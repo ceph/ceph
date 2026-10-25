@@ -35,6 +35,9 @@ pub struct Inventory {
     files: Vec<(String, u32)>,
     /* every directory, the same way */
     dirs: Vec<(String, u32)>,
+    /* every entry the walker could not read, so its attributes are
+     * unknown rather than absent */
+    unreadable: Vec<String>,
 }
 
 impl Inventory {
@@ -114,6 +117,16 @@ impl Inventory {
                 self.dirs.push((rel.clone(), md.mode() & 0o7777));
             }
 
+            /* llistxattr() omits the `user.*` names of an entry the
+             * caller cannot read, and says nothing;  so an entry this
+             * walker cannot read is recorded as such, and neither its
+             * attributes nor what is below it are guessed at */
+            if ty != "l" && !readable(&path) {
+                self.lines.insert(format!("{}\tunreadable", encode(&rel)));
+                self.unreadable.push(rel);
+                continue;
+            }
+
             for name in list_xattr_names(&path)? {
                 /* Written by neither gateway:  the host's security
                  * policy puts it there and it differs per machine.
@@ -166,6 +179,16 @@ impl Inventory {
                             env::DIR_MODE)
     }
 
+    /// Every entry was read whole.  One the walker could not read is
+    /// one whose attributes the inventory does not know, so the
+    /// inventory is not the tree's;  one line per such entry.
+    pub fn check_readable(&self) -> Vec<String> {
+        self.unreadable.iter()
+            .map(|p| format!("{p:?} is not readable by the walker, so its \
+                              attributes and contents are unknown"))
+            .collect()
+    }
+
     /// The same check against a policy given rather than read, so both
     /// polarities are testable without mutating the environment -- the
     /// axes run in one process and share it.
@@ -206,12 +229,15 @@ pub enum Entry {
     },
     /// `path  xattr  name`
     Xattr { path: String, name: String },
+    /// `path  unreadable`:  the walker could not read it
+    Unreadable { path: String },
 }
 
 impl Entry {
     pub fn path(&self) -> &str {
         match self {
-            Entry::Stat { path, .. } | Entry::Xattr { path, .. } => path,
+            Entry::Stat { path, .. } | Entry::Xattr { path, .. }
+            | Entry::Unreadable { path } => path,
         }
     }
 }
@@ -224,6 +250,7 @@ pub fn parse_line(line: &str) -> Option<Entry> {
             path: decode(path),
             name: decode(name),
         }),
+        [path, "unreadable"] => Some(Entry::Unreadable { path: decode(path) }),
         [path, kind, mode, uid, gid, size] => Some(Entry::Stat {
             path: decode(path),
             kind: kind.to_string(),
@@ -286,9 +313,9 @@ fn mode_policy(spec: Option<&str>, default: u32) -> ModePolicy {
 /// same reason the walk uses `lstat`.
 ///
 /// Note that this omits `user.*` names the caller cannot read -- that is
-/// `listxattr`'s documented behaviour and the reason impersonated
-/// conversion is unsafe (`docs/IMPERSONATED_XATTR.md`).  The corpus runs
-/// unimpersonated, so it sees everything.
+/// `listxattr`'s documented behaviour (`docs/IMPERSONATED_XATTR.md`) --
+/// so the walk asks `readable()` first and records an entry it cannot
+/// read rather than calling this on it.
 fn list_xattr_names(path: &Path) -> std::io::Result<Vec<String>> {
     let c = CString::new(path.as_os_str().as_bytes())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
@@ -350,6 +377,44 @@ mod tests {
             !out.contains("mtime") && !out.contains("ino"),
             "the inventory recorded something that varies per run: {out}"
         );
+    }
+
+    /// An entry the walker cannot read is recorded as unreadable, and
+    /// is a problem, rather than listed with its `user.*` names
+    /// silently missing.  Both polarities:  the same file, readable,
+    /// is recorded with its attribute and is no problem.
+    #[test]
+    fn an_unreadable_entry_is_recorded_and_is_a_problem() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        let f = root.join("f");
+        std::fs::write(&f, b"abc").unwrap();
+        let c = CString::new(f.as_os_str().as_bytes()).unwrap();
+        let (n, v) = (CString::new("user.probe").unwrap(), b"x");
+        assert_eq!(unsafe { libc::setxattr(c.as_ptr(), n.as_ptr(),
+                                           v.as_ptr().cast(), 1, 0) }, 0,
+                   "the tempdir's filesystem takes no user.* attributes");
+        let set = |mode: u32| std::fs::set_permissions(&f,
+            std::os::unix::fs::PermissionsExt::from_mode(mode)).unwrap();
+
+        let mut seen = Inventory::new();
+        seen.walk(root).expect("walk");
+        assert!(seen.render().contains("f\txattr\tuser.probe"),
+                "the readable file's attribute is missing: {}", seen.render());
+        assert!(seen.check_readable().is_empty());
+
+        set(0o000);
+        let mut hidden = Inventory::new();
+        hidden.walk(root).expect("walk");
+        set(0o600);
+        let out = hidden.render();
+        assert!(out.lines().any(|l| l == "f\tunreadable"),
+                "the unreadable file is not recorded as such: {out}");
+        assert!(!out.contains("xattr"),
+                "an attribute list was taken from a file the walker cannot read: {out}");
+        assert_eq!(hidden.check_readable().len(), 1);
+        assert!(matches!(parse_line("f\tunreadable"),
+                         Some(Entry::Unreadable { .. })));
     }
 
     /// Strict unless told otherwise, and an unreadable value is a
@@ -482,19 +547,30 @@ pub fn capture(bucket: &str, dir: &Path, stem: &str) -> Vec<String> {
     };
     let bucket_dir = Path::new(&data_root).join(bucket);
     let mut inv = Inventory::new();
+    /* asked for and not taken is a failure:  without it the axis
+     * passes with half its comparison missing */
     if let Err(e) = inv.walk(&bucket_dir) {
-        eprintln!(
-            "corpus {stem}: no inventory, {} is not readable: {e}",
-            bucket_dir.display()
-        );
-        return Vec::new();
+        return vec![format!(
+            "no inventory of {}:  {e};  {} names it, so it was asked for",
+            bucket_dir.display(), env::DATA_ROOT
+        )];
     }
     let ipath = dir.join(format!("{stem}.inventory"));
     std::fs::write(&ipath, inv.render()).expect("write inventory");
     eprintln!("corpus {stem}: {} disk facts -> {}", inv.len(), ipath.display());
-    let mut problems = inv.check_object_modes();
+    let mut problems = inv.check_readable();
+    problems.extend(inv.check_object_modes());
     problems.extend(inv.check_directory_modes());
     problems
+}
+
+/// Whether this process may read `path`, by the kernel's own check
+/// against its effective ids.
+fn readable(path: &Path) -> bool {
+    let Ok(c) = CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    unsafe { libc::faccessat(libc::AT_FDCWD, c.as_ptr(), libc::R_OK, libc::AT_EACCESS) == 0 }
 }
 
 /// The attribute names on a directory itself.

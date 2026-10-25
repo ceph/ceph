@@ -250,6 +250,11 @@ pub fn key_inventory(text: &str) -> Result<Keyed, Vec<String>> {
                     .or_default()
                     .insert("present".to_string());
             }
+            inventory::Entry::Unreadable { path } => {
+                k.entry((path, "unreadable".to_string()))
+                    .or_default()
+                    .insert("present".to_string());
+            }
         }
     }
     Ok(k)
