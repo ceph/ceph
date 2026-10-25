@@ -989,6 +989,10 @@ public:
     next(std::move(_next)), bucket(_b) {}
   virtual ~FilterMultipartUpload() = default;
 
+  virtual void set_on_behalf_of(const rgw_owner& owner) override {
+    next->set_on_behalf_of(owner);
+  }
+
   virtual const std::string& get_meta() const override { return next->get_meta(); }
   virtual const std::string& get_key() const override { return next->get_key(); }
   virtual const std::string& get_upload_id() const override { return next->get_upload_id(); }

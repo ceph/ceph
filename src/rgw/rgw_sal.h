@@ -191,6 +191,19 @@ static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
  * makes them greppable as a set. */
 inline const rgw_owner no_authenticated_user{};
 
+/* Whose work an operation with no authenticated user is, where it is
+ * someone's:  lifecycle acts for the bucket's owner.  Carried as
+ * `on_behalf_of` in ReadOp and DeleteOp params, and by
+ * MultipartUpload::set_on_behalf_of().
+ *
+ * Not an authentication.  The operation's `authenticated_user` stays
+ * no_authenticated_user, since nobody authenticated;  this says only
+ * on whose behalf the gateway does work that no request asked for.  A
+ * driver that maps an identity to filesystem credentials decides what
+ * acting for it permits;  a driver with no such mapping ignores it, as
+ * it ignores `authenticated_user`.  Empty is nobody, which is what an
+ * operation that does not set it carries. */
+
 enum class RGWRestoreStatus : uint8_t {
   None  = 0,
   RestoreAlreadyInProgress = 1,
@@ -1332,6 +1345,7 @@ public:
         /// If the object is multipart, the total number of multipart
         /// parts is assigned to this output parameter.
         std::optional<int> parts_count;
+        rgw_owner on_behalf_of; //< see no_authenticated_user
       } params;
 
       virtual ~ReadOp() = default;
@@ -1381,6 +1395,7 @@ public:
 	bool abortmp{false};
 	uint64_t parts_accounted_size{0};
         RGWObjVersionTracker* objv_tracker = nullptr;
+        rgw_owner on_behalf_of; //< see no_authenticated_user
       } params;
 
       struct Result {
@@ -1792,6 +1807,11 @@ public:
 
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
+
+  /** For an upload no request is acting on -- lifecycle's abort --
+   * whose work it is (see no_authenticated_user).  A driver with no
+   * identity mapping ignores it. */
+  virtual void set_on_behalf_of(const rgw_owner& owner) {}
 
   /** Get the name of the object representing this upload in the backing store */
   virtual const std::string& get_meta() const = 0;
