@@ -6,9 +6,10 @@ until the corresponding fix lands; it then moves to the matching facet.
 Kept out of the regular facets so they do not turn the suite red.
 
   test_gateway_failure_moves_vip
-      keepalived checks https://<host addr>:<port>/health, but with a
-      virtual_ip nginx only listens on <vip>:<port>, so the check fails on
-      every host and a dead gateway never loses the VIP.
+      keepalived checked https://<host addr>:<port>/health, but with a
+      virtual_ip nginx only listens on <vip>:<port> (since the fix for
+      tracker 74929), so the check failed on every host and a dead gateway
+      never lost the VIP. Runs keepalived's own check on each host first.
   test_internal_urls_follow_a_live_gateway
       without a virtual_ip, every internal URL (dashboard API hosts,
       grafana datasource, prometheus discovery) points at the first
@@ -25,8 +26,9 @@ Run by the orch/cephadm/services/mgmt-gateway suite (open-issues facet);
 shared helpers live in common.py.
 """
 
+import re
 import urllib.parse
-from typing import Optional
+from typing import Optional, Tuple
 
 from tasks.cephadm_cases.services.base import ROOT_CA_FILE, WORKDIR
 from tasks.cephadm_cases.services.mgmt_gateway.common import (
@@ -61,9 +63,22 @@ class TestMgmtGatewayOpenIssues(GatewayTestCase):
                    if f' {self.vip}/' in self.remote_for(h).sh(['ip', '-o', 'addr', 'show'])]
         return holders[0] if len(holders) == 1 else None
 
+    def keepalived_check(self, host: str) -> Tuple[str, int]:
+        """Run on 'host' the backend check keepalived runs there, as found in
+        its deployed configuration. Returns the command and its exit code."""
+        remote = self.remote_for(host)
+        conf = remote.sh(['sudo', 'sh', '-c', 'cat /var/lib/ceph/*/keepalived.*/keepalived.conf'])
+        m = re.search(r'script "([^"]+)"', conf)
+        self.assertIsNotNone(m, f'no check script in keepalived.conf on {host}: {conf}')
+        assert m is not None
+        proc = remote.run(args=['sudo', 'sh', '-c', m.group(1)], check_status=False)
+        return m.group(1), proc.exitstatus
+
     def test_gateway_failure_moves_vip(self) -> None:
-        """Stopping the gateway on the VIP holder moves the VIP to the other
-        gateway host."""
+        """keepalived's check sees each running gateway as healthy; stopping
+        the gateway on the VIP holder moves the VIP to the other gateway host
+        and the gateway stays reachable; once it is back, it is still
+        reachable through the VIP (keepalived may move the VIP back)."""
         prefix = self.job_ctx().vip['vnet'].prefixlen
         self.label_hosts(LABEL, self.host_names[:2])
         # Apply both before waiting: with a virtual_ip nginx only listens on
@@ -79,17 +94,25 @@ class TestMgmtGatewayOpenIssues(GatewayTestCase):
         self.wait_service(INGRESS)
         self.gw_vip = self.vip
         self.wait_mode('gateway')
+        for host in self.host_names[:2]:
+            self.poll(f'keepalived check passes on {host} (gateway running)',
+                      lambda: self.keepalived_check(host)[1] == 0, timeout=120)
         holder = self.vip_holder()
         self.assertIsNotNone(holder)
+        assert holder is not None
         gw = [d['daemon_name'] for d in self.daemons(GW) if d['hostname'] == holder]
-        self.orch('daemon', 'stop', gw[0])
+        self.stop_daemon(gw[0])
         try:
+            cmd, rc = self.keepalived_check(holder)
+            self.assertNotEqual(rc, 0, f'keepalived check passes with the gateway down: {cmd}')
             self.poll('VIP moved away from the stopped gateway',
                       lambda: self.vip_holder() not in (None, holder), timeout=300)
             res = self.http(self.gw('/health'), cacert=ROOT_CA_FILE)
             self.assertEqual(res['status'], 200, res)
         finally:
-            self.orch('daemon', 'start', gw[0])
+            self.start_daemon(gw[0])
+        self.wait_mode('gateway')
+        self.hold_mode('gateway', seconds=60)
 
     def test_internal_urls_follow_a_live_gateway(self) -> None:
         """Two gateways without a VIP: when the one the internal URLs point
