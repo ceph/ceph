@@ -196,9 +196,10 @@ librados::obj_err_t compare_candidate_to_authoritative(
     auto citer = cand_si.attrs.find(OI_ATTR);
     if (citer == cand_si.attrs.end() ||
 	!aiter->second.contents_equal(citer->second)) {
-      object_info_t auth_oi(aiter->second);
-      object_info_t cand_oi(citer->second);
-      DEBUG("inconsistent oi, auth: {}, cand: {}", auth_oi, cand_oi);
+      // the candidate's OI may be missing or corrupted
+      DEBUG("inconsistent oi, auth: {}, cand: {}",
+	    *auth.object_info,
+	    cand.object_info ? fmt::format("{}", *cand.object_info) : "(none)");
       ret.errors |= obj_err_t::OBJECT_INFO_INCONSISTENCY;
     }
   }
