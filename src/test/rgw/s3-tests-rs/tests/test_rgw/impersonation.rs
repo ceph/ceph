@@ -736,6 +736,90 @@ async fn test_impersonation_denies_an_unprovisioned_identity() {
 
 }
 
+/// The status of each metadata read of `key`:  HEAD, GetObjectTagging,
+/// GetObjectAcl and GetObjectAttributes, none of which reads data.
+async fn metadata_statuses(client: &aws_sdk_s3::Client, bucket: &str,
+                           key: &str) -> Vec<(&'static str, u16)> {
+    fn status<T, E>(r: Result<T, aws_sdk_s3::error::SdkError<E>>) -> u16 {
+        match r {
+            Ok(_) => 200,
+            Err(e) => e.raw_response().map_or(0, |r| r.status().as_u16()),
+        }
+    }
+    vec![
+        ("HEAD", status(client.head_object().bucket(bucket).key(key)
+            .send().await)),
+        ("GetObjectTagging", status(client.get_object_tagging()
+            .bucket(bucket).key(key).send().await)),
+        ("GetObjectAcl", status(client.get_object_acl()
+            .bucket(bucket).key(key).send().await)),
+        ("GetObjectAttributes", status(client.get_object_attributes()
+            .bucket(bucket).key(key)
+            .object_attributes(aws_sdk_s3::types::ObjectAttributes::ObjectSize)
+            .send().await)),
+    ]
+}
+
+/// A user whose credentials do not resolve is denied a metadata read,
+/// not served it as the gateway (n-plan §6.1).
+///
+/// HEAD and the attribute reads reach neither of the data entry points,
+/// so a denial deferred to them served these as the gateway, which
+/// holds `CAP_DAC_READ_SEARCH`.  The control is the same reads with the
+/// identity row in place;  the injected arm,
+/// `inject-unresolved-as-gateway` for this user alone, restores the
+/// deferral and must see all four served, so the denials are
+/// attributable to the fix and the test can be watched failing.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_impersonation_denies_metadata_to_unresolved_credentials() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let Some((alice_u, _bob_u)) = alice_and_bob("unresmeta", None).await
+    else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let alice = &alice_u.client;
+    let bucket = get_new_bucket(Some(alice)).await;
+    let key = "meta";
+    alice.put_object().bucket(&bucket).key(key)
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"x"))
+        .send().await.expect("a provisioned identity could not write");
+
+    /* the control */
+    for (op, st) in metadata_statuses(alice, &bucket, key).await {
+        assert_eq!(st, 200, "{op} failed for a user whose credentials \
+                             resolve");
+    }
+
+    let _ = nsfs_delete_identity(&alice_u.id).await;
+
+    /* the injected arm:  the deferral restored, so all four are served */
+    let served = with_hint("inject-unresolved-as-gateway",
+                           &[("enable", "true"), ("user", &alice_u.id)],
+                           metadata_statuses(alice, &bucket, key)).await;
+    for (op, st) in served {
+        assert_eq!(st, 200, "{op} was not served under \
+                             inject-unresolved-as-gateway;  the arm does \
+                             not reproduce the defect");
+    }
+
+    for (op, st) in metadata_statuses(alice, &bucket, key).await {
+        assert_eq!(st, 403, "{op} returned {st} to a user whose \
+                             credentials do not resolve;  it was served \
+                             as the gateway rather than denied");
+    }
+}
+
 /// NooBaa's guard on where an account's buckets go, enacted
 /// (DECISIONS.md 2026-10-14):  NooBaa makes a bucket's directory as the
 /// account, so an account that cannot write its `new_buckets_path`
