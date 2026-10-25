@@ -503,4 +503,62 @@ chunk_result_t validate_chunk(
   return ret;
 }
 
+scrub_stats_update_t update_stats_from_scrub(
+  bool deep,
+  const object_stat_sum_t &scrubbed,
+  eversion_t last_update,
+  utime_t now,
+  pg_history_t &history,
+  pg_stat_t &pg_stats)
+{
+  scrub_stats_update_t ret;
+
+  // Handle invalid stats, in case of split/merge
+  if (pg_stats.stats_invalid) {
+    pg_stats.stats.sum = scrubbed;
+    pg_stats.stats_invalid = false;
+    ret.repaired_invalid_stats = true;
+  }
+
+  auto &sum = pg_stats.stats.sum;
+  foreach_scrub_maintained_stat(
+    [deep, &sum, &scrubbed](
+      const auto &name, auto statptr, bool skip_for_shallow) {
+      if (deep || !skip_for_shallow) {
+	sum.*statptr = scrubbed.*statptr;
+      }
+    });
+
+  foreach_scrub_checked_stat(
+    [&ret, &pg_stats, &sum, &scrubbed](
+      const auto &name, auto statptr, const auto &invalid_predicate) {
+      if (!invalid_predicate(pg_stats) &&
+	  (scrubbed.*statptr != sum.*statptr)) {
+	ret.stat_mismatches.push_back(fmt::format(
+	  "stat mismatch for {}: scrubbed value: {}, stored pg value: {}",
+	  name, scrubbed.*statptr, sum.*statptr));
+	++sum.num_shallow_scrub_errors;
+      }
+    });
+
+  // must follow the stat mismatch accounting above
+  sum.num_scrub_errors =
+    sum.num_shallow_scrub_errors + sum.num_deep_scrub_errors;
+
+  history.last_scrub = last_update;
+  history.last_scrub_stamp = now;
+  if (deep) {
+    history.last_deep_scrub = last_update;
+    history.last_deep_scrub_stamp = now;
+  }
+  // as in classic, a clean shallow scrub does not imply the absence of
+  // (previously found) deep errors
+  if (sum.num_shallow_scrub_errors == 0 &&
+      (!deep || sum.num_deep_scrub_errors == 0)) {
+    history.last_clean_scrub_stamp = now;
+  }
+
+  return ret;
+}
+
 }
