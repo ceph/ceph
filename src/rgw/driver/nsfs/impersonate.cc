@@ -793,7 +793,7 @@ int open_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
     return ret;
   }
   /* O_NOFOLLOW for every caller:  nothing nsfs opens by name is a link
-   * (n-plan, "Symlinks") */
+   * (DECISIONS.md 2026-10-22) */
   return rgw::sal::posix_uring_openat2(dpp, dirfd, path, flags | O_NOFOLLOW,
 				       mode, ref.id());
 }

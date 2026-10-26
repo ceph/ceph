@@ -135,13 +135,12 @@ struct ConvertProgress {
   uint64_t versions{0};
   uint64_t uploads{0};
   uint64_t parts{0};
-  /* Symbolic links, which are not objects and are not converted
-   * (n-plan, "One rule:  a link is an object only beneath the
-   * bucket").  Counted by what each resolves to as NooBaa resolved it,
-   * its real path against the bucket's, with read-search held so the
-   * count does not depend on the gateway's uid, and so an operator sees
-   * what the gateway no longer serves.  A link a filesystem error keeps
-   * from resolving is counted dangling, and logged as an error. */
+  /* Symbolic links, which are not objects and are not converted (DECISIONS.md
+   * 2026-10-23).  Counted by what each resolves to as NooBaa resolved it, its
+   * real path against the bucket's, with read-search held so the count does
+   * not depend on the gateway's uid, and so an operator sees what the gateway
+   * no longer serves.  A link a filesystem error keeps from resolving is
+   * counted dangling, and logged as an error. */
   struct Links {
     uint64_t file{0};       /* to a file in the bucket */
     uint64_t directory{0};  /* to a directory in the bucket */
@@ -974,10 +973,10 @@ protected:
    * Atomic:  a test thread arms it while another deletes */
   std::atomic<bool> inject_denial_as_absence{false};
   /* the user whose credentials not resolving NSFSReadOp::prepare(),
-   * get_attr(), check_owner_access() and create() pass over, as they
-   * did before n-plan F2, so a test can watch a metadata read served,
-   * or a bucket placed or created, rather than deleting the fix.  By
-   * user, since the suite runs in parallel;  empty is off */
+   * get_attr(), check_owner_access() and create() pass over, as they did
+   * before work-plan stage N-F2, so a test can watch a metadata read served,
+   * or a bucket placed or created, rather than deleting the fix.  By user,
+   * since the suite runs in parallel;  empty is off */
   ceph::mutex unresolved_as_gateway_lock =
     ceph::make_mutex("NSFSDriver::unresolved_as_gateway_lock");
   std::string unresolved_as_gateway_user;
@@ -2559,7 +2558,7 @@ public:
      * the bucket directory, against an object an identity wrote.  As
      * the gateway that link fails with EPERM under
      * fs.protected_hardlinks, so the authenticated user is what those
-     * two calls need (inflight/n-plan.md phase D).
+     * two calls need (work-plan stage N-D).
      *
      * Not the promote that may follow them.  That publishes as the
      * version file's own owner (§5) and must stay outside any

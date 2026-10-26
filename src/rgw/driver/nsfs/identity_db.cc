@@ -955,7 +955,7 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
   }
   /* Rejected here with a message rather than left to the CHECK, so an
    * operator learns what was wrong with it
-   * (`NSFS_BUCKET_PLACEMENT_PLAN.md` §9). */
+   * (`archive/NSFS_BUCKET_PLACEMENT_PLAN.md` §9). */
   if (!placement_path_is_acceptable(bp.path)) {
     ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name
       << " rejected: \"" << bp.path

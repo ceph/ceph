@@ -19,7 +19,7 @@ stay where they are even though they are format-specific.
 | `noobaa_import_plan` | what a store becomes on the RGW side, and the collision gate.  I3 |
 
 `docs/ACCOUNT_IMPORT.md` §9 is the stage list these are lettered
-against, and `docs/NSFS_ADOPTION_WORK_PLAN.md` is the ordered one.
+against, and `docs/NSFS_WORK_PLAN.md` is the ordered one.
 
 **The store is an import source, not a backing store.**  It is read
 once and what the import produces is RGW's own state;  after a bucket

@@ -935,7 +935,7 @@ public:
   }
 };
 
-/* A File is opened O_NOFOLLOW (the symlink policy, n-plan "Symlinks").
+/* A File is opened O_NOFOLLOW (the symlink policy, DECISIONS.md 2026-10-22).
  * A File stands only for a regular file -- get_ent() and stat() refuse
  * anything else -- so the case is the race:  the entry stat'ed as a
  * regular file, then swapped for a link before the open.  The open
@@ -2952,10 +2952,10 @@ TEST_F(NSFSObjectTest, ObjectAttrs)
 }
 
 /* An attribute write on an object nothing has loaded opens it, as the
- * attribute delete does, rather than dereferencing an entry that does
- * not exist yet:  it was a segfault at write_attrs() (n-plan D4).  The
- * core loads before an attribute operation, so no S3 path reached it.
- * ATTR1, written with the object, surviving shows the write merged. */
+ * attribute delete does, rather than dereferencing an entry that does not
+ * exist yet:  it was a segfault at write_attrs() (work-plan stage N-D4).  The
+ * core loads before an attribute operation, so no S3 path reached it.  ATTR1,
+ * written with the object, surviving shows the write merged. */
 TEST_F(NSFSObjectTest, AnAttributeWriteOnAnUnloadedObjectLoadsIt)
 {
   const std::string probe = RGW_ATTR_META_PREFIX "probe";
@@ -6453,16 +6453,16 @@ public:
   std::optional<bool> shares_extents() const override { return false; }
 };
 
-/* copy_range() moves bytes between descriptors already opened, so a
- * copy runs as whoever opened them:  the identity reaches the copies
- * only through set_identity() calls in NSFSMultipartWriter, far from
- * them (call-site table §9.2, row 1).  So every file a strided upload
- * makes -- the shared file, part 2's own file after its divert, and the
- * object assembly produces -- is the uploader's;  and the same upload
- * by another identity makes them that identity's, so the first case
- * discriminates.  Not the gateway as the other case:  under impersonation
- * a part with no authenticated user is denied (n-plan §6.1).  The upload's
- * `.meta` is the gateway's by design -- staging stays its -- so the
+/* copy_range() moves bytes between descriptors already opened, so a copy runs
+ * as whoever opened them:  the identity reaches the copies only through
+ * set_identity() calls in NSFSMultipartWriter, far from them (call-site table
+ * §9.2, row 1).  So every file a strided upload makes -- the shared file, part
+ * 2's own file after its divert, and the object assembly produces -- is the
+ * uploader's;  and the same upload by another identity makes them that
+ * identity's, so the first case discriminates.  Not the gateway as the other
+ * case:  under impersonation a part with no authenticated user is denied
+ * (`RGW_NSFS_VADE_MECUM.md` §12, "No authenticated user means refuse").  The
+ * upload's `.meta` is the gateway's by design -- staging stays its -- so the
  * data files are named rather than listed. */
 TEST_F(NSFSImpersonatedStridedTest, EveryFileAStridedUploadMakesIsTheUploaders)
 {
@@ -10294,8 +10294,8 @@ TEST_F(NSFSUpgradeTest, ConvertsVersionEntries)
   }
 }
 
-/* Adoption reports every link (n-plan, "One rule:  a link is an object
- * only beneath the bucket"):  the conversion counts each by what it
+/* Adoption reports every link (DECISIONS.md 2026-10-23;  a link is an object
+ * only beneath the bucket):  the conversion counts each by what it
  * resolves to, as NooBaa resolved it, and converts none.  An absolute
  * link into the bucket is among them, which NooBaa served;  so are links
  * in a subdirectory, one to the bucket itself and one climbing out of
@@ -10785,8 +10785,8 @@ static std::vector<std::string> listing_rows(rgw::sal::Bucket* bucket,
   return rows;
 }
 
-/* A symbolic link is not an object (n-plan, "One rule:  a link is an
- * object only beneath the bucket").  One link of each kind the rule
+/* A symbolic link is not an object (DECISIONS.md 2026-10-23;  a link is an
+ * object only beneath the bucket).  One link of each kind the rule
  * covers:  to a file in the bucket, to a directory in the bucket, out of
  * the bucket, to nothing, and to itself.  `o00` and `sub/inner` are
  * objects. */
@@ -16205,9 +16205,8 @@ TEST_F(NooBaaModeTest, AnUnknownModeIsRejected)
 /* ------------------------------------------------------------------ *
  * P2 -- resolution from a stored path.
  *
- * Two branches (NSFS_BUCKET_PLACEMENT_PLAN.md §7):  an index row's Path,
- * else `<base>/<name>`.  The second is what every deployment has, so
- * the test that matters most is that nothing changes without a row.
+ * A placement row's Path, else NooBaa's record, else no bucket
+ * (`RGW_NSFS_VADE_MECUM.md` §1).
  * ------------------------------------------------------------------ */
 
 class NSFSPlacedBucketTest : public NSFSDriverTest {
@@ -17157,19 +17156,19 @@ TEST_F(NSFSPlaceBucketTest, AUserIsRejectedAsOwner)
       << "the control:  the account may own it";
 }
 
-/* Raise site 1:  a bucket placed over a directory another uid owns at
- * 0770 still takes its state -- placement's marks, put_info()'s mtime,
- * an attribute write and a profile change -- because each bucket-state
- * write raises BUCKET_STATE_CAPS once the gateway is denied.  The
- * premise is that the gateway, unraised, is denied;  n-plan §4 records
- * placement rolled back on exactly that, under impersonation -- where
- * the gateway holds read-search and so opens the directory, and only
- * the write is denied.  Without impersonation it cannot open another
- * uid's 0770 directory at all, and placement is refused there, which is
- * right.  The account the directory belongs to has a row naming its
- * uid, which placement under impersonation checks.  The driver calls
- * run on a thread of their own:  a raise takes read-search for the life
- * of the thread, which would spoil other tests' controls on this one. */
+/* Raise site 1:  a bucket placed over a directory another uid owns at 0770
+ * still takes its state -- placement's marks, put_info()'s mtime, an attribute
+ * write and a profile change -- because each bucket-state write raises
+ * BUCKET_STATE_CAPS once the gateway is denied.  The premise is that the
+ * gateway, unraised, is denied;  `archive/n-plan.md` §4 records placement
+ * rolled back on exactly that, under impersonation -- where the gateway holds
+ * read-search and so opens the directory, and only the write is
+ * denied.  Without impersonation it cannot open another uid's 0770 directory
+ * at all, and placement is refused there, which is right.  The account the
+ * directory belongs to has a row naming its uid, which placement under
+ * impersonation checks.  The driver calls run on a thread of their own:  a
+ * raise takes read-search for the life of the thread, which would spoil other
+ * tests' controls on this one. */
 TEST_F(NSFSPlaceBucketTest, ABucketOverAnotherUidsDirectoryTakesItsState)
 {
   static constexpr uid_t other_uid = 70170;

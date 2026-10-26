@@ -880,10 +880,9 @@ static int exists_as(const DoutPrefixProvider* dpp, const nsfs::FSIdentity& id,
   }, null_yield);
 }
 
-/* A symbolic link is not an object (n-plan, "One rule:  a link is an
- * object only beneath the bucket"), so a write or a delete that lands on
- * a name a link holds unlinks the link, never its target.  Returns 0
- * whether or not there was a link, or -errno. */
+/* A symbolic link is not an object (DECISIONS.md 2026-10-23), so a write or a
+ * delete that lands on a name a link holds unlinks the link, never its
+ * target.  Returns 0 whether or not there was a link, or -errno. */
 static int unlink_if_link(const DoutPrefixProvider* dpp,
 			  const nsfs::FSIdentity& id,
 			  const nsfs::AccessStrategy* model,
@@ -1078,7 +1077,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
      * writer.  The file says who wrote it, and a hard link preserves
      * the inode's owner, so publishing it under the current name
      * grants nobody access they did not already have
-     * (inflight/n-plan.md §5).
+     * (`RGW_NSFS_VADE_MECUM.md` §12, "The raise sites").
      *
      * The groups come from the identity row that carries this uid,
      * because the bucket directory is reachable by group for everyone
@@ -5747,33 +5746,23 @@ std::unique_ptr<Object> NSFSDriver::get_object(const rgw_obj_key& k)
   return std::make_unique<NSFSObject>(this, k);
 }
 
-/* P2.  Where a bucket's storage is, resolved per lookup.
+/* P2 and P5.  Where a bucket's storage is, resolved per lookup:
  *
- * Two branches (`NSFS_BUCKET_PLACEMENT_PLAN.md` §7):
+ *     placement row for (name, tenant)?          ->  its Path
+ *     NooBaa's record, adoption not complete?    ->  its path
+ *     otherwise                                  ->  null:  nothing places it
  *
- *     index row for (name, tenant)?  ->  use its Path
- *     otherwise                      ->  <base>/<name>
- *
- * The second keeps every existing deployment working with no index and
- * no migration:  an absent row means the default location, which is
- * where every bucket this driver has ever created lives.
- *
- * There is deliberately no third branch reading NooBaa's bucket record.
- * NooBaa's `path` arrives at adopt time and is written into the index
- * with the rest of the bucket's state;  consulting NooBaa's config store
- * on the request path is drift, and this must not add a second
- * consumer of it.
+ * Only a placed directory is a bucket (`RGW_NSFS_VADE_MECUM.md` §1).  A
+ * bucket nothing places is not looked for anywhere:  bucket_dir() gives
+ * it a Directory with no path, which is -ENOENT when opened.
  *
  * **Bound per lookup, not cached.**  NooBaa's is read on every lookup --
  * `read_bucket_sdk_info()` builds the namespace resource around the
  * record each time, so changing the record changes where the next
  * request goes -- and storage is attachable to a running Scale cluster
  * at any time, so a design that binds a location once is wrong on the
- * platform this driver exists for (§6).  That also disposes of whether
- * a path is "mutable":  binding late makes mutability a non-event.
- *
- * Returns null when there is no row, which the callers read as "the
- * default", so the ordinary case allocates nothing.
+ * platform this driver exists for.  That also disposes of whether a
+ * path is "mutable":  binding late makes mutability a non-event.
  */
 std::unique_ptr<nsfs::Directory>
 NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
@@ -5801,7 +5790,7 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
      *
      * The read is the one serve mode already does for a bucket's
      * configuration, through the component that owns it, so this adds
-     * no consumer of NooBaa's store (§7).
+     * no consumer of NooBaa's store.
      *
      * **It never adopts.**  Resolving where a bucket lives is
      * read-only;  adoption happens because the mode says so, or by
@@ -5819,7 +5808,7 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
     }
     /* NooBaa's path names the bucket's own directory, and a path nsfs
      * would not store is one it will not serve from either -- the
-     * record is a store nsfs did not write (§9). */
+     * record is a store nsfs did not write (`RGW_NSFS_VADE_MECUM.md` §1). */
     if (!nsfs::placement_path_is_acceptable(path)) {
       ldpp_dout(dpp, 0) << "ERROR: bucket " << name << ": their record "
 	<< "says " << path << ", which is not an absolute canonical path"
@@ -6002,8 +5991,8 @@ int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
     return 0;
   }
   if (ret == -ENOENT) {
-    /* credentials that do not resolve are denied, not checked as the
-     * gateway (n-plan §6.1) */
+    /* credentials that do not resolve are denied, not checked as the gateway
+     * (`RGW_NSFS_VADE_MECUM.md` §12, "No authenticated user means refuse") */
     ldpp_dout(dpp, 1) << "nsfs: " << to_string(owner) << " may not access "
       << path << ":  no credentials resolve for it" << dendl;
     return -EACCES;
@@ -7711,7 +7700,7 @@ static bool parent_is_base_path(const std::string& base,
 /* What a bucket-state write raises, and nothing else raises (raise
  * site 1):  `CAP_DAC_OVERRIDE` for an attribute on a bucket directory
  * the gateway does not own, and `CAP_FOWNER` for put_info()'s explicit
- * mtime on one, which DAC_OVERRIDE does not grant (n-plan §5.1,
+ * mtime on one, which DAC_OVERRIDE does not grant (DECISIONS.md 2026-10-16,
  * measured).  Taken only after the call is denied:  a gateway on its
  * own directories never raises, so one started without the capability
  * still serves them. */
@@ -11024,13 +11013,13 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
     ret = write_attrs(dpp, y);
   }
 
-  /* Raise site 4:  a client's bucket directory is its creator's, as
-   * NooBaa's mkdir as the performing account makes it
-   * (bucketspace_fs.js:1055-1062, DECISIONS.md 2026-10-23);  the owner's
-   * where no request made it.  Given last, so the gateway writes the
-   * state above on a directory it still owns.  Credentials that do not
-   * resolve deny the bucket rather than leave the directory the
-   * gateway's (n-plan §6.1). */
+  /* Raise site 4:  a client's bucket directory is its creator's, as NooBaa's
+   * mkdir as the performing account makes it (bucketspace_fs.js:1055-1062,
+   * DECISIONS.md 2026-10-23);  the owner's where no request made it.  Given
+   * last, so the gateway writes the state above on a directory it still
+   * owns.  Credentials that do not resolve deny the bucket rather than leave
+   * the directory the gateway's (`RGW_NSFS_VADE_MECUM.md` §12, "No
+   * authenticated user means refuse"). */
   if ((ret == 0) && made && !is_internal() &&
       nsfs::impersonation_enabled()) {
     const rgw_owner& who = nsfs::owner_empty(creator) ? info.owner : creator;
@@ -19152,10 +19141,10 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   }
 
   if (hint == "symlink") {
-    /* A symbolic link in a bucket, for the suite's tests of what a link
-     * is (n-plan, "One rule:  a link is an object only beneath the
-     * bucket").  A filesystem client makes links and S3 cannot, so the
-     * gateway makes one, as `unplaced-directory` makes a directory.
+    /* A symbolic link in a bucket, for the suite's tests of what a link is
+     * (DECISIONS.md 2026-10-23).  A filesystem client makes links and S3
+     * cannot, so the gateway makes one, as `unplaced-directory` makes a
+     * directory.
      *
      *   op=create bucket= key= target=   fails if the key's name exists
      *   op=stat bucket= key=             kind=link|file|directory|other|none,
@@ -19475,7 +19464,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   }
 
   if (hint == "inject-unresolved-as-gateway") {
-    /* reproduce the defects n-plan §6.1 names:  prepare() passed over
+    /* reproduce the defects work-plan stage N-F2 fixed:  prepare() passed over
      * a user whose credentials do not resolve, so HEAD and the
      * attribute reads were served as the gateway, and
      * check_owner_access() allowed one, so a bucket was placed at a

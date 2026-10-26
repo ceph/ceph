@@ -178,7 +178,7 @@ public:
    * a deployment we have not touched.
    *
    * **This is the existing consumer returning one more field, not a
-   * new one.**  `NSFS_BUCKET_PLACEMENT_PLAN.md` §7 withdrew a
+   * new one.**  `archive/NSFS_BUCKET_PLACEMENT_PLAN.md` §7 withdrew a
    * resolution branch that would read NooBaa's store on the request path,
    * because the plan must not add a second consumer of it.  Serve mode
    * already reads this record on every request for a bucket's

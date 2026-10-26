@@ -176,7 +176,7 @@ struct AbandonedRecord {
  *
  * **Checked where it is stored, never on the request path.**  By then
  * it is a row we wrote, and re-checking each time would put a policy
- * decision on the hot path (`NSFS_BUCKET_PLACEMENT_PLAN.md` §9).
+ * decision on the hot path (`archive/NSFS_BUCKET_PLACEMENT_PLAN.md` §9).
  *
  * This is the lexical half:  absolute, no `..`, no empty component,
  * no trailing slash.  Opening it safely is a different question and a
