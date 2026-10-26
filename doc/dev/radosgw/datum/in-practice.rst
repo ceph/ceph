@@ -8,8 +8,8 @@ Psst... wanna buy a codec?
 ==========================
 
 Here are real-world examples from gateway bucket listings and the object-class methods that encode
-bucket-index replies. A short split-buffer example shows how to read a payload without joining its
-buffers first.
+bucket-index replies. Small cache and split-buffer examples show how to select missing bytes and
+read a payload across separate buffers.
 
 Selecting a key range
 ---------------------
@@ -93,6 +93,74 @@ The listing code chooses the prefix and markers. The range operations calculate 
 adapter constructs the database selection.
 
 `Database adapter excerpt in the PR docs <https://github.com/chardan/ceph/blob/jfw-datum/doc/dev/radosgw/datum/in-practice-assets/integration-listing.cpp.txt#L69-L100>`_.
+
+Reading only the missing bytes
+------------------------------
+
+A read asks for bytes 0–63. The cache already holds bytes 16–47. Read the sixteen bytes on each side:
+
+.. raw:: html
+
+   <figure class="datum-cache-gaps" aria-label="Requested bytes 0 through 63, cached bytes 16 through 47, and two missing ranges">
+     <div class="datum-gap-label">Requested</div><div class="datum-gap-row"><span class="datum-gap-request">0–63 · 64 bytes</span></div>
+     <div class="datum-gap-label">Already cached</div><div class="datum-gap-row"><span class="datum-gap-cached">16–47 · 32 bytes</span></div>
+     <div class="datum-gap-label">Still needed</div><div class="datum-gap-row"><span class="datum-gap-left">0–15</span><span class="datum-gap-right">48–63</span></div>
+     <figcaption>Two gaps of sixteen bytes. Thirty-two logical bytes still need to be read.</figcaption>
+   </figure>
+
+Ceph’s `write-log read path <https://github.com/ceph/ceph/blob/dc7b747c37c466b46bfd90bd7b940b8cdf3c8478/src/librbd/cache/pwl/AbstractWriteLog.cc#L740-L775>`_
+handles this problem when it separates cache hits from the gaps still needed from storage.
+This small example isolates that range calculation for one cached block. Offsets named ``stop``
+are one past the last byte: 64 for the request and 48 for the cached block. Here, ``iv`` is a short
+name for Datum’s interval namespace.
+
+.. list-table::
+   :class: datum-code-comparison
+   :widths: 50 50
+
+   * - **Explicit gap checks**
+
+       .. code-block:: cpp
+
+          if (wanted_start < cache_start) {
+              read(wanted_start, std::min(cache_start, wanted_stop) - wanted_start);
+          }
+          if (cache_stop < wanted_stop) {
+              const auto start = std::max(cache_stop, wanted_start);
+              read(start, wanted_stop - start);
+          }
+
+       Check for a gap before the cached block and another after it.
+
+       `Complete comparison in the PR <https://github.com/chardan/ceph/blob/jfw-datum/doc/dev/radosgw/datum/in-practice-assets/cache-gap-example.cc>`_.
+     - **Range subtraction**
+
+       .. code-block:: cpp
+
+          const auto missing = iv::difference(requested, cached);
+          for (const auto& part : iv::compile_intervals<2>(missing)) {
+              read(part.lower().key(), part.upper().key() - part.lower().key());
+          }
+
+       Select the requested bytes that are not cached, then visit the resulting ranges.
+
+       PR implementation: `difference <https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/interval/query.h#L1148-L1158>`_.
+
+The program calls its byte-range type ``ByteRange``. ``ByteRange::closed_open(0, 64)`` covers
+bytes 0–63. The same subtraction handles zero, one, or two missing ranges; ``compile_intervals<2>``
+allows for the two-range case shown here.
+
+Both versions produce:
+
+.. code-block:: text
+
+   read 0..15 (16 bytes)
+   read 48..63 (16 bytes)
+
+The cache keeps its buffer ownership and locking. The storage layer still chooses how to issue the
+physical reads. This comparison changes only how the logical gaps are calculated.
+
+:download:`Run or inspect the complete cache-gap comparison <in-practice-assets/cache-gap-example.cc>`.
 
 Reading across separate buffers
 -------------------------------

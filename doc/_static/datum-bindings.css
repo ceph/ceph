@@ -73,6 +73,32 @@
 #psst-wanna-buy-a-codec .key.excluded { background: #eeefea; color: #819086; }
 #psst-wanna-buy-a-codec .selection-status { margin-bottom: 0; color: #18625b; font-size: 13px; }
 
+/* Numeric range labels stay readable at the page's normal font size. */
+#psst-wanna-buy-a-codec .datum-cache-gaps {
+  margin: 24px 0;
+  padding: 18px;
+  border: 1px solid #cadcca;
+  border-radius: 5px;
+  background: #f8faf6;
+}
+#psst-wanna-buy-a-codec .datum-gap-label { margin: 12px 0 6px; font-size: 14px; font-weight: 600; }
+#psst-wanna-buy-a-codec .datum-gap-label:first-child { margin-top: 0; }
+#psst-wanna-buy-a-codec .datum-gap-row { display: grid; grid-template-columns: repeat(4, 1fr); }
+#psst-wanna-buy-a-codec .datum-gap-row span {
+  padding: 8px 4px;
+  border: 1px solid #b8d2bf;
+  border-radius: 4px;
+  background: #d7ead9;
+  color: #164d39;
+  text-align: center;
+  font-size: 13px;
+}
+#psst-wanna-buy-a-codec .datum-gap-request { grid-column: 1 / -1; }
+#psst-wanna-buy-a-codec .datum-gap-cached { grid-column: 2 / span 2; }
+#psst-wanna-buy-a-codec .datum-gap-left { grid-column: 1; }
+#psst-wanna-buy-a-codec .datum-gap-right { grid-column: 4; }
+#psst-wanna-buy-a-codec .datum-cache-gaps figcaption { margin-top: 14px; font-size: 13px; }
+
 #psst-wanna-buy-a-codec .stats {
   display: grid;
   grid-template-columns: 1fr 1.4fr 1fr;

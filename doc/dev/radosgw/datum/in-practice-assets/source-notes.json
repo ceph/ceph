@@ -162,5 +162,11 @@
       "original_end": 292,
       "original_sha256": "5fda16f6143bb6e756b8f243c91c3ea05fd4465fe0a718bd4986b192cd792a1e"
     }
+  },
+  "worked_cache_example": {
+    "origin": "Ceph write-log read path splits reads into cache hits and missing extents. The example isolates one requested range and one nonempty cached range; it is not a consumer migration.",
+    "reference": "dc7b747c37c466b46bfd90bd7b940b8cdf3c8478:src/librbd/cache/pwl/AbstractWriteLog.cc:740-775",
+    "program": "cache-gap-example.cc",
+    "expected_stdout": "read 0..15 (16 bytes)\nread 48..63 (16 bytes)\n"
   }
 }
