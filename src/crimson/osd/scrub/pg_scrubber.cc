@@ -152,15 +152,19 @@ const std::set<pg_shard_t> &PGScrubber::get_ids_to_scrub() const
 chunk_validation_policy_t PGScrubber::get_policy() const
 {
   return chunk_validation_policy_t{
-    pg.get_primary(),
-    crimson::common::local_conf().get_val<Option::size_t>(
-      "osd_max_object_size"),
-    crimson::common::local_conf().get_val<std::string>(
-      "osd_hit_set_namespace"),
-    crimson::common::local_conf().get_val<Option::size_t>(
-      "osd_deep_scrub_large_omap_object_value_sum_threshold"),
-    crimson::common::local_conf().get_val<uint64_t>(
-      "osd_deep_scrub_large_omap_object_key_threshold")
+    .primary = pg.get_primary(),
+    .max_object_size =
+      crimson::common::local_conf().get_val<Option::size_t>(
+	"osd_max_object_size"),
+    .hitset_namespace =
+      crimson::common::local_conf().get_val<std::string>(
+	"osd_hit_set_namespace"),
+    .omap_key_limit =
+      crimson::common::local_conf().get_val<uint64_t>(
+	"osd_deep_scrub_large_omap_object_key_threshold"),
+    .omap_bytes_limit =
+      crimson::common::local_conf().get_val<Option::size_t>(
+	"osd_deep_scrub_large_omap_object_value_sum_threshold")
   };
 }
 
