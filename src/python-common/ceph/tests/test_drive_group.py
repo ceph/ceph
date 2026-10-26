@@ -721,3 +721,90 @@ def test_drive_group_osd_type_crimson_roundtrip():
     assert spec2.osd_type == 'crimson'
     j2 = spec2.to_json()
     assert j2['spec']['osd_type'] == 'crimson'
+
+
+def test_ceph_volume_command_hw_opal_only():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        hw_opal_only=True,
+    )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device() * 2)
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(
+        cmd == (
+            'lvm batch --no-auto /dev/sda /dev/sdb '
+            '--objectstore bluestore --hw-opal-only --yes --no-systemd'
+        )
+        for cmd in cmds
+    ), f'Expected hw-opal-only command in {cmds}'
+
+
+def test_ceph_volume_command_hw_opal_only_with_tpm2():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        hw_opal_only=True,
+        tpm2=True,
+    )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device() * 2)
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(
+        cmd == (
+            'lvm batch --no-auto /dev/sda /dev/sdb '
+            '--objectstore bluestore --hw-opal-only --with-tpm '
+            '--yes --no-systemd'
+        )
+        for cmd in cmds
+    ), f'Expected hw-opal-only+tpm2 command in {cmds}'
+
+
+def test_ceph_volume_command_hw_opal_only_raw():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        method='raw',
+        hw_opal_only=True,
+    )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device() * 2)
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert cmds[0] == 'raw prepare --bluestore --data /dev/sda --hw-opal-only'
+    assert cmds[1] == 'raw prepare --bluestore --data /dev/sdb --hw-opal-only'
+
+
+def test_drive_group_hw_opal_only_roundtrip():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        hw_opal_only=True,
+    )
+    spec.validate()
+    j = spec.to_json()
+    assert j['spec']['hw_opal_only'] is True
+    spec2 = ServiceSpec.from_json(j)
+    assert spec2.hw_opal_only is True
+
+
+def test_drive_group_hw_opal_only_mutually_exclusive_with_encrypted():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        hw_opal_only=True,
+        encrypted=True,
+    )
+    with pytest.raises(
+        DriveGroupValidationError,
+        match='mutually exclusive with encrypted',
+    ):
+        spec.validate()

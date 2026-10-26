@@ -882,6 +882,22 @@ Add the ``tpm2`` attribute to the OSD spec:
 LUKS. After a cephadm OSD stop, reopen the mapping before using those
 tools. See :ref:`cephadm-encrypted-osd-store-tools`.
 
+For SED OPAL hardware-only encryption (cryptsetup ``--hw-opal-only``), set
+``hw_opal_only``. This implies encrypted OSD deployment and is mutually
+exclusive with ``encrypted``. It can be combined with ``tpm2``:
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: example_osd_spec_hw_opal
+    placement:
+      host_pattern: '*'
+    spec:
+      data_devices:
+        all: true
+      hw_opal_only: true
+
+
 A full list of supported attributes:
 
 .. py:currentmodule:: ceph.deployment.drive_group

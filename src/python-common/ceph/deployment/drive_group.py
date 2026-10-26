@@ -174,7 +174,7 @@ class DriveGroupSpec(ServiceSpec):
     """
 
     _supported_features = [
-        "encrypted", "tpm2", "block_wal_size", "osds_per_device",
+        "encrypted", "tpm2", "hw_opal_only", "block_wal_size", "osds_per_device",
         "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
@@ -196,6 +196,7 @@ class DriveGroupSpec(ServiceSpec):
                  objectstore='bluestore',  # type: str
                  encrypted=False,  # type: bool
                  tpm2=False,  # type: bool
+                 hw_opal_only=False,  # type: bool
                  db_slots=None,  # type: Optional[int]
                  wal_slots=None,  # type: Optional[int]
                  osd_id_claims=None,  # type: Optional[Dict[str, List[str]]]
@@ -265,6 +266,11 @@ class DriveGroupSpec(ServiceSpec):
 
         #: ``true`` or ``false``
         self.tpm2 = tpm2
+
+        #: ``true`` or ``false``. Use cryptsetup ``--hw-opal-only`` (SED OPAL
+        #: hardware-only encryption). Implies encrypted OSD deployment.
+        #: Mutually exclusive with ``encrypted``. Can be combined with ``tpm2``.
+        self.hw_opal_only = hw_opal_only
 
         #: How many OSDs per DB device
         self.db_slots = db_slots
@@ -412,6 +418,10 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'objectstore seastore only supports osd type crimson')
+        if self.hw_opal_only and self.encrypted:
+            raise DriveGroupValidationError(
+                self.service_id,
+                'hw_opal_only is mutually exclusive with encrypted')
 
 
 yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)

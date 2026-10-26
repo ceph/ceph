@@ -3739,7 +3739,11 @@ Then run the following:
             unmanaged=False,
             method=drive_group.method,
             objectstore=drive_group.objectstore,
-            osd_type=OSDType(drive_group.osd_type)
+            osd_type=OSDType(drive_group.osd_type),
+            encrypted=drive_group.encrypted,
+            tpm2=drive_group.tpm2,
+            hw_opal_only=drive_group.hw_opal_only,
+            crush_device_class=drive_group.crush_device_class,
         )
 
         self.log.info(f"Creating OSDs with service ID: {drive_group.service_id} on {host}:{device_list}")
