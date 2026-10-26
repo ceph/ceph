@@ -3,7 +3,7 @@ import { ActivatedRoute, ParamMap } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
 import { SmbClusterResourceStateService } from '~/app/shared/services/smb-cluster-resource-state.service';
-import { SMBCluster } from '../smb.model';
+import { CLIENT_COMPAT, SMBCluster } from '../smb.model';
 
 @Component({
   selector: 'cd-smb-cluster-resource-page',
@@ -75,6 +75,10 @@ export class SmbClusterResourcePageComponent implements OnInit, OnDestroy {
       {
         label: $localize`Authentication Mode`,
         value: cluster.auth_mode
+      },
+      {
+        label: $localize`Compatibility`,
+        value: cluster.client_compat || CLIENT_COMPAT.Default
       }
     ];
   }

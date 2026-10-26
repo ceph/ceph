@@ -15,7 +15,9 @@ import {
   ClusterRequestModel,
   SMBUsersGroups,
   PublicAddress,
-  SMBCluster
+  SMBCluster,
+  CLIENT_COMPAT,
+  ClientCompat
 } from '../smb.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
@@ -153,6 +155,9 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         }
         this.smbForm.get('cluster_id').setValue(this.clusterResponse.cluster_id);
         this.smbForm.get('auth_mode').setValue(this.clusterResponse.auth_mode);
+        this.smbForm
+          .get('client_compat')
+          .setValue(this.clusterResponse.client_compat === CLIENT_COMPAT.MacOS);
         if (this.clusterResponse.placement.count) {
           this.smbForm.get('count').setValue(this.clusterResponse.placement.count);
         }
@@ -213,7 +218,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       clustering: new UntypedFormControl(
         CLUSTERING.Default.charAt(0).toUpperCase() + CLUSTERING.Default.slice(1)
       ),
-      public_addrs: new FormArray([])
+      public_addrs: new FormArray([]),
+      client_compat: [false]
     });
 
     this.orchService.status().subscribe((status) => {
@@ -384,6 +390,11 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     if (rawFormValue.clustering && rawFormValue.clustering.toLowerCase() !== CLUSTERING.Default) {
       requestModel.cluster_resource.clustering = rawFormValue.clustering.toLowerCase();
     }
+
+    const clientCompat: ClientCompat = rawFormValue.client_compat
+      ? CLIENT_COMPAT.MacOS
+      : CLIENT_COMPAT.Default;
+    requestModel.cluster_resource.client_compat = clientCompat;
 
     if (rawFormValue.placement?.count) {
       requestModel.cluster_resource.count = rawFormValue.placement.count;
