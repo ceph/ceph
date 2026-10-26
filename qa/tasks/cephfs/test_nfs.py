@@ -503,22 +503,27 @@ class TestNFS(MgrTestCase):
         apply spec and wait for redeploy otherwise it will reset any conf changes
         :param spec: ganesha daemon spec (YAML)
         """
-        ganesha_daemon_pid_init = (self.ctx.cluster.run(args=["sudo", "pgrep", "ganesha.nfsd"],
-                                                        stdout=StringIO(),
-                                                        stderr=StringIO()))[0].stdout.getvalue().strip()
+        def _ganesha_daemons_started():
+            # the `started` timestamps of the nfs daemons, as reported by
+            # `ceph orch ps`
+            ps = json.loads(self._orch_cmd("ps", "--daemon-type", "nfs",
+                                           "-f", "json"))
+            return sorted(str(d.get("started")) for d in ps
+                          if d.get("daemon_type") == "nfs")
+
+        started_init = _ganesha_daemons_started()
         self.ctx.cluster.run(args=['ceph', 'orch', 'apply', '-i', '-'],
                              stdin=spec)
-        with contextutil.safe_while(sleep=4, tries=15) as proceed:
+        with contextutil.safe_while(sleep=4, tries=45) as proceed:
             while proceed():
                 try:
-                    ganesha_daemon_pid = (self.ctx.cluster.run(args=["sudo", "pgrep", "ganesha.nfsd"],
-                                                               stdout=StringIO(),
-                                                               stderr=StringIO()))[0].stdout.getvalue().strip()
-                    if ganesha_daemon_pid != ganesha_daemon_pid_init:
-                        # new pid i.e. redeployment done
+                    # a redeploy (re)starts the daemon(s): the set of
+                    # `started` timestamps changes
+                    if _ganesha_daemons_started() != started_init:
                         break
-                except CommandFailedError:
-                    # no pid if the redeployment is in progress
+                except Exception:
+                    # daemon might be temporarily absent while it is
+                    # being redeployed
                     log.info('waiting for ganesha daemon redeployment')
 
     def enable_libcephfs_logging(self, cluster_name):
