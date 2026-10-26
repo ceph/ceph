@@ -380,6 +380,7 @@ int64_t BtreeAllocator::allocate(
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint,
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   ldout(cct, 10) << __func__ << std::hex
