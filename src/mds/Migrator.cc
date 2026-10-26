@@ -3287,6 +3287,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
     for (auto& p : it->second.session_map) {
       Session *session = p.second.first;
       session->dec_importing();
+      session->forced_open_unused = false;
     }
   }
 

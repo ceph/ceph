@@ -1086,7 +1086,11 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
     if (session->is_closed() || 
 	session->is_closing() ||
 	session->is_killing()) {
+      // the client may go on using a session it was closing
+      if (!session->is_closing())
+	session->client_opened = false;
       sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
+      session->forced_open_unused = true;
       auto q = cmm.find(p->first);
       if (q != cmm.end())
 	session->info.client_metadata.merge(q->second);
@@ -1144,6 +1148,7 @@ void Server::finish_force_open_sessions(map<client_t,pair<Session*,uint64_t> >& 
 
     if (dec_import) {
       session->dec_importing();
+      session->forced_open_unused = false;
     }
 
     mds->sessionmap.mark_dirty(session);
@@ -1158,19 +1163,23 @@ void Server::close_forced_opened_sessions(const map<client_t,pair<Session*,uint6
 
   for (auto &it : smap) {
     Session *session = it.second.first;
-    uint64_t sseq = it.second.second;
-    if (sseq == 0)
+    if (!session->forced_open_unused)
       continue;
-    if (session->get_state_seq() != sseq) {
+    if (session->is_importing()) {
+      // the last import that references this session closes it
+      dout(10) << "deferring close of forced opened session " << session->info.inst << dendl;
+      continue;
+    }
+    session->forced_open_unused = false;
+    if (session->client_opened)
+      continue;
+    if (!session->is_open() && !session->is_stale()) {
       dout(10) << "skipping changed session (" << session->get_state_name() << ") "
 	       << session->info.inst << dendl;
       continue;
     }
-    if (session->client_opened)
-      continue;
     dout(10) << "closing forced opened session (" << session->get_state_name() << ") "
 	     << session->info.inst << dendl;
-    ceph_assert(!session->is_importing());
     journal_close_session(session, Session::STATE_CLOSING, NULL);
   }
 }
