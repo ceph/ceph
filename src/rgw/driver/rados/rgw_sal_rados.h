@@ -836,7 +836,7 @@ class RadosBucket : public StoreBucket {
 class RadosVectorBucket : public RadosBucket {
   public:
     using RadosBucket::RadosBucket; // inherit RadosBucket's constructors
-    ~RadosVectorBucket() override = default;
+    ~RadosVectorBucket() override;
 
     int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) override;
     int create(const DoutPrefixProvider* dpp, const CreateParams& params,
