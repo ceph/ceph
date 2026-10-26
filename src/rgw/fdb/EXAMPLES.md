@@ -59,6 +59,15 @@ namespace fdbc = lfdb::layer::content;
 using namespace std::string_literals;
 ```
 
+The examples use the spellings below. The compatibility names perform the same
+operations and remain available for existing callers.
+
+| Purpose | Examples use | Compatibility name |
+| --- | --- | --- |
+| Stream rows | `lfdb::scan()` | `lfdb::pair_generator()` |
+| Stream blocks of rows | `lfdb::blocks()` | `lfdb::block_generator()` |
+| Compile content keys | `fdbc::key()` | `fdbc::assemble()` |
+
 The snippets share the database opened in Setup. Application record types and
 functions such as `use_name()` stand for the application's own data and work.
 The recovery examples below contain their entire transaction bodies.
@@ -2028,15 +2037,10 @@ fdbc::prefix(fdbc::keyspace("tenant") / bucket_id);
 fdbc::prefix(fdbc::key("tenant", bucket_id));
 ```
 
-Use `key()` for compiled key construction. `assemble()` is an existing synonym;
-it produces the same type and performs the same validation.
+Use `key()` to build the complete object key:
 
 ```cpp
-const auto object_head = fdbc::key("object-cache",
-                                        "object",
-                                        bucket_id,
-                                        version,
-                                        object_name);
+const auto object_head = fdbc::key("object-cache", "object", bucket_id, version, object_name);
 ```
 
 Invalid segment types are rejected at compile time, and invalid keyspace roots
