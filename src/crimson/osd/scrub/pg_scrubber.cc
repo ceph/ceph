@@ -305,27 +305,55 @@ void PGScrubber::recovery_completed()
       return;
     }
 
-    // Remove from queue if already queued to prevent duplicates
-    if (m_queued_or_active || m_scrub_job->is_queued()) {
-      pg.shard_services.get_scrub_scheduler().remove_from_osd_queue(pg.get_pgid());
-      m_scrub_job->clear_both_targets_queued();
-      clear_queued_or_active();
-    }
-
-    // Set urgency and schedule for immediate execution
+    // As in classic recovery_completed(): replace only the deep target in the
+    // queue. The targets' 'queued' flags and m_queued_or_active are
+    // deliberately left untouched, as an active scrub may be in progress.
+    pg.shard_services.get_scrub_scheduler().dequeue_target(
+      pg.get_pgid(), scrub_level_t::deep);
     auto& trgt = m_scrub_job->get_target(scrub_level_t::deep);
     trgt.up_urgency_to(urgency_t::after_repair);
     const auto clock_now = ceph_clock_now();
     trgt.sched_info.schedule.scheduled_at = clock_now;
     trgt.sched_info.schedule.not_before = clock_now;
 
-    // Enqueue directly without calling update_scrub_job() to preserve our schedule
-    DEBUGDPP("Enqueueing after_repair scrub job: {}", pg, *m_scrub_job);
-    pg.shard_services.get_scrub_scheduler().enqueue_scrub_job(*m_scrub_job);
-    m_scrub_job->set_both_targets_queued();
+    DEBUGDPP("Enqueueing after_repair deep target: {}", pg, trgt);
+    pg.shard_services.get_scrub_scheduler().enqueue_target(trgt);
     pg.publish_stats_to_osd();
   }
 }
+
+namespace {
+
+/**
+ * The (hobject-based) part of the key under which classic's Scrub::Store
+ * (ScrubStore.cc) keeps an error record - see virtual_hobject_w_prefix().
+ * The full object identity (name, nspace, locator, snap) is part of the key.
+ * The (constant) "SCRUB_OBJ_"/"SCRUB_SS_" prefix is omitted, as it does not
+ * affect the ordering within each of the two groups.
+ */
+std::string scrub_store_key(
+    int64_t pool,
+    const librados::object_id_t& oid,
+    uint32_t hash)
+{
+  return hobject_t(object_t{oid.name}, oid.locator, oid.snap, hash, pool,
+                   oid.nspace)
+      .to_str();
+}
+
+// classic's to_object_key()
+std::string object_error_key(int64_t pool, const librados::object_id_t& oid)
+{
+  return scrub_store_key(pool, oid, 0x00000000);
+}
+
+// classic's to_snap_key()
+std::string snap_error_key(int64_t pool, const librados::object_id_t& oid)
+{
+  return scrub_store_key(pool, oid, 0x77777777);
+}
+
+}  // namespace
 
 bool PGScrubber::get_store_errors(const scrub_ls_arg_t& arg,
                                    scrub_ls_result_t& res_inout) const
@@ -340,19 +368,27 @@ bool PGScrubber::get_store_errors(const scrub_ls_arg_t& arg,
     return false;
   }
 
+  const int64_t pool = pg.get_pgid().pgid.pool();
+
   // Encode the appropriate error type based on arg.get_snapsets
   if (arg.get_snapsets) {
-    // Return snapset errors (only stored in shallow store)
+    // Return snapset errors (only stored in shallow store).
+    // m_stored_snapset_errors is kept sorted by the classic store key
+    // (see emit_scrub_result()).
+    const std::string start_key = arg.start_after.name.empty()
+      ? std::string{}
+      : snap_error_key(pool, arg.start_after);
+
     for (const auto& snapset_error : m_stored_snapset_errors) {
       if (res_inout.vals.size() >= arg.max_return) {
         break;
       }
 
       // Check if we should skip this error based on start_after
-      if (!arg.start_after.name.empty()) {
-        if (snapset_error.object.name <= arg.start_after.name) {
-          continue;
-        }
+      // (classic: get_1st_after_key(to_snap_key(start)))
+      if (!start_key.empty() &&
+          snap_error_key(pool, snapset_error.object) <= start_key) {
+        continue;
       }
 
       // Encode the snapset error wrapper to bufferlist
@@ -368,33 +404,44 @@ bool PGScrubber::get_store_errors(const scrub_ls_arg_t& arg,
 
     DEBUGDPP("Retrieving errors (last scrub was {})", pg, m_last_scrub_was_deep ? "deep" : "shallow");
 
+    // Key the errors by the full object identity (name, nspace, locator, snap),
+    // as classic does (see Scrub::Store's to_object_key()). Keying by name
+    // alone would merge/overwrite the errors of different clones (or
+    // namespaces) of the same object, and would break 'start_after' paging.
+    auto to_key = [pool](const librados::object_id_t& oid) {
+      return object_error_key(pool, oid);
+    };
+
     std::map<std::string, const inconsistent_obj_wrapper*> shallow_map;
     std::map<std::string, const inconsistent_obj_wrapper*> deep_map;
 
     for (const auto& err : m_shallow_errors) {
-      shallow_map[err.object.name] = &err;
+      shallow_map[to_key(err.object)] = &err;
     }
     for (const auto& err : m_deep_errors) {
-      deep_map[err.object.name] = &err;
+      deep_map[to_key(err.object)] = &err;
     }
 
-    // Collect all unique object names
+    // Collect all unique object keys
     std::set<std::string> all_objects;
-    for (const auto& [name, _] : shallow_map) all_objects.insert(name);
-    for (const auto& [name, _] : deep_map) all_objects.insert(name);
+    for (const auto& [key, _] : shallow_map) all_objects.insert(key);
+    for (const auto& [key, _] : deep_map) all_objects.insert(key);
 
-    for (const auto& obj_name : all_objects) {
+    const std::string start_key =
+      arg.start_after.name.empty() ? std::string{} : to_key(arg.start_after);
+
+    for (const auto& obj_key : all_objects) {
       if (res_inout.vals.size() >= arg.max_return) {
         break;
       }
 
       // Check if we should skip this error based on start_after
-      if (!arg.start_after.name.empty() && obj_name <= arg.start_after.name) {
+      if (!start_key.empty() && obj_key <= start_key) {
         continue;
       }
 
-      auto deep_it = deep_map.find(obj_name);
-      auto shallow_it = shallow_map.find(obj_name);
+      auto deep_it = deep_map.find(obj_key);
+      auto shallow_it = shallow_map.find(obj_key);
 
 
       ceph::buffer::list bl;
@@ -435,11 +482,18 @@ bool PGScrubber::get_store_errors(const scrub_ls_arg_t& arg,
                 auto it = merged.shards.find(shard_id);
                 if (it != merged.shards.end()) {
                   // Shard exists in both - update metadata only, preserve deep errors
-                  // Classic OSD line 395-397: updates selected_oi and primary,
+                  // Classic OSD line 393-395: updates selected_oi and primary,
                   // then does |= saved_er which is a no-op (preserves deep shard errors)
                   it->second.selected_oi = sh_shard_info.selected_oi;
                   it->second.primary = sh_shard_info.primary;
                   // Note: NOT merging shard errors - classic OSD preserves deep shard errors
+
+                  // The attributes: copy the shallow ones that are missing
+                  // from the deep data (otherwise the shallow attr buffer
+                  // is ignored), as classic does (ScrubStore.cc line 398-407)
+                  for (const auto& [attr, attr_bl] : sh_shard_info.attrs) {
+                    it->second.attrs.try_emplace(attr, attr_bl);
+                  }
                 } else {
                   // Shard only in shallow - add it
                   merged.shards[shard_id] = sh_shard_info;
@@ -650,6 +704,7 @@ seastar::future<schedule_result_t> PGScrubber::start_scrub(
   // a few checks. If failing - the 'not-before' is modified, and the target
   // is requeued.
   auto clock_now = ceph_clock_now();
+  epoch_t epoch_started = pg.get_osdmap_epoch();
 
   if (!pg.is_primary() || !pg.is_active()) {
     // the PG is not expected to be 'registered' in this state. And we should
@@ -714,9 +769,26 @@ seastar::future<schedule_result_t> PGScrubber::start_scrub(
   if (!reserved) {
     DEBUGDPP("failed to reserve locally", pg);
     requeue_penalized(
-	    s_or_d, delay_both_targets_t::yes, delay_cause_t::local_resources,
-	    clock_now);
+     s_or_d, delay_both_targets_t::yes, delay_cause_t::local_resources,
+     clock_now);
     co_return schedule_result_t::osd_wide_failure;
+  }
+
+  // Across the suspension point of reserve_local(), the PG interval,
+  // peering state, or primary status may have changed.
+  if (epoch_started < pg.get_same_interval_since() ||
+      !pg.is_primary() ||
+      !pg.is_active_clean()) {
+    DEBUGDPP("PG state or interval changed across suspension (started epoch: {}, same_interval_since: {}), aborting reservation",
+      pg, epoch_started, pg.get_same_interval_since());
+    m_local_osd_resource.reset();
+    if (m_scrub_job->is_registered()) {
+      requeue_penalized(
+          s_or_d, delay_both_targets_t::yes,
+          (epoch_started < pg.get_same_interval_since() ? delay_cause_t::interval : delay_cause_t::pg_state),
+          clock_now);
+    }
+    co_return schedule_result_t::target_specific_failure;
   }
 
   // can commit now to the specific scrub details, as nothing will
@@ -735,28 +807,26 @@ seastar::future<schedule_result_t> PGScrubber::start_scrub(
   // executing now.
   trgt.reset();
 
-  epoch_t epoch_queued = pg.get_osdmap_epoch();
-  DEBUGDPP("queued at epoch: {}", pg, epoch_queued);
-  if (epoch_queued >= pg.get_same_interval_since()) {
-    bool deep = pg.state_test(PG_STATE_DEEP_SCRUB);
-    DEBUGDPP("can scrub now, deep: {}", pg, deep);
-    Ref<PG> pgref = &pg;
-    co_await PG::interruptor::with_interruption([this, pgref, deep] {
-      handle_scrub_requested(deep);
-      return PG::interruptor::now();
-    }, [FNAME, this](std::exception_ptr ep) {
-      DEBUGDPP("interrupted with {}", pg, ep);
-    }, pgref, pgref->get_osdmap_epoch());
-    co_return schedule_result_t::scrub_initiated;
-  } else {
-    DEBUGDPP("cannot scrub now, will be scheduled by OSD later. epoch_queued: {}, same_interval_since: {}",
-      pg, epoch_queued, pg.get_same_interval_since());
-    // the target is already marked as not in queue, but the job isn't
-    // registered yet. We need to register it, so it will be properly
-    // scheduled by the OSD.
-    schedule_scrub_with_osd();
+  bool deep = pg.state_test(PG_STATE_DEEP_SCRUB);
+  DEBUGDPP("can scrub now, deep: {}", pg, deep);
+  Ref<PG> pgref = &pg;
+  bool interrupted = false;
+  co_await PG::interruptor::with_interruption([this, deep] {
+    handle_scrub_requested(deep);
+    return PG::interruptor::now();
+  }, [FNAME, this, &interrupted](std::exception_ptr ep) {
+    DEBUGDPP("interrupted with {}", pg, ep);
+    interrupted = true;
+  }, pgref, epoch_started);
+
+  if (interrupted) {
+    DEBUGDPP("scrub initiation interrupted, aborting scrub session", pg);
+    on_mid_scrub_abort(delay_cause_t::interval);
+    cleanup_on_finish();
     co_return schedule_result_t::target_specific_failure;
   }
+
+  co_return schedule_result_t::scrub_initiated;
 }
 
 void PGScrubber::handle_scrub_requested(bool deep)
@@ -805,17 +875,14 @@ void PGScrubber::enqueue_scrub_requested(bool deep, bool repair)
   auto scrub_level = deep_requested ? scrub_level_t::deep : scrub_level_t::shallow;
   auto& trgt = m_scrub_job->get_target(scrub_level);
 
-  // Dequeue if already queued
-  if (trgt.queued) {
-    pg.shard_services.get_scrub_scheduler().dequeue_target(pg.pgid, scrub_level);
-    trgt.queued = false;
-  }
-
-  // Set urgency to operator_requested and enqueue with correct scrub type
+  // Dequeue (a no-op if not queued), update the target's urgency and
+  // re-enqueue. As in classic scrub_requested(), the target's 'queued' flag
+  // is deliberately left untouched here: it is maintained only by the
+  // registration, start_scrub() and requeue code paths.
+  pg.shard_services.get_scrub_scheduler().dequeue_target(pg.pgid, scrub_level);
   auto scrub_type = repair ? scrub_type_t::do_repair : scrub_type_t::not_repair;
   m_scrub_job->operator_forced(scrub_level, scrub_type);
   pg.shard_services.get_scrub_scheduler().enqueue_target(trgt);
-  trgt.queued = true;
 
   DEBUGDPP("enqueued operator-requested {} {}", pg,
     deep_requested ? "deep" : "shallow", repair ? "repair" : "scrub");
@@ -880,7 +947,10 @@ void PGScrubber::handle_schedule_scrub(bool deep, int64_t offset)
   // Directly update the job's schedule to match the timestamp we set
   // We can't use update_scrub_job() because it calls update_targets() which
   // would recalculate and overwrite the schedule we just set
-  if (m_scrub_job && m_scrub_job->is_registered()) {
+  // As in classic (PG::on_scrub_schedule_input_change()), do not touch the
+  // queue if a scrub is already queued or active: the new stamps will be
+  // picked up when that scrub ends and the job is updated.
+  if (m_scrub_job && m_scrub_job->is_registered() && !is_queued_or_active()) {
     auto scrub_level = deep ? scrub_level_t::deep : scrub_level_t::shallow;
     auto& target = m_scrub_job->get_target(scrub_level);
 
@@ -1941,12 +2011,13 @@ int PGScrubber::scrub_process_inconsistent(
     }
 
     if (!bad_shards.empty() && auth_shard_info) {
-      // Count the number of bad shards being fixed
-      // This matches classic OSD's behavior of counting bad_peers.size()
-      fixed_count += bad_shards.size();
-
-      // Get the version from the authoritative shard's object_info
-      // This matches classic OSD's approach in scrub_backend.cc:402-424
+      // Get the version from the authoritative shard's object_info.
+      // Classic OSD (scrub_backend.cc repair_object()) calls ceph_abort() if
+      // the auth-shard OI cannot be decoded, because auth selection guarantees
+      // a decodable OI.  We log an error and skip instead, but we must NOT
+      // count the object as fixed when that happens — counting before the
+      // decode would falsely satisfy (m_fixed_count == total_errors) and clear
+      // PG_STATE_INCONSISTENT even though no repair was performed.
       std::optional<eversion_t> repair_version;
       try {
         object_info_t oi;
@@ -1971,15 +2042,15 @@ int PGScrubber::scrub_process_inconsistent(
         continue;
       }
 
-      // Mark objects as missing on bad shards
-      // This matches classic OSD's approach in scrub_backend.cc:424
-      // Classic OSD just calls force_object_missing() and lets the PG state
-      // machine automatically queue recovery when it detects the PG is not clean
+      // Mark objects as missing on bad shards and count them as fixed only
+      // after the repair is actually queued (matches scrub_backend.cc:376/383
+      // where fixed_cnt is incremented after repair_object() succeeds).
       for (const auto& bad_shard : bad_shards) {
         pg.peering_state.force_object_missing(bad_shard, oid, *repair_version);
         DEBUGDPP("Marked object {} as missing on shard {} with version {}",
                  pg, oid, bad_shard, *repair_version);
       }
+      fixed_count += bad_shards.size();
     }
   }
 
@@ -1993,18 +2064,25 @@ void PGScrubber::emit_scrub_result(
   LOG_PREFIX(PGScrubber::emit_scrub_result);
   DEBUGDPP("objects_scrubbed: {}", pg, m_objects_scrubbed_in_chunk);
 
-  // Sort snapset errors to match classic OSD's omap-key order across all chunks:
-  // (snap ascending, then name ascending).  Per-chunk sort was already applied in
-  // validate_chunk, but cross-chunk ordering requires a final global sort here
-  // once all chunks have been accumulated into m_stored_snapset_errors.
-  std::sort(m_stored_snapset_errors.begin(), m_stored_snapset_errors.end(),
-    [](const inconsistent_snapset_wrapper &a,
-       const inconsistent_snapset_wrapper &b) {
-      if (a.object.snap != b.object.snap) {
-        return a.object.snap < b.object.snap;
-      }
-      return a.object.name < b.object.name;
-    });
+  // Sort snapset errors to match classic OSD's omap-key order across all
+  // chunks: classic stores them under to_snap_key(), i.e. the string form of
+  // the full hobject (pool, hash, snap in hex, name, locator, nspace).
+  // Cross-chunk ordering requires a final global sort here once all chunks
+  // have been accumulated into m_stored_snapset_errors.
+  {
+    const int64_t pool = pg.get_pgid().pgid.pool();
+    std::vector<std::pair<std::string, inconsistent_snapset_wrapper>> keyed;
+    keyed.reserve(m_stored_snapset_errors.size());
+    for (auto& e : m_stored_snapset_errors) {
+      keyed.emplace_back(snap_error_key(pool, e.object), std::move(e));
+    }
+    std::stable_sort(keyed.begin(), keyed.end(),
+      [](const auto& a, const auto& b) { return a.first < b.first; });
+    m_stored_snapset_errors.clear();
+    for (auto& [_, e] : keyed) {
+      m_stored_snapset_errors.push_back(std::move(e));
+    }
+  }
 
   pg.peering_state.update_stats(
     [this, FNAME, deep, &in_stats](auto &history, auto &pg_stats) {
