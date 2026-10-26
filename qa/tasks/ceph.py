@@ -1018,6 +1018,16 @@ def cluster(ctx, config):
             if section not in conf:
                 conf[section] = {}
             conf[section][key] = value
+    # a value in ceph.conf would override the one cluster-conf sets in the
+    # configuration database
+    for section, keys in config.get('cluster_conf', {}).items():
+        section = str(section)
+        names = {str(k).replace(' ', '_') for k in keys}
+        for key in list(conf.get(section) or {}):
+            if key.replace(' ', '_') in names:
+                log.info("[%s] %s moves to the configuration database",
+                         section, key)
+                del conf[section][key]
 
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
@@ -2413,6 +2423,7 @@ def task(ctx, config):
     subtasks += [
         lambda: cluster(ctx=ctx, config=dict(
             conf=config.get('conf', {}),
+            cluster_conf=config.get('cluster-conf', {}),
             fs=config.get('fs', 'xfs'),
             mkfs_options=config.get('mkfs_options', None),
             mount_options=config.get('mount_options', None),
