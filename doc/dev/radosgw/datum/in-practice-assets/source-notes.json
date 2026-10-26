@@ -181,5 +181,14 @@
     ],
     "scope": "Standalone byte-key illustration of the same logical names, prefix, and markers shown in the page.",
     "expected_stdout": "photos/30\nphotos/70\n"
+  },
+  "field_explanation": {
+    "source": "src/rgw/datum/include/datum/codec/zpp.h",
+    "ref": "c22d6be23c73cb113a3d13fea6ba5cd5dfae9cc8",
+    "lines": [
+      92,
+      97
+    ],
+    "presentation": "Closed native details element; literalinclude quotes the actual normal field-serialization loop."
   }
 }

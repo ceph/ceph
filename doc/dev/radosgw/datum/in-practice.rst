@@ -331,6 +331,35 @@ One entry codec can serve native records, independent module records, and client
 Native version-one entry format. Selected source excerpts; other record members omitted.
 `Reply encoder excerpt <https://github.com/chardan/ceph/blob/jfw-datum/doc/dev/radosgw/datum/in-practice-assets/integration-bi.cpp.txt#L42-L75>`_ · `field traversal in the PR <https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/codec/zpp.h#L72-L102>`_.
 
+.. raw:: html
+
+   <details class="datum-explain"><summary>What happens inside this call?</summary>
+
+A member pointer names a field in a type. Combine it with a record to access that field:
+
+.. code-block:: cpp
+
+   const auto field = &entry::idx;
+   const auto& name = value.*field;  // refers to the same string as value.idx
+
+For the field list above, the chosen fields are ``type``, ``idx``, and ``data``, in that order.
+During normal encoding, the implementation walks this list, named ``members``:
+
+.. literalinclude:: ../../../../src/rgw/datum/include/datum/codec/zpp.h
+   :language: cpp
+   :lines: 92-97
+   :dedent: 8
+
+``template for`` is a C++26 loop expanded at compile time for those member pointers.
+``value.*member`` accesses the chosen field. ``serialize_field`` passes it to that field’s codec;
+a reported error stops the walk.
+
+`Read the complete function in the PR <https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/codec/zpp.h#L72-L102>`_.
+
+.. raw:: html
+
+   </details>
+
 Choosing a reply container
 --------------------------
 
