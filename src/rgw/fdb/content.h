@@ -104,7 +104,7 @@ constexpr void append_encoded_string_segments(std::string& out, const auto& ...s
 
 template <typename ...Segments>
 concept key_segments = 0 < sizeof...(Segments) && (concepts::stringview_convertible<Segments> && ...);
-struct compiled_key final
+class compiled_key final
 {
  std::string encoded_bytes;
 

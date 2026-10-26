@@ -3176,6 +3176,19 @@ TEST_CASE("for_each provides callback-scoped raw range values", "[fdb]")
 
  const auto kvs_in = write_monotonic_kvs(j, nkeys);
 
+ SECTION("borrows noncopyable consumers with an explicit read mode") {
+  auto consumer = [calls = std::make_unique<std::size_t>(0)](
+                    std::span<const std::uint8_t>, std::span<const std::uint8_t>) mutable {
+   ++*calls;
+  };
+  static_assert(not std::copy_constructible<decltype(consumer)>);
+  const auto selector = lfdb::select {make_key(0), make_key(nkeys)};
+  const auto txn = lfdb::make_transaction(j);
+  CHECK(lfdb::for_each(lfdb::raw, txn, selector, lfdb::read_mode::snapshot, consumer) == nkeys);
+  CHECK(lfdb::for_each(lfdb::raw, j.dbh(), lfdb::transaction_options {}, selector,
+                       lfdb::read_mode::snapshot, consumer) == nkeys);
+ }
+
  auto check_traversal = [&kvs_in](auto source, auto selector, auto expected,
                                   const auto expected_end) {
   const auto nread = lfdb::for_each(
@@ -3467,6 +3480,19 @@ TEST_CASE("managed read helpers accept transaction options", "[fdb]")
                       | std::ranges::to<std::vector<std::string>>();
 
   CHECK_THAT(keys, Catch::Matchers::RangeEquals(expected));
+ }
+
+ SECTION("configured callbacks borrow noncopyable lvalues") {
+  auto consumer = [state = std::make_unique<int>(0)](string_pair&&) mutable { ++*state; };
+  CHECK(lfdb::for_each(j.dbh(), options, selector, lfdb::read_mode::snapshot, consumer) == nkeys);
+  auto transform_key = [state = std::make_unique<int>(0)](string_pair&& row) mutable {
+   ++*state;
+   return std::move(row.first);
+  };
+  std::vector<std::string> keys;
+  lfdb::transform(j.dbh(), options, selector, std::back_inserter(keys),
+                   lfdb::read_mode::snapshot, transform_key);
+  CHECK_THAT(keys, Catch::Matchers::RangeEquals(kvs_in | std::views::keys));
  }
 
  SECTION("paged scan runs with transaction options") {
@@ -4808,7 +4834,7 @@ SCENARIO("transactor", "[fdb]")
 
     CHECK_FALSE(lfdb::get(txn, key, out, lfdb::read_mode::snapshot));
     CHECK(lfdb::get(txn, key, out));
-    lfdb::reset_for_replay(txn, 1020);
+    lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed);
    }
   }
  }
