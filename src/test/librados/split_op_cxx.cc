@@ -572,5 +572,44 @@ TEST_P(LibRadosSplitOpPP, CancelReplica)
   EXPECT_EQ(-ECANCELED, ret);
 }
 
+// Verify that a sparse read whose full extent spans multiple replicas is
+// assembled correctly end-to-end: the decoded extent map and data must match
+// those returned by a non-split sparse_read of the same range on the same
+// object.  This exercises SplitOp::complete's outmetadata/outdata assembly
+// as well as CB_ObjectOperation_sparse_read's split-reply path.
+TEST_P(LibRadosSplitOpPP, SparseReadInMultiOpContent)
+{
+  SKIP_IF_CRIMSON();
+  bufferlist written_bl;
+  ASSERT_NO_FATAL_FAILURE(write_pattern_object(2, 0, &written_bl));
+
+  // Reference: a plain (non-split) sparse_read of the whole object.
+  std::map<uint64_t, uint64_t> ref_extents;
+  bufferlist ref_data;
+  {
+    int ret = ioctx.sparse_read("foo", ref_extents, ref_data,
+                                written_bl.length(), 0);
+    ASSERT_GE(ret, 1) << "reference sparse_read must find at least one extent";
+  }
+
+  // Now issue the same sparse_read inside an ObjectReadOperation so the split
+  // path is exercised (the min_split_size write makes it span multiple shards).
+  std::map<uint64_t, uint64_t> got_extents;
+  bufferlist got_data;
+  int sparse_rval = -1;
+  ObjectReadOperation read;
+  read.sparse_read(0, written_bl.length(), &got_extents, &got_data,
+                   &sparse_rval);
+  bufferlist result_bl;
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, 2, "foo", &read, &result_bl,
+                                       balanced_read_flags));
+  ASSERT_EQ(0, sparse_rval);
+
+  EXPECT_EQ(ref_extents, got_extents)
+    << "split sparse_read extent map must match the reference";
+  EXPECT_TRUE(got_data.contents_equal(ref_data))
+    << "split sparse_read data must match the reference";
+}
+
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSplitOpPP);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSplitOpECPP);
