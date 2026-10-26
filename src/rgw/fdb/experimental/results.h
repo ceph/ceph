@@ -228,14 +228,15 @@ struct result_access final
   return point_read_result {std::move(txn), std::move(future), value};
  }
 
- static auto range_future(const transaction_handle& txn, const scan_cursor& cursor)
+ static auto range_future(const transaction_handle& txn, const scan_cursor& cursor,
+                           const read_mode mode)
  {
   if (not cursor) {
    throw std::invalid_argument("cannot read from an exhausted scan cursor");
   }
 
   return ::ceph::libfdb::detail::get_range_future_from_transaction(
-    *txn, cursor.progress.current(), cursor.progress.fdb_iteration());
+    *txn, cursor.progress.current(), cursor.progress.fdb_iteration(), mode);
  }
 
  static scan_window scan(transaction_handle& txn, scan_cursor& cursor,

@@ -19,6 +19,8 @@
 #include "test_fdb_common.h"
 #include "rgw/ceph_fdb_execution.h"
 
+#include <catch2/generators/catch_generators.hpp>
+
 #include <array>
 #include <cstring>
 #include <exception>
@@ -440,6 +442,72 @@ TEST_CASE("Experimental transaction delivery survives a failing associated alloc
  CHECK(1 == completions);
  CHECK(state.fail_at == state.calls);
  CHECK(0 == state.outstanding);
+}
+
+TEST_CASE("Native point and window reads honor snapshot conflict semantics", "[fdb][concurrency][api]")
+{
+ janitor dbh;
+ const auto mode = GENERATE(lfdb::read_mode::serializable, lfdb::read_mode::snapshot);
+ const auto key = test_key("native/read-mode");
+ lfdb::set(dbh, key, "original");
+ const auto txn = lfdb::make_transaction(dbh);
+
+ SECTION("point read") {
+  const auto result = lfdbx::wait(lfdbx::get(lfdb::raw, txn, std::string_view(key), mode), null_yield);
+  REQUIRE(result.bytes());
+ }
+ SECTION("window read") {
+  const auto result = lfdbx::wait(lfdbx::read_window(
+    lfdb::raw, txn, lfdbx::scan_cursor {lfdb::query::singleton(key)}, mode), null_yield);
+  REQUIRE(result.rows().size() == 1);
+ }
+
+ lfdb::set(dbh, key, "changed");
+ lfdb::set(txn, test_key("native/read-mode-effect"), "written");
+ const auto committed = lfdb::commit(lfdb::with_result, txn);
+ if (mode == lfdb::read_mode::snapshot) {
+  CHECK(committed);
+ } else {
+  REQUIRE_FALSE(committed);
+  CHECK(committed.error() == lfdb::fdb_error_code::not_committed);
+ }
+}
+
+TEST_CASE("Native replay preparation is lazy and preserves typed errors", "[fdb][concurrency][api]")
+{
+ janitor dbh;
+ const auto key = test_key("native/manual-replay");
+ const auto txn = lfdb::make_transaction(dbh);
+ lfdb::versionstamp stamp;
+ lfdb::set(txn, key, "pending");
+ lfdb::set(txn, test_key("native/manual-replay-stamp"), lfdb::versioned("", stamp));
+
+ SECTION("preparation starts on initiation") {
+  auto prepare = lfdbx::reset_for_replay(txn, lfdb::fdb_error_code::not_committed);
+  CHECK_FALSE(stamp.is_ready());
+  REQUIRE(lfdb::key_exists(txn, key));
+  CHECK_NOTHROW(lfdbx::wait(std::move(prepare), null_yield));
+  REQUIRE(stamp.is_ready());
+  CHECK(stamp.resolved_bytes(lfdb::with_result).error() == lfdb::fdb_error_code::not_committed);
+  CHECK_FALSE(lfdb::key_exists(txn, key));
+  lfdb::set(txn, key, "replayed");
+  CHECK_NOTHROW(lfdbx::wait(lfdbx::commit(txn), null_yield));
+  CHECK(lfdb::key_exists(dbh, key));
+ }
+ SECTION("non-native categories cannot reset transaction state") {
+  auto prepare = lfdbx::reset_for_replay(txn, std::error_code(1020, std::generic_category()));
+  CHECK_THROWS_AS(lfdbx::wait(std::move(prepare), null_yield), std::invalid_argument);
+  CHECK_FALSE(stamp.is_ready());
+  CHECK(lfdb::key_exists(txn, key));
+ }
+ SECTION("terminal native errors preserve their category and value") {
+  try {
+   lfdbx::wait(lfdbx::reset_for_replay(txn, lfdb::fdb_error_code::operation_cancelled), null_yield);
+   FAIL("terminal native error was unexpectedly prepared for replay");
+  } catch (const lfdb::libfdb_exception& failure) {
+   CHECK(failure.code() == lfdb::fdb_error_code::operation_cancelled);
+  }
+ }
 }
 
 TEST_CASE("Experimental point operations own borrowed and transferred keys",

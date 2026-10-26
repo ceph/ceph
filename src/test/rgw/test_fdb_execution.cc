@@ -1316,7 +1316,7 @@ TEST_CASE("FDB execution commits leave replay preparation explicit after conflic
  REQUIRE_FALSE(result);
  CHECK(lfdb::retryable_not_committed(result.error()));
 
- lfdb::reset_for_replay(txn, result.error().value());
+ lfdb::reset_for_replay(txn, result.error());
  REQUIRE(lfdb::get(txn, key, value));
  CHECK("conflict" == value);
 

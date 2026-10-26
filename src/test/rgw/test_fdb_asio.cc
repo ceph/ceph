@@ -176,7 +176,7 @@ TEST_CASE("Experimental ASIO commits leave replay preparation explicit", "[fdb][
  const auto result = lfdbx::wait(lfdbx::commit(lfdb::with_result, txn), null_yield);
  REQUIRE_FALSE(result);
  CHECK(lfdb::retryable_not_committed(result.error()));
- lfdb::reset_for_replay(txn, result.error().value());
+ lfdb::reset_for_replay(txn, result.error());
  REQUIRE(lfdb::get(txn, key, value));
  CHECK("conflict" == value);
  lfdb::set(txn, key, "second attempt");

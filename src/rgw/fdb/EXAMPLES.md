@@ -355,14 +355,16 @@ for (;;) {
     throw lfdb::libfdb_exception {outcome.error()};
   }
 
-  lfdb::reset_for_replay(txn, outcome.error().value());
+  if (not ex::sync_wait(lfdbx::reset_for_replay(txn, outcome.error()))) {
+    throw std::runtime_error("replay preparation stopped before initiation");
+  }
 }
 ```
 
 This loop stops on 1021 and terminal errors, preserving their native code.
-It deliberately ends each asynchronous commit at a synchronous boundary, so
-the blocking preparation call runs on the caller's thread. Inside asynchronous
-composition, prefer `transact()` for nonblocking recovery.
+This example waits at a synchronous boundary for both native operations. The
+preparation operation itself composes asynchronously; use it in the selected
+backend's native composition, or prefer `transact()` for managed recovery.
 
 Ordinary `commit()` has no success payload and sends native failures through
 the error channel. `commit(with_result, txn)` sends

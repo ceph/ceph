@@ -272,6 +272,7 @@ struct point_request final : future_request
  transaction_handle txn;
 
  std::string key;
+ read_mode mode = read_mode::serializable;
 
  public:
  void start(state_type& state)
@@ -284,7 +285,8 @@ struct point_request final : future_request
   }
 
   state.emplace(fdb_transaction_get(
-    txn->raw_handle(), bytes.data(), static_cast<int>(std::size(bytes)), false));
+    txn->raw_handle(), bytes.data(), static_cast<int>(std::size(bytes)),
+    read_mode::snapshot == mode));
  }
 
  std::optional<value_type> advance(state_type& state)
@@ -301,12 +303,13 @@ struct scan_request final : future_request
  transaction_handle txn;
 
  scan_cursor cursor;
+ read_mode mode = read_mode::serializable;
 
  public:
  void start(state_type& state)
  {
   validate_transaction(txn);
-  state.emplace(result_access::range_future(txn, cursor));
+  state.emplace(result_access::range_future(txn, cursor, mode));
  }
 
  std::optional<value_type> advance(state_type& state)
@@ -388,7 +391,7 @@ struct replay_request final : future_request
 
  transaction_handle txn;
 
- fdb_error_t error;
+ std::error_code error;
 
  public:
  void start(state_type& state)

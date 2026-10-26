@@ -418,7 +418,9 @@ class asio_transaction_operation final
   }
 
   try {
-   auto preparation = make_future_operation(replay_request {{}, txn, replay_error});
+   auto preparation = make_future_operation(replay_request {
+    {}, txn, std::error_code(replay_error, ::ceph::libfdb::fdb_error_category())
+   });
    std::move(preparation).native_handle()(bind_child(
      [owner = this->shared_from_this(), replay_error](std::exception_ptr failure, auto) mutable {
       if (failure) {

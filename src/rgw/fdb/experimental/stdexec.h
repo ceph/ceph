@@ -412,7 +412,8 @@ class transaction_operation final
   explicit replay_operation_t(transaction_operation& parent, const fdb_error_t error)
    : state(stdexec::connect(
      stdexec::starts_on(::exec::trampoline_scheduler {},
-                       future_sender {replay_request {{}, parent.txn, error}}),
+                       future_sender {replay_request {{}, parent.txn,
+                         std::error_code(error, ::ceph::libfdb::fdb_error_category())}}),
      replay_receiver {parent, error}))
   {}
 

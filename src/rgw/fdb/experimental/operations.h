@@ -49,20 +49,33 @@ template <query::expression SelectionT>
 }
 
 // Lazily reads an owning point result on an existing transaction:
-[[nodiscard]] inline auto get(raw_t, transaction_handle txn, std::string key)
+[[nodiscard]] inline auto get(raw_t, transaction_handle txn, std::string key,
+                              const read_mode mode = read_mode::serializable)
 {
- return detail::make_future_operation(detail::point_request {{}, std::move(txn), std::move(key)});
+ return detail::make_future_operation(detail::point_request {
+  {}, std::move(txn), std::move(key), mode
+ });
 }
 
-[[nodiscard]] inline auto get(raw_t, transaction_handle txn, const concepts::libfdb_key auto& key)
+[[nodiscard]] inline auto get(raw_t, transaction_handle txn, const concepts::libfdb_key auto& key,
+                              const read_mode mode = read_mode::serializable)
 {
- return get(raw, std::move(txn), std::string {::ceph::libfdb::detail::as_libfdb_key_view(key)});
+ return get(raw, std::move(txn), std::string {::ceph::libfdb::detail::as_libfdb_key_view(key)}, mode);
 }
 
 // Consuming the window yields the cursor for the next read:
-[[nodiscard]] inline auto read_window(raw_t, transaction_handle txn, scan_cursor cursor)
+[[nodiscard]] inline auto read_window(raw_t, transaction_handle txn, scan_cursor cursor,
+                                      const read_mode mode = read_mode::serializable)
 {
- return detail::make_future_operation(detail::scan_request {{}, std::move(txn), std::move(cursor)});
+ return detail::make_future_operation(detail::scan_request {
+  {}, std::move(txn), std::move(cursor), mode
+ });
+}
+
+// Prepare once; the caller decides whether the whole transaction body may replay.
+[[nodiscard]] inline auto reset_for_replay(transaction_handle txn, const std::error_code error)
+{
+ return detail::make_future_operation(detail::replay_request {{}, std::move(txn), error});
 }
 
 // Adopts an already-created watch; its underlying future may be active:

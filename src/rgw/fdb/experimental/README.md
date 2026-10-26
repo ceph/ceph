@@ -30,13 +30,14 @@ Both backends provide the following operations in
 
 | Operation | Successful result |
 | --- | --- |
-| `get(raw, txn, key)` | `point_read_result` |
-| `read_window(raw, txn, cursor)` | `scan_window` |
+| `get(raw, txn, key[, mode])` | `point_read_result` |
+| `read_window(raw, txn, cursor[, mode])` | `scan_window` |
 | `read_version(txn)` | `std::int64_t` read version |
 | `approximate_commit_bytes(txn)` | `std::int64_t` pending transaction size |
 | `approximate_range_size(txn, selection)` | `std::int64_t` estimated stored bytes |
 | `partitions(txn, selection, target_bytes)` | Owning `std::vector<select>` |
 | `when_changed(watch)` | No values |
+| `reset_for_replay(txn, error)` | no value |
 | `commit(txn)` | no success payload |
 | `commit(with_result, txn)` | `std::expected<void, std::error_code>` |
 | `transact(dbh, [options,] body, args...)` | The body's owning successful values, after commit |
@@ -51,6 +52,10 @@ Point results and scan windows own the FoundationDB storage behind their byte
 views. Keep the result alive and unmoved while using its views. Consuming a
 window with `next()` also releases its rows. A missing key is a successful
 point result with an empty `bytes()`, rather than an operation failure.
+Point and window reads default to `read_mode::serializable`. Pass
+`read_mode::snapshot` as the final argument to omit native read conflicts,
+just as with synchronous reads. The chosen mode belongs to that read operation;
+subsequent windows may choose their mode explicitly.
 Experimental windows reuse the ordinary scan result owner and extraction.
 Both paths copy unaligned row metadata into aligned storage; key and value
 bytes continue to use FoundationDB's storage without copying. Aligned metadata
@@ -85,7 +90,12 @@ requested version stamps independently: stamp failure after a confirmed commit
 does not change successful commit disposition.
 
 For manual replay, decide whether replay is appropriate, call
-`lfdb::reset_for_replay()`, then rebuild the transaction body. `transact()` manages
+`lfdbx::reset_for_replay(txn, error)`, await its completion, then rebuild the
+transaction body. It owns the handle, starts lazily, validates the complete
+nonzero native error code before changing state, and uses the same recovery
+mechanism as `transact()`. Once started, preparation runs to its actual outcome;
+cancellation cannot leave an uncertain partially prepared transaction. The
+synchronous spelling is `lfdb::reset_for_replay()`. `transact()` manages
 native asynchronous preparation, backoff, restoration of options, and replay.
 It prepares fresh staged state for each attempt and publishes body values and
 staged outputs only after confirmed commit. Application errors retain their
