@@ -1971,6 +1971,50 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
  }
 }
 
+TEST_CASE("range writes accept distinct sentinels and single-pass transaction input",
+          "[fdb][rgw][api]")
+{
+ janitor dbh;
+ const std::array rows {
+  string_pair {make_key(0, "sentinel-write"), "zero"},
+  string_pair {make_key(1, "sentinel-write"), "one"},
+  string_pair {make_key(2, "sentinel-write"), "two"}
+ };
+ auto noncommon = rows | std::views::take_while([](const auto&) { return true; });
+ static_assert(std::ranges::forward_range<decltype(noncommon)>);
+ static_assert(not std::ranges::common_range<decltype(noncommon)>);
+
+ SECTION("managed ranges are replayable") {
+  lfdb::set(dbh, noncommon);
+ }
+ SECTION("managed iterator pairs accept a sentinel") {
+  lfdb::set(dbh, noncommon.begin(), noncommon.end());
+ }
+ SECTION("transaction iterator pairs default to no commit") {
+  auto txn = lfdb::make_transaction(dbh);
+  lfdb::set(txn, noncommon.begin(), noncommon.end());
+  CHECK_FALSE(lfdb::key_exists(dbh, rows.front().first));
+  CHECK(lfdb::key_exists(txn, rows.front().first));
+  lfdb::commit(txn);
+ }
+ SECTION("transaction input may be single-pass and noncopyable") {
+  auto generated = [&rows]() -> std::generator<const string_pair&> {
+   for (const auto& row : rows) {
+    co_yield row;
+   }
+  }();
+  static_assert(std::ranges::input_range<decltype(generated)>);
+  static_assert(not std::copy_constructible<std::ranges::iterator_t<decltype(generated)>>);
+  static_assert(not can_lfdb_set<lfdb::database_handle, decltype(generated)&>);
+  auto txn = lfdb::make_transaction(dbh);
+  lfdb::set(txn, generated, lfdb::commit_after_op::commit);
+ }
+
+ std::vector<string_pair> observed;
+ CHECK(lfdb::get(dbh, lfdb::query::prefix(make_key_prefix("sentinel-write")), observed) == 3);
+ CHECK_THAT(observed, Catch::Matchers::RangeEquals(rows));
+}
+
 TEST_CASE("check selectors", "[fdb][rgw]") {
  janitor dbh;
 

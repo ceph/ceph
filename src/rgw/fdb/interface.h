@@ -322,16 +322,17 @@ inline void set(database_handle dbh, const concepts::libfdb_key auto& k, const a
  return set(std::move(dbh), transaction_options {}, k, v);
 }
 
-template <concepts::key_value_iterator IteratorT>
+template <concepts::key_value_iterator IteratorT, std::sentinel_for<IteratorT> SentinelT>
 inline void set(transaction_handle txn,
-                IteratorT b, IteratorT e,
+                IteratorT b, SentinelT e,
                 const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
           [&b, &e](const transaction_handle& active_txn) {
             detail::scalar_encoding_buffer encoded;
 
-            for (const auto& kv : std::ranges::subrange(b, e)) {
+            for (; b != e; ++b) {
+             const auto& kv = *b;
              detail::transaction_set_kv_bytes(active_txn,
                        detail::as_byte_view(kv.first),
                        detail::encode_scalar_value(kv.second, encoded));
@@ -339,9 +340,15 @@ inline void set(transaction_handle txn,
           });
 }
 
-template <concepts::key_value_iterator IteratorT>
+template <concepts::key_value_iterator IteratorT, std::sentinel_for<IteratorT> SentinelT>
+inline void set(transaction_handle txn, IteratorT b, SentinelT e)
+{
+ return set(std::move(txn), std::move(b), std::move(e), commit_after_op::no_commit);
+}
+
+template <concepts::key_value_iterator IteratorT, std::sentinel_for<IteratorT> SentinelT>
 requires std::forward_iterator<IteratorT>
-inline void set(database_handle dbh, const transaction_options& options, IteratorT b, IteratorT e)
+inline void set(database_handle dbh, const transaction_options& options, IteratorT b, SentinelT e)
 {
  return detail::in_transaction(std::move(dbh), options,
           detail::invoke_user_callback(std::in_place, [b, e](transaction_handle& txn) {
@@ -349,9 +356,9 @@ inline void set(database_handle dbh, const transaction_options& options, Iterato
           }));
 }
 
-template <concepts::key_value_iterator IteratorT>
+template <concepts::key_value_iterator IteratorT, std::sentinel_for<IteratorT> SentinelT>
 requires std::forward_iterator<IteratorT>
-inline void set(database_handle dbh, IteratorT b, IteratorT e)
+inline void set(database_handle dbh, IteratorT b, SentinelT e)
 {
  return set(std::move(dbh), transaction_options {}, b, e);
 }
