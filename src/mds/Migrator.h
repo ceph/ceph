@@ -283,7 +283,7 @@ protected:
   void import_reverse_final(CDir *dir);
   void import_notify_abort(CDir *dir, std::set<CDir*>& bounds);
   void import_notify_finish(CDir *dir, std::set<CDir*>& bounds);
-  void import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
+  void import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from, uint64_t tid,
 			   std::map<client_t,std::pair<Session*,uint64_t> >& imported_session_map);
   void handle_export_finish(const cref_t<MExportDirFinish> &m);
 
