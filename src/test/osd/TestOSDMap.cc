@@ -3075,6 +3075,58 @@ TEST_F(OSDMapTest, ReadBalanceScoreSmallPoolLargeCluster) {
   ASSERT_FLOAT_EQ(rbi.acting_adj_score, 1.0);
 }
 
+//
+// OSDMap::dump includes the read balance score of each replicated pool by
+// default, which the balancer's read mode relies on. With with_read_balance
+// false, as the mgr's osd_map getter passes, no pool has one.
+//
+TEST_F(OSDMapTest, DumpWithReadBalance) {
+  set_up_map();
+
+  auto check_dump = [this](std::optional<bool> with_read_balance) {
+    JSONFormatter f;
+    f.open_object_section("osdmap");
+    if (with_read_balance) {
+      osdmap.dump(&f, g_ceph_context, *with_read_balance);
+    } else {
+      osdmap.dump(&f, g_ceph_context);
+    }
+    f.close_section();
+    stringstream ss;
+    f.flush(ss);
+    bool expect_scores = with_read_balance.value_or(true);
+
+    JSONParser parser;
+    ASSERT_TRUE(parser.parse(ss.str().c_str(), static_cast<int>(ss.str().size())));
+    auto* pools = parser.find_obj("pools");
+    ASSERT_NE(pools, nullptr);
+    unsigned replicated = 0, erasure = 0;
+    for (const auto& pool : pools->get_array_elements()) {
+      JSONParser parser2;
+      ASSERT_TRUE(parser2.parse(pool.c_str(), static_cast<int>(pool.size())));
+      auto* id = parser2.find_obj("pool");
+      ASSERT_NE(id, nullptr);
+      const pg_pool_t *pi = osdmap.get_pg_pool(std::stoll(id->get_data()));
+      ASSERT_NE(pi, nullptr);
+      if (pi->is_replicated()) {
+        replicated++;
+      } else {
+        erasure++;
+      }
+      EXPECT_EQ(parser2.find_obj("read_balance") != nullptr,
+                expect_scores && pi->is_replicated())
+        << "pool " << id->get_data();
+    }
+    // set_up_map() makes one pool of each type
+    ASSERT_EQ(replicated, 1u);
+    ASSERT_EQ(erasure, 1u);
+  };
+
+  check_dump(std::nullopt);
+  check_dump(true);
+  check_dump(false);
+}
+
 TEST_F(OSDMapTest, read_balance_small_map) {
   // Set up a map with 4 OSDs and default pools
   set_up_map(4);
