@@ -365,9 +365,15 @@ fn run(s: &Step, run_dir: &Path) -> (Res, String) {
                 && counted && !t.contains(" (")) {
             summary.push(t.to_string());
         }
+        /* a conversion's result in counts:  corpus-compare's two pair
+         * lines, and how the profile ended */
+        if let Some(pair) = t.strip_prefix("== ").filter(|p| p.starts_with("adoption (")
+                                                          || p.starts_with("conversion (")) {
+            summary.push(pair.to_string());
+        }
         if t.starts_with("==> conversion:  every step passed")
             || t.contains("the conversion profile stopped at") {
-            summary.push(t.to_string());
+            summary.push(t.trim_start_matches("==> conversion:  ").to_string());
         }
         if t.starts_with("FAIL [") || t.starts_with("error:") || t.starts_with("ERROR:") {
             println!("    {t}");

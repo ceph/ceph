@@ -68,8 +68,13 @@ struct Env {
     /// HTTP form -- with the self-signed certificate they generate
     /// when the config root holds none
     iam_port: u16,
+    /// NooBaa's STS port, HTTPS only like IAM
+    sts_port: u16,
     /// the account NooBaa serves as
     account: String,
+    /// the role `config` gives that account, which the account itself may
+    /// assume
+    role: String,
     /// the IAM user `iam-user` creates in that account
     iam_user: String,
     /// a credential on the adopted gateway carrying `users=*` and
@@ -180,7 +185,9 @@ impl Env {
             port: get("port", "6001").parse().unwrap_or(6001),
             rgw_port: get("rgw_port", "8000").parse().unwrap_or(8000),
             iam_port: get("iam_port", "7005").parse().unwrap_or(7005),
+            sts_port: get("sts_port", "7443").parse().unwrap_or(7443),
             account: get("account", "adoption"),
+            role: get("role", "adoption-role"),
             iam_user: get("iam_user", "adoption-iam-user"),
             rgw_admin_key: get("rgw_admin_key", "ABCDEFGHIJKLMNOPQRST"),
             rgw_admin_secret: get("rgw_admin_secret",
@@ -302,12 +309,15 @@ const STEPS: &[(&str, &str)] = &[
     ("config",   "write the NooBaa account and bucket records over the data root"),
     ("serve",    "start the NooBaa NSFS endpoint"),
     ("iam-user", "create an IAM user in the account, through NooBaa's IAM API"),
+    ("role-noobaa", "assume the account's role through NooBaa's STS, by NooBaa's ARN"),
     ("store-tests", "run the nsfs unit tests that read a real NooBaa store, against this one"),
     ("capture",  "run the corpus against the NooBaa endpoint"),
+    ("schema-agreement", "hold the nsfs record schema to NooBaa's validator, over the records NooBaa wrote"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("damage",   "damage one bucket record, so adoption meets a record it cannot carry"),
     ("import",   "RGW over the same tree;  import the identities, buckets left in NooBaa's format"),
     ("adopt",    "adopt every bucket:  import its record and convert its tree"),
+    ("role-rgw", "assume the imported role through RGW's STS, by its account-id ARN, and write"),
     ("compare",  "evaluate the three captures against the expected-difference list"),
     ("conversion", "the conversion profile:  every step above, in order, on a fresh work directory"),
 ];
@@ -331,7 +341,10 @@ fn main() {
         "config" => config(&env),
         "serve" => serve(&env),
         "iam-user" => iam_user(&env),
+        "role-noobaa" => role_noobaa(&env),
+        "role-rgw" => role_rgw(&env),
         "store-tests" => store_tests(&env),
+        "schema-agreement" => schema_agreement(&env),
         "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
         "damage" => damage(&env),
@@ -353,7 +366,11 @@ fn main() {
 
     if let Err(e) = r {
         eprintln!("\x1b[31mstandup: {e}\x1b[0m");
-        std::process::exit(if KNOWN_DEFECTS.load(Ordering::Relaxed) { 3 } else { 1 });
+        std::process::exit(1);
+    }
+    /* as corpus-compare does:  nothing failed, and known defects remain */
+    if KNOWN_DEFECTS.load(Ordering::Relaxed) {
+        std::process::exit(3);
     }
 }
 
@@ -376,8 +393,10 @@ fn list() {
         ("data", "what --data-root is given;  the tree is data/root"),
         ("port", "the NooBaa HTTP port"),
         ("iam_port", "the NooBaa IAM port, HTTPS"),
+        ("sts_port", "the NooBaa STS port, HTTPS;  default 7443"),
         ("rgw_port", "the port RGW serves on after `adopt`"),
         ("account", "the account `config` creates;  default adoption"),
+        ("role", "the role `config` gives the account;  default adoption-role"),
         ("iam_user", "the IAM user `iam-user` creates;  default adoption-iam-user"),
         ("rgw_admin_key", "an Admin Ops key on RGW for `adopt` and the corpus;  default vstart's [iam]"),
         ("bucket", "the bucket `config` creates;  default adoption"),
@@ -743,9 +762,10 @@ fn config(env: &Env) -> Result<(), String> {
                 "--new_buckets_path", &env.tree().display().to_string(),
                 "--access_key", &env.access_key,
                 "--secret_key", &env.secret_key,
+                "--role_config", &role_config(env),
             ],
         )?;
-        println!("         account {:?} created", env.account);
+        println!("         account {:?} created, with role {:?}", env.account, env.role);
     }
 
     /* The anonymous account, which NooBaa creates only when asked:  the
@@ -930,7 +950,6 @@ fn serve(env: &Env) -> Result<(), String> {
              * EACCES.  The error names `0.0.0.0:1`, which is the only
              * clue that the argument never arrived. */
             "--https_port=-1",
-            "--https_port_sts=-1",
             "--https_port_vector=-1",
             /* IAM, because an IAM user is a record only their IAM API
              * writes -- `manage_nsfs.js` cannot address one.  HTTPS is
@@ -938,6 +957,9 @@ fn serve(env: &Env) -> Result<(), String> {
              * root they generate a self-signed certificate, which
              * `iam-user` accepts. */
             &format!("--https_port_iam={}", env.iam_port),
+            /* STS, for `role-noobaa`:  a role is assumed through it, and
+             * HTTPS is its only form too */
+            &format!("--https_port_sts={}", env.sts_port),
         ])
         .current_dir(&wt)
         .stdout(Stdio::from(log))
@@ -961,12 +983,13 @@ fn serve(env: &Env) -> Result<(), String> {
                 env.log_file().display()
             ));
         }
-        /* both listeners:  IAM comes up after S3, once its certificate
-         * is generated, and `iam-user` asks it next */
+        /* every listener:  STS and IAM come up after S3, once their
+         * certificates are generated, and `iam-user` asks IAM next */
         if std::net::TcpStream::connect(("127.0.0.1", env.port)).is_ok()
-            && std::net::TcpStream::connect(("127.0.0.1", env.iam_port)).is_ok() {
-            println!("serve    answering on http://127.0.0.1:{} (IAM :{})",
-                     env.port, env.iam_port);
+            && std::net::TcpStream::connect(("127.0.0.1", env.iam_port)).is_ok()
+            && std::net::TcpStream::connect(("127.0.0.1", env.sts_port)).is_ok() {
+            println!("serve    answering on http://127.0.0.1:{} (IAM :{}, STS :{})",
+                     env.port, env.iam_port, env.sts_port);
             return Ok(());
         }
         if i == 10 {
@@ -975,9 +998,10 @@ fn serve(env: &Env) -> Result<(), String> {
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
     Err(format!(
-        "it did not answer on port {} and IAM port {} within a minute;  see {}",
+        "it did not answer on port {}, IAM port {} and STS port {} within a minute;  see {}",
         env.port,
         env.iam_port,
+        env.sts_port,
         env.log_file().display()
     ))
 }
@@ -1041,6 +1065,143 @@ fn iam_user(env: &Env) -> Result<(), String> {
     )
     .map_err(|e| format!("cannot write {}: {e}", env.iam_user_credentials().display()))?;
     println!("         access key {ak}, recorded in {}", env.iam_user_credentials().display());
+    Ok(())
+}
+
+/// The `role_config` `config` gives the account:  NooBaa's CLI shape
+/// (`manage_nsfs_help_utils.js:148`), a role the account itself may
+/// assume.  At 5.23 a role is this field on an account, assumed by an ARN
+/// naming one of the account's access keys.
+fn role_config(env: &Env) -> String {
+    format!(
+        concat!(r#"{{"role_name":"{}","assume_role_policy":{{"version":"2012-10-17","#,
+                r#""statement":[{{"effect":"allow","action":["sts:AssumeRole"],"#,
+                r#""principal":["{}"]}}]}}}}"#),
+        env.role, env.account
+    )
+}
+
+/// An AssumeRole, signed with the account's own key;  the session's
+/// key, secret and token, or the status and body.
+fn assume_role(env: &Env, url: &str, insecure: bool, arn: &str)
+               -> Result<Result<(String, String, String), (u16, String)>, String> {
+    let form = format!("Action=AssumeRole&RoleArn={arn}&RoleSessionName=standup\
+                        &DurationSeconds=900&Version=2011-06-15");
+    let user = format!("{}:{}", env.access_key, env.secret_key);
+    let mut args = vec!["--aws-sigv4", "aws:amz:us-east-1:sts", "--user", &user,
+                        "--data", &form, url];
+    if insecure {
+        args.insert(0, "-k");
+    }
+    let (status, body) = curl(&args)?;
+    if status != 200 {
+        return Ok(Err((status, body)));
+    }
+    match (xml_tag(&body, "AccessKeyId"), xml_tag(&body, "SecretAccessKey"),
+           xml_tag(&body, "SessionToken")) {
+        (Some(ak), Some(sk), Some(tok)) => Ok(Ok((ak, sk, tok))),
+        _ => Err(format!("AssumeRole answered 200 without a credential:\n{body}")),
+    }
+}
+
+/// An S3 request as a role session.
+fn session_call(session: &(String, String, String), method: &str, url: &str)
+                -> Result<(u16, String), String> {
+    let (ak, sk, tok) = session;
+    curl(&["-X", method, "--aws-sigv4", "aws:amz:us-east-1:s3",
+           "--user", &format!("{ak}:{sk}"),
+           "-H", &format!("x-amz-security-token: {tok}"),
+           "--data-binary", if method == "PUT" { "role probe" } else { "" },
+           url])
+}
+
+/// Assume the account's role through NooBaa, as a 5.23 client does.
+///
+/// The ARN is NooBaa's:  `arn:aws:sts::<access key>:role/<name>`, which
+/// `_assume_role()` resolves by that access key (`sts_sdk.js:67-87`).  A
+/// read only, a listing of the bucket, because the tree is captured after
+/// this and nothing may be added to it.  What it establishes is that the
+/// role `config` wrote is one NooBaa itself serves, so the role the
+/// import translates is a working one.
+fn role_noobaa(env: &Env) -> Result<(), String> {
+    if running(env).is_none() {
+        return Err("the NooBaa endpoint is not running;  run `serve` first".into());
+    }
+    let arn = format!("arn:aws:sts::{}:role/{}", env.access_key, env.role);
+    let session = match assume_role(env, &format!("https://127.0.0.1:{}/", env.sts_port),
+                                    true, &arn)? {
+        Ok(s) => s,
+        Err((status, body)) => {
+            return Err(format!("NooBaa answered AssumeRole of {arn} with {status}:\n{body}"));
+        }
+    };
+    println!("role     {arn} assumed through NooBaa");
+    let (status, body) = session_call(
+        &session, "GET",
+        &format!("http://127.0.0.1:{}/{}?list-type=2", env.port, env.bucket))?;
+    if status != 200 {
+        return Err(format!("the session's listing of {} answered {status}:\n{body}",
+                           env.bucket));
+    }
+    println!("         the session lists {}", env.bucket);
+    Ok(())
+}
+
+/// Assume the imported role through RGW, as a client does after adoption,
+/// and write as it.
+///
+/// The ARN is RGW's, `arn:aws:iam::<account id>:role/<name>`, learned
+/// as a client learns it, from IAM GetRole;  that is what clients move
+/// to at adoption (DECISIONS.md 2026-10-26);  NooBaa's
+/// access-key form is not carried, and that is checked too.  Under
+/// `rgw_nsfs_adoption_role_rights=account`, the default, the session has
+/// the account's rights, so a write to its bucket succeeds;  the object is
+/// removed again.  After `compare`, so nothing it writes is compared,
+/// and a failure here does not hide the comparison.
+fn role_rgw(env: &Env) -> Result<(), String> {
+    let sts = format!("http://127.0.0.1:{}/", env.rgw_port);
+    /* The ARN as a client learns it after adoption:  IAM GetRole, with
+     * the account's own key */
+    let (status, body) = curl(&[
+        "--aws-sigv4", "aws:amz:us-east-1:iam",
+        "--user", &format!("{}:{}", env.access_key, env.secret_key),
+        "--data", &format!("Action=GetRole&RoleName={}&Version=2010-05-08", env.role),
+        &sts,
+    ])?;
+    let Some(arn) = (status == 200).then(|| xml_tag(&body, "Arn")).flatten() else {
+        return Err(format!("RGW answered GetRole {:?} with {status}:\n{body}", env.role));
+    };
+
+    let nb_arn = format!("arn:aws:sts::{}:role/{}", env.access_key, env.role);
+    if let Ok(_) = assume_role(env, &sts, false, &nb_arn)? {
+        return Err(format!("RGW assumed {nb_arn}, NooBaa's access-key form, which \
+                            adoption does not carry"));
+    }
+    println!("role     {nb_arn}, NooBaa's form, is not a role RGW holds");
+
+    if !arn.starts_with("arn:aws:iam::") || !arn.ends_with(&format!(":role/{}", env.role)) {
+        return Err(format!("RGW's ARN for the role is {arn}, not an account-id role ARN"));
+    }
+    let session = match assume_role(env, &sts, false, &arn)? {
+        Ok(s) => s,
+        Err((status, body)) => {
+            return Err(format!("RGW answered AssumeRole of {arn} with {status}:\n{body}"));
+        }
+    };
+    println!("         {arn} assumed through RGW");
+
+    let probe = format!("http://127.0.0.1:{}/{}/standup-role-probe", env.rgw_port, env.bucket);
+    let (status, body) = session_call(&session, "PUT", &probe)?;
+    if status != 200 {
+        return Err(format!("the session's write to {} answered {status}:\n{body}",
+                           env.bucket));
+    }
+    let (status, body) = session_call(&session, "DELETE", &probe)?;
+    if status != 204 {
+        return Err(format!("the session's delete in {} answered {status}:\n{body}",
+                           env.bucket));
+    }
+    println!("         the session writes to {} with its account's rights", env.bucket);
     Ok(())
 }
 
@@ -1652,8 +1813,99 @@ fn store_tests(env: &Env) -> Result<(), String> {
     Ok(())
 }
 
+/// Hold the nsfs driver's record schema to NooBaa's own validator (X4's
+/// second layer).
+///
+/// Every account and bucket record NooBaa wrote here, after the corpus
+/// has made its buckets, goes through `schema-agreement.js`, which runs
+/// NooBaa's validator at the pin over each record and over each with an
+/// unknown key planted at every object inside it.  Then the nsfs unit
+/// binary's `NooBaaSchema.AgreesWithNooBaasValidator` requires the
+/// driver's tree to accept and refuse exactly the same records.  So the
+/// tree is checked against NooBaa, not against a reading of its schema.
+fn schema_agreement(env: &Env) -> Result<(), String> {
+    let Some(build) = env.ceph_build.as_ref() else {
+        return Err("`ceph_build` is not set;  `schema-agreement` runs the nsfs \
+                    unit binary from the ceph build directory".into());
+    };
+    let bin = build.join("bin/unittest_rgw_nsfs_driver");
+    if !bin.exists() {
+        return Err(format!("{} is not built", bin.display()));
+    }
+
+    let ls = |dir: &Path| -> Result<Vec<String>, String> {
+        let out = privileged(env, "ls").arg("-1").arg(dir).output()
+            .map_err(|e| format!("cannot run ls: {e}"))?;
+        if !out.status.success() {
+            return Err(format!("cannot read {}:  {}", dir.display(),
+                               String::from_utf8_lossy(&out.stderr).trim()));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).lines().map(str::to_string).collect())
+    };
+    let mut records = String::new();
+    let identities = env.config_root().join("identities");
+    for id in ls(&identities)? {
+        let text = read_store(env, &identities.join(&id).join("identity.json"))?;
+        records += &format!("account\t{}\n", text.replace('\n', ""));
+    }
+    let buckets = env.config_root().join("buckets");
+    for name in ls(&buckets)?.into_iter().filter(|n| n.ends_with(".json")) {
+        let text = read_store(env, &buckets.join(&name))?;
+        records += &format!("bucket\t{}\n", text.replace('\n', ""));
+    }
+
+    use std::io::Write;
+    let script = adoption_home().join("schema-agreement.js");
+    let mut child = Command::new(env.node())
+        .arg(&script).arg(env.worktree().join("src"))
+        .current_dir(env.worktree())
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("cannot run {}: {e}", script.display()))?;
+    child.stdin.take().unwrap().write_all(records.as_bytes())
+        .map_err(|e| format!("cannot write to {}: {e}", script.display()))?;
+    let out = child.wait_with_output()
+        .map_err(|e| format!("cannot run {}: {e}", script.display()))?;
+    if !out.status.success() {
+        return Err(format!("{} failed:\n{}", script.display(),
+                           String::from_utf8_lossy(&out.stderr)));
+    }
+    let cases = env.work.join("schema-cases.tsv");
+    std::fs::write(&cases, &out.stdout)
+        .map_err(|e| format!("cannot write {}: {e}", cases.display()))?;
+    let lines: Vec<&str> = std::str::from_utf8(&out.stdout).unwrap_or("").lines().collect();
+    let col = |l: &str, i: usize| l.split('\t').nth(i).map(str::to_string);
+    let refused = lines.iter().filter(|l| col(l, 1).as_deref() == Some("1")).count();
+    println!("schema   {} cases from {} records, {refused} of them refused by NooBaa",
+             lines.len(), records.lines().count());
+    /* a record NooBaa wrote that its own validator refuses is a finding
+     * of its own;  the agreement below would only restate it */
+    for l in &lines {
+        if col(l, 1).as_deref() == Some("1") && col(l, 2).as_deref() == Some("record") {
+            println!("schema   NooBaa's validator refuses a record NooBaa wrote:  {l}");
+        }
+    }
+
+    let out = Command::new(&bin)
+        .arg("--gtest_filter=NooBaaSchema.AgreesWithNooBaasValidator")
+        .env("NSFS_NOOBAA_SCHEMA_CASES", &cases)
+        .current_dir(build)
+        .output()
+        .map_err(|e| format!("cannot run {}: {e}", bin.display()))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    if !out.status.success() || !text.lines().any(|l| l.starts_with("[       OK ]")) {
+        let detail: Vec<&str> = text.lines().filter(|l| l.contains("Failure")
+            || l.contains("disagree") || l.starts_with("[")).collect();
+        return Err(format!("the driver's schema and NooBaa's validator disagree, or the \
+                            test did not run;  {}:\n{}", cases.display(), detail.join("\n")));
+    }
+    println!("schema   the driver's schema agrees with NooBaa's validator on every case");
+    Ok(())
+}
+
 /// Set by `compare` when corpus-compare exits 3, so the stand-up exits 3
-/// as well:  every difference is accounted for, and known defects remain.
+/// as well when nothing else fails:  every difference is accounted for,
+/// and known defects remain.  Not a failure, so the steps after it run.
 static KNOWN_DEFECTS: AtomicBool = AtomicBool::new(false);
 
 /// Evaluate the three captures against the expected-difference list.
@@ -1693,8 +1945,9 @@ fn compare(env: &Env) -> Result<(), String> {
                         see the lines above".into()),
         Some(3) => {
             KNOWN_DEFECTS.store(true, Ordering::Relaxed);
-            Err("every difference is accounted for, and known defects remain;  \
-                 see the KNOWN lines above".into())
+            println!("compare  every difference is accounted for, and known defects remain;  \
+                      see the KNOWN lines above");
+            Ok(())
         }
         _ => Err("corpus-compare could not read its inputs;  see above".into()),
     }
@@ -1730,7 +1983,7 @@ fn conversion(env: &Env) -> Result<(), String> {
      * the NooBaa build rather than at `import` and `adopt`, by when a
      * sudo ticket taken beforehand has expired. */
     preflight_rgw(ceph_build)?;
-    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 16] = [
+    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 19] = [
         ("pin", &pin),
         ("worktree", &worktree),
         ("patch", &patch),
@@ -1738,8 +1991,10 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("config", &config),
         ("serve", &serve),
         ("iam-user", &iam_user),
+        ("role-noobaa", &role_noobaa),
         ("store-tests", &store_tests),
         ("capture noobaa", &|e| capture(e, "noobaa")),
+        ("schema-agreement", &schema_agreement),
         ("stop", &stop),
         ("damage", &damage),
         ("import", &|e| adopt(e, "import")),
@@ -1747,6 +2002,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("adopt", &|e| adopt(e, "adopt")),
         ("capture rgw-converted", &|e| capture(e, "rgw-converted")),
         ("compare", &compare),
+        ("role-rgw", &role_rgw),
     ];
     for (i, (name, step)) in steps.iter().enumerate() {
         println!("\n==> conversion {}/{}:  {name}", i + 1, steps.len());
@@ -1759,7 +2015,11 @@ fn conversion(env: &Env) -> Result<(), String> {
             return Err(format!("the conversion profile stopped at `{name}`:  {e}"));
         }
     }
-    println!("\n==> conversion:  every step passed");
+    if KNOWN_DEFECTS.load(Ordering::Relaxed) {
+        println!("\n==> conversion:  every step passed, and known defects remain");
+    } else {
+        println!("\n==> conversion:  every step passed");
+    }
     Ok(())
 }
 
