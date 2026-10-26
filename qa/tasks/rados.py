@@ -178,7 +178,7 @@ def task(ctx, config):
     object_size = int(config.get('object_size', 4000000))
     op_weights = config.get('op_weights', {})
     testdir = teuthology.get_testdir(ctx)
-    pct_update_delay = None
+    pct_update_delay = config.get('pct_update_delay', None)
     args = [
         'adjust-ulimits',
         'ceph-coverage',
@@ -209,7 +209,8 @@ def task(ctx, config):
         args.extend(['--pool-snaps'])
     if config.get('balance_reads', False):
         args.extend(['--balance-reads'])
-        pct_update_delay = config.get('pct_update_delay', 5)
+        if pct_update_delay is None:
+            pct_update_delay = 5
     if config.get('osd_min_split_replica_read_size', None) is not None:
         args.extend(['--min-split-size',
                      str(config.get('osd_min_split_replica_read_size'))])
