@@ -77,9 +77,9 @@ struct Env {
     role: String,
     /// the IAM user `iam-user` creates in that account
     iam_user: String,
-    /// the account `config` makes in name form -- NooBaa's
+    /// the nsswitch-resolved account `config` makes -- NooBaa's
     /// `distinguished_name`, which its CLI calls `--user` -- naming the
-    /// account's own uid, for `name-form`
+    /// account's own uid, for `nsswitch`
     dn_account: String,
     dn_access_key: String,
     dn_secret_key: String,
@@ -323,7 +323,7 @@ const STEPS: &[(&str, &str)] = &[
     ("store-tests", "run the nsfs unit tests that read a real NooBaa store, against this one"),
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("schema-agreement", "hold the nsfs record schema to NooBaa's validator, over the records NooBaa wrote"),
-    ("name-form", "write as the name-form account, and check the file is the name's uid's:  NooBaa before `stop`, RGW after `role-rgw`"),
+    ("nsswitch", "write as the nsswitch-resolved account, and check the file is the name's uid's:  NooBaa before `stop`, RGW after `role-rgw`"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("damage",   "damage one bucket record, so adoption meets a record it cannot carry"),
     ("import",   "RGW over the same tree;  import the identities, buckets left in NooBaa's format"),
@@ -356,7 +356,7 @@ fn main() {
         "role-rgw" => role_rgw(&env),
         "store-tests" => store_tests(&env),
         "schema-agreement" => schema_agreement(&env),
-        "name-form" => name_form(&env),
+        "nsswitch" => nsswitch_step(&env),
         "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
         "damage" => damage(&env),
@@ -780,7 +780,7 @@ fn config(env: &Env) -> Result<(), String> {
         println!("         account {:?} created, with role {:?}", env.account, env.role);
     }
 
-    /* The name-form account (I7):  NooBaa's `distinguished_name`, which
+    /* The nsswitch-resolved account (I7):  NooBaa's `distinguished_name`, which
      * it passes to getpwnam, naming the account's own uid, so both
      * gateways resolve it through nsswitch and the tree stays the
      * account's to write in.  Its bucket is made here, as the others
@@ -802,15 +802,15 @@ fn config(env: &Env) -> Result<(), String> {
         )?;
         println!("         account {:?} created, by name {dn_name:?}", env.dn_account);
     }
-    let nf_path = env.tree().join(NAME_FORM_BUCKET);
-    if nsfs_cli(env, &["bucket", "status", "--name", NAME_FORM_BUCKET]).is_ok() {
-        println!("         bucket {NAME_FORM_BUCKET:?} already present");
+    let nf_path = env.tree().join(NSSWITCH_BUCKET);
+    if nsfs_cli(env, &["bucket", "status", "--name", NSSWITCH_BUCKET]).is_ok() {
+        println!("         bucket {NSSWITCH_BUCKET:?} already present");
     } else {
         account_dir(env, &nf_path, dn_uid, dn_gid)?;
         let np = nf_path.display().to_string();
-        nsfs_cli(env, &["bucket", "add", "--name", NAME_FORM_BUCKET,
+        nsfs_cli(env, &["bucket", "add", "--name", NSSWITCH_BUCKET,
                         "--owner", &env.dn_account, "--path", &np])?;
-        println!("         bucket {NAME_FORM_BUCKET:?} created at {np}, for `name-form`");
+        println!("         bucket {NSSWITCH_BUCKET:?} created at {np}, for `nsswitch`");
     }
 
     /* The anonymous account, which NooBaa creates only when asked:  the
@@ -1250,16 +1250,16 @@ fn role_rgw(env: &Env) -> Result<(), String> {
     Ok(())
 }
 
-/// Write as the name-form account, and check whose the file is.
+/// Write as the nsswitch-resolved account, and check whose the file is.
 ///
 /// NooBaa resolves `distinguished_name` with getpwnam, and so must RGW
 /// (I7), so a file either writes is owned by that name's uid and primary
-/// gid -- the comparison between the two gateways that a name-form
+/// gid -- the comparison between the two gateways that an nsswitch-resolved
 /// identity is about.  Against NooBaa while it runs, before `stop`;
 /// against RGW otherwise, after `role-rgw`, where the object NooBaa wrote
 /// is also read back, and the import must have resolved every name.
 /// The bucket is not a corpus bucket, so no capture compares it.
-fn name_form(env: &Env) -> Result<(), String> {
+fn nsswitch_step(env: &Env) -> Result<(), String> {
     let (dn_name, uid, gid) = dn_identity(env)?;
     let who = format!("{}:{}", env.dn_access_key, env.dn_secret_key);
     let (gateway, port, key) = if running(env).is_some() {
@@ -1267,36 +1267,36 @@ fn name_form(env: &Env) -> Result<(), String> {
     } else {
         ("rgw", env.rgw_port, "rgw-wrote")
     };
-    let url = |k: &str| format!("http://127.0.0.1:{port}/{NAME_FORM_BUCKET}/{k}");
+    let url = |k: &str| format!("http://127.0.0.1:{port}/{NSSWITCH_BUCKET}/{k}");
 
     let (status, body) = curl(&["-X", "PUT", "--aws-sigv4", "aws:amz:us-east-1:s3",
                                 "--user", &who, "--data-binary", key, &url(key)])?;
     if status != 200 {
-        return Err(format!("{gateway} answered the name-form account's PUT with \
-                            {status}:\n{body}"));
+        return Err(format!("{gateway} answered the nsswitch-resolved account's \
+                            PUT with {status}:\n{body}"));
     }
-    let file = env.tree().join(NAME_FORM_BUCKET).join(key);
+    let file = env.tree().join(NSSWITCH_BUCKET).join(key);
     let owner = file_owner(env, &file)?;
     if owner != (uid, gid) {
         return Err(format!(
             "{gateway} wrote {} as {}:{}, not as {dn_name} ({uid}:{gid}), which \
              the name resolves to", file.display(), owner.0, owner.1));
     }
-    println!("name-form {gateway}:  {} written as {dn_name} ({uid}:{gid})", key);
+    println!("nsswitch {gateway}:  {} written as {dn_name} ({uid}:{gid})", key);
 
     if gateway == "rgw" {
         let (status, body) = curl(&["--aws-sigv4", "aws:amz:us-east-1:s3",
                                     "--user", &who, &url("noobaa-wrote")])?;
         if status != 200 || body != "noobaa-wrote" {
-            return Err(format!("RGW answered the name-form account's read of what \
-                                NooBaa wrote with {status}:\n{body}"));
+            return Err(format!("RGW answered the nsswitch-resolved account's read \
+                                of what NooBaa wrote with {status}:\n{body}"));
         }
         println!("          and reads back what NooBaa wrote as it");
     }
     Ok(())
 }
 
-/// The name-form account's name, uid and primary gid:  the name of the
+/// The nsswitch-resolved account's name, uid and primary gid:  the name of the
 /// account's own uid, and what nsswitch resolves it to, as getpwnam does
 /// for either gateway.
 fn dn_identity(env: &Env) -> Result<(String, u32, u32), String> {
@@ -2136,7 +2136,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("store-tests", &store_tests),
         ("capture noobaa", &|e| capture(e, "noobaa")),
         ("schema-agreement", &schema_agreement),
-        ("name-form noobaa", &name_form),
+        ("nsswitch noobaa", &nsswitch_step),
         ("stop", &stop),
         ("damage", &damage),
         ("import", &|e| adopt(e, "import")),
@@ -2145,7 +2145,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("capture rgw-converted", &|e| capture(e, "rgw-converted")),
         ("compare", &compare),
         ("role-rgw", &role_rgw),
-        ("name-form rgw", &name_form),
+        ("nsswitch rgw", &nsswitch_step),
     ];
     for (i, (name, step)) in steps.iter().enumerate() {
         println!("\n==> conversion {}/{}:  {name}", i + 1, steps.len());
@@ -2440,7 +2440,7 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
     println!("{tag} identities imported:  {} accounts, {} users",
              json_str(&body, "accounts").unwrap_or_default(),
              json_str(&body, "users").unwrap_or_default());
-    /* `config` makes a name-form account whose name nsswitch knows */
+    /* `config` makes an nsswitch-resolved account whose name nsswitch knows */
     if json_str(&body, "unresolved_names").as_deref() != Some("0") {
         return Err(format!("the import left names nsswitch did not resolve;  the \
                             gateway log names them:\n{body}"));
@@ -2530,8 +2530,8 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
 
 /// The bucket `damage` damages.  Made by `config` like any other.
 const DAMAGED_BUCKET: &str = "corpus-damaged";
-/// The name-form account's bucket.  Not a corpus bucket.
-const NAME_FORM_BUCKET: &str = "name-form";
+/// The nsswitch-resolved account's bucket.  Not a corpus bucket.
+const NSSWITCH_BUCKET: &str = "nsswitch";
 
 /// An account `_id` no identity in the store has.
 const NO_SUCH_OWNER: &str = "000000000000000000000000";

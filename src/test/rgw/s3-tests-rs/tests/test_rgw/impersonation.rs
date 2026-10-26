@@ -150,7 +150,7 @@ async fn test_impersonation_isolates_identities() {
 
 }
 
-/// An identity in name form is served as the user nsswitch resolves
+/// An nsswitch-resolved identity is served as the user nsswitch resolves
 /// the name to (I7).  `distinguished_name` is what NooBaa passes to
 /// `getpwnam`, so a row carrying `rgwalice` and no ids must run as
 /// 70101.
@@ -163,7 +163,7 @@ async fn test_impersonation_isolates_identities() {
 /// served as the gateway.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_impersonation_serves_a_name_form_identity() {
+async fn test_impersonation_serves_an_nsswitch_resolved_identity() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
