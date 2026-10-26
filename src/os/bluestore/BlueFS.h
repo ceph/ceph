@@ -21,6 +21,7 @@
 #include "boost/intrusive/list.hpp"
 #include "boost/dynamic_bitset.hpp"
 #include "include/hash.h"
+#include "bluestore_common.h"
 
 class Allocator;
 
@@ -706,10 +707,11 @@ private:
   void _update_allocate_stats(uint8_t id, const ceph::timespan& d);
   int _allocate(uint8_t bdev, uint64_t len,
                 uint64_t alloc_unit,
-		bluefs_fnode_t* node,
+                bluefs_fnode_t* node,
                 update_fn_t cb = nullptr,
                 size_t alloc_attempts = 0,
-                bool permit_dev_fallback = true);
+                bool permit_dev_fallback = true,
+                alloc_tag_t tag = alloc_tag_t::bluefs(alloc_tag_bluefs_t::OTHER));
 
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log_D(FileWriter *h);

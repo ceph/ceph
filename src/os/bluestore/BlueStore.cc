@@ -7879,9 +7879,16 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair, bluestore_
 	    }
 	    PExtentVector exts;
 	    dout(5) << __func__ << "::NCB::(F)alloc=" << alloc << ", length=" << e->length << dendl;
+	    alloc_tag_t tag = alloc_tag_t::unknown();
+	    if (c) {
+	      spg_t pgid_val;
+	      if (c->cid.is_pg(&pgid_val)) {
+	        tag = alloc_tag_t::pg(pgid_val.pool(), pgid_val.ps());
+	      }
+	    }
 	    int64_t alloc_len =
-              alloc->allocate(e->length, min_alloc_size,
-				       0, -1, &exts);
+	        alloc->allocate(e->length, min_alloc_size,
+	                                0, -1, tag, &exts);
 	    if (alloc_len < 0 || alloc_len < (int64_t)e->length) {
 	      derr << __func__
 	           << " failed to allocate 0x" << std::hex << e->length
@@ -8345,7 +8352,7 @@ void BlueStore::inject_leaked(uint64_t len)
 {
   PExtentVector exts;
   int64_t alloc_len = alloc->allocate(len, min_alloc_size,
-					   min_alloc_size * 256, -1, &exts);
+					   min_alloc_size * 256, -1, alloc_tag_t::unknown(), &exts);
   ceph_assert(alloc_len >= 0); // generally we do not expect any errors
   if (fm->is_null_manager()) {
     return;
@@ -13825,9 +13832,17 @@ int BlueStore::_do_alloc_write(
   prealloc.reserve(2 * wctx->writes.size());
   int64_t prealloc_left = 0;
   auto start = mono_clock::now();
+  alloc_tag_t tag = alloc_tag_t::unknown();
+  if (coll) {
+    spg_t pgid;
+    if (coll->cid.is_pg(&pgid)) {
+      tag = alloc_tag_t::pg(pgid.pool(), pgid.ps());
+    }
+  }
   prealloc_left = alloc->allocate(
     need, min_alloc_size, need,
     use_last_allocator_lookup_position ? -1 : 0,
+    tag,
     &prealloc);
   log_latency("allocator@_do_alloc_write",
     l_bluestore_allocator_lat,
