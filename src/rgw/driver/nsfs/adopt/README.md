@@ -8,7 +8,7 @@ a tree;  nothing here is reached while serving an S3 request.  The
 strategies one level up — `xattr_strategy`, `path_strategy`,
 `mpu_strategy`, `fs_strategy`, `bucket_state_strategy` — are the other
 case:  they are selected per bucket and consulted per request, and
-`bucket_state_strategy`'s NooBaa arm reads their bucket record on the
+`bucket_state_strategy`'s NooBaa branch reads their bucket record on the
 request path in the `serve` mode of `NSFS_ADOPTION.md` §7.  So they
 stay where they are even though they are format-specific.
 

@@ -179,7 +179,7 @@ public:
    *
    * **This is the existing consumer returning one more field, not a
    * new one.**  `NSFS_BUCKET_PLACEMENT_PLAN.md` §7 withdrew a
-   * resolution arm that would read NooBaa's store on the request path,
+   * resolution branch that would read NooBaa's store on the request path,
    * because the plan must not add a second consumer of it.  Serve mode
    * already reads this record on every request for a bucket's
    * configuration (`NSFS_ADOPTION.md` §7), so taking `path` from the

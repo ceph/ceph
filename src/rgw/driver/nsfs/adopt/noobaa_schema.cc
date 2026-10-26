@@ -37,7 +37,8 @@ using Kind = Node::Kind;
  * validator compiles them:  `nsfs_account_schema.js`,
  * `nsfs_bucket_schema.js`, and the `common_api.js` definitions they
  * reach, each a `def_` node shared by every field that refers to it.
- * An arm is named for its position in NooBaa's oneOf/anyOf/allOf.
+ * An alternative is named `_arm<n>` for its position in NooBaa's
+ * oneOf/anyOf/allOf.
  * ------------------------------------------------------------------ */
 
 constexpr Field account_access_keys_item_fields[] = {

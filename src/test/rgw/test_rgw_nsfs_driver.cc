@@ -1380,7 +1380,7 @@ TEST_F(NSFSIdentityDBTest, EveryColumnRoundTrips)
   EXPECT_TRUE(got.distinguished_name.empty());
 }
 
-/* A directory-backed identity is the other arm:  a name and no ids. */
+/* A directory-backed identity is the other form:  a name and no ids. */
 TEST_F(NSFSIdentityDBTest, DirectoryBackedIdentityRoundTrips)
 {
   nsfs::Identity id;
@@ -1402,7 +1402,7 @@ TEST_F(NSFSIdentityDBTest, DirectoryBackedIdentityRoundTrips)
  *
  * Collapsing the first two would make "this identity has no
  * supplementary groups" indistinguishable from "nobody has said",
- * which is the difference the directory arm will turn on. */
+ * which is the difference the directory-backed form will turn on. */
 TEST_F(NSFSIdentityDBTest, GroupsDistinguishUnsetFromEmpty)
 {
   nsfs::Identity id;
@@ -1447,12 +1447,12 @@ TEST_F(NSFSIdentityDBTest, FieldsUpdateIndependently)
 
 /* The exclusivity rule is enforced by the schema, not by a caller.
  *
- * NooBaa's own schema will not validate a record holding both arms,
+ * NooBaa's own schema will not validate a record holding both forms,
  * so neither may this one -- otherwise an importer could produce a
  * record NooBaa's tooling would reject. */
 TEST_F(NSFSIdentityDBTest, BothIdentityArmsAreRejected)
 {
-  /* the control:  each arm alone is accepted */
+  /* the control:  each form alone is accepted */
   nsfs::Identity local;
   local.key = "user$ok-local";
   local.uid = 5; local.gid = 5;
@@ -1627,7 +1627,7 @@ TEST_F(NSFSIdentityDBTest, ResolveAbsentGroupListClears)
 }
 
 /* An explicitly empty list resolves the same way.  The two stay
- * distinct in the record for the directory arm;  they are not
+ * distinct in the record for the directory-backed form;  they are not
  * distinct here. */
 TEST_F(NSFSIdentityDBTest, ResolveEmptyGroupListClears)
 {
@@ -1674,7 +1674,7 @@ TEST_F(NSFSIdentityDBTest, ResolvePlacementOnlyRowAsksForNothing)
  * request as the daemon, which holds more access than the user, so
  * it fails closed.
  *
- * The control is the same key carrying the local arm, which must
+ * The control is the same key carrying the local form, which must
  * resolve -- without it a resolver that denied everything would
  * pass. */
 TEST_F(NSFSIdentityDBTest, ResolveDirectoryBackedFailsClosed)
@@ -4937,7 +4937,7 @@ TEST_F(NSFSImpersonatedRenameTest, AnIdentitysOpenRefusesALinkSwappedIn)
  * thread, so on alice's 0660 object it succeeds only with credentials
  * that may write it.  Under posix-strict no raise is possible, so a
  * removal that succeeds there can only have run with that user's
- * credentials -- which is what remove_x_attr()'s old single-name arm,
+ * credentials -- which is what remove_x_attr()'s old single-name branch,
  * acting as the gateway, failed (16c5f31a2e1).  The premise is that the
  * gateway, unraised, cannot;  bob, whom posix-strict denies, cannot
  * either, so the identity follows the authenticated user.  Under
@@ -5048,7 +5048,7 @@ TEST_F(NSFSImpersonatedRenameTest, ATagRemovalRunsAsTheAuthenticatedUserUnderEac
  * `.versions` and link the owner's file -- which the gateway, unraised,
  * cannot (the premise) -- and `raised()` not moving shows no raise did
  * it.  The marker is a file the delete creates, so its uid is the
- * identity observed directly.  The s3-native arms are
+ * identity observed directly.  The s3-native cases are
  * UnderS3NativeAnotherIdentitysPutIsRaised and ...DeleteIsRaised. */
 TEST_F(NSFSImpersonatedRenameTest, TheOwnersDemoteAndMarkerRunAsTheOwner)
 {
@@ -6342,8 +6342,8 @@ public:
  * them (call-site table §9.2, row 1).  So every file a strided upload
  * makes -- the shared file, part 2's own file after its divert, and the
  * object assembly produces -- is the uploader's;  and the same upload
- * by another identity makes them that identity's, so the first arm
- * discriminates.  Not the gateway as the other arm:  under impersonation
+ * by another identity makes them that identity's, so the first case
+ * discriminates.  Not the gateway as the other case:  under impersonation
  * a part with no authenticated user is denied (n-plan §6.1).  The upload's
  * `.meta` is the gateway's by design -- staging stays its -- so the
  * data files are named rather than listed. */
@@ -14675,7 +14675,7 @@ TEST_F(NooBaaPolicyTest, OnlyPrincipalsAreTouched)
   EXPECT_NE(out.find("StringEquals"), std::string::npos) << out;
 }
 
-/* NooBaa's three principal shapes, and the arms that are not nsfs's.
+/* NooBaa's three principal shapes, and the namespaces that are not nsfs's.
  *
  * A bare string, an array, and an object with an `AWS` member;
  * `Service` and `Federated` are AWS's own namespaces and are left
@@ -16088,7 +16088,7 @@ TEST_F(NooBaaModeTest, AnUnknownModeIsRejected)
 /* ------------------------------------------------------------------ *
  * P2 -- resolution from a stored path.
  *
- * Two arms (NSFS_BUCKET_PLACEMENT_PLAN.md §7):  an index row's Path,
+ * Two branches (NSFS_BUCKET_PLACEMENT_PLAN.md §7):  an index row's Path,
  * else `<base>/<name>`.  The second is what every deployment has, so
  * the test that matters most is that nothing changes without a row.
  * ------------------------------------------------------------------ */
@@ -17650,7 +17650,7 @@ TEST_F(NSFSRecordedPathTest, APathWeWouldNotStoreIsNotServedFrom)
 
 /* With no store configured, nothing about resolution changes.
  *
- * Every deployment today, and the arm that must not break. */
+ * Every deployment today, and the case that must not break. */
 TEST_F(NSFSBucketTest, WithoutANooBaaStoreResolutionIsUnchanged)
 {
   std::unique_ptr<rgw::sal::Bucket> loaded;

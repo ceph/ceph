@@ -48,7 +48,7 @@ namespace rgw { namespace sal { namespace nsfs {
  * load-bearing:
  *
  *   nullopt   no list was set.  Today that means no supplementary
- *             groups;  once the directory arm is implemented it will
+ *             groups;  once the directory-backed form is implemented it will
  *             mean "resolve from the directory".
  *   empty     a list was set and it is empty -- this identity has no
  *             supplementary groups, deliberately.
@@ -421,7 +421,7 @@ struct Credentials {
  *            exactly as it does today, which is what keeps this
  *            additive.
  *   -EPERM   a row that asks for impersonation which cannot be
- *            supplied.  Today that is the directory arm, whose uid
+ *            supplied.  Today that is the directory-backed form, whose uid
  *            and gid live in the directory rather than in the
  *            record.  Serving such a request unimpersonated would
  *            run it as the daemon, which holds more access than the

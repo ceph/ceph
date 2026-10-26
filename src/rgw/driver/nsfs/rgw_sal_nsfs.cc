@@ -2587,7 +2587,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   /* Through the strategy where there is one, so this carries the
-   * identity like every other arm.  This is the arm a format that
+   * identity like every other branch.  This is the branch a format that
    * keeps the key under a single name takes -- which is the nsfs
    * format for object tags -- and it removed the attribute as the
    * gateway, so DeleteObjectTagging answered 403 against an
@@ -5368,7 +5368,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
        * personality only until io_uring_submit() returns -- after
        * that the slot may be unregistered or reused, and the
        * operation fails or runs as whoever holds it now
-       * (probes/persprobe.c, arm S1). */
+       * (probes/persprobe.c, case S1). */
       ldpp_dout(dpp, -1) << "ERROR: rgw_nsfs_io_uring_sqpoll cannot be"
 	" used with rgw_nsfs_impersonate:  the polling thread reads each"
 	" submission's personality after it is released.  Unset one of"
@@ -5749,7 +5749,7 @@ std::unique_ptr<Object> NSFSDriver::get_object(const rgw_obj_key& k)
 
 /* P2.  Where a bucket's storage is, resolved per lookup.
  *
- * Two arms (`NSFS_BUCKET_PLACEMENT_PLAN.md` §7):
+ * Two branches (`NSFS_BUCKET_PLACEMENT_PLAN.md` §7):
  *
  *     index row for (name, tenant)?  ->  use its Path
  *     otherwise                      ->  <base>/<name>
@@ -5758,7 +5758,7 @@ std::unique_ptr<Object> NSFSDriver::get_object(const rgw_obj_key& k)
  * no migration:  an absent row means the default location, which is
  * where every bucket this driver has ever created lives.
  *
- * There is deliberately no third arm reading NooBaa's bucket record.
+ * There is deliberately no third branch reading NooBaa's bucket record.
  * NooBaa's `path` arrives at adopt time and is written into the index
  * with the rest of the bucket's state;  consulting NooBaa's config store
  * on the request path is drift, and this must not add a second
@@ -12450,7 +12450,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
 
   if (src_exists && !(flags & FSIOObject::OPEN_FLAG_TRUNC)) {
     /* COW clone of the published object.  clone_file() works by name, so
-     * this arm needs a named temp rather than O_TMPFILE. */
+     * this branch needs a named temp rather than O_TMPFILE. */
     tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
       "_" + std::to_string(fsio_build_seq.fetch_add(1));
     int ret = driver->get_fs_strategy()->clone_file(
@@ -13024,7 +13024,7 @@ int NSFSObject::NSFSFSIOObject::fsetattr(const DoutPrefixProvider* dpp, const st
   }
   if (!val.length()) {
     /* an empty value means "leave this attr alone", as in
-     * RGWRados::set_attrs() and FSEnt::write_attrs()'s MERGE arm.
+     * RGWRados::set_attrs() and FSEnt::write_attrs()'s MERGE branch.
      * Writing it would replace a good value with one that does not
      * decode -- which is how an empty ACL became EIO. */
     return 0;
@@ -19637,7 +19637,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    *                     would be the identity's
    *
    * `cap` names what to raise, `dac_override` by default;  `user` is
-   * an rgw_user string for the impersonating arm, which is skipped
+   * an rgw_user string for the impersonating case, which is skipped
    * without one.  On a gateway started without the file capabilities
    * the first two are `result=not-permitted`, which is the
    * deployment answer and not a failure of the primitive. */

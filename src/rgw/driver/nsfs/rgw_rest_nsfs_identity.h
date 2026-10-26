@@ -288,7 +288,7 @@ public:
 			 &id.custom_bucket_path_allowed_list);
     RESTArgs::get_string(s, "fs_backend", "", &id.fs_backend);
 
-    /* The two arms name the same thing twice and would disagree the
+    /* The two forms name the same thing twice and would disagree the
      * moment the directory changed. */
     if (id.local() && id.directory_backed()) {
       op_ret = -EINVAL;

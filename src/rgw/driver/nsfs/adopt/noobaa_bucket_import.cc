@@ -111,7 +111,7 @@ void rewrite_one(rapidjson::Value& v, rapidjson::Document& d,
 /* The `Principal` (or `NotPrincipal`) of one statement.
  *
  * NooBaa's shape is AWS's:  a string, an array of strings, or an object
- * whose `AWS` member is either.  Only the AWS arm names an identity we
+ * whose `AWS` member is either.  Only the AWS member names an identity we
  * could have imported;  `Service` and `Federated` are AWS's own
  * namespaces and are left exactly as they are. */
 void rewrite_principal(rapidjson::Value& principal, rapidjson::Document& d,

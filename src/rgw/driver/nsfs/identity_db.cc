@@ -882,7 +882,7 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
    * vector.  Absent means "no supplementary groups" today, and the
    * caller installs that rather than skipping the call -- NooBaa's
    * ThreadScope issues setgroups(0, NULL) for exactly this case.
-   * The two stay distinct in the record because the directory arm
+   * The two stay distinct in the record because the directory-backed form
    * will read them differently. */
   out.groups.clear();
   if (id.groups) {

@@ -120,7 +120,7 @@ int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
  *
  * `contents` is needed as well as `plan` because the plan carries
  * what RGW will hold and the records carry what only the nsfs row
- * holds -- the POSIX arm, the placement fields, the trust policy.
+ * holds -- the POSIX identity, the placement fields, the trust policy.
  *
  * Returns 0 when everything was written, -EIO when anything was not,
  * with each failure named in `result.failures`.  Partial success is

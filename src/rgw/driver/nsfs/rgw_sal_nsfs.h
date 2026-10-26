@@ -2098,7 +2098,7 @@ public:
     { }
 
   /* A bucket served from a Directory already built, with the info
-   * provided -- P2's placed arm, where the directory is an absolute
+   * provided -- P2's placed branch, where the directory is an absolute
    * path rather than a child of the base path, so it cannot be
    * rendered from the name. */
   NSFSBucket(NSFSDriver *_dr, std::unique_ptr<nsfs::Directory> _this_dir,

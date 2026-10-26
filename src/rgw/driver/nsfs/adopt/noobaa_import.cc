@@ -140,12 +140,12 @@ const NooBaaIdentity* find_source(const NooBaaStoreContents& contents,
   return nullptr;
 }
 
-/* NooBaa's POSIX arm into the nsfs identity row.
+/* NooBaa's POSIX identity into the nsfs identity row.
  *
  * `uid`/`gid` or a distinguished name, never both -- NooBaa's schema is
  * a `oneOf` and the nsfs table's is a CHECK, so a record that violated
  * it could not be stored here either.  `user` takes the
- * distinguished-name arm for the anonymous account (§6.8). */
+ * distinguished-name form for the anonymous account (§6.8). */
 void fill_posix(const NooBaaIdentity& src, Identity& row)
 {
   switch (src.posix.kind) {
@@ -527,7 +527,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       ++result.grants_written;
     }
 
-    /* The nsfs row, for a root account only:  the POSIX arm and the
+    /* The nsfs row, for a root account only:  the POSIX identity and the
      * placement fields, keyed on the account.  Every member of the
      * account runs as it and has no row of its own (§2.8);  a member
      * whose NooBaa copy differs was reported by the plan. */
