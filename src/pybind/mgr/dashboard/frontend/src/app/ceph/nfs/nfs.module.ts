@@ -26,7 +26,6 @@ import {
 import Close from '@carbon/icons/es/close/32';
 import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
 import { ClusterModule } from '../cluster/cluster.module';
-import { NfsClusterDetailsComponent } from './nfs-cluster-details/nfs-cluster-details.component';
 
 @NgModule({
   imports: [
@@ -54,8 +53,7 @@ import { NfsClusterDetailsComponent } from './nfs-cluster-details/nfs-cluster-de
     NfsDetailsComponent,
     NfsFormComponent,
     NfsFormClientComponent,
-    NfsClusterComponent,
-    NfsClusterDetailsComponent
+    NfsClusterComponent
   ]
 })
 export class NfsModule {

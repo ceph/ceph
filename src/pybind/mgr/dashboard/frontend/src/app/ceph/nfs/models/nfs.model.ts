@@ -1,7 +1,7 @@
 export interface NFSBackend {
   hostname: string;
   ip: string;
-  port: number;
+  port?: number;
   status?: string;
 }
 
@@ -11,6 +11,7 @@ export interface NFSCluster {
   port?: number;
   backend: NFSBackend[];
   placement: Record<string, unknown>;
+  enable_nfsv3?: boolean;
   enable_rdma?: boolean;
   deployment_type?: string;
   ingress_mode?: string;
@@ -20,4 +21,9 @@ export interface NFSCluster {
 export interface NFSClusterOption {
   cluster_id: string;
   enable_rdma?: boolean;
+}
+
+export interface NFSShare {
+  cluster_id?: string;
+  export_id?: number;
 }

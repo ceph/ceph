@@ -58,6 +58,7 @@ import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
 import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
 import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
+import { NFS_PAGE_HEADER } from '../nfs/nfs.constants';
 import { RgwMultisiteSyncPolicyComponent } from './rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 import { RgwMultisiteSyncPolicyFormComponent } from './rgw-multisite-sync-policy-form/rgw-multisite-sync-policy-form.component';
 import { RgwConfigurationPageComponent } from './rgw-configuration-page/rgw-configuration-page.component';
@@ -570,10 +571,14 @@ const routes: Routes = [
         section_info: 'NFS GANESHA',
         header: 'NFS-Ganesha is not configured'
       },
-      breadcrumbs: 'NFS'
+      breadcrumbs: $localize`Network Filesystem`
     },
     children: [
-      { path: '', component: NfsClusterComponent },
+      {
+        path: '',
+        component: NfsClusterComponent,
+        data: { pageHeader: NFS_PAGE_HEADER }
+      },
       {
         path: URLVerbs.CREATE,
         component: NfsFormComponent,

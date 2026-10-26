@@ -1,60 +1,65 @@
-import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { BehaviorSubject, Observable, forkJoin, of } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
+
 import { NfsService } from '~/app/shared/api/nfs.service';
-import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { NFSCluster } from '../models/nfs-cluster-config';
-import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
-import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
-import { BehaviorSubject, Observable } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
-const BASE_URL = 'cephfs/nfs';
+
+import { NFSBackend, NFSCluster, NFSShare } from '../models/nfs.model';
+
+interface NFSClusterRow extends NFSCluster {
+  status: string;
+  shares: number;
+  protocol: string;
+}
+
 @Component({
   selector: 'cd-nfs-cluster',
   templateUrl: './nfs-cluster.component.html',
   styleUrls: ['./nfs-cluster.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
   standalone: false
 })
-export class NfsClusterComponent extends ListWithDetails implements OnInit {
-  @ViewChild('hostnameTpl', { static: true })
-  hostnameTpl: TemplateRef<any>;
-
-  @ViewChild('ipAddrTpl', { static: true })
-  ipAddrTpl: TemplateRef<any>;
-
-  @ViewChild('virtualIpTpl', { static: true })
-  virtualIpTpl: TemplateRef<any>;
-
+export class NfsClusterComponent implements OnInit {
   columns: CdTableColumn[] = [];
   selection: CdTableSelection = new CdTableSelection();
-  tableActions: CdTableAction[] = [];
   permission: Permission;
   orchStatus: OrchestratorStatus;
-  clusters$: Observable<NFSCluster[]>;
-  subject = new BehaviorSubject<NFSCluster[]>([]);
+  clusters$: Observable<NFSClusterRow[]>;
+  subject = new BehaviorSubject<NFSClusterRow[]>([]);
 
-  constructor(
-    public actionLabels: ActionLabelsI18n,
-    protected ngZone: NgZone,
-    private authStorageService: AuthStorageService,
-    private nfsService: NfsService,
-    private orchService: OrchestratorService
-  ) {
-    super();
+  private destroyRef = inject(DestroyRef);
+  private authStorageService = inject(AuthStorageService);
+  private nfsService = inject(NfsService);
+  private orchService = inject(OrchestratorService);
+
+  constructor() {
+    this.permission = this.authStorageService.getPermissions().nfs;
   }
 
   ngOnInit(): void {
-    this.orchService.status().subscribe((status: OrchestratorStatus) => {
-      this.orchStatus = status;
-    });
-    this.permission = this.authStorageService.getPermissions().nfs;
-    this.clusters$ = this.subject.pipe(switchMap(() => this.nfsService.listClusters(true)));
+    this.orchService
+      .status()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((status: OrchestratorStatus) => {
+        this.orchStatus = status;
+      });
+    this.clusters$ = this.subject.pipe(
+      switchMap(() =>
+        forkJoin({
+          clusters: this.nfsService.listClusters().pipe(catchError(() => of([]))),
+          exports: this.nfsService.list().pipe(catchError(() => of([])))
+        }).pipe(
+          map(({ clusters, exports }) => this.mapClusterRows(clusters, exports as NFSShare[]))
+        )
+      )
+    );
     this.columns = [
       {
         name: $localize`Name`,
@@ -62,24 +67,62 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
         flexGrow: 1
       },
       {
-        name: $localize`Hostnames`,
-        prop: 'backend',
-        flexGrow: 2,
-        cellTemplate: this.hostnameTpl
-      },
-      {
-        name: $localize`IP Address`,
-        prop: 'backend',
-        flexGrow: 2,
-        cellTemplate: this.ipAddrTpl
-      },
-      {
-        name: $localize`Virtual IP Address`,
-        prop: 'virtual_ip',
+        name: $localize`Status`,
+        prop: 'status',
         flexGrow: 1,
-        cellTemplate: this.virtualIpTpl
+        cellTransformation: CellTemplate.tag,
+        customTemplateConfig: {
+          map: {
+            Running: { class: 'tag-success' },
+            Degraded: { class: 'tag-warning' },
+            Stopped: { class: 'tag-danger' },
+            Unknown: { class: 'tag-default' }
+          }
+        }
+      },
+      {
+        name: $localize`Shares`,
+        prop: 'shares',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Protocol`,
+        prop: 'protocol',
+        flexGrow: 1
       }
     ];
+  }
+
+  private mapClusterRows(clusters: NFSCluster[], exports: NFSShare[]): NFSClusterRow[] {
+    const shareCounts = (exports || []).reduce((acc: Record<string, number>, exp: NFSShare) => {
+      const clusterId = exp?.cluster_id;
+      if (clusterId) {
+        acc[clusterId] = (acc[clusterId] || 0) + 1;
+      }
+      return acc;
+    }, {});
+
+    return (clusters || []).map((cluster) => ({
+      ...cluster,
+      status: this.getClusterStatus(cluster.backend),
+      shares: shareCounts[cluster.name] || 0,
+      protocol: cluster.enable_nfsv3 ? $localize`NFSv3, NFSv4` : $localize`NFSv4`
+    }));
+  }
+
+  private getClusterStatus(backends: NFSBackend[] = []): string {
+    if (!backends?.length) {
+      return '';
+    }
+    const statuses = backends.map((backend) => (backend.status || '').toLowerCase());
+    const running = statuses.filter((status) => status === 'running').length;
+    if (running === statuses.length) {
+      return 'Running';
+    }
+    if (running > 0) {
+      return 'Degraded';
+    }
+    return '';
   }
 
   loadData() {
