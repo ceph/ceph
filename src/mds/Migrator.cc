@@ -3082,6 +3082,10 @@ void Migrator::import_reverse(CDir *dir)
       }
       in->put(CInode::PIN_IMPORTINGCAPS);
     }
+  } else if (stat.state == IMPORT_LOGGINGSTART) {
+    // no caps are imported yet
+    for (auto& p : stat.peer_exports)
+      p.first->put(CInode::PIN_IMPORTINGCAPS);
   }
 
   if (stat.state == IMPORT_LOGGINGSTART || stat.state == IMPORT_ACKING) {
