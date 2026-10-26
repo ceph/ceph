@@ -584,7 +584,9 @@ class OsdFlagsController(RESTController):
             # Let's pretend to the API that 'pause' is in fact a proper flag.
             enabled_flags = list(
                 set(enabled_flags) - {'pauserd', 'pausewr'} | {'pause'})
-        return sorted(enabled_flags)
+        # 'stretch_zones' records the upgrade commit, like
+        # require_osd_release, and cannot be set or unset.
+        return sorted(set(enabled_flags) - {'stretch_zones'})
 
     @staticmethod
     def _update_flags(action, flags, ids=None):
