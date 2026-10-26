@@ -155,9 +155,9 @@ This strategy tracks network connectivity between Monitors and is
 used to determine which data center should be favored when the cluster
 experiences a netsplit.
 
-.. note:: In Umbrella 21 and later releases, ``ceph mon enable_stretch_mode``
+.. note:: In Umbrella and later releases, ``ceph mon enable_stretch_mode``
    switches the election strategy to ``connectivity`` if it is not already
-   set. In Squid 19.2 and Tentacle 20.2, set it first, or the command fails with
+   set. In Squid and Tentacle, set it first, or the command fails with
    ``Monitors must use the connectivity strategy to enable stretch mode``:
 
    .. prompt:: bash #
@@ -221,9 +221,9 @@ with the CRUSH topology.
              step emit
      }
 
-   .. warning:: In Squid 19.2, ``ceph df`` reports a wrong ``MAX AVAIL`` for
-      pools whose CRUSH rule has more than one ``take`` step: it counts the
-      available space of a single ``datacenter`` only. Tentacle 20.2 and later
+   .. warning:: In Squid, ``ceph df`` reports a wrong ``MAX AVAIL`` for pools
+      whose CRUSH rule has more than one ``take`` step: it counts the
+      available space of a single ``datacenter`` only. Tentacle and later
       releases combine all ``take`` steps and report the correct value.
 
       For example, consider a cluster with two CRUSH rules, ``stretch_replicated_rule`` and
@@ -249,7 +249,7 @@ with the CRUSH topology.
               step emit
          }
 
-      In Squid 19.2, ``stretch_replicated_rule_alt`` reports an incorrect value for
+      In Squid, ``stretch_replicated_rule_alt`` reports an incorrect value for
       ``MAX AVAIL``. ``stretch_replicated_rule`` will report the correct value.
       This is because ``stretch_replicated_rule_alt`` is defined in such a way that
       ``PGMap::get_rule_avail`` considers only the available capacity of a single
@@ -269,7 +269,7 @@ with the CRUSH topology.
       crushtool -c crush.map.txt -o crush2.map.bin
       ceph osd setcrushmap -i crush2.map.bin
 
-#. Direct the cluster to enter stretch mode. In Umbrella 21 and later releases,
+#. Direct the cluster to enter stretch mode. In Umbrella and later releases,
    the cluster switches to the ``connectivity`` election strategy if it is not
    already configured.
 
@@ -278,8 +278,8 @@ with the CRUSH topology.
    must not exist in your CRUSH map: ``ceph mon enable_stretch_mode`` fails
    unless the CRUSH map has exactly two buckets of the dividing type.
 
-   An explicit tiebreaker Monitor is optional in Umbrella 21 and later releases;
-   in Squid 19.2 and Tentacle 20.2, you must name it, as in Option 2. If it is
+   An explicit tiebreaker Monitor is optional in Umbrella and later releases; in
+   Squid and Tentacle, you must name it, as in Option 2. If it is
    not named, the cluster selects the one Monitor whose ``datacenter`` (or other
    dividing bucket) differs from the two data zones.
 
