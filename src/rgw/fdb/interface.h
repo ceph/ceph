@@ -208,15 +208,15 @@ auto get_output_for(OutputTargetOrFnT&& output_target_or_fn)
 } // namespace detail
 
 [[nodiscard]] inline watch_handle make_watch(database_handle dbh, const transaction_options& options,
-                                             std::string_view key)
+                                             const concepts::libfdb_key auto& key)
 {
  return detail::in_transaction(std::move(dbh), options,
-          [key](transaction_handle& txn) {
+          [&key](transaction_handle& txn) {
             return make_watch(txn, key);
           });
 }
 
-[[nodiscard]] inline watch_handle make_watch(database_handle dbh, std::string_view key)
+[[nodiscard]] inline watch_handle make_watch(database_handle dbh, const concepts::libfdb_key auto& key)
 {
  return make_watch(std::move(dbh), transaction_options {}, key);
 }
@@ -244,11 +244,11 @@ concept watch_callback =
 
 void watched_loop(database_handle dbh,
                   const transaction_options& options,
-                  std::string_view key,
+                  const concepts::libfdb_key auto& key,
                   std::stop_token stop_token,
                   watch_callback auto&& fn)
 {
- std::string watched_key(key);
+ std::string watched_key(detail::as_libfdb_key_view(key));
 
  while (not stop_token.stop_requested() &&
         watch_event::changed ==
@@ -258,7 +258,7 @@ void watched_loop(database_handle dbh,
 }
 
 void watched_loop(database_handle dbh,
-                  std::string_view key,
+                  const concepts::libfdb_key auto& key,
                   std::stop_token stop_token,
                   watch_callback auto&& fn)
 {
@@ -271,14 +271,14 @@ void watched_loop(database_handle dbh,
  * wait_for_event(): */
 void watched_loop(database_handle dbh,
                   const transaction_options& options,
-                  std::string_view key,
+                  const concepts::libfdb_key auto& key,
                   watch_callback auto&& fn)
 {
  watched_loop(std::move(dbh), options, key,
               std::stop_token {}, std::forward<decltype(fn)>(fn));
 }
 
-void watched_loop(database_handle dbh, std::string_view key,
+void watched_loop(database_handle dbh, const concepts::libfdb_key auto& key,
                   watch_callback auto&& fn)
 {
  watched_loop(std::move(dbh), transaction_options {}, key,

@@ -987,7 +987,7 @@ TEST_CASE("version stamps", "[fdb]") {
    CHECK(commit.error() == error.code());
   }
 
-  lfdb::reset_for_replay(txn, commit.error().value());
+  lfdb::reset_for_replay(txn, commit.error());
   CHECK(stamp.is_ready());
   lfdb::set(txn, output_key, lfdb::versioned("", stamp));
   CHECK_FALSE(copy.is_ready());
@@ -1010,7 +1010,7 @@ TEST_CASE("version stamps", "[fdb]") {
   lfdb::versionstamp abandoned_stamp;
   lfdb::set(txn, abandoned_key, lfdb::versioned("", abandoned_stamp));
 
-  lfdb::reset_for_replay(txn, not_committed);
+  lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed);
 
   lfdb::versionstamp committed_stamp;
   lfdb::set(txn, committed_key, lfdb::versioned("", committed_stamp));
@@ -1615,6 +1615,49 @@ bool trigger_watch_until(lfdb::database_handle dbh,
  }
 
  return enough_callbacks();
+}
+
+TEST_CASE("watches accept ordinary keys", "[rgw][fdb][api]")
+{
+ janitor dbh;
+ const auto compiled = content::key("watch-api", "compiled");
+ auto exercise = [&dbh](const auto& key) {
+  auto watch = lfdb::make_watch(dbh, key);
+  lfdb::set(dbh, key, "changed");
+  CHECK(lfdb::watch_event::changed == wait_for_watch_event(watch));
+  const auto txn = lfdb::make_transaction(dbh);
+  auto transaction_watch = lfdb::make_watch(txn, key);
+  lfdb::commit(txn);
+  transaction_watch.cancel();
+  CHECK(lfdb::watch_event::cancelled == transaction_watch.wait_for_event());
+
+  std::stop_source stop;
+  stop.request_stop();
+  CHECK_NOTHROW(lfdb::watched_loop(dbh, key, stop.get_token(), [](std::string_view) {}));
+  lfdb::erase(dbh, key);
+ };
+ exercise(compiled);
+ exercise(std::string_view(watch_key));
+ exercise("libfdb-test/watch-api/literal");
+}
+
+TEST_CASE("const handles retain commit and typed replay semantics", "[rgw][fdb][api]")
+{
+ janitor dbh;
+ const auto key = test_key("const-handle-replay");
+ const auto txn = lfdb::make_transaction(dbh);
+ lfdb::set(txn, key, "pending");
+ CHECK_THROWS_AS(lfdb::reset_for_replay(txn, std::error_code(1020, std::generic_category())),
+                 std::invalid_argument);
+ CHECK_THROWS_AS(lfdb::reset_for_replay(txn, lfdb::libfdb_error_code::invalid_result),
+                 std::invalid_argument);
+ CHECK(lfdb::key_exists(txn, key));
+ lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed);
+ CHECK_FALSE(lfdb::key_exists(txn, key));
+ lfdb::set(txn, key, "committed");
+ CHECK(lfdb::commit(lfdb::with_result, txn));
+ CHECK(lfdb::key_exists(dbh, key));
+ CHECK_NOTHROW(lfdb::commit(lfdb::make_transaction(dbh)));
 }
 
 TEST_CASE("transaction watches", "[rgw][fdb]") {
@@ -4717,7 +4760,7 @@ SCENARIO("transactor", "[fdb]")
 
   auto txn = lfdb::make_transaction(j);
 
-  CHECK_NOTHROW(lfdb::reset_for_replay(txn, not_committed));
+  CHECK_NOTHROW(lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed));
 
   const auto key = test_key("reset-for-replay");
   lfdb::set(txn, key, "value");
@@ -4735,7 +4778,7 @@ SCENARIO("transactor", "[fdb]")
   const auto key = test_key("reset-options");
   auto txn = lfdb::make_transaction(j, options);
 
-  lfdb::reset_for_replay(txn, not_committed);
+  lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed);
   lfdb::set(txn, key, "value");
 
   std::string out;
@@ -4776,7 +4819,7 @@ SCENARIO("transactor", "[fdb]")
 
   lfdb::set(txn, test_key("abandoned-versionstamp"),
             lfdb::versioned("", abandoned_stamp));
-  lfdb::reset_for_replay(txn, 1020);
+  lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed);
 
   lfdb::set(txn, test_key("replayed-without-versionstamp"), "value");
   REQUIRE_NOTHROW(lfdb::commit(txn));
@@ -4789,13 +4832,13 @@ SCENARIO("transactor", "[fdb]")
 
   auto txn = lfdb::make_transaction(j);
 
-  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, operation_cancelled), lfdb::libfdb_exception);
+  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, lfdb::fdb_error_code::operation_cancelled), lfdb::libfdb_exception);
  }
 
  SECTION("reset_for_replay requires an error") {
   auto txn = lfdb::make_transaction(j);
 
-  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, 0), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, std::error_code {}), std::invalid_argument);
  }
 
  SECTION("reset_for_replay preserves a changed preparation error") {
@@ -4808,7 +4851,7 @@ SCENARIO("transactor", "[fdb]")
   std::this_thread::sleep_for(20ms);
 
   try {
-   lfdb::reset_for_replay(txn, 1020);
+   lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed);
    FAIL("expired transaction was unexpectedly prepared for replay");
   } catch (const lfdb::libfdb_exception& error) {
    CHECK(lfdb::fdb_error_code::transaction_timed_out == error.code());
@@ -4849,7 +4892,7 @@ SCENARIO("transactor", "[fdb]")
   REQUIRE_NOTHROW(lfdb::commit(txn));
 
   CHECK(0 < lfdb::committed_version(txn));
-  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, 1020), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed), std::invalid_argument);
  }
 
  SECTION("transaction function returns nothing") {
@@ -4997,7 +5040,7 @@ SCENARIO("transactor", "[fdb]")
   CHECK(lfdb::fdb_error_code::not_committed == result.error());
   CHECK_THROWS_AS(lfdb::commit(lfdb::with_result, txn), std::invalid_argument);
 
-  lfdb::reset_for_replay(txn, result.error().value());
+  lfdb::reset_for_replay(txn, result.error());
 
   REQUIRE(lfdb::get(txn, key, out));
   CHECK("conflict" == out);
@@ -5031,7 +5074,7 @@ SCENARIO("transactor", "[fdb]")
 
   const auto result = lfdb::commit(lfdb::with_result, txn);
   REQUIRE_FALSE(result);
-  lfdb::reset_for_replay(txn, result.error().value());
+  lfdb::reset_for_replay(txn, result.error());
 
   lfdb::set(txn, output_key, "replay");
   CHECK_FALSE(lfdb::get(txn, output_key, out));

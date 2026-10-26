@@ -476,7 +476,7 @@ class transaction_source final
 
 // Submit once, without retry preparation. Native failures are returned as values;
 // precondition and local failures may throw. Use reset_for_replay before replay.
-[[nodiscard]] inline auto commit(with_result_t, transaction_handle& txn)
+[[nodiscard]] inline auto commit(with_result_t, const transaction_handle& txn)
  -> std::expected<void, std::error_code>
 {
  if (not txn or not *txn) {
@@ -486,14 +486,14 @@ class transaction_source final
  return txn->commit(with_result);
 }
 
-inline void commit(transaction_handle& txn)
+inline void commit(const transaction_handle& txn)
 {
  if (const auto result = commit(with_result, txn); not result) {
   throw libfdb_exception(result.error());
  }
 }
 
-[[nodiscard]] inline auto commit(with_result_t, transaction_handle& txn, const versionstamp& stamp)
+[[nodiscard]] inline auto commit(with_result_t, const transaction_handle& txn, const versionstamp& stamp)
  -> std::expected<void, std::error_code>
 {
  if (not txn or not *txn) {
@@ -505,7 +505,7 @@ inline void commit(transaction_handle& txn)
  return commit(with_result, txn);
 }
 
-inline void commit(transaction_handle& txn, const versionstamp& stamp)
+inline void commit(const transaction_handle& txn, const versionstamp& stamp)
 {
  if (const auto result = commit(with_result, txn, stamp); not result) {
   throw libfdb_exception(result.error());
@@ -540,9 +540,10 @@ inline void set_read_version(const transaction_handle& txn, const std::int64_t v
 }
 
 // Prepare an uncommitted transaction for replay after a native failure:
-inline void reset_for_replay(transaction_handle& txn, fdb_error_t error);
+inline void reset_for_replay(const transaction_handle& txn, std::error_code error);
 
-[[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key)
+[[nodiscard]] inline watch_handle make_watch(transaction_handle txn,
+                                             const concepts::libfdb_key auto& key)
 {
  return txn->make_watch(detail::as_byte_view(key));
 }
@@ -773,7 +774,7 @@ inline transactor make_transactor(database_handle dbh, const transaction_options
  return transactor(std::move(dbh), opts);
 }
 
-inline void reset_for_replay(transaction_handle& txn, const fdb_error_t error)
+inline void reset_for_replay(const transaction_handle& txn, const std::error_code error)
 {
  auto preparation = detail::block_until_ready(detail::reset_for_replay_if_needed(txn, error));
  detail::transaction_replay_ready(*txn);
@@ -834,7 +835,7 @@ try
    result.emplace(invocation_result_traits<ResultT>::store(txn, fn));
   } catch (const libfdb_exception& e) {
    if (const auto replay_error = retryable_error(e, txn, policy)) {
-    reset_for_replay(txn, *replay_error);
+    reset_for_replay(txn, std::error_code(*replay_error, ::ceph::libfdb::fdb_error_category()));
     continue;
    }
 
@@ -850,7 +851,7 @@ try
   if (not commit_state) {
    if (const auto replay_error = retryable_error(
          transaction_failure {commit_state.error(), transaction_phase::commit}, txn, policy)) {
-    reset_for_replay(txn, *replay_error);
+    reset_for_replay(txn, std::error_code(*replay_error, ::ceph::libfdb::fdb_error_category()));
     continue;
    }
 

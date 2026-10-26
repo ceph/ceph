@@ -746,7 +746,7 @@ try {
     }
 
     // Prepare explicitly, then rebuild the body using the same native budgets.
-    lfdb::reset_for_replay(txn, result.error().value());
+    lfdb::reset_for_replay(txn, result.error());
   }
 }
 catch (const lfdb::libfdb_exception& error) {
@@ -860,6 +860,8 @@ keep its own progress marker before re-running part of a larger operation.
 Call `reset_for_replay()` after deciding that the entire transaction body may
 be replayed, for a failure from either the body or commit. A successful reset
 prepares another attempt; a failed reset throws and ends this recovery loop.
+Pass the complete error code: its category must identify a nonzero native FDB
+error. A libfdb or application error is rejected before changing the transaction.
 
 ```cpp
 const lfdb::transaction_options options {
@@ -880,7 +882,7 @@ for (;;) {
     if (not lfdb::retryable_not_committed(e.code())) {
       throw;
     }
-    lfdb::reset_for_replay(txn, e.code().value());
+    lfdb::reset_for_replay(txn, e.code());
   }
 }
 ```
@@ -2240,6 +2242,12 @@ Transaction watches ask FoundationDB to report a change to a key relative to
 the transaction that created the watch. If watches are unsupported by the local
 FoundationDB configuration, or the transaction cannot create watches, waiting on
 the watch throws `lfdb::libfdb_exception`.
+
+Watch keys use the same key concept as `get()` and `set()`: string literals,
+`std::string_view`, strings, and compiled content keys all work directly. For
+example, `make_watch(dbh, fdbc::key("people", "person", "title"))` watches a
+compiled key. `watched_loop()` owns a copy of the resolved key bytes for its
+repeated watches and passes those bytes to its callback as a string view.
 
 Note that watches do not report the triggering value. If you need the value,
 read it in a separate transaction. For the underlying semantics, see the

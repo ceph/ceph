@@ -80,7 +80,6 @@ using transaction_handle = std::shared_ptr<transaction>;
 enum struct read_mode { serializable, snapshot };
 
 extern transaction_handle make_transaction(database_handle dbh);
-[[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key);
 
 } // namespace ceph::libfdb
 
@@ -140,7 +139,8 @@ inline future_value block_until_ready(future_value&& fv);
 
 [[nodiscard]] inline std::string extract_byte_string(future_value result_owner);
 
-[[nodiscard]] inline future_value reset_for_replay_if_needed(transaction_handle& txn, fdb_error_t error);
+[[nodiscard]] inline future_value reset_for_replay_if_needed(const transaction_handle& txn,
+                                                            std::error_code error);
 
 } // namespace ceph::libfdb::detail
 
@@ -414,7 +414,6 @@ class watch_handle final
 
  private:
  friend detail::future_value detail::take_watch_future(watch_handle&& watch);
- friend watch_handle make_watch(transaction_handle txn, std::string_view key);
  friend class transaction;
 };
 
@@ -1574,18 +1573,18 @@ class transaction final
                                read_mode mode,
                                const commit_after_op commit_after);
 
- friend inline std::expected<void, std::error_code> commit(with_result_t, transaction_handle& txn);
- friend inline std::expected<void, std::error_code> commit(with_result_t, transaction_handle& txn,
+ friend inline std::expected<void, std::error_code> commit(with_result_t, const transaction_handle& txn);
+ friend inline std::expected<void, std::error_code> commit(with_result_t, const transaction_handle& txn,
                                                          const versionstamp& stamp);
  friend inline std::int64_t committed_version(const transaction_handle& txn);
  friend inline std::int64_t read_version(const transaction_handle& txn);
  friend inline std::int64_t approximate_commit_bytes(const transaction_handle& txn);
  friend inline auto ::ceph::libfdb::detail::reset_for_replay_if_needed(
-   transaction_handle&, fdb_error_t) -> detail::future_value;
+   const transaction_handle&, std::error_code) -> detail::future_value;
  friend inline void ::ceph::libfdb::detail::transaction_replay_ready(transaction&);
  friend inline void ::ceph::libfdb::detail::finish_version_stamps(transaction&, std::error_code) noexcept;
  friend inline void set_read_version(const transaction_handle& txn, std::int64_t version);
- friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
+ friend inline watch_handle make_watch(transaction_handle txn, const concepts::libfdb_key auto& key);
  friend class ::ceph::libfdb::detail::commit_attempt;
  friend inline void ::ceph::libfdb::detail::transaction_set_kv_bytes(
    const transaction_handle&, detail::byte_view, detail::byte_view);
@@ -1807,14 +1806,14 @@ inline future_value transaction_get_key(const transaction_handle& txn,
  return txn->get_key(selector, mode);
 }
 
-[[nodiscard]] inline future_value reset_for_replay_if_needed(transaction_handle& txn,
-                                                             const fdb_error_t error)
+[[nodiscard]] inline future_value reset_for_replay_if_needed(const transaction_handle& txn,
+                                                             const std::error_code error)
 {
- if (not txn or not *txn or 0 == error) {
-  throw std::invalid_argument("reset_for_replay() requires a transaction and nonzero error");
+ if (not txn or not *txn or not error or error.category() != ::ceph::libfdb::fdb_error_category()) {
+  throw std::invalid_argument("reset_for_replay() requires a transaction and nonzero native error");
  }
 
- return txn->reset_for_replay(error);
+ return txn->reset_for_replay(error.value());
 }
 
 } // namespace detail
