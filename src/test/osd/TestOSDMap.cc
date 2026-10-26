@@ -185,7 +185,8 @@ public:
     return pool_id;
   }
 
-  void balance_capacity(int64_t pid) {
+  void balance_capacity(int64_t pid,
+                        std::random_device::result_type seed = 0) {
     set<int64_t> only_pools;
     only_pools.insert(pid);
     OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
@@ -193,7 +194,8 @@ public:
                           0,
                           100,
                           only_pools,
-                          &pending_inc);
+                          &pending_inc,
+                          seed ? &seed : nullptr);
     osdmap.apply_incremental(pending_inc);
   }
 
@@ -3462,8 +3464,14 @@ TEST_F(OSDMapTest, rb_osdsize_opt_score) {
   set_up_map_heterogeneous(weights, 1);
   //set_verbose(true);
 
-  // Make sure capacity is balanced first
-  balance_capacity(my_rep_pool);
+  // Make sure capacity is balanced first. Use a fixed seed so the upmap
+  // result -- and with it the read balance scores -- is deterministic:
+  // balance_capacity() seeds the PG shuffle in calc_pg_upmaps() from
+  // /dev/random by default, and for some placements the rounded
+  // acting_adj_score coincides with the rounded fair_score even at read
+  // ratios <= 85, failing the ASSERT_NE below (e.g. 1.15 vs 1.15 in
+  // https://jenkins.ceph.com/job/ceph-pr-pipeline/6543/).
+  balance_capacity(my_rep_pool, 1);
   map<uint64_t,set<pg_t>> prim_pgs_by_osd;
   map<uint64_t,set<pg_t>> pgs_by_osd = osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd);
   OSDMap::read_balance_info_t rbi;
