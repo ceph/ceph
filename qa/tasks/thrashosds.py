@@ -67,9 +67,10 @@ def task(ctx, config):
     test_min_size_duration: (1800) the number of seconds for
         test_pool_min_size to last.
 
-    timeout: (360) the number of seconds to wait for the cluster
-       to become clean after each cluster change. If this doesn't
-       happen within the timeout, an exception will be raised.
+    timeout: (360) the number of seconds to wait for all osds to come
+       back up and for the cluster to become clean after each cluster
+       change. If this doesn't happen within the timeout, an exception
+       will be raised.
 
     revive_timeout: (150) number of seconds to wait for an osd asok to
        appear after attempting to revive the osd
@@ -214,11 +215,17 @@ def task(ctx, config):
         yield
     finally:
         log.info('joining thrashosds')
-        thrash_proc.stop_and_join()
-        cluster_manager.wait_for_all_osds_up()
-        cluster_manager.flush_all_pg_stats()
-        cluster_manager.wait_for_recovery(config.get('timeout', 360))
-        if aggro:
-            cluster_manager.raw_cluster_cmd(
-                'config', 'rm', 'mgr',
-                'mgr_debug_aggressive_pg_num_changes')
+        try:
+            thrash_proc.stop_and_join()
+            if thrash_proc.exception is not None:
+                raise RuntimeError(
+                    f'error during osd thrashing: {thrash_proc.exception}')
+            timeout = config.get('timeout', 360)
+            cluster_manager.wait_for_all_osds_up(timeout=timeout)
+            cluster_manager.flush_all_pg_stats()
+            cluster_manager.wait_for_recovery(timeout)
+        finally:
+            if aggro:
+                cluster_manager.raw_cluster_cmd(
+                    'config', 'rm', 'mgr',
+                    'mgr_debug_aggressive_pg_num_changes')
