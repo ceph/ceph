@@ -111,7 +111,18 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
         std::map<core_id_t, unsigned>::iterator count_iter;
         std::map<core_id_t, std::map<unsigned, unsigned>>::iterator core_shard_iter;
         std::map<unsigned, unsigned>::iterator shard_iter;
-        if (core_expected == NULL_CORE) {
+        if (core_expected == NULL_CORE &&
+            crimson::common::get_conf<bool>("crimson_osd_align_pg_cores")) {
+          assert(store_index == NULL_STORE_INDEX);
+          // the same reactor index on every OSD with this reactor count;
+          // a split child (ps + k * old pg_num) stays on its parent's index
+          // when the old pg_num is a multiple of the reactor count
+          auto &cores = primary_mapping.core_to_num_pgs;
+          const auto idx = (static_cast<uint64_t>(pgid.pgid.ps()) +
+                            static_cast<uint64_t>(pgid.pool())) % cores.size();
+          count_iter = std::next(cores.begin(), idx);
+          core_to_update = count_iter->first;
+        } else if (core_expected == NULL_CORE) {
           assert(store_index == NULL_STORE_INDEX);
           count_iter = std::min_element(
             primary_mapping.core_to_num_pgs.begin(),

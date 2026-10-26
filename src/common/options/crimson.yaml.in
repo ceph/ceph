@@ -192,6 +192,21 @@ options:
   - startup
   see_also:
   - crimson_osd_client_shard_ports
+- name: crimson_osd_align_pg_cores
+  type: bool
+  level: advanced
+  desc: Place each PG on the same reactor index on every OSD
+  long_desc: A PG goes to reactor (ps + pool) % reactors instead of the reactor
+    with the fewest PGs, so OSDs with the same reactor count run it on the same
+    reactor index. With crimson_osd_cluster_shard_ports, reactor k's cluster lane
+    then reaches only the peers' reactor k, one connection per peer instead of up
+    to one per peer reactor. Primaries are no longer spread over reactors by
+    placement and need balancing with pg-upmap-primary.
+  default: false
+  flags:
+  - startup
+  see_also:
+  - crimson_osd_cluster_shard_ports
 - name: crimson_osd_stat_interval
   type: int
   level: advanced
