@@ -7,7 +7,7 @@
 The ``require_osd_release`` field of the OSDMap is the cluster-wide
 declaration that every OSD is running at least the named release. It is
 raised at the tail of a cluster upgrade, once all OSDs have been upgraded
-to the new binary. cephadm (``ceph orch upgrade``) and Rook raise it
+to the new release. cephadm (``ceph orch upgrade``) and Rook raise it
 automatically; on other clusters, the operator raises it. Raising it unlocks
 features that would otherwise be rejected as unsafe, and it bounds how far
 ahead of the cluster a new OSD release is allowed to boot.
@@ -28,8 +28,8 @@ For example, after finishing an upgrade to *tentacle*:
 
    ceph osd require-osd-release tentacle
 
-Monitors only accept a small set of recent release names. The current
-accepted targets are ``squid``, ``tentacle``, and ``umbrella``; any older
+Monitors only accept a small set of recent release names. As of 2026 November,
+the accepted targets are ``squid``, ``tentacle``, and ``umbrella``; any older
 release name is rejected.
 The accepted set slides forward as new Ceph releases are added.
 
@@ -83,9 +83,9 @@ OSD boot window
 ===============
 
 The Monitors refuse the boot of an OSD whose release is more than two
-releases ahead of ``require_osd_release``. Monitors of this release also
-refuse any OSD older than ``squid``. For example, on a cluster whose
-Monitors run Umbrella 21 and whose ``require_osd_release`` is ``reef``:
+releases ahead of ``require_osd_release``. Umbrella Monitors also refuse any
+OSD older than ``squid``. For example, on a cluster whose Monitors run
+Umbrella and whose ``require_osd_release`` is ``reef``:
 
 .. list-table::
    :header-rows: 1
@@ -96,8 +96,8 @@ Monitors run Umbrella 21 and whose ``require_osd_release`` is ``reef``:
      - Notes
    * - ``reef``
      - **no**
-     - ``disallowing boot of OSD ... because the osd lacks
-       CEPH_FEATURE_SERVER_SQUID``
+     - ``disallowing boot of OSD osd.3 v2:10.0.0.3:6802/1234 because the osd
+       lacks CEPH_FEATURE_SERVER_SQUID``
    * - ``squid``
      - yes
      - One release ahead.
@@ -106,7 +106,7 @@ Monitors run Umbrella 21 and whose ``require_osd_release`` is ``reef``:
      - Two releases ahead (at the edge of the window).
    * - ``umbrella``
      - **no**
-     - ``disallowing boot of umbrella+ OSD ... because
+     - ``disallowing boot of umbrella+ OSD osd.3 v2:10.0.0.3:6802/1234 because
        require_osd_release < squid``
 
 This sliding window forces operators to raise ``require_osd_release``
@@ -125,14 +125,14 @@ a ``HEALTH_WARN`` check ``OSD_UPGRADE_FINISHED`` with the message::
    all OSDs are running <release> or later but require_osd_release < <release>
 
 On a cluster where no orchestrator raises the flag, the appearance of this
-warning is the normal cue to run ``ceph osd require-osd-release <release>``;
-the warning clears once the flag has been raised.
+warning is a cue to run ``ceph osd require-osd-release <release>``. The
+warning clears once the flag has been raised.
 
 Initial value on new clusters
 =============================
 
 New clusters start with ``require_osd_release`` set to the newest
-release the Monitor code knows about. On this release that is
+release the Monitor code knows about. For Umbrella Monitors, that is
 ``umbrella``. Two developer options adjust the initial value for
 testing; neither should be used in production.
 

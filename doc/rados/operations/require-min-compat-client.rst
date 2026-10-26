@@ -91,11 +91,11 @@ features in active use on the map:
    * - CRUSH tunables (any non-legacy)
      - ``argonaut``
 
-The last two rows are effectively always satisfied on modern clusters:
-``OSDHASHPSPOOL`` is set on every new pool by default
+The last two rows are always satisfied on modern clusters: ``OSDHASHPSPOOL``
+is set on every new pool by default
 (:confval:`osd_pool_default_flag_hashpspool`), and new clusters use the
-``jewel`` CRUSH tunables profile. They are listed for completeness; in
-practice the floor only ever sits at ``firefly`` or newer.
+``jewel`` CRUSH tunables profile or newer. They are listed for completeness;
+in practice the floor only ever sits at ``firefly`` or newer.
 
 If the command fails and prints ``osdmap current utilizes features that
 require <floor>; cannot set require_min_compat_client below that to
@@ -163,7 +163,7 @@ kernel clients are present in the cluster, that column can be ignored.
    that CRUSH MSR rules raise the features-in-use floor to ``squid``
    (see `Lowering the flag`_), whether they come in a CRUSH map injected
    with ``osd setcrushmap`` or from an erasure-code profile that sets
-   ``crush-osds-per-failure-domain`` above 1.  While
+   ``crush-osds-per-failure-domain`` above 1.  When
    ``require_min_compat_client`` is below ``squid``, the Monitors refuse
    either change with ``new crush map requires client version squid but
    require_min_compat_client is <release>``.  To check whether either
