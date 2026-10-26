@@ -48,6 +48,9 @@ const PARALLEL_LOG: &str = "/tmp/s3test-parallel.log";
 
 enum Suite {
     Profile(&'static str),
+    /* profile `dynamic-groups`, then its membership test again with
+     * `rgwalice` taken out of `rgwfix`, putting her back after (I8) */
+    DynamicGroups,
     Librgw,
     /* `standup.rs conversion`, which starts its own gateway */
     Conversion { impersonate: bool, access_model: &'static str },
@@ -67,13 +70,15 @@ const CELLS: &[Cell] = &[
     Cell { name: "posix-strict",
            vstart: &["--store", "nsfs", "--with-impersonation", "--clean"],
            suites: &[Suite::Profile("baseline"),
-                     Suite::Profile("access-model-switch")],
+                     Suite::Profile("access-model-switch"),
+                     Suite::DynamicGroups],
            by_default: true },
     Cell { name: "s3-native",
            vstart: &["--store", "nsfs", "--with-impersonation",
                      "--access-model", "s3-native", "--clean"],
            suites: &[Suite::Profile("baseline"),
-                     Suite::Profile("access-model-switch")],
+                     Suite::Profile("access-model-switch"),
+                     Suite::DynamicGroups],
            by_default: true },
     Cell { name: "plain",
            vstart: &["--store", "nsfs", "--bucket-profile", "strong", "--clean"],
@@ -250,7 +255,8 @@ fn plan(o: &Opts, suite_dir: &Path, run_dir: &Path) -> Vec<Step> {
             }
             for suite in c.suites {
                 match suite {
-                    Suite::Profile(_) | Suite::Conversion { .. } if o.test.is_some() => {}
+                    Suite::Profile(_) | Suite::Conversion { .. } | Suite::DynamicGroups
+                        if o.test.is_some() => {}
                     Suite::Librgw if !o.librgw => {}
                     Suite::Conversion { impersonate, access_model } => {
                         /* conversion raises CAP_DAC_OVERRIDE and CAP_CHOWN
@@ -285,6 +291,27 @@ fn plan(o: &Opts, suite_dir: &Path, run_dir: &Path) -> Vec<Step> {
                         st.env.push(("S3TEST_CONF".into(), o.conf.to_string_lossy().into()));
                         st.parallel_log = true;
                         steps.push(st);
+                    }
+                    Suite::DynamicGroups => {
+                        for (name, argv) in [
+                            ("dynamic-groups", s(&["cargo", "nextest", "run", "-P",
+                                "dynamic-groups", "--no-fail-fast", "--features", FEATURES])),
+                            ("gpasswd-del", s(&["sudo", "-n", "gpasswd", "-d", "rgwalice", "rgwfix"])),
+                            ("dynamic-groups-del", s(&["cargo", "nextest", "run", "-P",
+                                "dynamic-groups-membership", "--no-fail-fast", "--features",
+                                FEATURES])),
+                            /* run whatever the step before returned:  a failing
+                             * step does not stop the cell, and rgw-vstart.sh
+                             * puts the membership back too */
+                            ("gpasswd-add", s(&["sudo", "-n", "gpasswd", "-a", "rgwalice", "rgwfix"])),
+                        ] {
+                            let mut st = step(&cell, name, suite_dir, argv);
+                            if name.starts_with("dynamic-groups") {
+                                st.env.push(("S3TEST_CONF".into(), o.conf.to_string_lossy().into()));
+                                st.parallel_log = true;
+                            }
+                            steps.push(st);
+                        }
                     }
                     Suite::Librgw => {
                         for (bin, extra) in [("ceph_test_librgw_file_write2", &["--create"][..]),

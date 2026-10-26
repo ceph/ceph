@@ -13,6 +13,7 @@ mod attr_write_fail;
 mod bucket_profile;
 mod custom_bucket_path;
 mod driver_hint;
+mod dynamic_groups;
 mod features;
 mod identity;
 mod impersonation;

@@ -110,11 +110,13 @@ default-filter = 'test(sts::)'
 
 # Fast pre-commit gate: everything except lifecycle (slow), bucket_logging
 # (not implemented on posix/nsfs), stress (ignored), and the test that
-# switches the access model (profile access-model-switch, run after).
+# switches the access model (profile access-model-switch, run after),
+# and the tests that switch dynamic supplementary groups (profile
+# dynamic-groups, run after).
 #
 [profile.baseline]
 test-threads = 8
-default-filter = 'all() & !test(lifecycle::) & !test(bucket_logging::) & !test(stress::) & !test(=impersonation::test_data_follows_the_access_model)'
+default-filter = 'all() & !test(lifecycle::) & !test(bucket_logging::) & !test(stress::) & !test(=impersonation::test_data_follows_the_access_model) & !test(dynamic_groups::)'
 
 [[profile.baseline.overrides]]
 filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
@@ -132,6 +134,19 @@ test-group = 'serial-nsfs-identity'
 # after baseline, against the same gateway.
 [profile.access-model-switch]
 default-filter = 'test(=impersonation::test_data_follows_the_access_model)'
+test-threads = 1
+
+# The tests that switch rgw_nsfs_dynamic_supplemental_groups, alone:  the
+# switch changes what every list-less identity row means.  After
+# baseline, against the same gateway.
+[profile.dynamic-groups]
+default-filter = 'test(dynamic_groups::)'
+test-threads = 1
+
+# The membership test alone, run by validate.rs again after
+# `gpasswd -d rgwalice rgwfix`.
+[profile.dynamic-groups-membership]
+default-filter = 'test(=dynamic_groups::test_dynamic_groups_follow_the_membership)'
 test-threads = 1
 
 [profile.basic]

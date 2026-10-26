@@ -323,6 +323,7 @@ const STEPS: &[(&str, &str)] = &[
     ("store-tests", "run the nsfs unit tests that read a real NooBaa store, against this one"),
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("schema-agreement", "hold the nsfs record schema to NooBaa's validator, over the records NooBaa wrote"),
+    ("groups", "under impersonation, write through rgwfix as list-less accounts:  NooBaa before `stop`, RGW after `role-rgw`"),
     ("nsswitch", "write as the nsswitch-resolved account, and check the file is the name's uid's:  NooBaa before `stop`, RGW after `role-rgw`"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("damage",   "damage one bucket record, so adoption meets a record it cannot carry"),
@@ -357,6 +358,7 @@ fn main() {
         "store-tests" => store_tests(&env),
         "schema-agreement" => schema_agreement(&env),
         "nsswitch" => nsswitch_step(&env),
+        "groups" => groups_step(&env),
         "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
         "damage" => damage(&env),
@@ -813,6 +815,51 @@ fn config(env: &Env) -> Result<(), String> {
         println!("         bucket {NSSWITCH_BUCKET:?} created at {np}, for `nsswitch`");
     }
 
+    /* The `groups` step's accounts and bucket (I8), under `impersonate`:
+     * two list-less accounts, one as a user `rgwfix` holds and one as a
+     * user it does not, and a bucket whose directory is a third uid's,
+     * group `rgwfix`, `0770`, so only membership grants a write. */
+    if env.impersonate {
+        for (name, user, key) in GROUPS_ACCOUNTS {
+            let (_, uid, gid) = passwd_entry(user)?;
+            if nsfs_cli(env, &["account", "status", "--name", name]).is_ok() {
+                println!("         account {name:?} already present");
+                continue;
+            }
+            /* No new_buckets_path:  NooBaa refuses an account that cannot
+             * reach its own (`InaccessibleAccountNewBucketsPath`,
+             * manage_nsfs_validations.js:636-640), which the one outside
+             * rgwfix cannot, and neither creates buckets. */
+            nsfs_cli(env, &[
+                "account", "add", "--name", name,
+                "--uid", &uid.to_string(), "--gid", &gid.to_string(),
+                "--access_key", key, "--secret_key", GROUPS_SECRET,
+            ])?;
+            println!("         account {name:?} created as {user} ({uid}:{gid}), no group list");
+        }
+        let gp = env.tree().join(GROUPS_BUCKET);
+        if nsfs_cli(env, &["bucket", "status", "--name", GROUPS_BUCKET]).is_ok() {
+            println!("         bucket {GROUPS_BUCKET:?} already present");
+        } else {
+            let owner = vstart_id(env, "IMP_UID_I")?;
+            let group = vstart_id(env, "IMP_GRP_GID")?;
+            account_dir(env, &gp, owner, group)?;
+            let principals: Vec<String> = GROUPS_ACCOUNTS.iter()
+                .map(|(n, _, _)| format!("\"{n}\"")).collect();
+            let policy = format!(
+                concat!(r#"{{"Version":"2012-10-17","Statement":[{{"Effect":"Allow","#,
+                        r#""Principal":{{"AWS":[{}]}},"Action":["s3:PutObject","s3:GetObject"],"#,
+                        r#""Resource":["arn:aws:s3:::{}/*"]}}]}}"#),
+                principals.join(","), GROUPS_BUCKET);
+            let p = gp.display().to_string();
+            nsfs_cli(env, &["bucket", "add", "--name", GROUPS_BUCKET,
+                            "--owner", &env.account, "--path", &p,
+                            "--bucket_policy", &policy])?;
+            println!("         bucket {GROUPS_BUCKET:?} created at {p} \
+                      ({owner}:{group}, 0770), for `groups`");
+        }
+    }
+
     /* The anonymous account, which NooBaa creates only when asked:  the
      * POSIX identity an unauthenticated request runs as.  A deployment
      * that serves public buckets has one, and the import writes it as an
@@ -890,10 +937,19 @@ fn config(env: &Env) -> Result<(), String> {
      * with the Rust SDK;  a self-signed cert is a problem worth not
      * having when nothing here leaves the host. */
 
+    /* NooBaa's dynamic supplementary groups, under `impersonate` only:
+     * NooBaa unprivileged cannot install groups, so the unimpersonated
+     * tree is written without them (I8;  `groups`). */
     let cfg = env.config_root().join("config.json");
-    std::fs::write(&cfg, "{\n    \"ALLOW_HTTP\": true\n}\n")
+    let text = if env.impersonate {
+        "{\n    \"ALLOW_HTTP\": true,\n    \"NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS\": true\n}\n"
+    } else {
+        "{\n    \"ALLOW_HTTP\": true\n}\n"
+    };
+    std::fs::write(&cfg, text)
         .map_err(|e| format!("cannot write {}: {e}", cfg.display()))?;
-    println!("         wrote {} (ALLOW_HTTP)", cfg.display());
+    println!("         wrote {} (ALLOW_HTTP{})", cfg.display(),
+             if env.impersonate { ", NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS" } else { "" });
 
     /* What `capture` will need, written where it can find it rather
      * than rediscovered. */
@@ -1248,6 +1304,157 @@ fn role_rgw(env: &Env) -> Result<(), String> {
     }
     println!("         the session writes to {} with its account's rights", env.bucket);
     Ok(())
+}
+
+/// Write through `rgwfix` as list-less accounts (I8).
+///
+/// Under NooBaa's dynamic supplementary groups a list-less account runs
+/// with its user's Unix groups, and so must it under RGW with
+/// `rgw_nsfs_dynamic_supplemental_groups`.  The bucket's directory grants
+/// a write through `rgwfix` alone, so the account as `rgwalice`, whom
+/// `/etc/group` puts in it, writes, and the account as `rgwbob` is
+/// refused:  against NooBaa before `stop`, and the same two answers
+/// against RGW after `role-rgw`.  Then, on RGW only -- the change is the
+/// sweep's and the hint's, which are RGW's -- `rgwalice` leaves `rgwfix`,
+/// her entry is cleared, and her write is refused;  the membership is put
+/// back whatever happened, and rgw-vstart.sh puts it back too.  NooBaa's
+/// own groups cache, keyed by uid for a minute, never sees a change.
+/// Under `impersonate` only.
+fn groups_step(env: &Env) -> Result<(), String> {
+    if !env.impersonate {
+        println!("groups   not impersonating;  NooBaa cannot install groups, so nothing to check");
+        return Ok(());
+    }
+    let noobaa = running(env).is_some();
+    let port = if noobaa { env.port } else { env.rgw_port };
+    let write = |key: &str, k: &str| -> Result<u16, String> {
+        let who = format!("{key}:{GROUPS_SECRET}");
+        let url = format!("http://127.0.0.1:{port}/{GROUPS_BUCKET}/{k}");
+        Ok(curl(&["-X", "PUT", "--aws-sigv4", "aws:amz:us-east-1:s3",
+                  "--user", &who, "--data-binary", k, &url])?.0)
+    };
+    let (in_name, in_user, in_key) = GROUPS_ACCOUNTS[0];
+    let (out_name, out_user, out_key) = GROUPS_ACCOUNTS[1];
+
+    if noobaa {
+        /* NooBaa never performs what the filesystem refuses */
+        let st = write(in_key, "noobaa-in")?;
+        if st != 200 {
+            return Err(format!("NooBaa refused {in_name} ({in_user}, in rgwfix) a \
+                                write through the group:  {st}"));
+        }
+        let st = write(out_key, "noobaa-out")?;
+        if st == 200 {
+            return Err(format!("NooBaa let {out_name} ({out_user}, not in rgwfix) \
+                                write where only rgwfix can"));
+        }
+        println!("groups   noobaa:  {in_name} writes through rgwfix;  {out_name} is refused ({st})");
+        return Ok(());
+    }
+
+    /* RGW:  the permission check is the subject, the same at either access
+     * model;  the write follows the model, refused under posix-strict and
+     * performed under s3-native */
+    let admin = format!("{}:{}", env.rgw_admin_key, env.rgw_admin_secret);
+    let base = format!("http://127.0.0.1:{}", env.rgw_port);
+    let user_of = |key: &str| -> Result<String, String> {
+        let (st, body) = rgw_call(&admin, "GET",
+            &format!("{base}/admin/user?access-key={key}&format=json"))?;
+        json_str(&body, "user_id").filter(|u| !u.is_empty())
+            .ok_or_else(|| format!("the gateway does not know {key} ({st}):  the import \
+                                    did not bring it across.\n{body}"))
+    };
+    let check = |key: &str, k: &str| -> Result<String, String> {
+        let user = user_of(key)?;
+        let (st, body) = rgw_call(&admin, "DELETE", &format!(
+            "{base}/admin/driver/hint?hint=access&bucket={GROUPS_BUCKET}&key={k}\
+             &user={user}&mode=c"))?;
+        let r = (st == 200).then(|| json_str(&body, "result")).flatten()
+            .ok_or_else(|| format!("the access hint answered {st}:\n{body}"))?;
+        Ok(r)
+    };
+    let model_writes = env.access_model == "s3-native";
+    let refused_write = |st: u16| if model_writes { st == 200 } else { st != 200 };
+
+    if check(in_key, "rgw-in")? != "permitted" {
+        return Err(format!("RGW's permission check refuses {in_name} ({in_user}, in \
+                            rgwfix) a create through the group"));
+    }
+    let st = write(in_key, "rgw-in")?;
+    if st != 200 {
+        return Err(format!("RGW refused {in_name} a write through rgwfix:  {st}"));
+    }
+    if check(out_key, "rgw-out")? != "refused" {
+        return Err(format!("RGW's permission check lets {out_name} ({out_user}, not \
+                            in rgwfix) create where only rgwfix can"));
+    }
+    let st = write(out_key, "rgw-out")?;
+    if !refused_write(st) {
+        return Err(format!("RGW answered {out_name}'s write with {st}, which is not \
+                            {}'s answer to a refusal", env.access_model));
+    }
+    println!("groups   rgw:  {in_name} permitted through rgwfix;  {out_name} refused \
+              (its write {st} under {})", env.access_model);
+
+    /* the membership change, where we own the cache */
+    let (_, uid, _) = passwd_entry(in_user)?;
+    let st = privileged(env, "gpasswd").args(["-d", in_user, "rgwfix"])
+        .stdout(Stdio::null()).status()
+        .map_err(|e| format!("cannot run gpasswd: {e}"))?;
+    if !st.success() {
+        return Err(format!("gpasswd -d {in_user} rgwfix failed"));
+    }
+    let after = (|| -> Result<(String, u16), String> {
+        let (s, b) = rgw_call(&admin, "DELETE", &format!(
+            "{base}/admin/driver/hint?hint=nsswitch-cache&forget_uid={uid}"))?;
+        if s != 200 {
+            return Err(format!("the nsswitch-cache hint answered {s}:\n{b}"));
+        }
+        Ok((check(in_key, "rgw-after")?, write(in_key, "rgw-after")?))
+    })();
+    let back = privileged(env, "gpasswd").args(["-a", in_user, "rgwfix"])
+        .stdout(Stdio::null()).status();
+    let (r, st) = after?;
+    if !back.map(|s| s.success()).unwrap_or(false) {
+        return Err(format!("gpasswd -a {in_user} rgwfix failed;  rgw-vstart.sh \
+                            --with-impersonation puts it back"));
+    }
+    if r != "refused" || !refused_write(st) {
+        return Err(format!("after {in_user} left rgwfix and the entry was cleared, \
+                            RGW's check returned {r} and the write {st}"));
+    }
+    println!("         after gpasswd -d {in_user} rgwfix, the check refuses it \
+              (its write {st});  membership put back");
+    Ok(())
+}
+
+/// A user's name, uid and primary gid from nsswitch, as `getent passwd`
+/// returns them.
+fn passwd_entry(user: &str) -> Result<(String, u32, u32), String> {
+    let out = Command::new("getent").args(["passwd", user]).output()
+        .map_err(|e| format!("cannot run getent: {e}"))?;
+    let line = String::from_utf8_lossy(&out.stdout).to_string();
+    let f: Vec<&str> = line.trim().split(':').collect();
+    match (f.get(2).and_then(|v| v.parse().ok()), f.get(3).and_then(|v| v.parse().ok())) {
+        (Some(u), Some(g)) => Ok((user.to_string(), u, g)),
+        _ => Err(format!("{user} has no passwd entry;  run rgw-vstart.sh \
+                          --with-impersonation once, which makes the fixture's users")),
+    }
+}
+
+/// One of rgw-vstart.sh's fixture ids, read from the script, which stays
+/// the single authority on them.
+fn vstart_id(env: &Env, var: &str) -> Result<u32, String> {
+    let Some(build) = env.ceph_build.as_ref() else {
+        return Err("`impersonate` takes vstart's fixture ids, so `ceph_build` \
+                    must be set".into());
+    };
+    let p = build.join("../src/script/rgw/rgw-vstart.sh");
+    let text = std::fs::read_to_string(&p)
+        .map_err(|e| format!("cannot read {}: {e}", p.display()))?;
+    text.lines().find_map(|l| l.strip_prefix(&format!("{var}=")))
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .ok_or_else(|| format!("{} sets no {var}", p.display()))
 }
 
 /// Write as the nsswitch-resolved account, and check whose the file is.
@@ -2124,7 +2331,7 @@ fn conversion(env: &Env) -> Result<(), String> {
      * the NooBaa build rather than at `import` and `adopt`, by when a
      * sudo ticket taken beforehand has expired. */
     preflight_rgw(ceph_build)?;
-    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 21] = [
+    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 23] = [
         ("pin", &pin),
         ("worktree", &worktree),
         ("patch", &patch),
@@ -2137,6 +2344,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("capture noobaa", &|e| capture(e, "noobaa")),
         ("schema-agreement", &schema_agreement),
         ("nsswitch noobaa", &nsswitch_step),
+        ("groups noobaa", &groups_step),
         ("stop", &stop),
         ("damage", &damage),
         ("import", &|e| adopt(e, "import")),
@@ -2146,6 +2354,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("compare", &compare),
         ("role-rgw", &role_rgw),
         ("nsswitch rgw", &nsswitch_step),
+        ("groups rgw", &groups_step),
     ];
     for (i, (name, step)) in steps.iter().enumerate() {
         println!("\n==> conversion {}/{}:  {name}", i + 1, steps.len());
@@ -2445,6 +2654,12 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
         return Err(format!("the import left names nsswitch did not resolve;  the \
                             gateway log names them:\n{body}"));
     }
+    /* and, under the switch, every list-less account's uid is a fixture
+     * user's */
+    if json_str(&body, "unresolved_uids").as_deref().unwrap_or("0") != "0" {
+        return Err(format!("the import left uids nsswitch did not resolve;  the \
+                            gateway log names them:\n{body}"));
+    }
 
     /* The corpus asks the gateway, as the imported IAM user, what that
      * user's requests run as -- `GET /admin/nsfs/credentials`, which is
@@ -2530,6 +2745,15 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
 
 /// The bucket `damage` damages.  Made by `config` like any other.
 const DAMAGED_BUCKET: &str = "corpus-damaged";
+/// The `groups` step's accounts:  NooBaa name, the fixture user it runs
+/// as, its access key.  The first is in `rgwfix`, the second is not.
+const GROUPS_ACCOUNTS: [(&str, &str, &str); 2] = [
+    ("adoption-grp-in", "rgwalice", "ADOPTIONGRPINACCES01"),
+    ("adoption-grp-out", "rgwbob", "ADOPTIONGRPOUTACCE01"),
+];
+const GROUPS_SECRET: &str = "adoptiongroupssecretkeyadoptiongroupssec";
+/// The `groups` step's bucket.  Not a corpus bucket.
+const GROUPS_BUCKET: &str = "groups";
 /// The nsswitch-resolved account's bucket.  Not a corpus bucket.
 const NSSWITCH_BUCKET: &str = "nsswitch";
 
@@ -2808,10 +3032,11 @@ fn nsfs_cli(env: &Env, args: &[&str]) -> Result<String, String> {
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         let o = String::from_utf8_lossy(&out.stdout);
+        /* both:  NooBaa's CLI writes warnings to stderr and the error it
+         * returns to stdout */
         return Err(format!(
-            "manage_nsfs {} failed:\n{}",
-            args.join(" "),
-            if err.trim().is_empty() { o.trim() } else { err.trim() }
+            "manage_nsfs {} failed:\n{}\n{}",
+            args.join(" "), o.trim(), err.trim()
         ));
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
@@ -2824,8 +3049,11 @@ fn rgw_identity_opts(env: &Env) -> Vec<String> {
     if !env.impersonate {
         return vec![];
     }
+    /* the store `config` writes under `impersonate` has NooBaa's dynamic
+     * groups on, and the import refuses a gateway without them */
     vec!["--with-impersonation".into(), "--no-fixture".into(),
-         "--access-model".into(), env.access_model.clone()]
+         "--access-model".into(), env.access_model.clone(),
+         "-o".into(), "rgw_nsfs_dynamic_supplemental_groups=true".into()]
 }
 
 /// `program` as root under `impersonate`, where NooBaa is root as an
