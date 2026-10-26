@@ -336,6 +336,21 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     return -ENOENT;
   }
 
+  /* I8:  a store whose list-less accounts take their groups from
+   * nsswitch cannot be served by a gateway that gives them none -- it
+   * would strip the groups the site depends on (ACCOUNT_IMPORT.md §2.5
+   * point 4).  Refused before anything is written. */
+  if (contents.settings.dynamic_supplemental_groups
+      && !db->nsswitch_cache().dynamic_groups()) {
+    result.failures.push_back(
+      "the store has NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS on and this "
+      "gateway has rgw_nsfs_dynamic_supplemental_groups off;  set it to "
+      "match before importing");
+    ldpp_dout(dpp, 0) << "ERROR: adoption:  " << result.failures.back()
+      << dendl;
+    return -EINVAL;
+  }
+
   /* `noobaa_id` -> the owner string an identity row is keyed on, for
    * this run.  In memory, because the column is the durable form
    * (§3.4). */
@@ -359,6 +374,19 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       result.unresolved_names.push_back(
 	row.key + ": " + row.distinguished_name + " (" + cpp_strerror(-r)
 	+ ")");
+    }
+  };
+  /* I8:  the same for a list-less local row's uid, under the switch */
+  auto check_uid = [&](const Identity& row) {
+    if (!row.uid || row.groups || !db->nsswitch_cache().dynamic_groups()) {
+      return;
+    }
+    std::vector<uint32_t> g;
+    const int r = db->nsswitch_cache().groups_by_uid(dpp, *row.uid, g, y);
+    if (r < 0) {
+      result.unresolved_uids.push_back(
+	row.key + ": uid " + std::to_string(*row.uid) + " ("
+	+ cpp_strerror(-r) + ")");
     }
   };
 
@@ -405,6 +433,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 	continue;
       }
       check_name(row);
+      check_uid(row);
       ret = db->put_noobaa_id(dpp, e.noobaa_id, row.key);
       if (ret < 0) {
 	fail("anonymous", std::string("put_noobaa_id: ") + cpp_strerror(-ret));
@@ -562,6 +591,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 	continue;
       }
       check_name(row);
+      check_uid(row);
       owner_key = row.key;
       ++result.identity_rows;
     }

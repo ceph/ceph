@@ -50,8 +50,9 @@ namespace rgw { namespace sal { namespace nsfs {
  * load-bearing:
  *
  *   nullopt   no list was set.  Today that means no supplementary
- *             groups;  on an nsswitch-resolved row, once I8 is built, it will
- *             mean "resolve them through getgrouplist(3)".
+ *             groups, unless rgw_nsfs_dynamic_supplemental_groups is
+ *             on, when it means "the user's groups from nsswitch", for
+ *             either form (I8).
  *   empty     a list was set and it is empty -- this identity has no
  *             supplementary groups, deliberately.
  *   non-empty the vector to install.
@@ -403,9 +404,9 @@ public:
 
   NsswitchCache& nsswitch_cache() const { return names; }
 
-  /* every nsswitch-resolved row's name, for the sweep's first pass */
-  std::vector<std::string> distinguished_names(
-    const DoutPrefixProvider* dpp) const;
+  /* What the sweep's first pass resolves:  every nsswitch-resolved row's
+   * name, and under the switch every list-less local row's uid. */
+  NsswitchCache::Table sweep_table(const DoutPrefixProvider* dpp) const;
 
   /* The sweep, whose first pass resolves every name the table carries:
    * a name nsswitch does not know is logged then rather than found by a

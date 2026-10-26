@@ -1685,6 +1685,11 @@ struct FakeDirectory {
   std::map<std::string, int> fail;	/* name -> -errno */
   std::map<std::string, nsfs::ResolvedName> names;
   int calls{0};
+  /* I8:  users by uid, and each name's group list */
+  std::map<uint32_t, std::pair<std::string, uint32_t>> users;
+  std::map<std::string, std::vector<uint32_t>> groups;
+  std::map<std::string, int> group_fail;	/* name -> -errno */
+  int group_calls{0};
 
   nsfs::NameLookupFn fn() {
     return [this] (const std::string& name, nsfs::ResolvedName& out) {
@@ -1701,7 +1706,51 @@ struct FakeDirectory {
       return 0;
     };
   }
+
+  nsfs::GroupLookupFn groups_fn() {
+    return [this] (const std::string& name, uint32_t,
+		   std::vector<uint32_t>& out) {
+      std::lock_guard l(m);
+      ++group_calls;
+      if (auto f = group_fail.find(name); f != group_fail.end()) {
+	return f->second;
+      }
+      auto i = groups.find(name);
+      out = (i == groups.end()) ? std::vector<uint32_t>{} : i->second;
+      return 0;
+    };
+  }
+
+  nsfs::UserLookupFn user_fn() {
+    return [this] (uint32_t uid, std::string& name, uint32_t& gid) {
+      std::lock_guard l(m);
+      auto i = users.find(uid);
+      if (i == users.end()) {
+	return -ENOENT;
+      }
+      name = i->second.first;
+      gid = i->second.second;
+      return 0;
+    };
+  }
+
+  void install(nsfs::NsswitchCache& c) {
+    c.set_lookup_for_test(fn());
+    c.set_group_lookups_for_test(groups_fn(), user_fn());
+  }
 };
+
+/* A local row with no list:  NooBaa's dynamic groups apply to it too,
+ * by uid. */
+nsfs::Identity listless_identity(const std::string& key, uint32_t uid,
+				 uint32_t gid)
+{
+  nsfs::Identity id;
+  id.key = key;
+  id.uid = uid;
+  id.gid = gid;
+  return id;
+}
 
 nsfs::Identity name_identity(const std::string& key, const std::string& name)
 {
@@ -2096,6 +2145,363 @@ TEST_F(NSFSIdentityDBTest, NsswitchCompletesFileCredentials)
   ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, file, &key), 0);
   EXPECT_EQ(file.groups, (std::vector<gid_t>{7}));
   EXPECT_EQ(key, "user$byname");
+}
+
+/* I8.  Supplementary groups through nsswitch, under
+ * rgw_nsfs_dynamic_supplemental_groups (`inflight/i8-plan.md`).  NooBaa's
+ * rule, at the pin:  an explicit list wins, empty included;  otherwise,
+ * switch on, the user's groups from getgrouplist (`object_sdk.js:313`).
+ * The lookups are injected;  NsswitchRealGroups calls the real ones. */
+
+/* Switch on, an explicit list wins over nsswitch.  The control is the
+ * same row with no list, which takes nsswitch's. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsTheExplicitListWins)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"nsfsuser", 70101};
+  dir.groups["nsfsuser"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+
+  auto id = listless_identity("user$grouped", 70101, 70101);
+  id.groups = std::vector<uint32_t>{5};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{5}));
+
+  id.groups.reset();
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101, 70010}))
+      << "control:  a list-less row did not take nsswitch's groups";
+}
+
+/* The sharp edge:  an explicit *empty* list is no groups, not "ask
+ * nsswitch" -- NooBaa tests the list's presence, and `[]` is present.
+ * Getting it wrong grants access.  The control is the list-less row. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsTheExplicitEmptyListWins)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"nsfsuser", 70101};
+  dir.groups["nsfsuser"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+
+  auto id = listless_identity("user$grouped", 70101, 70101);
+  id.groups = std::vector<uint32_t>{};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_TRUE(cred.groups.empty()) << "an empty list asked nsswitch";
+  EXPECT_EQ(dir.group_calls, 0);
+
+  id.groups.reset();
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_FALSE(cred.groups.empty()) << "control:  no list, no groups";
+}
+
+/* Switch off, a list-less row has no groups and nsswitch is not asked --
+ * today's behaviour, pinned.  The control is the switch on. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsOffGivesNone)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"nsfsuser", 70101};
+  dir.groups["nsfsuser"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(false);
+
+  const auto id = listless_identity("user$grouped", 70101, 70101);
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_TRUE(cred.groups.empty());
+  EXPECT_EQ(dir.group_calls, 0) << "the switch off asked nsswitch";
+
+  db->nsswitch_cache().override_dynamic_groups(true);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101, 70010}))
+      << "control:  the switch on gave no groups";
+}
+
+/* Both forms:  an nsswitch-resolved row's groups come by its name and
+ * resolved gid, a local row's by its uid.  Each is its own user's. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsForBothForms)
+{
+  FakeDirectory dir;
+  dir.names["byname"] = {70102, 100};
+  dir.users[70101] = {"bylocal", 70101};
+  dir.groups["byname"] = {100, 70020};
+  dir.groups["bylocal"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity("user$n", "byname")), 0);
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     listless_identity("user$l", 70101, 70101)), 0);
+  nsfs::Credentials n, l;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner("user$n"),
+				      n, null_yield), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner("user$l"),
+				      l, null_yield), 0);
+  EXPECT_EQ(n.groups, (std::vector<gid_t>{100, 70020}));
+  EXPECT_EQ(l.groups, (std::vector<gid_t>{70101, 70010}));
+}
+
+/* Under the switch a list-less local identity whose uid nsswitch does
+ * not know is refused, as NooBaa's request is (`fs_napi.cpp:1508-1515`).
+ * The control is the switch off, which serves it with no groups. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsUnknownUidIsRefused)
+{
+  FakeDirectory dir;
+  dir.install(db->nsswitch_cache());
+  const auto id = listless_identity("user$nouser", 70199, 70199);
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Credentials cred;
+
+  db->nsswitch_cache().override_dynamic_groups(false);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0)
+      << "control:  the switch off refused";
+
+  db->nsswitch_cache().override_dynamic_groups(true);
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), -EPERM);
+}
+
+/* A group lookup that fails is refused and not cached:  the control is
+ * the next call after it recovers, which resolves. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsLookupFailureIsRefusedAndNotCached)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"nsfsuser", 70101};
+  dir.groups["nsfsuser"] = {70101, 70010};
+  dir.group_fail["nsfsuser"] = -EIO;
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+  const auto id = listless_identity("user$grouped", 70101, 70101);
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), -EPERM);
+  dir.group_fail.clear();
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0)
+      << "a failed group lookup was cached";
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101, 70010}));
+}
+
+/* A membership change reaches requests through the sweep:  a changed
+ * list moves the identity generation, for a local identity and an
+ * nsswitch-resolved one alike.  The control is a sweep over unchanged
+ * groups, which moves nothing. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsSweepInvalidatesOnChange)
+{
+  FakeDirectory dir;
+  dir.names["byname"] = {70102, 100};
+  dir.users[70101] = {"bylocal", 70101};
+  dir.groups["byname"] = {100, 70010};
+  dir.groups["bylocal"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity("user$n", "byname")), 0);
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     listless_identity("user$l", 70101, 70101)), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner("user$n"),
+				      cred, null_yield), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner("user$l"),
+				      cred, null_yield), 0);
+
+  const rgw_owner owner = parse_owner("user$l");
+  uint64_t gen = nsfs::identity_generation(owner);
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 0);
+  EXPECT_EQ(nsfs::identity_generation(owner), gen)
+      << "control:  unchanged groups invalidated";
+
+  dir.groups["bylocal"] = {70101};		/* gpasswd -d */
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101}));
+
+  gen = nsfs::identity_generation(owner);
+  dir.groups["byname"] = {100};
+  EXPECT_EQ(db->nsswitch_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner("user$n"),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{100}));
+}
+
+/* A local row written clears its uid's entry, so a rewrite looks the
+ * groups up again.  The control is a write to an unrelated row. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsRowWritesClearTheirUid)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"bylocal", 70101};
+  dir.groups["bylocal"] = {70101, 70010};
+  dir.install(db->nsswitch_cache());
+  db->nsswitch_cache().override_dynamic_groups(true);
+  const auto id = listless_identity("user$l", 70101, 70101);
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+
+  dir.groups["bylocal"] = {70101};
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$unrelated")), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101, 70010}))
+      << "control:  an unrelated write cleared it";
+
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70101}))
+      << "the row rewritten was not looked up again";
+}
+
+/* The driver hint flips the switch for the suite's dynamic-groups
+ * profile, and invalidates every identity, since what a list-less row
+ * means changes.  The control is `default`, which returns to the
+ * option's value, off here. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsOverrideInvalidates)
+{
+  const rgw_owner owner = parse_owner("user$any");
+  db->nsswitch_cache().override_dynamic_groups(std::nullopt);
+  EXPECT_FALSE(db->nsswitch_cache().dynamic_groups());
+  const uint64_t gen = nsfs::identity_generation(owner);
+  db->nsswitch_cache().override_dynamic_groups(true);
+  EXPECT_TRUE(db->nsswitch_cache().dynamic_groups());
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  db->nsswitch_cache().override_dynamic_groups(std::nullopt);
+  EXPECT_FALSE(db->nsswitch_cache().dynamic_groups())
+      << "control:  default did not return to the option";
+}
+
+/* The sweep's first pass under the switch resolves every list-less
+ * local row's uid as well as every name, so a uid nsswitch does not know
+ * is logged at startup.  The control:  with the switch off, no uid is
+ * looked up. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsSweepStartsWithTheTablesUids)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"bylocal", 70101};
+  dir.install(db->nsswitch_cache());
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     listless_identity("user$l", 70101, 70101)), 0);
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     listless_identity("user$x", 70199, 70199)), 0);
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$listed")), 0);
+
+  db->nsswitch_cache().override_dynamic_groups(false);
+  EXPECT_TRUE(db->sweep_table(env->dpp).uids.empty())
+      << "control:  the switch off listed uids";
+
+  db->nsswitch_cache().override_dynamic_groups(true);
+  auto uids = db->sweep_table(env->dpp).uids;
+  std::sort(uids.begin(), uids.end());
+  EXPECT_EQ(uids, (std::vector<uint32_t>{70101, 70199}))
+      << "a row with its own list, or none, was listed";
+}
+
+/* The real lookups, on whatever source this host has.  root is in every
+ * `files` source, in its own group;  the control is a uid no source has. */
+TEST_F(NSFSIdentityDBTest, NsswitchRealGroups)
+{
+  std::string name;
+  uint32_t gid = 1;
+  ASSERT_EQ(nsfs::nsswitch_user(0, name, gid), 0);
+  EXPECT_EQ(name, "root");
+  EXPECT_EQ(gid, 0u);
+  std::vector<uint32_t> groups;
+  ASSERT_EQ(nsfs::nsswitch_groups(name, gid, groups), 0);
+  EXPECT_NE(std::find(groups.begin(), groups.end(), 0u), groups.end())
+      << "getgrouplist left out the primary gid";
+  EXPECT_EQ(nsfs::nsswitch_user(3999999999u, name, gid), -ENOENT);
+}
+
+/* Credentials built from a file, under the switch (decision 4):  (1) a
+ * list-less row completes with its nsswitch groups;  (2) rows disagree
+ * when what each would install differs;  (3) a failed lookup is
+ * -ENODATA;  and a uid no row carries completes with its Unix groups,
+ * -ENOENT when nsswitch does not know it either.  Each with its control:
+ * the switch off. */
+TEST_F(NSFSIdentityDBTest, NsswitchGroupsCompleteFileCredentials)
+{
+  FakeDirectory dir;
+  dir.users[70101] = {"bylocal", 70101};
+  dir.users[70103] = {"norow", 70103};
+  dir.groups["bylocal"] = {70101, 70010};
+  dir.groups["norow"] = {70103, 70030};
+  dir.install(db->nsswitch_cache());
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     listless_identity("user$l", 70101, 70101)), 0);
+  auto file = [] (uint32_t uid) {
+    nsfs::Credentials c;
+    c.uid = uid;
+    c.gid = uid;
+    return c;
+  };
+
+  /* (1), and its control */
+  db->nsswitch_cache().override_dynamic_groups(false);
+  auto c = file(70101);
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), 0);
+  EXPECT_TRUE(c.groups.empty()) << "control:  the switch off gave groups";
+  db->nsswitch_cache().override_dynamic_groups(true);
+  c = file(70101);
+  std::string key;
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c, &key), 0);
+  EXPECT_EQ(c.groups, (std::vector<gid_t>{70101, 70010}));
+  EXPECT_EQ(key, "user$l");
+
+  /* a uid no row carries:  its Unix groups, and no key;  control off */
+  c = file(70103);
+  key = "untouched";
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c, &key), 0);
+  EXPECT_EQ(c.groups, (std::vector<gid_t>{70103, 70030}));
+  EXPECT_EQ(key, "untouched");
+  db->nsswitch_cache().override_dynamic_groups(false);
+  c = file(70103);
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), -ENOENT)
+      << "control:  the switch off completed a uid no row carries";
+  db->nsswitch_cache().override_dynamic_groups(true);
+  c = file(70199);
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), -ENOENT)
+      << "a uid neither a row nor nsswitch knows completed";
+
+  /* (3) */
+  dir.group_fail["bylocal"] = -EIO;
+  db->nsswitch_cache().forget_uid(70101);
+  c = file(70101);
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), -ENODATA);
+  dir.group_fail.clear();
+
+  /* (2):  a second row on the uid with its own list, which differs */
+  auto listed = listless_identity("user$l2", 70101, 70101);
+  listed.groups = std::vector<uint32_t>{7};
+  ASSERT_EQ(db->put_identity(env->dpp, listed), 0);
+  c = file(70101);
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), -ENODATA)
+      << "an explicit list and nsswitch's were taken to agree";
+  listed.groups = std::vector<uint32_t>{70101, 70010};
+  ASSERT_EQ(db->put_identity(env->dpp, listed), 0);
+  c = file(70101);
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, c), 0)
+      << "control:  rows that install the same groups disagreed";
+  EXPECT_EQ(c.groups, (std::vector<gid_t>{70101, 70010}));
 }
 
 /* Completing a credential built from a file:  the groups come from
@@ -14449,6 +14855,49 @@ TEST_F(NooBaaImportTest, AnUnresolvedNameIsReported)
 	    std::string::npos) << result.unresolved_names[0];
 }
 
+/* I8.  A store whose config.json has NooBaa's dynamic groups on is
+ * refused by a gateway with rgw_nsfs_dynamic_supplemental_groups off:
+ * its list-less accounts would lose the groups the site gives them.
+ * Nothing is written.  The control is the gateway with the switch on,
+ * which imports it, and reports a list-less account whose uid nsswitch
+ * does not know. */
+TEST_F(NooBaaImportTest, DynamicGroupsMustMatchTheStore)
+{
+  FakeDirectory dir;
+  dir.users[1000] = {"known", 1000};
+  dir.install(driver->get_identity_db()->nsswitch_cache());
+
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  std::string other = NB_ACCOUNT_PLAIN;
+  auto sub = [&other] (const std::string& from, const std::string& to) {
+    const auto at = other.find(from);
+    ASSERT_NE(at, std::string::npos) << from;
+    other.replace(at, from.size(), to);
+  };
+  sub("6ac7cb27fd4af356919110a3", "6ac7cb27fd4af356919110c1");
+  sub("\"name\": \"interchange\"", "\"name\": \"ix-nouser\"");
+  sub("\"email\": \"interchange\"", "\"email\": \"ix-nouser\"");
+  sub("INTERCHANGEACCESSKEY", "INTERCHANGENOUSERK01");
+  sub("\"uid\": 1000,\n    \"gid\": 1000,", "\"uid\": 70199,\n    \"gid\": 70199,");
+  add_identity("6ac7cb27fd4af356919110c1", other.c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  write_file(store + "/config.json",
+	     R"({"NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS": true})");
+
+  driver->get_identity_db()->nsswitch_cache().override_dynamic_groups(false);
+  EXPECT_LT(run(), 0) << "a store with dynamic groups on was imported "
+			 "by a gateway with them off";
+  EXPECT_EQ(result.identity_rows, 0u) << "the refusal wrote rows";
+  ASSERT_FALSE(result.failures.empty());
+
+  driver->get_identity_db()->nsswitch_cache().override_dynamic_groups(true);
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.identity_rows, 2u);
+  ASSERT_EQ(result.unresolved_uids.size(), 1u);
+  EXPECT_NE(result.unresolved_uids[0].find("70199"), std::string::npos)
+      << result.unresolved_uids[0];
+}
+
 /* A store NooBaa's tools wrote lands in RGW.
  *
  * The account, the user that holds its keys, and the identity row --
@@ -15111,6 +15560,13 @@ TEST_F(NooBaaImportTest, AStoreOnDiskImports)
   ASSERT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p,
 				  collisions), 0);
 
+  /* The gateway set as a deployment adopting this store sets it:  the
+   * import refuses a store with NooBaa's dynamic groups on when
+   * rgw_nsfs_dynamic_supplemental_groups is off (I8), and the stand-up
+   * writes one under impersonation. */
+  driver->get_identity_db()->nsswitch_cache().override_dynamic_groups(
+    c.settings.dynamic_supplemental_groups);
+
   nsfs::ImportResult r;
   std::string s;
   int ret = nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
@@ -15119,6 +15575,8 @@ TEST_F(NooBaaImportTest, AStoreOnDiskImports)
     s += "\n  " + f;
   }
   ASSERT_EQ(ret, 0) << s;
+  EXPECT_TRUE(r.unresolved_names.empty()) << r.unresolved_names.front();
+  EXPECT_TRUE(r.unresolved_uids.empty()) << r.unresolved_uids.front();
   EXPECT_GT(r.accounts_created, 0u);
   EXPECT_GT(r.identity_rows, 0u);
   /* An anonymous account, where the store has one, becomes a row rather

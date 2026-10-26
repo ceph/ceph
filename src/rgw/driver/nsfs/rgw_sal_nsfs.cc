@@ -43,6 +43,7 @@
 #include <unistd.h>
 #include <algorithm>
 #include <atomic>
+#include <charconv>
 #include <cstdint>
 #include <optional>
 #include "rgw_mime.h"
@@ -18251,6 +18252,11 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 0) << "WARNING: adoption:  an identity names a user"
       " nsswitch does not know:  " << u << dendl;
   }
+  put_report("unresolved_uids", std::to_string(ir.unresolved_uids.size()));
+  for (const auto& u : ir.unresolved_uids) {
+    ldpp_dout(dpp, 0) << "WARNING: adoption:  an identity with no group "
+      "list runs as a uid nsswitch does not know:  " << u << dendl;
+  }
   if (ret < 0) {
     put_report("ran", "partial");
     return ret;
@@ -20105,15 +20111,50 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  if (hint == "dynamic-groups") {
+    /* I8:  rgw_nsfs_dynamic_supplemental_groups for the suite's
+     * dynamic-groups profile, as `access-model` switches the model.
+     * Daemon-global, so the profile runs alone. */
+    auto it = params.find("set");
+    if (it != params.end()) {
+      if (it->second == "on") {
+	userDB->nsswitch_cache().override_dynamic_groups(true);
+      } else if (it->second == "off") {
+	userDB->nsswitch_cache().override_dynamic_groups(false);
+      } else if (it->second == "default") {
+	userDB->nsswitch_cache().override_dynamic_groups(std::nullopt);
+      } else {
+	return -EINVAL;
+      }
+      ldpp_dout(dpp, 1) << "nsfs: dynamic supplementary groups "
+	<< it->second << " by driver hint" << dendl;
+    }
+    if (out) {
+      (*out)["dynamic_groups"] =
+	userDB->nsswitch_cache().dynamic_groups() ? "true" : "false";
+    }
+    return 0;
+  }
+
   if (hint == "nsswitch-cache") {
     /* clear one nsswitch-resolved identity's resolution (I7), so a test
      * can make the next request look it up without waiting for the
      * sweep */
-    auto it = params.find("forget");
-    if (it == params.end()) {
+    bool cleared;
+    if (auto u = params.find("forget_uid"); u != params.end()) {
+      uint32_t uid = 0;
+      const auto [p, ec] = std::from_chars(u->second.data(),
+					   u->second.data() + u->second.size(),
+					   uid);
+      if ((ec != std::errc{}) || (p != u->second.data() + u->second.size())) {
+	return -EINVAL;
+      }
+      cleared = userDB->nsswitch_cache().forget_uid(uid);
+    } else if (auto it = params.find("forget"); it != params.end()) {
+      cleared = userDB->nsswitch_cache().forget(it->second);
+    } else {
       return -EINVAL;
     }
-    const bool cleared = userDB->nsswitch_cache().forget(it->second);
     if (out) {
       (*out)["cleared"] = cleared ? "true" : "false";
     }

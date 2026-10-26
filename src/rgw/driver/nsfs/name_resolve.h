@@ -15,11 +15,13 @@
 
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -49,6 +51,24 @@ using NameLookupFn =
  * returns -- `files` here, sssd in front of a directory on Scale.  No
  * directory client is written here. */
 int nsswitch_lookup(const std::string& name, ResolvedName& out);
+
+/* I8.  The supplementary groups of a user, as NooBaa takes them under
+ * NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS (`object_sdk.js:295-330`,
+ * `fs_napi.cpp:1463-1525`):  getgrouplist(3) on the user's name and
+ * primary gid, which returns the primary gid among them.  0 and `out`,
+ * or -errno where the lookup failed. */
+using GroupLookupFn = std::function<int(const std::string& name,
+					uint32_t gid,
+					std::vector<uint32_t>& out)>;
+int nsswitch_groups(const std::string& name, uint32_t gid,
+		    std::vector<uint32_t>& out);
+
+/* getpwuid_r(3):  the name and primary gid of `uid`, which a local
+ * identity's groups are looked up by.  0, -ENOENT for a uid no source
+ * knows, or another -errno. */
+using UserLookupFn = std::function<int(uint32_t uid, std::string& name,
+				       uint32_t& gid)>;
+int nsswitch_user(uint32_t uid, std::string& name, uint32_t& gid);
 
 /* The resolutions of an identity row's `distinguished_name`, kept for
  * a bounded time.
@@ -98,6 +118,31 @@ public:
   int resolve(const DoutPrefixProvider* dpp, const std::string& name,
 	      ResolvedName& out, optional_yield y);
 
+  /* I8.  The supplementary groups of the user `name` resolves to, whose
+   * primary gid is `gid`, kept on `name`'s entry and swept with it.
+   * Returns resolve()'s values;  a group lookup that fails is not
+   * cached. */
+  int groups_by_name(const DoutPrefixProvider* dpp, const std::string& name,
+		     std::vector<uint32_t>& out, optional_yield y);
+
+  /* The same for a local identity, by uid:  getpwuid_r(3), then the
+   * groups.  -ENOENT for a uid nsswitch does not know, cached like an
+   * answer. */
+  int groups_by_uid(const DoutPrefixProvider* dpp, uint32_t uid,
+		    std::vector<uint32_t>& out, optional_yield y);
+
+  /* Whether a row with no list of its own takes its groups from
+   * nsswitch:  `rgw_nsfs_dynamic_supplemental_groups`, unless the
+   * `dynamic-groups` driver hint overrides it. */
+  bool dynamic_groups() const;
+
+  /* The hint's override;  `nullopt` returns to the option.  Every
+   * identity is invalidated, since what a list-less row means changes. */
+  void override_dynamic_groups(std::optional<bool> on);
+
+  /* Drop `uid`'s entry, for a local row written or removed.  As forget(). */
+  bool forget_uid(uint32_t uid);
+
   /* The names currently resolved to `uid`, for a credential built from
    * a file, which carries a uid and no name. */
   std::vector<std::string> names_for_uid(uint32_t uid) const;
@@ -118,31 +163,51 @@ public:
    * hint;  the bound does not rely on anyone calling it. */
   bool forget(const std::string& name);
 
-  /* The names to resolve when the sweep starts. */
-  using NameSource =
-    std::function<std::vector<std::string>(const DoutPrefixProvider*)>;
+  /* What to resolve when the sweep starts:  every nsswitch-resolved
+   * row's name, and under the switch every list-less local row's uid. */
+  struct Table {
+    std::vector<std::string> names;
+    std::vector<uint32_t> uids;
+  };
+  using NameSource = std::function<Table(const DoutPrefixProvider*)>;
 
-  /* The sweep's thread.  Its first act is to resolve every name `source`
-   * returns, logging each nsswitch does not know;  that runs on the
-   * thread so it delays nothing.  Idempotent;  stop() is also the
-   * destructor's. */
+  /* The sweep's thread.  Its first act is to resolve everything `source`
+   * returns, logging each name and uid nsswitch does not know;  that
+   * runs on the thread so it delays nothing.  Idempotent;  stop() is
+   * also the destructor's. */
   void start(NameSource source = {});
   void stop();
 
   /* Internal:  replace the nsswitch call, for the unit tests.  The
    * entries held are dropped, since they came from the old one. */
   void set_lookup_for_test(NameLookupFn fn);
+  void set_group_lookups_for_test(GroupLookupFn groups, UserLookupFn user);
 
 private:
   struct Entry {
     int ret{0};			/* 0 or -ENOENT */
     ResolvedName name;
+    /* looked up only once asked for, under the switch */
+    std::optional<std::vector<uint32_t>> groups;
+  };
+  /* by uid, for a local identity:  the user's name and gid, and its
+   * groups */
+  struct UidEntry {
+    int ret{0};			/* 0 or -ENOENT */
+    std::string name;
+    uint32_t gid{0};
+    std::vector<uint32_t> groups;
   };
 
   CephContext* const cct;
   mutable std::mutex mtx;
   std::map<std::string, Entry> entries;
+  std::map<uint32_t, UidEntry> uid_entries;
   NameLookupFn lookup;
+  GroupLookupFn group_lookup;
+  UserLookupFn user_lookup;
+  /* -1 the option's, 0 off, 1 on */
+  std::atomic<int> dynamic_override{-1};
 
   std::mutex sweep_mtx;
   std::condition_variable sweep_cv;
@@ -153,6 +218,11 @@ private:
   /* Store an outcome:  true if it differs from what was held. */
   bool store(const std::string& name, int ret, const ResolvedName& rn);
   bool drop(const std::string& name);
+  int look_up_groups(const std::string& name, uint32_t gid,
+		     std::vector<uint32_t>& out) const;
+  int look_up_uid(uint32_t uid, UidEntry& out) const;
+  /* one name or uid looked up again;  1 changed, 0 not, or -errno */
+  int refresh_uid(const DoutPrefixProvider* dpp, uint32_t uid);
   void sweep_loop(NameSource source);
 };
 

@@ -433,6 +433,12 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
   if (!id.distinguished_name.empty()) {
     names.forget(id.distinguished_name);
   }
+  if (had && old.uid) {
+    names.forget_uid(*old.uid);
+  }
+  if (id.uid) {
+    names.forget_uid(*id.uid);
+  }
   return 0;
 }
 
@@ -765,6 +771,9 @@ int IdentityDB::remove_identity(const DoutPrefixProvider* dpp,
   if (had && !old.distinguished_name.empty()) {
     names.forget(old.distinguished_name);
   }
+  if (had && old.uid) {
+    names.forget_uid(*old.uid);
+  }
   /* deleting what is not there is not an error;  the caller asked for
    * it to be gone and it is */
   return 0;
@@ -852,17 +861,20 @@ int IdentityDB::get_identities_by_name(const DoutPrefixProvider* dpp,
   return (rc == SQLITE_DONE) ? 0 : -EIO;
 }
 
-std::vector<std::string> IdentityDB::distinguished_names(
+NsswitchCache::Table IdentityDB::sweep_table(
   const DoutPrefixProvider* dpp) const
 {
   std::vector<Identity> rows;
-  std::vector<std::string> out;
+  NsswitchCache::Table out;
   if (list_identities(dpp, rows) < 0) {
     return out;
   }
+  const bool dynamic = names.dynamic_groups();
   for (const auto& id : rows) {
     if (id.directory_backed()) {
-      out.push_back(id.distinguished_name);
+      out.names.push_back(id.distinguished_name);
+    } else if (dynamic && id.local() && !id.groups) {
+      out.uids.push_back(*id.uid);
     }
   }
   return out;
@@ -871,9 +883,43 @@ std::vector<std::string> IdentityDB::distinguished_names(
 void IdentityDB::start_name_sweep()
 {
   names.start([this] (const DoutPrefixProvider* dpp) {
-    return distinguished_names(dpp);
+    return sweep_table(dpp);
   });
 }
+
+namespace {
+
+/* The supplementary groups a row installs (I8):  its own list if it has
+ * one, an empty one included;  else, under
+ * rgw_nsfs_dynamic_supplemental_groups, the user's groups from nsswitch
+ * -- by name for an nsswitch-resolved row, by uid for a local one -- as
+ * NooBaa's request path takes them (`object_sdk.js:313`);  else none.
+ * -ENOENT for a local uid nsswitch does not know, or the lookup's
+ * -errno. */
+int row_groups(const DoutPrefixProvider* dpp, const IdentityDB& db,
+	       const Identity& id, uid_t uid, std::vector<gid_t>& out,
+	       optional_yield y)
+{
+  out.clear();
+  if (id.groups) {
+    out.assign(id.groups->begin(), id.groups->end());
+    return 0;
+  }
+  if (! db.nsswitch_cache().dynamic_groups()) {
+    return 0;
+  }
+  std::vector<uint32_t> g;
+  const int ret = id.directory_backed()
+    ? db.nsswitch_cache().groups_by_name(dpp, id.distinguished_name, g, y)
+    : db.nsswitch_cache().groups_by_uid(dpp, uid, g, y);
+  if (ret < 0) {
+    return ret;
+  }
+  out.assign(g.begin(), g.end());
+  return 0;
+}
+
+} // namespace
 
 int complete_file_credentials(const DoutPrefixProvider* dpp,
 			      const IdentityDB& db, Credentials& inout,
@@ -893,33 +939,59 @@ int complete_file_credentials(const DoutPrefixProvider* dpp,
     }
   }
 
-  /* A directory-backed row carries no uid, so it cannot be here;  a
-   * row carrying only placement data can, and it asks for no
-   * impersonation.  Drop those rather than read an empty group list
-   * off them. */
+  /* A row carrying only placement data asks for no impersonation.  Drop
+   * those rather than read an empty group list off them. */
   std::erase_if(rows, [](const Identity& id) {
     return !id.local() && !id.directory_backed();
   });
   if (rows.empty()) {
-    return -ENOENT;
+    /* I8, decision 4:  under the switch a uid no row carries completes
+     * with its Unix groups.  The operation runs as the file's owner, and
+     * those give it no more than it already has. */
+    if (! db.nsswitch_cache().dynamic_groups()) {
+      return -ENOENT;
+    }
+    std::vector<uint32_t> g;
+    ret = db.nsswitch_cache().groups_by_uid(dpp, inout.uid, g, null_yield);
+    if (ret == -ENOENT) {
+      return -ENOENT;
+    }
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: the groups of uid " << inout.uid
+	<< ", which owns the file and no identity carries, could not be "
+	"looked up;  acting on its own rights" << dendl;
+      return -ENODATA;
+    }
+    inout.groups.assign(g.begin(), g.end());
+    return 0;
   }
 
+  /* Rows disagree when what each would install differs (I8):  an
+   * explicit list against nsswitch's is a disagreement as two lists are. */
+  std::vector<std::vector<gid_t>> installs(rows.size());
+  for (size_t i = 0; i < rows.size(); ++i) {
+    ret = row_groups(dpp, db, rows[i], inout.uid, installs[i], null_yield);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: the groups of identity " << rows[i].key
+	<< ", which carries uid " << inout.uid << ", could not be looked "
+	"up (" << cpp_strerror(-ret) << ");  acting on the file owner's "
+	"own rights" << dendl;
+      return -ENODATA;
+    }
+  }
   const auto& first = rows.front();
-  for (const auto& id : rows) {
-    if (id.groups != first.groups) {
+  for (size_t i = 1; i < rows.size(); ++i) {
+    if (installs[i] != installs[0]) {
       ldpp_dout(dpp, 0) << "ERROR: uid " << inout.uid << " is carried by "
 	<< rows.size() << " identities whose supplemental group lists "
-	"differ (" << first.key << ", " << id.key << ");  a file names its "
-	"owner by uid alone, so it cannot say which applies.  Acting on "
+	"differ (" << first.key << ", " << rows[i].key << ");  a file names "
+	"its owner by uid alone, so it cannot say which applies.  Acting on "
 	"the file owner's own rights instead" << dendl;
       return -ENODATA;
     }
   }
 
-  inout.groups.clear();
-  if (first.groups) {
-    inout.groups.assign(first.groups->begin(), first.groups->end());
-  }
+  inout.groups = std::move(installs[0]);
   /* Only one row names an identity.  Where several agree, their
    * credentials coincide and their keys do not, so there is nothing
    * to name. */
@@ -963,15 +1035,19 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
     out.gid = *id.gid;
   }
 
-  /* Both an explicitly empty list and an absent one give an empty
-   * vector.  Absent means "no supplementary groups" today, and the
-   * caller installs that rather than skipping the call -- NooBaa's
-   * ThreadScope issues setgroups(0, NULL) for exactly this case.
-   * The two stay distinct in the record because an nsswitch-resolved row will
-   * read them differently in I8. */
-  out.groups.clear();
-  if (id.groups) {
-    out.groups.assign(id.groups->begin(), id.groups->end());
+  /* An explicitly empty list gives an empty vector, as does an absent
+   * one with the switch off, and the caller installs it rather than
+   * skipping the call -- NooBaa's ThreadScope issues setgroups(0, NULL)
+   * for exactly this case.  Under the switch an absent list is
+   * nsswitch's (I8), and a lookup that cannot give it refuses, as
+   * NooBaa's request does. */
+  ret = row_groups(dpp, db, id, out.uid, out.groups, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 4) << "identity " << key << " has no group list, and "
+      "nsswitch did not give uid " << out.uid << "'s groups ("
+      << cpp_strerror(-ret) << ");  denying it rather than serving it with "
+      "fewer groups than the site gives it" << dendl;
+    return -EPERM;
   }
   return 0;
 }

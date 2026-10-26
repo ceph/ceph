@@ -467,6 +467,14 @@ if $IMPERSONATE; then
 	getent passwd "$IMP_USER_B" >/dev/null 2>&1 || \
 		sudo useradd -u "$IMP_UID_B" -M -N -s /sbin/nologin \
 			"$IMP_USER_B"
+	# and their memberships, which the dynamic-groups tests and the
+	# stand-up's groups step change and put back:  a run interrupted
+	# between the two would otherwise leave them changed for every
+	# run after
+	id -nG "$IMP_USER_A" | grep -qw "$IMP_GRP_NAME" || \
+		sudo gpasswd -a "$IMP_USER_A" "$IMP_GRP_NAME" >/dev/null
+	! id -nG "$IMP_USER_B" | grep -qw "$IMP_GRP_NAME" || \
+		sudo gpasswd -d "$IMP_USER_B" "$IMP_GRP_NAME" >/dev/null
 	# in no gating group:  anonymous reaches only what is open to all
 	getent passwd "$IMP_USER_N" >/dev/null 2>&1 || \
 		sudo useradd -u "$IMP_UID_N" -M -N -s /sbin/nologin \

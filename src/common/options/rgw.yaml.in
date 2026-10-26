@@ -4998,6 +4998,20 @@ options:
   - s3-native
   services:
   - rgw
+- name: rgw_nsfs_dynamic_supplemental_groups
+  type: bool
+  level: advanced
+  desc: Give nsfs identities with no group list their groups from nsswitch
+  long_desc: NooBaa's NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS. An identity
+    row with no supplemental group list of its own then runs with the
+    user's groups as nsswitch returns them (getgrouplist), by name for an
+    nsswitch-resolved row and by uid for a local one; an explicit list,
+    an empty one included, still wins. A uid nsswitch does not know, or a
+    lookup that fails, is refused. Adoption refuses a NooBaa store that
+    has the setting on while this is off.
+  default: false
+  services:
+  - rgw
 - name: rgw_nsfs_identity_resolve_ttl
   type: uint
   level: advanced

@@ -97,6 +97,11 @@ struct ImportResult {
    * NooBaa, and this is where the operator learns of it. */
   std::vector<std::string> unresolved_names;
 
+  /* I8:  under rgw_nsfs_dynamic_supplemental_groups, list-less local
+   * identities whose uid nsswitch does not know, as "<owner>: uid <n>".
+   * Written, and refused until the uid resolves, as under NooBaa. */
+  std::vector<std::string> unresolved_uids;
+
   /* Every identity that could not be written, named.  Non-empty means
    * the import did not finish, and re-running it is the recovery. */
   std::vector<std::string> failures;
