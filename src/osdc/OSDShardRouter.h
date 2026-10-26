@@ -51,11 +51,14 @@ public:
   static constexpr duration max_backoff = std::chrono::minutes(10);
 
   /// The connection for an op of `pgid`, pinned until unroute().
+  /// enabled == false: a PG with no ops in flight takes `main`; one with ops
+  /// in flight stays where they are, so its ops never overtake each other.
   ConnRef route(const PGId& pgid, const ConnRef& main,
-                const connect_fn_t& connect, time_point now) {
+                const connect_fn_t& connect, time_point now,
+                bool enabled = true) {
     auto& r = routes[pgid];
     if (r.inflight == 0) {
-      r.con = pick(pgid, main, connect, now);
+      r.con = enabled ? pick(pgid, main, connect, now) : main;
     }
     ++r.inflight;
     return r.con;

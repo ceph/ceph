@@ -639,7 +639,8 @@ seastar::future<> OSD::start()
 
   // one extra port per reactor for shard-aware clients; a reactor that
   // gets no port is served through the main port as before
-  public_msgr->set_client_shard_ports(true);
+  public_msgr->set_client_shard_ports(
+    local_conf().get_val<bool>("crimson_osd_client_shard_ports"));
 
   crimson::net::dispatchers_t dispatchers{this, monc.get(), mgrc.get()};
   co_await seastar::when_all_succeed(

@@ -235,6 +235,7 @@ std::vector<std::string> Objecter::get_tracked_keys() const noexcept
     "rados_osd_op_timeout"s,
     "osd_min_split_replica_read_size"s,
     "rados_replica_read_policy"s,
+    "crimson_objecter_shard_routing"s,
   };
 }
 
@@ -250,6 +251,9 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("rados_osd_op_timeout")) {
     osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  }
+  if (changed.count("crimson_objecter_shard_routing")) {
+    shard_routing = conf.get_val<bool>("crimson_objecter_shard_routing");
   }
   if (changed.count("osd_min_split_replica_read_size")) {
     min_split_replica_read_size
@@ -3893,7 +3897,8 @@ ConnectionRef Objecter::_route_op(Op *op)
     return nullptr;
   };
   ConnectionRef con = s->router.route(op->target.actual_pgid, s->con, connect,
-                                      ceph::coarse_mono_clock::now());
+                                      ceph::coarse_mono_clock::now(),
+                                      shard_routing);
   op->con = con;
   op->route_pgid = op->target.actual_pgid;
   return con;
@@ -5784,6 +5789,7 @@ Objecter::Objecter(CephContext *cct,
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
   dispatch_to_session_strand = cct->_conf.get_val<bool>("objecter_dispatch_to_session_strand");
+  shard_routing = cct->_conf.get_val<bool>("crimson_objecter_shard_routing");
   min_split_replica_read_size
     = cct->_conf.get_val<uint64_t>("osd_min_split_replica_read_size");
   ceph_assert(min_split_replica_read_size >= SplitOp::REPLICA_MIN_SPLIT_SIZE ||
