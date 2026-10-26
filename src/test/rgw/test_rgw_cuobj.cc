@@ -11,7 +11,6 @@
 #include <thread>
 #include <vector>
 
-#include <cuobjserver.h>
 #include <gtest/gtest.h>
 
 #include "global/global_context.h"
@@ -63,6 +62,38 @@ TEST(CuObjDescriptorSize, RejectsOverflowAndMissingSeparators)
     SCOPED_TRACE(token);
     EXPECT_EQ(RGWCuObjServer::parse_rdma_descriptor_size(token), 0);
   }
+}
+
+#ifdef WITH_RADOSGW_CUOBJ_SHIM
+TEST(CuObjLibrary, MissingLibraryIsReportedWithoutThrowing)
+{
+  const DoutPrefix dpp(g_ceph_context, ceph_subsys_rgw, "rgw_cuobj: ");
+  RGWCuObjTransport::Params params;
+  params.library = "libcuobjserver-does-not-exist.so.0";
+  params.rdma_ip = "192.0.2.1";
+  int err = 0;
+  EXPECT_EQ(RGWCuObjTransport::create(&dpp, params, err), nullptr);
+  EXPECT_EQ(err, -ENOENT);
+}
+
+TEST(CuObjLibrary, UnrelatedLibraryIsRejectedAsUnsupported)
+{
+  const DoutPrefix dpp(g_ceph_context, ceph_subsys_rgw, "rgw_cuobj: ");
+  RGWCuObjTransport::Params params;
+  params.library = "libc.so.6"; // loads, but has none of the cuObject symbols
+  params.rdma_ip = "192.0.2.1";
+  int err = 0;
+  EXPECT_EQ(RGWCuObjTransport::create(&dpp, params, err), nullptr);
+  EXPECT_EQ(err, -ENOSYS);
+}
+#endif
+
+TEST(CuObjLibrary, ServerInitWithoutRdmaIpLeavesCuObjectUnavailable)
+{
+  // rgw_cuobj_rdma_ip has no default, so init fails before any library work.
+  EXPECT_EQ(RGWCuObjServer::init(g_ceph_context), -EINVAL);
+  EXPECT_EQ(RGWCuObjServer::get_instance(), nullptr);
+  EXPECT_FALSE(RGWCuObjServer::available());
 }
 } // anonymous namespace
 

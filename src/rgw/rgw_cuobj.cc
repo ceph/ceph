@@ -3,8 +3,6 @@
 
 #include "rgw_cuobj.h"
 
-#include <cuobjserver.h>
-
 #include <algorithm>
 #include <cstdlib>
 #include <optional>
@@ -20,22 +18,6 @@ thread_local uint16_t RGWCuObjServer::tls_channel_id = 0;
 thread_local bool RGWCuObjServer::tls_channel_valid = false;
 
 static constexpr size_t MAX_RDMA_OP_SIZE = 1ULL << 30; // 1 GiB per cuObj API
-
-// Path flags select message severity. The second setTelemFlags() argument
-// selects which ops emit telemetry spans; leave that at 0.
-static unsigned cuobj_telem_flags(const std::string& level)
-{
-  if (level == "debug") {
-    return CUOBJ_LOG_PATH_ERROR | CUOBJ_LOG_PATH_INFO | CUOBJ_LOG_PATH_DEBUG;
-  }
-  if (level == "info") {
-    return CUOBJ_LOG_PATH_ERROR | CUOBJ_LOG_PATH_INFO;
-  }
-  if (level == "off") {
-    return 0;
-  }
-  return CUOBJ_LOG_PATH_ERROR;
-}
 
 RGWCuObjServer::~RGWCuObjServer()
 {
@@ -80,28 +62,25 @@ int RGWCuObjServer::do_init(CephContext* cct)
   auto buf_size = static_cast<size_t>(cct->_conf.get_val<Option::size_t>("rgw_cuobj_buffer_size"));
   auto buf_count = static_cast<size_t>(cct->_conf.get_val<uint64_t>("rgw_cuobj_buffer_count"));
 
-  cuObjRDMATunable params;
-  params.setNumDcis(num_dcis);
+  RGWCuObjTransport::Params params;
+  params.library = cct->_conf.get_val<std::string>("rgw_cuobj_library");
+  params.rdma_ip = rdma_ip;
+  params.rdma_port = rdma_port;
+  params.num_dcis = num_dcis;
+  params.log_level = cct->_conf.get_val<std::string>("rgw_cuobj_log_level");
 
   ldpp_dout_fmt(this, 1,
                 "initializing cuObjServer on {}:{} dcis={} bufs={}x{}",
                 rdma_ip, rdma_port, num_dcis, buf_count, buf_size);
 
-  try {
-    m_server = std::make_unique<cuObjServer>(rdma_ip.c_str(), rdma_port, CUOBJ_PROTO_RDMA_DC_V1, params);
-  } catch (const std::exception& e) {
-    ldpp_dout_fmt(this, -1, "ERROR: cuObjServer construction failed: {}", e.what());
-    return -EIO;
+  int err = 0;
+  m_server = RGWCuObjTransport::create(this, params, err);
+  if (!m_server) {
+    return err;
   }
+  ldpp_dout_fmt(this, 1, "telemetry log level={}", params.log_level);
 
-  auto log_level = cct->_conf.get_val<std::string>("rgw_cuobj_log_level");
-  cuObjServer::setupTelemetry(false, &std::cerr);
-  // setTelemFlags() second arg selects which ops emit telemetry: 0 (none),
-  // avaliable options: CUOBJ_LOG_OP_GET, CUOBJ_LOG_OP_PUT, or both OR'ed together
-  cuObjServer::setTelemFlags(cuobj_telem_flags(log_level), 0);
-  ldpp_dout_fmt(this, 1, "telemetry log level={}", log_level);
-
-  if (!m_server->isConnected()) {
+  if (!m_server->is_connected()) {
     ldpp_dout_fmt(this, -1, "ERROR: cuObjServer failed to connect");
     m_server.reset();
     return -ECONNREFUSED;
@@ -111,14 +90,14 @@ int RGWCuObjServer::do_init(CephContext* cct)
   m_buffer_pool = std::make_unique<RDMABufEntry[]>(buf_count);
   for (size_t i = 0; i < buf_count; i++) {
     auto& entry = m_buffer_pool[i];
-    entry.ptr = m_server->allocHostBuffer(buf_size);
+    entry.ptr = m_server->alloc_host_buffer(buf_size);
     if (!entry.ptr) {
       ldpp_dout_fmt(this, -1, "ERROR: allocHostBuffer failed for buffer {}", i);
       do_shutdown();
       return -ENOMEM;
     }
     entry.size = buf_size;
-    entry.handle = m_server->registerBuffer(entry.ptr, buf_size);
+    entry.handle = m_server->register_buffer(entry.ptr, buf_size);
     if (!entry.handle) {
       ldpp_dout_fmt(this, -1, "ERROR: registerBuffer failed for buffer {}", i);
       free(entry.ptr);
@@ -140,7 +119,7 @@ void RGWCuObjServer::do_shutdown()
   for (size_t i = 0; i < m_buf_count; i++) {
     auto& entry = m_buffer_pool[i];
     if (entry.handle && m_server) {
-      m_server->deRegisterBuffer(entry.handle);
+      m_server->deregister_buffer(entry.handle);
       entry.handle = nullptr;
     }
     if (entry.ptr) {
@@ -155,7 +134,7 @@ void RGWCuObjServer::do_shutdown()
 
 bool RGWCuObjServer::is_available() const
 {
-  return m_server && m_server->isConnected();
+  return m_server && m_server->is_connected();
 }
 
 // descriptor format: "addr:size:rkey:reserved:qp_num:lid:gid"
@@ -198,7 +177,7 @@ static std::optional<uint64_t> parse_rdma_descriptor_addr(const std::string& rdm
 uint16_t RGWCuObjServer::get_channel_id()
 {
   if (!tls_channel_valid) {
-    tls_channel_id = m_server->allocateChannelId();
+    tls_channel_id = m_server->allocate_channel_id();
     tls_channel_valid = true;
   }
   ldpp_dout_fmt(this, 21, "allocated channel ID {}", tls_channel_id);
@@ -209,7 +188,7 @@ void RGWCuObjServer::release_channel_id()
 {
   if (tls_channel_valid) {
     ldpp_dout_fmt(this, 21, "releasing channel ID {}", tls_channel_id);
-    m_server->freeChannelId(tls_channel_id);
+    m_server->free_channel_id(tls_channel_id);
     tls_channel_valid = false;
   }
 }
@@ -263,21 +242,21 @@ ssize_t RGWCuObjServer::rdma_read_from_client(
   size_t total_read = 0;
 
   ldpp_dout_fmt(this, 21,
-                "handlePutObject key={} size={} client_addr={} channel={} "
+                "put_object key={} size={} client_addr={} channel={} "
                 "buf_ptr={} buf_size={} descr={}",
                 key, size, client_addr, channel, buf->ptr, buf->size, rdma_descr);
 
   while (total_read < size) {
     size_t chunk = std::min(size - total_read, MAX_RDMA_OP_SIZE);
-    ibv_wc_status wc_status = IBV_WC_SUCCESS;
-    ssize_t ret = m_server->handlePutObject(
+    int wc_status = 0; // ibv_wc_status, 0 == IBV_WC_SUCCESS
+    ssize_t ret = m_server->put_object(
         key, buf->handle, client_addr + total_read,
         chunk, rdma_descr, channel, total_read, &wc_status);
     if (ret < 0) {
       ldpp_dout_fmt(this, -1,
-                    "ERROR: handlePutObject failed: ret={} wc_status={} chunk={} "
+                    "ERROR: put_object failed: ret={} wc_status={} chunk={} "
                     "local_offset={} remote_addr={}",
-                    ret, static_cast<int>(wc_status), chunk, total_read,
+                    ret, wc_status, chunk, total_read,
                     client_addr + total_read);
       return ret;
     }
@@ -307,17 +286,17 @@ ssize_t RGWCuObjServer::rdma_write_to_client(
   size_t total_written = 0;
 
   ldpp_dout_fmt(this, 21,
-                "handleGetObject key={} size={} client_addr={} channel={} "
+                "get_object key={} size={} client_addr={} channel={} "
                 "buf_ptr={} buf_size={} descr={}",
                 key, size, client_addr, channel, buf->ptr, buf->size, rdma_descr);
   while (total_written < size) {
     size_t chunk = std::min(size - total_written, MAX_RDMA_OP_SIZE);
-    ssize_t ret = m_server->handleGetObject(
+    ssize_t ret = m_server->get_object(
         key, buf->handle, client_addr + total_written,
         chunk, rdma_descr, channel, total_written);
     if (ret < 0) {
       ldpp_dout_fmt(this, -1,
-                    "ERROR: handleGetObject failed: ret={} chunk={} "
+                    "ERROR: get_object failed: ret={} chunk={} "
                     "local_offset={} remote_addr={}",
                     ret, chunk, total_written, client_addr + total_written);
       return ret;

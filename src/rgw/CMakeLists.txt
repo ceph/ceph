@@ -346,12 +346,22 @@ endif()
 
 if(WITH_RADOSGW_CUOBJ)
   list(APPEND librgw_common_srcs rgw_cuobj.cc)
-  list(APPEND rgw_common_libs ${CUOBJSERVER_LIBRARY})
+  if(WITH_RADOSGW_CUOBJ_SHIM)
+    list(APPEND librgw_common_srcs rgw_cuobj_dl.cc)
+    list(APPEND rgw_common_libs ${CMAKE_DL_LIBS})
+  else()
+    list(APPEND librgw_common_srcs rgw_cuobj_direct.cc)
+    list(APPEND rgw_common_libs ${CUOBJSERVER_LIBRARY})
+  endif()
 endif()
 
 add_library(rgw_common STATIC
   ${librgw_common_srcs}
   ${librgw_driver_srcs})
+
+if(WITH_RADOSGW_CUOBJ AND NOT WITH_RADOSGW_CUOBJ_SHIM)
+  target_include_directories(rgw_common SYSTEM PRIVATE ${CUOBJSERVER_INCLUDE_DIR})
+endif()
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"

@@ -45,8 +45,8 @@ function munge_ceph_spec_in {
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
     fi
-    if [ "${WITH_RADOSGW_CUOBJ:-OFF}" = ON ]; then
-        sed -i -e 's/%bcond_with cuobj/%bcond_without cuobj/g' $OUTFILE
+    if ! $with_cuobj_shim; then
+        sed -i -e 's/^%bcond_without cuobj_shim$/%bcond_with cuobj_shim/' $OUTFILE
     fi
 }
 
@@ -315,7 +315,7 @@ EOF
 }
 
 function setup_cuobj_repo() {
-    if [ "${WITH_RADOSGW_CUOBJ:-OFF}" != ON ]; then
+    if $with_cuobj_shim; then
         return
     fi
 
@@ -323,11 +323,11 @@ function setup_cuobj_repo() {
     case "${ID}:${el_major}" in
         rocky:9|centos:9|almalinux:9|rhel:9|rocky:10|centos:10|almalinux:10|rhel:10) ;;
         fedora:*)
-            echo "cuObject is not supported on Fedora: NVIDIA's Fedora repository does not provide the required libcuobjserver-devel server SDK." >&2
+            echo "Direct cuObject linking is not supported on Fedora: NVIDIA's Fedora repository does not provide libcuobjserver-devel. Use the default WITH_RADOSGW_CUOBJ_SHIM=ON." >&2
             return 1
             ;;
         *)
-            echo "cuObject repository setup requires an EL9 or EL10 distribution" >&2
+            echo "cuObject SDK repository setup requires an EL9 or EL10 distribution (Rocky, AlmaLinux, RHEL, or CentOS Stream)." >&2
             return 1
             ;;
     esac
@@ -336,13 +336,13 @@ function setup_cuobj_repo() {
         x86_64) cuda_arch=x86_64 ;;
         aarch64) cuda_arch=sbsa ;;
         *)
-            echo "cuObject repository setup does not support ${ID} ${VERSION_ID} on ${ARCH}" >&2
+            echo "cuObject SDK repository setup does not support ${ID} ${VERSION_ID} on ${ARCH}." >&2
             return 1
             ;;
     esac
 
-    # The spec's cuobj BuildRequires selects the server library and headers.
-    # The CUDA toolkit and client packages are not needed for the RGW build.
+    # The spec's conditional BuildRequires installs the server SDK and its
+    # dependencies. RGW does not need the CUDA toolkit or client packages.
     $SUDO dnf install -y dnf-plugins-core || return 1
     $SUDO dnf config-manager --add-repo \
         "https://developer.download.nvidia.com/compute/cuda/repos/rhel${el_major}/${cuda_arch}/cuda-rhel${el_major}.repo"
@@ -425,7 +425,21 @@ elif tty -s; then
     for_make_check=true
 fi
 
+with_cuobj_shim=true
+case "${WITH_RADOSGW_CUOBJ_SHIM:-ON}" in
+    ON|on|TRUE|true|YES|yes|1) ;;
+    OFF|off|FALSE|false|NO|no|0) with_cuobj_shim=false ;;
+    *)
+        echo "error: unexpected WITH_RADOSGW_CUOBJ_SHIM value: ${WITH_RADOSGW_CUOBJ_SHIM}" >&2
+        exit 2
+        ;;
+esac
+
 if [ x$(uname)x = xFreeBSDx ]; then
+    if ! $with_cuobj_shim; then
+        echo "cuObject SDK repository setup requires an EL9 or EL10 distribution." >&2
+        exit 1
+    fi
     if [ "$INSTALL_EXTRA_PACKAGES" ]; then
         echo "Installing extra packages not supported on FreeBSD" >&2
         exit 1

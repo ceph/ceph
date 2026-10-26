@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 
-#include <cuobjserver.h>
 #include <gtest/gtest.h>
 
 #include "common/ceph_context.h"
@@ -290,6 +289,13 @@ TEST_F(CuObjGet, FilterFailureAfterDataReturnsErrorWithoutRdma)
   EXPECT_EQ(rdma.writes, 0);
   op.reset();
   EXPECT_EQ(rdma.releases, 1);
+}
+
+TEST_F(CuObjGet, TokenWithoutCuObjectFailsWith500)
+{
+  client.env.set("HTTP_X_AMZ_RDMA_TOKEN", "1234:4:1:0:1:0:0");
+  RGWCuObjServer::shutdown(); // library absent or init failed
+  EXPECT_EQ(op->get_params(null_yield), -ERR_INTERNAL_ERROR);
 }
 
 TEST_F(CuObjGet, HeadPreservesContentLengthWithoutRdma)

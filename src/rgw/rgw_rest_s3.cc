@@ -351,13 +351,17 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   }
 
 #ifdef WITH_RADOSGW_CUOBJ
-  if (auto* cuobj = RGWCuObjServer::get_instance();
-      cuobj && cuobj->is_available()) {
-    auto rdma_token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
-    if (rdma_token) {
-      rdma_descriptor = *rdma_token;
-      rdma_active = true;
+  if (auto rdma_token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN")) {
+    if (!RGWCuObjServer::available()) {
+      // The client asked for an out-of-band transfer that cannot be served
+      // (cuObject library not installed, or init failed). Do not silently
+      // fall back to the HTTP body.
+      ldpp_dout(this, 0) << "rgw_cuobj: ERROR: RDMA token received but cuObject "
+                            "is unavailable" << dendl;
+      return -ERR_INTERNAL_ERROR;
     }
+    rdma_descriptor = *rdma_token;
+    rdma_active = true;
   }
 #endif
 
@@ -3012,11 +3016,13 @@ static inline void map_qs_metadata(req_state* s, bool crypto_too)
 int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
 {
 #ifdef WITH_RADOSGW_CUOBJ
-  if (auto* cuobj = RGWCuObjServer::get_instance();
-      cuobj && cuobj->is_available()) {
-    if (s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN")) {
-      rdma_active = true;
+  if (s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN")) {
+    if (!RGWCuObjServer::available()) {
+      ldpp_dout(this, 0) << "rgw_cuobj: ERROR: RDMA token received but cuObject "
+                            "is unavailable" << dendl;
+      return -ERR_INTERNAL_ERROR;
     }
+    rdma_active = true;
   }
 #endif
 

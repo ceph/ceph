@@ -5123,6 +5123,8 @@ void RGWPutObj::execute(optional_yield y)
   std::string rdma_descr;
   bool rdma_put = false;
   auto* cuobj_srv = RGWCuObjServer::get_instance();
+  // An RDMA token without a usable cuObject server was already rejected in
+  // RGWPutObj_ObjStore_S3::get_params().
   if (cuobj_srv && cuobj_srv->is_available() && copy_source.empty()) {
     auto rdma_token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
     if (rdma_token) {
