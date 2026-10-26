@@ -300,8 +300,10 @@ public:
   unsigned m_digest_updates_pending{0};
   uint64_t m_digest_updates_generation{0};
 
-  /// Track the number of object copies fixed during repair scrub
+  /// Track the total number of items fixed during repair scrub (object copies + stat corrections)
   int m_fixed_count{0};
+  /// Track the number of object copies marked missing for recovery
+  int m_objects_repaired{0};
 
   /// Accumulated missing/inconsistent/error counts across all chunks.
   /// Emitted once in emit_scrub_result to match classic OSD's scrub_finish() summary.

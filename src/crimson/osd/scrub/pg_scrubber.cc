@@ -1803,6 +1803,7 @@ void PGScrubber::emit_chunk_result(
     if (m_is_repair) {
       int fixed = scrub_process_inconsistent(result.object_errors, result.object_hoids);
       m_fixed_count += fixed;
+      m_objects_repaired += fixed;
       DEBUGDPP("Initiated repair for {} object copies", pg, fixed);
     }
   } else {
@@ -2005,47 +2006,6 @@ void PGScrubber::emit_scrub_result(
       return a.object.name < b.object.name;
     });
 
-  // Since we don't know which errors were fixed, we can only clear them
-  // when every one has been fixed.  Matches classic OSD scrub_finish()
-  // (pg_scrubber.cc:2012-2045):
-  //   - all fixed:  zero error counts so prepare_stats_for_publish()
-  //                 clears PG_STATE_INCONSISTENT.
-  //   - has_error:  recovery will be initiated; schedule a deep-scrub
-  //                 afterward to get the updated error counts.
-  //                 Classic "has_error" = authoritative_peers_count() > 0
-  //                 i.e. there were objects with a repairable auth copy.
-  //                 Crimson equivalent: m_total_missing_count or
-  //                 m_total_inconsistent_count is > 0.
-  if (m_is_repair) {
-    int total_errors = in_stats.num_shallow_scrub_errors +
-                       in_stats.num_deep_scrub_errors;
-    // has_error: there were objects scrub could attempt to repair
-    // (an authoritative shard was identified).
-    bool has_error = (m_total_missing_count > 0 || m_total_inconsistent_count > 0);
-    DEBUGDPP("repair: {} errors, {} fixed, has_error={}",
-             pg, total_errors, m_fixed_count, has_error);
-    if (m_fixed_count == total_errors) {
-      ceph_assert(deep);
-      in_stats.num_shallow_scrub_errors = 0;
-      in_stats.num_deep_scrub_errors = 0;
-      in_stats.num_scrub_errors = 0;
-      DEBUGDPP("All errors fixed, zeroing scrub error counts", pg);
-    } else if (has_error) {
-      // Recovery will be initiated below.  Arrange for a deep-scrub
-      // after recovery to get the updated error counts.
-      m_after_repair_scrub_required = true;
-      DEBUGDPP("{} errors, {} fixed — scheduling after_repair scrub",
-               pg, total_errors, m_fixed_count);
-    }
-  }
-
-  // Log repair results if this was a repair scrub
-  if (m_is_repair && m_fixed_count > 0) {
-    INFODPP("Scrub repair completed: {} object copies fixed", pg, m_fixed_count);
-    pg.get_clog_info() << "pg " << pg.get_pgid()
-                       << " scrub repair: " << m_fixed_count << " fixed";
-  }
-
   pg.peering_state.update_stats(
     [this, FNAME, deep, &in_stats](auto &history, auto &pg_stats) {
       // Handle invalid stats, in case of split/merge
@@ -2151,6 +2111,41 @@ void PGScrubber::emit_scrub_result(
                   pg, pg_stats.stats.sum.num_shallow_scrub_errors);
        }
 
+      int total_errors = pg_stats.stats.sum.num_shallow_scrub_errors +
+                         pg_stats.stats.sum.num_deep_scrub_errors;
+
+      // Since we don't know which errors were fixed, we can only clear them
+      // when every one has been fixed. Matches classic OSD scrub_finish()
+      // (pg_scrubber.cc:2012-2045):
+      //   - all fixed: zero error counts so prepare_stats_for_publish()
+      //                clears PG_STATE_INCONSISTENT.
+      //   - has_error: recovery will be initiated; schedule a deep-scrub
+      //                afterward to get the updated error counts.
+      //                Classic "has_error" = authoritative_peers_count() > 0
+      //                i.e. there were objects marked missing for recovery.
+      if (m_is_repair) {
+        bool has_error = (m_objects_repaired > 0);
+        DEBUGDPP("repair: {} errors, {} fixed ({} objects), has_error={}",
+                 pg, total_errors, m_fixed_count, m_objects_repaired, has_error);
+        if (m_fixed_count == total_errors) {
+          ceph_assert(deep);
+          pg_stats.stats.sum.num_shallow_scrub_errors = 0;
+          pg_stats.stats.sum.num_deep_scrub_errors = 0;
+          DEBUGDPP("All errors fixed, zeroing scrub error counts", pg);
+        } else if (has_error) {
+          // Recovery will be initiated below. Arrange for a deep-scrub
+          // after recovery to get the updated error counts.
+          m_after_repair_scrub_required = true;
+          DEBUGDPP("{} errors, {} fixed — scheduling after_repair scrub",
+                   pg, total_errors, m_fixed_count);
+        } else if (total_errors > 0) {
+          // We have errors but nothing can be fixed, so there is no repair possible.
+          pg.state_set(PG_STATE_FAILED_REPAIR);
+          INFODPP("scrub_finish {} error(s) present with no repair possible",
+                  pg, total_errors);
+        }
+      }
+
       // Recalculate total scrub errors (matches classic OSD)
       pg_stats.stats.sum.num_scrub_errors =
         pg_stats.stats.sum.num_shallow_scrub_errors +
@@ -2188,6 +2183,13 @@ void PGScrubber::emit_scrub_result(
 
       return false;
     });
+
+    // Log repair results if this was a repair scrub
+    if (m_is_repair && m_fixed_count > 0) {
+      INFODPP("Scrub repair completed: {} object copies fixed", pg, m_fixed_count);
+      pg.get_clog_info() << "pg " << pg.get_pgid()
+                         << " scrub repair: " << m_fixed_count << " fixed";
+    }
 
     // Emit summary messages matching classic OSD's scrub_finish():
     //   "{pgid} {mode} {N} missing, {M} inconsistent objects"
@@ -2229,8 +2231,8 @@ void PGScrubber::emit_scrub_result(
 
     m_flags.deep_scrub_on_error = false;
 
-    // Save fixed_count before cleanup resets it
-    int fixed_count = m_fixed_count;
+    // Save state before cleanup resets it
+    int objects_repaired = m_objects_repaired;
     bool is_repair = m_is_repair;
 
     // Track the type of scrub that just completed for proper error retrieval
@@ -2257,11 +2259,11 @@ void PGScrubber::emit_scrub_result(
 
     // Handle repair completion based on whether recovery is needed
     // This matches classic OSD behavior in scrub_finish()
-    if (is_repair && fixed_count > 0) {
+    if (is_repair && objects_repaired > 0) {
       // Repair marked objects as missing, post DoRecovery event to trigger recovery
       // This causes the PeeringState state machine to transition to RECOVERING state
       // and properly start recovery operations to restore the missing objects.
-      DEBUGDPP("Repair marked {} objects as missing, posting DoRecovery event", pg, fixed_count);
+      DEBUGDPP("Repair marked {} objects as missing, posting DoRecovery event", pg, objects_repaired);
       (void) pg.get_shard_services().start_operation<LocalPeeringEvent>(
         &pg,
         pg.get_pg_whoami(),
@@ -2270,18 +2272,11 @@ void PGScrubber::emit_scrub_result(
         pg.get_osdmap_epoch(),
         pg.get_osdmap_epoch(),
         PeeringState::DoRecovery{});
-    } else if (is_repair && error_count > 0 && fixed_count == 0) {
-      // We have errors but nothing can be fixed, so there is no repair possible
-      // This matches classic OSD behavior in scrub_finish()
-      pg.state_set(PG_STATE_FAILED_REPAIR);
-      INFODPP("scrub_finish {} error(s) present with no repair possible", pg, error_count);
-    } else if (is_repair && error_count == 0) {
-      // Repair completed with no errors and no recovery needed - clear repair state
-      // The INCONSISTENT state will be cleared automatically by prepare_stats_for_publish()
-      // when num_scrub_errors == 0
+    } else if (is_repair) {
+      // No recovery needed - clear repair state
       m_is_repair = false;
       pg.state_clear(PG_STATE_REPAIR);
-      DEBUGDPP("Repair complete with no errors, clearing PG_STATE_REPAIR", pg);
+      DEBUGDPP("Repair complete with no recovery needed, clearing PG_STATE_REPAIR", pg);
     }
     // Resume snap trimming that was deferred while the PG was scrubbing
     pg.kick_snap_trim();
@@ -2383,6 +2378,7 @@ void PGScrubber::reset_internal_state()
   clear_queued_or_active();
   m_objects_scrubbed_in_chunk = 0;
   m_fixed_count = 0;
+  m_objects_repaired = 0;
   m_total_missing_count = 0;
   m_total_inconsistent_count = 0;
   m_total_error_count = 0;
