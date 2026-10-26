@@ -126,3 +126,52 @@ class TestBacktrace(CephFSTestCase):
         # quick test to check if the mds has handled backtrace update failure
         # on the deleted data pool without going read-only.
         self.mount_a.run_shell(["mkdir", "dir_y"])
+
+    def test_backtrace_old_pool_after_rename_and_replay(self):
+        """
+        That a file created in a non-default data pool still gets its
+        backtrace in the default data pool when it is renamed in a later
+        journal segment and the MDS fails over after the create's segment
+        is trimmed but before the rename's segment expires.
+        """
+        data_pool = self.fs.get_data_pool_name()
+        extra_data_pool_name = data_pool + '_extra'
+        extra_pool_id = self.fs.add_data_pool(extra_data_pool_name)
+
+        self.mount_a.run_shell(["mkdir", "dir_x", "filler"])
+        self.mount_a.setfattr("dir_x", "ceph.dir.layout.pool", extra_data_pool_name)
+
+        self.config_set('mds', 'mds_log_events_per_segment', 10)
+        self.config_set('mds', 'mds_log_max_segments', 2)
+
+        def mds_log(key):
+            return self.fs.mds_asok(['perf', 'dump', 'mds_log'])['mds_log'][key]
+
+        filler = iter(range(1000))
+        def start_new_segment():
+            segadd = mds_log('segadd')
+            while mds_log('segadd') == segadd:
+                self.mount_a.run_shell(["touch", f"filler/f{next(filler)}"])
+
+        start_new_segment()
+        self.mount_a.run_shell(["touch", "dir_x/file_x.tmp"])
+        file_ino = self.mount_a.path_to_ino("dir_x/file_x.tmp")
+        self.mount_a.run_shell(["sync"])
+        create_end = mds_log('wrpos')
+
+        # The rename journals the backtrace update in a later segment
+        start_new_segment()
+        self.mount_a.run_shell(["mv", "dir_x/file_x.tmp", "dir_x/file_x"])
+        self.mount_a.run_shell(["sync"])
+
+        # Trim the create's segment, leaving the rename's for replay
+        start_new_segment()
+        self.wait_until_true(lambda: mds_log('expos') > create_end, timeout=60, period=1)
+
+        self.fs.rank_fail()
+        self.fs.wait_for_daemons()
+        self.fs.mds_asok(["flush", "journal"])
+
+        backtrace = self.fs.read_backtrace(file_ino, pool=data_pool)
+        self.assertEqual(backtrace['pool'], extra_pool_id)
+        self.assertEqual(['file_x', 'dir_x'], [a['dname'] for a in backtrace['ancestors']])
