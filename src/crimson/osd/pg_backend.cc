@@ -258,6 +258,36 @@ PGBackend::read(const ObjectState& os, OSDOp& osd_op,
   read_errorator::pass_further{});
 }
 
+namespace {
+
+/**
+ * Store the result of a SPARSE_READ in osd_op. Mirrors the classic OSD's
+ * set_sparse_read_result() so both OSD flavours agree on the format:
+ *  - CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA set by the client:
+ *    outmetadata = encoded extent map, outdata = raw data (no length prefix);
+ *  - otherwise (legacy): outdata = encoded extent map followed by the data
+ *    encoded as a bufferlist (u32 length + bytes).
+ * Any previous content of outdata/outmetadata is replaced.
+ */
+template <typename Extents>
+void set_sparse_read_result(
+  OSDOp& osd_op,
+  const Extents& extents,
+  ceph::bufferlist&& data)
+{
+  osd_op.outdata.clear();
+  osd_op.outmetadata.clear();
+  if (osd_op.op.flags & CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA) {
+    ceph::encode(extents, osd_op.outmetadata);
+    osd_op.outdata = std::move(data);
+  } else {
+    ceph::encode(extents, osd_op.outdata);
+    encode_destructively(data, osd_op.outdata);
+  }
+}
+
+} // namespace
+
 PGBackend::read_ierrorator::future<>
 PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
                 object_stat_sum_t& delta_stats)
@@ -292,9 +322,8 @@ PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
   if (is_erasure()) {
     // TODO: implement sparse read properly for EC pools with direct reads.
     if (!adjusted_length) {
-      std::map<uint64_t, uint64_t> extents;
-      ceph::encode(extents, osd_op.outdata);
-      ceph::encode(ceph::bufferlist{}, osd_op.outdata);
+      set_sparse_read_result(osd_op, std::map<uint64_t, uint64_t>{},
+                             ceph::bufferlist{});
       osd_op.op.extent.length = 0;
       return read_errorator::now();
     }
@@ -306,8 +335,7 @@ PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
       }
       osd_op.op.extent.length = bl.length();
       std::map<uint64_t, uint64_t> extents = {{offset, bl.length()}};
-      ceph::encode(extents, osd_op.outdata);
-      encode_destructively(bl, osd_op.outdata);
+      set_sparse_read_result(osd_op, extents, std::move(bl));
       logger().trace("sparse_read got {} bytes from object {}",
                      (uint64_t)osd_op.op.extent.length, os.oi.soid);
       delta_stats.num_rd++;
@@ -334,9 +362,8 @@ PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
         [&delta_stats, &os, &osd_op, &extents](auto&& bl) -> read_errorator::future<> {
         if (_read_verify_data(os.oi, bl)) {
           osd_op.op.extent.length = bl.length();
-          // re-encode since it might be modified
-          ceph::encode(extents, osd_op.outdata);
-          encode_destructively(bl, osd_op.outdata);
+          // extents are re-encoded since they might have been modified
+          set_sparse_read_result(osd_op, extents, std::move(bl));
           logger().trace("sparse_read got {} bytes from object {}",
                          (uint64_t)osd_op.op.extent.length, os.oi.soid);
          delta_stats.num_rd++;
