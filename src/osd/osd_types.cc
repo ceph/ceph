@@ -161,6 +161,9 @@ const char * ceph_osd_op_flag_name(unsigned flag)
     case CEPH_OSD_OP_FLAG_SCRUB:
       name = "scrub";
       break;
+    case CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA:
+      name = "support_outmetadata";
+      break;
     default:
       name = "???";
   };
@@ -8639,6 +8642,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
   }
   if (op.outdata.length()) {
     out << " out=" << op.outdata.length() << "b";
+  }
+  if (op.outmetadata.length()) {
+    out << " out_meta=" << op.outmetadata.length() << "b";
   }
   return out;
 }
