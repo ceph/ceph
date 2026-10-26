@@ -237,6 +237,70 @@ async fn test_impersonation_serves_an_nsswitch_resolved_identity() {
         "a name nsswitch does not know was served: {theirs:?}");
 }
 
+/// An nsswitch-resolved identity creates under its `new_buckets_path` as
+/// the user its name resolves to (I7).  The same check as
+/// `test_new_buckets_path_requires_the_accounts_access`, with alice's
+/// row carrying `distinguished_name` and no ids:  her location is made
+/// for her by the `unplaced-directory` hint, which resolves her by name
+/// too.  At `0550` she cannot write it, so creation there is denied --
+/// which it is only if the check ran as 70101, the location's owner.
+/// The control is the same location at `0770`:  created.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_new_buckets_path_by_name_requires_the_accounts_access() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let Some(alice_u) = PrivateUser::create("impnbpn").await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    assert!(alice_u.bind_name("rgwalice").await, "binding alice by name failed");
+    let alice = &alice_u.client;
+    let loc = s3_tests_rs::fixtures::get_new_bucket_name();
+    let made = driver_hint_results("unplaced-directory", &[
+        ("op", "create"), ("name", &loc), ("as", &alice_u.id),
+        ("mode", "0550")]).await
+        .expect("could not make alice a location");
+    let path = made.get("path").cloned().expect("the location's path");
+    let r = nsfs_put_identity(&[
+        ("identity", alice_u.id.as_str()),
+        ("distinguished_name", "rgwalice"),
+        ("new_buckets_path", path.as_str()),
+    ]).await;
+    assert_eq!(r.status, 200, "binding alice's location failed: {}", r.body);
+    let status = |r: Result<_, aws_sdk_s3::error::SdkError<
+        aws_sdk_s3::operation::create_bucket::CreateBucketError>>| match r {
+        Ok(_) => 200,
+        Err(e) => e.raw_response().map_or(0, |r| r.status().as_u16()),
+    };
+
+    let denied = s3_tests_rs::fixtures::get_new_bucket_name();
+    let r = status(alice.create_bucket().bucket(&denied).send().await);
+
+    driver_hint_results("unplaced-directory", &[
+        ("op", "mode"), ("name", &loc), ("as", &alice_u.id),
+        ("mode", "0770")]).await
+        .expect("could not give alice write on her location");
+    let allowed = s3_tests_rs::fixtures::get_new_bucket_name();
+    let ok = status(alice.create_bucket().bucket(&allowed).send().await);
+    if ok == 200 {
+        let _ = alice.delete_bucket().bucket(&allowed).send().await;
+    }
+    let _ = driver_hint_results("unplaced-directory", &[
+        ("op", "remove"), ("name", &loc), ("as", &alice_u.id)]).await;
+
+    assert_eq!(r, 403, "alice created a bucket where she cannot write");
+    assert_eq!(ok, 200, "alice was denied where she can write");
+}
+
 /// Which authority decides an object's bytes, asserted rather than
 /// inferred from whichever tests happen to read data.
 ///
