@@ -2837,6 +2837,130 @@ TEST_CASE("managed reads distinguish FDB failures from callback failures", "[fdb
  }
 }
 
+TEST_CASE("functional traversal borrows callables and keeps them last", "[fdb][api]")
+{
+ janitor dbh;
+ const auto prefix = test_key("functional-callables/");
+ const std::vector<string_pair> rows {
+  {prefix + "0", "first"}, {prefix + "1", "second"}, {prefix + "2", "third"}
+ };
+ lfdb::set(dbh, rows);
+
+ const auto managed = GENERATE(false, true);
+ const auto mode = GENERATE(lfdb::read_mode::serializable, lfdb::read_mode::snapshot);
+ auto txn = lfdb::make_transaction(dbh);
+ const auto selection = lfdb::select {prefix};
+
+ struct row_counter final
+ {
+  std::unique_ptr<std::size_t> calls = std::make_unique<std::size_t>(0);
+
+  void operator()(string_pair&&) { ++*calls; }
+ };
+
+ struct key_counter final
+ {
+  std::unique_ptr<std::size_t> calls = std::make_unique<std::size_t>(0);
+
+  std::string operator()(string_pair&& row)
+  {
+   ++*calls;
+
+   return std::move(row.first);
+  }
+ };
+
+ SECTION("for_each updates a noncopyable lvalue consumer and returns its count") {
+  row_counter consumer;
+  const auto count = managed ? lfdb::for_each(dbh, selection, mode, consumer)
+                             : lfdb::for_each(txn, selection, mode, consumer);
+
+  CHECK(rows.size() == count);
+  CHECK(rows.size() == *consumer.calls);
+ }
+
+ SECTION("transform returns the advanced output iterator") {
+  key_counter key_transform;
+  std::vector<std::string> keys(rows.size());
+  const auto result = managed ? lfdb::transform(dbh, selection, keys.begin(), mode, key_transform)
+                              : lfdb::transform(txn, selection, keys.begin(), mode, key_transform);
+
+  CHECK(keys.end() == result);
+  CHECK(rows.size() == *key_transform.calls);
+  CHECK_THAT(keys, Catch::Matchers::RangeEquals(rows | std::views::keys));
+ }
+
+ SECTION("allocating transform borrows the same noncopyable callable") {
+  key_counter key_transform;
+  const auto keys = managed ? lfdb::transform(dbh, selection, mode, key_transform)
+                            : lfdb::transform(txn, selection, mode, key_transform);
+
+  CHECK(rows.size() == *key_transform.calls);
+  CHECK_THAT(keys, Catch::Matchers::RangeEquals(rows | std::views::keys));
+ }
+}
+
+TEST_CASE("database traversal delivers independent windows without replaying consumers", "[fdb][api]")
+{
+ janitor dbh;
+ const auto prefix = test_key("functional-windows/");
+ const std::vector<string_pair> rows {
+  {prefix + "0", "first"}, {prefix + "1", "second"}, {prefix + "2", "old"}
+ };
+ lfdb::set(dbh, rows);
+
+ auto selection = lfdb::select {prefix};
+ selection.options.result_limit = 1;
+ std::size_t calls = 0;
+
+ const auto count = lfdb::for_each(dbh, selection, [&](string_pair&& row) {
+  if (0 == calls++) {
+   lfdb::set(dbh, rows.back().first, "new");
+  }
+
+  if (rows.back().first == row.first) {
+   CHECK("new" == row.second);
+  }
+ });
+
+ CHECK(rows.size() == calls);
+ CHECK(rows.size() == count);
+}
+
+TEST_CASE("erase_if preserves predicate failures without replay or publication", "[fdb][api]")
+{
+ janitor dbh;
+ const auto prefix = test_key("erase-predicate-failure/");
+ const std::vector<string_pair> rows {
+  {prefix + "0", "first"}, {prefix + "1", "second"}, {prefix + "2", "third"}
+ };
+ lfdb::set(dbh, rows);
+
+ const auto failure = std::make_exception_ptr(
+  lfdb::libfdb_exception(lfdb::fdb_error_code::not_committed, "predicate failure"));
+ std::size_t calls = 0;
+ auto predicate = [owned = std::make_unique<int>(0), &calls, &failure](const string_pair&) mutable {
+  ++*owned;
+  if (2 == ++calls) {
+   std::rethrow_exception(failure);
+  }
+
+  return true;
+ };
+
+ try {
+  lfdb::erase_if(dbh, lfdb::select {prefix}, predicate);
+  FAIL("predicate failure was swallowed");
+ } catch (...) {
+  CHECK(failure == std::current_exception());
+ }
+
+ CHECK(2 == calls);
+ for (const auto& [key, value] : rows) {
+  CHECK(lfdb::key_exists(dbh, key));
+ }
+}
+
 TEST_CASE("read_query_window", "[fdb]")
 {
  janitor j;
@@ -3568,11 +3692,10 @@ TEST_CASE("basic generators", "[fdb]") {
     std::vector<std::string> keys;
     auto txn = lfdb::make_transaction(j);
 
-    lfdb::transform(txn, lfdb::select { make_key(0), make_key(nkeys) },
+    lfdb::transform(txn, lfdb::select { make_key(0), make_key(nkeys) }, std::back_inserter(keys),
                     [](string_pair&& row) {
                      return std::move(row.first);
-                    },
-                    std::back_inserter(keys));
+                    });
 
     CAPTURE(nkeys);
     CAPTURE(keys.size());
@@ -3624,11 +3747,10 @@ TEST_CASE("basic generators", "[fdb]") {
  SECTION("transform with database handle writes to output iterator") {
     std::vector<std::string> keys;
 
-    lfdb::transform(j, lfdb::select { make_key(0), make_key(nkeys) },
+    lfdb::transform(j, lfdb::select { make_key(0), make_key(nkeys) }, std::back_inserter(keys),
                     [](string_pair&& row) {
                      return std::move(row.first);
-                    },
-                    std::back_inserter(keys));
+                    });
 
     CAPTURE(nkeys);
     CAPTURE(keys.size());
@@ -3914,18 +4036,16 @@ TEST_CASE("snapshot reads do not add read conflicts", "[fdb]") {
 
   auto snapshot_txn = lfdb::make_transaction(j);
   int visited = 0;
-  lfdb::for_each(snapshot_txn, selector,
+  lfdb::for_each(snapshot_txn, selector, lfdb::read_mode::snapshot,
                  [&visited](string_pair&&) {
                   ++visited;
-                 },
-                 lfdb::read_mode::snapshot);
+                 });
   REQUIRE(1 == visited);
 
-  const auto values = lfdb::transform(snapshot_txn, selector,
+  const auto values = lfdb::transform(snapshot_txn, selector, lfdb::read_mode::snapshot,
                                       [](string_pair&& row) {
                                        return std::move(row.second);
-                                      },
-                                      lfdb::read_mode::snapshot);
+                                      });
   REQUIRE_THAT(values, Catch::Matchers::Equals(std::vector<std::string>{ "old" }));
 
   lfdb::set(j, conflict_key, "new");

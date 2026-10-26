@@ -1610,6 +1610,18 @@ Use `collect()` when a materialized container is exactly what the caller needs:
 auto people = lfdb::collect<person_record>(dbh, q::prefix("person/"));
 ```
 
+Each database-handle scan window uses an independently retried transaction, so
+later windows may observe a newer read version. `collect(dbh, ...)` retains that
+streaming contract while assembling its return value. Use an explicit transaction
+when the whole traversal must share one read version.
+
+Range `get(dbh, selection, output)` instead reads the entire selection in one
+managed transaction, retries before publishing, and then appends or merges the
+materialized rows into the output. This is useful for bounded reads requiring one
+read version. Existing map values remain authoritative on key collisions. A
+publication failure can still leave partial output; materializing first protects
+against publishing rows from a failed database attempt.
+
 ### Borrowing Raw Range Results
 
 Use `for_each(lfdb::raw, ...)` when an operation can consume FoundationDB
@@ -1648,7 +1660,9 @@ again, so externally visible effects must be idempotent or staged.
 
 Use `for_each()` when the operation is naturally callback-shaped and you do not
 need a composable generator. The callback is a row consumer and must return
-`void`; use `transform()` when each row should produce a value.
+`void`; traversal returns the number of rows delivered. Use `transform()` when
+each row should produce a value. Synchronous callbacks are borrowed for the call,
+including noncopyable lvalues; their mutable state remains visible to the caller.
 
 ```cpp
 auto txn = lfdb::make_transaction(dbh);
@@ -1659,10 +1673,11 @@ lfdb::for_each(txn, q::prefix("person/"), [](auto&& row) {
 });
 ```
 
-The database-handle overload is a convenience for bounded, retryable work that
-should run in one managed transaction. The callback may run again if the
-transaction is retried, so keep it replay-safe. An exception thrown by the
-callback itself escapes directly, even when it is a `libfdb_exception`:
+The database-handle overload consumes the same independently retried windows as
+`scan(dbh, ...)`. A delivered callback is never replayed by the helper. Callback
+exceptions propagate unchanged, including native-category `libfdb_exception`
+objects. If the caller puts the traversal inside a transactor, an outer replay
+can still invoke the whole traversal again:
 
 ```cpp
 lfdb::for_each<person_record>(dbh, q::prefix("person/"), [](auto&& row) {
@@ -1680,16 +1695,17 @@ std::vector<std::string> names;
 
 lfdb::transform<person_record>(txn,
                                q::prefix("person/"),
+                               std::back_inserter(names),
                                [](auto&& row) {
                                  return std::move(row.second.name);
-                               },
-                               std::back_inserter(names));
+                               });
 ```
 
 When the transformed values should be materialized directly, let `transform()`
-return the vector. The transform function is evaluated inside managed
-transaction work, so it should also be replay-safe. Its own exceptions escape
-without being interpreted as FoundationDB retry requests:
+return the vector. Database-handle transforms use the same window and callback
+contract as `for_each()`. Explicit-output forms stream into the output and return
+its advanced iterator; a later failure leaves earlier output in place. The
+allocating form returns its vector only after traversal succeeds:
 
 ```cpp
 auto names = lfdb::transform<person_record>(
@@ -1700,9 +1716,18 @@ auto names = lfdb::transform<person_record>(
   });
 ```
 
+The callable is always last. Pass an explicit read mode immediately before it:
+
+```cpp
+auto names = lfdb::transform<person_record>(
+  dbh, q::prefix("person/"), lfdb::read_mode::snapshot,
+  [](auto&& row) { return std::move(row.second.name); });
+```
+
 Use `erase_if()` when the delete decision depends on the decoded row. It returns
 the number of keys cleared; database-handle predicates are evaluated inside the
-managed transaction loop:
+managed write transaction and may run again after a native database failure.
+Predicate exceptions themselves propagate unchanged without requesting replay:
 
 ```cpp
 const auto removed = lfdb::erase_if<person_record>(
