@@ -10452,7 +10452,7 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     r = -EIO;
     goto out;
   }
-  if (int inject = cct->_conf->osd_debug_inject_copyfrom_single_error; inject != 0) {
+  if (int inject = cct->_conf.get_val<int64_t>("osd_debug_inject_copyfrom_single_error"); inject != 0) {
     derr << __func__ << " injecting single copyfrom error " << cpp_strerror(inject) << dendl;
     cct->_conf.set_val("osd_debug_inject_copyfrom_single_error", "0");
     r = -inject;

@@ -3404,7 +3404,6 @@ options:
   type: int
   level: dev
   default: 0
-  with_legacy: true
 - name: osd_debug_misdirected_ops
   type: bool
   level: dev
