@@ -1202,7 +1202,7 @@ inline AssocT collect(::ceph::libfdb::database_handle dbh, SelectionT selection,
  * Both spans expire when the callback returns: */
 template <query::expression SelectionT,
           concepts::raw_key_value_callback FnT>
-inline std::size_t for_each(raw_t, const transaction_handle& txn,
+inline std::size_t for_each(raw_t, transaction_handle txn,
                             SelectionT selection, const read_mode mode, FnT&& fn)
 {
  return detail::for_each_result_pair(
@@ -1251,10 +1251,11 @@ inline std::size_t for_each(raw_t tag, database_handle dbh,
 }
 
 template <query::expression SelectionT, concepts::raw_key_value_callback FnT>
-inline std::size_t for_each(raw_t tag, const transaction_handle& txn,
+inline std::size_t for_each(raw_t tag, transaction_handle txn,
                             SelectionT selection, FnT&& fn)
 {
- return for_each(tag, txn, std::move(selection), read_mode::serializable, std::forward<FnT>(fn));
+ return for_each(tag, std::move(txn), std::move(selection), read_mode::serializable,
+                  std::forward<FnT>(fn));
 }
 
 template <query::expression SelectionT, concepts::raw_key_value_callback FnT>
@@ -1273,6 +1274,21 @@ inline std::size_t for_each(raw_t tag, database_handle dbh, SelectionT selection
 }
 
 namespace detail {
+
+// Native I/O remains outside the matcher, so only user work gets an origin marker.
+template <query::expression SelectionT, typename MatchT>
+std::size_t erase_matching_rows(const transaction_handle& txn, SelectionT selection, MatchT&& matches)
+{
+ std::size_t removed = 0;
+ for_each_result_pair(*txn, std::move(selection), read_mode::serializable,
+  [&](const FDBKeyValue& pair) {
+   if (std::invoke(matches, pair)) {
+    transaction_clear_key_bytes(txn, as_byte_view(key_view(pair)));
+    ++removed;
+   }
+  });
+ return removed;
+}
 
 // Scan generators yield owning rows; consumers borrow their callable for the call.
 template <typename RowT, typename FnT>
@@ -1344,7 +1360,6 @@ inline std::size_t for_each(database_handle dbh, SelectionT selection, FnT&& fn)
 template <typename ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
 inline OutIterT transform(transaction_handle txn, SelectionT selection, OutIterT out,
                           const read_mode mode, FnT&& fn)
@@ -1360,7 +1375,6 @@ inline OutIterT transform(transaction_handle txn, SelectionT selection, OutIterT
 template <typename ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
 inline OutIterT transform(transaction_handle txn, SelectionT selection, OutIterT out, FnT&& fn)
 {
@@ -1370,7 +1384,11 @@ inline OutIterT transform(transaction_handle txn, SelectionT selection, OutIterT
 
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>>
+         std::constructible_from<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
+           detail::row_transform_result_t<ValueT, FnT>> and
+         std::move_constructible<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>>
 [[nodiscard]] auto transform(transaction_handle txn, SelectionT selection, const read_mode mode,
                              FnT&& fn)
 {
@@ -1385,7 +1403,11 @@ requires detail::row_invocable<FnT, ValueT> and
 
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>>
+         std::constructible_from<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
+           detail::row_transform_result_t<ValueT, FnT>> and
+         std::move_constructible<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>>
 [[nodiscard]] auto transform(transaction_handle txn, SelectionT selection, FnT&& fn)
 {
  return transform<ValueT>(std::move(txn), std::move(selection), read_mode::serializable,
@@ -1395,7 +1417,6 @@ requires detail::row_invocable<FnT, ValueT> and
 template <typename ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
 inline OutIterT transform(database_handle dbh, const transaction_options& options,
                           SelectionT selection, OutIterT out,
@@ -1412,7 +1433,6 @@ inline OutIterT transform(database_handle dbh, const transaction_options& option
 template <typename ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
 inline OutIterT transform(database_handle dbh, SelectionT selection, OutIterT out,
                           const read_mode mode, FnT&& fn)
@@ -1424,7 +1444,6 @@ inline OutIterT transform(database_handle dbh, SelectionT selection, OutIterT ou
 template <typename ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
 inline OutIterT transform(database_handle dbh, const transaction_options& options,
                           SelectionT selection, OutIterT out, FnT&& fn)
@@ -1436,7 +1455,6 @@ inline OutIterT transform(database_handle dbh, const transaction_options& option
 template <typename ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
 inline OutIterT transform(database_handle dbh, SelectionT selection, OutIterT out, FnT&& fn)
 {
@@ -1446,7 +1464,11 @@ inline OutIterT transform(database_handle dbh, SelectionT selection, OutIterT ou
 
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>>
+         std::constructible_from<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
+           detail::row_transform_result_t<ValueT, FnT>> and
+         std::move_constructible<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>>
 [[nodiscard]] auto transform(database_handle dbh, const transaction_options& options,
                              SelectionT selection, const read_mode mode,
                              FnT&& fn)
@@ -1462,7 +1484,11 @@ requires detail::row_invocable<FnT, ValueT> and
 
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>>
+         std::constructible_from<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
+           detail::row_transform_result_t<ValueT, FnT>> and
+         std::move_constructible<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>>
 [[nodiscard]] auto transform(database_handle dbh, SelectionT selection, const read_mode mode,
                              FnT&& fn)
 {
@@ -1472,7 +1498,11 @@ requires detail::row_invocable<FnT, ValueT> and
 
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>>
+         std::constructible_from<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
+           detail::row_transform_result_t<ValueT, FnT>> and
+         std::move_constructible<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>>
 [[nodiscard]] auto transform(database_handle dbh, const transaction_options& options,
                              SelectionT selection, FnT&& fn)
 {
@@ -1482,7 +1512,11 @@ requires detail::row_invocable<FnT, ValueT> and
 
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
-         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>>
+         std::constructible_from<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
+           detail::row_transform_result_t<ValueT, FnT>> and
+         std::move_constructible<
+           std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>>
 [[nodiscard]] auto transform(database_handle dbh, SelectionT selection, FnT&& fn)
 {
  return transform<ValueT>(std::move(dbh), transaction_options {}, std::move(selection),
@@ -1494,16 +1528,11 @@ requires detail::row_predicate<PredT, ValueT>
 inline std::size_t erase_if(::ceph::libfdb::transaction_handle txn,
                             SelectionT selection, PredT&& pred)
 {
- std::size_t removed = 0;
-
- for (const auto& row : scan<ValueT>(txn, std::move(selection))) {
-  if (std::invoke(pred, row)) {
-   erase(txn, row.first);
-   ++removed;
-  }
- }
-
- return removed;
+ return detail::erase_matching_rows(txn, std::move(selection),
+  [&pred](const FDBKeyValue& pair) {
+   const auto row = detail::to_decoded_kv_pair<ValueT>(pair);
+   return bool(std::invoke(pred, row));
+  });
 }
 
 template <typename ValueT = std::string, typename PredT, query::expression SelectionT>
@@ -1513,8 +1542,11 @@ inline std::size_t erase_if(::ceph::libfdb::database_handle dbh, const transacti
 {
  return detail::in_transaction(std::move(dbh), options,
   [selection = std::move(selection), &pred](auto& txn) {
-   return erase_if<ValueT>(txn, selection,
-                           detail::invoke_user_callback(std::in_place, std::ref(pred)));
+   return detail::erase_matching_rows(txn, selection,
+    detail::invoke_user_callback(std::in_place, [&pred](const FDBKeyValue& pair) {
+     const auto row = detail::to_decoded_kv_pair<ValueT>(pair);
+     return bool(std::invoke(pred, row));
+    }));
   });
 }
 

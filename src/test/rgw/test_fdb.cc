@@ -734,6 +734,21 @@ TEST_CASE("thrown serializer exceptions retain their identity", "[fdb][errors][c
   CHECK_FALSE(stamp.is_ready());
  }
 
+ SECTION("managed conditional erase protects decoder failures") {
+  const lfdb::database_options defaults {
+   {FDB_DB_OPTION_TRANSACTION_TIMEOUT, std::int64_t {5000}},
+   {FDB_DB_OPTION_TRANSACTION_RETRY_LIMIT, std::int64_t {0}}
+  };
+  janitor dbh(lfdb::create_database(defaults));
+  const auto key = test_key("serializer-thrown-erase");
+  write_raw_fdb_value(dbh, key, bytes);
+  check_failure([&] {
+   std::ignore = lfdb::erase_if<thrown_serialization_failure>(
+     dbh, lfdb::select {key}, [](const auto&) { return true; });
+  });
+  CHECK(lfdb::key_exists(dbh, key));
+ }
+
  SECTION("typed scan") {
   janitor dbh;
   const auto key = test_key("serializer-thrown-scan");
@@ -2987,6 +3002,52 @@ TEST_CASE("functional traversal borrows callables and keeps them last", "[fdb][a
  }
 }
 
+TEST_CASE("synchronous transactors borrow bodies with bound arguments", "[fdb][api]")
+{
+ struct body_t final {
+  std::unique_ptr<int> calls = std::make_unique<int>(0);
+  int operator()(lfdb::transaction_handle&, int& value) {
+   if (++*calls == 1) {
+    throw lfdb::libfdb_exception(lfdb::fdb_error_code::not_committed);
+   }
+   return value + *calls;
+  }
+ };
+ janitor dbh;
+ const auto run = lfdb::make_transactor(dbh);
+ body_t body;
+ CHECK(run(body, 7) == 9);
+ CHECK(*body.calls == 2);
+ body_t policy_body;
+ CHECK(run(lfdb::retry_if([](const lfdb::transaction_failure&) { return true; }),
+            policy_body, 7) == 9);
+ CHECK(*policy_body.calls == 2);
+}
+
+TEST_CASE("transforms consume reference results before scan rows expire", "[fdb][api]")
+{
+ janitor dbh;
+ const std::vector<string_pair> rows {
+  {test_key("transform-reference/0"), "zero"},
+  {test_key("transform-reference/1"), "one"}
+ };
+ lfdb::set(dbh, rows);
+ const auto selection = lfdb::query::prefix(test_key("transform-reference/"));
+ const auto reference = [](const string_pair& row) -> const std::string& { return row.first; };
+ auto txn = lfdb::make_transaction(dbh);
+ const auto managed = GENERATE(false, true);
+ std::vector<std::string> copied;
+ if (managed) {
+  lfdb::transform(dbh, selection, std::back_inserter(copied), reference);
+ } else {
+  lfdb::transform(txn, selection, std::back_inserter(copied), reference);
+ }
+ CHECK_THAT(copied, Catch::Matchers::RangeEquals(rows | std::views::keys));
+ const auto collected = managed ? lfdb::transform(dbh, selection, reference)
+                               : lfdb::transform(txn, selection, reference);
+ CHECK(collected == copied);
+}
+
 TEST_CASE("database traversal delivers independent windows without replaying consumers", "[fdb][api]")
 {
  janitor dbh;
@@ -3175,6 +3236,20 @@ TEST_CASE("for_each provides callback-scoped raw range values", "[fdb]")
  const std::size_t nkeys = 12;
 
  const auto kvs_in = write_monotonic_kvs(j, nkeys);
+
+ SECTION("retains the transaction when a callback releases the caller's handle") {
+  auto txn = lfdb::make_transaction(j);
+  const std::weak_ptr<lfdb::transaction> owner = txn;
+  auto selector = lfdb::select {make_key(0), make_key(nkeys)};
+  selector.options.result_limit = 1;
+  const auto count = lfdb::for_each(lfdb::raw, txn, selector,
+   [&](std::span<const std::uint8_t>, std::span<const std::uint8_t>) {
+    txn.reset();
+    CHECK_FALSE(owner.expired());
+   });
+  CHECK(count == nkeys);
+  CHECK(owner.expired());
+ }
 
  SECTION("borrows noncopyable consumers with an explicit read mode") {
   auto consumer = [calls = std::make_unique<std::size_t>(0)](

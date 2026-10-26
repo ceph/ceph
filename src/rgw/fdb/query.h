@@ -179,9 +179,6 @@ struct interval final
  bool end_inclusive = false;
  query_options options;
 
- // An uninitialized executable selection is empty.
- constexpr interval() = default;
-
  constexpr interval(std::string lower,
                     std::string upper,
                     const bool includes_begin,
@@ -687,7 +684,7 @@ constexpr auto compile_intervals(const ExprT& expr)
 template <std::size_t Capacity, expression ExprT>
 constexpr auto compile_intervals(const ExprT& expr)
 {
- core::static_interval_set<byte_string_domain, Capacity, interval> out;
+ core::static_interval_set<byte_string_domain, Capacity, interval> out {empty()};
 
  for_each_interval(expr, [&out](interval x) {
   ceph::util::emplace_append(out, std::move(x));

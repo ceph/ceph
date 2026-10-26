@@ -901,6 +901,12 @@ transaction, invokes the body, and commits it. The body may be called more than
 once after retryable FoundationDB errors. Keep it deterministic and free of
 non-idempotent external side effects.
 
+Synchronous transactors borrow the body for the duration of the call, including
+when additional arguments are bound. Noncopyable lvalue bodies work directly,
+and mutations of their state remain visible to the caller. Bound arguments
+retain their existing owned/staged semantics for replay. Asynchronous
+`transact()` operations own their bodies because execution may start later.
+
 ```cpp
 auto txr = lfdb::make_transactor(dbh);
 
@@ -1262,14 +1268,14 @@ for (const auto& [key, value] : lfdb::scan(dbh, people)) {
 executable interval values, including their query options. The latter stores
 at most `N` intervals without allocating container storage and throws
 `std::length_error` if that capacity is exceeded. Interval keys still own strings.
-A default-constructed interval is empty. Geometric predicates such as
-`is_universal()` ignore execution options.
+Geometric predicates such as `is_universal()` ignore execution options.
 
 Union and intersection preserve matching options. When only one operand has
 non-default options, those options apply to the result. Conflicting non-default
 options throw `std::invalid_argument`; configure the operands consistently, or
 combine unconfigured geometry and apply `with_options()` to the result.
-Difference and complement retain the options of the query being subtracted from.
+Difference retains its left operand's options; complement retains its operand's
+options.
 
 Underneath the friendly selection helpers, libfdb queries are a compiled
 interval algebra. A query expression emits zero or more canonical `lfdb::select`
@@ -1733,7 +1739,10 @@ auto names = lfdb::transform<person_record>(
   });
 ```
 
-The callable is always last. Pass an explicit read mode immediately before it:
+Reference results are consumed while the source row is alive; the vector form
+materializes values before advancing. Pointer and view results retain their
+normal referent-lifetime requirements. The callable is always last. Pass an
+explicit read mode immediately before it:
 
 ```cpp
 auto names = lfdb::transform<person_record>(
@@ -1744,7 +1753,7 @@ auto names = lfdb::transform<person_record>(
 Use `erase_if()` when the delete decision depends on the decoded row. It returns
 the number of keys cleared; database-handle predicates are evaluated inside the
 managed write transaction and may run again after a native database failure.
-Predicate exceptions themselves propagate unchanged without requesting replay:
+Predicate and decoder exceptions propagate unchanged without requesting replay:
 
 ```cpp
 const auto removed = lfdb::erase_if<person_record>(

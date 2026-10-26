@@ -455,7 +455,19 @@ class static_interval_set final
  std::array<value_type, Capacity> intervals {};
  std::size_t interval_count = 0;
 
+ template <std::size_t ...Indices>
+ constexpr static_interval_set(const value_type& initial, std::index_sequence<Indices...>)
+  : intervals {((void)Indices, initial)...}
+ {}
+
  public:
+ constexpr static_interval_set() = default;
+
+ // Initialize unused slots without requiring an adapter's default interval.
+ explicit constexpr static_interval_set(const value_type& initial)
+  : static_interval_set(initial, std::make_index_sequence<Capacity> {})
+ {}
+
  constexpr void push_back(value_type value)
  {
   if (Capacity == interval_count) {

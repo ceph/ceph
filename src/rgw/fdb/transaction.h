@@ -733,11 +733,13 @@ class transactor final
  }
 
  template <typename FnT, typename ...ArgTs>
- requires (0 < sizeof...(ArgTs) && detail::bound_transaction_op<FnT, ArgTs...>)
+ requires (0 < sizeof...(ArgTs) &&
+           detail::bound_transaction_op<std::reference_wrapper<std::remove_reference_t<FnT>>,
+                                        ArgTs...>)
  decltype(auto) operator()(FnT&& fn, ArgTs&& ...args) const
  {
   auto bound = detail::bind_transaction_invocation(
-    std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
+    std::ref(fn), std::forward<ArgTs>(args)...);
 
   return (*this)(bound);
  }
@@ -750,11 +752,13 @@ class transactor final
  }
 
  template <typename PolicyT, typename FnT, typename ...ArgTs>
- requires (0 < sizeof...(ArgTs) && detail::bound_transaction_op<FnT, ArgTs...>)
+ requires (0 < sizeof...(ArgTs) &&
+           detail::bound_transaction_op<std::reference_wrapper<std::remove_reference_t<FnT>>,
+                                        ArgTs...>)
  decltype(auto) operator()(retry_if<PolicyT> policy, FnT&& fn, ArgTs&& ...args) const
  {
   auto bound = detail::bind_transaction_invocation(
-   std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
+   std::ref(fn), std::forward<ArgTs>(args)...);
 
   return (*this)(std::move(policy), bound);
  }

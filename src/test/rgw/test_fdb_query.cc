@@ -613,7 +613,7 @@ TEST_CASE("query execution options survive compilation and combine symmetrically
  CHECK(lq::compile_intervals<0>(lq::empty()).empty());
  CHECK(lq::is_universal(lq::with_options(lq::universal(), options)));
  CHECK_FALSE(lq::is_universal(configured));
- CHECK(lq::is_empty(lq::interval {}));
+ static_assert(not std::default_initializable<lq::interval>);
 
  auto check_combination = [&](auto combine) {
   const auto forward = lq::compile_intervals(combine(configured, cut));
