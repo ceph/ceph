@@ -91,10 +91,29 @@ else()
   set(USING_MOLD_LINKER FALSE CACHE INTERNAL "")
 endif()
 
+option(WITH_PCH "Build with precompiled headers." OFF)
+if(WITH_PCH)
+  # Other compilers are untested.
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    message(FATAL_ERROR "WITH_PCH is supported only with Clang and GCC, not "
+      "${CMAKE_CXX_COMPILER_ID}.")
+  endif()
+  # CMake marks its PCH header as a system header, which hides the warnings of
+  # all headers in it.  CMAKE_PCH_PROLOGUE is undocumented.
+  set(CMAKE_PCH_PROLOGUE "")
+endif()
+
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
   if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
     message(WARNING "Compiler launcher already set. stop configuring ccache")
+    if(WITH_PCH)
+      # src/CMakeLists.txt then gives the PCH targets no launcher of its own.
+      message(WARNING "WITH_PCH needs pch_defines and time_macros in "
+        "CCACHE_SLOPPINESS (environment or ccache.conf), or objects built "
+        "against a precompiled header are never cached.  With GCC, they also "
+        "miss after every rebuild of a precompiled header.")
+    endif()
   else()
     find_program(CCACHE_EXECUTABLE ccache
       REQUIRED)
