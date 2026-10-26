@@ -9,7 +9,10 @@
 //! (70010), `rgwalice` (70101) in it, `rgwbob` (70102) not.
 
 use s3_tests_rs::access_model::{Access, Class};
-use s3_tests_rs::admin::{driver_hint_results, nsfs_delete_identity, nsfs_put_identity};
+use s3_tests_rs::admin::{
+    as_json, driver_hint_results, nsfs_credentials_for, nsfs_delete_identity,
+    nsfs_put_identity,
+};
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::{cross_account_data, features};
@@ -145,6 +148,93 @@ async fn test_impersonation_isolates_identities() {
          did not cover creation, so the object is not owned by her");
     access.expect(bob.get_object().bucket(&bucket).key(key).send().await);
 
+}
+
+/// An identity in name form is served as the user nsswitch resolves
+/// the name to (I7).  `distinguished_name` is what NooBaa passes to
+/// `getpwnam`, so a row carrying `rgwalice` and no ids must run as
+/// 70101.
+///
+/// The same isolation as `test_impersonation_isolates_identities`, with
+/// alice bound by name:  her object is hers on disk only if the name
+/// resolved, so bob's read of it is denied by the filesystem.  The
+/// controls are alice reading her own object, and a third user whose
+/// name nsswitch does not know, whose request is refused rather than
+/// served as the gateway.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_impersonation_serves_a_name_form_identity() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let Some(alice_u) = PrivateUser::create("impnamea").await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let Some(bob_u) = PrivateUser::create("impnameb").await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let Some(nobody_u) = PrivateUser::create("impnamen").await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    assert!(alice_u.bind_name("rgwalice").await, "binding alice by name failed");
+    assert!(bob_u.bind(UID_BOB, UID_BOB, None).await, "binding bob failed");
+    assert!(nobody_u.bind_name("rgw-no-such-user").await,
+            "binding an unknown name failed");
+
+    let j = as_json(&nsfs_credentials_for(&alice_u.id).await)
+        .expect("credentials for alice");
+    assert_eq!(j["outcome"], "resolved", "{j}");
+    assert_eq!(j["uid"].to_string(), UID_ALICE, "{j}");
+    let j = as_json(&nsfs_credentials_for(&nobody_u.id).await)
+        .expect("credentials for the unknown name");
+    assert_eq!(j["outcome"], "refused", "{j}");
+
+    let (alice, bob) = (&alice_u.client, &bob_u.client);
+    let bucket = get_new_bucket(Some(alice)).await;
+    let key = "alices-object";
+    let put = alice.put_object()
+        .bucket(&bucket).key(key)
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"alice wrote this"))
+        .send().await;
+    assert!(put.is_ok(), "alice could not write her own object: {put:?}");
+
+    let resource = make_arn_resource(&format!("{bucket}/*"));
+    let doc = make_json_policy(
+        "s3:GetObject", &resource,
+        Some(serde_json::json!({"AWS": [
+            format!("arn:aws:iam:::user/{}", bob_u.id),
+            format!("arn:aws:iam:::user/{}", nobody_u.id)]})),
+        None, None);
+    let pol = alice.put_bucket_policy()
+        .bucket(&bucket).policy(&doc).send().await;
+    assert!(pol.is_ok(), "could not grant bob s3:GetObject: {pol:?}");
+
+    let mine = alice.get_object().bucket(&bucket).key(key).send().await;
+    assert!(mine.is_ok(), "alice could not read her own object: {mine:?}");
+
+    let access = Access::ask(Class::Data, &bucket, key,
+                             &bob_u.id, "r").await;
+    assert!(access.denied(),
+        "the filesystem permits bob to read an object alice wrote;  \
+         her name did not resolve to her uid");
+    access.expect(bob.get_object().bucket(&bucket).key(key).send().await);
+
+    /* an identity that cannot be supplied is refused at every model:
+     * serving it as the gateway would give it the daemon's reach */
+    let theirs = nobody_u.client.get_object()
+        .bucket(&bucket).key(key).send().await;
+    assert!(theirs.is_err(),
+        "a name nsswitch does not know was served: {theirs:?}");
 }
 
 /// Which authority decides an object's bytes, asserted rather than

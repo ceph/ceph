@@ -457,6 +457,15 @@ impl PrivateUser {
         }
         crate::admin::nsfs_put_identity(&p).await.status == 200
     }
+
+    /// Give it a POSIX identity by name, which the gateway resolves
+    /// through nsswitch, as NooBaa's `distinguished_name` is.  Returns
+    /// whether the row was written.
+    pub async fn bind_name(&self, name: &str) -> bool {
+        crate::admin::nsfs_put_identity(&[
+            ("identity", &self.id), ("distinguished_name", name)])
+            .await.status == 200
+    }
 }
 
 impl Drop for PrivateUser {

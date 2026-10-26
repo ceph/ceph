@@ -77,6 +77,12 @@ struct Env {
     role: String,
     /// the IAM user `iam-user` creates in that account
     iam_user: String,
+    /// the account `config` makes in name form -- NooBaa's
+    /// `distinguished_name`, which its CLI calls `--user` -- naming the
+    /// account's own uid, for `name-form`
+    dn_account: String,
+    dn_access_key: String,
+    dn_secret_key: String,
     /// a credential on the adopted gateway carrying `users=*` and
     /// `nsfs=*`:  `adopt` signs its Admin Ops requests with it, and the
     /// rgw capture conf names it as `[iam]`, which the corpus signs its
@@ -189,6 +195,10 @@ impl Env {
             account: get("account", "adoption"),
             role: get("role", "adoption-role"),
             iam_user: get("iam_user", "adoption-iam-user"),
+            dn_account: get("dn_account", "adoption-dn"),
+            dn_access_key: get("dn_access_key", "ADOPTIONDNACCESSK001"),
+            dn_secret_key: get("dn_secret_key",
+                               "adoptiondnsecretkeyadoptiondnsecretkeyad"),
             rgw_admin_key: get("rgw_admin_key", "ABCDEFGHIJKLMNOPQRST"),
             rgw_admin_secret: get("rgw_admin_secret",
                                   "abcdefghijklmnopqrstuvwxyzabcdefghijklmn"),
@@ -313,6 +323,7 @@ const STEPS: &[(&str, &str)] = &[
     ("store-tests", "run the nsfs unit tests that read a real NooBaa store, against this one"),
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("schema-agreement", "hold the nsfs record schema to NooBaa's validator, over the records NooBaa wrote"),
+    ("name-form", "write as the name-form account, and check the file is the name's uid's:  NooBaa before `stop`, RGW after `role-rgw`"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("damage",   "damage one bucket record, so adoption meets a record it cannot carry"),
     ("import",   "RGW over the same tree;  import the identities, buckets left in NooBaa's format"),
@@ -345,6 +356,7 @@ fn main() {
         "role-rgw" => role_rgw(&env),
         "store-tests" => store_tests(&env),
         "schema-agreement" => schema_agreement(&env),
+        "name-form" => name_form(&env),
         "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
         "damage" => damage(&env),
@@ -766,6 +778,39 @@ fn config(env: &Env) -> Result<(), String> {
             ],
         )?;
         println!("         account {:?} created, with role {:?}", env.account, env.role);
+    }
+
+    /* The name-form account (I7):  NooBaa's `distinguished_name`, which
+     * it passes to getpwnam, naming the account's own uid, so both
+     * gateways resolve it through nsswitch and the tree stays the
+     * account's to write in.  Its bucket is made here, as the others
+     * are, owned as the name resolves. */
+    let (dn_name, dn_uid, dn_gid) = dn_identity(env)?;
+    if nsfs_cli(env, &["account", "status", "--name", &env.dn_account]).is_ok() {
+        println!("         account {:?} already present", env.dn_account);
+    } else {
+        nsfs_cli(
+            env,
+            &[
+                "account", "add",
+                "--name", &env.dn_account,
+                "--user", &dn_name,
+                "--new_buckets_path", &env.tree().display().to_string(),
+                "--access_key", &env.dn_access_key,
+                "--secret_key", &env.dn_secret_key,
+            ],
+        )?;
+        println!("         account {:?} created, by name {dn_name:?}", env.dn_account);
+    }
+    let nf_path = env.tree().join(NAME_FORM_BUCKET);
+    if nsfs_cli(env, &["bucket", "status", "--name", NAME_FORM_BUCKET]).is_ok() {
+        println!("         bucket {NAME_FORM_BUCKET:?} already present");
+    } else {
+        account_dir(env, &nf_path, dn_uid, dn_gid)?;
+        let np = nf_path.display().to_string();
+        nsfs_cli(env, &["bucket", "add", "--name", NAME_FORM_BUCKET,
+                        "--owner", &env.dn_account, "--path", &np])?;
+        println!("         bucket {NAME_FORM_BUCKET:?} created at {np}, for `name-form`");
     }
 
     /* The anonymous account, which NooBaa creates only when asked:  the
@@ -1203,6 +1248,87 @@ fn role_rgw(env: &Env) -> Result<(), String> {
     }
     println!("         the session writes to {} with its account's rights", env.bucket);
     Ok(())
+}
+
+/// Write as the name-form account, and check whose the file is.
+///
+/// NooBaa resolves `distinguished_name` with getpwnam, and so must RGW
+/// (I7), so a file either writes is owned by that name's uid and primary
+/// gid -- the comparison between the two gateways that a name-form
+/// identity is about.  Against NooBaa while it runs, before `stop`;
+/// against RGW otherwise, after `role-rgw`, where the object NooBaa wrote
+/// is also read back, and the import must have resolved every name.
+/// The bucket is not a corpus bucket, so no capture compares it.
+fn name_form(env: &Env) -> Result<(), String> {
+    let (dn_name, uid, gid) = dn_identity(env)?;
+    let who = format!("{}:{}", env.dn_access_key, env.dn_secret_key);
+    let (gateway, port, key) = if running(env).is_some() {
+        ("noobaa", env.port, "noobaa-wrote")
+    } else {
+        ("rgw", env.rgw_port, "rgw-wrote")
+    };
+    let url = |k: &str| format!("http://127.0.0.1:{port}/{NAME_FORM_BUCKET}/{k}");
+
+    let (status, body) = curl(&["-X", "PUT", "--aws-sigv4", "aws:amz:us-east-1:s3",
+                                "--user", &who, "--data-binary", key, &url(key)])?;
+    if status != 200 {
+        return Err(format!("{gateway} answered the name-form account's PUT with \
+                            {status}:\n{body}"));
+    }
+    let file = env.tree().join(NAME_FORM_BUCKET).join(key);
+    let owner = file_owner(env, &file)?;
+    if owner != (uid, gid) {
+        return Err(format!(
+            "{gateway} wrote {} as {}:{}, not as {dn_name} ({uid}:{gid}), which \
+             the name resolves to", file.display(), owner.0, owner.1));
+    }
+    println!("name-form {gateway}:  {} written as {dn_name} ({uid}:{gid})", key);
+
+    if gateway == "rgw" {
+        let (status, body) = curl(&["--aws-sigv4", "aws:amz:us-east-1:s3",
+                                    "--user", &who, &url("noobaa-wrote")])?;
+        if status != 200 || body != "noobaa-wrote" {
+            return Err(format!("RGW answered the name-form account's read of what \
+                                NooBaa wrote with {status}:\n{body}"));
+        }
+        println!("          and reads back what NooBaa wrote as it");
+    }
+    Ok(())
+}
+
+/// The name-form account's name, uid and primary gid:  the name of the
+/// account's own uid, and what nsswitch resolves it to, as getpwnam does
+/// for either gateway.
+fn dn_identity(env: &Env) -> Result<(String, u32, u32), String> {
+    let (uid, _) = account_ids(env)?;
+    let out = Command::new("getent").args(["passwd", &uid.to_string()]).output()
+        .map_err(|e| format!("cannot run getent: {e}"))?;
+    let line = String::from_utf8_lossy(&out.stdout).to_string();
+    let f: Vec<&str> = line.trim().split(':').collect();
+    match (f.first(), f.get(2).and_then(|v| v.parse::<u32>().ok()),
+           f.get(3).and_then(|v| v.parse::<u32>().ok())) {
+        (Some(n), Some(u), Some(g)) if !n.is_empty() => Ok((n.to_string(), u, g)),
+        _ => Err(format!("uid {uid} has no passwd entry to name it by")),
+    }
+}
+
+/// A file's owner and group in the tree:  read as root under
+/// `impersonate`, where this process may not reach it.
+fn file_owner(env: &Env, path: &Path) -> Result<(u32, u32), String> {
+    if !env.impersonate {
+        let m = std::fs::metadata(path)
+            .map_err(|e| format!("cannot stat {}: {e}", path.display()))?;
+        return Ok((m.uid(), m.gid()));
+    }
+    let out = privileged(env, "stat").args(["-c", "%u %g"]).arg(path).output()
+        .map_err(|e| format!("cannot run stat: {e}"))?;
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    let mut it = text.split_whitespace().filter_map(|v| v.parse::<u32>().ok());
+    match (it.next(), it.next()) {
+        (Some(u), Some(g)) => Ok((u, g)),
+        _ => Err(format!("cannot stat {}:  {}", path.display(),
+                         String::from_utf8_lossy(&out.stderr).trim())),
+    }
 }
 
 /// The IAM user's key and secret, as `iam-user` recorded them.  `None`
@@ -1998,7 +2124,7 @@ fn conversion(env: &Env) -> Result<(), String> {
      * the NooBaa build rather than at `import` and `adopt`, by when a
      * sudo ticket taken beforehand has expired. */
     preflight_rgw(ceph_build)?;
-    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 19] = [
+    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 21] = [
         ("pin", &pin),
         ("worktree", &worktree),
         ("patch", &patch),
@@ -2010,6 +2136,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("store-tests", &store_tests),
         ("capture noobaa", &|e| capture(e, "noobaa")),
         ("schema-agreement", &schema_agreement),
+        ("name-form noobaa", &name_form),
         ("stop", &stop),
         ("damage", &damage),
         ("import", &|e| adopt(e, "import")),
@@ -2018,6 +2145,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("capture rgw-converted", &|e| capture(e, "rgw-converted")),
         ("compare", &compare),
         ("role-rgw", &role_rgw),
+        ("name-form rgw", &name_form),
     ];
     for (i, (name, step)) in steps.iter().enumerate() {
         println!("\n==> conversion {}/{}:  {name}", i + 1, steps.len());
@@ -2312,6 +2440,11 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
     println!("{tag} identities imported:  {} accounts, {} users",
              json_str(&body, "accounts").unwrap_or_default(),
              json_str(&body, "users").unwrap_or_default());
+    /* `config` makes a name-form account whose name nsswitch knows */
+    if json_str(&body, "unresolved_names").as_deref() != Some("0") {
+        return Err(format!("the import left names nsswitch did not resolve;  the \
+                            gateway log names them:\n{body}"));
+    }
 
     /* The corpus asks the gateway, as the imported IAM user, what that
      * user's requests run as -- `GET /admin/nsfs/credentials`, which is
@@ -2397,6 +2530,8 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
 
 /// The bucket `damage` damages.  Made by `config` like any other.
 const DAMAGED_BUCKET: &str = "corpus-damaged";
+/// The name-form account's bucket.  Not a corpus bucket.
+const NAME_FORM_BUCKET: &str = "name-form";
 
 /// An account `_id` no identity in the store has.
 const NO_SUCH_OWNER: &str = "000000000000000000000000";
