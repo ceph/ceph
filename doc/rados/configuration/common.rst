@@ -210,8 +210,8 @@ documentation might lead readers to wrongly think that unique cluster names are
 required to use ``rbd-mirror``. They are not required.
 
 Custom cluster names are now considered deprecated and the ability to deploy
-them has already been removed from some tools. In Tentacle 20.2 and later
-releases, the packaged systemd units (such as ``ceph-osd@`` and ``ceph-mon@``)
+them has already been removed from some tools. In Tentacle and later releases,
+the packaged systemd units (such as ``ceph-osd@`` and ``ceph-mon@``)
 no longer pass ``--cluster``, so they start only the daemons of a cluster named
 ``ceph``. The ability to run and manage clusters with custom names might be
 progressively removed by future Ceph releases, so **it is strongly recommended
