@@ -114,7 +114,7 @@ protected:
     objecter->start(&map);
 
     for (int osd = 0; osd < num_osds; osd++) {
-      auto s = new Objecter::OSDSession(g_ceph_context, osd);
+      auto s = new Objecter::OSDSession(g_ceph_context, osd, ioc.get_executor());
       cons[osd] = ceph::make_ref<RecordingConnection>(osd);
       s->con = cons[osd];
       s->con->set_priv(RefCountedPtr{s});
