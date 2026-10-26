@@ -201,6 +201,19 @@ accepts the payload in chunks and uses each chunk during the call:
    const std::array fragments {"pay"sv, "load"sv, "tail"sv};
    const std::size_t length = 7;
 
+.. raw:: html
+
+   <figure class="datum-byte-flow" aria-label="Original buffers, borrowed spans, and the consumer">
+     <div class="datum-flow-stages">
+       <div class="datum-flow-stage"><strong>Original buffers</strong><div class="datum-flow-pieces"><span>pay</span><span>load</span><span class="datum-unread">tail · unread</span></div></div>
+       <span class="datum-flow-arrow" aria-hidden="true"></span>
+       <div class="datum-flow-stage"><strong>Borrowed slice</strong><div class="datum-flow-pieces"><span>3-byte span → pay</span><span>4-byte span → load</span></div></div>
+       <span class="datum-flow-arrow" aria-hidden="true"></span>
+       <div class="datum-flow-stage"><strong>Consumer calls</strong><div class="datum-flow-pieces"><span>1. pay</span><span>2. load</span></div></div>
+     </div>
+     <figcaption>The spans point to the original bytes. Keep those buffers alive while the consumer uses them.</figcaption>
+   </figure>
+
 .. list-table::
    :class: datum-code-comparison
    :widths: 50 50

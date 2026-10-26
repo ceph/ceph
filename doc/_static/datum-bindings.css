@@ -140,3 +140,40 @@
   overflow-wrap: anywhere;
   font-size: 12px;
 }
+
+#psst-wanna-buy-a-codec .datum-byte-flow {
+  margin: 24px 0;
+  padding: 18px;
+  border: 1px solid #cadcca;
+  border-radius: 5px;
+  background: #f1f6ed;
+}
+#psst-wanna-buy-a-codec .datum-flow-stages {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+#psst-wanna-buy-a-codec .datum-flow-stage { min-width: 0; }
+#psst-wanna-buy-a-codec .datum-flow-stage strong { display: block; margin-bottom: 10px; }
+#psst-wanna-buy-a-codec .datum-flow-pieces { display: flex; flex-wrap: wrap; gap: 6px; }
+#psst-wanna-buy-a-codec .datum-flow-pieces span {
+  padding: 7px;
+  border: 1px solid #b8d2bf;
+  border-radius: 4px;
+  background: #d7ead9;
+  color: #164d39;
+  font: 13px monospace;
+}
+#psst-wanna-buy-a-codec .datum-flow-pieces .datum-unread {
+  background: #eeefea;
+  border-color: #cad5c4;
+  color: #5e706b;
+}
+#psst-wanna-buy-a-codec .datum-flow-arrow::after { content: '→'; color: #217f67; font-size: 26px; }
+#psst-wanna-buy-a-codec .datum-byte-flow figcaption { margin-top: 18px; font-size: 13px; }
+@media (max-width: 700px) {
+  #psst-wanna-buy-a-codec .datum-flow-stages { grid-template-columns: minmax(0, 1fr); }
+  #psst-wanna-buy-a-codec .datum-flow-arrow { text-align: center; }
+  #psst-wanna-buy-a-codec .datum-flow-arrow::after { content: '↓'; }
+}
