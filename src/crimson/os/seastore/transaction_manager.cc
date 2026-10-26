@@ -13,6 +13,7 @@
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "crimson/os/seastore/object_data_handler.h"
 #include "crimson/os/seastore/omap_manager/btree/omap_btree_node_impl.h"
+#include "crimson/os/seastore/omap_manager/log/log_node.h"
 
 /*
  * TransactionManager logs
@@ -1320,6 +1321,7 @@ TransactionManager::move_region(
       }
       if (loaded_extent && loaded_extent->is_stable_dirty()) {
         using namespace crimson::os::seastore::omap_manager;
+        using namespace crimson::os::seastore::log_manager;
         ceph_assert(!src.has_shadow_val());
         auto this_dst_key = calc_dst_key();
         auto category = get_extent_category(src.get_extent_type());
@@ -1348,6 +1350,11 @@ TransactionManager::move_region(
           co_await alloc_and_copy_non_data_extent<OMapInnerNode>(
             t, this_dst_key, src.get_length(),
             *loaded_extent->cast<OMapInnerNode>());
+          break;
+        case extent_types_t::LOG_NODE:
+          co_await alloc_and_copy_non_data_extent<LogNode>(
+            t, this_dst_key, src.get_length(),
+            *loaded_extent->cast<LogNode>());
           break;
         default:
           ceph_abort("unexpected extent type");
