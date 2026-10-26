@@ -6,8 +6,13 @@ import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import {
+  MirroringSnapshotStatus,
+  MirroringSyncStatus
+} from '~/app/shared/enum/cephfs-mirroring-sync-status.enum';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
@@ -16,7 +21,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths.component';
 import { HttpClientModule } from '@angular/common/http';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -27,14 +31,13 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   let fixture: ComponentFixture<CephfsMirroringFsMirrorPathsComponent>;
   let cephfsService: any;
   let formatterService: any;
-  let notificationService: any;
 
   const mockMirrorStatusResponse: MirrorStatusResponse = {
     metrics: {
       '/path1': {
         peer: {
           'peer-uuid-1': {
-            state: 'syncing',
+            state: MirroringSyncStatus.SYNCING,
             current_syncing_snap: {
               id: 4,
               name: 'snap-current',
@@ -77,7 +80,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       '/path2': {
         peer: {
           'peer-uuid-2': {
-            state: 'idle',
+            state: MirroringSyncStatus.IDLE,
             current_syncing_snap: {
               id: 5,
               name: 'snap-current-2',
@@ -137,6 +140,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           checkpoints: []
         })
       ),
+      lsSnapshots: jest.fn().mockReturnValue(of([])),
       addMirrorCheckpoint: jest.fn().mockReturnValue(of({})),
       removeMirrorCheckpoint: jest.fn().mockReturnValue(of({})),
       removeMirrorDirectory: jest.fn().mockReturnValue(of({}))
@@ -202,7 +206,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         },
         {
           provide: ModalCdsService,
-          useValue: { show: jest.fn() }
+          useValue: { show: jest.fn(), dismissAll: jest.fn() }
         },
         {
           provide: NotificationService,
@@ -219,7 +223,6 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
     cephfsService = TestBed.inject(CephfsService);
     formatterService = TestBed.inject(FormatterService);
-    notificationService = TestBed.inject(NotificationService);
 
     fixture = TestBed.createComponent(CephfsMirroringFsMirrorPathsComponent);
     component = fixture.componentInstance;
@@ -256,10 +259,11 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     const router = TestBed.inject(Router);
     const navigateByUrlSpy = jest.spyOn(router, 'navigateByUrl').mockResolvedValue(true as any);
     component.fsName = 'test-fs';
+    component.fsId = 7;
 
     component.openAddPath();
 
-    expect(cephfsService.list).toHaveBeenCalled();
+    expect(cephfsService.list).not.toHaveBeenCalled();
     expect(navigateByUrlSpy).toHaveBeenCalledWith('/cephfs/mirroring/(modal:add-path/7/test-fs)', {
       state: {
         returnUrl: '/cephfs/mirroring/test-fs/mirror-paths'
@@ -278,20 +282,52 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     expect(navigateByUrlSpy).not.toHaveBeenCalled();
   });
 
-  it('should notify when filesystem list fails while opening add-path wizard', () => {
+  it('should not open add-path wizard when the filesystem id is not resolved', () => {
     const router = TestBed.inject(Router);
     const navigateByUrlSpy = jest.spyOn(router, 'navigateByUrl').mockResolvedValue(true as any);
-    cephfsService.list.mockReturnValue(throwError(() => new Error('list failed')));
     component.fsName = 'test-fs';
+    component.fsId = undefined;
 
     component.openAddPath();
 
+    expect(cephfsService.list).not.toHaveBeenCalled();
     expect(navigateByUrlSpy).not.toHaveBeenCalled();
-    expect(notificationService.show).toHaveBeenCalledWith(
-      NotificationType.error,
-      'Error',
-      'Failed to load filesystems for adding a mirror path.'
-    );
+  });
+  describe('filesystem id resolution', () => {
+    beforeEach(() => {
+      cephfsService.getMirrorStatus.mockReturnValue(of(mockMirrorStatusResponse));
+    });
+
+    it('should use the id passed via router state without listing filesystems', () => {
+      const router = TestBed.inject(Router);
+      jest.spyOn(router, 'currentNavigation').mockReturnValue({
+        extras: { state: { fsId: 3, fsName: 'test-fs' } }
+      } as any);
+
+      component.ngOnInit();
+
+      expect(component.fsId).toBe(3);
+      expect(cephfsService.list).not.toHaveBeenCalled();
+    });
+
+    it('should ignore router state that belongs to another filesystem', () => {
+      const router = TestBed.inject(Router);
+      jest.spyOn(router, 'currentNavigation').mockReturnValue({
+        extras: { state: { fsId: 3, fsName: 'other-fs' } }
+      } as any);
+
+      component.ngOnInit();
+
+      expect(component.fsId).toBe(7);
+      expect(cephfsService.list).toHaveBeenCalledTimes(1);
+    });
+
+    it('should fall back to listing filesystems when no router state is available', () => {
+      component.ngOnInit();
+
+      expect(component.fsId).toBe(7);
+      expect(cephfsService.list).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('parseMirrorStatus', () => {
@@ -311,7 +347,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result.length).toBe(2);
 
       expect(result[0].path).toBe('/path1');
-      expect(result[0].syncStatus).toBe('syncing');
+      expect(result[0].syncStatus).toBe(MirroringSyncStatus.SYNCING);
       expect(result[0].currentSyncSnapshot).toBe('snap-current');
       expect(result[0].currentSyncEta).toBe('calculating...');
       expect(result[0].currentSyncMode).toBe('delta');
@@ -324,7 +360,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[0].snapshots).toEqual([
         {
           name: 'snap-current',
-          status: 'in-progress',
+          status: MirroringSnapshotStatus.IN_PROGRESS,
           eta: 'calculating...',
           icon: 'inProgress',
           iconClass: 'info',
@@ -334,8 +370,8 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         },
         {
           name: 'snap-last',
-          status: 'replicated',
-          icon: 'checkMarkOutline',
+          status: MirroringSnapshotStatus.REPLICATED,
+          icon: 'success',
           iconClass: 'success',
           statusLabel: 'replicated.',
           filesSynced: 5000,
@@ -354,7 +390,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[0].avgWriteThroughput).toBe('0.00 B/s');
 
       expect(result[1].path).toBe('/path2');
-      expect(result[1].syncStatus).toBe('idle');
+      expect(result[1].syncStatus).toBe(MirroringSyncStatus.IDLE);
       expect(result[1].currentSyncSnapshot).toBe('snap-current-2');
       expect(result[1].lastSyncedSnapshot).toBe('snap-last-2');
       expect(result[1].snapshotCount).toBe(5);
@@ -362,7 +398,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[1].snapshots).toEqual([
         {
           name: 'snap-current-2',
-          status: 'pending',
+          status: MirroringSnapshotStatus.PENDING,
           icon: 'pendingFilled',
           iconClass: 'muted',
           statusLabel: 'replication pending',
@@ -371,8 +407,8 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         },
         {
           name: 'snap-last-2',
-          status: 'replicated',
-          icon: 'checkMarkOutline',
+          status: MirroringSnapshotStatus.REPLICATED,
+          icon: 'success',
           iconClass: 'success',
           statusLabel: 'replicated.',
           filesSynced: 100,
@@ -391,7 +427,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           '/path1': {
             peer: {
               'peer-1': {
-                state: 'idle',
+                state: MirroringSyncStatus.IDLE,
                 last_synced_snap: {
                   id: 1,
                   name: 'snap-only-name'
@@ -406,7 +442,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
       expect(result[0].snapshots).toHaveLength(1);
       expect(result[0].snapshots[0].name).toBe('snap-only-name');
-      expect(result[0].snapshots[0].status).toBe('replicated');
+      expect(result[0].snapshots[0].status).toBe(MirroringSnapshotStatus.REPLICATED);
       expect(result[0].snapshots[0].bytesSynced).toBeUndefined();
     });
 
@@ -427,7 +463,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           '/path1': {
             peer: {
               'peer-1': {
-                state: 'idle'
+                state: MirroringSyncStatus.IDLE
               }
             }
           }
@@ -437,7 +473,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       const result = component.parseMirrorStatus(minimalData);
 
       expect(result.length).toBe(1);
-      expect(result[0].syncStatus).toBe('idle');
+      expect(result[0].syncStatus).toBe(MirroringSyncStatus.IDLE);
       expect(result[0].currentSyncSnapshot).toBe('-');
       expect(result[0].lastSyncedSnapshot).toBe('-');
       expect(result[0].snapshotCount).toBe(0);
@@ -528,15 +564,15 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     it('should extract first peer info from path data', () => {
       const pathData = {
         peer: {
-          'peer-1': { state: 'syncing' },
-          'peer-2': { state: 'idle' }
+          'peer-1': { state: MirroringSyncStatus.SYNCING },
+          'peer-2': { state: MirroringSyncStatus.IDLE }
         }
       };
 
       const result = component['extractPeerInfo'](pathData as any);
 
       expect(result).toBeDefined();
-      expect(result?.state).toBe('syncing');
+      expect(result?.state).toBe(MirroringSyncStatus.SYNCING);
     });
 
     it('should return null when peer object is empty', () => {
@@ -565,7 +601,105 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
       expect(cephfsService.getMirrorStatus).toHaveBeenCalledWith('test-fs');
       expect(cephfsService.listMirrorCheckpoints).not.toHaveBeenCalled();
+      expect(cephfsService.lsSnapshots).not.toHaveBeenCalled();
       expect(component.mirrorPaths.length).toBe(2);
+    });
+
+    it('should refresh live mirror status without reloading directory snapshots', () => {
+      cephfsService.getMirrorStatus.mockReturnValue(of(mockMirrorStatusResponse));
+      component.fsName = 'test-fs';
+      component.ngOnInit();
+      component.selectedPath = {
+        path: '/path1',
+        lastSyncedSnapshot: 'snap-last',
+        snapshots: []
+      } as any;
+      component.sidePanelOpen = true;
+      component.pathSnapshots = [
+        { name: 'snap-a', path: '/path1/.snap/snap-a', created: '2024-01-01T00:00:00Z' }
+      ];
+      cephfsService.listMirrorCheckpoints.mockClear();
+      cephfsService.lsSnapshots.mockClear();
+
+      component.loadMirrorPaths();
+
+      expect(cephfsService.getMirrorStatus).toHaveBeenCalledWith('test-fs');
+      expect(cephfsService.listMirrorCheckpoints).not.toHaveBeenCalled();
+      expect(cephfsService.lsSnapshots).not.toHaveBeenCalled();
+      expect(component.pathSnapshots.map((snapshot) => snapshot.name)).toEqual(['snap-a']);
+      expect(component.selectedPath?.path).toBe('/path1');
+      expect(component.sidePanelOpen).toBe(true);
+    });
+
+    it('should keep snapshot details when a refresh request fails', () => {
+      cephfsService.getMirrorStatus.mockReturnValue(of(mockMirrorStatusResponse));
+      component.fsName = 'test-fs';
+      component.ngOnInit();
+      component.selectedPath = {
+        path: '/path1',
+        lastSyncedSnapshot: 'snap-a',
+        snapshots: []
+      } as any;
+      component.sidePanelOpen = true;
+      component.pathSnapshots = [
+        { name: 'snap-a', path: '/path1/.snap/snap-a', created: '2024-01-01T00:00:00Z' }
+      ];
+      component.pathCheckpoints = [
+        {
+          snap_id: 1,
+          snap_name: 'snap-a',
+          status: 'complete',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z'
+        }
+      ];
+      cephfsService.lsSnapshots.mockReturnValue(
+        throwError(() => new Error('snapshot list failed'))
+      );
+      cephfsService.listMirrorCheckpoints.mockReturnValue(
+        throwError(() => new Error('checkpoint list failed'))
+      );
+
+      component.loadSnapshotDetails('/path1', true);
+
+      expect(component.pathSnapshots.map((snapshot) => snapshot.name)).toEqual(['snap-a']);
+      expect(component.pathCheckpoints.map((checkpoint) => checkpoint.snap_name)).toEqual([
+        'snap-a'
+      ]);
+      expect(component.pathSnapshotsLoading).toBe(false);
+    });
+
+    it('should replace snapshot details when the refresh returns an empty list', () => {
+      cephfsService.getMirrorStatus.mockReturnValue(of(mockMirrorStatusResponse));
+      component.fsName = 'test-fs';
+      component.ngOnInit();
+      component.selectedPath = {
+        path: '/path1',
+        lastSyncedSnapshot: 'snap-a',
+        snapshots: []
+      } as any;
+      component.sidePanelOpen = true;
+      component.pathSnapshots = [
+        { name: 'snap-a', path: '/path1/.snap/snap-a', created: '2024-01-01T00:00:00Z' }
+      ];
+      component.pathCheckpoints = [
+        {
+          snap_id: 1,
+          snap_name: 'snap-a',
+          status: 'complete',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z'
+        }
+      ];
+      cephfsService.lsSnapshots.mockReturnValue(of([]));
+      cephfsService.listMirrorCheckpoints.mockReturnValue(
+        of({ dir_root: '/path1', checkpoints: [] })
+      );
+
+      component.loadSnapshotDetails('/path1', true);
+
+      expect(component.pathSnapshots).toEqual([]);
+      expect(component.pathCheckpoints).toEqual([]);
     });
 
     it('should set empty array on error', () => {
@@ -606,7 +740,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   });
 
   describe('onPathClick', () => {
-    it('should set selected path and open side panel', fakeAsync(() => {
+    it('should set selected path and open side panel', () => {
       const snapshotScheduleService = TestBed.inject(CephfsSnapshotScheduleService) as any;
       snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of([]));
       cephfsService.getMirrorStatus.mockReturnValue(
@@ -619,7 +753,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
       const mockPath = {
         path: '/test',
-        syncStatus: 'syncing' as const,
+        syncStatus: MirroringSyncStatus.SYNCING,
         currentSyncSnapshot: 'snap1',
         lastSyncedSnapshot: 'snap0',
         snapshots: []
@@ -627,23 +761,20 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
       component.fsName = 'test-fs';
       component.ngOnInit();
-      // Simulate the template async pipe so checkpoint loading runs.
-      const checkpointSub = component.checkpointState$.subscribe();
       component.onPathClick(mockPath as any);
-      tick();
 
       expect(component.selectedPath?.path).toBe('/test');
       expect(component.sidePanelOpen).toBe(true);
       expect(cephfsService.listMirrorCheckpoints).toHaveBeenCalledWith('test-fs', '/test');
-      checkpointSub.unsubscribe();
-    }));
+      expect(cephfsService.lsSnapshots).toHaveBeenCalledWith(7, '/test');
+    });
   });
 
   describe('snapshot checkpoints', () => {
     const mockSnapshots = [
       {
         name: 'snap-current',
-        status: 'in-progress' as const,
+        status: MirroringSnapshotStatus.IN_PROGRESS,
         eta: '10s',
         icon: 'inProgress' as const,
         iconClass: 'info',
@@ -653,8 +784,8 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       },
       {
         name: 'snap-last',
-        status: 'replicated' as const,
-        icon: 'checkMarkOutline' as const,
+        status: MirroringSnapshotStatus.REPLICATED,
+        icon: 'success' as const,
         iconClass: 'success',
         statusLabel: 'replicated.',
         filesSynced: 50,
@@ -683,13 +814,197 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
       component.refreshSnapshotPanels();
 
+      expect(component.currentSnapshotPanels.length).toBe(1);
+      expect(component.syncedSnapshotPanels.length).toBe(1);
       expect(component.snapshotPanels.length).toBe(2);
-      expect(component.snapshotPanels[1].hasCheckpoint).toBe(true);
-      expect(component.snapshotPanels[1].statusLabel).toBe('checkpoint complete');
-      expect(component.snapshotPanels[1].replicationStatusLabel).toBe('Complete');
-      expect(component.snapshotPanels[0].hasCheckpoint).toBe(false);
-      expect(component.snapshotPanels[0].statusLabel).toBe('replication in-progress');
+      expect(component.syncedSnapshotPanels[0].hasCheckpoint).toBe(true);
+      expect(component.syncedSnapshotPanels[0].statusLabel).toBe('checkpoint complete');
+      expect(component.syncedSnapshotPanels[0].replicationStatusLabel).toBe('Complete');
+      expect(component.currentSnapshotPanels[0].hasCheckpoint).toBe(false);
+      expect(component.currentSnapshotPanels[0].statusLabel).toBe('replication in-progress');
       expect(component.pathCheckpoints.length).toBe(1);
+    });
+
+    it('should list directory snapshots in the already synced section', () => {
+      component.selectedPath = {
+        path: '/path1',
+        lastSyncedSnapshot: 'snap-b',
+        snapshots: [
+          {
+            name: 'snap-b',
+            status: MirroringSnapshotStatus.REPLICATED,
+            icon: 'success',
+            iconClass: 'success',
+            statusLabel: 'replicated.'
+          }
+        ]
+      } as any;
+      component.pathSnapshots = [
+        { name: 'snap-a', path: '/path1/.snap/snap-a', created: '2024-01-01T00:00:00Z' },
+        { name: 'snap-b', path: '/path1/.snap/snap-b', created: '2024-01-02T00:00:00Z' }
+      ];
+      component.pathCheckpoints = [];
+
+      component.refreshSnapshotPanels();
+
+      expect(component.currentSnapshotPanels.length).toBe(0);
+      expect(component.syncedSnapshotPanels.map((snapshot) => snapshot.name)).toEqual([
+        'snap-b',
+        'snap-a'
+      ]);
+    });
+
+    it('should list only the 15 most relevant current snapshots', () => {
+      const snapshots = Array.from({ length: 16 }, (_, index) => {
+        const day = String(index + 1).padStart(2, '0');
+        const name = `snap-${day}`;
+        return {
+          name,
+          path: `/path1/.snap/${name}`,
+          created: `2024-01-${day}T00:00:00Z`
+        };
+      });
+      component.selectedPath = {
+        path: '/path1',
+        lastSyncedSnapshot: '-',
+        snapshots: [
+          {
+            name: 'snap-01',
+            status: MirroringSnapshotStatus.IN_PROGRESS,
+            icon: 'inProgress',
+            iconClass: 'info',
+            statusLabel: 'replication in-progress'
+          }
+        ]
+      } as any;
+      component.pathSnapshots = snapshots;
+      component.pathCheckpoints = [];
+
+      component.refreshSnapshotPanels();
+
+      expect(component.currentSnapshotTotal).toBe(16);
+      expect(component.currentSnapshotPanels).toHaveLength(component.snapshotListLimit);
+      expect(component.currentSnapshotPanels[0].name).toBe('snap-01');
+      expect(component.currentSnapshotPanels[0].status).toBe(MirroringSnapshotStatus.IN_PROGRESS);
+      expect(component.currentSnapshotPanels.map((snapshot) => snapshot.name)).not.toContain(
+        'snap-02'
+      );
+      expect(component.selectedPath?.pendingSnapshotCount).toBe(16);
+      expect(component.syncedSnapshotPanels).toEqual([]);
+    });
+
+    it('should treat directory snapshots as current until one has synced', () => {
+      component.selectedPath = {
+        path: '/path1',
+        lastSyncedSnapshot: '-',
+        snapshots: [
+          {
+            name: 'snap-b',
+            status: MirroringSnapshotStatus.IN_PROGRESS,
+            icon: 'inProgress',
+            iconClass: 'info',
+            statusLabel: 'replication in-progress'
+          }
+        ]
+      } as any;
+      component.pathSnapshots = [
+        { name: 'snap-a', path: '/path1/.snap/snap-a', created: '2024-01-01T00:00:00Z' },
+        { name: 'snap-b', path: '/path1/.snap/snap-b', created: '2024-01-02T00:00:00Z' },
+        { name: 'snap-c', path: '/path1/.snap/snap-c', created: '2024-01-03T00:00:00Z' }
+      ];
+      component.pathCheckpoints = [];
+
+      component.refreshSnapshotPanels();
+
+      expect(component.syncedSnapshotPanels).toEqual([]);
+      expect(component.currentSnapshotPanels.map((snapshot) => snapshot.name)).toEqual([
+        'snap-b',
+        'snap-c',
+        'snap-a'
+      ]);
+      expect(component.currentSnapshotPanels[0].status).toBe(MirroringSnapshotStatus.IN_PROGRESS);
+      expect(component.currentSnapshotPanels[1].status).toBe(MirroringSnapshotStatus.PENDING);
+      expect(component.currentSnapshotPanels[2].status).toBe(MirroringSnapshotStatus.PENDING);
+    });
+
+    it('should treat directory snapshots newer than last synced as pending', () => {
+      component.selectedPath = {
+        path: '/path1',
+        lastSyncedSnapshot: 'snap-b',
+        snapshots: [
+          {
+            name: 'snap-b',
+            status: MirroringSnapshotStatus.REPLICATED,
+            icon: 'success',
+            iconClass: 'success',
+            statusLabel: 'replicated.'
+          }
+        ]
+      } as any;
+      component.pathSnapshots = [
+        { name: 'snap-b', path: '/path1/.snap/snap-b', created: '2024-01-02T00:00:00Z' },
+        { name: 'snap-c', path: '/path1/.snap/snap-c', created: '2024-01-03T00:00:00Z' }
+      ];
+      component.pathCheckpoints = [];
+
+      component.refreshSnapshotPanels();
+
+      expect(component.currentSnapshotPanels.map((snapshot) => snapshot.name)).toEqual(['snap-c']);
+      expect(component.currentSnapshotPanels[0].status).toBe(MirroringSnapshotStatus.PENDING);
+      expect(component.syncedSnapshotPanels.map((snapshot) => snapshot.name)).toEqual(['snap-b']);
+    });
+
+    it('should list only the latest 15 already synced snapshots', () => {
+      const snapshots = Array.from({ length: 16 }, (_, index) => {
+        const day = String(index + 1).padStart(2, '0');
+        const name = `snap-${day}`;
+        return {
+          name,
+          path: `/path1/.snap/${name}`,
+          created: `2024-01-${day}T00:00:00Z`
+        };
+      });
+      component.selectedPath = {
+        path: '/path1',
+        lastSyncedSnapshot: 'snap-16',
+        snapshots: []
+      } as any;
+      component.pathSnapshots = snapshots;
+      component.pathCheckpoints = [];
+
+      component.refreshSnapshotPanels();
+
+      expect(component.syncedSnapshotTotal).toBe(16);
+      expect(component.syncedSnapshotPanels).toHaveLength(component.snapshotListLimit);
+      expect(component.syncedSnapshotPanels.map((snapshot) => snapshot.name)).toEqual(
+        Array.from({ length: 15 }, (_, index) => `snap-${String(16 - index).padStart(2, '0')}`)
+      );
+    });
+
+    it('should keep a checkpoint when the snapshot is no longer on the path', () => {
+      component.selectedPath = {
+        path: '/path1',
+        lastSyncedSnapshot: 'snap-b',
+        snapshots: []
+      } as any;
+      component.pathSnapshots = [];
+      component.pathCheckpoints = [
+        {
+          snap_id: 1,
+          snap_name: 'snap-a',
+          status: 'complete',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z'
+        }
+      ];
+
+      component.refreshSnapshotPanels();
+
+      expect(component.syncedSnapshotPanels.map((snapshot) => snapshot.name)).toEqual([
+        'snap-b',
+        'snap-a'
+      ]);
+      expect(component.syncedSnapshotPanels[1].hasCheckpoint).toBe(true);
     });
 
     it('should toggle snapshot expansion', () => {
@@ -708,16 +1023,42 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     });
 
     it('should mark snapshot as checkpoint', () => {
+      const modalService = TestBed.inject(ModalCdsService) as any;
       component.pathCheckpoints = [];
       component.refreshSnapshotPanels();
 
       component.markAsCheckpoint(component.snapshotPanels[0]);
+
+      expect(modalService.show).toHaveBeenCalledWith(
+        ConfirmationModalComponent,
+        expect.objectContaining({
+          onSubmit: expect.any(Function)
+        })
+      );
+      expect(cephfsService.addMirrorCheckpoint).not.toHaveBeenCalled();
+
+      modalService.show.mock.calls[0][1].onSubmit();
 
       expect(cephfsService.addMirrorCheckpoint).toHaveBeenCalledWith(
         'test-fs',
         '/path1',
         'snap-current'
       );
+    });
+
+    it('should stop the confirmation spinner when marking a checkpoint fails', () => {
+      const modalService = TestBed.inject(ModalCdsService) as any;
+      const modalRef = { stopLoadingSpinner: jest.fn() };
+      modalService.show.mockReturnValue(modalRef);
+      cephfsService.addMirrorCheckpoint.mockReturnValueOnce(throwError(() => new Error('failed')));
+      component.pathCheckpoints = [];
+      component.refreshSnapshotPanels();
+
+      component.markAsCheckpoint(component.snapshotPanels[0]);
+      modalService.show.mock.calls[0][1].onSubmit();
+
+      expect(modalRef.stopLoadingSpinner).toHaveBeenCalled();
+      expect(component.checkpointActionInProgress).toBe('');
     });
 
     it('should open remove checkpoint modal', () => {
@@ -733,7 +1074,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       ];
       component.refreshSnapshotPanels();
 
-      component.removeCheckpointModal(component.snapshotPanels[1]);
+      component.removeCheckpointModal(component.syncedSnapshotPanels[0]);
 
       expect(modalService.show).toHaveBeenCalled();
     });
@@ -1327,7 +1668,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
         const mockPath = {
           path: '/path1',
-          syncStatus: 'syncing' as const,
+          syncStatus: MirroringSyncStatus.SYNCING,
           currentSyncSnapshot: 'snap1',
           lastSyncedSnapshot: 'snap0'
         };

@@ -252,7 +252,7 @@ export class CephfsAddMirroringPathComponent implements OnInit {
   private closeTearsheet(reload: boolean): void {
     if (this.returnUrl) {
       this.router.navigateByUrl(this.returnUrl, {
-        state: reload ? { reload: true } : undefined
+        state: { fsId: this.fsId, fsName: this.fsName, ...(reload ? { reload: true } : {}) }
       });
       return;
     }
