@@ -52,10 +52,13 @@ public:
   /// Detach from the controller.
   seastar::future<> detach();
 
-  /// Allocate this shard's io queue pair and register the completion poller.
+  /// Take a reference on this shard's io queue pair, allocating it on first
+  /// use, and run its completion poller while referenced.
   void start_shard();
-  /// Free this shard's queue pair and poller.
+  /// Drop the reference; the queue pair is kept until detach().
   void stop_shard();
+
+  struct shard_qpair;
 
   /// errorator shared with BlockIODriver (errorator<input_output_error>).
   using io_ertr = crimson::errorator<crimson::ct_error::input_output_error>;
@@ -121,7 +124,7 @@ private:
   uint32_t nsid = 0;
 
   spdk_nvme_qpair* qpair = nullptr;
-  std::optional<seastar::reactor::poller> poller;
+  shard_qpair* shared = nullptr;
   std::optional<seastar::timer<seastar::lowres_clock>> admin_timer;
   unsigned owning_shard = 0;
 };
