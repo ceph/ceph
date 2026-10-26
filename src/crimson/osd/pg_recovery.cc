@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <utility>
+
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
@@ -572,6 +574,12 @@ void PGRecovery::request_primary_scan(
 PGRecovery::interruptible_future<OperationThrottler::ThrottleReleaser>
 PGRecovery::get_backfill_throttle()
 {
+  // The retry reservation belongs to the next backfill operation. Transfer
+  // it to a scan rather than waiting for another slot while holding this one.
+  if (auto reserved = std::exchange(budget_retry_releaser, std::nullopt)) {
+    return interruptor::make_ready_future<OperationThrottler::ThrottleReleaser>(
+      std::move(*reserved));
+  }
   return interruptor::make_interruptible(
     pg->get_shard_services().get_throttle(backfill_throttle_params));
 }
@@ -715,6 +723,11 @@ void PGRecovery::update_peers_last_backfill(
 
 bool PGRecovery::budget_available() const
 {
+  // the slot held by budget_retry_releaser is the budget for the operation
+  // being enqueued
+  if (budget_retry_releaser.has_value()) {
+    return true;
+  }
   auto &ss = pg->get_shard_services();
   return ss.throttle_available();
 }
