@@ -94,6 +94,32 @@ adapter constructs the database selection.
 
 `Database adapter excerpt in the PR docs <https://github.com/chardan/ceph/blob/jfw-datum/doc/dev/radosgw/datum/in-practice-assets/integration-listing.cpp.txt#L69-L100>`_.
 
+.. raw:: html
+
+   <details class="datum-explain"><summary>Run the key-range example</summary>
+
+The complete program applies the prefix and both markers to an array of names. It prints:
+
+.. code-block:: text
+
+   photos/30
+   photos/70
+
+:download:`Download the program <in-practice-assets/key-range-example.cc>` or
+`read it in the PR <https://github.com/chardan/ceph/blob/jfw-datum/doc/dev/radosgw/datum/in-practice-assets/key-range-example.cc>`_.
+From a Ceph checkout, use your C++26 compiler in place of ``c++`` below. The
+:doc:`build instructions <build-and-run>` describe the compiler requirements.
+
+.. code-block:: sh
+
+   c++ -std=c++26 -Isrc/rgw/datum/include \
+       doc/dev/radosgw/datum/in-practice-assets/key-range-example.cc -o /tmp/datum-key-range
+   /tmp/datum-key-range
+
+.. raw:: html
+
+   </details>
+
 Reading only the missing bytes
 ------------------------------
 

@@ -116,3 +116,27 @@
   #psst-wanna-buy-a-codec .stats { grid-template-columns: 1fr; gap: 14px; }
   #psst-wanna-buy-a-codec .stats strong { font-size: 30px; }
 }
+
+/* Optional runnable examples and implementation details stay closed initially. */
+#psst-wanna-buy-a-codec .datum-explain {
+  margin: 20px 0 28px;
+  padding: 14px 18px;
+  border: 1px solid #cadcca;
+  border-radius: 5px;
+  background: #f8faf6;
+}
+#psst-wanna-buy-a-codec .datum-explain > summary {
+  cursor: pointer;
+  color: #18625b;
+  font-weight: 600;
+}
+#psst-wanna-buy-a-codec .datum-explain[open] > summary { margin-bottom: 16px; }
+#psst-wanna-buy-a-codec .datum-explain > summary:focus-visible {
+  outline: 3px solid #b56c32;
+  outline-offset: 3px;
+}
+#psst-wanna-buy-a-codec .datum-explain pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}

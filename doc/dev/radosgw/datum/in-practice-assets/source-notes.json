@@ -168,5 +168,18 @@
     "reference": "dc7b747c37c466b46bfd90bd7b940b8cdf3c8478:src/librbd/cache/pwl/AbstractWriteLog.cc:740-775",
     "program": "cache-gap-example.cc",
     "expected_stdout": "read 0..15 (16 bytes)\nread 48..63 (16 bytes)\n"
+  },
+  "runnable_key_range": {
+    "program": "key-range-example.cc",
+    "inputs": [
+      "notes/01",
+      "photos/10",
+      "photos/30",
+      "photos/70",
+      "photos/90",
+      "videos/01"
+    ],
+    "scope": "Standalone byte-key illustration of the same logical names, prefix, and markers shown in the page.",
+    "expected_stdout": "photos/30\nphotos/70\n"
   }
 }
