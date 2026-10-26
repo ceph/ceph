@@ -18171,6 +18171,9 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   put_report("limits_raised", std::to_string(ir.limits_raised));
   put_report("anonymous", ir.anonymous_imported ? "true" : "false");
   put_report("anonymous_present", ir.anonymous_present ? "true" : "false");
+  put_report("roles", std::to_string(ir.roles_created));
+  put_report("role_rights", ir.role_rights);
+  put_report("role_policies", std::to_string(ir.role_policies_written));
   if (ret < 0) {
     put_report("ran", "partial");
     return ret;

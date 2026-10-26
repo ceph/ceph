@@ -80,6 +80,10 @@ struct ImportResult {
   size_t users_skipped{0};
   size_t identity_rows{0};
   size_t roles_created{0};
+  /* `rgw_nsfs_adoption_role_rights` as this run read it, and the roles
+   * it wrote `NooBaaRoleMigration` on */
+  std::string role_rights;
+  size_t role_policies_written{0};
   size_t grants_written{0};
   /* accounts created with a limit above RGW's default */
   size_t limits_raised{0};

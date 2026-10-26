@@ -12160,10 +12160,12 @@ TEST_F(NooBaaStoreTest, AnIamUserIsTheOneWithAnOwner)
   add_identity("b", R"({"_id":"b","name":"a-user","email":"u@x",
     "owner":"6ac7cb27fd4af356919110a3","creator":"6ac7cb27fd4af356919110a3",
     "iam_path":"/eng/"})");
+  /* role_config as NooBaa writes it at the pin:  the CLI's own example
+   * (`manage_nsfs_help_utils.js:148`), with this test's names */
   add_identity("c", R"({"_id":"c","name":"a-role",
-    "role_config":{"role_name":"r","assume_role_policy_document":{
-      "Version":"2012-10-17","Statement":[{"Effect":"Allow",
-      "Principal":{"AWS":["u@x"]},"Action":["sts:AssumeRole"]}]}}})");
+    "role_config":{"role_name":"r","assume_role_policy":{
+      "statement":[{"effect":"allow","action":["sts:AssumeRole"],
+      "principal":["u@x"]}]}}})");
 
   auto c = read_store();
   ASSERT_EQ(c.identities.size(), 3u);
@@ -14260,6 +14262,133 @@ TEST_F(NooBaaImportTest, AStoreOnDiskImports)
  * may do what, and nobody notices until an access decision goes the
  * wrong way.
  * ------------------------------------------------------------------ */
+
+/* A role NooBaa holds becomes an RGW role in its account (DECISIONS.md
+ * 2026-10-26).
+ *
+ * NooBaa's bytes for `ix-groups`, with one documented change:  the
+ * `role_config` that `account update --role_config` writes, in the CLI's
+ * own shape.  Its three statements are the three cases NooBaa 5.23's
+ * evaluation distinguishes (`sts_rest.js:195-232`):  `allow` for a
+ * named account, an `effect` other than `allow`, which NooBaa partitions
+ * with the denies, and an action that is not an AssumeRole, which never
+ * applies. */
+static std::string nb_role_account(const std::string& principal)
+{
+  std::string rec = NB_ACCOUNT_GROUPS;
+  const std::string from = R"("master_key_id")";
+  rec.replace(rec.find(from), from.size(),
+    R"("role_config": {"role_name": "nb-role", "assume_role_policy": {)"
+    R"("version": "2012-10-17", "statement": [)"
+    R"({"effect": "allow", "action": ["sts:*"], "principal": [")" +
+    principal + R"("]},)"
+    R"({"effect": "Allow", "action": ["sts:AssumeRole"], "principal": ["*"]},)"
+    R"({"effect": "allow", "action": ["s3:GetObject"], "principal": ["*"]})"
+    R"(]}}, "master_key_id")");
+  return rec;
+}
+
+/* The trust policy is NooBaa's, translated as it evaluates:  the named
+ * account's principal rewritten to its RGW account, the second statement
+ * a deny, and the third dropped.  Under the default the role carries
+ * NooBaaRoleMigration, which is 5.23's account rights. */
+TEST_F(NooBaaImportTest, ARoleIsAnRgwRoleWithItsTrustPolicyTranslated)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account("interchange").c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+  EXPECT_EQ(result.role_rights, "account");
+  EXPECT_EQ(result.role_policies_written, 1u);
+
+  const auto* holder = entry("ix-groups");
+  const auto* named = entry("interchange");
+  ASSERT_NE(holder, nullptr);
+  ASSERT_NE(named, nullptr);
+  auto role = driver->get_role("nb-role", holder->tenant,
+			       rgw_account_id{holder->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0)
+      << "the role is not in its account";
+  const auto& info = role->get_info();
+  /* what IAM CreateRole gives a role, and what a client is handed as
+   * the ARN to assume after adoption */
+  EXPECT_EQ(info.arn, "arn:aws:iam::" + holder->account_id + ":role/nb-role");
+  EXPECT_FALSE(info.id.empty()) << "the role has no id";
+  EXPECT_FALSE(info.creation_date.empty()) << "the role has no creation date";
+  EXPECT_EQ(info.max_session_duration, 3600u);
+
+  JSONParser p;
+  ASSERT_TRUE(p.parse(info.trust_policy.data(), info.trust_policy.size()))
+      << info.trust_policy;
+  std::vector<std::string> effects, principals;
+  JSONObj* stmts = p.find_obj("Statement");
+  ASSERT_NE(stmts, nullptr) << info.trust_policy;
+  for (auto i = stmts->find_first(); !i.end(); ++i) {
+    std::string effect, action;
+    std::vector<std::string> aws;
+    JSONDecoder::decode_json("Effect", effect, *i);
+    JSONDecoder::decode_json("Action", action, *i);
+    JSONDecoder::decode_json("AWS", aws, (*i)->find_obj("Principal"));
+    EXPECT_EQ(action, "sts:AssumeRole") << info.trust_policy;
+    effects.push_back(effect);
+    principals.insert(principals.end(), aws.begin(), aws.end());
+  }
+  EXPECT_EQ(effects, (std::vector<std::string>{"Allow", "Deny"}))
+      << info.trust_policy;
+  EXPECT_EQ(principals,
+	    (std::vector<std::string>{named->account_id, "*"}))
+      << "the named account's principal is not its RGW account: "
+      << info.trust_policy;
+
+  ASSERT_EQ(info.perm_policy_map.count("NooBaaRoleMigration"), 1u);
+  EXPECT_NE(info.perm_policy_map.at("NooBaaRoleMigration").find(
+	      R"("Action":"s3:*","Resource":"*")"), std::string::npos);
+}
+
+/* `rgw_nsfs_adoption_role_rights=none` imports the role as NooBaa 6
+ * migrates one:  the same trust policy, and no permission policy. */
+TEST_F(NooBaaImportTest, RoleRightsNoneImportsTheRoleWithNoPolicy)
+{
+  g_conf().set_val("rgw_nsfs_adoption_role_rights", "none");
+  auto reset = make_scope_guard([] {
+    g_conf().set_val("rgw_nsfs_adoption_role_rights", "account");
+  });
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account("interchange").c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+  EXPECT_EQ(result.role_rights, "none");
+  EXPECT_EQ(result.role_policies_written, 0u);
+
+  const auto* holder = entry("ix-groups");
+  ASSERT_NE(holder, nullptr);
+  auto role = driver->get_role("nb-role", holder->tenant,
+			       rgw_account_id{holder->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0);
+  EXPECT_TRUE(role->get_info().perm_policy_map.empty());
+  EXPECT_FALSE(role->get_info().trust_policy.empty());
+}
+
+/* A principal that resolves to nothing fails the role rather than being
+ * dropped:  dropped, an allow would stop admitting the account it named,
+ * and a deny would stop refusing it. */
+TEST_F(NooBaaImportTest, ARolePrincipalThatResolvesToNothingFailsTheRole)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0", nb_role_account("nobody").c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  EXPECT_LT(run(), 0);
+  EXPECT_EQ(result.roles_created, 0u);
+  EXPECT_NE(why().find("resolve to nothing: nobody"), std::string::npos)
+      << why();
+}
 
 class NooBaaPolicyTest : public ::testing::Test {
 public:

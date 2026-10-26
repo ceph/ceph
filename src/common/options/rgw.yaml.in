@@ -4723,6 +4723,26 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_nsfs_adoption_role_rights
+  type: str
+  level: advanced
+  desc: What a role imported from NooBaa may do
+  long_desc: Meaningful only when rgw_nsfs_noobaa_config_root names a NooBaa
+    configuration store.  At NooBaa 5.23 a role is an account's role_config,
+    and a session of it acts with all of that account's rights.  "account"
+    (default) keeps that -- the import writes the inline role policy
+    NooBaaRoleMigration, allowing s3:* on *, on each role it creates, and
+    reports how many carry it.  "none" imports the role with no permission
+    policy, as NooBaa 6 migrates one;  a session can then do only what
+    bucket policies grant until an operator attaches a policy.  Read when a
+    role is imported;  changing it later changes no imported role.
+  default: account
+  enum_values:
+  - account
+  - none
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_nsfs_noobaa_config_root
   type: str
   level: advanced

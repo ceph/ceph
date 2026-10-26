@@ -13,7 +13,13 @@
  *
  */
 
+#include <algorithm>
 #include <map>
+#include <tuple>
+
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 
 #include "common/ceph_json.h"
 #include "common/errno.h"
@@ -26,6 +32,7 @@
 #include "driver/rados/rgw_user.h"
 
 #include "../rgw_sal_nsfs.h"
+#include "noobaa_bucket_import.h"
 #include "noobaa_import.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -33,6 +40,94 @@
 namespace rgw { namespace sal { namespace nsfs {
 
 namespace {
+
+/* The inline policy `rgw_nsfs_adoption_role_rights=account` writes on
+ * an imported role (DECISIONS.md 2026-10-26).  At NooBaa 5.23 a role
+ * session acts with all of its account's rights;  in RGW an identity
+ * allow on `*` gives the account's own buckets, and another account's
+ * still needs that bucket's policy, as the account's own rights do. */
+constexpr const char* ROLE_MIGRATION_POLICY_NAME = "NooBaaRoleMigration";
+constexpr const char* ROLE_MIGRATION_POLICY =
+  R"({"Version":"2012-10-17","Statement":[{"Effect":"Allow",)"
+  R"("Action":"s3:*","Resource":"*"}]})";
+
+/* NooBaa's `assume_role_policy` as an RGW trust policy, principals
+ * still NooBaa's.
+ *
+ * Translated to evaluate as NooBaa 5.23 evaluates it
+ * (`sts_rest.js:195-232`), which is the only place it is read, and only
+ * for AssumeRole:  `effect` is `allow` or, for any other value, deny;  a
+ * statement applies when an action is `*`, `sts:*` or `sts:AssumeRole`,
+ * so one that applies becomes `sts:AssumeRole` and one that does not is
+ * dropped -- copying `*` would also admit AssumeRoleWithWebIdentity,
+ * which `role_config` never governed;  a principal is an email or `*`.
+ * A policy left with no statement admits no one, as NooBaa's does, and
+ * is written as an explicit deny so that it still parses.
+ *
+ * Returns 0, or -EBADMSG with `why`. */
+int trust_policy_from(JSONObj* policy, std::string& out, std::string& why)
+{
+  std::string version;
+  std::vector<std::tuple<bool, std::vector<std::string>>> applied;
+  try {
+    JSONDecoder::decode_json("version", version, policy);
+    JSONObj* stmts = policy->find_obj("statement");
+    if (!stmts || !stmts->is_array()) {
+      why = "assume_role_policy has no statement array";
+      return -EBADMSG;
+    }
+    for (auto i = stmts->find_first(); !i.end(); ++i) {
+      std::string effect;
+      std::vector<std::string> actions, principals;
+      JSONDecoder::decode_json("effect", effect, *i);
+      JSONDecoder::decode_json("action", actions, *i);
+      JSONDecoder::decode_json("principal", principals, *i);
+      const bool assume = std::any_of(
+	actions.begin(), actions.end(), [](const std::string& a) {
+	  return (a == "*") || (a == "sts:*") || (a == "sts:AssumeRole");
+	});
+      if (!assume) {
+	continue;
+      }
+      applied.emplace_back(effect == "allow", std::move(principals));
+    }
+  } catch (const JSONDecoder::err& e) {
+    why = std::string("assume_role_policy: ") + e.what();
+    return -EBADMSG;
+  }
+  if (applied.empty()) {
+    applied.emplace_back(false, std::vector<std::string>{"*"});
+  }
+
+  rapidjson::StringBuffer buf;
+  rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+  w.StartObject();
+  w.Key("Version");
+  w.String(version.empty() ? "2012-10-17" : version.c_str());
+  w.Key("Statement");
+  w.StartArray();
+  for (const auto& [allow, principals] : applied) {
+    w.StartObject();
+    w.Key("Effect");
+    w.String(allow ? "Allow" : "Deny");
+    w.Key("Action");
+    w.String("sts:AssumeRole");
+    w.Key("Principal");
+    w.StartObject();
+    w.Key("AWS");
+    w.StartArray();
+    for (const auto& p : principals) {
+      w.String(p.c_str());
+    }
+    w.EndArray();
+    w.EndObject();
+    w.EndObject();
+  }
+  w.EndArray();
+  w.EndObject();
+  out.assign(buf.GetString(), buf.GetSize());
+  return 0;
+}
 
 const NooBaaIdentity* find_source(const NooBaaStoreContents& contents,
 				  const std::string& noobaa_id)
@@ -464,6 +559,18 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 
   /* ---- pass two:  the policies that need the finished mapping ---- */
 
+  /* The principals a role's trust policy may name:  identities this run
+   * wrote or found already written.  One the plan holds and this run did
+   * not write would map to an account that does not exist. */
+  ImportPlan written = plan;
+  std::erase_if(written.entries, [&](const ImportEntry& w) {
+    return !owner_by_noobaa_id.contains(w.noobaa_id);
+  });
+  const IdentityMapping mapping = mapping_from(written);
+
+  result.role_rights = driver->ctx()->_conf.get_val<std::string>(
+    "rgw_nsfs_adoption_role_rights");
+
   for (const auto& e : plan.entries) {
     const NooBaaIdentity* src = find_source(contents, e.noobaa_id);
     if (!src || src->role_config.empty()) {
@@ -477,9 +584,12 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     }
 
     /* NooBaa's `role_config` carries a role name and an assume-role
-     * policy document.  The document's principals name identities by
-     * the NooBaa email, which is the name -- so the mapping is what makes
-     * it resolvable, and that is why this is a second pass. */
+     * policy (`{role_name, assume_role_policy}` at the pin).  Its
+     * principals name identities by the NooBaa email, which is a copy of
+     * the name -- so the mapping is what makes it resolvable, and that
+     * is why this is a second pass.  The role becomes an RGW role in the
+     * account, assumed by RGW's account-id ARN rather than NooBaa's
+     * access-key one (DECISIONS.md 2026-10-26). */
     JSONParser p;
     if (!p.parse(src->role_config.data(), src->role_config.size())) {
       fail(e.noobaa_name, "role_config is not JSON");
@@ -497,9 +607,28 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
 
-    JSONObj* doc = p.find_obj("assume_role_policy_document");
-    if (!doc) {
-      fail(e.noobaa_name, "role_config has no assume_role_policy_document");
+    JSONObj* arp = p.find_obj("assume_role_policy");
+    if (!arp) {
+      fail(e.noobaa_name, "role_config has no assume_role_policy");
+      continue;
+    }
+    std::string trust, why;
+    if (trust_policy_from(arp, trust, why) < 0) {
+      fail(e.noobaa_name, why);
+      continue;
+    }
+    std::string rewritten;
+    std::vector<std::string> unresolved;
+    if (int r = rewrite_policy_principals(dpp, trust, mapping, rewritten,
+					  unresolved); r < 0) {
+      std::string names;
+      for (const auto& u : unresolved) {
+	names += (names.empty() ? "" : ", ") + u;
+      }
+      fail(e.noobaa_name, (r == -ENOENT)
+	   ? "the trust policy names principals that resolve to nothing: " +
+	     names
+	   : "the trust policy will not translate: " + cpp_strerror(-r));
       continue;
     }
 
@@ -508,24 +637,32 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     ri.path = "/";
     ri.account_id = e.account_id;
     ri.tenant = e.tenant;
-    /* The document as NooBaa's record holds it.  Rewriting its
-     * principals through the mapping is §4.4's and belongs with the
-     * bucket-policy rewriting in I5, which is where that code will
-     * live;  carried verbatim here so nothing is lost. */
-    ri.trust_policy = doc->get_data();
+    ri.trust_policy = std::move(rewritten);
+    /* NooBaa 5.23 has no per-role duration;  RGW's CreateRole default,
+     * which is also the one NooBaa 6's migration gives */
+    ri.max_session_duration = RGWRole::SESSION_DURATION_MIN;
+    const bool with_rights = (result.role_rights == "account");
+    if (with_rights) {
+      ri.perm_policy_map[ROLE_MIGRATION_POLICY_NAME] = ROLE_MIGRATION_POLICY;
+    }
 
     std::unique_ptr<RGWRole> role = driver->get_role(ri);
-    constexpr bool exclusive = true;
-    int ret = role->store_info(dpp, exclusive, y);
+    /* create(), as IAM CreateRole does:  it gives the role its id, its
+     * creation date and the ARN clients assume it by, and stores it
+     * exclusively */
+    int ret = role->create(dpp, "", y);
     if (ret == -EEXIST) {
       /* a re-run meeting its own output */
       continue;
     }
     if (ret < 0) {
-      fail(e.noobaa_name, std::string("store_info: ") + cpp_strerror(-ret));
+      fail(e.noobaa_name, std::string("create: ") + cpp_strerror(-ret));
       continue;
     }
     ++result.roles_created;
+    if (with_rights) {
+      ++result.role_policies_written;
+    }
   }
 
   ldpp_dout(dpp, 4) << "nsfs: imported " << result.accounts_created
