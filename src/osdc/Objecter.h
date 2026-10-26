@@ -2640,6 +2640,8 @@ public:
 
   ceph::timespan mon_timeout;
   ceph::timespan osd_timeout;
+  /// crimson_objecter_shard_routing; changed at runtime by handle_conf_change()
+  std::atomic<bool> shard_routing{false};
 
   uint64_t min_split_replica_read_size;
 
