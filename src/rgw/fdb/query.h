@@ -18,6 +18,7 @@
 
 #include "common/container_concepts.h"
 #include "interval.h"
+#include "fdb_errors.h"
 
 #include <string>
 #include <vector>
@@ -134,7 +135,7 @@ constexpr std::string successor(const std::string_view prefix)
   return std::move(*upper);
  }
 
- throw libfdb_exception("requested prefix has no finite successor");
+ throw libfdb_exception(std::errc::invalid_argument, "requested prefix has no finite successor");
 }
 
 struct interval_bound final
@@ -424,7 +425,8 @@ constexpr query_options combined_options(const LHS_T& lhs, const RHS_T& rhs)
   return right;
  }
 
- throw std::invalid_argument("conflicting query options; configure operands consistently");
+ throw libfdb_exception(std::errc::invalid_argument,
+   "conflicting query options; configure operands consistently");
 }
 
 template <expression ExprT>
@@ -687,7 +689,11 @@ constexpr auto compile_intervals(const ExprT& expr)
  core::static_interval_set<byte_string_domain, Capacity, interval> out {empty()};
 
  for_each_interval(expr, [&out](interval x) {
-  ceph::util::emplace_append(out, std::move(x));
+  try {
+   ceph::util::emplace_append(out, std::move(x));
+  } catch (const std::length_error& error) {
+   throw libfdb_exception(std::errc::value_too_large, error.what());
+  }
  });
 
  return out;

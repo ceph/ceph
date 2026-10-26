@@ -232,7 +232,7 @@ struct result_access final
                            const read_mode mode)
  {
   if (not cursor) {
-   throw std::invalid_argument("cannot read from an exhausted scan cursor");
+   throw libfdb_exception(std::errc::invalid_argument, "cannot read from an exhausted scan cursor");
   }
 
   return ::ceph::libfdb::detail::get_range_future_from_transaction(

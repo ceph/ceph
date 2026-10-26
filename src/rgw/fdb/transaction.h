@@ -31,7 +31,6 @@
 #include <exception>
 #include <functional>
 #include <memory>
-#include <stdexcept>
 #include <type_traits>
 #include <utility>
 
@@ -333,7 +332,7 @@ void validate_staged_arguments(const ArgTs& ...arguments)
   };
 
   if (std::ranges::adjacent_find(addresses, same_target) != std::ranges::end(addresses)) {
-   throw std::invalid_argument("cannot stage one target more than once");
+   throw libfdb_exception(std::errc::invalid_argument, "cannot stage one target more than once");
   }
  }
 }
@@ -480,7 +479,7 @@ class transaction_source final
  -> std::expected<void, std::error_code>
 {
  if (not txn or not *txn) {
-  throw std::invalid_argument("commit() requires a transaction");
+  throw libfdb_exception(std::errc::invalid_argument, "commit() requires a transaction");
  }
 
  return txn->commit(with_result);
@@ -497,7 +496,7 @@ inline void commit(const transaction_handle& txn)
  -> std::expected<void, std::error_code>
 {
  if (not txn or not *txn) {
-  throw std::invalid_argument("commit() requires a transaction");
+  throw libfdb_exception(std::errc::invalid_argument, "commit() requires a transaction");
  }
 
  txn->mark_version(stamp);

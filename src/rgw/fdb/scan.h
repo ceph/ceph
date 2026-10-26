@@ -558,10 +558,8 @@ inline select select_from_initializer_list(
   return select(*first, *std::next(first));
  }
 
- // You might except that std::invalid_argument should be thrown... and you would
- // be correct. However, we also don't want to make callers catch a zillion different
- // exceptions:
- throw libfdb_exception("range selection initializer list requires one or two keys");
+ throw libfdb_exception(std::errc::invalid_argument,
+   "range selection initializer list requires one or two keys");
 }
 
 template <typename OutT>
@@ -845,7 +843,7 @@ struct page final
   : size(size_)
  {
   if (max_size < size) {
-   throw libfdb_exception("page size exceeds FoundationDB range limit");
+   throw libfdb_exception(std::errc::value_too_large, "page size exceeds FoundationDB range limit");
   }
  }
 
@@ -1050,11 +1048,11 @@ requires std::ranges::range<ResultT> and
                                  SelectionT selection, const std::int64_t target_bytes)
 {
  if (0 >= target_bytes) {
-  throw std::invalid_argument("partition target byte size must be positive");
+  throw libfdb_exception(std::errc::invalid_argument, "partition target byte size must be positive");
  }
 
  if (not txn or not *txn) {
-  throw std::invalid_argument("invalid FoundationDB transaction");
+  throw libfdb_exception(std::errc::invalid_argument, "invalid FoundationDB transaction");
  }
 
  return std::ranges::to<ResultT>(detail::plan_partitions(txn, std::move(selection), target_bytes));
@@ -1072,7 +1070,7 @@ requires std::ranges::range<ResultT> and
                                  SelectionT selection, const std::int64_t target_bytes)
 {
  if (0 >= target_bytes) {
-  throw std::invalid_argument("partition target byte size must be positive");
+  throw libfdb_exception(std::errc::invalid_argument, "partition target byte size must be positive");
  }
 
  auto planned = detail::in_read_transaction(

@@ -496,7 +496,7 @@ TEST_CASE("Native replay preparation is lazy and preserves typed errors", "[fdb]
  }
  SECTION("non-native categories cannot reset transaction state") {
   auto prepare = lfdbx::reset_for_replay(txn, std::error_code(1020, std::generic_category()));
-  CHECK_THROWS_AS(lfdbx::wait(std::move(prepare), null_yield), std::invalid_argument);
+  CHECK_THROWS_AS(lfdbx::wait(std::move(prepare), null_yield), lfdb::libfdb_exception);
   CHECK_FALSE(stamp.is_ready());
   CHECK(lfdb::key_exists(txn, key));
  }
@@ -644,7 +644,7 @@ TEST_CASE("Experimental metadata validates on initiation and preserves errors",
 {
  namespace lq = lfdb::query;
  const auto invalid = [](auto operation) {
-  CHECK_THROWS_AS(lfdbx::wait(std::move(operation), null_yield), std::invalid_argument);
+  CHECK_THROWS_AS(lfdbx::wait(std::move(operation), null_yield), lfdb::libfdb_exception);
  };
  invalid(lfdbx::read_version({}));
  invalid(lfdbx::approximate_commit_bytes({}));

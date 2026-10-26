@@ -85,7 +85,8 @@ managed replay is needed.
 `commit()` submits once without retry preparation. Ordinary commit has no success
 payload and reports native failures through the existing error channel. Tagged
 commit returns every native operational failure as an error value. Local failures
-and contract violations retain the error channel. Both forms eagerly complete
+and contract violations retain the error channel and use `libfdb_exception`. Both
+forms eagerly complete
 requested version stamps independently: stamp failure after a confirmed commit
 does not change successful commit disposition.
 

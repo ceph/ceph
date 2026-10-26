@@ -43,7 +43,6 @@
 #include <functional>
 #include <initializer_list>
 #include <memory>
-#include <stdexcept>
 #include <stop_token>
 #include <type_traits>
 #include <utility>
@@ -208,7 +207,7 @@ concept decoded_value_sink =
 } // namespace ceph::libfdb::concepts
 
 // libfdb_exception represents libfdb operation failures.
-// Caller contract errors use standard exceptions such as std::invalid_argument.
+// Library-generated contract failures use this type too; application exceptions retain their type.
 namespace ceph::libfdb {
 
 /* FoundationDB key selectors navigate among stored keys. Prefer the named
@@ -325,7 +324,7 @@ struct future_value final
    return future;
   }
 
-  throw std::invalid_argument("invalid FDB pointer");
+  throw libfdb_exception(std::errc::invalid_argument, "invalid FDB pointer");
  }
 
 };
@@ -465,7 +464,7 @@ struct versionstamp final
   -> std::expected<std::span<const std::uint8_t, 10>, std::error_code>
  {
   if (not is_ready()) {
-   throw std::invalid_argument("attempt to access unresolved version stamp");
+   throw libfdb_exception(std::errc::invalid_argument, "attempt to access unresolved version stamp");
   }
 
   if (const auto *error = std::get_if<std::error_code>(&result->value)) {
@@ -562,7 +561,7 @@ inline std::vector<std::uint8_t> make_versioned_encoding(std::string_view prefix
  std::ranges::copy(prefix, std::back_inserter(out));
 
  if (not std::in_range<std::uint32_t>(std::size(out))) {
-  throw std::invalid_argument("version-stamped prefix is too large");
+  throw libfdb_exception(std::errc::invalid_argument, "version-stamped prefix is too large");
  }
 
  const auto versionstamp_offset = static_cast<std::uint32_t>(std::size(out));
@@ -597,11 +596,12 @@ versioned_bytes versioned(const PrefixT& prefix, versionstamp stamp)
 inline void versionstamp::store_result(const std::span<const std::uint8_t> versionstamp_result)
 {
  if (not result or nullptr != result->owner or (is_ready() and not has_value())) {
-  throw std::invalid_argument("attempt to overwrite registered or failed version stamp output");
+  throw libfdb_exception(std::errc::invalid_argument,
+    "attempt to overwrite registered or failed version stamp output");
  }
 
  if (versionstamp_result.size() != std::tuple_size_v<versionstamp_data_t>) {
-  throw std::invalid_argument("invalid version stamp size");
+  throw libfdb_exception(std::errc::invalid_argument, "invalid version stamp size");
  }
 
  versionstamp_data_t result_value;
@@ -613,7 +613,7 @@ inline void versionstamp::store_result(const std::span<const std::uint8_t> versi
  }
 
  if (std::get<versionstamp_data_t>(result->value) != result_value) {
-  throw std::invalid_argument("attempt to overwrite resolved version stamp");
+  throw libfdb_exception(std::errc::invalid_argument, "attempt to overwrite resolved version stamp");
  }
 }
 
@@ -711,7 +711,7 @@ class option_list final
    const auto count = std::ranges::size(values);
 
    if (count > entries.max_size() - entries.size()) {
-    throw std::length_error("too many option entries");
+    throw libfdb_exception(std::errc::value_too_large, "too many option entries");
    }
 
    entries.reserve(entries.size() + count);
@@ -772,7 +772,8 @@ struct connection_source final
     value(path.string())
  {
   if (std::empty(value)) {
-   throw std::invalid_argument("connection_source requires non-empty cluster file path");
+   throw libfdb_exception(std::errc::invalid_argument,
+     "connection_source requires non-empty cluster file path");
   }
  }
 
@@ -781,7 +782,8 @@ struct connection_source final
     value(std::move(value_))
  {
   if (std::empty(value)) {
-   throw std::invalid_argument("connection_source requires non-empty connection string");
+   throw libfdb_exception(std::errc::invalid_argument,
+     "connection_source requires non-empty connection string");
   }
  }
 
@@ -804,7 +806,7 @@ namespace detail {
 constexpr int checked_fdb_size(const std::size_t size)
 {
  if (not std::in_range<int>(size)) {
-  throw libfdb_exception("value is too large for the FoundationDB C API");
+  throw libfdb_exception(std::errc::value_too_large, "value is too large for the FoundationDB C API");
  }
 
  return static_cast<int>(size);
@@ -1209,7 +1211,7 @@ namespace detail {
   return *dbh;
  }
 
- throw std::invalid_argument("invalid database handle");
+ throw libfdb_exception(std::errc::invalid_argument, "invalid database handle");
 }
 
 } // namespace detail
@@ -1229,7 +1231,7 @@ class transaction final
  static database_handle require_database(database_handle dbh)
  {
   if (not dbh) {
-   throw std::invalid_argument("transaction requires a database handle");
+   throw libfdb_exception(std::errc::invalid_argument, "transaction requires a database handle");
   }
 
   return dbh;
@@ -1239,14 +1241,16 @@ class transaction final
  void require_active(const std::string_view operation) const
  {
   if (state_t::active != state || nullptr == raw_handle()) {
-   throw std::invalid_argument(fmt::format("{} requires active transaction", operation));
+   throw libfdb_exception(std::errc::invalid_argument,
+     fmt::format("{} requires active transaction", operation));
   }
  }
 
  void require_committed(const std::string_view operation) const
  {
   if (state_t::committed != state || nullptr == raw_handle()) {
-   throw std::invalid_argument(fmt::format("{} requires committed transaction", operation));
+   throw libfdb_exception(std::errc::invalid_argument,
+     fmt::format("{} requires committed transaction", operation));
   }
  }
 
@@ -1279,7 +1283,8 @@ class transaction final
  detail::future_value reset_for_replay(const fdb_error_t error)
  {
   if (state_t::committed == state or nullptr == raw_handle()) {
-   throw std::invalid_argument("reset_for_replay() requires an uncommitted transaction");
+   throw libfdb_exception(std::errc::invalid_argument,
+     "reset_for_replay() requires an uncommitted transaction");
   }
 
   finish_version_stamps(std::error_code(error, ::ceph::libfdb::fdb_error_category()));
@@ -1349,12 +1354,12 @@ class transaction final
   require_active("version stamp registration");
 
   if (not stamp.result or stamp.has_value()) {
-   throw std::invalid_argument("attempt to reuse resolved version stamp");
+   throw libfdb_exception(std::errc::invalid_argument, "attempt to reuse resolved version stamp");
   }
 
   if (nullptr != stamp.result->owner) {
    if (this != stamp.result->owner) {
-    throw std::invalid_argument("version stamp belongs to another transaction");
+    throw libfdb_exception(std::errc::invalid_argument, "version stamp belongs to another transaction");
    }
 
    return;
@@ -1424,7 +1429,7 @@ class transaction final
   const auto half_open_range = detail::as_half_open_select(key_range);
 
   if (not (half_open_range.begin_key < half_open_range.end_key)) {
-   throw std::invalid_argument("conflict range must be non-empty");
+   throw libfdb_exception(std::errc::invalid_argument, "conflict range must be non-empty");
   }
 
   if (FDB_CONFLICT_RANGE_TYPE_READ == type) {
@@ -1512,7 +1517,8 @@ class transaction final
   }
 
   if (0 > version) {
-   throw std::invalid_argument("committed_version() requires a committed transaction");
+   throw libfdb_exception(std::errc::invalid_argument,
+     "committed_version() requires a committed transaction");
   }
 
   return version;
@@ -1810,7 +1816,8 @@ inline future_value transaction_get_key(const transaction_handle& txn,
                                                              const std::error_code error)
 {
  if (not txn or not *txn or not error or error.category() != ::ceph::libfdb::fdb_error_category()) {
-  throw std::invalid_argument("reset_for_replay() requires a transaction and nonzero native error");
+  throw libfdb_exception(std::errc::invalid_argument,
+    "reset_for_replay() requires a transaction and nonzero native error");
  }
 
  return txn->reset_for_replay(error.value());

@@ -48,7 +48,7 @@ catch (...)
 inline void validate_transaction(const transaction_handle& txn)
 {
  if (not txn or not *txn) {
-  throw std::invalid_argument("invalid FoundationDB transaction");
+  throw libfdb_exception(std::errc::invalid_argument, "invalid FoundationDB transaction");
  }
 }
 
@@ -214,7 +214,7 @@ struct partition_request final : future_request
  void start(state_type& state)
  {
   if (0 >= target_bytes) {
-   throw std::invalid_argument("partition target byte size must be positive");
+   throw libfdb_exception(std::errc::invalid_argument, "partition target byte size must be positive");
   }
 
   validate_transaction(txn);
@@ -281,7 +281,7 @@ struct point_request final : future_request
   const auto bytes = ::ceph::libfdb::detail::as_byte_view(std::string_view {key});
 
   if (not std::in_range<int>(std::size(bytes))) {
-   throw std::length_error("FoundationDB key is too large");
+   throw libfdb_exception(std::errc::value_too_large, "FoundationDB key is too large");
   }
 
   state.emplace(fdb_transaction_get(

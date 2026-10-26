@@ -486,7 +486,7 @@ template <fdb_integer_value ValueT>
 constexpr auto little_endian_integer(const std::span<const std::uint8_t> bytes)
 {
  if (sizeof(ValueT) < std::size(bytes)) {
-  throw std::invalid_argument {"FoundationDB integer value is too large"};
+  throw libfdb_exception {std::errc::invalid_argument, "FoundationDB integer value is too large"};
  }
 
  using unsigned_t = std::make_unsigned_t<ValueT>;
@@ -931,7 +931,7 @@ inline void mark_conflict(transaction_handle txn,
  });
 
  if (not marked) {
-  throw std::invalid_argument(
+  throw libfdb_exception(std::errc::invalid_argument,
     "conflict expression must contain a non-empty range");
  }
 }

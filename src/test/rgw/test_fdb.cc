@@ -528,6 +528,34 @@ TEST_CASE("error codes retain categories, context, and native values", "[fdb][er
  }
 }
 
+TEST_CASE("library generated failures share an exception type with useful codes", "[fdb][errors]")
+{
+ const auto verify = [](auto&& operation, const std::errc code, const std::string_view context) {
+  try {
+   std::invoke(operation);
+   FAIL("expected a library-generated error");
+  } catch (const lfdb::libfdb_exception& error) {
+   CHECK(error.code() == code);
+   CHECK(error.code().category() == std::generic_category());
+   CHECK_FALSE(error.retryable());
+   CHECK_THAT(error.what(), Catch::Matchers::ContainsSubstring(std::string(context)));
+  }
+ };
+ verify([] { std::ignore = lfdb::commit(lfdb::with_result, {}); },
+        std::errc::invalid_argument, "requires a transaction");
+ verify([] { std::ignore = lfdb::connection_source {std::filesystem::path {}}; },
+        std::errc::invalid_argument, "non-empty cluster file path");
+ verify([] { lfdb::versionstamp stamp; std::ignore = stamp.resolved_bytes(); },
+        std::errc::invalid_argument, "unresolved version stamp");
+ verify([] { std::ignore = content::key(""); },
+        std::errc::invalid_argument, "keyspace root");
+ verify([] { std::ignore = lfdb::query::compile_intervals<0>(lfdb::query::singleton("a")); },
+        std::errc::value_too_large, "capacity exceeded");
+ const lfdb::libfdb_exception local {std::errc::invalid_argument, "local context"sv};
+ CHECK(local.code() == std::errc::invalid_argument);
+ CHECK_THAT(local.what(), Catch::Matchers::ContainsSubstring("local context"));
+}
+
 TEST_CASE("error predicates classify only native category codes", "[fdb][errors]")
 {
  const auto value = GENERATE(0, 1020, 1021, 1101, 2000, 9999);
@@ -645,7 +673,7 @@ TEST_CASE("returned serializer failures retain their standard codes", "[fdb][err
 
 TEST_CASE("thrown serializer exceptions retain their identity", "[fdb][errors][conversion]")
 {
- const auto source = GENERATE(0, 1, 2, 3);
+ const auto source = GENERATE(0, 1, 2, 3, 4);
  if (0 == source) {
   thrown_serialization_failure::cause =
    std::make_exception_ptr(std::runtime_error("serializer sentinel"));
@@ -661,6 +689,10 @@ TEST_CASE("thrown serializer exceptions retain their identity", "[fdb][errors][c
  if (3 == source) {
   thrown_serialization_failure::cause =
    std::make_exception_ptr(lfdb::libfdb_exception("local serializer sentinel"));
+ }
+ if (4 == source) {
+  thrown_serialization_failure::cause =
+   std::make_exception_ptr(std::invalid_argument("application validation sentinel"));
  }
  thrown_serialization_failure::calls = 0;
  const std::array<std::uint8_t, 1> bytes {0};
@@ -898,9 +930,9 @@ TEST_CASE("version stamps", "[fdb]") {
 
   CHECK_FALSE(stamp.has_value());
   CHECK_FALSE(stamp.is_ready());
-  CHECK_THROWS_AS(stamp.resolved_bytes(lfdb::with_result), std::invalid_argument);
+  CHECK_THROWS_AS(stamp.resolved_bytes(lfdb::with_result), lfdb::libfdb_exception);
   CHECK_THROWS_MATCHES(stamp.resolved_bytes(),
-                       std::invalid_argument,
+                       lfdb::libfdb_exception,
                        Catch::Matchers::MessageMatches(
                         Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp")));
  }
@@ -910,7 +942,7 @@ TEST_CASE("version stamps", "[fdb]") {
   const std::array<std::uint8_t, 1> invalid_stamp_bytes {};
 
   CHECK_THROWS_AS(lfdb::from::convert(std::span(invalid_stamp_bytes), stamp),
-                  std::invalid_argument);
+                  lfdb::libfdb_exception);
  }
 
  SECTION("moved-from stamps remain safely queryable") {
@@ -919,10 +951,10 @@ TEST_CASE("version stamps", "[fdb]") {
   CHECK_FALSE(stamp.is_ready());
   CHECK_FALSE(stamp.has_value());
   CHECK_FALSE(moved.is_ready());
-  CHECK_THROWS_AS(stamp.resolved_bytes(), std::invalid_argument);
+  CHECK_THROWS_AS(stamp.resolved_bytes(), lfdb::libfdb_exception);
   auto txn = lfdb::make_transaction(dbh);
   CHECK_THROWS_AS(lfdb::set(txn, test_key("versionstamp/moved"), lfdb::versioned("", stamp)),
-                  std::invalid_argument);
+                  lfdb::libfdb_exception);
  }
 
  SECTION("parsing identical bytes preserves borrowed storage") {
@@ -932,7 +964,7 @@ TEST_CASE("version stamps", "[fdb]") {
   lfdb::from::convert(std::span(bytes), stamp);
   CHECK(original == &stamp.resolved_bytes());
   const auto other = stamp_data(2);
-  CHECK_THROWS_AS(lfdb::from::convert(std::span(other), stamp), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::from::convert(std::span(other), stamp), lfdb::libfdb_exception);
   CHECK(bytes == stamp.resolved_bytes());
  }
 
@@ -993,7 +1025,7 @@ TEST_CASE("version stamps", "[fdb]") {
   CHECK(copy.is_ready());
   const auto replacement = stamp_data(1);
   CHECK_THROWS_AS(lfdb::from::convert(std::span(replacement), stamp),
-                  std::invalid_argument);
+                  lfdb::libfdb_exception);
 
   try {
    std::ignore = copy.resolved_bytes();
@@ -1123,10 +1155,10 @@ TEST_CASE("version stamps", "[fdb]") {
   lfdb::set(first, test_key("versionstamp/owner"), lfdb::versioned("", stamp));
 
   CHECK_THROWS_AS(lfdb::set(second, rejected_key, lfdb::versioned("", stamp)),
-                  std::invalid_argument);
+                  lfdb::libfdb_exception);
   const auto replacement = stamp_data(1);
   CHECK_THROWS_AS(lfdb::from::convert(std::span(replacement), stamp),
-                  std::invalid_argument);
+                  lfdb::libfdb_exception);
   REQUIRE_NOTHROW(lfdb::commit(second));
   CHECK_FALSE(lfdb::key_exists(dbh, rejected_key));
   REQUIRE_NOTHROW(lfdb::commit(first));
@@ -1165,7 +1197,7 @@ TEST_CASE("version stamps", "[fdb]") {
   lfdb::set(reuse_txn, second_key, "value");
 
   CHECK_THROWS_MATCHES(lfdb::commit(reuse_txn, stamp),
-                       std::invalid_argument,
+                       lfdb::libfdb_exception,
                        Catch::Matchers::MessageMatches(
                         Catch::Matchers::ContainsSubstring("attempt to reuse resolved version stamp")));
  }
@@ -1175,19 +1207,19 @@ TEST_CASE("version stamps", "[fdb]") {
   const auto resolved = resolved_stamp(stamp_data(1));
 
   CHECK_THROWS_MATCHES((void)(unresolved == resolved),
-                       std::invalid_argument,
+                       lfdb::libfdb_exception,
                        Catch::Matchers::MessageMatches(
                         Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp")));
   CHECK_THROWS_MATCHES((void)(resolved == unresolved),
-                       std::invalid_argument,
+                       lfdb::libfdb_exception,
                        Catch::Matchers::MessageMatches(
                         Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp")));
   CHECK_THROWS_MATCHES((void)(unresolved < resolved),
-                       std::invalid_argument,
+                       lfdb::libfdb_exception,
                        Catch::Matchers::MessageMatches(
                         Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp")));
   CHECK_THROWS_MATCHES((void)(resolved < unresolved),
-                       std::invalid_argument,
+                       lfdb::libfdb_exception,
                        Catch::Matchers::MessageMatches(
                         Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp")));
  }
@@ -1293,7 +1325,7 @@ TEST_CASE("transaction versions", "[fdb]") {
   auto txn = lfdb::make_transaction(dbh);
 
   CHECK_THROWS_MATCHES(lfdb::committed_version(txn),
-                       std::invalid_argument,
+                       lfdb::libfdb_exception,
                        Catch::Matchers::MessageMatches(
                         Catch::Matchers::ContainsSubstring(
                          "committed_version() requires committed transaction")));
@@ -1355,15 +1387,15 @@ TEST_CASE("api and system diagnostics", "[fdb]")
  }
 
  SECTION("system namespace rejects invalid database handles") {
-  CHECK_THROWS_AS(lfdb::system::client_network_load({}), std::invalid_argument);
-  CHECK_THROWS_AS(lfdb::system::client_status_json({}), std::invalid_argument);
-  CHECK_THROWS_AS(lfdb::system::server_protocol({}), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::client_network_load({}), lfdb::libfdb_exception);
+  CHECK_THROWS_AS(lfdb::system::client_status_json({}), lfdb::libfdb_exception);
+  CHECK_THROWS_AS(lfdb::system::server_protocol({}), lfdb::libfdb_exception);
   CHECK_THROWS_AS(lfdb::system::reboot_worker({}, "127.0.0.1:4500", false, 0),
-                  std::invalid_argument);
+                  lfdb::libfdb_exception);
   CHECK_THROWS_AS(lfdb::system::force_recovery_with_data_loss({}, "dc1"),
-                  std::invalid_argument);
+                  lfdb::libfdb_exception);
   CHECK_THROWS_AS(lfdb::system::create_snapshot({}, "snapshot-id", "snapshot-command"),
-                  std::invalid_argument);
+                  lfdb::libfdb_exception);
  }
 
  SECTION("system namespace reports live database diagnostics") {
@@ -1542,10 +1574,10 @@ TEST_CASE("partitions produce algebra-compatible managed work ranges", "[fdb]")
 
  CHECK(std::empty(lfdb::partitions(dbh, empty_selection, target_bytes)));
  CHECK_THROWS_AS(lfdb::partitions(dbh, selection, 0),
-                 std::invalid_argument);
+                 lfdb::libfdb_exception);
  CHECK_THROWS_AS(lfdb::partitions(
                    lfdb::transaction_handle {}, selection, target_bytes),
-                 std::invalid_argument);
+                 lfdb::libfdb_exception);
 }
 
 static_assert(not std::default_initializable<lfdb::watch_handle>);
@@ -1663,9 +1695,9 @@ TEST_CASE("const handles retain commit and typed replay semantics", "[rgw][fdb][
  const auto txn = lfdb::make_transaction(dbh);
  lfdb::set(txn, key, "pending");
  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, std::error_code(1020, std::generic_category())),
-                 std::invalid_argument);
+                 lfdb::libfdb_exception);
  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, lfdb::libfdb_error_code::invalid_result),
-                 std::invalid_argument);
+                 lfdb::libfdb_exception);
  CHECK(lfdb::key_exists(txn, key));
  lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed);
  CHECK_FALSE(lfdb::key_exists(txn, key));
@@ -1750,7 +1782,7 @@ TEST_CASE("transaction watches", "[rgw][fdb]") {
 
   CHECK_FALSE(watch.ready());
   CHECK_NOTHROW(watch.cancel());
-  CHECK_THROWS_AS(watch.wait_for_event(), std::invalid_argument);
+  CHECK_THROWS_AS(watch.wait_for_event(), lfdb::libfdb_exception);
 
   moved_watch.cancel();
   CHECK(lfdb::watch_event::cancelled == moved_watch.wait_for_event());
@@ -4386,13 +4418,13 @@ TEST_CASE("explicit conflict ranges", "[fdb]") {
   auto txn = lfdb::make_transaction(j);
 
   CHECK_THROWS_MATCHES(lfdb::mark_conflict_read(txn, lfdb::select { key, key }),
-                       std::invalid_argument,
+                       lfdb::libfdb_exception,
                        Catch::Matchers::MessageMatches(
                         Catch::Matchers::ContainsSubstring(
                          "conflict expression must contain a non-empty range")));
 
   CHECK_THROWS_MATCHES(lfdb::mark_conflict_write(txn, lfdb::query::prefix(std::string("\xFF", 1))),
-                       std::invalid_argument,
+                       lfdb::libfdb_exception,
                        Catch::Matchers::MessageMatches(
                         Catch::Matchers::ContainsSubstring(
                          "conflict expression must contain a non-empty range")));
@@ -4773,14 +4805,14 @@ TEST_CASE("transactors reject invalid database handles", "[fdb]")
 
  SECTION("direct transaction") {
   CHECK_THROWS_WITH(lfdb::transaction {dbh},
-                    "transaction requires a database handle");
+                    Catch::Matchers::ContainsSubstring("transaction requires a database handle"));
  }
 
  SECTION("default options") {
   auto txr = lfdb::make_transactor(dbh);
 
   CHECK_THROWS_WITH(txr([](auto) {}),
-                    "transaction requires a database handle");
+                    Catch::Matchers::ContainsSubstring("transaction requires a database handle"));
  }
 
  SECTION("explicit options") {
@@ -4788,7 +4820,7 @@ TEST_CASE("transactors reject invalid database handles", "[fdb]")
   auto txr = lfdb::make_transactor(dbh, opts);
 
   CHECK_THROWS_WITH(txr([](auto) {}),
-                    "transaction requires a database handle");
+                    Catch::Matchers::ContainsSubstring("transaction requires a database handle"));
  }
 
  SECTION("duplicate staged target") {
@@ -4797,11 +4829,11 @@ TEST_CASE("transactors reject invalid database handles", "[fdb]")
 
   CHECK_THROWS_WITH(txr([](auto, auto&, auto&) {},
                         lfdb::staged(output), lfdb::staged(output)),
-                    "cannot stage one target more than once");
+                    Catch::Matchers::ContainsSubstring("cannot stage one target more than once"));
   CHECK_THROWS_WITH(txr([](auto, auto&, auto&) {},
                         lfdb::staged(output),
                         lfdb::staged(output, std::in_place)),
-                    "cannot stage one target more than once");
+                    Catch::Matchers::ContainsSubstring("cannot stage one target more than once"));
  }
 }
 
@@ -4939,7 +4971,7 @@ SCENARIO("transactor", "[fdb]")
  SECTION("reset_for_replay requires an error") {
   auto txn = lfdb::make_transaction(j);
 
-  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, std::error_code {}), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, std::error_code {}), lfdb::libfdb_exception);
  }
 
  SECTION("reset_for_replay preserves a changed preparation error") {
@@ -4993,7 +5025,7 @@ SCENARIO("transactor", "[fdb]")
   REQUIRE_NOTHROW(lfdb::commit(txn));
 
   CHECK(0 < lfdb::committed_version(txn));
-  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, lfdb::fdb_error_code::not_committed), lfdb::libfdb_exception);
  }
 
  SECTION("transaction function returns nothing") {
@@ -5139,7 +5171,7 @@ SCENARIO("transactor", "[fdb]")
   auto result = lfdb::commit(lfdb::with_result, txn);
   REQUIRE_FALSE(result);
   CHECK(lfdb::fdb_error_code::not_committed == result.error());
-  CHECK_THROWS_AS(lfdb::commit(lfdb::with_result, txn), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::commit(lfdb::with_result, txn), lfdb::libfdb_exception);
 
   lfdb::reset_for_replay(txn, result.error());
 
@@ -5606,8 +5638,8 @@ SCENARIO("options", "[fdb]")
   lfdb::create_database(lfdb::connection_source{std::filesystem::path{"/dev/null"}}, {}, {});
   lfdb::create_database(lfdb::database_options {}, lfdb::network_options {});
 
-  CHECK_THROWS_AS(lfdb::connection_source{std::filesystem::path{}}, std::invalid_argument);
-  CHECK_THROWS_AS(lfdb::connection_source{""}, std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::connection_source{std::filesystem::path{}}, lfdb::libfdb_exception);
+  CHECK_THROWS_AS(lfdb::connection_source{""}, lfdb::libfdb_exception);
  }
 
  SECTION("piecemeal construction") {
@@ -5817,7 +5849,7 @@ TEST_CASE("transactor retry policy owns decisions and preserves failures", "[fdb
   }), lfdb::libfdb_exception);
   CHECK(1 == attempts);
   CHECK(1 == decisions);
-  CHECK_THROWS_AS(lfdb::commit(retained), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::commit(retained), lfdb::libfdb_exception);
  }
 
  SECTION("true cannot force a terminal native replay") {

@@ -767,7 +767,7 @@ TEST_CASE("FDB transaction senders report invalid databases",
    lfdb::database_handle {},
    [](lfdb::transaction_handle&) { return stdexec::just(); });
 
- CHECK_THROWS_AS(stdexec::sync_wait(std::move(work)), std::invalid_argument);
+ CHECK_THROWS_AS(stdexec::sync_wait(std::move(work)), lfdb::libfdb_exception);
 }
 
 TEST_CASE("FDB transaction senders honor stop before start",
@@ -1092,7 +1092,7 @@ TEST_CASE("FDB execution point reads report invalid transactions",
  CHECK_THROWS_AS(
    stdexec::sync_wait(
      lfdbx::get(lfdb::raw, {}, test_key("execution/invalid"))),
-   std::invalid_argument);
+   lfdb::libfdb_exception);
 }
 
 TEST_CASE("FDB execution point reads preserve FoundationDB errors",
@@ -1153,7 +1153,7 @@ TEST_CASE("FDB execution watches handle ready and moved-from handles",
  auto invalid = lfdbx::when_changed(std::move(watch));
 
  CHECK_THROWS_AS(stdexec::sync_wait(std::move(invalid)),
-                 std::invalid_argument);
+                 lfdb::libfdb_exception);
 
  lfdb::set(dbh, key, "changed before start");
 
@@ -1381,7 +1381,7 @@ TEST_CASE("FDB execution commits report invalid transactions",
 {
  CHECK_THROWS_AS(
    stdexec::sync_wait(lfdbx::commit({})),
-   std::invalid_argument);
+   lfdb::libfdb_exception);
 }
 
 TEST_CASE("FDB execution commits preserve non-retryable errors",
@@ -1623,7 +1623,7 @@ TEST_CASE("FDB execution scan cursors reject exhausted scans",
  CHECK_THROWS_AS(
    stdexec::sync_wait(lfdbx::read_window(
      lfdb::raw, lfdb::make_transaction(dbh), std::move(cursor))),
-   std::invalid_argument);
+   lfdb::libfdb_exception);
 }
 
 TEST_CASE("FDB execution scan reads reject invalid transactions",
@@ -1632,7 +1632,7 @@ TEST_CASE("FDB execution scan reads reject invalid transactions",
  CHECK_THROWS_AS(
    stdexec::sync_wait(lfdbx::read_window(
      lfdb::raw, {}, lfdbx::scan_cursor {lfdb::select {"a", "b"}})),
-   std::invalid_argument);
+   lfdb::libfdb_exception);
 }
 
 TEST_CASE("FDB execution scan windows represent empty results",
@@ -1931,10 +1931,10 @@ TEST_CASE("FDB execution wait blocks without a yield context",
    lfdbx::wait(
      lfdbx::get(lfdb::raw, {}, test_key("execution/blocking-error")),
      null_yield),
-   std::invalid_argument);
+   lfdb::libfdb_exception);
 }
 
-TEST_CASE("FDB execution Asio bridge preserves exception types",
+TEST_CASE("FDB execution Asio bridge preserves library exception types",
           "[fdb][execution]")
 {
  boost::asio::io_context context;
@@ -1947,13 +1947,30 @@ TEST_CASE("FDB execution Asio bridge preserves exception types",
      std::ignore = lfdbx::wait(
        lfdbx::get(lfdb::raw, {}, test_key("execution/asio-error")),
        optional_yield {yield});
-    } catch (const std::invalid_argument&) {
+    } catch (const lfdb::libfdb_exception&) {
      caught = true;
     }
    }, boost::asio::detached);
 
  REQUIRE(context.run());
  CHECK(caught);
+}
+
+TEST_CASE("FDB execution Asio bridge preserves application invalid arguments", "[fdb][execution]")
+{
+ boost::asio::io_context context;
+ const auto original = std::make_exception_ptr(std::invalid_argument("application validation"));
+ std::exception_ptr observed;
+ boost::asio::spawn(context, [&](boost::asio::yield_context yield) {
+  try {
+   auto failure = stdexec::just() | stdexec::then([&]() -> int { std::rethrow_exception(original); });
+   std::ignore = lfdbx::wait(lfdbx::operation {std::move(failure)}, optional_yield {yield});
+  } catch (...) {
+   observed = std::current_exception();
+  }
+ }, boost::asio::detached);
+ REQUIRE(context.run());
+ CHECK(observed == original);
 }
 
 TEST_CASE("FDB execution Asio bridge forwards cancellation",

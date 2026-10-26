@@ -88,7 +88,7 @@ TEST_CASE("Experimental ASIO preserves missing reads and original errors", "[fdb
                                    test_key("asio/missing")), null_yield);
  CHECK_FALSE(result.bytes());
  CHECK_THROWS_AS(lfdbx::wait(lfdbx::get(lfdb::raw, {}, "invalid"), null_yield),
-                 std::invalid_argument);
+                 lfdb::libfdb_exception);
 
  auto txn = lfdb::make_transaction(dbh);
  fdb_transaction_cancel(txn->raw_handle());
@@ -134,7 +134,7 @@ TEST_CASE("Experimental ASIO scan windows own rows and preserve cursor progress"
  CHECK(std::pair {second, std::string {"second"}} == rows[1]);
  CHECK_THROWS_AS(lfdbx::wait(lfdbx::read_window(lfdb::raw, lfdb::make_transaction(dbh),
                                           std::move(cursor)), null_yield),
-                 std::invalid_argument);
+                 lfdb::libfdb_exception);
 }
 
 TEST_CASE("Experimental ASIO commit is lazy and ignores cancellation after submission", "[fdb][asio]")

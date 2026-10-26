@@ -609,7 +609,7 @@ TEST_CASE("query execution options survive compilation and combine symmetrically
   CHECK(part.options == options);
   CHECK(lq::compile_intervals(part).front() == part);
  }
- CHECK_THROWS_AS(lq::compile_intervals<1>(expression), std::length_error);
+ CHECK_THROWS_AS(lq::compile_intervals<1>(expression), lfdb::libfdb_exception);
  CHECK(lq::compile_intervals<0>(lq::empty()).empty());
  CHECK(lq::is_universal(lq::with_options(lq::universal(), options)));
  CHECK_FALSE(lq::is_universal(configured));
@@ -626,9 +626,9 @@ TEST_CASE("query execution options survive compilation and combine symmetrically
   CHECK(lq::compile_intervals(combine(configured, composite)) ==
         lq::compile_intervals(combine(composite, configured)));
   const auto conflicting = lq::with_options(cut, lq::query_options {.result_limit = 3});
-  CHECK_THROWS_AS(combine(configured, conflicting), std::invalid_argument);
-  CHECK_THROWS_AS(combine(conflicting, configured), std::invalid_argument);
-  CHECK_THROWS_AS(combine(expression, conflicting), std::invalid_argument);
+  CHECK_THROWS_AS(combine(configured, conflicting), lfdb::libfdb_exception);
+  CHECK_THROWS_AS(combine(conflicting, configured), lfdb::libfdb_exception);
+  CHECK_THROWS_AS(combine(expression, conflicting), lfdb::libfdb_exception);
  };
  check_combination([](const auto& lhs, const auto& rhs) { return lq::intersection(lhs, rhs); });
  check_combination([](const auto& lhs, const auto& rhs) { return lq::set_union(lhs, rhs); });

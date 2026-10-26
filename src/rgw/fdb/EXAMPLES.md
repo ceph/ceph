@@ -1149,9 +1149,6 @@ try {
 catch (const lfdb::libfdb_exception& e) {
   handle_libfdb_error(e);
 }
-catch (const std::invalid_argument& e) {
-  handle_contract_error(e);
-}
 catch (const std::exception& e) {
   handle_application_error(e);
 }
@@ -1267,13 +1264,15 @@ for (const auto& [key, value] : lfdb::scan(dbh, people)) {
 `compile_intervals(expr)` and `compile_intervals<N>(expr)` return the same
 executable interval values, including their query options. The latter stores
 at most `N` intervals without allocating container storage and throws
-`std::length_error` if that capacity is exceeded. Interval keys still own strings.
+`libfdb_exception` with `std::errc::value_too_large` if that capacity is exceeded.
+Interval keys still own strings.
 Geometric predicates such as `is_universal()` ignore execution options.
 
 Union and intersection preserve matching options. When only one operand has
 non-default options, those options apply to the result. Conflicting non-default
-options throw `std::invalid_argument`; configure the operands consistently, or
-combine unconfigured geometry and apply `with_options()` to the result.
+options throw `libfdb_exception` with `std::errc::invalid_argument`. Configure the
+operands consistently, or combine unconfigured geometry and apply
+`with_options()` to the result.
 Difference retains its left operand's options; complement retains its operand's
 options.
 
@@ -2111,7 +2110,8 @@ values. A stamp is a shared result handle: copies observe the same completion.
 `is_ready()` means it holds bytes or an error; `has_value()` means it holds bytes.
 Inspect the result after operation completion, or use external synchronization;
 the shared handle does not synchronize concurrent access to its result.
-Reading a pending stamp throws `std::invalid_argument`. A failed stamp throws
+Reading a pending stamp throws `libfdb_exception` with
+`std::errc::invalid_argument`. A failed stamp throws
 `libfdb_exception` with its recorded code from `resolved_bytes()`, or returns
 that code from `resolved_bytes(with_result)`.
 
@@ -2126,7 +2126,7 @@ Keep a copy of the stamp handle alive while using borrowed bytes. Access from
 temporary handles is deleted. Valid bytes are immutable; parsing the identical
 bytes again is permitted without replacing their storage. Parsing malformed
 bytes, overwriting valid bytes, and parsing into an active or failed output are
-contract errors reported as `std::invalid_argument`.
+contract errors reported as `libfdb_exception` with `std::errc::invalid_argument`.
 
 A failed output retains its error until explicitly registered as an output
 again. Registration clears the shared failure for the new attempt; an error
@@ -2686,14 +2686,21 @@ Benchmarks are hidden from default test runs. Run all libfdb benchmarks with:
 
 ## Appendix: Exception Summary
 
-libfdb tries to keep its exception surface small. Ordinary library operation
-failures are reported as `lfdb::libfdb_exception`; direct caller contract
-violations use standard exceptions.
+Library-generated failures, including rejected arguments and invalid operation
+states, use `lfdb::libfdb_exception`. Its error code distinguishes native errors,
+library-specific failures, and standard conditions such as
+`std::errc::invalid_argument` or `std::errc::value_too_large`; callers need one
+exception handler while retaining the failure's category, code, and context.
 
-The categories are intentionally coarse: they are meant to be useful to
-callers, not to divide every possible misuse into a separate exception type. For
-example, some versionstamp state violations are treated as `std::invalid_argument`
-to avoid an overly fine-grained exception taxonomy.
+Code that caught `std::invalid_argument` or `std::length_error` for a libfdb
+validation failure should now catch `lfdb::libfdb_exception` and inspect `code()`
+when it needs that distinction.
+
+Exceptions thrown by application serializers, converters, callbacks, or native
+continuations retain their original type and identity. Standard allocation
+failures also propagate normally. The generic interval core remains independent
+of FoundationDB; the libfdb query boundary translates its fixed-capacity failure
+into `libfdb_exception`.
 
 | Condition | Exception |
 | --- | --- |
@@ -2704,8 +2711,8 @@ to avoid an overly fine-grained exception taxonomy.
 | A user serializer, converter, or callback throws | The original exception, with its type and contents preserved |
 | Invalid result at the FoundationDB boundary | `lfdb::libfdb_exception` |
 | Caller uses libfdb after shutdown | `lfdb::libfdb_exception` |
-| Caller passes an impossible selector prefix or invalid versionstamp bytes | `std::invalid_argument` |
-| Caller accesses a pending stamp, reuses a stamp holding bytes, registers an output with two transactions, overwrites immutable bytes, or asks for a committed version before commit | `std::invalid_argument` |
+| Caller passes an impossible selector prefix or invalid versionstamp bytes | `lfdb::libfdb_exception` with `std::errc::invalid_argument` |
+| Caller accesses a pending stamp, reuses a stamp holding bytes, registers an output with two transactions, overwrites immutable bytes, or asks for a committed version before commit | `lfdb::libfdb_exception` with `std::errc::invalid_argument` |
 | Stamp completed with an error | `resolved_bytes()` throws `lfdb::libfdb_exception`; `resolved_bytes(with_result)` returns the recorded error |
 
 ### Error Codes and Exceptions
@@ -2718,7 +2725,9 @@ it assigns the nonzero `lfdb::libfdb_error_code::operation_failed` code in
 available, supply that code explicitly, with any useful operation context.
 
 Native errors use `lfdb::fdb_error_category()`, whose diagnostic name is
-"FoundationDB". Local errors use `lfdb::libfdb_error_category()`, named "libfdb".
+"FoundationDB". Library-specific codes use `lfdb::libfdb_error_category()`, named
+"libfdb". Standard conditions retain their standard category. The constructor
+`libfdb_exception(std::errc, context)` accepts a standard condition directly.
 The native `enum struct fdb_error_code : int` retains the pinned FoundationDB
 names and numbers; unknown native integers remain representable. Both enums
 convert to `std::error_code`. At a raw C API boundary, construct
