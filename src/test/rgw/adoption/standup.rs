@@ -1823,6 +1823,10 @@ fn store_tests(env: &Env) -> Result<(), String> {
 /// binary's `NooBaaSchema.AgreesWithNooBaasValidator` requires the
 /// driver's tree to accept and refuse exactly the same records.  So the
 /// tree is checked against NooBaa, not against a reading of its schema.
+/// `ObjectAttributesAgreeWithWhatNooBaaWrote` then reads the NooBaa
+/// capture's inventories and requires every `user.noobaa.*` name on an
+/// object to be one the driver's attribute table knows (X4's third
+/// layer).
 fn schema_agreement(env: &Env) -> Result<(), String> {
     let Some(build) = env.ceph_build.as_ref() else {
         return Err("`ceph_build` is not set;  `schema-agreement` runs the nsfs \
@@ -1886,20 +1890,31 @@ fn schema_agreement(env: &Env) -> Result<(), String> {
         }
     }
 
+    /* and the object attributes:  every `user.noobaa.*` name NooBaa
+     * wrote in the capture must be one the driver's table knows */
+    let capture = env.capture_dir("noobaa");
+    if !capture.is_dir() {
+        return Err(format!("no NooBaa capture at {};  run `capture noobaa` first",
+                           capture.display()));
+    }
     let out = Command::new(&bin)
-        .arg("--gtest_filter=NooBaaSchema.AgreesWithNooBaasValidator")
+        .arg("--gtest_filter=NooBaaSchema.AgreesWithNooBaasValidator:\
+              NooBaaSchema.ObjectAttributesAgreeWithWhatNooBaaWrote")
         .env("NSFS_NOOBAA_SCHEMA_CASES", &cases)
+        .env("NSFS_NOOBAA_CAPTURE", &capture)
         .current_dir(build)
         .output()
         .map_err(|e| format!("cannot run {}: {e}", bin.display()))?;
     let text = String::from_utf8_lossy(&out.stdout);
-    if !out.status.success() || !text.lines().any(|l| l.starts_with("[       OK ]")) {
+    if !out.status.success()
+        || text.lines().filter(|l| l.starts_with("[       OK ]")).count() != 2 {
         let detail: Vec<&str> = text.lines().filter(|l| l.contains("Failure")
             || l.contains("disagree") || l.starts_with("[")).collect();
         return Err(format!("the driver's schema and NooBaa's validator disagree, or the \
                             test did not run;  {}:\n{}", cases.display(), detail.join("\n")));
     }
-    println!("schema   the driver's schema agrees with NooBaa's validator on every case");
+    println!("schema   the driver's schema agrees with NooBaa's validator on every case, \
+              and knows every object attribute NooBaa wrote");
     Ok(())
 }
 
