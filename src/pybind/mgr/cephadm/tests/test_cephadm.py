@@ -1345,6 +1345,62 @@ class TestCephadm(object):
             OsdIdClaims(cephadm_module)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @pytest.mark.parametrize('method,encrypted,tpm2', [
+        ('raw', False, False),
+        ('raw', True, True),
+        ('lvm', True, False),
+        (None, True, False),
+    ])
+    def test_apply_osd_encryption(
+        self, _run_cephadm, cephadm_module, method, encrypted, tpm2
+    ):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        spec = DriveGroupSpec(
+            service_id='encrypted',
+            placement=PlacementSpec(host_pattern='*'),
+            data_devices=DeviceSelection(all=True),
+            method=method, encrypted=encrypted, tpm2=tpm2,
+        )
+        with with_host(cephadm_module, 'test'):
+            _run_cephadm.reset_mock()
+            assert wait(cephadm_module, cephadm_module.apply([spec])) == [
+                'Scheduled osd.encrypted update...']
+            assert cephadm_module.spec_store['osd.encrypted'].spec == spec
+            _run_cephadm.assert_not_called()
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @pytest.mark.parametrize('operation', ['apply', 'create_osds', 'create_from_spec'])
+    def test_reject_raw_encryption_without_tpm2(
+        self, _run_cephadm, cephadm_module, operation
+    ):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        spec = DriveGroupSpec(
+            service_id='encrypted',
+            placement=PlacementSpec(host_pattern='*'),
+            data_devices=DeviceSelection(all=True),
+            method='raw', encrypted=True,
+        )
+        expected_error = (
+            'Raw encrypted OSD deployment through cephadm requires tpm2: true. '
+            'Use method: lvm for encryption without TPM2.')
+        with with_host(cephadm_module, 'test'):
+            _run_cephadm.reset_mock()
+            with mock.patch.object(cephadm_module, '_trigger_preview_refresh') as preview:
+                with pytest.raises(OrchestratorError) as error:
+                    if operation == 'apply':
+                        wait(cephadm_module, cephadm_module.apply(
+                            [spec], continue_on_error=False))
+                    elif operation == 'create_osds':
+                        wait(cephadm_module, cephadm_module.create_osds(spec))
+                    else:
+                        cephadm_module.osd_service.create_from_spec(spec)
+                assert str(error.value) == expected_error
+                preview.assert_not_called()
+            assert 'osd.encrypted' not in cephadm_module.spec_store
+            assert 'osd.default' not in cephadm_module.spec_store
+            _run_cephadm.assert_not_called()
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_osd_save(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         with with_host(cephadm_module, 'test'):
