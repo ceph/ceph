@@ -394,7 +394,7 @@ procedure:
       monmaptool --print {tmp}/{filename}
 
    The output takes the following form. Squid 19.2.6 and later, Tentacle
-   20.2.4 and later, and Umbrella 21 also print four ``auth_`` lines after the
+   20.2.4 and later, and Umbrella also print four ``auth_`` lines after the
    Monitor lines.
 
    ::
