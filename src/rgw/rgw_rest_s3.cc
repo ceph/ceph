@@ -2886,6 +2886,49 @@ static inline void map_qs_metadata(req_state* s, bool crypto_too)
   }
 }
 
+namespace {
+
+int parse_object_lock_headers(const req_state* s,
+                              const char* obj_lock_mode_str,
+                              const char* obj_lock_date_str,
+                              const char* obj_legal_hold_str,
+                              boost::optional<ceph::real_time>& date,
+                              std::string& err_message)
+{
+  if (obj_lock_mode_str && obj_lock_date_str) {
+    date = ceph::from_iso_8601(obj_lock_date_str);
+    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+      err_message = "invalid x-amz-object-lock-retain-until-date value";
+      ldpp_dout(s, 0) << err_message << dendl;
+      return -EINVAL;
+    }
+    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
+      err_message = "invalid x-amz-object-lock-mode value";
+      ldpp_dout(s, 0) << err_message << dendl;
+      return -EINVAL;
+    }
+  } else if ((obj_lock_mode_str && !obj_lock_date_str) || (!obj_lock_mode_str && obj_lock_date_str)) {
+    err_message = "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date ";
+    ldpp_dout(s, 0) << err_message << dendl;
+    return -EINVAL;
+  }
+  if (obj_legal_hold_str) {
+    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
+      err_message = "invalid x-amz-object-lock-legal-hold value";
+      ldpp_dout(s, 0) << err_message << dendl;
+      return -EINVAL;
+    }
+  }
+  if (!s->bucket->get_info().obj_lock_enabled() && (obj_lock_mode_str || obj_legal_hold_str)) {
+    err_message = "Bucket is missing Object Lock Configuration";
+    ldpp_dout(s, 0) << "ERROR: object retention or legal hold can't be set if bucket object lock not configured" << dendl;
+    return -ERR_INVALID_REQUEST;
+  }
+  return 0;
+}
+
+} // anonymous namespace
+
 int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
 {
   if (!s->length) {
@@ -2932,37 +2975,21 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
   auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
   auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
-  if (obj_lock_mode_str && obj_lock_date_str) {
-    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
-    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
-        ret = -EINVAL;
-        ldpp_dout(this,0) << "invalid x-amz-object-lock-retain-until-date value" << dendl;
-        return ret;
-    }
-    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
-        ret = -EINVAL;
-        ldpp_dout(this,0) << "invalid x-amz-object-lock-mode value" << dendl;
-        return ret;
-    }
-    obj_retention = new RGWObjectRetention(obj_lock_mode_str, *date);
-  } else if ((obj_lock_mode_str && !obj_lock_date_str) || (!obj_lock_mode_str && obj_lock_date_str)) {
-    ret = -EINVAL;
-    ldpp_dout(this,0) << "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date " << dendl;
+
+  boost::optional<ceph::real_time> date;
+  ret = parse_object_lock_headers(s, obj_lock_mode_str, obj_lock_date_str,
+                                  obj_legal_hold_str, date, s->err.message);
+  if (ret < 0) {
     return ret;
+  }
+
+  if (date) {
+    obj_retention = new RGWObjectRetention(obj_lock_mode_str, *date);
   }
   if (obj_legal_hold_str) {
-    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
-        ret = -EINVAL;
-        ldpp_dout(this,0) << "invalid x-amz-object-lock-legal-hold value" << dendl;
-        return ret;
-    }
     obj_legal_hold = new RGWObjectLegalHold(obj_legal_hold_str);
   }
-  if (!s->bucket->get_info().obj_lock_enabled() && (obj_retention || obj_legal_hold)) {
-    ldpp_dout(this, 0) << "ERROR: object retention or legal hold can't be set if bucket object lock not configured" << dendl;
-    ret = -ERR_INVALID_REQUEST;
-    return ret;
-  }
+
   multipart_upload_id = s->info.args.get("uploadId");
   multipart_part_str = s->info.args.get("partNumber");
   if (!multipart_part_str.empty()) {
@@ -3366,6 +3393,37 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
   r = get_tags();
   if (r < 0)
     return r;
+
+  std::string obj_lock_mode_str, obj_lock_date_str, obj_legal_hold_str;
+  const bool has_mode = part_str(parts, "x-amz-object-lock-mode", &obj_lock_mode_str);
+  const bool has_date = part_str(parts, "x-amz-object-lock-retain-until-date", &obj_lock_date_str);
+  const bool has_legal_hold = part_str(parts, "x-amz-object-lock-legal-hold", &obj_legal_hold_str);
+
+  /* AWS doesn't document object lock fields for POST object, so for a bucket
+   * without object lock they're ignored like any other unknown field. For a
+   * bucket with object lock, honor them the same way as PutObject. */
+  if (has_mode || has_date || has_legal_hold) {
+    if (!s->bucket->get_info().obj_lock_enabled()) {
+      ldpp_dout(this, 10) << "ignoring object lock form fields, bucket "
+          << s->bucket->get_name() << " doesn't have object lock enabled" << dendl;
+    } else {
+      boost::optional<ceph::real_time> date;
+      r = parse_object_lock_headers(s, (has_mode ? obj_lock_mode_str.c_str() : nullptr),
+                                    (has_date ? obj_lock_date_str.c_str() : nullptr),
+                                    (has_legal_hold ? obj_legal_hold_str.c_str() : nullptr),
+                                    date, err_msg);
+      if (r < 0) {
+        return r;
+      }
+
+      if (date) {
+        obj_retention.emplace(obj_lock_mode_str, *date);
+      }
+      if (has_legal_hold) {
+        obj_legal_hold.emplace(obj_legal_hold_str);
+      }
+    }
+  }
 
   min_len = post_policy.min_length;
   max_len = post_policy.max_length;
@@ -3928,30 +3986,18 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
   auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
-  if (obj_lock_mode_str && obj_lock_date_str) {
-    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
-    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
-      s->err.message = "invalid x-amz-object-lock-retain-until-date value";
-      ldpp_dout(this,0) << s->err.message << dendl;
-      return -EINVAL;
-    }
-    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
-      s->err.message = "invalid x-amz-object-lock-mode value";
-      ldpp_dout(this,0) << s->err.message << dendl;
-      return -EINVAL;
-    }
+
+  boost::optional<ceph::real_time> date;
+  int r = parse_object_lock_headers(s, obj_lock_mode_str, obj_lock_date_str,
+                                    obj_legal_hold_str, date, s->err.message);
+  if (r < 0) {
+    return r;
+  }
+
+  if (date) {
     obj_retention = new RGWObjectRetention(obj_lock_mode_str, *date);
-  } else if (obj_lock_mode_str || obj_lock_date_str) {
-    s->err.message = "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date ";
-    ldpp_dout(this,0) << s->err.message << dendl;
-    return -EINVAL;
   }
   if (obj_legal_hold_str) {
-    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
-      s->err.message = "invalid x-amz-object-lock-legal-hold value";
-      ldpp_dout(this,0) << s->err.message << dendl;
-      return -EINVAL;
-    }
     obj_legal_hold = new RGWObjectLegalHold(obj_legal_hold_str);
   }
 
@@ -3993,7 +4039,7 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
       RGWObjTags new_tags;
       auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
       if (tag_str) {
-        int r = new_tags.set_from_string(tag_str);
+        r = new_tags.set_from_string(tag_str);
         if (r < 0) {
           ldpp_dout(this, 0) << "setting obj tags failed with " << r << dendl;
           if (r == -ERR_INVALID_TAG) {
@@ -4737,31 +4783,19 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
   auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
   auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
-  if (obj_lock_mode_str && obj_lock_date_str) {
-    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
-    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
-      ldpp_dout(this,0) << "invalid x-amz-object-lock-retain-until-date value" << dendl;
-      return -EINVAL;;
-    }
-    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
-      ldpp_dout(this,0) << "invalid x-amz-object-lock-mode value" << dendl;
-      return -EINVAL;
-    }
-    obj_retention = RGWObjectRetention(obj_lock_mode_str, *date);
-  } else if ((obj_lock_mode_str && !obj_lock_date_str) || (!obj_lock_mode_str && obj_lock_date_str)) {
-    ldpp_dout(this,0) << "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date " << dendl;
-    return -EINVAL;
+
+  boost::optional<ceph::real_time> date;
+  ret = parse_object_lock_headers(s, obj_lock_mode_str, obj_lock_date_str,
+                                  obj_legal_hold_str, date, s->err.message);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (date) {
+    obj_retention.emplace(obj_lock_mode_str, *date);
   }
   if (obj_legal_hold_str) {
-    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
-      ldpp_dout(this,0) << "invalid x-amz-object-lock-legal-hold value" << dendl;
-      return -EINVAL;
-    }
-    obj_legal_hold = RGWObjectLegalHold(obj_legal_hold_str);
-  }
-  if (!s->bucket->get_info().obj_lock_enabled() && (obj_retention || obj_legal_hold)) {
-    ldpp_dout(this, 0) << "ERROR: object retention or legal hold can't be set if bucket object lock not configured" << dendl;
-    return -ERR_INVALID_REQUEST;
+    obj_legal_hold.emplace(obj_legal_hold_str);
   }
 
   /* checksums */

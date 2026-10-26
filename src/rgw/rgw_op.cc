@@ -5629,6 +5629,17 @@ void RGWPostObj::execute(optional_yield y)
       }
     }
 
+    if (obj_retention) {
+      bufferlist obj_retention_bl;
+      obj_retention->encode(obj_retention_bl);
+      emplace_attr(RGW_ATTR_OBJECT_RETENTION, std::move(obj_retention_bl));
+    }
+    if (obj_legal_hold) {
+      bufferlist obj_legal_hold_bl;
+      obj_legal_hold->encode(obj_legal_hold_bl);
+      emplace_attr(RGW_ATTR_OBJECT_LEGAL_HOLD, std::move(obj_legal_hold_bl));
+    }
+
     const req_context rctx{this, s->yield, s->trace.get()};
     op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(),
 				 attrs, cksum,

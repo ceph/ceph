@@ -29,6 +29,17 @@
 
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
+* RGW: Browser-based (POST object) uploads to a bucket with object lock enabled
+  now honor the ``x-amz-object-lock-mode``,
+  ``x-amz-object-lock-retain-until-date`` and ``x-amz-object-lock-legal-hold``
+  form fields, which were previously ignored. Invalid values are rejected with
+  ``400 InvalidArgument``. For buckets without object lock the fields are still
+  ignored.
+* RGW: CopyObject now rejects the ``x-amz-object-lock-mode``,
+  ``x-amz-object-lock-retain-until-date`` and ``x-amz-object-lock-legal-hold``
+  headers with ``400 InvalidRequest`` when the destination bucket does not have
+  object lock enabled, as PutObject and CreateMultipartUpload already did.
+  Previously the copy succeeded and the headers were silently ignored.
 
 * RGW: Changing ``rgw_dynamic_resharding`` used to turn queuing buckets
   for reshard on or off while not affecting resharding itself until the
