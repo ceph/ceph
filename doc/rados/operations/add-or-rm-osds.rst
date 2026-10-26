@@ -163,7 +163,7 @@ cluster have and therefore might have greater weight as well.
    This presentation of the command assumes the default cluster name,
    ``ceph``. Custom cluster names are deprecated (see
    :ref:`Naming Clusters (deprecated) <ceph-runtime-config>`), and in Tentacle
-   20.2 and later releases the packaged ``ceph-osd@`` unit no longer passes
+   and later releases the packaged ``ceph-osd@`` unit no longer passes
    ``--cluster``, so it starts only OSDs of a cluster named ``ceph``.
 
 #. Add the OSD to the CRUSH map by running the following command. This allows
