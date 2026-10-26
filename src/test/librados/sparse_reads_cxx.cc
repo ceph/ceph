@@ -10,7 +10,9 @@
 
 #include "include/buffer.h"
 #include "include/interval_set.h"
+#include "include/rados.h"
 #include "include/rados/librados.hpp"
+#include "librados/ObjectOperationImpl.h"
 #include "osd/osd_types.h"
 #include "test/librados/test_cxx.h"
 #include "test/librados/test_pool_types.h"
@@ -2130,4 +2132,137 @@ TEST_F(SparseReadFlagTest, FlagOnReplicatedPoolNoFAE) {
 
   rep_ioctx.close();
   destroy_pool_pp(rep_pool, rados);
+}
+
+// ---------------------------------------------------------------------------
+// SplitReplyFormatTest — two cluster tests for the split/legacy reply format.
+//
+// One test runs a sparse_read with the SPLIT_REPLY flag set (normal path),
+// the other clears the flag before sending so the OSD uses the legacy format.
+// Both must decode to the same extents and data.
+//
+// The "without flag" variant accesses the internal ObjectOperationImpl to
+// clear CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA after it was set by
+// ObjectOperation::sparse_read().  This requires including the private
+// ObjectOperationImpl header (already done at the top of this file).
+// ---------------------------------------------------------------------------
+
+// Subclass of ObjectReadOperation that exposes the flag-clearing helper.
+// impl is protected, and ObjectReadOperation inherits it from ObjectOperation.
+class SparseReadOpFlagHack : public librados::ObjectReadOperation {
+public:
+  // Clear CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA from the most recently
+  // added op (the last sparse_read call).
+  void clear_split_reply_flag_on_last_op() {
+    ceph_assert(!impl->o.ops.empty());
+    auto& op = impl->o.ops.back();
+    op.op.flags = op.op.flags & ~CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA;
+  }
+};
+
+class SplitReplyFormatTest : public ::testing::Test {
+protected:
+  static librados::Rados rados;
+  static std::string pool_name;
+  librados::IoCtx ioctx;
+
+  static void SetUpTestSuite() {
+    ASSERT_EQ("", connect_cluster_pp(rados));
+    pool_name = get_temp_pool_name("split_reply_fmt_test_");
+    ASSERT_EQ("", create_pool_pp(pool_name, rados));
+    rados.wait_for_latest_osdmap();
+  }
+
+  static void TearDownTestSuite() {
+    destroy_pool_pp(pool_name, rados);
+    rados.shutdown();
+  }
+
+  void SetUp() override {
+    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  }
+
+  void TearDown() override {
+    ioctx.close();
+  }
+
+  static bufferlist make_pattern(size_t n, char c) {
+    bufferlist bl;
+    bl.append(std::string(n, c));
+    return bl;
+  }
+
+  // Write two non-contiguous blocks so that sparse_read returns two extents.
+  // Returns the concatenated expected data.
+  bufferlist write_two_blocks(const std::string& oid) {
+    bufferlist a = make_pattern(4096, 'A');
+    bufferlist b = make_pattern(4096, 'B');
+    EXPECT_EQ(0, ioctx.write(oid, a, a.length(), 0));
+    EXPECT_EQ(0, ioctx.write(oid, b, b.length(), 8192));
+    bufferlist combined;
+    combined.append(a);
+    combined.append(b);
+    return combined;
+  }
+};
+
+librados::Rados SplitReplyFormatTest::rados;
+std::string SplitReplyFormatTest::pool_name;
+
+// Sparse read with the SPLIT_REPLY flag (the default path): the OSD sends the
+// extent map in outmetadata and raw data in outdata.
+TEST_F(SplitReplyFormatTest, WithFlagDecodesSplitReply)
+{
+  const std::string oid = "split_reply_with_flag";
+  bufferlist expected_data = write_two_blocks(oid);
+
+  std::map<uint64_t, uint64_t> extents;
+  bufferlist data;
+  int rval = -1;
+
+  // ObjectReadOperation::sparse_read sets the flag automatically.
+  ObjectReadOperation op;
+  op.sparse_read(0, 12288, &extents, &data, &rval);
+
+  bufferlist result_bl;
+  ASSERT_EQ(0, ioctx.operate(oid, &op, &result_bl));
+  ASSERT_EQ(0, rval);
+
+  std::map<uint64_t, uint64_t> expected_extents = {{0, 4096}, {8192, 4096}};
+  EXPECT_EQ(expected_extents, extents);
+  EXPECT_TRUE(data.contents_equal(expected_data))
+    << "split-reply data must equal the written content";
+  EXPECT_TRUE(data.is_page_aligned())
+    << "split-reply data bufferlist must be page-aligned";
+}
+
+// Sparse read with the SPLIT_REPLY flag cleared: the OSD uses the legacy
+// combined outdata format.  The client must decode it correctly.
+TEST_F(SplitReplyFormatTest, WithoutFlagDecodesLegacyReply)
+{
+  const std::string oid = "split_reply_without_flag";
+  bufferlist expected_data = write_two_blocks(oid);
+
+  std::map<uint64_t, uint64_t> extents;
+  bufferlist data;
+  int rval = -1;
+
+  // Build the op, then forcibly clear the SPLIT_REPLY flag to make the OSD
+  // respond with the legacy combined format.
+  SparseReadOpFlagHack op;
+  op.sparse_read(0, 12288, &extents, &data, &rval);
+  op.clear_split_reply_flag_on_last_op();
+
+  bufferlist result_bl;
+  // Cast back to the base type expected by ioctx.operate().
+  ASSERT_EQ(0, ioctx.operate(oid,
+    static_cast<librados::ObjectReadOperation*>(&op), &result_bl));
+  ASSERT_EQ(0, rval);
+
+  std::map<uint64_t, uint64_t> expected_extents = {{0, 4096}, {8192, 4096}};
+  EXPECT_EQ(expected_extents, extents);
+  EXPECT_TRUE(data.contents_equal(expected_data))
+    << "legacy-reply data must equal the written content";
+  EXPECT_FALSE(data.is_page_aligned())
+    << "legacy-reply data bufferlist is offset by the extent map and must not be page-aligned";
 }
