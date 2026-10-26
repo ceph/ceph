@@ -1,5 +1,6 @@
 import cherrypy
 import json
+import pytest
 import socket
 from _pytest.monkeypatch import MonkeyPatch
 from urllib.error import URLError
@@ -8,6 +9,7 @@ from cephadm.agent import NodeProxyEndpoint
 from unittest.mock import MagicMock, call, patch
 from cephadm.inventory import AgentCache, NodeProxyCache, Inventory
 from cephadm.ssl_certs import SSLCerts
+from orchestrator import HardwareNoReport
 from . import node_proxy_data
 
 
@@ -445,3 +447,21 @@ def test_node_proxy_get_dependencies():
         'ROOT-CA',
         'generic',
     ])
+
+
+def test_node_proxy_cache_unknown_host_raises_hardware_no_report():
+    cache = NodeProxyCache(MagicMock())
+    cache.data = {'host01': node_proxy_data.full_set['host01']}
+    with pytest.raises(HardwareNoReport):
+        cache.fullreport(hostname='host02')
+
+
+def test_node_proxy_cache_list_hosts_skips_incomplete_reports():
+    cache = NodeProxyCache(MagicMock())
+    cache.data = {
+        'host02': node_proxy_data.full_set['host02'],
+        'host01': node_proxy_data.full_set['host01'],
+        'host03': {},
+        'host04': {'host': 'host04', 'status': {}},
+    }
+    assert cache.list_hosts() == ['host01', 'host02']

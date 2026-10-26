@@ -23,7 +23,8 @@ from ceph.deployment.service_spec import (
     NvmeofServiceSpec,
 )
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
-from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
+from orchestrator import OrchestratorError, HardwareNoReport, HostSpec, OrchestratorEvent, service_to_daemon_types, \
+    NODE_PROXY_REPORT_KEYS
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from ceph.deployment.tls_utils import SSLConfigException, parse_tls_pem_bundle
 
@@ -1910,10 +1911,15 @@ class NodeProxyCache:
         if hostname is None:
             return list(self.data.keys())
         if hostname not in self.data:
-            raise OrchestratorError(
+            raise HardwareNoReport(
                 f"Host '{hostname}' has no node-proxy data (unknown host or node-proxy not running)."
             )
         return [hostname]
+
+    def list_hosts(self) -> List[str]:
+        # Returns hosts with a complete node-proxy report; no blobs loaded.
+        return sorted(host for host, report in self.data.items()
+                      if all(key in report for key in NODE_PROXY_REPORT_KEYS))
 
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
         """
