@@ -17,6 +17,7 @@
 
 #include <seastar/core/future.hh>
 #include <ostream>
+#include <optional>
 
 #include "crimson/common/config_proxy.h"
 #include "common/mclock_common.h"
@@ -24,6 +25,9 @@
 namespace crimson::osd::scheduler {
 
 using client_t = uint64_t;
+// Strict priorities sort ahead of the ordinary weighted queue, including
+// strict priority zero. A disengaged optional denotes ordinary scheduling.
+using priority_t = std::optional<uint64_t>;
 
 struct params_t {
   int cost = 1;
@@ -70,6 +74,14 @@ public:
   // Enqueue op for processing as though it were enqueued prior
   // to other items already scheduled.
   virtual void enqueue_front(item_t &&item) = 0;
+
+  virtual priority_t get_strict_priority(const params_t &params) const = 0;
+
+  // Match the scheduler's fairness domain when staging candidates. WPQ
+  // rotates between owners; mClock groups them into a single class/profile.
+  virtual client_t get_queue_owner(const params_t &params) const {
+    return params.owner;
+  }
 
   // Returns true iff there are no ops scheduled
   virtual bool empty() const = 0;

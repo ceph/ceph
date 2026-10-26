@@ -175,6 +175,20 @@ public:
   // Helper method to display mclock queues
   std::string display_queues() const;
 
+  scheduler::priority_t get_strict_priority(const params_t &params) const final {
+    if (params.klass == SchedulerClass::immediate) {
+      return immediate_class_priority;
+    }
+    if (params.priority >= cutoff_priority) {
+      return params.priority;
+    }
+    return std::nullopt;
+  }
+
+  client_t get_queue_owner(const params_t&) const final {
+    return 0;
+  }
+
   // Enqueue op in the back of the regular queue
   void enqueue(item_t &&item) final;
 

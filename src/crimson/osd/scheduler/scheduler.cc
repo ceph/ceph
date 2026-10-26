@@ -88,6 +88,16 @@ public:
     ] = conf.get_val<uint64_t>("osd_client_op_priority");
   }
 
+  scheduler::priority_t get_strict_priority(const params_t &params) const final {
+    if (params.klass == SchedulerClass::immediate) {
+      return params.priority;
+    }
+    if (use_strict(params.klass)) {
+      return get_priority(params.klass);
+    }
+    return std::nullopt;
+  }
+
   void enqueue(item_t &&item) final {
      // immediate ops bypass class-based priority -- use message priority directly
     // matching classic WPQ which uses numeric priority, not SchedulerClass

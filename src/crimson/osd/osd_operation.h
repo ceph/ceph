@@ -4,7 +4,9 @@
 #pragma once
 
 #include <array>
+#include <compare>
 #include <deque>
+#include <map>
 #include <utility>
 
 #include "crimson/common/operation.h"
@@ -379,6 +381,7 @@ private:
 class OperationThrottler : public BlockerT<OperationThrottler>,
 			private md_config_obs_t {
   friend BlockerT<OperationThrottler>;
+  friend class OperationThrottlerTest;
   static constexpr const char* type_name = "OperationThrottler";
 
   // Perf counters used to capture mClock throttling behavior per op class
@@ -444,23 +447,37 @@ private:
 
   crimson::osd::scheduler::SchedulerRef scheduler;
 
-  static constexpr size_t num_levels =
-    static_cast<size_t>(throttle_level_t::count);
-  // slots that operations at a level and above can never take, kept for
-  // each lower level, so the operations they wait on can always be admitted
+  static constexpr size_t num_levels = std::to_underlying(throttle_level_t::count);
   static constexpr uint64_t reserved_per_level = 1;
-
-  // the smallest limit that still leaves a slot for foreground operations
   static constexpr uint64_t min_in_progress =
     1 + reserved_per_level * (num_levels - 1);
 
-  // max_in_progress is the limit for all operations; each level above leaf
-  // may use reserved_per_level fewer slots than the level below it
+  using level_counts_t = std::array<uint64_t, num_levels>;
+  // All levels share max_in_progress. Each higher level leaves one slot
+  // for each level below it. Committed includes running and fed candidates.
   uint64_t max_in_progress = 0;
-  std::array<uint64_t, num_levels> in_progress = {};
-  // items dequeued while their level had no room, so the scheduler can
-  // still hand out items of the levels below
-  std::array<std::deque<crimson::osd::scheduler::item_t>, num_levels> parked;
+  level_counts_t in_progress = {};
+  level_counts_t committed = {};
+
+  struct QueueKey {
+    throttle_level_t level;
+    SchedulerClass klass;
+    crimson::osd::scheduler::priority_t priority;
+    crimson::osd::scheduler::client_t owner;
+
+    auto operator<=>(const QueueKey&) const = default;
+  };
+  struct PendingQueue {
+    std::deque<crimson::osd::scheduler::item_t> items;
+    size_t candidates = 0;
+
+    bool empty() const { return items.empty() && candidates == 0; }
+  };
+  // One extra candidate per fairness domain keeps other classes, strict
+  // priorities, and WPQ owners visible when a level has no capacity.
+  std::map<QueueKey, PendingQueue> waiting;
+  // Equal-priority candidates retain their scheduler dequeue order.
+  std::deque<crimson::osd::scheduler::item_t> parked;
 
   uint64_t pending = 0;
   bool started = false;
@@ -471,15 +488,17 @@ private:
 
   void wake();
 
-  seastar::future<> wake_set();
-
   seastar::future<> acquire_throttle(
     crimson::osd::scheduler::params_t params,
     throttle_level_t level);
 
-  // slots held by operations at the given level and above
-  uint64_t in_progress_from(size_t level) const;
+  QueueKey queue_key(const crimson::osd::scheduler::item_t &item) const;
+  static uint64_t count_from(const level_counts_t &counts, size_t level = 0);
+  bool fits(throttle_level_t level, const level_counts_t &counts) const;
+  bool can_feed(const QueueKey &key, const PendingQueue &queue) const;
+  void feed();
   bool has_parked_admissible() const;
+  bool admit_parked();
   void admit(crimson::osd::scheduler::item_t &item);
   void release_throttle(throttle_level_t level);
   seastar::future<> background_task();
