@@ -20,13 +20,13 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <set>
 
 #include "common/ceph_json.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
 #include "noobaa_config_store.h"
+#include "noobaa_schema.h"
 #include "../impersonate.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -141,15 +141,13 @@ std::vector<std::string> NooBaaStoreContents::md5_etag_divergence() const
   return out;
 }
 
-/* The NooBaa versions adoption is verified against.  Pinned at
- * noobaa-core `08d063f86`, whose package version is 5.23.0. */
-static const std::set<std::string> VERIFIED_NOOBAA_VERSIONS = {"5.23.0"};
-
 std::vector<std::string> NooBaaStoreContents::version_skew() const
 {
   std::vector<std::string> out;
+  /* the releases the record schema has been reviewed against */
   auto verified = [](const std::string& v) {
-    return VERIFIED_NOOBAA_VERSIONS.count(v) != 0;
+    return std::ranges::find(noobaa_schema::reviewed_releases, v) !=
+	   noobaa_schema::reviewed_releases.end();
   };
   if (!system.present) {
     out.push_back("no readable system.json, so no NooBaa version");
@@ -338,6 +336,21 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
     out.unreadable.push_back(NooBaaUnreadable{path, std::move(why)});
   };
 
+  /* X4's second layer:  a record holding a field NooBaa at the store's
+   * release does not write is not read.  Checked after system.json and
+   * config.json, which say the release and whether NooBaa itself let
+   * such a record through. */
+  auto unknown_field = [&out](const noobaa_schema::Node& schema,
+			      JSONObj* record) -> std::string {
+    std::string why = noobaa_schema::unknown_field(
+      schema, record, out.system.upgrade_package_version);
+    if (!why.empty() && out.settings.schema_check_disabled) {
+      why += ";  this deployment sets NC_DISABLE_SCHEMA_CHECK, so NooBaa "
+	     "served it";
+    }
+    return why;
+  };
+
   /* config.json.  Read first, because what it says changes how every
    * identity below it behaves and a reader of the report should see it
    * before the identities it qualifies. */
@@ -373,6 +386,12 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 				   out.settings.master_keys_get_executable, &p);
 	} catch (const JSONDecoder::err& e) {
 	  unreadable(path, std::string("NC_MASTER_KEYS_*: ") + e.what());
+	}
+	try {
+	  JSONDecoder::decode_json("NC_DISABLE_SCHEMA_CHECK",
+				   out.settings.schema_check_disabled, &p);
+	} catch (const JSONDecoder::err& e) {
+	  unreadable(path, std::string("NC_DISABLE_SCHEMA_CHECK: ") + e.what());
 	}
       }
     } else if (ret != -ENOENT) {
@@ -450,6 +469,11 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 	  unreadable(path, "not JSON");
 	  continue;
 	}
+	if (auto why = unknown_field(noobaa_schema::account, &p);
+	    !why.empty()) {
+	  unreadable(path, why);
+	  continue;
+	}
 	NooBaaIdentity id;
 	try {
 	  decode_identity(&p, id);
@@ -500,6 +524,11 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 	JSONParser p;
 	if (!p.parse(doc.data(), doc.size())) {
 	  unreadable(path, "not JSON");
+	  continue;
+	}
+	if (auto why = unknown_field(noobaa_schema::bucket, &p);
+	    !why.empty()) {
+	  unreadable(path, why);
 	  continue;
 	}
 	NooBaaBucketRecord rec;

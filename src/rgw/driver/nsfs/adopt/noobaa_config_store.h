@@ -183,6 +183,11 @@ struct NooBaaSettings {
   std::string master_keys_store_type;      /* "file" | "executable" */
   std::string master_keys_file_location;   /* empty: beside config.json */
   std::string master_keys_get_executable;
+
+  /* `NC_DISABLE_SCHEMA_CHECK`, false by default in `config.js` at the
+   * pin.  Set, NooBaa serves a record its schema rejects, so such a
+   * store can hold records outside it whatever its release. */
+  bool schema_check_disabled{false};
 };
 
 /* What `system.json` says about the NooBaa versions that wrote the

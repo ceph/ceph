@@ -302,6 +302,7 @@ list(APPEND librgw_nsfs_srcs
   driver/nsfs/xattr_strategy.cc
   driver/nsfs/bucket_state_strategy.cc
   driver/nsfs/adopt/noobaa_config_store.cc
+  driver/nsfs/adopt/noobaa_schema.cc
   driver/nsfs/adopt/noobaa_master_keys.cc
   driver/nsfs/adopt/noobaa_import_plan.cc
   driver/nsfs/adopt/noobaa_import.cc

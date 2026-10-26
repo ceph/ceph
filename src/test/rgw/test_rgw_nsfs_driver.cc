@@ -45,6 +45,7 @@
 #include "driver/nsfs/adopt/noobaa_import_plan.h"
 #include "driver/nsfs/adopt/noobaa_import.h"
 #include "driver/nsfs/adopt/noobaa_bucket_import.h"
+#include "driver/nsfs/adopt/noobaa_schema.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_pubsub.h"
 #include "rgw_account.h"
@@ -53,6 +54,7 @@
 #include "driver/nsfs/personality.h"
 #include "rgw_auth.h"
 #include "common/ceph_json.h"
+#include "common/split.h"
 
 using namespace rgw::sal;
 
@@ -12298,6 +12300,207 @@ TEST_F(NooBaaStoreTest, TheVersionGateAdmitsOnlyAVerifiedUnlockedStore)
   }
 }
 
+/* A record holding a field NooBaa does not write is not read (X4's
+ * second layer).
+ *
+ * Each refused case is NooBaa's bytes with one documented change, and
+ * each is one NooBaa's own validator at the pin refuses too
+ * (`nsfs_schema_utils.js` `validate_account_schema()` and
+ * `validate_bucket_schema()`, run against the same records):  a field at
+ * the top, one inside `nsfs_account_config`, a group list on the
+ * directory-backed form, which only the uid form carries, a field inside
+ * a lifecycle rule, a key inside a policy statement, and a principal
+ * in a namespace other than `AWS`, which NooBaa's schema has no form
+ * for.  The accepted cases are the controls:  NooBaa's own records, the
+ * uid form with groups, and a principal's string form with a
+ * condition's open map, which NooBaa's validator accepts as well. */
+TEST_F(NooBaaStoreTest, ARecordHoldingAFieldNooBaaDoesNotWriteIsNotRead)
+{
+  auto changed = [](std::string doc, const std::string& from,
+		    const std::string& to) {
+    const auto at = doc.find(from);
+    EXPECT_NE(at, std::string::npos) << from;
+    return doc.replace(at, from.size(), to);
+  };
+  const std::string plain = NB_ACCOUNT_PLAIN;
+  const std::string bucket =
+    R"({"_id":"1","name":"b","owner_account":"2","versioning":"ENABLED",)"
+    R"("path":"/x","should_create_underlying_storage":true,)"
+    R"("creation_date":"2026-01-02T03:04:05.000Z"})";
+  auto with = [&](const std::string& extra) {
+    return bucket.substr(0, bucket.size() - 1) + "," + extra + "}";
+  };
+
+  struct Case {
+    const char* what;
+    bool is_bucket;
+    std::string doc;
+    /* empty:  read */
+    std::string expect;
+  };
+  const std::vector<Case> cases = {
+    {"an account as NooBaa wrote it", false, plain, ""},
+    {"a group list on the uid form", false, NB_ACCOUNT_GROUPS, ""},
+    {"a field at the top", false,
+     changed(plain, R"("_id")", R"("new_field":1,"_id")"),
+     ".new_field is not a field NooBaa writes"},
+    {"a field in nsfs_account_config", false,
+     changed(plain, R"("nsfs_account_config": {)",
+	     R"("nsfs_account_config": {"new_field":1,)"),
+     ".nsfs_account_config.new_field is not a field"},
+    {"a group list on the directory-backed form", false,
+     changed(changed(plain, R"("uid": 1000,)", ""), R"("gid": 1000)",
+	     R"("distinguished_name":"cn=x","supplemental_groups":[4])"),
+     ".nsfs_account_config matches none of the forms"},
+    {"a bucket as NooBaa wrote it", true, bucket, ""},
+    {"a field in a lifecycle rule", true,
+     with(R"("lifecycle_configuration_rules":[{"id":"r","status":"Enabled",)"
+	  R"("filter":{"prefix":""},"expiration":{"days":1},"new_field":1}])"),
+     ".lifecycle_configuration_rules[0].new_field is not a field"},
+    {"a key in a policy statement", true,
+     with(R"("s3_policy":{"Version":"2012-10-17","Statement":[{"Effect":)"
+	  R"("Allow","Principal":{"AWS":["*"]},"Action":["s3:*"],)"
+	  R"("Resource":["*"],"Foo":1}]})"),
+     ".s3_policy.Statement[0].Foo is not a field"},
+    {"a principal's string form and a condition's map", true,
+     with(R"("s3_policy":{"Version":"2012-10-17","Statement":[{"Effect":)"
+	  R"("Allow","Principal":"*","Action":"s3:*",)"
+	  R"("Resource":"*","Condition":{"StringEquals":{"aws:any":"v"}}}]})"),
+     ""},
+    {"a principal naming a namespace other than AWS", true,
+     with(R"("s3_policy":{"Version":"2012-10-17","Statement":[{"Effect":)"
+	  R"("Allow","Principal":{"Service":"x"},"Action":"s3:*",)"
+	  R"("Resource":"*"}]})"),
+     ".Principal matches none of the forms"},
+  };
+
+  for (const auto& tc : cases) {
+    SCOPED_TRACE(tc.what);
+    std::filesystem::remove_all(store + "/identities");
+    std::filesystem::remove_all(store + "/buckets");
+    std::filesystem::create_directories(store + "/identities");
+    std::filesystem::create_directories(store + "/buckets");
+    if (tc.is_bucket) {
+      add_bucket("b", tc.doc);
+    } else {
+      add_identity("i", tc.doc.c_str());
+    }
+    auto c = read_store();
+    std::string all;
+    for (const auto& u : c.unreadable) {
+      if (u.why != "no identities directory") {
+	all += "\n  " + u.path + ": " + u.why;
+      }
+    }
+    if (tc.expect.empty()) {
+      EXPECT_TRUE(all.empty()) << all;
+      EXPECT_EQ(tc.is_bucket ? c.buckets.size() : c.identities.size(), 1u);
+      continue;
+    }
+    EXPECT_NE(all.find(tc.expect), std::string::npos) << all;
+    EXPECT_EQ(tc.is_bucket ? c.buckets.size() : c.identities.size(), 0u)
+	<< "a record holding an unknown field was read";
+  }
+}
+
+/* A deployment with NooBaa's schema check off can hold such a record at
+ * any release, and the refusal says so. */
+TEST_F(NooBaaStoreTest, ARefusalSaysWhenNooBaaSchemaCheckWasOff)
+{
+  std::string doc = NB_ACCOUNT_PLAIN;
+  doc.replace(doc.find(R"("_id")"), 5, R"("new_field":1,"_id")");
+  add_identity("i", doc.c_str());
+  write_file(store + "/config.json", R"({"NC_DISABLE_SCHEMA_CHECK":true})");
+
+  auto c = read_store();
+  EXPECT_TRUE(c.settings.schema_check_disabled);
+  ASSERT_EQ(c.unreadable.size(), 1u);
+  EXPECT_NE(c.unreadable[0].why.find("NC_DISABLE_SCHEMA_CHECK"),
+	    std::string::npos) << c.unreadable[0].why;
+}
+
+/* A field is known from the release that first writes it, as a Ceph
+ * decoder reads a field only from the struct version that added it.
+ *
+ * A tree of the test's own, since every field at the pin is 5.23.0's:  a
+ * field from 5.24.0 is unknown to a 5.23.0 store and known to a 5.24.0
+ * one, and a release that does not parse, or one before any review,
+ * reads as the newest or the oldest reviewed release. */
+TEST(NooBaaSchema, AFieldIsKnownFromTheReleaseThatWritesIt)
+{
+  namespace ns = rgw::sal::nsfs::noobaa_schema;
+  static constexpr ns::Node scalar{.kind = ns::Node::Kind::Scalar};
+  static constexpr ns::Field fields[] = {
+    {"old", "5.23.0", ns::Disposition::Translated, &scalar},
+    {"new", "5.24.0", ns::Disposition::NotCarried, &scalar},
+  };
+  static constexpr ns::Node tree{.kind = ns::Node::Kind::Object,
+				 .fields = fields};
+
+  JSONParser both, old_only;
+  const std::string b = R"({"old":1,"new":2})", o = R"({"old":1})";
+  ASSERT_TRUE(both.parse(b.data(), b.size()));
+  ASSERT_TRUE(old_only.parse(o.data(), o.size()));
+
+  EXPECT_EQ(ns::unknown_field(tree, &old_only, "5.23.0"), "");
+  EXPECT_EQ(ns::unknown_field(tree, &both, "5.23.0"),
+	    ".new is written from NooBaa 5.24.0");
+  EXPECT_EQ(ns::unknown_field(tree, &both, "5.24.0"), "");
+  EXPECT_EQ(ns::unknown_field(tree, &both, "5.24"),
+	    ".new is written from NooBaa 5.24.0")
+      << "a release that does not parse is not read as the newest reviewed "
+	 "one";
+  EXPECT_EQ(ns::unknown_field(tree, &old_only, "5.20.0"), "")
+      << "a release before the first review is not read as the oldest";
+}
+
+/* The schema tree accepts and refuses exactly what NooBaa's validator
+ * does, over records NooBaa wrote.
+ *
+ * `NSFS_NOOBAA_SCHEMA_CASES` names the file `standup.rs schema-agreement`
+ * writes:  every record in a store NooBaa stood up, and each with an
+ * unknown key planted at every object inside it, with whether NooBaa's
+ * validator at the pin refuses each (`schema-agreement.js`).  Skipped when unset,
+ * as the on-disk store tests are.  The tree is checked against NooBaa
+ * itself here, not against a reading of its schema files. */
+TEST(NooBaaSchema, AgreesWithNooBaasValidator)
+{
+  const char* file = ::getenv("NSFS_NOOBAA_SCHEMA_CASES");
+  if (!file || !*file) {
+    GTEST_SKIP() << "NSFS_NOOBAA_SCHEMA_CASES is unset;  see "
+		 << "src/test/rgw/adoption/standup.rs schema-agreement";
+  }
+  namespace ns = rgw::sal::nsfs::noobaa_schema;
+  std::ifstream in(file);
+  ASSERT_TRUE(in) << file;
+  size_t cases = 0;
+  std::string disagree;
+  for (std::string line; std::getline(in, line);) {
+    auto parts = ceph::split(line, "\t");
+    auto it = parts.begin();
+    std::vector<std::string> col;
+    for (; it != parts.end() && col.size() < 3; ++it) {
+      col.emplace_back(*it);
+    }
+    ASSERT_EQ(col.size(), 3u) << line;
+    const std::string json = line.substr(col[0].size() + col[1].size() +
+					 col[2].size() + 3);
+    JSONParser p;
+    ASSERT_TRUE(p.parse(json.data(), json.size())) << line;
+    const ns::Node& schema = (col[0] == "bucket") ? ns::bucket : ns::account;
+    const std::string why = ns::unknown_field(schema, &p, "5.23.0");
+    const bool noobaa_refused = (col[1] == "1");
+    if (!why.empty() != noobaa_refused) {
+      disagree += "\n  " + col[0] + " " + col[2] + ":  NooBaa " +
+	(noobaa_refused ? "refuses" : "accepts") + ", the tree " +
+	(why.empty() ? "accepts" : "refuses (" + why + ")") + ":  " + json;
+    }
+    ++cases;
+  }
+  EXPECT_GT(cases, 0u) << file << " holds no cases";
+  EXPECT_TRUE(disagree.empty()) << "they disagree on" << disagree;
+}
+
 /* A store on disk, read without complaint.
  *
  * `NSFS_NOOBAA_STORE` names a real NooBaa configuration directory and
@@ -15268,6 +15471,38 @@ TEST_F(NooBaaModeTest, AStoreALaterNooBaaWroteIsRefusedBeforeAnyWrite)
 
   /* the control:  NooBaa's own system.json, and the same store adopts */
   write_file(conf_root() / "system.json", NB_SYSTEM_JSON);
+  auto st = ask({{"identities", "true"}});
+  EXPECT_EQ(st["ran"], "true") << st["error"];
+  auto again = ask({{"bucket", testname}});
+  EXPECT_EQ(again["adopted"], "true") << again["error"];
+}
+
+/* A bucket record holding a field NooBaa does not write is not imported
+ * (X4's second layer), and neither is the store's identities, since a
+ * preflight that does not read a record stops.  The same record without
+ * the field then adopts, so the field is what refused it. */
+TEST_F(NooBaaModeTest, ABucketRecordHoldingAnUnknownFieldIsNotImported)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_nb_record("ENABLED", R"(,"new_field":1)");
+
+  std::map<std::string, std::string> ids;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"identities", "true"}}, &ids), -EBADMSG);
+  EXPECT_EQ(ids["unreadable"], "1");
+
+  std::map<std::string, std::string> one;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", testname}}, &one), 0);
+  EXPECT_EQ(one["adopted"], "false");
+  nsfs::BucketPlacement row;
+  EXPECT_LT(driver->get_identity_db()->get_bucket_placement(
+	      env->dpp, testname, "", row), 0)
+      << "the record was imported";
+
+  /* the control */
+  write_nb_record("ENABLED");
   auto st = ask({{"identities", "true"}});
   EXPECT_EQ(st["ran"], "true") << st["error"];
   auto again = ask({{"bucket", testname}});

@@ -18536,6 +18536,22 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
     put_report("version_skew", std::to_string(skew.size()));
     return -ENOTSUP;
   }
+  /* and its record must read:  one that does not, or that holds a field
+   * NooBaa at the store's release does not write (X4's second layer), is
+   * not imported, as adopt_identities() refuses the store for it */
+  {
+    const std::string path = root + "/buckets/" + bucket_name + ".json";
+    for (const auto& u : contents.unreadable) {
+      if (u.path != path) {
+	continue;
+      }
+      ldpp_dout(dpp, 0) << "ERROR: not importing bucket " << bucket_name
+	<< ": " << u.path << ": " << u.why << dendl;
+      put_report("configured", "false");
+      put_report("unreadable", u.why);
+      return -EBADMSG;
+    }
+  }
 
   nsfs::ImportPlan plan;
   ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
