@@ -18,6 +18,7 @@
 
 #include "rgw_common.h"
 #include "rgw_zone.h"
+#include "rgw_compression.h"
 #include "rgw_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
@@ -2923,6 +2924,10 @@ class RGWObjFetchCR : public RGWCoroutine {
 
   std::optional<rgw_user> param_user;
   rgw_sync_pipe_params::Mode param_mode;
+  // the storage class that sync policy picks for the object, if it's known
+  // before the fetch
+  std::optional<std::optional<std::string>> param_storage_class;
+  bool fetch_decompressed{false};
 
   std::optional<RGWUserPermHandler> user_perms;
   RGWUserPermHandler::Bucket dest_bucket_perms;
@@ -2960,16 +2965,26 @@ public:
 
         {
           std::optional<rgw_user> param_acl_translation;
-          std::optional<string> param_storage_class;
+          // not used for the storage class: find_basic_info_without_tags()
+          // can pick another rule than the filter's find_obj_params()
+          std::optional<string> basic_storage_class;
+          param_storage_class.reset();
 
           if (!sync_pipe.info.handler.find_basic_info_without_tags(key,
                                                                    &param_user,
                                                                    &param_acl_translation,
-                                                                   &param_storage_class,
+                                                                   &basic_storage_class,
                                                                    &param_mode,
                                                                    &need_more_info)) {
             if (!need_more_info) {
               return set_cr_error(-ERR_PRECONDITION_FAILED);
+            }
+          }
+          if (!need_more_info) {
+            // the storage class as RGWFetchObjFilter_Sync will pick it
+            rgw_sync_pipe_params params;
+            if (sync_pipe.info.handler.find_obj_params(key, {}, &params)) {
+              param_storage_class.emplace(params.dest.storage_class);
             }
           }
         }
@@ -3015,6 +3030,7 @@ public:
 
           param_user = params.user;
           param_mode = params.mode;
+          param_storage_class.emplace(params.dest.storage_class);
 
           dest_params = params.dest;
         }
@@ -3056,6 +3072,20 @@ public:
           if (!need_retry) {
             need_retry = make_shared<bool>();
           }
+          // objects whose compression type is already the one this zone would
+          // use for them can be fetched as stored, saving the source zone the
+          // decompression, this zone the recompression, and both the bandwidth
+          std::string skip_decompress_types;
+          if (!fetch_decompressed && param_storage_class &&
+              cct->_conf.get_val<bool>("rgw_sync_obj_skip_decompress")) {
+            const auto& zone_params = sync_env->svc->zone->get_zone_params();
+            const auto& rule = sync_pipe.dest_bucket_info.placement_rule;
+            if (auto p = zone_params.placement_pools.find(rule.name);
+                p != zone_params.placement_pools.end()) {
+              skip_decompress_types = rgw_sync_compression_types(
+                  cct, p->second, rule.get_storage_class(), *param_storage_class);
+            }
+          }
           auto filter = make_shared<RGWFetchObjFilter_Sync>(sync_pipe,
                                                             std::move(dest_params),
                                                             need_retry);
@@ -3069,10 +3099,16 @@ public:
                                        std::static_pointer_cast<RGWFetchObjFilter>(filter),
                                        stat_follow_olh,
                                        source_trace_entry, zones_trace,
-                                       sync_env->counters, dpp, replicate_tags));
+                                       sync_env->counters, dpp, replicate_tags,
+                                       std::move(skip_decompress_types)));
         }
         if (retcode < 0) {
           if (*need_retry) {
+            continue;
+          }
+          if (retcode == -ERR_SYNC_COMPRESSION_MISMATCH && !fetch_decompressed) {
+            // the object's compression doesn't match its storage class here
+            fetch_decompressed = true;
             continue;
           }
           return set_cr_error(retcode);

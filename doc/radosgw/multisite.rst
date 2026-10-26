@@ -590,7 +590,9 @@ set to ``true``, an MD5 checksum is used to verify the integrity of the data tha
 was transferred from the source to the destination. This ensures the integrity
 of any object that has been fetched from a remote server over HTTP (including
 multi-site sync). This option may decrease the performance of your RGW because
-it requires more computation.
+it requires more computation. Objects that are transferred encrypted or
+compressed are not verified; set :confval:`rgw_sync_obj_skip_decompress` to
+``false`` to verify compressed objects that are not encrypted.
 
 
 Maintenance
