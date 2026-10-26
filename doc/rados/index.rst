@@ -12,7 +12,7 @@ Storage Clusters consist of several types of daemons:
 - a :term:`Ceph Monitor` (MON) maintains a master copy of the cluster map
 - a :term:`Ceph Manager` daemon
        
-A Ceph Storage Cluster might contain thousands of storage nodes. A minimal
+A Ceph Storage Cluster may comprise thousands of storage nodes. A minimal
 system runs at least one Ceph Monitor, one Ceph Manager, and as many Ceph OSD
 Daemons as the number of object replicas or shards in its pools (three for the
 default pool size). See :ref:`ceph-cluster-components`.

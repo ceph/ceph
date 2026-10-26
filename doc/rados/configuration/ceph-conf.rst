@@ -30,20 +30,9 @@ Option Names
 
 Each Ceph configuration option has a unique name that consists of words
 formed with lowercase characters and connected with underscore characters
-(``_``).
-
-On the command line (and in ``CEPH_ARGS``), underscore (``_``) and dash
-(``-``) characters in option names are interchangeable: ``--mon-host`` is
-equivalent to ``--mon_host``.
-
-In configuration files, spaces can be used in place of underscores
-(``mon host`` is the same as ``mon_host``), but dashes cannot: a name such
-as ``mon-host`` is not recognized and is ignored without a warning.
-``ceph config`` commands do not convert dashes in option names either.
-
-For the sake of clarity and
-convenience, we suggest that you consistently use underscores, as we do
-throughout this documentation.
+(``_``). Always write option names with underscores, as this documentation
+does. In a configuration file, a name written with dashes, such as
+``mon-host``, is ignored without a warning.
 
 Config Sources
 ==============
@@ -105,9 +94,11 @@ option, which skips the step that retrieves configuration information from
 the cluster's Monitors at startup.
 Skipping this config option source can be useful in cases where configuration is
 managed entirely via configuration files, or when maintenance is necessary
-but the Monitor quorum is down. Programs that connect through librados, such
-as the ``ceph`` command and ``radosgw``, accept the option but still retrieve
-the central configuration when they connect.
+but the Monitor quorum is down. Once it connects to the Monitors, a daemon
+started with the option still applies the central values of options that can
+change at runtime. Programs that connect through librados, such as the
+``ceph`` command and ``radosgw``, accept the option but still retrieve and
+apply the central configuration when they connect.
 
 .. _ceph-conf-file:
 
@@ -278,7 +269,7 @@ On startup, a Ceph process reads one configuration file, chosen as follows:
    #. ``~/.ceph/$cluster.conf``
    #. ``./$cluster.conf`` (that is, in the current working directory)
    #. On FreeBSD systems only, ``/usr/local/etc/ceph/$cluster.conf``
-   #. On Windows systems only, ``$programdata/ceph/$cluster.conf``
+   #. On MS Windows systems only, ``$programdata/ceph/$cluster.conf``
 
 ``-c`` and ``CEPH_CONF`` take a list of paths separated by commas or
 semicolons, and the first file in the list that can be read is used. If no

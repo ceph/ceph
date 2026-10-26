@@ -61,7 +61,7 @@ clients will only see the v1 addresses and will continue to connect as
 they did before, with the v1 protocol.
 
 The ``mon_host`` configuration option and the ``-m <mon-host>`` command
-line option accept the same bracketed address vector syntax.
+line option accept the same bracketed lists of addresses.
 
 
 Bind configuration options
@@ -192,8 +192,8 @@ port ``1112``:
 Updating ceph.conf and mon_host
 -------------------------------
 
-A CLI user or daemon normally discovers the monitors via the ``mon_host``
-option in ``/etc/ceph/ceph.conf``, which accepts bracketed address vectors.
+A CLI user or daemon normally discovers the Monitors via the ``mon_host``
+option in ``/etc/ceph/ceph.conf``, which accepts bracketed lists of addresses.
 For example, a line that lists only v1 addresses, like::
 
   mon_host = 10.0.0.1:6789,10.0.0.2:6789,10.0.0.3:6789
@@ -207,15 +207,15 @@ be omitted::
 
   mon_host = 10.0.0.1,10.0.0.2,10.0.0.3
 
-Once v2 has been enabled on the monitors, ``ceph.conf`` may need to be
+Once v2 has been enabled on the Monitors, ``ceph.conf`` may need to be
 updated to either specify no ports (this is usually simplest), or
 explicitly specify both the v2 and v1 addresses.
 
 When you are updating ``ceph.conf``, note the new ``ceph config
 generate-minimal-conf`` command (which generates a barebones config
-file with just enough information to reach the monitors) and the
+file with just enough information to reach the Monitors) and the
 ``ceph config assimilate-conf`` (which moves config file options into
-the monitors' configuration database) may be helpful.  For example:
+the Monitors' configuration database) may be helpful.  For example:
 
 .. prompt:: bash #
 
@@ -232,7 +232,9 @@ the monitors' configuration database) may be helpful.  For example:
 
 Before you replace the file, read ``/etc/ceph/ceph.conf.unassimilated``: it
 lists the options that were not imported into the Monitor configuration
-database. Add to the new file any of them that the host still needs.
+database. The old file's ``fsid`` and ``mon_host`` lines always appear in it,
+because the Monitors do not store these options, and the new file already has
+both. Add to the new file any other options that the host still needs.
 
 .. prompt:: bash #
 

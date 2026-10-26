@@ -10,11 +10,15 @@ The addition of the ability to look up Monitors through DNS means that daemons
 and clients do not require a :confval:`mon_host` configuration directive in their
 ``ceph.conf`` configuration file.
 
-To be more precise and technical, clients look up the Monitors by using
-``DNS SRV TCP`` records. Clients and daemons read the SRV records when they
-start, to find their first Monitor. After that they follow the monitor map
-that the Monitors maintain, so a change to the SRV records reaches only
-processes that start after the change.
+Clients and daemons look up the Monitors in ``DNS SRV TCP`` records only when
+their configuration gives no Monitor addresses, for example when
+:confval:`mon_host` is not set. Host names in ``mon_host`` are resolved with
+ordinary address lookups, not SRV records. If there are no SRV records either,
+the client or daemon cannot find a Monitor and fails with an error. Clients and
+daemons read the SRV records when they start, to find their first Monitor.
+After startup, clients update their monitor maps from the map that the
+Monitors maintain, so a change to the SRV records reaches only processes that
+start after the change.
 
 By default, clients and daemons look for the TCP service called *ceph-mon*,
 which is configured by the ``mon_dns_srv_name`` configuration directive.
@@ -67,8 +71,8 @@ v2 once they have the monitor map, if the Monitors have v2 addresses. Linux
 kernel clients connect with one protocol only: a kernel CephFS mount or
 ``rbd device map`` with ``ms_mode=legacy`` needs v1 records (port 6789), and
 one with any other ``ms_mode`` needs v2 records (port 3300). With no
-``ms_mode``, ``rbd device map`` needs v2 records in Tentacle 20.2 and later
-releases and v1 records in Squid 19.2. A CephFS mount with no ``ms_mode``
+``ms_mode``, ``rbd device map`` needs v2 records in Tentacle and later
+releases and v1 records in Squid. A CephFS mount with no ``ms_mode``
 needs v1 records if it uses the old device syntax; with the new syntax it uses
 v2 records when they exist and v1 records otherwise.
 
