@@ -943,6 +943,8 @@ if(WITH_RADOSGW_RADOS)
     global ${LIB_RESOLV}
     OATH::OATH
     ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+  target_include_directories(radosgw-admin SYSTEM
+    PRIVATE "${CMAKE_SOURCE_DIR}/src/CLI11/include")
 
   # this is unsatisfying and hopefully temporary; ARROW should not be
   # part of radosgw_admin
@@ -969,6 +971,8 @@ if(WITH_RADOSGW_STANDALONE)
     global ${LIB_RESOLV}
     OATH::OATH
     ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+  target_include_directories(rgw-standalone-admin SYSTEM
+    PRIVATE "${CMAKE_SOURCE_DIR}/src/CLI11/include")
 
   # this is unsatisfying and hopefully temporary; ARROW should not be
   # part of radosgw_admin

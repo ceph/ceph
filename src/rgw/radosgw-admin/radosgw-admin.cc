@@ -5,11 +5,16 @@
  * Copyright (C) 2025 IBM
  */
 
+#include <algorithm>
 #include <cerrno>
+#include <functional>
 #include <optional>
 #include <string>
 #include <sstream>
+#include <unordered_set>
 #include <iostream>
+#include <memory>
+#include <CLI/CLI.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -612,21 +617,9 @@ static SimpleCmd::Commands all_cmds = {
   { "subuser rm", OPT::SUBUSER_RM },
   { "key create", OPT::KEY_CREATE },
   { "key rm", OPT::KEY_RM },
-  { "buckets list", OPT::BUCKETS_LIST },
-  { "bucket list", OPT::BUCKETS_LIST },
-  { "bucket limit check", OPT::BUCKET_LIMIT_CHECK },
-#ifdef WITH_RADOSGW_RADOS
-  { "bucket link", OPT::BUCKET_LINK },
-  { "bucket unlink", OPT::BUCKET_UNLINK },
-#endif
-  { "bucket layout", OPT::BUCKET_LAYOUT },
-  { "bucket stats", OPT::BUCKET_STATS },
   { "bucket suspend", OPT::BUCKET_SUSPEND },
   { "bucket unsuspend", OPT::BUCKET_UNSUSPEND },
 #ifdef WITH_RADOSGW_RADOS
-  { "bucket check", OPT::BUCKET_CHECK },
-  { "bucket check olh", OPT::BUCKET_CHECK_OLH },
-  { "bucket check unlinked", OPT::BUCKET_CHECK_UNLINKED },
   { "bucket sync checkpoint", OPT::BUCKET_SYNC_CHECKPOINT },
   { "bucket sync info", OPT::BUCKET_SYNC_INFO },
   { "bucket sync status", OPT::BUCKET_SYNC_STATUS },
@@ -635,27 +628,8 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket sync run", OPT::BUCKET_SYNC_RUN },
   { "bucket sync disable", OPT::BUCKET_SYNC_DISABLE },
   { "bucket sync enable", OPT::BUCKET_SYNC_ENABLE },
-#endif
-  { "bucket rm", OPT::BUCKET_RM },
-#ifdef WITH_RADOSGW_RADOS
-  { "bucket rewrite", OPT::BUCKET_REWRITE },
   { "bucket reshard", OPT::BUCKET_RESHARD },
 #endif
-  { "bucket set-min-shards", OPT::BUCKET_SET_MIN_SHARDS },
-  { "bucket chown", OPT::BUCKET_CHOWN },
-#ifdef WITH_RADOSGW_RADOS
-  { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
-  { "bucket rados list", OPT::BUCKET_RADOS_LIST },
-#endif
-  { "bucket shard objects", OPT::BUCKET_SHARD_OBJECTS },
-  { "bucket shard object", OPT::BUCKET_SHARD_OBJECTS },
-  { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
-#ifdef WITH_RADOSGW_RADOS
-  { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
-#endif
-  { "bucket logging flush", OPT::BUCKET_LOGGING_FLUSH },
-  { "bucket logging info", OPT::BUCKET_LOGGING_INFO },
-  { "bucket logging list", OPT::BUCKET_LOGGING_LIST },
   { "policy", OPT::POLICY },
 #ifdef WITH_RADOSGW_RADOS
   { "log list", OPT::LOG_LIST },
@@ -881,9 +855,6 @@ static SimpleCmd::Commands all_cmds = {
   { "topic stats", OPT::PUBSUB_TOPIC_STATS },
   { "topic dump", OPT::PUBSUB_TOPIC_DUMP },
 #endif
-  { "script put", OPT::SCRIPT_PUT },
-  { "script get", OPT::SCRIPT_GET },
-  { "script rm", OPT::SCRIPT_RM },
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
@@ -1592,9 +1563,7 @@ done:
 
   return 0;
 }
-#endif
 
-#ifdef WITH_RADOSGW_RADOS
 int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj_key& key, bool fix, Formatter *f) {
   f->open_object_section("object");
   f->open_object_section("key");
@@ -1621,9 +1590,7 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj_key& k
 
   return 0;
 }
-#endif
 
-#ifdef WITH_RADOSGW_RADOS
 int do_check_object_locator(const string& tenant_name, const string& bucket_name,
                             bool fix, bool remove_bad, Formatter *f)
 {
@@ -1696,9 +1663,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   return 0;
 }
-#endif
 
-#ifdef WITH_RADOSGW_RADOS
 /// search for a matching zone/zonegroup id and return a connection if found
 static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver,
                                                     const RGWZoneGroup& zonegroup,
@@ -3414,6 +3379,365 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
   }
 }
 
+// Group holding the hidden ancestor copies registered by add_multilevel_*.
+// It must be non-empty: CLI11 returns an empty name for an option whose group
+// is empty (Option::get_name), which drops the flag from its own error message
+// — "--bucket: 1 required TEXT missing" becomes ": 1 required TEXT missing".
+// Keeping the copies out of --help is AncestorCopiesFormatter's job instead.
+constexpr const char* ANCESTOR_COPIES_GROUP = "__ancestor_copies";
+
+// Hides ANCESTOR_COPIES_GROUP from the help output. Every group listing goes
+// through make_group, so overriding it is enough. Must be installed on the
+// root before the first add_subcommand: a subcommand copies the formatter
+// from its parent at construction.
+class AncestorCopiesFormatter : public CLI::Formatter {
+public:
+  std::string make_group(std::string group, bool is_positional,
+                         std::vector<const CLI::Option*> opts) const override {
+    if (group == ANCESTOR_COPIES_GROUP) {
+      return {};
+    }
+    return CLI::Formatter::make_group(std::move(group), is_positional,
+                                      std::move(opts));
+  }
+};
+
+// Registers a value option at every level of the command tree: hidden on all
+// ancestor commands for backward compatibility, visible on cmd. Returns the
+// visible Option* so callers can chain modifiers like ->option_text().
+// Uses only the primary name (before any comma) for ancestor existence checks
+// since get_option_no_throw does not parse comma-separated names, but registers
+// the full name (including short flags like -b) so both forms work at every level.
+// Assumes the same option name always binds to the same target variable across
+// all commands sharing an ancestor. If two commands register the same name with
+// different targets, the first registration wins on shared ancestors — the
+// second command's ancestor registration is silently skipped.
+// An optional per-value check is attached to every copy (whichever copy sits at
+// the token's position is the one that collects the value), so flag-specific
+// validations fire no matter where the flag appears on the command line.
+template <typename T>
+CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& var,
+                               std::string_view desc = {},
+                               const std::function<void(std::string)>& check = {}) {
+  const std::string primary = name.substr(0, name.find(','));
+  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent()) {
+    if (!p->get_option_no_throw(primary)) {
+      auto* opt = p->add_option(name, var)->group(ANCESTOR_COPIES_GROUP)->take_last();
+      if (check) {
+        opt->each(check);
+      }
+    }
+  }
+  auto* opt = cmd->add_option(name, var, std::string(desc))->take_last();
+  if (check) {
+    opt->each(check);
+  }
+  return opt;
+}
+
+// Multilevel strict base-10 integer option (sibling of add_multilevel_option):
+// binds through a string callback that parses with strict_strtol/strict_strtoll
+// (base 10), matching the legacy parse loop, instead of CLI11's integer binding,
+// which auto-detects the base ("010" -> octal 8, "0x10" -> hex 16, "08" ->
+// rejected). An invalid value fails the callback, so CLI11 emits its standard
+// conversion error (exit 104), same as a directly-bound integer.
+template <typename T>
+CLI::Option* add_multilevel_strict_int(CLI::App* cmd, const std::string& name,
+                                       T& target, std::string_view desc = {}) {
+  const std::string primary = name.substr(0, name.find(','));
+  CLI::callback_t setter = [&target](const CLI::results_t& res) {
+    std::string err;
+    if constexpr (std::is_same_v<T, int>) {
+      // int targets: strict_strtol, which adds an int range check
+      target = strict_strtol(res.back(), 10, &err);
+    } else {
+      // wider targets (e.g. uint64_t): strict_strtoll + the legacy cast
+      target = static_cast<T>(strict_strtoll(res.back(), 10, &err));
+    }
+    return err.empty();
+  };
+  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent()) {
+    if (!p->get_option_no_throw(primary)) {
+      p->add_option(name, setter)->group(ANCESTOR_COPIES_GROUP)->take_last()
+          ->type_name(CLI::detail::type_name<T>());
+    }
+  }
+  return cmd->add_option(name, setter, std::string(desc))->take_last()
+      ->type_name(CLI::detail::type_name<T>());
+}
+
+// Maps a captured binary-flag value to its legacy int var. "false"/"0" -> 0,
+// anything else -> 1 (invalid values warn but set, like legacy's truthy -EINVAL).
+static void parse_binary_flag(const std::string& flag,
+                              const std::string& value, int& out) {
+  if (value.empty() || value == "true" || value == "1") {
+    out = 1;
+    return;
+  }
+  if (value == "false" || value == "0") {
+    out = 0;
+    return;
+  }
+  cerr << "Warning: invalid value '" << value << "' for " << flag
+       << ", treating as set" << std::endl;
+  out = 1;
+}
+
+// Multilevel binary flag (sibling of add_multilevel_option): a string option with
+// expected(0,1) at each level, so "--fix false" is consumed (not left as a stray) and parse()
+// stays parse-safe for unmigrated commands. The bound setter converts straight
+// into the command's int var, so no separate capture variable is needed; absent
+// leaves it untouched (add_option_function skips run_callback_for_default()).
+CLI::Option* add_multilevel_binary_flag(CLI::App* cmd, const std::string& name,
+                                        int& target, std::string_view desc = {}) {
+  const std::string primary = name.substr(0, name.find(','));
+  auto setter = [&target, primary](const std::string& v) {
+    parse_binary_flag(primary, v, target);
+  };
+  for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent()) {
+    if (!p->get_option_no_throw(primary)) {
+      p->add_option_function<std::string>(name, setter)
+          ->group(ANCESTOR_COPIES_GROUP)->expected(0, 1)->take_last();
+    }
+  }
+  return cmd->add_option_function<std::string>(name, setter, std::string(desc))->expected(0, 1)->take_last();
+}
+
+// Builds a display string for warning messages, e.g. "--bucket/-b".
+static std::string option_display_name(const CLI::Option* opt) {
+  std::string name;
+  for (const auto& n : opt->get_lnames()) {
+    name += (name.empty() ? "--" : "/--") + n;
+  }
+  for (const auto& n : opt->get_snames()) {
+    name += (name.empty() ?  "-" : "/-")  + n;
+  }
+  return name;
+}
+
+// Space-joined command path for a node, e.g. "bucket limit check".
+// Stops before the root app (which holds the program name, not a command).
+static std::string full_command_name(CLI::App* node) {
+  if (!node || !node->get_parent()) {
+    return {};
+  }
+  const std::string parent = full_command_name(node->get_parent());
+  return parent.empty() ? node->get_name() : parent + " " + node->get_name();
+}
+
+// After parsing, warns about flags that a parent command caught instead of the
+// actual command. A correctly-placed flag is caught by the command's own
+// visible option, so it never shows up here; a flag caught by a parent shows up
+// as a hidden ANCESTOR_COPIES_GROUP copy (added by add_multilevel_option for
+// backward compat) with count() > 0. Whether the command actually has the flag
+// decides the message:
+//   - the command has it   -> it was just typed too early:
+//                             "should appear after the subcommand".
+//   - the command lacks it -> unrelated flag we accept anyway for backward
+//                             compat: "is not a valid option for '<command>'".
+// We ask the command itself, not each child. Under fallthrough()
+// get_option_no_throw() climbs to the parent when the command doesn't own the
+// flag, so we also check the returned option's group: a real (visible) option
+// has its own group, while a hidden copy climbed from an ancestor is in
+// ANCESTOR_COPIES_GROUP.
+void warn_wrong_position_and_unrelated_option(CLI::App* root) {
+  // One command is parsed, so follow the parsed chain down to the real command.
+  std::vector<CLI::App*> path;
+  for (CLI::App* n = root; n; ) {
+    path.push_back(n);
+    auto subs = n->get_subcommands();
+    n = subs.empty() ? nullptr : subs.front();
+  }
+  CLI::App* leaf = path.back();
+  if (leaf == root) {
+    return;  // no command was given
+  }
+  const std::string cmd_name = full_command_name(leaf);
+
+  std::set<std::string> warned;
+  for (CLI::App* node : path) {
+    for (const auto* opt : node->get_options()) {
+      if (opt->get_group() != ANCESTOR_COPIES_GROUP || opt->count() == 0) {
+        continue;
+      }
+      const std::string primary = "--" + opt->get_single_name();
+      if (!warned.insert(primary).second) {
+        continue;
+      }
+      // Does the actual command own this flag as a real (visible) option?
+      const CLI::Option* owned = leaf->get_option_no_throw(primary);
+      const bool command_has_flag =
+          owned && owned->get_group() != ANCESTOR_COPIES_GROUP;
+      if (command_has_flag) {
+        cerr << "Warning: " << option_display_name(opt)
+             << " should appear after the subcommand\n";
+      } else {
+        cerr << "Warning: " << option_display_name(opt)
+             << " is not a valid option for '" << cmd_name << "'\n";
+      }
+    }
+  }
+}
+
+static void collect_parsed_path(CLI::App* node, std::vector<CLI::App*>& path) {
+  path.push_back(node);
+  for (auto* child : node->get_subcommands()) {
+    collect_parsed_path(child, path);
+  }
+}
+
+// After parsing: warns if the same option was specified more than once
+// across the parsed command path. This catches both duplicates at the
+// same command level and duplicates introduced by backward-compatibility
+// registrations at ancestor levels.
+// The last value wins.
+void warn_duplicates(CLI::App* root) {
+  std::vector<CLI::App*> path;
+  collect_parsed_path(root, path);
+  std::set<std::string> checked;
+  for (auto* path_node : path) {
+    for (const auto* opt : path_node->get_options()) {
+      const std::string primary = "--" + opt->get_single_name();
+      if (!checked.insert(primary).second) {
+        continue;
+      }
+      // Dedup by pointer: with fallthrough, get_option_no_throw returns the same
+      // global Option* for every node, so count it once (multilevel flags are
+      // distinct objects and still summed).
+      std::set<const CLI::Option*> counted;
+      std::size_t total = 0;
+      for (auto* node : path) {
+        if (auto* option = node->get_option_no_throw(primary)) {
+          if (counted.insert(option).second) {
+            total += option->count();
+          }
+        }
+      }
+      if (total > 1) {
+        cerr << "Warning: " << option_display_name(opt)
+             << " specified multiple times, using last value\n";
+      }
+    }
+  }
+}
+
+// Warns for each option name the user spelled with underscores (legacy still
+// accepts it; normalize_cli11_tokens rewrites it to the registered dash form).
+void warn_underscore_options(
+    const std::vector<std::pair<std::string, std::string>>& rewrites) {
+  for (const auto& [original, dashed] : rewrites) {
+    cerr << "Warning: " << original << " should be spelled " << dashed << "\n";
+  }
+}
+
+// Normalize the token stream before CLI11 parses it, fixing two places where
+// CLI11's tokenizer loses information the legacy parser preserves:
+//   --name=    ->  ["--name", ""]      empty '=' form: CLI11 collapses it into
+//                                      a bare "--name" (missing value); legacy
+//                                      passes an empty-string value through.
+//   -X=value   ->  ["-X", "value"]     short flags: CLI11 has no '=' handling
+//                                      and would capture "=value" verbatim.
+// Only options registered on the root that take a value are rewritten (binary
+// flags keep their optional-value handling; unknown flags can't be arity-
+// checked, so they pass through untouched). A token in value position (right
+// after a value-taking flag) is never rewritten. Returns the full token list;
+// the caller owns it and points argv at it.
+std::vector<std::string> normalize_cli11_tokens(
+    const CLI::App& app, const std::vector<const char*>& argv,
+    std::vector<std::pair<std::string, std::string>>& underscore_rewrites) {
+  std::vector<std::string> tokens;
+  tokens.reserve(argv.size() * 2);
+  bool pending_value = false;  // previous token was a flag awaiting its value
+  std::unordered_set<std::string> seen;  // option names already collected
+  for (const char* arg : argv) {
+    std::string_view token(arg);
+    std::string rewritten;  // backing storage when the token below is rewritten
+
+    // Value position: both parsers consume the next token as the flag's value
+    // whatever it looks like (even "--" or "-islides"), so emit it untouched.
+    if (pending_value) {
+      pending_value = false;
+      tokens.emplace_back(token);
+      continue;
+    }
+
+    // Legacy accepts '_' in long option names. Rewrite recognized option
+    // names to their registered dash form before the other normalization
+    // rules run, leaving unknown options untouched for legacy parsing.
+    if (token.size() >= 3 && token.starts_with("--") &&
+        token.find('_') != token.npos) {
+      size_t name_len = std::min(token.find('='), token.size());
+      std::string_view option_name = token.substr(0, name_len);
+      if (option_name.find('_') != option_name.npos) {
+        std::string dash_name;
+        dash_name.reserve(name_len);
+        for (char c : option_name) {
+          dash_name.push_back(c == '_' ? '-' : c);
+        }
+        if (app.get_option_no_throw(dash_name) != nullptr) {
+          std::string original(option_name);
+          // dedup by name: warn_duplicates covers repeats of the same flag
+          if (seen.insert(original).second) {
+            underscore_rewrites.emplace_back(std::move(original), dash_name);
+          }
+          rewritten = std::move(dash_name);
+          rewritten.append(token.substr(name_len));
+          token = rewritten;
+        }
+      }
+    }
+    // long flag, empty '=' form: exactly "--name="
+    if (token.size() >= 4 && token.starts_with("--") &&
+        token.find('=') == token.size() - 1) {
+      std::string flag_name(token.substr(0, token.size() - 1));
+      const CLI::Option* option = app.get_option_no_throw(flag_name);
+      if (option != nullptr && option->get_expected_min() >= 1) {
+        tokens.push_back(std::move(flag_name));  // "--name"
+        tokens.emplace_back();                   // explicit "" value
+        continue;
+      }
+    }
+    // short flag with glued '=': "-X=value" (value possibly empty)
+    if (token.size() >= 3 && token[0] == '-' && token[1] != '-' &&
+        token[2] == '=') {
+      std::string flag_name(token.substr(0, 2));
+      const CLI::Option* option = app.get_option_no_throw(flag_name);
+      if (option != nullptr && option->get_expected_min() >= 1) {
+        tokens.push_back(std::move(flag_name));  // "-X"
+        tokens.emplace_back(token.substr(3));    // "value"
+        continue;
+      }
+    }
+    // plain known value-taking flag: its value arrives as the NEXT token
+    if (token.size() >= 2 && token[0] == '-' &&
+        token.find('=') == token.npos) {
+      const CLI::Option* option =
+          app.get_option_no_throw(std::string(token));
+      if (option != nullptr && option->get_expected_min() >= 1) {
+        pending_value = true;
+      }
+    }
+    tokens.emplace_back(token);
+  }
+  return tokens;
+}
+
+// Maps CLI11 parse error exit codes to the corresponding errno exit codes.
+// Only the numeric exit code is remapped; the error message is left unchanged.
+int to_errno_exit_code(const CLI::ParseError& e) {
+  switch (e.get_exit_code()) {
+    case static_cast<int>(CLI::ExitCodes::ConversionError):  // CLI11: 104 - option value failed conversion
+      return EINVAL;
+
+    case static_cast<int>(CLI::ExitCodes::RequiredError):     // CLI11: 106 - required subcommand not provided
+    case static_cast<int>(CLI::ExitCodes::ArgumentMismatch):  // CLI11: 114 - option missing its argument
+      return 1;
+
+    default:
+      return e.get_exit_code();
+  }
+}
+
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.
 // coverity[root_function:SUPPRESS]
@@ -3446,6 +3770,7 @@ int main(int argc, const char **argv)
   rgw_user user_id_arg;
   std::unique_ptr<rgw::sal::User> user;
   string tenant;
+  std::string uid_str;  // CLI11 binding for --uid; rgw_user has no operator>>
   string user_ns;
   string account_name;
   rgw_account_id account_id;
@@ -3609,7 +3934,10 @@ int main(int argc, const char **argv)
   uint64_t min_rewrite_size = 4 * 1024 * 1024;
   uint64_t max_rewrite_size = ULLONG_MAX;
   uint64_t min_rewrite_stripe_size = 0;
+  std::string min_rw_val, max_rw_val, min_rw_stripe_val;  // sinks; conversion via ->each (legacy atoll compat)
+  std::string rgw_obj_fs_val;  // sink; feeds the std::optional rgw_obj_fs via ->each (only set when given)
 #endif
+  std::string prefix_val;  // sink; feeds the std::optional opt_prefix via ->each (only set when given)
 
   BIIndexType bi_index_type = BIIndexType::Plain;
   std::optional<log_type> opt_log_type;
@@ -3621,8 +3949,11 @@ int main(int argc, const char **argv)
 
   int max_concurrent_ios = 32;
   ceph::timespan min_age = std::chrono::hours(1);
-  bool hide_progress = false;
-  bool dump_keys = false;
+  // int, not bool: shared with the legacy ceph_argparse_binary_flag() path,
+  // which operates on ints.
+  // TODO: convert to bool once these flags are no longer used by the legacy parser.
+  int hide_progress = false;
+  int dump_keys = false;
 #ifdef WITH_RADOSGW_RADOS
   uint64_t orphan_stale_secs = (24 * 3600);
 #endif
@@ -3726,6 +4057,1450 @@ int main(int argc, const char **argv)
   init_realm_param(cct.get(), realm_id, opt_realm_id, "rgw_realm_id");
   init_realm_param(cct.get(), zonegroup_id, opt_zonegroup_id, "rgw_zonegroup_id");
   init_realm_param(cct.get(), zone_id, opt_zone_id, "rgw_zone_id");
+
+  // Declared here (before the CLI11 block) so lambdas defined inside the
+  // block can capture them by reference. Pointers are set after their target
+  // objects are constructed (after driver initialization).
+  std::unique_ptr<rgw::SiteConfig> site;
+  RGWStreamFlusher* stream_flusher_ptr = nullptr;
+  RGWUserAdminOpState* user_op_ptr = nullptr;
+  // CLI11 state set by command callbacks during parsing. Each bool mirrors a
+  // legacy OPT-set membership for commands migrated to CLI11:
+  //   cli11_parsed: a CLI11 command was parsed (skips legacy command checks)
+  //   cli11_readonly: read-only command (readonly_ops_list), for need_cache
+  //   cli11_need_gc: command may schedule object deletions (gc_ops_list)
+  //   cli11_allows_tenant_no_uid: command accepts --tenant without --uid
+  //   cli11_non_master_op: metadata mutation that should run on the master
+  //                        zone (non_master_ops_list)
+  // cli11_action holds the deferred command handler, run after driver init.
+  std::function<int()> cli11_action;
+  bool cli11_parsed = false;
+  bool cli11_readonly = false;
+  bool cli11_need_gc = false;
+  bool cli11_allows_tenant_no_uid = false;
+  bool cli11_non_master_op = false;
+  // Names accepted at each level of the parsed CLI11 command path (canonical name
+  // plus aliases), matched against the surviving words after the legacy flag loop.
+  struct PathLevel {
+    std::vector<std::string> accepted_names;
+  };
+  std::vector<PathLevel> cli11_path;
+
+  // Outlives the block below so the command can be parsed again after the
+  // legacy flag loop.
+  CLI::App app{"radosgw-admin"};
+
+  {
+    // Feed CLI11 the ceph-stripped args: rgw_global_init() above already removed
+    // every ceph global (--conf, --rgw-zone, --id, --name, --cluster, ...) from
+    // `args`, so CLI11 never sees them and can't misparse or reject them — the
+    // same vector the legacy flag loop below iterates. We also drop the
+    // radosgw-admin-only --cli11-help here (ceph leaves it in `args`).
+    // TODO: drop the --cli11-help filtering once --help is fully replaced by CLI11.
+    bool show_cli11_help = false;
+    std::vector<const char*> cli_argv;
+    cli_argv.push_back(argv[0]);  // program name for CLI11's parser
+    for (const char* a : args) {
+      if (std::string_view(a) == "--cli11-help") {
+        show_cli11_help = true;
+      } else {
+        cli_argv.push_back(a);
+      }
+    }
+    const int new_argc = static_cast<int>(cli_argv.size());
+
+    // Transitional: the bucket subtree is half-migrated. Route the command to
+    // CLI11 or the legacy parser by the first recognized word after "bucket".
+    // Flags and their values are skipped (only command words are matched).
+    // TODO: remove this block and the !route_bucket_to_legacy guard below once
+    // all bucket subcommands are migrated (legacy_bucket_words becomes empty).
+    static const std::set<std::string_view> migrated_bucket_leaves = {
+        "list", "stats", "link", "unlink", "check", "rm", "remove", "layout", "chown",
+        "limit", "logging", "rewrite", "set-min-shards", "object", "shard", "resync",
+        "radoslist", "rados"};
+    static const std::set<std::string_view> legacy_bucket_words = {
+        "sync", "reshard", "suspend", "unsuspend"};
+    bool route_bucket_to_legacy = false;
+    if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
+      for (int i = 1; i < new_argc; ++i) {
+        if (std::string_view(cli_argv[i]) != "bucket" && std::string_view(cli_argv[i]) != "buckets") {
+          continue;
+        }
+        for (int j = i + 1; j < new_argc; ++j) {
+          std::string_view word(cli_argv[j]);
+          if (migrated_bucket_leaves.count(word)) {
+            break;
+          }
+          if (legacy_bucket_words.count(word)) {
+            route_bucket_to_legacy = true;
+            break;
+          }
+        }
+        break;
+      }
+    }
+
+    // Keeps the hidden ancestor copies out of the help output. Set before the
+    // first add_subcommand below, since each subcommand copies the formatter from
+    // its parent when it is constructed.
+    app.formatter(std::make_shared<AncestorCopiesFormatter>());
+
+    // TODO: keep while CLI11 and legacy parsing coexist. After full migration,
+    // decide whether to preserve legacy acceptance of known-but-irrelevant
+    // options while still rejecting truly unknown options, or intentionally
+    // tighten behavior to reject irrelevant options too.
+    app.allow_extras();
+    // Enable fallthrough on the root so options declared here (globals) are accepted
+    // at any position: before, after, or inside a nested subcommand. fallthrough_ is
+    // INHERITABLE, so every subcommand created below copies it at construction. This
+    // must be set before the first add_subcommand call.
+    app.fallthrough();
+    // At most one command word may be matched here, so a repeated one is left over
+    // and reported instead of entering the same command twice. No minimum: a command
+    // CLI11 does not know yet must still reach the legacy parsing below. Every
+    // command created below inherits the same maximum, and may set its own.
+    app.require_subcommand(show_cli11_help ? 0 : -1);
+
+    constexpr std::string_view tenant_desc     = "tenant name";
+    constexpr std::string_view account_id_desc = "account id";
+    // radosgw-admin's own global flags (category 1, identity), shared across command
+    // families — owned by CLI11 on the root and declared once here instead of on every
+    // command. Matches the legacy parser, where --tenant, -i/--uid and --account-id are
+    // handled globally for any command.
+    app.add_option("--tenant", tenant, std::string(tenant_desc))->take_last();
+    // Legacy exits immediately when -i/--uid resolves to an empty user
+    // ("no value for uid", e.g. -i "" or -i '$'); run the same check on
+    // each captured value.
+    app.add_option("--uid,-i",  uid_str, "user id")->take_last()
+        ->each([](const std::string& value) {
+          if (rgw_user(value).empty()) {
+            cerr << "no value for uid" << std::endl;
+            throw CLI::RuntimeError(1);
+          }
+        });
+    app.add_option("--account-id", account_id, std::string(account_id_desc))->take_last();
+
+    // Ceph's globals are stripped by rgw_global_init() before CLI11 runs, so document
+    // them in the footer (descriptions from generic_usage(), common/ceph_argparse.cc).
+    // Set BEFORE the subcommands: footer_ is copied to children at construction, so
+    // every command's help stays self-contained.
+    // Disable paragraph formatting to emit the padding verbatim.
+    app.get_formatter()->enable_footer_formatting(false);
+    app.footer(
+        "Ceph options:\n"
+        "  --conf/-c FILE       read configuration from the given configuration file\n"
+        "  --cluster NAME       set cluster name (default: ceph)\n"
+        "  --id/--user ID       set ID portion of my name\n"
+        "  --name/-n TYPE.ID    set name\n"
+        "  --no-config-file     do not require a config file to be present\n"
+        "  --setuser USER       set uid to user or uid (and gid to user's gid)\n"
+        "  --setgroup GROUP     set gid to group or gid\n"
+        "  --version/-v         show version and quit\n"
+        "  --show_args          print the command-line arguments\n"
+        "  --<config>=<value>   set any ceph config option (e.g. --mon_host, --debug-rgw)");
+
+    { // script command registrations
+      auto* script     = app.add_subcommand("script",  "Manage Lua scripts by context");
+      auto* script_put = script->add_subcommand("put", "upload a Lua script to a context");
+      auto* script_get = script->add_subcommand("get", "get the Lua script of a context");
+      auto* script_rm  = script->add_subcommand("rm",  "remove the Lua scripts of a context");
+      script_rm->alias("remove");
+      // TODO: restore to require_subcommand(1) once --help is fully replaced by CLI11
+      script->require_subcommand(show_cli11_help ? 0 : 1);
+
+      // Do not use ->required() while options are also accepted at parent
+      // levels for compatibility, because CLI11 checks the specific option location.
+      // TODO: once flags-before-subcommand support is removed, replace option_text("... REQUIRED")
+      // and manual checks with ->required()
+      const std::string ctx_desc    = "context in which the script runs. one of: " + LUA_CONTEXT_LIST;
+      constexpr std::string_view infile_desc = "file to read in when setting data";
+
+      add_multilevel_option(script_put, "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
+      add_multilevel_option(script_put, "--infile",  infile,         infile_desc)->option_text("<file> REQUIRED");
+
+      add_multilevel_option(script_get, "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
+
+      add_multilevel_option(script_rm,  "--context", str_script_ctx, ctx_desc)->option_text("<context> REQUIRED");
+
+      script_put->callback(
+          [&str_script_ctx, &infile, &tenant,
+           &cli11_allows_tenant_no_uid, &cli11_action] {
+        // Enforce required options by value, because options may have been
+        // parsed before the subcommand.
+        // TODO: once flags-before-subcommand support is removed, replace with ->required()
+        if (!str_script_ctx) {
+          cerr << "ERROR: context was not provided (via --context)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        if (infile.empty()) {
+          cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        bufferlist bl;
+        const auto rc = read_input(infile, bl);
+        if (rc < 0) {
+          cerr << "ERROR: failed to read script: '" << infile << "'. error: " << rc << std::endl;
+          throw CLI::RuntimeError(-rc);
+        }
+        const std::string script = bl.to_str();
+        std::string err_msg;
+        if (!rgw::lua::verify(script, err_msg)) {
+          cerr << "ERROR: script: '" << infile << "' has error: " << std::endl << err_msg << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+        if (script_ctx == rgw::lua::context::none) {
+          cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        if (script_ctx == rgw::lua::context::background && !tenant.empty()) {
+          cerr << "ERROR: cannot specify tenant in background context" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        cli11_allows_tenant_no_uid = true;
+
+        cli11_action = [&tenant, script_ctx, script]() -> int {
+          auto lua_manager = driver->get_lua_manager("");
+          const auto rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+          if (rc < 0) {
+            cerr << "ERROR: failed to put script. error: " << rc << std::endl;
+            return -rc;
+          }
+          return 0;
+        };
+      });
+
+      script_get->callback(
+          [&str_script_ctx, &tenant,
+           &cli11_allows_tenant_no_uid, &cli11_readonly, &cli11_action] {
+        // Enforce required options by value, because options may have been
+        // parsed before the subcommand.
+        // TODO: once flags-before-subcommand support is removed, replace with ->required()
+        if (!str_script_ctx) {
+          cerr << "ERROR: context was not provided (via --context)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+        if (script_ctx == rgw::lua::context::none) {
+          cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        cli11_readonly = true;
+        cli11_allows_tenant_no_uid = true;
+
+        cli11_action = [&tenant, script_ctx, ctx = *str_script_ctx]() -> int {
+          auto lua_manager = driver->get_lua_manager("");
+          std::string script;
+          const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+          if (rc == -ENOENT) {
+            std::cout << "no script exists for context: " << ctx <<
+              (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+          } else if (rc < 0) {
+            cerr << "ERROR: failed to read script. error: " << rc << std::endl;
+            return -rc;
+          } else {
+            std::cout << script << std::endl;
+          }
+          return 0;
+        };
+      });
+
+      script_rm->callback(
+          [&str_script_ctx, &tenant,
+           &cli11_allows_tenant_no_uid, &cli11_action] {
+        // Enforce required options by value, because options may have been
+        // parsed before the subcommand.
+        // TODO: once flags-before-subcommand support is removed, replace with ->required()
+        if (!str_script_ctx) {
+          cerr << "ERROR: context was not provided (via --context)" << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+        if (script_ctx == rgw::lua::context::none) {
+          cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+          throw CLI::RuntimeError(EINVAL);
+        }
+        cli11_allows_tenant_no_uid = true;
+
+        cli11_action = [&tenant, script_ctx]() -> int {
+          auto lua_manager = driver->get_lua_manager("");
+          const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
+          if (rc < 0) {
+            cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
+            return -rc;
+          }
+          return 0;
+        };
+      });
+    } // script command registrations
+
+    // --- bucket commands ---
+    { // bucket command registrations
+      constexpr std::string_view bucket_desc      = "Specify the bucket name. Also used by the quota command.";
+      constexpr std::string_view bucket_id_desc   = "bucket id";
+      constexpr std::string_view format_desc      = "specify output format for certain operations: xml, json (default: json)";
+      constexpr std::string_view max_entries_desc = "max entries for listing operations";
+      constexpr std::string_view marker_desc      = "object name marker to specify where listing begins (default: start from beginning)";
+      constexpr std::string_view new_name_desc    = "for bucket link: optional new name";
+      constexpr std::string_view obj_ver_desc     = "object version";
+
+      // Legacy exits immediately on an empty --bucket-id value; every
+      // registration below attaches this check.
+      const auto reject_empty_bucket_id = [](const std::string& value) {
+        if (value.empty()) {
+          cerr << "no value for bucket-id" << std::endl;
+          throw CLI::RuntimeError(1);
+        }
+      };
+
+      auto* bucket_cmd    = app.add_subcommand("bucket", "Manage buckets");
+      bucket_cmd->alias("buckets");
+      auto* bucket_list   = bucket_cmd->add_subcommand("list",   "list buckets (specify --allow-unordered for faster, unsorted listing)");
+      auto* bucket_stats  = bucket_cmd->add_subcommand("stats",  "returns bucket statistics");
+#ifdef WITH_RADOSGW_RADOS
+      auto* bucket_link   = bucket_cmd->add_subcommand("link",   "link bucket to specified user");
+      auto* bucket_unlink = bucket_cmd->add_subcommand("unlink", "unlink bucket from specified user");
+      auto* bucket_check  = bucket_cmd->add_subcommand("check",  "check bucket index by verifying size and object count stats");
+      auto* bucket_check_olh      = bucket_check->add_subcommand("olh",      "check for olh index entries and objects that are pending removal");
+      auto* bucket_check_unlinked = bucket_check->add_subcommand("unlinked", "check for object versions that are not visible in a bucket listing");
+#endif
+      auto* bucket_rm     = bucket_cmd->add_subcommand("rm",     "remove bucket");
+      bucket_rm->alias("remove");
+      auto* bucket_layout = bucket_cmd->add_subcommand("layout", "show the bucket's layout");
+      auto* bucket_chown  = bucket_cmd->add_subcommand("chown",  "link bucket to specified user and update its object ACLs");
+      auto* bucket_limit       = bucket_cmd->add_subcommand("limit", "bucket limit commands");
+      auto* bucket_limit_check = bucket_limit->add_subcommand("check", "show bucket sharding stats");
+      bucket_limit->require_subcommand(show_cli11_help ? 0 : 1);
+      auto* bucket_logging       = bucket_cmd->add_subcommand("logging", "manage bucket logging");
+      auto* bucket_logging_flush = bucket_logging->add_subcommand("flush", "flush pending log records object of source bucket to the log bucket");
+      auto* bucket_logging_info  = bucket_logging->add_subcommand("info",  "get info on bucket logging configuration on source bucket or list of sources in log bucket");
+      auto* bucket_logging_list  = bucket_logging->add_subcommand("list",  "list the log objects pending commit for the source bucket");
+      bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
+#ifdef WITH_RADOSGW_RADOS
+      auto* bucket_rewrite = bucket_cmd->add_subcommand("rewrite", "rewrite all objects in the specified bucket");
+#endif
+      auto* bucket_set_min_shards = bucket_cmd->add_subcommand("set-min-shards", "set the minimum number of shards that dynamic resharding will consider for a bucket");
+      auto* bucket_object       = bucket_cmd->add_subcommand("object", "bucket object commands");
+      auto* bucket_object_shard = bucket_object->add_subcommand("shard", "show the shard index a given object maps to");
+      bucket_object->require_subcommand(show_cli11_help ? 0 : 1);
+      auto* bucket_shard         = bucket_cmd->add_subcommand("shard", "bucket shard commands");
+      auto* bucket_shard_objects = bucket_shard->add_subcommand("objects", "show sample object names that map to bucket shards");
+      bucket_shard_objects->alias("object");
+      bucket_shard->require_subcommand(show_cli11_help ? 0 : 1);
+#ifdef WITH_RADOSGW_RADOS
+      auto* bucket_resync           = bucket_cmd->add_subcommand("resync", "bucket resync commands");
+      auto* bucket_resync_encrypted = bucket_resync->add_subcommand("encrypted", "encrypted multipart resync commands");
+      auto* bucket_resync_encrypted_multipart = bucket_resync_encrypted->add_subcommand("multipart", "repair replication of encrypted multipart uploads");
+      bucket_resync->require_subcommand(show_cli11_help ? 0 : 1);
+      bucket_resync_encrypted->require_subcommand(show_cli11_help ? 0 : 1);
+      // 'bucket radoslist' and 'bucket rados list' are two entry points to the
+      // same command; both leaves share one option-registration helper and one
+      // action lambda below to keep them identical (CLI11 can't alias a two-token path).
+      auto* bucket_radoslist  = bucket_cmd->add_subcommand("radoslist", "list rados objects backing bucket's objects");
+      auto* bucket_rados      = bucket_cmd->add_subcommand("rados", "bucket rados commands");
+      auto* bucket_rados_list = bucket_rados->add_subcommand("list", "list rados objects backing bucket's objects");
+      bucket_rados->require_subcommand(show_cli11_help ? 0 : 1);
+#endif
+      bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
+
+      // bucket list options
+      add_multilevel_option(bucket_list, "--bucket,-b",       bucket_name,    bucket_desc);
+      add_multilevel_option(bucket_list, "--bucket-id",       bucket_id,      bucket_id_desc, reject_empty_bucket_id);
+      add_multilevel_option(bucket_list, "--format",          format,         format_desc);
+      // strict base-10 parsing (including overflow checks); sets max_entries_specified
+      // to mirror the legacy argparse behavior
+      add_multilevel_strict_int(bucket_list, "--max-entries",     max_entries,    max_entries_desc)
+          ->each([&max_entries_specified](const std::string&) { max_entries_specified = true; });
+      add_multilevel_option(bucket_list, "--marker",          marker,         marker_desc);
+      add_multilevel_option(bucket_list, "--object-version",  object_version, obj_ver_desc);
+      add_multilevel_binary_flag(bucket_list,   "--allow-unordered", allow_unordered, "allow unordered bucket listing");
+
+      // bucket stats options
+      add_multilevel_option(bucket_stats, "--bucket,-b",          bucket_name,        bucket_desc);
+      add_multilevel_option(bucket_stats, "--bucket-id",          bucket_id,          bucket_id_desc, reject_empty_bucket_id);
+      add_multilevel_option(bucket_stats, "--format",             format,             format_desc);
+      // strict base-10 parsing (including overflow checks); sets max_entries_specified
+      // to mirror the legacy argparse behavior
+      add_multilevel_strict_int(bucket_stats, "--max-entries",        max_entries,        max_entries_desc)
+          ->each([&max_entries_specified](const std::string&) { max_entries_specified = true; });
+      add_multilevel_option(bucket_stats, "--marker",             marker,             marker_desc);
+      add_multilevel_binary_flag(bucket_stats,   "--show-restore-stats", show_restore_stats, "if the flag is in present it will show restores stats in the bucket stats command");
+
+#ifdef WITH_RADOSGW_RADOS
+      // bucket link options
+      add_multilevel_option(bucket_link, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_link, "--bucket-id",       bucket_id,       bucket_id_desc, reject_empty_bucket_id);
+      add_multilevel_option(bucket_link, "--bucket-new-name", new_bucket_name, new_name_desc);
+
+      // bucket unlink options
+      add_multilevel_option(bucket_unlink, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+
+      // bucket check options
+      add_multilevel_option(bucket_check, "--bucket,-b", bucket_name, bucket_desc);
+      add_multilevel_binary_flag(bucket_check, "--fix",               fix,                    "besides checking bucket index, will also fix it");
+      add_multilevel_binary_flag(bucket_check, "--remove-bad",             remove_bad,             "remove bad objects");
+      add_multilevel_binary_flag(bucket_check, "--check-head-obj-locator", check_head_obj_locator, "check the locator of head objects");
+      add_multilevel_binary_flag(bucket_check, "--check-objects",          check_objects,          "besides checking bucket index, will also check objects");
+      add_multilevel_strict_int(bucket_check, "--max-concurrent-ios",     max_concurrent_ios,     "maximum concurrent ios for bucket operations (default: 32)");
+
+      // bucket check olh options
+      add_multilevel_option(bucket_check_olh, "--bucket,-b",         bucket_name,        bucket_desc);
+      add_multilevel_binary_flag(bucket_check_olh, "--fix",          fix,                "besides checking, will also fix it");
+      add_multilevel_strict_int(bucket_check_olh, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)");
+      add_multilevel_binary_flag(bucket_check_olh, "--dump-keys",     dump_keys,     "output all checked keys");
+      add_multilevel_binary_flag(bucket_check_olh, "--hide-progress", hide_progress, "suppress per-shard progress output");
+
+      // bucket check unlinked options
+      add_multilevel_option(bucket_check_unlinked, "--bucket,-b",         bucket_name,        bucket_desc);
+      add_multilevel_binary_flag(bucket_check_unlinked, "--fix",          fix,                "besides checking, will also fix it");
+      add_multilevel_strict_int(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)");
+      add_multilevel_binary_flag(bucket_check_unlinked, "--dump-keys",     dump_keys,     "output all checked keys");
+      add_multilevel_binary_flag(bucket_check_unlinked, "--hide-progress", hide_progress, "suppress per-shard progress output");
+#endif
+
+      // bucket rm options
+      add_multilevel_option(bucket_rm, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_binary_flag(bucket_rm, "--purge-objects",        delete_child_objects, "remove a bucket's objects before deleting it");
+      add_multilevel_binary_flag(bucket_rm, "--bypass-gc",            bypass_gc,            "when specified with bucket deletion, triggers object deletions by not involving GC");
+      add_multilevel_binary_flag(bucket_rm, "--inconsistent-index",   inconsistent_index,   "when specified with bucket deletion and bypass-gc set to true, ignores bucket index consistency");
+      add_multilevel_binary_flag(bucket_rm, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations");
+
+      // bucket layout options
+      add_multilevel_option(bucket_layout, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_layout, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
+      add_multilevel_option(bucket_layout, "--format",    format,      format_desc);
+
+      // bucket chown options
+      add_multilevel_option(bucket_chown, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_chown, "--marker",          marker,          marker_desc);
+      add_multilevel_option(bucket_chown, "--bucket-new-name", new_bucket_name, new_name_desc);
+
+      // bucket limit check options
+      add_multilevel_binary_flag(bucket_limit_check, "--warnings-only", warnings_only,
+                                 "list only buckets nearing or over the current max objects per shard value");
+
+      // bucket logging flush options
+      add_multilevel_option(bucket_logging_flush, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_logging_flush, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
+
+      // bucket logging info options
+      add_multilevel_option(bucket_logging_info, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_logging_info, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
+      add_multilevel_option(bucket_logging_info, "--format",    format,      format_desc);
+
+      // bucket logging list options
+      add_multilevel_option(bucket_logging_list, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_logging_list, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
+      add_multilevel_option(bucket_logging_list, "--format",    format,      format_desc);
+
+#ifdef WITH_RADOSGW_RADOS
+      // bucket rewrite options
+      add_multilevel_option(bucket_rewrite, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_rewrite, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
+      add_multilevel_option(bucket_rewrite, "--format",    format,      format_desc);
+      add_multilevel_option(bucket_rewrite, "--start-date,--start-time", start_date,
+                            "start date in the format yyyy-mm-dd");
+      add_multilevel_option(bucket_rewrite, "--end-date,--end-time",     end_date,
+                            "end date in the format yyyy-mm-dd");
+      // The size flags use atoll() in ->each (runs only when the flag is given) to match the
+      // legacy parse loop exactly: malformed input becomes 0 instead of being rejected, and an
+      // absent flag leaves the default untouched. Binding directly to the uint64_t would parse
+      // strictly and reject inputs like --min-rewrite-size=abc.
+      add_multilevel_option(bucket_rewrite, "--min-rewrite-size", min_rw_val,
+                            "min object size for bucket rewrite (default 4M)")
+          ->each([&min_rewrite_size](const std::string& v) { min_rewrite_size = (uint64_t)atoll(v.c_str()); });
+      add_multilevel_option(bucket_rewrite, "--max-rewrite-size", max_rw_val,
+                            "max object size for bucket rewrite (default ULLONG_MAX)")
+          ->each([&max_rewrite_size](const std::string& v) { max_rewrite_size = (uint64_t)atoll(v.c_str()); });
+      add_multilevel_option(bucket_rewrite, "--min-rewrite-stripe-size", min_rw_stripe_val,
+                            "min stripe size for object rewrite (default 0)")
+          ->each([&min_rewrite_stripe_size](const std::string& v) { min_rewrite_stripe_size = (uint64_t)atoll(v.c_str()); });
+#endif
+
+      // bucket set-min-shards options
+      add_multilevel_option(bucket_set_min_shards, "--bucket,-b",  bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_set_min_shards, "--bucket-id",  bucket_id,   bucket_id_desc, reject_empty_bucket_id);
+      // Track whether --num-shards was provided, so the handler can
+      // distinguish an omitted option from an explicit value of 0.
+      add_multilevel_strict_int(bucket_set_min_shards, "--num-shards", num_shards,  "minimum number of shards to set")
+          ->option_text("<num-shards> REQUIRED")
+          ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
+
+      // bucket object shard options
+      add_multilevel_option(bucket_object_shard, "--object,-o",  object, "object name")
+          ->option_text("<object> REQUIRED");
+      add_multilevel_strict_int(bucket_object_shard, "--num-shards", num_shards, "number of shards")
+          ->option_text("<num-shards> REQUIRED")
+          ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
+      add_multilevel_option(bucket_object_shard, "--format",     format, format_desc);
+
+      // bucket shard objects options
+      add_multilevel_strict_int(bucket_shard_objects, "--num-shards", num_shards, "number of shards")
+          ->option_text("<num-shards> REQUIRED")
+          ->each([&num_shards_specified](const std::string&) { num_shards_specified = true; });
+      add_multilevel_strict_int(bucket_shard_objects, "--shard-id", shard_id, "shard id")
+          ->each([&specified_shard_id](const std::string&) { specified_shard_id = true; });
+      // opt_prefix is a std::optional; bind a string sink and set it via ->each so it
+      // stays unset (handler defaults to "obj") when --prefix is not given.
+      add_multilevel_option(bucket_shard_objects, "--prefix", prefix_val, "object name prefix (default \"obj\")")
+          ->each([&opt_prefix](const std::string& v) { opt_prefix = v; });
+      add_multilevel_option(bucket_shard_objects, "--format", format, format_desc);
+
+#ifdef WITH_RADOSGW_RADOS
+      // bucket resync encrypted multipart options
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket-id",  bucket_id,  bucket_id_desc, reject_empty_bucket_id);
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--marker",     marker,     marker_desc);
+      add_multilevel_binary_flag(bucket_resync_encrypted_multipart, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations");
+      add_multilevel_option(bucket_resync_encrypted_multipart, "--format",     format,     format_desc);
+
+      // bucket radoslist / bucket rados list options (shared by both entry points).
+      // rgw_obj_fs is a std::optional; bind a string sink and set it via ->each so it
+      // stays unset (no field separator) when --rgw-obj-fs is not given.
+      auto register_radoslist_opts =
+          [&bucket_name, &max_concurrent_ios, &orphan_stale_secs,
+           &rgw_obj_fs_val, &rgw_obj_fs, &yes_i_really_mean_it,
+           &bucket_desc](CLI::App* cmd) {
+        add_multilevel_option(cmd, "--bucket,-b", bucket_name, bucket_desc);
+        add_multilevel_strict_int(cmd, "--max-concurrent-ios", max_concurrent_ios,
+                              "maximum concurrent ios for bucket operations (default: 32)");
+        add_multilevel_strict_int(cmd, "--orphan-stale-secs", orphan_stale_secs,
+                              "num of seconds to wait before declaring an object to be an orphan (default: 86400)");
+        add_multilevel_option(cmd, "--rgw-obj-fs", rgw_obj_fs_val,
+                              "the field separator that will separate the rados object name from the rgw object name; "
+                              "additionally rados objects for incomplete multipart uploads will not be output")
+            ->each([&rgw_obj_fs](const std::string& v) { rgw_obj_fs = v; });
+        add_multilevel_binary_flag(cmd, "--yes-i-really-mean-it", yes_i_really_mean_it, "required for certain operations");
+      };
+      register_radoslist_opts(bucket_radoslist);
+      register_radoslist_opts(bucket_rados_list);
+#endif
+
+      bucket_list->callback(
+          [&cli11_readonly, &cli11_action,
+           &uid_str, &user_id_arg,
+           &bucket_name, &bucket_id, &tenant, &marker, &max_entries,
+           &max_entries_specified, &object_version, &allow_unordered,
+           &bucket_op, &user, &user_op_ptr, &site, &stream_flusher_ptr,
+           &formatter, &bucket] {
+        user_id_arg.from_str(uid_str);
+        cli11_readonly = true;
+
+        cli11_action = [&bucket_name, &bucket_id, &tenant, &marker, &max_entries,
+                        &max_entries_specified, &object_version, &allow_unordered,
+                        &bucket_op, &user, &user_op_ptr, &site, &stream_flusher_ptr,
+                        &formatter, &bucket]() -> int {
+          if (bucket_name.empty()) {
+            if (!rgw::sal::User::empty(user)) {
+              if (!user_op_ptr->has_existing_user()) {
+                cerr << "ERROR: could not find user: " << user << std::endl;
+                return ENOENT;
+              }
+            }
+            bucket_op.marker = marker;
+            if (max_entries_specified)
+              bucket_op.max_entries = max_entries;
+            else
+              bucket_op.max_entries = 0; /* for backward compatibility */
+            RGWBucketAdminOp::info(driver, *site, bucket_op, *stream_flusher_ptr, null_yield, dpp());
+          } else {
+            int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+            if (ret < 0) {
+              cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+              return -ret;
+            }
+            formatter->open_array_section("entries");
+
+            int count = 0;
+
+            static constexpr int MAX_PAGINATE_SIZE = 10000;
+            static constexpr int DEFAULT_MAX_ENTRIES = 1000;
+
+            if (max_entries < 0) {
+              max_entries = DEFAULT_MAX_ENTRIES;
+            }
+            const int paginate_size = std::min(max_entries, MAX_PAGINATE_SIZE);
+
+            string prefix;
+            string delim;
+            string ns;
+
+            rgw::sal::Bucket::ListParams params;
+            rgw::sal::Bucket::ListResults results;
+
+            params.prefix = prefix;
+            params.delim = delim;
+            // Support pagination for versioned buckets using --marker and --object-version
+            // For versioned buckets: use both --marker (name) and --object-version (instance)
+            // For non-versioned buckets: use only --marker (name)
+            if (!object_version.empty()) {
+              params.marker = rgw_obj_key(marker, object_version);
+            } else {
+              params.marker = rgw_obj_key(marker);
+            }
+            params.ns = ns;
+            params.enforce_ns = false;
+            params.list_versions = true;
+            params.allow_unordered = bool(allow_unordered);
+
+            do {
+              const int remaining = max_entries - count;
+              ret = bucket->list(dpp(), params, std::min(remaining, paginate_size), results,
+                                 null_yield);
+              if (ret < 0) {
+                cerr << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << std::endl;
+                return -ret;
+              }
+              ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
+                ": list() returned without error; results.objs.size()=" <<
+                results.objs.size() << ", results.is_truncated=" << results.is_truncated << ", marker=" <<
+                params.marker << dendl;
+
+              count += results.objs.size();
+
+              for (const auto& entry : results.objs) {
+                encode_json("entry", entry, formatter.get());
+              }
+              formatter->flush(cout);
+            } while (results.is_truncated && count < max_entries);
+            ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": done" << dendl;
+
+            formatter->close_section();
+            formatter->flush(cout);
+          } /* have bucket_name */
+          return 0;
+        };
+      });
+
+      bucket_stats->callback(
+          [&cli11_readonly, &cli11_action,
+           &bucket_name, &bucket_id, &marker, &max_entries, &max_entries_specified,
+           &show_restore_stats, &bucket_op, &site, &stream_flusher_ptr, &err] {
+        cli11_readonly = true;
+
+        cli11_action = [&bucket_name, &bucket_id, &marker, &max_entries,
+                        &max_entries_specified, &show_restore_stats, &bucket_op,
+                        &site, &stream_flusher_ptr, &err]() -> int {
+          if (bucket_name.empty() && !bucket_id.empty()) {
+            rgw_bucket bkt;
+            if (!rgw_find_bucket_by_id(dpp(), driver->ctx(), driver, marker, bucket_id, &bkt)) {
+              cerr << "failure: no such bucket id" << std::endl;
+              return ENOENT;
+            }
+            bucket_op.set_tenant(bkt.tenant);
+            bucket_op.set_bucket_name(bkt.name);
+          }
+          bucket_op.set_fetch_stats(true);
+          if (max_entries_specified)
+            bucket_op.max_entries = max_entries;
+          else
+            bucket_op.max_entries = 0; /* for backward compatibility */
+          bucket_op.set_restore_stats(bool(show_restore_stats));
+
+          int r = RGWBucketAdminOp::info(driver, *site, bucket_op, *stream_flusher_ptr,
+                                         null_yield, dpp());
+          if (r < 0) {
+            cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
+            return posix_errortrans(-r);
+          }
+          return 0;
+        };
+      });
+
+#ifdef WITH_RADOSGW_RADOS
+      bucket_link->callback(
+          [&uid_str, &user_id_arg,
+           &cli11_non_master_op, &cli11_action, &bucket_op, &bucket_id, &new_bucket_name] {
+        // TODO: consider validating --bucket and --uid explicitly; without them,
+        // the underlying op returns -EINVAL with no useful message ("Invalid argument")
+        user_id_arg.from_str(uid_str);
+        cli11_non_master_op = true;
+
+        cli11_action = [&bucket_op, &bucket_id, &new_bucket_name]() -> int {
+          bucket_op.set_bucket_id(bucket_id);
+          bucket_op.set_new_bucket_name(new_bucket_name);
+          string err;
+          int r = RGWBucketAdminOp::link(driver, bucket_op, dpp(), null_yield, &err);
+          if (r < 0) {
+            cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
+            return -r;
+          }
+          return 0;
+        };
+      });
+
+      bucket_unlink->callback(
+          [&uid_str, &user_id_arg,
+           &cli11_non_master_op, &cli11_action, &bucket_op] {
+        // TODO: consider validating --bucket and --uid explicitly; without them,
+        // the underlying op returns -EINVAL with no useful message ("Invalid argument")
+        user_id_arg.from_str(uid_str);
+        cli11_non_master_op = true;
+
+        cli11_action = [&bucket_op]() -> int {
+          int r = RGWBucketAdminOp::unlink(driver, bucket_op, dpp(), null_yield);
+          if (r < 0) {
+            cerr << "failure: " << cpp_strerror(-r) << std::endl;
+            return -r;
+          }
+          return 0;
+        };
+      });
+
+      bucket_check->callback(
+          [&bucket_name, &cli11_action,
+           &tenant, &fix, &remove_bad, &check_head_obj_locator,
+           &bucket_op, &stream_flusher_ptr, &formatter] {
+
+        cli11_action = [&bucket_name, &tenant, &fix, &remove_bad, &check_head_obj_locator,
+                        &bucket_op, &stream_flusher_ptr, &formatter]() -> int {
+          if (check_head_obj_locator) {
+            if (bucket_name.empty()) {
+              cerr << "ERROR: need to specify bucket name" << std::endl;
+              return EINVAL;
+            }
+            do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter.get());
+          } else {
+            RGWBucketAdminOp::check_index(driver, bucket_op, *stream_flusher_ptr, null_yield, dpp());
+          }
+          return 0;
+        };
+      });
+
+      bucket_check_olh->callback(
+          [&cli11_action,
+           &bucket_op, &stream_flusher_ptr] {
+
+        cli11_action = [&bucket_op, &stream_flusher_ptr]() -> int {
+          rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+          if (!store) {
+            cerr <<
+              "WARNING: this command is only relevant when the cluster has a RADOS backing store." <<
+              std::endl;
+            return 0;
+          }
+          RGWBucketAdminOp::check_index_olh(store, bucket_op, *stream_flusher_ptr, dpp());
+          return 0;
+        };
+      });
+
+      bucket_check_unlinked->callback(
+          [&cli11_action,
+           &bucket_op, &stream_flusher_ptr] {
+
+        cli11_action = [&bucket_op, &stream_flusher_ptr]() -> int {
+          rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+          if (!store) {
+            cerr <<
+              "WARNING: this command is only relevant when the cluster has a RADOS backing store." <<
+              std::endl;
+            return 0;
+          }
+          RGWBucketAdminOp::check_index_unlinked(store, bucket_op, *stream_flusher_ptr, dpp());
+          return 0;
+        };
+      });
+#endif
+
+      bucket_rm->callback(
+          [&cli11_action, &cli11_need_gc,
+           &bucket_op, &site, &bypass_gc, &inconsistent_index, &yes_i_really_mean_it] {
+        cli11_need_gc = true;  // legacy gc_ops_list: --purge-objects deletions go through GC
+
+        // TODO: legacy behavior ignores bucket_rm's return value, so any
+        // failure (missing --bucket, nonexistent bucket, deletion error)
+        // silently exits 0. Consider validating --bucket and propagating
+        // failures.
+        cli11_action = [&bucket_op, &site, &bypass_gc, &inconsistent_index,
+                        &yes_i_really_mean_it]() -> int {
+          if (!inconsistent_index) {
+            RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(),
+                                            bypass_gc, true, false);
+          } else {
+            if (!yes_i_really_mean_it) {
+              cerr << "using --inconsistent_index can corrupt the bucket index " << std::endl
+                << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+              return 1;
+            }
+            RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(),
+                                            bypass_gc, false, false);
+          }
+          return 0;
+        };
+      });
+
+      bucket_layout->callback(
+          [&cli11_readonly, &cli11_action,
+           &bucket_name, &bucket_id, &tenant, &bucket, &formatter] {
+        cli11_readonly = true;
+
+        cli11_action = [&bucket_name, &bucket_id, &tenant, &bucket,
+                        &formatter]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+          const auto& bucket_info = bucket->get_info();
+          formatter->open_object_section("layout");
+          encode_json("layout", bucket_info.layout, formatter.get());
+          formatter->close_section();
+          formatter->flush(cout);
+          return 0;
+        };
+      });
+
+      bucket_chown->callback(
+          [&uid_str, &user_id_arg,
+           &cli11_non_master_op, &cli11_action,
+           &bucket_name, &new_bucket_name, &marker, &bucket_op, &account_id] {
+        user_id_arg.from_str(uid_str);
+        cli11_non_master_op = true;  // legacy: BUCKET_CHOWN is in non_master_ops_list
+
+        cli11_action = [&bucket_name, &new_bucket_name, &marker, &bucket_op, &account_id]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket name not specified" << std::endl;
+            return EINVAL;
+          }
+
+          bucket_op.account_id = account_id;
+          bucket_op.set_bucket_name(bucket_name);
+          bucket_op.set_new_bucket_name(new_bucket_name);
+          string err;
+
+          int r = RGWBucketAdminOp::chown(driver, bucket_op, marker, dpp(), null_yield, &err);
+          if (r < 0) {
+            cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
+            return -r;
+          }
+          return 0;
+        };
+      });
+
+      bucket_limit_check->callback(
+          [&uid_str, &user_id_arg, &cli11_readonly, &cli11_action,
+           &user, &bucket_op, &stream_flusher_ptr, &warnings_only, &metadata_key] {
+        user_id_arg.from_str(uid_str);
+        cli11_readonly = true;
+
+        cli11_action = [&user, &bucket_op, &stream_flusher_ptr, &warnings_only,
+                        &metadata_key]() -> int {
+          void *handle;
+          std::list<std::string> user_ids;
+          metadata_key = "user";
+          int max = 1000;
+          bool truncated;
+          int ret = 0;
+
+          if (!rgw::sal::User::empty(user)) {
+            user_ids.push_back(user->get_id().id);
+            ret = RGWBucketAdminOp::limit_check(driver, bucket_op, user_ids,
+                                                *stream_flusher_ptr, null_yield, dpp(),
+                                                warnings_only);
+          } else {
+            /* list users in groups of max-keys, then perform user-bucket
+             * limit-check on each group */
+            ret = driver->meta_list_keys_init(dpp(), metadata_key, string(), &handle);
+            if (ret < 0) {
+              cerr << "ERROR: buckets limit check can't get user metadata_key: "
+                   << cpp_strerror(-ret) << std::endl;
+              return -ret;
+            }
+
+            do {
+              ret = driver->meta_list_keys_next(dpp(), handle, max, user_ids, &truncated);
+              if (ret < 0 && ret != -ENOENT) {
+                cerr << "ERROR: buckets limit check lists_keys_next(): "
+                     << cpp_strerror(-ret) << std::endl;
+                break;
+              } else {
+                /* ok, do the limit checks for this group */
+                ret = RGWBucketAdminOp::limit_check(driver, bucket_op, user_ids,
+                                                    *stream_flusher_ptr, null_yield, dpp(),
+                                                    warnings_only);
+                if (ret < 0)
+                  break;
+              }
+              user_ids.clear();
+            } while (truncated);
+            driver->meta_list_keys_complete(handle);
+          }
+          return -ret;
+        };
+      });
+
+      bucket_logging_flush->callback(
+          [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket] {
+
+        cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+
+          rgw::bucketlogging::configuration configuration;
+          std::unique_ptr<rgw::sal::Bucket> target_bucket;
+          ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(), driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
+          if (ret < 0 && ret != -ENODATA) {
+            cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
+              << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          } else if (ret == -ENODATA) {
+            cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
+            return 0;
+          }
+
+          // make sure that the logging source attribute is up-to-date
+          if (ret = rgw::bucketlogging::update_bucket_logging_sources(dpp(), target_bucket, bucket->get_key(), true, null_yield); ret < 0) {
+            cerr << "WARNING: failed to update logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
+              << "' in logging target '" << target_bucket->get_key() << "'. error: " << cpp_strerror(ret) << std::endl;
+          }
+
+          std::string obj_name;
+          RGWObjVersionTracker objv_tracker;
+          ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp(), &objv_tracker);
+          if (ret < 0 && ret != -ENOENT) {
+            cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket <<
+              "'. error: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+          std::string old_obj;
+          const auto region = driver->get_zone()->get_zonegroup().get_api_name();
+          ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket.get(), null_yield, true, &objv_tracker, false, &old_obj);
+          if (ret < 0) {
+            cerr << "ERROR: failed to flush pending logging object '" << obj_name << "' to target bucket '" << configuration.target_bucket
+              << "'. error: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+          cout << "flushed pending logging object '" << old_obj
+            << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
+          return 0;
+        };
+      });
+
+      bucket_logging_info->callback(
+          [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket, &formatter] {
+
+        cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket, &formatter]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+          const auto& bucket_attrs = bucket->get_attrs();
+          auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
+          if (iter != bucket_attrs.end()) {
+            rgw::bucketlogging::configuration configuration;
+            try {
+              configuration.enabled = true;
+              decode(configuration, iter->second);
+            } catch (buffer::error& err) {
+              cerr << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+                << "'. error: " << err.what() << std::endl;
+              return  EINVAL;
+            }
+            encode_json("logging", configuration, formatter.get());
+            formatter->flush(cout);
+          }
+          iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING_SOURCES);
+          if (iter != bucket_attrs.end()) {
+            rgw::bucketlogging::source_buckets sources;
+            try {
+              decode(sources, iter->second);
+            } catch (buffer::error& err) {
+              cerr << "ERROR: failed to decode logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
+                << "'. error: " << err.what() << std::endl;
+              return  EINVAL;
+            }
+            encode_json("logging_sources", sources, formatter.get());
+            formatter->flush(cout);
+          }
+
+          return 0;
+        };
+      });
+
+#ifdef WITH_RADOSGW_RADOS
+      bucket_logging_list->callback(
+          [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket, &formatter] {
+
+        cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket, &formatter]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+          if (driver->get_name() != "rados") {
+            cerr << "ERROR: this command is only available with the RADOS driver." << std::endl;
+            return EINVAL;
+          }
+
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+
+          rgw::bucketlogging::configuration configuration;
+          std::unique_ptr<rgw::sal::Bucket> target_bucket;
+          ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(),
+               driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
+          if (ret < 0 && ret != -ENODATA) {
+            cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
+              << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          } else if (ret == -ENODATA) {
+            cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
+            return 0;
+          }
+          std::string target_prefix = configuration.target_prefix;
+          std::set<std::string> entries;
+
+          ret = rgw::bucketlogging::list_pending_commit_objects(dpp(),
+              static_cast<rgw::sal::RadosStore*>(driver), target_bucket.get(),
+              target_prefix, entries, null_yield);
+
+          if (ret < 0) {
+            cerr << "ERROR: failed to get pending log entries for bucket '" << bucket_name
+                 << "': " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+
+          formatter->open_array_section("pending_logs");
+          for (auto &entry: entries) {
+              formatter->dump_string("log", entry);
+          }
+          formatter->close_section(); // objs
+          formatter->flush(cout);
+          return 0;
+        };
+      });
+
+      bucket_rewrite->callback(
+          [&cli11_action, &cli11_need_gc,
+           &bucket_name, &tenant, &bucket_id, &bucket, &start_date, &end_date,
+           &min_rewrite_size, &max_rewrite_size, &min_rewrite_stripe_size, &formatter] {
+        cli11_need_gc = true;  // legacy: BUCKET_REWRITE is in gc_ops_list
+
+        cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket, &start_date, &end_date,
+                        &min_rewrite_size, &max_rewrite_size, &min_rewrite_stripe_size,
+                        &formatter]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+
+          uint64_t start_epoch = 0;
+          uint64_t end_epoch = 0;
+
+          if (!end_date.empty()) {
+            int ret = utime_t::parse_date(end_date, &end_epoch, NULL);
+            if (ret < 0) {
+              cerr << "ERROR: failed to parse end date" << std::endl;
+              return EINVAL;
+            }
+          }
+          if (!start_date.empty()) {
+            int ret = utime_t::parse_date(start_date, &start_epoch, NULL);
+            if (ret < 0) {
+              cerr << "ERROR: failed to parse start date" << std::endl;
+              return EINVAL;
+            }
+          }
+
+          bool is_truncated = true;
+          bool cls_filtered = true;
+
+          rgw_obj_index_key marker;
+          string empty_prefix;
+          string empty_delimiter;
+
+          formatter->open_object_section("result");
+          formatter->dump_string("bucket", bucket_name);
+          formatter->open_array_section("objects");
+
+          constexpr uint32_t NUM_ENTRIES = 1000;
+          uint16_t expansion_factor = 1;
+          while (is_truncated) {
+            RGWRados::ent_map_t result;
+            result.reserve(NUM_ENTRIES);
+
+            const auto& current_index = bucket->get_info().layout.current_index;
+            int r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->cls_bucket_list_ordered(
+              dpp(), bucket->get_info(), current_index, RGW_NO_SHARD,
+              marker, empty_prefix, empty_delimiter,
+              NUM_ENTRIES, true, expansion_factor,
+              result, &is_truncated, &cls_filtered, &marker,
+              null_yield,
+              rgw_bucket_object_check_filter);
+            if (r < 0 && r != -ENOENT) {
+              cerr << "ERROR: failed operation r=" << r << std::endl;
+            } else if (r == -ENOENT) {
+              break;
+            }
+
+            if (result.size() < NUM_ENTRIES / 8) {
+              ++expansion_factor;
+            } else if (result.size() > NUM_ENTRIES * 7 / 8 &&
+                       expansion_factor > 1) {
+              --expansion_factor;
+            }
+
+            for (auto iter = result.begin(); iter != result.end(); ++iter) {
+              rgw_obj_key key = iter->second.key;
+              rgw_bucket_dir_entry& entry = iter->second;
+
+              formatter->open_object_section("object");
+              formatter->dump_string("name", key.name);
+              formatter->dump_string("instance", key.instance);
+              formatter->dump_int("size", entry.meta.size);
+              utime_t ut(entry.meta.mtime);
+              ut.gmtime(formatter->dump_stream("mtime"));
+
+              if ((entry.meta.size < min_rewrite_size) ||
+                  (entry.meta.size > max_rewrite_size) ||
+                  (start_epoch > 0 && start_epoch > (uint64_t)ut.sec()) ||
+                  (end_epoch > 0 && end_epoch < (uint64_t)ut.sec())) {
+                formatter->dump_string("status", "Skipped");
+              } else {
+                std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
+
+                bool need_rewrite = true;
+                if (min_rewrite_stripe_size > 0) {
+                  r = check_min_obj_stripe_size(driver, obj.get(), min_rewrite_stripe_size, &need_rewrite);
+                  if (r < 0) {
+                    ldpp_dout(dpp(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
+                  }
+                }
+                if (!need_rewrite) {
+                  formatter->dump_string("status", "Skipped");
+                } else {
+                  RGWRados* store = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
+                  r = store->rewrite_obj(bucket->get_info(), obj->get_obj(), dpp(), null_yield);
+                  if (r == 0) {
+                    formatter->dump_string("status", "Success");
+                  } else {
+                    formatter->dump_string("status", cpp_strerror(-r));
+                  }
+                }
+              }
+              formatter->dump_int("flags", entry.flags);
+
+              formatter->close_section();
+              formatter->flush(cout);
+            }
+          }
+          formatter->close_section();
+          formatter->close_section();
+          formatter->flush(cout);
+          return 0;
+        };
+      });
+#endif
+
+      bucket_set_min_shards->callback(
+          [&cli11_action, &bucket_name, &bucket_id, &tenant, &bucket,
+           &num_shards, &num_shards_specified] {
+
+        cli11_action = [&bucket_name, &bucket_id, &tenant, &bucket,
+                        &num_shards, &num_shards_specified]() -> int {
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+
+          if (!num_shards_specified) {
+            cerr << "ERROR: --num-shards not specified" << std::endl;
+            return EINVAL;
+          }
+
+          if (num_shards < 1) {
+            cerr << "ERROR: --num-shards must be at least 1" << std::endl;
+            return EINVAL;
+          }
+
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+          auto& bucket_info = bucket->get_info();
+
+          const rgw::BucketIndexType type =
+            bucket_info.layout.current_index.layout.type;
+          if (type != rgw::BucketIndexType::Normal) {
+            cerr << "ERROR: the bucket's layout is type " << type <<
+              " instead of type " << rgw::BucketIndexType::Normal <<
+              " and therefore does not have a "
+              "minimum number of shards that can be altered" << std::endl;
+            return EINVAL;
+          }
+
+          uint32_t& min_num_shards =
+            bucket_info.layout.current_index.layout.normal.min_num_shards;
+          min_num_shards = num_shards;
+
+          ret = bucket->put_info(dpp(), false, real_time(), null_yield);
+          if (ret < 0) {
+            cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+
+          return 0;
+        };
+      });
+
+      bucket_object_shard->callback(
+          [&cli11_readonly, &cli11_action, &object, &num_shards,
+           &num_shards_specified, &formatter] {
+#ifdef WITH_RADOSGW_RADOS
+        cli11_readonly = true;
+#endif
+
+        cli11_action = [&object, &num_shards, &num_shards_specified,
+                        &formatter]() -> int {
+          if (!num_shards_specified || object.empty()) {
+            cerr << "ERROR: num-shards and object must be specified."
+                 << std::endl;
+            return EINVAL;
+          } else if (num_shards <= 0) {
+            cerr << "ERROR: non-positive value supplied for num-shards: " <<
+              num_shards << std::endl;
+            return EINVAL;
+          }
+          auto shard =
+            RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
+          formatter->open_object_section("obj_shard");
+          encode_json("shard", shard, formatter.get());
+          formatter->close_section();
+          formatter->flush(cout);
+
+          return 0;
+        };
+      });
+
+      bucket_shard_objects->callback(
+          [&cli11_readonly, &cli11_action, &opt_prefix, &num_shards,
+           &num_shards_specified, &specified_shard_id, &shard_id, &formatter] {
+#ifdef WITH_RADOSGW_RADOS
+        cli11_readonly = true;
+#endif
+
+        cli11_action = [&opt_prefix, &num_shards, &num_shards_specified,
+                        &specified_shard_id, &shard_id, &formatter]() -> int {
+          const auto prefix = opt_prefix ? *opt_prefix : "obj"s;
+          if (!num_shards_specified) {
+            cerr << "ERROR: num-shards must be specified."
+                 << std::endl;
+            return EINVAL;
+          }
+
+          if (specified_shard_id) {
+            if (shard_id >= num_shards) {
+              cerr << "ERROR: shard-id must be less than num-shards."
+                   << std::endl;
+              return EINVAL;
+            }
+            std::string obj;
+            uint64_t ctr = 0;
+            int shard;
+            do {
+              obj = fmt::format("{}{:0>20}", prefix, ctr);
+              shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj, num_shards);
+              ++ctr;
+            } while (shard != shard_id);
+
+            formatter->open_object_section("shard_obj");
+            encode_json("obj", obj, formatter.get());
+            formatter->close_section();
+            formatter->flush(cout);
+          } else {
+            std::vector<std::string> objs(num_shards);
+            for (uint64_t ctr = 0, shardsleft = num_shards; shardsleft > 0; ++ctr) {
+              auto key = fmt::format("{}{:0>20}", prefix, ctr);
+              auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(key, num_shards);
+              if (objs[shard].empty()) {
+                objs[shard] = std::move(key);
+                --shardsleft;
+              }
+            }
+
+            formatter->open_object_section("shard_objs");
+            encode_json("objs", objs, formatter.get());
+            formatter->close_section();
+            formatter->flush(cout);
+          }
+
+          return 0;
+        };
+      });
+
+#ifdef WITH_RADOSGW_RADOS
+      bucket_resync_encrypted_multipart->callback(
+          [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket,
+           &yes_i_really_mean_it, &marker, &formatter, &stream_flusher_ptr] {
+
+        cli11_action = [&bucket_name, &tenant, &bucket_id, &bucket,
+                        &yes_i_really_mean_it, &marker, &formatter,
+                        &stream_flusher_ptr]() -> int {
+          // repair logic for replication of encrypted multipart uploads:
+          // https://tracker.ceph.com/issues/46062
+          if (bucket_name.empty()) {
+            cerr << "ERROR: bucket not specified" << std::endl;
+            return EINVAL;
+          }
+          int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+          if (ret < 0) {
+            return -ret;
+          }
+
+          auto rados_driver = dynamic_cast<rgw::sal::RadosStore*>(driver);
+          if (!rados_driver) {
+            cerr << "ERROR: this command can only work when the cluster "
+                "has a RADOS backing store." << std::endl;
+            return EPERM;
+          }
+
+          // fail if recovery wouldn't generate replication log entries
+          if (!rados_driver->svc()->zone->need_to_log_data() && !yes_i_really_mean_it) {
+            cerr << "This command is only necessary for replicated buckets." << std::endl;
+            cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+            return EPERM;
+          }
+
+          formatter->open_object_section("modified");
+          encode_json("bucket", bucket->get_name(), formatter.get());
+          encode_json("bucket_id", bucket->get_bucket_id(), formatter.get());
+
+          ret = rados_driver->getRados()->bucket_resync_encrypted_multipart(
+              dpp(), null_yield, rados_driver, bucket->get_info(),
+              marker, *stream_flusher_ptr);
+          if (ret < 0) {
+            return -ret;
+          }
+          formatter->close_section();
+          formatter->flush(cout);
+          return 0;
+        };
+      });
+
+      // Shared by both 'bucket radoslist' and 'bucket rados list' (same command,
+      // two entry points). Defined once; each leaf's callback installs it.
+      auto radoslist_action =
+          [&max_concurrent_ios, &orphan_stale_secs, &tenant, &rgw_obj_fs,
+           &bucket_name, &yes_i_really_mean_it]() -> int {
+        RGWRadosList lister(static_cast<rgw::sal::RadosStore*>(driver),
+                            max_concurrent_ios, orphan_stale_secs, tenant);
+        if (rgw_obj_fs) {
+          lister.set_field_separator(*rgw_obj_fs);
+        }
+
+        int ret;
+        if (bucket_name.empty()) {
+          // yes_i_really_mean_it means continue with listing even if
+          // there are indexless buckets
+          ret = lister.run(dpp(), yes_i_really_mean_it);
+        } else {
+          ret = lister.run(dpp(), bucket_name);
+        }
+
+        if (ret < 0) {
+          std::cerr <<
+            "ERROR: bucket radoslist failed to finish before " <<
+            "encountering error: " << cpp_strerror(-ret) << std::endl;
+          std::cerr << "************************************"
+            "************************************" << std::endl;
+          std::cerr << "WARNING: THE RESULTS ARE NOT RELIABLE AND SHOULD NOT " <<
+            "BE USED IN DELETING ORPHANS" << std::endl;
+          std::cerr << "************************************"
+            "************************************" << std::endl;
+          return -ret;
+        }
+        return 0;
+      };
+      bucket_radoslist->callback([&cli11_action, radoslist_action] {
+
+        cli11_action = radoslist_action;
+      });
+      bucket_rados_list->callback([&cli11_action, radoslist_action] {
+
+        cli11_action = radoslist_action;
+      });
+#endif
+    } // bucket command registrations
+
+    // Skip CLI11 for legacy-owned commands so it can't reject them or mis-match
+    // a later migrated leaf; the legacy find_command path below handles them.
+    if (!route_bucket_to_legacy) {
+      // cli_argv is the ceph-stripped args (globals removed) minus --cli11-help,
+      // normalized so CLI11 sees the same token meanings as the legacy parser.
+      // Only CLI11's copy is normalized — the legacy loop below still iterates
+      // the original `args`.
+      std::vector<std::pair<std::string, std::string>> underscore_rewrites;
+      const auto cli_tokens =
+          normalize_cli11_tokens(app, cli_argv, underscore_rewrites);
+      std::vector<const char*> parse_argv;
+      parse_argv.reserve(cli_tokens.size());
+      for (const auto& t : cli_tokens) {
+        parse_argv.push_back(t.c_str());
+      }
+      try {
+        app.parse(static_cast<int>(parse_argv.size()), parse_argv.data());
+      } catch (const CLI::ParseError& e) {
+        if (show_cli11_help) {
+          cout << app.help();
+          return 0;
+        }
+        warn_underscore_options(underscore_rewrites);
+        warn_wrong_position_and_unrelated_option(&app);
+        warn_duplicates(&app);
+        app.exit(e);                    // prints CLI11's own message
+        return to_errno_exit_code(e);   // remaps just the exit code
+      }
+
+      // Handles --cli11-help when parse succeeded (no subcommand, or all args provided).
+      if (show_cli11_help) {
+        cout << app.help();
+        return 0;
+      }
+
+      // Any parsed CLI11 command will appear as a subcommand of app.
+      cli11_parsed = !app.get_subcommands().empty();
+      if (cli11_parsed) {
+        warn_underscore_options(underscore_rewrites);
+        warn_wrong_position_and_unrelated_option(&app);
+        warn_duplicates(&app);
+
+        // Record the command path CLI11 matched: command words only, no flags
+        // or stray words. Flags CLI11 does not recognize yet are consumed only
+        // by the legacy flag loop, so the words left in `args` after the loop
+        // are checked against this path to catch what the two parsers read
+        // differently.
+        // TODO: remove once all flags are migrated and the legacy flag loop is
+        // gone; `args` then always matches what CLI11 parsed.
+        for (CLI::App* n = &app; !n->get_subcommands().empty(); ) {
+          n = n->get_subcommands().front();
+          PathLevel level;
+          level.accepted_names = n->get_aliases();
+          level.accepted_names.push_back(n->get_name());
+          cli11_path.push_back(std::move(level));
+        }
+      }
+    }
+  }
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -4073,10 +5848,10 @@ int main(int argc, const char **argv)
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, NULL, "--inconsistent-index", (char*)NULL)) {
      // do nothing
-    } else if (ceph_argparse_flag(args, i, "--hide-progress", (char*)NULL)) {
-      hide_progress = true;
-    } else if (ceph_argparse_flag(args, i, "--dump-keys", (char*)NULL)) {
-      dump_keys = true;
+    } else if (ceph_argparse_binary_flag(args, i, &hide_progress, NULL, "--hide-progress", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &dump_keys, NULL, "--dump-keys", (char*)NULL)) {
+      // do nothing
 #ifdef WITH_RADOSGW_RADOS
     } else if (ceph_argparse_binary_flag(args, i, &placement_inline_data, NULL, "--placement-inline-data", (char*)NULL)) {
       placement_inline_data_specified = true;
@@ -4330,7 +6105,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
-      str_script_ctx = val;
+      // consumed by CLI11 for script commands; kept here to prevent "invalid flag" error
     } else if (ceph_argparse_witharg(args, i, &val, "--package", (char*)NULL)) {
       script_package = val;
     } else if (ceph_argparse_binary_flag(args, i, &allow_compilation, NULL, "--allow-compilation", (char*)NULL)) {
@@ -4357,11 +6132,80 @@ int main(int argc, const char **argv)
     }
   }
 
+  // `args` holds the words the legacy flag loop did not consume. Check them
+  // against the command path CLI11 parsed: a word past the end of the path is
+  // a stray; any other mismatch means the words name a different command and
+  // are parsed again. For example, all three lines below matched path
+  // [bucket, list]. CLI11 does not know `--access-key`, so it matched `list`
+  // as a command word; the legacy loop took `list` as the flag's value.
+  //   line                             args                     result
+  //   bucket list banana               [bucket, list, banana]   stray
+  //   bucket --access-key list stats   [bucket, stats]          parsed again
+  //   bucket --access-key list         [bucket]                 parsed again
+  // TODO: remove once all flags are migrated and the legacy flag loop is
+  // gone; `args` then always matches the path CLI11 parsed. Keep the
+  // `remaining()` check below, which goes away with allow_extras() instead.
+  if (cli11_parsed) {
+    std::size_t path_index = 0;
+    bool path_intact = true;
+    for (const char* raw : args) {
+      const std::string_view word(raw);
+      // No path level is left to match this word against: a stray word.
+      if (path_index == cli11_path.size()) {
+        cerr << "ERROR: unexpected argument: '" << word << "'" << std::endl;
+        return 1;
+      }
+      const auto& accepted = cli11_path[path_index].accepted_names;
+      if (std::find(accepted.begin(), accepted.end(), word) != accepted.end()) {
+        ++path_index;
+        continue;
+      }
+      path_intact = false;
+      break;
+    }
+    if (path_index < cli11_path.size()) {
+      path_intact = false;
+    }
+
+    if (!path_intact) {
+      // Clear what the first parse's command callback set; the re-parse sets
+      // them again. State set by a new command callback belongs here too.
+      cli11_action = nullptr;
+      cli11_readonly = false;
+      cli11_need_gc = false;
+      cli11_allows_tenant_no_uid = false;
+      cli11_non_master_op = false;
+
+      std::vector<const char*> reparse_argv;
+      reparse_argv.reserve(args.size() + 1);
+      reparse_argv.push_back(argv[0]);
+      reparse_argv.insert(reparse_argv.end(), args.begin(), args.end());
+      try {
+        app.parse(static_cast<int>(reparse_argv.size()), reparse_argv.data());
+      } catch (const CLI::ParseError& e) {
+        app.exit(e);
+        return to_errno_exit_code(e);
+      }
+      // A parse that matches no subcommand still succeeds, so check for one
+      // and let legacy dispatch handle the line if none was found.
+      cli11_parsed = !app.get_subcommands().empty();
+
+      // Whatever the re-parse did not claim is a stray word: the legacy loop
+      // already took every flag it owns off the line.
+      // TODO: remove once allow_extras() is gone; CLI11 then rejects unknown
+      // arguments itself.
+      const auto extras = app.remaining(true);
+      if (!extras.empty()) {
+        cerr << "ERROR: unexpected argument: '" << extras.front() << "'" << std::endl;
+        return 1;
+      }
+    }
+  }
+
   /* common_init_finish needs to be called after g_conf().set_val() */
   common_init_finish(g_ceph_context);
 
   std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
-  std::unique_ptr<rgw::SiteConfig> site;
 
   if (args.empty()) {
     usage();
@@ -4373,27 +6217,28 @@ int main(int argc, const char **argv)
 
     std::any _opt_cmd;
 
-    if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
-      if (!expected.empty()) {
-        cerr << err << std::endl;
-        cerr << "Expected one of the following:" << std::endl;
-        for (auto& exp : expected) {
-          if (exp == "*" || exp == "[*]") {
-            continue;
+    if (opt_cmd == OPT::NO_CMD && !cli11_parsed) {
+      if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
+        if (!expected.empty()) {
+          cerr << err << std::endl;
+          cerr << "Expected one of the following:" << std::endl;
+          for (auto& exp : expected) {
+            if (exp == "*" || exp == "[*]") {
+              continue;
+            }
+            cerr << "  " << exp << std::endl;
           }
-          cerr << "  " << exp << std::endl;
+        } else {
+          cerr << "Command not found:";
+          for (auto& arg : args) {
+            cerr << " " << arg;
+          }
+          cerr << std::endl;
         }
-      } else {
-        cerr << "Command not found:";
-        for (auto& arg : args) {
-          cerr << " " << arg;
-        }
-        cerr << std::endl;
+        exit(1);
       }
-      exit(1);
+      opt_cmd = std::any_cast<OPT>(_opt_cmd);
     }
-
-    opt_cmd = std::any_cast<OPT>(_opt_cmd);
 
     /* some commands may have an optional extra param */
     if (!extra_args.empty()) {
@@ -4461,17 +6306,11 @@ int main(int argc, const char **argv)
 			 OPT::ACCOUNT_GET,
 			 OPT::ACCOUNT_STATS,
 			 OPT::ACCOUNT_LIST,
-			 OPT::BUCKETS_LIST,
-			 OPT::BUCKET_LIMIT_CHECK,
-			 OPT::BUCKET_LAYOUT,
-			 OPT::BUCKET_STATS,
 #ifdef WITH_RADOSGW_RADOS
 			 OPT::BUCKET_SYNC_CHECKPOINT,
 			 OPT::BUCKET_SYNC_INFO,
 			 OPT::BUCKET_SYNC_STATUS,
 			 OPT::BUCKET_SYNC_MARKERS,
-			 OPT::BUCKET_SHARD_OBJECTS,
-			 OPT::BUCKET_OBJECT_SHARD,
 			 OPT::LOG_LIST,
 			 OPT::LOG_SHOW,
 #endif
@@ -4565,7 +6404,6 @@ int main(int argc, const char **argv)
 			 OPT::GC_PROCESS,
 #endif
 			 OPT::OBJECT_RM,
-			 OPT::BUCKET_RM,  // --purge-objects
 			 OPT::USER_RM,    // --purge-data
 			 OPT::OBJECTS_EXPIRE,
 			 OPT::OBJECTS_EXPIRE_STALE_RM,
@@ -4580,8 +6418,10 @@ int main(int argc, const char **argv)
 
     raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
 			   raw_period_update || raw_period_pull);
-    bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
-    bool need_gc = (gc_ops_list.find(opt_cmd) != gc_ops_list.end()) && !bypass_gc;
+    bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end()
+                     && !cli11_readonly;
+    bool need_gc = (gc_ops_list.find(opt_cmd) != gc_ops_list.end() || cli11_need_gc)
+                   && !bypass_gc;
 
     DriverManager::Config cfg = DriverManager::get_config(true, g_ceph_context);
 
@@ -4674,9 +6514,7 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_TOPIC_STATS
                           && opt_cmd != OPT::PUBSUB_TOPIC_DUMP
 #endif
-			  && opt_cmd != OPT::SCRIPT_PUT
-			  && opt_cmd != OPT::SCRIPT_GET
-			  && opt_cmd != OPT::SCRIPT_RM
+                          && !cli11_allows_tenant_no_uid
                           && opt_cmd != OPT::ACCOUNT_CREATE
                           && opt_cmd != OPT::ACCOUNT_MODIFY
                           && opt_cmd != OPT::ACCOUNT_GET
@@ -4738,8 +6576,10 @@ int main(int argc, const char **argv)
   zonegroup_name = g_conf()->rgw_zonegroup;
 
   RGWStreamFlusher stream_flusher(formatter.get(), cout);
+  stream_flusher_ptr = &stream_flusher;
 
   RGWUserAdminOpState user_op(driver);
+  user_op_ptr = &user_op;
   if (!user_email.empty()) {
     user_op.user_email_specified=true;
   }
@@ -6720,10 +8560,6 @@ int main(int argc, const char **argv)
                                         OPT::USER_MODIFY, OPT::USER_ENABLE,
                                         OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
                                         OPT::SUBUSER_MODIFY, OPT::SUBUSER_RM,
-#ifdef WITH_RADOSGW_RADOS
-                                        OPT::BUCKET_LINK, OPT::BUCKET_UNLINK,
-#endif
-                                        OPT::BUCKET_CHOWN,
                                         OPT::BUCKET_SUSPEND,
                                         OPT::BUCKET_UNSUSPEND,
 #ifdef WITH_RADOSGW_RADOS
@@ -6742,7 +8578,8 @@ int main(int argc, const char **argv)
                                         OPT::RATELIMIT_SET, OPT::RATELIMIT_ENABLE, OPT::RATELIMIT_DISABLE,
                                         OPT::QUOTA_SET, OPT::QUOTA_ENABLE, OPT::QUOTA_DISABLE};
 
-  bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
+  bool print_warning_message = ((non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() ||
+                                 cli11_non_master_op) &&
                                 non_master_cmd);
 
   if (print_warning_message) {
@@ -7673,488 +9510,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (opt_cmd == OPT::BUCKET_LIMIT_CHECK) {
-    void *handle;
-    std::list<std::string> user_ids;
-    metadata_key = "user";
-    int max = 1000;
-
-    bool truncated;
-
-    if (!rgw::sal::User::empty(user)) {
-      user_ids.push_back(user->get_id().id);
-      ret =
-	RGWBucketAdminOp::limit_check(driver, bucket_op, user_ids, stream_flusher,
-				      null_yield, dpp(), warnings_only);
-    } else {
-      /* list users in groups of max-keys, then perform user-bucket
-       * limit-check on each group */
-     ret = driver->meta_list_keys_init(dpp(), metadata_key, string(), &handle);
-      if (ret < 0) {
-	cerr << "ERROR: buckets limit check can't get user metadata_key: "
-	     << cpp_strerror(-ret) << std::endl;
-	return -ret;
-      }
-
-      do {
-	ret = driver->meta_list_keys_next(dpp(), handle, max, user_ids,
-					      &truncated);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: buckets limit check lists_keys_next(): "
-	       << cpp_strerror(-ret) << std::endl;
-	  break;
-	} else {
-	  /* ok, do the limit checks for this group */
-	  ret =
-	    RGWBucketAdminOp::limit_check(driver, bucket_op, user_ids, stream_flusher,
-					  null_yield, dpp(), warnings_only);
-	  if (ret < 0)
-	    break;
-	}
-	user_ids.clear();
-      } while (truncated);
-      driver->meta_list_keys_complete(handle);
-    }
-    return -ret;
-  } /* OPT::BUCKET_LIMIT_CHECK */
-
-  if (opt_cmd == OPT::BUCKETS_LIST) {
-    if (bucket_name.empty()) {
-      if (!rgw::sal::User::empty(user)) {
-        if (!user_op.has_existing_user()) {
-          cerr << "ERROR: could not find user: " << user << std::endl;
-          return ENOENT;
-        }
-      }
-      bucket_op.marker = marker;
-      if (max_entries_specified)
-        bucket_op.max_entries = max_entries;
-      else
-        bucket_op.max_entries = 0; /* for backward compatibility */
-      RGWBucketAdminOp::info(driver, *site, bucket_op, stream_flusher, null_yield, dpp());
-    } else {
-      int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-      if (ret < 0) {
-        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      formatter->open_array_section("entries");
-
-      int count = 0;
-
-      static constexpr int MAX_PAGINATE_SIZE = 10000;
-      static constexpr int DEFAULT_MAX_ENTRIES = 1000;
-
-      if (max_entries < 0) {
-	max_entries = DEFAULT_MAX_ENTRIES;
-      }
-      const int paginate_size = std::min(max_entries, MAX_PAGINATE_SIZE);
-
-      string prefix;
-      string delim;
-      string ns;
-
-      rgw::sal::Bucket::ListParams params;
-      rgw::sal::Bucket::ListResults results;
-
-      params.prefix = prefix;
-      params.delim = delim;
-      // Support pagination for versioned buckets using --marker and --object-version
-      // For versioned buckets: use both --marker (name) and --object-version (instance)
-      // For non-versioned buckets: use only --marker (name)
-      if (!object_version.empty()) {
-        params.marker = rgw_obj_key(marker, object_version);
-      } else {
-        params.marker = rgw_obj_key(marker);
-      }
-      params.ns = ns;
-      params.enforce_ns = false;
-      params.list_versions = true;
-      params.allow_unordered = bool(allow_unordered);
-
-      do {
-        const int remaining = max_entries - count;
-	ret = bucket->list(dpp(), params, std::min(remaining, paginate_size), results,
-			   null_yield);
-        if (ret < 0) {
-          cerr << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-	ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
-	  ": list() returned without error; results.objs.size()=" <<
-	  results.objs.size() << ", results.is_truncated=" << results.is_truncated << ", marker=" <<
-	  params.marker << dendl;
-
-        count += results.objs.size();
-
-        for (const auto& entry : results.objs) {
-          encode_json("entry", entry, formatter.get());
-        }
-        formatter->flush(cout);
-      } while (results.is_truncated && count < max_entries);
-      ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": done" << dendl;
-
-      formatter->close_section();
-      formatter->flush(cout);
-    } /* have bucket_name */
-  } /* OPT::BUCKETS_LIST */
-
 #ifdef WITH_RADOSGW_RADOS
-  if (opt_cmd == OPT::BUCKET_RADOS_LIST) {
-    RGWRadosList lister(static_cast<rgw::sal::RadosStore*>(driver),
-			max_concurrent_ios, orphan_stale_secs, tenant);
-    if (rgw_obj_fs) {
-      lister.set_field_separator(*rgw_obj_fs);
-    }
-
-    if (bucket_name.empty()) {
-      // yes_i_really_mean_it means continue with listing even if
-      // there are indexless buckets
-      ret = lister.run(dpp(), yes_i_really_mean_it);
-    } else {
-      ret = lister.run(dpp(), bucket_name);
-    }
-
-    if (ret < 0) {
-      std::cerr <<
-	"ERROR: bucket radoslist failed to finish before " <<
-	"encountering error: " << cpp_strerror(-ret) << std::endl;
-      std::cerr << "************************************"
-	"************************************" << std::endl;
-      std::cerr << "WARNING: THE RESULTS ARE NOT RELIABLE AND SHOULD NOT " <<
-	"BE USED IN DELETING ORPHANS" << std::endl;
-      std::cerr << "************************************"
-	"************************************" << std::endl;
-      return -ret;
-    }
-  }
-#endif
-
-  if (opt_cmd == OPT::BUCKET_LAYOUT) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-    const auto& bucket_info = bucket->get_info();
-    formatter->open_object_section("layout");
-    encode_json("layout", bucket_info.layout, formatter.get());
-    formatter->close_section();
-    formatter->flush(cout);
-  }
-
-  if (opt_cmd == OPT::BUCKET_STATS) {
-    if (bucket_name.empty() && !bucket_id.empty()) {
-      rgw_bucket bucket;
-      if (!rgw_find_bucket_by_id(dpp(), driver->ctx(), driver, marker, bucket_id, &bucket)) {
-        cerr << "failure: no such bucket id" << std::endl;
-        return ENOENT;
-      }
-      bucket_op.set_tenant(bucket.tenant);
-      bucket_op.set_bucket_name(bucket.name);
-    }
-    bucket_op.set_fetch_stats(true);
-    if (max_entries_specified)
-      bucket_op.max_entries = max_entries;
-    else
-      bucket_op.max_entries = 0; /* for backward compatibility */
-    bucket_op.set_restore_stats(bool(show_restore_stats));
-
-    int r = RGWBucketAdminOp::info(driver, *site, bucket_op, stream_flusher, null_yield, dpp());
-    if (r < 0) {
-      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
-      return posix_errortrans(-r);
-    }
-  }
-
-#ifdef WITH_RADOSGW_RADOS
-  if (opt_cmd == OPT::BUCKET_LINK) {
-    bucket_op.set_bucket_id(bucket_id);
-    bucket_op.set_new_bucket_name(new_bucket_name);
-    string err;
-    int r = RGWBucketAdminOp::link(driver, bucket_op, dpp(), null_yield, &err);
-    if (r < 0) {
-      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
-      return -r;
-    }
-  }
-
-  if (opt_cmd == OPT::BUCKET_UNLINK) {
-    int r = RGWBucketAdminOp::unlink(driver, bucket_op, dpp(), null_yield);
-    if (r < 0) {
-      cerr << "failure: " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
-  }
-#endif
-
-  if (opt_cmd == OPT::BUCKET_SHARD_OBJECTS) {
-    const auto prefix = opt_prefix ? *opt_prefix : "obj"s;
-    if (!num_shards_specified) {
-      cerr << "ERROR: num-shards must be specified."
-	   << std::endl;
-      return EINVAL;
-    }
-
-    if (specified_shard_id) {
-      if (shard_id >= num_shards) {
-	cerr << "ERROR: shard-id must be less than num-shards."
-	     << std::endl;
-	return EINVAL;
-      }
-      std::string obj;
-      uint64_t ctr = 0;
-      int shard;
-      do {
-	obj = fmt::format("{}{:0>20}", prefix, ctr);
-	shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj, num_shards);
-	++ctr;
-      } while (shard != shard_id);
-
-      formatter->open_object_section("shard_obj");
-      encode_json("obj", obj, formatter.get());
-      formatter->close_section();
-      formatter->flush(cout);
-    } else {
-      std::vector<std::string> objs(num_shards);
-      for (uint64_t ctr = 0, shardsleft = num_shards; shardsleft > 0; ++ctr) {
-	auto key = fmt::format("{}{:0>20}", prefix, ctr);
-	auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(key, num_shards);
-	if (objs[shard].empty()) {
-	  objs[shard] = std::move(key);
-	  --shardsleft;
-	}
-      }
-
-      formatter->open_object_section("shard_objs");
-      encode_json("objs", objs, formatter.get());
-      formatter->close_section();
-      formatter->flush(cout);
-    }
-  }
-
-  if (opt_cmd == OPT::BUCKET_OBJECT_SHARD) {
-    if (!num_shards_specified || object.empty()) {
-      cerr << "ERROR: num-shards and object must be specified."
-	   << std::endl;
-      return EINVAL;
-    } else if (num_shards <= 0) {
-      cerr << "ERROR: non-positive value supplied for num-shards: " <<
-	num_shards << std::endl;
-      return EINVAL;
-    }
-    auto shard =
-      RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
-    formatter->open_object_section("obj_shard");
-    encode_json("shard", shard, formatter.get());
-    formatter->close_section();
-    formatter->flush(cout);
-  }
-
-#ifdef WITH_RADOSGW_RADOS
-  if (opt_cmd == OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART) {
-    // repair logic for replication of encrypted multipart uploads:
-    // https://tracker.ceph.com/issues/46062
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-
-    auto rados_driver = dynamic_cast<rgw::sal::RadosStore*>(driver);
-    if (!rados_driver) {
-      cerr << "ERROR: this command can only work when the cluster "
-          "has a RADOS backing store." << std::endl;
-      return EPERM;
-    }
-
-    // fail if recovery wouldn't generate replication log entries
-    if (!rados_driver->svc()->zone->need_to_log_data() && !yes_i_really_mean_it) {
-      cerr << "This command is only necessary for replicated buckets." << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return EPERM;
-    }
-
-    formatter->open_object_section("modified");
-    encode_json("bucket", bucket->get_name(), formatter.get());
-    encode_json("bucket_id", bucket->get_bucket_id(), formatter.get());
-
-    ret = rados_driver->getRados()->bucket_resync_encrypted_multipart(
-        dpp(), null_yield, rados_driver, bucket->get_info(),
-        marker, stream_flusher);
-    if (ret < 0) {
-      return -ret;
-    }
-    formatter->close_section();
-    formatter->flush(cout);
-    return 0;
-  }
-#endif
-
-  if (opt_cmd == OPT::BUCKET_CHOWN) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket name not specified" << std::endl;
-      return EINVAL;
-    }
-
-    bucket_op.account_id = account_id;
-    bucket_op.set_bucket_name(bucket_name);
-    bucket_op.set_new_bucket_name(new_bucket_name);
-    string err;
-
-    int r = RGWBucketAdminOp::chown(driver, bucket_op, marker, dpp(), null_yield, &err);
-    if (r < 0) {
-      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
-      return -r;
-    }
-  }
-
-  if (opt_cmd == OPT::BUCKET_LOGGING_FLUSH) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-
-    rgw::bucketlogging::configuration configuration;
-    std::unique_ptr<rgw::sal::Bucket> target_bucket;
-    ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(), driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
-    if (ret < 0 && ret != -ENODATA) {
-      cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
-        << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    } else if (ret == -ENODATA) {
-      cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
-      return 0;
-    }
-
-    // make sure that the logging source attribute is up-to-date
-    if (ret = rgw::bucketlogging::update_bucket_logging_sources(dpp(), target_bucket, bucket->get_key(), true, null_yield); ret < 0) {
-      cerr << "WARNING: failed to update logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
-        << "' in logging target '" << target_bucket->get_key() << "'. error: " << cpp_strerror(ret) << std::endl;
-    }
-
-    std::string obj_name;
-    RGWObjVersionTracker objv_tracker;
-    ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp(), &objv_tracker);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket <<
-        "'. error: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    std::string old_obj;
-    const auto region = driver->get_zone()->get_zonegroup().get_api_name();
-    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket.get(), null_yield, true, &objv_tracker, false, &old_obj);
-    if (ret < 0) {
-      cerr << "ERROR: failed to flush pending logging object '" << obj_name << "' to target bucket '" << configuration.target_bucket
-        << "'. error: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    cout << "flushed pending logging object '" << old_obj
-      << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
-    return 0;
-  }
-
-  if (opt_cmd == OPT::BUCKET_LOGGING_INFO) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-    const auto& bucket_attrs = bucket->get_attrs();
-    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
-    if (iter != bucket_attrs.end()) {
-      rgw::bucketlogging::configuration configuration;
-      try {
-        configuration.enabled = true;
-        decode(configuration, iter->second);
-      } catch (buffer::error& err) {
-        cerr << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-          << "'. error: " << err.what() << std::endl;
-        return  EINVAL;
-      }
-      encode_json("logging", configuration, formatter.get());
-      formatter->flush(cout);
-    }
-    iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING_SOURCES);
-    if (iter != bucket_attrs.end()) {
-      rgw::bucketlogging::source_buckets sources;
-      try {
-        decode(sources, iter->second);
-      } catch (buffer::error& err) {
-        cerr << "ERROR: failed to decode logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
-          << "'. error: " << err.what() << std::endl;
-        return  EINVAL;
-      }
-      encode_json("logging_sources", sources, formatter.get());
-      formatter->flush(cout);
-    }
-
-    return 0;
-  }
-
-#ifdef WITH_RADOSGW_RADOS
-  if (opt_cmd == OPT::BUCKET_LOGGING_LIST) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    if (driver->get_name() != "rados") {
-      cerr << "ERROR: this command is only available with the RADOS driver." << std::endl;
-      return EINVAL;
-    }
-
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-
-    rgw::bucketlogging::configuration configuration;
-    std::unique_ptr<rgw::sal::Bucket> target_bucket;
-    ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(),
-         driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
-    if (ret < 0 && ret != -ENODATA) {
-      cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
-        << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    } else if (ret == -ENODATA) {
-      cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
-      return 0;
-    }
-    std::string target_prefix = configuration.target_prefix;
-    std::set<std::string> entries;
-
-    ret = rgw::bucketlogging::list_pending_commit_objects(dpp(),
-        static_cast<rgw::sal::RadosStore*>(driver), target_bucket.get(),
-        target_prefix, entries, null_yield);
-
-    if (ret < 0) {
-      cerr << "ERROR: failed to get pending log entries for bucket '" << bucket_name
-           << "': " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    formatter->open_array_section("pending_logs");
-    for (auto &entry: entries) {
-        formatter->dump_string("log", entry);
-    }
-    formatter->close_section(); // objs
-    formatter->flush(cout);
-    return 0;
-  }
-
   if (opt_cmd == OPT::LOG_LIST) {
     // filter by date?
     if (date.size() && date.size() != 10) {
@@ -8846,123 +10202,6 @@ next:
   }
 
 #ifdef WITH_RADOSGW_RADOS
-  if (opt_cmd == OPT::BUCKET_REWRITE) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    uint64_t start_epoch = 0;
-    uint64_t end_epoch = 0;
-
-    if (!end_date.empty()) {
-      int ret = utime_t::parse_date(end_date, &end_epoch, NULL);
-      if (ret < 0) {
-        cerr << "ERROR: failed to parse end date" << std::endl;
-        return EINVAL;
-      }
-    }
-    if (!start_date.empty()) {
-      int ret = utime_t::parse_date(start_date, &start_epoch, NULL);
-      if (ret < 0) {
-        cerr << "ERROR: failed to parse start date" << std::endl;
-        return EINVAL;
-      }
-    }
-
-    bool is_truncated = true;
-    bool cls_filtered = true;
-
-    rgw_obj_index_key marker;
-    string empty_prefix;
-    string empty_delimiter;
-
-    formatter->open_object_section("result");
-    formatter->dump_string("bucket", bucket_name);
-    formatter->open_array_section("objects");
-
-    constexpr uint32_t NUM_ENTRIES = 1000;
-    uint16_t expansion_factor = 1;
-    while (is_truncated) {
-      RGWRados::ent_map_t result;
-      result.reserve(NUM_ENTRIES);
-
-      const auto& current_index = bucket->get_info().layout.current_index;
-      int r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->cls_bucket_list_ordered(
-	dpp(), bucket->get_info(), current_index, RGW_NO_SHARD,
-	marker, empty_prefix, empty_delimiter,
-	NUM_ENTRIES, true, expansion_factor,
-	result, &is_truncated, &cls_filtered, &marker,
-	null_yield,
-	rgw_bucket_object_check_filter);
-      if (r < 0 && r != -ENOENT) {
-        cerr << "ERROR: failed operation r=" << r << std::endl;
-      } else if (r == -ENOENT) {
-        break;
-      }
-
-      if (result.size() < NUM_ENTRIES / 8) {
-	++expansion_factor;
-      } else if (result.size() > NUM_ENTRIES * 7 / 8 &&
-		 expansion_factor > 1) {
-	--expansion_factor;
-      }
-
-      for (auto iter = result.begin(); iter != result.end(); ++iter) {
-        rgw_obj_key key = iter->second.key;
-        rgw_bucket_dir_entry& entry = iter->second;
-
-        formatter->open_object_section("object");
-        formatter->dump_string("name", key.name);
-        formatter->dump_string("instance", key.instance);
-        formatter->dump_int("size", entry.meta.size);
-        utime_t ut(entry.meta.mtime);
-        ut.gmtime(formatter->dump_stream("mtime"));
-
-        if ((entry.meta.size < min_rewrite_size) ||
-            (entry.meta.size > max_rewrite_size) ||
-            (start_epoch > 0 && start_epoch > (uint64_t)ut.sec()) ||
-            (end_epoch > 0 && end_epoch < (uint64_t)ut.sec())) {
-          formatter->dump_string("status", "Skipped");
-        } else {
-	  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
-
-          bool need_rewrite = true;
-          if (min_rewrite_stripe_size > 0) {
-            r = check_min_obj_stripe_size(driver, obj.get(), min_rewrite_stripe_size, &need_rewrite);
-            if (r < 0) {
-              ldpp_dout(dpp(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
-            }
-          }
-          if (!need_rewrite) {
-            formatter->dump_string("status", "Skipped");
-          } else {
-            RGWRados* store = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
-            r = store->rewrite_obj(bucket->get_info(), obj->get_obj(), dpp(), null_yield);
-            if (r == 0) {
-              formatter->dump_string("status", "Success");
-            } else {
-              formatter->dump_string("status", cpp_strerror(-r));
-            }
-          }
-        }
-        formatter->dump_int("flags", entry.flags);
-
-        formatter->close_section();
-        formatter->flush(cout);
-      }
-    }
-    formatter->close_section();
-    formatter->close_section();
-    formatter->flush(cout);
-  }
-
   if (opt_cmd == OPT::BUCKET_RESHARD) {
     int ret = check_reshard_bucket_params(driver,
 					  bucket_name,
@@ -9196,51 +10435,6 @@ next:
   } // OPT_RESHARD_CANCEL
 #endif
 
-  if (opt_cmd == OPT::BUCKET_SET_MIN_SHARDS) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-
-    if (!num_shards_specified) {
-      cerr << "ERROR: --num-shards not specified" << std::endl;
-      return EINVAL;
-    }
-
-    if (num_shards < 1) {
-      cerr << "ERROR: --num-shards must be at least 1" << std::endl;
-      return EINVAL;
-    }
-
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      return -ret;
-    }
-    auto& bucket_info = bucket->get_info();
-
-    const rgw::BucketIndexType type =
-      bucket_info.layout.current_index.layout.type;
-    if (type != rgw::BucketIndexType::Normal) {
-      cerr << "ERROR: the bucket's layout is type " << type <<
-	" instead of type " << rgw::BucketIndexType::Normal <<
-	" and therefore does not have a "
-	"minimum number of shards that can be altered" << std::endl;
-      return EINVAL;
-    }
-
-    uint32_t& min_num_shards =
-      bucket_info.layout.current_index.layout.normal.min_num_shards;
-    min_num_shards = num_shards;
-
-    ret = bucket->put_info(dpp(), false, real_time(), null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    return 0;
-  } // SET_MIN_SHARDS
-
   if (opt_cmd == OPT::OBJECT_UNLINK) {
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
@@ -9439,58 +10633,8 @@ next:
     formatter->close_section(); // outer
     formatter->flush(cout);
   } // OPT::OBJECT_MANIFEST
-#endif
 
-#ifdef WITH_RADOSGW_RADOS
-  if (opt_cmd == OPT::BUCKET_CHECK) {
-    if (check_head_obj_locator) {
-      if (bucket_name.empty()) {
-        cerr << "ERROR: need to specify bucket name" << std::endl;
-        return EINVAL;
-      }
-      do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter.get());
-    } else {
-      RGWBucketAdminOp::check_index(driver, bucket_op, stream_flusher, null_yield, dpp());
-    }
-  }
 
-  if (opt_cmd == OPT::BUCKET_CHECK_OLH) {
-    rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
-    if (!store) {
-      cerr <<
-	      "WARNING: this command is only relevant when the cluster has a RADOS backing store." <<
-	      std::endl;
-      return 0;
-    }
-    RGWBucketAdminOp::check_index_olh(store, bucket_op, stream_flusher, dpp());
-  }
-
-  if (opt_cmd == OPT::BUCKET_CHECK_UNLINKED) {
-    rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
-    if (!store) {
-      cerr <<
-	      "WARNING: this command is only relevant when the cluster has a RADOS backing store." <<
-	      std::endl;
-      return 0;
-    }
-    RGWBucketAdminOp::check_index_unlinked(store, bucket_op, stream_flusher, dpp());
-  }
-#endif
-
-  if (opt_cmd == OPT::BUCKET_RM) {
-    if (!inconsistent_index) {
-      RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(), bypass_gc, true, false);
-    } else {
-      if (!yes_i_really_mean_it) {
-	cerr << "using --inconsistent_index can corrupt the bucket index " << std::endl
-	<< "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-	return 1;
-      }
-      RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(), bypass_gc, false, false);
-    }
-  }
-
-#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::DEDUP_STATS    ||
       opt_cmd == OPT::DEDUP_ESTIMATE ||
       opt_cmd == OPT::DEDUP_ABORT    ||
@@ -12507,86 +13651,6 @@ next:
   }
 #endif
 
-  if (opt_cmd == OPT::SCRIPT_PUT) {
-    if (!str_script_ctx) {
-      cerr << "ERROR: context was not provided (via --context)" << std::endl;
-      return EINVAL;
-    }
-    if (infile.empty()) {
-      cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
-      return EINVAL;
-    }
-    bufferlist bl;
-    auto rc = read_input(infile, bl);
-    if (rc < 0) {
-      cerr << "ERROR: failed to read script: '" << infile << "'. error: " << rc << std::endl;
-      return -rc;
-    }
-    const std::string script = bl.to_str();
-    std::string err_msg;
-    if (!rgw::lua::verify(script, err_msg)) {
-      cerr << "ERROR: script: '" << infile << "' has error: " << std::endl << err_msg << std::endl;
-      return EINVAL;
-    }
-    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-    if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-      return EINVAL;
-    }
-    if (script_ctx == rgw::lua::context::background && !tenant.empty()) {
-      cerr << "ERROR: cannot specify tenant in background context" << std::endl;
-      return EINVAL;
-    }
-    auto lua_manager = driver->get_lua_manager("");
-    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
-    if (rc < 0) {
-      cerr << "ERROR: failed to put script. error: " << rc << std::endl;
-      return -rc;
-    }
-  }
-
-  if (opt_cmd == OPT::SCRIPT_GET) {
-    if (!str_script_ctx) {
-      cerr << "ERROR: context was not provided (via --context)" << std::endl;
-      return EINVAL;
-    }
-    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-    if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-      return EINVAL;
-    }
-    auto lua_manager = driver->get_lua_manager("");
-    std::string script;
-    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
-    if (rc == -ENOENT) {
-      std::cout << "no script exists for context: " << *str_script_ctx << 
-        (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
-    } else if (rc < 0) {
-      cerr << "ERROR: failed to read script. error: " << rc << std::endl;
-      return -rc;
-    } else {
-      std::cout << script << std::endl;
-    }
-  }
-  
-  if (opt_cmd == OPT::SCRIPT_RM) {
-    if (!str_script_ctx) {
-      cerr << "ERROR: context was not provided (via --context)" << std::endl;
-      return EINVAL;
-    }
-    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-    if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-      return EINVAL;
-    }
-    auto lua_manager = driver->get_lua_manager("");
-    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
-    if (rc < 0) {
-      cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
-      return -rc;
-    }
-  }
-
   if (opt_cmd == OPT::SCRIPT_PACKAGE_ADD) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     if (!script_package) {
@@ -12771,6 +13835,10 @@ next:
 
     optional_global_cors->dump(formatter.get());
     formatter->flush(cout);
+  }
+
+  if (cli11_action) {
+    return cli11_action();
   }
   return 0;
 }
