@@ -229,6 +229,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 
     if (static_cast<rgw::sal::NSFSDriver*>(driver)
             ->set_run_lc_thread(use_lc_thread)
+            .set_background_tasks(background_tasks)
             .initialize(cct, dpp) < 0) {
       delete driver;
       return nullptr;

@@ -1815,6 +1815,31 @@ TEST_F(NSFSIdentityDBTest, NsswitchHitsDoNotLookUp)
   EXPECT_EQ(cred.uid, 70102u);
 }
 
+/* The identity an unauthenticated request is served as may take the name
+ * form too -- NooBaa's anonymous account can carry a distinguished name
+ * (`ACCOUNT_IMPORT.md` §6.8) -- and it resolves under RGW's anonymous
+ * user like any other key.  The control is the same row before the
+ * directory knows the name, which must be refused. */
+TEST_F(NSFSIdentityDBTest, NsswitchResolvesTheAnonymousIdentity)
+{
+  FakeDirectory dir;
+  db->nsswitch_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner anon = rgw_user(RGW_USER_ANON_ID);
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(anon),
+						     "nsfsanon")), 0);
+
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, anon, cred,
+				      null_yield), -EPERM)
+      << "control:  a name nsswitch does not know resolved";
+
+  dir.names["nsfsanon"] = {70105, 100};
+  db->nsswitch_cache().refresh(env->dpp, "nsfsanon");
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, anon, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70105u);
+}
+
 /* The bound.  A personality hit resolves nothing, so the sweep is what
  * notices a change, and it does so by moving the identity generation.
  * Every outcome counts:  a new uid, a name that went, one that

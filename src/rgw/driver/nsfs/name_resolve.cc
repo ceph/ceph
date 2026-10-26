@@ -225,6 +225,9 @@ void NsswitchCache::start(NameSource source)
     return;
   }
   stopping = false;
+  ldout(cct, 1) << "nsfs: nsswitch-resolved identities swept every "
+    << cct->_conf.get_val<uint64_t>("rgw_nsfs_identity_resolve_ttl")
+    << " s" << dendl;
   sweeper = std::thread([this, source = std::move(source)] {
     sweep_loop(source);
   });

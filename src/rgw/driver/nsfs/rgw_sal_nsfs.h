@@ -938,6 +938,7 @@ protected:
   RGWQuotaHandler* quota_handler{nullptr};
   RGWLC* lc{nullptr};
   bool use_lc_thread{false};
+  bool background_tasks{false};
   /* driver hint state (test only)--see driver_hint() */
   bool inject_fork_race{false};
 
@@ -1133,6 +1134,13 @@ public:
 
   NSFSDriver& set_run_lc_thread(bool _use_lc_thread) {
     use_lc_thread = _use_lc_thread;
+    return *this;
+  }
+
+  /* RGW's `background_tasks`:  true in a process that serves requests,
+   * radosgw and librgw;  false in radosgw-admin */
+  NSFSDriver& set_background_tasks(bool _background_tasks) {
+    background_tasks = _background_tasks;
     return *this;
   }
 

@@ -5466,6 +5466,13 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     lc->start_processor();
   }
 
+  /* The bound on an nsswitch-resolved identity's staleness.  Not in a
+   * process with no background tasks:  radosgw-admin would wait at exit
+   * for the sweep's first pass over every name. */
+  if (background_tasks) {
+    userDB->start_name_sweep();
+  }
+
   quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
 
   init_sync_policy(dpp);
@@ -20074,7 +20081,6 @@ rgw::sal::Driver* newNSFSDriver(CephContext *cct)
     delete driver;
     return nullptr;
   }
-  driver->get_identity_db()->start_name_sweep();
 
   driver->set_context(cct);
 
