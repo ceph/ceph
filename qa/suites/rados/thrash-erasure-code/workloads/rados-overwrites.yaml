@@ -11,6 +11,7 @@ tasks:
       objects: 1024
       object_size: 16384
       erasure_code_use_overwrites: true
+      pct_update_delay: 5
       op_weights:
         read: 100
         write: 100
