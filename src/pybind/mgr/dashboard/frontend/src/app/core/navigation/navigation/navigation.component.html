@@ -374,7 +374,7 @@
           >
           @if (permissions?.smb?.read) {
             <cds-sidenav-item
-              route="/rgw/smb"
+              [route]="smbRgwRoute"
               [useRouter]="true"
               title="SMB"
               i18n-title
