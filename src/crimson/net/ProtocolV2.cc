@@ -743,6 +743,19 @@ ProtocolV2::process_wait()
   });
 }
 
+// The addresses we present when we (re)connect as the client. A session we
+// accepted on a reactor port is known to the peer by that address, not by
+// our main one, so name it first: a reverse reconnect then finds the
+// peer's session to that port.
+entity_addrvec_t ProtocolV2::my_client_addrs() const
+{
+  entity_addrvec_t addrs = messenger.get_myaddrs();
+  if (conn.accepted_shard_port && conn.shard_target_addr) {
+    addrs.v.insert(addrs.v.begin(), *conn.shard_target_addr);
+  }
+  return addrs;
+}
+
 seastar::future<ProtocolV2::next_step_t>
 ProtocolV2::client_connect()
 {
@@ -753,7 +766,7 @@ ProtocolV2::client_connect()
   }
 
   auto client_ident = ClientIdentFrame::Encode(
-      messenger.get_myaddrs(),
+      my_client_addrs(),
       conn.target_addr,
       messenger.get_myname().num(),
       global_seq,
@@ -879,7 +892,7 @@ seastar::future<ProtocolV2::next_step_t>
 ProtocolV2::client_reconnect()
 {
   // send_reconnect() logic
-  auto reconnect = ReconnectFrame::Encode(messenger.get_myaddrs(),
+  auto reconnect = ReconnectFrame::Encode(my_client_addrs(),
                                           client_cookie,
                                           server_cookie,
                                           global_seq,
@@ -1517,13 +1530,17 @@ ProtocolV2::server_connect()
                     conn, conn.policy.lossy, lossy);
     }
 
-    // A lossy client session to one of our reactor ports (a shard-aware
-    // client) coexists with that client's other sessions. Sessions to the
-    // main port keep per-address replacement.
-    if (SocketMessenger::is_lossy_client(conn) &&
-        messenger.is_client_shard_port(client_ident.target_addr().get_port())) {
-      conn.multi_session = true;
+    // A session to one of our reactor ports: we identify on it with the
+    // address the peer dialled. A lossy client session there (a
+    // shard-aware client) also coexists with that client's other sessions;
+    // any other session there (a peer OSD's cluster lane) is registered per
+    // (address, port), see accepted_shard_port. Sessions to the main port
+    // keep per-address replacement.
+    if (messenger.is_client_shard_port(client_ident.target_addr().get_port())) {
       conn.shard_target_addr = client_ident.target_addr();
+      if (SocketMessenger::is_lossy_client(conn)) {
+        conn.multi_session = true;
+      }
     }
 
     // Looks good so far, let's check if there is already an existing connection
@@ -1531,7 +1548,8 @@ ProtocolV2::server_connect()
     // replaced by) another session from the same address.
 
     SocketConnectionRef existing_conn =
-      conn.multi_session ? nullptr : messenger.lookup_conn(conn.peer_addr);
+      conn.multi_session ? nullptr :
+      messenger.lookup_conn(conn.peer_addr, conn.accepted_shard_port);
 
     if (existing_conn) {
       return handle_existing_connection(existing_conn);
@@ -1629,7 +1647,8 @@ ProtocolV2::server_reconnect()
     }
     peer_global_seq = reconnect.global_seq();
 
-    SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
+    SocketConnectionRef existing_conn =
+      messenger.lookup_conn(conn.peer_addr, conn.accepted_shard_port);
 
     if (!existing_conn) {
       // there is no existing connection therefore cannot reconnect to previous
@@ -1785,6 +1804,11 @@ void ProtocolV2::execute_accepting()
                       conn, _my_addr_from_peer, messenger.get_myaddr());
         throw std::system_error(
             make_error_code(crimson::net::error::bad_peer_address));
+      }
+      // a non-lossy session to a reactor port is registered per port
+      if (!conn.policy.lossy &&
+          messenger.is_client_shard_port(_my_addr_from_peer.get_port())) {
+        conn.accepted_shard_port = _my_addr_from_peer.get_port();
       }
       messenger.learned_addr(_my_addr_from_peer, conn);
       return server_auth();

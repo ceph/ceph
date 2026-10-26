@@ -308,10 +308,18 @@ seastar::future<> SocketMessenger::mark_down_all_ports(const entity_addr_t& a)
 {
   assert(seastar::this_shard_id() == sid);
   std::vector<SocketConnectionRef> found;
+  auto matches = [&a](const entity_addr_t& addr) {
+    return addr.get_type() == a.get_type() &&
+      addr.is_same_host(a) &&
+      addr.get_nonce() == a.get_nonce();
+  };
   for (auto& [addr, conn] : connections) {
-    if (addr.get_type() == a.get_type() &&
-        addr.is_same_host(a) &&
-        addr.get_nonce() == a.get_nonce()) {
+    if (matches(addr)) {
+      found.push_back(conn);
+    }
+  }
+  for (auto& [key, conn] : shard_port_conns) {
+    if (matches(key.first)) {
       found.push_back(conn);
     }
   }
@@ -345,6 +353,17 @@ seastar::future<> SocketMessenger::shutdown()
       return conn.second->close_clean_yielded();
     });
   }).then([this] {
+    // copy: closing unregisters and mutates the map
+    std::vector<SocketConnectionRef> conns;
+    for (auto& [key, conn] : shard_port_conns) {
+      conns.push_back(conn);
+    }
+    return seastar::do_with(std::move(conns), [](auto &conns) {
+      return seastar::parallel_for_each(conns, [](auto conn) {
+        return conn->close_clean_yielded();
+      });
+    });
+  }).then([this] {
     // copy: closing unregisters and mutates the set
     auto multi = std::vector<SocketConnectionRef>(
       multi_session_conns.begin(), multi_session_conns.end());
@@ -360,6 +379,7 @@ seastar::future<> SocketMessenger::shutdown()
   }).then([this] {
     ceph_assert(connections.empty());
     ceph_assert(multi_session_conns.empty());
+    ceph_assert(shard_port_conns.empty());
     shutdown_promise.set_value();
   });
 }
@@ -490,6 +510,20 @@ crimson::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr
   }
 }
 
+crimson::net::SocketConnectionRef
+SocketMessenger::lookup_conn(const entity_addr_t& addr, uint16_t shard_port)
+{
+  assert(seastar::this_shard_id() == sid);
+  if (shard_port == 0) {
+    return lookup_conn(addr);
+  }
+  if (auto found = shard_port_conns.find({addr, shard_port});
+      found != shard_port_conns.end()) {
+    return found->second;
+  }
+  return nullptr;
+}
+
 void SocketMessenger::accept_conn(SocketConnectionRef conn)
 {
   assert(seastar::this_shard_id() == sid);
@@ -505,6 +539,21 @@ void SocketMessenger::unaccept_conn(SocketConnectionRef conn)
 bool SocketMessenger::is_lossy_client(const SocketConnection &conn)
 {
   return conn.policy.lossy && conn.get_peer_name().is_client();
+}
+
+seastar::future<> SocketMessenger::mark_down_shard_port(const entity_addr_t& a)
+{
+  assert(seastar::this_shard_id() == sid);
+  std::vector<SocketConnectionRef> matched;
+  for (auto it = shard_port_conns.lower_bound({a, 0});
+       it != shard_port_conns.end() && it->first.first == a; ++it) {
+    matched.push_back(it->second);
+  }
+  return seastar::parallel_for_each(matched, [](auto conn) {
+    return seastar::smp::submit_to(conn->get_shard_id(), [c = conn.get()] {
+      c->mark_down();
+    });
+  });
 }
 
 seastar::future<> SocketMessenger::mark_down_multi_session(const entity_addr_t& a)
@@ -532,6 +581,13 @@ void SocketMessenger::register_conn(SocketConnectionRef conn)
     ceph_assert(added);
     return;
   }
+  if (conn->accepted_shard_port) {
+    auto [it, added] = shard_port_conns.emplace(
+      std::make_pair(conn->get_peer_addr(), conn->accepted_shard_port), conn);
+    std::ignore = it;
+    ceph_assert(added);
+    return;
+  }
   auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
   std::ignore = i;
   ceph_assert(added);
@@ -542,6 +598,14 @@ void SocketMessenger::unregister_conn(SocketConnectionRef conn)
   assert(seastar::this_shard_id() == sid);
   ceph_assert(conn);
   if (conn->multi_session && multi_session_conns.erase(conn)) {
+    return;
+  }
+  if (conn->accepted_shard_port) {
+    auto found = shard_port_conns.find(
+      {conn->get_peer_addr(), conn->accepted_shard_port});
+    ceph_assert(found != shard_port_conns.end());
+    ceph_assert(found->second == conn);
+    shard_port_conns.erase(found);
     return;
   }
   auto found = connections.find(conn->get_peer_addr());

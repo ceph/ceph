@@ -178,6 +178,8 @@ private:
   seastar::future<> client_auth(std::vector<uint32_t> &allowed_methods);
 
   seastar::future<next_step_t> process_wait();
+  /// our addresses for client_ident / reconnect, see the definition
+  entity_addrvec_t my_client_addrs() const;
   seastar::future<next_step_t> client_connect();
   seastar::future<next_step_t> client_reconnect();
   void execute_connecting();

@@ -162,6 +162,11 @@ public:
 
   SocketConnectionRef lookup_conn(const entity_addr_t& addr);
 
+  /// the session from addr accepted on reactor port shard_port (0: the
+  /// registry lookup_conn(addr) uses)
+  SocketConnectionRef lookup_conn(const entity_addr_t& addr,
+                                  uint16_t shard_port);
+
   void accept_conn(SocketConnectionRef);
 
   void unaccept_conn(SocketConnectionRef);
@@ -200,6 +205,15 @@ public:
 private:
   seastar::future<> mark_down_multi_session(const entity_addr_t& a);
   seastar::future<> mark_down_registered(const entity_addr_t& a) {
+    if (!shard_port_conns.empty()) {
+      return mark_down_shard_port(a).then([this, a] {
+        return mark_down_registered_main(a);
+      });
+    }
+    return mark_down_registered_main(a);
+  }
+  seastar::future<> mark_down_shard_port(const entity_addr_t& a);
+  seastar::future<> mark_down_registered_main(const entity_addr_t& a) {
     auto conn = lookup_conn(a);
     if (conn) {
       return seastar::smp::submit_to(
@@ -243,6 +257,12 @@ private:
   /// (one entity_addr incl. nonce) may hold several concurrent sessions,
   /// e.g. shard-steered connections, and none replaces another.
   std::set<SocketConnectionRef> multi_session_conns;
+  /// Non-lossy sessions accepted on a reactor port, keyed by (peer
+  /// address, port): e.g. a peer OSD's cluster lane holding sessions to
+  /// several of our reactors. Each one is replaced and reconnected only by
+  /// a session to the same port.
+  std::map<std::pair<entity_addr_t, uint16_t>, SocketConnectionRef>
+    shard_port_conns;
   std::set<SocketConnectionRef> accepting_conns;
   std::vector<SocketConnectionRef> closing_conns;
   ceph::net::PolicySet<Throttle> policy_set;

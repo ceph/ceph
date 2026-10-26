@@ -235,6 +235,10 @@ private:
   /// dialled (our address with that port). We identify with it, so the
   /// client's usual "is this who I dialled" check passes.
   std::optional<entity_addr_t> shard_target_addr;
+  /// The reactor port a non-lossy session was accepted on (0: the main
+  /// port). Such sessions are registered per (peer address, port), so a
+  /// peer may hold one to our main port and one to each reactor port.
+  uint16_t accepted_shard_port = 0;
 
   friend class IOHandler;
   friend class ProtocolV2;
