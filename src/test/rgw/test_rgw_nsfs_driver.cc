@@ -2312,11 +2312,13 @@ TEST_F(NSFSPersonalityTest, AChangedIdentityInvalidatesItsPersonality)
 }
 
 /* A stale slot a live operation still holds is not pulled out from
- * under it.
+ * under it, and is not given to anyone else.
  *
- * Dropping a pinned slot would unregister a personality an in-flight
- * submission still names.  The old credentials are served for the
- * life of that operation and the slot goes on the next lookup. */
+ * Unregistering a pinned slot would pull a personality an in-flight
+ * submission still names.  Serving it to a new lookup would hand a new
+ * operation credentials its identity no longer has -- and that
+ * operation keeps what it resolved for its whole life.  So the slot
+ * leaves the index at once and is unregistered at its last unpin. */
 TEST_F(NSFSPersonalityTest, AStaleSlotInUseIsNotPulled)
 {
   ManualGenerations gens;
@@ -2328,18 +2330,133 @@ TEST_F(NSFSPersonalityTest, AStaleSlotInUseIsNotPulled)
   gens.bump(alice);
 
   nsfs::PersonalityRef r;
-  EXPECT_EQ(t.find(alice, &r), 0)
-      << "a pinned stale slot was dropped under a live operation";
+  EXPECT_EQ(t.find(alice, &r), -ENOENT)
+      << "a stale slot was served to a new lookup because it was pinned";
   EXPECT_TRUE(reg.released.empty())
       << "a personality still in use was unregistered";
-  r.reset();
+  EXPECT_EQ(held.credentials().uid, 1001u)
+      << "the live operation lost the credentials it was submitting under";
   held.reset();
+  EXPECT_EQ(reg.released.size(), 1u)
+      << "the stale personality was not given back at its last unpin";
+}
 
-  /* released, so now it goes */
-  nsfs::PersonalityRef after;
-  EXPECT_EQ(t.find(alice, &after), -ENOENT)
-      << "the stale slot survived its last pin";
-  EXPECT_EQ(reg.released.size(), 1u);
+/* Credentials resolved before an identity changed are never indexed
+ * as current.
+ *
+ * The defect:  an operation resolves an identity once, and each
+ * submission registers from those credentials if its slot is gone.
+ * After an identity write, the operation's next submission found the
+ * slot stale, dropped it and registered the old credentials -- stamped
+ * with the current generation, so every later request was served the
+ * old credentials as fresh, until the identity changed again.  A
+ * revoked group stayed granted.
+ *
+ * The operation itself keeps what it resolved;  a new lookup must not
+ * see it.  The control is a registration at the current generation,
+ * which is indexed and found. */
+TEST_F(NSFSPersonalityTest, OldCredentialsAreNotIndexedAsCurrent)
+{
+  ManualGenerations gens;
+  nsfs::PersonalityTable t{4, &reg, &gens};
+  const rgw_user alice{"", "alice"};
+  const uint64_t g0 = gens.generation(alice);
+
+  /* an operation's first submission */
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(1001), g0, &r), 0);
+  }
+  gens.bump(alice);
+
+  /* its next submission, after the change, under what it resolved */
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(1001), g0, &r), 0);
+    EXPECT_EQ(r.credentials().uid, 1001u)
+        << "the operation's submission ran under other credentials";
+  }
+
+  /* a new operation */
+  nsfs::PersonalityRef n;
+  EXPECT_EQ(t.find(alice, &n), -ENOENT)
+      << "credentials resolved before the change were indexed as current";
+  n.reset();
+
+  /* the control:  a registration at the current generation is indexed */
+  const uint64_t g1 = gens.generation(alice);
+  ASSERT_NE(g1, g0);
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(2002), g1, &r), 0);
+    EXPECT_EQ(r.credentials().uid, 2002u);
+  }
+  ASSERT_EQ(t.find(alice, &n), 0) << "a current registration was not indexed";
+  EXPECT_EQ(n.credentials().uid, 2002u);
+  n.reset();
+  EXPECT_EQ(reg.registered.size() - reg.released.size(), 1u)
+      << "registrations from the old credentials were not given back";
+}
+
+/* A new operation gets the current credentials while an older one is
+ * still submitting under the stale slot. */
+TEST_F(NSFSPersonalityTest, ANewOperationIsNotGivenAPinnedStaleSlot)
+{
+  ManualGenerations gens;
+  nsfs::PersonalityTable t{4, &reg, &gens};
+  const rgw_user alice{"", "alice"};
+  const uint64_t g0 = gens.generation(alice);
+
+  nsfs::PersonalityRef older;
+  ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(1001), g0, &older), 0);
+  gens.bump(alice);
+
+  nsfs::PersonalityRef newer;
+  ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(2002),
+		      gens.generation(alice), &newer), 0);
+  EXPECT_EQ(newer.credentials().uid, 2002u)
+      << "a new operation was submitted under the old credentials";
+  EXPECT_NE(newer.id(), older.id());
+  EXPECT_EQ(older.credentials().uid, 1001u);
+  EXPECT_TRUE(reg.released.empty())
+      << "the older operation's personality was pulled while in flight";
+  older.reset();
+  EXPECT_EQ(reg.released.size(), 1u)
+      << "the stale personality was not given back at its last unpin";
+}
+
+/* An operation older than the index keeps its own credentials.
+ *
+ * Once a newer operation has registered the identity's current
+ * credentials, an operation that resolved before the change still
+ * submits under what it resolved, through a registration of its own
+ * that is never indexed and is given back when the submission ends. */
+TEST_F(NSFSPersonalityTest, AnOperationOlderThanTheIndexKeepsItsCredentials)
+{
+  ManualGenerations gens;
+  nsfs::PersonalityTable t{4, &reg, &gens};
+  const rgw_user alice{"", "alice"};
+  const uint64_t g0 = gens.generation(alice);
+  gens.bump(alice);
+  const uint64_t g1 = gens.generation(alice);
+
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(2002), g1, &r), 0);
+  }
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.acquire(env->dpp, alice, creds_for(1001), g0, &r), 0);
+    EXPECT_EQ(r.credentials().uid, 1001u)
+        << "an operation was switched to credentials it did not resolve";
+  }
+  nsfs::PersonalityRef n;
+  ASSERT_EQ(t.find(alice, &n), 0);
+  EXPECT_EQ(n.credentials().uid, 2002u)
+      << "the older operation displaced the current registration";
+  n.reset();
+  EXPECT_EQ(reg.registered.size() - reg.released.size(), 1u)
+      << "the older operation's registration was not given back";
 }
 
 /* Eviction is by age, and the evicted personality is given back. */

@@ -39,6 +39,12 @@ const Credentials& PersonalityRef::credentials() const
   return table->slots[slot].cred;
 }
 
+uint64_t PersonalityRef::generation() const
+{
+  ceph_assert(table != nullptr);
+  return table->slots[slot].gen;
+}
+
 PersonalityTable::PersonalityTable(size_t capacity, Registrar* reg,
 				   const GenerationSource* gen)
   : registrar(reg), gen_source(gen)
@@ -71,26 +77,39 @@ void PersonalityTable::unpin(uint32_t slot)
   ceph_assert(slot < slots.size());
   ceph_assert(slots[slot].pins > 0);
   --slots[slot].pins;
+  if ((slots[slot].pins == 0) && slots[slot].detached) {
+    release(slot);
+  }
 }
 
-bool PersonalityTable::invalidate(uint32_t slot)
+void PersonalityTable::release(uint32_t slot)
 {
-  if (slots[slot].pins > 0) {
-    /* A live operation is still submitting under it.  Leave it;  the
-     * next caller after that operation finishes will find it stale
-     * again and drop it then.  Registering a second personality for
-     * the same identity would be the alternative, and it would make
-     * the table's size a function of how often an identity is
-     * rewritten. */
-    return false;
-  }
   if (registrar) {
     registrar->unregister_personality(nullptr, slots[slot].id);
   }
-  by_key.erase(slots[slot].key);
   slots[slot].occupied = false;
+  slots[slot].detached = false;
   slots[slot].cred = Credentials{};
-  return true;
+}
+
+void PersonalityTable::invalidate(uint32_t slot)
+{
+  if (auto it = by_key.find(slots[slot].key);
+      (it != by_key.end()) && (it->second == slot)) {
+    by_key.erase(it);
+  }
+  if (slots[slot].pins > 0) {
+    /* A live submission still names it.  Out of the index now, so no
+     * one else is given it;  given back when that submission ends. */
+    slots[slot].detached = true;
+    return;
+  }
+  release(slot);
+}
+
+uint64_t PersonalityTable::current_generation(const rgw_owner& key) const
+{
+  return gen_source ? gen_source->generation(key) : 0;
 }
 
 int PersonalityTable::find(const rgw_owner& key, PersonalityRef* out,
@@ -109,22 +128,18 @@ int PersonalityTable::find(const rgw_owner& key, PersonalityRef* out,
   /* Stale?  The record this was minted from has been rewritten, so
    * the credentials in the slot are no longer what this identity
    * is. */
-  if (gen_source && (slots[slot].gen != gen_source->generation(key))) {
+  if (slots[slot].gen != current_generation(key)) {
     ++stats.stale;
-    const bool dropped = invalidate(slot);
     if (dpp) {
       ldpp_dout(dpp, 20) << "nsfs: personality for " << key
 	<< " is stale (slot gen " << slots[slot].gen << ", now "
-	<< gen_source->generation(key) << ");  "
-	<< (dropped ? "dropped" : "PINNED, serving the old one")
+	<< current_generation(key) << ");  out of the index"
+	<< (slots[slot].pins ? ", given back at its last unpin" : "")
 	<< dendl;
     }
-    if (dropped) {
-      ++stats.misses;
-      return -ENOENT;
-    }
-    /* pinned, so it could not be dropped -- fall through and serve
-     * the old one rather than failing a request mid-flight */
+    invalidate(slot);
+    ++stats.misses;
+    return -ENOENT;
   }
 
   ++slots[slot].pins;
@@ -171,24 +186,13 @@ int PersonalityTable::insert(const DoutPrefixProvider* dpp,
 			     const rgw_owner& key, const Credentials& cred,
 			     PersonalityRef* out)
 {
-  /* A concurrent insert of the same key cannot happen -- one task
-   * owns this table -- but a caller may insert twice if it did not
-   * check find() first.  Return what is there rather than
-   * registering a second time. */
-  if (auto it = by_key.find(key); it != by_key.end()) {
-    const uint32_t slot = it->second;
-    const bool stale = gen_source &&
-	(slots[slot].gen != gen_source->generation(key));
-    if (! stale || ! invalidate(slot)) {
-      ++slots[slot].pins;
-      ++stats.hits;
-      *out = PersonalityRef(this, slot, slots[slot].id);
-      return 0;
-    }
-    ++stats.stale;
-    /* dropped;  fall through and register the new credentials */
-  }
+  return acquire(dpp, key, cred, current_generation(key), out);
+}
 
+int PersonalityTable::place(const DoutPrefixProvider* dpp,
+			    const rgw_owner& key, const Credentials& cred,
+			    uint64_t gen, bool indexed, PersonalityRef* out)
+{
   const uint32_t slot = claim_slot(dpp);
   if (slot == slots.size()) {
     ++stats.exhausted;
@@ -220,15 +224,41 @@ int PersonalityTable::insert(const DoutPrefixProvider* dpp,
 
   slots[slot].key = key;
   slots[slot].cred = cred;
-  slots[slot].gen = gen_source ? gen_source->generation(key) : 0;
+  slots[slot].gen = gen;
   slots[slot].id = static_cast<uint16_t>(id);
   slots[slot].occupied = true;
+  slots[slot].detached = !indexed;
   slots[slot].pins = 1;
-  by_key[key] = slot;
+  if (indexed) {
+    by_key[key] = slot;
+  }
   ++stats.registrations;
 
   *out = PersonalityRef(this, slot, slots[slot].id);
   return 0;
+}
+
+int PersonalityTable::acquire(const DoutPrefixProvider* dpp,
+			      const rgw_owner& key, const Credentials& cred,
+			      uint64_t gen, PersonalityRef* out)
+{
+  const uint64_t current = current_generation(key);
+  if (auto it = by_key.find(key); it != by_key.end()) {
+    const uint32_t slot = it->second;
+    if (slots[slot].gen != current) {
+      ++stats.stale;
+      invalidate(slot);
+    } else if (gen == current) {
+      ++slots[slot].pins;
+      ++stats.hits;
+      *out = PersonalityRef(this, slot, slots[slot].id);
+      return 0;
+    }
+  }
+  /* Indexed only when the credentials are current and nothing current
+   * is indexed:  an older operation's credentials are its own. */
+  return place(dpp, key, cred, gen,
+	       (gen == current) && !by_key.contains(key), out);
 }
 
 } } } // namespace rgw::sal::nsfs

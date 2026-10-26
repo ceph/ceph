@@ -139,6 +139,10 @@ public:
    * these as well as the id -- and resolving them is a database
    * read.  Only meaningful while valid. */
   const Credentials& credentials() const;
+
+  /* The identity generation those credentials were resolved at.  Only
+   * meaningful while valid. */
+  uint64_t generation() const;
 };
 
 /* One ring's personality table.
@@ -212,6 +216,21 @@ public:
   int insert(const DoutPrefixProvider* dpp, const rgw_owner& key,
 	     const Credentials& cred, PersonalityRef* out);
 
+  /* A personality for one submission, from credentials resolved at
+   * identity generation `gen`.
+   *
+   * The index names only slots registered at their identity's current
+   * generation, so a lookup never hands a new operation credentials
+   * the identity no longer has.  A current slot is reused when `gen` is
+   * current.  Credentials from an older generation -- an operation that
+   * resolved before its identity was rewritten -- get a registration of
+   * their own, never indexed and given back at its last unpin, so that
+   * operation keeps what it resolved and nobody else is served it.
+   *
+   * Returns what insert() does. */
+  int acquire(const DoutPrefixProvider* dpp, const rgw_owner& key,
+	      const Credentials& cred, uint64_t gen, PersonalityRef* out);
+
   size_t capacity() const { return slots.size(); }
   size_t size() const { return by_key.size(); }
   const Stats& get_stats() const { return stats; }
@@ -227,6 +246,10 @@ private:
     uint16_t id{0};
     uint32_t pins{0};
     bool occupied{false};
+    /* registered and out of the index:  stale while pinned, or
+     * credentials older than the identity's current generation.
+     * Given back at its last unpin. */
+    bool detached{false};
   };
 
   void unpin(uint32_t slot);
@@ -234,9 +257,18 @@ private:
    * Returns capacity() when every slot is pinned. */
   uint32_t claim_slot(const DoutPrefixProvider* dpp);
 
-  /* Drop a slot that no longer matches its identity's record.
-   * Returns false when a live operation still holds it. */
-  bool invalidate(uint32_t slot);
+  /* Take a slot that no longer matches its identity's record out of
+   * the index:  given back now, or at its last unpin when a live
+   * submission still holds it. */
+  void invalidate(uint32_t slot);
+  /* Unregister a slot and free it. */
+  void release(uint32_t slot);
+  /* Claim a slot, register `cred` in it at `gen`, and pin it;  into
+   * the index only when `indexed`. */
+  int place(const DoutPrefixProvider* dpp, const rgw_owner& key,
+	    const Credentials& cred, uint64_t gen, bool indexed,
+	    PersonalityRef* out);
+  uint64_t current_generation(const rgw_owner& key) const;
 
   std::vector<Slot> slots;
   ankerl::unordered_dense::map<rgw_owner, uint32_t> by_key;

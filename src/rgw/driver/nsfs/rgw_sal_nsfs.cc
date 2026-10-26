@@ -14560,9 +14560,14 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
   if (nsfs::find_personality(who, &ref, dpp) == 0) {
     ident->key = who;
     ident->cred = ref.credentials();
+    ident->gen = ref.generation();
     return 0;
   }
 
+  /* Read before resolving:  an identity write changes the row and then
+   * the generation, so credentials read after this are at least this
+   * new, and a change landing in between leaves them marked stale. */
+  const uint64_t gen = nsfs::identity_generation(who);
   rgw_account_id account;
   nsfs::Credentials cred;
   const int ret = resolve_credentials_for(dpp, driver, who, null_yield,
@@ -14586,10 +14591,11 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 20) << "nsfs: resolved " << who << " to uid " << cred.uid
     << " gid " << cred.gid << " and " << cred.groups.size()
     << " supplementary groups" << dendl;
-  const int ret2 = nsfs::acquire_personality(dpp, who, cred, &ref);
+  const int ret2 = nsfs::acquire_personality(dpp, who, cred, gen, &ref);
   if (ret2 == 0) {
     ident->key = who;
     ident->cred = cred;
+    ident->gen = gen;
   }
   return ret2;
 }

@@ -778,20 +778,17 @@ int find_personality(const rgw_owner& key, PersonalityRef* out,
 }
 
 int acquire_personality(const DoutPrefixProvider* dpp, const rgw_owner& key,
-			const Credentials& cred, PersonalityRef* out)
+			const Credentials& cred, uint64_t gen,
+			PersonalityRef* out)
 {
-  auto& table = thread_personality_table();
-  if (table.find(key, out) == 0) {
-    return 0;
-  }
-  return table.insert(dpp, key, cred, out);
+  return thread_personality_table().acquire(dpp, key, cred, gen, out);
 }
 
 int open_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
 	    int dirfd, const char* path, uint64_t flags, uint64_t mode)
 {
   PersonalityRef ref;
-  const int ret = acquire_personality(dpp, id.key, id.cred, &ref);
+  const int ret = acquire_personality(dpp, id.key, id.cred, id.gen, &ref);
   if (ret < 0) {
     return ret;
   }
@@ -879,7 +876,7 @@ int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
 
 int IdentityPersonality::acquire(const DoutPrefixProvider* dpp, uint16_t* out)
 {
-  const int ret = acquire_personality(dpp, id.key, id.cred, &ref);
+  const int ret = acquire_personality(dpp, id.key, id.cred, id.gen, &ref);
   if (ret < 0) {
     return ret;
   }

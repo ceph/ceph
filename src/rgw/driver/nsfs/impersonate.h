@@ -92,7 +92,8 @@ PersonalityTable& thread_personality_table();
  *   < 0      the registration failed
  */
 int acquire_personality(const DoutPrefixProvider* dpp, const rgw_owner& key,
-			const Credentials& cred, PersonalityRef* out);
+			const Credentials& cred, uint64_t gen,
+			PersonalityRef* out);
 
 /* Say that an identity's record has changed.
  *
@@ -205,6 +206,10 @@ int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
 struct FSIdentity {
   rgw_owner key;
   Credentials cred;
+  /* The identity generation `cred` was resolved at, so a submission
+   * registering from it after the identity changed is not taken for
+   * current (PersonalityTable::acquire()). */
+  uint64_t gen{0};
 
   bool active() const { return !owner_empty(key); }
 
