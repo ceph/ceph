@@ -38,6 +38,7 @@ use std::collections::BTreeMap;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /* ---------------------------------------------------------------- */
 
@@ -352,7 +353,7 @@ fn main() {
 
     if let Err(e) = r {
         eprintln!("\x1b[31mstandup: {e}\x1b[0m");
-        std::process::exit(1);
+        std::process::exit(if KNOWN_DEFECTS.load(Ordering::Relaxed) { 3 } else { 1 });
     }
 }
 
@@ -1651,6 +1652,10 @@ fn store_tests(env: &Env) -> Result<(), String> {
     Ok(())
 }
 
+/// Set by `compare` when corpus-compare exits 3, so the stand-up exits 3
+/// as well:  every difference is accounted for, and known defects remain.
+static KNOWN_DEFECTS: AtomicBool = AtomicBool::new(false);
+
 /// Evaluate the three captures against the expected-difference list.
 ///
 /// `corpus-compare` (s3-tests-rs, `src/bin/corpus-compare.rs`) over
@@ -1686,8 +1691,11 @@ fn compare(env: &Env) -> Result<(), String> {
         }
         Some(1) => Err("the captures differ in ways the list does not account for;  \
                         see the lines above".into()),
-        Some(3) => Err("every difference is accounted for, and known defects remain;  \
-                        see the KNOWN lines above".into()),
+        Some(3) => {
+            KNOWN_DEFECTS.store(true, Ordering::Relaxed);
+            Err("every difference is accounted for, and known defects remain;  \
+                 see the KNOWN lines above".into())
+        }
         _ => Err("corpus-compare could not read its inputs;  see above".into()),
     }
 }

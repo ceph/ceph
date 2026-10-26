@@ -155,42 +155,46 @@ fn main() {
     take_sudo().unwrap_or_else(|e| die(&e));
     fs::create_dir_all(&run_dir).unwrap_or_else(|e| die(&format!("{}: {e}", run_dir.display())));
 
-    let mut results: Vec<(String, String, bool, String)> = Vec::new();
+    let mut results: Vec<(String, String, Res, String)> = Vec::new();
     let mut skip_cell: Option<String> = None;
     for s in &steps {
         if skip_cell.as_deref() == Some(&s.cell) {
-            results.push((s.cell.clone(), s.name.clone(), false, "not run:  the cell did not stand up".into()));
+            results.push((s.cell.clone(), s.name.clone(), Res::Fail, "not run:  the cell did not stand up".into()));
             continue;
         }
         println!("\n==> [{}] {}", s.cell, s.name);
-        let (ok, summary) = run(s, &run_dir);
-        println!("    {} {summary}", if ok { "ok  " } else { "FAIL" });
+        let (res, summary) = run(s, &run_dir);
+        let ok = res != Res::Fail;
+        println!("    {} {summary}", res.label());
         if !ok && s.name == "vstart" {
             skip_cell = Some(s.cell.clone());
         }
         if !ok && s.name == "build" {
-            results.push((s.cell.clone(), s.name.clone(), ok, summary));
+            results.push((s.cell.clone(), s.name.clone(), res, summary));
             break;
         }
         if s.name == "vstart" && ok {
             if let Err(e) = wait_for_gateway() {
-                results.push((s.cell.clone(), "gateway".into(), false, e));
+                results.push((s.cell.clone(), "gateway".into(), Res::Fail, e));
                 skip_cell = Some(s.cell.clone());
                 continue;
             }
         }
-        results.push((s.cell.clone(), s.name.clone(), ok, summary));
+        results.push((s.cell.clone(), s.name.clone(), res, summary));
     }
 
     let mut table = String::from("\ncell                  step                    result\n");
-    for (cell, name, ok, summary) in &results {
-        table += &format!("{cell:<21} {name:<23} {} {summary}\n",
-                          if *ok { "ok  " } else { "FAIL" });
+    for (cell, name, res, summary) in &results {
+        table += &format!("{cell:<21} {name:<23} {} {summary}\n", res.label());
     }
     print!("{table}");
     let _ = fs::write(run_dir.join("summary.txt"), &table);
-    if results.iter().any(|r| !r.2) {
+    if results.iter().any(|r| r.2 == Res::Fail) {
         std::process::exit(1);
+    }
+    /* as corpus-compare does:  nothing failed, and known defects remain */
+    if results.iter().any(|r| r.2 == Res::Known) {
+        std::process::exit(3);
     }
 }
 
@@ -304,14 +308,33 @@ fn plan(o: &Opts, suite_dir: &Path, run_dir: &Path) -> Vec<Step> {
     steps
 }
 
+/// A step's result.  `Known` is the conversion step's exit 3:  every
+/// difference is accounted for, and known defects remain.
+#[derive(Clone, Copy, PartialEq)]
+enum Res {
+    Ok,
+    Known,
+    Fail,
+}
+
+impl Res {
+    fn label(self) -> &'static str {
+        match self {
+            Res::Ok => "ok   ",
+            Res::Known => "KNOWN",
+            Res::Fail => "FAIL ",
+        }
+    }
+}
+
 /// Run a step with its output in its own log, and the summary line the
 /// suite prints:  nextest's `Summary`, or gtest's PASSED/FAILED counts.
-fn run(s: &Step, run_dir: &Path) -> (bool, String) {
+fn run(s: &Step, run_dir: &Path) -> (Res, String) {
     let dir = run_dir.join(&s.cell);
     let _ = fs::create_dir_all(&dir);
     let mut log = match File::create(dir.join(format!("{}.log", s.name))) {
         Ok(f) => f,
-        Err(e) => return (false, format!("cannot create its log: {e}")),
+        Err(e) => return (Res::Fail, format!("cannot create its log: {e}")),
     };
     let mut parallel = s.parallel_log.then(|| {
         OpenOptions::new().create(true).append(true).open(PARALLEL_LOG).ok()
@@ -327,7 +350,7 @@ fn run(s: &Step, run_dir: &Path) -> (bool, String) {
     }
     let mut child = match cmd.spawn() {
         Ok(c) => c,
-        Err(e) => return (false, format!("cannot start {}: {e}", s.argv[0])),
+        Err(e) => return (Res::Fail, format!("cannot start {}: {e}", s.argv[0])),
     };
     let mut summary = Vec::new();
     for line in BufReader::new(child.stdout.take().unwrap()).lines().map_while(Result::ok) {
@@ -350,8 +373,14 @@ fn run(s: &Step, run_dir: &Path) -> (bool, String) {
             println!("    {t}");
         }
     }
-    let ok = child.wait().map(|st| st.success()).unwrap_or(false);
-    (ok, summary.join(";  "))
+    let res = match child.wait().ok().and_then(|st| st.code()) {
+        Some(0) => Res::Ok,
+        /* standup.rs exits 3 when every difference is accounted for and
+         * known defects remain */
+        Some(3) if s.name == "conversion" => Res::Known,
+        _ => Res::Fail,
+    };
+    (res, summary.join(";  "))
 }
 
 fn preflight(o: &Opts) -> Result<(), String> {
