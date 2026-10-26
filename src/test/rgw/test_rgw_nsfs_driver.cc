@@ -16363,6 +16363,83 @@ TEST_F(NooBaaCompletionTest, ACompletePassWritesTheRecord)
   EXPECT_EQ(st["completed_at"], c.completed_at);
 }
 
+/* A NooBaa bucket policy names an account by its NooBaa name, and RGW
+ * names it by account id.  The policy a request is evaluated against
+ * must name the imported account at every stage:  served in NooBaa's
+ * format after the identities are imported, and after the bucket is
+ * adopted.  The order is the stand-up's -- the bucket is loaded before
+ * its adoption, then again after -- because a request against an
+ * unadopted bucket is what precedes adoption in a deployment.  Found by
+ * the stand-up's `groups` step, whose writes RGW refused against the
+ * unrewritten principal.  The control is the owner, mapped through the
+ * identity database at both stages. */
+TEST_F(NooBaaCompletionTest, ABucketPolicyNamesTheImportedAccountAtEveryStage)
+{
+  /* a tree NooBaa made, so its state comes from the record until adopted */
+  remove_rgw_bucket_info();
+  write_nb_record("ENABLED",
+      R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
+        "Effect":"Allow","Principal":{"AWS":["interchange"]},
+        "Action":["s3:GetObject"],
+        "Resource":["arn:aws:s3:::b/*"]}]})");
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  std::string account;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, NB_OWNER_ID, account), 0);
+
+  auto policy_and_owner = [&] () {
+    std::unique_ptr<rgw::sal::Bucket> b;
+    EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+				  null_yield), 0);
+    std::string pol;
+    if (auto p = b->get_attrs().find(RGW_ATTR_IAM_POLICY);
+	p != b->get_attrs().end()) {
+      pol = p->second.to_str();
+    }
+    return std::make_pair(pol, to_string(b->get_owner()));
+  };
+
+  auto [before, owner_before] = policy_and_owner();
+  EXPECT_EQ(owner_before, account) << "control:  the owner was not mapped";
+  EXPECT_NE(before.find(account), std::string::npos)
+      << "unadopted, the policy does not name the imported account: "
+      << before;
+  EXPECT_EQ(before.find("interchange"), std::string::npos)
+      << "unadopted, the policy names NooBaa's account: " << before;
+
+  ASSERT_EQ(ask({{"bucket", testname}})["adopted"], "true");
+  auto [after, owner_after] = policy_and_owner();
+  EXPECT_EQ(owner_after, account) << "control:  the owner was not mapped";
+  EXPECT_NE(after.find(account), std::string::npos)
+      << "adopted, the policy does not name the imported account: " << after;
+  EXPECT_EQ(after.find("interchange"), std::string::npos)
+      << "adopted, the policy names NooBaa's account: " << after;
+}
+
+/* Unadopted, a policy naming a principal the import did not write is
+ * not served, as the import does not write it (§6.1a):  pointing at
+ * nothing, it would grant nothing and deny nothing it was meant to.  The
+ * control is the same policy naming the imported account, which is. */
+TEST_F(NooBaaCompletionTest, AnUnadoptedPolicyNamingNobodyIsNotServed)
+{
+  remove_rgw_bucket_info();
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  auto served = [&] (const char* who) {
+    write_nb_record("ENABLED", std::string(
+	R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{)"
+	R"("Effect":"Allow","Principal":{"AWS":[")") + who + R"("]},)"
+	R"("Action":["s3:GetObject"],"Resource":["arn:aws:s3:::b/*"]}]})");
+    std::unique_ptr<rgw::sal::Bucket> b;
+    EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+				  null_yield), 0);
+    return b && b->get_attrs().count(RGW_ATTR_IAM_POLICY);
+  };
+  EXPECT_TRUE(served("interchange"))
+      << "control:  a policy naming the imported account was not served";
+  EXPECT_FALSE(served("nobody-imported"))
+      << "a policy naming a principal the import did not write was served";
+}
+
 /* A record that does not adopt keeps adoption incomplete:  the control
  * that the record is observed, not merely written at the end of a
  * pass. */

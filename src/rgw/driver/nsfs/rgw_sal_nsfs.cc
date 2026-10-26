@@ -8419,6 +8419,11 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 	return ret;
       }
       if (ret == 0) {
+	/* Cleared first:  load_bucket() reads into `attrs` without
+	 * replacing a name already held, so this handle's NooBaa-format
+	 * policy, its principals unrewritten, would survive the reload
+	 * and write_attrs() below would put it back over the import's. */
+	attrs.clear();
 	ret = load_bucket(dpp, y);
 	if (ret < 0) {
 	  return ret;
@@ -10254,6 +10259,11 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
     auto* nb_state = bucket_state_fallback();
     ret = nb_state ? nb_state->load(dpp, dir->get_fd(), get_name(), attrs, info)
 		 : -ENOENT;
+    /* NooBaa's record names principals as NooBaa does;  served here as
+     * adoption will write them */
+    if (ret == 0) {
+      ret = driver->rewrite_unadopted_policy(dpp, get_name(), attrs);
+    }
   }
   if (ret == -ENOENT) {
     /* No state anywhere:  the info the caller seeded stands, owner
@@ -18223,6 +18233,8 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
 
   nsfs::ImportResult ir;
   ret = nsfs::import_identities(dpp, y, this, contents, plan, ir);
+  /* the principals an unadopted bucket's policy maps to have changed */
+  invalidate_unadopted_mapping();
   put_report("accounts", std::to_string(ir.accounts_created));
   put_report("accounts_present", std::to_string(ir.accounts_skipped));
   put_report("users", std::to_string(ir.users_created));
@@ -18618,20 +18630,12 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
     }
   }
 
-  nsfs::ImportPlan plan;
-  ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
-				  get_identity_db());
+  nsfs::IdentityMapping mapping;
+  ret = imported_identity_mapping(dpp, contents, mapping);
   if (ret < 0) {
     put_report("configured", "false");
-    put_report("collisions", std::to_string(plan.collisions.size()));
     return ret;
   }
-  std::erase_if(plan.entries, [this, dpp](const nsfs::ImportEntry& e) {
-    std::string owner;
-    return get_identity_db()->get_owner_by_noobaa_id(dpp, e.noobaa_id,
-						     owner) < 0;
-  });
-  const auto mapping = nsfs::mapping_from(plan);
 
   nsfs::BucketImportResult br;
   ret = nsfs::import_one_bucket(dpp, y, this, root, bucket_name, contents,
@@ -18645,6 +18649,86 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
     put_report("error", cpp_strerror(-ret));
   }
   return ret;
+}
+
+int NSFSDriver::imported_identity_mapping(const DoutPrefixProvider* dpp,
+					  const nsfs::NooBaaStoreContents& contents,
+					  nsfs::IdentityMapping& out)
+{
+  nsfs::ImportPlan plan;
+  const int ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
+					  get_identity_db());
+  if (ret < 0) {
+    return ret;
+  }
+  std::erase_if(plan.entries, [this, dpp](const nsfs::ImportEntry& e) {
+    std::string owner;
+    return get_identity_db()->get_owner_by_noobaa_id(dpp, e.noobaa_id,
+						     owner) < 0;
+  });
+  out = nsfs::mapping_from(plan);
+  return 0;
+}
+
+void NSFSDriver::invalidate_unadopted_mapping()
+{
+  std::lock_guard l(unadopted_mapping_mtx);
+  unadopted_mapping.reset();
+}
+
+int NSFSDriver::rewrite_unadopted_policy(const DoutPrefixProvider* dpp,
+					 const std::string& bucket,
+					 Attrs& attrs)
+{
+  auto i = attrs.find(RGW_ATTR_IAM_POLICY);
+  if (i == attrs.end()) {
+    return 0;
+  }
+  std::shared_ptr<const nsfs::IdentityMapping> m;
+  {
+    std::lock_guard l(unadopted_mapping_mtx);
+    m = unadopted_mapping;
+  }
+  if (!m) {
+    const auto& root =
+      g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+    nsfs::NooBaaConfigStore store(root);
+    nsfs::NooBaaStoreContents contents;
+    int ret = store.read(dpp, contents);
+    auto built = std::make_shared<nsfs::IdentityMapping>();
+    if (ret == 0) {
+      ret = imported_identity_mapping(dpp, contents, *built);
+    }
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket << ":  NooBaa's "
+	"principals cannot be mapped (" << cpp_strerror(-ret) << ");  its "
+	"policy is not served" << dendl;
+      attrs.erase(i);
+      return ret;
+    }
+    std::lock_guard l(unadopted_mapping_mtx);
+    unadopted_mapping = built;
+    m = std::move(built);
+  }
+  std::vector<std::string> unresolved;
+  std::string rewritten;
+  if (nsfs::rewrite_policy_principals(dpp, i->second.to_str(), *m,
+				      rewritten, unresolved) < 0) {
+    std::string who;
+    for (const auto& u : unresolved) {
+      who += " " + u;
+    }
+    ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket << "'s policy names "
+      "principals the import has not written (" << who << " );  it is not "
+      "served until it can be rewritten, as the import would not write it"
+      << dendl;
+    attrs.erase(i);
+    return 0;
+  }
+  bufferlist bl;
+  bl.append(rewritten);
+  i->second = std::move(bl);
+  return 0;
 }
 
 /* Adopt one bucket:  import its NooBaa record and bring its tree into

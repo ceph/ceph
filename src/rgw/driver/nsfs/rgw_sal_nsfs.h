@@ -61,6 +61,7 @@ enum class MutationPurpose { client, adoption, copy_source };
 namespace nsfs {
 
 struct NooBaaStoreContents;
+struct IdentityMapping;
 
 /* The multipart cache's bucket field, which has to find the bucket again
  * from an eviction with nothing else in hand.  `<tenant>/<name>`, or the
@@ -939,6 +940,8 @@ protected:
   RGWLC* lc{nullptr};
   bool use_lc_thread{false};
   bool background_tasks{false};
+  std::mutex unadopted_mapping_mtx;
+  std::shared_ptr<const nsfs::IdentityMapping> unadopted_mapping;
   /* driver hint state (test only)--see driver_hint() */
   bool inject_fork_race{false};
 
@@ -1699,6 +1702,25 @@ public:
   int import_noobaa_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 			   const std::string& bucket_name,
 			   std::map<std::string, std::string>* report = nullptr);
+
+  /* NooBaa's principals as RGW names them, for the identities the import
+   * has written:  what adoption rewrites a bucket policy through. */
+  int imported_identity_mapping(const DoutPrefixProvider* dpp,
+				const nsfs::NooBaaStoreContents& contents,
+				nsfs::IdentityMapping& out);
+
+  /* A bucket served in NooBaa's format serves its policy with the same
+   * principals adoption will write:  NooBaa's names name nobody in RGW.
+   * A policy naming anyone the import did not write is not served, as
+   * the import does not write it (`ACCOUNT_IMPORT.md` §6.1a).  0, or
+   * the error that kept the mapping from being built. */
+  int rewrite_unadopted_policy(const DoutPrefixProvider* dpp,
+			       const std::string& bucket, Attrs& attrs);
+
+  /* The mapping rewrite_unadopted_policy() uses is built from the whole
+   * store, once, and rebuilt after an identities import, the only thing
+   * that changes it. */
+  void invalidate_unadopted_mapping();
 
   int driver_hint(const DoutPrefixProvider* dpp,
 		  const std::string& hint,
