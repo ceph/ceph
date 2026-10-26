@@ -18097,6 +18097,15 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
     put_report("unreadable", std::to_string(contents.unreadable.size()));
     return -EBADMSG;
   }
+  if (const auto skew = contents.version_skew(); !skew.empty()) {
+    for (const auto& why : skew) {
+      ldpp_dout(dpp, 0) << "ERROR: adoption: " << root << ": " << why
+	<< dendl;
+    }
+    put_report("ran", "false");
+    put_report("version_skew", std::to_string(skew.size()));
+    return -ENOTSUP;
+  }
   /* an identity an operator abandoned is not imported, and does not
    * stop the others -- a collision is the usual reason to abandon one */
   {
@@ -18512,6 +18521,17 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
     put_report("configured", "false");
     put_report("error", cpp_strerror(-ret));
     return ret;
+  }
+  /* X4's version gate, here as well as in adopt_identities():  this is
+   * what set_profile() leaving base calls before it rewrites a tree */
+  if (const auto skew = contents.version_skew(); !skew.empty()) {
+    for (const auto& why : skew) {
+      ldpp_dout(dpp, 0) << "ERROR: not importing bucket " << bucket_name
+	<< ": " << root << ": " << why << dendl;
+    }
+    put_report("configured", "false");
+    put_report("version_skew", std::to_string(skew.size()));
+    return -ENOTSUP;
   }
 
   nsfs::ImportPlan plan;

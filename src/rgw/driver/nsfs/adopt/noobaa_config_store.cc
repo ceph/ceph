@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <set>
 
 #include "common/ceph_json.h"
 #include "common/errno.h"
@@ -136,6 +137,48 @@ std::vector<std::string> NooBaaStoreContents::md5_etag_divergence() const
 		     ? std::string(", against the account's ") +
 		       (*account_says ? "true" : "false")
 		     : std::string(", which no account states")));
+  }
+  return out;
+}
+
+/* The NooBaa versions adoption is verified against.  Pinned at
+ * noobaa-core `08d063f86`, whose package version is 5.23.0. */
+static const std::set<std::string> VERIFIED_NOOBAA_VERSIONS = {"5.23.0"};
+
+std::vector<std::string> NooBaaStoreContents::version_skew() const
+{
+  std::vector<std::string> out;
+  auto verified = [](const std::string& v) {
+    return VERIFIED_NOOBAA_VERSIONS.count(v) != 0;
+  };
+  if (!system.present) {
+    out.push_back("no readable system.json, so no NooBaa version");
+    return out;
+  }
+  if (system.hosts.empty()) {
+    out.push_back("system.json names no host");
+  }
+  for (const auto& [host, version] : system.hosts) {
+    if (!verified(version)) {
+      out.push_back("host " + host + " runs NooBaa " +
+		    (version.empty() ? std::string("<none>") : version) +
+		    ", which is not verified");
+    }
+  }
+  if (!system.have_config_directory) {
+    out.push_back("system.json has no config_directory");
+    return out;
+  }
+  if (!verified(system.upgrade_package_version)) {
+    out.push_back("config_directory.upgrade_package_version is " +
+		  (system.upgrade_package_version.empty()
+		     ? std::string("<none>") : system.upgrade_package_version) +
+		  ", which is not verified");
+  }
+  if (system.phase != "CONFIG_DIR_UNLOCKED") {
+    out.push_back("config_directory.phase is " +
+		  (system.phase.empty() ? std::string("<none>") : system.phase) +
+		  ", not CONFIG_DIR_UNLOCKED");
   }
   return out;
 }
@@ -340,6 +383,42 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
      * which is itself a permission fact, not an absence, so the
      * caller is told the file was missing rather than being handed a
      * false it cannot distinguish from a stored one. */
+  }
+
+  /* system.json.  Read for the version gate only;  nothing in it is
+   * imported.  Absent is not unreadable here:  version_skew() is what
+   * acts on it. */
+  {
+    const std::string path = root + "/system.json";
+    std::string doc;
+    int ret = read_record_file(dpp, path, doc);
+    if (ret == 0) {
+      JSONParser p;
+      if (!p.parse(doc.data(), doc.size()) || !p.is_object()) {
+	unreadable(path, "not a JSON object");
+      } else {
+	try {
+	  for (auto i = p.find_first(); !i.end(); ++i) {
+	    JSONObj* e = *i;
+	    if (e->get_name() == "config_directory") {
+	      out.system.have_config_directory = true;
+	      JSONDecoder::decode_json("upgrade_package_version",
+				       out.system.upgrade_package_version, e);
+	      JSONDecoder::decode_json("phase", out.system.phase, e);
+	    } else {
+	      std::string version;
+	      JSONDecoder::decode_json("current_version", version, e);
+	      out.system.hosts.emplace_back(e->get_name(), std::move(version));
+	    }
+	  }
+	  out.system.present = true;
+	} catch (const JSONDecoder::err& e) {
+	  unreadable(path, e.what());
+	}
+      }
+    } else if (ret != -ENOENT) {
+      unreadable(path, cpp_strerror(-ret));
+    }
   }
 
   out.master_keys_present = path_exists(dpp, root + "/master_keys.json");

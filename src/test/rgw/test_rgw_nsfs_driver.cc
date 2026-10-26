@@ -7522,6 +7522,15 @@ TEST_F(NSFSNooBaaBucketTest, DeletingABucketAbortsTheUploadTheyStarted)
  * The config root is set before the driver is built, because that is
  * when the reader is constructed:  an address we were not given means
  * do not consult a store. */
+/* `system.json` as NooBaa wrote it, in the store `standup.rs` stood up
+ * at noobaa-core 08d063f86:  one host, and the store's own entry.  The
+ * version gate (X4) admits exactly this. */
+static constexpr const char* NB_SYSTEM_JSON =
+  R"({"fedora.private":{"current_version":"5.23.0","config_dir_version":"1.0.0",)"
+  R"("upgrade_history":{"successful_upgrades":[]}},"config_directory":)"
+  R"({"config_dir_version":"1.0.0","upgrade_package_version":"5.23.0",)"
+  R"("phase":"CONFIG_DIR_UNLOCKED","upgrade_history":{"successful_upgrades":[]}}})";
+
 class NSFSNooBaaStateTest : public NSFSNooBaaBucketTest {
 public:
   sf::path conf_root() const {
@@ -7532,6 +7541,7 @@ public:
     sf::create_directories(conf_root() / "buckets");
     g_conf().set_val("rgw_nsfs_noobaa_config_root", conf_root().string());
     NSFSNooBaaBucketTest::SetUp();
+    write_file(conf_root() / "system.json", NB_SYSTEM_JSON);
     /* NooBaa made this bucket, so nsfs holds no row for it:  what places
      * a NooBaa bucket is its record, until the import writes a row. */
     ASSERT_EQ(driver->get_identity_db()->remove_bucket_placement(
@@ -12215,6 +12225,77 @@ TEST_F(NooBaaStoreTest, AStoreWithNoIdentitiesSaysSo)
   EXPECT_EQ(c.buckets.size(), 1u) << "a lock file was read as a record";
 }
 
+/* The version gate admits a store only a verified NooBaa wrote, and
+ * only while no upgrade of it runs.
+ *
+ * Each case is NooBaa's `system.json` with one documented change:  a
+ * host, or the package, at a later release;  a second host at a later
+ * one, which is what a cluster upgraded part way looks like;  the
+ * phase an upgrade of the store sets (`_update_config_dir_upgrade_start()`
+ * in nc_upgrade_manager.js);  no `config_directory`, as a store from
+ * before NooBaa recorded one has;  and no `system.json`, or one that
+ * does not parse.  The first case is the control. */
+TEST_F(NooBaaStoreTest, TheVersionGateAdmitsOnlyAVerifiedUnlockedStore)
+{
+  auto changed = [](std::string doc, const std::string& from,
+		    const std::string& to) {
+    const auto at = doc.find(from);
+    EXPECT_NE(at, std::string::npos) << from;
+    return doc.replace(at, from.size(), to);
+  };
+  const std::string sys = NB_SYSTEM_JSON;
+
+  struct Case {
+    const char* what;
+    std::optional<std::string> doc;
+    /* empty:  admitted */
+    std::string expect;
+  };
+  const std::vector<Case> cases = {
+    {"as NooBaa wrote it", sys, ""},
+    {"a later host",
+     changed(sys, R"("current_version":"5.23.0")",
+	     R"("current_version":"5.24.0")"),
+     "host fedora.private runs NooBaa 5.24.0"},
+    {"a second host, later",
+     changed(sys, R"({"fedora.private")",
+	     R"({"other.host":{"current_version":"5.24.0"},"fedora.private")"),
+     "host other.host runs NooBaa 5.24.0"},
+    {"a later package",
+     changed(sys, R"("upgrade_package_version":"5.23.0")",
+	     R"("upgrade_package_version":"5.24.0")"),
+     "upgrade_package_version is 5.24.0"},
+    {"an upgrade running",
+     changed(sys, "CONFIG_DIR_UNLOCKED", "CONFIG_DIR_LOCKED"),
+     "phase is CONFIG_DIR_LOCKED"},
+    {"no config_directory",
+     sys.substr(0, sys.find(R"(,"config_directory")")) + "}",
+     "no config_directory"},
+    {"no system.json", std::nullopt, "no readable system.json"},
+    {"not JSON", std::string("{ not json"), "no readable system.json"},
+  };
+
+  for (const auto& tc : cases) {
+    SCOPED_TRACE(tc.what);
+    std::filesystem::remove(store + "/system.json");
+    if (tc.doc) {
+      write_file(store + "/system.json", *tc.doc);
+    }
+    auto c = read_store();
+    const auto skew = c.version_skew();
+    std::string all;
+    for (const auto& s : skew) {
+      all += "\n  " + s;
+    }
+    if (tc.expect.empty()) {
+      EXPECT_TRUE(skew.empty()) << all;
+      continue;
+    }
+    ASSERT_FALSE(skew.empty()) << "admitted";
+    EXPECT_NE(all.find(tc.expect), std::string::npos) << all;
+  }
+}
+
 /* A store on disk, read without complaint.
  *
  * `NSFS_NOOBAA_STORE` names a real NooBaa configuration directory and
@@ -12246,6 +12327,13 @@ TEST_F(NooBaaStoreTest, AStoreOnDiskReadsWithoutComplaint)
     complaints += "\n  " + u.path + ": " + u.why;
   }
   EXPECT_TRUE(c.unreadable.empty()) << complaints;
+
+  /* and its NooBaa is the one adoption is verified against */
+  std::string skew;
+  for (const auto& s : c.version_skew()) {
+    skew += "\n  " + s;
+  }
+  EXPECT_TRUE(skew.empty()) << skew;
 
   /* A store with no identities is not one an import can act on, and
    * reading one as success would make this test vacuous. */
@@ -15002,6 +15090,59 @@ TEST_F(NooBaaModeTest, APreflightFailureWritesNothing)
   EXPECT_EQ(out["unreadable"], "1");
   EXPECT_TRUE(out.find("accounts") == out.end())
       << "a preflight failure got as far as writing";
+}
+
+/* A store a later NooBaa wrote is refused before anything is written
+ * (X4, DECISIONS.md 2026-10-21).
+ *
+ * Both entry points are tried:  the identities, and one bucket, whose
+ * adoption imports its record before set_profile() rewrites the tree.
+ * Neither writes:  the credential does not authenticate, the bucket
+ * has no row and is still base.  The same store with NooBaa's own
+ * `system.json` put back then adopts, so the gate is what refused. */
+TEST_F(NooBaaModeTest, AStoreALaterNooBaaWroteIsRefusedBeforeAnyWrite)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_nb_record("ENABLED");
+  std::string later = NB_SYSTEM_JSON;
+  const std::string from = R"("current_version":"5.23.0")";
+  later.replace(later.find(from), from.size(),
+		R"("current_version":"5.24.0")");
+  write_file(conf_root() / "system.json", later);
+
+  std::map<std::string, std::string> ids;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"identities", "true"}}, &ids), -ENOTSUP);
+  EXPECT_EQ(ids["ran"], "false");
+  EXPECT_EQ(ids["version_skew"], "1");
+  EXPECT_TRUE(ids.find("accounts") == ids.end())
+      << "a skewed store got as far as writing";
+
+  std::map<std::string, std::string> one;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", testname}}, &one), 0);
+  EXPECT_EQ(one["adopted"], "false");
+
+  std::unique_ptr<rgw::sal::User> user;
+  EXPECT_LT(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  nsfs::BucketPlacement row;
+  EXPECT_LT(driver->get_identity_db()->get_bucket_placement(
+	      env->dpp, testname, "", row), 0)
+      << "a skewed store's bucket record was imported";
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base");
+
+  /* the control:  NooBaa's own system.json, and the same store adopts */
+  write_file(conf_root() / "system.json", NB_SYSTEM_JSON);
+  auto st = ask({{"identities", "true"}});
+  EXPECT_EQ(st["ran"], "true") << st["error"];
+  auto again = ask({{"bucket", testname}});
+  EXPECT_EQ(again["adopted"], "true") << again["error"];
 }
 
 /* One bucket, adopted by command.

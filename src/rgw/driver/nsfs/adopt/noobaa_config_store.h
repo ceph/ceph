@@ -18,7 +18,7 @@
  * nothing has changed yet -- and that reader is
  * `NooBaaBucketStateStrategy`, not this.
  *
- * WHAT IT READS.  Four of the eight entries a NooBaa configuration
+ * WHAT IT READS.  Five of the eight entries a NooBaa configuration
  * directory holds (`ACCOUNT_IMPORT.md` §1):
  *
  *   identities/<id>/identity.json   every account, IAM user and role;
@@ -28,10 +28,12 @@
  *                                   secret with it is I2
  *   config.json                     the settings that change how an
  *                                   account behaves (§2.5)
+ *   system.json                     which NooBaa versions wrote the
+ *                                   store, for X4's version gate
  *
  * `accounts_by_name/` and `access_keys/` are symlink indexes into
- * `identities/` and so are derivable;  `system.json` and
- * `certificates/` describe a NooBaa deployment's own state.
+ * `identities/` and so are derivable;  `certificates/` describes a
+ * NooBaa deployment's own state.
  *
  * IT REPORTS WHAT IT CANNOT READ RATHER THAN STOPPING.  A record that
  * is present and will not parse is collected into `unreadable` and the
@@ -183,6 +185,28 @@ struct NooBaaSettings {
   std::string master_keys_get_executable;
 };
 
+/* What `system.json` says about the NooBaa versions that wrote the
+ * store.
+ *
+ * NooBaa writes one entry per host that has run it, keyed by hostname,
+ * and one `config_directory` entry for the store itself
+ * (`config_fs.js` `_get_new_system_json_data()`).  A store whose
+ * `system.json` predates the `config_directory` entry has none, which
+ * `have_config_directory` keeps. */
+struct NooBaaSystem {
+  /* `system.json` was there and parsed */
+  bool present{false};
+
+  /* hostname, `current_version` */
+  std::vector<std::pair<std::string, std::string>> hosts;
+
+  bool have_config_directory{false};
+  std::string upgrade_package_version;
+  /* `CONFIG_DIR_UNLOCKED`, or `CONFIG_DIR_LOCKED` while an upgrade of
+   * the store runs */
+  std::string phase;
+};
+
 /* One bucket record, as far as I1 reads it.
  *
  * The fields a bucket's *state* needs are translated by
@@ -218,6 +242,7 @@ struct NooBaaUnreadable {
 /* Everything one read of the store found. */
 struct NooBaaStoreContents {
   NooBaaSettings settings;
+  NooBaaSystem system;
   std::vector<NooBaaIdentity> identities;
 
   std::vector<NooBaaBucketRecord> buckets;
@@ -242,6 +267,16 @@ struct NooBaaStoreContents {
    * a digest for an ETag.  Empty means the deployment is uniform,
    * which is the ordinary case. */
   std::vector<std::string> md5_etag_divergence() const;
+
+  /* Why the NooBaa that wrote this store is not one adoption is
+   * verified against, one line per reason;  empty when it is.
+   *
+   * X4's version gate (DECISIONS.md 2026-10-21).  Every host's
+   * `current_version` and the store's `upgrade_package_version` must be
+   * in the verified set, and its `phase` must be `CONFIG_DIR_UNLOCKED`.
+   * A store with no `system.json`, or one without a `config_directory`
+   * entry, is not verified:  the gate fails closed. */
+  std::vector<std::string> version_skew() const;
 };
 
 /* A NooBaa configuration directory, read.
