@@ -74,6 +74,9 @@ map is ``active+clean``.
 *backfill_wait*
   The placement group is waiting in line to start backfill.
 
+*backfill_pause*
+  the backfill is suspended due to the nobackfill flag set on the corresponding pool
+
 *backfill_toofull*
   A backfill operation is waiting because the destination OSD is over
   the backfillfull ratio.

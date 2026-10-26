@@ -72,6 +72,7 @@ to the monitor. The state chart can set:
  - recovering: recovering
  - recovery_toofull: recovery stopped, OSD(s) above full ratio
  - backfill_wait: waiting for remote backfill reservations
+ - backfill_pause: the backfill canceled by pool set with nobackfill
  - backfilling: backfilling
  - backfill_toofull: backfill stopped, OSD(s) above backfillfull ratio
 
