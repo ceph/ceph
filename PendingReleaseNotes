@@ -133,6 +133,14 @@
   and such an image simply runs without a cache. Note that ``ceph config set
   ... rwl`` now fails, which may break automation.
 
+* RADOS: The ``pct_update_delay`` pool option now also applies to
+  erasure-coded pools with EC optimizations enabled. There it defers the
+  roll-forward kick, the transaction-empty op that lets the shards discard
+  their rollback state after a pause in writes, by that many seconds instead
+  of sending it as soon as the PG's write pipeline goes idle. When the option
+  is not set, or is ``0``, the kick is still sent at once, as before.
+  Previously the option had no effect on an erasure-coded pool.
+
 >=21.0.0
 * CephFS: The ``fs subvolumegroup create`` command now supports the
   ``--namespace-isolated`` option. When a subvolume group is created with this flag,

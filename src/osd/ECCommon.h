@@ -675,6 +675,21 @@ struct ECCommon {
     void try_finish_rmw();
     void finish_rmw(OpRef const &op);
 
+    // The roll-forward kick. When the pipeline goes idle after an op whose
+    // version is past can_rollback_to, finish_rmw sends every shard that
+    // still holds rollback state a dummy, transaction-empty op carrying
+    // pg_committed_to, so that it can discard that state. Each kick costs
+    // those shards a transaction and a message pair, and the next write's
+    // acknowledgement queues behind its commit. If set, defer_rollforward
+    // is asked first: true means the owner sends the kick later through
+    // kick_rollforward (ECBackend: after the pool's pct_update_delay) and
+    // nothing is sent now. A write that starts meanwhile carries
+    // pg_committed_to itself, so a deferred kick often finds nothing to do.
+    std::function<bool()> defer_rollforward;
+    // Send the kick now if the pipeline is still idle and committed_to is
+    // still past can_rollback_to; otherwise do nothing.
+    void kick_rollforward();
+
     void on_change();
     void on_change2();
     void call_write_ordered(std::function<void(void)> &&cb);
@@ -717,6 +732,11 @@ struct ECCommon {
     // Set of shards that will need a dummy transaction for the final
     // roll forward
     std::set<shard_id_t> pending_roll_forward;
+    // The op that last asked for a roll-forward kick: the dummy op repeats
+    // its object, trim_to and reqid (kick_rollforward).
+    hobject_t rollforward_hoid;
+    eversion_t rollforward_trim_to;
+    osd_reqid_t rollforward_reqid;
 
     ceph::ErasureCodeInterfaceRef ec_impl;
     const ECUtil::stripe_info_t &sinfo;
