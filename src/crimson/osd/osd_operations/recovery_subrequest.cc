@@ -60,7 +60,8 @@ RecoverySubRequest::with_pg_interruptible(
           std::max<int>(pgref->get_average_object_size(), 1),
           static_cast<unsigned>(recovery_prio),
           0,
-          kclass}));
+          kclass},
+        scheduler::throttle_level_t::leaf));
     throttle.emplace(std::move(releaser));
   }
   co_await pgref->get_recovery_backend()->handle_recovery_op(

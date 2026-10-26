@@ -232,17 +232,79 @@ void OperationThrottler::initialize_scheduler(CephContext *cct, ConfigProxy &con
   update_from_config(conf);
 }
 
+uint64_t OperationThrottler::in_progress_from(size_t level) const
+{
+  uint64_t n = 0;
+  for (size_t l = level; l < num_levels; ++l) {
+    n += in_progress[l];
+  }
+  return n;
+}
+
+bool OperationThrottler::available(throttle_level_t level) const
+{
+  if (!max_in_progress) {
+    return true;
+  }
+  // admitting an operation at this level adds a slot to every level at or
+  // below it, so each of those levels must still be within its limit: all
+  // slots, minus the ones reserved for each level below it
+  for (size_t l = 0; l <= static_cast<size_t>(level); ++l) {
+    const uint64_t limit = max_in_progress - reserved_per_level * l;
+    if (in_progress_from(l) + 1 > limit) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool OperationThrottler::has_parked_admissible() const
+{
+  for (size_t l = 0; l < num_levels; ++l) {
+    if (!parked[l].empty() && available(static_cast<throttle_level_t>(l))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void OperationThrottler::admit(crimson::osd::scheduler::item_t &item)
+{
+  LOG_PREFIX(OperationThrottler::admit);
+  ++in_progress[static_cast<size_t>(item.level)];
+  --pending;
+  DEBUG("Waking up a work item at level {}: in_progress={}, pending={}",
+        static_cast<int>(item.level), in_progress_from(0), pending);
+  item.wake.set_value();
+}
+
 seastar::future<> OperationThrottler::background_task() {
   LOG_PREFIX(OperationThrottler::background_task);
   while (!stopped) {
     co_await cv.wait([this] {
-      return (available() && !scheduler->empty()) || stopped;
+      return stopped ||
+        has_parked_admissible() ||
+        (!scheduler->empty() && available(throttle_level_t::leaf));
     });
 
-    // It might be possible as mclock scheduler can return a timestamp in double means
-    // the work item is scheduled in the future, so in that case wait until
-    // the returned timestamp in the dequeue response before retrying.
-    while (available() && !scheduler->empty() && !stopped) {
+    while (!stopped) {
+      // items parked earlier were dequeued before anything still in the
+      // scheduler, so they go first, lowest level first
+      for (size_t l = 0; l < num_levels; ++l) {
+        while (!parked[l].empty() &&
+               available(static_cast<throttle_level_t>(l))) {
+          admit(parked[l].front());
+          parked[l].pop_front();
+        }
+      }
+      // an item whose level is full is parked once dequeued, so dequeuing
+      // only stops when nothing at all can be admitted
+      if (scheduler->empty() || !available(throttle_level_t::leaf)) {
+        break;
+      }
+      // It might be possible as mclock scheduler can return a timestamp in double means
+      // the work item is scheduled in the future, so in that case wait until
+      // the returned timestamp in the dequeue response before retrying.
       WorkItem work_item = scheduler->dequeue();
       if (auto when_ready = std::get_if<double>(&work_item)) {
         ceph::real_clock::time_point future_time = ceph::real_clock::from_double(*when_ready);
@@ -265,11 +327,15 @@ seastar::future<> OperationThrottler::background_task() {
         continue;
       }
       if (auto *item = std::get_if<crimson::osd::scheduler::item_t>(&work_item)) {
-        DEBUG("Waking up a work item");
-        item->wake.set_value();
-        ++in_progress;
-        --pending;
-        DEBUG("Updated counters during background_task: in_progress={}, pending={}", in_progress, pending);
+        if (available(item->level)) {
+          admit(*item);
+        } else {
+          const auto l = static_cast<size_t>(item->level);
+          parked[l].push_back(std::move(*item));
+          DEBUG("Parking a work item at level {}: in_progress={}, pending={}, "
+                "parked={}",
+                l, in_progress_from(0), pending, parked[l].size());
+        }
       } else {
         DEBUG("Unexpected variant in WorkItem — neither time nor item");
       }
@@ -287,20 +353,22 @@ void OperationThrottler::wake() {
   cv.signal();
 }
 
-void OperationThrottler::release_throttle()
+void OperationThrottler::release_throttle(throttle_level_t level)
 {
   LOG_PREFIX(OperationThrottler::release_throttle);
-  ceph_assert(in_progress > 0);
-  --in_progress;
-  DEBUG("Updated counters during release_throttle: in_progress={}, pending={}",
-        in_progress, pending);
+  auto &n = in_progress[static_cast<size_t>(level)];
+  ceph_assert(n > 0);
+  --n;
+  DEBUG("Updated counters during release_throttle: level={}, in_progress={}, pending={}",
+        static_cast<int>(level), in_progress_from(0), pending);
   wake();
 }
 
 seastar::future<> OperationThrottler::acquire_throttle(
-  crimson::osd::scheduler::params_t params)
+  crimson::osd::scheduler::params_t params,
+  throttle_level_t level)
 {
-  crimson::osd::scheduler::item_t item{params, seastar::promise<>()};
+  crimson::osd::scheduler::item_t item{params, level, seastar::promise<>()};
   auto fut = item.wake.get_future();
   scheduler->enqueue(std::move(item));
   ++pending;
@@ -349,7 +417,16 @@ void OperationThrottler::record_throttle_wait(
 void OperationThrottler::dump_detail(Formatter *f) const
 {
   f->dump_unsigned("max_in_progress", max_in_progress);
-  f->dump_unsigned("in_progress", in_progress);
+  f->dump_unsigned("in_progress", in_progress_from(0));
+  f->open_array_section("levels");
+  for (size_t l = 0; l < num_levels; ++l) {
+    f->open_object_section("level");
+    f->dump_unsigned("level", l);
+    f->dump_unsigned("in_progress", in_progress[l]);
+    f->dump_unsigned("parked", parked[l].size());
+    f->close_section();
+  }
+  f->close_section();
   f->dump_unsigned("pending", pending);
   f->dump_unsigned("background_task started", started);
   f->dump_unsigned("background_task stopeed", stopped);
@@ -364,6 +441,12 @@ void OperationThrottler::dump_detail(Formatter *f) const
 void OperationThrottler::update_from_config(const ConfigProxy &conf)
 {
   max_in_progress = conf.get_val<uint64_t>("crimson_osd_scheduler_concurrency");
+  if (max_in_progress && max_in_progress < min_in_progress) {
+    logger().warn("crimson_osd_scheduler_concurrency={} leaves no slot for "
+                  "foreground operations, using {}",
+                  max_in_progress, min_in_progress);
+    max_in_progress = min_in_progress;
+  }
   wake();
 }
 

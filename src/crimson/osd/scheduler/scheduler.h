@@ -32,8 +32,26 @@ struct params_t {
   SchedulerClass klass;
 };
 
+// What an operation may wait on while it holds a throttle slot.  This is
+// about dependencies, not QoS: SchedulerClass decides the order in which
+// operations are admitted, while the level decides whether an operation can
+// be admitted at all.  An operation at a level only waits on operations at
+// lower levels, so as long as the lower levels always have slots of their
+// own, every slot holder eventually finishes.
+enum class throttle_level_t : uint8_t {
+  // only does local work, and is waited on by other slot holders: RepRequest,
+  // EC sub-ops, recovery pushes and pulls, ScrubScan
+  leaf,
+  // waits on leaf operations, local or remote: recover_object, backfill scans
+  recovery,
+  // waits on recovery and leaf operations: client requests, snaptrim
+  foreground,
+  count
+};
+
 struct item_t {
   params_t params;
+  throttle_level_t level = throttle_level_t::foreground;
   seastar::promise<> wake;
   int get_cost() const { return params.cost; }
   unsigned get_priority() const { return params.priority; }

@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include <array>
+#include <deque>
+#include <utility>
+
 #include "crimson/common/operation.h"
 #include "crimson/net/Connection.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
@@ -369,11 +373,8 @@ private:
   size_t num_slow_ops = 0;
 };
 /**
- * Throttles set of currently running operations
- *
- * Very primitive currently, assumes all ops are equally
- * expensive and simply limits the number that can be
- * concurrently active.
+ * Limit concurrent operations while reserving capacity for their dependencies.
+ * The scheduler orders candidates; dependency levels decide which can run.
  */
 class OperationThrottler : public BlockerT<OperationThrottler>,
 			private md_config_obs_t {
@@ -397,9 +398,10 @@ public:
 			  const std::set<std::string> &changed) final;
   void update_from_config(const ConfigProxy &conf);
 
-  bool available() const {
-    return !max_in_progress || in_progress < max_in_progress;
-  }
+  using throttle_level_t = crimson::osd::scheduler::throttle_level_t;
+
+  // true if an operation at the given level would be admitted right now
+  bool available(throttle_level_t level) const;
 
   // The returned guard's destructor is the mClock RequestCompletion
   // (release_throttle), so it must be held for the throttled operation's whole
@@ -407,30 +409,32 @@ public:
   // operation never counts against max_in_progress.
   class [[nodiscard("discarding the guard releases the throttle slot immediately")]] ThrottleReleaser {
     OperationThrottler *parent = nullptr;
+    throttle_level_t level = throttle_level_t::foreground;
   public:
-    ThrottleReleaser(OperationThrottler *parent) : parent(parent) {}
+    ThrottleReleaser(OperationThrottler *parent, throttle_level_t level)
+      : parent(parent), level(level) {}
     ThrottleReleaser(const ThrottleReleaser &) = delete;
-    ThrottleReleaser(ThrottleReleaser &&rhs) noexcept {
-      std::swap(parent, rhs.parent);
-    }
+    ThrottleReleaser(ThrottleReleaser &&rhs) noexcept
+      : parent(std::exchange(rhs.parent, nullptr)), level(rhs.level) {}
 
     ~ThrottleReleaser() {
       if (parent) {
-	parent->release_throttle();
+	parent->release_throttle(level);
       }
     }
   };
 
   void record_throttle_wait(SchedulerClass op_class, uint64_t wait_ms);
-  auto get_throttle(crimson::osd::scheduler::params_t params) {
+  auto get_throttle(crimson::osd::scheduler::params_t params,
+                    throttle_level_t level) {
     auto start = seastar::steady_clock_type::now();
     return acquire_throttle(
-      params
-    ).then([this, start, klass = params.klass] {
+      params, level
+    ).then([this, start, klass = params.klass, level] {
       auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
       seastar::steady_clock_type::now() - start).count();
       record_throttle_wait(klass, wait_ms);
-      return ThrottleReleaser{this};
+      return ThrottleReleaser{this, level};
     });
   }
   void register_metrics(const std::string &sched_type);
@@ -440,8 +444,23 @@ private:
 
   crimson::osd::scheduler::SchedulerRef scheduler;
 
+  static constexpr size_t num_levels =
+    static_cast<size_t>(throttle_level_t::count);
+  // slots that operations at a level and above can never take, kept for
+  // each lower level, so the operations they wait on can always be admitted
+  static constexpr uint64_t reserved_per_level = 1;
+
+  // the smallest limit that still leaves a slot for foreground operations
+  static constexpr uint64_t min_in_progress =
+    1 + reserved_per_level * (num_levels - 1);
+
+  // max_in_progress is the limit for all operations; each level above leaf
+  // may use reserved_per_level fewer slots than the level below it
   uint64_t max_in_progress = 0;
-  uint64_t in_progress = 0;
+  std::array<uint64_t, num_levels> in_progress = {};
+  // items dequeued while their level had no room, so the scheduler can
+  // still hand out items of the levels below
+  std::array<std::deque<crimson::osd::scheduler::item_t>, num_levels> parked;
 
   uint64_t pending = 0;
   bool started = false;
@@ -455,9 +474,14 @@ private:
   seastar::future<> wake_set();
 
   seastar::future<> acquire_throttle(
-    crimson::osd::scheduler::params_t params);
+    crimson::osd::scheduler::params_t params,
+    throttle_level_t level);
 
-  void release_throttle();
+  // slots held by operations at the given level and above
+  uint64_t in_progress_from(size_t level) const;
+  bool has_parked_admissible() const;
+  void admit(crimson::osd::scheduler::item_t &item);
+  void release_throttle(throttle_level_t level);
   seastar::future<> background_task();
 };
 
