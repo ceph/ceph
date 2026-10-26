@@ -92,7 +92,7 @@ void HybridAllocatorBase<T>::dump()
 }
 
 template <typename T>
-void HybridAllocatorBase<T>::init_rm_free(uint64_t offset, uint64_t length)
+void HybridAllocatorBase<T>::init_rm_free(uint64_t offset, uint64_t length, alloc_tag_t tag)
 {
   if (!length)
     return;
@@ -105,7 +105,7 @@ void HybridAllocatorBase<T>::init_rm_free(uint64_t offset, uint64_t length)
     [&](uint64_t o, uint64_t l, bool found) {
       if (!found) {
         if (bmap_alloc) {
-          bmap_alloc->init_rm_free(o, l);
+          bmap_alloc->init_rm_free(o, l, tag);
         } else {
           derr << __func__ << " lambda " << std::hex
             << "Uexpected extent: "

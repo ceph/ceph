@@ -56,7 +56,8 @@ public:
       bmap_alloc->foreach(notify);
     }
   }
-  void init_rm_free(uint64_t offset, uint64_t length) override;
+  void init_rm_free(uint64_t offset, uint64_t length,
+                    alloc_tag_t tag = alloc_tag_t::unknown()) override;
 
   void expand(int64_t new_size) override {
     std::lock_guard l(PrimaryAllocator::get_lock());

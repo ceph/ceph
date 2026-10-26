@@ -92,7 +92,8 @@ public:
     return "btree_v2";
   }
   void init_add_free(uint64_t offset, uint64_t length) override;
-  void init_rm_free(uint64_t offset, uint64_t length) override;
+  void init_rm_free(uint64_t offset, uint64_t length,
+                    alloc_tag_t tag = alloc_tag_t::unknown()) override;
 
   int64_t allocate(
     uint64_t want,

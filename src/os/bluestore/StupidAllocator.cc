@@ -359,7 +359,7 @@ void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
   num_free += length;
 }
 
-void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
+void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length, alloc_tag_t tag)
 {
   if (!length)
     return;

@@ -92,7 +92,7 @@ void BitmapAllocator::init_add_free(uint64_t offset, uint64_t length)
   _mark_free(offs, l);
   ldout(cct, 10) << __func__ << " done" << dendl;
 }
-void BitmapAllocator::init_rm_free(uint64_t offset, uint64_t length)
+void BitmapAllocator::init_rm_free(uint64_t offset, uint64_t length, alloc_tag_t tag)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 		 << std::dec << dendl;

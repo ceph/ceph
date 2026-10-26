@@ -49,7 +49,7 @@ void Btree2Allocator::init_add_free(uint64_t offset, uint64_t length)
   _add_to_tree(offset, length);
 }
 
-void Btree2Allocator::init_rm_free(uint64_t offset, uint64_t length)
+void Btree2Allocator::init_rm_free(uint64_t offset, uint64_t length, alloc_tag_t tag)
 {
   ldout(cct, 10) << __func__ << std::hex
     << " offset 0x" << offset
