@@ -87,7 +87,7 @@ and two standby MDS daemons) might print the following:
     usage:   546 GiB used, 384 GiB / 931 GiB avail
     pgs:     49 active+clean
 
-In Tentacle 20.2 and later releases, the ``mon`` line also names the leader:
+In Tentacle and later releases, the ``mon`` line also names the leader:
 for example, ``mon: 3 daemons, quorum a,b,c (age 2h) [leader: a]``.
 
 
@@ -811,7 +811,7 @@ Print active connections and their TCP round trip time and retransmission counte
 Tracking Data Availability Score of a Cluster
 =============================================
 
-In Tentacle 20.2 and later releases, the Monitors can track the data
+In Tentacle and later releases, the Monitors can track the data
 availability of each pool. The feature is a technology preview and is off by
 default: until you turn it on (see below),
 ``ceph osd pool availability-status`` returns an error. To check the data

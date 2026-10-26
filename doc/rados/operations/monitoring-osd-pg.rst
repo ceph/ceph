@@ -503,9 +503,9 @@ in ``pg_history_t`` (``pg_vulnerability_duration`` in
 ``last_rebuild_active_start``), so both survive OSD restarts and primary
 handovers mid-episode or mid-rebuild.
 
-.. note:: These counters are available in Umbrella 21 and later releases.
-   Some Tentacle 20.2 releases have an earlier counter under one of these
-   names that works differently.
+.. note:: These counters are available in Umbrella and later releases. Some
+   Tentacle releases have an earlier counter under one of these names that
+   works differently.
 
 Finding the counters
 --------------------
