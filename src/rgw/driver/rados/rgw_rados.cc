@@ -3509,6 +3509,26 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     op.setxattr(RGW_ATTR_OLH_ID_TAG, state->olh_tag);
   }
 
+  if (!meta.multipart_upload_id.empty()) {
+    // Try to prevent racing CompleteMultipartUpload requests with the same
+    // UploadId from both producing a head object, because a later complete
+    // will overwrite the initial head object and garbage collect the same
+    // tail objects used by the new head.
+    //
+    // Store this multipart UploadId as a head object xattr so we can check
+    // whether it was already written. However, this strategy is defeated
+    // if another request races to overwrite/remove this head object in
+    // the meantime.
+    bufferlist bl;
+    bl.append(meta.multipart_upload_id);
+
+    if (auto i = state->attrset.find(RGW_ATTR_MULTIPART_UPLOAD_ID);
+        i != state->attrset.end() && i->second.contents_equal(bl)) {
+      return 0; // already completed
+    }
+    op.setxattr(RGW_ATTR_MULTIPART_UPLOAD_ID, bl);
+  }
+
   struct timespec mtime_ts = real_clock::to_timespec(meta.set_mtime);
   op.mtime2(&mtime_ts);
 
