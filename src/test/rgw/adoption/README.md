@@ -9,7 +9,7 @@ It is the workflow driver and tests nothing itself.  The corpus is in
 
 ## Why this exists
 
-`docs/NSFS_ADOPTION_WORK_PLAN.md` §4, in the nsfs design set:  until
+`docs/NSFS_WORK_PLAN.md` §4, in the nsfs design set:  until
 this exists, every control in the adoption work is composed from *our
 reading* of NooBaa's schema, so a passing stage is evidence about our
 reading rather than about NooBaa's output.  The corpus's nine axes

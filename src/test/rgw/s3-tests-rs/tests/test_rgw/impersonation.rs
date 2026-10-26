@@ -761,7 +761,7 @@ async fn metadata_statuses(client: &aws_sdk_s3::Client, bucket: &str,
 }
 
 /// A user whose credentials do not resolve is denied a metadata read,
-/// not served it as the gateway (n-plan §6.1).
+/// not served it as the gateway (`RGW_NSFS_VADE_MECUM.md` §12, "No authenticated user means refuse").
 ///
 /// HEAD and the attribute reads reach neither of the data entry points,
 /// so a denial deferred to them served these as the gateway, which
@@ -821,7 +821,7 @@ async fn test_impersonation_denies_metadata_to_unresolved_credentials() {
 }
 
 /// A user whose credentials do not resolve is denied a bucket, not
-/// given one the gateway owns (n-plan §6.1).
+/// given one the gateway owns (`RGW_NSFS_VADE_MECUM.md` §12, "No authenticated user means refuse").
 ///
 /// The gateway makes a client's bucket directory in the base path and
 /// then gives it to its creator (raise site 4).  A creator whose

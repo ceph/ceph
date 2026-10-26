@@ -44,7 +44,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Where everything lives.  Every one is overridable, because the
 /// pin in particular is a hypothesis rather than a fact -- see
-/// `docs/NSFS_ADOPTION_WORK_PLAN.md` and the Scale team question
+/// `docs/NSFS_WORK_PLAN.md` and the Scale team question
 /// about which commit 5.23 actually ships.
 struct Env {
     /// the developer's own clone, read only -- never checked out

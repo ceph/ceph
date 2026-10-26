@@ -5,7 +5,7 @@
 //! write was unchecked at each, so a failure published an object
 //! carrying no recorded id -- which a later demote files as the null
 //! version -- or a delete marker without the attribute that makes it
-//! one (n-plan D4).  Nothing in an ordinary setup makes these writes
+//! one (work-plan stage N-D4).  Nothing in an ordinary setup makes these writes
 //! fail, so the failure is injected (`inject-attr-write-fail`, keyed by
 //! bucket so the tests running beside it are not touched).
 

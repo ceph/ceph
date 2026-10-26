@@ -2,7 +2,7 @@
 
 **Who this is for.**  A developer running the adoption validation, or
 taking it over part-built.  Stage letters like C2b are
-`docs/NSFS_ADOPTION_WORK_PLAN.md`'s.
+`docs/NSFS_WORK_PLAN.md`'s.
 
 This is the sequence and nothing else;  each step names the document
 that owns its detail rather than restating it.
@@ -161,7 +161,7 @@ otherwise:  the corpus needs it to ask what the IAM user's requests run
 as.
 
 `import` and `adopt` produce the two RGW runs C2b compares
-(`docs/NSFS_ADOPTION_WORK_PLAN.md`).  `import` imports the identities
+(`docs/NSFS_WORK_PLAN.md`).  `import` imports the identities
 and leaves every bucket in NooBaa's format, served with its
 configuration from NooBaa's configuration store
 (`buckets/<name>.json`).  `adopt` adopts every bucket, which writes its
@@ -184,7 +184,7 @@ as `[iam]` for that.
 ./standup.rs compare
 ```
 
-The comparison is C2b of `docs/NSFS_ADOPTION_WORK_PLAN.md`:  a
+The comparison is C2b of `docs/NSFS_WORK_PLAN.md`:  a
 three-way judgement over the captures, `capture/noobaa`,
 `capture/rgw-unadopted` and `capture/rgw-converted`, by
 `corpus-compare` (s3-tests-rs, `src/bin/corpus-compare.rs`).  Two pairs
@@ -211,7 +211,7 @@ records what RGW says about the objects NooBaa wrote
 | `docs/NSFS_CORPUS.md` | why the corpus is shaped as it is;  §7 the two formats |
 | `docs/NSFS_ADOPTION.md` | the adoption model:  §7 the modes, §8 the permission rules, §9 how the work is scheduled |
 | `docs/ACCOUNT_IMPORT.md` | the import:  §6.1 what it does in order, §6.2 failure and re-running |
-| `docs/NSFS_ADOPTION_WORK_PLAN.md` | the stages, and which are done |
+| `docs/NSFS_WORK_PLAN.md` | the stages, and which are done |
 | `docs/RGW_FS_DEV_GUIDE.md` §6 | the same ground for a developer who is not doing adoption work |
 
 The `docs/` set is the nsfs design notes, held outside this tree.

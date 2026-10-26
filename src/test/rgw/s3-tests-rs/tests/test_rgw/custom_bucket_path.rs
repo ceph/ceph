@@ -33,7 +33,7 @@ async fn nsfs_only() -> bool {
 ///
 /// Not a root buckets live under:  a bucket is found through the
 /// record that places it, and the record carries its path
-/// (NSFS_BUCKET_PLACEMENT_PLAN.md 7).  What this test wants of it is
+/// (archive/NSFS_BUCKET_PLACEMENT_PLAN.md §7).  What this test wants of it is
 /// only that it is a path the gateway can create in, so the allowlist
 /// has something real to admit.
 async fn default_new_buckets_path() -> String {
@@ -98,7 +98,7 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
     /* An allowlist admitting it, and no uid.  Under impersonation nsfs
      * checks the owner's own access to the path before it makes the
      * directory, and an owner whose credentials do not resolve is
-     * denied rather than checked as the gateway (n-plan §6.1).  The
+     * denied rather than checked as the gateway (`RGW_NSFS_VADE_MECUM.md` §12, "No authenticated user means refuse").  The
      * injected case restores the old reading, which admitted it.
      * Without impersonation nothing is checked as anybody, so it is
      * admitted. */
