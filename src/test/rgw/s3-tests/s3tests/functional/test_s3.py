@@ -14784,6 +14784,189 @@ def test_object_lock_uploading_obj():
     client.put_object_legal_hold(Bucket=bucket_name, Key=key, LegalHold={'Status':'OFF'})
     client.delete_object(Bucket=bucket_name, Key=key, VersionId=response['VersionId'], BypassGovernanceRetention=True)
 
+def _post_object_with_lock_fields(bucket_name, key, lock_fields):
+    url = _get_post_url(bucket_name)
+    expires = datetime.datetime.now(pytz.utc) + datetime.timedelta(seconds=+6000)
+    conditions = [{"bucket": bucket_name}, {"key": key}, ["content-length-range", 0, 1024]]
+    conditions += [{k: v} for k, v in lock_fields.items()]
+    policy_document = {"expiration": expires.strftime("%Y-%m-%dT%H:%M:%SZ"), "conditions": conditions}
+    policy = base64.b64encode(bytes(json.JSONEncoder().encode(policy_document), 'utf-8'))
+    signature = base64.b64encode(hmac.new(bytes(get_main_aws_secret_key(), 'utf-8'), policy, hashlib.sha1).digest())
+
+    payload = OrderedDict([("key", key), ("AWSAccessKeyId", get_main_aws_access_key()),
+                           ("signature", signature), ("policy", policy)])
+    payload.update(lock_fields)
+    payload['file'] = 'bar'
+    return requests.post(url, files=payload, verify=get_config_ssl_verify())
+
+@pytest.mark.fails_on_dbstore
+def test_object_lock_post_object_retention_and_legal_hold():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    r = _post_object_with_lock_fields(bucket_name, key, {
+        'x-amz-object-lock-mode': 'GOVERNANCE',
+        'x-amz-object-lock-retain-until-date': '2140-01-01T00:00:00Z',
+        'x-amz-object-lock-legal-hold': 'ON'})
+    assert r.status_code == 204
+
+    response = client.head_object(Bucket=bucket_name, Key=key)
+    assert response['ObjectLockMode'] == 'GOVERNANCE'
+    assert response['ObjectLockRetainUntilDate'] == datetime.datetime(2140,1,1,tzinfo=pytz.UTC)
+    assert response['ObjectLockLegalHoldStatus'] == 'ON'
+    version_id = response['VersionId']
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket_name, Key=key, VersionId=version_id)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    client.put_object_legal_hold(Bucket=bucket_name, Key=key, VersionId=version_id, LegalHold={'Status':'OFF'})
+    client.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id, BypassGovernanceRetention=True)
+
+@pytest.mark.fails_on_dbstore
+def test_object_lock_post_object_overrides_default_retention():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    conf = {'ObjectLockEnabled':'Enabled',
+            'Rule': {'DefaultRetention': {'Mode':'GOVERNANCE', 'Days':1}}}
+    client.put_object_lock_configuration(Bucket=bucket_name, ObjectLockConfiguration=conf)
+    key = 'file1'
+    r = _post_object_with_lock_fields(bucket_name, key, {
+        'x-amz-object-lock-mode': 'GOVERNANCE',
+        'x-amz-object-lock-retain-until-date': '2140-01-01T00:00:00Z'})
+    assert r.status_code == 204
+
+    response = client.head_object(Bucket=bucket_name, Key=key)
+    assert response['ObjectLockMode'] == 'GOVERNANCE'
+    assert response['ObjectLockRetainUntilDate'] == datetime.datetime(2140,1,1,tzinfo=pytz.UTC)
+    client.delete_object(Bucket=bucket_name, Key=key, VersionId=response['VersionId'], BypassGovernanceRetention=True)
+
+@pytest.mark.fails_on_dbstore
+def test_object_lock_post_object_invalid_fields():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    invalid = [
+        {'x-amz-object-lock-mode': 'GOVERNANCE'},
+        {'x-amz-object-lock-retain-until-date': '2140-01-01T00:00:00Z'},
+        {'x-amz-object-lock-mode': 'INVALID',
+         'x-amz-object-lock-retain-until-date': '2140-01-01T00:00:00Z'},
+        {'x-amz-object-lock-mode': 'GOVERNANCE',
+         'x-amz-object-lock-retain-until-date': '2000-01-01T00:00:00Z'},
+        {'x-amz-object-lock-mode': 'GOVERNANCE',
+         'x-amz-object-lock-retain-until-date': 'not-a-date'},
+        {'x-amz-object-lock-legal-hold': 'INVALID'},
+    ]
+    for fields in invalid:
+        r = _post_object_with_lock_fields(bucket_name, key, fields)
+        assert r.status_code == 400, fields
+
+    # nothing was written
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert 'Versions' not in response
+
+@pytest.mark.fails_on_dbstore
+def test_object_lock_post_object_bucket_without_lock():
+    # AWS doesn't document object lock fields for POST object; for a bucket
+    # without object lock they're ignored like other unknown form fields
+    bucket_name = get_new_bucket()
+    client = get_client()
+    key = 'file1'
+    for fields in [{'x-amz-object-lock-mode': 'GOVERNANCE',
+                    'x-amz-object-lock-retain-until-date': '2140-01-01T00:00:00Z'},
+                   {'x-amz-object-lock-legal-hold': 'ON'},
+                   {'x-amz-object-lock-legal-hold': 'INVALID'}]:
+        r = _post_object_with_lock_fields(bucket_name, key, fields)
+        assert r.status_code == 204, fields
+
+        response = client.head_object(Bucket=bucket_name, Key=key)
+        assert 'ObjectLockMode' not in response
+        assert 'ObjectLockRetainUntilDate' not in response
+        assert 'ObjectLockLegalHoldStatus' not in response
+
+@pytest.mark.fails_on_dbstore
+def test_object_lock_copy_object_with_lock_headers():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    client.put_object(Bucket=bucket_name, Key='src', Body='abc')
+
+    client.copy_object(Bucket=bucket_name, Key='dst',
+                       CopySource={'Bucket': bucket_name, 'Key': 'src'},
+                       ObjectLockMode='GOVERNANCE',
+                       ObjectLockRetainUntilDate=datetime.datetime(2140,1,1,tzinfo=pytz.UTC),
+                       ObjectLockLegalHoldStatus='ON')
+    response = client.head_object(Bucket=bucket_name, Key='dst')
+    assert response['ObjectLockMode'] == 'GOVERNANCE'
+    assert response['ObjectLockRetainUntilDate'] == datetime.datetime(2140,1,1,tzinfo=pytz.UTC)
+    assert response['ObjectLockLegalHoldStatus'] == 'ON'
+
+    version_id = response['VersionId']
+    client.put_object_legal_hold(Bucket=bucket_name, Key='dst', VersionId=version_id, LegalHold={'Status':'OFF'})
+    client.delete_object(Bucket=bucket_name, Key='dst', VersionId=version_id, BypassGovernanceRetention=True)
+
+@pytest.mark.fails_on_dbstore
+def test_object_lock_copy_object_bucket_without_lock():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='src', Body='abc')
+    copy_source = {'Bucket': bucket_name, 'Key': 'src'}
+
+    for lock_args in [{'ObjectLockMode': 'GOVERNANCE',
+                       'ObjectLockRetainUntilDate': datetime.datetime(2140,1,1,tzinfo=pytz.UTC)},
+                      {'ObjectLockLegalHoldStatus': 'ON'}]:
+        e = assert_raises(ClientError, client.copy_object, Bucket=bucket_name, Key='dst',
+                          CopySource=copy_source, **lock_args)
+        status, error_code = _get_status_and_error_code(e.response)
+        assert status == 400
+        assert error_code == 'InvalidRequest'
+
+    e = assert_raises(ClientError, client.head_object, Bucket=bucket_name, Key='dst')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+
+@pytest.mark.fails_on_dbstore
+def test_object_lock_copy_object_from_locked_to_bucket_without_lock():
+    client = get_client()
+    src_bucket = get_new_bucket_name()
+    client.create_bucket(Bucket=src_bucket, ObjectLockEnabledForBucket=True)
+    retain_until = datetime.datetime(2140,1,1,tzinfo=pytz.UTC)
+    response = client.put_object(Bucket=src_bucket, Key='src', Body='abc',
+                                 ObjectLockMode='GOVERNANCE',
+                                 ObjectLockRetainUntilDate=retain_until,
+                                 ObjectLockLegalHoldStatus='ON')
+    src_version_id = response['VersionId']
+    dst_bucket = get_new_bucket()
+    copy_source = {'Bucket': src_bucket, 'Key': 'src', 'VersionId': src_version_id}
+
+    # lock headers are rejected for a destination bucket without object lock
+    e = assert_raises(ClientError, client.copy_object, Bucket=dst_bucket, Key='dst',
+                      CopySource=copy_source, ObjectLockMode='GOVERNANCE',
+                      ObjectLockRetainUntilDate=retain_until, ObjectLockLegalHoldStatus='ON')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidRequest'
+    e = assert_raises(ClientError, client.head_object, Bucket=dst_bucket, Key='dst')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+
+    # without them the copy succeeds and doesn't inherit the source's lock
+    client.copy_object(Bucket=dst_bucket, Key='dst', CopySource=copy_source)
+    response = client.head_object(Bucket=dst_bucket, Key='dst')
+    assert 'ObjectLockMode' not in response
+    assert 'ObjectLockRetainUntilDate' not in response
+    assert 'ObjectLockLegalHoldStatus' not in response
+    client.delete_object(Bucket=dst_bucket, Key='dst')
+
+    client.put_object_legal_hold(Bucket=src_bucket, Key='src', VersionId=src_version_id,
+                                 LegalHold={'Status':'OFF'})
+    client.delete_object(Bucket=src_bucket, Key='src', VersionId=src_version_id,
+                         BypassGovernanceRetention=True)
+
 @pytest.mark.fails_on_dbstore
 def test_object_lock_changing_mode_from_governance_with_bypass():
     bucket_name = get_new_bucket_name()
