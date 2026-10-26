@@ -655,6 +655,8 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
   return ret;
 }
 
+RadosVectorBucket::~RadosVectorBucket() = default;
+
 int RadosVectorBucket::unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, optional_yield y, bool update_entrypoint)
 {
   ldpp_dout(dpp, 20) << "s3vector --- RadosVectorBucket::unlink called" << dendl;
