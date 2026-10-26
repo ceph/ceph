@@ -382,6 +382,9 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
     }
   }
 
+  Identity old;
+  const bool had = (get_identity(dpp, id.key, old) == 0);
+
   const std::string sql =
     "INSERT OR REPLACE INTO '" + identity_table + "' (" + IDENTITY_COLUMNS
     + ") VALUES (?,?,?,?,?,?,?,?,?);";
@@ -419,6 +422,16 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
     ldpp_dout(dpp, 4) << "identity " << id.key << " rejected: "
       << sqlite3_errmsg(handle()) << dendl;
     return -EINVAL;
+  }
+  /* A row written is a reason to look its name up again, even the same
+   * name:  whoever wrote it may know the directory changed.  The name it
+   * no longer carries is cleared too.  Neither invalidates anything
+   * unless the cache held it. */
+  if (had && !old.distinguished_name.empty()) {
+    names.forget(old.distinguished_name);
+  }
+  if (!id.distinguished_name.empty()) {
+    names.forget(id.distinguished_name);
   }
   return 0;
 }
@@ -732,6 +745,9 @@ int IdentityDB::owner_was_imported(const DoutPrefixProvider* dpp,
 int IdentityDB::remove_identity(const DoutPrefixProvider* dpp,
 				const std::string& key)
 {
+  Identity old;
+  const bool had = (get_identity(dpp, key, old) == 0);
+
   const std::string sql =
     "DELETE FROM '" + identity_table + "' WHERE Identity = ?;";
 
@@ -745,6 +761,9 @@ int IdentityDB::remove_identity(const DoutPrefixProvider* dpp,
 
   if (sqlite3_step(st) != SQLITE_DONE) {
     return -EIO;
+  }
+  if (had && !old.distinguished_name.empty()) {
+    names.forget(old.distinguished_name);
   }
   /* deleting what is not there is not an error;  the caller asked for
    * it to be gone and it is */
@@ -805,6 +824,57 @@ int IdentityDB::get_identities_by_uid(const DoutPrefixProvider* dpp,
   return (rc == SQLITE_DONE) ? 0 : -EIO;
 }
 
+int IdentityDB::get_identities_by_name(const DoutPrefixProvider* dpp,
+				       const std::string& name,
+				       std::vector<Identity>& out) const
+{
+  const std::string sql =
+    std::string("SELECT ") + IDENTITY_COLUMNS + " FROM '" + identity_table
+    + "' WHERE DistinguishedName = ? ORDER BY Identity;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    return -EIO;
+  }
+  auto done = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, name.c_str(), -1, SQLITE_TRANSIENT);
+
+  int rc;
+  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    Identity id;
+    int ret = row_to_identity(dpp, st, id);
+    if (ret < 0) {
+      return ret;
+    }
+    out.push_back(std::move(id));
+  }
+  return (rc == SQLITE_DONE) ? 0 : -EIO;
+}
+
+std::vector<std::string> IdentityDB::distinguished_names(
+  const DoutPrefixProvider* dpp) const
+{
+  std::vector<Identity> rows;
+  std::vector<std::string> out;
+  if (list_identities(dpp, rows) < 0) {
+    return out;
+  }
+  for (const auto& id : rows) {
+    if (id.directory_backed()) {
+      out.push_back(id.distinguished_name);
+    }
+  }
+  return out;
+}
+
+void IdentityDB::start_name_sweep()
+{
+  names.start([this] (const DoutPrefixProvider* dpp) {
+    return distinguished_names(dpp);
+  });
+}
+
 int complete_file_credentials(const DoutPrefixProvider* dpp,
 			      const IdentityDB& db, Credentials& inout,
 			      std::string* key)
@@ -814,12 +884,22 @@ int complete_file_credentials(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     return ret;
   }
+  /* A name-form row stores no uid;  the cache knows which names last
+   * resolved to this one. */
+  for (const auto& name : db.name_cache().names_for_uid(inout.uid)) {
+    ret = db.get_identities_by_name(dpp, name, rows);
+    if (ret < 0) {
+      return ret;
+    }
+  }
 
   /* A directory-backed row carries no uid, so it cannot be here;  a
    * row carrying only placement data can, and it asks for no
    * impersonation.  Drop those rather than read an empty group list
    * off them. */
-  std::erase_if(rows, [](const Identity& id) { return !id.local(); });
+  std::erase_if(rows, [](const Identity& id) {
+    return !id.local() && !id.directory_backed();
+  });
   if (rows.empty()) {
     return -ENOENT;
   }
@@ -850,7 +930,8 @@ int complete_file_credentials(const DoutPrefixProvider* dpp,
 }
 
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
-			const rgw_owner& owner, Credentials& out)
+			const rgw_owner& owner, Credentials& out,
+			optional_yield y)
 {
   const std::string key = to_string(owner);
 
@@ -861,29 +942,33 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
   }
 
   if (id.directory_backed()) {
-    ldpp_dout(dpp, 4) << "identity " << key << " is directory-backed ("
-      << id.distinguished_name << ") and the directory is not"
-      " consulted;  denying it rather than serving it unimpersonated"
-      << dendl;
-    return -EPERM;
-  }
-
-  if (! id.local()) {
+    ResolvedName rn;
+    ret = db.name_cache().resolve(dpp, id.distinguished_name, rn, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 4) << "identity " << key << " names "
+	<< id.distinguished_name << ", which nsswitch did not resolve ("
+	<< cpp_strerror(-ret) << ");  denying it rather than serving it"
+	" unimpersonated" << dendl;
+      return -EPERM;
+    }
+    out.uid = rn.uid;
+    out.gid = rn.gid;
+  } else if (! id.local()) {
     /* a row carrying only placement or provenance data asks for no
      * impersonation, which is not the same as asking for one we
      * cannot give */
     return -ENOENT;
+  } else {
+    out.uid = *id.uid;
+    out.gid = *id.gid;
   }
-
-  out.uid = *id.uid;
-  out.gid = *id.gid;
 
   /* Both an explicitly empty list and an absent one give an empty
    * vector.  Absent means "no supplementary groups" today, and the
    * caller installs that rather than skipping the call -- NooBaa's
    * ThreadScope issues setgroups(0, NULL) for exactly this case.
-   * The two stay distinct in the record because the directory-backed form
-   * will read them differently. */
+   * The two stay distinct in the record because the name form will
+   * read them differently in I8. */
   out.groups.clear();
   if (id.groups) {
     out.groups.assign(id.groups->begin(), id.groups->end());
@@ -893,13 +978,13 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 			const rgw_user& user, const rgw_account_id& account,
-			Credentials& out, std::string* row)
+			Credentials& out, optional_yield y, std::string* row)
 {
   rgw_owner owner{user};
-  int ret = resolve_credentials(dpp, db, owner, out);
+  int ret = resolve_credentials(dpp, db, owner, out, y);
   if ((ret == -ENOENT) && !account.empty()) {
     owner = account;
-    ret = resolve_credentials(dpp, db, owner, out);
+    ret = resolve_credentials(dpp, db, owner, out, y);
   }
   if (row && ((ret == 0) || (ret == -EPERM))) {
     *row = to_string(owner);
@@ -915,7 +1000,8 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
     return -ENOENT;
   }
   return resolve_credentials(dpp, db, s->user->get_id(),
-			     s->user->get_info().account_id, out, row);
+			     s->user->get_info().account_id, out, s->yield,
+			     row);
 }
 
 

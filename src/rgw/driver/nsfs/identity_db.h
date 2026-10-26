@@ -25,6 +25,8 @@
 
 #include "rgw_basic_types.h"
 #include "driver/posix/posixDB.h"
+#include "common/async/yield_context.h"
+#include "name_resolve.h"
 
 namespace rgw { namespace sal { namespace nsfs {
 
@@ -48,8 +50,8 @@ namespace rgw { namespace sal { namespace nsfs {
  * load-bearing:
  *
  *   nullopt   no list was set.  Today that means no supplementary
- *             groups;  once the directory-backed form is implemented it will
- *             mean "resolve from the directory".
+ *             groups;  on a name-form row, once I8 is built, it will
+ *             mean "resolve them through getgrouplist(3)".
  *   empty     a list was set and it is empty -- this identity has no
  *             supplementary groups, deliberately.
  *   non-empty the vector to install.
@@ -233,6 +235,9 @@ class IdentityDB : public rgw::store::POSIXUserDB {
   /* NooBaa records abandoned by an operator */
   const std::string abandoned_table;
 
+  /* what each row's `distinguished_name` resolved to (I7) */
+  mutable NameCache names;
+
   /* The one handle, qualified.
    *
    * `POSIXUserDB` declares a `void *db` that shadows `DB::db`
@@ -261,7 +266,8 @@ public:
       completion_table(std::filesystem::path(db_name).filename().string()
 		       + "_nsfs_adoption_complete"),
       abandoned_table(std::filesystem::path(db_name).filename().string()
-		      + "_nsfs_noobaa_abandoned") {}
+		      + "_nsfs_noobaa_abandoned"),
+      names(cct) {}
 
   int Initialize(std::string logfile, int loglevel);
 
@@ -389,6 +395,23 @@ public:
   int get_identities_by_uid(const DoutPrefixProvider* dpp, uid_t uid,
 			    std::vector<Identity>& out) const;
 
+  /* The rows carrying `distinguished_name`, in Identity order;  the
+   * same read for a name-form row, whose uid is not stored. */
+  int get_identities_by_name(const DoutPrefixProvider* dpp,
+			     const std::string& name,
+			     std::vector<Identity>& out) const;
+
+  NameCache& name_cache() const { return names; }
+
+  /* every name-form row's name, for the sweep's first pass */
+  std::vector<std::string> distinguished_names(
+    const DoutPrefixProvider* dpp) const;
+
+  /* The sweep, whose first pass resolves every name the table carries:
+   * a name nsswitch does not know is logged then rather than found by a
+   * refused request. */
+  void start_name_sweep();
+
   const std::string& get_identity_table() const { return identity_table; }
 };
 
@@ -421,22 +444,22 @@ struct Credentials {
  *            exactly as it does today, which is what keeps this
  *            additive.
  *   -EPERM   a row that asks for impersonation which cannot be
- *            supplied.  Today that is the directory-backed form, whose uid
- *            and gid live in the directory rather than in the
- *            record.  Serving such a request unimpersonated would
- *            run it as the daemon, which holds more access than the
- *            user, so it fails closed.  -EPERM rather than a more
- *            descriptive errno so a caller which forgets to map it
- *            still denies.
+ *            supplied:  a name-form row whose name nsswitch does not
+ *            know, or whose lookup failed.  Serving such a request
+ *            unimpersonated would run it as the daemon, which holds
+ *            more access than the user, so it fails closed.  -EPERM
+ *            rather than a more descriptive errno so a caller which
+ *            forgets to map it still denies.
  *
- * Only stored columns are read.  NooBaa's branch 2 -- resolving the
- * vector through getgrouplist(3) at request time -- is deliberately
- * not implemented:  the group data belongs in this database, put
- * there by the import and refreshed out of band, rather than looked
- * up on the gateway host on the request path.
+ * A name-form row -- `distinguished_name`, which NooBaa passes to
+ * getpwnam -- takes its uid and gid from nsswitch, through the
+ * database's NameCache;  `y` is where a lookup on a miss suspends.
+ * The supplementary groups are the row's list, else none, in both
+ * forms;  NooBaa's getgrouplist(3) branch is I8.
  */
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
-			const rgw_owner& owner, Credentials& out);
+			const rgw_owner& owner, Credentials& out,
+			optional_yield y);
 
 /* An authenticated user's credentials:  its own row, else its
  * account's.
@@ -456,7 +479,8 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
  * success or on -EPERM;  it is left alone otherwise. */
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 			const rgw_user& user, const rgw_account_id& account,
-			Credentials& out, std::string* row = nullptr);
+			Credentials& out, optional_yield y,
+			std::string* row = nullptr);
 
 /* The same, for a request.
  *
@@ -471,6 +495,8 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
  * served as that owner.  That is the wanted behaviour:  the system
  * user's own reach is the daemon's, and confining it to the owner it
  * is acting for is the narrower of the two.
+ *
+ * A lookup suspends on `s->yield`.
  */
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 			const req_state* s, Credentials& out,
@@ -495,7 +521,8 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
  *             given, receives that row's identity -- which is also
  *             what makes an `FSIdentity` active, so a caller may use
  *             a registered personality rather than a thread hop
- *   -ENOENT   no row carries that uid.  `inout` is unchanged and the
+ *   -ENOENT   no row carries that uid, nor a name the cache last
+ *             resolved to it.  `inout` is unchanged and the
  *             caller proceeds on the file owner's own rights, which
  *             is what both sites did before this existed
  *   -ENODATA  several rows carry that uid and they do not agree on

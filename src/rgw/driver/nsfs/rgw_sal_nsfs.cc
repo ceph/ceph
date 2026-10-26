@@ -777,7 +777,7 @@ static bool credentials_from_recorded_owner(const DoutPrefixProvider* dpp,
   }
 
   nsfs::Credentials named;
-  if (nsfs::resolve_credentials(dpp, db, recorded.id, named) < 0) {
+  if (nsfs::resolve_credentials(dpp, db, recorded.id, named, y) < 0) {
     return false;
   }
   /* the groups of the identity the object names, on the uid the file
@@ -5998,7 +5998,7 @@ int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
     return 0;
   }
   nsfs::Credentials cred;
-  int ret = nsfs::resolve_credentials(dpp, *userDB, owner, cred);
+  int ret = nsfs::resolve_credentials(dpp, *userDB, owner, cred, y);
   if ((ret == -ENOENT) && unresolved_as_gateway_injected(owner)) {
     return 0;
   }
@@ -6516,7 +6516,7 @@ static int resolve_credentials_for(const DoutPrefixProvider* dpp,
   const auto* user = std::get_if<rgw_user>(&who);
   if (! user) {
     return nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
-				     who, cred);
+				     who, cred, y);
   }
   rgw_account_id acct;
   std::unique_ptr<User> u = driver->get_user(*user);
@@ -6527,13 +6527,13 @@ static int resolve_credentials_for(const DoutPrefixProvider* dpp,
     *account = acct;
   }
   return nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
-				   *user, acct, cred);
+				   *user, acct, cred, y);
 }
 
 /* Defined below, beside the operations that use it most. */
 static int pin_personality_for(const DoutPrefixProvider* dpp,
 			       NSFSDriver* driver, const rgw_owner& who,
-			       nsfs::FSIdentity* ident);
+			       nsfs::FSIdentity* ident, optional_yield y);
 static const rgw_owner& acting_for(const rgw_owner& authenticated_user,
 				   const rgw_owner& on_behalf_of);
 
@@ -7830,7 +7830,7 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   nsfs::FSIdentity id;
   if (!is_internal() && !nsfs::owner_empty(authenticated_user)) {
     const int pret = pin_personality_for(dpp, driver, authenticated_user,
-					 &id);
+					 &id, y);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -10448,9 +10448,9 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
 	return ret;
       }
       ret = nsfs::resolve_credentials(dpp, *db, *u,
-				      user->get_info().account_id, cred);
+				      user->get_info().account_id, cred, y);
     } else {
-      ret = nsfs::resolve_credentials(dpp, *db, new_owner, cred);
+      ret = nsfs::resolve_credentials(dpp, *db, new_owner, cred, y);
     }
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << ":  the new "
@@ -10969,7 +10969,7 @@ int NSFSBucket::make_dir(const DoutPrefixProvider* dpp, optional_yield y,
     return dir->create(dpp, y, existed);
   }
   nsfs::FSIdentity id;
-  const int pret = pin_personality_for(dpp, driver, creator, &id);
+  const int pret = pin_personality_for(dpp, driver, creator, &id, y);
   if ((pret < 0) && (pret != -ENODATA)) {
     return pret;
   }
@@ -11069,7 +11069,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
       ret = resolve_credentials_for(dpp, driver, creator, y, nullptr, cred);
     } else {
       ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
-				      info.owner, cred);
+				      info.owner, cred, y);
     }
     if (ret == 0) {
       ret = chown_raised(dpp, dir->get_fd(), "", cred.uid, cred.gid);
@@ -11094,7 +11094,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
     if (!nsfs::owner_empty(creator) &&
 	!parent_is_base_path(driver->default_bucket_location(),
 			     dir->get_name())) {
-      (void) pin_personality_for(dpp, driver, creator, &id);
+      (void) pin_personality_for(dpp, driver, creator, &id, y);
     }
     const int r = id.active()
       ? remove_dir_as(dpp, y, id, driver->get_access_strategy(), true)
@@ -11255,7 +11255,8 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
    * Nobody named is the gateway, as for set_obj_attrs(). */
   nsfs::FSIdentity id;
   if (! nsfs::owner_empty(authenticated_user)) {
-    const int pret = pin_personality_for(dpp, driver, authenticated_user, &id);
+    const int pret = pin_personality_for(dpp, driver, authenticated_user,
+					 &id, y);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -11629,7 +11630,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   nsfs::FSIdentity identity;
   {
     const int pret = pin_personality_for(dpp, driver, authenticated_user,
-					 &identity);
+					 &identity, y);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -12290,7 +12291,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   nsfs::FSIdentity identity;
   {
     const int pret = pin_personality_for(dpp, driver, authenticated_user,
-					 &identity);
+					 &identity, null_yield);
     if ((pret < 0) && (pret != -ENODATA)) {
       return FSIOResult{pret, nullptr};
     }
@@ -13240,7 +13241,7 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
     }
   }
 
-  ret = pin_identity_for_attrs(dpp, authenticated_user);
+  ret = pin_identity_for_attrs(dpp, authenticated_user, y);
   if (ret < 0) {
     return ret;
   }
@@ -13350,7 +13351,7 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
   }
   state.attrset[attr_name] = attr_val;
   {
-    const int pret = pin_identity_for_attrs(dpp, authenticated_user);
+    const int pret = pin_identity_for_attrs(dpp, authenticated_user, y);
     if (pret < 0) {
       return pret;
     }
@@ -13427,13 +13428,13 @@ int NSFSObject::with_cross_account_retry(const DoutPrefixProvider* dpp,
 }
 
 int NSFSObject::pin_identity_for_attrs(const DoutPrefixProvider* dpp,
-				       const rgw_owner& who)
+				       const rgw_owner& who, optional_yield y)
 {
   if (nsfs::owner_empty(who)) {
     return 0;				/* nobody asked;  see the header */
   }
   nsfs::FSIdentity id;
-  const int pret = pin_personality_for(dpp, driver, who, &id);
+  const int pret = pin_personality_for(dpp, driver, who, &id, y);
   if ((pret < 0) && (pret != -ENODATA)) {
     return pret;
   }
@@ -13467,7 +13468,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
    * returns before the cross-account path is reached -- which it did,
    * leaving DeleteObjectTagging a 403 while the same deployment let a
    * put through.  The retry's own attempt opens, both times. */
-  ret = pin_identity_for_attrs(dpp, authenticated_user);
+  ret = pin_identity_for_attrs(dpp, authenticated_user, y);
   if (ret < 0) {
     return ret;
   }
@@ -14340,7 +14341,7 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
    * authorisation read carries the authenticated user, so it is
    * denied here too, which is the earlier 403 rgw_op.cc expects. */
   if (!reads_staging(source)) {
-    const int pret = pin_personality(dpp);
+    const int pret = pin_personality(dpp, y);
     if ((pret < 0) && (pret != -ENODATA) &&
 	!((pret == -EACCES) && source->driver->unresolved_as_gateway_injected(
 	    acting_for(auth_user, params.on_behalf_of)))) {
@@ -14576,7 +14577,7 @@ static int nsfs_data_file_fd(nsfs::FSEnt* ent)
  */
 static int pin_personality_for(const DoutPrefixProvider* dpp,
 			       NSFSDriver* driver, const rgw_owner& who,
-			       nsfs::FSIdentity* ident)
+			       nsfs::FSIdentity* ident, optional_yield y)
 {
   if (! nsfs::impersonation_enabled()) {
     return -ENODATA;
@@ -14613,7 +14614,7 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
   const uint64_t gen = nsfs::identity_generation(who);
   rgw_account_id account;
   nsfs::Credentials cred;
-  const int ret = resolve_credentials_for(dpp, driver, who, null_yield,
+  const int ret = resolve_credentials_for(dpp, driver, who, y,
 					  &account, cred);
   if (ret == -ENOENT) {
     /* A valid account always has an identity record;  one without
@@ -14653,21 +14654,24 @@ static const rgw_owner& acting_for(const rgw_owner& authenticated_user,
 					       : authenticated_user;
 }
 
-int NSFSObject::NSFSReadOp::pin_personality(const DoutPrefixProvider* dpp)
+int NSFSObject::NSFSReadOp::pin_personality(const DoutPrefixProvider* dpp,
+					    optional_yield y)
 {
   return pin_personality_for(dpp, source->driver,
 			     acting_for(auth_user, params.on_behalf_of),
-			     &identity);
+			     &identity, y);
 }
 
-int NSFSAtomicWriter::pin_personality(const DoutPrefixProvider* dpp)
+int NSFSAtomicWriter::pin_personality(const DoutPrefixProvider* dpp,
+				      optional_yield y)
 {
-  return pin_personality_for(dpp, driver, auth_user, &identity);
+  return pin_personality_for(dpp, driver, auth_user, &identity, y);
 }
 
-int NSFSMultipartWriter::pin_personality(const DoutPrefixProvider* dpp)
+int NSFSMultipartWriter::pin_personality(const DoutPrefixProvider* dpp,
+					 optional_yield y)
 {
-  return pin_personality_for(dpp, driver, auth_user, &identity);
+  return pin_personality_for(dpp, driver, auth_user, &identity, y);
 }
 
 int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
@@ -14802,7 +14806,7 @@ int NSFSObject::NSFSReadOp::get_attr(const DoutPrefixProvider* dpp, const char* 
   /* a caller that skips prepare() -- lifecycle's tag read -- still reads
    * as whom it is for */
   if (nsfs::impersonation_enabled() && !identity.active()) {
-    const int pret = pin_personality(dpp);
+    const int pret = pin_personality(dpp, y);
     if ((pret < 0) && (pret != -ENODATA) &&
 	!((pret == -EACCES) && source->driver->unresolved_as_gateway_injected(
 	    acting_for(auth_user, params.on_behalf_of)))) {
@@ -14978,7 +14982,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   nsfs::FSIdentity identity;
   {
     const int pret = pin_personality_for(dpp, source->driver, who,
-					 &identity);
+					 &identity, y);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -16057,7 +16061,7 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   /* who staging, the meta object and its record are made as */
   {
-    const int pret = pin_personality_for(dpp, driver, auth_user, &identity);
+    const int pret = pin_personality_for(dpp, driver, auth_user, &identity, y);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -16293,7 +16297,7 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
    * (NSFSBucket::abort_multiparts()), which raises for it itself. */
   const rgw_owner& who = acting_for(auth_user, on_behalf_of);
   if (!nsfs::owner_empty(who)) {
-    const int pret = pin_personality_for(dpp, driver, who, &identity);
+    const int pret = pin_personality_for(dpp, driver, who, &identity, y);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -16377,7 +16381,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   /* who the object will belong to.  Denied where it cannot be applied,
    * as the writers deny it, rather than made as the gateway. */
   {
-    const int pret = pin_personality_for(dpp, driver, auth_user, &identity);
+    const int pret = pin_personality_for(dpp, driver, auth_user, &identity, y);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -17097,7 +17101,7 @@ int NSFSMultipartWriter::prepare(optional_yield y)
    * be resolved must fail wherever it would otherwise have been
    * served as the gateway. */
   {
-    const int pret = pin_personality(dpp);
+    const int pret = pin_personality(dpp, y);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -17518,7 +17522,7 @@ int NSFSAtomicWriter::prepare(optional_yield y)
    * be resolved must fail wherever it would otherwise have been
    * served as the gateway. */
   {
-    const int pret = pin_personality(dpp);
+    const int pret = pin_personality(dpp, y);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -18223,6 +18227,11 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   put_report("roles", std::to_string(ir.roles_created));
   put_report("role_rights", ir.role_rights);
   put_report("role_policies", std::to_string(ir.role_policies_written));
+  put_report("unresolved_names", std::to_string(ir.unresolved_names.size()));
+  for (const auto& u : ir.unresolved_names) {
+    ldpp_dout(dpp, 0) << "WARNING: adoption:  an identity names a user"
+      " nsswitch does not know:  " << u << dendl;
+  }
   if (ret < 0) {
     put_report("ran", "partial");
     return ret;
@@ -18721,7 +18730,7 @@ static int hint_credentials(const DoutPrefixProvider* dpp, NSFSDriver* driver,
     }
   }
   const int ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
-					    who, account, cred);
+					    who, account, cred, null_yield);
   return (ret == -EPERM) ? -ENOENT : ret;
 }
 
@@ -20005,6 +20014,20 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  if (hint == "name-cache") {
+    /* clear one name-form identity's resolution (I7), so a test can make
+     * the next request look it up without waiting for the sweep */
+    auto it = params.find("forget");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    const bool cleared = userDB->name_cache().forget(it->second);
+    if (out) {
+      (*out)["cleared"] = cleared ? "true" : "false";
+    }
+    return 0;
+  }
+
   if (hint == "invalidate-cache") {
     /* drop a bucket's listing cache, so the next listing rebuilds it by
      * enumerating the store.  The incremental and rebuild paths compose
@@ -20050,6 +20073,7 @@ rgw::sal::Driver* newNSFSDriver(CephContext *cct)
     delete driver;
     return nullptr;
   }
+  driver->get_identity_db()->start_name_sweep();
 
   driver->set_context(cct);
 

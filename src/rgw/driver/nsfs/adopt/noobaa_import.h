@@ -91,6 +91,12 @@ struct ImportResult {
   /* the store has an anonymous account, and an earlier run imported it */
   bool anonymous_present{false};
 
+  /* Name-form identities whose name nsswitch did not resolve, as
+   * "<owner>: <name> (<why>)".  Written all the same, as NooBaa's record
+   * stood:  each is refused until its name resolves, as it was under
+   * NooBaa, and this is where the operator learns of it. */
+  std::vector<std::string> unresolved_names;
+
   /* Every identity that could not be written, named.  Non-empty means
    * the import did not finish, and re-running it is the recovery. */
   std::vector<std::string> failures;

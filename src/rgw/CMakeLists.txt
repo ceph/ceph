@@ -308,6 +308,7 @@ list(APPEND librgw_nsfs_srcs
   driver/nsfs/adopt/noobaa_import.cc
   driver/nsfs/adopt/noobaa_bucket_import.cc
   driver/nsfs/identity_db.cc
+  driver/nsfs/name_resolve.cc
   driver/nsfs/impersonate.cc
   driver/nsfs/personality.cc
   driver/nsfs/path_strategy.cc

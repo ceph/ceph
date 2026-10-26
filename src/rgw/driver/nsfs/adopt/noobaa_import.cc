@@ -345,6 +345,22 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     result.failures.push_back(who + ": " + what);
   };
 
+  /* A name-form row's name, resolved now, so one nsswitch does not know
+   * is reported by the import rather than by a refused request. */
+  auto check_name = [&](const Identity& row) {
+    if (row.distinguished_name.empty()) {
+      return;
+    }
+    ResolvedName rn;
+    const int r = db->name_cache().resolve(dpp, row.distinguished_name, rn,
+					   y);
+    if (r < 0) {
+      result.unresolved_names.push_back(
+	row.key + ": " + row.distinguished_name + " (" + cpp_strerror(-r)
+	+ ")");
+    }
+  };
+
   /* ---- pass one:  identities ---- */
 
   for (const auto& e : plan.entries) {
@@ -387,6 +403,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 	fail("anonymous", cpp_strerror(-ret));
 	continue;
       }
+      check_name(row);
       ret = db->put_noobaa_id(dpp, e.noobaa_id, row.key);
       if (ret < 0) {
 	fail("anonymous", std::string("put_noobaa_id: ") + cpp_strerror(-ret));
@@ -543,6 +560,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 	fail(e.name, std::string("put_identity: ") + cpp_strerror(-ret));
 	continue;
       }
+      check_name(row);
       owner_key = row.key;
       ++result.identity_rows;
     }

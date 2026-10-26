@@ -38,6 +38,11 @@
 #include "rgw_bucket_encryption.h"
 #include "driver/nsfs/identity_db.h"
 #include "driver/nsfs/impersonate.h"
+#include "driver/nsfs/name_resolve.h"
+#include <condition_variable>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/spawn.hpp>
 #include <linux/capability.h>
 #include <sys/syscall.h>
 #include "driver/nsfs/adopt/noobaa_config_store.h"
@@ -1573,7 +1578,7 @@ TEST_F(NSFSIdentityDBTest, ResolveLocalIdentity)
 			     local_identity(to_string(owner))), 0);
 
   nsfs::Credentials cred;
-  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred, null_yield), 0);
   EXPECT_EQ(cred.uid, 1001u);
   EXPECT_EQ(cred.gid, 2002u);
   EXPECT_EQ(cred.groups, (std::vector<gid_t>{10, 20, 30}));
@@ -1590,7 +1595,7 @@ TEST_F(NSFSIdentityDBTest, ResolveAccountIdOwner)
 			     local_identity(to_string(owner))), 0);
 
   nsfs::Credentials cred;
-  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred, null_yield), 0);
   EXPECT_EQ(cred.uid, 1001u);
 }
 
@@ -1616,7 +1621,7 @@ TEST_F(NSFSIdentityDBTest, ResolveAbsentGroupListClears)
 
   nsfs::Credentials cred;
   ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db,
-				      parse_owner(id.key), cred), 0);
+				      parse_owner(id.key), cred, null_yield), 0);
   EXPECT_TRUE(cred.groups.empty())
       << "an absent list resolved to " << cred.groups.size() << " groups";
   for (auto g : mine) {
@@ -1639,7 +1644,7 @@ TEST_F(NSFSIdentityDBTest, ResolveEmptyGroupListClears)
 
   nsfs::Credentials cred;
   ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db,
-				      parse_owner(id.key), cred), 0);
+				      parse_owner(id.key), cred, null_yield), 0);
   EXPECT_TRUE(cred.groups.empty());
 }
 
@@ -1650,7 +1655,7 @@ TEST_F(NSFSIdentityDBTest, ResolveNoRowIsNotAnError)
   nsfs::Credentials cred;
   cred.uid = 4242;			/* must not be written to */
   EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db,
-				      parse_owner("user$absent"), cred),
+				      parse_owner("user$absent"), cred, null_yield),
 	    -ENOENT);
   EXPECT_EQ(cred.uid, 4242u) << "a failed resolve wrote to its output";
 }
@@ -1666,34 +1671,406 @@ TEST_F(NSFSIdentityDBTest, ResolvePlacementOnlyRowAsksForNothing)
 
   nsfs::Credentials cred;
   EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db,
-				      parse_owner(id.key), cred), -ENOENT);
+				      parse_owner(id.key), cred, null_yield), -ENOENT);
 }
 
-/* A directory-backed row asks for an impersonation whose uid and gid
- * live in the directory.  Serving it unimpersonated would run the
- * request as the daemon, which holds more access than the user, so
- * it fails closed.
- *
- * The control is the same key carrying the local form, which must
- * resolve -- without it a resolver that denied everything would
- * pass. */
-TEST_F(NSFSIdentityDBTest, ResolveDirectoryBackedFailsClosed)
+/* I7.  A row in name form -- `distinguished_name`, the field NooBaa
+ * passes to getpwnam -- is resolved through nsswitch.  The lookup is
+ * replaced here, so each outcome nsswitch can return is exercised;
+ * NameFormRealNsswitch below calls the real one. */
+namespace {
+
+struct FakeDirectory {
+  std::mutex m;
+  std::map<std::string, int> fail;	/* name -> -errno */
+  std::map<std::string, nsfs::ResolvedName> names;
+  int calls{0};
+
+  nsfs::NameLookupFn fn() {
+    return [this] (const std::string& name, nsfs::ResolvedName& out) {
+      std::lock_guard l(m);
+      ++calls;
+      if (auto f = fail.find(name); f != fail.end()) {
+	return f->second;
+      }
+      auto i = names.find(name);
+      if (i == names.end()) {
+	return -ENOENT;
+      }
+      out = i->second;
+      return 0;
+    };
+  }
+};
+
+nsfs::Identity name_identity(const std::string& key, const std::string& name)
 {
-  const rgw_owner owner = parse_owner("user$fromdirectory");
+  nsfs::Identity id;
+  id.key = key;
+  id.distinguished_name = name;
+  return id;
+}
+
+} // namespace
+
+/* Resolved and served:  the uid and gid are nsswitch's.  The control is
+ * the same row before the directory knows the name, which must be
+ * refused -- without it a resolver that returned a fixed answer would
+ * pass. */
+TEST_F(NSFSIdentityDBTest, NameFormResolvesThroughNsswitch)
+{
+  FakeDirectory dir;
+  db->name_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+
   nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), -EPERM)
+      << "control:  a name nsswitch does not know resolved";
 
-  nsfs::Identity local;
-  local.key = to_string(owner);
-  local.uid = 77; local.gid = 77;
-  ASSERT_EQ(db->put_identity(env->dpp, local), 0);
-  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred), 0);
-  ASSERT_EQ(cred.uid, 77u);
+  dir.names["nsfsname"] = {70101, 100};
+  db->name_cache().refresh(env->dpp, "nsfsname");
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70101u);
+  EXPECT_EQ(cred.gid, 100u);
+  EXPECT_TRUE(cred.groups.empty())
+      << "no list on the row means none until I8";
+}
 
-  nsfs::Identity dir;
-  dir.key = to_string(owner);
-  dir.distinguished_name = "uid=someone,ou=people,dc=example,dc=com";
-  ASSERT_EQ(db->put_identity(env->dpp, dir), 0);
-  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred), -EPERM);
+/* The row's explicit list wins:  nsswitch supplies only the uid and the
+ * primary gid. */
+TEST_F(NSFSIdentityDBTest, NameFormTakesTheRowsGroupList)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->name_cache().set_lookup_for_test(dir.fn());
+
+  auto id = name_identity("user$byname", "nsfsname");
+  id.groups = std::vector<uint32_t>{5, 6};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{5, 6}));
+
+  id.groups = std::vector<uint32_t>{};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  EXPECT_TRUE(cred.groups.empty())
+      << "control:  the list read back was not the row's";
+}
+
+/* A lookup that fails is refused, as NooBaa's request is, and is not
+ * cached:  the control is the next call after the directory recovers,
+ * which must resolve. */
+TEST_F(NSFSIdentityDBTest, NameFormLookupFailureIsRefusedAndNotCached)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  dir.fail["nsfsname"] = -EAGAIN;
+  db->name_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), -EPERM);
+
+  dir.fail.clear();
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0)
+      << "a failed lookup was cached";
+  EXPECT_EQ(cred.uid, 70101u);
+}
+
+/* A hit costs no lookup;  the control is a refresh, after which the
+ * next lookup is the directory's. */
+TEST_F(NSFSIdentityDBTest, NameFormHitsDoNotLookUp)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->name_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(dir.calls, 1);
+
+  dir.names["nsfsname"] = {70102, 100};
+  EXPECT_EQ(cred.uid, 70101u) << "the cache was bypassed";
+  EXPECT_EQ(db->name_cache().refresh(env->dpp, "nsfsname"), 1);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70102u);
+}
+
+/* The bound.  A personality hit resolves nothing, so the sweep is what
+ * notices a change, and it does so by moving the identity generation.
+ * Every outcome counts:  a new uid, a name that went, one that
+ * appeared, a lookup that failed.  The control is a sweep over an
+ * unchanged directory, which must move nothing. */
+TEST_F(NSFSIdentityDBTest, NameFormSweepInvalidatesOnChange)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->name_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+
+  uint64_t gen = nsfs::identity_generation(owner);
+  EXPECT_EQ(db->name_cache().sweep(env->dpp), 0);
+  EXPECT_EQ(nsfs::identity_generation(owner), gen)
+      << "control:  an unchanged directory invalidated";
+
+  dir.names["nsfsname"] = {70102, 100};		/* a new uid */
+  EXPECT_EQ(db->name_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70102u);
+
+  gen = nsfs::identity_generation(owner);
+  dir.names.erase("nsfsname");			/* the name went */
+  EXPECT_EQ(db->name_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), -EPERM);
+
+  gen = nsfs::identity_generation(owner);
+  dir.names["nsfsname"] = {70101, 100};		/* and came back */
+  EXPECT_EQ(db->name_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+
+  gen = nsfs::identity_generation(owner);
+  dir.fail["nsfsname"] = -EIO;			/* the lookup failed */
+  EXPECT_EQ(db->name_cache().sweep(env->dpp), 1);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), -EPERM)
+      << "a warm answer outlived a failing directory";
+}
+
+/* Clearing an entry makes the next resolution a lookup and invalidates
+ * identities, so a warm personality resolves again too.  The control is
+ * clearing a name the cache does not hold, which must move nothing. */
+TEST_F(NSFSIdentityDBTest, NameFormForgetClearsAndInvalidates)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->name_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+
+  uint64_t gen = nsfs::identity_generation(owner);
+  EXPECT_FALSE(db->name_cache().forget("othername"));
+  EXPECT_EQ(nsfs::identity_generation(owner), gen)
+      << "control:  clearing an absent entry invalidated";
+
+  dir.names["nsfsname"] = {70102, 100};
+  EXPECT_TRUE(db->name_cache().forget("nsfsname"));
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70102u);
+  EXPECT_EQ(dir.calls, 2);
+}
+
+/* A row written or removed is the gateway's own evidence that a name may
+ * have changed, so the names it touches are cleared:  the same name
+ * rewritten is looked up again, a name the row no longer carries is
+ * dropped, and so is a removed row's.  The control is a write to an
+ * unrelated row, which must leave the cached answer alone. */
+TEST_F(NSFSIdentityDBTest, NameFormRowWritesClearTheirNames)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  dir.names["othername"] = {70103, 100};
+  db->name_cache().set_lookup_for_test(dir.fn());
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+
+  dir.names["nsfsname"] = {70102, 100};
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$unrelated")), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70101u) << "control:  an unrelated write cleared it";
+
+  uint64_t gen = nsfs::identity_generation(owner);
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+  EXPECT_NE(nsfs::identity_generation(owner), gen);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 70102u) << "the same name rewritten was not looked up";
+
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "othername")), 0);
+  EXPECT_TRUE(db->name_cache().names_for_uid(70102).empty())
+      << "the name the row left behind was kept";
+
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred,
+				      null_yield), 0);
+  ASSERT_EQ(db->name_cache().names_for_uid(70103).size(), 1u);
+  ASSERT_EQ(db->remove_identity(env->dpp, to_string(owner)), 0);
+  EXPECT_TRUE(db->name_cache().names_for_uid(70103).empty())
+      << "a removed row's name was kept";
+}
+
+/* The sweep's first pass resolves every name the table carries, so one
+ * nsswitch does not know is logged at startup.  The control is the
+ * cache before the sweep starts, which holds nothing. */
+TEST_F(NSFSIdentityDBTest, NameFormSweepStartsByResolvingTheTable)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->name_cache().set_lookup_for_test(dir.fn());
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity("user$a", "nsfsname")),
+	    0);
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity("user$b", "nobody")),
+	    0);
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$c")), 0);
+  EXPECT_TRUE(db->name_cache().names_for_uid(70101).empty())
+      << "control:  the cache held a name before the sweep";
+
+  db->start_name_sweep();
+  for (int i = 0; i < 500; ++i) {
+    {
+      std::lock_guard l(dir.m);
+      if (dir.calls >= 2) {
+	break;
+      }
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  db->name_cache().stop();
+  EXPECT_EQ(dir.calls, 2) << "the pass looked up other than the two names";
+  EXPECT_EQ(db->name_cache().names_for_uid(70101),
+	    (std::vector<std::string>{"nsfsname"}));
+
+  /* both are held now:  neither is looked up again */
+  nsfs::ResolvedName rn;
+  EXPECT_EQ(db->name_cache().resolve(env->dpp, "nobody", rn, null_yield),
+	    -ENOENT);
+  EXPECT_EQ(dir.calls, 2);
+}
+
+/* With a coroutine the lookup runs on the pool and the coroutine
+ * suspends, so a frontend thread serves other requests meanwhile.  The
+ * lookup waits for a second coroutine on the same single-threaded
+ * io_context;  it can run only if the first suspended.  The control is
+ * `null_yield`, which runs the lookup on the calling thread and so
+ * cannot see the second coroutine -- the lookup times out. */
+TEST_F(NSFSIdentityDBTest, NameFormLookupSuspendsTheCoroutine)
+{
+  const rgw_owner owner = parse_owner("user$byname");
+  ASSERT_EQ(db->put_identity(env->dpp, name_identity(to_string(owner),
+						     "nsfsname")), 0);
+
+  for (const bool suspend : {true, false}) {
+    std::mutex m;
+    std::condition_variable cv;
+    bool released = false;
+    std::thread::id looked_up_on;
+    db->name_cache().set_lookup_for_test(
+      [&] (const std::string&, nsfs::ResolvedName& out) {
+	std::unique_lock l(m);
+	looked_up_on = std::this_thread::get_id();
+	if (! cv.wait_for(l, std::chrono::seconds(1),
+			  [&] { return released; })) {
+	  return -ETIMEDOUT;
+	}
+	out = {70101, 100};
+	return 0;
+      });
+
+    boost::asio::io_context io;
+    int ret = 1;
+    std::thread::id caller;
+    boost::asio::spawn(io, [&] (boost::asio::yield_context yield) {
+	caller = std::this_thread::get_id();
+	nsfs::Credentials cred;
+	ret = nsfs::resolve_credentials(
+	  env->dpp, *db, owner, cred,
+	  suspend ? optional_yield{yield} : null_yield);
+      }, boost::asio::detached);
+    boost::asio::spawn(io, [&] (boost::asio::yield_context) {
+	std::lock_guard l(m);
+	released = true;
+	cv.notify_all();
+      }, boost::asio::detached);
+    io.run();
+
+    if (suspend) {
+      EXPECT_EQ(ret, 0) << "the coroutine held its thread";
+      EXPECT_NE(looked_up_on, caller);
+    } else {
+      EXPECT_EQ(ret, -EPERM) << "control:  null_yield suspended";
+      EXPECT_EQ(looked_up_on, caller);
+    }
+  }
+}
+
+/* The real nsswitch, on whatever source this host has.  root is in every
+ * `files` source;  the control is a name no source has. */
+TEST_F(NSFSIdentityDBTest, NameFormRealNsswitch)
+{
+  nsfs::ResolvedName rn;
+  ASSERT_EQ(nsfs::nsswitch_lookup("root", rn), 0);
+  EXPECT_EQ(rn.uid, 0u);
+  EXPECT_EQ(rn.gid, 0u);
+  EXPECT_EQ(nsfs::nsswitch_lookup("uid=someone,ou=people,dc=example,dc=com",
+				  rn), -ENOENT);
+}
+
+/* A credential built from a file carries a uid and no name, and a
+ * name-form row stores no uid, so the row is found through the cache:
+ * the names recently resolved to that uid.  The control is the same
+ * completion before the name was resolved, which finds no row. */
+TEST_F(NSFSIdentityDBTest, NameFormCompletesFileCredentials)
+{
+  FakeDirectory dir;
+  dir.names["nsfsname"] = {70101, 100};
+  db->name_cache().set_lookup_for_test(dir.fn());
+  auto id = name_identity("user$byname", "nsfsname");
+  id.groups = std::vector<uint32_t>{7};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials file;
+  file.uid = 70101;
+  file.gid = 100;
+  std::string key;
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, file, &key),
+	    -ENOENT) << "control:  an unresolved name completed";
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, parse_owner(id.key),
+				      cred, null_yield), 0);
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, file, &key), 0);
+  EXPECT_EQ(file.groups, (std::vector<gid_t>{7}));
+  EXPECT_EQ(key, "user$byname");
 }
 
 /* Completing a credential built from a file:  the groups come from
@@ -1974,9 +2351,9 @@ TEST_F(NSFSIdentityDBTest, AccountMembersResolveIndependently)
   auto ua = ia->load_acct_info(env->dpp);
   auto ub = ib->load_acct_info(env->dpp);
   ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, ua->get_id(),
-				      ua->get_info().account_id, ca, &ra), 0);
+				      ua->get_info().account_id, ca, null_yield, &ra), 0);
   ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, ub->get_id(),
-				      ub->get_info().account_id, cb, &rb), 0);
+				      ub->get_info().account_id, cb, null_yield, &rb), 0);
   EXPECT_EQ(ra, alice.to_str());
   EXPECT_EQ(rb, bob.to_str());
 
@@ -2006,7 +2383,7 @@ TEST_F(NSFSIdentityDBTest, AMemberWithNoRowRunsAsItsAccount)
   nsfs::Credentials cred;
   std::string row = "untouched";
   ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, u->get_id(),
-				      u->get_info().account_id, cred, &row),
+				      u->get_info().account_id, cred, null_yield, &row),
 	    -ENOENT);
   EXPECT_EQ(row, "untouched") << "-ENOENT named a row";
 
@@ -2017,7 +2394,7 @@ TEST_F(NSFSIdentityDBTest, AMemberWithNoRowRunsAsItsAccount)
   ASSERT_EQ(db->put_identity(env->dpp, acct_row), 0);
 
   ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, u->get_id(),
-				      u->get_info().account_id, cred, &row), 0)
+				      u->get_info().account_id, cred, null_yield, &row), 0)
       << "a member with no row was not served as its account";
   EXPECT_EQ(row, acct) << "the fallback did not name the account's row";
   EXPECT_EQ(cred.uid, 9999u);
@@ -2027,7 +2404,7 @@ TEST_F(NSFSIdentityDBTest, AMemberWithNoRowRunsAsItsAccount)
   /* and the owner form does not fall back:  it reads one row, which
    * is what the credentials diagnostic's `identity=` reports */
   EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, rgw_owner{u->get_id()},
-				      cred), -ENOENT);
+				      cred, null_yield), -ENOENT);
 }
 
 /* A user outside any account has nothing to fall back to. */
@@ -2036,14 +2413,14 @@ TEST_F(NSFSIdentityDBTest, AUserOutsideAnAccountResolvesUnderItsOwnKey)
   const rgw_user dan{"", "dan"};
   nsfs::Credentials cred;
   EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, dan, rgw_account_id{},
-				      cred), -ENOENT);
+				      cred, null_yield), -ENOENT);
 
   nsfs::Identity row;
   row.key = dan.to_str();
   row.uid = 1234; row.gid = 1234;
   ASSERT_EQ(db->put_identity(env->dpp, row), 0);
   ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, dan, rgw_account_id{},
-				      cred), 0);
+				      cred, null_yield), 0);
   EXPECT_EQ(cred.uid, 1234u);
 }
 
@@ -2066,7 +2443,7 @@ TEST_F(NSFSIdentityDBTest, ADeniedMemberRowDoesNotFallBack)
   /* the control:  with no row of her own, erin runs as the account */
   nsfs::Credentials cred;
   ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, erin,
-				      rgw_account_id{acct}, cred), 0);
+				      rgw_account_id{acct}, cred, null_yield), 0);
   ASSERT_EQ(cred.uid, 9999u);
 
   nsfs::Identity dir;
@@ -2075,7 +2452,7 @@ TEST_F(NSFSIdentityDBTest, ADeniedMemberRowDoesNotFallBack)
   ASSERT_EQ(db->put_identity(env->dpp, dir), 0);
   std::string row;
   EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, erin,
-				      rgw_account_id{acct}, cred, &row), -EPERM)
+				      rgw_account_id{acct}, cred, null_yield, &row), -EPERM)
       << "a denied row fell through to the account";
   EXPECT_EQ(row, erin.to_str()) << "the denial named another row";
 }
@@ -14002,6 +14379,51 @@ public:
   }
 };
 
+/* A name-form account whose name nsswitch does not know is imported as
+ * NooBaa's record stood, and named in the result, so the operator
+ * learns of it at the import rather than from a refused request.  The
+ * control is the account whose name resolves, which must not be named. */
+TEST_F(NooBaaImportTest, AnUnresolvedNameIsReported)
+{
+  FakeDirectory dir;
+  dir.names["knownname"] = {70101, 100};
+  driver->get_identity_db()->name_cache().set_lookup_for_test(dir.fn());
+
+  auto dn_account = [] (const char* id, const char* name, const char* key,
+		     const char* dn) {
+    std::string j = NB_ACCOUNT_PLAIN;
+    auto sub = [&j] (const std::string& from, const std::string& to) {
+      const auto at = j.find(from);
+      ASSERT_NE(at, std::string::npos) << from;
+      j.replace(at, from.size(), to);
+    };
+    sub("6ac7cb27fd4af356919110a3", id);
+    sub("\"name\": \"interchange\"", std::string("\"name\": \"") + name
+	+ "\"");
+    sub("\"email\": \"interchange\"", std::string("\"email\": \"") + name
+	+ "\"");
+    sub("INTERCHANGEACCESSKEY", key);
+    sub("\"uid\": 1000,\n    \"gid\": 1000,",
+	std::string("\"distinguished_name\": \"") + dn + "\",");
+    return j;
+  };
+  const std::string known = dn_account("6ac7cb27fd4af356919110b1",
+					"ix-known", "INTERCHANGEKNOWNKEY1",
+					"knownname");
+  const std::string unknown = dn_account("6ac7cb27fd4af356919110b2",
+					  "ix-unknown", "INTERCHANGEUNKNOWNK1",
+					  "unknownname");
+  add_identity("6ac7cb27fd4af356919110b1", known.c_str());
+  add_identity("6ac7cb27fd4af356919110b2", unknown.c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.identity_rows, 2u) << "an unresolved name was not written";
+  ASSERT_EQ(result.unresolved_names.size(), 1u);
+  EXPECT_NE(result.unresolved_names[0].find("unknownname"),
+	    std::string::npos) << result.unresolved_names[0];
+}
+
 /* A store NooBaa's tools wrote lands in RGW.
  *
  * The account, the user that holds its keys, and the identity row --
@@ -14299,7 +14721,7 @@ TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
   nsfs::Credentials cred;
   ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *driver->get_identity_db(),
 				      user->get_id(),
-				      user->get_info().account_id, cred), 0);
+				      user->get_info().account_id, cred, null_yield), 0);
   EXPECT_EQ(cred.uid, 1000u);
 
   /* both ids recorded, each against what it became */

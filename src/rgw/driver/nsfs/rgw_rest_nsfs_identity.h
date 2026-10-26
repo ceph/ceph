@@ -406,7 +406,8 @@ public:
 	return;
       }
       ret = rgw::sal::nsfs::resolve_credentials(
-	  s, *nsfs_driver->get_identity_db(), parse_owner(key), cred);
+	  s, *nsfs_driver->get_identity_db(), parse_owner(key), cred,
+	  s->yield);
       row = key;
     } else {
       /* the caller.  This is the path get_credentials() serves, and

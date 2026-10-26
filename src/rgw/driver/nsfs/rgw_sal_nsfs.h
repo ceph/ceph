@@ -2545,7 +2545,7 @@ public:
     /* resolve who this op runs as, into `identity`.  0 or -errno;
      * -ENODATA means impersonation is off and the caller proceeds as
      * before. */
-    int pin_personality(const DoutPrefixProvider* dpp);
+    int pin_personality(const DoutPrefixProvider* dpp, optional_yield y);
   };
 
   struct NSFSDeleteOp : DeleteOp {
@@ -2752,7 +2752,7 @@ public:
    * `rgw::sal::no_authenticated_user` means -- lifecycle, restore, a
    * chown -- and those run as the gateway by design. */
   int pin_identity_for_attrs(const DoutPrefixProvider* dpp,
-			     const rgw_owner& who);
+			     const rgw_owner& who, optional_yield y);
 
   /* Run an attribute operation, and where the filesystem denied the
    * authenticated user an operation S3 had authorised, run it again as the
@@ -3016,7 +3016,7 @@ private:
   std::unique_ptr<UringWriteWindow> uring_write;
 
 public:
-  int pin_personality(const DoutPrefixProvider* dpp);
+  int pin_personality(const DoutPrefixProvider* dpp, optional_yield y);
 
   NSFSAtomicWriter(const DoutPrefixProvider *dpp,
                     optional_yield y,
@@ -3133,7 +3133,7 @@ private:
   std::unique_ptr<UringWriteWindow> uring_write;
 
 public:
-  int pin_personality(const DoutPrefixProvider* dpp);
+  int pin_personality(const DoutPrefixProvider* dpp, optional_yield y);
 
   NSFSMultipartWriter(const DoutPrefixProvider *dpp,
                     optional_yield y,

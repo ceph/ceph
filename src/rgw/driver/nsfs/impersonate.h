@@ -194,6 +194,14 @@ using ImpersonatedFn = fu2::unique_function<int() const>;
 int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
 	   const ImpersonatedFn& fn, optional_yield y);
 
+/* Run `fn` on the same pool as the gateway itself, suspending the caller's
+ * coroutine meanwhile, for a blocking call that is not the filesystem's:
+ * an nsswitch lookup, which may be a directory round trip.  The rules for
+ * `fn` are run_as()'s.  With `null_yield`, or on a pool thread already,
+ * `fn` runs on the calling thread. */
+int run_on_helper(const DoutPrefixProvider* dpp, const ImpersonatedFn& fn,
+		  optional_yield y);
+
 /* What an operation needs to be performed as somebody.
  *
  * Who, not a personality id.  An id names a credential on one

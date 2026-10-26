@@ -507,7 +507,10 @@ class ImpersonationPool {
       }
 
       int ret;
-      {
+      if (! job->cred) {
+	/* run_on_helper():  the gateway's own work */
+	ret = (*job->fn)();
+      } else {
 	ScopedCredentials scope;
 	ret = scope.push(*job->cred);
 	if (ret == 0) {
@@ -558,10 +561,11 @@ public:
     }
   }
 
-  int run(const Credentials& cred, const ImpersonatedFn& fn,
+  /* `cred` null runs `fn` as the gateway */
+  int run(const Credentials* cred, const ImpersonatedFn& fn,
 	  optional_yield y) {
     Job job;
-    job.cred = &cred;
+    job.cred = cred;
     job.fn = &fn;
     {
       std::lock_guard lock(mtx);
@@ -591,6 +595,21 @@ public:
   }
 };
 
+static ImpersonationPool& impersonation_pool()
+{
+  static ImpersonationPool pool;
+  return pool;
+}
+
+int run_on_helper(const DoutPrefixProvider* dpp, const ImpersonatedFn& fn,
+		  optional_yield y)
+{
+  if (! y || tl_impersonating) {
+    return fn();
+  }
+  return impersonation_pool().run(nullptr, fn, y);
+}
+
 /* Set while a pool thread is running somebody else's work.
  *
  * Without it a nested call -- an operation that wraps itself and
@@ -616,8 +635,7 @@ int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
       << ";  the work would have run as the wrong identity" << dendl;
     return -EDEADLK;
   }
-  static ImpersonationPool pool;
-  const int ret = pool.run(cred, fn, y);
+  const int ret = impersonation_pool().run(&cred, fn, y);
   if (ret < 0) {
     ldpp_dout(dpp, 10) << "impersonated call as uid " << cred.uid
       << " returned " << cpp_strerror(-ret) << dendl;
