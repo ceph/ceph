@@ -294,6 +294,14 @@ Configuration
 .. confval:: mgr_data
 .. confval:: mgr_tick_period
 .. confval:: mon_mgr_beacon_grace
+.. confval:: mgr_dispatch_throttle_bytes
+.. confval:: mgr_client_bytes
+.. confval:: mgr_osd_bytes
+.. confval:: mgr_osd_messages
+.. confval:: mgr_mds_bytes
+.. confval:: mgr_mds_messages
+.. confval:: mgr_mon_bytes
+.. confval:: mgr_mon_messages
 .. confval:: mgr_stats_period
 .. confval:: mgr_stats_period_autotune
 .. confval:: mgr_stats_period_autotune_queue_threshold
