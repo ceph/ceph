@@ -1209,6 +1209,11 @@ void Server::terminate_sessions()
 	session->is_killing() ||
 	session->is_closed())
       continue;
+    if (session->is_importing()) {
+      // the import still references it. shutdown_pass() retries later
+      dout(10) << "skipping importing session " << session->info.inst << dendl;
+      continue;
+    }
     journal_close_session(session, Session::STATE_CLOSING, NULL);
   }
 
