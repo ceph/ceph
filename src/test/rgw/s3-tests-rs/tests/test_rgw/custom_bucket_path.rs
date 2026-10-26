@@ -99,7 +99,7 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
      * checks the owner's own access to the path before it makes the
      * directory, and an owner whose credentials do not resolve is
      * denied rather than checked as the gateway (n-plan §6.1).  The
-     * injected arm restores the old reading, which admitted it.
+     * injected case restores the old reading, which admitted it.
      * Without impersonation nothing is checked as anybody, so it is
      * admitted. */
     let r = nsfs_put_identity(&[("identity", me.as_str()),

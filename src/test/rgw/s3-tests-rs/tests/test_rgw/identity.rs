@@ -12,8 +12,8 @@
 //! unset, not that it keeps its previous value.  That is what lets
 //! `groups` travel in all three of its states -- absent is unset,
 //! empty is an explicit "this identity has none", a list is the list
-//! -- and the difference between the first two is what the directory
-//! arm will turn on.
+//! -- and the difference between the first two is what the directory-backed
+//! form will turn on.
 
 use s3_tests_rs::admin::{
     admin_request_as, as_json, driver_hint_results, nsfs_credentials,
@@ -204,7 +204,7 @@ async fn test_identity_groups_distinguish_unset_from_empty() {
     scrub(key).await;
 }
 
-/// The directory arm:  a name and no ids.
+/// The directory-backed form:  a name and no ids.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_identity_directory_backed() {
@@ -620,7 +620,7 @@ async fn test_credentials_of_a_user_in_an_account() {
         return;
     }
     let cfg = get_config();
-    /* An account of this test's own:  both arms set the account's row,
+    /* An account of this test's own:  both cases set the account's row,
      * and the suite's `[iam root]` account is in use by every IAM test
      * at once. */
     let Some(acct) = PrivateAccount::create("nsfscred").await else {
@@ -728,7 +728,7 @@ async fn test_credentials_of_a_user_in_an_account() {
 /// the account and `s->user` the user (see
 /// `test_credentials_of_a_user_in_an_account`).
 ///
-/// **Three arms**, because one assertion proves nothing on its own:
+/// **Three cases**, because one assertion proves nothing on its own:
 /// the user's row is used when it has one;  moving that row moves
 /// what is recorded, so the value tracks the row rather than being
 /// echoed;  and such a user with **no** row is served as its account,
@@ -736,7 +736,7 @@ async fn test_credentials_of_a_user_in_an_account() {
 /// right.
 ///
 /// The account is the test's own ([`PrivateAccount`]), so its row can
-/// hold whatever the fallback arm needs without touching a principal
+/// hold whatever the fallback case needs without touching a principal
 /// another test is using.
 ///
 /// **Asserts the identity and not the status**, as `nested-identity`
@@ -763,7 +763,7 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
      * chosen, not whether the filesystem lets it through. */
     const ACCT_USER_UID: &str = "70101";
     const MEMBER_GRP: &str = "70010";
-    /* bob's, for the second arm.  Any second value would do;  one the
+    /* bob's, for the second case.  Any second value would do;  one the
      * fixture already creates keeps the test from inventing uids. */
     const OTHER_UID: &str = "70102";
     const ACCOUNT_UID: &str = "9999";
@@ -822,7 +822,7 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
         })).unwrap())
         .send().await.expect("put_user_policy");
 
-    /* the fallback arm below needs the account's row to hold a known
+    /* the fallback case below needs the account's row to hold a known
      * uid */
     scrub(&acct_user).await;
     scrub(&account).await;
@@ -892,8 +892,8 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
      * same site must record the new one:  that is what shows the
      * recorded value tracks the row rather than being echoed from
      * somewhere.  A driver that had collapsed the user onto its
-     * account would fail both arms, since neither value would be the
-     * account's.  Without this arm the assertions above would hold
+     * account would fail both cases, since neither value would be the
+     * account's.  Without this case the assertions above would hold
      * against a driver that ignored the user entirely -- the shape
      * `inject-no-chown` had, one polarity asserted twice.
      *

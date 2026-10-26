@@ -766,7 +766,7 @@ async fn metadata_statuses(client: &aws_sdk_s3::Client, bucket: &str,
 /// HEAD and the attribute reads reach neither of the data entry points,
 /// so a denial deferred to them served these as the gateway, which
 /// holds `CAP_DAC_READ_SEARCH`.  The control is the same reads with the
-/// identity row in place;  the injected arm,
+/// identity row in place;  the injected case,
 /// `inject-unresolved-as-gateway` for this user alone, restores the
 /// deferral and must see all four served, so the denials are
 /// attributable to the fix and the test can be watched failing.
@@ -803,7 +803,7 @@ async fn test_impersonation_denies_metadata_to_unresolved_credentials() {
 
     let _ = nsfs_delete_identity(&alice_u.id).await;
 
-    /* the injected arm:  the deferral restored, so all four are served */
+    /* the injected case:  the deferral restored, so all four are served */
     let served = with_hint("inject-unresolved-as-gateway",
                            &[("enable", "true"), ("user", &alice_u.id)],
                            metadata_statuses(alice, &bucket, key)).await;
@@ -828,7 +828,7 @@ async fn test_impersonation_denies_metadata_to_unresolved_credentials() {
 /// credentials did not resolve was left a bucket the gateway owned,
 /// holding the name though every operation in it is denied.  The
 /// control is the same create with the identity row in place;  the
-/// injected arm, `inject-unresolved-as-gateway` for this user, must see
+/// injected case, `inject-unresolved-as-gateway` for this user, must see
 /// the old creation;  and the denied name must be free afterwards, so
 /// the denial took back the directory and the placement row.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
@@ -866,7 +866,7 @@ async fn test_impersonation_denies_a_bucket_to_unresolved_credentials() {
     let b1 = s3_tests_rs::fixtures::get_new_bucket_name();
     let denied = status(alice.create_bucket().bucket(&b1).send().await);
 
-    /* the injected arm:  the old reading, a bucket the gateway owns */
+    /* the injected case:  the old reading, a bucket the gateway owns */
     let b2 = s3_tests_rs::fixtures::get_new_bucket_name();
     let injected = with_hint("inject-unresolved-as-gateway",
                              &[("enable", "true"), ("user", &alice_u.id)],
@@ -1031,7 +1031,7 @@ async fn test_a_raise_is_effective_for_one_call_and_dropped_after() {
          * capability to the identity */
         Some("-1") => {}
         /* impersonation off, or the fixture's user carries no identity:
-         * that arm is unreachable, and the three above still hold */
+         * that case is unreachable, and the three above still hold */
         Some("not-impersonating") | Some("no-identity") | None => {}
         other => panic!(
             "a raise on an impersonating thread returned {other:?} \

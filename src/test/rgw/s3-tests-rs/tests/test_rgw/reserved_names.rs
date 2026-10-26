@@ -69,7 +69,7 @@ async fn test_reserved_names_are_not_objects() {
 
     /* a multipart upload to a reserved name cannot succeed:  rejected at
      * initiation, or else at completion, which is where the key becomes
-     * a path.  Both arms assert, so neither can pass by being skipped. */
+     * a path.  Both cases assert, so neither can pass by being skipped. */
     let up = client.create_multipart_upload().bucket(&b).key(".folder")
         .send().await;
     if up.is_err() {
