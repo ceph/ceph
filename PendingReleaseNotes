@@ -300,6 +300,8 @@
 * RGW: ``radosgw-admin bilog trim`` without ``--end-marker`` now requires
   ``--yes-i-really-mean-it``, because such a trim has no upper bound and can
   remove bilog entries that other zones have not synced yet.
+* RGW: S3 Select is deprecated. The default value of ``rgw_disable_s3select``
+  changed from ``false`` to ``true``.
 
 * RGW: Bucket Logging suppports creating log buckets in EC pools.
   Implicit logging object commits are now performed asynchronously.
