@@ -34,11 +34,7 @@ public:
   ScrubScheduler(ShardServices &shard_services)
     : shard_services(shard_services),
       m_resource_bookkeeper() {}
-  ~ScrubScheduler() {
-    // Clear the queue to prevent memory leaks
-    // The queue's destructor doesn't automatically free allocated entries
-    m_queue.clear_queue();
-  }
+  ~ScrubScheduler() = default;
 
   seastar::future<> initiate_scrub(bool is_recovery_active);
   void enqueue_scrub_job(const scrub::ScrubJob& sjob);

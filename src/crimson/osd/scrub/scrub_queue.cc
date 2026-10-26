@@ -40,11 +40,7 @@ void ScrubQueue::clear_queue()
 {
   LOG_PREFIX(ScrubQueue::clear_queue);
   DEBUG("clearing all entries from scrub queue");
-  // Get all PGs in the queue and remove them
-  auto all_pgs = get_pgs([](const SchedEntry&, bool) { return true; });
-  for (const auto& pgid : all_pgs) {
-    to_scrub.remove_by_class<spg_t>(pgid);
-  }
+  to_scrub.clear();
 }
 
 

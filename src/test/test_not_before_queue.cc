@@ -63,16 +63,6 @@ class NotBeforeTest : public testing::Test {
  public:
   using queue_t = not_before_queue_t<tv_t, test_time_t>;
 
-  ~NotBeforeTest() {
-    // Advance time until all queued items become eligible for processing.
-    // This ensures complete dequeuing during test teardown, preventing memory leaks.
-    // We assume test cutoff timepoints remain within reasonable bounds. If a specified
-    // timepoint precedes current time, the process continues advancing normally.
-    for (unsigned when = 1; queue.eligible_count() < queue.total_count(); when += 1) {
-      queue.advance_time(when);
-    }
-    while (queue.dequeue()) {}
-  }
   void load_test_data(const std::vector<tv_t> &dt) {
     for (const auto &d : dt) {
       queue.enqueue(d);
@@ -372,5 +362,14 @@ TEST_F(NotBeforeTest, forEachN_high_max) {
   queue.for_each_n<decltype(f1)>(std::move(f1), 20);
   EXPECT_EQ(jobs_cnt[0], 4);
   EXPECT_EQ(jobs_cnt[1], 4);
+}
+
+TEST_F(NotBeforeTest, Clear) {
+  load_test_data(for_each_test_data);
+  EXPECT_EQ(queue.total_count(), 8);
+  queue.clear();
+  EXPECT_EQ(queue.total_count(), 0);
+  EXPECT_EQ(queue.eligible_count(), 0);
+  EXPECT_EQ(queue.dequeue(), std::nullopt);
 }
 
