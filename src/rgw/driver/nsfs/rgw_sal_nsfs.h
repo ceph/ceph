@@ -415,8 +415,12 @@ public:
 			  AttrWriteMode mode = AttrWriteMode::REPLACE_ALL,
 			  const std::vector<std::string>* rmattrs = nullptr,
 			  int use_fd = -1);
+  /* `unknown`, if given, receives every `user.noobaa.*` name the
+   * reviewed releases do not write (X4's third layer);  a caller that
+   * hands out the object refuses on one, and listing passes none */
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
-			 int use_fd = -1);
+			 int use_fd = -1,
+			 std::vector<std::string>* unknown = nullptr);
   /* src_as_gateway:  the access model permits the gateway to read a
    * source the filesystem denies the authenticated user.  Resolved by the
    * caller, which knows the bucket;  see clone_file_by_copy(). */
@@ -617,7 +621,8 @@ public:
 			  const std::vector<std::string>* rmattrs = nullptr,
 			  int use_fd = -1) override;
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
-			 int use_fd = -1) override;
+			 int use_fd = -1,
+			 std::vector<std::string>* unknown = nullptr) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,

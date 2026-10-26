@@ -96,6 +96,23 @@ extern const Node& bucket;
  * first.  The version gate admits exactly these. */
 extern const std::span<const std::string_view> reviewed_releases;
 
+/* One of NooBaa's object attributes:  `user.noobaa.<name>`, or every
+ * name under `user.noobaa.<name>` when `prefix` -- X4's third layer
+ * (DECISIONS.md 2026-10-26).  Versioned as the record fields are. */
+struct ObjectAttribute {
+  const char* name;
+  bool prefix;
+  const char* since;
+  Disposition disposition;
+};
+
+extern const std::span<const ObjectAttribute> object_attributes;
+
+/* Whether `xattr`, a full attribute name, is one NooBaa at the newest
+ * reviewed release writes.  True for any name outside `user.noobaa.`:
+ * user metadata and nsfs's own names are not NooBaa's to define. */
+bool object_attribute_known(std::string_view xattr);
+
 /* The path of the first key in `record` that NooBaa at `release` does
  * not write, with why;  empty when every key is known.
  *

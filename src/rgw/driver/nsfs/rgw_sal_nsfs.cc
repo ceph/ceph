@@ -60,6 +60,7 @@
 #include "adopt/noobaa_master_keys.h"
 #include "adopt/noobaa_import_plan.h"
 #include "adopt/noobaa_import.h"
+#include "adopt/noobaa_schema.h"
 #include "adopt/noobaa_bucket_import.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -2303,13 +2304,20 @@ static inline int copy_dir_fd(int old_fd)
  * still holds objects that are not.
  *
  * Names starting with `skip` are not read at all:  NooBaaDirectoryObject
- * reads a directory that may also carry the bucket's own state. */
+ * reads a directory that may also carry the bucket's own state.
+ *
+ * `unknown`, if given, receives every `user.noobaa.*` name the reviewed
+ * releases of NooBaa do not write (X4's third layer, DECISIONS.md
+ * 2026-10-26).  Reported rather than refused here, because listing reads
+ * through this too, and one object must not end a listing;  the callers
+ * that hand out or convert an object refuse. */
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display,
 		       const nsfs::XattrStrategy* xs,
 		       const nsfs::XattrStrategy* alt = nullptr,
 		       const nsfs::FSIdentity& id = {},
-		       std::string_view skip = {})
+		       std::string_view skip = {},
+		       std::vector<std::string>* unknown = nullptr)
 {
   /* The whole read as the identity:  each value needs read
    * permission on the object.  Nested with_identity() calls below are harmless -- a thread
@@ -2356,6 +2364,9 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 	 * a time, and parse_disk_attrs() is given these to make what
 	 * they encode.  The value is not read here;  the format reads
 	 * the ones it claims. */
+	if (unknown && !nsfs::noobaa_schema::object_attribute_known(xattr_name)) {
+	  unknown->push_back(xattr_name);
+	}
 	unclaimed.emplace_back(std::move(xattr_name));
 	buflen -= keylen;
 	keyptr += keylen;
@@ -3093,7 +3104,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 }
 
 int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
-		      int use_fd)
+		      int use_fd, std::vector<std::string>* unknown)
 {
   if (use_fd < 0) {
     const int ret = open(dpp);
@@ -3107,10 +3118,10 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
   /* this entry's own names, where it has them;  see own_xattr_strategy */
   if (own_xattr_strategy) {
     return get_x_attrs(y, dpp, afd, attrs, get_name(),
-		       own_xattr_strategy, nullptr, aid);
+		       own_xattr_strategy, nullptr, aid, {}, unknown);
   }
   return get_x_attrs(y, dpp, afd, attrs, get_name(), xattr_strategy,
-		    xattr_fallback, aid);
+		    xattr_fallback, aid, {}, unknown);
 }
 
 int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix)
@@ -4304,7 +4315,7 @@ int NooBaaDirectoryObject::read(int64_t ofs, int64_t left, bufferlist& bl,
 
 int NooBaaDirectoryObject::read_attrs(const DoutPrefixProvider* dpp,
 				      optional_yield y, Attrs& attrs,
-				      int use_fd)
+				      int use_fd, std::vector<std::string>* unknown)
 {
   /* a sentinel's attributes live on its parent directory, which this
    * opens itself;  a caller's descriptor is for the object and is not
@@ -4315,7 +4326,8 @@ int NooBaaDirectoryObject::read_attrs(const DoutPrefixProvider* dpp,
     return ret;
   }
   return get_x_attrs(y, dpp, parent->get_fd(), attrs, parent->get_name(),
-		     xattr_strategy, xattr_fallback, identity, "user.nsfs.");
+		     xattr_strategy, xattr_fallback, identity, "user.nsfs.",
+		     unknown);
 }
 
 int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
@@ -8590,9 +8602,21 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			 const std::vector<std::string>* leave_alone = nullptr)
 {
   Attrs attrs;
-  int ret = get_x_attrs(y, dpp, fd, attrs, display, xs, xattr_fallback);
+  std::vector<std::string> unknown;
+  int ret = get_x_attrs(y, dpp, fd, attrs, display, xs, xattr_fallback, {},
+			{}, &unknown);
   if (ret < 0) {
     return ret;
+  }
+  /* X4's third layer:  an attribute no reviewed release writes stops
+   * the bucket's conversion, which resumes once the release is
+   * reviewed */
+  if (!unknown.empty()) {
+    ldpp_dout(dpp, 0) << "ERROR: not converting " << display << ":  it "
+      << "carries " << unknown.front()
+      << (unknown.size() > 1 ? " and others" : "")
+      << ", which no reviewed release of NooBaa writes" << dendl;
+    return -ERR_INVALID_OBJECT_STATE;
   }
 
   nsfs::xattr_map_t to_write;
@@ -8966,10 +8990,18 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   /* Not `user.nsfs.`:  on the bucket root those are the bucket's own
    * state, which is not the object's to carry, and nothing else in
    * NooBaa's format has them. */
+  std::vector<std::string> unknown;
   ret = get_x_attrs(y, dpp, dir_fd, dattrs, ev.key, xs, xattr_fallback, {},
-		    "user.nsfs.");
+		    "user.nsfs.", &unknown);
   if (ret < 0) {
     return ret;
+  }
+  if (!unknown.empty()) {
+    ldpp_dout(dpp, 0) << "ERROR: not converting directory object " << ev.key
+      << ":  it carries " << unknown.front()
+      << (unknown.size() > 1 ? " and others" : "")
+      << ", which no reviewed release of NooBaa writes" << dendl;
+    return -ERR_INVALID_OBJECT_STATE;
   }
 
   if (cb) {
@@ -9514,9 +9546,18 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       Attrs pattrs;
       int pfd = ::openat(fallback_dir.get_fd(), pname.c_str(), O_RDONLY | O_NOFOLLOW);
       if (pfd >= 0) {
+	std::vector<std::string> unknown;
 	get_x_attrs(y, dpp, pfd, pattrs, pname, xattr_strategy(),
-		    xattr_fallback());
+		    xattr_fallback(), {}, {}, &unknown);
 	::close(pfd);
+	/* X4's third layer, as for an object */
+	if (!unknown.empty()) {
+	  ldpp_dout(dpp, 0) << "ERROR: not converting part " << pname
+	    << " of an upload in bucket " << get_name() << ":  it carries "
+	    << unknown.front() << (unknown.size() > 1 ? " and others" : "")
+	    << ", which no reviewed release of NooBaa writes" << dendl;
+	  return -ERR_INVALID_OBJECT_STATE;
+	}
       }
 
       /* The cache first, as every reader of a part record takes it:
@@ -13253,7 +13294,20 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
       driver->record_attr_read_fail();
       return -EIO;
     }
-    return ent->read_attrs(dpp, y, state.attrset, use_fd);
+    std::vector<std::string> unknown;
+    const int rret = ent->read_attrs(dpp, y, state.attrset, use_fd, &unknown);
+    if ((rret == 0) && !unknown.empty()) {
+      /* X4's third layer (DECISIONS.md 2026-10-26):  an attribute the
+       * reviewed releases of NooBaa do not write may change what the
+       * bytes mean or who may read them, so the object is not handed
+       * out until the release is reviewed */
+      ldpp_dout(dpp, 0) << "ERROR: " << get_name() << " carries "
+	<< unknown.front() << (unknown.size() > 1 ? " and others" : "")
+	<< ", which no reviewed release of NooBaa writes;  not read" << dendl;
+      state.attrset.clear();
+      return -ERR_INVALID_OBJECT_STATE;
+    }
+    return rret;
   });
   state.has_attrs = (ret == 0);
 

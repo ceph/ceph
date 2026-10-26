@@ -484,7 +484,51 @@ bool holds(const Node& n, JSONObj* v, const Release& at,
   return false;
 }
 
+/* NooBaa's object attributes at noobaa-core `08d063f86`:
+ * `namespace_fs.js:75-88` and `glacier.js:32-50`, under `user.noobaa.`.
+ * `user.content_md5` and `user.storage_class` are outside the prefix and
+ * not this table's.  Unchanged by name to master and 6.0 as fetched
+ * 2026-10-07 (the retention pair is spelled through a prefix there). */
+constexpr ObjectAttribute object_attribute_table[] = {
+  {"content_type", false, "5.23.0", Disposition::Translated},
+  {"content_encoding", false, "5.23.0", Disposition::Translated},
+  {"part_offset", false, "5.23.0", Disposition::Translated},
+  {"part_size", false, "5.23.0", Disposition::Translated},
+  {"part_etag", false, "5.23.0", Disposition::Translated},
+  {"version_id", false, "5.23.0", Disposition::Translated},
+  {"delete_marker", false, "5.23.0", Disposition::Translated},
+  {"dir_content", false, "5.23.0", Disposition::Translated},
+  {"non_current_timestamp", false, "5.23.0", Disposition::Translated},
+  {"tag.", true, "5.23.0", Disposition::Translated},
+  {"legal_hold", false, "5.23.0", Disposition::Translated},
+  {"retention_mode", false, "5.23.0", Disposition::Translated},
+  {"retention_date", false, "5.23.0", Disposition::Translated},
+  {"restore.request", false, "5.23.0", Disposition::NotCarried},
+  {"restore.expiry", false, "5.23.0", Disposition::NotCarried},
+  {"migrate.staged", false, "5.23.0", Disposition::NotCarried},
+};
+
+constexpr std::string_view NB_INTERNAL_PREFIX = "user.noobaa.";
+
 } // namespace
+
+const std::span<const ObjectAttribute> object_attributes{object_attribute_table};
+
+bool object_attribute_known(std::string_view xattr)
+{
+  if (!xattr.starts_with(NB_INTERNAL_PREFIX)) {
+    return true;
+  }
+  const std::string_view name = xattr.substr(NB_INTERNAL_PREFIX.size());
+  const Release newest = *parse(releases[std::size(releases) - 1]);
+  for (const auto& a : object_attributes) {
+    const bool match = a.prefix ? name.starts_with(a.name) : (name == a.name);
+    if (match && (*parse(a.since) <= newest)) {
+      return a.disposition != Disposition::Refused;
+    }
+  }
+  return false;
+}
 
 const Node& account = account_record;
 const Node& bucket = bucket_record;

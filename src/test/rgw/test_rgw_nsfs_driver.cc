@@ -8001,6 +8001,71 @@ TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelAnObjectMode)
 	 "S3 carries";
 }
 
+/* An object carrying a `user.noobaa.*` attribute no reviewed release of
+ * NooBaa writes is not read (X4's third layer, DECISIONS.md 2026-10-26).
+ *
+ * The attribute might change what the bytes mean or who may read them,
+ * and a bucket in NooBaa's format serves reads only, so the read is
+ * refused with InvalidObjectState.  Three objects:  one with nothing
+ * unusual, the control;  one with an attribute NooBaa writes and nsfs does
+ * not carry, `restore.request`, which is known and so read;  and one
+ * with an attribute nothing writes.  The last still lists:  a listing
+ * row hands out no content, and one object must not end a listing. */
+TEST_F(NSFSNooBaaBucketTest, AnObjectCarryingAnUnknownNooBaaAttributeIsNotRead)
+{
+  write_file(bucket_path() / "plain", "abc");
+  write_file(bucket_path() / "restoring", "abc");
+  write_file(bucket_path() / "odd", "abc");
+  ASSERT_EQ(::setxattr((bucket_path() / "restoring").c_str(),
+		       "user.noobaa.restore.request", "x", 1, 0), 0)
+      << cpp_strerror(errno);
+  ASSERT_EQ(::setxattr((bucket_path() / "odd").c_str(),
+		       "user.noobaa.encryption", "x", 1, 0), 0)
+      << cpp_strerror(errno);
+
+  const ClientView plain = client_view(bucket.get(), env->dpp, "plain");
+  EXPECT_TRUE(plain.exists) << "the control did not read";
+  EXPECT_EQ(plain.body, "abc");
+  const ClientView restoring = client_view(bucket.get(), env->dpp, "restoring");
+  EXPECT_TRUE(restoring.exists)
+      << "an attribute NooBaa writes at the pin refused the read";
+
+  auto obj = bucket->get_object(rgw_obj_key("odd"));
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop(
+      obj->get_read_op(rgw::sal::no_authenticated_user));
+  EXPECT_EQ(rop->prepare(null_yield, env->dpp), -ERR_INVALID_OBJECT_STATE)
+      << "an object carrying an attribute no reviewed release writes was "
+	 "read";
+  const ClientView odd = client_view(bucket.get(), env->dpp, "odd");
+  EXPECT_FALSE(odd.exists);
+  EXPECT_TRUE(odd.listed) << "the object ended or left the listing";
+  EXPECT_TRUE(plain.listed);
+}
+
+/* The same attribute stops the bucket's conversion, and the converting
+ * marker stays, so the conversion resumes once the attribute is gone or
+ * its release is reviewed.  The resume is the control. */
+TEST_F(NSFSNooBaaBucketTest, AnUnknownNooBaaAttributeStopsTheConversion)
+{
+  write_file(bucket_path() / "plain", "abc");
+  write_file(bucket_path() / "odd", "abc");
+  const sf::path odd = bucket_path() / "odd";
+  ASSERT_EQ(::setxattr(odd.c_str(), "user.noobaa.encryption", "x", 1, 0), 0)
+      << cpp_strerror(errno);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED),
+	    -ERR_INVALID_OBJECT_STATE)
+      << "a bucket holding an attribute no reviewed release writes converted";
+  EXPECT_TRUE(b->is_converting()) << "the converting marker did not stay";
+
+  ASSERT_EQ(::removexattr(odd.c_str(), "user.noobaa.encryption"), 0);
+  EXPECT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0)
+      << "the conversion did not resume";
+  EXPECT_FALSE(b->is_converting());
+  EXPECT_EQ(client_view(bucket.get(), env->dpp, "odd").body, "abc");
+}
+
 /* A group the process belongs to that is not its primary one.
  *
  * `chown(2)` lets an unprivileged owner change a file's group to any
@@ -12616,6 +12681,72 @@ TEST(NooBaaSchema, AgreesWithNooBaasValidator)
   }
   EXPECT_GT(cases, 0u) << file << " holds no cases";
   EXPECT_TRUE(disagree.empty()) << "they disagree on" << disagree;
+}
+
+/* The object attributes NooBaa writes at the pin are known, and nothing
+ * else under `user.noobaa.` is.  Names outside it -- user metadata, nsfs's
+ * own -- are not this layer's to refuse. */
+TEST(NooBaaSchema, ObjectAttributesKnownAreNooBaasAtThePin)
+{
+  namespace ns = rgw::sal::nsfs::noobaa_schema;
+  for (const char* n : {"user.noobaa.content_type", "user.noobaa.version_id",
+			"user.noobaa.dir_content", "user.noobaa.tag.colour",
+			"user.noobaa.retention_date",
+			"user.noobaa.restore.request",
+			"user.noobaa.migrate.staged",
+			"user.content_md5", "user.storage_class", "user.colour",
+			"user.nsfs.bucket_info"}) {
+    EXPECT_TRUE(ns::object_attribute_known(n)) << n;
+  }
+  for (const char* n : {"user.noobaa.encryption", "user.noobaa.tag",
+			"user.noobaa.retention_until",
+			"user.noobaa.restore"}) {
+    EXPECT_FALSE(ns::object_attribute_known(n)) << n;
+  }
+}
+
+/* Every `user.noobaa.*` name NooBaa wrote on the objects of a capture is
+ * one the object-attribute table knows.
+ *
+ * `NSFS_NOOBAA_CAPTURE` names the corpus's capture of a tree NooBaa
+ * wrote -- `capture/noobaa` in the stand-up's work directory, whose
+ * `*.inventory` files list each entry's attributes as `path  xattr
+ * name`.  Skipped when unset.  The table is read off NooBaa's source;
+ * this holds it to what NooBaa actually wrote. */
+TEST(NooBaaSchema, ObjectAttributesAgreeWithWhatNooBaaWrote)
+{
+  const char* dir = ::getenv("NSFS_NOOBAA_CAPTURE");
+  if (!dir || !*dir) {
+    GTEST_SKIP() << "NSFS_NOOBAA_CAPTURE is unset;  see "
+		 << "src/test/rgw/adoption/standup.rs schema-agreement";
+  }
+  namespace ns = rgw::sal::nsfs::noobaa_schema;
+  size_t seen = 0;
+  std::string unknown;
+  for (const auto& f : std::filesystem::directory_iterator(dir)) {
+    if (f.path().extension() != ".inventory") {
+      continue;
+    }
+    std::ifstream in(f.path());
+    for (std::string line; std::getline(in, line);) {
+      std::vector<std::string> col;
+      for (auto c : ceph::split(line, "\t")) {
+	col.emplace_back(c);
+      }
+      if ((col.size() != 3) || (col[1] != "xattr") ||
+	  !col[2].starts_with("user.noobaa.")) {
+	continue;
+      }
+      ++seen;
+      if (!ns::object_attribute_known(col[2])) {
+	unknown += "\n  " + f.path().filename().string() + ":  " + col[0] +
+	  "  " + col[2];
+      }
+    }
+  }
+  EXPECT_GT(seen, 0u) << dir << " holds no NooBaa attribute";
+  EXPECT_TRUE(unknown.empty())
+      << "NooBaa wrote attributes the table does not know:" << unknown;
 }
 
 /* A store on disk, read without complaint.
