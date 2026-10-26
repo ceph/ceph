@@ -442,11 +442,13 @@ class query final : public detail::expression_tag
  }
 };
 
-template <ordered_domain DomainT, std::size_t Capacity>
+// Adapters may retain their interval representation, including execution metadata.
+template <ordered_domain DomainT, std::size_t Capacity, typename IntervalT = query<DomainT>>
+requires std::same_as<typename IntervalT::domain_type, DomainT>
 class static_interval_set final
 {
  public:
- using value_type = query<DomainT>;
+ using value_type = IntervalT;
  using const_iterator = typename std::array<value_type, Capacity>::const_iterator;
 
  private:

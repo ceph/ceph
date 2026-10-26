@@ -1256,6 +1256,19 @@ for (const auto& [key, value] : lfdb::scan(dbh, people)) {
 
 ### Query Algebra
 
+`compile_intervals(expr)` and `compile_intervals<N>(expr)` return the same
+executable interval values, including their query options. The latter stores
+at most `N` intervals without allocating container storage and throws
+`std::length_error` if that capacity is exceeded. Interval keys still own strings.
+A default-constructed interval is empty. Geometric predicates such as
+`is_universal()` ignore execution options.
+
+Union and intersection preserve matching options. When only one operand has
+non-default options, those options apply to the result. Conflicting non-default
+options throw `std::invalid_argument`; configure the operands consistently, or
+combine unconfigured geometry and apply `with_options()` to the result.
+Difference and complement retain the options of the query being subtracted from.
+
 Underneath the friendly selection helpers, libfdb queries are a compiled
 interval algebra. A query expression emits zero or more canonical `lfdb::select`
 intervals, and the normal operations consume those expressions directly:
@@ -2005,13 +2018,11 @@ fdbc::prefix(fdbc::keyspace("tenant") / bucket_id);
 fdbc::prefix(fdbc::key("tenant", bucket_id));
 ```
 
-`assemble()` is the explicit compiler entry point used under the nicer
-interfaces. Use it when you want the validation/lowering step to be visible, for
-example in tests, generated schemas, or other code that builds key layouts as
-data.
+Use `key()` for compiled key construction. `assemble()` is an existing synonym;
+it produces the same type and performs the same validation.
 
 ```cpp
-const auto object_head = fdbc::assemble("object-cache",
+const auto object_head = fdbc::key("object-cache",
                                         "object",
                                         bucket_id,
                                         version,
@@ -2025,12 +2036,13 @@ throw during assembly:
 static_assert(fdbc::key_segments<std::string_view, std::string_view>);
 static_assert(!fdbc::key_segments<int>);
 
-const auto object_records = fdbc::assemble("object-cache", "object");
+const auto object_records = fdbc::key("object-cache", "object");
 ```
 
-Only the root segment has the non-empty and non-`0xFF` root restriction.
-Subsequent segments are encoded as data under that root, so empty strings or
-segments beginning with `0xFF` remain valid when the domain needs them.
+The root segment must be non-empty. A root beginning with `0xFF` is valid:
+segment encoding starts with a tuple type byte, so the compiled key remains in
+ordinary FoundationDB keyspace. Later segments may also be empty or begin with
+`0xFF`.
 
 The lowering code is written to be constexpr-friendly, but the current compiled
 target owns a `std::string`. A future fixed-size/literal compiled target would
