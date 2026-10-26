@@ -8,33 +8,59 @@
 TEST(OSDMonitor, CalcMigratingPgCountSourceBigger) {
   int source_pgnum = 101;
   int target_pgnum = 79;
-  uint64_t migration_percent = 5;
-  uint64_t expected_total = (target_pgnum * migration_percent + 99) / 100;
-  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_percent), expected_total);
+  double migration_ratio = 0.05;
+  uint64_t expected_total = 4; // ceil(79 * 0.05)
+  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_ratio), expected_total);
 }
 
 TEST(OSDMonitor, CalcMigratingPgCountTargetBigger) {
   int source_pgnum = 32;
   int target_pgnum = 124;
-  uint64_t migration_percent = 50;
-  uint64_t expected_total = (source_pgnum * migration_percent + 99) / 100;
-  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_percent), expected_total);
+  double migration_ratio = 0.5;
+  uint64_t expected_total = 16; // 32 * 0.5
+  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_ratio), expected_total);
 }
 
 TEST(OSDMonitor, CalcMigratingPgCountSourceTargetEqual) {
   int source_pgnum = 128;
   int target_pgnum = 128;
-  uint64_t migration_percent = 10;
-  uint64_t expected_total = (target_pgnum * migration_percent + 99) / 100;
-  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_percent), expected_total);
+  double migration_ratio = 0.1;
+  uint64_t expected_total = 13; // ceil(128 * 0.1)
+  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_ratio), expected_total);
 }
 
 TEST(OSDMonitor, CalcMigratingPgCountRoundUp) {
   int source_pgnum = 32;
   int target_pgnum = 32;
-  uint64_t migration_percent = 1;
+  double migration_ratio = 0.01;
+  uint64_t expected_total = 1; // ceil(32 * 0.01)
+  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_ratio), expected_total);
+}
+
+TEST(OSDMonitor, CalcMigratingPgCountFullRatioNonPowerOf2) {
+  // A ratio of 1.0 must never migrate more PGs than the smaller pool has
+  int source_pgnum = 101;
+  int target_pgnum = 79;
+  double migration_ratio = 1.0;
+  uint64_t expected_total = 79;
+  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_ratio), expected_total);
+}
+
+TEST(OSDMonitor, CalcMigratingPgCountZeroRatio) {
+  // At least one PG must always be migrated so the migration makes progress
+  int source_pgnum = 32;
+  int target_pgnum = 32;
+  double migration_ratio = 0.0;
   uint64_t expected_total = 1;
-  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_percent), expected_total);
+  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_ratio), expected_total);
+}
+
+TEST(OSDMonitor, CalcMigratingPgCountFullRatio) {
+  int source_pgnum = 64;
+  int target_pgnum = 128;
+  double migration_ratio = 1.0;
+  uint64_t expected_total = 64;
+  ASSERT_EQ(OSDMonitor::calculate_migrating_pg_count(source_pgnum, target_pgnum, migration_ratio), expected_total);
 }
 
 // -----------------------------------------

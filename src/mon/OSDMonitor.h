@@ -441,7 +441,7 @@ public:
   static bool target_pg_migrating(const std::set<pg_t> &migrating_pgs, const pg_t &source_pg,
                                   int source_pgnum, int target_pgnum);
   static uint64_t calculate_migrating_pg_count(int source_pgnum, int target_pgnum,
-                                               uint64_t migration_percent);
+                                               double migration_ratio);
 
 private:
   void print_utilization(std::ostream &out, ceph::Formatter *f, bool tree) const;

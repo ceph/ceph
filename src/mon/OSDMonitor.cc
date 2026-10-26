@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
+#include <cmath>
 #include <experimental/iterator>
 #include <locale>
 #include <sstream>
@@ -4469,8 +4470,8 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
     dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
   } else {
     const pg_pool_t target_p = std::as_const(*this).get_pg_pool(source_p.migration_target.value());
-    auto migration_percent = g_conf().get_val<uint64_t>("mon_pool_migration_max_pg_percent");
-    uint64_t migrating_pgs_target_total = calculate_migrating_pg_count(source_p.get_pg_num(), target_p.get_pg_num(), migration_percent);
+    auto migration_ratio = g_conf().get_val<double>("mon_pool_migration_max_pg_ratio");
+    uint64_t migrating_pgs_target_total = calculate_migrating_pg_count(source_p.get_pg_num(), target_p.get_pg_num(), migration_ratio);
     uint64_t num_pgs_to_add = migrating_pgs_target_total > source_p.migrating_pgs.size()
         ? migrating_pgs_target_total - source_p.migrating_pgs.size()
         : 0;
@@ -4532,15 +4533,12 @@ bool OSDMonitor::target_pg_migrating(const std::set<pg_t> &migrating_pgs,
 
 uint64_t OSDMonitor::calculate_migrating_pg_count(int source_pgnum,
                                                   int target_pgnum,
-                                                  uint64_t migration_percent)
+                                                  double migration_ratio)
 {
-  uint64_t migrating_pgs_size = 0;
-  if (source_pgnum > target_pgnum) {
-    migrating_pgs_size = ((target_pgnum * migration_percent) + 99) / 100;
-  } else {
-    migrating_pgs_size = ((source_pgnum * migration_percent) + 99) / 100;
-  }
-  return migrating_pgs_size;
+  int pgnum = std::min(source_pgnum, target_pgnum);
+  uint64_t migrating_pgs = static_cast<uint64_t>(std::ceil(pgnum * migration_ratio));
+  // Always migrate at least one PG, otherwise the migration would never progress
+  return std::clamp<uint64_t>(migrating_pgs, 1, pgnum);
 }
 
 // ---
@@ -8977,8 +8975,8 @@ int OSDMonitor::prepare_new_pool(string& name,
       mp->set_pg_num_pending(mp->get_pg_num());
     }
 
-    auto migration_percent = g_conf().get_val<uint64_t>("mon_pool_migration_max_pg_percent");
-    uint64_t migrating_pgs_size = calculate_migrating_pg_count(spi->get_pg_num(), pi->get_pg_num(), migration_percent);
+    auto migration_ratio = g_conf().get_val<double>("mon_pool_migration_max_pg_ratio");
+    uint64_t migrating_pgs_size = calculate_migrating_pg_count(spi->get_pg_num(), pi->get_pg_num(), migration_ratio);
 
     for (unsigned int i = spi->get_pg_num() - 1; i >= (spi->get_pg_num() - migrating_pgs_size); i--) {
       pg_t source_pg(pg_t(i, source_pool_id.value()));
