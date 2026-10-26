@@ -243,6 +243,19 @@ seastar::future<bool> ShardServices::seastore_merge_shards_ok(
   co_return false;
 }
 
+seastar::future<bool> ShardServices::seastore_pending_merge_shards_ok(
+  spg_t pgid,
+  unsigned pg_num,
+  unsigned pg_num_pending)
+{
+  // pgid is either a merge source (find its parent) or the target itself
+  spg_t target = pgid;
+  pgid.is_merge_source(pg_num, pg_num_pending, &target);
+  std::set<spg_t> merge_sources;
+  target.is_split(pg_num_pending, pg_num, &merge_sources);
+  co_return co_await seastore_merge_shards_ok(target, merge_sources);
+}
+
 Ref<PG> PerShardState::get_pg(spg_t pgid)
 {
   assert_core();
