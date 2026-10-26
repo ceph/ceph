@@ -5,17 +5,33 @@
 #include <atomic>
 #include <barrier>
 #include <cerrno>
+#include <dlfcn.h>
 #include <limits>
 #include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include <cuobjserver.h>
 #include <gtest/gtest.h>
 
 #include "global/global_context.h"
 #include "rgw_cuobj.h"
+
+namespace {
+enum class LibraryFailure { None, Missing, MissingSymbols };
+thread_local LibraryFailure library_failure = LibraryFailure::None;
+}
+
+extern "C" void* __real_dlopen(const char*, int);
+extern "C" void* __wrap_dlopen(const char* name, int flags)
+{
+  if (library_failure != LibraryFailure::None) {
+    EXPECT_STREQ(name, "libcuobjserver.so.2");
+    name = library_failure == LibraryFailure::Missing
+        ? "libcuobjserver-does-not-exist.so.0" : "libc.so.6";
+  }
+  return __real_dlopen(name, flags);
+}
 
 namespace {
 std::vector<std::string> invalid_hex_fields()
@@ -63,6 +79,40 @@ TEST(CuObjDescriptorSize, RejectsOverflowAndMissingSeparators)
     SCOPED_TRACE(token);
     EXPECT_EQ(RGWCuObjServer::parse_rdma_descriptor_size(token), 0);
   }
+}
+
+class CuObjLibrary : public ::testing::Test {
+  void TearDown() override { library_failure = LibraryFailure::None; }
+};
+
+TEST_F(CuObjLibrary, MissingLibraryIsReportedWithoutThrowing)
+{
+  library_failure = LibraryFailure::Missing;
+  const DoutPrefix dpp(g_ceph_context, ceph_subsys_rgw, "rgw_cuobj: ");
+  RGWCuObjTransport::Params params;
+  params.rdma_ip = "192.0.2.1";
+  int err = 0;
+  EXPECT_EQ(RGWCuObjTransport::create(&dpp, params, err), nullptr);
+  EXPECT_EQ(err, -ENOENT);
+}
+
+TEST_F(CuObjLibrary, UnrelatedLibraryIsRejectedAsUnsupported)
+{
+  library_failure = LibraryFailure::MissingSymbols;
+  const DoutPrefix dpp(g_ceph_context, ceph_subsys_rgw, "rgw_cuobj: ");
+  RGWCuObjTransport::Params params;
+  params.rdma_ip = "192.0.2.1";
+  int err = 0;
+  EXPECT_EQ(RGWCuObjTransport::create(&dpp, params, err), nullptr);
+  EXPECT_EQ(err, -ENOSYS);
+}
+
+TEST_F(CuObjLibrary, ServerInitWithoutRdmaIpLeavesCuObjectUnavailable)
+{
+  // rgw_cuobj_rdma_ip has no default, so init fails before any library work.
+  EXPECT_EQ(RGWCuObjServer::init(g_ceph_context), -EINVAL);
+  EXPECT_EQ(RGWCuObjServer::get_instance(), nullptr);
+  EXPECT_FALSE(RGWCuObjServer::available());
 }
 } // anonymous namespace
 

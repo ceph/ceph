@@ -619,9 +619,9 @@ else()
 endif()
 option(WITH_RADOSGW_LANCEDB "Enable lancedb support in RADOS Gateway" ${WITH_RADOSGW_LANCEDB_DEFAULT})
 # See doc/radosgw/s3rdma.rst for build and runtime requirements.
-option(WITH_RADOSGW_CUOBJ "cuObject RDMA support for RADOS Gateway (experimental)" OFF)
-if(WITH_RADOSGW_CUOBJ)
-  find_library(CUOBJSERVER_LIBRARY cuobjserver REQUIRED)
+# The ABI shim loads libcuobjserver with dlopen() without needing the SDK.
+option(WITH_RADOSGW_CUOBJ "cuObject RDMA support for RADOS Gateway (experimental)" ON)
+if(WITH_RADOSGW AND WITH_RADOSGW_CUOBJ)
   message(STATUS "cuObject RDMA support for RADOS Gateway is enabled (experimental)")
 endif()
 

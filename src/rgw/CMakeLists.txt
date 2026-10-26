@@ -345,8 +345,8 @@ if(WITH_RADOSGW_STANDALONE)
 endif()
 
 if(WITH_RADOSGW_CUOBJ)
-  list(APPEND librgw_common_srcs rgw_cuobj.cc)
-  list(APPEND rgw_common_libs ${CUOBJSERVER_LIBRARY})
+  list(APPEND librgw_common_srcs rgw_cuobj.cc rgw_cuobj_dl.cc)
+  list(APPEND rgw_common_libs ${CMAKE_DL_LIBS})
 endif()
 
 add_library(rgw_common STATIC

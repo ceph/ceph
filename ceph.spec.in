@@ -22,8 +22,9 @@
 #################################################################################
 %bcond_with make_check
 %bcond_with cmake_verbose_logging
-# Experimental cuObject S3 RDMA support (disabled by default).
-%bcond_with cuobj
+# Experimental cuObject S3 RDMA support (enabled by default). The
+# ABI shim loads libcuobjserver at runtime without an SDK build dependency.
+%bcond_without cuobj
 %bcond_without ceph_test_package
 %ifarch s390
 %bcond_with tcmalloc
@@ -280,9 +281,6 @@ BuildRequires:	pkgconfig(openssl)
 BuildRequires:	pkgconfig(ldap)
 BuildRequires:	pkgconfig(libibverbs)
 BuildRequires:	pkgconfig(librdmacm)
-%if %{with cuobj}
-BuildRequires:  libcuobjserver-devel >= 2.0.0
-%endif
 BuildRequires:	pkgconfig(liblz4) >= 1.7
 BuildRequires:	pkgconfig(libnl-3.0)
 BuildRequires:	pkgconfig(liboath)

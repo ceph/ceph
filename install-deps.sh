@@ -45,9 +45,6 @@ function munge_ceph_spec_in {
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
     fi
-    if [ "${WITH_RADOSGW_CUOBJ:-OFF}" = ON ]; then
-        sed -i -e 's/%bcond_with cuobj/%bcond_without cuobj/g' $OUTFILE
-    fi
 }
 
 function munge_debian_control {
@@ -314,8 +311,8 @@ gpgcheck=0
 EOF
 }
 
-function setup_cuobj_repo() {
-    if [ "${WITH_RADOSGW_CUOBJ:-OFF}" != ON ]; then
+function install_cuobj_runtime() {
+    if ! $install_cuobj; then
         return
     fi
 
@@ -323,11 +320,11 @@ function setup_cuobj_repo() {
     case "${ID}:${el_major}" in
         rocky:9|centos:9|almalinux:9|rhel:9|rocky:10|centos:10|almalinux:10|rhel:10) ;;
         fedora:*)
-            echo "cuObject is not supported on Fedora: NVIDIA's Fedora repository does not provide the required libcuobjserver-devel server SDK." >&2
+            echo "Automatic cuObject runtime installation is not supported on Fedora: NVIDIA's Fedora repository does not provide libcuobjserver. Build without INSTALL_CUOBJ_RUNTIME=ON." >&2
             return 1
             ;;
         *)
-            echo "cuObject repository setup requires an EL9 or EL10 distribution" >&2
+            echo "cuObject runtime installation requires an EL9 or EL10 distribution (Rocky, AlmaLinux, RHEL, or CentOS Stream)." >&2
             return 1
             ;;
     esac
@@ -336,16 +333,17 @@ function setup_cuobj_repo() {
         x86_64) cuda_arch=x86_64 ;;
         aarch64) cuda_arch=sbsa ;;
         *)
-            echo "cuObject repository setup does not support ${ID} ${VERSION_ID} on ${ARCH}" >&2
+            echo "cuObject runtime installation does not support ${ID} ${VERSION_ID} on ${ARCH}." >&2
             return 1
             ;;
     esac
 
-    # The spec's cuobj BuildRequires selects the server library and headers.
-    # The CUDA toolkit and client packages are not needed for the RGW build.
+    # Keep this package version in sync with the ABI used by rgw_cuobj_dl.cc.
+    local cuobj_version=2.0.0.109-1
     $SUDO dnf install -y dnf-plugins-core || return 1
     $SUDO dnf config-manager --add-repo \
-        "https://developer.download.nvidia.com/compute/cuda/repos/rhel${el_major}/${cuda_arch}/cuda-rhel${el_major}.repo"
+        "https://developer.download.nvidia.com/compute/cuda/repos/rhel${el_major}/${cuda_arch}/cuda-rhel${el_major}.repo" || return 1
+    $SUDO dnf install -y "libcuobjserver-${cuobj_version}.${ARCH}"
 }
 
 function populate_wheelhouse() {
@@ -425,7 +423,21 @@ elif tty -s; then
     for_make_check=true
 fi
 
+install_cuobj=false
+case "${INSTALL_CUOBJ_RUNTIME:-OFF}" in
+    ON|on|TRUE|true|YES|yes|1) install_cuobj=true ;;
+    OFF|off|FALSE|false|NO|no|0) ;;
+    *)
+        echo "error: unexpected INSTALL_CUOBJ_RUNTIME value: ${INSTALL_CUOBJ_RUNTIME}" >&2
+        exit 2
+        ;;
+esac
+
 if [ x$(uname)x = xFreeBSDx ]; then
+    if $install_cuobj; then
+        echo "cuObject runtime installation requires an EL9 or EL10 distribution." >&2
+        exit 1
+    fi
     if [ "$INSTALL_EXTRA_PACKAGES" ]; then
         echo "Installing extra packages not supported on FreeBSD" >&2
         exit 1
@@ -484,7 +496,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
 else
     [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
     source /etc/os-release
-    setup_cuobj_repo || exit 1
+    install_cuobj_runtime || exit 1
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
         echo "Using apt-get to install dependencies"
