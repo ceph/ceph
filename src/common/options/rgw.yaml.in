@@ -5001,13 +5001,14 @@ options:
 - name: rgw_nsfs_identity_resolve_ttl
   type: uint
   level: advanced
-  desc: Seconds between re-resolutions of name-form nsfs identities
-  long_desc: An identity row in name form (distinguished_name) takes its
-    uid and gid from nsswitch. The answers are cached, and every this
-    many seconds each cached name is looked up again; where an answer
-    changed, the identities served from the old one are re-resolved on
-    their next use. This bounds how long a change in the directory takes
-    to reach requests. NooBaa's group cache is one minute.
+  desc: Seconds between re-resolutions of nsswitch-resolved nsfs identities
+  long_desc: An nsswitch-resolved identity row, one carrying
+    distinguished_name, takes its uid and gid from nsswitch. The answers
+    are cached, and every this many seconds each cached name is looked up
+    again; where an answer changed, the identities served from the old
+    one are re-resolved on their next use. This bounds how long a change
+    in the directory takes to reach requests. NooBaa's group cache is one
+    minute.
   default: 60
   min: 1
   services:

@@ -884,9 +884,9 @@ int complete_file_credentials(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     return ret;
   }
-  /* A name-form row stores no uid;  the cache knows which names last
+  /* An nsswitch-resolved row stores no uid;  the cache knows which names last
    * resolved to this one. */
-  for (const auto& name : db.name_cache().names_for_uid(inout.uid)) {
+  for (const auto& name : db.nsswitch_cache().names_for_uid(inout.uid)) {
     ret = db.get_identities_by_name(dpp, name, rows);
     if (ret < 0) {
       return ret;
@@ -943,7 +943,7 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 
   if (id.directory_backed()) {
     ResolvedName rn;
-    ret = db.name_cache().resolve(dpp, id.distinguished_name, rn, y);
+    ret = db.nsswitch_cache().resolve(dpp, id.distinguished_name, rn, y);
     if (ret < 0) {
       ldpp_dout(dpp, 4) << "identity " << key << " names "
 	<< id.distinguished_name << ", which nsswitch did not resolve ("
@@ -967,7 +967,7 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
    * vector.  Absent means "no supplementary groups" today, and the
    * caller installs that rather than skipping the call -- NooBaa's
    * ThreadScope issues setgroups(0, NULL) for exactly this case.
-   * The two stay distinct in the record because the name form will
+   * The two stay distinct in the record because an nsswitch-resolved row will
    * read them differently in I8. */
   out.groups.clear();
   if (id.groups) {

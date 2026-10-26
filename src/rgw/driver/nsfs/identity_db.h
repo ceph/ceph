@@ -50,7 +50,7 @@ namespace rgw { namespace sal { namespace nsfs {
  * load-bearing:
  *
  *   nullopt   no list was set.  Today that means no supplementary
- *             groups;  on a name-form row, once I8 is built, it will
+ *             groups;  on an nsswitch-resolved row, once I8 is built, it will
  *             mean "resolve them through getgrouplist(3)".
  *   empty     a list was set and it is empty -- this identity has no
  *             supplementary groups, deliberately.
@@ -236,7 +236,7 @@ class IdentityDB : public rgw::store::POSIXUserDB {
   const std::string abandoned_table;
 
   /* what each row's `distinguished_name` resolved to (I7) */
-  mutable NameCache names;
+  mutable NsswitchCache names;
 
   /* The one handle, qualified.
    *
@@ -396,14 +396,14 @@ public:
 			    std::vector<Identity>& out) const;
 
   /* The rows carrying `distinguished_name`, in Identity order;  the
-   * same read for a name-form row, whose uid is not stored. */
+   * same read for an nsswitch-resolved row, whose uid is not stored. */
   int get_identities_by_name(const DoutPrefixProvider* dpp,
 			     const std::string& name,
 			     std::vector<Identity>& out) const;
 
-  NameCache& name_cache() const { return names; }
+  NsswitchCache& nsswitch_cache() const { return names; }
 
-  /* every name-form row's name, for the sweep's first pass */
+  /* every nsswitch-resolved row's name, for the sweep's first pass */
   std::vector<std::string> distinguished_names(
     const DoutPrefixProvider* dpp) const;
 
@@ -444,16 +444,16 @@ struct Credentials {
  *            exactly as it does today, which is what keeps this
  *            additive.
  *   -EPERM   a row that asks for impersonation which cannot be
- *            supplied:  a name-form row whose name nsswitch does not
+ *            supplied:  an nsswitch-resolved row whose name nsswitch does not
  *            know, or whose lookup failed.  Serving such a request
  *            unimpersonated would run it as the daemon, which holds
  *            more access than the user, so it fails closed.  -EPERM
  *            rather than a more descriptive errno so a caller which
  *            forgets to map it still denies.
  *
- * A name-form row -- `distinguished_name`, which NooBaa passes to
+ * An nsswitch-resolved row -- `distinguished_name`, which NooBaa passes to
  * getpwnam -- takes its uid and gid from nsswitch, through the
- * database's NameCache;  `y` is where a lookup on a miss suspends.
+ * database's NsswitchCache;  `y` is where a lookup on a miss suspends.
  * The supplementary groups are the row's list, else none, in both
  * forms;  NooBaa's getgrouplist(3) branch is I8.
  */

@@ -91,7 +91,7 @@ struct ImportResult {
   /* the store has an anonymous account, and an earlier run imported it */
   bool anonymous_present{false};
 
-  /* Name-form identities whose name nsswitch did not resolve, as
+  /* Nsswitch-resolved identities whose name nsswitch did not resolve, as
    * "<owner>: <name> (<why>)".  Written all the same, as NooBaa's record
    * stood:  each is refused until its name resolves, as it was under
    * NooBaa, and this is where the operator learns of it. */

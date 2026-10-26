@@ -20014,14 +20014,15 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return 0;
   }
 
-  if (hint == "name-cache") {
-    /* clear one name-form identity's resolution (I7), so a test can make
-     * the next request look it up without waiting for the sweep */
+  if (hint == "nsswitch-cache") {
+    /* clear one nsswitch-resolved identity's resolution (I7), so a test
+     * can make the next request look it up without waiting for the
+     * sweep */
     auto it = params.find("forget");
     if (it == params.end()) {
       return -EINVAL;
     }
-    const bool cleared = userDB->name_cache().forget(it->second);
+    const bool cleared = userDB->nsswitch_cache().forget(it->second);
     if (out) {
       (*out)["cleared"] = cleared ? "true" : "false";
     }

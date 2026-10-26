@@ -76,13 +76,13 @@ int nsswitch_lookup(const std::string& name, ResolvedName& out);
  * A lookup that fails rather than returning an answer is not cached:
  * the next resolve() tries again, and the caller is refused meanwhile,
  * as NooBaa's request is. */
-class NameCache {
+class NsswitchCache {
 public:
-  explicit NameCache(CephContext* cct);
-  ~NameCache();
+  explicit NsswitchCache(CephContext* cct);
+  ~NsswitchCache();
 
-  NameCache(const NameCache&) = delete;
-  NameCache& operator=(const NameCache&) = delete;
+  NsswitchCache(const NsswitchCache&) = delete;
+  NsswitchCache& operator=(const NsswitchCache&) = delete;
 
   /* The resolution of `name`:  from the cache, else from the lookup.
    *
@@ -114,7 +114,7 @@ public:
 
   /* Drop `name`'s entry, so the next resolve() looks it up.  Where there
    * was one, identities are invalidated, so a warm personality resolves
-   * again too.  Returns whether there was.  For the `name-cache` driver
+   * again too.  Returns whether there was.  For the `nsswitch-cache` driver
    * hint;  the bound does not rely on anyone calling it. */
   bool forget(const std::string& name);
 

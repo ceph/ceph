@@ -54,16 +54,16 @@ int nsswitch_lookup(const std::string& name, ResolvedName& out)
   return 0;
 }
 
-NameCache::NameCache(CephContext* cct)
+NsswitchCache::NsswitchCache(CephContext* cct)
   : cct(cct), lookup(nsswitch_lookup)
 {}
 
-NameCache::~NameCache()
+NsswitchCache::~NsswitchCache()
 {
   stop();
 }
 
-int NameCache::look_up(const std::string& name, ResolvedName& out) const
+int NsswitchCache::look_up(const std::string& name, ResolvedName& out) const
 {
   NameLookupFn fn;
   {
@@ -73,7 +73,7 @@ int NameCache::look_up(const std::string& name, ResolvedName& out) const
   return fn(name, out);
 }
 
-bool NameCache::store(const std::string& name, int ret,
+bool NsswitchCache::store(const std::string& name, int ret,
 		      const ResolvedName& rn)
 {
   std::lock_guard l(mtx);
@@ -85,13 +85,13 @@ bool NameCache::store(const std::string& name, int ret,
   return changed;
 }
 
-bool NameCache::drop(const std::string& name)
+bool NsswitchCache::drop(const std::string& name)
 {
   std::lock_guard l(mtx);
   return entries.erase(name) > 0;
 }
 
-int NameCache::resolve(const DoutPrefixProvider* dpp,
+int NsswitchCache::resolve(const DoutPrefixProvider* dpp,
 		       const std::string& name, ResolvedName& out,
 		       optional_yield y)
 {
@@ -122,7 +122,7 @@ int NameCache::resolve(const DoutPrefixProvider* dpp,
   return ret;
 }
 
-std::vector<std::string> NameCache::names_for_uid(uint32_t uid) const
+std::vector<std::string> NsswitchCache::names_for_uid(uint32_t uid) const
 {
   std::vector<std::string> out;
   std::lock_guard l(mtx);
@@ -139,7 +139,7 @@ std::vector<std::string> NameCache::names_for_uid(uint32_t uid) const
  * the worst case is one that reads the old generation and the new
  * answer, and re-registers once.  The reverse would let one read the new
  * generation and the old answer, and keep it. */
-int NameCache::refresh(const DoutPrefixProvider* dpp,
+int NsswitchCache::refresh(const DoutPrefixProvider* dpp,
 		       const std::string& name)
 {
   ResolvedName rn;
@@ -164,7 +164,7 @@ int NameCache::refresh(const DoutPrefixProvider* dpp,
   return changed ? 1 : 0;
 }
 
-bool NameCache::forget(const std::string& name)
+bool NsswitchCache::forget(const std::string& name)
 {
   if (! drop(name)) {
     return false;
@@ -173,7 +173,7 @@ bool NameCache::forget(const std::string& name)
   return true;
 }
 
-int NameCache::sweep(const DoutPrefixProvider* dpp)
+int NsswitchCache::sweep(const DoutPrefixProvider* dpp)
 {
   std::vector<std::string> names;
   {
@@ -192,7 +192,7 @@ int NameCache::sweep(const DoutPrefixProvider* dpp)
   return changed;
 }
 
-void NameCache::sweep_loop(NameSource source)
+void NsswitchCache::sweep_loop(NameSource source)
 {
   NoDoutPrefix dpp(cct, dout_subsys);
   if (source) {
@@ -218,7 +218,7 @@ void NameCache::sweep_loop(NameSource source)
   }
 }
 
-void NameCache::start(NameSource source)
+void NsswitchCache::start(NameSource source)
 {
   std::lock_guard l(sweep_mtx);
   if (sweeper.joinable()) {
@@ -230,7 +230,7 @@ void NameCache::start(NameSource source)
   });
 }
 
-void NameCache::stop()
+void NsswitchCache::stop()
 {
   {
     std::lock_guard l(sweep_mtx);
@@ -242,7 +242,7 @@ void NameCache::stop()
   }
 }
 
-void NameCache::set_lookup_for_test(NameLookupFn fn)
+void NsswitchCache::set_lookup_for_test(NameLookupFn fn)
 {
   std::lock_guard l(mtx);
   lookup = std::move(fn);
