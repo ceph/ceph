@@ -41,3 +41,12 @@ add_executable(unittest_objecter_direct_reads
   )
 add_ceph_unittest(unittest_objecter_direct_reads)
 target_link_libraries(unittest_objecter_direct_reads osdc global ${BLKID_LIBRARIES})
+
+# unittest_sparse_read_reply
+# Pure unit tests for CB_ObjectOperation_sparse_read (split vs legacy format,
+# flag plumbing).  No cluster or I/O needed.
+add_executable(unittest_sparse_read_reply
+  test_sparse_read_reply.cc
+  )
+add_ceph_unittest(unittest_sparse_read_reply)
+target_link_libraries(unittest_sparse_read_reply global ${BLKID_LIBRARIES})
