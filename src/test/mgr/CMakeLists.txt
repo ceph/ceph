@@ -1,7 +1,74 @@
+set(unittest_mgr_clusterstate_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/ClusterState.cc
+)
+
+set(unittest_mgr_daemonkey_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonKey.cc
+)
+
+set(unittest_mgr_daemonstate_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonState.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonPerfCounters.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PerfCounterInstance.cc
+)
+
+set(unittest_mgr_pyformatter_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyFormatter.cc
+)
+
+set(unittest_mgr_pyutil_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyUtil.cc
+)
+
+set(unittest_mgr_servicemap_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/ServiceMap.cc
+)
+
+set(unittest_mgr_map_cache_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/MgrMapCache.cc
+)
+
+set(unittest_mgr_mgroprequest_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/MgrOpRequest.cc
+)
+
+add_library(unittest_mgr_clusterstate_obj OBJECT ${unittest_mgr_clusterstate_srcs})
+target_link_libraries(unittest_mgr_clusterstate_obj legacy-option-headers)
+
+add_library(unittest_mgr_daemonkey_obj OBJECT ${unittest_mgr_daemonkey_srcs})
+target_link_libraries(unittest_mgr_daemonkey_obj legacy-option-headers)
+
+add_library(unittest_mgr_daemonstate_obj OBJECT ${unittest_mgr_daemonstate_srcs})
+target_link_libraries(unittest_mgr_daemonstate_obj legacy-option-headers)
+
+add_library(unittest_mgr_pyformatter_obj OBJECT ${unittest_mgr_pyformatter_srcs})
+target_include_directories(unittest_mgr_pyformatter_obj PRIVATE
+  $<TARGET_PROPERTY:Python3::Python,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(unittest_mgr_pyformatter_obj legacy-option-headers)
+
+add_library(unittest_mgr_pyutil_obj OBJECT ${unittest_mgr_pyutil_srcs})
+target_include_directories(unittest_mgr_pyutil_obj PRIVATE
+  $<TARGET_PROPERTY:Python3::Python,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(unittest_mgr_pyutil_obj legacy-option-headers)
+
+add_library(unittest_mgr_servicemap_obj OBJECT ${unittest_mgr_servicemap_srcs})
+target_link_libraries(unittest_mgr_servicemap_obj legacy-option-headers)
+
+add_library(unittest_mgr_map_cache_obj OBJECT ${unittest_mgr_map_cache_srcs})
+target_include_directories(unittest_mgr_map_cache_obj PRIVATE
+  $<TARGET_PROPERTY:Python3::Python,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(unittest_mgr_map_cache_obj legacy-option-headers)
+
+add_library(unittest_mgr_mgroprequest_obj OBJECT ${unittest_mgr_mgroprequest_srcs})
+target_link_libraries(unittest_mgr_mgroprequest_obj legacy-option-headers)
+if(WITH_LTTNG)
+  add_dependencies(unittest_mgr_mgroprequest_obj mgr_op_tp)
+endif()
+
 # unittest_mgr_clusterstate
 add_executable(unittest_mgr_clusterstate
   test_clusterstate.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/ClusterState.cc
+  $<TARGET_OBJECTS:unittest_mgr_clusterstate_obj>
 )
 add_ceph_unittest(unittest_mgr_clusterstate)
 target_link_libraries(unittest_mgr_clusterstate
@@ -13,7 +80,7 @@ target_link_libraries(unittest_mgr_clusterstate
 # unittest_mgr_daemonkey
 add_executable(unittest_mgr_daemonkey
   test_daemonkey.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonKey.cc
+  $<TARGET_OBJECTS:unittest_mgr_daemonkey_obj>
 )
 add_ceph_unittest(unittest_mgr_daemonkey)
 target_link_libraries(unittest_mgr_daemonkey
@@ -23,10 +90,8 @@ target_link_libraries(unittest_mgr_daemonkey
 # unittest_mgr_daemonstate
 add_executable(unittest_mgr_daemonstate
   test_daemonstate.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonState.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonKey.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonPerfCounters.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/PerfCounterInstance.cc
+  $<TARGET_OBJECTS:unittest_mgr_daemonstate_obj>
+  $<TARGET_OBJECTS:unittest_mgr_daemonkey_obj>
 )
 add_ceph_unittest(unittest_mgr_daemonstate)
 target_link_libraries(unittest_mgr_daemonstate
@@ -44,7 +109,7 @@ target_link_libraries(unittest_mgr_mgrcap global)
 # unittest_mgr_pyformatter
 add_executable(unittest_mgr_pyformatter
   test_pyformatter.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/PyFormatter.cc
+  $<TARGET_OBJECTS:unittest_mgr_pyformatter_obj>
 )
 add_ceph_unittest(unittest_mgr_pyformatter)
 target_link_libraries(unittest_mgr_pyformatter
@@ -55,7 +120,7 @@ target_link_libraries(unittest_mgr_pyformatter
 # unittest_mgr_pyutil
 add_executable(unittest_mgr_pyutil
   test_pyutil.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/PyUtil.cc
+  $<TARGET_OBJECTS:unittest_mgr_pyutil_obj>
 )
 add_ceph_unittest(unittest_mgr_pyutil)
 target_link_libraries(unittest_mgr_pyutil
@@ -66,7 +131,7 @@ target_link_libraries(unittest_mgr_pyutil
 # unittest_mgr_servicemap
 add_executable(unittest_mgr_servicemap
   test_servicemap.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/ServiceMap.cc
+  $<TARGET_OBJECTS:unittest_mgr_servicemap_obj>
 )
 add_ceph_unittest(unittest_mgr_servicemap)
 target_link_libraries(unittest_mgr_servicemap
@@ -76,7 +141,7 @@ target_link_libraries(unittest_mgr_servicemap
 # unittest_mgr_map_cache
 add_executable(unittest_mgr_map_cache
   test_mgrmapcache.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/MgrMapCache.cc)
+  $<TARGET_OBJECTS:unittest_mgr_map_cache_obj>)
 add_ceph_unittest(unittest_mgr_map_cache)
 target_link_libraries(unittest_mgr_map_cache ceph-common global
   Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
@@ -84,12 +149,9 @@ target_link_libraries(unittest_mgr_map_cache ceph-common global
 # unittest_mgr_mgroprequest
 add_executable(unittest_mgr_mgroprequest
   test_mgroprequest.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/MgrOpRequest.cc
+  $<TARGET_OBJECTS:unittest_mgr_mgroprequest_obj>
 )
 add_ceph_unittest(unittest_mgr_mgroprequest)
-if(WITH_LTTNG)
-  add_dependencies(unittest_mgr_mgroprequest mgr_op_tp)
-endif()
 target_link_libraries(unittest_mgr_mgroprequest
   ceph-common
   global
