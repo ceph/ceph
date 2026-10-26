@@ -3112,34 +3112,34 @@ TEST(MOSDOpReply, core_hint_roundtrip)
   auto reply = ceph::make_message<MOSDOpReply>();
   reply->set_core_hint(hint);
   auto decoded = reply_roundtrip(reply, CEPH_FEATURES_ALL);
-  EXPECT_EQ(decoded->get_header().version, 9);
+  EXPECT_GE(decoded->get_header().version, 9);
   ASSERT_TRUE(decoded->get_core_hint().has_value());
   EXPECT_EQ(*decoded->get_core_hint(), hint);
   EXPECT_EQ(fmt::format("{}", *decoded->get_core_hint()), "core 3 port 6810");
 }
 
-// the hint is optional: a v9 reply may name none
+// the hint is optional: a reply may name none
 TEST(MOSDOpReply, no_core_hint)
 {
   auto reply = ceph::make_message<MOSDOpReply>();
   auto decoded = reply_roundtrip(reply, CEPH_FEATURES_ALL);
-  EXPECT_EQ(decoded->get_header().version, 9);
+  EXPECT_GE(decoded->get_header().version, 9);
   EXPECT_FALSE(decoded->get_core_hint().has_value());
 }
 
-// no feature gates it: any peer gets v9, and older ones ignore the hint
+// no feature gates it: any peer gets the hint (v9+), and older ones ignore it
 TEST(MOSDOpReply, core_hint_regardless_of_features)
 {
   auto reply = ceph::make_message<MOSDOpReply>();
   reply->set_core_hint(osd_core_hint_t{3, 6810});
   auto decoded = reply_roundtrip(
     reply, CEPH_FEATURES_ALL & ~CEPH_FEATURE_SERVER_VAMPIRE);
-  EXPECT_EQ(decoded->get_header().version, 9);
+  EXPECT_GE(decoded->get_header().version, 9);
   ASSERT_TRUE(decoded->get_core_hint().has_value());
   EXPECT_EQ(*decoded->get_core_hint(), (osd_core_hint_t{3, 6810}));
 }
 
-// a v8 decoder reads a v9 reply: all of it but the trailing hint
+// a v8 decoder reads a newer reply: all of it but the trailing hint
 TEST(MOSDOpReply, v9_read_as_v8)
 {
   auto reply = ceph::make_message<MOSDOpReply>();
@@ -3148,7 +3148,7 @@ TEST(MOSDOpReply, v9_read_as_v8)
   reply->set_reply_versions(eversion_t(5, 7), 7);
   reply->set_core_hint(osd_core_hint_t{3, 6810});
   reply->encode_payload(CEPH_FEATURES_ALL);
-  ASSERT_EQ(reply->get_header().version, 9);
+  ASSERT_GE(reply->get_header().version, 9);
 
   auto out = ceph::make_message<MOSDOpReply>();
   auto header = reply->get_header();

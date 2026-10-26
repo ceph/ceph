@@ -4299,6 +4299,13 @@ struct OSDOp {
   ceph_osd_op op;
 
   ceph::buffer::list indata, outdata;
+  /**
+   * Structured per-op reply data that must not share a buffer with outdata
+   * (currently only the extent map of a SPARSE_READ). Unlike outdata it is
+   * carried in the payload section of MOSDOpReply, so outdata stays free for
+   * bulk data that benefits from alignment. Empty for every other op.
+   */
+  ceph::buffer::list outmetadata;
   errorcode32_t rval;
 
   OSDOp() {
@@ -4374,6 +4381,7 @@ struct OSDOp {
     for (unsigned i = 0; i < ops.size(); i++) {
       OSDOp& op = ops[i];
       op.outdata.clear();
+      op.outmetadata.clear();
       if (ceph_osd_op_type_attr(op.op.op) &&
 	  op.op.xattr.name_len &&
 	  op.indata.length() >= op.op.xattr.name_len) {
