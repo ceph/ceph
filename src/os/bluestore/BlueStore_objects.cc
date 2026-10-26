@@ -1639,7 +1639,7 @@ void bluestore::ExtentMap::make_range_shared_maybe_merge(
       dirty_range_begin = std::min<uint32_t>(dirty_range_begin, e.blob_start());
       // first try to find a shared blob nearby
       // that can accomodate extra extents
-      uint32_t blob_width; // to signal when extents end
+      uint32_t blob_width = 0; // to signal when extents end
       dout(20) << __func__ << std::hex << " e.blob_start=" << e.blob_start()
                << " e.logical_offset=" << e.logical_offset << std::dec << dendl;
       Blob *b = blob.is_compressed() ? nullptr :
