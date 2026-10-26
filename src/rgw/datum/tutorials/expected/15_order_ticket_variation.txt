@@ -1,0 +1,4 @@
+requested: 8 bytes
+quota: 10 bytes
+[0, 8)
+served: 8 bytes

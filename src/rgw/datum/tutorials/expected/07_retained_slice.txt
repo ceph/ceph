@@ -1,0 +1,2 @@
+before move: meow
+after move: meow

@@ -1,0 +1,214 @@
+{
+  "case": "bi/1000/0/encode",
+  "baseline_ref": "d8552606423c86efe4df2d39c0b7e4b20ba69c73",
+  "current_ref": "ec5d6c985f3543254ad461e11e21657f64cb803c",
+  "timed_rows": 48,
+  "results": [
+    {
+      "allocator": "tcmalloc",
+      "pairs": 12,
+      "thread_cpu_ns": {
+        "main_median": 41905.7935,
+        "compact_median": 13084.3635,
+        "change_percent": -68.6711291438302,
+        "ci_low_percent": -68.99451060714298,
+        "ci_high_percent": -68.34437487225466,
+        "pair_changes_percent": [
+          -68.87734086349089,
+          -69.25955151631504,
+          -68.01314706939172,
+          -68.99412033209931,
+          -69.13198135485783,
+          -69.36427647791315,
+          -68.9854284071583,
+          -67.81112299748078,
+          -68.4955180024523,
+          -68.09353957848539,
+          -68.53985620770597,
+          -68.44165195160654
+        ]
+      },
+      "wall_ns": {
+        "main_median": 42047.248,
+        "compact_median": 13122.0415,
+        "change_percent": -68.67241769187895,
+        "ci_low_percent": -68.99838028213566,
+        "ci_high_percent": -68.34302780939643,
+        "pair_changes_percent": [
+          -68.89103239281853,
+          -69.25750475370589,
+          -68.01552030239229,
+          -68.98366050945977,
+          -69.14491670749254,
+          -69.37692876958822,
+          -68.98830043124535,
+          -67.81592643407926,
+          -68.49524202367134,
+          -68.06761278831466,
+          -68.5418181051783,
+          -68.4437920397987
+        ]
+      },
+      "user_cycles": {
+        "main_median": 216403.644,
+        "compact_median": 67673.8695,
+        "change_percent": -68.63767626826964,
+        "ci_low_percent": -68.9713029808062,
+        "ci_high_percent": -68.30046233506283,
+        "pair_changes_percent": [
+          -68.87903561194157,
+          -69.17125382998724,
+          -67.98015799713029,
+          -69.04009558111672,
+          -69.0393971318101,
+          -69.35355798976343,
+          -68.98599033822617,
+          -67.706641149617,
+          -68.48460933988008,
+          -67.99655081335953,
+          -68.5254070543815,
+          -68.4404438859229
+        ]
+      },
+      "user_instructions": {
+        "main_median": 497397.663,
+        "compact_median": 134034.30550000002,
+        "change_percent": -73.05288795047102,
+        "ci_low_percent": -73.05288826346712,
+        "ci_high_percent": -73.05288763747491,
+        "pair_changes_percent": [
+          -73.0528880442886,
+          -73.05288848489914,
+          -73.05288755670286,
+          -73.05288822967657,
+          -73.05288846924076,
+          -73.05288860890992,
+          -73.05288813698259,
+          -73.05288709917748,
+          -73.05288775774923,
+          -73.05288715461008,
+          -73.0528879973134,
+          -73.05288786610161
+        ]
+      },
+      "minimum_counter_running_fraction": 1.0
+    },
+    {
+      "allocator": "glibc",
+      "pairs": 12,
+      "thread_cpu_ns": {
+        "main_median": 41930.423500000004,
+        "compact_median": 12963.425500000001,
+        "change_percent": -69.26847135119128,
+        "ci_low_percent": -69.75446178515985,
+        "ci_high_percent": -68.77467194056537,
+        "pair_changes_percent": [
+          -70.97532634582274,
+          -68.55584000552656,
+          -69.7180198409293,
+          -69.15980251541322,
+          -68.11277641575015,
+          -68.75374811267898,
+          -68.99584959603241,
+          -69.65624783461584,
+          -68.56836286151673,
+          -69.67702217116491,
+          -69.81227945445994,
+          -69.13059400373248
+        ]
+      },
+      "wall_ns": {
+        "main_median": 42038.854,
+        "compact_median": 12998.5025,
+        "change_percent": -69.27274636828595,
+        "ci_low_percent": -69.76131872536403,
+        "ci_high_percent": -68.77628005095437,
+        "pair_changes_percent": [
+          -70.99440654141887,
+          -68.56162700465133,
+          -69.726622970584,
+          -69.15188118007866,
+          -68.11570668083647,
+          -68.76603533251287,
+          -68.9933566253202,
+          -69.65442224471045,
+          -68.56222795928893,
+          -69.67475703243142,
+          -69.82459058293232,
+          -69.14040131235318
+        ]
+      },
+      "user_cycles": {
+        "main_median": 216933.204,
+        "compact_median": 67118.4835,
+        "change_percent": -69.25629126545753,
+        "ci_low_percent": -69.746368589483,
+        "ci_high_percent": -68.75827519912822,
+        "pair_changes_percent": [
+          -70.99235699341514,
+          -68.53917631577036,
+          -69.67585788050737,
+          -69.15476557660931,
+          -68.09760463915418,
+          -68.7249445978428,
+          -68.99402619540565,
+          -69.65373451219097,
+          -68.55080542519816,
+          -69.64718528477202,
+          -69.80725620333787,
+          -69.1302675869702
+        ]
+      },
+      "user_instructions": {
+        "main_median": 500064.4435,
+        "compact_median": 135902.1435,
+        "change_percent": -72.82307419592844,
+        "ci_low_percent": -72.82307463570072,
+        "ci_high_percent": -72.82307375615615,
+        "pair_changes_percent": [
+          -72.82307581634264,
+          -72.82307356227929,
+          -72.82307443393621,
+          -72.82307408833461,
+          -72.82307310798399,
+          -72.8230736862788,
+          -72.82307407092144,
+          -72.82307459697674,
+          -72.82307376225351,
+          -72.82307461438991,
+          -72.82307459486938,
+          -72.8230740165746
+        ]
+      },
+      "minimum_counter_running_fraction": 1.0
+    }
+  ],
+  "allocations_glibc": {
+    "main": {
+      "malloc_calls": 10.0,
+      "requested_bytes": 37080.0
+    },
+    "compact": {
+      "malloc_calls": 6.0,
+      "requested_bytes": 28744.0
+    }
+  },
+  "encoded_bytes": {
+    "main": 29901,
+    "compact": 23901
+  },
+  "encoded_size_change_percent": -20.066218521119694,
+  "allocation_calls_change_percent": -40.0,
+  "measurement_seconds": 55.21322202400188,
+  "minimum_available_GiB": 113.77973937988281,
+  "maximum_swap_used_GiB": 0.0,
+  "process_conflicts": [],
+  "validation": [
+    "Independent expected-wire bytes for both formats",
+    "Both replies decode to the same 1000 records and truncation flag",
+    "Actual allocator bindings checked in separate processes",
+    "Source, dependency, runtime, and executable hashes stable"
+  ],
+  "statistics": "Geometric mean of 12 paired CPU-time ratios with a descriptive casewise Student t 95% interval (df11), no multiplicity adjustment. Allocation diagnostics run separately under glibc.",
+  "scope": "Only 1000-entry no-payload encoding; shared preserved support libraries match prior experiments. No whole-RGW throughput result."
+}

@@ -1,0 +1,2 @@
+object: photos/cat.jpg
+more: false

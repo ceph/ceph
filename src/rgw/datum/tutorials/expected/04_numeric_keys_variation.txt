@@ -1,0 +1,2 @@
+decimal: 15, 16, 2
+fixed-width hex: 2, 15, 16

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block site_name %}
+  <a class="datum-brand" href="{{ nav.homepage.url|url }}">Datum</a>
+  <div class="datum-brand-note">Tutorial &amp; design</div>
+{% endblock %}
+
+{% block mobile_nav %}
+  <button class="datum-menu-button" data-toggle="wy-nav-top" type="button" aria-label="Open navigation">
+    <span aria-hidden="true">☰</span>
+  </button>
+  <a href="{{ nav.homepage.url|url }}">Datum</a>
+{% endblock %}
+
+{% block site_nav %}
+  <ul class="datum-primary-nav">
+    {% for item in nav %}
+      {% set landing = item.children[0] if item.is_section else item %}
+      <li class="toctree-l1{% if item.active %} current{% endif %}">
+        <a href="{{ landing.url|url }}"{% if item.active %} aria-current="{{ 'page' if landing == page else 'location' }}"{% endif %}>{{ item.title }}</a>
+      </li>
+    {% endfor %}
+  </ul>
+  {% if page and page.file.src_uri.startswith('tutorial/') %}
+    {% for group in config.extra.reading_groups %}
+      <p class="caption"><span class="caption-text">{{ group.title }}</span></p>
+      <ul class="current datum-outline">
+        {% for chapter in group.chapters %}
+          <li class="toctree-l2{% if page.file.src_uri == chapter.file %} current{% endif %}">
+            <a href="{{ chapter.url|url }}"{% if page.file.src_uri == chapter.file %} aria-current="page"{% endif %}>{{ chapter.label }}</a>
+            {% if page.file.src_uri == chapter.file and page.toc.items[0].children %}
+              <ul class="current">
+                {% set nav_item = page %}
+                {% set toc_item = page.toc.items[0] %}
+                {% set navlevel = 3 %}
+                {% include 'toc.html' %}
+              </ul>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endfor %}
+  {% elif page and not page.is_homepage and page.toc.items and page.toc.items[0].children %}
+    <p class="caption"><span class="caption-text">{% if page.file.src_uri == 'tutorial.md' %}Chapters{% else %}On this page{% endif %}</span></p>
+    <ul class="current datum-outline">
+      {% set nav_item = page %}
+      {% set toc_item = page.toc.items[0] %}
+      {% set navlevel = 2 %}
+      {% include 'toc.html' %}
+    </ul>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <div class="datum-status">
+    Provisional documentation <span aria-hidden="true">·</span> Datum {{ config.extra.datum_revision[:12] }}
+    {% if page and page.file.src_uri in config.extra.chapters_by_file %}
+      {% set lesson = config.extra.chapters_by_file[page.file.src_uri] %}
+      <span aria-hidden="true">·</span> <a href="{{ lesson.setup_url|url }}">{{ lesson.dependency }}</a>
+    {% endif %}
+  </div>
+  <div{% if page and page.is_homepage %} class="datum-home"{% elif page and page.file.src_uri == 'lookup.md' %} class="datum-index"{% endif %}>
+    {{ page.content }}
+  </div>
+{% endblock %}
+
+{% block footer %}
+  {% if page %}
+    {% set chapter = config.extra.chapters_by_file.get(page.file.src_uri) %}
+    {% if chapter %}
+      <nav class="datum-lesson-nav" aria-label="Lesson navigation">
+        {% if chapter.previous %}
+          <a rel="prev" href="{{ chapter.previous.url|url }}"><small>Previous lesson</small>{{ chapter.previous.title }}</a>
+        {% endif %}
+        {% if chapter.next %}
+          <a class="datum-next" rel="next" href="{{ chapter.next.url|url }}"><small>Next lesson</small>{{ chapter.next.title }}</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% endif %}
+  <footer class="datum-footer">
+    <a href="{{ 'tutorial/'|url }}">Tutorial</a>
+    <a href="{{ 'design/'|url }}">Design</a>
+    <a href="{{ 'build-and-run/'|url }}">Build and run</a>
+    <a href="{{ 'lookup/'|url }}">Index</a>
+    <a href="{{ 'references/'|url }}">References</a>
+    {% if page and page.file.src_uri == 'design.md' %}
+      <a href="{{ 'sources/datum-design.txt'|url }}">Source document</a>
+    {% endif %}
+  </footer>
+{% endblock %}

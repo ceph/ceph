@@ -6,6 +6,10 @@ algebra is its mathematical foundation; data views, observation and codecs are
 separate layers above it. Keep application records, native buffers, backend
 policy and I/O implementations in consumers and adapters.
 
+Read the [tutorial](tutorials/tutorial.md) for small, runnable examples, or use the
+[documentation overview](../../../doc/dev/radosgw/datum/index.rst) to find the
+tutorial, design, build instructions, and index together. All lessons are provisional.
+
 ## Architectural guidelines
 
 Changes to Datum must preserve these boundaries:

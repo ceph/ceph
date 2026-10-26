@@ -1,0 +1,101 @@
+// Recorded integration source excerpts for the documentation comparisons.
+// These excerpts are not production source added by the foundation PR.
+
+// src/rgw/salad/include/operation/listing_plan.h
+// Revision: 8858813c2e7340e65583aba184d24e82f401e010
+// Original lines: 272-327
+
+constexpr bool can_push_object_name_bounds(const data::object_list_query& query) noexcept
+{
+  return query.enforce_ns &&
+         !query.include_versions &&
+         name_only_cursor(query.marker) &&
+         name_only_cursor(query.end_marker) &&
+         !common_prefix_cursor(query, query.marker);
+}
+
+constexpr datum::key::byte_query prefix_scan(const data::object_list_query& query)
+{
+  if (!query.enforce_ns) {
+    return query.include_versions ? key::version_index_query(query.bucket)
+                                  : key::current_index_query(query.bucket);
+  }
+
+  if (query.include_versions) {
+    return key::version_index_name_query(query.bucket, query.ns, query.prefix);
+  }
+
+  return key::current_index_name_query(query.bucket, query.ns, query.prefix);
+}
+
+constexpr datum::key::byte_query
+apply_current_cursor_bound(datum::key::byte_query scan,
+                           const data::object_list_query& query,
+                           const data::object_list_cursor& cursor,
+                           const current_cursor_bound bound)
+{
+  if (cursor.name.empty()) {
+    return scan;
+  }
+
+  const auto cursor_key = current_index_key_for_cursor(query, cursor);
+
+  switch (bound) {
+  case current_cursor_bound::after:
+    return datum::key::starting_after(scan, datum::key::key_view(cursor_key));
+  case current_cursor_bound::before:
+    return datum::key::ending_before(scan, datum::key::key_view(cursor_key));
+  }
+
+  std::unreachable();
+}
+
+constexpr datum::key::byte_query apply_current_cursor_bounds(datum::key::byte_query scan,
+                                                      const data::object_list_query& query)
+{
+  if (!can_push_object_name_bounds(query)) {
+    return scan;
+  }
+
+  scan = apply_current_cursor_bound(std::move(scan), query, query.marker,
+                                    current_cursor_bound::after);
+  return apply_current_cursor_bound(std::move(scan), query, query.end_marker,
+                                    current_cursor_bound::before);
+
+// src/rgw/salad/integration/libfdb_listing.h
+// Revision: 8858813c2e7340e65583aba184d24e82f401e010
+// Original lines: 45-76
+
+inline ceph::libfdb::range_endpoint endpoint_for(const auto& endpoint)
+{
+  if (!endpoint.finite()) {
+    throw std::invalid_argument {
+      "SALad FDB listing scans require finite index bounds"
+    };
+  }
+
+  return endpoint.inclusive()
+    ? ceph::libfdb::inclusive(endpoint.key())
+    : ceph::libfdb::exclusive(endpoint.key());
+}
+
+inline ceph::libfdb::select select_for(
+  const datum::key::byte_query& interval,
+  const std::optional<std::size_t> row_limit)
+{
+  auto selection = ceph::libfdb::select(
+    endpoint_for(interval.lower()), endpoint_for(interval.upper()));
+
+  if (row_limit) {
+    selection.options.result_limit = static_cast<int>(
+      std::min(*row_limit,
+               static_cast<std::size_t>(std::numeric_limits<int>::max())));
+    selection.options.streaming_mode =
+      ceph::libfdb::streaming_mode::want_all;
+  }
+
+  return selection;
+}
+
+inline datum::key::encoded_key listing_root(
+
