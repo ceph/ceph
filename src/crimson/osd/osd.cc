@@ -641,6 +641,10 @@ seastar::future<> OSD::start()
   // gets no port is served through the main port as before
   public_msgr->set_client_shard_ports(
     local_conf().get_val<bool>("crimson_osd_client_shard_ports"));
+  // the same on the cluster messenger, for peer OSDs' repops
+  const bool cluster_shard_ports =
+    local_conf().get_val<bool>("crimson_osd_cluster_shard_ports");
+  cluster_msgr->set_client_shard_ports(cluster_shard_ports);
 
   crimson::net::dispatchers_t dispatchers{this, monc.get(), mgrc.get()};
   co_await seastar::when_all_succeed(
@@ -672,6 +676,13 @@ seastar::future<> OSD::start()
     INFO("{} client shard ports", ports.size());
     co_await pg_to_shard_mappings.invoke_on_all([ports](auto &mapping) {
       mapping.set_client_shard_ports(ports);
+    });
+  }
+  if (cluster_shard_ports) {
+    auto ports = cluster_msgr->get_client_shard_ports();
+    INFO("{} cluster shard ports", ports.size());
+    co_await shard_services.invoke_on_all([ports](auto &local_service) {
+      local_service.set_cluster_shard_ports(true, ports);
     });
   }
   co_await _add_device_class();

@@ -175,6 +175,23 @@ options:
   - client
   see_also:
   - crimson_osd_client_shard_ports
+- name: crimson_osd_cluster_shard_ports
+  type: bool
+  level: advanced
+  desc: Send repops to the replica reactor that runs their PG
+  long_desc: The cluster messenger also listens on one port per reactor, taken
+    from the ms_bind_port range, and repop replies name the replica reactor
+    that runs the PG and that reactor's port. The primary then sends the PG's
+    later repops from its own reactor's cluster lane to that port, so they are
+    not forwarded between reactors on the replica. Only for active+clean PGs;
+    other PGs, and the first repops of a PG, use the replica's published
+    cluster address. Needs per-reactor cluster lanes. The reactor ports must be
+    reachable from the peer OSDs, like the rest of the ms_bind_port range.
+  default: false
+  flags:
+  - startup
+  see_also:
+  - crimson_osd_client_shard_ports
 - name: crimson_osd_stat_interval
   type: int
   level: advanced

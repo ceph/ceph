@@ -4,7 +4,10 @@
 #pragma once
 
 #include <array>
+#include <map>
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
@@ -419,6 +422,26 @@ class ShardServices : public OSDMapService,
   // instead of on reactor 0's.
   crimson::net::MessengerRef cluster_lane_msgr;
 
+  // crimson_osd_cluster_shard_ports. A replica names, in each repop reply,
+  // the reactor that runs the PG and that reactor's cluster port; the
+  // primary then sends the PG's repops from this lane to that port, so
+  // they arrive on the replica's PG reactor instead of being forwarded
+  // there. Keyed by (pgid, peer osd). A PG changes port only while it has
+  // no repop to that peer in flight, so its repops stay in order.
+  struct replica_route_t {
+    uint16_t port = 0;      ///< in use; 0 = the peer's cluster address
+    uint16_t learned = 0;   ///< named by the peer's last reply
+    unsigned inflight = 0;  ///< repops sent on `port` awaiting a reply
+  };
+  std::map<std::pair<spg_t, int>, replica_route_t> replica_routes;
+  bool replica_routing = false;
+  uint16_t local_cluster_shard_port = 0;
+
+  bool can_send_to_osd(int peer, epoch_t from_epoch) const;
+  /// on this reactor's lane, to the peer's cluster address at `port` (0:
+  /// the address as published)
+  seastar::future<> send_on_lane(int peer, uint16_t port, MessageURef m);
+
   template <typename F, typename... Args>
   auto with_singleton(F &&f, Args&&... args) {
     return osd_singleton_state.invoke_on(
@@ -538,6 +561,29 @@ public:
   }
 
   seastar::future<> send_to_osd(int peer, MessageURef m, epoch_t from_epoch);
+
+  /// crimson_osd_cluster_shard_ports, set once at startup on every core:
+  /// whether repops are routed, and each reactor's cluster port (0 = none)
+  void set_cluster_shard_ports(bool routing,
+                               const std::vector<uint16_t>& ports);
+  /// this reactor's cluster port, 0 if it has none
+  uint16_t get_local_cluster_shard_port() const {
+    return local_cluster_shard_port;
+  }
+  /// A repop of pgid to peer. With routing, and once the peer named the
+  /// port of the reactor that runs pgid there, it goes to that port.
+  /// may_route false keeps (or, when idle, moves) pgid on the peer's
+  /// published address.
+  seastar::future<> send_repop_to_osd(
+    int peer, spg_t pgid, MessageURef m, epoch_t from_epoch, bool may_route);
+  /// Another message of pgid to peer, on the connection its repops use, so
+  /// it stays ordered with them.
+  seastar::future<> send_pg_msg_to_osd(
+    int peer, spg_t pgid, MessageURef m, epoch_t from_epoch);
+  /// peer replied to a repop of pgid, naming port (0: none)
+  void repop_replied(int peer, spg_t pgid, uint16_t port);
+  /// pgid's repops are no longer tracked (new interval, or PG stopped)
+  void forget_replica_routes(spg_t pgid);
 
   seastar::future<> start_cluster_lane(
     uint32_t nonce,
