@@ -126,14 +126,16 @@ static void forward_req_info(const DoutPrefixProvider *dpp, CephContext *cct, re
  * driver to run the operation as the daemon.
  *
  * A role session is the exception.  Its `s->user` is the user that
- * assumed the role, and a role in an account acts as that account,
- * as RoleApplier::get_aclowner() does. */
+ * assumed the role, which is not who the session acts as;  a role in an
+ * account is carried as the role itself, in rgw::sal::role_session_ns,
+ * and what that role is served as is the driver's to decide. */
 rgw_owner authenticated_user(const req_state* s)
 {
   if (s->auth.identity &&
       s->auth.identity->get_identity_type() == TYPE_ROLE) {
     if (const auto& account = s->auth.identity->get_account(); account) {
-      return account->id;
+      return rgw_user{account->tenant, s->auth.identity->get_role_id(),
+                      std::string(rgw::sal::role_session_ns)};
     }
   }
   if (s->user) {

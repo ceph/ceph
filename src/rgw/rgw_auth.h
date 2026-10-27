@@ -103,6 +103,10 @@ public:
   /* Return the identity's account info if present */
   virtual const std::optional<RGWAccountInfo>& get_account() const = 0;
 
+  /* The id of the role a session assumed (RGWRoleInfo::id);  empty for
+   * every identity that is not a role session */
+  virtual std::string get_role_id() const { return {}; }
+
   /* write any auth-specific fields that are safe to expose in the ops log */
   virtual void write_ops_log_entry(rgw_log_entry& entry) const {};
 };
@@ -883,6 +887,7 @@ public:
   const std::optional<RGWAccountInfo>& get_account() const override {
     return role.account;
   }
+  std::string get_role_id() const override { return role.id; }
   void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;

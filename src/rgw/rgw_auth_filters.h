@@ -124,6 +124,10 @@ public:
     return get_decoratee().get_account();
   }
 
+  std::string get_role_id() const override {
+    return get_decoratee().get_role_id();
+  }
+
   auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override {  /* out */
     return get_decoratee().load_acct_info(dpp);
   }

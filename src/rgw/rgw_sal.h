@@ -177,11 +177,12 @@ static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
  * An `authenticated_user` parameter names who an operation is for:
  * the identity the request authenticated as, which for a member of an
  * account is the member and not the account that owns what it
- * touches, and for a session of a role in an account is that account,
- * since a role has no user of its own.  A driver that maps an
- * identity to filesystem credentials needs the member, or every member
- * of an account is served as one;  a driver with no such mapping
- * ignores it.
+ * touches, and for a session of a role in an account is the role --
+ * `rgw_user{tenant, <role id>, role_session_ns}`, since a role has no
+ * user of its own and rgw_owner names users and accounts.  A driver
+ * that maps an identity to filesystem credentials needs the member, or
+ * every member of an account is served as one, and the role, or every
+ * role of an account is;  a driver with no such mapping ignores it.
  *
  * The parameter is not defaulted, deliberately:  such a driver runs an
  * unnamed operation as the daemon, which reaches more of the
@@ -190,6 +191,10 @@ static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
  * nobody -- lifecycle, restore, sync, a cache's own writeback -- and
  * makes them greppable as a set. */
 inline const rgw_owner no_authenticated_user{};
+
+/* The namespace of a role session's `authenticated_user`, as "oidc" is
+ * a federated user's (rgw_auth.cc) */
+inline constexpr std::string_view role_session_ns = "role";
 
 /* Whose work an operation with no authenticated user is, where it is
  * someone's:  lifecycle acts for the bucket's owner.  Carried as
