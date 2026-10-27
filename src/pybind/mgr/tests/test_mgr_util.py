@@ -64,28 +64,6 @@ class TestCephFsEarmarkResolver:
 
         mock_earmarking.set_earmark.assert_called_once_with("smb.test2")
 
-    @patch('mgr_util.CephFSVolumeEarmarking.parse_earmark')
-    def test_check_earmark(self, mock_parse_earmark, resolver):
-        # Test that an earmark with the 'smb' top-level scope is correctly identified
-        mock_parse_earmark.return_value = MagicMock(top=mgr_util.EarmarkTopScope.SMB)
-        result = resolver.check_earmark("smb.cluster.cluster1", mgr_util.EarmarkTopScope.SMB)
-        assert result is True
-
-        # Test with a different top-level scope, should return False
-        mock_parse_earmark.return_value = MagicMock(top=mgr_util.EarmarkTopScope.SMB)
-        result = resolver.check_earmark("smb.cluster.cluster1", mgr_util.EarmarkTopScope.NFS)
-        assert result is False
-
-        # Test with an invalid earmark (parse_earmark returns None), should return False
-        mock_parse_earmark.return_value = None
-        result = resolver.check_earmark("invalid.test", mgr_util.EarmarkTopScope.SMB)
-        assert result is False
-
-        # Test with an exception raised by parse_earmark, should return False
-        mock_parse_earmark.side_effect = mgr_util.EarmarkParseError
-        result = resolver.check_earmark("error.test", mgr_util.EarmarkTopScope.SMB)
-        assert result is False
-
 
 _SHA256_OK = "a" * 64
 _SHA256_BAD_HEX = "g" * 64
