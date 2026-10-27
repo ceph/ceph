@@ -17882,6 +17882,100 @@ TEST_F(NSFSPlacedBucketTest, AUsersOwnNewBucketsPathIsUsedUnderTheOverride)
   db->force_user_identity_override(std::nullopt);
 }
 
+/* A role in an account, for the tests of a role session's new buckets:
+ * created as IAM CreateRole creates one, which gives it its id. */
+static std::string make_account_role(const DoutPrefixProvider* dpp,
+				     rgw::sal::Driver* driver,
+				     const std::string& name,
+				     const rgw_account_id& acct)
+{
+  RGWRoleInfo ri;
+  ri.name = name;
+  ri.path = "/";
+  ri.account_id = acct;
+  ri.trust_policy = R"({"Version":"2012-10-17","Statement":[{"Effect":"Allow",)"
+    R"("Principal":{"AWS":["arn:aws:iam::)" + std::string(acct) +
+    R"(:root"]},"Action":["sts:AssumeRole"]}]})";
+  ri.max_session_duration = RGWRole::SESSION_DURATION_MIN;
+  std::unique_ptr<RGWRole> role = driver->get_role(ri);
+  if (role->create(dpp, "", null_yield) < 0) {
+    return {};
+  }
+  return role->get_info().id;
+}
+
+/* I9:  under rgw_nsfs_role_identity_override a role session's new
+ * bucket goes under the role's own new_buckets_path, as a user's goes
+ * under its own under the user override;  the bucket is still the
+ * account's.  Without the override, and for a role of another account,
+ * it goes under the account's. */
+TEST_F(NSFSPlacedBucketTest, ARolesOwnNewBucketsPathIsUsedUnderTheOverride)
+{
+  auto* db = driver->get_identity_db();
+  const rgw_account_id acct{"RGW77777777777777777"};
+  const rgw_account_id other{"RGW77777777777777778"};
+  const sf::path apath = elsewhere() / "acct-path";
+  const sf::path rpath = elsewhere() / "role-path";
+  sf::create_directories(apath);
+  sf::create_directories(rpath);
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.new_buckets_path = apath.string();
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+
+  const std::string mine = make_account_role(env->dpp, driver.get(),
+					     "path-role", acct);
+  const std::string theirs = make_account_role(env->dpp, driver.get(),
+					       "path-role", other);
+  ASSERT_FALSE(mine.empty()) << "the role was not created";
+  ASSERT_FALSE(theirs.empty()) << "the other account's role was not created";
+  for (const auto& id : {mine, theirs}) {
+    nsfs::Identity rrow;
+    rrow.key = nsfs::role_identity_key(id);
+    rrow.new_buckets_path = rpath.string();
+    ASSERT_EQ(db->put_identity(env->dpp, rrow), 0);
+  }
+
+  auto create = [&] (const std::string& name, const std::string& role_id) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = rgw_owner{acct};
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = rgw_owner{acct};
+    const rgw_owner session{rgw_user{"", role_id,
+				     std::string(rgw::sal::role_session_ns)}};
+    return b->create(env->dpp, cp, null_yield, session);
+  };
+
+  db->force_role_identity_override(false);
+  ASSERT_EQ(create("role-off", mine), 0);
+  EXPECT_TRUE(sf::is_directory(apath / "role-off"))
+      << "without the override the account's path did not place it";
+  EXPECT_FALSE(sf::exists(rpath / "role-off"));
+
+  db->force_role_identity_override(true);
+  ASSERT_EQ(create("role-on", mine), 0);
+  EXPECT_TRUE(sf::is_directory(rpath / "role-on"))
+      << "under the override the role's own path did not place it";
+  EXPECT_FALSE(sf::exists(apath / "role-on"));
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(db->get_bucket_placement(env->dpp, "role-on", "", row), 0);
+  EXPECT_EQ(row.owner, to_string(rgw_owner{acct}))
+      << "the role's path was used, but the bucket is the account's";
+
+  ASSERT_EQ(create("role-elsewhere", theirs), 0);
+  EXPECT_TRUE(sf::is_directory(apath / "role-elsewhere"))
+      << "a role of another account placed the account's bucket";
+  EXPECT_FALSE(sf::exists(rpath / "role-elsewhere"));
+
+  /* a role given no identity follows its account */
+  ASSERT_EQ(db->remove_identity(env->dpp, nsfs::role_identity_key(mine)), 0);
+  ASSERT_EQ(create("role-no-row", mine), 0);
+  EXPECT_TRUE(sf::is_directory(apath / "role-no-row"));
+  db->force_role_identity_override(std::nullopt);
+}
+
 /* An owner imported from NooBaa without a path cannot create buckets,
  * as it could not in NooBaa.  The control is the same owner before it
  * is marked imported, which creates at the base path. */
@@ -18342,6 +18436,57 @@ TEST_F(NSFSCustomPathTest, TheUsersOwnAllowlistAdmitsUnderTheOverride)
   EXPECT_EQ(create_at("on-user", uroot / "on-user"), 0);
   EXPECT_EQ(row_path("on-user"), (uroot / "on-user").string());
   db->force_user_identity_override(std::nullopt);
+}
+
+/* I9:  under rgw_nsfs_role_identity_override a role session's own
+ * allowlist admits a custom path, as a user's does under the user
+ * override;  without it the account's does. */
+TEST_F(NSFSCustomPathTest, TheRolesOwnAllowlistAdmitsUnderTheOverride)
+{
+  auto* db = driver->get_identity_db();
+  const rgw_account_id acct{"RGW66666666666666666"};
+  const sf::path aroot = elsewhere() / "acct-allowed";
+  const sf::path rroot = elsewhere() / "role-allowed";
+  sf::create_directories(aroot);
+  sf::create_directories(rroot);
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.custom_bucket_path_allowed_list = aroot.string();
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+
+  const std::string role_id = make_account_role(env->dpp, driver.get(),
+						"allow-role", acct);
+  ASSERT_FALSE(role_id.empty()) << "the role was not created";
+  nsfs::Identity rrow;
+  rrow.key = nsfs::role_identity_key(role_id);
+  rrow.custom_bucket_path_allowed_list = rroot.string();
+  ASSERT_EQ(db->put_identity(env->dpp, rrow), 0);
+
+  auto create_at = [&] (const std::string& name, const sf::path& at) {
+    env_.set("HTTP_X_NOOBAA_CUSTOM_BUCKET_PATH", at.string());
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = rgw_owner{acct};
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = rgw_owner{acct};
+    cp.env = &env_;
+    const rgw_owner session{rgw_user{"", role_id,
+				     std::string(rgw::sal::role_session_ns)}};
+    return b->create(env->dpp, cp, null_yield, session);
+  };
+
+  db->force_role_identity_override(false);
+  EXPECT_EQ(create_at("off-role", rroot / "off-role"), -EACCES)
+      << "without the override the role's allowlist admitted a path";
+  EXPECT_EQ(create_at("off-acct", aroot / "off-acct"), 0);
+
+  db->force_role_identity_override(true);
+  EXPECT_EQ(create_at("on-acct", aroot / "on-acct"), -EACCES)
+      << "under the override the account's allowlist still admitted";
+  EXPECT_EQ(create_at("on-role", rroot / "on-role"), 0);
+  EXPECT_EQ(row_path("on-role"), (rroot / "on-role").string());
+  db->force_role_identity_override(std::nullopt);
 }
 
 /* The global list stands in for an owner with none. */

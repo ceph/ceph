@@ -5876,6 +5876,26 @@ NSFSDriver::make_placed_dir(const std::string& path)
   return d;
 }
 
+namespace {
+
+bool is_role_principal(const rgw_owner& who)
+{
+  const auto* u = std::get_if<rgw_user>(&who);
+  return u && (u->ns == rgw::sal::role_session_ns);
+}
+
+/* The identity row's key for `who`:  a role principal's is its role
+ * key, every other owner's its rendering */
+std::string identity_key_for(const rgw_owner& who)
+{
+  if (is_role_principal(who)) {
+    return nsfs::role_identity_key(std::get<rgw_user>(who).id);
+  }
+  return to_string(who);
+}
+
+} // anonymous namespace
+
 rgw_owner NSFSDriver::new_bucket_path_source(const DoutPrefixProvider* dpp,
 					     const rgw_owner& owner,
 					     const rgw_owner& authenticated_user,
@@ -5883,10 +5903,26 @@ rgw_owner NSFSDriver::new_bucket_path_source(const DoutPrefixProvider* dpp,
 {
   const auto* user = std::get_if<rgw_user>(&authenticated_user);
   const auto* acct = std::get_if<rgw_account_id>(&owner);
-  /* a role session's buckets go where its account's do:  NooBaa's
-   * documented role identity is a uid and gid, not a path */
-  if (!user || !acct || !userDB->user_identity_override() ||
-      (user->ns == rgw::sal::role_session_ns)) {
+  if (!user || !acct) {
+    return owner;
+  }
+  if (user->ns == rgw::sal::role_session_ns) {
+    /* a role given an identity, under the role override, as a user's
+     * own row under the user override */
+    if (!userDB->role_identity_override()) {
+      return owner;
+    }
+    std::unique_ptr<RGWRole> role = get_role(user->id);
+    if ((role->load_by_id(dpp, y) < 0) || (role->get_account_id() != *acct)) {
+      return owner;
+    }
+    nsfs::Identity row;
+    if (userDB->get_identity(dpp, nsfs::role_identity_key(user->id), row) < 0) {
+      return owner;
+    }
+    return authenticated_user;
+  }
+  if (!userDB->user_identity_override()) {
     return owner;
   }
   std::unique_ptr<User> u = get_user(*user);
@@ -5922,7 +5958,7 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
 
   const std::string dname =
     b.tenant.empty() ? b.name : (b.tenant + "$" + b.name);
-  const std::string key = to_string(owner);
+  const std::string key = identity_key_for(owner);
 
   nsfs::Identity id;
   int ret = userDB->get_identity(dpp, key, id);
@@ -5994,7 +6030,7 @@ int NSFSDriver::custom_bucket_path(const DoutPrefixProvider* dpp,
 
   std::string list;
   nsfs::Identity id;
-  if ((userDB->get_identity(dpp, to_string(owner), id) == 0) &&
+  if ((userDB->get_identity(dpp, identity_key_for(owner), id) == 0) &&
       !id.custom_bucket_path_allowed_list.empty()) {
     list = id.custom_bucket_path_allowed_list;
   } else {
@@ -6036,7 +6072,10 @@ int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
     return 0;
   }
   nsfs::Credentials cred;
-  int ret = nsfs::resolve_credentials(dpp, *userDB, owner, cred, y);
+  /* a role principal resolves as its session does */
+  int ret = is_role_principal(owner)
+    ? get_credentials_for(dpp, owner, y, cred)
+    : nsfs::resolve_credentials(dpp, *userDB, owner, cred, y);
   if ((ret == -ENOENT) && unresolved_as_gateway_injected(owner)) {
     return 0;
   }
