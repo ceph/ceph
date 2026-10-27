@@ -218,6 +218,10 @@ def task(ctx, config):
             bad_tests.append(str(test))
         for test, failure in result.failures:
             bad_tests.append(str(test))
+        # an @unittest.expectedFailure test that passed: the bug it
+        # reproduces is fixed and the marker should go
+        for test in result.unexpectedSuccesses:
+            bad_tests.append("{0} (unexpected success)".format(test))
 
         raise RuntimeError("Test failure: {0}".format(", ".join(bad_tests)))
 
