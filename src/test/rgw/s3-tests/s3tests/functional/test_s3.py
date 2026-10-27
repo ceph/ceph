@@ -10219,7 +10219,7 @@ def test_lifecycle_cloud_multiple_transition():
     client = get_client()
     rules=[{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': sc1}], 'Prefix': 'expire1/', 'Status': 'Enabled'},
            {'ID': 'rule2', 'Transitions': [{'Days': 5, 'StorageClass': cloud_sc}], 'Prefix': 'expire1/', 'Status': 'Enabled'},
-           {'ID': 'rule3', 'Expiration': {'Days': 9}, 'Prefix': 'expire1/', 'Status': 'Enabled'}]
+           {'ID': 'rule3', 'Expiration': {'Days': 12}, 'Prefix': 'expire1/', 'Status': 'Enabled'}]
     lifecycle = {'Rules': rules}
     client.put_bucket_lifecycle_configuration(Bucket=bucket_name, LifecycleConfiguration=lifecycle)
 
@@ -10249,7 +10249,7 @@ def test_lifecycle_cloud_multiple_transition():
         assert len(expire1_keys[sc[2]]) == 0
 
     # Wait for final expiration cycle
-    time.sleep(6*lc_interval)
+    time.sleep(9*lc_interval)
     expire3_keys = list_bucket_storage_class(client, bucket_name)
     assert len(expire3_keys['STANDARD']) == 2
     assert len(expire3_keys[sc[1]]) == 0
