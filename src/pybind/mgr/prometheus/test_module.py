@@ -740,3 +740,66 @@ class TestBuildSSLInfo(TestCase):
                 mock.patch('prometheus.module.ssl'):
             _build_ssl_info(self.module)
         self.module.log.warning.assert_not_called()
+
+
+class TestRgwZoneIds(TestCase):
+    def setUp(self):
+        self.module = mock.MagicMock(spec=Module)
+
+    def _set_service_map(self, service_map):
+        self.module.get = mock.MagicMock(return_value=service_map)
+
+    def test_rgw_metadata_has_zone_id_label(self):
+        from prometheus.module import RGW_METADATA
+        self.assertEqual(RGW_METADATA[-1], 'zone_id')
+
+    def test_no_rgw_service(self):
+        self._set_service_map({'services': {}})
+        self.assertEqual(Module.get_rgw_zone_ids(self.module), {})
+
+    def test_empty_service_map(self):
+        self._set_service_map({})
+        self.assertEqual(Module.get_rgw_zone_ids(self.module), {})
+
+    def test_keyed_by_gid_and_daemon_id(self):
+        self._set_service_map({'services': {'rgw': {'daemons': {
+            '4123': {'metadata': {'id': 'rgw.a', 'zone_id': 'zone-uuid-1'}},
+        }}}})
+        self.assertEqual(
+            Module.get_rgw_zone_ids(self.module),
+            {'4123': 'zone-uuid-1', 'rgw.a': 'zone-uuid-1'})
+
+    def test_missing_zone_id_defaults_to_empty(self):
+        self._set_service_map({'services': {'rgw': {'daemons': {
+            '4123': {'metadata': {'id': 'rgw.a'}},
+        }}}})
+        self.assertEqual(
+            Module.get_rgw_zone_ids(self.module),
+            {'4123': '', 'rgw.a': ''})
+
+    def test_missing_metadata_id_only_gid_key(self):
+        self._set_service_map({'services': {'rgw': {'daemons': {
+            '4123': {'metadata': {'zone_id': 'zone-uuid-1'}},
+        }}}})
+        self.assertEqual(
+            Module.get_rgw_zone_ids(self.module), {'4123': 'zone-uuid-1'})
+
+    def test_non_dict_daemon_entries_skipped(self):
+        # The service map's 'daemons' dict also carries scalar entries such
+        # as 'summary'.
+        self._set_service_map({'services': {'rgw': {'daemons': {
+            'summary': '',
+            '4123': {'metadata': {'id': 'rgw.a', 'zone_id': 'zone-uuid-1'}},
+        }}}})
+        self.assertEqual(
+            Module.get_rgw_zone_ids(self.module),
+            {'4123': 'zone-uuid-1', 'rgw.a': 'zone-uuid-1'})
+
+    def test_multiple_daemons_different_zones(self):
+        self._set_service_map({'services': {'rgw': {'daemons': {
+            '1': {'metadata': {'id': 'a', 'zone_id': 'z1'}},
+            '2': {'metadata': {'id': 'b', 'zone_id': 'z2'}},
+        }}}})
+        self.assertEqual(
+            Module.get_rgw_zone_ids(self.module),
+            {'1': 'z1', 'a': 'z1', '2': 'z2', 'b': 'z2'})
