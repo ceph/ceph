@@ -2250,17 +2250,19 @@ class CephManager:
             assert pool_name not in self.pools
             self.log("creating pool_name %s" % (pool_name,))
             if erasure_code_profile_name:
-                cmd_args = ['osd', 'pool', 'create', 
-                            pool_name, str(pg_num), 
-                            str(pg_num), 'erasure', 
+                cmd_args = ['osd', 'pool', 'create',
+                            pool_name, str(pg_num),
+                            str(pg_num), 'erasure',
                             erasure_code_profile_name]
 
                 if erasure_code_crush_rule_name:
                     cmd_args.extend([erasure_code_crush_rule_name])
+
                 self.raw_cluster_cmd(*cmd_args)
             else:
-                self.raw_cluster_cmd('osd', 'pool', 'create',
-                                     pool_name, str(pg_num))
+                cmd_args = ['osd', 'pool', 'create',
+                            pool_name, str(pg_num)]
+                self.raw_cluster_cmd(*cmd_args)
             if min_size is not None:
                 self.raw_cluster_cmd(
                     'osd', 'pool', 'set', pool_name,

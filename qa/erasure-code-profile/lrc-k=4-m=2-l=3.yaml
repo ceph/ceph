@@ -1,0 +1,12 @@
+# LRC plugin with k=4, m=2, l=3
+overrides:
+  ceph:
+    pool-config:
+      ec_pool: true
+      erasure_code_profile:
+        name: lrc423profile
+        plugin: lrc
+        k: 4
+        m: 2
+        l: 3
+        crush-failure-domain: osd
