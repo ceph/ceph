@@ -66,6 +66,9 @@ struct DBOpTopicInfo {
 struct DBOpUserInfo {
   RGWUserInfo uinfo = {};
   obj_version user_version;
+  /* InsertUser:  the version an existing row must still have for the
+   * write to apply;  0 for a user not yet stored, which no row has */
+  uint64_t expected_ver = 0;
   rgw::sal::Attrs user_attrs;
   std::list<RGWUserInfo> list_entries;
 };
@@ -304,6 +307,7 @@ struct DBOpUserPrepareInfo {
   static constexpr const char* user_attrs = ":user_attrs";
   static constexpr const char* user_ver = ":user_vers";
   static constexpr const char* user_ver_tag = ":user_ver_tag";
+  static constexpr const char* expected_ver = ":expected_ver";
 };
 
 struct DBOpBucketPrepareInfo {
@@ -1609,18 +1613,18 @@ class ListAccountUsersOp: virtual public DBOp {
 
 class InsertUserOp : virtual public DBOp {
   private:
-    /* For existing entires, -
-     * (1) INSERT or REPLACE - it will delete previous entry and then
-     * inserts new one. Since it deletes previous entries, it will
-     * trigger all foreign key cascade deletes or other triggers.
-     * (2) INSERT or UPDATE - this will set NULL values to unassigned
-     * fields.
-     * more info: https://code-examples.net/en/q/377728
+    /* An insert of a new user, or an update of an existing one that
+     * applies only while its row still has the version the writer read
+     * (`expected_ver`).  One statement, so the check and the write
+     * cannot be separated:  a writer whose read is stale changes
+     * nothing, and the caller turns that into -ECANCELED.  INSERT OR
+     * REPLACE, used before, wrote over whatever was there, and two
+     * writers that read the same version both succeeded, the second
+     * losing the first's change.
      *
-     * For now using INSERT or REPLACE. If required of updating existing
-     * record, will use another query.
-     */
-    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
+     * An upsert, not a replace, also leaves the row in place on update,
+     * so nothing cascades from a delete that is not one. */
+    static constexpr std::string_view Query = "INSERT INTO '{}'	\
                           (UserID, Tenant, NS, DisplayName, UserEmail, \
                            AccessKeys, SwiftKeys,\
                            SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -1628,7 +1632,24 @@ class InsertUserOp : virtual public DBOp {
                            BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, \
                            AccountID, UserPath, UserCreateDate, UserAttrs, UserVersion, UserVersionTag) \
                           VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}) \
+                          ON CONFLICT(UserID) DO UPDATE SET \
+                           Tenant = excluded.Tenant, NS = excluded.NS, \
+                           DisplayName = excluded.DisplayName, UserEmail = excluded.UserEmail, \
+                           AccessKeys = excluded.AccessKeys, SwiftKeys = excluded.SwiftKeys, \
+                           SubUsers = excluded.SubUsers, Suspended = excluded.Suspended, \
+                           MaxBuckets = excluded.MaxBuckets, OpMask = excluded.OpMask, \
+                           UserCaps = excluded.UserCaps, Admin = excluded.Admin, \
+                           System = excluded.System, PlacementName = excluded.PlacementName, \
+                           PlacementStorageClass = excluded.PlacementStorageClass, \
+                           PlacementTags = excluded.PlacementTags, \
+                           BucketQuota = excluded.BucketQuota, TempURLKeys = excluded.TempURLKeys, \
+                           UserQuota = excluded.UserQuota, Type = excluded.Type, \
+                           MfaIDs = excluded.MfaIDs, AccountID = excluded.AccountID, \
+                           UserPath = excluded.UserPath, UserCreateDate = excluded.UserCreateDate, \
+                           UserAttrs = excluded.UserAttrs, UserVersion = excluded.UserVersion, \
+                           UserVersionTag = excluded.UserVersionTag \
+                          WHERE UserVersion = {};";
 
   public:
     virtual ~InsertUserOp() {}
@@ -1648,7 +1669,7 @@ class InsertUserOp : virtual public DBOp {
           params.op.user.account_id,
           params.op.user.path, params.op.user.create_date,
           params.op.user.user_attrs, params.op.user.user_ver,
-          params.op.user.user_ver_tag);
+          params.op.user.user_ver_tag, params.op.user.expected_ver);
     }
 
 };

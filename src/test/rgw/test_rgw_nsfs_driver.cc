@@ -1237,6 +1237,105 @@ TEST_F(NSFSBucketTest, APosixChownRejectsWithoutAUsableIdentity)
   EXPECT_EQ(b->get_info().owner, was) << "a rejected chown moved the owner";
 }
 
+/* A user's stored record is compare-and-swap on its version:  writers that
+ * read it concurrently each either apply or get -ECANCELED and retry, as
+ * RGW's callers do, and no write is lost.  dbstore checked the version and
+ * then wrote with INSERT OR REPLACE, two steps nothing held together, so
+ * two writers that read the same version both succeeded and the later one
+ * wrote over the earlier -- a concurrent caps grant on one Admin Ops user
+ * lost a cap that way (run 20261027-135946).  Each thread here adds its
+ * own placement tags, a list nothing validates, so every one must be
+ * there at the end. */
+TEST_F(NSFSBucketTest, ConcurrentUserWritesLoseNothing)
+{
+  auto* udb = driver->get_user_db();
+  RGWUserInfo info;
+  info.user_id = rgw_user{"", "cas-user"};
+  info.display_name = "cas";
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  ASSERT_EQ(udb->store_user(env->dpp, info, true, &attrs, &objv, nullptr), 0);
+
+  constexpr int threads = 16;
+  constexpr int each = 8;
+  std::atomic<int> cancelled{0};
+  std::atomic<int> failed{0};
+  std::vector<std::thread> ts;
+  for (int t = 0; t < threads; ++t) {
+    ts.emplace_back([&, t] {
+      for (int i = 0; i < each; ++i) {
+	const std::string tag = "t" + std::to_string(t) + "-" + std::to_string(i);
+	for (;;) {
+	  RGWUserInfo u;
+	  u.user_id = rgw_user{"", "cas-user"};
+	  rgw::sal::Attrs a;
+	  RGWObjVersionTracker v;
+	  if (udb->get_user(env->dpp, "user_id", "cas-user", u, &a, &v) < 0) {
+	    ++failed;
+	    return;
+	  }
+	  u.placement_tags.push_back(tag);
+	  const int r = udb->store_user(env->dpp, u, false, &a, &v, nullptr);
+	  if (r == -ECANCELED) {
+	    ++cancelled;
+	    continue;
+	  }
+	  if (r < 0) {
+	    ++failed;
+	  }
+	  break;
+	}
+      }
+    });
+  }
+  for (auto& t : ts) {
+    t.join();
+  }
+  ASSERT_EQ(failed.load(), 0);
+
+  RGWUserInfo end;
+  end.user_id = rgw_user{"", "cas-user"};
+  ASSERT_EQ(udb->get_user(env->dpp, "user_id", "cas-user", end, nullptr,
+			  nullptr), 0);
+  std::set<std::string> have(end.placement_tags.begin(),
+			     end.placement_tags.end());
+  EXPECT_EQ(have.size(), static_cast<size_t>(threads * each))
+      << "writes were lost:  " << have.size() << " of " << threads * each
+      << " tags stored, after " << cancelled.load() << " retries";
+}
+
+/* And the plain case:  a write carrying a version the row no longer has
+ * is refused, and the row is left as the newer write made it. */
+TEST_F(NSFSBucketTest, AStaleUserWriteIsRefused)
+{
+  auto* udb = driver->get_user_db();
+  RGWUserInfo info;
+  info.user_id = rgw_user{"", "stale-user"};
+  info.display_name = "stale";
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  ASSERT_EQ(udb->store_user(env->dpp, info, true, &attrs, &objv, nullptr), 0);
+
+  auto load = [&] (RGWUserInfo& u, RGWObjVersionTracker& v) {
+    u.user_id = rgw_user{"", "stale-user"};
+    rgw::sal::Attrs a;
+    return udb->get_user(env->dpp, "user_id", "stale-user", u, &a, &v);
+  };
+  RGWUserInfo first, second;
+  RGWObjVersionTracker v1, v2;
+  ASSERT_EQ(load(first, v1), 0);
+  ASSERT_EQ(load(second, v2), 0);
+  first.max_buckets = 11;
+  ASSERT_EQ(udb->store_user(env->dpp, first, false, &attrs, &v1, nullptr), 0);
+  second.max_buckets = 22;
+  EXPECT_EQ(udb->store_user(env->dpp, second, false, &attrs, &v2, nullptr),
+	    -ECANCELED);
+  RGWUserInfo now;
+  RGWObjVersionTracker vn;
+  ASSERT_EQ(load(now, vn), 0);
+  EXPECT_EQ(now.max_buckets, 11) << "the stale write replaced the newer one";
+}
+
 /* Stored state that will not decode fails the bucket closed.
  *
  * Absent and unreadable are different.  A bucket with no stored state

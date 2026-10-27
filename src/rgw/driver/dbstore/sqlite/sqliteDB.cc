@@ -3200,16 +3200,31 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_ver_tag, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.user_version.tag.c_str(), sdb);
 
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.expected_ver, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.user.expected_ver, sdb);
+
 out:
   return rc;
 }
 
+/* -ECANCELED when the statement changed no row:  the user exists with a
+ * version other than the one the writer read.  The connection is shared
+ * by every thread (SQLITE_OPEN_FULLMUTEX), so sqlite3_changes() is read
+ * under the connection's own mutex, held across the step, or it could
+ * report another thread's statement;  the mutex is recursive in that
+ * mode, so the step inside takes it again. */
 int SQLInsertUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
 {
   int ret = -1;
+  sqlite3_mutex* conn = sqlite3_db_mutex(*sdb);
 
+  sqlite3_mutex_enter(conn);
   SQL_EXECUTE(dpp, params, stmt, NULL);
+  if (sqlite3_changes(*sdb) == 0) {
+    ret = -ECANCELED;
+  }
 out:
+  sqlite3_mutex_leave(conn);
   return ret;
 }
 
