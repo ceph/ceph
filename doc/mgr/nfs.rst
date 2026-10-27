@@ -653,7 +653,8 @@ Create CephFS Export
    ceph nfs export create cephfs --cluster-id <cluster_id> \
           --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] \
           [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>] \
-          [--sectype <value>...] [--cmount_path <value>] [--xprtsec <value>] [--transports <value>...]
+          [--sectype <value>...] [--cmount_path <value>] [--xprtsec <value>] \
+          [--transports <value>...] [--server_addr <value>...]
 
 This creates export RADOS objects containing the export block, where
 
@@ -677,6 +678,12 @@ path is ``/``. It need not be unique. Subvolume path can be fetched using:
 permissions will be applicable. By default all clients can access the export
 according to specified export permissions. See the `NFS-Ganesha Export Sample`_
 for permissible values.
+
+``<server_addr>`` is the list of server IP addresses on which this export will
+be accessible. When set, NFS-Ganesha restricts the export to respond only on
+the specified destination IPs. This is applicable on any NFS server with
+multiple IP addresses. If not specified, the export is accessible on all
+server addresses. At least one address must be provided if this option is used.
 
 ``<squash>`` defines the kind of user ID squashing to be performed. The default
 value is ``no_root_squash``. See the `NFS-Ganesha Export Sample`_ for
@@ -737,7 +744,8 @@ To export a *bucket*:
    ceph nfs export create rgw --cluster-id <cluster_id> \
           --pseudo-path <pseudo_path> --bucket <bucket_name> \
           [--user-id <user-id>] [--readonly] [--client_addr <value>...] [--squash <value>] \
-          [--sectype <value>...] [--xprtsec <value>] [--transports <value>...]
+          [--sectype <value>...] [--xprtsec <value>] [--transports <value>...] \
+          [--server_addr <value>...]
 
 For example, to export ``mybucket`` via NFS cluster ``mynfs`` at the
 pseudo-path ``/bucketdata`` to any host in the ``192.168.10.0/24`` network
@@ -768,6 +776,12 @@ the bucket will be used.
 permissions will be applicable. By default all clients can access the export
 according to specified export permissions. See the `NFS-Ganesha Export
 Sample`_ for permissible values.
+
+``<server_addr>`` is the list of server IP addresses on which this export will
+be accessible. When set, NFS-Ganesha restricts the export to respond only on
+the specified destination IPs. This is applicable on any NFS server with
+multiple IP addresses. If not specified, the export is accessible on all
+server addresses. At least one address must be provided if this option is used.
 
 ``<squash>`` defines the kind of user ID squashing to be performed. The
 default value is ``no_root_squash``. See the `NFS-Ganesha Export Sample`_ for
