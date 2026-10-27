@@ -771,10 +771,12 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
     if (!alloc[i]) continue;
     bluefs_locked_extents_t res_la = locked_alloc[i].get_merged();
     if (res_la.head_length) {
-      alloc[i]->init_rm_free(res_la.head_offset, res_la.head_length);
+      alloc[i]->init_rm_free(res_la.head_offset, res_la.head_length,
+                              alloc_tag_t::bluefs(alloc_tag_bluefs_t::OTHER));
     }
     if (res_la.tail_length) {
-      alloc[i]->init_rm_free(res_la.tail_offset, res_la.tail_length);
+      alloc[i]->init_rm_free(res_la.tail_offset, res_la.tail_length,
+                              alloc_tag_t::bluefs(alloc_tag_bluefs_t::OTHER));
     }
   }
 
@@ -1174,15 +1176,28 @@ int BlueFS::mount()
       log.uses_envelope_mode = true;
     }
     dout(20) << __func__ << " noting alloc for " << p.second->fnode << dendl;
+    alloc_tag_bluefs_t subkind = alloc_tag_bluefs_t::OTHER;
+    if (p.second->fnode.ino == 1) {
+      subkind = alloc_tag_bluefs_t::LOG;
+    } else {
+      uint64_t hint_val = reinterpret_cast<uint64_t>(p.second->vselector_hint);
+      if (hint_val == 0 || hint_val == 3 || hint_val == 2) {
+        subkind = alloc_tag_bluefs_t::WAL;
+      } else if (hint_val == 1 || hint_val == 4 || hint_val == 2 ||
+                  hint_val == 3 || hint_val == 4) {
+        subkind = alloc_tag_bluefs_t::SST;
+      }
+    }
+    alloc_tag_t tag = alloc_tag_t::bluefs(subkind);
     for (auto& q : p.second->fnode.extents) {
       bool is_shared = is_shared_alloc(q.bdev);
       ceph_assert(!is_shared || (is_shared && shared_alloc));
       if (is_shared && shared_alloc->need_init && shared_alloc->a) {
         shared_alloc->bluefs_used += q.length;
-        alloc[q.bdev]->init_rm_free(q.offset, q.length);
+        alloc[q.bdev]->init_rm_free(q.offset, q.length, tag);
       } else if (!is_shared) {
         locked_alloc[q.bdev].reset_intersected(q);
-        alloc[q.bdev]->init_rm_free(q.offset, q.length);
+        alloc[q.bdev]->init_rm_free(q.offset, q.length, tag);
       }
     }
   }
@@ -1194,10 +1209,12 @@ int BlueFS::mount()
             << " " << locked_alloc[i] << " => " << res_la
             << dendl;
     if (res_la.head_length) {
-      alloc[i]->init_rm_free(res_la.head_offset, res_la.head_length);
+      alloc[i]->init_rm_free(res_la.head_offset, res_la.head_length,
+                              alloc_tag_t::bluefs(alloc_tag_bluefs_t::OTHER));
     }
     if (res_la.tail_length) {
-      alloc[i]->init_rm_free(res_la.tail_offset, res_la.tail_length);
+      alloc[i]->init_rm_free(res_la.tail_offset, res_la.tail_length,
+                              alloc_tag_t::bluefs(alloc_tag_bluefs_t::OTHER));
     }
   }
 
