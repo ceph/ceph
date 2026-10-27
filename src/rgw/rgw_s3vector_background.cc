@@ -1954,6 +1954,21 @@ public:
     return it->second;
   }
 
+  std::vector<session_info_t> list_sessions() {
+    std::shared_lock l(sessions_mutex);
+    std::vector<session_info_t> result;
+    result.reserve(sessions.size());
+    for (const auto& [key, _] : sessions) {
+      result.push_back({key.first, key.second});
+    }
+    return result;
+  }
+
+  bool admin_drop_session(const std::string& ns, const std::string& bucket_name) {
+    std::unique_lock l(sessions_mutex);
+    return sessions.erase(session_name_t(ns, bucket_name)) > 0;
+  }
+
   // Snapshot of this instance's rebuild status + aggregate counters.
   background_status_t get_background_status() {
     background_status_t st;
@@ -2140,6 +2155,18 @@ std::vector<rebuild_event_info_t> get_rebuild_events(uint64_t since_epoch,
   return s_manager->get_rebuild_events(since_epoch, tenant_filter, bucket_filter);
 }
 
+std::vector<session_info_t> list_sessions() {
+  if (!s_manager) {
+    return {};
+  }
+  return s_manager->list_sessions();
+}
 
+bool admin_drop_session(const std::string& ns, const std::string& bucket_name) {
+  if (!s_manager) {
+    return false;
+  }
+  return s_manager->admin_drop_session(ns, bucket_name);
+}
 
 } // namespace rgw::s3vector

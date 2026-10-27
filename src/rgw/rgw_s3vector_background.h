@@ -93,5 +93,25 @@ namespace rgw::s3vector {
     uint64_t since_epoch = 0,
     const std::string& tenant_filter = "",
     const std::string& bucket_filter = "");
+
+  // ==========================================================================
+  // Session cache admin API
+  // ==========================================================================
+
+  // Snapshot of a single cached LanceDB session on this instance.
+  struct session_info_t {
+    std::string ns;     // bucket_namespace_t::name() — account ID or tenant
+    std::string bucket; // vector bucket name
+  };
+
+  // Returns a snapshot of all currently cached sessions on this instance.
+  std::vector<session_info_t> list_sessions();
+
+  // Immediately evicts the named session from the cache. Returns true if a
+  // session was found and removed; false if it was not cached (already evicted
+  // or never created). This is a direct synchronous removal — it does not go
+  // through the message queue, so the eviction is visible to the next caller
+  // of get_session() without waiting for the next process_messages tick.
+  bool admin_drop_session(const std::string& ns, const std::string& bucket_name);
 }
 
