@@ -251,7 +251,7 @@ class TestNVMeoFTopConnectionFormat:
             tool.format_output()
 
 
-class TestNvmeofTopCollector:
+class TestNvmeofTopCollector:  # pylint: disable=too-many-public-methods
     @pytest.fixture
     def collector(self):
         c = NvmeofTopCollector()
@@ -459,6 +459,156 @@ class TestNvmeofTopCollector:
         assert collector.health.rc == -errno.ENOENT
         assert collector.health.msg == \
             'Failed to retrieve load balancing group mapping for service myservice'
+
+    def test_initialise_falls_back_to_reachable_gateway(self, collector):
+        collector.gw_info = None
+        collector.client = None
+        down = MagicMock(gateway_addr='1.1.1.1:5500')
+        up = MagicMock(gateway_addr='2.2.2.2:5500')
+        collector.clients = {
+            ('mygroup', '1.1.1.1:5500'): down,
+            ('mygroup', '2.2.2.2:5500'): up,
+        }
+
+        def fetch(client):
+            if client is down:
+                collector.health.rc = -errno.ECONNREFUSED
+                return None
+            return MagicMock()
+
+        with patch.object(collector, '_set_gateways'), \
+             patch.object(collector, '_fetch_gateway_info', side_effect=fetch):
+            collector.initialise(collector.tool)
+        assert collector.ready
+        assert collector.client is up
+
+    def test_initialise_all_gateways_down(self, collector):
+        collector.gw_info = None
+        collector.client = None
+        collector.clients = {
+            ('mygroup', '1.1.1.1:5500'): MagicMock(gateway_addr='1.1.1.1:5500'),
+            ('mygroup', '2.2.2.2:5500'): MagicMock(gateway_addr='2.2.2.2:5500'),
+        }
+
+        def fetch(_client):
+            collector.health.rc = -errno.ECONNREFUSED
+
+        with patch.object(collector, '_set_gateways'), \
+             patch.object(collector, '_fetch_gateway_info', side_effect=fetch):
+            collector.initialise(collector.tool)
+        assert collector.health.rc == -errno.ECONNREFUSED
+        assert 'Unable to connect to any gateway in the group' in collector.health.msg
+        assert '1.1.1.1:5500' in collector.health.msg
+        assert '2.2.2.2:5500' in collector.health.msg
+
+    def test_collect_cpu_data_skips_down_gateway(self, collector):
+        down = MagicMock(gateway_addr='1.1.1.1:5500')
+        up = MagicMock(gateway_addr='2.2.2.2:5500')
+        collector.clients = {
+            ('mygroup', '1.1.1.1:5500'): down,
+            ('mygroup', '2.2.2.2:5500'): up,
+        }
+        collector.reactor_stats = {'1.1.1.1:5500': {}}  # stale stats from the down gw
+
+        def fetch_thread_stats(client):
+            if client is down:
+                return False
+            return True
+
+        with patch.object(collector, '_fetch_thread_stats',
+                          side_effect=fetch_thread_stats):
+            collector.collect_cpu_data()
+        assert collector.ready
+        assert '1.1.1.1:5500' not in collector.reactor_stats
+
+    def test_collect_cpu_data_all_gateways_down(self, collector):
+        collector.clients = {
+            ('mygroup', '1.1.1.1:5500'): MagicMock(gateway_addr='1.1.1.1:5500'),
+            ('mygroup', '2.2.2.2:5500'): MagicMock(gateway_addr='2.2.2.2:5500'),
+        }
+        with patch.object(collector, '_fetch_thread_stats', return_value=False):
+            collector.collect_cpu_data()
+        assert collector.health.rc == -errno.ECONNREFUSED
+        assert collector.health.msg == 'Unable to connect to any gateway in the group'
+
+    def test_collect_io_data_skips_down_gateway(self, collector):
+        collector.tool.subsystem_nqn = 'nqn.test'
+        down = MagicMock(gateway_addr='1.1.1.1:5500', daemon_name='gw.down')
+        up = MagicMock(gateway_addr='2.2.2.2:5500', daemon_name='gw.up')
+        collector.clients = {
+            ('mygroup', '1.1.1.1:5500'): down,
+            ('mygroup', '2.2.2.2:5500'): up,
+        }
+        collector.iostats = {'gw.down': {}}  # stale stats from the down gw
+
+        def fetch_namespace_iostats(client):
+            if client is down:
+                return False
+            return True
+
+        with patch.object(collector, '_set_subsystem_and_namespaces'), \
+             patch.object(collector, '_fetch_namespace_iostats',
+                          side_effect=fetch_namespace_iostats), \
+             patch('dashboard.services.nvmeof_top_cli.get_lbg_gws_map',
+                   return_value={1: 'gw.up'}):
+            collector.collect_io_data()
+        assert collector.ready
+        assert 'gw.down' not in collector.iostats
+
+    def test_collect_io_data_all_gateways_down(self, collector):
+        collector.tool.subsystem_nqn = 'nqn.test'
+        collector.clients = {
+            ('mygroup', '1.1.1.1:5500'): MagicMock(gateway_addr='1.1.1.1:5500',
+                                                   daemon_name='gw.down1'),
+            ('mygroup', '2.2.2.2:5500'): MagicMock(gateway_addr='2.2.2.2:5500',
+                                                   daemon_name='gw.down2'),
+        }
+        with patch.object(collector, '_set_subsystem_and_namespaces'), \
+             patch.object(collector, '_fetch_namespace_iostats', return_value=False), \
+             patch('dashboard.services.nvmeof_top_cli.get_lbg_gws_map',
+                   return_value={1: 'gw.down1'}):
+            collector.collect_io_data()
+        assert collector.health.rc == -errno.ECONNREFUSED
+        assert collector.health.msg == 'Unable to connect to any gateway in the group'
+
+    def test_collect_connection_data_skips_down_gateway(self, collector):
+        collector.tool.subsystem_nqn = 'nqn.test'
+        collector.tool.host_nqn = 'nqn.host'
+        down = MagicMock(gateway_addr='1.1.1.1:5500')
+        up = MagicMock(gateway_addr='2.2.2.2:5500')
+        collector.clients = {
+            ('mygroup', '1.1.1.1:5500'): down,
+            ('mygroup', '2.2.2.2:5500'): up,
+        }
+        collector.connection_stats = {('1.1.1.1:5500', 4): {}}  # stale stats from down gw
+        ok = MagicMock(status=0, buckets=[])
+
+        def call_grpc(_method, _req, client):
+            if client is down:
+                collector.health.rc = -errno.ECONNREFUSED
+                return None
+            return ok
+
+        with patch.object(collector, '_call_grpc', side_effect=call_grpc):
+            collector.collect_connection_data()
+        assert collector.ready
+        assert ('1.1.1.1:5500', 4) not in collector.connection_stats
+
+    def test_collect_connection_data_all_gateways_down(self, collector):
+        collector.tool.subsystem_nqn = 'nqn.test'
+        collector.tool.host_nqn = 'nqn.host'
+        collector.clients = {
+            ('mygroup', '1.1.1.1:5500'): MagicMock(gateway_addr='1.1.1.1:5500'),
+            ('mygroup', '2.2.2.2:5500'): MagicMock(gateway_addr='2.2.2.2:5500'),
+        }
+
+        def call_grpc(_method, _req, _client):
+            collector.health.rc = -errno.ECONNREFUSED
+
+        with patch.object(collector, '_call_grpc', side_effect=call_grpc):
+            collector.collect_connection_data()
+        assert collector.health.rc == -errno.ECONNREFUSED
+        assert collector.health.msg == 'Unable to connect to any gateway in the group'
 
 
 class TestNvmeofTopValidateArgs:
