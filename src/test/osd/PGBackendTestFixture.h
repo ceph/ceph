@@ -125,6 +125,9 @@ protected:
 
   int num_replicas = 3;
   int min_size = 2;
+
+  // OSDs in the map beyond those the pool needs, for tests that move the PG.
+  int spare_osds = 0;
   
   int64_t pool_id = 0;
   pg_t pgid;
@@ -219,6 +222,7 @@ public:
   }
 
 private:
+  void setup_osdmap(int num_osds);
   void setup_ec_pool();
   void setup_replicated_pool();
 
@@ -258,6 +262,15 @@ public:
     return *pool;
   }
   
+  // Shard id of the PG instance at the given position in up/acting.
+  shard_id_t shard_at(int position) const {
+    return pool_type == EC ? shard_id_t(position) : shard_id_t::NO_SHARD;
+  }
+
+  // Create the pool's backend for a TestPG whose collection exists.
+  std::unique_ptr<PGBackend> create_backend(
+    TestPG *test_pg, MockPGBackendListener *listener);
+
   int get_instance_count() const {
     return pool_type == EC ? (num_zones * (k + m)) : num_replicas;
   }
