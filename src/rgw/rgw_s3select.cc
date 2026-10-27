@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_s3select_private.h"
+#include "common/strtol.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -661,15 +662,35 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   extract_by_tag(m_s3select_query, "Start", m_start_scan);
   extract_by_tag(m_s3select_query, "End", m_end_scan);
   if (m_start_scan.size() || m_end_scan.size()) {
-    m_scan_range_ind = true;
-    if (m_start_scan.size()) {
-      m_start_scan_sz = std::stol(m_start_scan);
+    int64_t start = 0;
+    int64_t end = std::numeric_limits<int64_t>::max();
+    if (!m_start_scan.empty()) {
+      auto parsed = ceph::parse<int64_t>(m_start_scan);
+      if (!parsed || *parsed < 0) {
+        ldpp_dout(this, 5) << "s3select: invalid Start scan range '"
+                           << m_start_scan << "'" << dendl;
+        return -EINVAL;
+      }
+      start = *parsed;
     }
-    if (m_end_scan.size()) {
-      m_end_scan_sz = std::stol(m_end_scan);
-    } else {
-      m_end_scan_sz = std::numeric_limits<std::int64_t>::max();
-    } 
+    if (!m_end_scan.empty()) {
+      auto parsed = ceph::parse<int64_t>(m_end_scan);
+      if (!parsed || *parsed < 0) {
+        ldpp_dout(this, 5) << "s3select: invalid End scan range '"
+                           << m_end_scan << "'" << dendl;
+        return -EINVAL;
+      }
+      end = *parsed;
+    }
+    if (end < start) {
+      ldpp_dout(this, 5) << "s3select: invalid scan range Start='"
+                         << m_start_scan << "' End='" << m_end_scan
+                         << "'" << dendl;
+      return -EINVAL;
+    }
+    m_start_scan_sz = start;
+    m_end_scan_sz = end;
+    m_scan_range_ind = true;
   }
   if (m_enable_progress.compare("true")==0) {
     enable_progress = true;
@@ -726,7 +747,11 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
   char parquet_magic[4];
   static constexpr uint8_t parquet_magic1[4] = {'P', 'A', 'R', '1'};
   static constexpr uint8_t parquet_magicE[4] = {'P', 'A', 'R', 'E'};
-  get_params(y);
+  status = get_params(y);
+  if (status < 0) {
+    op_ret = status;
+    return;
+  }
 #ifdef _ARROW_EXIST
   m_rgw_api.m_y = &y;
 #endif
