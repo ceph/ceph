@@ -17,6 +17,7 @@ import contextlib
 import dataclasses
 import fnmatch
 import logging
+import threading
 import time
 
 import ceph.smb.constants
@@ -364,6 +365,7 @@ class ClusterConfigHandler:
             earmark_resolver = cast(EarmarkResolver, _FakeEarmarkResolver())
         self._earmark_resolver = earmark_resolver
         self._tool_execer = tool_execer
+        self._apply_lock = threading.Lock()
         log.info(
             'Initialized new ClusterConfigHandler with'
             f' internal store {self.internal_store!r},'
@@ -381,6 +383,13 @@ class ClusterConfigHandler:
         """Apply resource configuration changes.
         Set `create_only` to disable changing existing resource values.
         """
+        # mgr.remote() callers (e.g. dashboard) bypass the command finisher.
+        with self._apply_lock:
+            return self._apply(inputs, create_only=create_only)
+
+    def _apply(
+        self, inputs: Iterable[SMBResource], *, create_only: bool = False
+    ) -> ResultGroup:
         log.debug('applying changes to internal data store')
         results = ResultGroup()
         staging = Staging(self.internal_store, self._tool_execer)
