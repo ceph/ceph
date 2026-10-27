@@ -59,7 +59,8 @@ RecordBatch::add_pending(
           maybe_promise_result->mdlength + dlength_offset),
       write_result_t{_write_base, maybe_promise_result->write_length},
       maybe_promise_result->write_start,
-      maybe_promise_result->write_end
+      maybe_promise_result->write_end,
+      maybe_promise_result->dma_times
     };
     TRACE("{} write finish with {}", name, submit_result);
     return add_pending_fut(
@@ -93,7 +94,8 @@ RecordBatch::encode_ret_t RecordBatch::encode_batch(
 
 void RecordBatch::set_result(
   maybe_result_t maybe_write_length,
-  std::chrono::steady_clock::time_point write_start)
+  std::chrono::steady_clock::time_point write_start,
+  dma_write_times_t dma_times)
 {
   maybe_promise_result_t result;
   if (maybe_write_length.has_value()) {
@@ -102,7 +104,8 @@ void RecordBatch::set_result(
       *maybe_write_length,
       submitting_mdlength,
       write_start,
-      std::chrono::steady_clock::now()
+      std::chrono::steady_clock::now(),
+      dma_times
     };
   }
   assert(state == state_t::SUBMITTING);
@@ -343,13 +346,15 @@ RecordSubmitter::submit(
         journal_allocator.get_written_to(),
         to_write.length()};
     auto write_start = std::chrono::steady_clock::now();
-    auto write_fut = journal_allocator.write(std::move(to_write)
-    ).safe_then([mdlength=sizes.get_mdlength(), result, write_start] {
+    auto dma_times = seastar::make_lw_shared<dma_write_times_t>();
+    auto write_fut = journal_allocator.write(std::move(to_write), dma_times.get()
+    ).safe_then([mdlength=sizes.get_mdlength(), result, write_start, dma_times] {
       return record_locator_t{
         result.start_seq.offset.add_offset(mdlength),
         result,
         write_start,
-        std::chrono::steady_clock::now()
+        std::chrono::steady_clock::now(),
+        *dma_times
       };
     }).finally([this] {
       decrement_io_with_flush();
@@ -550,10 +555,11 @@ void RecordSubmitter::account_submission(
 void RecordSubmitter::finish_submit_batch(
   RecordBatch* p_batch,
   maybe_result_t maybe_result,
-  std::chrono::steady_clock::time_point write_start)
+  std::chrono::steady_clock::time_point write_start,
+  dma_write_times_t dma_times)
 {
   assert(p_batch->is_submitting());
-  p_batch->set_result(maybe_result, write_start);
+  p_batch->set_result(maybe_result, write_start, dma_times);
   free_batch_ptrs.push_back(p_batch);
   decrement_io_with_flush();
 }
@@ -585,23 +591,25 @@ void RecordSubmitter::flush_current_batch()
         get_committed_to(), num_outstanding_io);
   assert(write_base == journal_allocator.get_written_to());
   auto write_start = std::chrono::steady_clock::now();
-  std::ignore = journal_allocator.write(std::move(encode_ret.bl)
-  ).safe_then([this, p_batch, FNAME, num, sizes, write_len, write_start] {
+  auto dma_times = seastar::make_lw_shared<dma_write_times_t>();
+  std::ignore = journal_allocator.write(std::move(encode_ret.bl), dma_times.get()
+  ).safe_then([this, p_batch, FNAME, num, sizes, write_len, write_start,
+               dma_times] {
     TRACE("{} {} records, {}, write done",
           get_name(), num, sizes);
-    finish_submit_batch(p_batch, write_len, write_start);
+    finish_submit_batch(p_batch, write_len, write_start, *dma_times);
   }).handle_error(
     crimson::ct_error::all_same_way(
       [this, p_batch, FNAME, num, sizes, write_start](auto e) {
       ERROR("{} {} records, {}, got error {}",
             get_name(), num, sizes, e);
-      finish_submit_batch(p_batch, std::nullopt, write_start);
+      finish_submit_batch(p_batch, std::nullopt, write_start, {});
       return seastar::now();
     })
   ).handle_exception([this, p_batch, FNAME, num, sizes, write_start](auto e) {
     ERROR("{} {} records, {}, got exception {}",
           get_name(), num, sizes, e);
-    finish_submit_batch(p_batch, std::nullopt, write_start);
+    finish_submit_batch(p_batch, std::nullopt, write_start, {});
   });
 }
 

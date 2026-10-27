@@ -90,7 +90,9 @@ class SegmentAllocator : public JournalAllocator {
   //
   // May be called concurrently, but writes may complete in any order.
   // If rolling/opening, no write is allowed.
-  write_ertr::future<> write(ceph::bufferlist&& to_write) final;
+  write_ertr::future<> write(
+    ceph::bufferlist&& to_write,
+    dma_write_times_t *dma_times = nullptr) final;
 
   using close_ertr = base_ertr;
   close_ertr::future<> close() final;

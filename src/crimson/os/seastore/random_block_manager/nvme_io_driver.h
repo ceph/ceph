@@ -77,12 +77,15 @@ public:
     uint64_t offset,
     bufferptr &bptr,
     uint16_t stream) = 0;
+  // dma_times, if given, is filled in with when the device write ran
+  // (kernel driver only; the SPDK driver leaves it blank)
   virtual write_ertr::future<> writev(
     device_id_t device_id,
     uint64_t offset,
     bufferlist &&bl,
     size_t block_size,
-    uint16_t stream) = 0;
+    uint16_t stream,
+    dma_write_times_t *dma_times = nullptr) = 0;
 
   // The BlockIODriver base write/writev (no stream) forward to the stream-aware
   // overloads with the default stream.

@@ -55,7 +55,8 @@ public:
     bufferptr &bptr, uint16_t stream) final;
   write_ertr::future<> writev(
     device_id_t device_id, uint64_t offset,
-    bufferlist &&bl, size_t block_size, uint16_t stream) final;
+    bufferlist &&bl, size_t block_size, uint16_t stream,
+    dma_write_times_t *dma_times) final;
 
   seastar::future<std::optional<nvme_identify_controller_data_t>>
     identify_controller() final;

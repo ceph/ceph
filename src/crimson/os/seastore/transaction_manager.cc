@@ -912,6 +912,16 @@ TransactionManager::do_submit_transaction(
       submit_result.write_end - submit_result.write_start;
     tref.get_phase_durations().journal_finalize_wait +=
       submit_result.finalize_wait;
+    // the segmented journal doesn't fill in dma_times, leaving start blank
+    const auto &dma_times = submit_result.dma_times;
+    if (dma_times.start != std::chrono::steady_clock::time_point{}) {
+      tref.get_phase_durations().journal_pre_dma +=
+        dma_times.start - submit_result.write_start;
+      tref.get_phase_durations().journal_dma +=
+        dma_times.end - dma_times.start;
+      tref.get_phase_durations().journal_post_dma +=
+        submit_result.write_end - dma_times.end;
+    }
     auto start_seq = submit_result.write_result.start_seq;
     journal->get_trimmer().set_journal_head(start_seq);
     auto complete_commit_start = std::chrono::steady_clock::now();

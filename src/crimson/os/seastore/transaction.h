@@ -549,6 +549,10 @@ public:
     std::chrono::steady_clock::duration journal_batch_wait{0}; // submit_record until its journal write starts, part of journal
     std::chrono::steady_clock::duration journal_disk_write{0}; // journal write start until complete, part of journal
     std::chrono::steady_clock::duration journal_finalize_wait{0}; // wait to enter the journal finalize phase, part of journal
+    // RBM only, the three parts of journal_disk_write split at the device's dma_write
+    std::chrono::steady_clock::duration journal_pre_dma{0};  // journal write start until first dma_write issued
+    std::chrono::steady_clock::duration journal_dma{0};      // first dma_write issued until last one completes
+    std::chrono::steady_clock::duration journal_post_dma{0}; // last dma_write completes until the journal write is seen complete
     // ool_* time for the current OOL write attempt; moved into the
     // fields above only when ool_write itself is counted
     std::chrono::steady_clock::duration attempt_ool_throttle{0};
