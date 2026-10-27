@@ -240,6 +240,7 @@ auto decode_entries(datum::binary_fields<Member...> selected, byte_buffer::const
 
     return archive.frame(Supported, [&](auto& fields, const std::uint8_t version, const std::uint8_t compatible) {
         const auto body = [&]<std::uint8_t Version>() {
+            // Entry metadata is kind, key, and payload length; only v1 frames each entry.
             constexpr auto minimum_entry_size =
                 ::ceph::datum_wire::encoded_size(
                     detail::entry_prefix_fields, detail::entry_prefix {}) +

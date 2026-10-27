@@ -782,7 +782,9 @@ TEST_CASE("BI native entry decode preserves its destination on truncation", "[rg
 {
     const auto rows = fixtures();
     const auto bytes = rgw_bi_oracle::encode_reply(rows, false);
+    // Entries follow the reply header and row count.
     constexpr auto start = ::ceph::encoding_detail::struct_header_len() + sizeof(std::uint32_t);
+    // Entry metadata is its frame, kind byte, key length, and payload length.
     const auto length = ::ceph::encoding_detail::struct_header_len() + sizeof(std::uint8_t) +
         2 * sizeof(std::uint32_t) + rows[0].key.size() + rows[0].payload.length();
     for (unsigned size = 0; size < length; ++size) {
@@ -1042,6 +1044,7 @@ TEST_CASE("BI get bounds key fields and preserves request publication on failure
     invalid.push_back(std::move(outside));
     auto excessive = fragmented(full);
     const char count[] = {char(0xFF), char(0xFF), char(0xFF), char(0xFF)};
+    // The name length follows the request frame header and nested key frame header.
     excessive.begin(2 * ::ceph::encoding_detail::struct_header_len()).copy_in(sizeof(count), count);
     invalid.push_back(std::move(excessive));
     for (const auto& bytes : invalid) {

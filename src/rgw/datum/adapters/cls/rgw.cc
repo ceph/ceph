@@ -302,6 +302,7 @@ list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
     archive.frame(4, 2, [&](auto& fields, const std::uint8_t version) {
         fields.frame(2, 2, [&](auto& directory_fields, std::uint8_t) {
             directory_fields.native(candidate.dir.header);
+            // A row needs its key-length prefix and at least the entry's version byte.
             const auto count = directory_fields.template sequence_size<
                 sizeof(std::uint32_t) + sizeof(std::uint8_t)>();
             auto& entries = candidate.dir.m;
@@ -332,7 +333,7 @@ namespace {
 stat_associations decode_stats(reader& fields)
 {
     static_assert(std::same_as<std::underlying_type_t<::RGWObjCategory>, std::uint8_t>);
-    // Stats v1 predates framed records and the actual_size counter.
+    // Stats v1 is unframed: version byte, total_size, total_size_rounded, and num_entries.
     constexpr auto minimum_stats_size = sizeof(std::uint8_t) + 3 * sizeof(std::uint64_t);
     const auto count = fields.sequence_size<sizeof(::RGWObjCategory) + minimum_stats_size>();
     stat_associations result;
@@ -776,7 +777,8 @@ using ::ceph::datum_wire::decode_record;
 using ::ceph::datum_wire::reader;
 using ::ceph::datum_wire::encode_frame;
 
-// Usage v1 has no usage-map, payer, or S3-select fields.
+// v1: owner/bucket length prefixes, epoch, and total_usage's bytes_sent, bytes_received,
+// ops, and successful_ops; usage_map, payer, and s3select_usage were added later.
 constexpr auto minimum_entry_size = ::ceph::encoding_detail::struct_header_len() +
     2 * sizeof(std::uint32_t) + 5 * sizeof(std::uint64_t);
 
@@ -872,8 +874,10 @@ read_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
     read_reply<EntriesT> candidate;
     reader archive {cursor};
     archive.frame(1, [&](auto& fields, std::uint8_t) {
+        // Association keys contain user and bucket strings, each with a length prefix.
         constexpr auto minimum_key_size =
             ::ceph::encoding_detail::struct_header_len() + 2 * sizeof(std::uint32_t);
+        // The reply ends with truncated and the next_iter string.
         constexpr auto tail_size = sizeof(std::uint8_t) + sizeof(std::uint32_t);
         const auto count = fields.template sequence_size<
             minimum_key_size + minimum_entry_size>(tail_size);
@@ -1053,7 +1057,8 @@ std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
     auto cursor = input.cbegin();
     reader archive {cursor};
     return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        // Version 2 is shortest: v1 has a fourth string, and v3 adds initiator.
+        // v2 has tenant, bucket_name, and bucket_id strings; v1 also has new_instance_id.
+        // v3 adds initiator, so v2 is the shortest accepted entry.
         constexpr auto minimum_entry_size = ::ceph::encoding_detail::struct_header_len() +
             ::ceph::datum_wire::encoded_time_size + 3 * sizeof(std::uint32_t) +
             sizeof(::cls_rgw_reshard_entry::old_num_shards) +

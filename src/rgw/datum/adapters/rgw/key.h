@@ -14,6 +14,7 @@ namespace rgw::datum_wire {
 
 namespace datum = ::ceph::salad::datum;
 
+// An object key frame contains name and instance strings, each with a length prefix.
 inline constexpr auto minimum_key_size =
     ::ceph::encoding_detail::struct_header_len() + 2 * sizeof(std::uint32_t);
 

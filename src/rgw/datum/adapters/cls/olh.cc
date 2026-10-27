@@ -126,6 +126,7 @@ bool canonical_key(auto& archive)
 bool canonical_event(auto& archive)
 {
     return archive.canonical_frame(1, [](auto& fields) {
+        // Skip the event epoch and action; their original bytes are forwarded.
         fields.skip(sizeof(std::uint64_t) + sizeof(std::uint8_t));
         fields.skip_text();
         if (!canonical_key(fields)) {
@@ -158,6 +159,7 @@ std::optional<int> try_encode_stored_reply(
         }
         // The stored head's delete-marker and epoch are not reply fields.
         fields.skip(sizeof(std::uint8_t) + sizeof(std::uint64_t));
+        // Reserve the tag's length prefix and the exists/pending_removal flags.
         constexpr auto tail_size = sizeof(std::uint32_t) + 2 * sizeof(std::uint8_t);
         const auto count = fields.template sequence_size<
             ::cls::rgw::olh_wire::detail::minimum_group_size>(tail_size);

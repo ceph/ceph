@@ -67,6 +67,7 @@ using header_fields =
 
 inline constexpr auto growing_metadata = std::true_type {};
 
+// Native timestamps encode seconds and nanoseconds as uint32 fields.
 inline constexpr auto encoded_time_size = 2 * sizeof(std::uint32_t);
 
 // Keep success local when the archive's throwing helper is outlined.

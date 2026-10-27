@@ -94,8 +94,10 @@ list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
     list_reply<EntriesT> candidate;
     reader archive {cursor};
     archive.frame(2, [&](auto& fields, const std::uint8_t version) {
+        // Frames wrap info and its chain; uint32 fields hold tag length and chain object count.
         constexpr auto minimum_info_size = 2 * ::ceph::encoding_detail::struct_header_len() +
             2 * sizeof(std::uint32_t) + ::ceph::datum_wire::encoded_time_size;
+        // The tail holds next_marker (v2+) and the final truncated flag.
         const auto tail_size = sizeof(std::uint8_t) + (version >= 2 ? sizeof(std::uint32_t) : 0);
         candidate.entries = fields.template native<minimum_info_size, EntriesT>(tail_size);
         if (version >= 2) {

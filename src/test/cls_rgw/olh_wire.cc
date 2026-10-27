@@ -258,6 +258,7 @@ TEST_CASE("OLH framing rejects every proper truncation without publishing candid
 TEST_CASE("OLH bounds reject impossible group and event counts before allocation", "[rgw][cls][datum][olh]")
 {
     constexpr auto group_count_offset = ::ceph::encoding_detail::struct_header_len();
+    // The first event count follows the group count and the first group's epoch.
     constexpr auto event_count_offset =
         group_count_offset + sizeof(std::uint32_t) + sizeof(std::uint64_t);
     for (const unsigned offset : {group_count_offset, event_count_offset}) {
@@ -269,7 +270,8 @@ TEST_CASE("OLH bounds reject impossible group and event counts before allocation
         CHECK_THROWS_AS(native::decode_reply(bytes, value), ::ceph::buffer::error);
     }
     auto bytes = encode(fixture());
-    // The first event frame cannot consume bytes outside its enclosing reply.
+    // Skip the event count and the first event frame's version and compatibility bytes.
+    // Its length must not permit reads outside the enclosing reply.
     constexpr auto event_length_offset =
         event_count_offset + sizeof(std::uint32_t) + 2 * sizeof(std::uint8_t);
     auto cursor = bytes.begin(event_length_offset);

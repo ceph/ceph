@@ -45,7 +45,9 @@ struct event_prefix final
 constexpr auto event_prefix_fields = datum::binary_fields<
     &event_prefix::epoch, &event_prefix::operation, &event_prefix::tag> {};
 
+// An epoch group starts with its epoch and the count of its events.
 inline constexpr auto minimum_group_size = sizeof(std::uint64_t) + sizeof(std::uint32_t);
+// An event frame contains epoch/action/tag, a nested object key, and a delete-marker flag.
 inline constexpr auto minimum_event_size = ::ceph::encoding_detail::struct_header_len() +
     ::ceph::datum_wire::encoded_size(event_prefix_fields, event_prefix {}) +
     ::rgw::datum_wire::minimum_key_size + sizeof(std::uint8_t);
