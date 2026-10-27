@@ -854,6 +854,21 @@ public:
       enable_ec_optimizations, true};
     if (!pg_num && !enable_ec_optimizations) {
       pool_mig_request.inherit_params = true;
+    } else {
+      // A migrate takes every setting that it is not given from the
+      // defaults: give the pool's own, so that only the change asked for is
+      // made.
+      auto pool = get_pool_all(source_name);
+      if (pool.erasure_code_profile) {
+        pool_mig_request.pool_type = "erasure";
+        pool_mig_request.erasure_code_profile = pool.erasure_code_profile;
+        if (pool.allow_ec_optimizations.value_or(false)) {
+          pool_mig_request.enable_ec_optimizations = true;
+        }
+      } else {
+        pool_mig_request.pool_type = "replicated";
+        pool_mig_request.size = pool.size;
+      }
     }
     encode_json("OSDPoolMigrateRequest", pool_mig_request, formatter.get());
     formatter.get()->flush(oss);
@@ -890,7 +905,7 @@ public:
         cout_prefix() << __func__ << " migration in progress" << std::endl;
       } else if (!needs_wait) {
         // Only set pg_num when the test explicitly requests a specific count;
-        // otherwise leave it unset so the mon inherits the source pool's value.
+        // with no change asked for, the migration copies the pool.
         std::optional<int> req_pg_num;
         if (migration_pg_num.has_value()) {
           // Alternate between the requested pg_num and the pool's initial
@@ -901,8 +916,7 @@ public:
                          : initial_pg_num;
         }
         // Only set enable_ec_optimizations when the test explicitly requests
-        // it; otherwise leave it unset so the migration inherits the source
-        // pool's EC type/profile.
+        // it.
         std::optional<bool> req_ec_opts =
           migration_ec_opts ? std::optional<bool>{true} : std::nullopt;
         cout_prefix() << __func__ << " starting new pool migration on "
