@@ -1,22 +1,26 @@
 """
 mgmt-gateway reproducers for behaviour main does not implement yet.
 
-Each test states the expected behaviour and is expected to FAIL on main
-until the corresponding fix lands; it then moves to the matching facet.
-Kept out of the regular facets so they do not turn the suite red.
+Each test states the expected behaviour. The ones for bugs cephadm does
+not fix yet are marked @unittest.expectedFailure: they keep the job green
+while the bug is there, and turn it red (unexpected success) once a fix
+lands, as a reminder to drop the marker and move the test to its facet.
 
+Fixed (pass, to be moved to the regular facets):
   test_gateway_failure_moves_vip
       keepalived checked https://<host addr>:<port>/health, but with a
       virtual_ip nginx only listens on <vip>:<port> (since the fix for
       tracker 74929), so the check failed on every host and a dead gateway
       never lost the VIP. Runs keepalived's own check on each host first.
+  test_advertised_port_with_ssl_disabled
+      ssl: false with no port: nginx listened on 80 while cephadm recorded
+      and advertised 443.
+
+Open (expected to fail):
   test_internal_urls_follow_a_live_gateway
       without a virtual_ip, every internal URL (dashboard API hosts,
       grafana datasource, prometheus discovery) points at the first
       gateway daemon, alive or not.
-  test_advertised_port_with_ssl_disabled
-      ssl: false with no port: nginx listens on 80 while cephadm records
-      and advertises 443.
   test_login_returns_to_requested_page[_custom_port]
       oauth2-proxy's allowlist has the gateway short host name and address,
       without port, while the callback uses the FQDN (and the port), so
@@ -27,6 +31,7 @@ shared helpers live in common.py.
 """
 
 import re
+import unittest
 import urllib.parse
 from typing import Optional, Tuple
 
@@ -114,6 +119,7 @@ class TestMgmtGatewayOpenIssues(GatewayTestCase):
         self.wait_mode('gateway')
         self.hold_mode('gateway', seconds=60)
 
+    @unittest.expectedFailure  # open: internal URLs pinned to the first gateway
     def test_internal_urls_follow_a_live_gateway(self) -> None:
         """Two gateways without a VIP: when the one the internal URLs point
         at stops, cephadm points them at the one still running."""
@@ -161,10 +167,12 @@ class TestMgmtGatewayOpenIssues(GatewayTestCase):
         self.assertEqual(landed.path, path,
                          f'after login the user landed on {res["final_url"]}: {res["hops"]}')
 
+    @unittest.expectedFailure  # open: oauth2-proxy allowlist misses the FQDN
     def test_login_returns_to_requested_page(self) -> None:
         """After logging in, the user is taken back to the page they asked for."""
         self._login_lands_on(None)
 
+    @unittest.expectedFailure  # open: oauth2-proxy allowlist misses the FQDN/port
     def test_login_returns_to_requested_page_custom_port(self) -> None:
         """Same, with the gateway on a non-default port."""
         self._login_lands_on(9876)

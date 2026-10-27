@@ -1,5 +1,6 @@
-# Reproducers for behaviour main does not implement yet: these are expected
-# to fail until the fixes land (see test_open_issues.py).
+# Reproducers for mgmt-gateway bugs (see test_open_issues.py). The ones not
+# fixed yet are marked expectedFailure and do not fail the job; one passing
+# unexpectedly does, so the marker is dropped when its fix lands.
 tasks:
 - vip:
 - cephadm.shell:
