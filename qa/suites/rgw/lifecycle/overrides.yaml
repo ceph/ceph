@@ -12,6 +12,7 @@ overrides:
         rgw s3 auth use sts: true
         rgw lc counters cache: true
         rgw lc debug interval: 10
+        rgw lc list cnt: 100
   rgw:
     storage classes:
       LUKEWARM: [--compression, zstd]
