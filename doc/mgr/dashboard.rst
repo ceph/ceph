@@ -1447,6 +1447,13 @@ A log entry, as shown by ``ceph -W audit``, may look like this::
 
   2026-10-19T15:27:01.302514+0000 mgr.x [INF] [DASHBOARD] from='https://[::ffff:127.0.0.1]:37022' path='/api/rgw/user/klaus' method='PUT' user='admin' params='{"max_buckets": "1000", "display_name": "Klaus Mustermann", "uid": "klaus", "suspended": "0", "email": "klaus.mustermann@ceph.com"}'
 
+API Documentation
+-----------------
+
+The Ceph Dashboard REST API is documented in :doc:`ceph_api/index`. A running
+Dashboard also serves interactive API documentation: click the help (``?``)
+icon at the top right of the page and select **API**.
+
 .. _configuring-nfs-ganesha-in-the-dashboard:
 
 .. _dashboard-nfs-ganesha-management:
