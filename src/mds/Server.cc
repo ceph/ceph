@@ -10638,6 +10638,10 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
 
       if (!frozen_inode) {
         srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
+        // The other auth pins may belong to updates that wait to be
+        // journaled, such as a client's cap flush: flush the log now
+        // rather than waiting for the next tick.
+        mds->mdlog->flush();
         return;
       }
 

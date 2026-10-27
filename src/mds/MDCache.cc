@@ -10972,6 +10972,8 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
       } else if (reply->is_empty()) {
 	dout(7) << "handle_discover blocking on xlocked " << *dn << dendl;
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, dis));
+	// the xlock may be held by an update that waits to be journaled
+	mds->locker->nudge_log(&dn->lock);
 	return;
       } else {
 	dout(7) << "handle_discover non-empty reply, xlocked tail " << *dn << dendl;
