@@ -549,9 +549,8 @@ export class TaskMessageService {
       this.commonOperations.deactivate,
       (metadata) => this.snapshotSchedule(metadata)
     ),
-    // smb (cephfs + rgw)
-    ...this.smbTaskMessages(SMB_BASE_CEPHFS),
-    ...this.smbTaskMessages(SMB_BASE_RGW),
+    // smb (cephfs/smb and rgw/smb)
+    ...this.buildSmbMessages(),
     'ceph-user/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata: { userEntity: string }) => this.cephUser(metadata)
@@ -560,6 +559,30 @@ export class TaskMessageService {
       this.bootstrap()
     )
   };
+
+  private buildSmbMessages(): Record<string, TaskMessage> {
+    const entries: [string, TaskMessageOperation, (metadata: any) => string][] = [
+      ['cluster/create', this.commonOperations.create, (m) => this.smbCluster(m)],
+      ['cluster/edit', this.commonOperations.update, (m) => this.smbCluster(m)],
+      ['cluster/delete', this.commonOperations.delete, (m) => this.smbCluster(m)],
+      ['share/create', this.commonOperations.create, (m) => this.smbShare(m)],
+      ['share/edit', this.commonOperations.update, (m) => this.smbShare(m)],
+      ['share/delete', this.commonOperations.delete, (m) => this.smbShare(m)],
+      ['active-directory/create', this.commonOperations.create, (m) => this.smbJoinAuth(m)],
+      ['active-directory/edit', this.commonOperations.update, (m) => this.smbJoinAuth(m)],
+      ['active-directory/delete', this.commonOperations.delete, (m) => this.smbJoinAuth(m)],
+      ['standalone/create', this.commonOperations.create, (m) => this.smbUsersgroups(m)],
+      ['standalone/edit', this.commonOperations.update, (m) => this.smbUsersgroups(m)],
+      ['standalone/delete', this.commonOperations.delete, (m) => this.smbUsersgroups(m)]
+    ];
+    const messages: Record<string, TaskMessage> = {};
+    for (const base of [SMB_BASE_CEPHFS, SMB_BASE_RGW]) {
+      for (const [path, operation, involves] of entries) {
+        messages[`${base}/${path}`] = this.newTaskMessage(operation, involves);
+      }
+    }
+    return messages;
+  }
 
   newTaskMessage(
     operation: TaskMessageOperation,
@@ -629,59 +652,6 @@ export class TaskMessageService {
     return $localize`NFS '${metadata.cluster_id}\:${
       metadata.export_id ? metadata.export_id : metadata.path
     }'`;
-  }
-
-  private smbTaskMessages(prefix: string) {
-    return {
-      [`${prefix}/cluster/create`]: this.newTaskMessage(
-        this.commonOperations.create,
-        (metadata: { cluster_id: string }) => this.smbCluster(metadata)
-      ),
-      [`${prefix}/cluster/edit`]: this.newTaskMessage(
-        this.commonOperations.update,
-        (metadata: { cluster_id: string }) => this.smbCluster(metadata)
-      ),
-      [`${prefix}/cluster/delete`]: this.newTaskMessage(
-        this.commonOperations.delete,
-        (metadata: { cluster_id: string }) => this.smbCluster(metadata)
-      ),
-      [`${prefix}/share/create`]: this.newTaskMessage(
-        this.commonOperations.create,
-        (metadata: Record<'share_id', string>) => this.smbShare(metadata)
-      ),
-      [`${prefix}/share/edit`]: this.newTaskMessage(
-        this.commonOperations.update,
-        (metadata: Record<'share_id', string>) => this.smbShare(metadata)
-      ),
-      [`${prefix}/share/delete`]: this.newTaskMessage(
-        this.commonOperations.delete,
-        (metadata: Record<'share_id', string>) => this.smbShare(metadata)
-      ),
-      [`${prefix}/active-directory/create`]: this.newTaskMessage(
-        this.commonOperations.create,
-        (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-      ),
-      [`${prefix}/active-directory/edit`]: this.newTaskMessage(
-        this.commonOperations.update,
-        (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-      ),
-      [`${prefix}/active-directory/delete`]: this.newTaskMessage(
-        this.commonOperations.delete,
-        (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-      ),
-      [`${prefix}/standalone/create`]: this.newTaskMessage(
-        this.commonOperations.create,
-        (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-      ),
-      [`${prefix}/standalone/edit`]: this.newTaskMessage(
-        this.commonOperations.update,
-        (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-      ),
-      [`${prefix}/standalone/delete`]: this.newTaskMessage(
-        this.commonOperations.delete,
-        (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-      )
-    };
   }
 
   smbCluster(metadata: { cluster_id: string }) {

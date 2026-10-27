@@ -5,6 +5,7 @@ import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 
+import { SMB_BASE_CEPHFS, SMB_CEPHFS_CONTEXT } from '~/app/shared/constants/smb.constant';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { SmbService } from '~/app/shared/api/smb.service';
@@ -12,7 +13,6 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { DomainSettings, JoinSource, SMBJoinAuth } from '../smb.model';
 import { Observable } from 'rxjs';
 import { Router } from '@angular/router';
-import { SMB_CEPHFS_CONTEXT } from '~/app/shared/constants/smb.constant';
 
 @Component({
   selector: 'cd-smb-domain-setting-modal',
@@ -25,6 +25,7 @@ export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
   domainSettingsForm: CdFormGroup;
   realmNames: string[];
   joinAuths$: Observable<SMBJoinAuth[]>;
+  smbBasePath = SMB_BASE_CEPHFS;
 
   constructor(
     public activeModal: NgbActiveModal,

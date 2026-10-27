@@ -1,10 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { BehaviorSubject, of } from 'rxjs';
 
 import { SmbClusterResourceSidebarComponent } from './smb-cluster-resource-sidebar.component';
-import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
+import {
+  SMB_BASE_CEPHFS,
+  SMB_CEPHFS_CONTEXT,
+  SMB_CONTEXT
+} from '~/app/shared/constants/smb.constant';
 import { SmbClusterResourceStateService } from '~/app/shared/services/smb-cluster-resource-state.service';
 import { SMBCluster } from '../smb.model';
 
@@ -34,8 +38,13 @@ describe('SmbClusterResourceSidebarComponent', () => {
         {
           provide: ActivatedRoute,
           useValue: {
-            paramMap: of(convertToParamMap({ cluster_id: 'test-cluster' }))
+            paramMap: of(convertToParamMap({ cluster_id: 'test-cluster' })),
+            snapshot: { data: { smbBasePath: SMB_BASE_CEPHFS, isRgw: false } }
           }
+        },
+        {
+          provide: Router,
+          useValue: { url: `/${SMB_BASE_CEPHFS}/cluster/test-cluster/overview` }
         }
       ],
       schemas: [NO_ERRORS_SCHEMA]
@@ -74,7 +83,7 @@ describe('SmbClusterResourceSidebarComponent', () => {
     // Verify that the sidebar items were built
     expect(component.sidebarItems.length).toBe(1);
     expect(component.sidebarItems[0].route).toEqual([
-      '/cephfs/smb/cluster',
+      `/${SMB_BASE_CEPHFS}/cluster`,
       'test-cluster',
       'overview'
     ]);

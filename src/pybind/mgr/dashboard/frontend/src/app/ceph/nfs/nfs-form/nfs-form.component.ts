@@ -46,6 +46,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
   @ViewChild('nfsClients', { static: true })
   nfsClients: NfsFormClientComponent;
 
+  readonly routes = {
+    RGW_BUCKET_CREATE: '/rgw/bucket/create'
+  };
+
   clients: any[] = [];
 
   permission: Permission;
