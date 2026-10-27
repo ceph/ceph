@@ -8367,6 +8367,33 @@ def test_versioning_obj_list_marker():
 
 @pytest.mark.fails_on_dbstore
 @pytest.mark.versioning
+def test_versioning_obj_list_marker_null_delete_marker():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+    key = 'testobj'
+    response = client.put_object(Bucket=bucket_name, Key=key, Body='data')
+    version_id = response['VersionId']
+    # a null delete marker in front of the version
+    check_configure_versioning_retry(bucket_name, "Suspended", "Suspended")
+    client.delete_object(Bucket=bucket_name, Key=key)
+
+    # one entry per page: the first page ends on the null delete marker
+    response = client.list_object_versions(Bucket=bucket_name, MaxKeys=1)
+    assert [m['VersionId'] for m in response['DeleteMarkers']] == ['null']
+    assert response['IsTruncated']
+    assert response['NextVersionIdMarker'] == 'null'
+
+    # Without the fix, the next page skips the version
+    response = client.list_object_versions(
+        Bucket=bucket_name, MaxKeys=1, KeyMarker=response['NextKeyMarker'],
+        VersionIdMarker=response['NextVersionIdMarker'])
+    versions = response.get('Versions', [])
+    assert [v['VersionId'] for v in versions] == [version_id]
+
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_versioning_copy_obj_version():
     bucket_name = get_new_bucket()
     client = get_client()
