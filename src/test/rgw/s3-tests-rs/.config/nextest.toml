@@ -179,6 +179,11 @@ test-group = 'serial-nsfs-identity'
 filter = 'test(=impersonation::test_data_follows_the_access_model)'
 threads-required = "num-test-threads"
 
+# The other daemon-wide switches, by hint, as the access model is
+[[profile.all.overrides]]
+filter = 'test(dynamic_groups::) | test(role_identity::)'
+threads-required = "num-test-threads"
+
 # Bench profiles — elbencho workloads, run with --run-ignored=all
 # Smoke: quick sanity check under moderate load
 # Soak: sustained high-thread-count stress test
