@@ -279,6 +279,37 @@ public:
 
   PGBackend::Listener *get_parent() { return parent; }
 
+  // The RMW pipeline's roll-forward kick, deferred by the pool's
+  // pct_update_delay (RMWPipeline::defer_rollforward): the PG timer calls
+  // RMWPipeline::kick_rollforward under the PG lock, which sends the kick
+  // only if the pipeline is still idle and still has something to roll
+  // forward. Modelled on ReplicatedBackend::pct_callback_t.
+  struct rollforward_kick_t final : public common::intrusive_timer::callback_t {
+    ECBackend *backend;
+
+    explicit rollforward_kick_t(ECBackend *backend) : backend(backend) {}
+
+    void lock() override {
+      return backend->parent->pg_lock();
+    }
+    void unlock() override {
+      return backend->parent->pg_unlock();
+    }
+    void add_ref() override {
+      return backend->parent->pg_add_ref();
+    }
+    void dec_ref() override {
+      return backend->parent->pg_dec_ref();
+    }
+    void invoke() override {
+      return backend->rmw_pipeline.kick_rollforward();
+    }
+  } rollforward_kick{this};
+
+  /// From RMWPipeline::finish_rmw: true if the kick is left to the PG timer
+  bool defer_rollforward_kick();
+  void cancel_rollforward_kick();
+
   /**
    * ECRecPred
    *

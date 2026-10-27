@@ -565,6 +565,28 @@ You may set values for the following keys:
    :Type: Boolean 
    :Defaults: ``0``
 
+.. _pct_update_delay:
+
+.. describe:: pct_update_delay
+
+   :Description: Seconds the primary waits after its last write has
+                 committed, with no write in flight, before it sends the
+                 other OSDs of a PG its committed point. Setting ``0``
+                 removes the option. On a replicated pool the committed
+                 point is sent on its own only when this is set; otherwise
+                 the replicas learn of it with the next write, and a
+                 replica serves a balanced read of an object only once it
+                 knows of the object's last write. On an erasure-coded pool
+                 with optimizations enabled the shards need the committed
+                 point to discard their rollback state, so it is sent at
+                 once when this is not set; a value defers it that long,
+                 which saves every shard a transaction on each pause
+                 between writes, and for up to that long keeps the rollback
+                 state and sends balanced reads of just-written objects
+                 back to the primary.
+   :Type: Integer
+   :Default: Not set
+
 .. _scrub_min_interval:
 
 .. describe:: scrub_min_interval

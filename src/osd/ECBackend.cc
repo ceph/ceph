@@ -95,6 +95,39 @@ ECBackend::ECBackend(
    */
   ceph_assert((ec_impl->get_data_chunk_count() *
     ec_impl->get_chunk_size(stripe_width)) == stripe_width);
+
+  rmw_pipeline.defer_rollforward = [this] { return defer_rollforward_kick(); };
+}
+
+// Under the PG lock, from RMWPipeline::finish_rmw. Modelled on
+// ReplicatedBackend::maybe_kick_pct_update, which sends the committed point
+// of a replicated PG the same way, except that without the option, or with
+// a delay of 0, the kick is sent at once: unlike a replica, an EC shard
+// needs the committed point to free its rollback state, so the kick cannot
+// go unsent. Each request starts the delay again, so the kick goes out
+// once the pipeline has been quiet for the whole delay and carries the
+// committed_to of that moment.
+bool ECBackend::defer_rollforward_kick() {
+  int64_t delay = 0;
+  if (!get_parent()->get_pool().opts.get(
+        pool_opts_t::PCT_UPDATE_DELAY, &delay) ||
+      delay <= 0) {
+    return false;
+  }
+  auto &timer = get_parent()->get_pg_timer();
+  if (rollforward_kick.is_scheduled()) {
+    timer.cancel(rollforward_kick);
+  }
+  dout(20) << __func__ << ": kick in " << delay << " s" << dendl;
+  timer.schedule_after(rollforward_kick, std::chrono::seconds(delay));
+  return true;
+}
+
+void ECBackend::cancel_rollforward_kick() {
+  if (rollforward_kick.is_scheduled()) {
+    dout(10) << __func__ << dendl;
+    get_parent()->get_pg_timer().cancel(rollforward_kick);
+  }
 }
 
 PGBackend::RecoveryHandle *ECBackend::open_recovery_op() {
@@ -1049,6 +1082,9 @@ void ECBackend::check_recovery_sources(const OSDMapRef &osdmap) {
 
 void ECBackend::on_change() {
   ec_omap_journal.clear_all();
+  // A kick pending from the old interval has nothing to send: the pipeline
+  // forgets committed_to below.
+  cancel_rollforward_kick();
   rmw_pipeline.on_change();
   read_pipeline.on_change();
   rmw_pipeline.on_change2();
