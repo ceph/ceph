@@ -1963,6 +1963,7 @@ bool LCObjsLister::get_obj(rgw_bucket_dir_entry *obj) const {
 }
 
 bool LCObjsLister::next(boost::asio::yield_context y) {
+  skipped_key_name.clear();
   if (obj_iter == list_results.objs.end())
     return false;
 
@@ -1992,6 +1993,7 @@ bool LCObjsLister::next(boost::asio::yield_context y) {
         << obj_iter->key << " (multiple currents)"
         << " in bucket=" << backend->get_bucket_name()
         <<  dendl;
+      skipped_key_name = obj_iter->key.name;
       obj_iter = skip_to_the_next_key(obj_iter, y);
       obj_iter = skip_to_key_with_first_current(obj_iter, y);
     }
@@ -2373,9 +2375,24 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       key_group.clear();
     };
 
+    // drop the queued versions of an object the lister skipped; a group
+    // already flushed at the 1000-version cap can't be recalled
+    auto drop_skipped_key_group = [&] {
+      if (key_group.empty() ||
+          ol.skipped_key() != key_group.front().obj.key.name) {
+        return;
+      }
+      for (size_t i = 0; i < key_group.size(); ++i) {
+        batch_counters.decrement_pending();
+      }
+      key_group.clear();
+    };
+
     rgw_bucket_dir_entry e;
     for (auto offset = 0; ol.get_obj(&e); ++offset, ol.next(yield)) {
       const auto obj = e;
+
+      drop_skipped_key_group();
 
       // Update all rules to capture current lister state before spawning
       for (auto& rule : rules) {
@@ -2416,6 +2433,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 	}
       }
     }
+    drop_skipped_key_group();
     flush_key_group();
   }
 

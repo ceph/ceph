@@ -1167,6 +1167,42 @@ TEST_F(LCObjsListerTests, EmptyPageAfterTruncatedPage) {
   io.run();
 }
 
+TEST_F(LCObjsListerTests, SkippedKeyAfterMultipleCurrents) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+      {
+        .objs = {
+          make_entry("objA", "cur0", curr_flags),
+          make_entry("objA", "v1", non_curr_flags),
+          make_entry("objA", "cur1", curr_flags),
+          make_entry("objB", "cur", curr_flags),
+        },
+        .truncated = false
+      }
+    };
+    LCObjsLister l(&fbl, cct.get());
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.instance, "v1");
+    EXPECT_TRUE(l.skipped_key().empty());
+
+    // objA[cur0] and objA[v1] were returned before its second current
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objB");
+    EXPECT_EQ(l.skipped_key(), "objA");
+
+    ASSERT_FALSE(l.next(yield));
+    EXPECT_TRUE(l.skipped_key().empty());
+  }, rethrow);
+  io.run();
+}
+
 // a page that ends on a null version resumes after it, not before all
 // versions of its name (tracker #82181)
 TEST_F(LCObjsListerTests, ResumeAfterNullVersion) {
