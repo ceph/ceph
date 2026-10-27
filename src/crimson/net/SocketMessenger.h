@@ -86,6 +86,12 @@ public:
   /// host/type/nonce on one of my reactor ports
   bool is_my_addr(const entity_addr_t& addr) const;
 
+
+  void set_auth_shard(seastar::shard_id shard) override {
+    assert(seastar::this_shard_id() == sid);
+    auth_shard = shard;
+  }
+
   bind_ertr::future<> bind(const entity_addrvec_t& addr) override;
 
   seastar::future<> start(const dispatchers_t& dispatchers) override;
@@ -144,6 +150,11 @@ public:
     return auth_server;
   }
 
+  seastar::shard_id get_auth_shard() const {
+    assert(seastar::this_shard_id() == sid);
+    return auth_shard;
+  }
+
   uint32_t get_global_seq(uint32_t old=0);
 
   void learned_addr(const entity_addr_t &peer_addr_for_me,
@@ -200,6 +211,8 @@ private:
     }
     return seastar::now();
   }
+
+  seastar::future<> mark_down_all_ports(const entity_addr_t& a) final;
 private:
   seastar::future<> accept(SocketFRef &&, const entity_addr_t &);
 
@@ -219,6 +232,7 @@ private:
   entity_addrvec_t my_addrs;
   crimson::auth::AuthClient* auth_client = nullptr;
   crimson::auth::AuthServer* auth_server = nullptr;
+  seastar::shard_id auth_shard = seastar::this_shard_id();
 
   ShardedServerSocket *listener = nullptr;
   ChainedDispatchers dispatchers;
