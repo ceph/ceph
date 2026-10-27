@@ -143,7 +143,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     
     // If a callback is set, queue the transaction
     if (queue_transaction_callback && !t.empty()) {
-      ObjectStore::Transaction copy;
+      ObjectStore::Transaction copy(t.get_data_features());
       copy.append(t);
       queue_transaction_callback(std::move(copy));
     }

@@ -56,6 +56,7 @@ public:
   std::map<pg_shard_t, pg_info_t> shard_info;
   std::map<pg_shard_t, pg_missing_t> shard_missing;
   std::map<hobject_t, std::set<pg_shard_t>> missing_loc_shards;
+  std::map<hobject_t, std::unique_ptr<SnapSetContext>> snapset_contexts;
   pg_missing_tracker_t local_missing;
   
   std::vector<MessageRef> sent_messages;
@@ -475,10 +476,28 @@ public:
       obc->obs.exists = false;
     }
     
-    obc->ssc = nullptr;
+    obc->ssc = get_snapset_context(hoid, attrs);
     obc->attr_cache = attrs;
     
     return obc;
+  }
+
+  // Mirrors PrimaryLogPG::get_snapset_context(), which replicated recovery
+  // needs.  Contexts live as long as the listener.
+  SnapSetContext *get_snapset_context(
+    const hobject_t &hoid,
+    const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) {
+    auto &ssc = snapset_contexts[hoid.get_head()];
+    if (!ssc) {
+      ssc = std::make_unique<SnapSetContext>(hoid.get_head());
+      ssc->exists = false;
+    }
+    if (auto it_ss = attrs.find(SS_ATTR); it_ss != attrs.end()) {
+      auto p = it_ss->second.cbegin();
+      decode(ssc->snapset, p);
+      ssc->exists = true;
+    }
+    return ssc.get();
   }
 
   bool try_lock_for_read(
@@ -708,7 +727,7 @@ public:
   }
 
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) override {
-    return nullptr;
+    return ceph::make_ref<MockConnection>(peer);
   }
 
   entity_name_t get_cluster_msgr_name() override {
