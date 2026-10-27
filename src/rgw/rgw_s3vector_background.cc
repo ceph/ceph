@@ -39,9 +39,6 @@
 
 namespace rgw::s3vector {
 
-// table metadata key for build coordination state
-static constexpr const char* build_state_metadata_key = "s3v_index_state";
-
 // lock object key prefix/suffix within the vector bucket
 // The distributed-lock object is stored under a reserved top-level "directory"
 // so it can never collide with (or be enumerated as) LanceDB data. LanceDB only
@@ -69,74 +66,6 @@ enum {
   l_rgw_s3v_bg_last,
 };
 
-
-struct build_state_t {
-  int64_t build_started_at = 0;
-  std::string builder_id;
-  // per-index rebuild timing, persisted across RGW restarts via table metadata
-  int64_t last_rebuild_completed_at = 0;  // epoch seconds
-  int64_t last_rebuild_duration_ms = 0;
-
-  // Persisted in LanceDB table metadata using Ceph's versioned bufferlist
-  // encoding (struct_v / compat_v via ENCODE_START / DECODE_START). To evolve:
-  // append a new field, bump the ENCODE_START version, and read it back under
-  // `if (struct_v >= N)`. DECODE_FINISH skips trailing bytes written by a newer
-  // RGW (forward compatible), and compat_v lets an older reader reject a record
-  // it cannot understand (it throws buffer::error, surfaced as a decode failure).
-  // The metadata store holds null-terminated strings, so the binary encoding is
-  // base64-wrapped for storage — see to_base64_str() / from_base64_str().
-  void encode(ceph::buffer::list& bl) const {
-    // v2 drops the obsolete global_delete_count field: ghost rows are now read
-    // as ground truth from lancedb_table_stats().num_deleted_rows instead of
-    // being accumulated into persisted metadata. compat_v is bumped to 2 because
-    // a v1 reader cannot parse a record that omits the mid-struct field.
-    ENCODE_START(2, 2, bl);
-    encode(build_started_at, bl);
-    encode(builder_id, bl);
-    encode(last_rebuild_completed_at, bl);
-    encode(last_rebuild_duration_ms, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
-    decode(build_started_at, bl);
-    decode(builder_id, bl);
-    if (struct_v < 2) {
-      uint64_t deprecated_global_delete_count = 0;  // removed in v2
-      decode(deprecated_global_delete_count, bl);
-    }
-    decode(last_rebuild_completed_at, bl);
-    decode(last_rebuild_duration_ms, bl);
-    DECODE_FINISH(bl);
-  }
-
-  // base64 of the versioned bufferlist, so the binary encoding survives the
-  // string-typed LanceDB metadata API.
-  std::string to_base64_str() const {
-    ceph::buffer::list bl;
-    encode(bl);
-    ceph::buffer::list b64;
-    bl.encode_base64(b64);
-    return b64.to_str();
-  }
-
-  // Returns false on malformed base64 or a corrupt / incompatible-version record.
-  bool from_base64_str(const char* str) {
-    try {
-      ceph::buffer::list b64;
-      b64.append(str);
-      ceph::buffer::list bl;
-      bl.decode_base64(b64);
-      auto it = bl.cbegin();
-      decode(it);
-    } catch (const ceph::buffer::error&) {
-      return false;
-    }
-    return true;
-  }
-};
-WRITE_CLASS_ENCODER(build_state_t)
 
 // ============================================================================
 // Background rebuild observability (per-instance)
@@ -429,60 +358,6 @@ private:
     while (event_log_.size() > max_events) {
       event_log_.pop_front();
     }
-  }
-
-  // ============================================================================
-  // Build state management via LanceDB table metadata
-  // ============================================================================
-
-  int read_build_state(const LanceDBTable* table, build_state_t& state) {
-    const char* key = build_state_metadata_key;
-    char** keys_out = nullptr;
-    char** values_out = nullptr;
-    size_t count = 0;
-    char* error_message = nullptr;
-
-    if (const auto result = lancedb_table_get_metadata(
-            table, &key, 1, &keys_out, &values_out, &count, &error_message);
-        result != LANCEDB_SUCCESS) {
-      ldpp_dout(this, 1) << "ERROR: failed to read build state from table metadata: "
-          << (error_message ? error_message : "unknown") << dendl;
-      lancedb_free_string(error_message);
-      return -EIO;
-    }
-
-    int ret = 0;
-    if (count > 0 && values_out[0]) {
-      if (!state.from_base64_str(values_out[0])) {
-        // corrupt / unparseable metadata, or a record whose incompatible (compat)
-        // version this build cannot decode: do not silently proceed with a
-        // half-populated struct. Reset to clean defaults (treated as "no prior
-        // state"; the next write repairs the record) and report the error.
-        ldpp_dout(this, 0) << "ERROR: failed to decode build state metadata (corrupt "
-            "or incompatible version), resetting to defaults" << dendl;
-        state = build_state_t{};
-        ret = -EINVAL;
-      }
-    }
-    lancedb_free_metadata(keys_out, values_out, count);
-    return ret;
-  }
-
-  int write_build_state(const LanceDBTable* table, const build_state_t& state) {
-    const std::string encoded = state.to_base64_str();
-    const char* key = build_state_metadata_key;
-    const char* value = encoded.c_str();
-    char* error_message = nullptr;
-
-    if (const auto result = lancedb_table_set_metadata(
-            table, &key, &value, 1, &error_message);
-        result != LANCEDB_SUCCESS) {
-      ldpp_dout(this, 1) << "ERROR: failed to write build state to table metadata: "
-          << (error_message ? error_message : "unknown") << dendl;
-      lancedb_free_string(error_message);
-      return -EIO;
-    }
-    return 0;
   }
 
   // ============================================================================
@@ -1284,23 +1159,11 @@ private:
       return RESULT_SKIPPED;
     }
 
-    // step 9: record build state
-    build_state_t state;
-    state.build_started_at = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    state.builder_id = lock_token;
-    if (int ret = write_build_state(table, state); ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to record build state for "
-          << bucket_name << "." << index_name
-          << ", aborting rebuild (ret=" << ret << ")" << dendl;
-      return ret;
-    }
-
-    // step 10: get distance metric for index config
+    // step 9: get distance metric for index config
     DistanceMetric metric = s3vector::get_distance_metric(table, this);
     LanceDBDistanceType distance_type = to_lancedb_distance(metric);
 
-    // step 11: run the vector index build
+    // step 10: run the vector index build
     ldpp_dout(this, 1) << "INFO: starting vector index build for "
         << bucket_name << "." << index_name
         << " (unindexed=" << vector_index_status.num_unindexed_rows
@@ -1309,7 +1172,7 @@ private:
 
     int build_ret = run_vector_index_build(table, distance_type);
 
-    // step 12: check if the lock was lost during the build (detected by main-loop refresh)
+    // step 11: check if the lock was lost during the build (detected by main-loop refresh)
     bool lock_lost = false;
     {
       std::lock_guard lg(active_builds_mutex);
@@ -1321,27 +1184,7 @@ private:
 
     if (lock_lost) {
       ldpp_dout(this, 1) << "WARNING: lock was lost during build for "
-          << bucket_name << "." << index_name
-          << " — skipping metadata update" << dendl;
-    } else {
-      // step 13: mark build complete in table metadata
-      build_state_t post_state;
-      if (int ret = read_build_state(table, post_state); ret < 0) {
-        ldpp_dout(this, 1) << "WARNING: failed to read build state after build for "
-            << bucket_name << "." << index_name << dendl;
-      }
-      post_state.build_started_at = 0;
-      if (build_ret == 0) {
-        const int64_t now_s = std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-        post_state.last_rebuild_completed_at = now_s;
-        post_state.last_rebuild_duration_ms =
-            (state.build_started_at > 0) ? (now_s - state.build_started_at) * 1000 : 0;
-      }
-      if (int ret = write_build_state(table, post_state); ret < 0) {
-        ldpp_dout(this, 1) << "WARNING: failed to clear build state for "
-            << bucket_name << "." << index_name << dendl;
-      }
+          << bucket_name << "." << index_name << dendl;
     }
 
     if (build_ret == 0) {
