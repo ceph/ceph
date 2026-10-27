@@ -72,9 +72,12 @@ using ::ceph::datum_wire::writer;
 void decode(bulk_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
-        // The oldest bucket entry has a one-byte version, empty name, size and mtime.
-        // Reserve only after proving the count fits, including the bool/time tail.
-        candidate.entries = fields.template native<17, decltype(candidate.entries)>(9);
+        // Bucket-entry v1 predates framing and carries only name, size, and mtime.
+        constexpr auto minimum_entry_size = sizeof(std::uint8_t) + sizeof(std::uint32_t) +
+            sizeof(std::uint64_t) + sizeof(std::uint32_t);
+        constexpr auto tail_size = sizeof(std::uint8_t) + ::ceph::datum_wire::encoded_time_size;
+        candidate.entries = fields.template native<
+            minimum_entry_size, decltype(candidate.entries)>(tail_size);
         candidate.add = 0 != fields.template scalar<std::uint8_t>();
         fields.native(candidate.time);
     });

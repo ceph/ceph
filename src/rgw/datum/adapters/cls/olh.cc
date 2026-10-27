@@ -30,6 +30,8 @@ constexpr auto client_key_fields = datum::binary_fields<&client_key::name, &clie
 
 // The unread span is the active suffix; next_fragment points past accounted-for fragments.
 // Empty spans load the next fragment lazily. The input owns all bytes.
+// basic_reader checks each read/skip against its frame before advancing this cursor.
+// SingleFragment is selected only for one nonempty buffer, so its spans need no fragment walk.
 template <bool SingleFragment>
 class fragment_cursor final
 {
@@ -109,6 +111,8 @@ public:
 
 };
 
+// Forward only the exact native v1 frames: compatible extensions would be discarded by
+// decode/re-encode, so copying them verbatim would change the reply's wire representation.
 bool canonical_key(auto& archive)
 {
     return archive.canonical_frame(1, [](auto& fields) {
@@ -122,16 +126,20 @@ bool canonical_key(auto& archive)
 bool canonical_event(auto& archive)
 {
     return archive.canonical_frame(1, [](auto& fields) {
-        fields.skip(9); // Epoch and action are preserved byte for byte.
+        fields.skip(sizeof(std::uint64_t) + sizeof(std::uint8_t));
         fields.skip_text();
         if (!canonical_key(fields)) {
             return false;
         }
 
+        // Native bool decoding normalizes every nonzero byte to true; only 0/1 survive unchanged.
         return fields.template scalar<std::uint8_t>() <= 1;
     });
 }
 
+// The stored rgw_bucket_olh_entry nests the same epoch/event sequence as the read reply.
+// Reuse that sequence only after validating the whole stored frame, including unselected groups
+// and the tag after the log. A full page cannot short-circuit validation or tag comparison.
 template <bool SingleFragment>
 std::optional<int> try_encode_stored_reply(
     std::bool_constant<SingleFragment>, const ::ceph::buffer::list& input,
@@ -148,8 +156,11 @@ std::optional<int> try_encode_stored_reply(
         if (!canonical_key(fields)) {
             return false;
         }
-        fields.skip(9); // Stored head delete-marker and epoch are not reply fields.
-        const auto count = fields.template sequence_size<12>(6);
+        // The stored head's delete-marker and epoch are not reply fields.
+        fields.skip(sizeof(std::uint8_t) + sizeof(std::uint64_t));
+        constexpr auto tail_size = sizeof(std::uint32_t) + 2 * sizeof(std::uint8_t);
+        const auto count = fields.template sequence_size<
+            ::cls::rgw::olh_wire::detail::minimum_group_size>(tail_size);
         std::uint64_t previous = 0;
         for (std::uint32_t index = 0; index < count; ++index) {
             const auto start = cursor.get_offset();
@@ -158,7 +169,8 @@ std::optional<int> try_encode_stored_reply(
                 return false; // Native map decoding orders and deduplicates groups.
             }
             previous = epoch;
-            const auto events = fields.template sequence_size<34>();
+            const auto events = fields.template sequence_size<
+                ::cls::rgw::olh_wire::detail::minimum_event_size>();
             for (std::uint32_t item = 0; item < events; ++item) {
                 if (!canonical_event(fields)) {
                     return false;
@@ -177,7 +189,8 @@ std::optional<int> try_encode_stored_reply(
             }
         }
         matches = fields.text_equals(tag);
-        fields.skip(2); // Stored exists/pending-removal booleans are not reply fields.
+        // Stored exists/pending-removal flags are not reply fields.
+        fields.skip(2 * sizeof(std::uint8_t));
 
         return true;
     });
@@ -236,7 +249,9 @@ std::optional<int> try_encode_stored_reply(const ::ceph::buffer::list& input,
                                            const std::uint64_t marker, const std::string_view tag,
                                            ::ceph::buffer::list& output)
 try {
-    // Dense fragment chains favor the existing single-pass owning decoder.
+    // Compare payload size with the buffer-node metadata that forwarding may retain.
+    // This is an owner-overhead heuristic, not a wire-size limit: dense chains fall back to
+    // the owning decoder rather than retaining many owners for very little payload.
     const auto owner_bytes = std::uint64_t {input.get_num_buffers()} * sizeof(::ceph::buffer::ptr_node);
     if (input.length() < owner_bytes) {
         return std::nullopt;

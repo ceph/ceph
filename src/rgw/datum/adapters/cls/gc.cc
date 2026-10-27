@@ -94,7 +94,10 @@ list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
     list_reply<EntriesT> candidate;
     reader archive {cursor};
     archive.frame(2, [&](auto& fields, const std::uint8_t version) {
-        candidate.entries = fields.template native<28, EntriesT>(version >= 2 ? 5 : 1);
+        constexpr auto minimum_info_size = 2 * ::ceph::encoding_detail::struct_header_len() +
+            2 * sizeof(std::uint32_t) + ::ceph::datum_wire::encoded_time_size;
+        const auto tail_size = sizeof(std::uint8_t) + (version >= 2 ? sizeof(std::uint32_t) : 0);
+        candidate.entries = fields.template native<minimum_info_size, EntriesT>(tail_size);
         if (version >= 2) {
             fields.text(candidate.next_marker);
         }

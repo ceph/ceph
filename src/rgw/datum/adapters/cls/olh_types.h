@@ -11,6 +11,8 @@
 
 namespace cls::rgw::olh {
 
+// These values are the OLHLogOp wire tags, independent of that native enum's storage width.
+// Unrecognized byte values remain representable for the replay error path.
 enum struct action : std::uint8_t
 {
     unknown = 0,
@@ -36,6 +38,7 @@ struct event final
     bool delete_marker = false;
 };
 
+// The group key drives pagination/trim; event.epoch drives link arbitration. They need not match.
 using epoch_group = std::pair<std::uint64_t, std::vector<event>>;
 
 struct reply final

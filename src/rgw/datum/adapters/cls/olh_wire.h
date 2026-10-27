@@ -42,6 +42,14 @@ struct event_prefix final
     std::string_view tag;
 };
 
+constexpr auto event_prefix_fields = datum::binary_fields<
+    &event_prefix::epoch, &event_prefix::operation, &event_prefix::tag> {};
+
+inline constexpr auto minimum_group_size = sizeof(std::uint64_t) + sizeof(std::uint32_t);
+inline constexpr auto minimum_event_size = ::ceph::encoding_detail::struct_header_len() +
+    ::ceph::datum_wire::encoded_size(event_prefix_fields, event_prefix {}) +
+    ::rgw::datum_wire::minimum_key_size + sizeof(std::uint8_t);
+
 template <typename EntryT, auto Epoch, auto Operation, auto Tag, auto Key, auto Deleted,
           auto Name, auto Instance>
 void encode_event(datum::binary_fields<Epoch, Operation, Tag, Key, Deleted>,
@@ -51,7 +59,7 @@ void encode_event(datum::binary_fields<Epoch, Operation, Tag, Key, Deleted>,
     archive.frame(1, [&] [[gnu::noinline]] {
         using prefix = event_prefix;
 
-        archive.fields(datum::binary_fields<&prefix::epoch, &prefix::operation, &prefix::tag> {},
+        archive.fields(event_prefix_fields,
                        prefix {datum::member_lens<Epoch> {}(value),
                                ::ceph::datum_wire::checked_byte(datum::member_lens<Operation> {}(value)), tag});
         const auto& key = datum::member_lens<Key> {}(value);
@@ -68,6 +76,7 @@ void decode_event(datum::binary_fields<Epoch, Operation, Tag, Key, Deleted>,
     archive.frame(1, [&](auto& fields, std::uint8_t) {
         value.*Epoch = fields.template scalar<std::uint64_t>();
         auto& operation = value.*Operation;
+        // Admit the entire native uint8 wire domain; replay decides which actions it supports.
         operation = static_cast<std::remove_cvref_t<decltype(operation)>>(fields.template scalar<std::uint8_t>());
         fields.text(value.*Tag);
         decode_key(key_fields, fields, value.*Key);
@@ -103,6 +112,7 @@ auto decode_request(byte_buffer::const_iterator& input, FactoryT&& factory)
         const auto marker = fields.template scalar<std::uint64_t>();
         TagT tag CEPH_INDETERMINATE;
         fields.text(tag);
+        // Version 1 predates the stale-event flag and retains its false default.
         const bool stales = version >= 2 && 0 != fields.template scalar<std::uint8_t>();
 
         return std::invoke(std::forward<FactoryT>(factory), std::move(name),
@@ -112,6 +122,8 @@ auto decode_request(byte_buffer::const_iterator& input, FactoryT&& factory)
 
 // Filtering is applied to an already paginated range. Empty epoch groups are
 // retained with all events when requested by the native get_stales policy.
+// Filtering must not refill the page or recompute truncated: even an empty filtered
+// reply can report that more stored epoch groups remain.
 template <std::ranges::forward_range GroupsT, auto ...EventMember, auto ...KeyMember, typename IncludeT>
 byte_buffer encode_reply(datum::binary_fields<EventMember...> event_fields,
                          datum::binary_fields<KeyMember...> key_fields,
@@ -157,12 +169,12 @@ auto decode_reply(datum::binary_fields<EventMember...> event_fields,
     detail::reader archive {input};
 
     return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        const auto size = fields.template sequence_size<12>(1);
+        const auto size = fields.template sequence_size<detail::minimum_group_size>(1);
         GroupsT groups;
         ::ceph::util::maybe_reserve(groups, size);
         for (std::uint32_t index = 0; index < size; ++index) {
             const auto epoch = fields.template scalar<std::uint64_t>();
-            auto entries = fields.template sequence<34, EntriesT>(
+            auto entries = fields.template sequence<detail::minimum_event_size, EntriesT>(
                 [event_fields, key_fields](auto& fields, auto& entry) {
                     detail::decode_event(event_fields, key_fields, fields, entry);
                 });

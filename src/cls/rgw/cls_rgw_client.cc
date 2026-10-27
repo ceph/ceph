@@ -52,6 +52,8 @@ public:
 public:
   void handle_completion(int result, ::ceph::buffer::list& bytes) override {
     try {
+      // A filtered bucket listing can return a continuation marker with this retry status.
+      // Decode that reply while preserving the status so the caller can advance and retry.
       if (0 <= result || RGWBIAdvanceAndRetryError == result) {
         decode_reply(bytes, output);
       }

@@ -549,7 +549,7 @@ TEST_CASE("BI decoder rejects impossible counts before constructing rows", "[rgw
 {
     auto bytes = rgw_bi_oracle::encode_reply({}, false);
     const char excessive[] = {char(0xFF), char(0xFF), char(0xFF), char(0xFF)};
-    auto position = bytes.begin(6);
+    auto position = bytes.begin(::ceph::encoding_detail::struct_header_len());
     position.copy_in(4, excessive);
     auto cursor = bytes.cbegin();
     counted_row::constructions = 0;
@@ -782,8 +782,9 @@ TEST_CASE("BI native entry decode preserves its destination on truncation", "[rg
 {
     const auto rows = fixtures();
     const auto bytes = rgw_bi_oracle::encode_reply(rows, false);
-    const unsigned start = 10; // reply frame header followed by row count
-    const unsigned length = 15 + rows[0].key.size() + rows[0].payload.length();
+    constexpr auto start = ::ceph::encoding_detail::struct_header_len() + sizeof(std::uint32_t);
+    const auto length = ::ceph::encoding_detail::struct_header_len() + sizeof(std::uint8_t) +
+        2 * sizeof(std::uint32_t) + rows[0].key.size() + rows[0].payload.length();
     for (unsigned size = 0; size < length; ++size) {
         byte_buffer input;
         input.substr_of(bytes, 0, start + size);
@@ -899,7 +900,8 @@ TEST_CASE("BI batch request decoding publishes atomically on structural failure"
     }
     auto impossible = rgw_bi_oracle::encode_put_request({}, false);
     const char excessive[] = {char(0xFF), char(0xFF), char(0xFF), char(0xFF)};
-    impossible.begin(6).copy_in(4, excessive);
+    impossible.begin(::ceph::encoding_detail::struct_header_len())
+        .copy_in(sizeof(excessive), excessive);
     auto cursor = impossible.cbegin();
     native::put_request value;
     CHECK_THROWS(native::decode(value, cursor));
@@ -1025,19 +1027,22 @@ TEST_CASE("BI get bounds key fields and preserves request publication on failure
         short_input.substr_of(full, 0, size);
         invalid.push_back(std::move(short_input));
     }
-    for (const unsigned offset : {1, 7}) {
+    constexpr auto key_compat_offset =
+        ::ceph::encoding_detail::struct_header_len() + sizeof(std::uint8_t);
+    for (const auto offset : {sizeof(std::uint8_t), key_compat_offset}) {
         auto bytes = fragmented(full);
         const char newer = 2;
         bytes.begin(offset).copy_in(1, &newer);
         invalid.push_back(std::move(bytes));
     }
     auto outside = fragmented(full);
-    const auto length = static_cast<char>(full.length() - 7);
+    const auto length = static_cast<char>(
+        full.length() - ::ceph::encoding_detail::struct_header_len() - sizeof(std::uint8_t));
     outside.begin(2).copy_in(1, &length); // kind lies outside the outer frame
     invalid.push_back(std::move(outside));
     auto excessive = fragmented(full);
     const char count[] = {char(0xFF), char(0xFF), char(0xFF), char(0xFF)};
-    excessive.begin(12).copy_in(4, count);
+    excessive.begin(2 * ::ceph::encoding_detail::struct_header_len()).copy_in(sizeof(count), count);
     invalid.push_back(std::move(excessive));
     for (const auto& bytes : invalid) {
         byte_buffer input;

@@ -37,6 +37,8 @@ public:
 
 };
 
+// Preserve the native read limit of 1000 epoch groups, not individual events or bytes.
+// Both reply paths keep a group's events together, even if one group is large.
 inline constexpr std::uint32_t max_page_epochs = 1000;
 
 using stored_log = decltype(::rgw_bucket_olh_entry::pending_log);

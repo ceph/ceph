@@ -257,7 +257,10 @@ TEST_CASE("OLH framing rejects every proper truncation without publishing candid
 
 TEST_CASE("OLH bounds reject impossible group and event counts before allocation", "[rgw][cls][datum][olh]")
 {
-    for (const unsigned offset : {6, 18}) {
+    constexpr auto group_count_offset = ::ceph::encoding_detail::struct_header_len();
+    constexpr auto event_count_offset =
+        group_count_offset + sizeof(std::uint32_t) + sizeof(std::uint64_t);
+    for (const unsigned offset : {group_count_offset, event_count_offset}) {
         auto bytes = encode(fixture());
         const char impossible[] = {'\xFF', '\xFF', '\xFF', '\xFF'};
         auto cursor = bytes.begin(offset);
@@ -267,7 +270,9 @@ TEST_CASE("OLH bounds reject impossible group and event counts before allocation
     }
     auto bytes = encode(fixture());
     // The first event frame cannot consume bytes outside its enclosing reply.
-    auto cursor = bytes.begin(24);
+    constexpr auto event_length_offset =
+        event_count_offset + sizeof(std::uint32_t) + 2 * sizeof(std::uint8_t);
+    auto cursor = bytes.begin(event_length_offset);
     const char impossible[] = {'\xFF', '\xFF', '\xFF', '\xFF'};
     cursor.copy_in(4, impossible);
     olh::reply value;

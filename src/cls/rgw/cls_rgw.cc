@@ -2385,6 +2385,8 @@ try {
     return -ECANCELED;
   }
 
+  // Bound the stored epoch range before stale filtering. Refilling a filtered page or
+  // deriving truncation from its surviving events would change native continuation semantics.
   constexpr auto max_epochs = ::cls::rgw::olh_datum::max_page_epochs;
   const auto& log = olh_data_entry.pending_log;
   const auto page = [&] {

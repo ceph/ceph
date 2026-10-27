@@ -240,14 +240,18 @@ auto decode_entries(datum::binary_fields<Member...> selected, byte_buffer::const
 
     return archive.frame(Supported, [&](auto& fields, const std::uint8_t version, const std::uint8_t compatible) {
         const auto body = [&]<std::uint8_t Version>() {
-            // Unframed entries need nine bytes; framed entries need fifteen.
-            // Both reserve the final flag before allocating any rows.
-            auto entries = fields.template sequence<1 == Version ? 15 : 9, EntriesT>(
+            constexpr auto minimum_entry_size =
+                ::ceph::datum_wire::encoded_size(
+                    detail::entry_prefix_fields, detail::entry_prefix {}) +
+                (1 == Version ? ::ceph::encoding_detail::struct_header_len() : 0);
+            auto entries = fields.template sequence<minimum_entry_size, EntriesT>(
                 [selected](auto& fields, auto& entry) { detail::decode_entry<Version>(selected, fields, entry); }, 1);
             const bool flag = 0 != fields.template scalar<std::uint8_t>();
 
             return std::pair {std::move(entries), flag};
         };
+        // Compatibility, rather than version alone, selects the compact layout. A newer
+        // compat-1 reply still has framed entries and may only append outer-frame fields.
         if constexpr (2 <= Supported) {
             if (2 <= compatible) {
                 if (version < 2) {

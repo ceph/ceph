@@ -67,6 +67,8 @@ using header_fields =
 
 inline constexpr auto growing_metadata = std::true_type {};
 
+inline constexpr auto encoded_time_size = 2 * sizeof(std::uint32_t);
+
 // Keep success local when the archive's throwing helper is outlined.
 [[gnu::always_inline]] inline void throw_if_error(const zpp::bits::errc result)
 {
@@ -336,6 +338,9 @@ public:
         }
     }
 
+    // Minimum is the least encoded bytes per element across all accepted leaf versions,
+    // not sizeof(T) or the current encoder's size. Reserve tail bytes for following fields.
+    // This rejects impossible counts before allocation; each leaf still validates its own body.
     template <unsigned Minimum>
     std::uint32_t sequence_size(const unsigned tail = 0)
     {
@@ -518,7 +523,8 @@ public:
     }
 
     // Reuse encoded bytes only when decoding and re-encoding would preserve them.
-    // Compatible extensions use the ordinary decode path:
+    // Require the exact version, compat 1, and no unconsumed frame tail; compatible
+    // extensions use the ordinary decode path so their extra bytes are not forwarded:
     template <typename BodyT>
     bool canonical_frame(const std::uint8_t version, BodyT&& body)
     {

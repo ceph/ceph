@@ -9984,6 +9984,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   librados::ObjectWriteOperation op;
 
   // The client decoder orders epoch groups and keeps the first duplicate.
+  // Pagination and trim use the group key; link arbitration below uses each event's epoch.
   const uint64_t last_ver = page.epochs.back().first;
   *plast_ver = last_ver;
 

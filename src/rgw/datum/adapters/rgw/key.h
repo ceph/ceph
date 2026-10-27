@@ -4,6 +4,8 @@
 
 #include "rgw/datum/adapters/ceph/wire.h"
 
+#include <cstdint>
+
 #include <string>
 #include <string_view>
 #include <utility>
@@ -11,6 +13,9 @@
 namespace rgw::datum_wire {
 
 namespace datum = ::ceph::salad::datum;
+
+inline constexpr auto minimum_key_size =
+    ::ceph::encoding_detail::struct_header_len() + 2 * sizeof(std::uint32_t);
 
 struct key_fields final
 {

@@ -212,8 +212,8 @@ std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
     reader archive {cursor};
 
     return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        // Even the shortest native entry needs its six-byte frame header.
-        auto entries = fields.template native<6, EntriesT>(1);
+        auto entries = fields.template native<
+            ::ceph::encoding_detail::struct_header_len(), EntriesT>(1);
         const bool truncated = 0 != fields.template scalar<std::uint8_t>();
 
         return std::pair {std::move(entries), truncated};
@@ -302,8 +302,8 @@ list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
     archive.frame(4, 2, [&](auto& fields, const std::uint8_t version) {
         fields.frame(2, 2, [&](auto& directory_fields, std::uint8_t) {
             directory_fields.native(candidate.dir.header);
-            // A string count plus even an unframed entry needs five bytes.
-            const auto count = directory_fields.template sequence_size<5>();
+            const auto count = directory_fields.template sequence_size<
+                sizeof(std::uint32_t) + sizeof(std::uint8_t)>();
             auto& entries = candidate.dir.m;
             ::ceph::util::maybe_reserve(entries, count);
             for (std::uint32_t index = 0; index < count; ++index) {
@@ -332,8 +332,11 @@ namespace {
 stat_associations decode_stats(reader& fields)
 {
     static_assert(std::same_as<std::underlying_type_t<::RGWObjCategory>, std::uint8_t>);
-    const auto count = fields.sequence_size<26>();
+    // Stats v1 predates framed records and the actual_size counter.
+    constexpr auto minimum_stats_size = sizeof(std::uint8_t) + 3 * sizeof(std::uint64_t);
+    const auto count = fields.sequence_size<sizeof(::RGWObjCategory) + minimum_stats_size>();
     stat_associations result;
+    // First-wins insertion can retain at most the 256 distinct uint8 category values.
     constexpr auto categories = 1u + std::numeric_limits<std::uint8_t>::max();
     result.reserve(std::min(count, categories));
     for (std::uint32_t index = 0; index < count; ++index) {
@@ -482,8 +485,8 @@ void decode(complete_request& value, ::ceph::buffer::list::const_iterator& input
             fields.text(candidate.locator);
         }
         const bool names_only = version >= 4 && version < 7;
-        const auto count = names_only ? fields.template sequence_size<4>()
-                                      : fields.template sequence_size<14>();
+        const auto count = names_only ? fields.template sequence_size<sizeof(std::uint32_t)>()
+            : fields.template sequence_size<::rgw::datum_wire::minimum_key_size>();
         candidate.remove_objs.reserve(count);
         for (std::uint32_t i = 0; i < count; ++i) {
             auto& removed = candidate.remove_objs.emplace_back();
@@ -527,6 +530,8 @@ void decode(link_request& value, ::ceph::buffer::list::const_iterator& input)
         candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
         candidate.bilog_flags = fields.template scalar<std::uint16_t>();
         if (version >= 2) {
+            // Version 3 added the native timestamp after the old seconds field;
+            // the old field remains on the wire but only version 2 uses its value.
             const auto seconds = fields.template scalar<std::uint64_t>();
             if (version == 2) {
                 candidate.unmod_since = ::ceph::real_clock::from_time_t(static_cast<time_t>(seconds));
@@ -771,6 +776,10 @@ using ::ceph::datum_wire::decode_record;
 using ::ceph::datum_wire::reader;
 using ::ceph::datum_wire::encode_frame;
 
+// Usage v1 has no usage-map, payer, or S3-select fields.
+constexpr auto minimum_entry_size = ::ceph::encoding_detail::struct_header_len() +
+    2 * sizeof(std::uint32_t) + 5 * sizeof(std::uint64_t);
+
 ::ceph::buffer::list encode_add(const std::vector<::rgw_usage_log_entry>& entries)
 {
     return encode_frame(2, [&](auto& archive) {
@@ -808,7 +817,8 @@ void decode(add_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     decode_record<2>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
         fields.frame(1, [&](auto& sequence, std::uint8_t) {
-            candidate.info.entries = sequence.template native<54, decltype(candidate.info.entries)>();
+            candidate.info.entries = sequence.template native<
+                minimum_entry_size, decltype(candidate.info.entries)>();
         });
         if (version >= 2) {
             fields.skip_text(); // The native handler never observes this user field.
@@ -862,7 +872,11 @@ read_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
     read_reply<EntriesT> candidate;
     reader archive {cursor};
     archive.frame(1, [&](auto& fields, std::uint8_t) {
-        const auto count = fields.template sequence_size<68>(5);
+        constexpr auto minimum_key_size =
+            ::ceph::encoding_detail::struct_header_len() + 2 * sizeof(std::uint32_t);
+        constexpr auto tail_size = sizeof(std::uint8_t) + sizeof(std::uint32_t);
+        const auto count = fields.template sequence_size<
+            minimum_key_size + minimum_entry_size>(tail_size);
         auto& entries = candidate.usage;
         ::ceph::util::maybe_reserve(entries, count);
         for (std::uint32_t index = 0; index < count; ++index) {
@@ -1039,7 +1053,12 @@ std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
     auto cursor = input.cbegin();
     reader archive {cursor};
     return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        auto entries = fields.template native<34, EntriesT>(1);
+        // Version 2 is shortest: v1 has a fourth string, and v3 adds initiator.
+        constexpr auto minimum_entry_size = ::ceph::encoding_detail::struct_header_len() +
+            ::ceph::datum_wire::encoded_time_size + 3 * sizeof(std::uint32_t) +
+            sizeof(::cls_rgw_reshard_entry::old_num_shards) +
+            sizeof(::cls_rgw_reshard_entry::new_num_shards);
+        auto entries = fields.template native<minimum_entry_size, EntriesT>(1);
         const bool truncated = 0 != fields.template scalar<std::uint8_t>();
 
         return std::pair {std::move(entries), truncated};
@@ -1131,6 +1150,8 @@ void encode(const head_message& value, ::ceph::buffer::list& output)
 
 void encode(const list_reply& value, ::ceph::buffer::list& output)
 {
+    // The request version selects the reply shape: through v2 it is a bucket/status map,
+    // while v3 carries full entries. Keep first-wins map insertion for the older shape.
     auto candidate = encode_frame(value.compat_v, [&](auto& archive) {
         if (value.compat_v <= 2) {
             std::map<std::string_view, int> old_entries;
