@@ -211,7 +211,7 @@ protected:
     r->set_tid(op->get_tid());
     r->set_op_returns(std::vector<pg_log_op_return_item_t>(op->ops.size()));
     r->set_connection(cons[osd]);
-    objecter->ms_dispatch2(r);
+    objecter->ms_fast_dispatch2(r);
     poll();
   }
 
