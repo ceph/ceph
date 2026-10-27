@@ -462,6 +462,163 @@ To check network statistics, run the following command:
 
    netstat -s
 
+Link State and Error Counters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To check the link state, speed, and duplex mode of an interface, run a command
+of the following form:
+
+.. prompt:: bash
+
+   ethtool <interface>
+
+A link that has negotiated a lower speed than expected, or half-duplex mode,
+limits every OSD on the host.
+
+To check the error and drop counters of an interface, run a command of the
+following form:
+
+.. prompt:: bash
+
+   ethtool -S <interface>
+
+Counter names vary by driver. Look for non-zero counters with names that
+contain ``err``, ``drop``, ``crc``, ``discard``, ``miss``, or ``no_buf``. Run
+the command twice, a few seconds apart, to distinguish counters that are
+increasing now from those that reflect old events. ``ip -s link show <interface>``
+shows the kernel's error and drop totals in a form that does not depend on the
+driver. CRC errors are counted at the receiving end, so check the switch port
+as well: a bad cable or transceiver might show errors only on the switch.
+
+Bonded Interfaces
+~~~~~~~~~~~~~~~~~
+
+A bond that has lost a member keeps working at reduced capacity, so the
+failure is easy to miss. The kernel logs link and bond member changes, so
+``dmesg -T`` or ``journalctl -k`` shows when a member went down. To check a
+bond, run a command of the following form:
+
+.. prompt:: bash
+
+   cat /proc/net/bonding/<bond>
+
+Check the following:
+
+- Every member interface shows ``MII Status: up``.
+- ``Bonding Mode`` matches the switch configuration. For example, ``IEEE
+  802.3ad Dynamic link aggregation`` on the host requires an LACP port channel
+  on the switch. If the switch ports are not in an LACP port channel, the bond
+  might use only one link or might drop traffic.
+- In 802.3ad mode, the ``Active Aggregator Info`` section shows a ``Number of
+  ports`` equal to the number of members and a ``Partner Mac Address`` other
+  than ``00:00:00:00:00:00``, and every member shows the same ``Aggregator
+  ID`` as that section. A member with a different aggregator ID is not
+  carrying traffic.
+- ``Transmit Hash Policy``. Bonds sometimes default to ``layer2``, which
+  sends all traffic between two hosts over the same link, when ``layer2+3`` or
+  ``layer3+4`` would spread traffic across the links. Ask your network team
+  which policy is appropriate for your network. The switch has its own hash
+  setting for traffic toward the host.
+
+MTU
+~~~
+
+Every host and switch port on a Ceph network must use the same MTU. When they
+differ, small messages such as heartbeats get through but large packets are
+dropped, which shows up as slow requests and flapping OSDs rather than as a
+clear network failure. To check the MTU of an interface, run a command of the
+following form:
+
+.. prompt:: bash
+
+   ip link show <interface>
+
+To test the path end to end, send packets of the full MTU size with
+fragmentation disabled to every other host, on both the public and the cluster
+network. For an MTU of 9000, run a command of the following form:
+
+.. prompt:: bash
+
+   ping -M do -s 8972 -c 3 <peer-ip>
+
+The payload size is the MTU minus 28 bytes of IP and ICMP headers. If this
+fails while a plain ``ping`` succeeds, a host or switch port on the path uses a
+smaller MTU.
+
+Link Saturation
+~~~~~~~~~~~~~~~
+
+A link that is running at or near its capacity delays every request that
+crosses it. Recovery and backfill can saturate the cluster network, and
+clients can saturate the public network. To watch the throughput of each
+interface, run the following command, which is in the ``sysstat`` package:
+
+.. prompt:: bash
+
+   sar -n DEV 1
+
+``sar`` reports ``rxkB/s`` and ``txkB/s`` in kilobytes per second: multiply by
+8 to compare them with the link speed that ``ethtool`` reports in bits per
+second. To see saturation over time and across hosts, see `Network Metrics in
+Prometheus`_. Check switch uplinks as well as host ports.
+
+Network Metrics in Prometheus
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``node-exporter`` daemons that cephadm deploys collect interface, bond, and
+link metrics on every host, and the Prometheus that cephadm deploys scrapes
+them. The following queries check every host at once. Some virtual interfaces,
+such as the USB network interface of a BMC, report half-duplex mode or no
+speed. Exclude them with a ``device`` label matcher.
+
+Interfaces with errors or drops in the last five minutes:
+
+.. code-block:: promql
+
+   rate(node_network_receive_errs_total[5m]) > 0
+   rate(node_network_transmit_errs_total[5m]) > 0
+   rate(node_network_receive_drop_total[5m]) > 0
+   rate(node_network_transmit_drop_total[5m]) > 0
+
+The kernel also counts frames that it discards on purpose as receive drops,
+for example frames for protocols that the host does not run and duplicate
+frames that a bond discards. A low, steady rate of receive drops is often
+harmless. Look for drops that rise with load or that appear on only some
+hosts.
+
+Interfaces whose link went down or came up in the last hour:
+
+.. code-block:: promql
+
+   increase(node_network_carrier_changes_total[1h]) > 0
+
+Bonds with fewer active members than configured members:
+
+.. code-block:: promql
+
+   node_bonding_active < node_bonding_slaves
+
+Interfaces in half-duplex mode, and the speed of each interface in Gb/s:
+
+.. code-block:: promql
+
+   node_network_info{duplex="half"}
+   node_network_speed_bytes * 8 / 1e9
+
+The number of hosts with each MTU on one interface, here ``bond0``. More than
+one result means that the MTU differs between hosts:
+
+.. code-block:: promql
+
+   count_values("mtu", node_network_mtu_bytes{device="bond0"})
+
+Interfaces receiving or transmitting at more than 80% of their link speed:
+
+.. code-block:: promql
+
+   rate(node_network_receive_bytes_total[1m]) / node_network_speed_bytes > 0.8
+   rate(node_network_transmit_bytes_total[1m]) / node_network_speed_bytes > 0.8
+
 Drive Configuration
 -------------------
 
@@ -610,7 +767,21 @@ Newer versions of Ceph complain about ``slow requests``::
 
 Possible causes include:
 
-- A failing drive (check ``dmesg`` output)
+- A failing drive. Check the kernel log with ``dmesg -T`` or ``journalctl
+  -k``, check ``/var/log/messages`` or ``/var/log/syslog``, and check the
+  health of the drive with ``smartctl -a <device>`` or, for an NVMe drive,
+  ``nvme smart-log <device>``. See `Bad Sectors / Fragmented Disk`_.
+- A network problem: a failed bond member, a bonding mode or hash policy that
+  uses only one link, an MTU mismatch, interface or switch port errors, or a
+  saturated link. See `Networking Issues`_.
+- Recovery or backfill settings that are too high, for example raised values
+  of :confval:`osd_max_backfills` or :confval:`osd_recovery_max_active` and
+  its ``_hdd`` and ``_ssd`` variants. Recovery and backfill then compete with
+  client I/O for drives and network bandwidth. With the mClock scheduler,
+  these options take effect only when
+  :confval:`osd_mclock_override_recovery_settings` is ``true``, and the
+  ``high_recovery_ops`` :confval:`osd_mclock_profile` also favors recovery
+  over client I/O.
 - A bug in the kernel file system (check ``dmesg`` output)
 - An overloaded cluster (check system load, iostat, etc.)
 - A bug in the ``ceph-osd`` daemon.
@@ -623,6 +794,8 @@ Possible solutions:
 - Upgrade Ceph
 - Restart OSDs
 - Replace failed or failing components
+- Fix network faults and mismatched bond or MTU settings
+- Return recovery and backfill settings to their defaults
 - Override OSD shard configuration (on HDD based cluster with mClock scheduler)
     - See :ref:`mclock-tblshoot-hdd-shard-config` for resolution
 
@@ -840,7 +1013,8 @@ To find where time is spent in an operation:
      contention. Another op holds the lock on the same object. Reduce
      concurrent writes to the same object.
    - Large duration on ``waiting for subops from [X,Y]`` |rarr| replica X or Y
-     is slow. Check replica OSD health, disk I/O, network.
+     is slow. Check replica OSD health, disk I/O, and the network: see
+     `Networking Issues`_.
    - Large duration on ``started`` (before ``op_commit``) |rarr| slow backend
      I/O on the primary. Check disk iostat.
    - Large duration on ``queued_for_pg`` |rarr| PG queue backlog; high
