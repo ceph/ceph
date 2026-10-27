@@ -20,6 +20,20 @@ class TestStretchCluster(MgrTestCase):
     WRITE_PERIOD = 10
     RECOVERY_PERIOD = WRITE_PERIOD * 12
     SUCCESS_HOLD_TIME = 7
+    # Cap bench writes so two file-backed OSDs sharing the root filesystem
+    # cannot fill it.  256 × 4 MiB objects ≈ 1 GiB of client data per bench
+    # run, well within the available headroom even after EC expansion.
+    BENCH_MAX_OBJECTS = 256
+    # Duration used for the parallel background bench in the site-failure test.
+    # Must be long enough for I/O to be in flight when DC1 is killed.
+    PARALLEL_BENCH_DURATION = 30
+    # Hard OS-level timeout applied to each bench process in the parallel
+    # workload (PARALLEL_BENCH_DURATION + WRITE_PERIOD seconds of slack).
+    # rados bench does not exit on its own when the cluster is unreachable --
+    # it stalls in-flight ops until osd_op_timeout fires, causing an indefinite
+    # remote.run(wait=True) hang.  The 'timeout' wrapper kills the process at
+    # the OS level so teardown can never hang regardless of cluster state.
+    BENCH_HARD_TIMEOUT = PARALLEL_BENCH_DURATION + WRITE_PERIOD
     # This dictionary maps the datacenter to the osd ids and hosts
     DC_OSDS = {
         'dc1': {
@@ -125,23 +139,34 @@ class TestStretchCluster(MgrTestCase):
         osd_map = self.mgr_cluster.mon_manager.get_osd_dump_json()
         return len(osd_map['osds'])
 
-    def _write_some_data(self, t, pool_name):
+    def _write_some_data(self, t, pool_name, hard_timeout=None):
         """
         Write some data to the pool to simulate a workload.
-        """
 
+        hard_timeout: if set, wrap the bench in 'timeout <n>' so the remote
+        process is killed after that many seconds regardless of cluster state,
+        preventing an indefinite hang in remote.run(wait=True).
+        """
         args = [
-            "rados", "-p", pool_name, "bench", str(t), "write", "-t", "16", "--no-cleanup"]
+            "rados", "-p", pool_name, "bench", str(t), "write", "-t", "16",
+            "--no-cleanup", "--max-objects", str(self.BENCH_MAX_OBJECTS)]
+        if hard_timeout is not None:
+            args = ["timeout", str(hard_timeout)] + args
 
         self.mgr_cluster.admin_remote.run(args=args, wait=True)
 
-    def _read_some_data(self, t, pool_name):
+    def _read_some_data(self, t, pool_name, hard_timeout=None):
         """
-        Write some data to the pool to simulate a workload.
-        """
+        Read some data from the pool to simulate a workload.
 
+        hard_timeout: if set, wrap the bench in 'timeout <n>' so the remote
+        process is killed after that many seconds regardless of cluster state,
+        preventing an indefinite hang in remote.run(wait=True).
+        """
         args = [
             "rados", "-p", pool_name, "bench", str(t), "rand", "-t", "16"]
+        if hard_timeout is not None:
+            args = ["timeout", str(hard_timeout)] + args
 
         self.mgr_cluster.admin_remote.run(args=args, wait=True)
 
@@ -680,18 +705,22 @@ class TestStretchCluster(MgrTestCase):
         """
         Run write and read bench workloads in parallel threads and join them.
         Any exception raised inside a thread is re-raised in the caller.
+        Each bench is wrapped with a hard OS-level timeout (BENCH_HARD_TIMEOUT)
+        so remote.run(wait=True) cannot block indefinitely if the cluster dies.
         """
         errors = []
 
         def _write():
             try:
-                self._write_some_data(duration, pool_name)
+                self._write_some_data(duration, pool_name,
+                                      hard_timeout=self.BENCH_HARD_TIMEOUT)
             except Exception as e:
                 errors.append(('write', e))
 
         def _read():
             try:
-                self._read_some_data(duration, pool_name)
+                self._read_some_data(duration, pool_name,
+                                     hard_timeout=self.BENCH_HARD_TIMEOUT)
             except Exception as e:
                 errors.append(('read', e))
 
@@ -939,14 +968,19 @@ class TestStretchCluster(MgrTestCase):
             success_hold_time=self.SUCCESS_HOLD_TIME,
         )
 
-        # Launch parallel workloads in the background while we kill DC1
+        # Launch parallel workloads in the background while we kill DC1.
+        # PARALLEL_BENCH_DURATION (30 s) keeps the bench short enough that
+        # --max-objects is reached and the processes exit normally before the
+        # DC2-only cluster could fill the root filesystem.  Each bench is also
+        # wrapped in a hard OS timeout (BENCH_HARD_TIMEOUT) by
+        # _run_parallel_workloads, so if the cluster dies the remote processes
+        # are killed at the OS level rather than stalling indefinitely.
         errors = []
 
         def _background_io():
             try:
-                # Long enough that I/O is still in flight while the site kill
-                # sequence (OSDs + MONs) completes.
-                self._run_parallel_workloads(self.EC_POOL, self.RECOVERY_PERIOD)
+                self._run_parallel_workloads(
+                    self.EC_POOL, self.PARALLEL_BENCH_DURATION)
             except Exception as e:
                 errors.append(e)
 
@@ -967,7 +1001,9 @@ class TestStretchCluster(MgrTestCase):
         )
         self._wait_for_degraded_stretch_mode()
 
-        # Wait for the background I/O to finish (it targets DC2 which is up)
+        # Wait for the background I/O to finish.  The bench processes are
+        # bounded by both --max-objects and BENCH_HARD_TIMEOUT, so the join
+        # should always complete within RECOVERY_PERIOD.
         io_thread.join(timeout=self.RECOVERY_PERIOD)
         self.assertFalse(
             io_thread.is_alive(),
