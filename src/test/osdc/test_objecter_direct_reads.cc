@@ -19,7 +19,7 @@
  *
  * The Objecter is initialised with a session per OSD whose connection
  * records the MOSDOps sent on it.  Maps are delivered through
- * handle_osd_map() and replies through ms_dispatch2().
+ * handle_osd_map() and replies through ms_fast_dispatch2().
  *
  * Pool 1 is a 2+1 EC pool with 4K chunks and one PG, 1.0:
  *
@@ -114,7 +114,7 @@ protected:
     objecter->start(&map);
 
     for (int osd = 0; osd < num_osds; osd++) {
-      auto s = new Objecter::OSDSession(g_ceph_context, osd);
+      auto s = new Objecter::OSDSession(g_ceph_context, osd, ioc.get_executor());
       cons[osd] = ceph::make_ref<RecordingConnection>(osd);
       s->con = cons[osd];
       s->con->set_priv(RefCountedPtr{s});
@@ -211,7 +211,7 @@ protected:
     r->set_tid(op->get_tid());
     r->set_op_returns(std::vector<pg_log_op_return_item_t>(op->ops.size()));
     r->set_connection(cons[osd]);
-    objecter->ms_dispatch2(r);
+    objecter->ms_fast_dispatch2(r);
     poll();
   }
 
