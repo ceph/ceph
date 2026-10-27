@@ -1768,7 +1768,8 @@ cdef class WriteOp(object):
     def set_flags(self, flags: int = LIBRADOS_OPERATION_NOFLAG):
         """
         Set flags for the last operation added to this write_op.
-        :para flags: flags to apply to the last operation
+
+        :param flags: flags to apply to the last operation
         """
 
         cdef:
@@ -1780,6 +1781,7 @@ cdef class WriteOp(object):
     def set_xattr(self, xattr_name: str, xattr_value: bytes):
         """
         Set an extended attribute on an object.
+
         :param xattr_name: name of the xattr
         :param xattr_value: buffer to set xattr to
         """
@@ -1805,6 +1807,7 @@ cdef class WriteOp(object):
     def append(self, to_write: bytes):
         """
         Append data to an object synchronously
+
         :param to_write: data to write
         """
 
@@ -1818,6 +1821,7 @@ cdef class WriteOp(object):
     def write_full(self, to_write: bytes):
         """
         Write whole object, atomically replacing it.
+
         :param to_write: data to write
         """
 
@@ -1831,6 +1835,7 @@ cdef class WriteOp(object):
     def write(self, to_write: bytes, offset: int = 0):
         """
         Write to offset.
+
         :param to_write: data to write
         :param offset: byte offset in the object to begin writing at
         """
@@ -1846,6 +1851,7 @@ cdef class WriteOp(object):
     def assert_version(self, version: int):
         """
         Check if object's version is the expected one.
+
         :param version: expected version of the object
         :param type: int
         """
@@ -1858,6 +1864,7 @@ cdef class WriteOp(object):
     def zero(self, offset: int, length: int):
         """
         Zero part of an object.
+
         :param offset: byte offset in the object to begin writing at
         :param offset: number of zero to write
         """
@@ -1872,6 +1879,7 @@ cdef class WriteOp(object):
     def truncate(self, offset: int):
         """
         Truncate an object.
+
         :param offset: byte offset in the object to begin truncating at
         """
 
@@ -1904,6 +1912,7 @@ cdef class WriteOp(object):
     def writesame(self, to_write: bytes, write_len: int, offset: int = 0):
         """
         Write the same buffer multiple times
+
         :param to_write: data to write
         :param write_len: total number of bytes to write
         :param offset: byte offset in the object to begin writing at
@@ -1919,6 +1928,7 @@ cdef class WriteOp(object):
     def cmpext(self, cmp_buf: bytes, offset: int = 0):
         """
         Ensure that given object range (extent) satisfies comparison
+
         :param cmp_buf: buffer containing bytes to be compared with object contents
         :param offset: object byte offset at which to start the comparison
         """
@@ -1932,6 +1942,7 @@ cdef class WriteOp(object):
     def omap_cmp(self, key: OMAP_KEY_TYPE, val: OMAP_KEY_TYPE, cmp_op: int = LIBRADOS_CMPXATTR_OP_EQ):
         """
         Ensure that an omap key value satisfies comparison
+
         :param key: omap key whose associated value is evaluated for comparison
         :param val: value to compare with
         :param cmp_op: comparison operator, one of LIBRADOS_CMPXATTR_OP_EQ (1),
@@ -1966,6 +1977,7 @@ cdef class ReadOp(object):
     def cmpext(self, cmp_buf: bytes, offset: int = 0):
         """
         Ensure that given object range (extent) satisfies comparison
+
         :param cmp_buf: buffer containing bytes to be compared with object contents
         :param offset: object byte offset at which to start the comparison
         """
@@ -1979,7 +1991,8 @@ cdef class ReadOp(object):
     def set_flags(self, flags: int = LIBRADOS_OPERATION_NOFLAG):
         """
         Set flags for the last operation added to this read_op.
-        :para flags: flags to apply to the last operation
+
+        :param flags: flags to apply to the last operation
         """
 
         cdef:
@@ -2438,6 +2451,7 @@ cdef class Ioctx(object):
                   oncomplete: Optional[Callable] = None) -> Completion:
         """
         Asynchronously compare an on-disk object range with a buffer
+
         :param object_name: the name of the object
         :param cmp_buf: buffer containing bytes to be compared with object contents
         :param offset: object byte offset at which to start the comparison
@@ -2445,8 +2459,8 @@ cdef class Ioctx(object):
             on all replicas
 
         :raises: :class:`TypeError`
-        returns: 0 - on success, negative error code on failure,
-                 (-MAX_ERRNO - mismatch_off) on mismatch
+        :returns: 0 - on success, negative error code on failure,
+            (-MAX_ERRNO - mismatch_off) on mismatch
         """
         object_name_raw = cstr(object_name, 'object_name')
 
@@ -2843,6 +2857,7 @@ returned %d, but should return zero on success." % (self.name, ret))
     def writesame(self, key: str, data: bytes, write_len: int, offset: int = 0):
         """
         Write the same buffer multiple times
+
         :param key: name of the object
         :param data: data to write
         :param write_len: total number of bytes to write
@@ -3601,16 +3616,18 @@ returned %d, but should return zero on success." % (self.name, ret))
     def release_read_op(self, read_op: ReadOp):
         """
         release memory alloc by create_read_op
-        :para read_op: read_op object
+
+        :param read_op: read_op object
         """
         read_op.release()
 
     def set_omap(self, write_op: WriteOp, keys: Sequence[OMAP_KEY_TYPE], values: Sequence[bytes]):
         """
         set keys values to write_op
-        :para write_op: write_operation object
-        :para keys: a tuple of keys
-        :para values: a tuple of values
+
+        :param write_op: write_operation object
+        :param keys: a tuple of keys
+        :param values: a tuple of values
         """
 
         if len(keys) != len(values):
@@ -3644,10 +3661,11 @@ returned %d, but should return zero on success." % (self.name, ret))
                          flags: int = LIBRADOS_OPERATION_NOFLAG):
         """
         execute the real write operation
-        :para write_op: write operation object
-        :para oid: object name
-        :para mtime: the time to set the mtime to, 0 for the current time
-        :para flags: flags to apply to the entire operation
+
+        :param write_op: write operation object
+        :param oid: object name
+        :param mtime: the time to set the mtime to, 0 for the current time
+        :param flags: flags to apply to the entire operation
         """
 
         oid_raw = cstr(oid, 'oid')
@@ -3669,14 +3687,15 @@ returned %d, but should return zero on success." % (self.name, ret))
                              flags: int = LIBRADOS_OPERATION_NOFLAG) -> Completion:
         """
         execute the real write operation asynchronously
-        :para write_op: write operation object
-        :para oid: object name
+
+        :param write_op: write operation object
+        :param oid: object name
         :param oncomplete: what to do when the remove is safe and complete in memory
             on all replicas
         :param onsafe:  what to do when the remove is safe and complete on storage
             on all replicas
-        :para mtime: the time to set the mtime to, 0 for the current time
-        :para flags: flags to apply to the entire operation
+        :param mtime: the time to set the mtime to, 0 for the current time
+        :param flags: flags to apply to the entire operation
 
         :raises: :class:`Error`
         :returns: completion object
@@ -3704,9 +3723,10 @@ returned %d, but should return zero on success." % (self.name, ret))
     def operate_read_op(self, read_op: ReadOp, oid: str, flag: int = LIBRADOS_OPERATION_NOFLAG):
         """
         execute the real read operation
-        :para read_op: read operation object
-        :para oid: object name
-        :para flag: flags to apply to the entire operation
+
+        :param read_op: read operation object
+        :param oid: object name
+        :param flag: flags to apply to the entire operation
         """
         oid_raw = cstr(oid, 'oid')
         cdef:
@@ -3725,13 +3745,14 @@ returned %d, but should return zero on success." % (self.name, ret))
                             flag: int = LIBRADOS_OPERATION_NOFLAG) -> Completion:
         """
         execute the real read operation
-        :para read_op: read operation object
-        :para oid: object name
+
+        :param read_op: read operation object
+        :param oid: object name
         :param oncomplete: what to do when the remove is safe and complete in memory
             on all replicas
         :param onsafe:  what to do when the remove is safe and complete on storage
             on all replicas
-        :para flag: flags to apply to the entire operation
+        :param flag: flags to apply to the entire operation
         """
         oid_raw = cstr(oid, 'oid')
         cdef:
@@ -3758,10 +3779,11 @@ returned %d, but should return zero on success." % (self.name, ret))
                       omap_key_type = bytes.decode) -> Tuple[OmapIterator, int]:
         """
         get the omap values
-        :para read_op: read operation object
-        :para start_after: list keys starting after start_after
-        :para filter_prefix: list only keys beginning with filter_prefix
-        :para max_return: list no more than max_return key/value pairs
+
+        :param read_op: read operation object
+        :param start_after: list keys starting after start_after
+        :param filter_prefix: list only keys beginning with filter_prefix
+        :param max_return: list no more than max_return key/value pairs
         :returns: an iterator over the requested omap values, return value from this action
         """
 
@@ -3788,9 +3810,10 @@ returned %d, but should return zero on success." % (self.name, ret))
                       omap_key_type = bytes.decode) -> Tuple[OmapIterator, int]:
         """
         get the omap keys
-        :para read_op: read operation object
-        :para start_after: list keys starting after start_after
-        :para max_return: list no more than max_return key/value pairs
+
+        :param read_op: read operation object
+        :param start_after: list keys starting after start_after
+        :param max_return: list no more than max_return key/value pairs
         :returns: an iterator over the requested omap values, return value from this action
         """
         start_after_raw = cstr(start_after, 'start_after') if start_after else None
@@ -3813,8 +3836,9 @@ returned %d, but should return zero on success." % (self.name, ret))
                               omap_key_type = bytes.decode) -> Tuple[OmapIterator, int]:
         """
         get the omap values by keys
-        :para read_op: read operation object
-        :para keys: input key tuple
+
+        :param read_op: read operation object
+        :param keys: input key tuple
         :returns: an iterator over the requested omap values, return value from this action
         """
         keys = cstr_list(keys, 'keys')
@@ -3838,8 +3862,9 @@ returned %d, but should return zero on success." % (self.name, ret))
     def remove_omap_keys(self, write_op: WriteOp, keys: Sequence[OMAP_KEY_TYPE]):
         """
         remove omap keys specifiled
-        :para write_op: write operation object
-        :para keys: input key tuple
+
+        :param write_op: write operation object
+        :param keys: input key tuple
         """
 
         keys = cstr_list(keys, 'keys')
@@ -3857,7 +3882,8 @@ returned %d, but should return zero on success." % (self.name, ret))
     def clear_omap(self, write_op: WriteOp):
         """
         Remove all key/value pairs from an object
-        :para write_op: write operation object
+
+        :param write_op: write operation object
         """
 
         cdef:
@@ -4050,12 +4076,13 @@ returned %d, but should return zero on success." % (self.name, ret))
         :param key: name of the object
         :param name: name of the lock
         :returns: dict - contains the following keys:
-                  * ``tag`` - the tag associated with the lock (every
-                    additional locker must use the same tag)
-                  * ``exclusive`` - boolean indicating whether the
-                     lock is exclusive or shared
-                  * ``lockers`` - a list of (client, cookie, address)
-                    tuples
+
+            * ``tag`` - the tag associated with the lock (every
+              additional locker must use the same tag)
+            * ``exclusive`` - boolean indicating whether the
+              lock is exclusive or shared
+            * ``lockers`` - a list of (client, cookie, address)
+              tuples
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
