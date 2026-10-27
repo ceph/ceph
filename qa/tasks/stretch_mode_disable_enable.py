@@ -1,5 +1,6 @@
 import logging
 from tasks.mgr.mgr_test_case import MgrTestCase
+from tasks.stretch_crush_rule import ensure_custom_crush_rule
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +53,34 @@ class TestStretchMode(MgrTestCase):
         osd_map = self.mgr_cluster.mon_manager.get_osd_dump_json()
         return len(osd_map['osds'])
 
+    def _ensure_stretch_rule(self):
+        """
+        Guarantee that STRETCH_CRUSH_RULE ('stretch_rule') exists and that
+        global stretch mode is active.
+
+        Deleting the last pool that references stretch_rule removes the rule
+        and clears the cluster stretch flags (tiebreaker, disallowed leaders).
+        This helper recreates the rule from the same text as the workunit
+        (mon-stretch-mode-5-mons-8-osds.sh) and re-enables global stretch mode,
+        restoring the invariant that the test depends on.
+
+        After calling this method the caller must re-read STRETCH_CRUSH_RULE_ID,
+        because the rule ID may differ from the original one.
+        """
+        ensure_custom_crush_rule(self.mgr_cluster, self.STRETCH_CRUSH_RULE,
+                                 datacenters=2)
+
+        # Re-enable global stretch mode if it was cleared (happens when the
+        # last stretched pool is deleted).
+        monmap = self.mgr_cluster.mon_manager.get_mon_dump_json()
+        if not monmap.get('stretch_mode', False):
+            log.debug('_ensure_stretch_rule: stretch mode cleared, re-enabling')
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                'mon', 'enable_stretch_mode',
+                self.TIEBREAKER_MON_NAME,
+                self.STRETCH_CRUSH_RULE,
+                self.STRETCH_BUCKET_TYPE)
+
     def setUp(self):
         """
         Setup the cluster and
@@ -60,7 +89,6 @@ class TestStretchMode(MgrTestCase):
         # Ensure we have at least 6 OSDs
         super(TestStretchMode, self).setUp()
         self.DEFAULT_POOL_CRUSH_RULE_ID = self.mgr_cluster.mon_manager.get_crush_rule_id(self.DEFAULT_POOL_CRUSH_RULE)
-        self.STRETCH_CRUSH_RULE_ID = self.mgr_cluster.mon_manager.get_crush_rule_id(self.STRETCH_CRUSH_RULE)
         if self._osd_count() < 4:
             self.skipTest("Not enough OSDS!")
 
@@ -70,7 +98,9 @@ class TestStretchMode(MgrTestCase):
             self.mds_cluster.mds_fail()
             self.mds_cluster.delete_all_filesystems()
 
-        # Remove all other pools
+        # Remove all other pools; deleting the last stretched pool also removes
+        # stretch_rule and clears the cluster stretch flags, so restore them
+        # afterwards.
         for pool in self.mgr_cluster.mon_manager.get_osd_dump_json()['pools']:
             try:
                 self.mgr_cluster.mon_manager.remove_pool(pool['pool_name'])
@@ -80,6 +110,10 @@ class TestStretchMode(MgrTestCase):
                     pool['pool_name'],
                     pool['pool_name'],
                     '--yes-i-really-really-mean-it')
+
+        self._ensure_stretch_rule()
+        # Re-read the rule ID: it may have changed if the rule was recreated.
+        self.STRETCH_CRUSH_RULE_ID = self.mgr_cluster.mon_manager.get_crush_rule_id(self.STRETCH_CRUSH_RULE)
 
     def _setup_pool(
             self,
@@ -518,6 +552,11 @@ class TestStretchMode(MgrTestCase):
         )
         # write some data to the pool
         self._write_some_data(self.WRITE_PERIOD)
+        # disable_stretch_mode moves the pool to the default rule, which leaves
+        # stretch_rule unused and the monitor removes it.  Recreate it and
+        # re-read its ID before calling enable_stretch_mode again.
+        self._ensure_stretch_rule()
+        self.STRETCH_CRUSH_RULE_ID = self.mgr_cluster.mon_manager.get_crush_rule_id(self.STRETCH_CRUSH_RULE)
         # Enable stretch mode
         self.assertEqual(
             0,

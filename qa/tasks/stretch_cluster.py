@@ -2,6 +2,7 @@ import json
 import logging
 import random
 from tasks.mgr.mgr_test_case import MgrTestCase
+from tasks.stretch_crush_rule import ensure_custom_crush_rule
 from time import sleep
 
 log = logging.getLogger(__name__)
@@ -81,9 +82,12 @@ class TestStretchCluster(MgrTestCase):
             self.mds_cluster.mds_fail()
             self.mds_cluster.delete_all_filesystems()
 
-        # Remove all other pools
+        # Remove all other pools; the monitor will delete CRUSH_RULE when the
+        # last pool referencing it is removed, so recreate it afterwards.
         for pool in self.mgr_cluster.mon_manager.get_osd_dump_json()['pools']:
             self.mgr_cluster.mon_manager.remove_pool(pool['pool_name'])
+
+        ensure_custom_crush_rule(self.mgr_cluster, self.CRUSH_RULE)
 
     def tearDown(self):
         """
