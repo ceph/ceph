@@ -574,13 +574,28 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       ++result.grants_written;
     }
 
-    /* The nsfs row, for a root account only:  the POSIX identity and the
-     * placement fields, keyed on the account.  Every member of the
-     * account runs as it and has no row of its own (§2.8);  a member
-     * whose NooBaa copy differs was reported by the plan. */
+    /* The nsfs row:  the POSIX identity, new_buckets_path and the
+     * allowlist, keyed on the account for a root account and on the
+     * user for an IAM user.  A user's row is its own tuple as NooBaa
+     * holds it -- the copy NooBaa made at CreateUser, changed or not
+     * since -- written over the copy store_user() made of the account's
+     * (I9).  Whether a request consults it is
+     * rgw_nsfs_user_identity_override;  a user whose tuple differs from
+     * its account's was reported by the plan. */
     std::string owner_key;
     if (e.iam_user) {
-      owner_key = to_string(rgw_owner{uid});
+      Identity row;
+      row.key = to_string(rgw_owner{uid});
+      fill_posix(*src, row);
+      ret = db->put_identity(dpp, row);
+      if (ret < 0) {
+	fail(e.name, std::string("put_identity: ") + cpp_strerror(-ret));
+	continue;
+      }
+      check_name(row);
+      check_uid(row);
+      owner_key = row.key;
+      ++result.user_rows;
     } else {
       Identity row;
       row.key = e.account_id;
@@ -718,6 +733,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     << " accounts (" << result.accounts_skipped << " already present), "
     << result.users_created << " users (" << result.users_skipped
     << " already present), " << result.identity_rows << " identity rows, "
+    << result.user_rows << " user rows, "
     << result.roles_created << " roles, " << result.grants_written
     << " grants, anonymous "
     << (result.anonymous_imported ? "imported"

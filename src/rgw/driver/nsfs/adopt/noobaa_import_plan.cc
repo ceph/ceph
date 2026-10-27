@@ -67,8 +67,9 @@ std::string label(const NooBaaIdentity& id)
 /* The fields of a member's identity row that differ from its
  * account's, by name.
  *
- * Every field the account's row carries is compared, because a
- * member's row no longer exists to hold a different value.
+ * Every field the account's row carries is compared:  the member's own
+ * row holds the difference, and without the user identity override
+ * the member runs as the account and does not see it (I9).
  * `allow_bypass_governance` is not among them:  it is imported as a
  * grant on each IAM user, so a member keeps its own. */
 std::vector<std::string> row_drift(const NooBaaIdentity& account,
@@ -208,9 +209,18 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
 	  for (const auto& x : fields) {
 	    f += (f.empty() ? "" : ", ") + x;
 	  }
+	  /* what it runs as is the override's, so the report says which,
+	   * and names the setting that serves it as NooBaa did (I9) */
+	  const bool overriding = stored ? stored->user_identity_override()
+	    : (cct && cct->_conf.get_val<bool>("rgw_nsfs_user_identity_override"));
 	  plan.drift.push_back(
 	      label(id) + " differs from its account " + label(root) +
-	      " in " + f + ";  it will run as the account");
+	      " in " + f + ";  its own row is imported, and " +
+	      (overriding
+	       ? "rgw_nsfs_user_identity_override serves it from that row, "
+		 "as NooBaa did"
+	       : "it runs as the account until rgw_nsfs_user_identity_override "
+		 "is on, which serves it from that row as NooBaa did"));
 	}
 	break;
       }

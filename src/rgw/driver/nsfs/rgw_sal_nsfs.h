@@ -1357,6 +1357,19 @@ public:
 		      const rgw_bucket& b, std::string& path,
 		      bool* owners_path = nullptr);
 
+  /* Whose identity row supplies a new bucket's directory --
+   * `new_buckets_path` and the custom bucket path allowlist -- for
+   * new_bucket_path(), custom_bucket_path() and
+   * check_owner_can_create_at():  the creating user's, as NooBaa's
+   * CreateBucket reads the requesting record's, when
+   * rgw_nsfs_user_identity_override is on and that user is in the
+   * owning account and has a row (I9);  otherwise `owner`.  The bucket
+   * is `owner`'s either way. */
+  rgw_owner new_bucket_path_source(const DoutPrefixProvider* dpp,
+				   const rgw_owner& owner,
+				   const rgw_owner& authenticated_user,
+				   optional_yield y);
+
   /* NooBaa's custom bucket path:  the header rgw_nsfs_custom_bucket_path_header
    * names, when the request carries it.  The path is admitted by the
    * owner's allowlist, or rgw_nsfs_custom_bucket_path_allowed_list when the
@@ -1844,21 +1857,18 @@ public:
    * did and not what the filesystem said. */
   std::atomic<uint64_t> publishes_as_gateway{0};
 
-  /* The POSIX credentials to serve a request as.
-   *
-   * The one entry point a request path needs;  nothing outside the
-   * driver should reach the identity database directly.  Keyed on
-   * `s->user`, the authenticated user, falling back to its account's
-   * row, which is where a user in an account ordinarily finds its
-   * identity (ACCOUNT_IMPORT.md §2.8).  Returns what
+  /* The POSIX credentials `who` is served as, by the same resolution
+   * every operation for it uses:  a user's own row under the user
+   * identity override, else its account's;  a role session's
+   * (rgw::sal::role_session_ns) own row under the role identity
+   * override, else its account's;  an account's row.  For a request,
+   * `who` is authenticated_user(s).  Returns what
    * nsfs::resolve_credentials() returns:  0 resolved, -ENOENT no
    * impersonation asked for, -EPERM asked for and unavailable.  `row`
    * receives the key of the row that resolved. */
-  int get_credentials(const DoutPrefixProvider* dpp, const req_state* s,
-		      nsfs::Credentials& out,
-		      std::string* row = nullptr) const {
-    return nsfs::resolve_credentials(dpp, *userDB, s, out, row);
-  }
+  int get_credentials_for(const DoutPrefixProvider* dpp, const rgw_owner& who,
+			  optional_yield y, nsfs::Credentials& out,
+			  std::string* row = nullptr);
   /* Where a bucket goes whose owner has no new_buckets_path, read once
    * at creation and copied into its row. */
   const std::string& default_bucket_location() const { return base_path_; }
@@ -2020,6 +2030,8 @@ class NSFSUser : public StoreUser {
 private:
   NSFSDriver* driver;
   int load_user_from_cache_or_db(const DoutPrefixProvider* dpp, bool& cache_hit);
+  /* I9:  a new account user's copy of its account's identity row */
+  int copy_account_identity(const DoutPrefixProvider* dpp);
 
 public:
   NSFSUser(NSFSDriver* _driver) :

@@ -5012,6 +5012,31 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_nsfs_user_identity_override
+  type: bool
+  level: advanced
+  desc: Let an nsfs account user's own identity row override its account's
+  long_desc: NooBaa serves an IAM user from its own record. With this on,
+    an account user's identity row -- uid and gid or a distinguished
+    name, supplementary groups, new_buckets_path and the custom bucket
+    path allowlist -- is consulted before its account's. Rows are written
+    whatever this is set to; adoption imports each NooBaa user's, and a
+    new account user gets a copy of its account's. Off, every account
+    user runs as its account.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_role_identity_override
+  type: bool
+  level: advanced
+  desc: Let a role given an nsfs identity of its own run as it
+  long_desc: A role session runs as its account's identity. With this on,
+    a role that has been given an identity row runs as that row, and a
+    role without one still runs as its account. NooBaa documents this
+    for roles and does not implement it.
+  default: false
+  services:
+  - rgw
 - name: rgw_nsfs_identity_resolve_ttl
   type: uint
   level: advanced

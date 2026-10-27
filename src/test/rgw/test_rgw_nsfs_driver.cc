@@ -1237,6 +1237,84 @@ TEST_F(NSFSBucketTest, APosixChownRejectsWithoutAUsableIdentity)
   EXPECT_EQ(b->get_info().owner, was) << "a rejected chown moved the owner";
 }
 
+/* I9:  a user stored for the first time in an account gets a copy of
+ * its account's identity row, as NooBaa's CreateUser copies the
+ * account's nsfs_account_config, and the copy is never updated.  The
+ * override decides only whether it is consulted.  An account with no
+ * row gives none, and a later store does not make one. */
+TEST_F(NSFSBucketTest, ANewAccountUserCopiesItsAccountsRow)
+{
+  auto* db = driver->get_identity_db();
+  const rgw_account_id acct{"RGW66666666666666666"};
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.uid = 4242; arow.gid = 4242;
+  arow.groups = std::vector<uint32_t>{77};
+  arow.new_buckets_path = "/elsewhere/acct";
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+
+  /* an NSFSUser, not the fixture's TestUser, which stores through the
+   * user table alone and would leave this test vacuous */
+  auto store = [&] (const rgw_user& id, const rgw_account_id& in) {
+    auto u = std::make_unique<rgw::sal::NSFSUser>(driver.get(), id);
+    u->get_info().user_id = id;
+    /* an existing user is updated as RGW's paths update one:  loaded
+     * first, so the store carries its version */
+    (void) u->load_user(env->dpp, null_yield);
+    u->get_info().account_id = in;
+    u->get_info().display_name = id.id;
+    return u->store_user(env->dpp, null_yield, false, nullptr);
+  };
+  const rgw_user fred{"", "copy-fred"};
+  ASSERT_EQ(store(fred, acct), 0);
+
+  nsfs::Identity copy;
+  ASSERT_EQ(db->get_identity(env->dpp, fred.to_str(), copy), 0)
+      << "a new account user got no copy";
+  EXPECT_EQ(copy.uid, arow.uid);
+  EXPECT_EQ(copy.gid, arow.gid);
+  EXPECT_EQ(copy.groups, arow.groups);
+  EXPECT_EQ(copy.new_buckets_path, arow.new_buckets_path);
+
+  /* the account changes;  the copy does not, and a second store of the
+   * same user does not refresh it */
+  arow.uid = 4343; arow.gid = 4343;
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+  ASSERT_EQ(store(fred, acct), 0);
+  ASSERT_EQ(db->get_identity(env->dpp, fred.to_str(), copy), 0);
+  EXPECT_EQ(copy.uid, 4242u) << "the copy followed its account";
+
+  /* which row fred runs as is the override's */
+  nsfs::Credentials cred;
+  db->force_user_identity_override(false);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, fred, acct, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 4343u) << "without the override fred is the account";
+  db->force_user_identity_override(true);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, fred, acct, cred,
+				      null_yield), 0);
+  EXPECT_EQ(cred.uid, 4242u) << "under the override fred is his copy";
+  db->force_user_identity_override(std::nullopt);
+
+  /* a user outside any account gets no row */
+  const rgw_user plain{"", "copy-plain"};
+  ASSERT_EQ(store(plain, rgw_account_id{}), 0);
+  EXPECT_EQ(db->get_identity(env->dpp, plain.to_str(), copy), -ENOENT);
+
+  /* an account with no row gives none, now or on a later store */
+  const rgw_account_id bare{"RGW77777777777777777"};
+  const rgw_user gail{"", "copy-gail"};
+  ASSERT_EQ(store(gail, bare), 0);
+  EXPECT_EQ(db->get_identity(env->dpp, gail.to_str(), copy), -ENOENT);
+  nsfs::Identity brow;
+  brow.key = bare;
+  brow.uid = 5151; brow.gid = 5151;
+  ASSERT_EQ(db->put_identity(env->dpp, brow), 0);
+  ASSERT_EQ(store(gail, bare), 0);
+  EXPECT_EQ(db->get_identity(env->dpp, gail.to_str(), copy), -ENOENT)
+      << "a later store copied a row the account gained after the user";
+}
+
 /* A user's stored record is compare-and-swap on its version:  writers that
  * read it concurrently each either apply or get -ECANCELED and retry, as
  * RGW's callers do, and no write is lost.  dbstore checked the version and
@@ -2811,7 +2889,7 @@ TEST_F(NSFSRaiseTest, SeveralUnpermittedCapabilitiesAreRejectedTogether)
  * says who a created object belongs to, and for a member of an
  * account that is the *account*;  `load_acct_info()` -- what becomes
  * `s->user` -- says who authenticated, and that is the *member*.
- * get_credentials() uses the second.
+ * authenticated_user(), and so get_credentials_for(), uses the second.
  *
  * This is not nsfs code, so it is exactly the kind of thing that can
  * change under us.  If `load_acct_info()` ever starts returning the
@@ -2845,6 +2923,8 @@ TEST_F(NSFSIdentityDBTest, AclOwnerIsTheAccountButAuthenticatedUserIsNot)
  * on it they would be indistinguishable. */
 TEST_F(NSFSIdentityDBTest, AccountMembersResolveIndependently)
 {
+  /* I9:  a member's own row is consulted only under the override */
+  db->force_user_identity_override(true);
   const char* acct = "RGW12345678901234567";
   const rgw_user alice{"", "alice"};
   const rgw_user bob{"", "bob"};
@@ -2893,6 +2973,18 @@ TEST_F(NSFSIdentityDBTest, AccountMembersResolveIndependently)
   EXPECT_NE(cb.uid, 9999u) << "a member was served as its account";
   EXPECT_EQ(ca.groups, (std::vector<gid_t>{50}));
   EXPECT_TRUE(cb.groups.empty());
+
+  /* the control:  without the override both run as the account, their
+   * rows kept but not consulted */
+  db->force_user_identity_override(false);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, ua->get_id(),
+				      ua->get_info().account_id, ca, null_yield, &ra), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, ub->get_id(),
+				      ub->get_info().account_id, cb, null_yield, &rb), 0);
+  EXPECT_EQ(ra, acct);
+  EXPECT_EQ(rb, acct);
+  EXPECT_EQ(ca.uid, 9999u);
+  EXPECT_EQ(cb.uid, 9999u);
 }
 
 /* A member with no row of its own runs as its account.
@@ -2949,9 +3041,13 @@ TEST_F(NSFSIdentityDBTest, AUserOutsideAnAccountResolvesUnderItsOwnKey)
   row.key = dan.to_str();
   row.uid = 1234; row.gid = 1234;
   ASSERT_EQ(db->put_identity(env->dpp, row), 0);
-  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, dan, rgw_account_id{},
-				      cred, null_yield), 0);
-  EXPECT_EQ(cred.uid, 1234u);
+  /* the I9 override governs account users only */
+  for (bool on : {false, true}) {
+    db->force_user_identity_override(on);
+    ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, dan, rgw_account_id{},
+					cred, null_yield), 0) << on;
+    EXPECT_EQ(cred.uid, 1234u) << on;
+  }
 }
 
 /* A member row that asks for an identity it cannot be given is
@@ -2962,6 +3058,7 @@ TEST_F(NSFSIdentityDBTest, AUserOutsideAnAccountResolvesUnderItsOwnKey)
  * row did not name. */
 TEST_F(NSFSIdentityDBTest, ADeniedMemberRowDoesNotFallBack)
 {
+  db->force_user_identity_override(true);
   const char* acct = "RGW12345678901234567";
   const rgw_user erin{"", "erin"};
 
@@ -2985,6 +3082,83 @@ TEST_F(NSFSIdentityDBTest, ADeniedMemberRowDoesNotFallBack)
 				      rgw_account_id{acct}, cred, null_yield, &row), -EPERM)
       << "a denied row fell through to the account";
   EXPECT_EQ(row, erin.to_str()) << "the denial named another row";
+
+  /* without the override erin's row is not consulted at all, so it
+   * cannot deny her:  she runs as the account */
+  db->force_user_identity_override(false);
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, erin,
+				      rgw_account_id{acct}, cred, null_yield, &row), 0);
+  EXPECT_EQ(row, acct);
+  EXPECT_EQ(cred.uid, 9999u);
+}
+
+/* A role's identity row (I9) is keyed apart from every owner's, and is
+ * stored and read like any other row.  No owner's key begins `role:`,
+ * since to_string(rgw_owner) is an account id or a user id. */
+TEST_F(NSFSIdentityDBTest, ARoleRowIsKeyedApartFromOwners)
+{
+  const std::string key = nsfs::role_identity_key("4c7e5a1d-role-id");
+  EXPECT_EQ(key, "role:4c7e5a1d-role-id");
+  EXPECT_TRUE(nsfs::is_role_identity_key(key));
+  EXPECT_FALSE(nsfs::is_role_identity_key(
+		 to_string(rgw_owner{rgw_account_id{"RGW12345678901234567"}})));
+  EXPECT_FALSE(nsfs::is_role_identity_key(
+		 to_string(rgw_owner{rgw_user{"", "alice"}})));
+
+  nsfs::Identity row;
+  row.key = key;
+  row.uid = 70109; row.gid = 70109;
+  ASSERT_EQ(db->put_identity(env->dpp, row), 0);
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, key, got), 0);
+  EXPECT_EQ(got.uid, 70109u);
+  /* and resolving an owner never reaches it */
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, rgw_user{"", "4c7e5a1d-role-id"},
+				      rgw_account_id{}, cred, null_yield), -ENOENT);
+}
+
+/* A role session's credentials (I9):  the role's own row under the role
+ * override, when it was given one, else its account's -- and its
+ * account's always without the override.  Each case is the others'
+ * control. */
+TEST_F(NSFSIdentityDBTest, ARoleSessionRunsAsItsRowOnlyUnderTheOverride)
+{
+  const rgw_account_id acct{"RGW13131313131313131"};
+  const std::string role_id = "1f2e3d4c-role";
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.uid = 70109; arow.gid = 70109;
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+  nsfs::Identity rrow;
+  rrow.key = nsfs::role_identity_key(role_id);
+  rrow.uid = 70110; rrow.gid = 70110;
+  ASSERT_EQ(db->put_identity(env->dpp, rrow), 0);
+
+  nsfs::Credentials cred;
+  std::string row;
+  db->force_role_identity_override(false);
+  ASSERT_EQ(nsfs::resolve_role_credentials(env->dpp, *db, role_id, acct, cred,
+					   null_yield, &row), 0);
+  EXPECT_EQ(cred.uid, 70109u) << "without the override the role was not its account";
+  EXPECT_EQ(row, std::string(acct));
+
+  db->force_role_identity_override(true);
+  ASSERT_EQ(nsfs::resolve_role_credentials(env->dpp, *db, role_id, acct, cred,
+					   null_yield, &row), 0);
+  EXPECT_EQ(cred.uid, 70110u) << "under the override the role's row was not used";
+  EXPECT_EQ(row, rrow.key);
+
+  ASSERT_EQ(db->remove_identity(env->dpp, rrow.key), 0);
+  ASSERT_EQ(nsfs::resolve_role_credentials(env->dpp, *db, role_id, acct, cred,
+					   null_yield, &row), 0);
+  EXPECT_EQ(cred.uid, 70109u)
+      << "a role given no identity did not follow its account";
+
+  /* and a role of no account, given no identity, has nothing */
+  EXPECT_EQ(nsfs::resolve_role_credentials(env->dpp, *db, role_id,
+					   rgw_account_id{}, cred, null_yield),
+	    -ENOENT);
 }
 
 /* Changing an account's row reaches every member's cached
@@ -15235,14 +15409,15 @@ TEST_F(NooBaaImportTest, AnonymousGetsARowAndNothingElse)
       << "an RGW account named anonymous was created";
 }
 
-/* An IAM user lands in its owner's account, and runs as it.
+/* An IAM user lands in its owner's account, with its own row.
  *
  * One schema serves accounts and users, so the import tells them apart
  * by `owner` and places the user in the account that owner became.
- * The user gets no identity row:  on Scale every member of an account
- * runs as the account (ACCOUNT_IMPORT.md §2.8).  This user's NooBaa
- * copy says uid 1500 where its account says 1000 -- the drift an
- * account update leaves behind -- so the plan reports it. */
+ * The user's row is its tuple as NooBaa holds it (I9).  This user's
+ * NooBaa copy says uid 1500 where its account says 1000 -- the drift an
+ * account update leaves behind -- so the plan reports it, and which
+ * row the user runs as is rgw_nsfs_user_identity_override's:  the
+ * account's without it, its own with it. */
 TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
@@ -15259,7 +15434,8 @@ TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
   EXPECT_EQ(result.accounts_created, 1u);
   EXPECT_EQ(result.users_created, 2u) << "the account's own user, and the "
 					 "IAM user";
-  EXPECT_EQ(result.identity_rows, 1u) << "a member got a row of its own";
+  EXPECT_EQ(result.identity_rows, 1u) << "an account row too many or few";
+  EXPECT_EQ(result.user_rows, 1u) << "the IAM user's own row was not written";
 
   const std::string account = entry("interchange")->account_id;
   std::unique_ptr<rgw::sal::User> user;
@@ -15286,16 +15462,25 @@ TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
   ASSERT_EQ(driver->get_identity_db()->get_identity(
 		env->dpp, account, row), 0);
   EXPECT_EQ(row.uid, 1000u) << "the member's copy replaced the account's";
-  EXPECT_EQ(driver->get_identity_db()->get_identity(
-		env->dpp, user->get_id().to_str(), row), -ENOENT)
-      << "the member got a row of its own";
+  /* and the member's is its own NooBaa tuple, not a copy of the
+   * account's */
+  ASSERT_EQ(driver->get_identity_db()->get_identity(
+		env->dpp, user->get_id().to_str(), row), 0)
+      << "the member's own row was not written";
+  EXPECT_EQ(row.uid, 1500u) << "the member's row is not its NooBaa tuple";
 
-  /* and it runs as the account */
+  /* which it runs as is the override's */
+  auto* db = driver->get_identity_db();
   nsfs::Credentials cred;
-  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *driver->get_identity_db(),
-				      user->get_id(),
+  db->force_user_identity_override(false);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, user->get_id(),
 				      user->get_info().account_id, cred, null_yield), 0);
-  EXPECT_EQ(cred.uid, 1000u);
+  EXPECT_EQ(cred.uid, 1000u) << "without the override it is not the account";
+  db->force_user_identity_override(true);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, user->get_id(),
+				      user->get_info().account_id, cred, null_yield), 0);
+  EXPECT_EQ(cred.uid, 1500u) << "under the override it is not its own row";
+  db->force_user_identity_override(std::nullopt);
 
   /* both ids recorded, each against what it became */
   std::string owner;
@@ -15312,6 +15497,9 @@ TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
   EXPECT_NE(plan.drift[0].find("uid/gid"), std::string::npos) << plan.drift[0];
   EXPECT_EQ(plan.drift[0].find("new_buckets_path"), std::string::npos)
       << "a field that matches was reported:  " << plan.drift[0];
+  EXPECT_NE(plan.drift[0].find("rgw_nsfs_user_identity_override"),
+	    std::string::npos)
+      << "the report does not name the override:  " << plan.drift[0];
 }
 
 /* A member whose copy matches its account is not drift.
@@ -17625,6 +17813,75 @@ TEST_F(NSFSPlacedBucketTest, AnOwnerWithAPathGetsItsBucketsThere)
   EXPECT_EQ(row.path, (acct / "routed").string());
 }
 
+/* I9:  under rgw_nsfs_user_identity_override a new bucket goes under
+ * its creating user's own new_buckets_path, as NooBaa's CreateBucket
+ * reads the requesting record's;  the bucket is still the account's.
+ * Without the override it goes under the account's, whatever the
+ * user's row says. */
+TEST_F(NSFSPlacedBucketTest, AUsersOwnNewBucketsPathIsUsedUnderTheOverride)
+{
+  auto* db = driver->get_identity_db();
+  const rgw_account_id acct{"RGW88888888888888888"};
+  const sf::path apath = elsewhere() / "acct-path";
+  const sf::path upath = elsewhere() / "user-path";
+  sf::create_directories(apath);
+  sf::create_directories(upath);
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.new_buckets_path = apath.string();
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+
+  const rgw_user hal{"", "path-hal"};
+  auto u = std::make_unique<rgw::sal::NSFSUser>(driver.get(), hal);
+  u->get_info().user_id = hal;
+  u->get_info().account_id = acct;
+  u->get_info().display_name = "hal";
+  ASSERT_EQ(u->store_user(env->dpp, null_yield, true, nullptr), 0);
+  nsfs::Identity urow;
+  ASSERT_EQ(db->get_identity(env->dpp, hal.to_str(), urow), 0)
+      << "the user got no copy to move";
+  urow.new_buckets_path = upath.string();
+  ASSERT_EQ(db->put_identity(env->dpp, urow), 0);
+
+  auto create = [&] (const std::string& name) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = rgw_owner{acct};
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = rgw_owner{acct};
+    return b->create(env->dpp, cp, null_yield, rgw_owner{hal});
+  };
+
+  db->force_user_identity_override(false);
+  ASSERT_EQ(create("by-account-row"), 0);
+  EXPECT_TRUE(sf::is_directory(apath / "by-account-row"))
+      << "without the override the account's path did not place it";
+  EXPECT_FALSE(sf::exists(upath / "by-account-row"));
+
+  db->force_user_identity_override(true);
+  ASSERT_EQ(create("by-user-row"), 0);
+  EXPECT_TRUE(sf::is_directory(upath / "by-user-row"))
+      << "under the override the user's own path did not place it";
+  EXPECT_FALSE(sf::exists(apath / "by-user-row"));
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(db->get_bucket_placement(env->dpp, "by-user-row", "", row), 0);
+  EXPECT_EQ(row.owner, to_string(rgw_owner{acct}))
+      << "the user's path was used, but the bucket is the account's";
+
+  /* a request with no authenticated user uses the owner's path */
+  RGWBucketInfo info;
+  info.bucket.name = "by-nobody";
+  info.owner = rgw_owner{acct};
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = rgw_owner{acct};
+  ASSERT_EQ(b->create(env->dpp, cp, null_yield,
+		      rgw::sal::no_authenticated_user), 0);
+  EXPECT_TRUE(sf::is_directory(apath / "by-nobody"));
+  db->force_user_identity_override(std::nullopt);
+}
+
 /* An owner imported from NooBaa without a path cannot create buckets,
  * as it could not in NooBaa.  The control is the same owner before it
  * is marked imported, which creates at the base path. */
@@ -18032,6 +18289,59 @@ TEST_F(NSFSCustomPathTest, TheOwnersAllowlistAdmitsACustomPath)
   EXPECT_TRUE(sf::is_directory(at));
   EXPECT_FALSE(sf::exists(bp / "root" / "custom"));
   EXPECT_EQ(row_path("custom"), at.string());
+}
+
+/* I9:  under rgw_nsfs_user_identity_override the creating user's own
+ * allowlist admits a custom path, as NooBaa checks the requesting
+ * record's;  without it the account's does.  The account allows one
+ * directory and the user another, so each setting admits exactly one. */
+TEST_F(NSFSCustomPathTest, TheUsersOwnAllowlistAdmitsUnderTheOverride)
+{
+  auto* db = driver->get_identity_db();
+  const rgw_account_id acct{"RGW99999999999999999"};
+  const sf::path aroot = elsewhere() / "acct-allowed";
+  const sf::path uroot = elsewhere() / "user-allowed";
+  sf::create_directories(aroot);
+  sf::create_directories(uroot);
+  nsfs::Identity arow;
+  arow.key = acct;
+  arow.custom_bucket_path_allowed_list = aroot.string();
+  ASSERT_EQ(db->put_identity(env->dpp, arow), 0);
+
+  const rgw_user ida{"", "allow-ida"};
+  auto u = std::make_unique<rgw::sal::NSFSUser>(driver.get(), ida);
+  u->get_info().user_id = ida;
+  u->get_info().account_id = acct;
+  u->get_info().display_name = "ida";
+  ASSERT_EQ(u->store_user(env->dpp, null_yield, true, nullptr), 0);
+  nsfs::Identity urow;
+  ASSERT_EQ(db->get_identity(env->dpp, ida.to_str(), urow), 0);
+  urow.custom_bucket_path_allowed_list = uroot.string();
+  ASSERT_EQ(db->put_identity(env->dpp, urow), 0);
+
+  auto create_at = [&] (const std::string& name, const sf::path& at) {
+    env_.set("HTTP_X_NOOBAA_CUSTOM_BUCKET_PATH", at.string());
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = rgw_owner{acct};
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = rgw_owner{acct};
+    cp.env = &env_;
+    return b->create(env->dpp, cp, null_yield, rgw_owner{ida});
+  };
+
+  db->force_user_identity_override(false);
+  EXPECT_EQ(create_at("off-user", uroot / "off-user"), -EACCES)
+      << "without the override the user's allowlist admitted a path";
+  EXPECT_EQ(create_at("off-acct", aroot / "off-acct"), 0);
+
+  db->force_user_identity_override(true);
+  EXPECT_EQ(create_at("on-acct", aroot / "on-acct"), -EACCES)
+      << "under the override the account's allowlist still admitted";
+  EXPECT_EQ(create_at("on-user", uroot / "on-user"), 0);
+  EXPECT_EQ(row_path("on-user"), (uroot / "on-user").string());
+  db->force_user_identity_override(std::nullopt);
 }
 
 /* The global list stands in for an owner with none. */

@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <filesystem>
 
 #include <optional>
@@ -33,14 +34,12 @@ namespace rgw { namespace sal { namespace nsfs {
 /* The Spectrum Scale data an identity carries, which RGW has nowhere
  * to put.
  *
- * One record per *account*:  on Scale an account has one POSIX
- * identity and every user and role in it runs as that identity.  A
- * user in an account has no row of its own and resolves to its
- * account's (see resolve_credentials() below).  NooBaa stores a copy
- * of this block on every user, but the copy is its storage layout
- * rather than its
- * model -- docs/ACCOUNT_IMPORT.md section 2.8.  A row keyed on a user
- * is still possible, and takes precedence over its account's.
+ * A record per account, and one per user in an account:  NooBaa
+ * serves an IAM user from its own copy of this block, made from its
+ * account's when the user is created and never updated, so a user's
+ * row is that copy.  Whether a user's row is consulted is
+ * rgw_nsfs_user_identity_override;  without it every user and role in
+ * an account runs as the account (see resolve_credentials() below).
  *
  * `uid`+`gid` and `distinguished_name` are mutually exclusive, which
  * the schema enforces rather than leaving to a caller.  An identity
@@ -239,6 +238,11 @@ class IdentityDB : public rgw::store::POSIXUserDB {
   /* what each row's `distinguished_name` resolved to (I7) */
   mutable NsswitchCache names;
 
+  /* the identity-override hint's overrides of the two I9 options:
+   * -1 follows the option, 0 off, 1 on */
+  std::atomic<int> user_override{-1};
+  std::atomic<int> role_override{-1};
+
   /* The one handle, qualified.
    *
    * `POSIXUserDB` declares a `void *db` that shadows `DB::db`
@@ -404,6 +408,19 @@ public:
 
   NsswitchCache& nsswitch_cache() const { return names; }
 
+  /* I9:  whether an account user's, or a role's, own row is consulted
+   * before its account's:  rgw_nsfs_user_identity_override and
+   * rgw_nsfs_role_identity_override, unless the `identity-override`
+   * driver hint overrides them. */
+  bool user_identity_override() const;
+  bool role_identity_override() const;
+
+  /* The hint's overrides;  `nullopt` returns to the option.  Every
+   * identity is invalidated, since which row a principal runs as
+   * changes. */
+  void force_user_identity_override(std::optional<bool> on);
+  void force_role_identity_override(std::optional<bool> on);
+
   /* What the sweep's first pass resolves:  every nsswitch-resolved row's
    * name, and under the switch every list-less local row's uid. */
   NsswitchCache::Table sweep_table(const DoutPrefixProvider* dpp) const;
@@ -437,6 +454,22 @@ struct Credentials {
   std::vector<gid_t> groups;
 };
 
+/* A role's identity row (I9), keyed apart from every owner's:  an
+ * owner's key is to_string(rgw_owner), which never begins `role:`
+ * (is_canonical_owner_key() refuses it), so a role's row cannot be
+ * written, read or resolved as a user's.  The role is RGW's
+ * (`RGWRoleInfo`);  the row is the identity it was given, consulted for
+ * its sessions only under rgw_nsfs_role_identity_override. */
+inline constexpr std::string_view ROLE_IDENTITY_PREFIX = "role:";
+inline std::string role_identity_key(std::string_view role_id)
+{
+  return std::string(ROLE_IDENTITY_PREFIX) + std::string(role_id);
+}
+inline bool is_role_identity_key(std::string_view key)
+{
+  return key.starts_with(ROLE_IDENTITY_PREFIX);
+}
+
 /* Resolve an owner to the credentials to serve it as.
  *
  *   0        resolved;  `out` is authoritative, groups included
@@ -465,12 +498,11 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 /* An authenticated user's credentials:  its own row, else its
  * account's.
  *
- * On Scale every user of an account runs as the account
- * (ACCOUNT_IMPORT.md §2.8), so a user in one ordinarily has no row
- * and resolves to the account's.  A row keyed on the user wins where one
- * exists, which keeps a per-user identity expressible without making
- * anyone write one.  `account` empty is a user outside any account,
- * which resolves under its own key alone.
+ * A user in an account runs as the account unless
+ * rgw_nsfs_user_identity_override is on (I9);  only then is a row keyed
+ * on the user consulted, and it wins where one exists, as NooBaa serves
+ * an IAM user from its own record.  `account` empty is a user outside
+ * any account, which resolves under its own key alone, either way.
  *
  * The user's row returning -ENOENT -- absent, or carrying no ids --
  * is what falls through;  -EPERM does not, since that row asked for an
@@ -483,25 +515,14 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 			Credentials& out, optional_yield y,
 			std::string* row = nullptr);
 
-/* The same, for a request.
- *
- * `s->user` is the *authenticated* user:  every applier's
- * `load_acct_info()` puts it there, and for a user in an account that
- * is the user, carrying its `account_id`.  `s->owner` would reach the
- * account directly, but only the account:  it cannot see a row keyed
- * on the user, so the precedence above would be lost.
- *
- * Under a system request carrying `rgwx-uid`, `SysReqApplier`
- * replaces `s->user` with the impersonated owner, so the request is
- * served as that owner.  That is the wanted behaviour:  the system
- * user's own reach is the daemon's, and confining it to the owner it
- * is acting for is the narrower of the two.
- *
- * A lookup suspends on `s->yield`.
- */
-int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
-			const req_state* s, Credentials& out,
-			std::string* row = nullptr);
+/* A role session's credentials (I9):  the role's own row under
+ * rgw_nsfs_role_identity_override, when it has been given one, else its
+ * account's.  `row`, if given, receives the key of the row that
+ * resolved, as above. */
+int resolve_role_credentials(const DoutPrefixProvider* dpp,
+			     const IdentityDB& db, const std::string& role_id,
+			     const rgw_account_id& account, Credentials& out,
+			     optional_yield y, std::string* row = nullptr);
 
 /* Complete a credential built from a file's owner.
  *

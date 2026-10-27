@@ -5090,6 +5090,12 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
 			     std::memory_order_relaxed);
   ldpp_dout(dpp, 1) << "nsfs: access model " << access_strategy->name()
     << dendl;
+  if (userDB) {
+    ldpp_dout(dpp, 1) << "nsfs: user identity override "
+      << (userDB->user_identity_override() ? "on" : "off")
+      << ", role identity override "
+      << (userDB->role_identity_override() ? "on" : "off") << dendl;
+  }
 
   nb_xattr_strategy = std::make_unique<nsfs::NooBaaXattrStrategy>();
   nb_path_strategy = std::make_unique<nsfs::NooBaaPathStrategy>();
@@ -5870,6 +5876,30 @@ NSFSDriver::make_placed_dir(const std::string& path)
   return d;
 }
 
+rgw_owner NSFSDriver::new_bucket_path_source(const DoutPrefixProvider* dpp,
+					     const rgw_owner& owner,
+					     const rgw_owner& authenticated_user,
+					     optional_yield y)
+{
+  const auto* user = std::get_if<rgw_user>(&authenticated_user);
+  const auto* acct = std::get_if<rgw_account_id>(&owner);
+  /* a role session's buckets go where its account's do:  NooBaa's
+   * documented role identity is a uid and gid, not a path */
+  if (!user || !acct || !userDB->user_identity_override() ||
+      (user->ns == rgw::sal::role_session_ns)) {
+    return owner;
+  }
+  std::unique_ptr<User> u = get_user(*user);
+  if ((u->load_user(dpp, y) < 0) || (u->get_info().account_id != *acct)) {
+    return owner;
+  }
+  nsfs::Identity row;
+  if (userDB->get_identity(dpp, to_string(authenticated_user), row) < 0) {
+    return owner;
+  }
+  return authenticated_user;
+}
+
 int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
 				const rgw_owner& owner, const rgw_bucket& b,
 				std::string& path, bool* owners_path)
@@ -6515,16 +6545,38 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
  * A user's account is needed only here, and such a user is normally in
  * the user cache already, since authenticating it put it there.  A
  * user that will not load still resolves under its own key.
- * `account`, if given, receives the account a user resolved through. */
+ * `account`, if given, receives the account a user resolved through;
+ * `row`, if given, the key of the row that resolved, as
+ * nsfs::resolve_credentials() gives it. */
 static int resolve_credentials_for(const DoutPrefixProvider* dpp,
 				   NSFSDriver* driver, const rgw_owner& who,
 			     optional_yield y, rgw_account_id* account,
-			     nsfs::Credentials& cred)
+			     nsfs::Credentials& cred,
+			     std::string* row = nullptr)
 {
   const auto* user = std::get_if<rgw_user>(&who);
   if (! user) {
-    return nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
-				     who, cred, y);
+    const int ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
+					      who, cred, y);
+    if (row && ((ret == 0) || (ret == -EPERM))) {
+      *row = to_string(who);
+    }
+    return ret;
+  }
+  /* a role session (rgw::sal::role_session_ns):  the role's account is
+   * the role's to say, and fixed for its life */
+  if (user->ns == rgw::sal::role_session_ns) {
+    std::unique_ptr<RGWRole> role = driver->get_role(user->id);
+    const int ret = role->load_by_id(dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
+    if (account) {
+      *account = role->get_account_id();
+    }
+    return nsfs::resolve_role_credentials(dpp, *driver->get_identity_db(),
+					  user->id, role->get_account_id(),
+					  cred, y, row);
   }
   rgw_account_id acct;
   std::unique_ptr<User> u = driver->get_user(*user);
@@ -6535,7 +6587,14 @@ static int resolve_credentials_for(const DoutPrefixProvider* dpp,
     *account = acct;
   }
   return nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
-				   *user, acct, cred, y);
+				   *user, acct, cred, y, row);
+}
+
+int NSFSDriver::get_credentials_for(const DoutPrefixProvider* dpp,
+				    const rgw_owner& who, optional_yield y,
+				    nsfs::Credentials& out, std::string* row)
+{
+  return resolve_credentials_for(dpp, this, who, y, nullptr, out, row);
 }
 
 /* Defined below, beside the operations that use it most. */
@@ -6598,14 +6657,19 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
     bp.bucket_name = get_name();
     bp.tenant = get_tenant();
     bp.owner = to_string(params.owner);
+    /* the owner's new_buckets_path and allowlist, or under the I9
+     * override the creating user's own;  the bucket is the owner's
+     * either way */
+    const rgw_owner path_source = driver->new_bucket_path_source(
+      dpp, params.owner, authenticated_user, y);
     bool owners_path = false;
-    ret = driver->new_bucket_path(dpp, params.owner, get_key(), bp.path,
+    ret = driver->new_bucket_path(dpp, path_source, get_key(), bp.path,
 				  &owners_path);
     if (ret < 0) {
       return ret;
     }
     std::optional<std::string> custom;
-    ret = driver->custom_bucket_path(dpp, params.owner, params.env, custom);
+    ret = driver->custom_bucket_path(dpp, path_source, params.env, custom);
     if (ret < 0) {
       return ret;
     }
@@ -6616,7 +6680,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
      * chose.  The base path is the gateway's default, not the
      * account's. */
     if (owners_path || custom) {
-      ret = driver->check_owner_can_create_at(dpp, params.owner, bp.path, y);
+      ret = driver->check_owner_can_create_at(dpp, path_source, bp.path, y);
       if (ret < 0) {
 	return ret;
       }
@@ -6708,10 +6772,58 @@ int NSFSUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 
 int NSFSUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
 {
+  /* I9:  a user stored for the first time in an account gets a copy of
+   * its account's identity row, as NooBaa's CreateUser copies the
+   * account's nsfs_account_config.  Whatever
+   * rgw_nsfs_user_identity_override says:  it decides whether the row
+   * is consulted, not whether it is written.  Asked before the store,
+   * since afterwards every user exists;  `old_info` cannot say, as most
+   * updates pass none. */
+  bool created = false;
+  if (!get_info().account_id.empty()) {
+    RGWUserInfo existing;
+    existing.user_id = get_id();
+    created = (driver->get_user_db()->get_user(dpp, "user_id", get_id().id,
+					       existing, nullptr, nullptr)
+	       == -ENOENT);
+  }
   int ret = driver->get_user_db()->store_user(dpp, this->get_info(), exclusive, &(this->get_attrs()), &(this->get_version_tracker()), old_info);
   if (ret == 0) {
     driver->get_user_cache().invalidate_user(dpp, this->get_id().id);
     driver->get_user_cache().insert_user(dpp, {this->get_info(), this->get_attrs(), this->get_version_tracker()});
+  }
+  if ((ret == 0) && created) {
+    ret = copy_account_identity(dpp);
+  }
+  return ret;
+}
+
+/* The copy itself.  An account with no row gives none, so the user
+ * follows its account if one is added later (DECISIONS.md 2026-10-27);
+ * a row the user already has is left alone. */
+int NSFSUser::copy_account_identity(const DoutPrefixProvider* dpp)
+{
+  auto* db = driver->get_identity_db();
+  const std::string key = to_string(rgw_owner{get_id()});
+  nsfs::Identity row;
+  int ret = db->get_identity(dpp, key, row);
+  if (ret != -ENOENT) {
+    return ret;
+  }
+  ret = db->get_identity(dpp, to_string(rgw_owner{get_info().account_id}),
+			 row);
+  if (ret == -ENOENT) {
+    return 0;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  row.key = key;
+  ret = db->put_identity(dpp, row);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: nsfs: user " << key << " was stored, but "
+      "its copy of account " << get_info().account_id << "'s identity was "
+      "not: " << cpp_strerror(-ret) << dendl;
   }
   return ret;
 }
@@ -18036,6 +18148,15 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    * against a model that is not running */
   features["access_model"] = get_access_strategy()->name();
   features["access_model_configured"] = access_strategy->name();
+  /* I9's two overrides, as in force -- the `identity-override` hint can
+   * change them for a test -- so a run's labels can be checked against
+   * the gateway rather than taken from how it was started */
+  if (userDB) {
+    features["user_identity_override"] =
+      userDB->user_identity_override() ? "true" : "false";
+    features["role_identity_override"] =
+      userDB->role_identity_override() ? "true" : "false";
+  }
 }
 
 /* Set the profile of a bucket that already exists.
@@ -18241,6 +18362,7 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   put_report("users", std::to_string(ir.users_created));
   put_report("users_present", std::to_string(ir.users_skipped));
   put_report("identity_rows", std::to_string(ir.identity_rows));
+  put_report("user_rows", std::to_string(ir.user_rows));
   put_report("limits_raised", std::to_string(ir.limits_raised));
   put_report("anonymous", ir.anonymous_imported ? "true" : "false");
   put_report("anonymous_present", ir.anonymous_present ? "true" : "false");
@@ -20132,6 +20254,47 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if (out) {
       (*out)["dynamic_groups"] =
 	userDB->nsswitch_cache().dynamic_groups() ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "identity-override") {
+    /* I9:  rgw_nsfs_user_identity_override and
+     * rgw_nsfs_role_identity_override for the tests, `user=` and `role=`
+     * each on, off or default.  Daemon-global, as dynamic-groups is.
+     * Both values are checked before either is applied. */
+    std::optional<std::optional<bool>> user, role;
+    for (const auto& [name, slot] :
+	   {std::pair{"user", &user}, std::pair{"role", &role}}) {
+      auto it = params.find(name);
+      if (it == params.end()) {
+	continue;
+      }
+      if (it->second == "on") {
+	*slot = std::optional<bool>(true);
+      } else if (it->second == "off") {
+	*slot = std::optional<bool>(false);
+      } else if (it->second == "default") {
+	*slot = std::optional<bool>();
+      } else {
+	return -EINVAL;
+      }
+    }
+    if (user) {
+      userDB->force_user_identity_override(*user);
+      ldpp_dout(dpp, 1) << "nsfs: user identity override "
+	<< params.at("user") << " by driver hint" << dendl;
+    }
+    if (role) {
+      userDB->force_role_identity_override(*role);
+      ldpp_dout(dpp, 1) << "nsfs: role identity override "
+	<< params.at("role") << " by driver hint" << dendl;
+    }
+    if (out) {
+      (*out)["user_identity_override"] =
+	userDB->user_identity_override() ? "true" : "false";
+      (*out)["role_identity_override"] =
+	userDB->role_identity_override() ? "true" : "false";
     }
     return 0;
   }

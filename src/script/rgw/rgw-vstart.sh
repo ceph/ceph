@@ -64,6 +64,11 @@
 #                       does when S3 authorises an operation the filesystem
 #                       denies the requester (rgw_nsfs_access_model).  The
 #                       driver defaults to posix-strict.
+#   --user-identity-override
+#                       An account user's own identity row overrides its
+#                       account's (rgw_nsfs_user_identity_override), as
+#                       NooBaa serves an IAM user from its own record.
+#                       The driver defaults to off.
 #   --data-root DIR     Serve objects from DIR/root instead of the build
 #                       directory (e.g. --data-root /mnt/nvme for fast
 #                       storage, or a tree another gateway wrote).
@@ -103,6 +108,7 @@ NOOBAA_CONFIG_ROOT=""
 ADOPTION_MODE=""
 BUCKET_PROFILE=""
 ACCESS_MODEL=""
+USER_IDENTITY_OVERRIDE=false
 PERF=false
 PROFILE=false
 GPFS_ROOT=/mnt/rgw/nsfs
@@ -131,6 +137,7 @@ while [[ $# -gt 0 ]]; do
 		--adoption-mode) ADOPTION_MODE="$2"; shift 2 ;;
 		--bucket-profile) BUCKET_PROFILE="$2"; shift 2 ;;
 		--access-model) ACCESS_MODEL="$2"; shift 2 ;;
+		--user-identity-override) USER_IDENTITY_OVERRIDE=true; shift ;;
 		--perf) PERF=true; shift ;;
 		--profile) PROFILE=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
@@ -351,6 +358,10 @@ if [[ -n "$ACCESS_MODEL" ]]; then
 	VSTART_OPTS+=(-o "rgw_nsfs_access_model=$ACCESS_MODEL")
 fi
 
+if $USER_IDENTITY_OVERRIDE; then
+	VSTART_OPTS+=(-o "rgw_nsfs_user_identity_override=true")
+fi
+
 if $INOTIFY; then
 	VSTART_OPTS+=(-o "rgw_${STORE}_inotify=true")
 fi
@@ -429,6 +440,16 @@ IMP_USER_R1=rgwacct1
 IMP_UID_R1=70107
 IMP_USER_R2=rgwacct2
 IMP_UID_R2=70108
+# I9's users:  the stand-up's `copy` step moves an account from the first
+# to the second after making a user in it, and the suite's override tests
+# bind them.  Their own, so no other test's rows carry their uids --
+# rows sharing a uid that disagree on groups make a file's credential
+# unresolvable (complete_file_credentials()) -- and in no gating group,
+# so nothing about them depends on rgwfix.
+IMP_USER_CA=rgwcopya
+IMP_UID_CA=70109
+IMP_USER_CB=rgwcopyb
+IMP_UID_CB=70110
 IMP_BUCKET=impersonate-fixture
 IMP_OWNED=impersonate-owned
 IMP_MULTI=impersonate-multiproto
@@ -481,7 +502,8 @@ if $IMPERSONATE; then
 			"$IMP_USER_N"
 	# the remaining principals, each in no gating group
 	for _u in "$IMP_USER_I:$IMP_UID_I" "$IMP_USER_P:$IMP_UID_P" \
-		  "$IMP_USER_R1:$IMP_UID_R1" "$IMP_USER_R2:$IMP_UID_R2"; do
+		  "$IMP_USER_R1:$IMP_UID_R1" "$IMP_USER_R2:$IMP_UID_R2" \
+		  "$IMP_USER_CA:$IMP_UID_CA" "$IMP_USER_CB:$IMP_UID_CB"; do
 		_n=${_u%%:*}
 		_i=${_u##*:}
 		getent passwd "$_n" >/dev/null 2>&1 || \

@@ -25,6 +25,7 @@
 #include "rgw_common.h"
 #include "rgw_sal.h"
 #include "identity_db.h"
+#include "impersonate.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -889,6 +890,46 @@ void IdentityDB::start_name_sweep()
 
 namespace {
 
+bool overridden(const std::atomic<int>& o, CephContext* cct,
+		const char* option)
+{
+  const int v = o.load(std::memory_order_relaxed);
+  if (v >= 0) {
+    return v != 0;
+  }
+  return cct->_conf.get_val<bool>(option);
+}
+
+void force(std::atomic<int>& o, std::optional<bool> on)
+{
+  o.store(on ? (*on ? 1 : 0) : -1, std::memory_order_relaxed);
+  note_all_identities_changed();
+}
+
+} // anonymous namespace
+
+bool IdentityDB::user_identity_override() const
+{
+  return overridden(user_override, cct, "rgw_nsfs_user_identity_override");
+}
+
+bool IdentityDB::role_identity_override() const
+{
+  return overridden(role_override, cct, "rgw_nsfs_role_identity_override");
+}
+
+void IdentityDB::force_user_identity_override(std::optional<bool> on)
+{
+  force(user_override, on);
+}
+
+void IdentityDB::force_role_identity_override(std::optional<bool> on)
+{
+  force(role_override, on);
+}
+
+namespace {
+
 /* The supplementary groups a row installs (I8):  its own list if it has
  * one, an empty one included;  else, under
  * rgw_nsfs_dynamic_supplemental_groups, the user's groups from nsswitch
@@ -1001,11 +1042,11 @@ int complete_file_credentials(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
-			const rgw_owner& owner, Credentials& out,
-			optional_yield y)
+namespace {
+
+int resolve_key(const DoutPrefixProvider* dpp, const IdentityDB& db,
+		const std::string& key, Credentials& out, optional_yield y)
 {
-  const std::string key = to_string(owner);
 
   Identity id;
   int ret = db.get_identity(dpp, key, id);
@@ -1052,10 +1093,51 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
   return 0;
 }
 
+} // anonymous namespace
+
+int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
+			const rgw_owner& owner, Credentials& out,
+			optional_yield y)
+{
+  return resolve_key(dpp, db, to_string(owner), out, y);
+}
+
+int resolve_role_credentials(const DoutPrefixProvider* dpp,
+			     const IdentityDB& db, const std::string& role_id,
+			     const rgw_account_id& account, Credentials& out,
+			     optional_yield y, std::string* row)
+{
+  std::string key;
+  int ret = -ENOENT;
+  if (db.role_identity_override()) {
+    key = role_identity_key(role_id);
+    ret = resolve_key(dpp, db, key, out, y);
+  }
+  if ((ret == -ENOENT) && !account.empty()) {
+    key = to_string(rgw_owner{account});
+    ret = resolve_key(dpp, db, key, out, y);
+  }
+  if (row && ((ret == 0) || (ret == -EPERM))) {
+    *row = key;
+  }
+  return ret;
+}
+
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 			const rgw_user& user, const rgw_account_id& account,
 			Credentials& out, optional_yield y, std::string* row)
 {
+  /* I9:  an account user's own row is consulted only under
+   * rgw_nsfs_user_identity_override;  without it the user runs as its
+   * account, whatever rows exist */
+  if (!account.empty() && !db.user_identity_override()) {
+    rgw_owner owner{account};
+    int ret = resolve_credentials(dpp, db, owner, out, y);
+    if (row && ((ret == 0) || (ret == -EPERM))) {
+      *row = to_string(owner);
+    }
+    return ret;
+  }
   rgw_owner owner{user};
   int ret = resolve_credentials(dpp, db, owner, out, y);
   if ((ret == -ENOENT) && !account.empty()) {
@@ -1067,19 +1149,6 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
   }
   return ret;
 }
-
-int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
-			const req_state* s, Credentials& out, std::string* row)
-{
-  if (!s || !s->user) {
-    /* nothing authenticated:  nothing to impersonate as */
-    return -ENOENT;
-  }
-  return resolve_credentials(dpp, db, s->user->get_id(),
-			     s->user->get_info().account_id, out, s->yield,
-			     row);
-}
-
 
 /* ---------------------------------------------------------------- *
  * Bucket placement.  P1:  the column and the accessor.

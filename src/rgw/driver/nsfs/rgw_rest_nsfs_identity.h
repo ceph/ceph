@@ -53,7 +53,7 @@ namespace rgw::sal::nsfs {
  * constrains nothing about what exists yet. */
 inline bool is_canonical_owner_key(const std::string& key)
 {
-  if (key.empty()) {
+  if (key.empty() || is_role_identity_key(key)) {
     return false;
   }
   const rgw_owner owner = parse_owner(key);
@@ -77,6 +77,10 @@ inline bool is_canonical_owner_key(const std::string& key)
 inline bool owner_resolves(const DoutPrefixProvider* dpp, optional_yield y,
 			   rgw::sal::Driver* driver, const std::string& key)
 {
+  if (is_role_identity_key(key)) {
+    auto role = driver->get_role(key.substr(ROLE_IDENTITY_PREFIX.size()));
+    return role->load_by_id(dpp, y) == 0;
+  }
   const rgw_owner owner = parse_owner(key);
   if (const auto* a = std::get_if<rgw_account_id>(&owner)) {
     RGWAccountInfo info;
@@ -132,6 +136,12 @@ inline void dump_identity(Formatter* f, const Identity& id)
  * under that user's own key, so it invalidates them all. */
 inline void note_row_changed(const std::string& key)
 {
+  /* a role's row is reached by every session on the role, under keys
+   * nothing here can enumerate */
+  if (is_role_identity_key(key)) {
+    note_all_identities_changed();
+    return;
+  }
   const rgw_owner owner = parse_owner(key);
   if (const auto* u = std::get_if<rgw_user>(&owner)) {
     note_identity_changed(*u);
@@ -140,9 +150,43 @@ inline void note_row_changed(const std::string& key)
   }
 }
 
+/* The row a request names:  `identity=<owner>`, or `role=<role id>` for
+ * a role's (I9) -- exactly one.  -EINVAL for neither, both, or an empty
+ * role id, and, where `canonical`, an owner key no owner renders to.
+ * The read takes any key, as it always has:  looking up one that cannot
+ * exist finds nothing, which is how a caller checks that nothing was
+ * written under it.  `required` false lets the listing form name none. */
+inline int requested_identity_key(req_state* s, std::string& key,
+				  bool required = true, bool canonical = true)
+{
+  std::string owner, role;
+  bool have_owner = false, have_role = false;
+  RESTArgs::get_string(s, "identity", "", &owner, &have_owner);
+  RESTArgs::get_string(s, "role", "", &role, &have_role);
+  if (have_owner && have_role) {
+    return -EINVAL;
+  }
+  if (have_role) {
+    if (role.empty()) {
+      return -EINVAL;
+    }
+    key = role_identity_key(role);
+    return 0;
+  }
+  if (!have_owner || owner.empty()) {
+    key.clear();
+    return required ? -EINVAL : 0;
+  }
+  if (canonical && !is_canonical_owner_key(owner)) {
+    return -EINVAL;
+  }
+  key = owner;
+  return 0;
+}
+
 } // namespace rgw::sal::nsfs
 
-/* GET /admin/nsfs/identity[?identity=<owner>]
+/* GET /admin/nsfs/identity[?identity=<owner>|role=<role id>]
  *
  * With a key, one record;  without one, all of them.  The list is
  * what an importer reconciles against and what a test asserts a
@@ -164,13 +208,14 @@ public:
     auto* db = nsfs_driver->get_identity_db();
 
     std::string key;
-    std::string row;
-    bool have_key = false;
-    RESTArgs::get_string(s, "identity", "", &key, &have_key);
+    op_ret = rgw::sal::nsfs::requested_identity_key(s, key, false, false);
+    if (op_ret < 0) {
+      return;
+    }
 
     Formatter* f = flusher.get_formatter();
 
-    if (have_key && !key.empty()) {
+    if (!key.empty()) {
       rgw::sal::nsfs::Identity id;
       op_ret = db->get_identity(s, key, id);
       if (op_ret < 0) {
@@ -208,7 +253,7 @@ public:
   const char* name() const override { return "nsfs_identity_get"; }
 };
 
-/* PUT /admin/nsfs/identity?identity=<owner>&...
+/* PUT /admin/nsfs/identity?identity=<owner>|role=<role id>&...
  *
  * A full replace, matching the storage layer underneath it.  An
  * absent parameter means the field is unset, not that it keeps its
@@ -234,10 +279,8 @@ public:
     }
 
     rgw::sal::nsfs::Identity id;
-    bool have_key = false;
-    RESTArgs::get_string(s, "identity", "", &id.key, &have_key);
-    if (!have_key || !rgw::sal::nsfs::is_canonical_owner_key(id.key)) {
-      op_ret = -EINVAL;
+    op_ret = rgw::sal::nsfs::requested_identity_key(s, id.key);
+    if (op_ret < 0) {
       return;
     }
 
@@ -317,7 +360,7 @@ public:
   const char* name() const override { return "nsfs_identity_put"; }
 };
 
-/* DELETE /admin/nsfs/identity?identity=<owner>
+/* DELETE /admin/nsfs/identity?identity=<owner>|role=<role id>
  *
  * Removing what is not there succeeds:  the caller asked for the row
  * to be gone and it is, and an importer re-run should not have to
@@ -338,9 +381,8 @@ public:
     }
 
     std::string key;
-    RESTArgs::get_string(s, "identity", "", &key);
-    if (! rgw::sal::nsfs::is_canonical_owner_key(key)) {
-      op_ret = -EINVAL;
+    op_ret = rgw::sal::nsfs::requested_identity_key(s, key);
+    if (op_ret < 0) {
       return;
     }
 
@@ -353,7 +395,7 @@ public:
   const char* name() const override { return "nsfs_identity_delete"; }
 };
 
-/* GET /admin/nsfs/credentials[?identity=<owner>]
+/* GET /admin/nsfs/credentials[?identity=<owner>|role=<role id>]
  *
  * What a request would be served as.  Without a parameter it
  * resolves the *caller*, which is the only way to exercise the key
@@ -364,6 +406,14 @@ public:
  * form reads the one row and does not fall back from a user to its
  * account:  it returns what a row says, and the caller form returns
  * what a request gets.
+ *
+ * With `role=` it returns what a session on that role gets (I9):  the
+ * role principal (`$role$<id>`), served as the role's own row under
+ * rgw_nsfs_role_identity_override, else its account's -- the path a
+ * session takes, fallback included, since a role alone is never what a
+ * request is served as.  A role session cannot ask for itself:  Admin
+ * Ops checks the caps of a user a session does not load.  What a role's
+ * row holds is `GET /admin/nsfs/identity?role=`.
  *
  * Reporting, not enforcing:  "no impersonation" and "asked for and
  * unavailable" are outcomes, not failures, and come back with a 200
@@ -392,13 +442,31 @@ public:
 
     std::string key;
     std::string row;
-    bool have_key = false;
+    std::string role;
+    bool have_key = false, have_role = false;
     RESTArgs::get_string(s, "identity", "", &key, &have_key);
+    RESTArgs::get_string(s, "role", "", &role, &have_role);
 
     rgw::sal::nsfs::Credentials cred;
     int ret;
 
-    if (have_key && !key.empty()) {
+    if (have_key && have_role) {
+      op_ret = -EINVAL;
+      return;
+    }
+    if (have_role) {
+      /* what a session on the role is served as, by the path a session
+       * takes:  the role principal (rgw::sal::role_session_ns), its row
+       * under the role identity override, else its account's */
+      if (role.empty()) {
+	op_ret = -EINVAL;
+	return;
+      }
+      const rgw_owner who{rgw_user{"", role,
+				   std::string(rgw::sal::role_session_ns)}};
+      key = to_string(who);
+      ret = nsfs_driver->get_credentials_for(s, who, s->yield, cred, &row);
+    } else if (have_key && !key.empty()) {
       if (! rgw::sal::nsfs::is_canonical_owner_key(key)) {
 	/* a key no owner renders to would report "none" forever;
 	 * say it is malformed instead */
@@ -410,14 +478,16 @@ public:
 	  s->yield);
       row = key;
     } else {
-      /* the caller.  This is the path get_credentials() serves, and
-       * the key comes from s->user rather than s->owner. */
-      if (! s->user) {
+      /* the caller, as every operation it makes is served:  its
+       * authenticated user, which for a role session is the role
+       * (rgw::sal::role_session_ns) and not the user that assumed it */
+      const rgw_owner who = authenticated_user(s);
+      if (rgw::sal::nsfs::owner_empty(who)) {
 	op_ret = -EINVAL;
 	return;
       }
-      key = s->user->get_id().to_str();
-      ret = nsfs_driver->get_credentials(s, s, cred, &row);
+      key = to_string(who);
+      ret = nsfs_driver->get_credentials_for(s, who, s->yield, cred, &row);
     }
 
     const char* outcome;

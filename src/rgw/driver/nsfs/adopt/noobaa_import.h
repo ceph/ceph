@@ -79,6 +79,9 @@ struct ImportResult {
    * created */
   size_t users_skipped{0};
   size_t identity_rows{0};
+  /* I9:  IAM users' own rows, each its tuple as its NooBaa record holds
+   * it;  counted apart from `identity_rows`, which are accounts' */
+  size_t user_rows{0};
   size_t roles_created{0};
   /* `rgw_nsfs_adoption_role_rights` as this run read it, and the roles
    * it wrote `NooBaaRoleMigration` on */
