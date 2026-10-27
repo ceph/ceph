@@ -8385,7 +8385,6 @@ def test_versioning_obj_list_marker_null_delete_marker():
     assert response['IsTruncated']
     assert response['NextVersionIdMarker'] == 'null'
 
-    # Without the fix, the next page skips the version
     response = client.list_object_versions(
         Bucket=bucket_name, MaxKeys=1, KeyMarker=response['NextKeyMarker'],
         VersionIdMarker=response['NextVersionIdMarker'])

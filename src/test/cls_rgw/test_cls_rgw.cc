@@ -818,7 +818,6 @@ TEST_P(TestClsRgw, index_list_resume_after_null_version)
   ASSERT_TRUE(entry.is_delete_marker());
 
   // after the null delete marker comes the version it hides
-  // Without the fix, "null" misses the delete marker and skips to "d"
   ASSERT_NO_FATAL_FAILURE(list_one(ioctx, bucket_oid, {"c", "null"}, entry));
   EXPECT_EQ(cls_rgw_obj_key("c", "v1"), entry.key);
 
