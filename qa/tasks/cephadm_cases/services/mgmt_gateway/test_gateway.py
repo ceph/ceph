@@ -142,7 +142,7 @@ class TestMgmtGateway(GatewayTestCase):
                     ('alertmanager still served', r[2]['status'] == 200),
                     ('/prometheus reports the outage', r[3]['status'] in (502, 503, 504))]
         victim = self.daemons('prometheus')[0]['daemon_name']
-        self.stop_daemon(victim)
+        self.stop_daemon(victim, force=True)  # the only instance
         try:
             self.wait_checks('prometheus down, other routes served', isolated, timeout=300)
         finally:
@@ -160,7 +160,7 @@ class TestMgmtGateway(GatewayTestCase):
             return [('/health unreachable', r[0]['status'] == 0),
                     ('/ unreachable', r[1]['status'] == 0)]
         victim = self.daemons(GW)[0]['daemon_name']
-        self.stop_daemon(victim)
+        self.stop_daemon(victim, force=True)  # the only instance
         try:
             self.wait_checks('gateway down', unreachable, timeout=120)
         finally:

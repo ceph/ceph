@@ -333,8 +333,11 @@ class GatewayTestCase(ServicesTestCase):
                 return str(d.get('status_desc'))
         return 'absent'
 
-    def stop_daemon(self, daemon_name: str) -> None:
-        self.orch('daemon', 'stop', daemon_name)
+    def stop_daemon(self, daemon_name: str, force: bool = False) -> None:
+        """Stop a daemon. cephadm refuses to stop a service's last daemon
+        unless forced: tests that take a non-redundant service down on
+        purpose pass force=True."""
+        self.orch('daemon', 'stop', daemon_name, *(['--force'] if force else []))
         self.poll(f'{daemon_name} stopped',
                   lambda: self.daemon_state(daemon_name) != 'running',
                   timeout=300, kick=True)

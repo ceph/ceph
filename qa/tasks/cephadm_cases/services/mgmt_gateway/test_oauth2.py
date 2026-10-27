@@ -135,7 +135,7 @@ class TestOAuth2Proxy(GatewayTestCase):
             return [(f'{path} {how} refused', self.fail_closed(next(r)))
                     for _, path in SSO_ROUTES for how, _ in ways]
         victim = self.daemons(OAUTH2)[0]['daemon_name']
-        self.stop_daemon(victim)
+        self.stop_daemon(victim, force=True)  # the only instance
         try:
             self.wait_checks('oauth2-proxy down: every route refused', closed, timeout=300)
             self.hold_checks('oauth2-proxy down: every route refused', closed, seconds=60)
@@ -150,7 +150,7 @@ class TestOAuth2Proxy(GatewayTestCase):
         res = self.login('/', JAR)
         self.assert_logged_in(res)
         victim = self.daemons('prometheus')[0]['daemon_name']
-        self.stop_daemon(victim)
+        self.stop_daemon(victim, force=True)  # the only instance
         try:
             self.wait_checks('prometheus down: logged-in user still reaches the rest',
                              lambda: self.session_checks(res['origin'], JAR, down=['prometheus']),
