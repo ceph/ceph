@@ -143,6 +143,7 @@ target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
 add_library(peering_test_fixture OBJECT
   PeeringTestFixture.cc
   ECPeeringTestFixture.cc
+  ReplicaPeeringTestFixture.cc
 )
 target_link_libraries(peering_test_fixture osd os global GTest::GTest)
 
