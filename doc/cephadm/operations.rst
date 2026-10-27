@@ -439,6 +439,52 @@ For manual invocations, pass ``--logging-level`` on the command line:
    mgr configuration does not apply; use ``--logging-level`` as shown above.
 
 
+.. _cephadm-asyncssh-log-verbosity:
+
+Controlling asyncssh Log Verbosity
+-----------------------------------
+
+The cephadm orchestration module uses the ``asyncssh`` library to establish
+SSH connections to managed hosts. If the connection fails, the captured output
+is written to the cephadm module log at ``debug`` level. If the connection
+succeeds, the captured output is discarded.
+
+Two module options control how verbose that captured output is:
+
+:confval:`mgr/cephadm/asyncssh_log_level`
+  Controls the asyncssh library log level. Valid values are ``DEBUG``,
+  ``INFO`` (default), ``WARNING``, and ``ERROR``. Use ``WARNING`` or 
+  ``ERROR`` to reduce the captured output. Set to ``DEBUG`` cautiously 
+  only when actively diagnosing SSH connectivity failures.
+
+  .. prompt:: bash #
+
+     ceph config set mgr mgr/cephadm/asyncssh_log_level DEBUG
+
+:confval:`mgr/cephadm/asyncssh_debug_level`
+  Controls the asyncssh internal debug verbosity (``0``–``3``). The default
+  is ``0``, which maps to asyncssh's minimum level (``1``). Debug output is
+  produced only when ``asyncssh_log_level`` is ``DEBUG``. Values ``1``–``3``
+  produce increasing detail: ``1`` = minimal, ``2`` = full debug,
+  ``3`` = full debug with packet dumps (may expose passwords in clear text).
+
+  .. prompt:: bash #
+
+     ceph config set mgr mgr/cephadm/asyncssh_debug_level 2
+
+Both options are applied each time cephadm opens a new SSH connection to a
+host. A connection that is already open and healthy is reused, so a change
+takes effect on the next new connection and does not require restarting the
+mgr.
+
+To restore the defaults after debugging:
+
+.. prompt:: bash #
+
+   ceph config rm mgr mgr/cephadm/asyncssh_log_level
+   ceph config rm mgr mgr/cephadm/asyncssh_debug_level
+
+
 Data Location
 =============
 
