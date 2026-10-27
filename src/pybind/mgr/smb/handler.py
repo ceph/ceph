@@ -797,7 +797,10 @@ class ClusterConfigHandler:
         # keys directly in each export definition block while samba needs the
         # ceph keyring to load keys.
         # For RGW shares, we don't need CephFS volumes but still need orchestration.
-        previous_orch = previous_info.get('orch_needed', False)
+        # orch_submitted keeps clusters without shares orchestrated.
+        previous_orch = previous_info.get(
+            'orch_needed', False
+        ) or previous_info.get('orch_submitted', False)
         if self._orch and (vols or rgw_buckets or previous_orch):
             log.debug(
                 'Submitting SMB service spec for cluster %s: '
@@ -809,6 +812,13 @@ class ClusterConfigHandler:
                 len(rgw_buckets),
                 previous_orch,
             )
+            entry = self.public_store[
+                external.cluster_placeholder_key(cluster.cluster_id)
+            ]
+            info = dict(entry.get())
+            # Record the submission attempt even if it fails.
+            info['orch_submitted'] = True
+            entry.set(info)
             self._orch.submit_smb_spec(smb_spec)
         else:
             log.debug(
@@ -1508,13 +1518,13 @@ def _swap_pending_cluster_info(
         existing = pentry.get()
     except KeyError:
         existing = {}
-    pentry.set(
-        {
-            'cluster_id': change_group.cluster.cluster_id,
-            'timestamp': int(time.time()),
-            'orch_needed': orch_needed,
-        }
-    )
+    info = {
+        'cluster_id': change_group.cluster.cluster_id,
+        'timestamp': int(time.time()),
+        'orch_needed': orch_needed,
+        'orch_submitted': existing.get('orch_submitted'),
+    }
+    pentry.set(info)
     change_group.cache_updated_entry(pentry)
     return existing
 

@@ -1,3 +1,4 @@
+import dataclasses
 import time
 
 import pytest
@@ -1154,6 +1155,52 @@ def test_apply_remove_all_clusters(thandler):
     all_ns = thandler.public_store.namespaces()
     assert list(all_ns) == []
     assert thandler._orch.deployed == set()
+
+
+def test_orchestration_continues_without_shares(thandler):
+    class FakeOrch:
+        def __init__(self):
+            self.submitted = []
+
+        def submit_smb_spec(self, spec):
+            self.submitted.append(spec)
+
+    thandler._orch = FakeOrch()
+    thandler._earmark_resolver = _FakeEarmarkResolver()
+    cluster = _cluster(
+        cluster_id='foo',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    share = smb.resources.Share(
+        cluster_id='foo',
+        share_id='s1',
+        cephfs=_cephfs(volume='cephfs', path='/'),
+    )
+    results = thandler.apply([cluster, share])
+    assert results.success, results.to_simplified()
+    assert len(thandler._orch.submitted) == 1
+    info = thandler.public_store['foo', 'cluster-info'].get()
+    assert info['orch_submitted'] is True
+
+    results = thandler.apply(
+        [smb.resources.RemovedShare(cluster_id='foo', share_id='s1')]
+    )
+    assert results.success, results.to_simplified()
+    assert len(thandler._orch.submitted) == 2
+
+    # The service is still deployed; updates must reach it.
+    updated = dataclasses.replace(cluster, custom_dns=['192.168.76.204'])
+    results = thandler.apply([updated])
+    assert results.success, results.to_simplified()
+    assert len(thandler._orch.submitted) == 3
+    assert thandler._orch.submitted[-1].custom_dns == ['192.168.76.204']
+    info = thandler.public_store['foo', 'cluster-info'].get()
+    assert info['orch_submitted'] is True
 
 
 def test_all_resources(thandler):
