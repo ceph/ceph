@@ -703,6 +703,56 @@ Run ``reconfig`` on the service to update its configuration:
 
   ceph orch reconfig alertmanager
 
+Sending Alerts to Slack
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The Alertmanager spec adds only webhook receivers. To send alerts to Slack, or
+to another receiver type such as email or PagerDuty, override the Alertmanager
+template as described in :ref:`cephadm-overwrite-jinja2-templates`.
+
+Start from the default template,
+``src/pybind/mgr/cephadm/templates/services/alertmanager/alertmanager.yml.j2``,
+and keep all of it, including its Jinja2 blocks, so that the Ceph Dashboard and
+any ``webhook_urls`` still receive alerts. Add a route at the top of the
+``routes`` list. ``continue: true`` passes each alert on to the routes after
+it:
+
+.. code-block:: yaml
+
+    route:
+      receiver: 'default'
+      routes:
+        - group_by: ['alertname']
+          receiver: 'slack'
+          continue: true
+        - group_by: ['alertname']
+          group_wait: 10s
+          ...
+
+Then add a receiver to the ``receivers`` list, using the URL of a Slack
+incoming webhook:
+
+.. code-block:: yaml
+
+    - name: 'slack'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/<webhook-path>'
+        send_resolved: true
+
+Cephadm renders the template with Jinja2 before Alertmanager reads it. To use
+Alertmanager template expressions such as ``{{ .CommonAnnotations.summary }}``
+in fields like ``text``, wrap them in ``{% raw %}`` and ``{% endraw %}``. See
+the `Alertmanager configuration documentation
+<https://prometheus.io/docs/alerting/latest/configuration/#slack_config>`_ for
+the other ``slack_configs`` fields.
+
+Store the template and reconfigure Alertmanager:
+
+.. prompt:: bash #
+
+  ceph config-key set mgr/cephadm/services/alertmanager/alertmanager.yml -i $PWD/alertmanager.yml.j2
+  ceph orch reconfig alertmanager
+
 Turn on Certificate Validation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
