@@ -121,7 +121,7 @@ will be on the ``main`` branch by default, which is the unstable
 development branch. You may choose other branches too.
 
 - ``main``: The unstable development branch.
-- ``stable-release-name``: The name of the stable, see `Active Releases`_. e.g. ``pacific``
+- ``stable-release-name``: The name of a stable branch, see `Active Releases`_. e.g. ``tentacle``
 - ``next``: The release candidate branch.
 
 ::
