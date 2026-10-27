@@ -70,6 +70,9 @@ public:
     return get_test_pg()->get_peering_listener();
   }
 
+  // The PG instance on an OSD, whether or not the OSD is in up/acting.
+  PeeringState* get_peering_state_on_osd(int osd);
+
   int get_primary_shard_from_osdmap() const;
 
   MockPGBackendListener* get_primary_listener() override;
@@ -186,6 +189,12 @@ public:
   void enter_degraded_stretch_mode(int surviving_zone);
   void enter_recovery_stretch_mode();
   void enter_healthy_stretch_mode();
+
+  /**
+   * Replace the PG's pg_upmap entry, which moves its up set.
+   * Creates a new OSDMap epoch and triggers peering.
+   */
+  void set_pg_upmap(const std::vector<int>& osds);
 
   /**
    * Advance to a new epoch without changing OSD states.
