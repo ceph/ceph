@@ -224,6 +224,18 @@ void PeeringTestFixture::on_primary_write_committed(const eversion_t& at_version
   ps->complete_write(at_version, at_version);  // mirrors PrimaryLogPG::repop_all_committed
 }
 
+PeeringState* PeeringTestFixture::get_peering_state_on_osd(int osd) {
+  TestPG* test_pg = nullptr;
+  for (auto& [spgid, pg] : get_osd_fixture(osd)->pgs) {
+    if (spgid.pgid == pgid) {
+      ceph_assert(test_pg == nullptr);
+      test_pg = pg.get();
+    }
+  }
+  ceph_assert(test_pg != nullptr);
+  return test_pg->get_peering_state();
+}
+
 int PeeringTestFixture::get_primary_shard_from_osdmap() const {
   std::vector<int> acting_osds;
   int acting_primary = -1;
@@ -760,6 +772,19 @@ void PeeringTestFixture::set_pool_min_size(unsigned new_min_size)
   auto new_osdmap = std::make_shared<OSDMap>();
   new_osdmap->deepish_copy_from(*osdmap);
   OSDMapTestHelpers::set_pool_min_size(new_osdmap, pool_id, new_min_size);
+
+  update_osdmap_with_peering(new_osdmap);
+}
+
+void PeeringTestFixture::set_pg_upmap(const std::vector<int>& osds)
+{
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
+  inc.fsid = new_osdmap->get_fsid();
+  inc.new_pg_upmap[pgid] =
+    mempool::osdmap::vector<int32_t>(osds.begin(), osds.end());
+  new_osdmap->apply_incremental(inc);
 
   update_osdmap_with_peering(new_osdmap);
 }
