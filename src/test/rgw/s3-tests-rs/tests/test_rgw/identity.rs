@@ -16,7 +16,7 @@
 //! form will turn on.
 
 use s3_tests_rs::admin::{
-    admin_request_as, as_json, driver_hint_results, nsfs_credentials,
+    admin_request, admin_request_as, as_json, driver_hint_results, nsfs_credentials,
     nsfs_credentials_as, nsfs_credentials_for, nsfs_delete_identity,
     nsfs_get_identity, grant_user_caps, nsfs_list_identities,
     nsfs_put_identity, q,
@@ -32,6 +32,18 @@ async fn nsfs_only() -> bool {
         Some(f) => f.backend.as_deref() == Some("nsfs"),
         None => false,
     }
+}
+
+/// The gateway's `rgw_nsfs_user_identity_override` (I9), read and not
+/// changed:  it is daemon-global and these tests run beside others.
+/// A gateway without the hint is one without the override.
+async fn user_identity_override() -> bool {
+    let on = driver_hint_results("identity-override", &[]).await
+        .and_then(|r| r.get("user_identity_override").cloned())
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    eprintln!("user identity override {}", if on { "on" } else { "off" });
+    on
 }
 
 /// Every field, so a round trip proves the record and not the subset
@@ -604,13 +616,17 @@ async fn test_credentials_for_another_identity() {
 /// two differ: `get_aclowner()` reports the account, `s->user`
 /// reports that user.
 ///
-/// On Scale every user of an account runs as the account, so a
-/// such a user ordinarily has no row and is served the account's.  A row
-/// keyed on the user takes precedence where one exists.  Both
-/// halves are here:  with a row under each, the user is served as
-/// its own (4242, not 9999), which fails if the driver keys on the
-/// ACL owner;  with the user's row removed, it is served as the
-/// account (9999), which fails if it keys on the user alone.
+/// Which row wins is `rgw_nsfs_user_identity_override` (I9):  on, a
+/// row keyed on the user takes precedence where one exists, as NooBaa
+/// serves an IAM user from its own record;  off, the user runs as its
+/// account whatever rows exist.  The test reads the gateway's setting
+/// and expects accordingly, so the deployments with and without the
+/// override each check their own half.  With a row under each:  on,
+/// the user is served as its own (4242, not 9999), which fails if the
+/// driver keys on the ACL owner;  off, as the account (9999), which
+/// fails if the user's row is consulted.  With the user's row removed
+/// it is served as the account either way, which fails if the driver
+/// keys on the user alone.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_credentials_of_a_user_in_an_account() {
@@ -675,6 +691,8 @@ async fn test_credentials_of_a_user_in_an_account() {
     assert_eq!(j["outcome"], "resolved");
     assert_eq!(j["uid"], 9999);
 
+    let overriding = user_identity_override().await;
+
     /* and now as the user itself, through real authentication */
     let resp = nsfs_credentials_as(&mak, &msk).await;
     assert_eq!(resp.status, 200, "its credentials failed: {}", resp.body);
@@ -685,11 +703,19 @@ async fn test_credentials_of_a_user_in_an_account() {
         j["identity"]);
     assert_ne!(j["identity"], serde_json::json!(account),
         "the user collapsed onto its account");
-    assert_eq!(j["uid"], 4242, "the user was served as the wrong row");
-    assert_ne!(j["uid"], serde_json::json!(9999),
-        "the user was served as its account");
-    assert_eq!(j["groups"], serde_json::json!([77]));
-    assert_eq!(j["row"], acct_user, "the answer did not come from the user's row");
+    if overriding {
+        assert_eq!(j["uid"], 4242, "the user was served as the wrong row");
+        assert_ne!(j["uid"], serde_json::json!(9999),
+            "the user was served as its account");
+        assert_eq!(j["groups"], serde_json::json!([77]));
+        assert_eq!(j["row"], acct_user,
+            "the answer did not come from the user's row");
+    } else {
+        assert_eq!(j["uid"], 9999,
+            "without the override the user's own row was consulted");
+        assert_eq!(j["row"], account,
+            "without the override the answer did not come from the account's row");
+    }
 
     /* no row of its own:  the user runs as its account, and the
      * answer says which row it came from */
@@ -714,7 +740,9 @@ async fn test_credentials_of_a_user_in_an_account() {
 
 
 /// An attribute write and a delete run as the **user**, not as its
-/// account.
+/// account -- under `rgw_nsfs_user_identity_override`;  without it,
+/// as the account, whatever row the user has (I9).  The test reads
+/// the gateway's setting and expects accordingly.
 ///
 /// (n) phase D's validation clause.  Phase C plumbed the
 /// authenticated user to `DeleteOp` and the attribute setters, and
@@ -880,12 +908,16 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
          attribute write and the delete.  Neither site saw {acct_user} \
          itself");
 
+    let overriding = user_identity_override().await;
+    /* what the user's own row is expected to yield:  itself under the
+     * override, the account's without it */
+    let mine = if overriding { ACCT_USER_UID } else { ACCOUNT_UID };
     let attrs = seen.get("ran_as_attrs").map(String::as_str);
     let del = seen.get("ran_as_delete").map(String::as_str);
-    assert_eq!(attrs, Some(ACCT_USER_UID),
-        "the attribute write chose {attrs:?}, not the user's row");
-    assert_eq!(del, Some(ACCT_USER_UID),
-        "the delete chose {del:?}, not the user's row");
+    assert_eq!(attrs, Some(mine),
+        "the attribute write chose {attrs:?}, not {mine}");
+    assert_eq!(del, Some(mine),
+        "the delete chose {del:?}, not {mine}");
 
     /* The other polarity, so a pass here is a discrimination and not
      * a tautology.  Move the user's row to a different uid and the
@@ -910,10 +942,14 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
         .send().await;
     let moved = driver_hint_results("ran-as", &[]).await
         .expect("reading ran-as failed");
+    /* without the override the moved row is still not consulted,
+     * which is that setting's discrimination:  the user has a row and
+     * it is not what runs */
+    let moved_to = if overriding { OTHER_UID } else { ACCOUNT_UID };
     assert_eq!(moved.get("ran_as_delete").map(String::as_str),
-               Some(OTHER_UID),
-        "the user's row moved to {OTHER_UID} and the delete still \
-         chose {:?};  the assertion above does not track the row",
+               Some(moved_to),
+        "the user's row moved to {OTHER_UID} and the delete \
+         chose {:?}, not {moved_to}",
         moved.get("ran_as_delete"));
 
     /* And the fallback, which is the Scale case and the one the
@@ -1020,4 +1056,79 @@ async fn test_every_principal_is_provisioned() {
          restart with --with-impersonation to re-provision, then find the \
          test.",
         missing.join("\n  "));
+}
+
+/// A role's identity row (I9):  `role=<role id>` in place of `identity=`
+/// on the identity endpoint, keyed `role:<id>`, apart from every owner's.
+/// The role is RGW's, made here through IAM;  the row is the identity it
+/// is given.  An owner key that begins `role:` is refused, so a role's
+/// row cannot be written as a user's, and naming both forms at once is
+/// refused.  `resolves` says whether the role exists, as it does for an
+/// owner.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_a_role_is_given_an_identity_by_its_id() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let cfg = get_config();
+    let Some(acct) = PrivateAccount::create("roleid").await else {
+        eprintln!("could not make this test's own account");
+        return;
+    };
+    let name = format!("{}RoleIdentity", cfg.iam_name_prefix);
+    let _ = acct.root.delete_role().role_name(&name).send().await;
+    let trust = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"AWS": "*"},
+                       "Action": "sts:AssumeRole"}]
+    }).to_string();
+    let made = acct.root.create_role().role_name(&name)
+        .assume_role_policy_document(&trust).send().await
+        .expect("create_role");
+    let role_id = made.role().unwrap().role_id().to_string();
+    let key = format!("role:{role_id}");
+
+    let put = nsfs_put_identity(&[("role", role_id.as_str()), ("uid", "70109"),
+                                  ("gid", "70109")]).await;
+    assert_eq!(put.status, 200, "giving the role an identity: {}", put.body);
+    let j = as_json(&put).expect("not JSON");
+    assert_eq!(j["identity"], key, "the role's row is not keyed role:<id>");
+    assert_eq!(j["resolves"], true, "the role was not found by its id");
+
+    let got = admin_request(reqwest::Method::GET, "/admin/nsfs/identity",
+                            &format!("role={}", q(&role_id)), None).await;
+    assert_eq!(got.status, 200, "{}", got.body);
+    assert_eq!(as_json(&got).unwrap()["uid"], 70109);
+
+    /* the role's key as an owner key:  refused, both ways */
+    assert_eq!(nsfs_put_identity(&[("identity", key.as_str()), ("uid", "5"),
+                                   ("gid", "5")]).await.status, 400,
+               "a role's key was accepted as an owner's");
+    assert_eq!(nsfs_put_identity(&[("identity", "someone"),
+                                   ("role", role_id.as_str()),
+                                   ("uid", "5"), ("gid", "5")]).await.status, 400,
+               "both forms at once were accepted");
+    assert_eq!(nsfs_put_identity(&[("role", ""), ("uid", "5"),
+                                   ("gid", "5")]).await.status, 400,
+               "an empty role id was accepted");
+
+    /* a role that does not exist is written and reported, as an owner is */
+    let ghost = nsfs_put_identity(&[("role", "no-such-role-id"), ("uid", "5"),
+                                    ("gid", "5")]).await;
+    assert_eq!(ghost.status, 200, "{}", ghost.body);
+    assert_eq!(as_json(&ghost).unwrap()["resolves"], false,
+               "a role that does not exist was reported found");
+
+    for id in [role_id.as_str(), "no-such-role-id"] {
+        let del = admin_request(reqwest::Method::DELETE, "/admin/nsfs/identity",
+                                &format!("role={}", q(id)), None).await;
+        assert_eq!(del.status, 200, "removing {id}'s row: {}", del.body);
+    }
+    let gone = admin_request(reqwest::Method::GET, "/admin/nsfs/identity",
+                             &format!("role={}", q(&role_id)), None).await;
+    assert_eq!(gone.status, 404, "the role's row outlived its delete: {}", gone.body);
+    let _ = acct.root.delete_role().role_name(&name).send().await;
 }

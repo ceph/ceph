@@ -58,6 +58,10 @@ enum Suite {
 
 struct Cell {
     name: &'static str,
+    /* rgw_nsfs_user_identity_override (I9):  passed to the gateway,
+     * shown in every label, and checked against what the gateway says
+     * it runs */
+    user_identity_override: bool,
     /* empty:  the suite stands its own gateway up */
     vstart: &'static [&'static str],
     suites: &'static [Suite],
@@ -67,33 +71,66 @@ struct Cell {
 
 /* Adding a configuration is an edit here. */
 const CELLS: &[Cell] = &[
-    Cell { name: "posix-strict",
+    Cell { name: "posix-strict", user_identity_override: false,
            vstart: &["--store", "nsfs", "--with-impersonation", "--clean"],
            suites: &[Suite::Profile("baseline"),
                      Suite::Profile("access-model-switch"),
-                     Suite::DynamicGroups],
+                     Suite::DynamicGroups,
+                     Suite::Profile("role-identity")],
            by_default: true },
-    Cell { name: "s3-native",
+    Cell { name: "s3-native", user_identity_override: false,
            vstart: &["--store", "nsfs", "--with-impersonation",
                      "--access-model", "s3-native", "--clean"],
            suites: &[Suite::Profile("baseline"),
                      Suite::Profile("access-model-switch"),
-                     Suite::DynamicGroups],
+                     Suite::DynamicGroups,
+                     Suite::Profile("role-identity")],
            by_default: true },
-    Cell { name: "plain",
+    Cell { name: "plain", user_identity_override: false,
            vstart: &["--store", "nsfs", "--bucket-profile", "strong", "--clean"],
            suites: &[Suite::Profile("baseline"), Suite::Librgw],
            by_default: true },
     /* the adoption corpus:  NooBaa writes a tree, RGW captures it before
      * and after conversion, and the captures are compared -- as the
      * gateway (C2b), and under (n) in each model (Phase G) */
-    Cell { name: "conversion", vstart: &[],
+    Cell { name: "conversion", user_identity_override: false, vstart: &[],
            suites: &[Suite::Conversion { impersonate: false, access_model: "posix-strict" }],
            by_default: false },
-    Cell { name: "conversion-posix-strict", vstart: &[],
+    Cell { name: "conversion-posix-strict", user_identity_override: false, vstart: &[],
            suites: &[Suite::Conversion { impersonate: true, access_model: "posix-strict" }],
            by_default: false },
-    Cell { name: "conversion-s3-native", vstart: &[],
+    Cell { name: "conversion-s3-native", user_identity_override: false, vstart: &[],
+           suites: &[Suite::Conversion { impersonate: true, access_model: "s3-native" }],
+           by_default: false },
+    /* the same six with rgw_nsfs_user_identity_override on (I9):  an
+     * account user's own row overrides its account's, as NooBaa serves
+     * an IAM user from its own record */
+    Cell { name: "posix-strict-override", user_identity_override: true,
+           vstart: &["--store", "nsfs", "--with-impersonation", "--clean"],
+           suites: &[Suite::Profile("baseline"),
+                     Suite::Profile("access-model-switch"),
+                     Suite::DynamicGroups,
+                     Suite::Profile("role-identity")],
+           by_default: true },
+    Cell { name: "s3-native-override", user_identity_override: true,
+           vstart: &["--store", "nsfs", "--with-impersonation",
+                     "--access-model", "s3-native", "--clean"],
+           suites: &[Suite::Profile("baseline"),
+                     Suite::Profile("access-model-switch"),
+                     Suite::DynamicGroups,
+                     Suite::Profile("role-identity")],
+           by_default: true },
+    Cell { name: "plain-override", user_identity_override: true,
+           vstart: &["--store", "nsfs", "--bucket-profile", "strong", "--clean"],
+           suites: &[Suite::Profile("baseline"), Suite::Librgw],
+           by_default: true },
+    Cell { name: "conversion-override", user_identity_override: true, vstart: &[],
+           suites: &[Suite::Conversion { impersonate: false, access_model: "posix-strict" }],
+           by_default: false },
+    Cell { name: "conversion-posix-strict-override", user_identity_override: true, vstart: &[],
+           suites: &[Suite::Conversion { impersonate: true, access_model: "posix-strict" }],
+           by_default: false },
+    Cell { name: "conversion-s3-native-override", user_identity_override: true, vstart: &[],
            suites: &[Suite::Conversion { impersonate: true, access_model: "s3-native" }],
            by_default: false },
 ];
@@ -120,6 +157,18 @@ struct Step {
     env: Vec<(String, String)>,
     /* the suite's own log convention:  also appended there */
     parallel_log: bool,
+    /* the deployment's rgw_nsfs_user_identity_override;  `None` for the
+     * steps outside any deployment, the build and the unit suite */
+    user_identity_override: Option<bool>,
+}
+
+/// How a step is labelled:  its deployment, with every setting that
+/// distinguishes one deployment from another stated rather than implied.
+fn label(cell: &str, over: Option<bool>) -> String {
+    match over {
+        Some(on) => format!("{cell} · user-identity-override={}", if on { "on" } else { "off" }),
+        None => cell.to_string(),
+    }
 }
 
 impl Step {
@@ -150,7 +199,7 @@ fn main() {
     let steps = plan(&opts, &suite_dir, &run_dir);
     println!("validate:  {} steps, logs under {}", steps.len(), run_dir.display());
     for s in &steps {
-        println!("  [{}] {}:  {}", s.cell, s.name, s.show());
+        println!("  [{}] {}:  {}", label(&s.cell, s.user_identity_override), s.name, s.show());
     }
     if opts.dry_run {
         return;
@@ -167,7 +216,7 @@ fn main() {
             results.push((s.cell.clone(), s.name.clone(), Res::Fail, "not run:  the cell did not stand up".into()));
             continue;
         }
-        println!("\n==> [{}] {}", s.cell, s.name);
+        println!("\n==> [{}] {}", label(&s.cell, s.user_identity_override), s.name);
         let (res, summary) = run(s, &run_dir);
         let ok = res != Res::Fail;
         println!("    {} {summary}", res.label());
@@ -184,13 +233,27 @@ fn main() {
                 skip_cell = Some(s.cell.clone());
                 continue;
             }
+            /* the label is a checked fact:  the gateway says which it runs */
+            if let Some(want) = s.user_identity_override {
+                if let Err(e) = check_user_identity_override(&opts.build_dir, want) {
+                    println!("    FAIL  {e}");
+                    results.push((s.cell.clone(), "user-identity-override".into(), Res::Fail, e));
+                    skip_cell = Some(s.cell.clone());
+                    continue;
+                }
+            }
         }
         results.push((s.cell.clone(), s.name.clone(), res, summary));
     }
 
-    let mut table = String::from("\ncell                  step                    result\n");
+    let setting = |cell: &str| steps.iter().find(|s| s.cell == cell)
+        .and_then(|s| s.user_identity_override)
+        .map(|on| if on { "on" } else { "off" }).unwrap_or("-");
+    let mut table = String::from(
+        "\ncell                              user-identity-override  step                    result\n");
     for (cell, name, res, summary) in &results {
-        table += &format!("{cell:<21} {name:<23} {} {summary}\n", res.label());
+        table += &format!("{cell:<33} {:<23} {name:<23} {} {summary}\n",
+                          setting(cell), res.label());
     }
     print!("{table}");
     let _ = fs::write(run_dir.join("summary.txt"), &table);
@@ -207,7 +270,7 @@ fn plan(o: &Opts, suite_dir: &Path, run_dir: &Path) -> Vec<Step> {
     let b = &o.build_dir;
     let step = |cell: &str, name: &str, cwd: &Path, argv: Vec<String>| Step {
         cell: cell.into(), name: name.into(), cwd: cwd.to_path_buf(), argv,
-        env: Vec::new(), parallel_log: false,
+        env: Vec::new(), parallel_log: false, user_identity_override: None,
     };
     let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
     let mut steps = Vec::new();
@@ -243,6 +306,10 @@ fn plan(o: &Opts, suite_dir: &Path, run_dir: &Path) -> Vec<Step> {
             if *lc {
                 argv.push("--with-lifecycle".into());
             }
+            if c.user_identity_override {
+                argv.push("--user-identity-override".into());
+            }
+            let first = steps.len();
             if !c.vstart.is_empty() {
                 steps.push(step(&cell, "vstart", b, argv));
             }
@@ -283,6 +350,8 @@ fn plan(o: &Opts, suite_dir: &Path, run_dir: &Path) -> Vec<Step> {
                         st.env.push(("ADOPTION_CEPH_BUILD".into(), b.to_string_lossy().into()));
                         st.env.push(("ADOPTION_IMPERSONATE".into(), impersonate.to_string()));
                         st.env.push(("ADOPTION_ACCESS_MODEL".into(), access_model.to_string()));
+                        st.env.push(("ADOPTION_USER_IDENTITY_OVERRIDE".into(),
+                                     c.user_identity_override.to_string()));
                         steps.push(st);
                     }
                     Suite::Profile(p) => {
@@ -329,6 +398,9 @@ fn plan(o: &Opts, suite_dir: &Path, run_dir: &Path) -> Vec<Step> {
                         }
                     }
                 }
+            }
+            for st in &mut steps[first..] {
+                st.user_identity_override = Some(c.user_identity_override);
             }
         }
     }
@@ -399,7 +471,8 @@ fn run(s: &Step, run_dir: &Path) -> (Res, String) {
             summary.push(pair.to_string());
         }
         if t.starts_with("==> conversion:  every step passed")
-            || t.contains("the conversion profile stopped at") {
+            || t.contains("the conversion profile stopped at")
+            || t.contains("the corpus failed against RGW") {
             summary.push(t.trim_start_matches("==> conversion:  ").to_string());
         }
         if t.starts_with("FAIL [") || t.starts_with("error:") || t.starts_with("ERROR:") {
@@ -477,6 +550,26 @@ fn wait_for_gateway() -> Result<(), String> {
         std::thread::sleep(Duration::from_millis(500));
     }
     Err("the gateway did not answer on :8000 within 60 s".into())
+}
+
+/// What the gateway says it runs, against what this deployment asked
+/// for:  its startup line `nsfs: user identity override on|off, ...`,
+/// the last one in vstart's gateway log.
+fn check_user_identity_override(build: &Path, want: bool) -> Result<(), String> {
+    let log = build.join("out/radosgw.8000.log");
+    let text = fs::read(&log).map_err(|e| format!("{}: {e}", log.display()))?;
+    let text = String::from_utf8_lossy(&text);
+    let said = text.lines().rev()
+        .find_map(|l| l.split("nsfs: user identity override ").nth(1))
+        .map(|rest| rest.starts_with("on"));
+    match said {
+        Some(on) if on == want => Ok(()),
+        Some(on) => Err(format!("asked for user-identity-override={}, and the gateway \
+                                 runs it {}", if want { "on" } else { "off" },
+                                if on { "on" } else { "off" })),
+        None => Err(format!("{} does not say which user identity override the \
+                             gateway runs", log.display())),
+    }
 }
 
 fn nproc() -> String {

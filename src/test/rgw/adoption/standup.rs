@@ -114,6 +114,9 @@ struct Env {
     impersonate: bool,
     /// the access model RGW is started with under `impersonate`
     access_model: String,
+    /// `rgw_nsfs_user_identity_override` for the gateway (I9), checked
+    /// against what it reports once it is up
+    user_identity_override: bool,
 }
 
 /// Every setting, from `adoption.conf` and then the environment.
@@ -228,6 +231,9 @@ impl Env {
             impersonate: matches!(get("impersonate", "false").to_ascii_lowercase().as_str(),
                                   "1" | "on" | "true" | "yes"),
             access_model: get("access_model", "posix-strict"),
+            user_identity_override: matches!(
+                get("user_identity_override", "false").to_ascii_lowercase().as_str(),
+                "1" | "on" | "true" | "yes"),
         })
     }
 
@@ -324,6 +330,7 @@ const STEPS: &[(&str, &str)] = &[
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("schema-agreement", "hold the nsfs record schema to NooBaa's validator, over the records NooBaa wrote"),
     ("groups", "under impersonation, write through rgwfix as list-less accounts:  NooBaa before `stop`, RGW after `role-rgw`"),
+    ("copy", "under impersonation, a user whose account moved after the user was made:  NooBaa before `stop` makes and records it, RGW after `role-rgw` serves it per rgw_nsfs_user_identity_override"),
     ("nsswitch", "write as the nsswitch-resolved account, and check the file is the name's uid's:  NooBaa before `stop`, RGW after `role-rgw`"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("damage",   "damage one bucket record, so adoption meets a record it cannot carry"),
@@ -359,6 +366,7 @@ fn main() {
         "schema-agreement" => schema_agreement(&env),
         "nsswitch" => nsswitch_step(&env),
         "groups" => groups_step(&env),
+        "copy" => copy_step(&env),
         "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
         "damage" => damage(&env),
@@ -862,6 +870,36 @@ fn config(env: &Env) -> Result<(), String> {
                             "--bucket_policy", &policy])?;
             println!("         bucket {GROUPS_BUCKET:?} created at {p} \
                       ({owner}:{group}, 0770), for `groups`");
+        }
+
+        /* The `copy` step's accounts (I9):  each as the first of its
+         * users, with a new_buckets_path of that user's, so the IAM user
+         * `copy` makes in it copies both;  `copy` then moves the account
+         * to the second.  The paths are outside the tree:  its root is
+         * the corpus account's at 0770, which these users cannot pass. */
+        let (_, a_uid, a_gid) = passwd_entry(COPY_USERS.0)?;
+        std::fs::create_dir_all(copy_paths_root(env))
+            .map_err(|e| format!("cannot create {}: {e}", copy_paths_root(env).display()))?;
+        for (name, by_name, key, _) in COPY_ACCOUNTS {
+            if nsfs_cli(env, &["account", "status", "--name", name]).is_ok() {
+                println!("         account {name:?} already present");
+                continue;
+            }
+            let before = copy_path(env, name, "before");
+            account_dir(env, &before, a_uid, a_gid)?;
+            let b = before.display().to_string();
+            let (a_uid_s, a_gid_s) = (a_uid.to_string(), a_gid.to_string());
+            let mut args = vec!["account", "add", "--name", name];
+            if by_name {
+                args.extend(["--user", COPY_USERS.0]);
+            } else {
+                args.extend(["--uid", &a_uid_s, "--gid", &a_gid_s]);
+            }
+            args.extend(["--new_buckets_path", &b,
+                         "--access_key", key, "--secret_key", COPY_SECRET]);
+            nsfs_cli(env, &args)?;
+            println!("         account {name:?} created as {} ({}), buckets in {b}",
+                     COPY_USERS.0, if by_name { "by name" } else { "numeric" });
         }
     }
 
@@ -1433,6 +1471,177 @@ fn groups_step(env: &Env) -> Result<(), String> {
     Ok(())
 }
 
+/// Where the `copy` accounts' buckets go:  under the work directory,
+/// not the tree, whose root its users cannot pass.
+fn copy_paths_root(env: &Env) -> PathBuf {
+    env.work.join("copy-paths")
+}
+
+/// Where a `copy` account's buckets go, before and after it is moved.
+fn copy_path(env: &Env, account: &str, when: &str) -> PathBuf {
+    copy_paths_root(env).join(format!("{account}-{when}"))
+}
+
+/// The credential `copy` recorded for an account's IAM user.
+fn copy_credentials(env: &Env, account: &str) -> PathBuf {
+    env.work.join(format!("{account}-user-credentials"))
+}
+
+/// A user whose account moved after the user was made (I9).
+///
+/// NooBaa's CreateUser copies the account's `nsfs_account_config`, and
+/// nothing updates the copy, so a user made before `account update`
+/// keeps the old uid, gid or name and the old new_buckets_path, and
+/// NooBaa serves it from that copy.  Against NooBaa, before `stop`:
+/// make the user, move the account from `rgwcopya` to `rgwcopyb` and a
+/// second path, and check that a bucket the user then creates lands
+/// under the first path, owned by `rgwcopya` -- NooBaa's behaviour,
+/// which is what the rest is held to.  Against RGW, after `role-rgw`:
+/// the same, expecting NooBaa's answer with
+/// rgw_nsfs_user_identity_override on and the account's -- `rgwcopyb`,
+/// the second path -- with it off.  Both forms:  a numeric account and
+/// an nsswitch-resolved one.  Under `impersonate` only:  otherwise every
+/// file is the gateway's and the owner discriminates nothing.
+fn copy_step(env: &Env) -> Result<(), String> {
+    if !env.impersonate {
+        println!("copy     not impersonating;  every file is the gateway's, so nothing to check");
+        return Ok(());
+    }
+    let noobaa = running(env).is_some();
+    let (_, a_uid, a_gid) = passwd_entry(COPY_USERS.0)?;
+    let (_, b_uid, b_gid) = passwd_entry(COPY_USERS.1)?;
+    let s3 = |port: u16, ak: &str, sk: &str, method: &str, path: &str|
+              -> Result<u16, String> {
+        let url = format!("http://127.0.0.1:{port}/{path}");
+        Ok(curl(&["-X", method, "--aws-sigv4", "aws:amz:us-east-1:s3",
+                  "--user", &format!("{ak}:{sk}"),
+                  "--data-binary", if method == "PUT" && path.contains('/') {
+                      "copy probe" } else { "" }, &url])?.0)
+    };
+    /* where a bucket landed, and whose its object is;  asked as root,
+     * since the directories are the copy users' at 0770 and the corpus
+     * account cannot search them */
+    let landed = |bucket: &str, under: &Path| -> Result<(u32, u32), String> {
+        let dir = under.join(bucket);
+        let is_dir = privileged(env, "test").arg("-d").arg(&dir).status()
+            .map(|s| s.success()).unwrap_or(false);
+        if !is_dir {
+            return Err(format!("{} is not where {bucket} was made", dir.display()));
+        }
+        file_owner(env, &dir.join("k"))
+    };
+
+    if noobaa {
+        for (name, by_name, key, user) in COPY_ACCOUNTS {
+            /* the user, as the account */
+            if iam_call_as(env, key, COPY_SECRET,
+                           &[("Action", "GetUser"), ("UserName", user)]).is_err() {
+                iam_call_as(env, key, COPY_SECRET,
+                            &[("Action", "CreateUser"), ("UserName", user)])?;
+            }
+            let body = iam_call_as(env, key, COPY_SECRET,
+                                   &[("Action", "CreateAccessKey"), ("UserName", user)])?;
+            let (Some(ak), Some(sk)) = (xml_tag(&body, "AccessKeyId"),
+                                        xml_tag(&body, "SecretAccessKey")) else {
+                return Err(format!("CreateAccessKey for {user} answered without a key:\n{body}"));
+            };
+            std::fs::write(copy_credentials(env, name),
+                           format!("access_key={ak}\nsecret_key={sk}\n"))
+                .map_err(|e| format!("cannot record {user}'s key: {e}"))?;
+
+            /* the account moves;  the user's copy does not */
+            let after = copy_path(env, name, "after");
+            account_dir(env, &after, b_uid, b_gid)?;
+            let a = after.display().to_string();
+            let (b_uid_s, b_gid_s) = (b_uid.to_string(), b_gid.to_string());
+            let mut args = vec!["account", "update", "--name", name];
+            if by_name {
+                args.extend(["--user", COPY_USERS.1]);
+            } else {
+                args.extend(["--uid", &b_uid_s, "--gid", &b_gid_s]);
+            }
+            args.extend(["--new_buckets_path", &a]);
+            nsfs_cli(env, &args)?;
+
+            /* and the user, served from its copy */
+            let bucket = format!("{name}-noobaa");
+            let st = s3(env.port, &ak, &sk, "PUT", &bucket)?;
+            if st != 200 {
+                return Err(format!("NooBaa refused {user} CreateBucket {bucket}:  {st}"));
+            }
+            let st = s3(env.port, &ak, &sk, "PUT", &format!("{bucket}/k"))?;
+            if st != 200 {
+                return Err(format!("NooBaa refused {user} a write to {bucket}:  {st}"));
+            }
+            let owner = landed(&bucket, &copy_path(env, name, "before"))?;
+            if owner != (a_uid, a_gid) {
+                return Err(format!("NooBaa wrote {user}'s object as {}:{}, not as its \
+                                    copy's {} ({a_uid}:{a_gid})", owner.0, owner.1, COPY_USERS.0));
+            }
+            println!("copy     noobaa:  {user} of {name} ({}) kept {} after the \
+                      account moved to {}:  its bucket under the first path, its \
+                      object {a_uid}:{a_gid}",
+                     if by_name { "by name" } else { "numeric" }, COPY_USERS.0, COPY_USERS.1);
+        }
+        return Ok(());
+    }
+
+    /* RGW:  which the user runs as is the override's */
+    let admin = format!("{}:{}", env.rgw_admin_key, env.rgw_admin_secret);
+    let on = reported_user_identity_override(env, &admin)
+        .ok_or("the gateway does not report rgw_nsfs_user_identity_override")?;
+    let iam = format!("http://127.0.0.1:{}/", env.rgw_port);
+    for (name, by_name, key, user) in COPY_ACCOUNTS {
+        let creds = std::fs::read_to_string(copy_credentials(env, name))
+            .map_err(|e| format!("no key recorded for {user}: {e}"))?;
+        let field = |k: &str| creds.lines()
+            .find_map(|l| l.strip_prefix(&format!("{k}=")).map(str::to_string))
+            .unwrap_or_default();
+        let (ak, sk) = (field("access_key"), field("secret_key"));
+        /* An RGW IAM user has no rights without a policy, where NooBaa
+         * grants one implicitly over its account's buckets;  the grant
+         * is set-up, not what is tested */
+        let policy = r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}"#;
+        let (st, body) = curl(&["--aws-sigv4", "aws:amz:us-east-1:iam",
+            "--user", &format!("{key}:{COPY_SECRET}"),
+            "--data-urlencode", "Action=PutUserPolicy",
+            "--data-urlencode", &format!("UserName={user}"),
+            "--data-urlencode", "PolicyName=standup-copy",
+            "--data-urlencode", &format!("PolicyDocument={policy}"),
+            "--data-urlencode", "Version=2010-05-08", &iam])?;
+        if st != 200 {
+            return Err(format!("RGW refused PutUserPolicy on {user}:  {st}\n{body}"));
+        }
+        let bucket = format!("{name}-rgw");
+        let st = s3(env.rgw_port, &ak, &sk, "PUT", &bucket)?;
+        if st != 200 {
+            return Err(format!("RGW refused {user} CreateBucket {bucket}:  {st}"));
+        }
+        let st = s3(env.rgw_port, &ak, &sk, "PUT", &format!("{bucket}/k"))?;
+        if st != 200 {
+            return Err(format!("RGW refused {user} a write to {bucket}:  {st}"));
+        }
+        let (want_path, want_ids, who) = if on {
+            (copy_path(env, name, "before"), (a_uid, a_gid), "its own row, as NooBaa")
+        } else {
+            (copy_path(env, name, "after"), (b_uid, b_gid), "its account's row")
+        };
+        let owner = landed(&bucket, &want_path)?;
+        if owner != want_ids {
+            return Err(format!("with the user identity override {} RGW wrote {user}'s \
+                                object as {}:{}, not as {who} ({}:{})",
+                               if on { "on" } else { "off" }, owner.0, owner.1,
+                               want_ids.0, want_ids.1));
+        }
+        println!("copy     rgw:  {user} of {name} ({}) runs as {who}, the user identity \
+                  override {}:  its bucket under {}, its object {}:{}",
+                 if by_name { "by name" } else { "numeric" },
+                 if on { "on" } else { "off" }, want_path.display(),
+                 want_ids.0, want_ids.1);
+    }
+    Ok(())
+}
+
 /// A user's name, uid and primary gid from nsswitch, as `getent passwd`
 /// returns them.
 fn passwd_entry(user: &str) -> Result<(String, u32, u32), String> {
@@ -1560,12 +1769,18 @@ fn iam_user_key(env: &Env) -> Result<Option<(String, String)>, String> {
 
 /// One IAM action against NooBaa, signed as the account.
 fn iam_call(env: &Env, params: &[(&str, &str)]) -> Result<String, String> {
+    iam_call_as(env, &env.access_key, &env.secret_key, params)
+}
+
+/// One IAM action against NooBaa, signed with the given key.
+fn iam_call_as(env: &Env, ak: &str, sk: &str, params: &[(&str, &str)])
+               -> Result<String, String> {
     let mut form: Vec<String> = params.iter().map(|(k, v)| format!("{k}={v}")).collect();
     form.push("Version=2010-05-08".into());
     let (status, body) = curl(&[
         "-k",
         "--aws-sigv4", "aws:amz:us-east-1:iam",
-        "--user", &format!("{}:{}", env.access_key, env.secret_key),
+        "--user", &format!("{ak}:{sk}"),
         "--data", &form.join("&"),
         &format!("https://127.0.0.1:{}/", env.iam_port),
     ])?;
@@ -2353,7 +2568,7 @@ fn conversion(env: &Env) -> Result<(), String> {
      * the NooBaa build rather than at `import` and `adopt`, by when a
      * sudo ticket taken beforehand has expired. */
     preflight_rgw(ceph_build)?;
-    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 23] = [
+    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 25] = [
         ("pin", &pin),
         ("worktree", &worktree),
         ("patch", &patch),
@@ -2367,6 +2582,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("schema-agreement", &schema_agreement),
         ("nsswitch noobaa", &nsswitch_step),
         ("groups noobaa", &groups_step),
+        ("copy noobaa", &copy_step),
         ("stop", &stop),
         ("damage", &damage),
         ("import", &|e| adopt(e, "import")),
@@ -2377,6 +2593,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("role-rgw", &role_rgw),
         ("nsswitch rgw", &nsswitch_step),
         ("groups rgw", &groups_step),
+        ("copy rgw", &copy_step),
     ];
     for (i, (name, step)) in steps.iter().enumerate() {
         println!("\n==> conversion {}/{}:  {name}", i + 1, steps.len());
@@ -2660,6 +2877,19 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
+    /* the label is a checked fact:  the gateway says which it runs */
+    match reported_user_identity_override(env, &admin) {
+        Some(on) if on == env.user_identity_override => {
+            println!("{tag} user identity override {}, as the gateway reports",
+                     if on { "on" } else { "off" });
+        }
+        reported => {
+            return Err(format!(
+                "user_identity_override is {} here, and the gateway reports {}",
+                env.user_identity_override,
+                reported.map(|b| b.to_string()).unwrap_or_else(|| "nothing".into())));
+        }
+    }
     /* A tree whose adoption is complete has nothing left to import or
      * adopt, and the gateway refuses every command against it. */
     let (_, body) = rgw_call(&admin, "DELETE", &hint)?;
@@ -2780,6 +3010,18 @@ const GROUPS_ACCOUNTS: [(&str, &str, &str); 2] = [
 const GROUPS_SECRET: &str = "adoptiongroupssecretkeyadoptiongroupssec";
 /// The `groups` step's bucket.  Not a corpus bucket.
 const GROUPS_BUCKET: &str = "groups";
+/// The `copy` step's fixture users (I9), `rgw-vstart.sh`'s own for it:
+/// in no gating group, and carried by no other test's rows.
+const COPY_USERS: (&str, &str) = ("rgwcopya", "rgwcopyb");
+/// The `copy` step's accounts (I9):  NooBaa name, whether it is
+/// nsswitch-resolved (`--user`) or numeric, its access key, and the IAM
+/// user made in it.  Each starts as `rgwcopya` and is moved to `rgwcopyb`
+/// after its user is made, so the user's copy keeps `rgwcopya`.
+const COPY_ACCOUNTS: [(&str, bool, &str, &str); 2] = [
+    ("adoption-copy", false, "ADOPTIONCOPYACCESS01", "copy-user"),
+    ("adoption-copy-dn", true, "ADOPTIONCOPYDNACCES1", "copy-user-dn"),
+];
+const COPY_SECRET: &str = "adoptioncopysecretkeyadoptioncopysecretk";
 /// The nsswitch-resolved account's bucket.  Not a corpus bucket.
 const NSSWITCH_BUCKET: &str = "nsswitch";
 
@@ -3072,14 +3314,36 @@ fn nsfs_cli(env: &Env, args: &[&str]) -> Result<String, String> {
 /// with vstart's users and capabilities but not its fixture, which
 /// would write into the tree NooBaa wrote.
 fn rgw_identity_opts(env: &Env) -> Vec<String> {
-    if !env.impersonate {
-        return vec![];
+    let mut opts: Vec<String> = Vec::new();
+    if env.impersonate {
+        /* the store `config` writes under `impersonate` has NooBaa's
+         * dynamic groups on, and the import refuses a gateway without
+         * them */
+        opts.extend(["--with-impersonation".into(), "--no-fixture".into(),
+                     "--access-model".into(), env.access_model.clone(),
+                     "-o".into(),
+                     "rgw_nsfs_dynamic_supplemental_groups=true".into()]);
     }
-    /* the store `config` writes under `impersonate` has NooBaa's dynamic
-     * groups on, and the import refuses a gateway without them */
-    vec!["--with-impersonation".into(), "--no-fixture".into(),
-         "--access-model".into(), env.access_model.clone(),
-         "-o".into(), "rgw_nsfs_dynamic_supplemental_groups=true".into()]
+    if env.user_identity_override {
+        opts.push("--user-identity-override".into());
+    }
+    opts
+}
+
+/// The gateway's own report of `rgw_nsfs_user_identity_override`, from
+/// `GET /admin/features`.  `None` for a gateway that does not report it.
+fn reported_user_identity_override(env: &Env, admin: &str) -> Option<bool> {
+    let (status, body) = rgw_call(admin, "GET",
+        &format!("http://127.0.0.1:{}/admin/features", env.rgw_port)).ok()?;
+    if status != 200 {
+        return None;
+    }
+    let v = serde_json::from_str::<serde_json::Value>(&body).ok()?;
+    match v.get("features")?.get("user_identity_override")? {
+        serde_json::Value::Bool(b) => Some(*b),
+        serde_json::Value::String(s) => Some(s == "true"),
+        _ => None,
+    }
 }
 
 /// `program` as root under `impersonate`, where NooBaa is root as an

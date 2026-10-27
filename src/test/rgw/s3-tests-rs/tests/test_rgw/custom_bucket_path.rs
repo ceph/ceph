@@ -19,6 +19,11 @@ use s3_tests_rs::fixtures::{get_new_bucket_name, TestGuard};
 const HEADER: &str = "x-noobaa-custom-bucket-path";
 /* the uid this module's user is bound to under impersonation */
 const UID_CUSTOMPATH: &str = "70101";
+/* I9's fixture users, `rgw-vstart.sh`'s `rgwcopya` and `rgwcopyb`:  no
+ * other test's rows carry their uids, so the override test's rows cannot
+ * disagree with another's on a uid a file names */
+const UID_COPY_A: &str = "70109";
+const UID_COPY_B: &str = "70110";
 
 /// `None` from the accessor means unknown, so skip rather than assert.
 async fn nsfs_only() -> bool {
@@ -177,4 +182,139 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
                "a custom path the allowlist admits, which its owner may \
                 write, was denied");
     assert_eq!(outside, 403, "a custom path outside the allowlist was admitted");
+}
+
+/// I9:  an account user's own allowlist admits a custom path under
+/// `rgw_nsfs_user_identity_override`, as NooBaa checks the requesting
+/// record's;  without it the account's does.  The user's row admits one
+/// location and the account's another, so each setting admits exactly
+/// one of the two.  The test reads the gateway's setting and expects
+/// accordingly, so it passes under either when the gateway is right.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
+#[cfg_attr(feature = "fails_on_rados", ignore = "fails on rados")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "fails on posix")]
+#[tokio::test]
+async fn test_an_account_users_own_allowlist_follows_the_override() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let impersonating = feature_bool("impersonate").await == Some(true);
+    let overriding = feature_bool("user_identity_override").await == Some(true);
+    eprintln!("user identity override {}", if overriding { "on" } else { "off" });
+    let cfg = s3_tests_rs::config::get_config();
+    let Some(acct) = s3_tests_rs::fixtures::PrivateAccount::create("upath").await else {
+        eprintln!("could not make this test's own account");
+        return;
+    };
+    let root = &acct.root;
+    let name = format!("{}upathuser", cfg.iam_name_prefix);
+    let _ = root.delete_user_policy().user_name(&name).policy_name("UpathAll")
+        .send().await;
+    if let Ok(keys) = root.list_access_keys().user_name(&name).send().await {
+        for k in keys.access_key_metadata() {
+            if let Some(id) = k.access_key_id() {
+                let _ = root.delete_access_key().user_name(&name)
+                    .access_key_id(id).send().await;
+            }
+        }
+    }
+    let _ = root.delete_user().user_name(&name).send().await;
+    let created = root.create_user().user_name(&name).path(&cfg.iam_path_prefix)
+        .send().await.expect("create_user");
+    let me = created.user().unwrap().user_id().to_string();
+    let ak = root.create_access_key().user_name(&name).send().await
+        .expect("create_access_key");
+    let k = ak.access_key().unwrap();
+    let client = s3_tests_rs::client::build_s3_client(k.access_key_id(),
+                                                      k.secret_access_key());
+    root.put_user_policy().user_name(&name).policy_name("UpathAll")
+        .policy_document(r#"{"Version":"2012-10-17","Statement":{"Effect":"Allow","Action":"*","Resource":"*"}}"#)
+        .send().await.expect("put_user_policy");
+
+    /* a row each, the user's and the account's, with ids under
+     * impersonation so each can be checked for access to its location */
+    let bind = |who: &str, uid: &'static str| {
+        let who = who.to_string();
+        async move {
+            let mut p = vec![("identity", who.as_str())];
+            if impersonating {
+                p.extend([("uid", uid), ("gid", uid)]);
+            }
+            let r = nsfs_put_identity(&p).await;
+            assert_eq!(r.status, 200, "binding {who}: {}", r.body);
+        }
+    };
+    bind(&acct.id, UID_COPY_B).await;
+    bind(&me, UID_COPY_A).await;
+
+    /* a location each, made as each by the `unplaced-directory` hint */
+    let make = |owner: String| async move {
+        let loc = get_new_bucket_name();
+        let mut p = vec![("op", "create".to_string()), ("name", loc.clone()),
+                         ("mode", "0770".to_string())];
+        if impersonating {
+            p.push(("as", owner));
+        }
+        let pr: Vec<(&str, &str)> = p.iter().map(|(a, b)| (*a, b.as_str())).collect();
+        let made = driver_hint_results("unplaced-directory", &pr).await
+            .expect("could not make a location");
+        (loc, made.get("path").cloned().expect("the location's path"))
+    };
+    let (uloc, upath) = make(me.clone()).await;
+    let (aloc, apath) = make(acct.id.clone()).await;
+    for (who, uid, path) in [(acct.id.as_str(), UID_COPY_B, apath.as_str()),
+                             (me.as_str(), UID_COPY_A, upath.as_str())] {
+        let mut p = vec![("identity", who), ("custom_bucket_path_allowed_list", path)];
+        if impersonating {
+            p.extend([("uid", uid), ("gid", uid)]);
+        }
+        let r = nsfs_put_identity(&p).await;
+        assert_eq!(r.status, 200, "setting {who}'s allowlist: {}", r.body);
+    }
+
+    let try_at = |path: String| {
+        let client = client.clone();
+        async move {
+            let b = get_new_bucket_name();
+            let st = create_at(&client, &b, &format!("{path}/custom-{b}")).await;
+            if st == 200 {
+                let _ = client.delete_bucket().bucket(&b).send().await;
+            }
+            st
+        }
+    };
+    let at_user = try_at(upath.clone()).await;
+    let at_account = try_at(apath.clone()).await;
+
+    for (loc, owner) in [(uloc, me.clone()), (aloc, acct.id.clone())] {
+        let mut p = vec![("op", "remove".to_string()), ("name", loc)];
+        if impersonating {
+            p.push(("as", owner));
+        }
+        let pr: Vec<(&str, &str)> = p.iter().map(|(a, b)| (*a, b.as_str())).collect();
+        let _ = driver_hint_results("unplaced-directory", &pr).await;
+    }
+    nsfs_delete_identity(&me).await;
+    nsfs_delete_identity(&acct.id).await;
+    let _ = root.delete_user_policy().user_name(&name).policy_name("UpathAll")
+        .send().await;
+    let _ = root.delete_access_key().user_name(&name)
+        .access_key_id(k.access_key_id()).send().await;
+    let _ = root.delete_user().user_name(&name).send().await;
+
+    if overriding {
+        assert_eq!(at_user, 200, "under the override the user's own allowlist \
+                                  did not admit its path");
+        assert_eq!(at_account, 403, "under the override the account's \
+                                     allowlist still admitted");
+    } else {
+        assert_eq!(at_user, 403, "without the override the user's own allowlist \
+                                  admitted a path");
+        assert_eq!(at_account, 200, "without the override the account's \
+                                     allowlist did not admit its path");
+    }
 }

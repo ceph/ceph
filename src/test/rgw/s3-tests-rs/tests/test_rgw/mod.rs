@@ -26,4 +26,5 @@ mod nsfs_symlink;
 mod object_lock;
 mod quota;
 mod reserved_names;
+mod role_identity;
 mod root_object;

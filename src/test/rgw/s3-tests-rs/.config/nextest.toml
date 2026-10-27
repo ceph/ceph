@@ -116,7 +116,7 @@ default-filter = 'test(sts::)'
 #
 [profile.baseline]
 test-threads = 8
-default-filter = 'all() & !test(lifecycle::) & !test(bucket_logging::) & !test(stress::) & !test(=impersonation::test_data_follows_the_access_model) & !test(dynamic_groups::)'
+default-filter = 'all() & !test(lifecycle::) & !test(bucket_logging::) & !test(stress::) & !test(=impersonation::test_data_follows_the_access_model) & !test(dynamic_groups::) & !test(role_identity::)'
 
 [[profile.baseline.overrides]]
 filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
@@ -141,6 +141,13 @@ test-threads = 1
 # baseline, against the same gateway.
 [profile.dynamic-groups]
 default-filter = 'test(dynamic_groups::)'
+test-threads = 1
+
+# The role identity override's test (I9), alone:  the override is
+# daemon-global and the test switches it.  After baseline, against the
+# same gateway.
+[profile.role-identity]
+default-filter = 'test(role_identity::)'
 test-threads = 1
 
 # The membership test alone, run by validate.rs again after
