@@ -52,12 +52,14 @@ class MetadataHandler : public RGWMetadataHandler {
   }
 
   int get(std::string& entry, RGWMetadataObject** obj,
-          optional_yield y, const DoutPrefixProvider* dpp) override
+          optional_yield y, const DoutPrefixProvider* dpp,
+          boost::optional<obj_version> expected_version = boost::none) override
   {
     std::list<rados::cls::otp::otp_info_t> devices;
     RGWObjVersionTracker objv;
     ceph::real_time mtime;
 
+    // expected_version is unused: cls_otp reads bypass the sysobj cache
     int r = mfa.list_mfa(dpp, entry, &devices, &objv, &mtime, y);
     if (r < 0) {
       return r;

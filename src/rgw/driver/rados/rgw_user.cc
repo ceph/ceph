@@ -2719,7 +2719,8 @@ class RGWUserMetadataHandler : public RGWMetadataHandler {
   }
 
   int get(std::string& entry, RGWMetadataObject** obj, optional_yield y,
-          const DoutPrefixProvider *dpp) override;
+          const DoutPrefixProvider *dpp,
+          boost::optional<obj_version> expected_version = boost::none) override;
   int put(std::string& entry, RGWMetadataObject* obj,
           RGWObjVersionTracker& objv_tracker,
           optional_yield y, const DoutPrefixProvider* dpp,
@@ -2741,7 +2742,8 @@ class RGWUserMetadataHandler : public RGWMetadataHandler {
 };
 
 int RGWUserMetadataHandler::get(std::string& entry, RGWMetadataObject **obj,
-                                optional_yield y, const DoutPrefixProvider *dpp)
+                                optional_yield y, const DoutPrefixProvider *dpp,
+                                boost::optional<obj_version> expected_version)
 {
   RGWUserCompleteInfo uci;
   RGWObjVersionTracker objv_tracker;
@@ -2751,7 +2753,7 @@ int RGWUserMetadataHandler::get(std::string& entry, RGWMetadataObject **obj,
 
   int ret = svc_user->read_user_info(user, &uci.info, &objv_tracker,
                                      &mtime, nullptr, &uci.attrs,
-                                     y, dpp);
+                                     y, dpp, expected_version);
   if (ret < 0) {
     return ret;
   }

@@ -126,7 +126,8 @@ public:
     return new RGWMetadataObject;
   }
 
-  int get(string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {
+  int get(string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp,
+          boost::optional<obj_version> expected_version = boost::none) override {
     return -ENOTSUP;
   }
 
@@ -263,7 +264,9 @@ int RGWMetadataManager::find_handler(const string& metadata_key, RGWMetadataHand
 
 }
 
-int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y, const DoutPrefixProvider *dpp)
+int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y,
+                            const DoutPrefixProvider *dpp,
+                            boost::optional<obj_version> expected_version)
 {
   RGWMetadataHandler *handler;
   string entry;
@@ -274,7 +277,7 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y
 
   RGWMetadataObject *obj;
 
-  ret = handler->get(entry, &obj, y, dpp);
+  ret = handler->get(entry, &obj, y, dpp, expected_version);
   if (ret < 0) {
     return ret;
   }

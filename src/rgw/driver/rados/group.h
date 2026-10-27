@@ -18,10 +18,12 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <boost/optional.hpp>
 #include "include/buffer_fwd.h"
 #include "include/rados/librados_fwd.hpp"
 #include "common/async/yield_context.h"
 #include "common/ceph_time.h"
+#include "cls/version/cls_version_types.h"
 
 class DoutPrefixProvider;
 struct rgw_raw_obj;
@@ -52,7 +54,8 @@ int read(const DoutPrefixProvider* dpp,
          RGWGroupInfo& info,
          std::map<std::string, ceph::buffer::list>& attrs,
          ceph::real_time& mtime,
-         RGWObjVersionTracker& objv);
+         RGWObjVersionTracker& objv,
+         boost::optional<obj_version> expected_version = boost::none);
 
 /// Read group info by name
 int read_by_name(const DoutPrefixProvider* dpp,

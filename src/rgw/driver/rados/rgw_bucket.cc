@@ -2465,7 +2465,8 @@ class RGWBucketMetadataHandler : public RGWMetadataHandler {
   }
 
   int get(std::string& entry, RGWMetadataObject** obj, optional_yield y,
-          const DoutPrefixProvider *dpp) override;
+          const DoutPrefixProvider *dpp,
+          boost::optional<obj_version> expected_version = boost::none) override;
   int put(std::string& entry, RGWMetadataObject* obj,
           RGWObjVersionTracker& objv_tracker,
           optional_yield y, const DoutPrefixProvider* dpp,
@@ -2487,7 +2488,8 @@ class RGWBucketMetadataHandler : public RGWMetadataHandler {
 };
 
 int RGWBucketMetadataHandler::get(std::string& entry, RGWMetadataObject** obj,
-                                  optional_yield y, const DoutPrefixProvider *dpp)
+                                  optional_yield y, const DoutPrefixProvider *dpp,
+                                  boost::optional<obj_version> expected_version)
 {
   RGWObjVersionTracker ot;
   RGWBucketEntryPoint be;
@@ -2495,7 +2497,9 @@ int RGWBucketMetadataHandler::get(std::string& entry, RGWMetadataObject** obj,
   map<string, bufferlist> attrs;
 
   int ret = svc_bucket->read_bucket_entrypoint_info(entry, &be, &ot, &mtime,
-                                                    &attrs, y, dpp);
+                                                    &attrs, y, dpp,
+                                                    nullptr, boost::none,
+                                                    expected_version);
   if (ret < 0) {
     return ret;
   }
@@ -2980,7 +2984,8 @@ class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   }
 
   int get(std::string& entry, RGWMetadataObject** obj, optional_yield y,
-          const DoutPrefixProvider *dpp) override;
+          const DoutPrefixProvider *dpp,
+          boost::optional<obj_version> expected_version = boost::none) override;
   int put(std::string& entry, RGWMetadataObject* obj,
           RGWObjVersionTracker& objv_tracker,
           optional_yield y, const DoutPrefixProvider* dpp,
@@ -3002,12 +3007,15 @@ class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
 };
 
 int RGWBucketInstanceMetadataHandler::get(std::string& entry, RGWMetadataObject **obj,
-                                          optional_yield y, const DoutPrefixProvider *dpp)
+                                          optional_yield y, const DoutPrefixProvider *dpp,
+                                          boost::optional<obj_version> expected_version)
 {
   RGWBucketCompleteInfo bci;
   real_time mtime;
 
-  int ret = svc_bucket->read_bucket_instance_info(entry, &bci.info, &mtime, &bci.attrs, y, dpp);
+  int ret = svc_bucket->read_bucket_instance_info(entry, &bci.info, &mtime, &bci.attrs, y, dpp,
+                                                  nullptr, boost::none,
+                                                  expected_version);
   if (ret < 0) {
     return ret;
   }

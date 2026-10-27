@@ -18,8 +18,10 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <boost/optional.hpp>
 #include "include/rados/librados_fwd.hpp"
 #include "common/ceph_time.h"
+#include "cls/version/cls_version_types.h"
 
 class DoutPrefixProvider;
 class optional_yield;
@@ -40,7 +42,8 @@ int read_by_id(const DoutPrefixProvider* dpp, optional_yield y,
                std::string_view role_id, RGWRoleInfo& info,
                ceph::real_time* pmtime = nullptr,
                RGWObjVersionTracker* pobjv = nullptr,
-               rgw_cache_entry_info* pcache_info = nullptr);
+               rgw_cache_entry_info* pcache_info = nullptr,
+               boost::optional<obj_version> expected_version = boost::none);
 
 /// Read role info by name.
 int read_by_name(const DoutPrefixProvider* dpp, optional_yield y,

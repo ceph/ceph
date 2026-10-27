@@ -56,7 +56,8 @@ static int read_info(const DoutPrefixProvider* dpp, optional_yield y,
                      RGWSI_SysObj& sysobj, const rgw_raw_obj& obj,
                      RGWRoleInfo& info, ceph::real_time* pmtime,
                      RGWObjVersionTracker* pobjv,
-                     rgw_cache_entry_info* pcache_info)
+                     rgw_cache_entry_info* pcache_info,
+                     boost::optional<obj_version> expected_version = boost::none)
 {
   bufferlist bl;
   std::map<std::string, bufferlist> attrs;
@@ -64,7 +65,7 @@ static int read_info(const DoutPrefixProvider* dpp, optional_yield y,
   constexpr bool raw_attrs = true;
   int r = rgw_get_system_obj(&sysobj, obj.pool, obj.oid, bl, pobjv,
                              pmtime, y, dpp, &attrs, pcache_info,
-                             boost::none, raw_attrs);
+                             boost::none, raw_attrs, expected_version);
   if (r < 0) {
     return r;
   }
@@ -94,10 +95,12 @@ int read_by_id(const DoutPrefixProvider* dpp, optional_yield y,
                RGWSI_SysObj& sysobj, const RGWZoneParams& zone,
                std::string_view role_id, RGWRoleInfo& info,
                ceph::real_time* pmtime, RGWObjVersionTracker* pobjv,
-               rgw_cache_entry_info* pcache_info)
+               rgw_cache_entry_info* pcache_info,
+               boost::optional<obj_version> expected_version)
 {
   const rgw_raw_obj& obj = get_id_obj(zone, role_id);
-  return read_info(dpp, y, sysobj, obj, info, pmtime, pobjv, pcache_info);
+  return read_info(dpp, y, sysobj, obj, info, pmtime, pobjv, pcache_info,
+                   expected_version);
 }
 
 static int write_info(const DoutPrefixProvider* dpp, optional_yield y,
@@ -630,11 +633,12 @@ class MetadataHandler : public RGWMetadataHandler {
   }
 
   int get(std::string& entry, RGWMetadataObject** obj,
-          optional_yield y, const DoutPrefixProvider* dpp) override
+          optional_yield y, const DoutPrefixProvider* dpp,
+          boost::optional<obj_version> expected_version = boost::none) override
   {
     RGWRoleInfo info;
     int ret = read_by_id(dpp, y, sysobj, zone, entry, info,
-                         &info.mtime, &info.objv_tracker);
+                         &info.mtime, &info.objv_tracker, nullptr, expected_version);
     if (ret < 0) {
       return ret;
     }
