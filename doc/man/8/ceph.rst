@@ -1230,13 +1230,17 @@ Usage::
 
 Subcommand ``migrate`` migrates a pool's RADOS objects to a new pool. The new pool acquires
 the original pool's user-visible name. The original pool is renamed automatically and is by
-default not displayed to the user.
+default not displayed to the user. Parameters that are not given take their defaults, as for
+``create``. ``--inherit-params`` instead gives the new pool all of the original pool's settings,
+to copy every object to a new pool without changing the pool; it cannot currently be combined
+with any other parameter.
 
 Usage::
 
 	ceph osd pool migrate <poolname> {<int[0-]>} {<int[0-]>} {replicated|erasure}
 	{<erasure_code_profile>} {<rule>} {<int>} {--autoscale-mode=<on,off,warn>}
 	{--enable-ec-optimizations}
+        ceph osd pool migrate <poolname> --inherit-params
 
 Subcommand ``delete`` deletes pool.
 

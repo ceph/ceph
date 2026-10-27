@@ -7955,6 +7955,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
 			 force_create,
 			 std::nullopt,
 			 false, // enable_ec_optimizations
+                         false, // inherit_params
 			 &ss);
 
   if (ret < 0) {
@@ -8582,6 +8583,29 @@ int OSDMonitor::check_pg_num(int64_t pool,
   return 0;
 }
 
+// The settings of a pool that 'osd pool create' does not take, for
+// 'osd pool migrate --inherit-params'
+static void inherit_pool_settings(const pg_pool_t &src, pg_pool_t &p)
+{
+  constexpr uint64_t state_flags = pg_pool_t::FLAG_FULL |
+    pg_pool_t::FLAG_INCOMPLETE_CLONES | pg_pool_t::FLAG_FULL_QUOTA |
+    pg_pool_t::FLAG_NEARFULL | pg_pool_t::FLAG_BACKFILLFULL |
+    pg_pool_t::FLAG_SELFMANAGED_SNAPS | pg_pool_t::FLAG_POOL_SNAPS |
+    pg_pool_t::FLAG_CREATING;
+  p.flags = (p.flags & state_flags) | (src.flags & ~state_flags);
+  p.min_size = src.min_size;
+  p.stripe_width = src.stripe_width;
+  p.nonprimary_shards = src.nonprimary_shards;
+  p.peering_crush_bucket_count = src.peering_crush_bucket_count;
+  p.peering_crush_bucket_barrier = src.peering_crush_bucket_barrier;
+  p.peering_crush_mandatory_member = src.peering_crush_mandatory_member;
+  p.peering_crush_bucket_target = src.peering_crush_bucket_target;
+  p.quota_max_bytes = src.quota_max_bytes;
+  p.quota_max_objects = src.quota_max_objects;
+  p.opts = src.opts;
+  p.application_metadata = src.application_metadata;
+}
+
 /**
  * @param name The name of the new pool
  * @param crush_rule The crush rule to use. If <0, will use the system default
@@ -8600,6 +8624,7 @@ int OSDMonitor::check_pg_num(int64_t pool,
  * @param bool crimson indicates whether pool is a crimson pool
  * @param bool force_create if true, bypass the pg_num limit check
  * @param int64_t Optional ID of migration source pool
+ * @param bool inherit_params if true, copy the source pool's other settings
  * @param ss human readable error message, if any.
  *
  * @return 0 on success, negative errno on failure.
@@ -8623,6 +8648,7 @@ int OSDMonitor::prepare_new_pool(string& name,
                  bool force_create,
 				 const std::optional<int64_t> source_pool_id,
 				 bool enable_ec_optimizations,
+                                 bool inherit_params,
 				 ostream *ss)
 {
   if (crimson && pg_autoscale_mode.empty()) {
@@ -8926,6 +8952,9 @@ int OSDMonitor::prepare_new_pool(string& name,
     }
 
     const pg_pool_t *sp = &get_pg_pool(source_pool_id.value());
+    if (inherit_params) {
+      inherit_pool_settings(*sp, *pi);
+    }
     pg_pool_t *spi = pending_inc.get_new_pool(source_pool_id.value(), sp);
 
     dout(0) << "starting migration of pool " << source_pool_id.value() << dendl;
@@ -14474,6 +14503,31 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     string source_pool_name = "";
 
+    bool migrate_no_params = false;
+    if (is_migrate) {
+      migrate_no_params = !cmdmap.count("pg_num") &&
+                          !cmdmap.count("pgp_num") &&
+                          !cmdmap.count("pool_type") &&
+                          !cmdmap.count("erasure_code_profile") &&
+                          !cmdmap.count("rule") &&
+                          !cmdmap.count("expected_num_objects") &&
+                          !cmdmap.count("size") &&
+                          !cmdmap.count("pg_num_min") &&
+                          !cmdmap.count("pg_num_max") &&
+                          !cmdmap.count("autoscale_mode") &&
+                          !cmdmap.count("bulk") &&
+                          !cmdmap.count("target_size_bytes") &&
+                          !cmdmap.count("target_size_ratio") &&
+                          !cmdmap.count("crimson") &&
+                          !cmdmap.count("enable_ec_optimizations");
+    }
+    bool inherit_params = cmd_getval_or<bool>(cmdmap, "inherit_params", false);
+    if (inherit_params && !migrate_no_params) {
+      ss << "--inherit-params cannot be combined with other pool parameters";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+
     if (is_migrate) {
       // Shared guards for both migration paths
       bool experimental_enabled =
@@ -14622,39 +14676,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    bool migrate_no_params = false;
-    if (is_migrate) {
-      migrate_no_params = !cmdmap.count("pg_num") &&
-                          !cmdmap.count("pgp_num") &&
-                          !cmdmap.count("pool_type") &&
-                          !cmdmap.count("erasure_code_profile") &&
-                          !cmdmap.count("rule") &&
-                          !cmdmap.count("expected_num_objects") &&
-                          !cmdmap.count("size") &&
-                          !cmdmap.count("pg_num_min") &&
-                          !cmdmap.count("pg_num_max") &&
-                          !cmdmap.count("autoscale_mode") &&
-                          !cmdmap.count("bulk") &&
-                          !cmdmap.count("target_size_bytes") &&
-                          !cmdmap.count("target_size_ratio") &&
-                          !cmdmap.count("crimson") &&
-                          !cmdmap.count("enable_ec_optimizations");
-    }
-
     auto pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
     auto pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
     auto pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", 0);
     auto pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
 
     bool pg_fields_set = (pg_num != 0) || (pg_num_min != 0) || (pg_num_max != 0) || (pgp_num != 0);
-    if (source_pool && !pg_fields_set && (migrate_no_params || !is_migrate)) {
+    if (source_pool && !pg_fields_set && (inherit_params || !is_migrate)) {
       pg_num = source_pool->get_pg_num();
       pg_num_min = source_pool->get_pg_num_min();
       pg_num_max = source_pool->get_pg_num_max();
       pgp_num = pg_num;
     }
 
-    bool inherit_type = source_pool && (migrate_no_params || !is_migrate);
+    bool inherit_type = source_pool && (inherit_params || !is_migrate);
     default_type_str = inherit_type ? string(source_pool->get_type_name())
                                     : g_conf().get_val<string>("osd_pool_default_type");
     bool pool_type_explicit = cmd_getval(cmdmap, "pool_type", pool_type_str);
@@ -14691,11 +14726,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     // Inherit type-specific parameters from the source when:
     //   - osd pool create (with source) and types match, or
-    //   - osd pool migrate with no params given and types match.
-    bool types_match = source_pool && (migrate_no_params || !is_migrate) &&
+    //   - osd pool migrate --inherit-params and types match.
+    bool types_match = source_pool && (inherit_params || !is_migrate) &&
                        (static_cast<unsigned>(pool_type) == source_pool->get_type());
 
-    bool inherit_from_source = source_pool && (migrate_no_params || !is_migrate);
+    bool inherit_from_source = source_pool && (inherit_params || !is_migrate);
     int64_t default_expected_num_objects = inherit_from_source ? source_pool->expected_num_objects : 0;
     
     // Only inherit erasure code profile if pool types match (and source is EC)
@@ -14812,17 +14847,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool force_create = false;
     cmd_getval(cmdmap, "force_pg_limit", force_create);
 
-    // For osd pool migrate with no parameters: the new pool is a full copy of
-    // the source pool, so the migration would be pointless.  Warn the user and
-    // require --yes-i-really-mean-it to proceed.
-    if (migrate_no_params && !confirm) {
-      ss << "The target pool would be identical to the source pool '" << poolstr << "'. "
-         << "No migration is necessary. If you still want to perform this pointless migration, "
-         << "add the --yes-i-really-mean-it flag.";
-      err = -EPERM;
-      goto reply_no_propose;
-    }
-
     err = prepare_new_pool(poolstr,
                            -1, // default crush rule
                            rule_name,
@@ -14837,6 +14861,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                force_create,
 			   source_pool_id,
 			   enable_ec_optimizations,
+                           inherit_params,
 			   &ss);
     if (err < 0) {
       switch(err) {

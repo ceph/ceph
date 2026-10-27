@@ -852,6 +852,9 @@ public:
     std::ostringstream oss;
     messaging::osd::OSDPoolMigrateRequest pool_mig_request{source_name, pg_num,
       enable_ec_optimizations, true};
+    if (!pg_num && !enable_ec_optimizations) {
+      pool_mig_request.inherit_params = true;
+    }
     encode_json("OSDPoolMigrateRequest", pool_mig_request, formatter.get());
     formatter.get()->flush(oss);
 
@@ -898,8 +901,8 @@ public:
                          : initial_pg_num;
         }
         // Only set enable_ec_optimizations when the test explicitly requests
-        // it; otherwise leave it unset so migrate_no_params stays true and
-        // the mon inherits the source pool's EC type/profile.
+        // it; otherwise leave it unset so the migration inherits the source
+        // pool's EC type/profile.
         std::optional<bool> req_ec_opts =
           migration_ec_opts ? std::optional<bool>{true} : std::nullopt;
         cout_prefix() << __func__ << " starting new pool migration on "

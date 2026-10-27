@@ -299,6 +299,46 @@ function TEST_pool_both_prio_no_pos() {
    check_pool_priority $dir 20 "2 - 36" "-10 -9 -8 -8 -7 -7 -6 -6 -5 -5 -4 -3 -3 -2 -2 -1 -1 0 0 2 4" || return 1
 }
 
+# A migrate with no options creates the pool that a create with no options
+# would; --inherit-params keeps every setting of the source and takes no
+# other options
+function TEST_pool_migrate_inherit_params() {
+  local dir=$1
+
+  run_mon $dir a || return 1
+  ceph osd erasure-code-profile set ec-prof plugin=isa k=2 m=1 crush-failure-domain=osd || return 1
+  ceph config set global enable_experimental_unrecoverable_data_corrupting_features poolmigration || return 1
+  ceph osd set-require-min-compat-client umbrella || return 1
+
+  ceph osd pool create defaulted 4 4 erasure ec-prof || return 1
+  ceph osd pool migrate defaulted || return 1
+
+  ceph config set mon osd_pool_default_flag_ec_optimizations true || return 1
+  ceph osd pool create inherited 4 4 erasure ec-prof || return 1
+  ceph config set mon osd_pool_default_flag_ec_optimizations false || return 1
+  ceph osd pool set inherited allow_ec_overwrites true || return 1
+  ceph osd pool set inherited min_size 2 || return 1
+  ceph osd pool set inherited nodelete true || return 1
+  ceph osd pool set inherited noscrub true || return 1
+  ceph osd pool set inherited compression_mode aggressive || return 1
+  ceph osd pool application enable inherited rbd || return 1
+  ceph osd pool set-quota inherited max_objects 1000 || return 1
+  expect_failure $dir "cannot be combined" \
+    ceph osd pool migrate inherited --inherit-params --size 2 || return 1
+  ceph osd pool migrate inherited --inherit-params || return 1
+
+  ceph osd dump --format=json > $dir/osdmap.json || return 1
+  pool_settings() {
+    jq -S ".pools[] | select(.pool_name == \"$1\") |
+      del(.pool, .pool_name, .create_time, .last_change, .migration_src,
+          .migration_target, .migration_root, .migrating_pgs,
+          .lowest_migrated_pg)" $dir/osdmap.json
+  }
+  test "$(pool_settings defaulted | jq .type)" = 1 || return 1
+  test "$(pool_settings inherited | jq -r .erasure_code_profile)" = ec-prof || return 1
+  diff <(pool_settings .migrate-2) <(pool_settings inherited) || return 1
+}
+
 function TEST_osd_pool_create_migrate_from() {
   local dir=$1
 
@@ -349,7 +389,7 @@ function TEST_osd_pool_create_migrate_from() {
 
   #migrate the pool, the new pool takes over the name and the old pool is
   #renamed to .migrate-1
-  ceph osd pool migrate $SRC_POOL_NAME || return 1
+  ceph osd pool migrate $SRC_POOL_NAME --inherit-params || return 1
   TGT_POOL_NAME=$SRC_POOL_NAME
   SRC_POOL_NAME=".migrate-1"
    

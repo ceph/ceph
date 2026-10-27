@@ -570,6 +570,7 @@ private:
 		       bool force_create,
 		       const std::optional<int64_t> source_pool_id,
 		       bool enable_ec_optimizations,
+                       bool inherit_params,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 

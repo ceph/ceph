@@ -579,13 +579,13 @@ void SetUpMigrationTest(rados_t *cluster,
     ASSERT_EQ(0, rados_wait_for_latest_osdmap(*cluster));
   }
 
-  // Start Migration (no parameters = same-pool copy, requires --yes-i-really-mean-it).
+  // Start Migration (--inherit-params = same-pool copy).
   // After migration the pool retains src_pool_name; tgt_pool_name is set to the
   // same value so callers can open an ioctx on the new target pool by name.
   tgt_pool_name = src_pool_name;
   {
     std::string c = "{\"prefix\": \"osd pool migrate\", \"pool\": \"" + src_pool_name +
-      "\", \"yes_i_really_mean_it\": true}";
+      "\", \"inherit_params\": true}";
     const char *cmd[2] = { c.c_str(), 0 };
     char *outbuf, *outs;
     size_t outbuflen, outslen;

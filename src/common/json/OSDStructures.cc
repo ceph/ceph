@@ -197,6 +197,7 @@ void OSDPoolMigrateRequest::dump(Formatter* f) const {
   encode_json("pg_num", pg_num, f);
   encode_json("enable_ec_optimizations", enable_ec_optimizations, f);
   encode_json("yes_i_really_mean_it", yes_i_really_mean_it, f);
+  encode_json("inherit_params", inherit_params, f);
 }
 
 void OSDPoolMigrateRequest::decode_json(JSONObj* obj) {
@@ -204,6 +205,7 @@ void OSDPoolMigrateRequest::decode_json(JSONObj* obj) {
   JSONDecoder::decode_json("pg_num", pg_num, obj);
   JSONDecoder::decode_json("enable_ec_optimizations", enable_ec_optimizations, obj);
   JSONDecoder::decode_json("yes_i_really_mean_it", yes_i_really_mean_it, obj);
+  JSONDecoder::decode_json("inherit_params", inherit_params, obj);
 }
 
 void OSDSetRequest::dump(Formatter* f) const {

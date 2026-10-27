@@ -1200,7 +1200,8 @@ COMMAND("osd pool migrate "
 	"name=force_pg_limit,type=CephBool,req=false "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=crimson,type=CephBool,req=false "
-	"name=enable_ec_optimizations,type=CephBool,req=false ",
+	"name=enable_ec_optimizations,type=CephBool,req=false "
+        "name=inherit_params,type=CephBool,req=false ",
 	"migrate pool to a new pool while keeping the same name", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete "
 	"name=pool,type=CephPoolname "
