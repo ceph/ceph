@@ -462,6 +462,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Maximum number of OSD daemons upgraded in parallel.'
         ),
         Option(
+            'max_gateway_upgrades_per_pass',
+            type='int',
+            default=16,
+            min=0,
+            desc='Maximum number of gateway daemons (rgw, iscsi, nfs, nvmeof, smb) '
+            'upgraded in a single upgrade pass. For rgw, iscsi, nvmeof and smb this is '
+            'a per-daemon cap and a service larger than it is split across passes. nfs '
+            'daemons are batched by whole services instead, because restarting one nfs '
+            'daemon puts the rest of its service into a grace period, so a pass may '
+            'exceed this value when a single nfs service is larger than it.'
+        ),
+        Option(
             'pg_autoscale_during_upgrade',
             type='bool',
             default=False,
@@ -691,6 +703,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
             self.max_parallel_osd_upgrades = 16
+            self.max_gateway_upgrades_per_pass = 16
             self.device_enhanced_scan = False
             self.inventory_list_all = False
             self.cgroups_split = True
