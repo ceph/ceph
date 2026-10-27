@@ -2093,15 +2093,19 @@ void PGScrubber::emit_scrub_result(
         DEBUGDPP(" repaired invalid stats! ", pg);
         return false;
       }
-      foreach_scrub_maintained_stat(
- [deep, &pg_stats, &in_stats](
-   const auto &name, auto statptr, bool skip_for_shallow) {
-   if (deep || !skip_for_shallow) {
-     pg_stats.stats.sum.*statptr = in_stats.*statptr;
-   }
- });
-      // Check for any stat mismatch and, if found, emit the classic comprehensive
-      // "stat mismatch, got ..." log message matching PrimaryLogScrub.cc format.
+
+      // Step 1: detect a stat mismatch against the *current* pg_stats before
+      // any scrub-maintained fields are overwritten.  This mirrors classic OSD
+      // PrimaryLogScrub::_scrub_finish(), which increments m_shallow_errors
+      // (and m_fixed_count on repair) before the m_fixed_count == total_errors
+      // reconciliation.  Doing this first ensures:
+      //   a) foreach_scrub_maintained_stat (step 2) copies the already-correct
+      //      in_stats (mismatch included) into pg_stats, so the error shows up
+      //      on shallow scrubs too (fixes bug B).
+      //   b) the repair reconciliation (step 3) sees a total_errors and
+      //      m_fixed_count that both include the mismatch, so a repair that
+      //      fixes every object error plus the stat mismatch correctly zeroes
+      //      the counts and leaves the PG clean (fixes bug A).
       bool stat_mismatch = false;
       foreach_scrub_checked_stat(
         [&pg_stats, &in_stats, &stat_mismatch](
@@ -2137,8 +2141,16 @@ void PGScrubber::emit_scrub_result(
           ERRORDPP("{}", pg, mismatch_msg);
           pg.get_clog_error() << mismatch_msg;
           ++in_stats.num_shallow_scrub_errors;
+          ++in_stats.num_scrub_errors;
           if (m_is_repair) {
             ++m_fixed_count;
+            // Repair: write the corrected object/byte stats into pg_stats and
+            // clear the *_invalid flags, matching classic OSD's _scrub_finish()
+            // which calls update_stats(stats.stats = m_scrub_cstat, clear flags)
+            // inside the same if (m_is_repair) block (PrimaryLogScrub.cc:221-231).
+            // Without this, pg_stats retains the old (mismatched) num_objects,
+            // num_bytes, etc. until the next scrub, and the *_invalid flags
+            // remain set, suppressing stat-based PG state transitions.
             pg_stats.stats.sum = in_stats;
             pg_stats.dirty_stats_invalid = false;
             pg_stats.omap_stats_invalid = false;
@@ -2163,6 +2175,16 @@ void PGScrubber::emit_scrub_result(
         }
       }
 
+      // Step 2: copy scrub-maintained fields from in_stats (which now includes
+      // any mismatch error increment) into pg_stats.
+      foreach_scrub_maintained_stat(
+        [deep, &pg_stats, &in_stats](
+          const auto& /*name*/, auto statptr, bool skip_for_shallow) {
+          if (deep || !skip_for_shallow) {
+            pg_stats.stats.sum.*statptr = in_stats.*statptr;
+          }
+        });
+
       // Update objects_scrubbed with the total count from all chunks
       pg_stats.objects_scrubbed = m_objects_scrubbed_in_chunk;
 
@@ -2170,37 +2192,41 @@ void PGScrubber::emit_scrub_result(
       auto now = ceph_clock_now();
       history.last_scrub_stamp = now;
       if (deep) {
- history.last_deep_scrub_stamp = now;
+        history.last_deep_scrub_stamp = now;
       }
 
-      // Update error counts from current scrub results (matches classic OSD)
-      // For deep scrubs, we update both shallow and deep error counts.
-      // For shallow scrubs that explicitly cleared deep-error details (operator
-      // request), also zero the stored deep error counts so PG_STATE_INCONSISTENT
-      // is cleared by prepare_stats_for_publish().
+      // foreach_scrub_maintained_stat (step 2) already wrote num_shallow_scrub_errors
+      // on all scrubs and num_deep_scrub_errors on deep scrubs.  The deep branch
+      // below is therefore a no-op for correctness but keeps the intent explicit.
+      // The deep_errors_cleared branch handles the one case with unique behavior:
+      // a shallow scrub that was requested to clear stored deep-error counts (so
+      // that PG_STATE_INCONSISTENT is cleared by prepare_stats_for_publish() even
+      // though no deep scrub ran).
       if (deep) {
-         pg_stats.stats.sum.num_shallow_scrub_errors = in_stats.num_shallow_scrub_errors;
-         pg_stats.stats.sum.num_deep_scrub_errors = in_stats.num_deep_scrub_errors;
-       } else if (m_flags.deep_errors_cleared) {
-         pg_stats.stats.sum.num_shallow_scrub_errors = in_stats.num_shallow_scrub_errors;
-         pg_stats.stats.sum.num_deep_scrub_errors = 0;
-         m_flags.deep_errors_cleared = false;
-         DEBUGDPP("shallow scrub cleared deep-error stats: num_shallow={} num_deep=0",
-                  pg, pg_stats.stats.sum.num_shallow_scrub_errors);
-       }
+        pg_stats.stats.sum.num_shallow_scrub_errors = in_stats.num_shallow_scrub_errors;
+        pg_stats.stats.sum.num_deep_scrub_errors = in_stats.num_deep_scrub_errors;
+      } else if (m_flags.deep_errors_cleared) {
+        pg_stats.stats.sum.num_shallow_scrub_errors = in_stats.num_shallow_scrub_errors;
+        pg_stats.stats.sum.num_deep_scrub_errors = 0;
+        m_flags.deep_errors_cleared = false;
+        DEBUGDPP("shallow scrub cleared deep-error stats: num_shallow={} num_deep=0",
+                 pg, pg_stats.stats.sum.num_shallow_scrub_errors);
+      }
 
-      int total_errors = pg_stats.stats.sum.num_shallow_scrub_errors +
-                         pg_stats.stats.sum.num_deep_scrub_errors;
-
-      // Since we don't know which errors were fixed, we can only clear them
-      // when every one has been fixed. Matches classic OSD scrub_finish()
-      // (pg_scrubber.cc:2012-2045):
+      // Step 3: repair reconciliation.  Both total_errors and m_fixed_count now
+      // include the stat-mismatch contribution from step 1, matching classic OSD
+      // scrub_finish() where the m_fixed_count == m_shallow_errors + m_deep_errors
+      // check runs after _scrub_finish() has already incremented both.
       //   - all fixed: zero error counts so prepare_stats_for_publish()
       //                clears PG_STATE_INCONSISTENT.
       //   - has_error: recovery will be initiated; schedule a deep-scrub
       //                afterward to get the updated error counts.
-      //                Classic "has_error" = authoritative_peers_count() > 0
-      //                i.e. there were objects marked missing for recovery.
+      //                "has_error" = objects were marked missing for recovery
+      //                (m_objects_repaired > 0), matching classic's
+      //                authoritative_peers_count() > 0.
+      int total_errors = pg_stats.stats.sum.num_shallow_scrub_errors +
+                         pg_stats.stats.sum.num_deep_scrub_errors;
+
       if (m_is_repair) {
         bool has_error = (m_objects_repaired > 0);
         DEBUGDPP("repair: {} errors, {} fixed ({} objects), has_error={}",
@@ -2217,7 +2243,7 @@ void PGScrubber::emit_scrub_result(
           DEBUGDPP("{} errors, {} fixed — scheduling after_repair scrub",
                    pg, total_errors, m_fixed_count);
         } else if (total_errors > 0) {
-          // We have errors but nothing can be fixed, so there is no repair possible.
+          // We have errors but nothing can be repaired, so flag it.
           pg.state_set(PG_STATE_FAILED_REPAIR);
           INFODPP("scrub_finish {} error(s) present with no repair possible",
                   pg, total_errors);
