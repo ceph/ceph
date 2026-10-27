@@ -26,7 +26,7 @@ use s3_tests_rs::client::{build_s3_client, build_s3_client_with_session_token,
                           build_sts_client};
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
-use s3_tests_rs::fixtures::{PrivateAccount, TestGuard};
+use s3_tests_rs::fixtures::{get_new_bucket_name, PrivateAccount, TestGuard};
 
 const UID_ACCOUNT: &str = "70109";
 const UID_ROLE: &str = "70110";
@@ -226,4 +226,131 @@ async fn test_a_role_session_runs_as_the_identity_it_was_given() {
     assert_eq!(as_json(&ghost).unwrap()["outcome"], "none",
         "a role that does not exist was served as something");
 
+}
+
+const HEADER: &str = "x-noobaa-custom-bucket-path";
+
+/// A CreateBucket with the custom-path header set to `path`;  the HTTP
+/// status.
+async fn create_at(client: &aws_sdk_s3::Client, bucket: &str, path: &str) -> u16 {
+    let path = path.to_string();
+    match client.create_bucket().bucket(bucket)
+        .customize()
+        .mutate_request(move |req| {
+            req.headers_mut().insert(HEADER, path.clone());
+        })
+        .send().await
+    {
+        Ok(_) => 200,
+        Err(e) => e.raw_response().map_or(0, |r| r.status().as_u16()),
+    }
+}
+
+/// A role session's new bucket follows the role's own row under the role
+/// override, as a user's follows its own under the user override:  the
+/// role's allowlist admits a custom path, and the account's does not;
+/// without the override, the reverse.  The account allows one directory
+/// and the role another, so each setting admits exactly one.  Where the
+/// bucket lands under `new_buckets_path` is the unit suite's to check
+/// (`ARolesOwnNewBucketsPathIsUsedUnderTheOverride`).
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_a_role_sessions_allowlist_follows_the_role_override() {
+    let _guard = TestGuard::setup();
+    if !impersonating_nsfs().await {
+        eprintln!("not nsfs under impersonation;  nothing to check");
+        return;
+    }
+    let cfg = get_config();
+    let Some(acct) = PrivateAccount::create("rolepath").await else {
+        eprintln!("could not make this test's own account");
+        return;
+    };
+    let root = &acct.root;
+
+    let uname = format!("{}rolepathuser", cfg.iam_name_prefix);
+    root.create_user().user_name(&uname).path(&cfg.iam_path_prefix)
+        .send().await.expect("create_user");
+    let ak = root.create_access_key().user_name(&uname).send().await
+        .expect("create_access_key");
+    let k = ak.access_key().unwrap();
+    let (uak, usk) = (k.access_key_id().to_string(), k.secret_access_key().to_string());
+    let all = r#"{"Version":"2012-10-17","Statement":{"Effect":"Allow","Action":"*","Resource":"*"}}"#;
+    root.put_user_policy().user_name(&uname).policy_name("RolePathAll")
+        .policy_document(all).send().await.expect("put_user_policy");
+
+    let rname = format!("{}RolePath", cfg.iam_name_prefix);
+    let trust = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"AWS": "*"},
+                       "Action": "sts:AssumeRole"}]
+    }).to_string();
+    let role = root.create_role().role_name(&rname)
+        .assume_role_policy_document(&trust).send().await.expect("create_role");
+    let role = role.role().unwrap();
+    let (role_id, role_arn) = (role.role_id().to_string(), role.arn().to_string());
+    root.put_role_policy().role_name(&rname).policy_name("RolePathAll")
+        .policy_document(all).send().await.expect("put_role_policy");
+
+    /* a location each, writable by both identities, so only the
+     * allowlists tell them apart */
+    let make = || async {
+        let loc = get_new_bucket_name();
+        let made = driver_hint_results("unplaced-directory",
+            &[("op", "create"), ("name", loc.as_str()), ("mode", "0777")]).await
+            .expect("could not make a location");
+        (loc, made.get("path").cloned().expect("the location's path"))
+    };
+    let (aloc, apath) = make().await;
+    let (rloc, rpath) = make().await;
+    for (p, uid, path) in [(("identity", acct.id.as_str()), UID_ACCOUNT, apath.as_str()),
+                           (("role", role_id.as_str()), UID_ROLE, rpath.as_str())] {
+        let r = nsfs_put_identity(&[p, ("uid", uid), ("gid", uid),
+                                    ("custom_bucket_path_allowed_list", path)]).await;
+        assert_eq!(r.status, 200, "binding {}: {}", p.1, r.body);
+    }
+
+    let sts = build_sts_client(&uak, &usk);
+    let creds = sts.assume_role().role_arn(&role_arn).role_session_name("i9path")
+        .send().await.expect("assume_role");
+    let c = creds.credentials().unwrap();
+    let session = build_s3_client_with_session_token(
+        c.access_key_id(), c.secret_access_key(), c.session_token());
+
+    let try_at = |path: String| {
+        let session = session.clone();
+        async move {
+            let b = get_new_bucket_name();
+            let st = create_at(&session, &b, &format!("{path}/custom-{b}")).await;
+            if st == 200 {
+                let _ = session.delete_bucket().bucket(&b).send().await;
+            }
+            st
+        }
+    };
+    let off = with_role_override("off", async {
+        (try_at(rpath.clone()).await, try_at(apath.clone()).await)
+    }).await.expect("no identity-override hint");
+    let on = with_role_override("on", async {
+        (try_at(rpath.clone()).await, try_at(apath.clone()).await)
+    }).await.expect("no identity-override hint");
+
+    for loc in [aloc, rloc] {
+        let _ = driver_hint_results("unplaced-directory",
+                                    &[("op", "remove"), ("name", loc.as_str())]).await;
+    }
+    let _ = admin_request(reqwest::Method::DELETE, "/admin/nsfs/identity",
+                          &format!("role={}", q(&role_id)), None).await;
+    let _ = admin_request(reqwest::Method::DELETE, "/admin/nsfs/identity",
+                          &format!("identity={}", q(&acct.id)), None).await;
+    let _ = root.delete_role_policy().role_name(&rname).policy_name("RolePathAll").send().await;
+    let _ = root.delete_role().role_name(&rname).send().await;
+    let _ = root.delete_user_policy().user_name(&uname).policy_name("RolePathAll").send().await;
+    let _ = root.delete_access_key().user_name(&uname).access_key_id(&uak).send().await;
+    let _ = root.delete_user().user_name(&uname).send().await;
+
+    assert_eq!(off, (403, 200), "without the role override the account's allowlist \
+                                 should admit, and the role's should not (role, account)");
+    assert_eq!(on, (200, 403), "under the role override the role's own allowlist \
+                                should admit, and the account's should not (role, account)");
 }
