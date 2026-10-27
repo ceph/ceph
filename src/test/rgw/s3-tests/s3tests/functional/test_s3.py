@@ -9317,7 +9317,6 @@ def test_lifecycle_expiration_newer_noncurrent_page_boundary_null_current():
     _lc_put_newer_noncurrent_rule(client, bucket_name, 1)
     # wait for LC to remove the noncurrent version v1
     remaining = _lc_page_boundary_wait(client, bucket_name, 'k', {v1_id}, lc_interval)
-    # Without the fix, v2 is expired too
     assert remaining == {null_id, v2_id}
 
 @pytest.mark.lifecycle
@@ -9350,7 +9349,6 @@ def test_lifecycle_expiration_newer_noncurrent_page_boundary_null_noncurrent():
     _lc_put_newer_noncurrent_rule(client, bucket_name, 3)
     remaining = _lc_page_boundary_wait(client, bucket_name, 'k',
                                        {'null'}, lc_interval)
-    # Without the fix, v3, v2 and v1 are expired too
     assert remaining == set(ids[:4])
 
 def get_byte_buffer(nbytes):
