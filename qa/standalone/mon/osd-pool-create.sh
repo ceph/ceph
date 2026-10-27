@@ -339,6 +339,29 @@ function TEST_pool_migrate_inherit_params() {
   diff <(pool_settings .migrate-2) <(pool_settings inherited) || return 1
 }
 
+# A second migration of a pool prepared in the update of the first must not
+# rename the pool again: that left two pools of its name
+function TEST_pool_migrate_twice_in_one_update() {
+  local dir=$1
+
+  run_mon $dir a || return 1
+  ceph config set global enable_experimental_unrecoverable_data_corrupting_features poolmigration || return 1
+  ceph osd set-require-min-compat-client umbrella || return 1
+  ceph osd pool create mtwice 4 4 replicated || return 1
+  ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+  # an OSDMap change just committed delays the next proposal
+  ceph osd set noout || return 1
+
+  timeout 60 ceph osd pool migrate mtwice --pool_type replicated &
+  local pid=$!
+  sleep 1
+  timeout 60 ceph osd pool migrate mtwice --pool_type replicated
+  wait $pid || return 1
+  ceph osd dump --format=json > $dir/osdmap.json || return 1
+  test "$(jq '[.pools[] | select(.pool_name == "mtwice")] | length' $dir/osdmap.json)" = 1 || return 1
+  test "$(jq '[.pools[] | select(.pool_name | startswith(".migrate-"))] | length' $dir/osdmap.json)" = 1 || return 1
+}
+
 function TEST_osd_pool_create_migrate_from() {
   local dir=$1
 

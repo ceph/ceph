@@ -14570,6 +14570,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       }
 
+      // a pending migration of the pool, or a pending pool of its name, is
+      // looked at once committed
+      if (pending_inc.new_pool_names.count(pool_id) ||
+          std::ranges::any_of(pending_inc.new_pool_names,
+                              [&poolstr](const auto& p) {
+                                return p.second == poolstr;
+                              })) {
+        goto wait;
+      }
+
       string old_pool_name;
       int suffix_iter = 1;
       while (true) {
