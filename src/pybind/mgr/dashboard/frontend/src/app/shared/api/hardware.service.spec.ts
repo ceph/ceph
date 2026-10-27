@@ -65,6 +65,18 @@ describe('HardwareService', () => {
     });
   });
 
+  describe('getHost', () => {
+    it('should request the hardware report of the host', () => {
+      const service = createService();
+
+      service.getHost('node/1').subscribe();
+
+      const req = httpTesting.expectOne('api/hardware/hosts/node%2F1');
+      expect(req.request.method).toBe('GET');
+      req.flush({});
+    });
+  });
+
   describe('isHardwareMonitoringEnabled$', () => {
     it('should be true when cephadm hw_monitoring is enabled', async () => {
       getConfig.mockReturnValue(of({ hw_monitoring: true }));

@@ -4,7 +4,7 @@ import { Observable, of } from 'rxjs';
 import { catchError, map, shareReplay } from 'rxjs/operators';
 import { MgrModuleService } from './mgr-module.service';
 import { AuthStorageService } from '../services/auth-storage.service';
-import { CompressionStats, HardwareSummary } from '../enum/hardware.enum';
+import { CompressionStats, HardwareHostResponse, HardwareSummary } from '../enum/hardware.enum';
 
 @Injectable({
   providedIn: 'root'
@@ -43,5 +43,12 @@ export class HardwareService {
     return this.http.get<CompressionStats>(`${this.baseURL}/compression`, {
       headers: { Accept: 'application/vnd.ceph.api.v0.1+json' }
     });
+  }
+
+  /* Hardware report of one host */
+  getHost(hostname: string): Observable<HardwareHostResponse> {
+    return this.http.get<HardwareHostResponse>(
+      `${this.baseURL}/hosts/${encodeURIComponent(hostname)}`
+    );
   }
 }

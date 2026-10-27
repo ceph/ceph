@@ -38,6 +38,15 @@ HARDWARE_HOST_SCHEMA = {
                          'temperatures')
     }, 'Hardware per category'),
     'firmware': (dict, 'Installed firmware: name -> version'),
+    'compression': ({
+        'fcm_drive_count': (int, 'Number of FCM drives'),
+        'phy_util_percent': (float, 'Physical space used, in percent'),
+        'log_util_percent': (float, 'Logical space used, in percent'),
+        'savings_bytes': (int, 'Logical minus physical bytes used'),
+        'compression_ratio': (float, 'Logical / physical bytes used'),
+        'efficiency_percent': (float, 'Space saved, in percent'),
+    }, 'FCM compression of the host; null when it has no FCM drives. Ratio, savings, '
+       'efficiency and logical use are null below 100 GiB of physical use'),
 }
 
 

@@ -36,6 +36,7 @@
 
 .sidebar-layout-main {
   margin-left: layout.rem(272px);
+  padding-bottom: var(--cds-spacing-07);
 
   &.no-sidebar {
     margin-left: var(--cds-spacing-05);
