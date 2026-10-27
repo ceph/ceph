@@ -3,6 +3,9 @@ overrides:
     log-ignorelist:
       - Telemetry requires re-opt-in
       - telemetry module includes new collections
+      - CEPHADM_STRAY_HOST
+      - DEGRADED_STRETCH_MODE
+      - RECOVERING_STRETCH_MODE
 tasks:
 - install:
     branch: umbrella
