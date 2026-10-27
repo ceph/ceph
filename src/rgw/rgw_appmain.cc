@@ -808,11 +808,12 @@ void rgw::AppMain::init_s3vector()
 
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
-  // stop the realm reloader
-  rgw_pauser.reset();
-  fe_pauser.reset();
+  // stop the realm reloader. its destructor waits for a reload in progress,
+  // which still uses the pausers
   realm_watcher.reset();
   reloader.reset();
+  rgw_pauser.reset();
+  fe_pauser.reset();
 #ifdef WITH_RADOSGW_RADOS
   pusher.reset();
   if (env.driver->get_name() == "rados") {
