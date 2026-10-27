@@ -8606,6 +8606,71 @@ static void inherit_pool_settings(const pg_pool_t &src, pg_pool_t &p)
   p.application_metadata = src.application_metadata;
 }
 
+// Whether 'osd pool migrate' with cmdmap, run on pool p while p is the target
+// of a migration, is satisfied by that migration. With --inherit-params it
+// is, whatever the migration is to. Otherwise p must have the pool type,
+// erasure code profile, CRUSH rule, size and EC optimizations that the
+// arguments and the defaults give, and the value of every other argument
+// given but the autoscale mode, which is off while the pool migrates
+bool OSDMonitor::pool_has_settings(const pg_pool_t &p, const string &pool,
+                                   const cmdmap_t &cmdmap)
+{
+  if (cmd_getval_or<bool>(cmdmap, "inherit_params", false)) {
+    return true;
+  }
+
+  const string type = cmd_getval_or<string>(cmdmap, "pool_type",
+    g_conf().get_val<string>("osd_pool_default_type"));
+  const bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
+    cct->_conf.get_val<bool>("osd_pool_default_crimson");
+  if (p.get_type_name() != type || p.is_crimson() != crimson) {
+    return false;
+  }
+  string profile;
+  string rule = cmd_getval_or<string>(cmdmap, "rule", "");
+  if (p.is_erasure()) {
+    profile = cmd_getval_or<string>(cmdmap, "erasure_code_profile", "default");
+    const bool ec_optimizations =
+      cmd_getval_or<bool>(cmdmap, "enable_ec_optimizations", false) ||
+      crimson ||
+      cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations");
+    if (p.erasure_code_profile != profile ||
+        p.allows_ecoptimizations() != ec_optimizations) {
+      return false;
+    }
+    if (rule.empty()) {
+      rule = profile == "default" ? "erasure-code" : pool;
+    }
+  }
+  const int rule_id = rule.empty() ?
+    osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct) :
+    osdmap.crush->get_rule_id(rule);
+  unsigned size, min_size;
+  stringstream ss;
+  if (p.get_crush_rule() != rule_id ||
+      prepare_pool_size(p.get_type(), profile,
+                        cmd_getval_or<int64_t>(cmdmap, "size", 0),
+                        &size, &min_size, &ss) ||
+      p.size != size) {
+    return false;
+  }
+
+  auto given = [&cmdmap](const char *arg, auto value) {
+    return !cmdmap.count(arg) ||
+      cmd_getval_or<decltype(value)>(cmdmap, arg, value) == value;
+  };
+  return given("pg_num", int64_t(p.get_pg_num())) &&
+    given("pgp_num", int64_t(p.get_pgp_num())) &&
+    given("expected_num_objects", int64_t(p.expected_num_objects)) &&
+    given("bulk", p.is_bulk()) &&
+    given("pg_num_min", p.opts.value_or(pool_opts_t::PG_NUM_MIN, int64_t(0))) &&
+    given("pg_num_max", p.opts.value_or(pool_opts_t::PG_NUM_MAX, int64_t(0))) &&
+    given("target_size_bytes",
+          p.opts.value_or(pool_opts_t::TARGET_SIZE_BYTES, int64_t(0))) &&
+    given("target_size_ratio",
+          p.opts.value_or(pool_opts_t::TARGET_SIZE_RATIO, 0.0));
+}
+
 /**
  * @param name The name of the new pool
  * @param crush_rule The crush rule to use. If <0, will use the system default
@@ -14605,6 +14670,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
       const pg_pool_t *src = osdmap.get_pg_pool(pool_id);
       if (src->is_migrating()) {
+        // the monitors run a command again, as after an election: a pool
+        // that is migrating to what it asks for is left as it is
+        if (src->is_migration_target() &&
+            pool_has_settings(*src, poolstr, cmdmap)) {
+          ss << "pool '" << poolstr << "' is already being migrated";
+          err = 0;
+          goto reply_no_propose;
+        }
         ss << "Cannot migrate from a pool which is part of an ongoing migration";
         err = -EINVAL;
         goto reply_no_propose;

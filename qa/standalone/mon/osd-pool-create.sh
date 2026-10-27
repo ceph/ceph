@@ -355,11 +355,40 @@ function TEST_pool_migrate_twice_in_one_update() {
   timeout 60 ceph osd pool migrate mtwice --pool_type replicated &
   local pid=$!
   sleep 1
-  timeout 60 ceph osd pool migrate mtwice --pool_type replicated
+  timeout 60 ceph osd pool migrate mtwice --pool_type replicated || return 1
   wait $pid || return 1
   ceph osd dump --format=json > $dir/osdmap.json || return 1
   test "$(jq '[.pools[] | select(.pool_name == "mtwice")] | length' $dir/osdmap.json)" = 1 || return 1
   test "$(jq '[.pools[] | select(.pool_name | startswith(".migrate-"))] | length' $dir/osdmap.json)" = 1 || return 1
+}
+
+# The monitors run a command again after an election: a migration of a pool
+# that is migrating to what it asks for succeeds and changes nothing
+function TEST_pool_migrate_again() {
+  local dir=$1
+
+  run_mon $dir a || return 1
+  ceph osd erasure-code-profile set ec-prof plugin=isa k=2 m=1 crush-failure-domain=osd || return 1
+  ceph config set global enable_experimental_unrecoverable_data_corrupting_features poolmigration || return 1
+  ceph osd set-require-min-compat-client umbrella || return 1
+
+  ceph osd pool create again 4 4 replicated || return 1
+  local to_ec="--pool_type erasure --erasure_code_profile ec-prof --enable_ec_optimizations"
+  ceph osd pool migrate again $to_ec --pg_num 8 || return 1
+  ceph osd pool migrate again $to_ec --pg_num 8 || return 1
+  expect_failure $dir "ongoing migration" ceph osd pool migrate again $to_ec --pg_num 16 || return 1
+  expect_failure $dir "ongoing migration" ceph osd pool migrate again || return 1
+  ceph osd pool migrate again --inherit-params || return 1
+
+  ceph osd pool create copied 4 4 erasure ec-prof || return 1
+  ceph osd pool migrate copied --inherit-params || return 1
+  ceph osd pool migrate copied --inherit-params || return 1
+  expect_failure $dir "cannot be combined" \
+    ceph osd pool migrate copied --inherit-params --size 2 || return 1
+  expect_failure $dir "ongoing migration" \
+    ceph osd pool migrate copied --pool_type replicated || return 1
+
+  test "$(ceph osd dump --format=json | jq '[.pools[] | select(.pool_name | startswith(".migrate-"))] | length')" = 2 || return 1
 }
 
 function TEST_osd_pool_create_migrate_from() {

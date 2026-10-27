@@ -573,6 +573,8 @@ private:
                        bool inherit_params,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
+  bool pool_has_settings(const pg_pool_t &p, const std::string &pool,
+                         const cmdmap_t &cmdmap);
 
   void set_pool_flags(int64_t pool_id, uint64_t flags);
   void clear_pool_flags(int64_t pool_id, uint64_t flags);

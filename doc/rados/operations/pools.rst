@@ -348,6 +348,16 @@ including its erasure code optimizations, flags, applications and quotas. It is
 usually needed only by support. ``--inherit-params`` cannot currently be combined
 with any other pool parameter.
 
+The monitors can run a command again, for example after an election, so
+``ceph osd pool migrate`` on a pool that is already being migrated does not always
+fail:
+
+- With ``--inherit-params``, it succeeds without changing anything, whatever the
+  pool is being migrated to. On a pool that is not being migrated, it always starts
+  a new migration.
+- Without ``--inherit-params``, it succeeds without changing anything if it asks for
+  the settings that the pool is being migrated to, and fails otherwise.
+
 
 .. _associate-pool-to-application:
 
