@@ -11,7 +11,7 @@ using namespace cls::timeindex;
 
 void cls_timeindex_add(
   librados::ObjectWriteOperation& op,
-  std::list<cls_timeindex_entry>& entries)
+  const std::list<cls_timeindex_entry>& entries)
 {
   librados::bufferlist in;
   cls_timeindex_add_op call;
@@ -23,7 +23,7 @@ void cls_timeindex_add(
 
 void cls_timeindex_add(
   librados::ObjectWriteOperation& op,
-  cls_timeindex_entry& entry)
+  const cls_timeindex_entry& entry)
 {
   librados::bufferlist in;
   cls_timeindex_add_op call;
