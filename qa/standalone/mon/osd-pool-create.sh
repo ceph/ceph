@@ -384,8 +384,15 @@ function TEST_osd_pool_create_migrate_from() {
   #resize the ec pool to have small number of pgs
   ceph osd pool set $SRC_POOL_NAME pg_num 2 || return 1
 
-  #Wait some of the PGs to be merged
-  sleep 10  
+  #wait for the merge to finish: a pool cannot start migrating while its
+  #pg_num is changing
+  local i
+  for ((i = 0; i < 600; i++)); do
+    test "$(ceph osd dump --format=json | jq ".pools[] | select(.pool_name == \"$SRC_POOL_NAME\") |
+      .pg_num == 2 and .pg_num_pending == 2")" = true && break
+    sleep 1
+  done
+  test $i -lt 600 || return 1
 
   #migrate the pool, the new pool takes over the name and the old pool is
   #renamed to .migrate-1
@@ -407,8 +414,9 @@ function TEST_osd_pool_create_migrate_from() {
 
   #check that the daemonServer was blocked from changing the pg_num on the two
   #pools involved in the migration
-  SRC_POOL_ID=$(ceph osd dump | grep " '$SRC_POOL_NAME' " | awk '{print $2}')
-  TGT_POOL_ID=$(ceph osd dump | grep " '$TGT_POOL_NAME' " | awk '{print $2}')
+  #(the plain osd dump does not list the source of a migration)
+  SRC_POOL_ID=$(ceph osd dump --format=json | jq ".pools[] | select(.pool_name == \"$SRC_POOL_NAME\") | .pool")
+  TGT_POOL_ID=$(ceph osd dump --format=json | jq ".pools[] | select(.pool_name == \"$TGT_POOL_NAME\") | .pool")
   echo "Source pool id: $SRC_POOL_ID"
   echo "Target pool id: $TGT_POOL_ID"
   
