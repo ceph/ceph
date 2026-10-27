@@ -810,7 +810,9 @@ cdef extern from "rbd/librbd.h" nogil:
                             rados_ioctx_t image_p, const char *image_name)
     int rbd_group_image_remove(rados_ioctx_t group_p, const char *group_name,
                                rados_ioctx_t image_p, const char *image_name)
-
+    int rbd_group_image_remove2(rados_ioctx_t group_p, const char *group_name,
+                                rados_ioctx_t image_p, const char *image_name,
+                                bint force)
     int rbd_group_image_list(rados_ioctx_t group_p,
                              const char *group_name,
                              rbd_group_image_info_t *images,

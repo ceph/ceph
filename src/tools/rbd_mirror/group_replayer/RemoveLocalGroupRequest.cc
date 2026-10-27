@@ -9,10 +9,15 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/MirroringWatcher.h"
+#include "librbd/Types.h"
 #include "librbd/Utils.h"
+#include "librbd/group/AddImageRequest.h"
+#include "librbd/group/ListSnapshotsRequest.h"
 #include "librbd/group/RemoveImageRequest.h"
 #include "librbd/mirror/GroupGetInfoRequest.h"
+#include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
 #include "tools/rbd_mirror/image_deleter/TrashMoveRequest.h"
 
 #define dout_context g_ceph_context
@@ -193,6 +198,189 @@ void RemoveLocalGroupRequest<I>::handle_disable_mirror_group(int r) {
     return;
   }
 
+  list_group_snapshots();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::list_group_snapshots() {
+  dout(10) << dendl;
+
+  auto ctx = create_context_callback<
+    RemoveLocalGroupRequest<I>,
+    &RemoveLocalGroupRequest<I>::handle_list_group_snapshots>(this);
+  auto req = librbd::group::ListSnapshotsRequest<I>::create(
+    m_io_ctx, m_group_id, false, false, &m_group_snaps, ctx);
+  req->send();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::handle_list_group_snapshots(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    list_group_images();
+    return;
+  } else if (r < 0) {
+    derr << "failed to list local group snapshots: " << cpp_strerror(r)
+         << dendl;
+    finish(r);
+    return;
+  }
+
+  open_snapshot_images();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::open_snapshot_images() {
+  dout(10) << dendl;
+
+  std::set<cls::rbd::GroupImageSpec> image_specs;
+  for (const auto& group_snap : m_group_snaps) {
+    for (const auto& image_snap : group_snap.snaps) {
+      if (image_snap.snap_id != CEPH_NOSNAP) {
+        image_specs.emplace(image_snap.image_id, image_snap.pool);
+      }
+    }
+  }
+
+  std::vector<std::pair<cls::rbd::GroupImageSpec, librados::IoCtx>> images;
+  for (const auto& image_spec : image_specs) {
+    librados::IoCtx image_io_ctx;
+    int r = librbd::util::create_ioctx(m_io_ctx, "image", image_spec.pool_id,
+                                       {}, &image_io_ctx);
+    if (r == -ENOENT) {
+      dout(10) << "image pool no longer exists: pool_id="
+               << image_spec.pool_id << dendl;
+      continue;
+    } else if (r < 0) {
+      derr << "failed to open image pool " << image_spec.pool_id << ": "
+           << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
+    images.emplace_back(image_spec, std::move(image_io_ctx));
+  }
+
+  auto ctx = create_context_callback<
+    RemoveLocalGroupRequest<I>,
+    &RemoveLocalGroupRequest<I>::handle_open_snapshot_images>(this);
+  auto cct = reinterpret_cast<CephContext*>(m_io_ctx.cct());
+  auto gather_ctx = new C_Gather(cct, ctx);
+
+  m_snapshot_image_ctxs.reserve(images.size());
+  for (auto& [image_spec, image_io_ctx] : images) {
+    auto image_ctx = I::create("", image_spec.image_id, nullptr, image_io_ctx,
+                               false);
+    image_ctx->read_only_mask &= ~librbd::IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+    m_snapshot_image_ctxs.push_back(image_ctx);
+    auto image_index = m_snapshot_image_ctxs.size() - 1;
+
+    auto on_open = new LambdaContext(
+      [this, image_index, image_spec,
+       on_finish=gather_ctx->new_sub()](int r) {
+        if (r < 0) {
+          m_snapshot_image_ctxs[image_index] = nullptr;
+          if (r == -ENOENT) {
+            // An earlier cleanup may have removed the image snapshots but
+            // failed to remove the group snapshot metadata. After clearing
+            // all remaining snapshots, the user can delete a former member
+            // separately. Resync can still find its old ID in that metadata.
+            dout(10) << "snapshot image no longer exists: image_id="
+                     << image_spec.image_id << ", pool_id="
+                     << image_spec.pool_id << dendl;
+            r = 0;
+          }
+        }
+        on_finish->complete(r);
+      });
+    image_ctx->state->open(librbd::OPEN_FLAG_SKIP_OPEN_PARENT, on_open);
+  }
+
+  gather_ctx->activate();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::handle_open_snapshot_images(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to open group snapshot images: " << cpp_strerror(r)
+         << dendl;
+    m_ret_val = r;
+    close_snapshot_images();
+    return;
+  }
+
+  remove_group_snapshot();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::remove_group_snapshot() {
+  if (m_group_snap_index == m_group_snaps.size()) {
+    close_snapshot_images();
+    return;
+  }
+
+  auto& group_snap = m_group_snaps[m_group_snap_index];
+  dout(10) << "group_snap_id=" << group_snap.id << dendl;
+
+  auto ctx = create_context_callback<
+    RemoveLocalGroupRequest<I>,
+    &RemoveLocalGroupRequest<I>::handle_remove_group_snapshot>(this);
+  auto req = librbd::mirror::snapshot::RemoveGroupSnapshotRequest<I>::create(
+    m_io_ctx, m_group_id, &group_snap, &m_snapshot_image_ctxs, ctx);
+  req->send();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::handle_remove_group_snapshot(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed to remove local group snapshot: " << cpp_strerror(r)
+         << dendl;
+    m_ret_val = r;
+    close_snapshot_images();
+    return;
+  }
+
+  ++m_group_snap_index;
+  remove_group_snapshot();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::close_snapshot_images() {
+  dout(10) << dendl;
+
+  auto ctx = create_context_callback<
+    RemoveLocalGroupRequest<I>,
+    &RemoveLocalGroupRequest<I>::handle_close_snapshot_images>(this);
+  auto cct = reinterpret_cast<CephContext*>(m_io_ctx.cct());
+  auto gather_ctx = new C_Gather(cct, ctx);
+  for (auto image_ctx : m_snapshot_image_ctxs) {
+    if (image_ctx != nullptr) {
+      image_ctx->state->close(gather_ctx->new_sub());
+    }
+  }
+  gather_ctx->activate();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::handle_close_snapshot_images(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  m_snapshot_image_ctxs.clear();
+  if (r < 0 && m_ret_val == 0) {
+    derr << "failed to close group snapshot images: " << cpp_strerror(r)
+         << dendl;
+    m_ret_val = r;
+  }
+
+  if (m_ret_val < 0) {
+    finish(m_ret_val);
+    return;
+  }
+
   list_group_images();
 }
 
@@ -252,7 +440,7 @@ void RemoveLocalGroupRequest<I>::get_mirror_images() {
   dout(10) << dendl;
 
   if (m_images.empty()) {
-    remove_image_from_group();
+    remove_unmirrored_image_from_group();
     return;
   }
 
@@ -287,7 +475,12 @@ void RemoveLocalGroupRequest<I>::handle_get_mirror_images(int r) {
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
   }
 
-  if (r < 0) {
+  if (r == -ENOENT) {
+    // ImageDeleter can remove mirror metadata and move the image to trash
+    // before group teardown reaches this member. It still needs to be
+    // detached from the group so its backlink no longer prevents deletion.
+    m_unmirrored_images.emplace_back(spec.pool_id, spec.image_id);
+  } else if (r < 0) {
     derr << "error getting local mirror image: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -298,6 +491,40 @@ void RemoveLocalGroupRequest<I>::handle_get_mirror_images(int r) {
 
   m_images.pop_front();
   get_mirror_images();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::remove_unmirrored_image_from_group() {
+  if (m_unmirrored_images.empty()) {
+    remove_image_from_group();
+    return;
+  }
+
+  auto &[pool_id, image_id] = m_unmirrored_images.front();
+  dout(10) << "image_id=" << image_id << " ,pool_id=" << pool_id
+           << " ,group_id=" << m_group_id << dendl;
+
+  auto ctx = create_context_callback<RemoveLocalGroupRequest,
+    &RemoveLocalGroupRequest<I>::handle_remove_unmirrored_image_from_group>(
+    this);
+
+  auto req = librbd::group::RemoveImageRequest<I>::create(m_io_ctx, m_group_id,
+    m_io_ctx, image_id, ctx);
+  req->send();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::handle_remove_unmirrored_image_from_group(
+  int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    finish(r);
+    return;
+  }
+
+  m_unmirrored_images.pop_front();
+  remove_unmirrored_image_from_group();
 }
 
 
@@ -330,6 +557,7 @@ void RemoveLocalGroupRequest<I>::handle_remove_image_from_group(int r) {
 
   if (r < 0 && r != -ENOENT) {
     finish(r);
+    return;
   }
 
   move_image_to_trash();
@@ -357,11 +585,45 @@ void RemoveLocalGroupRequest<I>::handle_move_image_to_trash(int r) {
   dout(10) << "r=" << r << dendl;
 
   if (r < 0 && r != -ENOENT) {
-    finish(r);
+    // Put the image back so a later cleanup can find and retry it after an
+    // rbd-mirror restart.
+    m_ret_val = r;
+    restore_image_to_group();
+    return;
   }
 
   m_trash_images.erase(m_trash_images.begin());
   remove_image_from_group();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::restore_image_to_group() {
+  ceph_assert(!m_trash_images.empty());
+  ceph_assert(m_ret_val < 0);
+
+  auto &[pool_id, image_id] = m_trash_images.begin()->second;
+  dout(10) << "image_id=" << image_id << ", pool_id=" << pool_id
+           << ", group_id=" << m_group_id << dendl;
+
+  auto ctx = create_context_callback<
+    RemoveLocalGroupRequest,
+    &RemoveLocalGroupRequest<I>::handle_restore_image_to_group>(this);
+
+  auto req = librbd::group::AddImageRequest<I>::create(
+    m_io_ctx, m_group_id, m_io_ctx, image_id, ctx);
+  req->send();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::handle_restore_image_to_group(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -EEXIST && r != -ENOENT) {
+    derr << "failed to restore image to group: " << cpp_strerror(r)
+         << dendl;
+  }
+
+  finish(m_ret_val);
 }
 
 template <typename I>

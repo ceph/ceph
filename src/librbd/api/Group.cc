@@ -298,18 +298,74 @@ bool is_user_snapshot(const cls::rbd::GroupSnapshot &group_snap) {
   return ns != nullptr;
 }
 
+template <typename I>
+int has_user_group_snapshot_dependency(librados::IoCtx& group_ioctx,
+                                       const std::string& group_id,
+                                       int64_t image_pool_id,
+                                       const std::string& image_id,
+                                       bool* has_dependency) {
+  *has_dependency = false;
+  std::vector<cls::rbd::GroupSnapshot> snaps;
+  int r = group_snap_list<I>(group_ioctx, group_id,
+                             false, false, &snaps);
+  if (r < 0) {
+    return r;
+  }
+
+  for (const auto& group_snap : snaps) {
+    if (!is_user_snapshot(group_snap)) {
+      continue;
+    }
+
+    for (const auto& image_snap : group_snap.snaps) {
+      if (image_snap.pool == image_pool_id &&
+          image_snap.image_id == image_id) {
+        *has_dependency = true;
+        return 0;
+      }
+    }
+  }
+
+  return 0;
+}
+
+template <typename I>
+int validate_group_image_remove(librados::IoCtx &group_ioctx,
+  const std::string &group_id, int64_t image_pool_id,
+  const std::string &image_id, bool force) {
+  auto cct = reinterpret_cast<CephContext *>(group_ioctx.cct());
+  if (force) {
+    return 0;
+  }
+
+  bool has_dependency = false;
+  int r = has_user_group_snapshot_dependency<I>(
+    group_ioctx, group_id, image_pool_id, image_id, &has_dependency);
+  if (r < 0) {
+    return r;
+  }
+  if (has_dependency) {
+    lderr(cct) << "image is referenced by one or more user group snapshots"
+               << dendl;
+    return -EBUSY;
+  }
+  return 0;
+}
+
 } // anonymous namespace
 
 template <typename I>
 int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
                                  const char *group_name,
                                  librados::IoCtx& image_ioctx,
-                                 const char *image_id)
+                                 const char *image_id,
+                                 bool force)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
                  << ", group_name=" << group_name << ", image="
-                 << &image_ioctx << ", id=" << image_id << dendl;
+                 << &image_ioctx << ", id=" << image_id
+                 << ", force=" << force << dendl;
 
   string group_id;
 
@@ -327,14 +383,17 @@ int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
     group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
   request->send();
   r = ctx.wait();
+  bool mirror_group_exists = false;
   if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
     lderr(cct) << "failed to get mirror group info: "
                << cpp_strerror(r) << dendl;
     return r;
   } else if (r == 0) {
-    if (mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
-      lderr(cct) << "cannot remove image from mirror enabled group" << dendl;
-      return -EINVAL;
+    mirror_group_exists = true;
+    if (mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLED) {
+      lderr(cct) << "cannot remove image while mirror group is transitioning"
+                 << dendl;
+      return -EBUSY;
     }
     if (promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
       lderr(cct) << "group is not primary, cannot remove image" << dendl;
@@ -345,8 +404,18 @@ int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
   ldout(cct, 20) << "removing image from group name " << group_name
                  << " group id " << group_id << dendl;
 
+  if (mirror_group_exists) {
+    r = validate_group_image_remove<I>(group_ioctx, group_id,
+      image_ioctx.get_id(), image_id, force);
+    if (r < 0) {
+      return r;
+    }
+    return Mirror<I>::group_image_remove(group_ioctx, group_id, image_ioctx,
+                                         image_id);
+  }
+
   r = Group<I>::group_image_remove(group_ioctx, group_id, image_ioctx,
-                                   image_id);
+                                   image_id, force);
 
   return r;
 }
@@ -456,7 +525,8 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
     }
 
     r = Group<I>::group_image_remove(io_ctx, group_id, image_ioctx,
-                                     image.spec.image_id);
+                                     image.spec.image_id,
+                                     true);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error removing image from a group" << dendl;
       return r;
@@ -596,11 +666,14 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
     group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
   request->send();
   r = ctx.wait();
+  bool mirror_group_enabled = false;
   if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
     lderr(cct) << "failed to get mirror group info: "
                << cpp_strerror(r) << dendl;
     return r;
   } else if (r == 0) {
+    mirror_group_enabled = mirror_group.state ==
+                           cls::rbd::MIRROR_GROUP_STATE_ENABLED;
     if (promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
       lderr(cct) << "group is not primary, cannot add image" << dendl;
       return -EINVAL;
@@ -621,17 +694,31 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   }
 
   cls::rbd::MirrorImage mirror_image;
+  bool mirror_image_exists = false;
+
   r = cls_client::mirror_image_get(&image_ioctx, image_id, &mirror_image);
-  if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
-    lderr(cct) << "failed to retrieve mirroring state of image: " << cpp_strerror(r)
-               << dendl;
+  if (r == 0) {
+    mirror_image_exists = true;
+  } else if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve mirroring state of image: "
+               << cpp_strerror(r) << dendl;
     return r;
-  } else if (r == 0 &&
-             mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_DISABLED) {
-    lderr(cct) << "cannot add mirror enabled image to group" << dendl;
+  }
+
+  if (!mirror_group_enabled && mirror_image_exists &&
+      mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_DISABLED) {
+    lderr(cct) << "cannot add mirror-enabled image to non-mirrored group"
+               << dendl;
     return -EINVAL;
   }
 
+  if (mirror_group_enabled &&
+      (!mirror_image_exists ||
+       mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED)) {
+    lderr(cct) << "cannot add a mirror-disabled image to a group that is "
+               << "enabled for mirroring" << dendl;
+    return -EINVAL;
+  }
   string image_header_oid = librbd::util::header_name(image_id);
 
   ldout(cct, 20) << "adding image " << image_name
@@ -655,6 +742,16 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   }
 
   r = cls_client::image_group_add(&image_ioctx, image_header_oid, group_spec);
+  if (r == -EEXIST && mirror_group_enabled) {
+    cls::rbd::GroupSpec existing_group_spec;
+    int get_r = cls_client::image_group_get(&image_ioctx, image_header_oid,
+      &existing_group_spec);
+    if (get_r == 0 && existing_group_spec == group_spec) {
+      ldout(cct, 10) << "resuming an incomplete add for image " << image_id
+                     << dendl;
+      r = 0;
+    }
+  }
   if (r < 0) {
     lderr(cct) << "error adding group reference to image: "
 	       << cpp_strerror(r) << dendl;
@@ -662,20 +759,20 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   }
   ImageWatcher<>::notify_header_update(image_ioctx, image_header_oid);
 
-  r = Mirror<I>::group_image_add(group_ioctx, group_id, image_ioctx, image_id);
+  r = cls_client::group_image_set(&group_ioctx, group_header_oid, attached_st);
   if (r < 0) {
-    lderr(cct) << "error adding image to mirror group: "
-               << cpp_strerror(r) << dendl;
-    // Mirror layer is responsible for its own cleanup, only metadata
-    // references are cleaned up here.
+    lderr(cct) << "error updating image reference to group: " << cpp_strerror(r)
+               << dendl;
     goto cleanup_image_group_ref;
   }
 
-  r = cls_client::group_image_set(&group_ioctx, group_header_oid,
-				  attached_st);
+  r = Mirror<I>::group_image_add(group_ioctx, group_id, image_ioctx, image_id,
+                                 mirror_image);
   if (r < 0) {
-    lderr(cct) << "error updating image reference to group: "
-	       << cpp_strerror(r) << dendl;
+    lderr(cct) << "error adding image to mirror group: " << cpp_strerror(r)
+               << dendl;
+    // Mirror layer is responsible for its own cleanup, only metadata
+    // references are cleaned up here.
     goto cleanup_image_group_ref;
   }
 
@@ -711,11 +808,13 @@ template <typename I>
 int Group<I>::image_remove(librados::IoCtx& group_ioctx,
                            const char *group_name,
                            librados::IoCtx& image_ioctx,
-                           const char *image_name) {
+                           const char *image_name,
+                           bool force) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
                  << ", group_name=" << group_name << ", image= "
-                 << &image_ioctx << ", name=" << image_name << dendl;
+                 << &image_ioctx << ", name=" << image_name
+                 << ", force=" << force << dendl;
 
   if (group_ioctx.get_namespace() != image_ioctx.get_namespace()) {
     lderr(cct) << "group and image cannot be in different namespaces" << dendl;
@@ -738,14 +837,17 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx,
     group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
   request->send();
   r = ctx.wait();
+  bool mirror_group_exists = false;
   if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
     lderr(cct) << "failed to get mirror group info: "
                << cpp_strerror(r) << dendl;
     return r;
   } else if (r == 0) {
-    if (mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
-      lderr(cct) << "cannot remove image from mirror enabled group" << dendl;
-      return -EINVAL;
+    mirror_group_exists = true;
+    if (mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLED) {
+      lderr(cct) << "cannot remove image while mirror group is transitioning"
+                 << dendl;
+      return -EBUSY;
     }
     if (promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
       lderr(cct) << "group is not primary, cannot remove image" << dendl;
@@ -765,7 +867,18 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx,
     return r;
   }
 
-  r = Group<I>::group_image_remove(group_ioctx, group_id, image_ioctx, image_id);
+  if (mirror_group_exists) {
+    r = validate_group_image_remove<I>(group_ioctx, group_id,
+      image_ioctx.get_id(), image_id, force);
+    if (r < 0) {
+      return r;
+    }
+    return Mirror<I>::group_image_remove(group_ioctx, group_id, image_ioctx,
+                                         image_id);
+  }
+
+  r = Group<I>::group_image_remove(group_ioctx, group_id, image_ioctx,
+                                   image_id, force);
 
   return r;
 }
@@ -1504,9 +1617,11 @@ int Group<I>::snap_get_mirror_namespace(
 }
 
 template <typename I>
-int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
-		                 librados::IoCtx& image_ioctx,
-                                 string image_id) {
+int Group<I>::group_image_remove(librados::IoCtx& group_ioctx,
+                                 const std::string& group_id,
+                                 librados::IoCtx& image_ioctx,
+                                 const std::string& image_id,
+                                 bool force) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
 
   string group_header_oid = librbd::util::group_header_name(group_id);
@@ -1514,7 +1629,14 @@ int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
   string image_header_oid = librbd::util::header_name(image_id);
 
   ldout(cct, 20) << "removing image " << image_id
-		 << " image id " << image_header_oid << dendl;
+                 << " image id " << image_header_oid
+                 << " force " << force << dendl;
+
+  int r = validate_group_image_remove<I>(group_ioctx, group_id,
+    image_ioctx.get_id(), image_id, force);
+  if (r < 0) {
+    return r;
+  }
 
   cls::rbd::GroupSpec group_spec(group_id, group_ioctx.get_id());
 
@@ -1523,8 +1645,8 @@ int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
 
   cls::rbd::GroupImageSpec spec(image_id, image_ioctx.get_id());
 
-  int r = cls_client::group_image_set(&group_ioctx, group_header_oid,
-				      incomplete_st);
+  r = cls_client::group_image_set(&group_ioctx, group_header_oid,
+                                  incomplete_st);
 
   if (r < 0) {
     lderr(cct) << "couldn't put image into removing state: "

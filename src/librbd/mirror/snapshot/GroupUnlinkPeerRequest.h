@@ -59,6 +59,7 @@ private:
   CephContext *m_cct;
 
   std::vector<cls::rbd::GroupSnapshot> m_group_snaps;
+  cls::rbd::GroupSnapshot m_group_snap;
   std::map<std::string, ImageCtx *> m_image_ctx_map;
   std::string m_group_snap_id;
 
@@ -83,6 +84,7 @@ private:
 
   void remove_group_snapshot(cls::rbd::GroupSnapshot group_snap);
   void handle_remove_group_snapshot(int r);
+  void handle_remove_complete_group_snapshot(int r);
 
   void remove_snap_metadata();
   void handle_remove_snap_metadata(int r);

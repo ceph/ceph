@@ -15,6 +15,7 @@
 #include "librbd/internal.h"
 #include "librbd/group/ListSnapshotsRequest.h"
 #include "librbd/group/RemoveImageRequest.h"
+#include "librbd/group/AddImageRequest.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/Utils.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
@@ -42,7 +43,8 @@ BootstrapRequest<I>::BootstrapRequest(
     librados::IoCtx &local_io_ctx,
     librados::IoCtx &remote_io_ctx,
     const std::string &global_group_id,
-    const std::string &local_mirror_uuid, // FIXME: Not used
+    const std::string &local_mirror_uuid,
+    const std::string &remote_mirror_peer_uuid,
     InstanceWatcher<I> *instance_watcher,
     MirrorStatusUpdater<I> *local_status_updater,
     MirrorStatusUpdater<I> *remote_status_updater,
@@ -61,6 +63,7 @@ BootstrapRequest<I>::BootstrapRequest(
     m_remote_io_ctx(remote_io_ctx),
     m_global_group_id(global_group_id),
     m_local_mirror_uuid(local_mirror_uuid),
+    m_remote_mirror_peer_uuid(remote_mirror_peer_uuid),
     m_instance_watcher(instance_watcher),
     m_local_status_updater(local_status_updater),
     m_remote_status_updater(remote_status_updater),
@@ -74,6 +77,13 @@ BootstrapRequest<I>::BootstrapRequest(
     m_lock(ceph::make_mutex(librbd::util::unique_lock_name(
         "BootstrapRequest::m_lock", this))){
   dout(10)  << "global_group_id=" << m_global_group_id << dendl;
+}
+
+template <typename I>
+int BootstrapRequest<I>::get_local_image_id(const std::string &global_image_id,
+  std::string *image_id) {
+  return librbd::cls_client::mirror_image_get_image_id(&m_local_io_ctx,
+    global_image_id, image_id);
 }
 
 template <typename I>
@@ -148,17 +158,38 @@ void BootstrapRequest<I>::handle_prepare_remote_group(int r) {
     dout(5) << "local group is primary" << dendl;
     finish(0);
     return;
-  } else if (r == -ENOENT) {
+  }
+
+  if (!state_builder->local_group_id.empty() &&
+      state_builder->local_mirror_group.state ==
+        cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
+    // Removal is multi-step and can be interrupted after persisting the
+    // DISABLING state. Always finish tearing down a non-primary local group,
+    // if the remote group is still enabled, the next bootstrap will recreate
+    // the secondary from it.
+    dout(10) << "resuming interrupted local group removal" << dendl;
+    remove_local_group();
+    return;
+  }
+
+  if (r == -ENOENT) {
     if (state_builder->remote_group_id.empty()) {
       if (state_builder->local_group_id.empty()) {
-	// Neither group exists
-	m_local_group_removed = true; //FIXME
-	finish(0);
-	return;
-      } else if (state_builder->local_promotion_state ==
-                 librbd::mirror::PROMOTION_STATE_NON_PRIMARY){
-	remove_local_group();
-	return;
+        // Neither group exists
+        // Tell the caller to discard the replayer for this missing group.
+        m_local_group_removed = true;
+        finish(0);
+        return;
+      } else if (state_builder->local_mirror_group.state ==
+                   cls::rbd::MIRROR_GROUP_STATE_CREATING ||
+                 state_builder->local_promotion_state ==
+                   librbd::mirror::PROMOTION_STATE_NON_PRIMARY) {
+        // CREATING is used only while constructing a local secondary. An
+        // empty group has no mirror snapshot from which GroupGetInfoRequest
+        // can infer NON_PRIMARY, so a rapid remote disable can otherwise
+        // strand the local group with an UNKNOWN promotion state.
+        remove_local_group();
+        return;
       } else {
 	// Do not remove the group if the promotion state is orphan or unknown
 	finish(-ENOLINK);
@@ -229,7 +260,63 @@ template <typename I>
 void BootstrapRequest<I>::remove_local_group() {
   dout(10) << dendl;
 
-  ceph_assert(!(*m_state_builder)->local_group_id.empty());
+  // A selected remote group snapshot can include an image that has not been
+  // created locally yet. The GroupReplayer starts an ImageReplayer to create
+  // it, and a later bootstrap adds it to the local group header. If the remote
+  // group disappears before that happens, header-only cleanup cannot find the
+  // image. Include the retained ImageReplayers in cleanup as well.
+  std::map<std::string, std::pair<int64_t, std::string>> extra_trash_images;
+  if (*m_resync_requested) {
+    // The local group header can be older than the remote primary after a
+    // force promotion. Include every live remote member in the resync set so
+    // that an image detached from the stale local header is also recreated.
+    // Reusing that standalone local image would retain its divergent mirror
+    // snapshot history and immediately report diverged histories after
+    // reattachment.
+    for (const auto &[global_image_id, remote_image] :
+      (*m_state_builder)->remote_images) {
+      std::string local_image_id;
+      int r = librbd::cls_client::mirror_image_get_image_id(&m_local_io_ctx,
+        global_image_id, &local_image_id);
+      if (r == 0) {
+        extra_trash_images.emplace(global_image_id,
+          std::make_pair(m_local_io_ctx.get_id(), std::move(local_image_id)));
+      } else if (r != -ENOENT) {
+        derr << "failed to resolve local image " << global_image_id << ": "
+             << cpp_strerror(r) << dendl;
+      }
+    }
+  }
+
+  for (auto &[local_io_ctx, image_replayer] : *m_image_replayers) {
+    const auto &global_image_id = image_replayer->get_global_image_id();
+
+    std::string remote_image_id;
+    int r = librbd::cls_client::mirror_image_get_image_id(&m_remote_io_ctx,
+      global_image_id, &remote_image_id);
+    if (r == 0) {
+      // The image was detached from the group but remains mirrored as a
+      // standalone image. Its standalone ImageReplayer owns its lifecycle.
+      continue;
+    } else if (r != -ENOENT) {
+      derr << "failed to check remote image " << global_image_id << ": "
+           << cpp_strerror(r) << dendl;
+      continue;
+    }
+
+    std::string local_image_id;
+    r = librbd::cls_client::mirror_image_get_image_id(&local_io_ctx,
+      global_image_id, &local_image_id);
+    if (r == 0) {
+      extra_trash_images.emplace(global_image_id,
+        std::make_pair(local_io_ctx.get_id(), std::move(local_image_id)));
+    } else if (r != -ENOENT) {
+      derr << "failed to resolve local image " << global_image_id << ": "
+           << cpp_strerror(r) << dendl;
+    }
+  }
+
+  dout(10) << "extra images to trash=" << extra_trash_images << dendl;
 
   auto ctx = create_context_callback<
     BootstrapRequest,
@@ -237,7 +324,7 @@ void BootstrapRequest<I>::remove_local_group() {
 
   auto req = RemoveLocalGroupRequest<I>::create(
     m_local_io_ctx, m_global_group_id, *m_resync_requested,
-    m_threads->work_queue, ctx);
+    m_threads->work_queue, extra_trash_images, ctx);
   req->send();
 }
 
@@ -273,10 +360,445 @@ void BootstrapRequest<I>::finish(int r) {
                             m_global_group_id,
                             (*m_state_builder)->is_local_primary(),
                              m_local_io_ctx};
-      r = create_replayers();
+
+      if ((*m_state_builder)->is_local_primary() ||
+          (*m_state_builder)->local_group_id.empty()) {
+        r = create_replayers();
+        m_on_finish->complete(r);
+        return;
+      }
+      load_local_group_snapshots();
+      return;
     }
   }
 
+  m_on_finish->complete(r);
+}
+
+template <typename I>
+void BootstrapRequest<I>::load_local_group_snapshots() {
+  m_local_group_snaps.clear();
+  auto ctx = create_context_callback<BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_load_local_group_snapshots>(this);
+  auto req = librbd::group::ListSnapshotsRequest<I>::create(m_local_io_ctx,
+    (*m_state_builder)->local_group_id, true, true, &m_local_group_snaps, ctx);
+  req->send();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_load_local_group_snapshots(int r) {
+  if (r < 0) {
+    derr << "failed to load local group snapshots: " << cpp_strerror(r)
+         << dendl;
+    m_on_finish->complete(r);
+    return;
+  }
+  load_remote_group_snapshots();
+}
+
+template <typename I>
+void BootstrapRequest<I>::load_remote_group_snapshots() {
+  m_remote_group_snaps.clear();
+  auto ctx = create_context_callback<BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_load_remote_group_snapshots>(this);
+  auto req = librbd::group::ListSnapshotsRequest<I>::create(m_remote_io_ctx,
+    (*m_state_builder)->remote_group_id, true, true, &m_remote_group_snaps,
+    ctx);
+  req->send();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_load_remote_group_snapshots(int r) {
+  if (r < 0) {
+    derr << "failed to load remote group snapshots: " << cpp_strerror(r)
+         << dendl;
+    m_on_finish->complete(r);
+    return;
+  }
+
+  r = select_target_group_membership();
+  if (r < 0) {
+    if (r == -EEXIST) {
+      // The latest complete local group snapshot is missing from the remote
+      // history, so there is no safe checkpoint for membership reconciliation.
+      // Keep an ImageReplayer for each remote member so status remains complete.
+      int create_r = create_replayers();
+      if (create_r < 0) {
+        r = create_r;
+      }
+    }
+    m_on_finish->complete(r);
+    return;
+  }
+  check_image_handoff_order();
+}
+
+template <typename I>
+int BootstrapRequest<I>::select_target_group_membership() {
+  auto state_builder = *m_state_builder;
+  m_target_remote_images = state_builder->remote_images;
+  m_target_remote_snap = nullptr;
+  m_handoff_image_index = 0;
+  m_handoff_snap_index = 0;
+
+  std::string last_local_snap_id;
+  // Snapshots are ordered oldest first. Stop at the newest complete one.
+  for (auto it = m_local_group_snaps.rbegin(); it != m_local_group_snaps.rend();
+    ++it) {
+    if (it->state != cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
+      continue;
+    }
+
+    auto mirror_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+      &it->snapshot_namespace);
+    if (mirror_ns != nullptr &&
+        !is_mirror_group_snapshot_complete(it->state, mirror_ns->complete)) {
+      continue;
+    }
+
+    last_local_snap_id = it->id;
+    break;
+  }
+
+  bool found_last = last_local_snap_id.empty();
+  for (const auto &snap : m_remote_group_snaps) {
+    if (!found_last) {
+      if (snap.id == last_local_snap_id) {
+        found_last = true;
+      }
+      continue;
+    }
+
+    auto mirror_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+      &snap.snapshot_namespace);
+    if (mirror_ns == nullptr || !mirror_ns->is_primary() ||
+        !is_mirror_group_snapshot_complete(snap.state, mirror_ns->complete)) {
+      continue;
+    }
+    m_target_remote_snap = &snap;
+    break;
+  }
+
+  if (!last_local_snap_id.empty() && !found_last) {
+    derr << "latest local group snapshot is absent from remote: "
+         << last_local_snap_id << dendl;
+    return -EEXIST;
+  }
+
+  if (m_target_remote_snap == nullptr) {
+    return 0;
+  }
+
+  m_target_remote_images.clear();
+  for (const auto &spec : m_target_remote_snap->snaps) {
+    if (spec.snap_id == CEPH_NOSNAP) {
+      derr << "complete remote group snapshot " << m_target_remote_snap->id
+           << " has no snapshot ID for image " << spec.image_id << dendl;
+      return -EINVAL;
+    }
+
+    cls::rbd::MirrorImage mirror_image;
+    int r = librbd::cls_client::mirror_image_get(&m_remote_io_ctx,
+      spec.image_id, &mirror_image);
+    if (r == -ENOENT) {
+      // A complete group snapshot must keep mirror metadata for every saved
+      // member. Reload bootstrap state instead of silently dropping an image
+      // from the selected membership.
+      dout(10) << "remote mirror metadata is not available for saved member "
+               << spec.image_id << ", retrying bootstrap" << dendl;
+      return -EAGAIN;
+    }
+    if (r < 0) {
+      derr << "failed to load remote mirror image " << spec.image_id << ": "
+           << cpp_strerror(r) << dendl;
+      return r;
+    }
+    m_target_remote_images.emplace(mirror_image.global_image_id,
+      std::make_pair(spec.pool, spec.image_id));
+  }
+
+  dout(10) << "target snapshot=" << m_target_remote_snap->id
+           << ", target images=" << m_target_remote_images << dendl;
+  return 0;
+}
+
+template <typename I>
+void BootstrapRequest<I>::check_image_handoff_order() {
+  if (m_target_remote_snap == nullptr ||
+      m_handoff_image_index == m_target_remote_snap->snaps.size()) {
+    reconcile_local_group_members();
+    return;
+  }
+
+  const auto& spec = m_target_remote_snap->snaps[m_handoff_image_index];
+  librados::ObjectReadOperation op;
+  librbd::cls_client::get_snapcontext_start(&op);
+  auto comp = create_rados_callback<
+    BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_get_handoff_snapcontext>(this);
+  m_handoff_out_bl.clear();
+  int r = m_remote_io_ctx.aio_operate(librbd::util::header_name(spec.image_id),
+                                      comp, &op, &m_handoff_out_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_get_handoff_snapcontext(int r) {
+  const auto& spec = m_target_remote_snap->snaps[m_handoff_image_index];
+  if (r >= 0) {
+    auto it = m_handoff_out_bl.cbegin();
+    r = librbd::cls_client::get_snapcontext_finish(&it, &m_handoff_snapc);
+  }
+  if (r == -ENOENT) {
+    dout(10) << "remote image header is not available for saved member "
+             << spec.image_id << ", retrying bootstrap" << dendl;
+    m_on_finish->complete(-EAGAIN);
+    return;
+  } else if (r < 0) {
+    derr << "failed to list snapshots for remote image " << spec.image_id
+         << ": " << cpp_strerror(r) << dendl;
+    m_on_finish->complete(r);
+    return;
+  }
+
+  m_handoff_snap_index = 0;
+  // Snap IDs are newest first. Check only snapshots before the target.
+  while (m_handoff_snap_index < m_handoff_snapc.snaps.size() &&
+         m_handoff_snapc.snaps[m_handoff_snap_index] >= spec.snap_id) {
+    ++m_handoff_snap_index;
+  }
+  get_next_handoff_snapshot();
+}
+
+template <typename I>
+void BootstrapRequest<I>::get_next_handoff_snapshot() {
+  const auto& spec = m_target_remote_snap->snaps[m_handoff_image_index];
+  if (m_handoff_snap_index == m_handoff_snapc.snaps.size()) {
+    ++m_handoff_image_index;
+    check_image_handoff_order();
+    return;
+  }
+
+  librados::ObjectReadOperation op;
+  librbd::cls_client::snapshot_get_start(
+    &op, m_handoff_snapc.snaps[m_handoff_snap_index]);
+  auto comp = create_rados_callback<
+    BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_get_handoff_snapshot>(this);
+  m_handoff_out_bl.clear();
+  int r = m_remote_io_ctx.aio_operate(librbd::util::header_name(spec.image_id),
+                                      comp, &op, &m_handoff_out_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_get_handoff_snapshot(int r) {
+  const auto& spec = m_target_remote_snap->snaps[m_handoff_image_index];
+  auto snap_id = m_handoff_snapc.snaps[m_handoff_snap_index];
+  cls::rbd::SnapshotInfo snap_info;
+  if (r >= 0) {
+    auto it = m_handoff_out_bl.cbegin();
+    r = librbd::cls_client::snapshot_get_finish(&it, &snap_info);
+  }
+  if (r == -ENOENT) {
+    // Pruning can remove a snapshot between listing its ID and reading it.
+    ++m_handoff_snap_index;
+    get_next_handoff_snapshot();
+    return;
+  } else if (r < 0) {
+    derr << "failed to load snapshot " << snap_id << " for remote image "
+         << spec.image_id << ": " << cpp_strerror(r) << dendl;
+    m_on_finish->complete(r);
+    return;
+  }
+
+  auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+    &snap_info.snapshot_namespace);
+  auto state_builder = *m_state_builder;
+  if (mirror_ns != nullptr && mirror_ns->is_primary() &&
+      !mirror_ns->group_snap_id.empty() &&
+      mirror_ns->mirror_peer_uuids.count(m_remote_mirror_peer_uuid) != 0 &&
+      (mirror_ns->group_spec.pool_id != m_remote_io_ctx.get_id() ||
+       mirror_ns->group_spec.group_id != state_builder->remote_group_id)) {
+    // The earlier group must finish with the image before this group can
+    // claim it.
+    dout(10) << "waiting for image " << spec.image_id << " snapshot "
+             << snap_id << " from group " << mirror_ns->group_spec << dendl;
+    m_on_finish->complete(-EAGAIN);
+    return;
+  }
+
+  ++m_handoff_snap_index;
+  get_next_handoff_snapshot();
+}
+
+template <typename I>
+void BootstrapRequest<I>::reconcile_local_group_members() {
+  auto state_builder = *m_state_builder;
+  dout(10) << "local images=" << state_builder->local_images
+           << ", local images without mirror metadata="
+           << state_builder->local_images_without_mirror_metadata.size()
+           << ", target remote images=" << m_target_remote_images << dendl;
+
+  // A local primary owns its membership and must not follow the remote group.
+  if (state_builder->is_local_primary()) {
+    int r = create_replayers();
+    m_on_finish->complete(r);
+    return;
+  }
+
+  m_remove_group_images.clear();
+  m_add_group_images.clear();
+
+  // The detach snapshot can finish syncing before bootstrap removes the old
+  // local membership entry. Once the primary's snapshot dependencies are
+  // cleared, the user can disable and delete the image. The local trash move
+  // can then remove its mirror metadata before that membership entry is
+  // removed. Use the saved local ID to remove the entry without a global ID.
+  m_remove_group_images.insert(m_remove_group_images.end(),
+    state_builder->local_images_without_mirror_metadata.begin(),
+    state_builder->local_images_without_mirror_metadata.end());
+
+  // Remove local members that are no longer present remotely.
+  for (const auto &[global_image_id, local] : state_builder->local_images) {
+
+    if (m_target_remote_images.count(global_image_id) == 0) {
+
+      cls::rbd::GroupImageSpec spec;
+      spec.pool_id = local.first;
+      spec.image_id = local.second;
+
+      m_remove_group_images.push_back(spec);
+    }
+  }
+
+  // Add remote members missing locally.
+  for (const auto &[global_image_id, remote] : m_target_remote_images) {
+    // Already a member locally.
+    if (state_builder->local_images.count(global_image_id) != 0) {
+      continue;
+    }
+
+    cls::rbd::GroupImageSpec spec;
+    spec.pool_id = m_local_io_ctx.get_id();
+
+    int r = get_local_image_id(global_image_id, &spec.image_id);
+    if (r == -ENOENT) {
+      // No local image ID is available yet, so we cannot queue a group add.
+      // Keep this member in m_target_remote_images so replay can create it.
+      // A group ImageReplayer creates it with group options, and the image
+      // creation path adds it to the local group.
+      dout(10) << "local image for global_image_id=" << global_image_id
+               << " not found yet" << dendl;
+      continue;
+    } else if (r < 0) {
+      derr << "failed to resolve local image for global_image_id="
+           << global_image_id << ": " << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
+
+    m_add_group_images.push_back(spec);
+  }
+
+  if (!m_remove_group_images.empty()) {
+    remove_next_group_member();
+    return;
+  }
+
+  if (!m_add_group_images.empty()) {
+    add_next_group_member();
+    return;
+  }
+
+  int r = create_replayers();
+  m_on_finish->complete(r);
+}
+
+template <typename I>
+void BootstrapRequest<I>::remove_next_group_member() {
+
+  auto spec = m_remove_group_images.front();
+  m_remove_group_images.pop_front();
+
+  dout(10) << "removing image_id=" << spec.image_id << " from local group "
+           << (*m_state_builder)->local_group_id << dendl;
+
+  auto ctx = create_context_callback<BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_remove_group_member>(this);
+
+  auto req = librbd::group::RemoveImageRequest<I>::create(m_local_io_ctx,
+    (*m_state_builder)->local_group_id, m_local_io_ctx, spec.image_id, ctx);
+
+  req->send();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_remove_group_member(int r) {
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed removing stale group member: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  if (!m_remove_group_images.empty()) {
+    remove_next_group_member();
+    return;
+  }
+
+  if (!m_add_group_images.empty()) {
+    add_next_group_member();
+    return;
+  }
+
+  r = create_replayers();
+  m_on_finish->complete(r);
+}
+
+template <typename I>
+void BootstrapRequest<I>::add_next_group_member() {
+
+  auto spec = m_add_group_images.front();
+  m_add_group_images.pop_front();
+
+  dout(10) << "adding image_id=" << spec.image_id << " to local group "
+           << (*m_state_builder)->local_group_id << dendl;
+
+  auto ctx = create_context_callback<BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_add_group_member>(this);
+
+  // Use the mirroring-aware request here.
+  auto req = librbd::group::AddImageRequest<I>::create(m_local_io_ctx,
+    (*m_state_builder)->local_group_id, m_local_io_ctx, spec.image_id, ctx);
+
+  req->send();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_add_group_member(int r) {
+
+  if (r == -EEXIST) {
+    // Another group can legitimately own this image while it finishes an
+    // earlier saved membership. Retry bootstrap after that group detaches the
+    // image instead of reporting a permanent snapshot-history conflict.
+    r = -EAGAIN;
+  }
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed adding missing group member: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  if (!m_add_group_images.empty()) {
+    add_next_group_member();
+    return;
+  }
+
+  r = create_replayers();
   m_on_finish->complete(r);
 }
 
@@ -295,15 +817,67 @@ int BootstrapRequest<I>::create_replayers() {
 
   auto state_builder = *m_state_builder;
 
-  if ((*m_state_builder)->is_local_primary()) {
-    //TODO: check that the images have not changed
-    if (m_image_replayers->size() == (*m_state_builder)->local_images.size()) {
-      dout(10) << "image replayers already exist."<< dendl;
-      return 0;
+  auto owned_remote_images = m_target_remote_images;
+  if (!state_builder->is_local_primary()) {
+    for (auto it = owned_remote_images.begin();
+      it != owned_remote_images.end();) {
+      cls::rbd::MirrorImage mirror_image;
+      r = librbd::cls_client::mirror_image_get(&m_remote_io_ctx,
+        it->second.second, &mirror_image);
+      if (r < 0) {
+        derr << "failed to load remote mirror image " << it->second.second
+             << ": " << cpp_strerror(r) << dendl;
+        return r;
+      }
+
+      // An earlier group snapshot can still include a detached image that is
+      // now mirrored standalone. Its standalone ImageReplayer keeps ownership;
+      // the group replayer only sets its snapshot limit.
+      if (mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE) {
+        it = owned_remote_images.erase(it);
+      } else {
+        ++it;
+      }
     }
-  // The ImageReplayers are required to run even when the group is primary in
-  // order to update the image status for the mirror pool status to be healthy.
-    for (auto &[global_image_id, p] : (*m_state_builder)->local_images) {
+  }
+
+  std::set<std::string> desired_global_image_ids;
+  if (state_builder->is_local_primary()) {
+    for (const auto &[global_image_id, _] : state_builder->local_images) {
+      desired_global_image_ids.insert(global_image_id);
+    }
+  } else if (!state_builder->remote_group_id.empty()) {
+    for (const auto &[global_image_id, _] : owned_remote_images) {
+      desired_global_image_ids.insert(global_image_id);
+    }
+  }
+
+  // Remove replayers that are outside the selected membership.
+  for (auto it = m_image_replayers->begin(); it != m_image_replayers->end();) {
+
+    auto image_replayer = it->second;
+    ceph_assert(image_replayer != nullptr);
+
+    const auto &global_image_id = image_replayer->get_global_image_id();
+
+    if (!desired_global_image_ids.contains(global_image_id)) {
+      dout(10) << "removing stale image replayer for global image id: "
+               << global_image_id << dendl;
+
+      ceph_assert(image_replayer->is_stopped());
+      image_replayer->destroy();
+      it = m_image_replayers->erase(it);
+      continue;
+    }
+
+    ++it;
+  }
+
+  if (state_builder->is_local_primary()) {
+    // The ImageReplayers are required to run even when the group
+    // is primary in order to update the image status for the
+    // mirror pool status to be healthy.
+    for (auto &[global_image_id, p] : state_builder->local_images) {
       auto &local_pool_id = p.first;
       bool is_image_replayer_exists = std::any_of(
         m_image_replayers->begin(), m_image_replayers->end(),
@@ -312,7 +886,7 @@ int BootstrapRequest<I>::create_replayers() {
         });
       if (is_image_replayer_exists) {
         dout(10) << "image replayer for global image id: " << global_image_id
-                 << "already exists" << dendl;
+                 << " already exists" << dendl;
         continue;
       }
 
@@ -377,12 +951,12 @@ int BootstrapRequest<I>::create_replayers() {
                                 remote_pool_meta, m_remote_status_updater});
     }
   } else if (!state_builder->remote_group_id.empty()) {
-    //TODO: check that the images have not changed
-    if (m_image_replayers->size() == (*m_state_builder)->remote_images.size()) {
-      dout(10) << "image replayers already exist."<< dendl;
-      return 0;
-    }
-    for (auto &[remote_pool_id, global_image_id] : (*m_state_builder)->remote_images) {
+    // Bootstrap reconciles the local group to one remote snapshot at a time.
+    // Its replayers must match that same target membership: an earlier group
+    // snapshot can contain an image which has since moved to another group,
+    // and the old group must finish processing it before releasing ownership.
+    for (auto &[global_image_id, p] : owned_remote_images) {
+      auto &remote_pool_id = p.first;
       bool is_image_replayer_exists = std::any_of(
         m_image_replayers->begin(), m_image_replayers->end(),
         [&global_image_id](const auto& entry) {
@@ -390,7 +964,7 @@ int BootstrapRequest<I>::create_replayers() {
         });
       if (is_image_replayer_exists) {
         dout(10) << "image replayer for global image id: " << global_image_id
-                 << "already exists" << dendl;
+                 << " already exists" << dendl;
         continue;
       }
 
@@ -463,6 +1037,7 @@ int BootstrapRequest<I>::create_replayers() {
     m_image_replayers->clear();
     return r;
   }
+
   return 0;
 }
 

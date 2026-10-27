@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "common/AsyncOpTracker.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Watcher.h"
 #include "librbd/managed_lock/Types.h"
 #include "tools/rbd_mirror/instance_watcher/Types.h"
@@ -92,6 +93,11 @@ public:
   void notify_sync_request(const std::string &sync_id, Context *on_sync_start);
   bool cancel_sync_request(const std::string &sync_id);
   void notify_sync_complete(const std::string &sync_id);
+
+  bool prune_image_snapshot(int64_t local_pool_id,
+    const std::string &local_image_id, uint64_t snap_id);
+  bool set_image_replayer_limit(const std::string &global_image_id,
+    uint64_t snap_id, const cls::rbd::GroupSpec &local_group_spec);
 
   void cancel_notify_requests(const std::string &instance_id);
 

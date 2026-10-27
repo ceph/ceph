@@ -34,6 +34,7 @@ public:
     OP_DEMOTE          = 3,
     OP_ADD_IMAGE       = 4,
     OP_CREATE_PRIMARY  = 5,
+    OP_REMOVE_IMAGE = 6,
   };
   static GroupPrepareImagesRequest *create(
       librados::IoCtx& group_ioctx, const std::string& group_id,
@@ -71,11 +72,11 @@ private:
    *       v                              |
    *   LIST_GROUP_IMAGES <----------------/
    *       |            \
-   *       |             \-----(enable/add_image, r=0)----->CHECK_MIRROR_IMAGES_DISABLED
+   *       |             \-----------(enable, r=0)--------->CHECK_MIRROR_IMAGES_DISABLED
    *       |          ________________________________________/
    *       |         |
    *       v         V
-   *   OPEN_GROUP_IMAGES ------------------(enable/add_image, r=0)---------->|
+   *   OPEN_GROUP_IMAGES ----------------------(enable, r=0)--------------->|
    *       |            \                                                    |
    *       |             \-------(disable)-------\                           |
    *       |                                     |                           |
@@ -84,7 +85,7 @@ private:
    *       |          ___________________________/                           |
    *       |         |                                                       |
    *       v         v                                                       |
-   *   GET_IMAGES_MIRROR_INFO ------------(create, r=0)--------------------->|
+   *   GET_IMAGES_MIRROR_INFO -----(create/add/remove_image, r=0)----------->|
    *       |         \                                                       |
    *       |          \------(disable)--->CHECK_IMAGES_CHILD_MIRRORING       |
    *       |           __________________________/                           |
