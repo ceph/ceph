@@ -95,8 +95,6 @@ TEST_stretch_cluster_uneven_crush_weights() {
 rule stretch_rule {
         id 1
         type replicated
-        min_size 1
-        max_size 10
         step take iris
         step chooseleaf firstn 2 type host
         step emit
@@ -112,9 +110,16 @@ EOF
     local stretched_poolname=stretched_rbdpool
     ceph osd pool create $stretched_poolname 32 32 stretch_rule || return 1
     ceph osd pool set $stretched_poolname size 4 || return 1
+    ceph osd pool application enable $stretched_poolname rbd || return 1
 
     ceph mon set_location e zone=arbiter host=node-1 || return 1
     ceph mon enable_stretch_mode e stretch_rule zone || return 1 # Enter strech mode
+
+    # A replay after a lost reply must succeed without proposing a new monmap.
+    ceph mon getmap -o "$dir/monmap.before" || return 1
+    ceph mon enable_stretch_mode e stretch_rule zone || return 1
+    ceph mon getmap -o "$dir/monmap.after" || return 1
+    cmp "$dir/monmap.before" "$dir/monmap.after" || return 1
 
     # reweight to a more round decimal.
     ceph osd crush reweight osd.0 $weight
