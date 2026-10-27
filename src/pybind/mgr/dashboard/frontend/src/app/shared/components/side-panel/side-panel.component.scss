@@ -23,6 +23,16 @@
     inline-size: 80rem;
   }
 
+  &[panel-size='full'] .cds--header-panel--expanded {
+    inline-size: 100%;
+  }
+
+  &[panel-padding='none'] .panel-content {
+    padding: 0;
+    min-inline-size: 0;
+    min-block-size: 0;
+  }
+
   .cds--header-panel--expanded {
     max-inline-size: 100%;
     overflow: hidden;
