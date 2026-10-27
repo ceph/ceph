@@ -382,6 +382,11 @@ fn main() {
         eprintln!("\x1b[31mstandup: {e}\x1b[0m");
         std::process::exit(1);
     }
+    /* a single `capture` step run by hand ends the same way */
+    if CORPUS_FAILED_AGAINST_RGW.load(Ordering::Relaxed) {
+        eprintln!("\x1b[31mstandup: the corpus failed against RGW\x1b[0m");
+        std::process::exit(1);
+    }
     /* as corpus-compare does:  nothing failed, and known defects remain */
     if KNOWN_DEFECTS.load(Ordering::Relaxed) {
         std::process::exit(3);
@@ -1578,9 +1583,11 @@ fn iam_call(env: &Env, params: &[(&str, &str)]) -> Result<String, String> {
 /// corpus produces per axis -- the S3 manifest and the disk inventory
 /// -- under `capture/noobaa`.
 ///
-/// **A failing axis is the finding, not a broken step.**  The corpus
-/// asserts what the nsfs driver should do, and NooBaa is a different
-/// implementation:  a disagreement is exactly what a capture is for.
+/// **Against NooBaa, a failing axis is the finding, not a broken step.**
+/// The corpus asserts what the nsfs driver should do, and NooBaa is a
+/// different implementation:  a disagreement is exactly what a capture
+/// is for.  Against RGW a failing test is a defect, and fails the
+/// stand-up once its steps have run (`CORPUS_FAILED_AGAINST_RGW`).
 /// Every axis writes its manifest and takes its inventory *before* it
 /// asserts, which is what makes this usable -- a failed axis still
 /// leaves its artifacts behind.  So the corpus is run `--no-fail-fast`
@@ -1942,6 +1949,12 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
     if st.success() {
         println!("capture  every axis agreed with what the corpus expects of the nsfs");
         println!("         driver, which is a stronger result than this step needs.");
+    } else if observe {
+        CORPUS_FAILED_AGAINST_RGW.store(true, Ordering::Relaxed);
+        println!();
+        println!("capture  FAILED:  the corpus exited {st} against RGW ({label}).  A");
+        println!("         failing test here is a defect, not a finding;  the steps");
+        println!("         after this one still run.  {}", env.capture_log_for(label).display());
     } else {
         println!();
         println!("capture  the corpus exited {st}:  one or more axes disagreed with");
@@ -2256,6 +2269,15 @@ fn schema_agreement(env: &Env) -> Result<(), String> {
 /// and known defects remain.  Not a failure, so the steps after it run.
 static KNOWN_DEFECTS: AtomicBool = AtomicBool::new(false);
 
+/// Set by `capture` when the corpus fails against RGW:  observing an
+/// adopted gateway, a failing test is a defect of RGW's, not a finding
+/// about NooBaa as it is in the NooBaa capture.  The steps after it
+/// still run, so their evidence is collected, and the stand-up then
+/// exits 1.  Without it the failure was absorbed:  the step returned
+/// Ok, the profile said "every step passed", and a known-defects exit
+/// hid it (run `20261027-124903`).
+static CORPUS_FAILED_AGAINST_RGW: AtomicBool = AtomicBool::new(false);
+
 /// Evaluate the three captures against the expected-difference list.
 ///
 /// `corpus-compare` (s3-tests-rs, `src/bin/corpus-compare.rs`) over
@@ -2366,6 +2388,10 @@ fn conversion(env: &Env) -> Result<(), String> {
             }
             return Err(format!("the conversion profile stopped at `{name}`:  {e}"));
         }
+    }
+    if CORPUS_FAILED_AGAINST_RGW.load(Ordering::Relaxed) {
+        return Err("every step ran, but the corpus failed against RGW;  see the \
+                    capture FAILED lines above".into());
     }
     if KNOWN_DEFECTS.load(Ordering::Relaxed) {
         println!("\n==> conversion:  every step passed, and known defects remain");
