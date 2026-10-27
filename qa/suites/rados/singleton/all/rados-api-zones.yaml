@@ -24,6 +24,7 @@ overrides:
       - \(POOL_
       - \(OBJECT_
       - \(SLOW_OPS\)
+      - \(MON_DOWN\)
       - slow request
       - do not have an application enabled
       - application not enabled
