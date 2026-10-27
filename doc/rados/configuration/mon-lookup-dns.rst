@@ -58,23 +58,20 @@ With those records now existing we can create the SRV TCP records with the name 
 
 ::
 
-    _ceph-mon._tcp.example.com. 60 IN SRV 10 20 6789 mon1.example.com.
-    _ceph-mon._tcp.example.com. 60 IN SRV 10 30 6789 mon2.example.com.
-    _ceph-mon._tcp.example.com. 60 IN SRV 20 50 6789 mon3.example.com.
+    _ceph-mon._tcp.example.com. 60 IN SRV 10 20 3300 mon1.example.com.
+    _ceph-mon._tcp.example.com. 60 IN SRV 10 30 3300 mon2.example.com.
+    _ceph-mon._tcp.example.com. 60 IN SRV 20 50 3300 mon3.example.com.
 
-These records tell clients to make first contact on port 6789, with
+These records tell clients to make first contact on port 3300, with
 priorities 10, 10, 20 and weights 20, 30, 50 respectively. Ceph reads the
-protocol from the port: 6789 means msgr1 (v1), 3300 means msgr2 (v2), and any
+protocol from the port: 3300 means msgr2 (v2), 6789 means msgr1 (v1), and any
 other port is tried with both. Ceph uses one SRV record per target host name.
 Daemons and user-space clients that make first contact with v1 reconnect with
 v2 once they have the monitor map, if the Monitors have v2 addresses. Linux
 kernel clients connect with one protocol only: a kernel CephFS mount or
 ``rbd device map`` with ``ms_mode=legacy`` needs v1 records (port 6789), and
-one with any other ``ms_mode`` needs v2 records (port 3300). With no
-``ms_mode``, ``rbd device map`` needs v2 records in Tentacle and later
-releases and v1 records in Squid. A CephFS mount with no ``ms_mode``
-needs v1 records if it uses the old device syntax; with the new syntax it uses
-v2 records when they exist and v1 records otherwise.
+one with any other ``ms_mode`` value needs v2 records (port 3300).
+By default, ``ms_mode=prefer-crc`` is assumed.
 
 Monitor clients choose a Monitor by referencing the SRV records. They first try
 the Monitors with the lowest priority value: they open connections to up to
