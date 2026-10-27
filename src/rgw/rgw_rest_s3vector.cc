@@ -1654,13 +1654,83 @@ void RGWOp_VectorBucket_Rebuild_Status::execute(optional_yield y) {
   flusher.flush();
 }
 
+// GET /admin/vectorbucket/session[?namespace=<ns>][&bucket=<name>]
+// Lists all LanceDB sessions currently cached on this RGW instance.
+// Optional query params narrow the output; without them all sessions are returned.
+class RGWOp_VectorBucketSession_List : public RGWRESTOp {
+public:
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("buckets", RGW_CAP_READ);
+  }
+  void execute(optional_yield) override;
+  const char* name() const override { return "vectorbucket_session_list"; }
+};
+
+void RGWOp_VectorBucketSession_List::execute(optional_yield) {
+  const std::string ns_filter     = s->info.args.get("namespace");
+  const std::string bucket_filter = s->info.args.get("bucket");
+
+  const auto sessions = rgw::s3vector::list_sessions();
+
+  Formatter* f = flusher.get_formatter();
+  flusher.start(0);
+  f->open_object_section("sessions");
+  f->open_array_section("entries");
+  int count = 0;
+  for (const auto& sess : sessions) {
+    if (!ns_filter.empty()     && sess.ns     != ns_filter)     continue;
+    if (!bucket_filter.empty() && sess.bucket != bucket_filter) continue;
+    f->open_object_section("session");
+    f->dump_string("namespace", sess.ns);
+    f->dump_string("bucket",    sess.bucket);
+    f->close_section();
+    ++count;
+  }
+  f->close_section(); // entries
+  f->dump_int("count", count);
+  f->close_section(); // sessions
+  flusher.flush();
+}
+
+// DELETE /admin/vectorbucket/session?namespace=<ns>&bucket=<name>
+// Immediately evicts the named session from the cache on this instance.
+// Returns 404 if the session is not currently cached.
+class RGWOp_VectorBucketSession_Drop : public RGWRESTOp {
+public:
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("buckets", RGW_CAP_WRITE);
+  }
+  void execute(optional_yield) override;
+  const char* name() const override { return "vectorbucket_session_drop"; }
+};
+
+void RGWOp_VectorBucketSession_Drop::execute(optional_yield) {
+  bool bucket_exists = false;
+  const std::string ns     = s->info.args.get("namespace");
+  const std::string bucket = s->info.args.get("bucket", &bucket_exists);
+  if (!bucket_exists || bucket.empty()) {
+    op_ret = -EINVAL;
+    return;
+  }
+  if (!rgw::s3vector::admin_drop_session(ns, bucket)) {
+    op_ret = -ENOENT;
+  }
+}
+
 } // anonymous namespace
 
 RGWOp* RGWHandler_VectorBucket::op_get() {
   if (s->info.args.exists("rebuild")) {
     return new RGWOp_VectorBucket_Rebuild_Status;
   }
-  // Future: if (s->info.args.exists("session")) { ... }
   return nullptr;
+}
+
+RGWOp* RGWHandler_VectorBucketSession::op_get() {
+  return new RGWOp_VectorBucketSession_List;
+}
+
+RGWOp* RGWHandler_VectorBucketSession::op_delete() {
+  return new RGWOp_VectorBucketSession_Drop;
 }
 

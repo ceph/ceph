@@ -6459,14 +6459,14 @@ def test_below_threshold_no_rebuild():
 
 
 def _grant_admin_caps():
-    """Grant the main test user the 'buckets=read' cap so it can call the
-    ceph admin REST API at /admin/vectorbucket. Idempotent — safe to call
+    """Grant the main test user 'buckets=*' so it can call GET and DELETE on
+    the ceph admin REST API at /admin/vectorbucket. Idempotent — safe to call
     multiple times."""
     out, ret = admin(['user', 'info', '--access-key', get_access_key()])
     assert ret == 0, f'failed to look up test user for admin caps: {out}'
     uid = json.loads(out)['user_id']
-    _, ret = admin(['caps', 'add', '--uid', uid, '--caps', 'buckets=read'])
-    assert ret == 0, f'failed to grant buckets=read cap to {uid}'
+    _, ret = admin(['caps', 'add', '--uid', uid, '--caps', 'buckets=*'])
+    assert ret == 0, f'failed to grant buckets=* cap to {uid}'
 
 
 def get_rebuild_admin_status(since=0, bucket='', tenant=''):
@@ -7228,3 +7228,157 @@ def test_lock_timestamp_refresh_during_rebuild():
         _ = _delete_vector_bucket(conn, bucket_name)
         set_rgw_config_option('rgw_s3vector_index_lock_ttl_seconds', 120)  # restore default
         set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 5)
+
+
+# ---------------------------------------------------------------------------
+# Session admin REST API helpers
+# ---------------------------------------------------------------------------
+
+def _admin_session_request(method, params=None):
+    """Make a SigV4-signed request to GET/DELETE /admin/vectorbucket/session.
+
+    Uses S3SigV4Auth (not plain SigV4Auth) because RGW is an S3 service and
+    requires the x-amz-content-sha256 header — same rationale as
+    get_rebuild_admin_status(). Uses stdlib urllib so it works with the offline
+    wheelhouse (no requests package needed)."""
+    import ssl
+    import urllib.request
+    import urllib.error
+    from botocore.auth import S3SigV4Auth
+    from botocore.awsrequest import AWSRequest
+    from botocore.credentials import Credentials
+
+    hostname = get_config_host()
+    port_no  = get_config_port()
+    scheme   = 'https://' if port_no in (443, 8443) else 'http://'
+
+    url    = f'{scheme}{hostname}:{port_no}/admin/vectorbucket/session'
+    creds  = Credentials(get_access_key(), get_secret_key())
+    req    = AWSRequest(method=method, url=url, params=params or {})
+    S3SigV4Auth(creds, 's3', get_config_zonegroup()).add_auth(req)
+    prep   = req.prepare()
+
+    ctx = None
+    if scheme == 'https://':
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode    = ssl.CERT_NONE
+
+    ureq = urllib.request.Request(prep.url, headers=dict(prep.headers), method=method)
+    try:
+        with urllib.request.urlopen(ureq, context=ctx) as resp:
+            raw = resp.read().decode()
+            return resp.status, json.loads(raw) if raw.strip() else {}
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode('utf-8', 'replace')
+        try:
+            return e.code, json.loads(raw)
+        except Exception:
+            return e.code, raw
+
+
+def get_session_admin_list(bucket='', namespace=''):
+    """Query GET /admin/vectorbucket/session, return the parsed JSON body.
+    Optional bucket/namespace params filter the response."""
+    params = {}
+    if bucket:
+        params['bucket'] = bucket
+    if namespace:
+        params['namespace'] = namespace
+    status, body = _admin_session_request('GET', params)
+    assert status == 200, f'GET /admin/vectorbucket/session failed: HTTP {status}: {body}'
+    return body
+
+
+def drop_session_admin(namespace, bucket):
+    """Call DELETE /admin/vectorbucket/session to evict a cached session.
+    Returns the HTTP status code (200 = evicted, 404 = not cached)."""
+    status, body = _admin_session_request('DELETE',
+                                          {'namespace': namespace, 'bucket': bucket})
+    return status
+
+
+# ---------------------------------------------------------------------------
+# Session admin test
+# ---------------------------------------------------------------------------
+
+def test_vector_bucket_session_admin():
+    """Verify the /admin/vectorbucket/session admin endpoints:
+      GET  — lists cached LanceDB sessions; optional ?bucket / ?namespace filter
+      DELETE — synchronously evicts a named session; 404 if not cached; 400 if
+               bucket param is missing.
+
+    The session is created lazily by the background manager's process_messages
+    loop when the first PutVectors notification arrives.  The test polls with a
+    short sleep to give the background worker time to process the message."""
+    _grant_admin_caps()
+
+    conn        = connection()
+    bucket_name = gen_bucket_name()
+    index_name  = 'session-admin-test-index'
+
+    try:
+        _ensure_s3_bucket_for_vector_bucket(bucket_name)
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        result = conn.create_index(
+            vectorBucketName=bucket_name, indexName=index_name,
+            dataType='float32', dimension=4, distanceMetric='cosine')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # PUT triggers a SESSION_CREATE message to the background manager.
+        result = conn.put_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            vectors=[
+                {'key': 'v1', 'data': {'float32': [0.1, 0.2, 0.3, 0.4]}},
+                {'key': 'v2', 'data': {'float32': [0.5, 0.6, 0.7, 0.8]}},
+            ])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # Poll for the session to appear in the admin list (background worker
+        # processes the SESSION_CREATE message asynchronously, normally < 2s).
+        session = None
+        for _ in range(10):
+            body = get_session_admin_list()
+            matches = [e for e in body.get('entries', [])
+                       if e['bucket'] == bucket_name]
+            if matches:
+                session = matches[0]
+                break
+            time.sleep(1)
+        assert session is not None, (
+            f'session for {bucket_name!r} never appeared in '
+            f'/admin/vectorbucket/session after PUT')
+
+        ns = session['namespace']
+        log.info('session cached: namespace=%r bucket=%r', ns, bucket_name)
+
+        # GET with bucket filter must return exactly the one session.
+        body_filtered = get_session_admin_list(bucket=bucket_name)
+        assert body_filtered['count'] == 1
+        assert body_filtered['entries'][0]['bucket'] == bucket_name
+
+        # DELETE evicts the session.
+        status = drop_session_admin(ns, bucket_name)
+        assert status == 200, f'expected 200 on eviction, got {status}'
+
+        # Confirm eviction: session must be gone from the list.
+        time.sleep(0.3)
+        body_after = get_session_admin_list(bucket=bucket_name)
+        assert body_after['count'] == 0, (
+            f'session still present after DELETE: {body_after["entries"]}')
+
+        # Second DELETE on an already-evicted session must return 404.
+        status2 = drop_session_admin(ns, bucket_name)
+        assert status2 == 404, f'expected 404 on re-eviction, got {status2}'
+
+        # DELETE with missing bucket param must return 400 (InvalidArgument).
+        status3, _ = _admin_session_request('DELETE', {'namespace': ns})
+        assert status3 == 400, f'expected 400 for missing bucket param, got {status3}'
+
+        log.info('PASS: session admin API (list / filter / evict / 404 / 400)')
+
+    finally:
+        _clean_s3_objects_for_vector_bucket(bucket_name)
+        _delete_vector_bucket(conn, bucket_name)
