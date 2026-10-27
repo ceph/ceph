@@ -202,6 +202,131 @@ The following state space defines the coordination required between primary and 
 
 (d) This case is similar to (c) but there are more than one secondary links, and some of the links have already rolled back.
 
-## 7. Rolling back nested directories in head
+## 7. Rolling back directories
 
-The MDS will need to add support to be able to recursively remove a directory tree by itself. There is redmine trakcer (https://tracker.ceph.com/issues/44455) already for this targetting an improvement in mgr/volumes plugin. This feature becomes a prerequisite for snapshot rollback. The tracker has undergone discussion which are a bit dated and would need to be revisited.
+A directory can be in many different states relative to the snapshot being rolled back to. This section classifies these states by comparing, for a given dentry name `D` in a parent directory, what `D` refers to in the snapshot `S` (the `rollback_to` snapshot) versus what it refers to in `head`.
+
+### Directory snapshot representation
+
+Directory inodes differ from regular files in how their snapshotted versions are stored, which affects every case below:
+
+* **Directory inodes are multiversion.** When a directory's metadata is modified across a snapshot boundary, the MDS does not fork a new dentry/inode pair as it does for regular files (Cases I-III). Instead, the older version of the inode is preserved in the inode's own `old_inodes` map, and the inode's `first` field is advanced. The primary dentry continues to span `[first, head]`.
+* **Unlinked or renamed directories leave a remote dentry behind.** When a directory's primary dentry is moved away (unlinked to stray, or renamed) and the old location is covered by a snapshot, the old location keeps a *remote* dentry `[first, last]` that refers to the directory inode by inode number. The inode itself stays linked at its new primary location (the stray directory, or the rename destination), and still carries its `old_inodes` versions.
+
+Throughout this section, the active snapshot vector is `[3, 4, 5]`, the rollback target is `rollback_to : 4`, and `6` is the next snapshot sequence number allocated for the rollback (as in Case I).
+
+### 7.1 Existence and identity: which inode the name `D` refers to
+
+#### CASE A1: Directory exists in snapshot and head, same inode
+
+This is the common case: the directory was neither deleted nor replaced after `S`, although its metadata and/or contents may have changed.
+
+* **Pre-Rollback:** `D_head : [2, head]` $\rightarrow$ `inode# X [2, head]`, with `X.old_inodes` holding any versions that were modified across snapshot boundaries.
+* **Mechanism:**
+  1. The current head version of `X` is copied into `X.old_inodes` so that snapshot `5` keeps seeing it.
+  2. The head metadata of `X` is replaced with the version of `X` visible in snapshot `4` (from `X.old_inodes`, or from head if `X` was not modified since `4`).
+  3. `X.first` is set to `6`. The dentry `D_head` remains `[2, head]` since the inode is multiversion and no dentry fork is required.
+  4. The rollback recurses into the children of `X`, each of which is evaluated independently (as a file case, or as one of the directory cases in this section).
+* **Post-Rollback:** `D_head : [2, head]` $\rightarrow$ `inode# X [6, head]` *(metadata as of snapshot 4)*.
+
+#### CASE A2: Directory does not exist in snapshot, exists in head
+
+The directory was created after `S`. Rolling back requires removing it, along with everything under it, from `head`.
+
+* **Pre-Rollback:** `D_head : [5, head]` $\rightarrow$ `inode# Y [5, head]` *(created after snapshot 4, before snapshot 5)*.
+* **Mechanism:**
+  1. The contents of `Y` are removed from head recursively. Each child is unlinked from head (a child directory is itself in state A2 relative to `S`).
+  2. `Y` is unlinked from head. Since snapshot `5` covers `Y`, `Y` is relinked into the stray directory and a remote dentry `D : [5, 5]` is left in the parent so that snapshot `5` still sees it.
+  3. If no snapshot covers `Y` (i.e., `Y` was created after the most recent snapshot), there is nothing to preserve and the entire subtree is purged.
+* **Post-Rollback:**
+  * `D : [5, 5]` $\rightarrow$ remote link to `inode# Y` *(visible only in snapshot 5)*
+  * `~mdsN/strayK/Y` $\rightarrow$ `inode# Y` *(in stray until snapshot 5 is removed)*
+  * No head dentry for `D`.
+
+The MDS will need to add support to be able to recursively remove a directory tree by itself. There is redmine tracker (https://tracker.ceph.com/issues/44455) already for this targetting an improvement in mgr/volumes plugin. This feature becomes a prerequisite for snapshot rollback. The tracker has undergone discussion which are a bit dated and would need to be revisited.
+
+#### CASE A3: Directory exists in snapshot, deleted in head
+
+The directory was removed (`rmdir`) after `S` and not re-created. Rolling back requires reinstating it, along with its entire subtree, into `head`.
+
+* **Pre-Rollback:**
+  * `D : [2, 5]` $\rightarrow$ remote link to `inode# X` *(left behind by `rmdir` after snapshot 5)*
+  * `~mdsN/strayK/X` $\rightarrow$ `inode# X`, with `X.old_inodes` holding its snapshotted versions
+* **Mechanism:**
+  1. `X` is relinked from the stray directory back into the parent as a primary dentry `D_head : [6, head]`. The stray dentry is removed.
+  2. The head metadata of `X` is replaced with the version visible in snapshot `4`, and `X.first` is set to `6`.
+  3. Since `rmdir` only succeeds on an empty directory, every child of `X` that existed in snapshot `4` is now a snapshot-only dentry. Each of these is reinstated into head recursively (a child directory is itself in state A3, and a child file is reinstated from its snapshot dentry).
+* **Post-Rollback:**
+  * `D_head : [6, head]` $\rightarrow$ `inode# X [6, head]` *(metadata as of snapshot 4)*
+  * `D : [2, 5]` $\rightarrow$ remote link to `inode# X` *(unchanged, serves snapshots 3-5)*
+
+While `X` is in the process of being reinstated, the stray manager must not evaluate it for purging or reintegration. Snapshot `S` must also be protected from removal for the duration of the rollback, since it is the only thing keeping `X` alive in stray.
+
+#### CASE A4: Directory exists in snapshot and head, different inodes
+
+The directory was deleted after `S` and a new directory with the same name was created in head. This is the directory equivalent of CASE III.
+
+* **Pre-Rollback:**
+  * `D_head : [5, head]` $\rightarrow$ `inode# Y [5, head]` *(new directory)*
+  * `D : [2, 4]` $\rightarrow$ remote link to `inode# X` *(original directory, deleted after snapshot 4)*
+  * `~mdsN/strayK/X` $\rightarrow$ `inode# X`
+* **Mechanism:** This is CASE A2 applied to `Y` followed by CASE A3 applied to `X`. The order matters: `Y` must be removed from head first to free the name before `X` can be reinstated under it. If the MDS fails over between the two steps, the dentry is left with no head linkage, which is exactly the pre-rollback state of CASE A3 and is resumed as such.
+* **Post-Rollback:**
+  * `D_head : [6, head]` $\rightarrow$ `inode# X [6, head]` *(metadata as of snapshot 4)*
+  * `D : [5, 5]` $\rightarrow$ remote link to `inode# Y`, with `Y` in stray
+  * `D : [2, 4]` $\rightarrow$ remote link to `inode# X` *(unchanged)*
+
+#### CASE A5: Name changed type between snapshot and head
+
+The name `D` refers to a regular file (or symlink) in the snapshot and a directory in head, or the other way round. The directory cases above therefore cannot assume that the snapshot and head versions of `D` are of the same type.
+
+* **File in snapshot, directory in head:** CASE A2 is applied to the head directory, followed by reinstating the file from its snapshot dentry.
+* **Directory in snapshot, file in head:** The head file is unlinked (as in the head half of CASE III, with its data routed to the purge queue if no snapshot covers it), followed by CASE A3 for the directory.
+
+As with CASE A4, the head entry is always removed before the snapshot entry is reinstated, so an interrupted rollback always resumes from a well-defined state.
+
+### Summary
+
+| Case | In snapshot `S` | In head | Rollback action | Recursion into children |
+| :--- | :--- | :--- | :--- | :--- |
+| **A1** | directory, `inode# X` | directory, `inode# X` | Restore `X` metadata from snapshot `S`; preserve the current head version in `X.old_inodes`; bump `X.first`. | Every child is evaluated independently. |
+| **A2** | absent | directory, `inode# Y` | Remove `Y` from head. Relink `Y` to stray if a newer snapshot covers it; otherwise purge. | Every head child is removed (recursive removal, tracker 44455). |
+| **A3** | directory, `inode# X` | absent | Relink `X` from stray into head; restore metadata from snapshot `S`. | Every snapshot child is reinstated. |
+| **A4** | directory, `inode# X` | directory, `inode# Y` (`X != Y`) | A2 on `Y`, then A3 on `X`. | Head children of `Y` removed; snapshot children of `X` reinstated. |
+| **A5** | file/symlink (or directory) | directory (or file/symlink) | Remove the head entry, then reinstate the snapshot entry. | Only for the directory side. |
+
+## 8. Readdir and capability handling under Copy-on-Access
+
+With Copy-on-Access (COA), client IO resumes once the `rollback_to` marker is set on the subvolume root, and dentries are rolled back lazily on first access. `readdir` needs special attention under this model because it touches every dentry in a directory fragment at once.
+
+Normally, the MDS responds to a `readdir` request with the inode metadata of each dentry and issues caps on those inodes (along with dentry leases) to the client. Under COA, issuing caps for an inode that has not yet been rolled back would expose head state that is no longer valid, so the MDS must decide, for each dentry in the reply, whether to roll it back first or to withhold caps.
+
+The set of names returned by `readdir` must itself reflect the snapshot being rolled back to: names that exist only in the snapshot (CASE A3) must appear, and names that exist only in head (CASE A2) must not. Therefore, the MDS must determine the snapshot view of every dentry in the dirfrag to build a correct `readdir` reply, regardless of how caps are handled.
+
+### Option 1: Roll back the entire dirfrag before replying
+
+On the first `readdir` (or lookup) of a dirfrag that has not yet been rolled back, the MDS rolls back the metadata of every dentry in that dirfrag, journals it, and then serves the `readdir` normally, including caps.
+
+* Since determining the snapshot view of each dentry is required anyway, performing the metadata splice at the same time adds limited extra cost.
+* The expensive part, rolling back file data in RADOS via `CEPH_OSD_OP_ROLLBACK`, is decoupled from the metadata splice. The MDS issues metadata caps (`p`, `As`, `Ls`, `Xs`) immediately but withholds file caps (`Fr`, `Fc`, `Fw`, `Fb`) on an inode until its data rollback has completed. Clients that attempt to read or write such a file block on cap acquisition until then.
+* The dirfrag becomes the unit of COA, so the rollback state can be tracked per dirfrag rather than per dentry.
+
+### Option 2: Reply to readdir without issuing caps
+
+The MDS builds the `readdir` reply from the snapshot view of each dentry without modifying head, and does not issue caps or dentry leases on the returned inodes. A subsequent `getattr`/`lookup`/`open` on an individual entry triggers the rollback of that dentry.
+
+* Avoids rolling back every dentry in a dirfrag for a single client request.
+* Clients must issue a `getattr` on each entry to obtain caps, so `ls -l` style workloads turn into one MDS round trip per entry.
+* Without `Fs` on the directory, clients will not consider the directory complete and will not serve subsequent lookups from their cache.
+* Requires verification that existing (legacy) clients tolerate `readdir` replies without caps on head inodes. There is precedent: `readdir` of a `.snap` directory already returns inodes without caps. Both the kernel client and ceph-fuse need to be tested.
+
+### Option 3: Block readdir until the dirfrag has been rolled back in the background
+
+The `readdir` request waits until the background rollback reaches that dirfrag.
+
+* Simplest to implement.
+* The latency of the first `readdir` is unbounded and depends on the progress of the background rollback.
+
+### Recommendation
+
+Option 1, with file caps withheld per inode until its data rollback completes. Since a correct `readdir` reply requires the snapshot view of every dentry in the dirfrag anyway, rolling back the metadata at that point is the natural place to do it, and it keeps client-visible behaviour (caps, leases, directory completeness) unchanged for both legacy and newer clients.
