@@ -69,6 +69,7 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
 {
   LOG_PREFIX(RepRequest::with_pg_interruptible);
   DEBUGI("{}", *this);
+  timer.mark(rep_op_stage_t::DISPATCH);
   req->finish_decode();
 
   co_await this->template enter_stage<interruptor>(repop_pipeline(*pg).process);
@@ -82,6 +83,7 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
   if (pg->can_discard_replica_op(*req)) {
     co_return;
   }
+  timer.mark(rep_op_stage_t::PG_ORDER);
 
   // acquire throttle AFTER process stage -- ordering preserved by pipeline
   // process stage serializes repops in correct log entry order
@@ -93,12 +95,15 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
         req->get_priority(),
         static_cast<uint64_t>(req->from.osd),
         SchedulerClass::immediate}));
+  timer.mark(rep_op_stage_t::THROTTLE);
   auto [commit_fut, reply] = co_await pg->handle_rep_op(req);
+  timer.mark(rep_op_stage_t::PREPARE);
 
   // Transitions from OrderedExclusive->OrderedConcurrent cannot block
   this->enter_stage_sync(repop_pipeline(*pg).wait_commit);
 
   co_await std::move(commit_fut);
+  timer.mark(rep_op_stage_t::COMMIT);
 
   co_await this->template enter_stage<interruptor>(
     repop_pipeline(*pg).send_reply);
@@ -107,6 +112,8 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
     pg->shard_services.send_to_osd(
       req->from.osd, std::move(reply), pg->get_osdmap_epoch())
   );
+  timer.mark(rep_op_stage_t::REPLY);
+  pg->shard_services.get_op_stage_stats().add(timer);
   // throttle destructs here -> release_throttle()
 }
 

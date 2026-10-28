@@ -5,6 +5,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
+#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/weak_ptr.hh>
 #include "messages/MOSDPGPCT.h"
 #include "include/buffer_fwd.h"
@@ -76,6 +77,9 @@ private:
     const eversion_t last_complete;
     crimson::osd::acked_peers_t acked_peers;
     seastar::shared_promise<> all_committed;
+    // for replication_lat_ms
+    seastar::lowres_clock::time_point sent;
+    seastar::lowres_clock::time_point local_committed;
   };
   using pending_transactions_t = std::map<ceph_tid_t, pending_on_t>;
   pending_transactions_t pending_trans;

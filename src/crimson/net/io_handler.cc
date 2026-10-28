@@ -7,6 +7,7 @@
 
 #include "common/ceph_time_fmt.h"
 #include "crimson/common/formatter.h"
+#include "crimson/common/lat_histogram.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Errors.h"
 #include "crimson/net/chained_dispatchers.h"
@@ -65,6 +66,11 @@ IOHandler::~IOHandler()
   assert(!conn_ref);
 }
 
+msgr_stats_t &IOHandler::get_stats()
+{
+  return conn.messenger.get_stats();
+}
+
 #ifdef UNIT_TESTS_BUILT
 IOHandler::sweep_ret
 #else
@@ -111,12 +117,17 @@ IOHandler::sweep_out_pending_msgs_to_sent(
 #endif
   }
 
+  assert(out_pending_stamps.size() == num_msgs);
+  auto &s = get_stats();
+  const auto sweep_start = seastar::lowres_clock::now();
   std::size_t num_swept = 0;
   for (std::size_t i = 0; i < num_msgs; ++i) {
     auto& msg = out_pending_msgs[i];
 
     msg->get_header().src = conn.messenger.get_myname();
 
+    crimson::common::add_lat_sample(
+      s.send_queue_wait, sweep_start - out_pending_stamps[i]);
     msg->encode(conn.features, 0);
 
     ceph_assert(!msg->get_seq() && "message already has seq");
@@ -157,6 +168,12 @@ IOHandler::sweep_out_pending_msgs_to_sent(
   out_pending_msgs.erase(
       out_pending_msgs.begin(),
       out_pending_msgs.begin() + num_swept);
+  out_pending_stamps.erase(
+      out_pending_stamps.begin(),
+      out_pending_stamps.begin() + num_swept);
+
+  s.msgs_sent += num_swept;
+  s.bytes_sent += bl.length();
 
 #ifdef UNIT_TESTS_BUILT
   return sweep_ret{std::move(bl), tags};
@@ -171,16 +188,18 @@ seastar::future<> IOHandler::send(MessageURef _msg)
   MessageFRef msg = seastar::make_foreign(std::move(_msg));
   auto cc_seq = io_crosscore.prepare_submit();
   auto source_core = seastar::this_shard_id();
+  const auto stamp = seastar::lowres_clock::now();
   logger().debug("{} send {} send() to core {} -- {}",
                  conn, cc_seq, get_shard_id(), *msg);
   // sid may be changed on-the-fly during the submission
   if (source_core == get_shard_id()) {
-    return do_send(cc_seq, source_core, std::move(msg));
+    return do_send(cc_seq, source_core, std::move(msg), stamp);
   } else {
+    ++get_stats().send_cross_core;
     return seastar::smp::submit_to(
         get_shard_id(),
-        [this, cc_seq, source_core, msg=std::move(msg)]() mutable {
-      return send_recheck_shard(cc_seq, source_core, std::move(msg));
+        [this, cc_seq, source_core, msg=std::move(msg), stamp]() mutable {
+      return send_recheck_shard(cc_seq, source_core, std::move(msg), stamp);
     });
   }
 }
@@ -188,19 +207,20 @@ seastar::future<> IOHandler::send(MessageURef _msg)
 seastar::future<> IOHandler::send_recheck_shard(
   cc_seq_t cc_seq,
   core_id_t source_core,
-  MessageFRef msg)
+  MessageFRef msg,
+  send_stamp_t stamp)
 {
   // sid may be changed on-the-fly during the submission
   if (seastar::this_shard_id() == get_shard_id()) {
-    return do_send(cc_seq, source_core, std::move(msg));
+    return do_send(cc_seq, source_core, std::move(msg), stamp);
   } else {
     logger().debug("{} send {} send_recheck_shard() "
                    "redirected from core {} to {} -- {}",
                    conn, cc_seq, source_core, get_shard_id(), *msg);
     return seastar::smp::submit_to(
         get_shard_id(),
-        [this, cc_seq, source_core, msg=std::move(msg)]() mutable {
-      return send_recheck_shard(cc_seq, source_core, std::move(msg));
+        [this, cc_seq, source_core, msg=std::move(msg), stamp]() mutable {
+      return send_recheck_shard(cc_seq, source_core, std::move(msg), stamp);
     });
   }
 }
@@ -208,7 +228,8 @@ seastar::future<> IOHandler::send_recheck_shard(
 seastar::future<> IOHandler::do_send(
   cc_seq_t cc_seq,
   core_id_t source_core,
-  MessageFRef msg)
+  MessageFRef msg,
+  send_stamp_t stamp)
 {
   assert(seastar::this_shard_id() == get_shard_id());
   if (io_crosscore.proceed_or_wait(cc_seq, source_core)) {
@@ -216,6 +237,7 @@ seastar::future<> IOHandler::do_send(
                    conn, cc_seq, source_core, *msg);
     if (get_io_state() != io_state_t::drop) {
       out_pending_msgs.push_back(std::move(msg));
+      out_pending_stamps.push_back(stamp);
       notify_out_dispatch();
     }
     return seastar::now();
@@ -225,8 +247,8 @@ seastar::future<> IOHandler::do_send(
                    io_crosscore.get_in_seq(source_core),
                    *msg);
     return io_crosscore.wait(cc_seq, source_core
-    ).then([this, cc_seq, source_core, msg=std::move(msg)]() mutable {
-      return send_recheck_shard(cc_seq, source_core, std::move(msg));
+    ).then([this, cc_seq, source_core, msg=std::move(msg), stamp]() mutable {
+      return send_recheck_shard(cc_seq, source_core, std::move(msg), stamp);
     });
   }
 }
@@ -378,8 +400,10 @@ void IOHandler::do_set_io_state(
     ceph_assert_always(protocol_is_connected == true);
     assign_frame_assembler(std::move(fa));
     dispatch_in = true;
+    ++get_stats().connections_open;
   } else if (prv_state == io_state_t::open) {
     // from open
+    --get_stats().connections_open;
     ceph_assert_always(protocol_is_connected == true);
     protocol_is_connected = false;
     assert(fa == nullptr);
@@ -563,6 +587,10 @@ void IOHandler::do_requeue_out_sent()
       out_pending_msgs.begin(),
       std::make_move_iterator(out_sent_msgs.begin()),
       std::make_move_iterator(out_sent_msgs.end()));
+  out_pending_stamps.insert(
+      out_pending_stamps.begin(),
+      out_sent_msgs.size(),
+      seastar::lowres_clock::now());
   out_sent_msgs.clear();
   maybe_notify_out_dispatch();
 }
@@ -620,6 +648,7 @@ void IOHandler::reset_out()
   assert(get_io_state() != io_state_t::open);
   discard_out_sent();
   out_pending_msgs.clear();
+  out_pending_stamps.clear();
   need_keepalive = false;
   next_keepalive_ack = std::nullopt;
   ack_left = 0;
@@ -860,6 +889,7 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
      case io_state_t::open: {
       if (unlikely(!is_out_queued())) {
         // try exit open dispatching
+        ++get_stats().out_flushes;
         return frame_assembler->flush<false>(
         ).then([this, &ctx] {
           if (ctx.get_io_state() != io_state_t::open || is_out_queued()) {
@@ -879,6 +909,7 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
       auto to_ack = ack_left;
       assert(to_ack == 0 || in_seq > 0);
       ack_left = 0;
+      ++get_stats().out_writes;
 #ifdef UNIT_TESTS_BUILT
       auto ret = sweep_out_pending_msgs_to_sent(
           require_keepalive, maybe_keepalive_ack, to_ack > 0);
@@ -893,6 +924,7 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
 #endif
       ).then([this, &ctx] {
         if (ctx.get_io_state() != io_state_t::open) {
+          ++get_stats().out_flushes;
           return frame_assembler->flush<false>(
           ).then([] {
             return seastar::make_ready_future<stop_t>(stop_t::no);
@@ -1043,12 +1075,15 @@ IOHandler::read_message(
     ceph_msg_footer footer{ceph_le32(0), ceph_le32(0),
                            ceph_le32(0), ceph_le64(0), current_header.flags};
 
+    auto &s = get_stats();
     Message *message = decode_message(nullptr, 0, header, footer,
         msg_frame.front(), msg_frame.middle(), msg_frame.data(), nullptr);
     if (!message) {
       logger().warn("{} decode message failed", conn);
       abort_in_fault();
     }
+    ++s.msgs_received;
+    s.bytes_received += msg_size;
 
     // store reservation size in message, so we don't get confused
     // by messages entering the dispatch queue through other paths.

@@ -16,10 +16,20 @@ The following needs to be available to run the monitoring script:
 * `curl`  
 * `python3`
 
-Also, the `vstart` cluster running with crimson OSDs, must have configured the `crimson_prometheus_port_base`, eg: 
+Also, the crimson OSDs must serve their metrics for Prometheus. Start
+`vstart` with `--crimson-prometheus-port`, which sets
+`crimson_prometheus_port_base` (osd.N listens on the base port + N):
 
 ```
-ceph config set osd crimson_prometheus_port_base 9400
+MON=1 MGR=1 OSD=3 ../src/vstart.sh -n --crimson --crimson-prometheus-port 9400
+```
+
+The "Seastar cross-core messages" panel also needs `--crimson-smp-metrics`
+(sets `crimson_smp_metrics`):
+
+```
+MON=1 MGR=1 OSD=3 ../src/vstart.sh -n --crimson --crimson-prometheus-port 9400 \
+    --crimson-smp-metrics
 ```
 
 
