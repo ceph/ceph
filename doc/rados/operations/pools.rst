@@ -953,6 +953,11 @@ You may set values for the following keys:
     :Description: Determines whether sparse reads and mapext can be performed on a pool. On for replicated and erasure-coded pools with EC optimizations enabled (excluding Crimson pools), off for all other erasure-coded pools. It is set automatically once all OSDs have been upgraded.
     :Type: Boolean
 
+.. describe:: preserve_allocation
+
+    :Description: Read-only (``ceph osd pool get``) boolean that reports whether the ``PRESERVE_ALLOCATION`` flag is set on an erasure-coded pool. When set together with ``allow_ec_optimizations``, the OSD tracks zeroed extents, so that sparse reads and ``mapext`` on erasure-coded pools can report them. It is independent of ``supports_sparse_reads``. Not available on replicated pools.
+    :Type: Boolean
+
 .. describe:: hashpspool
 
    :Description: Sets or unsets the ``HASHPSPOOL`` flag on a given pool.
