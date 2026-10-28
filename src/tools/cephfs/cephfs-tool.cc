@@ -1793,8 +1793,9 @@ bench_zerocopy_write_worker(
 
       active_callbacks.fetch_add(1, std::memory_order_relaxed);
       // ceph_ll_async_write consumes wbl at submit (even on early -errno).
-      int submit_rc = ceph_ll_async_write(cmount, fh, io_offset, wbl, do_fsync,
-                                          &available_ctx->comp);
+      const int write_flags = do_fsync ? CEPH_LL_WRITE_FSYNC : 0;
+      int submit_rc = ceph_ll_async_write(cmount, fh, io_offset, wbl,
+                                          write_flags, &available_ctx->comp);
       if (submit_rc < 0) {
         active_callbacks.fetch_sub(1, std::memory_order_relaxed);
         ss << "Thread " << thread_id

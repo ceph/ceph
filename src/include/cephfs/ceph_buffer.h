@@ -31,17 +31,31 @@ struct Fh;
  * Opaque handle owning a ceph::bufferlist.
  *
  * Ownership / lifetime:
- * - create / alloc / wrap_iov / async_read completion: caller owns the handle
- *   and must call ceph_bufferlist_put() when done (e.g. after socket send).
+ * - create / alloc / wrap_iov / claim_iov / async_read completion: caller owns
+ *   the handle and must call ceph_bufferlist_put() when done (e.g. after
+ *   socket send), unless the handle was consumed by ceph_ll_async_write.
  * - ceph_ll_async_write: consumes the handle at submit (do not put after a
  *   successful submit; put only if submit fails and you still own it).
  * - ceph_bufferlist_to_iovec(): fills iovec views into the handle's pages;
  *   the handle must outlive use of those iovecs (no byte copy).
+ * - wrap_iov: non-owning; caller memory must remain valid until write
+ *   completion (Objecter-only / no ObjectCacher).
+ * - claim_iov: owning donate; after a successful claim the caller must not
+ *   free the bytes. The per-segment deleter runs when the last buffer::ptr
+ *   (including any ObjectCacher BufferHead that shared the raw) drops it —
+ *   possibly on a writeback thread.
  *
  * This is the C surface for zero-copy I/O. Do not use ceph_ll_io_info
  * zerocopy/release fields (that approach is discarded).
  */
 typedef struct ceph_bufferlist ceph_bufferlist;
+
+/**
+ * Called once per claimed iovec segment when Ceph releases that raw.
+ * @p buf / @p len are the segment passed to claim_iov. May run off the
+ * submit thread; must be thread-safe.
+ */
+typedef void (*ceph_buffer_deleter_t)(void* buf, size_t len, void* priv);
 
 ceph_bufferlist* ceph_bufferlist_create(void);
 void ceph_bufferlist_put(ceph_bufferlist* bl);
@@ -61,25 +75,50 @@ ceph_bufferlist* ceph_bufferlist_alloc(size_t len);
 /**
  * Wrap caller iovecs without copying (ceph::ZeroCopyClient::wrap_static).
  * Caller memory must remain valid until write completion if submitted.
+ * Do not use with ObjectCacher — prefer claim_iov to donate ownership.
  */
 ceph_bufferlist* ceph_bufferlist_wrap_iov(const struct iovec* iov, int iovcnt);
+
+/**
+ * Claim ownership of caller iovecs without copying
+ * (ceph::ZeroCopyClient::claim_iov via buffer::claim_buffer).
+ *
+ * After success the caller must not free the bytes. @p del is invoked once
+ * per non-empty segment when that segment's raw is destroyed; if @p del is
+ * NULL, each base is passed to free(3). @p priv is passed through to @p del.
+ */
+ceph_bufferlist* ceph_bufferlist_claim_iov(const struct iovec* iov, int iovcnt,
+                                           ceph_buffer_deleter_t del,
+                                           void* priv);
 
 struct ceph_io_completion {
   void (*cb)(int64_t result, ceph_bufferlist* data, void* priv);
   void* priv;
 };
 
+/** Flags for @c ceph_ll_async_write (@p flags). */
+enum {
+  /** Flush file data (and metadata) after the write completes. */
+  CEPH_LL_WRITE_FSYNC = (1 << 0),
+  /**
+   * With @c CEPH_LL_WRITE_FSYNC, flush data only (skip metadata wait).
+   * Ignored if @c CEPH_LL_WRITE_FSYNC is not set.
+   */
+  CEPH_LL_WRITE_SYNCDATAONLY = (1 << 1),
+};
+
 /**
  * Zero-copy async read/write (ceph::ZeroCopyClient, Filer → Objecter).
  *
  * async_read: on success, @c cb receives an owned @p data handle (put after use).
- * async_write: consumes @p data on successful submit.
+ * async_write: consumes @p data on successful submit. @p flags is a bitwise-OR
+ * of @c CEPH_LL_WRITE_* (0 = no post-write fsync).
  */
 int ceph_ll_async_read(struct ceph_mount_info* cmount, struct Fh* fh,
                        uint64_t off, uint64_t len,
                        struct ceph_io_completion* c);
 int ceph_ll_async_write(struct ceph_mount_info* cmount, struct Fh* fh,
-                        uint64_t off, ceph_bufferlist* data, bool fsync,
+                        uint64_t off, ceph_bufferlist* data, int flags,
                         struct ceph_io_completion* c);
 
 #ifdef __cplusplus
