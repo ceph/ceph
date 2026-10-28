@@ -180,6 +180,47 @@ SRC_DIR="$(grep -m1 'CMAKE_HOME_DIRECTORY' CMakeCache.txt | cut -d= -f2)"
 CONF="$BUILD_DIR/ceph.conf"
 PID="$BUILD_DIR/out/radosgw.8000.pid"
 
+# What --with-impersonation needs of the machine, checked before the
+# running gateway is stopped, so a refusal leaves it as it was.
+if $IMPERSONATE; then
+	# setcap on a nosuid mount succeeds and the kernel then ignores
+	# the capabilities, so every impersonated request would fail as a
+	# denial.  Refused here, before anything is started.
+	if findmnt -no OPTIONS -T "$BUILD_DIR/bin" | tr , '\n' | grep -qx nosuid; then
+		echo "error: $BUILD_DIR/bin is on a nosuid mount, where file" \
+			"capabilities are ignored;  --with-impersonation needs a" \
+			"build on a mount without nosuid" >&2
+		exit 1
+	fi
+
+	# The fixture uids own none of the directories above the data
+	# root and are in none of their groups, so each needs the
+	# other-execute bit to reach a bucket;  a 0700 home directory is
+	# the usual one that lacks it.  The first existing ancestor of the
+	# data root without it is named, rather than surfacing later as
+	# denials.  Not the data root itself:  in an adopted tree it is
+	# NooBaa's, an account's at 0770, and what is below it is the
+	# access model's.
+	if $GPFS; then
+		_root="$GPFS_ROOT/root"
+	elif [[ -n "$DATA_ROOT" ]]; then
+		_root="$DATA_ROOT/root"
+	else
+		_root="$BUILD_DIR/dev/rgw/$STORE/root"
+	fi
+	_d="$(dirname "$_root")"
+	while [[ "$_d" != "/" ]]; do
+		if [[ -d "$_d" ]] && (( ( 8#$(stat -c '%a' "$_d") & 1 ) == 0 )); then
+			echo "error: the fixture uids cannot search $_d, so they cannot" \
+				"reach the data root $_root.  Give it o+x, or use a" \
+				"build or --data-root under a directory every user can" \
+				"search." >&2
+			exit 1
+		fi
+		_d="$(dirname "$_d")"
+	done
+fi
+
 # --- kill any existing radosgw ---
 
 echo "==> killing any existing radosgw on port 8000"
@@ -734,20 +775,12 @@ fi
 
 fi  # end GPFS block
 
-# --- generate s3tests.conf from SAMPLE ---
-
-SAMPLE="$SRC_DIR/qa/workunits/rgw/s3tests-rs/s3tests.conf.SAMPLE"
-S3CONF="$BUILD_DIR/s3tests.conf"
-
-if [[ -f "$SAMPLE" ]]; then
-	echo "==> generating $S3CONF"
-	cp "$SAMPLE" "$S3CONF"
-	sed -i "s/bucket prefix = yournamehere-/bucket prefix = $(whoami)-/" "$S3CONF"
-else
-	echo "warning: $SAMPLE not found, skipping s3tests.conf generation" >&2
-fi
-
-export S3TEST_CONF="$S3CONF"
+# s3tests.conf is not generated here:  the suite is its own repository,
+# and its s3tests.conf.SAMPLE already carries every user vstart.sh
+# creates.  Copy that once and point S3TEST_CONF at the copy.  The
+# sidecars, --with-lifecycle and --with-vault below record what they set
+# up in that file, when S3TEST_CONF names one.
+S3CONF="${S3TEST_CONF:-}"
 
 # --- impersonation:  the fixture ---------------------------------
 #
@@ -892,6 +925,9 @@ fi
 if $LIFECYCLE; then
 	if [[ -f "$S3CONF" ]]; then
 		sed -i 's/^#lc_debug_interval = .*/lc_debug_interval = 10/' "$S3CONF"
+	else
+		echo "note: S3TEST_CONF is not set;  set lc_debug_interval = 10" \
+			"in your s3tests.conf" >&2
 	fi
 fi
 
@@ -905,13 +941,15 @@ if $VAULT; then
 		if ! grep -q '^kms_keyid2' "$S3CONF"; then
 			sed -i '/^kms_keyid = /a kms_keyid2 = testkey-2' "$S3CONF"
 		fi
+	else
+		echo "note: S3TEST_CONF is not set;  set kms_keyid = testkey-1" \
+			"and kms_keyid2 = testkey-2 in your s3tests.conf" >&2
 	fi
 fi
 
 # --- status + what-next output ---
 
-S3TESTS_DIR="$SRC_DIR/qa/workunits/rgw/s3tests-rs"
-FEATURE_FLAG="fails_on_nsfs"
+FEATURE_FLAG="fails_on_nsfs,rgw_admin"
 if [[ "$STORE" == "posix" ]]; then
 	FEATURE_FLAG="fails_on_posix"
 fi
@@ -921,7 +959,11 @@ fi
 
 echo ""
 echo "==> radosgw up on port 8000 ($STORE, data on $DATA_DIR)"
-echo "    s3tests.conf: $S3CONF"
+if [[ -n "$S3CONF" ]]; then
+	echo "    s3tests.conf: $S3CONF"
+else
+	echo "    s3tests.conf: S3TEST_CONF is not set;  it names your copy of the suite's s3tests.conf.SAMPLE"
+fi
 if $LIFECYCLE; then
 	echo "    Lifecycle: rgw_lc_debug_interval=10"
 fi
@@ -948,10 +990,9 @@ if $VAULT; then
 	echo "    Vault: http://localhost:8200 (transit keys: testkey-1, testkey-2)"
 fi
 echo ""
-echo "To run tests:"
-echo "  cd $S3TESTS_DIR"
-echo "  S3TEST_CONF=$S3CONF \\"
-echo "    cargo nextest run -P all --test-threads=1 --features $FEATURE_FLAG"
+echo "To run tests, from your s3-tests-rs checkout's src/test/rgw/s3-tests-rs:"
+echo "  S3TEST_CONF=${S3CONF:-/path/to/s3tests.conf} \\"
+echo "    cargo nextest run -P baseline --features $FEATURE_FLAG"
 echo ""
 echo "To stop:"
 echo "  kill \$(cat $PID)"
