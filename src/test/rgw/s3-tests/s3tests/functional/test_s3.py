@@ -15726,6 +15726,27 @@ def test_sse_kms_default_copy():
 
 @pytest.mark.encryption
 @pytest.mark.bucket_encryption
+@pytest.mark.sse_s3
+@pytest.mark.fails_on_dbstore
+def test_sse_s3_default_copy():
+    src_bucket_name = get_new_bucket()
+    dest_bucket_name = get_new_bucket()
+    client = get_client()
+    _put_bucket_encryption_s3(client, dest_bucket_name)
+
+    data = 'A'*1000
+    client.put_object(Bucket=src_bucket_name, Key='testobj', Body=data)
+
+    copy_source = {'Bucket': src_bucket_name, 'Key': 'testobj'}
+    response = client.copy_object(Bucket=dest_bucket_name, CopySource=copy_source, Key='testobj')
+    assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == 'AES256'
+
+    response = client.get_object(Bucket=dest_bucket_name, Key='testobj')
+    assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == 'AES256'
+    assert _get_body(response) == data
+
+@pytest.mark.encryption
+@pytest.mark.bucket_encryption
 @pytest.mark.fails_on_dbstore
 def test_object_copy_to_itself_bucket_encryption():
     kms_keyid = get_main_kms_keyid()
