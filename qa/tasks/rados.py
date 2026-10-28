@@ -265,9 +265,6 @@ def task(ctx, config):
         'daemon-helper',
         'kill', 
         'ceph_test_rados']
-    if config.get('ec_pool', False):
-        if not config.get('erasure_code_use_overwrites', False):
-            args.extend(['--ec-pool'])
     if config.get('no_omap', False):
         args.extend(['--no-omap'])
     if config.get('write_fadvise_dontneed', False):
