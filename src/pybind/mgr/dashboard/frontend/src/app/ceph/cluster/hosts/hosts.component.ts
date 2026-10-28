@@ -138,7 +138,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         permission: 'create',
         buttonKind: 'secondary',
         icon: Icons.expand,
-        routerLink: '/add-storage',
+        click: () => this.router.navigate(['/add-storage'], { queryParams: { form: true } }),
         disable: (selection: CdTableSelection) => this.getDisable('add', selection),
         visible: () => this.showExpandClusterBtn
       }
