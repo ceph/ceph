@@ -1,8 +1,12 @@
 from typing import Dict
 from unittest import TestCase, mock
 import errno
+import json
 
-from prometheus.module import Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict, Module
+from prometheus.module import (
+    Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict,
+    Module, HEALTHCHECK_DETAIL,
+)
 import threading
 
 
@@ -120,6 +124,271 @@ class HealthHistoryTest(TestCase):
 
         self.assertFalse(t.is_alive(), "Deadlock detected: Thread is still hung!")
         self.mgr.set_store.assert_called()
+
+
+class HealthHistorySeverityTest(TestCase):
+    """Regression tests for severity staleness fix (IBMCEPH-17357 Change A)."""
+
+    def setUp(self):
+        self.mgr = mock.MagicMock()
+        self.mgr.get_localized_module_option.return_value = 1000
+        self.mgr.get_store.return_value = "{}"
+        self.hh = HealthHistory(self.mgr)
+
+    def _check(self, severity):
+        self.hh.check({'checks': {'OSD_DOWN': {'severity': severity}}})
+
+    def test_severity_stored_on_first_seen(self):
+        """Severity is captured when a check first appears."""
+        self._check('HEALTH_WARN')
+        self.assertEqual(self.hh.healthcheck['OSD_DOWN'].severity, 'HEALTH_WARN')
+
+    def test_severity_updated_on_escalation(self):
+        """Escalation from HEALTH_WARN to HEALTH_ERR is reflected immediately."""
+        self._check('HEALTH_WARN')
+        self.mgr.set_store.reset_mock()
+        self._check('HEALTH_ERR')
+        self.assertEqual(self.hh.healthcheck['OSD_DOWN'].severity, 'HEALTH_ERR')
+        # Must also persist the change
+        self.mgr.set_store.assert_called()
+
+    def test_severity_updated_on_de_escalation(self):
+        """De-escalation from HEALTH_ERR back to HEALTH_WARN is reflected."""
+        self._check('HEALTH_ERR')
+        self.mgr.set_store.reset_mock()
+        self._check('HEALTH_WARN')
+        self.assertEqual(self.hh.healthcheck['OSD_DOWN'].severity, 'HEALTH_WARN')
+        self.mgr.set_store.assert_called()
+
+    def test_severity_unchanged_does_not_trigger_extra_save(self):
+        """No unnecessary KV write when severity has not changed."""
+        self._check('HEALTH_WARN')
+        self.mgr.set_store.reset_mock()
+        # Re-check with same severity and same active state — nothing should change
+        self.hh.check({'checks': {'OSD_DOWN': {'severity': 'HEALTH_WARN'}}})
+        self.mgr.set_store.assert_not_called()
+
+    def test_first_seen_preserved_across_severity_change(self):
+        """first_seen is not reset when severity changes."""
+        self._check('HEALTH_WARN')
+        first_seen = self.hh.healthcheck['OSD_DOWN'].first_seen
+        self._check('HEALTH_ERR')
+        self.assertEqual(self.hh.healthcheck['OSD_DOWN'].first_seen, first_seen)
+
+    def test_severity_update_survives_reload(self):
+        """Updated severity is persisted to KV and restored by a new HealthHistory instance.
+
+        Proves the full round-trip: check() detects the change, save() writes
+        the updated JSON, and _load() reads it back correctly into a fresh
+        instance. A reviewer cannot verify this from set_store() call assertions
+        alone — this test constructs a second HealthHistory from the stored data.
+        """
+        # First check: severity HEALTH_WARN, creates the entry
+        self._check('HEALTH_WARN')
+        # Second check: severity escalates to HEALTH_ERR
+        self._check('HEALTH_ERR')
+
+        # Capture exactly what was written to the KV store by save()
+        stored_json = self.mgr.set_store.call_args[0][1]
+
+        # Construct a second HealthHistory that loads from that stored JSON
+        mgr2 = mock.MagicMock()
+        mgr2.get_localized_module_option.return_value = 1000
+        mgr2.get_store.return_value = stored_json
+        reloaded = HealthHistory(mgr2)
+
+        self.assertEqual(reloaded.healthcheck['OSD_DOWN'].severity, 'HEALTH_ERR')
+
+
+class GetHealthMessageTest(TestCase):
+    """Regression tests for summary message label and cardinality (IBMCEPH-17357 Change B)."""
+
+    def _make_mod(self):
+        mgr = mock.MagicMock()
+        mgr.get_localized_module_option.return_value = 1000
+        mgr.get_store.return_value = "{}"
+        mod = mock.MagicMock()
+        mod.metrics = {
+            'health_status': Metric('untyped', 'health_status', '', ()),
+            'health_detail': Metric('gauge', 'health_detail', '', HEALTHCHECK_DETAIL),
+        }
+        mod.health_history = HealthHistory(mgr)
+        return mod
+
+    def _run(self, mod, health):
+        """Run get_health() and return the health_detail value dict.
+
+        Mirrors what Module.collect() does: clear metrics before each scrape.
+        """
+        mod.metrics['health_detail'].clear()
+        mod.get.return_value = {'json': json.dumps(health)}
+        Module.get_health(mod)
+        return mod.metrics['health_detail'].value
+
+    def test_active_check_exposes_summary_message(self):
+        """An active non-scalar check emits its summary.message in the message label.
+
+        Uses MDS_DAMAGE (not OSD_DOWN) because OSD_DOWN is in _scalar_checks and
+        intentionally always emits an empty message for scalar() compatibility.
+        """
+        mod = self._make_mod()
+        value = self._run(mod, {'status': 'HEALTH_ERR', 'checks': {
+            'MDS_DAMAGE': {
+                'severity': 'HEALTH_ERR',
+                'summary': {'message': '1 mds has damaged metadata', 'count': 1},
+                'detail': [{'message': 'mds.a: damaged metadata'}],
+            }}})
+        self.assertEqual(value, {('MDS_DAMAGE', 'HEALTH_ERR', '1 mds has damaged metadata'): 1})
+
+    def test_message_reflects_latest_observation(self):
+        """When the summary changes between scrapes the latest message is used."""
+        mod = self._make_mod()
+        self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'MON_CLOCK_SKEW': {
+                'severity': 'HEALTH_WARN',
+                'summary': {'message': '1 clock(s) skewed', 'count': 1},
+                'detail': [],
+            }}})
+        value = self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'MON_CLOCK_SKEW': {
+                'severity': 'HEALTH_WARN',
+                'summary': {'message': '2 clock(s) skewed', 'count': 2},
+                'detail': [],
+            }}})
+        self.assertEqual(value, {('MON_CLOCK_SKEW', 'HEALTH_WARN', '2 clock(s) skewed'): 1})
+
+    def test_cleared_check_has_empty_message(self):
+        """After a check clears, its inactive series must not retain the active message."""
+        mod = self._make_mod()
+        self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'MON_CLOCK_SKEW': {
+                'severity': 'HEALTH_WARN',
+                'summary': {'message': '1 clock(s) skewed', 'count': 1},
+                'detail': [],
+            }}})
+        value = self._run(mod, {'status': 'HEALTH_OK', 'checks': {}})
+        self.assertEqual(value, {('MON_CLOCK_SKEW', 'HEALTH_WARN', ''): 0})
+
+    def test_missing_summary_message_safe(self):
+        """A check with no summary.message key emits an empty message, not an error.
+
+        health_check_t::dump() (src/mon/health_check.h) always emits a
+        'summary' dict with a 'message' key, so this tests graceful handling
+        of malformed or synthetic health data.
+        """
+        mod = self._make_mod()
+        value = self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'MON_CLOCK_SKEW': {'severity': 'HEALTH_WARN', 'summary': {}, 'detail': []}}})
+        self.assertEqual(value, {('MON_CLOCK_SKEW', 'HEALTH_WARN', ''): 1})
+
+    def test_one_series_per_check_name_not_per_entity(self):
+        """Multiple affected OSDs produce exactly one in-memory series, not one per OSD.
+
+        This verifies that detail[] entries are not iterated in the generic
+        emission loop — only summary.message is used. One series per check name
+        is the invariant that keeps the metric schema stable.
+        """
+        mod = self._make_mod()
+        value = self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'OSD_DOWN': {
+                'severity': 'HEALTH_WARN',
+                'summary': {'message': '3 osds down', 'count': 3},
+                'detail': [
+                    {'message': 'osd.1 is down'},
+                    {'message': 'osd.2 is down'},
+                    {'message': 'osd.3 is down'},
+                ],
+            }}})
+        # Exactly one series for OSD_DOWN regardless of detail count
+        osd_down_series = [k for k in value if k[0] == 'OSD_DOWN']
+        self.assertEqual(len(osd_down_series), 1)
+        self.assertEqual(value[osd_down_series[0]], 1)
+
+    def test_osd_down_message_is_empty_for_scalar_compatibility(self):
+        """OSD_DOWN keeps an empty message label because the existing alert rule
+        uses scalar(ceph_health_detail{name="OSD_DOWN"}). Keeping the message
+        stable avoids unnecessary time-series churn. Severity changes can still
+        change the label set.
+
+        Prometheus staleness and alert evaluation are not covered by this unit test.
+        """
+        mod = self._make_mod()
+        # First scrape: 3 osds down
+        self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'OSD_DOWN': {
+                'severity': 'HEALTH_WARN',
+                'summary': {'message': '3 osds down', 'count': 3},
+                'detail': [],
+            }}})
+        # Second scrape: count changes — message must still be empty
+        value = self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'OSD_DOWN': {
+                'severity': 'HEALTH_WARN',
+                'summary': {'message': '2 osds down', 'count': 2},
+                'detail': [],
+            }}})
+        self.assertEqual(value, {('OSD_DOWN', 'HEALTH_WARN', ''): 1})
+
+    def test_osd_down_severity_transition_changes_label_set(self):
+        """Verify severity changes update the label set.
+
+        Prometheus staleness behavior is not covered by this unit test.
+        """
+        mod = self._make_mod()
+        # First scrape: HEALTH_WARN
+        self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'OSD_DOWN': {
+                'severity': 'HEALTH_WARN',
+                'summary': {'message': '3 osds down', 'count': 3},
+                'detail': [],
+            }}})
+        # Second scrape: escalated to HEALTH_ERR
+        value = self._run(mod, {'status': 'HEALTH_ERR', 'checks': {
+            'OSD_DOWN': {
+                'severity': 'HEALTH_ERR',
+                'summary': {'message': '3 osds down', 'count': 3},
+                'detail': [],
+            }}})
+        # Verify the emitted series reflects the updated severity.
+        self.assertEqual(value, {('OSD_DOWN', 'HEALTH_ERR', ''): 1})
+
+    def test_non_scalar_check_message_is_populated(self):
+        """Checks not used in scalar() expressions expose their summary message."""
+        mod = self._make_mod()
+        value = self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'MDS_DAMAGE': {
+                'severity': 'HEALTH_ERR',
+                'summary': {'message': 'mds.a has damaged metadata', 'count': 1},
+                'detail': [],
+            }}})
+        self.assertEqual(value, {('MDS_DAMAGE', 'HEALTH_ERR', 'mds.a has damaged metadata'): 1})
+
+    def test_empty_checks_emits_nothing(self):
+        """No history means no health_detail series at all."""
+        mod = self._make_mod()
+        self.assertEqual(self._run(mod, {'status': 'HEALTH_OK', 'checks': {}}), {})
+
+    def test_cert_check_flows_through_generic_path(self):
+        """CEPHADM_CERT_WARNING is handled by the generic loop, not a separate method.
+
+        One series is emitted per check name using summary.message, consistent
+        with all other health checks. The detail[] entries are not iterated.
+        """
+        mod = self._make_mod()
+        value = self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'CEPHADM_CERT_WARNING': {
+                'severity': 'HEALTH_WARN',
+                'summary': {'message': 'Certificate expires soon', 'count': 1},
+                'detail': [
+                    {'message': 'mgr.a: cert expires in 7 days'},
+                    {'message': 'mgr.b: cert expires in 3 days'},
+                ],
+            }}})
+        # Exactly one series — detail[] entries are NOT iterated
+        self.assertEqual(
+            value,
+            {('CEPHADM_CERT_WARNING', 'HEALTH_WARN', 'Certificate expires soon'): 1}
+        )
 
 
 class ThreadSafeLRUCacheDictTest(TestCase):

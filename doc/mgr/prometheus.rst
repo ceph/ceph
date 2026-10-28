@@ -251,9 +251,14 @@ The metrics take the following form:
 
     # HELP ceph_health_detail healthcheck status by type (0=inactive, 1=active)
     # TYPE ceph_health_detail gauge
-    ceph_health_detail{name="OSDMAP_FLAGS",severity="HEALTH_WARN"} 0.0
-    ceph_health_detail{name="OSD_DOWN",severity="HEALTH_WARN"} 1.0
-    ceph_health_detail{name="PG_DEGRADED",severity="HEALTH_WARN"} 1.0
+    ceph_health_detail{name="OSDMAP_FLAGS",severity="HEALTH_WARN",message=""} 0.0
+    ceph_health_detail{name="OSD_DOWN",severity="HEALTH_WARN",message=""} 1.0
+    ceph_health_detail{name="PG_DEGRADED",severity="HEALTH_WARN",message="Degraded placement groups"} 1.0
+
+For active health checks, the ``message`` label contains the current health-check summary when
+available. Inactive checks always have an empty message. ``OSD_DOWN`` retains an empty message
+for compatibility with existing Prometheus rules that use
+``scalar(ceph_health_detail{name="OSD_DOWN"})``, which requires a single stable series.
 
 The module also maintains an in-memory history of health-check states.
 By default the history retains a maximum of 1000 entries. This limit is configurable via the following runtime option:
