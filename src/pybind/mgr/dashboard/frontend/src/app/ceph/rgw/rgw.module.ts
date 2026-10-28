@@ -16,6 +16,7 @@ import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 
+import { ContextComponent } from '~/app/core/context/context.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { RgwBucketDetailsComponent } from './rgw-bucket-details/rgw-bucket-details.component';
@@ -86,7 +87,8 @@ import {
   IconService,
   LayoutModule,
   SkeletonModule,
-  TilesModule
+  TilesModule,
+  ContentSwitcherModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import ScalesIcon from '@carbon/icons/es/scales/20';
@@ -167,7 +169,9 @@ import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account
     ProductiveCardComponent,
     TimePickerComponent,
     AreaChartComponent,
-    ComponentsModule
+    ComponentsModule,
+    ContentSwitcherModule,
+    ContextComponent
   ],
   exports: [
     RgwDaemonDetailsComponent,

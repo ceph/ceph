@@ -82,6 +82,26 @@ class RgwDaemon:
     zone_name: str
 
 
+def append_rgw_realm_zone(command: List[str],
+                          daemon: Optional[RgwDaemon] = None,
+                          daemon_name: Optional[str] = None) -> List[str]:
+    """
+    Append --rgw-realm / --rgw-zone flags for the given daemon.
+
+    Prefer passing an already-resolved ``daemon``. Callers that only have a
+    daemon name can pass ``daemon_name``; the lookup stays inside this module
+    so ``_get_daemons`` remains private.
+    """
+    if daemon is None and daemon_name:
+        daemon = _get_daemons().get(daemon_name)
+    if daemon:
+        if daemon.realm_name:
+            command.extend(['--rgw-realm', daemon.realm_name])
+        if daemon.zone_name:
+            command.extend(['--rgw-zone', daemon.zone_name])
+    return command
+
+
 _RGW_CEPHADM_CA_BUNDLE_DIR = os.path.join(tempfile.gettempdir(), 'ceph-dashboard-ca')
 _RGW_CEPHADM_CA_BUNDLE_PATH = os.path.join(_RGW_CEPHADM_CA_BUNDLE_DIR, 'rgw-cephadm-root-ca.pem')
 
@@ -1063,6 +1083,9 @@ class RgwClient(RestClient):
         rgw_list_roles_command = ['role', 'list']
         if account_id:
             rgw_list_roles_command += ['--account-id', account_id]
+
+        append_rgw_realm_zone(rgw_list_roles_command, self.daemon)
+
         code, roles, err = mgr.send_rgwadmin_command(rgw_list_roles_command)
         if code != 0:
             logger.warning('Error listing roles with code %d: %s', code, err)

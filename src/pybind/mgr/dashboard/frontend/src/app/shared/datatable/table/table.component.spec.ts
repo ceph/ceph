@@ -392,6 +392,27 @@ describe('TableComponent', () => {
       expectSearch('arraycolumn:1 arraycolumn:2', [{ a: 1, b: [1, 2] }]);
     });
 
+    it('should search using column searchFormatter', () => {
+      component.localColumns = [
+        { prop: 'a', name: 'Index' },
+        {
+          prop: 'b',
+          name: 'OSDs',
+          searchFormatter: (value: number[]) => value.map((id) => `osd.${id}`).join(' ')
+        }
+      ];
+      component.data = [
+        { a: 1, b: [12] },
+        { a: 2, b: [34] }
+      ];
+      expectSearch('osd.12', [{ a: 1, b: [12] }]);
+      expectSearch('osd', [
+        { a: 1, b: [12] },
+        { a: 2, b: [34] }
+      ]);
+      expectSearch('34', [{ a: 2, b: [34] }]);
+    });
+
     it('should search with spaces', () => {
       const expectedResult = [{ a: 2, b: 20, c: false }];
       expectSearch(`'Index times ten':20`, expectedResult);
@@ -436,6 +457,23 @@ describe('TableComponent', () => {
       component.search = '3';
       component.updateFilter();
       expect(component.rows?.length).toBeFalsy();
+    });
+
+    it('should show search-specific empty state when a search term has no matches', () => {
+      component.searchEmptyStateTitle = 'No matching results';
+      component.searchEmptyStateMessage = 'No records match the current search criteria.';
+      component.search = 'does-not-exist';
+      component.updateFilter();
+
+      expect(component.rows).toEqual([]);
+      expect(component.displayedEmptyStateTitle).toBe('No matching results');
+      expect(component.displayedEmptyStateMessage).toBe(
+        'No records match the current search criteria.'
+      );
+
+      component.onClearSearch();
+      expect(component.displayedEmptyStateTitle).toBe(component.emptyStateTitle);
+      expect(component.displayedEmptyStateMessage).toBe(component.emptyStateMessage);
     });
   });
 
@@ -734,6 +772,22 @@ describe('TableComponent', () => {
 
     afterEach(() => {
       clearLocalStorage();
+    });
+  });
+
+  describe('column toggle button', () => {
+    const getColumnToggleButton = () =>
+      fixture.debugElement.query(By.css('[data-testid="column-toggle-button"]'));
+
+    it('should show the column toggle button by default', () => {
+      expect(component.showColumnToggle).toBe(true);
+      expect(getColumnToggleButton()).not.toBeNull();
+    });
+
+    it('should hide the column toggle button when showColumnToggle is false', () => {
+      fixture.componentRef.setInput('showColumnToggle', false);
+      fixture.detectChanges();
+      expect(getColumnToggleButton()).toBeNull();
     });
   });
 
