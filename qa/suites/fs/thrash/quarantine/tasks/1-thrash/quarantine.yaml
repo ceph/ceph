@@ -12,6 +12,10 @@ overrides:
       - quarantine
       - evicting unresponsive client
       - slow request
+      # quarantine revokes all caps but PIN; releasing Fb needs a
+      # writeback of dirty data, which can outlast session_timeout
+      - responding to mclientcaps\(revoke\)
+      - MDS_CLIENT_LATE_RELEASE
   kclient:
     client.0:
       mount_subvol_num: 0
