@@ -214,7 +214,7 @@ ostream& operator<<(ostream& out, const snaplink_t &l)
 
 void sr_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(8, 4, bl);
+  ENCODE_START(9, 4, bl);
   encode(seq, bl);
   encode(created, bl);
   encode(last_created, bl);
@@ -224,6 +224,7 @@ void sr_t::encode(bufferlist& bl) const
   encode(past_parents, bl);
   encode(past_parent_snaps, bl);
   encode(flags, bl);
+  encode(subvol_prev_path, bl);
   encode(last_modified, bl);
   encode(change_attr, bl);
   ENCODE_FINISH(bl);
@@ -253,6 +254,9 @@ void sr_t::decode(bufferlist::const_iterator& p)
     decode(last_modified, p);
     decode(change_attr, p);
   }
+  if (struct_v >= 9) {
+    decode(subvol_prev_path, p);
+  }
   // ensure that after a cluster upgrade, snapshot visibility is enabled
   // by default.
   if (struct_v < 6) {
@@ -277,6 +281,7 @@ void sr_t::dump(Formatter *f) const
   f->dump_unsigned("change_attr", change_attr);
   f->dump_unsigned("is_snapdir_visible", is_snapdir_visible());
   f->dump_unsigned("current_parent_since", current_parent_since);
+  f->dump_string("subvol_prev_path", subvol_prev_path);
 
   f->open_array_section("snaps");
   for (map<snapid_t,SnapInfo>::const_iterator p = snaps.begin(); p != snaps.end(); ++p) {
