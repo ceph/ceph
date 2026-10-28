@@ -210,33 +210,21 @@ private:
   ceph::shared_mutex sessions_mutex = ceph::make_shared_mutex("s3vector::Manager::sessions_mutex");
   std::unordered_map<session_name_t, SessionPtr, boost::hash<session_name_t>> sessions;
 
-  struct table_state_t {
-    // track local insert/delete counts for each table, last_rebuild_time, to determine if a rebuild is needed.
-    // data is saved into table metadata to persist across RGW restarts and allow other RGW instances to see the global state.
-    // Concurrency note: tables_mutex guards the MAP STRUCTURE (entries are
-    // inserted/erased only under a unique_lock). Value updates to an existing
-    // entry are allowed under a shared_lock ONLY because insert_count/delete_count
-    // are atomics. last_rebuild_time is non-atomic, so it is written under a
-    // unique_lock (see the rebuild coroutine in process_tables). If you add a new
-    // field here and mutate it under a shared_lock, make it atomic OR take a
-    // unique_lock for the write — otherwise it races the scan's shared readers.
-    std::atomic<uint64_t> insert_count{0};
-    std::atomic<uint64_t> delete_count{0};
-    ceph::coarse_real_time last_rebuild_time;
-    table_state_t() = default;
-    table_state_t(table_state_t&& o) noexcept
-      : insert_count(o.insert_count.load()),
-        delete_count(o.delete_count.load()),
-        last_rebuild_time(o.last_rebuild_time) {}
-  };
-  // guards the `tables` map: shared (read) while the scan loop iterates and while
-  // notify_index_mutation bumps a counter; exclusive only to insert a new entry.
-  std::shared_mutex tables_mutex;
-  std::unordered_map<table_name_t, table_state_t, boost::hash<table_name_t>> tables;
-  // guards both `active_builds` and `active_locks` together (they are updated as a
-  // pair when a build starts/ends). A short-held plain mutex — never held across I/O.
+  // Set of tables that have had at least one mutation (insert or delete) since
+  // the last scan. The scan loop copies the set under the lock and then
+  // iterates the copy without holding it. Structural changes (insert/erase)
+  // are always made under pending_mutex; the set is never accessed without it.
+  std::mutex pending_mutex;
+  std::unordered_set<table_name_t, boost::hash<table_name_t>> pending_mutations;
+  // Per-table epoch (coarse_real_clock::to_time_t) of the last successful
+  // rebuild, used for the cooldown check. Map structure is modified only under
+  // pending_mutex; values are written atomically by the rebuild coroutine
+  // (under the distributed lock) without acquiring pending_mutex.
+  std::unordered_map<table_name_t, std::atomic<int64_t>,
+                     boost::hash<table_name_t>> last_rebuild_epoch;
+  // guards both `active_locks` together (updated as a pair when a build
+  // starts/ends). A short-held plain mutex — never held across I/O.
   std::mutex active_builds_mutex;
-  std::unordered_set<table_name_t, boost::hash<table_name_t>> active_builds;//to check locally if a table is already being rebuilt by this RGW instance(a cheap check before acquiring the distributed lock)
   std::atomic<int> active_rebuild_count{0};//how many rebuilds are currently active, in order to control the number of concurrent tasks.
 
   struct active_lock_t {
@@ -926,22 +914,15 @@ private:
   static constexpr int RESULT_ALREADY_BUILDING = 2;
   static constexpr int RESULT_REBUILD_DISABLED = 3;
 
-  void restore_counters(const table_name_t& table_name,
-                        uint64_t inserts, uint64_t deletes) {
-    std::shared_lock sl(tables_mutex);
-    auto it = tables.find(table_name);
-    if (it != tables.end()) {
-      if (inserts > 0) {
-        it->second.insert_count.fetch_add(inserts, std::memory_order_relaxed);
-      }
-      if (deletes > 0) {
-        it->second.delete_count.fetch_add(deletes, std::memory_order_relaxed);
-      }
-    }
+  // Re-signal that a mutation is pending for table_name so the next scan tick
+  // picks it up again. Called when a rebuild was attempted but did not complete
+  // (lock not acquired, or transient build failure).
+  void restore_pending(const table_name_t& table_name) {
+    std::lock_guard lg(pending_mutex);
+    pending_mutations.insert(table_name);
   }
 
   int process_table(const table_name_t& table_name,
-                    uint64_t local_inserts, uint64_t local_deletes,
                     boost::asio::yield_context yield) {
     const auto& bucket_name = table_name.bucket;
     const auto& index_name = table_name.index;
@@ -949,12 +930,10 @@ private:
     // step 1: check if this RGW is already building this table (cheapest check).
     {
       std::lock_guard lg(active_builds_mutex);
-      if (active_builds.count(table_name)) {
+      if (active_locks.count(table_name)) {
         ldpp_dout(this, 5) << "INFO: this RGW is already building "
-            << bucket_name << "." << index_name << ", skipping"
-            << " (local_inserts=" << local_inserts
-            << ", local_deletes=" << local_deletes << ")" << dendl;
-        restore_counters(table_name, local_inserts, local_deletes);
+            << bucket_name << "." << index_name << ", skipping" << dendl;
+        restore_pending(table_name);
         return RESULT_ALREADY_BUILDING;
       }
     }
@@ -1029,9 +1008,7 @@ private:
     ldpp_dout(this, 1) << "INFO: index stats for " << bucket_name << "." << index_name
         << ": indexed=" << vector_index_status.num_indexed_rows
         << " unindexed=" << vector_index_status.num_unindexed_rows
-        << " num_indices=" << vector_index_status.num_indices
-        << " local_inserts=" << local_inserts
-        << " local_deletes=" << local_deletes << dendl;
+        << " num_indices=" << vector_index_status.num_indices << dendl;
 
     // step 4b: minimum row count check
     const uint64_t min_rows = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_min_rows");
@@ -1079,10 +1056,9 @@ private:
       return delete_ratio >= delete_ratio_threshold;
     };
 
-    // step 5b: delete ratio pre-check (lock-free). local_deletes>0 only gates
-    // whether it is worth asking — this instance observed delete activity; the
-    // ghost count itself comes from the shared dataset.
-    bool delete_rebuild = (local_deletes > 0) && evaluate_delete_rebuild("pre-check");
+    // step 5b: delete ratio pre-check — ground-truth ghost count from LanceDB,
+    // no local counter needed (num_deleted_rows is authoritative across instances).
+    bool delete_rebuild = evaluate_delete_rebuild("pre-check");
 
     if (!insert_rebuild && !delete_rebuild) {
       ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
@@ -1100,7 +1076,7 @@ private:
     const StorageMode mode = backend_config.storage_mode.value_or(StorageMode::S3_BUCKET);
     auto lock_result = try_acquire_lock(table_name.ns, mode, bucket_name, index_name, y);
     if (lock_result.token.empty()) {
-      restore_counters(table_name, local_inserts, local_deletes);
+      restore_pending(table_name);
       if (lock_result.ret < 0 && lock_result.ret != -ENOENT) {
         // MAJOR error: the lock-storage bucket could not be accessed, so no rebuild
         // can run for this index. Surface it loudly (ERROR log + event-log entry +
@@ -1124,7 +1100,6 @@ private:
     {
       std::lock_guard lg(active_builds_mutex);
       const auto now = ceph::coarse_real_clock::now();
-      active_builds.insert(table_name);
       active_locks[table_name] = {lock_token, lock_result.etag,
                                    now, false, now, 0, mode};
     }
@@ -1140,7 +1115,6 @@ private:
       ~lock_guard_t() {
         {
           std::lock_guard lg(mgr->active_builds_mutex);
-          mgr->active_builds.erase(table_name);
           mgr->active_locks.erase(table_name);
         }
         mgr->release_lock(table_name.ns, mode, bucket_name, index_name, token, y);
@@ -1206,7 +1180,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: vector index build FAILED for "
           << bucket_name << "." << index_name
           << " (transient error, will retry)" << dendl;
-      restore_counters(table_name, local_inserts, local_deletes);
+      restore_pending(table_name);
     }
 
     return build_ret;
@@ -1358,8 +1332,9 @@ private:
           case message_t::Op::REMOVE:
             {
               ldpp_dout(this, 20) << "INFO: received remove message for table: " << table_name.bucket << "." << table_name.index << dendl;
-              std::unique_lock ul(tables_mutex);//exclusive lock to erase the table from the map, since we don't want any other thread to be reading or writing to this table while it's being removed.(short time)
-              tables.erase(table_name);
+              std::lock_guard lg(pending_mutex);
+              pending_mutations.erase(table_name);
+              last_rebuild_epoch.erase(table_name);
               return;
             }
           case message_t::Op::SESSION_CREATE:
@@ -1467,17 +1442,21 @@ private:
             "(rgw_s3vector_max_concurrent_rebuilds=0), skipping table scan" << dendl;
       }
 
-      // 2. scan tables for pending mutations
+      // 2. scan pending_mutations for tables needing a rebuild.
+      // Copy the set under lock (brief), then iterate the copy lock-free.
+      // New mutations arriving during iteration are fine — they stay in the
+      // set and will be picked up on the next tick.
       if (!paused) {
-        // Acquired on the single main-loop thread (s3v-mainloop, main_loop_io_context).
-        // Held only for the duration of scanning the tables map, not for the entire
-        // processing of each table. The matching unique_lock that writes
-        // last_rebuild_time (below, at the end of the rebuild coroutine) runs on a
-        // DIFFERENT thread (an s3v-worker on io_context), so that write blocks on this
-        // reader rather than deadlocking against it — the two never share a thread.
-        std::shared_lock sl(tables_mutex);
-        const auto now = ceph::coarse_real_clock::now();
-        for (auto& [name, state] : tables) {
+        std::unordered_set<table_name_t, boost::hash<table_name_t>> work;
+        {
+          std::lock_guard lg(pending_mutex);
+          work = pending_mutations;
+          pending_mutations.clear();
+        }
+        const auto now_epoch = ceph::coarse_real_clock::to_time_t(
+            ceph::coarse_real_clock::now());
+        for (auto wit = work.begin(); wit != work.end(); ++wit) {
+          const auto& name = *wit;
           if (active_rebuild_count.load(std::memory_order_relaxed) >= max_concurrent) {
             ldpp_dout(this, 1) << "INFO: rebuild concurrency limit reached"
                 << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
@@ -1486,66 +1465,66 @@ private:
             record_event(rebuild_event_t::Type::LIMIT_REACHED, "", "", "",
                          active_rebuild_count.load(std::memory_order_relaxed),
                          max_concurrent);
+            // re-queue only the unprocessed entries (from current position onward)
+            std::lock_guard lg(pending_mutex);
+            for (auto rem = wit; rem != work.end(); ++rem) {
+              pending_mutations.insert(*rem);
+            }
             break;
           }
 
-          const uint64_t inserts = state.insert_count.load(std::memory_order_relaxed);
-          const uint64_t deletes = state.delete_count.load(std::memory_order_relaxed);
-          if (inserts == 0 && deletes == 0) {
-            continue;
+          // cooldown check: read the per-table last-rebuild epoch atomically
+          {
+            auto it = last_rebuild_epoch.find(name);
+            if (it != last_rebuild_epoch.end()) {
+              const int64_t last = it->second.load(std::memory_order_relaxed);
+              if (now_epoch - last < cooldown.count()) {
+                ldpp_dout(this, 20) << "INFO: table " << name.bucket << "." << name.index
+                    << " under cooldown, re-queuing" << dendl;
+                restore_pending(name);
+                continue;
+              }
+            }
           }
-          if (now - state.last_rebuild_time < cooldown) {
-            ldpp_dout(this, 20) << "INFO: table " << name.bucket << "." << name.index
-                << " under cooldown, deferring (inserts=" << inserts
-                << ", deletes=" << deletes << ")" << dendl;
-            continue;
-          }
+
+          // fast-path dedup: skip if this instance already holds the distributed
+          // lock for this table. The authoritative dedup is the distributed lock
+          // itself; restore_pending() handles the race window between here and
+          // lock acquisition.
           {
             std::lock_guard lg(active_builds_mutex);
-            if (active_builds.count(name)) {
+            if (active_locks.count(name)) {
+              restore_pending(name);
               continue;
             }
           }
 
-          // Consume the counts we observed so the next tick won't re-select this
-          // table for the same mutations. NOTE: this and the local `active_builds`
-          // set are only fast-path dedup; they do NOT prevent a duplicate build on
-          // their own. Between here and the coroutine registering in `active_builds`
-          // (process_table step 6, after the lock round-trip yields), a fast re-scan
-          // with fresh mutations could spawn a second coroutine for this same table.
-          // The AUTHORITATIVE dedup — across that window and across RGW instances —
-          // is the distributed lock (try_acquire_lock); the loser returns SKIPPED and
-          // restores its counts. Do not rely on active_builds for correctness.
-          state.insert_count.fetch_sub(inserts, std::memory_order_relaxed);
-          state.delete_count.fetch_sub(deletes, std::memory_order_relaxed);
           perf_counters_->set(l_rgw_s3v_bg_rebuilds_active,
                               active_rebuild_count.fetch_add(1, std::memory_order_relaxed) + 1);
 
           ldpp_dout(this, 1) << "INFO: spawning rebuild coroutine for "
               << name.bucket << "." << name.index
               << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
-              << "/" << max_concurrent
-              << ", inserts=" << inserts
-              << ", deletes=" << deletes << ")" << dendl;
+              << "/" << max_concurrent << ")" << dendl;
 
           record_event(rebuild_event_t::Type::SPAWN, name.ns.name(), name.bucket, name.index,
                        active_rebuild_count.load(std::memory_order_relaxed),
                        max_concurrent);
 
           boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
-              [this, table_name = name, inserts, deletes, max_concurrent](boost::asio::yield_context yield) {
+              [this, table_name = name, max_concurrent](boost::asio::yield_context yield) {
             const auto build_start = ceph::coarse_real_clock::now();
-            const int rc = process_table(table_name, inserts, deletes, yield);
+            const int rc = process_table(table_name, yield);
             if (rc == 0) {
-              // Acquired on an s3v-worker thread (io_context), NOT the main-loop
-              // thread that runs the scan above. last_rebuild_time is a non-atomic
-              // field, so this write needs an exclusive lock to not race the scan's
-              // shared_lock reader (see process_tables). Short-lived: just a map
-              // lookup + assignment.
-              std::unique_lock ul(tables_mutex);//short time lock to update last_rebuild_time after successful rebuild
-              auto it = tables.find(table_name);
-              if (it != tables.end()) {
-                it->second.last_rebuild_time = ceph::coarse_real_clock::now();
+              // Store the rebuild epoch atomically — no mutex needed: the map
+              // entry was created under pending_mutex by notify_index_mutation,
+              // and the distributed lock ensures at most one coroutine writes
+              // this entry at a time.
+              auto it = last_rebuild_epoch.find(table_name);
+              if (it != last_rebuild_epoch.end()) {
+                it->second.store(
+                    ceph::coarse_real_clock::to_time_t(ceph::coarse_real_clock::now()),
+                    std::memory_order_relaxed);
               }
             } else if (rc < 0) {
               ldpp_dout(this, 1) << "ERROR: failed to process table: " << table_name.bucket
@@ -1565,7 +1544,7 @@ private:
                          table_name.bucket, table_name.index,
                          active_rebuild_count.load(std::memory_order_relaxed),
                          max_concurrent, duration_ms, result);
-          }, [this, table_name = name, inserts, deletes] (std::exception_ptr eptr) {
+          }, [this, table_name = name] (std::exception_ptr eptr) {
             if (eptr) {
               try {
                 std::rethrow_exception(eptr);
@@ -1574,13 +1553,13 @@ private:
                     << table_name.bucket << "." << table_name.index
                     << ": " << e.what() << dendl;
               }
-              restore_counters(table_name, inserts, deletes);
+              restore_pending(table_name);
             }
             perf_counters_->set(l_rgw_s3v_bg_rebuilds_active,
                                 active_rebuild_count.fetch_sub(1, std::memory_order_relaxed) - 1);
           });
         }
-      }// end of scan tables for pending mutations
+      }// end of scan pending_mutations
 
       // 3. refresh distributed lock timestamps for active builds
       refresh_active_locks(yield);
@@ -1744,32 +1723,14 @@ public:
     const table_name_t table_name{ns, bucket_name, index_name};
 
     {
-      std::shared_lock sl(tables_mutex);
-      auto it = tables.find(table_name);
-      if (it != tables.end()) {
-        if (is_delete) {
-          it->second.delete_count.fetch_add(row_count, std::memory_order_relaxed);
-        } else {
-          it->second.insert_count.fetch_add(row_count, std::memory_order_relaxed);
-        }
-        ldpp_dout(dpp, 20) << "INFO: incremented " << (is_delete ? "delete" : "insert")
-            << " counter by " << row_count << " for " << ns.name() << "/" << bucket_name << "." << index_name << dendl;
-        return true;
-      }
+      std::lock_guard lg(pending_mutex);
+      pending_mutations.insert(table_name);
+      // create the cooldown entry on first mutation so the coroutine can write
+      // the epoch atomically without structural map changes
+      last_rebuild_epoch.emplace(table_name, int64_t{0});
     }
-
-    {
-      std::unique_lock ul(tables_mutex);//exclusive lock to create a new entry in the tables map if it doesn't exist
-      auto [it, inserted] = tables.emplace(table_name, table_state_t{});
-      if (is_delete) {
-        it->second.delete_count.fetch_add(row_count, std::memory_order_relaxed);
-      } else {
-        it->second.insert_count.fetch_add(row_count, std::memory_order_relaxed);
-      }
-      ldpp_dout(dpp, 20) << "INFO: " << (inserted ? "created entry and incremented" : "incremented")
-          << " " << (is_delete ? "delete" : "insert")
-          << " counter by " << row_count << " for " << ns.name() << "/" << bucket_name << "." << index_name << dendl;
-    }
+    ldpp_dout(dpp, 20) << "INFO: pending mutation recorded for "
+        << ns.name() << "/" << bucket_name << "." << index_name << dendl;
     return true;
   }
 
@@ -1822,8 +1783,8 @@ public:
         cct->_conf.get_val<int64_t>("rgw_s3vector_max_concurrent_rebuilds");
     st.num_workers = static_cast<int>(workers.size());
     {
-      std::shared_lock sl(tables_mutex);
-      st.tables_tracked = static_cast<int>(tables.size());
+      std::lock_guard lg(pending_mutex);
+      st.tables_tracked = static_cast<int>(pending_mutations.size());
     }
     // aggregate counters are exposed via PerfCounters (see the perf collection),
     // not in this admin reply.
