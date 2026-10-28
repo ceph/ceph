@@ -308,13 +308,15 @@ list(APPEND librgw_posix_srcs
   driver/posix/lmdb-safe.cc
   driver/posix/posixDB.cc
   driver/posix/notify.cpp
+  driver/posix/userdb_watcher.cc
 )
 list(APPEND librgw_nsfs_srcs
   driver/nsfs/rgw_sal_nsfs.cc
   driver/posix/posixDB.cc
   driver/nsfs/fs_strategy.cc
   driver/posix/lmdb-safe.cc
-  driver/posix/notify.cpp)
+  driver/posix/notify.cpp
+  driver/posix/userdb_watcher.cc)
 list(APPEND librgw_d4n_srcs
   rgw_redis_driver.cc
   rgw_ssd_driver.cc
