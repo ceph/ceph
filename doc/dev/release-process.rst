@@ -451,6 +451,20 @@ The ``--promote`` step should be performed only as the final step in releasing
 containers, after the container images have been tested and have been confirmed
 to be good.
 
+Pushing the Tag
+---------------
+
+The tag is no longer automatically pushed to ceph.git (the version commit PR is).
+
+   .. prompt:: bash $
+
+      # Add the ceph-releases repo (requires permission to the repo)
+      git remote add releases git@github.com:ceph/ceph-releases.git
+      git fetch --all
+      # Check out the version commit
+      git checkout -f -B squid-release releases/squid-release
+      git push origin v19.2.3
+
 Version Commit PR
 -----------------
 
