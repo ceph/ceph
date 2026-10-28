@@ -7531,9 +7531,18 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
     }
 
     const auto* srnode = cur->get_projected_srnode();
-    //if (srnode && srnode->is_subvolume()) {
-    if (srnode) {
-      // TODO raise error if this not set on/inside a dir marked as subvolume
+    if (!srnode) {
+        dout(10) << __func__ << " no-op since no snaprealm node found for "
+                 << mdr->client_request->get_filepath() << dendl;
+        r = 0;
+    /*
+    } else if (srnode && !srnode->is_subvolume()) {
+        dout(10) << __func__ << " no-op since this dir is not marked as "
+                 << "subvolume: " < mdr->client_request->get_filepath()
+                 << dendl;
+        r = 0;
+    */
+    } else {
       *css << srnode->subvol_prev_path;
     }
   } else if (xattr_name == "ceph.dir.subvolume.snaps.visible"sv) {
