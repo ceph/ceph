@@ -2233,6 +2233,19 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   /* user info cache */
   user_cache.set_max_size(dpp, g_conf().get_val<uint64_t>("rgw_nsfs_cache_max_users"));
 
+#ifdef __linux__
+  /* watch userDB file for external modifications */
+  {
+    auto db_file = userDB->getDBfile();
+    userdb_watcher = std::make_unique<UserDBWatcher>(user_cache, cct, db_file);
+    int wr = userdb_watcher->start(dpp);
+    if (wr < 0) {
+      ldpp_dout(dpp, 0) << "WARNING: UserDBWatcher failed to start: "
+        << cpp_strerror(-wr) << dendl;
+    }
+  }
+#endif
+
   root_dir = std::make_unique<Directory>(base_path, nullptr, ctx(), fs_strategy.get());
   ret = root_dir->open(dpp);
   if (ret < 0) {
@@ -2288,6 +2301,11 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
 void NSFSDriver::finalize()
 {
+#ifdef __linux__
+  if (userdb_watcher) {
+    userdb_watcher->stop();
+  }
+#endif
   if (syncfs_thread) {
     syncfs_thread->shutdown();
   }

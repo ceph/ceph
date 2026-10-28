@@ -22,11 +22,14 @@
 #include "include/encoding.h"
 #include <cstdint>
 #include <memory>
+#include <atomic>
+#include <thread>
 #include "common/dout.h"
 #include "../posix/bucket_cache.h"
 #include "../posix/multipart_cache.h"
 #include "../posix/posixDB.h"
 #include "../posix/user_cache.h"
+#include "../posix/userdb_watcher.h"
 #include "../posix/qd2_pending.h"
 #include "../posix/posix_io_uring.h"
 #include "fs_strategy.h"
@@ -407,6 +410,9 @@ protected:
   std::unique_ptr<nsfs::MultipartCache> multipart_cache;
   std::unique_ptr<rgw::posix::SyncFsThread> syncfs_thread;
   UserCache user_cache;
+#ifdef __linux__
+  std::unique_ptr<UserDBWatcher> userdb_watcher;
+#endif
   std::unique_ptr<nsfs::FSStrategy> fs_strategy;
   std::string base_path;
   std::unique_ptr<nsfs::Directory> root_dir;
