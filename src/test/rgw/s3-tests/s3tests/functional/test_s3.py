@@ -7869,8 +7869,12 @@ def _object_url(bucket_name, key):
     scheme = 'https' if get_config_is_secure() else 'http'
     host = get_config_host()
     port = get_config_port()
-    return '{scheme}://{host}:{port}{prefix}/{bucket}/{key}'.format(
-        scheme=scheme, host=host, port=port, prefix=get_prefix(),
+    path_prefix = get_prefix()
+    if path_prefix and not path_prefix.startswith('/'):
+        path_prefix = '/' + path_prefix
+    path_prefix = path_prefix.rstrip('/')
+    return '{scheme}://{host}:{port}{path_prefix}/{bucket}/{key}'.format(
+        scheme=scheme, host=host, port=port, path_prefix=path_prefix,
         bucket=bucket_name, key=key)
 
 def test_object_unrecognized_http_method_not_implemented():
