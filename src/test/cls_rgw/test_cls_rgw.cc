@@ -1749,6 +1749,395 @@ TEST_P(TestClsRgw, bi_put_entries)
   }
 }
 
+static int check_olh_list(librados::IoCtx& ioctx, const string& oid,
+                          const string& name, rgw_cls_check_olh_list_ret& result)
+{
+  bufferlist out;
+  ObjectReadOperation op;
+  cls_rgw_bucket_check_olh_list(op, cls_rgw_obj_key(name), out);
+  int r = ioctx.operate(oid, &op, nullptr);
+  if (r < 0) {
+    return r;
+  }
+  cls_rgw_bucket_check_olh_list_decode(out, result);
+  return 0;
+}
+
+static int fix_olh_list(librados::IoCtx& ioctx, const string& oid,
+                        const string& name)
+{
+  ObjectWriteOperation op;
+  cls_rgw_bucket_fix_olh_list(op, cls_rgw_obj_key(name));
+  return ioctx.operate(oid, &op);
+}
+
+// the versioned list entries of an object, by index key
+static map<string, rgw_bucket_dir_entry> get_list_entries(
+    librados::IoCtx& ioctx, const string& oid, const string& name)
+{
+  map<string, rgw_bucket_dir_entry> result;
+  list<rgw_cls_bi_entry> entries;
+  bool truncated = false;
+  EXPECT_EQ(0, cls_rgw_bi_list(ioctx, oid, name, "", 1000, &entries, &truncated));
+  for (const auto& e : entries) {
+    if (e.type != BIIndexType::Plain ||
+        e.idx.find(string("\0v", 2)) == string::npos) {
+      continue;
+    }
+    rgw_bucket_dir_entry dirent;
+    auto p = e.data.cbegin();
+    decode(dirent, p);
+    if (dirent.key.name == name) {
+      result.emplace(e.idx, std::move(dirent));
+    }
+  }
+  return result;
+}
+
+static size_t count_current(const map<string, rgw_bucket_dir_entry>& entries)
+{
+  return std::count_if(entries.begin(), entries.end(), [] (const auto& e) {
+      return (e.second.flags & rgw_bucket_dir_entry::FLAG_CURRENT) != 0;
+    });
+}
+
+static void put_plain_entry(librados::IoCtx& ioctx, const string& oid,
+                            const string& idx, const rgw_bucket_dir_entry& dirent)
+{
+  rgw_cls_bi_entry entry;
+  entry.type = BIIndexType::Plain;
+  entry.idx = idx;
+  encode(dirent, entry.data);
+  ASSERT_EQ(0, cls_rgw_bi_put(ioctx, oid, entry));
+}
+
+static void check_plain_entry_flags(librados::IoCtx& ioctx, const string& oid,
+                                    const string& name, uint16_t flags)
+{
+  rgw_cls_bi_entry entry;
+  ASSERT_EQ(0, cls_rgw_bi_get(ioctx, oid, BIIndexType::Plain,
+                              cls_rgw_obj_key(name), &entry));
+  rgw_bucket_dir_entry dirent;
+  auto p = entry.data.cbegin();
+  decode(dirent, p);
+  EXPECT_EQ(flags, dirent.flags);
+}
+
+// trim the olh log, as rgw does once it has applied it to the olh object
+static void trim_olh_log(librados::IoCtx& ioctx, string oid, const string& name,
+                         const string& olh_tag)
+{
+  const cls_rgw_obj_key olh(name);
+  rgw_cls_read_olh_log_ret log_ret;
+  ASSERT_EQ(0, cls_rgw_get_olh_log(ioctx, oid, olh, 0, olh_tag, log_ret));
+  if (log_ret.log.empty()) {
+    return;
+  }
+  ObjectWriteOperation op;
+  cls_rgw_trim_olh_log(op, olh, log_ret.log.rbegin()->first, olh_tag);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+}
+
+/*
+ * An object with a versioned instance v1 and a null version on top, as
+ * written while versioning was enabled and then suspended.
+ */
+static void create_versioned_object(librados::IoCtx& ioctx, const string& oid,
+                                    const string& name, bool null_delete_marker)
+{
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  const string olh_tag = "olh-tag";
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = RGWObjCategory::Main;
+  meta.size = 1024;
+
+  // index_complete() links versioned instances with olh_tag = op tag
+  const cls_rgw_obj_key v1(name, "v1");
+  index_prepare(ioctx, oid, CLS_RGW_OP_ADD, olh_tag, v1, "");
+  index_complete(ioctx, oid, CLS_RGW_OP_ADD, olh_tag, 1, v1, meta);
+
+  const cls_rgw_obj_key null_key(name);
+  index_prepare(ioctx, oid, CLS_RGW_OP_ADD, "put-null", null_key, "");
+  index_complete(ioctx, oid, CLS_RGW_OP_ADD, "put-null", 2, null_key, meta);
+  bufferlist olh_tag_bl;
+  olh_tag_bl.append(olh_tag);
+  rgw_zone_set zone_set;
+  ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, null_key, olh_tag_bl, false,
+                                       "put-null", &meta, 0, ceph::real_time{},
+                                       true, true, zone_set));
+  if (null_delete_marker) {
+    ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, null_key, olh_tag_bl, true,
+                                         "dm-null", &meta, 0, ceph::real_time{},
+                                         true, true, zone_set));
+  }
+  trim_olh_log(ioctx, oid, name, olh_tag);
+}
+
+TEST_P(TestClsRgw, check_olh_list_healthy)
+{
+  for (bool null_delete_marker : {false, true}) {
+    const string oid = fmt::format("check-olh-list-healthy-{}", null_delete_marker);
+    create_versioned_object(ioctx, oid, "obj", null_delete_marker);
+
+    rgw_cls_check_olh_list_ret result;
+    ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+    EXPECT_FALSE(result.needs_fix());
+    EXPECT_FALSE(result.busy);
+    EXPECT_EQ(1u, count_current(get_list_entries(ioctx, oid, "obj")));
+
+    // an object without an olh has nothing to check
+    ASSERT_EQ(0, check_olh_list(ioctx, oid, "no-such-object", result));
+    EXPECT_FALSE(result.needs_fix());
+  }
+}
+
+TEST_P(TestClsRgw, check_olh_list_fix)
+{
+  for (bool null_delete_marker : {false, true}) {
+    const string oid = fmt::format("check-olh-list-fix-{}", null_delete_marker);
+    create_versioned_object(ioctx, oid, "obj", null_delete_marker);
+
+    const auto healthy = get_list_entries(ioctx, oid, "obj");
+    ASSERT_EQ(2u, healthy.size());
+    ASSERT_EQ(1u, count_current(healthy));
+    const auto current = std::find_if(healthy.begin(), healthy.end(), [] (const auto& e) {
+        return (e.second.flags & rgw_bucket_dir_entry::FLAG_CURRENT) != 0;
+      });
+    const auto other = std::find_if(healthy.begin(), healthy.end(), [] (const auto& e) {
+        return (e.second.flags & rgw_bucket_dir_entry::FLAG_CURRENT) == 0;
+      });
+
+    // an orphaned null list entry flagged CURRENT, as left by racing
+    // requests on null versions
+    rgw_bucket_dir_entry orphan = current->second;
+    orphan.key.instance.clear();
+    orphan.flags = rgw_bucket_dir_entry::FLAG_VER | rgw_bucket_dir_entry::FLAG_CURRENT;
+    put_plain_entry(ioctx, oid, "obj" + string("\0v", 2) + "999" + string("\0i", 2), orphan);
+
+    // the non-current version flagged CURRENT
+    rgw_bucket_dir_entry wrong = other->second;
+    wrong.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+    put_plain_entry(ioctx, oid, other->first, wrong);
+
+    // the version marker overwritten by a suggested update
+    put_plain_entry(ioctx, oid, "obj", orphan);
+
+    rgw_cls_check_olh_list_ret result;
+    ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+    EXPECT_FALSE(result.busy);
+    EXPECT_EQ(1u, result.orphaned.size());
+    ASSERT_EQ(1u, result.wrong_current.size());
+    EXPECT_EQ(other->first, result.wrong_current.front());
+    EXPECT_TRUE(result.bad_version_marker);
+
+    // checking does not change anything
+    EXPECT_EQ(3u, get_list_entries(ioctx, oid, "obj").size());
+
+    ASSERT_EQ(0, fix_olh_list(ioctx, oid, "obj"));
+
+    const auto fixed = get_list_entries(ioctx, oid, "obj");
+    ASSERT_EQ(2u, fixed.size());
+    EXPECT_EQ(1u, count_current(fixed));
+    EXPECT_TRUE(fixed.at(current->first).flags & rgw_bucket_dir_entry::FLAG_CURRENT);
+    EXPECT_FALSE(fixed.at(other->first).flags & rgw_bucket_dir_entry::FLAG_CURRENT);
+    check_plain_entry_flags(ioctx, oid, "obj", rgw_bucket_dir_entry::FLAG_VER_MARKER);
+
+    ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+    EXPECT_FALSE(result.needs_fix());
+  }
+}
+
+TEST_P(TestClsRgw, check_olh_list_missing_version_marker)
+{
+  const string oid = "check-olh-list-missing-marker";
+  create_versioned_object(ioctx, oid, "obj", false);
+
+  ASSERT_EQ(0, ioctx.omap_rm_keys(oid, {"obj"}));
+
+  rgw_cls_check_olh_list_ret result;
+  ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+  EXPECT_TRUE(result.bad_version_marker);
+  EXPECT_TRUE(result.orphaned.empty());
+  EXPECT_TRUE(result.wrong_current.empty());
+
+  ASSERT_EQ(0, fix_olh_list(ioctx, oid, "obj"));
+  check_plain_entry_flags(ioctx, oid, "obj", rgw_bucket_dir_entry::FLAG_VER_MARKER);
+
+  ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+  EXPECT_FALSE(result.needs_fix());
+}
+
+TEST_P(TestClsRgw, check_olh_list_busy)
+{
+  const string oid = "check-olh-list-busy";
+  create_versioned_object(ioctx, oid, "obj", false);
+
+  rgw_bucket_dir_entry orphan;
+  orphan.key.name = "obj";
+  orphan.flags = rgw_bucket_dir_entry::FLAG_VER | rgw_bucket_dir_entry::FLAG_CURRENT;
+  put_plain_entry(ioctx, oid, "obj" + string("\0v", 2) + "999" + string("\0i", 2), orphan);
+
+  // a write of the null version is in progress
+  const cls_rgw_obj_key null_key("obj");
+  index_prepare(ioctx, oid, CLS_RGW_OP_ADD, "pending", null_key, "");
+
+  rgw_cls_check_olh_list_ret result;
+  ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+  EXPECT_TRUE(result.busy);
+  EXPECT_FALSE(result.needs_fix());
+
+  ASSERT_EQ(-EBUSY, fix_olh_list(ioctx, oid, "obj"));
+  EXPECT_EQ(3u, get_list_entries(ioctx, oid, "obj").size());
+
+  rgw_bucket_dir_entry_meta meta;
+  index_complete(ioctx, oid, CLS_RGW_OP_CANCEL, "pending", 3, null_key, meta);
+
+  // a new version was linked, but rgw has not applied the olh log yet
+  const string olh_tag = "olh-tag";
+  bufferlist olh_tag_bl;
+  olh_tag_bl.append(olh_tag);
+  rgw_zone_set zone_set;
+  ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, null_key, olh_tag_bl, true,
+                                       "dm-null", &meta, 0, ceph::real_time{},
+                                       true, true, zone_set));
+  ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+  EXPECT_TRUE(result.busy);
+  ASSERT_EQ(-EBUSY, fix_olh_list(ioctx, oid, "obj"));
+
+  // once the operations are done, the object can be fixed
+  trim_olh_log(ioctx, oid, "obj", olh_tag);
+  ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+  EXPECT_FALSE(result.busy);
+  EXPECT_EQ(1u, result.orphaned.size());
+  ASSERT_EQ(0, fix_olh_list(ioctx, oid, "obj"));
+  const auto fixed = get_list_entries(ioctx, oid, "obj");
+  EXPECT_EQ(2u, fixed.size());
+  EXPECT_EQ(1u, count_current(fixed));
+}
+
+static const string null_instance_idx = string(1, '\x80') + "1000_obj" + string("\0i", 2);
+
+static string orphan_list_idx(const string& epoch)
+{
+  return "obj" + string("\0v", 2) + epoch + string("\0i", 2);
+}
+
+/*
+ * The instance entry of the current null version is lost to the same races
+ * that orphan list entries. The current list entry is the one whose
+ * versioned_epoch is the olh epoch, and the instance entry is restored from it.
+ */
+TEST_P(TestClsRgw, check_olh_list_restore_instance)
+{
+  const string oid = "check-olh-list-restore-instance";
+  create_versioned_object(ioctx, oid, "obj", false);
+
+  const auto healthy = get_list_entries(ioctx, oid, "obj");
+  const auto current = std::find_if(healthy.begin(), healthy.end(), [] (const auto& e) {
+      return (e.second.flags & rgw_bucket_dir_entry::FLAG_CURRENT) != 0;
+    });
+  ASSERT_NE(healthy.end(), current);
+
+  ASSERT_EQ(0, ioctx.omap_rm_keys(oid, {null_instance_idx}));
+  for (const string epoch : {"998", "999"}) {
+    rgw_bucket_dir_entry orphan = current->second;
+    orphan.versioned_epoch = 1;
+    put_plain_entry(ioctx, oid, orphan_list_idx(epoch), orphan);
+  }
+
+  rgw_cls_check_olh_list_ret result;
+  ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+  EXPECT_TRUE(result.restored_instance);
+  EXPECT_FALSE(result.unresolved);
+  EXPECT_EQ(2u, result.orphaned.size());
+
+  ASSERT_EQ(0, fix_olh_list(ioctx, oid, "obj"));
+  auto fixed = get_list_entries(ioctx, oid, "obj");
+  ASSERT_EQ(2u, fixed.size());
+  EXPECT_EQ(1u, count_current(fixed));
+  EXPECT_TRUE(fixed.at(current->first).flags & rgw_bucket_dir_entry::FLAG_CURRENT);
+
+  // bi_get maps an empty instance to the plain entry, so read the omap key
+  std::map<string, bufferlist> vals;
+  ASSERT_EQ(0, ioctx.omap_get_vals_by_keys(oid, {null_instance_idx}, &vals));
+  ASSERT_EQ(1u, vals.size());
+  rgw_bucket_dir_entry instance;
+  auto p = vals.begin()->second.cbegin();
+  decode(instance, p);
+  EXPECT_EQ(current->second.versioned_epoch, instance.versioned_epoch);
+  EXPECT_TRUE(instance.flags & rgw_bucket_dir_entry::FLAG_CURRENT);
+
+  ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+  EXPECT_FALSE(result.needs_fix());
+
+  // the next null version replaces the restored one without leaving it behind
+  const string olh_tag = "olh-tag";
+  const cls_rgw_obj_key null_key("obj");
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = RGWObjCategory::Main;
+  meta.size = 1024;
+  index_prepare(ioctx, oid, CLS_RGW_OP_ADD, "put-null-2", null_key, "");
+  index_complete(ioctx, oid, CLS_RGW_OP_ADD, "put-null-2", 3, null_key, meta);
+  bufferlist olh_tag_bl;
+  olh_tag_bl.append(olh_tag);
+  rgw_zone_set zone_set;
+  ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, null_key, olh_tag_bl, false,
+                                       "put-null-2", &meta, 0, ceph::real_time{},
+                                       true, true, zone_set));
+  trim_olh_log(ioctx, oid, "obj", olh_tag);
+  fixed = get_list_entries(ioctx, oid, "obj");
+  EXPECT_EQ(2u, fixed.size());
+  EXPECT_EQ(1u, count_current(fixed));
+  EXPECT_EQ(0u, fixed.count(current->first));
+}
+
+/*
+ * When the current version's instance entry is missing and no list entry has
+ * the olh epoch, which list entry is real is unknown: they are left alone.
+ * Orphans of other versions are still removed.
+ */
+TEST_P(TestClsRgw, check_olh_list_unresolved)
+{
+  const string oid = "check-olh-list-unresolved";
+  create_versioned_object(ioctx, oid, "obj", false);
+
+  const auto healthy = get_list_entries(ioctx, oid, "obj");
+  const auto current = std::find_if(healthy.begin(), healthy.end(), [] (const auto& e) {
+      return (e.second.flags & rgw_bucket_dir_entry::FLAG_CURRENT) != 0;
+    });
+  ASSERT_NE(healthy.end(), current);
+
+  ASSERT_EQ(0, ioctx.omap_rm_keys(oid, {null_instance_idx, current->first}));
+  for (const string epoch : {"998", "999"}) {
+    rgw_bucket_dir_entry orphan = current->second;
+    orphan.versioned_epoch = 1;
+    put_plain_entry(ioctx, oid, orphan_list_idx(epoch), orphan);
+  }
+  rgw_bucket_dir_entry other = current->second;
+  other.key.instance = "gone";
+  other.flags = rgw_bucket_dir_entry::FLAG_VER;
+  const string other_idx = orphan_list_idx("997") + "gone";
+  put_plain_entry(ioctx, oid, other_idx, other);
+
+  rgw_cls_check_olh_list_ret result;
+  ASSERT_EQ(0, check_olh_list(ioctx, oid, "obj", result));
+  EXPECT_TRUE(result.unresolved);
+  EXPECT_FALSE(result.restored_instance);
+  ASSERT_EQ(1u, result.orphaned.size());
+  EXPECT_EQ(other_idx, result.orphaned.front());
+  EXPECT_TRUE(result.wrong_current.empty());
+
+  ASSERT_EQ(0, fix_olh_list(ioctx, oid, "obj"));
+  const auto fixed = get_list_entries(ioctx, oid, "obj");
+  EXPECT_EQ(3u, fixed.size()); // v1 and the two null list entries
+  EXPECT_EQ(0u, fixed.count(other_idx));
+  EXPECT_EQ(1u, fixed.count(orphan_list_idx("998")));
+  EXPECT_EQ(1u, fixed.count(orphan_list_idx("999")));
+}
+
 
 INSTANTIATE_TEST_SUITE_P(, TestClsRgw,
   ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
