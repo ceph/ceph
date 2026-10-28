@@ -368,6 +368,33 @@ void cls_rgw_bucket_refresh_instance(librados::ObjectWriteOperation& op, const c
   op.exec(method::bucket_refresh_instance, in);
 }
 
+void cls_rgw_bucket_check_olh_list(librados::ObjectReadOperation& op,
+                                   const cls_rgw_obj_key& key, bufferlist& out)
+{
+  bufferlist in;
+  rgw_cls_check_olh_list_op call;
+  call.key = key;
+  encode(call, in);
+  op.exec(method::bucket_check_olh_list, in, &out, nullptr);
+}
+
+void cls_rgw_bucket_check_olh_list_decode(const bufferlist& out,
+                                          rgw_cls_check_olh_list_ret& result)
+{
+  auto p = out.cbegin();
+  decode(result, p);
+}
+
+void cls_rgw_bucket_fix_olh_list(librados::ObjectWriteOperation& op,
+                                 const cls_rgw_obj_key& key)
+{
+  bufferlist in;
+  rgw_cls_check_olh_list_op call;
+  call.key = key;
+  encode(call, in);
+  op.exec(method::bucket_fix_olh_list, in);
+}
+
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
                                    const cls_rgw_obj_key& key, const string& op_tag,
                                    const string& olh_tag, uint64_t olh_epoch, bool log_op,
