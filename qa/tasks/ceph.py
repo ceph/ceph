@@ -206,6 +206,12 @@ def ceph_log(ctx, config):
                             err = p.stderr.getvalue()
                             if 'error: error renaming temp state file' in err:
                                 log.info('ignoring transient state error: %s', e)
+                            elif 'is already locked' in err:
+                                # The distro's daily logrotate run holds the
+                                # state file lock. It rotates our logs too (it
+                                # includes /etc/logrotate.d), so skip this
+                                # round instead of failing the job.
+                                log.info('ignoring concurrent logrotate: %s', e)
                             else:
                                 raise
                 except socket.error as e:
