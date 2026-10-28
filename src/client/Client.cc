@@ -14961,11 +14961,11 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
 
   std::scoped_lock lock(client_lock);
 
-  InodeRef in;
-  int r = path_walk(cwd, path, &in, perms, {.mask = CEPH_STAT_CAP_XATTR});
+  walk_dentry_result wdr;
+  int r = path_walk(cwd, filepath(path), &wdr, perms, {.mask = CEPH_STAT_CAP_XATTR});
   if (r < 0)
     return r;
-  return _getxattr(in, name, value, size, perms);
+  return _getxattr(wdr.target.get(), name, value, size, perms, wdr.dn.get());
 }
 
 int Client::lgetxattr(const char *path, const char *name, void *value, size_t size,
@@ -14977,11 +14977,12 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
 
   std::scoped_lock lock(client_lock);
 
-  InodeRef in;
-  int r = path_walk(cwd, path, &in, perms, {.followsym = false, .mask = CEPH_STAT_CAP_XATTR});
+  walk_dentry_result wdr;
+  int r = path_walk(cwd, filepath(path), &wdr, perms,
+		    {.followsym = false, .mask = CEPH_STAT_CAP_XATTR});
   if (r < 0)
     return r;
-  return _getxattr(in, name, value, size, perms);
+  return _getxattr(wdr.target.get(), name, value, size, perms, wdr.dn.get());
 }
 
 int Client::fgetxattr(int fd, const char *name, void *value, size_t size,
@@ -15102,11 +15103,11 @@ int Client::setxattr(const char *path, const char *name, const void *value,
 
   std::scoped_lock lock(client_lock);
 
-  InodeRef in;
-  int r = path_walk(cwd, path, &in, perms, {});
+  walk_dentry_result wdr;
+  int r = path_walk(cwd, filepath(path), &wdr, perms, {});
   if (r < 0)
     return r;
-  return _setxattr(in, name, value, size, flags, perms);
+  return _setxattr(wdr.target, name, value, size, flags, perms, wdr.dn.get());
 }
 
 int Client::lsetxattr(const char *path, const char *name, const void *value,
@@ -15120,11 +15121,11 @@ int Client::lsetxattr(const char *path, const char *name, const void *value,
 
   std::scoped_lock lock(client_lock);
 
-  InodeRef in;
-  int r = path_walk(cwd, path, &in, perms, {.followsym = false});
+  walk_dentry_result wdr;
+  int r = path_walk(cwd, filepath(path), &wdr, perms, {.followsym = false});
   if (r < 0)
     return r;
-  return _setxattr(in, name, value, size, flags, perms);
+  return _setxattr(wdr.target, name, value, size, flags, perms, wdr.dn.get());
 }
 
 int Client::fsetxattr(int fd, const char *name, const void *value, size_t size,
@@ -15145,7 +15146,7 @@ int Client::fsetxattr(int fd, const char *name, const void *value, size_t size,
 }
 
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
-		      const UserPerm& perms)
+		      const UserPerm& perms, Dentry *dn)
 {
   int r;
   const VXattr *vxattr = nullptr;
@@ -15171,7 +15172,17 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 
     // call pointer-to-member function
     char buf[256];
-    if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in))) {
+    if (vxattr->flags & VXATTR_ALTNAME) {
+      // Path lookup names one link. Inode-only callers have no path, so
+      // they fall back to whichever parent is first in the cache.
+      Dentry *adn = dn ? dn : in->get_first_parent();
+      if (!alternate_name_visible || fscrypt_as || adn->alternate_name.empty()) {
+	r = -ENODATA;
+      } else {
+	r = adn->alternate_name.length();
+	memcpy(buf, adn->alternate_name.c_str(), r);
+      }
+    } else if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in))) {
       r = (this->*(vxattr->getxattr_cb))(in, buf, sizeof(buf));
     } else {
       r = -ENODATA;
@@ -15301,7 +15312,8 @@ int Client::ll_listxattr(Inode *in, char *names, size_t size,
 }
 
 int Client::_do_setxattr(Inode *in, const char *name, const void *value,
-			 size_t size, int flags, const UserPerm& perms)
+		       size_t size, int flags, const UserPerm& perms,
+		       Dentry *dn)
 {
 
   int xattr_flags = 0;
@@ -15317,8 +15329,14 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   in->make_nosnap_relative_path(path);
 
   if (flags & VXATTR_ALTNAME) {
-    req->set_filepath(filepath(in->get_first_parent()->name,in->ino));
-    req->set_dentry(in->get_first_parent());
+    // alternate_name belongs to one dentry. Name the link the caller
+    // walked: parent directory inode plus that dentry's name. An
+    // inode-only caller has no path, so use the first cached parent.
+    Dentry *adn = dn ? dn : in->get_first_parent();
+    filepath fp(adn->dir->parent_inode->ino);
+    fp.push_dentry(adn->name);
+    req->set_filepath(std::move(fp));
+    req->set_dentry(DentryRef(adn));
     req->dentry_drop = CEPH_CAP_FILE_SHARED;
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
   } else {
@@ -15342,7 +15360,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
 }
 
 int Client::_setxattr(const InodeRef& in, const char *name, const void *value,
-		      size_t size, int flags, const UserPerm& perms)
+		      size_t size, int flags, const UserPerm& perms, Dentry *dn)
 {
   if (should_check_perms()) {
     int r = xattr_permission(in.get(), name, CLIENT_MAY_WRITE, perms);
@@ -15413,6 +15431,8 @@ int Client::_setxattr(const InodeRef& in, const char *name, const void *value,
     if (vxattr) {
       if (vxattr->readonly)
 	return -EOPNOTSUPP;
+      if (vxattr->flags & VXATTR_ALTNAME)
+	return _set_alternate_name(in.get(), value, size, perms, dn);
       if (vxattr->setxattr_cb)
 	return (this->*(vxattr->setxattr_cb))(in.get(), value, size, perms);
       if (vxattr->name.compare(0, 10, "ceph.quota") == 0 && value)
@@ -15789,13 +15809,19 @@ size_t Client::_vxattrcb_alternate_name(Inode *in, char *val, size_t size)
   return length;
 }
 
-int Client::_vxattrcb_alternate_name_set(Inode *in, const void *val, size_t size,
-				       const UserPerm& perms)
+int Client::_set_alternate_name(Inode *in, const void *val, size_t size,
+			       const UserPerm& perms, Dentry *dn)
 {
   if (!alternate_name_visible || fscrypt_as)
     return -EPERM;
 
-  return _do_setxattr(in, "ceph.alternate_name", val, size, VXATTR_ALTNAME, perms);
+  return _do_setxattr(in, "ceph.alternate_name", val, size, VXATTR_ALTNAME, perms, dn);
+}
+
+int Client::_vxattrcb_alternate_name_set(Inode *in, const void *val, size_t size,
+				       const UserPerm& perms)
+{
+  return _set_alternate_name(in, val, size, perms, nullptr);
 }
 
 bool Client::_vxattrcb_alternate_name_exists(Inode *in)

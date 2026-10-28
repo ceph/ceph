@@ -2142,16 +2142,16 @@ private:
   int _getattr(const InodeRef& in, int mask, const UserPerm& perms, bool force=false);
   int _readlink(const InodeRef& diri, const char* relpath, char *buf, size_t size, const UserPerm& perms);
   int _getxattr(Inode *in, const char *name, void *value, size_t len,
-		const UserPerm& perms);
+		const UserPerm& perms, Dentry *dn=nullptr);
   int _getxattr(const InodeRef &in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
   int _getvxattr(Inode *in, const UserPerm& perms, const char *attr_name,
                  ssize_t size, void *value, mds_rank_t rank);
   int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms);
   int _do_setxattr(Inode *in, const char *name, const void *value, size_t len,
-		   int flags, const UserPerm& perms);
+		   int flags, const UserPerm& perms, Dentry *dn=nullptr);
   int _setxattr(const InodeRef &in, const char *name, const void *value, size_t len,
-		int flags, const UserPerm& perms);
+		int flags, const UserPerm& perms, Dentry *dn=nullptr);
   int _setxattr_check_data_pool(std::string& name, std::string& value, const OSDMap *osdmap);
   void _setxattr_maybe_wait_for_osdmap(const char *name, const void *value, size_t len);
   int _removexattr(Inode *in, const char *nm, const UserPerm& perms);
@@ -2254,6 +2254,8 @@ private:
 
   size_t _vxattrcb_alternate_name(Inode *in, char *val, size_t size);
   int _vxattrcb_alternate_name_set(Inode *in, const void *val, size_t size, const UserPerm& perms);
+  int _set_alternate_name(Inode *in, const void *val, size_t size,
+			  const UserPerm& perms, Dentry *dn);
   bool _vxattrcb_alternate_name_exists(Inode *in);
 
   size_t _vxattrcb_cluster_fsid(Inode *in, char *val, size_t size);
