@@ -404,7 +404,14 @@ public:
   };
 
   void record_throttle_wait(SchedulerClass op_class, uint64_t wait_ms);
-  auto get_throttle(crimson::osd::scheduler::params_t params) {
+  seastar::future<ThrottleReleaser> get_throttle(
+    crimson::osd::scheduler::params_t params) {
+    if (params.klass == SchedulerClass::immediate) {
+      // immediate ops skip mClock's queues anyway; admit them right away
+      // instead of waiting for background_task to dequeue them
+      ++in_progress;
+      return seastar::make_ready_future<ThrottleReleaser>(this);
+    }
     auto start = seastar::steady_clock_type::now();
     return acquire_throttle(
       params
