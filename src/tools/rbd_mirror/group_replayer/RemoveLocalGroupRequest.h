@@ -101,6 +101,9 @@ private:
    * GET_MIRROR_IMAGES
    *    |
    *    v
+   * REMOVE_STANDALONE_SNAPSHOTS
+   *    |
+   *    v
    * REMOVE_IMAGE_FROM_GROUP <--
    *    |                      |
    *    v                      |  fail
@@ -144,6 +147,7 @@ private:
   std::vector<ImageCtxT *> m_snapshot_image_ctxs;
   std::list<cls::rbd::GroupImageStatus> m_images;
   std::deque<std::pair<int64_t, std::string>> m_retained_images;
+  ImageCtxT *m_standalone_snapshot_image_ctx = nullptr;
 
   cls::rbd::MirrorGroup m_mirror_group;
   librbd::mirror::PromotionState m_promotion_state;
@@ -180,6 +184,11 @@ private:
 
   void get_mirror_images();
   void handle_get_mirror_images(int r);
+
+  void remove_standalone_snapshots();
+  void handle_open_standalone_snapshot_image(int r);
+  void handle_remove_standalone_snapshots(int r);
+  void handle_close_standalone_snapshot_image(int r);
 
   void detach_retained_image();
   void handle_detach_retained_image(int r);
