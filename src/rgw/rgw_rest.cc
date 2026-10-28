@@ -673,6 +673,14 @@ void abort_early(req_state *s, RGWOp* op, int err_no,
     }
 
     dump_errno(s);
+    if (s->err.http_ret == 405) {
+      if (auto* rest_handler = dynamic_cast<RGWHandler_REST*>(handler)) {
+        const std::string allow = rest_handler->list_allowed_methods();
+        if (!allow.empty()) {
+          dump_header(s, "Allow", allow.c_str());
+        }
+      }
+    }
     if (err_no == -ERR_RATE_LIMITED && s->ratelimit_retry_after > 0) {
       dump_header(s, "Retry-After",
                   static_cast<long long>(s->ratelimit_retry_after));
@@ -1701,6 +1709,36 @@ void RGWHandler_REST::put_op(RGWOp* op)
 {
   delete op;
 } /* put_op */
+
+std::string RGWHandler_REST::list_allowed_methods()
+{
+  struct method_entry {
+    const char *name;
+    RGWOp *(RGWHandler_REST::*factory)();
+  };
+  static const method_entry entries[] = {
+    {"GET", &RGWHandler_REST::op_get},
+    {"HEAD", &RGWHandler_REST::op_head},
+    {"POST", &RGWHandler_REST::op_post},
+    {"PUT", &RGWHandler_REST::op_put},
+    {"DELETE", &RGWHandler_REST::op_delete},
+    {"COPY", &RGWHandler_REST::op_copy},
+    {"OPTIONS", &RGWHandler_REST::op_options},
+  };
+
+  std::string allow;
+  for (const auto& entry : entries) {
+    RGWOp *op = (this->*entry.factory)();
+    if (op) {
+      put_op(op);
+      if (!allow.empty()) {
+        allow += ", ";
+      }
+      allow += entry.name;
+    }
+  }
+  return allow;
+}
 
 int RGWHandler_REST::allocate_formatter(req_state *s,
 					RGWFormat default_type,
