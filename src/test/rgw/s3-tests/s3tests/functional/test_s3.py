@@ -7850,6 +7850,8 @@ def test_ranged_request_invalid_range():
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 416
     assert error_code == 'InvalidRange'
+    headers = e.response['ResponseMetadata']['HTTPHeaders']
+    assert headers['content-range'] == 'bytes */%d' % len(content)
 
 def test_ranged_request_empty_object():
     content = ''
@@ -7864,6 +7866,8 @@ def test_ranged_request_empty_object():
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 416
     assert error_code == 'InvalidRange'
+    headers = e.response['ResponseMetadata']['HTTPHeaders']
+    assert headers['content-range'] == 'bytes */0'
 
 @pytest.mark.versioning
 def test_versioning_bucket_create_suspend():

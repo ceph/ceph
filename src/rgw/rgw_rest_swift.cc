@@ -1612,6 +1612,9 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
     dump_errno(s);
 
     if (s->is_err()) {
+      if (op_ret == -ERANGE && range_parsed) {
+        dump_unsatisfied_range(s, s->obj_size);
+      }
       end_header(s, this);
       return 0;
     }

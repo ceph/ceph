@@ -836,6 +836,7 @@ extern void abort_early(req_state* s, RGWOp* op, int err,
 			RGWHandler* handler, optional_yield y);
 extern void dump_range(req_state* s, uint64_t ofs, uint64_t end,
 		       uint64_t total_size);
+extern void dump_unsatisfied_range(req_state* s, uint64_t total_size);
 extern void dump_continue(req_state *s);
 extern void list_all_buckets_end(req_state *s);
 extern void dump_time(req_state *s, const char *name, real_time t);
