@@ -1974,6 +1974,61 @@ TEST_P(TestECFailoverWithPeering, ECRollbackPreservesOlderShardVersions) {
   std::cout << "=== ECRollbackPreservesOlderShardVersions completed successfully ===" << std::endl;
 }
 
+// k=2, m=1 on osd.0-3.  SetUp() places shard N on osd.N.
+class TestECRecoverySources : public ECPeeringTestFixture {
+public:
+  TestECRecoverySources() {
+    k = 2;
+    m = 1;
+    spare_osds = 1;
+  }
+};
+
+// https://tracker.ceph.com/issues/82013 in an EC pool: the primary holds a
+// chunk of "obj", and the only other chunk is on a stray that rejoins the up
+// set after the log has been trimmed past it.  Backfilling the stray would
+// leave "obj" unfound, although the primary is not missing it.
+TEST_F(TestECRecoverySources, ChunkSourceRejoiningUpStaysFound) {
+  ScopedConfig cfg_trim_min("osd_pg_log_trim_min", "1");
+  ASSERT_TRUE(all_shards_active());
+  osdmap->set_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT);
+  const size_t data_size = stripe_unit * k;
+  const std::string data(data_size, 'A');
+  const hobject_t obj = make_test_object("obj");
+  const pg_shard_t stray(1, shard_id_t(1));
+  PeeringState* primary = get_peering_state_on_osd(0);
+
+  mark_osd_down(2);
+  create_and_write_verify("obj", data);
+  mark_osd_up(2);
+
+  // osd.3 takes over shard 1 and, like osd.2, is missing "obj".
+  set_pg_upmap({0, 3, 2});
+  ASSERT_FALSE(primary->get_pg_log().get_missing().is_missing(obj));
+  ASSERT_TRUE(primary->get_missing_loc().get_locations(obj).contains(stray));
+
+  enable_log_trimming = true;
+  set_target_pg_log_entries(1);
+  create_and_write_verify("filler", data);
+  for (const char c : {'B', 'C', 'D', 'E'}) {
+    write_verify("filler", 0, std::string(data_size, c), data_size);
+  }
+  ASSERT_LT(get_peering_state_on_osd(1)->get_info().last_update,
+            primary->get_pg_log().get_tail());
+
+  // osd.1 returns to shard 1, behind the log.
+  set_pg_upmap({0, 1, 2});
+  EXPECT_EQ(0u, primary->get_num_unfound());
+  EXPECT_TRUE(primary->get_missing_loc().get_locations(obj).contains(stray));
+  ASSERT_TRUE(primary->get_backfill_targets().empty());
+
+  run_recovery("obj", false, data);
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_listener()->pg_temp_wanted);
+  ASSERT_TRUE(new_epoch(true));
+  new_epoch_loop();
+  EXPECT_EQ(std::set<pg_shard_t>({stray}), primary->get_backfill_targets());
+}
+
 // ---------------------------------------------------------------------------
 // Instantiate TestECFailoverWithPeering with EC configurations
 // ---------------------------------------------------------------------------

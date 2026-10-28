@@ -114,6 +114,7 @@ target_link_libraries(unittest_pglog osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBR
 # unittest_peeringstate
 add_executable(unittest_peeringstate
   TestPeeringState.cc
+  TestReplicaPeering.cc
   $<TARGET_OBJECTS:pg_backend_test_fixture>
   $<TARGET_OBJECTS:peering_test_fixture>
   )
