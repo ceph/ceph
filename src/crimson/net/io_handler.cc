@@ -53,7 +53,13 @@ IOHandler::IOHandler(ChainedDispatchers &dispatchers,
         seastar::this_shard_id(), io_state_t::delay)),
     dispatchers(dispatchers),
     conn(conn),
-    conn_ref(conn.get_local_shared_foreign_from_this())
+    conn_ref(conn.get_local_shared_foreign_from_this()),
+    ack_delay(local_conf().get_val<std::chrono::milliseconds>(
+        "crimson_msgr_ack_delay")),
+    ack_max_pending_msgs(local_conf().get_val<uint64_t>(
+        "crimson_msgr_ack_max_pending_msgs")),
+    ack_max_pending_bytes(local_conf().get_val<Option::size_t>(
+        "crimson_msgr_ack_max_pending_bytes"))
 {}
 
 IOHandler::~IOHandler()
@@ -323,7 +329,8 @@ void IOHandler::print_io_stat(std::ostream &out) const
       << ", out_seq=" << out_seq
       << ", out_pending_msgs_size=" << out_pending_msgs.size()
       << ", out_sent_msgs_size=" << out_sent_msgs.size()
-      << ", need_ack=" << (ack_left > 0)
+      << ", ack_left=" << ack_left
+      << ", ack_due=" << ack_due
       << ", need_keepalive=" << need_keepalive
       << ", need_keepalive_ack=" << bool(next_keepalive_ack)
       << ")";
@@ -402,6 +409,13 @@ void IOHandler::do_set_io_state(
   // FIXME: simplify and drop the prv_state == new_state case
   if (prv_state != new_state) {
     shard_states->set_io_state(new_state);
+  }
+
+  if (new_state == io_state_t::open && ack_left > 0) {
+    // Still owed from before the fault, possibly from another reactor.
+    // A reconnect has already told the peer our in_seq, but a replacing
+    // session may not have, so ack now rather than after ack_delay.
+    set_ack_due();
   }
 
   /*
@@ -613,6 +627,7 @@ void IOHandler::reset_in()
 {
   assert(get_io_state() != io_state_t::open);
   in_seq = 0;
+  clear_ack_owed();
 }
 
 void IOHandler::reset_out()
@@ -622,7 +637,7 @@ void IOHandler::reset_out()
   out_pending_msgs.clear();
   need_keepalive = false;
   next_keepalive_ack = std::nullopt;
-  ack_left = 0;
+  clear_ack_owed();
 }
 
 void IOHandler::discard_out_sent()
@@ -852,6 +867,62 @@ void IOHandler::ack_out_sent(seq_num_t seq)
   }
 }
 
+void IOHandler::note_ack_owed(std::size_t msg_size)
+{
+  if (ack_left == 0) {
+    ack_owed_since = seastar::lowres_clock::now();
+  }
+  ++ack_left;
+  ack_left_bytes += msg_size;
+  if (ack_due) {
+    return;
+  }
+  if (ack_delay == std::chrono::milliseconds::zero()) {
+    // ack every message, unless a message is pending to carry it
+    set_ack_due();
+  } else if (ack_left >= ack_max_pending_msgs ||
+             ack_left_bytes >= ack_max_pending_bytes) {
+    // bound what the peer keeps for resending
+    set_ack_due();
+  } else {
+    // the next message written will carry the ack
+    shard_states->arm_ack_timer(ack_owed_since + ack_delay, [this] {
+      on_ack_timer();
+    });
+  }
+}
+
+void IOHandler::on_ack_timer()
+{
+  assert(seastar::this_shard_id() == get_shard_id());
+  if (get_io_state() != io_state_t::open || ack_left == 0 || ack_due) {
+    // carried by a message meanwhile, or already due
+    return;
+  }
+  auto due = ack_owed_since + ack_delay;
+  if (seastar::lowres_clock::now() < due) {
+    // carried meanwhile, and owed again since
+    shard_states->arm_ack_timer(due, [this] { on_ack_timer(); });
+    return;
+  }
+  logger().debug("{} no message carried the ack of {} messages within {}ms",
+                 conn, ack_left, ack_delay.count());
+  set_ack_due();
+}
+
+void IOHandler::set_ack_due()
+{
+  ack_due = true;
+  notify_out_dispatch();
+}
+
+void IOHandler::clear_ack_owed()
+{
+  ack_left = 0;
+  ack_left_bytes = 0;
+  ack_due = false;
+}
+
 seastar::future<>
 IOHandler::do_out_dispatch(shard_states_t &ctx)
 {
@@ -876,9 +947,11 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
       need_keepalive = false;
       auto maybe_keepalive_ack = next_keepalive_ack;
       next_keepalive_ack = std::nullopt;
+      // whatever is written now acks all messages read so far: a message
+      // carries it in its header, otherwise an ack frame is written
       auto to_ack = ack_left;
       assert(to_ack == 0 || in_seq > 0);
-      ack_left = 0;
+      clear_ack_owed();
 #ifdef UNIT_TESTS_BUILT
       auto ret = sweep_out_pending_msgs_to_sent(
           require_keepalive, maybe_keepalive_ack, to_ack > 0);
@@ -1099,8 +1172,7 @@ IOHandler::read_message(
 
     // notify ack
     if (!conn.policy.lossy) {
-      ++ack_left;
-      notify_out_dispatch();
+      note_ack_owed(msg_size);
     }
 
     ack_out_sent(current_header.ack_seq);
