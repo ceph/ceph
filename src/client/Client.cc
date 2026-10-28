@@ -12413,8 +12413,10 @@ int64_t Client::_write_success(Fh *f, utime_t start, utime_t op_mtime,
     ldout(cct, 7) << "wrote to " << totalwritten+offset << ", effective size " << request_size + request_offset << ", leaving file size at " << in->size << dendl;
   }
 
-  // mtime
-  in->mtime = in->ctime = op_mtime;
+  if (op_mtime > in->mtime) {
+    // in case simultaneous operations completd out of order: don't go backwards
+    in->mtime = in->ctime = op_mtime;
+  }
   in->change_attr++;
   in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
