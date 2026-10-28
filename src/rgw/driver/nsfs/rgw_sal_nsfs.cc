@@ -6349,7 +6349,7 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     /* taken back whole:  what was written to the directory, then the
      * row, so the directory is as it was and the name is free */
     if (marked) {
-      bucket->unadopt(dpp);
+      bucket->release_nsfs_state(dpp);
     }
     userDB->remove_bucket_placement(dpp, name, "");
     ldpp_dout(dpp, 0) << "ERROR: placing bucket " << name << " at " << path
@@ -8074,7 +8074,7 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
       }
     }
   } else {
-    ret = unadopt(dpp);
+    ret = release_nsfs_state(dpp);
   }
   if (ret < 0) {
     return ret;
@@ -8134,21 +8134,21 @@ int NSFSBucket::set_owns_storage(const DoutPrefixProvider* dpp, bool owns)
   return ret;
 }
 
-/* Remove the bucket without removing the directory it was adopted
- * over.
+/* Remove the bucket without removing the directory it was made over,
+ * by removing what nsfs wrote to that directory.
  *
- * Deleting what adoption wrote is the inverse of adopting, and it
- * leaves the directory in the state it was in beforehand:  present,
- * found by the base path's readdir, and carrying nothing of nsfs's.
- * That is the same state every directory an operator has not adopted
- * is in, so this introduces no condition the driver did not already
- * have to handle.
+ * It leaves the directory as it was beforehand:  present, found by the
+ * base path's readdir, and carrying nothing of nsfs's, which is what
+ * carries_nsfs_state() checks.  That is the same state every directory
+ * nsfs has not made a bucket of is in, so this introduces no condition
+ * the driver did not already have to handle.
  *
- * The whole nsfs namespace goes, not a list of names.  user.nsfs. is
- * exactly what the gateway wrote, so naming the prefix cannot leave
- * behind an attribute a later version adds;  anything of NooBaa's,
- * or anyone else's, is not the gateway's to remove. */
-int NSFSBucket::unadopt(const DoutPrefixProvider* dpp)
+ * Of the attributes, the whole nsfs namespace goes, not a list of
+ * names.  user.nsfs. is exactly what the gateway wrote, so naming the
+ * prefix cannot leave behind an attribute a later version adds;
+ * anything of NooBaa's, or anyone else's, is not the gateway's to
+ * remove. */
+int NSFSBucket::release_nsfs_state(const DoutPrefixProvider* dpp)
 {
   int ret = dir->open(dpp);
   if (ret < 0) {
@@ -8176,6 +8176,19 @@ int NSFSBucket::unadopt(const DoutPrefixProvider* dpp)
 	<< get_name() << ": " << cpp_strerror(-ret) << dendl;
       return ret;
     }
+  }
+
+  /* The version lockfile too:  it is the gateway's mutex, which NooBaa
+   * never writes, and no object.  `.versions` stays:  it is NooBaa's
+   * layout as much as ours, so it is not ours alone to remove. */
+  ret = write_bucket_state(dpp, [&]() -> int {
+    return ((::unlinkat(dir->get_fd(), VERSIONS_LOCKFILE.c_str(), 0) < 0) &&
+	    (errno != ENOENT)) ? -errno : 0;
+  });
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: removing " << VERSIONS_LOCKFILE
+      << " from bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
   }
 
   ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name()

@@ -10844,8 +10844,8 @@ TEST_F(NSFSBucketTest, DISABLED_AnOverLongNameDoesNotHideItsBucket)
  * differs:  the directory, and anything in it, stays.
  *
  * Before, remove() checked emptiness only for a bucket that owns its
- * directory, so this one was unadopted with its object in it and its
- * record gone. */
+ * directory, so this one's nsfs state was released with its object in
+ * it and its record gone. */
 TEST_F(NSFSBucketTest, ABucketThatDoesNotOwnItsDirectoryIsStillRejectedWhileNotEmpty)
 {
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
@@ -18716,6 +18716,25 @@ TEST_F(NSFSPlaceBucketTest, DeletingAPlacedBucketLeavesItsDirectory)
   EXPECT_FALSE(has_row("lent"));
 
   EXPECT_EQ(place("lent", at), 0) << "the directory cannot be placed again";
+}
+
+/* It takes back the version lockfile, which is the gateway's, and
+ * leaves `.versions`, which is NooBaa's layout as well. */
+TEST_F(NSFSPlaceBucketTest, DeletingAPlacedBucketTakesBackItsVersionLock)
+{
+  const sf::path at = elsewhere() / "versioned";
+  sf::create_directories(at);
+  ASSERT_EQ(place("versioned", at), 0);
+  sf::create_directories(at / ".versions");
+  { std::ofstream lock(at / ".versions" / ".lock"); }
+  ASSERT_TRUE(sf::exists(at / ".versions" / ".lock")) << "the control";
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "versioned"}, &loaded,
+				null_yield), 0);
+  ASSERT_EQ(loaded->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
+  EXPECT_FALSE(sf::exists(at / ".versions" / ".lock"));
+  EXPECT_TRUE(sf::is_directory(at / ".versions"));
 }
 
 /* A placement that fails after it has written to the directory takes
