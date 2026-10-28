@@ -87,6 +87,9 @@ private:
    *    |
    *    | (all group mirror snapshots removed)
    *    v
+   * REMOVE_STANDALONE_SNAPSHOTS
+   *    |
+   *    v
    * REMOVE_MIRROR_IMAGES
    *    |
    *    v
@@ -157,6 +160,9 @@ private:
   void remove_group_mirror_snapshots();
   void remove_group_mirror_snapshot();
   void handle_remove_group_mirror_snapshot(int r);
+
+  void remove_standalone_snapshots();
+  void handle_remove_standalone_snapshots(int r);
 
   void remove_mirror_images();
   void handle_remove_mirror_images(int r);
