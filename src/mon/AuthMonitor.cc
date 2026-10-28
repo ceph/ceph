@@ -2019,6 +2019,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       ceph_assert(rv == CAPS_UPDATE_REQD or rv == CAPS_UPDATE_NOT_REQD or
 	          rv == CAPS_PARSING_ERR);
       if (rv == CAPS_PARSING_ERR) {
+	err = -EINVAL;
 	goto done;
       } else if (rv == CAPS_UPDATE_NOT_REQD) {
 	ss << "no update for caps of " << entity;
@@ -2169,7 +2170,17 @@ AuthMonitor::caps_update AuthMonitor::_merge_caps(const string& cap_entity,
   }
 
   if (cur_cap.merge(new_cap)) {
-    newcaps[cap_entity] = cur_cap.to_string();
+    string merged_cap_str = cur_cap.to_string();
+    // refuse to store a cap that does not read back as itself; storing it
+    // could silently change the grants the client already held.
+    CAP_ENTITY_CLASS merged_cap;
+    if (not merged_cap.parse(merged_cap_str, &out) or
+	merged_cap.to_string() != merged_cap_str) {
+      out << "cannot merge new " << cap_entity << " caps into the caps "
+	  << "client already holds";
+      return CAPS_PARSING_ERR;
+    }
+    newcaps[cap_entity] = merged_cap_str;
     return CAPS_UPDATE_REQD;
   } else {
     newcaps[cap_entity] = cur_cap_str;

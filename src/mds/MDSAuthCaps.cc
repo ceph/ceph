@@ -511,7 +511,18 @@ string MDSCapMatch::to_string()
   string str = "";
 
   if (!fs_name.empty())   { str += " fsname=" + fs_name; }
-  if (!path.empty())   { str += " path=" + path; }
+  if (!path.empty()) {
+    // quote paths that are not an unquoted word, as the parser requires
+    if (path.find_first_not_of("abcdefghijklmnopqrstuvwxyz"
+			       "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+			       "0123456789_./-") == string::npos) {
+      str += " path=" + path;
+    } else if (path.find('"') == string::npos) {
+      str += " path=\"" + path + "\"";
+    } else {
+      str += " path='" + path + "'";
+    }
+  }
   if (root_squash)   { str += " root_squash"; }
   if (uid != MDS_AUTH_UID_ANY) { str += " uid=" + std::to_string(uid); }
   if (!gids.empty()) {
@@ -548,7 +559,11 @@ string MDSCapSpec::to_string()
 
 string MDSCapGrant::to_string()
 {
-  return "allow " + spec.to_string() + match.to_string();
+  string str = "allow " + spec.to_string() + match.to_string();
+  if (!network.empty()) {
+    str += " network " + network;
+  }
+  return str;
 }
 
 string MDSAuthCaps::to_string()
