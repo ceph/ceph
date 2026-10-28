@@ -146,7 +146,7 @@ We'll use a stable/regular 19.2.2 release of Squid as an example throughout this
     +===================+=========================================================+
     | squid (19.X.X)    | ``jammy centos9 windows bookworm``                      |
     +-------------------+---------------------------------------------------------+
-    | tentacle (20.X.X) | ``jammy centos9 rocky10 windows bookworm``              |
+    | tentacle (20.X.X) | ``jammy noble centos9 rocky10 windows bookworm``        |
     +-------------------+---------------------------------------------------------+
     | umbrella (21.X.X) | ``jammy noble centos9 rocky10 bookworm trixie windows`` |
     +-------------------+---------------------------------------------------------+
