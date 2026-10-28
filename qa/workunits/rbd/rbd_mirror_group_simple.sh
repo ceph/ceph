@@ -4386,6 +4386,113 @@ test_demote_snap_sync_after_restart()
   check_daemon_running "${secondary_cluster}"
 }
 
+declare -a test_resync_after_incremental_attach_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}")
+
+test_resync_after_incremental_attach_scenarios=1
+
+# Test sequence:
+# 1. Sync a two-image group and keep both mirror daemons running.
+# 2. Attach two enabled images without waiting, force-promote the peer, and
+#   resync the old primary while standalone primary snapshots remain.
+# 3. Disable the group and let detached replicas follow remote deletion.
+# Expected: Resync creates a new local group and restores the promoted group
+#   membership without losing original members.
+test_resync_after_incremental_attach()
+{
+  skip_without_dynamic_groups "${FUNCNAME[0]}" && return 0
+
+  local primary_cluster=$1
+  local secondary_cluster=$2
+  local pool=$3
+  local cluster image group_id_before_resync expected_members actual_members
+  local -A standalone_snap_ids
+  local retained_standalone_snapshots=0
+
+  # Keep both daemons running throughout attach, promotion and resync.
+  start_mirrors "${primary_cluster}"
+  group_create "${primary_cluster}" "${pool}/${group0}"
+  for image in "${image_prefix}0" "${image_prefix}1"; do
+    run_cmd "rbd --cluster ${primary_cluster} create --size 6G --image-feature layering ${pool}/${image} --debug-rbd=0"
+  done
+  group_images_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}" 2
+  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_synced "${primary_cluster}" "${pool}/${group0}" "${secondary_cluster}" "${pool}/${group0}"
+  mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}/${group0}"
+  run_cmd "rbd --cluster ${primary_cluster} mirror group status ${pool}/${group0}"
+  for cluster in "${primary_cluster}" "${secondary_cluster}"; do
+    run_cmd "rbd --cluster ${cluster} group snap list ${pool}/${group0}"
+  done
+
+  # Create and enable both images first, then attach them without waiting for sync.
+  for image in img_a img_b; do
+    run_cmd "rbd --cluster ${primary_cluster} create --size 128 ${pool}/${image} --debug-rbd=0"
+  done
+  for image in img_a img_b; do
+    run_cmd "rbd --cluster ${primary_cluster} mirror image enable ${pool}/${image} snapshot --debug-rbd=0"
+  done
+  for image in img_a img_b; do
+    run_cmd "rbd --cluster ${primary_cluster} snap list --all ${pool}/${image} --format xml --debug-rbd=0"
+    standalone_snap_ids[${image}]=$(xmlstarlet sel -t -v "(//snapshots/snapshot[namespace/type='mirror' and namespace/state='primary']/id)[last()]" "${CMD_STDOUT}")
+    test -n "${standalone_snap_ids[${image}]}" || fail "no standalone primary snapshot found for ${image}"
+  done
+  for image in img_a img_b; do
+    run_cmd "rbd --cluster ${primary_cluster} group image add ${pool}/${group0} ${pool}/${image} --debug-rbd=0"
+  done
+  for cluster in "${primary_cluster}" "${secondary_cluster}"; do
+    run_cmd "rbd --cluster ${cluster} group snap list ${pool}/${group0} --debug-rbd=0"
+  done
+
+  run_cmd "rbd --cluster ${secondary_cluster} mirror group promote ${pool}/${group0} --force --debug-rbd=0"
+  run_cmd "rbd --cluster ${primary_cluster} mirror group demote ${pool}/${group0} --debug-rbd=0"
+  # Check the failure condition before resync starts deleting group snapshots.
+  # Otherwise this test could pass without exercising standalone cleanup.
+  for image in img_a img_b; do
+    run_cmd "rbd --cluster ${primary_cluster} snap list --all ${pool}/${image} --format xml --debug-rbd=0"
+    if [ "$(xmlstarlet sel -t -v "count(//snapshots/snapshot[id='${standalone_snap_ids[${image}]}' and namespace/type='mirror' and namespace/state='primary'])" "${CMD_STDOUT}")" != 0 ]; then
+      retained_standalone_snapshots=$((retained_standalone_snapshots + 1))
+    fi
+  done
+  test "${retained_standalone_snapshots}" -gt 0 || fail "standalone snapshots were already pruned; the resync cleanup failure was not reproduced"
+  get_id_from_group_info "${primary_cluster}" "${pool}/${group0}" group_id_before_resync
+  run_cmd "rbd --cluster ${primary_cluster} mirror group resync ${pool}/${group0} --debug-rbd=0"
+
+  # The latest complete snapshot decides which added images remain.
+  # Resync must restore that membership on the old primary.
+  run_cmd "rbd --cluster ${secondary_cluster} group image list ${pool}/${group0} --format xml"
+  expected_members=$(xmlstarlet sel -t -m '//images/image' -v pool -o / -v image -n "${CMD_STDOUT}" | LC_ALL=C sort)
+  test -n "${expected_members}" || fail "the promoted group has no members"
+  for image in "${image_prefix}0" "${image_prefix}1"; do
+    grep -Fxq "${pool}/${image}" <<< "${expected_members}" || fail "promotion lost an original member: ${image}"
+  done
+  wait_for_group_id_changed "${primary_cluster}" "${pool}/${group0}" "${group_id_before_resync}"
+  wait_for_group_synced "${secondary_cluster}" "${pool}/${group0}" "${primary_cluster}" "${pool}/${group0}"
+  run_cmd "rbd --cluster ${primary_cluster} group image list ${pool}/${group0} --format xml"
+  actual_members=$(xmlstarlet sel -t -m '//images/image' -v pool -o / -v image -n "${CMD_STDOUT}" | LC_ALL=C sort)
+  test "${actual_members}" = "${expected_members}" || fail "resynced group membership differs from the promoted group"
+  run_cmd "rbd --cluster ${primary_cluster} mirror group status ${pool}/${group0}"
+  for cluster in "${primary_cluster}" "${secondary_cluster}"; do
+    run_cmd "rbd --cluster ${cluster} group snap list ${pool}/${group0}"
+  done
+
+  mirror_group_disable "${secondary_cluster}" "${pool}/${group0}"
+  group_remove "${secondary_cluster}" "${pool}/${group0}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
+  for image in "${image_prefix}0" "${image_prefix}1" img_a img_b; do
+    if try_cmd "rbd --cluster ${secondary_cluster} info ${pool}/${image} --format xml"; then
+      # Rollback can leave an added image standalone on the promoted site.
+      if [ "$(xmlstarlet sel -t -v "count(//mirroring[state='enabled'])" "${CMD_STDOUT}")" != 0 ]; then
+        if [ "$(xmlstarlet sel -t -v '//mirroring/primary' "${CMD_STDOUT}")" = false ]; then
+          wait_for_image_present "${secondary_cluster}" "${pool}" "${image}" 'deleted'
+          continue
+        fi
+        mirror_image_disable "${secondary_cluster}" "${pool}/${image}" --force
+        wait_for_image_present "${primary_cluster}" "${pool}" "${image}" 'deleted'
+      fi
+      image_remove "${secondary_cluster}" "${pool}/${image}"
+    fi
+  done
+}
+
 declare -a test_rollback_after_add_image_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 2 'keep_attached')
 declare -a test_rollback_after_add_image_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 2 'detach_old_primary')
 
@@ -4721,6 +4828,7 @@ run_all_tests()
   run_test_all_scenarios test_rollback_after_add_image
   run_test_all_scenarios test_resync_after_standalone_attach
   run_test_all_scenarios test_resync_after_standalone_detach
+  run_test_all_scenarios test_resync_after_incremental_attach
   run_test_all_scenarios test_create_group_with_images_then_mirror
   # TODO: add the capabilty to have image from different pool in the mirror group
   run_test_all_scenarios test_images_different_pools

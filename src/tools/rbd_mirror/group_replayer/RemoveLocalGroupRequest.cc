@@ -18,6 +18,7 @@
 #include "librbd/group/RemoveImageRequest.h"
 #include "librbd/mirror/GroupGetInfoRequest.h"
 #include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
+#include "librbd/mirror/snapshot/RemoveStandaloneSnapshotsRequest.h"
 #include "tools/rbd_mirror/image_deleter/TrashMoveRequest.h"
 
 #define dout_context g_ceph_context
@@ -525,8 +526,68 @@ void RemoveLocalGroupRequest<I>::handle_get_mirror_images(int r) {
   } else {
     m_trash_images.insert({mirror_image.global_image_id,
                            {spec.pool_id, spec.image_id}});
+    if (mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_GROUP) {
+      remove_standalone_snapshots();
+      return;
+    }
   }
 
+  m_images.pop_front();
+  get_mirror_images();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::remove_standalone_snapshots() {
+  const auto& spec = m_images.front().spec;
+  librados::IoCtx image_io_ctx;
+  int r = librbd::util::create_ioctx(m_io_ctx, "image", spec.pool_id,
+                                     {}, &image_io_ctx);
+  if (r < 0) {
+    finish(r);
+    return;
+  }
+  m_standalone_snapshot_image_ctx = I::create(
+    "", spec.image_id, nullptr, image_io_ctx, false);
+  m_standalone_snapshot_image_ctx->read_only_mask &=
+    ~librbd::IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+  auto ctx = create_context_callback<RemoveLocalGroupRequest<I>,
+    &RemoveLocalGroupRequest<I>::handle_open_standalone_snapshot_image>(this);
+  m_standalone_snapshot_image_ctx->state->open(
+    librbd::OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::handle_open_standalone_snapshot_image(int r) {
+  if (r < 0) {
+    m_standalone_snapshot_image_ctx = nullptr;
+    finish(r);
+    return;
+  }
+  // Group snapshots are gone, but snapshots kept during attach can remain.
+  // Remove them only while this image still belongs to the group being removed.
+  auto ctx = create_context_callback<RemoveLocalGroupRequest<I>,
+    &RemoveLocalGroupRequest<I>::handle_remove_standalone_snapshots>(this);
+  auto req = librbd::mirror::snapshot::RemoveStandaloneSnapshotsRequest<I>::create(
+    m_standalone_snapshot_image_ctx,
+    cls::rbd::GroupSpec{m_group_id, m_io_ctx.get_id()}, ctx);
+  req->send();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::handle_remove_standalone_snapshots(int r) {
+  m_ret_val = r;
+  auto ctx = create_context_callback<RemoveLocalGroupRequest<I>,
+    &RemoveLocalGroupRequest<I>::handle_close_standalone_snapshot_image>(this);
+  m_standalone_snapshot_image_ctx->state->close(ctx);
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::handle_close_standalone_snapshot_image(int r) {
+  m_standalone_snapshot_image_ctx = nullptr;
+  if (m_ret_val < 0 || r < 0) {
+    finish(m_ret_val < 0 ? m_ret_val : r);
+    return;
+  }
   m_images.pop_front();
   get_mirror_images();
 }
