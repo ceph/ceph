@@ -1,5 +1,9 @@
 >=22.0.0
 
+* RGW: Swift API ``401 Unauthorized`` responses now include a
+  ``WWW-Authenticate`` header (``Swift realm=…``, and ``Keystone uri=…`` when
+  Keystone is configured), matching OpenStack Swift and RFC 9110.
+
 * Cephadm: ``ceph orch upgrade start`` and ``ceph orch upgrade check`` now
   verify that every host's CPU supports the x86-64 microarchitecture level
   required by the target release (official builds of 21.x and later require

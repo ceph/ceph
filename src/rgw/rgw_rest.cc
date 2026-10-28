@@ -293,11 +293,17 @@ void dump_errno(const struct rgw_err &err, string& out) {
 void dump_errno(req_state *s)
 {
   dump_status(s, s->err.http_ret, http_status_names[s->err.http_ret]);
+  if (s->err.http_ret == 401) {
+    dump_swift_www_authenticate(s);
+  }
 }
 
 void dump_errno(req_state *s, int http_ret)
 {
   dump_status(s, http_ret, http_status_names[http_ret]);
+  if (http_ret == 401) {
+    dump_swift_www_authenticate(s);
+  }
 }
 
 void dump_header(req_state* const s,
