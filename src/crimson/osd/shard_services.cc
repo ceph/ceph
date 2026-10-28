@@ -356,9 +356,13 @@ seastar::future<> ShardServices::start_cluster_lane(
 {
   LOG_PREFIX(ShardServices::start_cluster_lane);
   using crimson::net::SocketPolicy;
+  // Bind this reactor's lane without listening on every reactor. Sharing the
+  // port scan that way collides until a reactor exhausts the bind range and
+  // aborts the OSD.
   cluster_lane_msgr = crimson::net::Messenger::create(
     entity_name_t::OSD(local_state.whoami), "cluster_lane", nonce,
-    true);
+    true /* dispatch_only_on_this_shard */,
+    true /* listen_on_primary_only */);
   // the MonClient lives on reactor 0, the handshake calls it there
   cluster_lane_msgr->set_auth_client(auth_client);
   cluster_lane_msgr->set_auth_server(auth_server);

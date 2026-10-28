@@ -38,7 +38,8 @@ public:
   SocketMessenger(const entity_name_t& myname,
                   const std::string& logic_name,
                   uint32_t nonce,
-                  bool dispatch_only_on_this_shard);
+                  bool dispatch_only_on_this_shard,
+                  bool listen_on_primary_only = false);
 
   ~SocketMessenger() override;
 
@@ -191,6 +192,10 @@ private:
   const std::string logic_name;
   const uint32_t nonce;
   const bool dispatch_only_on_sid;
+  // Bind only on this messenger's shard. Per-reactor messengers must not
+  // listen on every shard: those binds take the same port and the scan
+  // runs out of ms_bind_port_min..max.
+  const bool listen_on_primary_only;
 
   entity_name_t my_name;
   entity_addrvec_t my_addrs;

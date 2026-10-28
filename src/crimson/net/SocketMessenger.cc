@@ -38,11 +38,13 @@ namespace crimson::net {
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
                                  uint32_t nonce,
-                                 bool dispatch_only_on_this_shard)
+                                 bool dispatch_only_on_this_shard,
+                                 bool listen_on_primary_only)
   : sid{seastar::this_shard_id()},
     logic_name{logic_name},
     nonce{nonce},
     dispatch_only_on_sid{dispatch_only_on_this_shard},
+    listen_on_primary_only{listen_on_primary_only},
     my_name{myname}
 {}
 
@@ -97,7 +99,8 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
   set_myaddrs(addrs);
   return seastar::futurize_invoke([this] {
     if (!listener) {
-      return ShardedServerSocket::create(dispatch_only_on_sid
+      return ShardedServerSocket::create(
+        dispatch_only_on_sid, listen_on_primary_only
       ).then([this] (auto _listener) {
         listener = _listener;
       });
