@@ -57,12 +57,12 @@ using IoCallback = std::function<void(IoResult&&)>;
  * (passthrough) for v1.
  *
  * Write ownership rule: @c async_write consumes the caller's @c bufferlist at
- * submit. If the caller needs a view after submit, it must retain its own
- * share (copy/share the list) before calling. For @c wrap_static buffers, the
- * wrapped memory must remain valid until the write callback runs. For
- * @c claim / @c claim_iov buffers, ownership transferred at claim time; the
- * deleter runs when the last @c buffer::ptr drops the @c raw (not necessarily
- * at write CB).
+ * submit. Prefer @c alloc_buffers (upper-layer / Ceph-owned pages) so the
+ * payload can live in ObjectCacher later without claim/donate. @c claim_iov is
+ * the fallback when memory was already allocated by the RPC layer. For
+ * @c wrap_static buffers, the wrapped memory must remain valid until the write
+ * callback runs. For @c claim / @c claim_iov, ownership transfers at claim
+ * time; the deleter runs when the last @c buffer::ptr drops the @c raw.
  */
 class ZeroCopyClient {
 public:
@@ -76,7 +76,12 @@ public:
 
   Client* get_client() const { return client; }
 
-  /// Page-aligned Ceph-owned buffers the caller may fill, then pass to write.
+  /**
+   * Page-aligned Ceph-owned buffers for upper-layer WRITE.
+   * Caller fills via @c bufferlist_to_iovec (writable views), then passes the
+   * list to @c async_write which consumes it. Single contiguous page-aligned
+   * ptr so FSAL can map with one iovec under IOV_MAX.
+   */
   static bufferlist alloc_buffers(size_t len);
 
   /**

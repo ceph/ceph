@@ -127,6 +127,75 @@ TEST(LibCephFS, ZeroCopyAsyncRoundTrip)
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, ZeroCopyUpperLayerAllocWrite)
+{
+  // Primary upper-layer WRITE path: Ceph allocates pages, caller fills via
+  // to_iovec, async_write consumes — no wrap/claim.
+  struct ceph_mount_info* cmount = nullptr;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+
+  UserPerm* perms = ceph_mount_perms(cmount);
+  Inode* root = nullptr;
+  ASSERT_EQ(0, ceph_ll_lookup_root(cmount, &root));
+
+  char filename[256];
+  sprintf(filename, "test_libcephfs_zc_alloc_%u", getpid());
+
+  Inode* file = nullptr;
+  Fh* fh = nullptr;
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_ll_create(cmount, root, filename, 0666,
+                              O_RDWR | O_CREAT | O_TRUNC, &file, &fh, &stx, 0,
+                              0, perms));
+
+  constexpr size_t len = 8192;
+  ceph_bufferlist* wbl = ceph_bufferlist_alloc(len);
+  ASSERT_NE(nullptr, wbl);
+  ASSERT_EQ(len, ceph_bufferlist_length(wbl));
+
+  struct iovec wiov[1];
+  ASSERT_EQ(1, ceph_bufferlist_to_iovec(wbl, wiov, 1));
+  ASSERT_EQ(len, wiov[0].iov_len);
+  // Page-aligned base for upper-layer readv.
+  EXPECT_EQ(0u, reinterpret_cast<uintptr_t>(wiov[0].iov_base) &
+                    (static_cast<uintptr_t>(getpagesize()) - 1));
+  std::memset(wiov[0].iov_base, 0xa5, len);
+  std::string expected(static_cast<char*>(wiov[0].iov_base), len);
+
+  ZcWait wwait;
+  struct ceph_io_completion wcomp{zc_io_cb, &wwait};
+  ASSERT_EQ(0, ceph_ll_async_write(cmount, fh, 0, wbl, 0, &wcomp));
+  ASSERT_EQ(static_cast<int64_t>(len), wwait.wait());
+  EXPECT_EQ(nullptr, wwait.data);
+
+  ZcWait rwait;
+  struct ceph_io_completion rcomp{zc_io_cb, &rwait};
+  ASSERT_EQ(0, ceph_ll_async_read(cmount, fh, 0, len, &rcomp));
+  ASSERT_EQ(static_cast<int64_t>(len), rwait.wait());
+  ASSERT_NE(nullptr, rwait.data);
+
+  struct iovec riov[8];
+  int niov = ceph_bufferlist_to_iovec(rwait.data, riov, 8);
+  ASSERT_GT(niov, 0);
+  size_t pos = 0;
+  for (int i = 0; i < niov; ++i) {
+    ASSERT_LE(pos + riov[i].iov_len, len);
+    EXPECT_EQ(0, std::memcmp(expected.data() + pos, riov[i].iov_base,
+                             riov[i].iov_len));
+    pos += riov[i].iov_len;
+  }
+  EXPECT_EQ(len, pos);
+  ceph_bufferlist_put(rwait.data);
+
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, filename, perms));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, ZeroCopyWrapIovWrite)
 {
   struct ceph_mount_info* cmount = nullptr;

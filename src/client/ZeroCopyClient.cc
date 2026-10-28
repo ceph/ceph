@@ -293,7 +293,11 @@ bufferlist ZeroCopyClient::alloc_buffers(size_t len)
   if (len == 0) {
     return bl;
   }
+  // One page-aligned raw of exact @p len: base is CEPH_PAGE_SIZE-aligned for
+  // readv/DMA; length matches the WRITE so to_iovec yields a single segment
+  // (FSAL IOV_MAX-friendly) and ObjectCacher substr_of can share the same raw.
   bl.push_back(bufferptr(buffer::create_page_aligned(len)));
+  ceph_assert(bl.length() == len);
   return bl;
 }
 

@@ -37,13 +37,17 @@ struct Fh;
  * - ceph_ll_async_write: consumes the handle at submit (do not put after a
  *   successful submit; put only if submit fails and you still own it).
  * - ceph_bufferlist_to_iovec(): fills iovec views into the handle's pages;
- *   the handle must outlive use of those iovecs (no byte copy).
- * - wrap_iov: non-owning; caller memory must remain valid until write
- *   completion (Objecter-only / no ObjectCacher).
- * - claim_iov: owning donate; after a successful claim the caller must not
- *   free the bytes. The per-segment deleter runs when the last buffer::ptr
- *   (including any ObjectCacher BufferHead that shared the raw) drops it —
- *   possibly on a writeback thread.
+ *   the handle must outlive use of those iovecs (no byte copy). Views are
+ *   writable so the caller may readv/memcpy the NFS payload into alloc'd
+ *   pages before submit.
+ *
+ * WRITE buffer sources (prefer in this order for Ganesha ZC):
+ * - alloc (primary / upper-layer): Ceph-owned page-aligned pages; fill via
+ *   to_iovec then ceph_ll_async_write. No claim/donate.
+ * - claim_iov (fallback): donate ntirpc/RPC memory when recv cannot be
+ *   deferred into Ceph pages (compound/GSS/failure/RDMA).
+ * - wrap_iov: non-owning borrow until write CB; Objecter-only, unsafe for
+ *   ObjectCacher dirty hold.
  *
  * This is the C surface for zero-copy I/O. Do not use ceph_ll_io_info
  * zerocopy/release fields (that approach is discarded).
@@ -69,13 +73,17 @@ size_t ceph_bufferlist_length(const ceph_bufferlist* bl);
 int ceph_bufferlist_to_iovec(const ceph_bufferlist* bl, struct iovec* iov,
                              int max_iov);
 
-/** Page-aligned Ceph-owned buffers (ceph::ZeroCopyClient::alloc_buffers). */
+/**
+ * Page-aligned Ceph-owned buffers (ceph::ZeroCopyClient::alloc_buffers).
+ * Preferred source for upper-layer WRITE: FSAL/ntirpc readv into these
+ * pages, then ceph_ll_async_write consumes the handle.
+ */
 ceph_bufferlist* ceph_bufferlist_alloc(size_t len);
 
 /**
  * Wrap caller iovecs without copying (ceph::ZeroCopyClient::wrap_static).
  * Caller memory must remain valid until write completion if submitted.
- * Do not use with ObjectCacher — prefer claim_iov to donate ownership.
+ * Do not use with ObjectCacher — prefer alloc (upper-layer) or claim_iov.
  */
 ceph_bufferlist* ceph_bufferlist_wrap_iov(const struct iovec* iov, int iovcnt);
 
@@ -83,9 +91,10 @@ ceph_bufferlist* ceph_bufferlist_wrap_iov(const struct iovec* iov, int iovcnt);
  * Claim ownership of caller iovecs without copying
  * (ceph::ZeroCopyClient::claim_iov via buffer::claim_buffer).
  *
- * After success the caller must not free the bytes. @p del is invoked once
- * per non-empty segment when that segment's raw is destroyed; if @p del is
- * NULL, each base is passed to free(3). @p priv is passed through to @p del.
+ * Fallback when upper-layer alloc is unavailable. After success the caller
+ * must not free the bytes. @p del is invoked once per non-empty segment when
+ * that segment's raw is destroyed; if @p del is NULL, each base is passed to
+ * free(3). @p priv is passed through to @p del.
  */
 ceph_bufferlist* ceph_bufferlist_claim_iov(const struct iovec* iov, int iovcnt,
                                            ceph_buffer_deleter_t del,
