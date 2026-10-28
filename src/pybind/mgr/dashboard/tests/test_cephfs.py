@@ -2,13 +2,19 @@
 import json
 from collections import defaultdict
 
+import errno
+import unittest
+
+import cephfs
+
 try:
-    from mock import Mock
+    from mock import Mock, patch
 except ImportError:
-    from unittest.mock import patch, Mock
+    from unittest.mock import Mock, patch
 
 from .. import mgr
-from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus
+from ..controllers.cephfs import CephFS, CephFSClients, CephFSMirror, CephFSMirrorStatus
+from ..services.ceph_service import SendCommandError
 from ..tests import ControllerTestCase
 
 
@@ -42,6 +48,38 @@ class CephFsTest(ControllerTestCase):
         self.cephFs._append_mds_metadata(mds_versions, 'foo')
         self.assertEqual(len(mds_versions), 1)
         self.assertEqual(mds_versions['bar'], ['foo'])
+
+
+
+class CephFSClientsTest(unittest.TestCase):
+    """Clients list must not raise when MDS rank 0 is down (File Systems /tabs)."""
+
+    @patch('dashboard.controllers.cephfs.CephService.send_command')
+    def test_get_suppresses_send_command_error(self, send_command):
+        send_command.side_effect = SendCommandError(
+            'Resource temporarily unavailable', 'session ls', {}, -errno.EAGAIN)
+        clients = CephFSClients(Mock(), fscid=1)
+        # ViewCache returns (status, value); call underlying getter via fn path.
+        status, value = clients.get('True')
+        self.assertEqual(value, [])
+        self.assertIn(status, (0, 1, 2))  # VALUE_OK / STALE / NONE
+
+    @patch('dashboard.controllers.cephfs.CephService.send_command')
+    def test_get_raises_send_command_error_when_not_suppressed(self, send_command):
+        send_command.side_effect = SendCommandError(
+            'Resource temporarily unavailable', 'session ls', {}, -errno.EAGAIN)
+        clients = CephFSClients(Mock(), fscid=1)
+        with self.assertRaises(SendCommandError):
+            clients.get('False')
+
+    @patch('dashboard.controllers.cephfs.CephService.send_command')
+    def test_get_suppresses_cephfs_wouldblock(self, send_command):
+        # LibCephFS raises cephfs.WouldBlock (cephfs.Error), not builtin OSError.
+        send_command.side_effect = cephfs.WouldBlock(
+            -errno.EAGAIN, 'Resource temporarily unavailable')
+        clients = CephFSClients(Mock(), fscid=1)
+        _status, value = clients.get('True')
+        self.assertEqual(value, [])
 
 
 class CephFSMirrorTest(ControllerTestCase):
