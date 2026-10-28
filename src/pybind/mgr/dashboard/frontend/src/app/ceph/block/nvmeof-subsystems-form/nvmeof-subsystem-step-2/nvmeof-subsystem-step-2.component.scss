@@ -1,4 +1,5 @@
 @use '@carbon/layout';
+@use 'sass:math';
 
 .cd-nvmeof-subsystem-step-two {
   // Full width of the tearsheet content column; min-inline-size allows nested
@@ -7,7 +8,7 @@
   inline-size: 100%;
 
   // Aligns with exactly 10 columns of the standard 16-column Carbon grid layout (10/16).
-  --host-input-width: #{percentage(10 / 16)};
+  --host-input-width: #{math.percentage(math.div(10, 16))};
 
   &-manual-hosts {
     display: flex;

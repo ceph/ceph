@@ -1,4 +1,4 @@
-<ng-container *ngIf="!!selection">
+@if (!!selection) {
   <cds-tabs
     type="contained"
     theme="light"
@@ -209,23 +209,24 @@
                 ACLs
               </td>
               <td>
-                <ng-container *ngFor="let type of groupedACLs | keyvalue">
+                @for (type of groupedACLs | keyvalue; track type) {
                   <div class="mb-2">
                     <div class="cds--label">{{ type.key }}:</div>
-                    <div
-                      *ngFor="let item of type.value"
-                      [cdsStack]="'horizontal'"
-                      class="mt-1"
-                    >
-                      <cds-tag
-                        size="sm"
-                        class="tags-background-gray"
+                    @for (item of type.value; track item) {
+                      <div
+                        [cdsStack]="'horizontal'"
+                        class="mt-1"
                       >
-                        {{ item.source_id }} : {{ item.dest_id }}
-                      </cds-tag>
-                    </div>
+                        <cds-tag
+                          size="sm"
+                          class="tags-background-gray"
+                        >
+                          {{ item.source_id }} : {{ item.dest_id }}
+                        </cds-tag>
+                      </div>
+                    }
                   </div>
-                </ng-container>
+                }
               </td>
             </tr>
           }
@@ -291,4 +292,4 @@
       </table>
     </cds-tab>
   </cds-tabs>
-</ng-container>
+}

@@ -11,20 +11,21 @@
     <div class="cds--overflow-menu-options__btn">Logged in as {{ username }}</div>
   </li>
   <li class="cds--overflow-menu-options__option cds--overflow-menu--divider mb-2">
-    <button
-      *ngIf="!sso"
-      routerLink="/user-profile/edit"
-      class="cds--overflow-menu-options__btn"
-      type="button"
-      i18n
-    >
-      <svg
-        cdsIcon="locked"
-        class="me-2"
-        size="16"
-      ></svg
-      >Change password
-    </button>
+    @if (!sso) {
+      <button
+        routerLink="/user-profile/edit"
+        class="cds--overflow-menu-options__btn"
+        type="button"
+        i18n
+      >
+        <svg
+          cdsIcon="locked"
+          class="me-2"
+          size="16"
+        ></svg
+        >Change password
+      </button>
+    }
   </li>
   <li class="cds--overflow-menu-options__option mb-2">
     <button

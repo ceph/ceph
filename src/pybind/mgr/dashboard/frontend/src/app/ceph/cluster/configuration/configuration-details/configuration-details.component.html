@@ -1,4 +1,4 @@
-<ng-container *ngIf="selection">
+@if (selection) {
   <table
     class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
     data-testid="config-details-table"
@@ -39,9 +39,9 @@
           Current values
         </td>
         <td>
-          <span *ngFor="let conf of selection.value; last as isLast">
-            {{ conf.section }}: {{ conf.value }}{{ !isLast ? ',' : '' }}<br />
-          </span>
+          @for (conf of selection.value; track conf; let isLast = $last) {
+            <span> {{ conf.section }}: {{ conf.value }}{{ !isLast ? ',' : '' }}<br /> </span>
+          }
         </td>
       </tr>
       <tr>
@@ -97,11 +97,13 @@
           Flags
         </td>
         <td>
-          <span *ngFor="let flag of selection.flags">
-            <span title="{{ flags[flag] }}">
-              <cds-tag class="tag-dark me-2">{{ flag | uppercase }}</cds-tag>
+          @for (flag of selection.flags; track flag) {
+            <span>
+              <span title="{{ flags[flag] }}">
+                <cds-tag class="tag-dark me-2">{{ flag | uppercase }}</cds-tag>
+              </span>
             </span>
-          </span>
+          }
         </td>
       </tr>
       <tr>
@@ -112,14 +114,15 @@
           Services
         </td>
         <td>
-          <span *ngFor="let service of selection.services">
-            <cds-tag
-              *ngIf="service"
-              class="tag-dark me-2"
-            >
-              {{ service }}
-            </cds-tag>
-          </span>
+          @for (service of selection.services; track service) {
+            <span>
+              @if (service) {
+                <cds-tag class="tag-dark me-2">
+                  {{ service }}
+                </cds-tag>
+              }
+            </span>
+          }
         </td>
       </tr>
       <tr>
@@ -178,4 +181,4 @@
       </tr>
     </tbody>
   </table>
-</ng-container>
+}

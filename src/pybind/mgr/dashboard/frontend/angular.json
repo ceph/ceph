@@ -104,6 +104,9 @@
               "src/styles.scss"
             ],
             "stylePreprocessorOptions": {
+              "sass": {
+                "silenceDeprecations": ["import"]
+              },
               "includePaths": [
                 "src",
                 "."

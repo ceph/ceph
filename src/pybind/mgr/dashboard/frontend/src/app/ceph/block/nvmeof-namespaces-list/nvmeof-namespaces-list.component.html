@@ -30,7 +30,7 @@
   </div>
 </div>
 
-<ng-container *ngIf="namespaces$ | async as namespaces">
+@if (namespaces$ | async; as namespaces) {
   <cd-table
     [data]="namespaces"
     columnMode="flex"
@@ -55,6 +55,6 @@
       </cd-table-actions>
     </div>
   </cd-table>
-</ng-container>
+}
 
 <router-outlet name="modal"></router-outlet>

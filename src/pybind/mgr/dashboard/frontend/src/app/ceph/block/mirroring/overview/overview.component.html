@@ -29,18 +29,20 @@
             (click)="updateSiteName()"
             [title]="editing ? 'Save' : 'Edit'"
           >
-            <svg
-              [cdsIcon]="icons.edit"
-              [size]="icons.size32"
-              class="cds--btn__icon"
-              *ngIf="!editing"
-            ></svg>
-            <svg
-              [cdsIcon]="icons.check"
-              [size]="icons.size32"
-              class="cds--btn__icon"
-              *ngIf="editing"
-            ></svg>
+            @if (!editing) {
+              <svg
+                [cdsIcon]="icons.edit"
+                [size]="icons.size32"
+                class="cds--btn__icon"
+              ></svg>
+            }
+            @if (editing) {
+              <svg
+                [cdsIcon]="icons.check"
+                [size]="icons.size32"
+                class="cds--btn__icon"
+              ></svg>
+            }
           </cds-icon-button>
           <cd-copy-2-clipboard-button
             [source]="siteName"
@@ -52,7 +54,7 @@
     </div>
     <div cdsCol="{md:5}">
       <div class="d-flex flex-row-reverse gap-3">
-        <ng-container *ngFor="let action of tableActions">
+        @for (action of tableActions; track action) {
           @if (!action.visible || action.visible(selection)) {
             <button
               type="button"
@@ -72,7 +74,7 @@
               ></svg>
             </button>
           }
-        </ng-container>
+        }
       </div>
     </div>
   </div>

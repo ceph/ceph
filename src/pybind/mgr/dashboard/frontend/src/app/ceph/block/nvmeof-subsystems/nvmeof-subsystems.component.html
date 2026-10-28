@@ -29,7 +29,7 @@
     </div>
   </div>
 </div>
-<ng-container *ngIf="subsystems$ | async as subsystems">
+@if (subsystems$ | async; as subsystems) {
   <cd-table
     #table
     [data]="subsystems"
@@ -52,7 +52,6 @@
       >
       </cd-table-actions>
     </div>
-
     <cd-nvmeof-subsystems-details
       *cdTableDetail
       [selection]="expandedRow"
@@ -61,7 +60,7 @@
     >
     </cd-nvmeof-subsystems-details>
   </cd-table>
-</ng-container>
+}
 
 <ng-template
   #customTableItemTemplate
