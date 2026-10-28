@@ -938,21 +938,12 @@ class CephadmService(metaclass=ABCMeta):
     def ok_to_upgrade(self,
                       to_upgrade: str,
                       known: Optional[List[str]] = None) -> HandleCommandResult:
-        """Default ok-to-upgrade: always safe. Services override this for custom logic.
-
-        Any service that needs a safety check before daemon upgrade (e.g. NFS
-        with TSM, or a future service with its own protocol) overrides this
-        method in its own class. upgrade.py calls this without knowing which
-        service it is talking to.
+        """Default ok-to-upgrade: always safe. Services override for custom logic.
 
         Args:
-            to_upgrade:        full daemon name we want to upgrade next
-            known:             output — filled with names of daemons safe to
-                               upgrade together (same batch pattern as OSD)
+            to_upgrade: daemon name to check
+            known:      output list — daemon name appended if safe
         """
-        # Default: no special check needed. Safe to proceed.
-        if known is not None:
-            known.append(to_upgrade)
         return HandleCommandResult(0, f'{to_upgrade} is safe to upgrade', '')
 
     def _enough_daemons_to_stop(self, daemon_type: str, daemon_ids: List[str], service: str, low_limit: int, alert: bool = False) -> Tuple[bool, str]:

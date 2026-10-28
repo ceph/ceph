@@ -3,11 +3,11 @@ import json
 import logging
 import re
 import socket
-from typing import cast, Dict, List, Any, Optional, TYPE_CHECKING, Union
+from typing import cast, Dict, List, Any, Optional, Tuple, TYPE_CHECKING, Union
 
 try:
-    import grpc
-    from cephadm.services.proto import nfs_ganesha_pb2, nfs_ganesha_pb2_grpc
+    import grpc  # type: ignore
+    from .nfs_grpc_stub import NfsUpgradeStub, OkToUpgradeRequest
     GRPC_AVAILABLE = True
 except ImportError:
     GRPC_AVAILABLE = False
@@ -1017,7 +1017,7 @@ class NFSCluster:
                           cluster_id: str = '',
                           ca_cert: Optional[bytes] = None,
                           client_cert: Optional[bytes] = None,
-                          client_key: Optional[bytes] = None):
+                          client_key: Optional[bytes] = None) -> Any:
         """Open a TLS gRPC channel to NFS-Ganesha.
 
         Uses explicit cert bytes if provided, otherwise falls back to insecure.
@@ -1037,7 +1037,7 @@ class NFSCluster:
         log.warning(f'gRPC: no certs — using insecure channel to {host_ip}:{port}')
         return grpc.insecure_channel(f'{host_ip}:{port}')
 
-    def _get_nfs_daemon_and_port(self, cluster_id: str):
+    def _get_nfs_daemon_and_port(self, cluster_id: str) -> Tuple[Any, Any, Any]:
         """Return (daemon, host_ip, tsm_port) for any running NFS daemon.
 
         Uses the ceph inventory IP address (not DNS hostname) to avoid IPv6
@@ -1080,45 +1080,6 @@ class NFSCluster:
             )
         return daemon, host_ip, tsm_port
 
-    def test_grpc_connection(self, cluster_id: str,
-                             ca_cert: Optional[bytes] = None,
-                             client_cert: Optional[bytes] = None,
-                             client_key: Optional[bytes] = None) -> Dict[str, Any]:
-        """Test gRPC connectivity to NFS-Ganesha by calling GetGracePeriod."""
-        daemon, host_ip, tsm_port = self._get_nfs_daemon_and_port(cluster_id)
-        channel = self._get_grpc_channel(
-            host_ip, tsm_port, cluster_id=cluster_id,
-            ca_cert=ca_cert, client_cert=client_cert, client_key=client_key,
-        )
-
-        try:
-            def _parse_ingrace(data: bytes) -> Optional[bool]:
-                if data and len(data) >= 2 and data[0] == 0x08:
-                    return bool(data[1])
-                return None
-
-            call = channel.unary_unary(
-                '/nfsService.GetNfsGrace/GetGracePeriod',
-                request_serializer=lambda x: b'',
-                response_deserializer=_parse_ingrace,
-            )
-            ingrace = call(None)
-            log.info(f'gRPC GetGracePeriod: {host_ip}:{tsm_port} ingrace={ingrace}')
-            return {
-                'cluster_id': cluster_id,
-                'daemon': daemon.name(),
-                'host': daemon.hostname,
-                'host_ip': host_ip,
-                'port': tsm_port,
-                'status': 'ok',
-                'ingrace': ingrace,
-                'message': f'gRPC GetGracePeriod succeeded on {host_ip}:{tsm_port}',
-            }
-        except Exception as e:
-            raise NFSInvalidOperation(
-                f'gRPC call to {host_ip}:{tsm_port} failed: {e}'
-            )
-
     def grpc_ok_to_upgrade(self,
                            cluster_id: str,
                            daemon_name: str,
@@ -1137,9 +1098,15 @@ class NFSCluster:
         )
 
         try:
-            ganesha_id = int(daemon_name.split('.')[2])   # extract rank
-            stub = nfs_ganesha_pb2_grpc.NfsUpgradeStub(channel)
-            request = nfs_ganesha_pb2.OkToUpgradeRequest(ganesha_id=ganesha_id)
+            # Look up the specific daemon to get its rank metadata
+            all_daemons = orchestrator.raise_if_exception(
+                self.mgr.list_daemons(daemon_type='nfs'))
+            target = next((d for d in all_daemons if d.name() == daemon_name), None)
+            if target is None or target.rank is None:
+                raise NFSInvalidOperation(f'Daemon {daemon_name} not found or has no rank')
+            ganesha_id = target.rank
+            stub = NfsUpgradeStub(channel)
+            request = OkToUpgradeRequest(ganesha_id=ganesha_id)
             response = stub.OkToUpgrade(request)
             log.info(f'ok_to_upgrade for {daemon_name} (ganesha_id={ganesha_id}): ok={response.ok_to_upgrade}')
             return {
@@ -1152,4 +1119,3 @@ class NFSCluster:
             raise NFSInvalidOperation(
                 f'ok_to_upgrade gRPC call for {daemon_name} failed: {e}'
             )
-

@@ -466,51 +466,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Disable NFS cluster QOS IOPS control"""
         return self.nfs.disable_cluster_qos_ops(cluster_id)
 
-    def _load_nfs_grpc_certs(self, cluster_id: str):
+    def _load_nfs_grpc_certs(self, cluster_id: str) -> Tuple[Optional[bytes], Optional[bytes], Optional[bytes]]:
         """Fetch NFS gRPC client certs from cephadm cert_mgr via remote()."""
         try:
             certs = self.remote('cephadm', 'get_nfs_grpc_certs', cluster_id)
-            ca   = certs['ca_cert'].encode()     if isinstance(certs['ca_cert'], str)     else certs['ca_cert']
+            ca = certs['ca_cert'].encode() if isinstance(certs['ca_cert'], str) else certs['ca_cert']
             cert = certs['client_cert'].encode() if isinstance(certs['client_cert'], str) else certs['client_cert']
-            key  = certs['client_key'].encode()  if isinstance(certs['client_key'], str)  else certs['client_key']
+            key = certs['client_key'].encode() if isinstance(certs['client_key'], str) else certs['client_key']
             return ca, cert, key
         except Exception as e:
             log.warning(f'Could not load NFS gRPC certs via cephadm remote: {e}')
             return None, None, None
 
-    @CLICommand('nfs grpc test', perm='r')
-    @object_format.Responder()
-    def _cmd_nfs_grpc_test(self,
-                           cluster_id: str,
-                           ca_cert: Optional[str] = None,
-                           client_cert: Optional[str] = None,
-                           client_key: Optional[str] = None) -> Dict[str, Any]:
-        """Test gRPC connectivity to NFS-Ganesha by calling GetGracePeriod.
-
-        Automatically reads certs from cert_mgr via cephadm remote call.
-        Optionally pass cert contents as base64 strings to override.
-
-        Usage: ceph nfs grpc test <cluster_id>
-        """
-        import base64
-        if ca_cert and client_cert and client_key:
-            ca_bytes   = base64.b64decode(ca_cert)
-            cert_bytes = base64.b64decode(client_cert)
-            key_bytes  = base64.b64decode(client_key)
-        else:
-            ca_bytes, cert_bytes, key_bytes = self._load_nfs_grpc_certs(cluster_id)
-        return self.nfs.test_grpc_connection(
-            cluster_id,
-            ca_cert=ca_bytes,
-            client_cert=cert_bytes,
-            client_key=key_bytes,
-        )
-
     @CLICommand('nfs ok-to-upgrade', perm='r')
     @object_format.Responder()
     def _cmd_nfs_ok_to_upgrade(self,
-                                cluster_id: str,
-                                daemon_name: str) -> Dict[str, Any]:
+                               cluster_id: str,
+                               daemon_name: str) -> Dict[str, Any]:
         """Ask NFS-Ganesha if a daemon is safe to upgrade via TSM gRPC.
 
         Automatically reads certs from cert_mgr. No manual cert passing needed.

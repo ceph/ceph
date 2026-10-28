@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import threading
 from threading import Lock
 from typing import Dict, Tuple, Any, List, Set, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
@@ -13,9 +14,8 @@ from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 
 try:
-    import grpc
-    from .proto import nfs_ganesha_pb2
-    from .proto import nfs_ganesha_pb2_grpc
+    import grpc  # type: ignore
+    from nfs.nfs_grpc_stub import NfsUpgradeStub, OkToUpgradeRequest
     GRPC_AVAILABLE = True
 except ImportError:
     GRPC_AVAILABLE = False
@@ -715,6 +715,9 @@ class NFSService(CephService):
                 f'Upgrade: cannot find daemon {to_upgrade}'
             )
 
+        if not self._is_tsm_enabled(daemon.service_name()):
+            return HandleCommandResult(0, '', '')
+
         tsm_port = self._get_tsm_port(daemon)
         if tsm_port is None:
             return HandleCommandResult(
@@ -722,14 +725,12 @@ class NFSService(CephService):
                 f'Upgrade: TSM port not configured for {to_upgrade}'
             )
 
-        # Extract integer rank from daemon name: nfs.<cluster>.<rank>.<ver>.<host>.<suffix>
-        try:
-            ganesha_id = int(to_upgrade.split('.')[2])
-        except (IndexError, ValueError):
+        if daemon.rank is None:
             return HandleCommandResult(
                 -errno.EINVAL, '',
-                f'Upgrade: cannot extract ganesha_id from daemon name {to_upgrade}'
+                f'Upgrade: daemon {to_upgrade} has no rank assigned'
             )
+        ganesha_id = daemon.rank
 
         logger.info(
             f'Upgrade: NFS gRPC ok_to_upgrade called for {to_upgrade} '
@@ -737,10 +738,10 @@ class NFSService(CephService):
         )
 
         try:
-            svc_name    = daemon.service_name()
-            ca_cert     = self.mgr.cert_mgr.get_root_ca()
+            svc_name = daemon.service_name()
+            ca_cert = self.mgr.cert_mgr.get_root_ca()
             client_cert = self.mgr.cert_mgr.get_cert(NFS_GRPC_CLIENT_CERT, service_name=svc_name)
-            client_key  = self.mgr.cert_mgr.get_key(NFS_GRPC_CLIENT_KEY, service_name=svc_name)
+            client_key = self.mgr.cert_mgr.get_key(NFS_GRPC_CLIENT_KEY, service_name=svc_name)
 
             if not (ca_cert and client_cert and client_key):
                 return HandleCommandResult(
@@ -753,11 +754,12 @@ class NFSService(CephService):
                 private_key=client_key.encode(),
                 certificate_chain=client_cert.encode(),
             )
+            assert daemon.hostname is not None
             host_ip = self.mgr.inventory.get_addr(daemon.hostname)
             channel = grpc.secure_channel(f'{host_ip}:{tsm_port}', credentials)
 
-            stub = nfs_ganesha_pb2_grpc.NfsUpgradeStub(channel)
-            request = nfs_ganesha_pb2.OkToUpgradeRequest(ganesha_id=ganesha_id)
+            stub = NfsUpgradeStub(channel)
+            request = OkToUpgradeRequest(ganesha_id=ganesha_id)
             response = stub.OkToUpgrade(request)
 
         except Exception as e:
@@ -834,7 +836,7 @@ class NFSService(CephService):
         """Return the TSM gRPC port configured for this NFS daemon's service."""
         try:
             spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon.service_name()].spec)
-            return spec.tsm_port
+            return getattr(spec, 'tsm_port', None)
         except Exception:
             return None
 
@@ -842,9 +844,106 @@ class NFSService(CephService):
         """Return True if TSM is enabled for the given NFS service."""
         try:
             spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
-            return bool(spec.enable_tsm)
+            return bool(getattr(spec, 'enable_tsm', False))
         except Exception:
             return False
+
+    def upgrade_nfs_cluster(
+            self,
+            cluster_name: str,
+            need_upgrade: list,
+            target_image: str,
+            target_digests: Optional[List[str]],
+            errors: List[str],
+            lock: Lock,
+    ) -> None:
+        """Serial upgrade for one NFS cluster. Runs in its own thread."""
+        try:
+            logger.info(f'Upgrade: starting serial upgrade for NFS cluster {cluster_name}')
+            for d_entry in need_upgrade:
+                d = d_entry[0]
+                known: List[str] = []
+
+                # Reserve upgrade quota atomically for --limit support
+                with lock:
+                    us = self.mgr.upgrade.upgrade_state
+                    if us and us.remaining_count is not None \
+                            and us.remaining_count <= 0 and not d_entry[1]:
+                        return
+                    if us and us.remaining_count is not None and not d_entry[1]:
+                        us.remaining_count -= 1
+
+                if not self.mgr.upgrade._wait_for_ok_to_upgrade(d, known):
+                    with lock:
+                        if us and us.remaining_count is not None and not d_entry[1]:
+                            us.remaining_count += 1
+                        errors.append(
+                            f'Upgrade: NFS cluster {cluster_name} stopped at {d.name()}'
+                        )
+                    return
+
+                self.mgr.upgrade._upgrade_daemons([d_entry], target_image, target_digests)
+                logger.info(f'Upgrade: {cluster_name} — upgraded {d.name()}')
+
+            logger.info(f'Upgrade: {cluster_name} — all daemons upgraded')
+        except Exception as e:
+            logger.exception(f'Upgrade: NFS cluster {cluster_name} failed with exception')
+            with lock:
+                errors.append(f'Upgrade: NFS cluster {cluster_name} exception: {e}')
+
+    def upgrade_nfs_parallel(
+            self,
+            need_upgrade: list,
+            target_image: str,
+            target_digests: Optional[List[str]],
+    ) -> bool:
+        """Upgrade NFS clusters in parallel batches (max 5 at a time),
+        each cluster serially within its own thread."""
+        MAX_PARALLEL = 5
+
+        clusters: Dict[str, list] = {}
+        for d_entry in need_upgrade:
+            cluster = d_entry[0].service_name()
+            if cluster not in clusters:
+                clusters[cluster] = []
+            clusters[cluster].append(d_entry)
+
+        cluster_items = list(clusters.items())
+
+        logger.info(
+            f'Upgrade: NFS parallel upgrade — {len(clusters)} cluster(s), '
+            f'max {MAX_PARALLEL} at a time: {list(clusters.keys())}'
+        )
+
+        errors: List[str] = []
+        lock = threading.Lock()
+
+        for i in range(0, len(cluster_items), MAX_PARALLEL):
+            batch = cluster_items[i:i + MAX_PARALLEL]
+            threads: List[threading.Thread] = []
+
+            for cluster_name, cluster_daemons in batch:
+                t = threading.Thread(
+                    target=self.upgrade_nfs_cluster,
+                    args=(cluster_name, cluster_daemons, target_image,
+                          target_digests, errors, lock),
+                    name=f'nfs-upgrade-{cluster_name}',
+                    daemon=True,
+                )
+                threads.append(t)
+                t.start()
+                logger.info(f'Upgrade: spawned thread for NFS cluster {cluster_name}')
+
+            for t in threads:
+                t.join()
+
+            if errors:
+                for err in errors:
+                    logger.error(err)
+                return False
+
+        logger.info('Upgrade: all NFS clusters upgraded successfully')
+        return True
 
     def _clear_legacy_nfs_store_markers(self, service_name: str) -> None:
         # Keep these markers until daemon post_remove has finished so
