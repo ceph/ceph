@@ -16,6 +16,9 @@
  * without the full complexity of the S3 REST API handlers.
  */
 
+#include <array>
+#include <fmt/compile.h>
+
 #include "rgw_sal_wrapper.h"
 #include "rgw/rgw_sal.h"
 #include "rgw/rgw_bucket.h"
@@ -180,6 +183,24 @@ static void c_meta_to_attrs(const DoutPrefixProvider* dpp,
   }
 }
 
+
+namespace {
+
+// "<major>.<minor>" formatted at compile time: fmt's FMT_COMPILE formatting of
+// integral arguments is usable in constant expressions, so the string the Rust
+// side reads is a constant and needs no runtime initialization.
+constexpr auto make_sal_wrapper_version_string() {
+  std::array<char, 32> out{};
+  fmt::format_to(out.data(), FMT_COMPILE("{}.{}"),
+                 RGW_SAL_WRAPPER_VERSION_MAJOR, RGW_SAL_WRAPPER_VERSION_MINOR);
+  return out;
+}
+
+constexpr auto sal_wrapper_version_string = make_sal_wrapper_version_string();
+static_assert(sal_wrapper_version_string.front() != '\0' &&
+              sal_wrapper_version_string.back() == '\0');
+
+} // anonymous namespace
 
 extern "C" {
 
@@ -1563,15 +1584,7 @@ uint64_t rgw_get_max_chunk_size(CRgwDriver* driver_ptr) {
 }
 
 const char* rgw_sal_wrapper_version(void) {
-  static char version[16];
-  static bool initialized = false;
-  if (!initialized) {
-    snprintf(version, sizeof(version), "%d.%d",
-             RGW_SAL_WRAPPER_VERSION_MAJOR,
-             RGW_SAL_WRAPPER_VERSION_MINOR);
-    initialized = true;
-  }
-  return version;
+  return sal_wrapper_version_string.data();
 }
 
 } // extern "C"

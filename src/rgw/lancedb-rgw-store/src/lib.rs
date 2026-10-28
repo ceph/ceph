@@ -94,7 +94,10 @@ pub unsafe extern "C" fn rgw_lancedb_store_create_provider(
     // version constants from the C++ header) instead of runtime verification
     match check_sal_wrapper_version() {
         Ok(_) => {}
-        Err(_) => return std::ptr::null_mut(),
+        Err(e) => {
+            eprintln!("rgw_lancedb_store_create_provider: {}", e);
+            return std::ptr::null_mut();
+        }
     }
 
     let provider: Arc<dyn lance_io::object_store::ObjectStoreProvider> = Arc::new(
