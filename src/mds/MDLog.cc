@@ -43,6 +43,21 @@
 
 using namespace std;
 
+/*
+ * The test subtree map journaled for mds_debug_subtrees only checks the
+ * subtree state on replay: it must not start a segment, or every event
+ * gets a major segment of its own.  Older MDSs did start one there and
+ * gave it a seq; their journals must still replay with the segments they
+ * had, which EPurged refers to by seq.
+ */
+static SegmentBoundary* get_segment_boundary(LogEvent* le)
+{
+  auto sb = dynamic_cast<SegmentBoundary*>(le);
+  if (sb && le->get_type() == EVENT_SUBTREEMAP_TEST && sb->get_seq() == 0)
+    return nullptr;
+  return sb;
+}
+
 MDLog::MDLog(MDSRank* m)
   :
     mds(m),
@@ -400,7 +415,7 @@ LogSegment::seq_t MDLog::_submit_entry(LogEvent *le, MDSLogContextBase* c)
 
   event_seq++;
 
-  if (auto sb = dynamic_cast<SegmentBoundary*>(le); sb) {
+  if (auto sb = get_segment_boundary(le); sb) {
     auto ls = _start_new_segment(sb);
     if (sb->is_major_segment_boundary()) {
       major_segments.insert(ls->seq);
@@ -527,7 +542,7 @@ void MDLog::_submit_thread()
       uint64_t write_pos = journaler->get_write_pos();
 
       le->set_start_off(write_pos);
-      if (dynamic_cast<SegmentBoundary*>(le)) {
+      if (get_segment_boundary(le)) {
 	ls->offset = write_pos;
       }
 
@@ -1310,7 +1325,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
     if (le) {
       bool modified = false;
 
-      if (auto sb = dynamic_cast<SegmentBoundary*>(le.get()); sb) {
+      if (auto sb = get_segment_boundary(le.get()); sb) {
         if (sb->get_seq() == 0) {
           // A non-explicit event seq: the effective sequence number 
           // of this segment is it's position in the old journal and
@@ -1531,7 +1546,7 @@ void MDLog::_replay_thread()
     }
     le->set_start_off(pos);
 
-    if (auto sb = dynamic_cast<SegmentBoundary*>(le.get()); sb) {
+    if (auto sb = get_segment_boundary(le.get()); sb) {
       auto seq = sb->get_seq();
       if (seq > 0) {
         event_seq = seq;
