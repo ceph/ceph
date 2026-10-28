@@ -270,6 +270,25 @@ export abstract class PageHelper {
     return cy.get('.cds--table-expand__button').first();
   }
 
+  getResourcePage(content?: string) {
+    this.waitDataTableToLoad();
+    if (content) {
+      const escapedContent = content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return cy
+        .contains('[cdstablerow] [cdstabledata]', content)
+        .parent('tr, [cdstablerow]')
+        .contains(
+          '[cdstabledata] a, [cdstabledata] [cdslink]',
+          new RegExp(`^\\s*${escapedContent}\\s*$`)
+        );
+    }
+    return cy
+      .get(
+        'tr [cdstabledata] a, [cdstablerow] [cdstabledata] a, [cdstablerow] [cdstabledata] [cdslink]'
+      )
+      .first();
+  }
+
   /**
    * Gets column headers of table
    */

@@ -1,0 +1,222 @@
+@if (selection) {
+  @switch (section) {
+    @case ('configuration') {
+      <section>
+        <cd-resource-overview-card
+          title="Bucket details"
+          [columns]="4"
+          [fields]="overviewFields"
+          i18n-title
+        >
+        </cd-resource-overview-card>
+      </section>
+
+      <section class="cds-mt-6">
+        <cd-resource-overview-card
+          title="Configuration summary"
+          i18n-title
+          [columns]="4"
+          [fields]="configurationSummaryFields"
+        >
+        </cd-resource-overview-card>
+      </section>
+
+      <cd-rgw-bucket-tags-table
+        [bucket]="selection"
+        [owner]="owner"
+        (tagsUpdated)="updateBucketDetails(extractDetailsFromResponse.bind(this))"
+      ></cd-rgw-bucket-tags-table>
+
+      @if (!!bucketRateLimit) {
+        <section class="cds-mt-6">
+          <cds-tile>
+            <div class="cds-pr-6">
+              <h3
+                class="bucket-resource-section__title cds--type-heading-03"
+                i18n
+              >
+                Bucket Rate Limit
+              </h3>
+              <p
+                class="bucket-resource-section__description cds--type-body-compact-01"
+                i18n
+              >
+                View the bucket rate limit details.
+              </p>
+              <cd-rgw-rate-limit-details
+                [rateLimitConfig]="bucketRateLimit"
+                [type]="'bucket'"
+                [showHeading]="false"
+              ></cd-rgw-rate-limit-details>
+            </div>
+          </cds-tile>
+        </section>
+      }
+    }
+
+    @case ('data-management') {
+      <section class="rgw-bucket-resource-section">
+        <cds-tabs>
+          <cds-tab heading="Bucket Policy"
+            ><cds-code-snippet
+              class="cds-mt-5"
+              display="multi"
+            >
+              {{ selection.bucket_policy | json }}
+            </cds-code-snippet></cds-tab
+          >
+          <cds-tab heading="Lifecycle">
+            @if ((selection.lifecycle | json) !== '{}') {
+              <div class="cds-mb-3 cds-mt-5">
+                <cds-content-switcher
+                  ariaLabel="Lifecycle format"
+                  [size]="'sm'"
+                  [selectionMode]="lifecycleContentSwitcherSelectionMode"
+                  [selectedIndex]="lifecycleContentSwitcherSelectedIndex"
+                  (selected)="updateLifecycleFormatFromSwitcher($event)"
+                  class="cds-mt-5"
+                >
+                  <button
+                    type="button"
+                    cdsContentOption
+                    name="json"
+                  >
+                    JSON
+                  </button>
+                  <button
+                    type="button"
+                    cdsContentOption
+                    name="xml"
+                  >
+                    XML
+                  </button>
+                </cds-content-switcher>
+              </div>
+
+              @if (lifecycleFormat === 'json') {
+                <cds-code-snippet
+                  class="cds-mt-5"
+                  display="multi"
+                >
+                  {{ selection.lifecycle | json }}
+                </cds-code-snippet>
+              }
+
+              @if (lifecycleFormat === 'xml') {
+                <cds-code-snippet
+                  class="cds-mt-5"
+                  display="multi"
+                >
+                  {{ selection.lifecycle | xml: { Rules: 'Rule' } | empty }}
+                </cds-code-snippet>
+              }
+            }
+
+            @if (selection.lifecycle_progress?.length > 0) {
+              <div class="cds-mt-5">
+                <cds-tooltip
+                  [description]="lifecycleProgressMap.get(lifecycleProgress.status)?.description"
+                  [align]="'right-end'"
+                >
+                  <cds-tag
+                    size="md"
+                    [type]="lifecycleProgressMap.get(lifecycleProgress.status)?.color"
+                  >
+                    {{ lifecycleProgress.status }}
+                  </cds-tag>
+                </cds-tooltip>
+                @if (lifecycleProgress?.status !== 'UNINITIAL') {
+                  <div>
+                    {{ lifecycleProgress?.started }}
+                  </div>
+                }
+              </div>
+            }
+
+            <section class="rgw-bucket-resource-section cds-mt-6">
+              <h2
+                class="bucket-resource-section__title cds--type-heading-03"
+                i18n
+              >
+                Tiering Configuration
+              </h2>
+              <p
+                class="bucket-resource-section__description cds--type-body-compact-01"
+                i18n
+              >
+                Configure bucket lifecycle tiering rules to move objects to other storage classes
+                over time.
+              </p>
+              <cd-rgw-bucket-lifecycle-list
+                [bucket]="selection"
+                [showHeading]="false"
+                (updateBucketDetails)="updateBucketDetails(extractLifecycleDetails.bind(this))"
+              ></cd-rgw-bucket-lifecycle-list>
+            </section>
+          </cds-tab>
+          <cds-tab heading="Replication">
+            @if (hasSyncPolicyOnly) {
+              <span
+                class="cds-mt-5"
+                i18n
+              >
+                Sync policy configured. View on
+                <a routerLink="/rgw/multisite/sync-policy">Sync-policy page.</a>
+              </span>
+            } @else {
+              <cds-code-snippet
+                class="cds-mt-5"
+                display="multi"
+              >
+                {{ replicationData?.policy | json }}
+              </cds-code-snippet>
+            }
+          </cds-tab>
+        </cds-tabs>
+      </section>
+    }
+
+    @case ('permissions') {
+      <section class="rgw-bucket-resource-section">
+        <h2
+          class="cds--type-heading-03 bucket-resource-section__title"
+          i18n
+        >
+          Access control list (ACL)
+        </h2>
+        <p
+          class="bucket-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          ACLs grant specific permissions to users or groups within the bucket.
+        </p>
+        <cd-table-key-value
+          [data]="aclData"
+          [autoReload]="false"
+        ></cd-table-key-value>
+      </section>
+    }
+
+    @case ('notifications') {
+      <section class="rgw-bucket-resource-section">
+        <h2
+          class="bucket-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Notification Configuration
+        </h2>
+        <p
+          class="bucket-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          Configure bucket notifications to trigger event delivery based on object events and
+          filters.
+        </p>
+        <cd-rgw-bucket-notification-list
+          [bucket]="selection"
+          [showHeading]="false"
+        ></cd-rgw-bucket-notification-list>
+      </section>
+    }
+  }
+}

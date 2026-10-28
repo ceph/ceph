@@ -36,9 +36,7 @@ export class ImagesPageHelper extends PageHelper {
     cy.get('#size').clear().type(newSize); // click the size box and send new size
 
     cy.get('[data-testid=submitBtn]').click();
-
-    this.getExpandCollapseElement(newName).click();
-    cy.get('[data-testid=rbd-details-table]').contains('td', newSize);
+    this.getTableCell(4, newSize, true).should('exist');
   }
 
   // Selects RBD image and moves it to the trash,
@@ -46,8 +44,6 @@ export class ImagesPageHelper extends PageHelper {
   moveToTrash(name: string) {
     // wait for image to be created
     cy.get('table[cdstable] tbody').first().should('not.contain.text', '(Creating...)');
-
-    this.getFirstTableCell(name).click();
 
     // click on the drop down and selects the move to trash option
     cy.get('[data-testid="table-action-btn"]').click({ multiple: true });
@@ -57,17 +53,16 @@ export class ImagesPageHelper extends PageHelper {
 
     // Clicks trash tab
     cy.contains('.nav-link', 'Trash').click();
-    this.getFirstTableCell(name).should('exist');
+    this.getTableCell(2, name).should('exist');
   }
 
   // Checks trash tab table for image and then restores it to the RBD Images table
   // (could change name if new name is given)
-  restoreImage(name: string, newName?: string) {
+  restoreImage(_name: string, newName?: string) {
     // clicks on trash tab
     cy.contains('.nav-link', 'Trash').click();
 
     // wait for table to load
-    this.getFirstTableCell(name).click();
     cy.get('[data-testid="table-action-btn"]').click({ multiple: true });
     cy.get('button.restore').click({ force: true });
 

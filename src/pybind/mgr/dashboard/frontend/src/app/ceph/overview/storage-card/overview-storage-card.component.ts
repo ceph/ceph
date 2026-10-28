@@ -22,6 +22,7 @@ import { ComponentsModule } from '~/app/shared/components/components.module';
 import { BreakdownChartData, CapacityThreshold, TrendPoint } from '~/app/shared/models/overview';
 import { EmptyStateComponent } from '~/app/shared/components/empty-state/empty-state.component';
 import { RouterModule } from '@angular/router';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 const CHART_HEIGHT = '45px';
 
@@ -50,6 +51,7 @@ const CHART_HEIGHT = '45px';
 export class OverviewStorageCardComponent {
   private readonly formatterService = inject(FormatterService);
   private readonly cdr = inject(ChangeDetectorRef);
+  readonly canAddStorage = inject(AuthStorageService).getPermissions().configOpt?.update;
 
   @Input() storageEmptyState: boolean = false;
   @Input() prometheusEmptyState: boolean = false;

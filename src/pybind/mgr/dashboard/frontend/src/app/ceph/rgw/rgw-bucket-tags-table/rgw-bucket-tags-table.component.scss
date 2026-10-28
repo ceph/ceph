@@ -1,0 +1,14 @@
+@use '@carbon/layout';
+
+.rgw-bucket-tags-section {
+  margin-top: layout.$spacing-06;
+}
+
+.rgw-bucket-tags-section__description {
+  margin-top: layout.$spacing-03;
+  margin-bottom: layout.$spacing-05;
+}
+
+cd-rgw-bucket-tags-table cds-pagination {
+  display: none;
+}

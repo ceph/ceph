@@ -1,0 +1,61 @@
+@if (selection) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        title="Account details"
+        [columns]="4"
+        [fields]="overviewField"
+      >
+      </cd-resource-overview-card>
+
+      @if (selection.quota) {
+        <section class="cds-mt-6 cds-mb-6">
+          <h2
+            class="user-account-resource-section__title cds--type-heading-03"
+            i18n
+          >
+            Account Quota
+          </h2>
+          <p
+            class="user-account-resource-section__description cds--type-body-compact-01"
+            i18n
+          >
+            View the account quota details, including maximum object and size.
+          </p>
+          <cd-table-key-value [data]="quota"></cd-table-key-value>
+        </section>
+      }
+
+      @if (selection.bucket_quota) {
+        <section class="cds-mb-6">
+          <h2
+            class="user-account-resource-section__title cds--type-heading-03"
+            i18n
+          >
+            Bucket Quota
+          </h2>
+          <p
+            class="user-account-resource-section__description cds--type-body-compact-01"
+            i18n
+          >
+            View the bucket quota details, including maximum object and size.
+          </p>
+          <cd-table-key-value [data]="bucket_quota"></cd-table-key-value>
+        </section>
+      }
+    }
+    @case ('roles') {
+      <cd-rgw-account-roles-list
+        [accountId]="selection.id"
+        [accountName]="selection.name"
+      >
+      </cd-rgw-account-roles-list>
+    }
+  }
+} @else if (notFound) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No account found.</cd-alert-panel
+  >
+}

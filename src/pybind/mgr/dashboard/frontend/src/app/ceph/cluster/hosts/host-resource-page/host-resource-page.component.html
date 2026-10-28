@@ -1,0 +1,92 @@
+@if (hostname) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        title="Host details"
+        [columns]="4"
+        [fields]="hostOverviewFields"
+      >
+      </cd-resource-overview-card>
+    }
+    @case ('storage-devices') {
+      <section class="host-resource-section cds-mb-6">
+        <h2
+          class="host-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Ceph Devices
+        </h2>
+        <p
+          class="host-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          Storage devices managed by Ceph, including OSD associations, allocation details, and
+          device roles used for cluster storage operations.
+        </p>
+        <cd-device-list [hostname]="hostname"></cd-device-list>
+      </section>
+
+      @if (permissions.hosts.read) {
+        <section class="host-resource-section cds-mb-6">
+          <h2
+            class="host-resource-section__title cds--type-heading-03"
+            i18n
+          >
+            Physical Disks
+          </h2>
+          <p
+            class="host-resource-section__description cds--type-body-compact-01"
+            i18n
+          >
+            View the underlying physical drives attached to the host, including hardware details,
+            capacity, media type, and disk inventory information.
+          </p>
+          <cd-inventory
+            [hostname]="hostname"
+            [showHeading]="false"
+          >
+          </cd-inventory>
+        </section>
+      }
+
+      <section class="host-resource-section cds-mb-6">
+        <h2
+          class="host-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Health & diagnostics
+        </h2>
+        <cd-smart-list [hostname]="hostname"></cd-smart-list>
+      </section>
+    }
+    @case ('daemons') {
+      @if (permissions.hosts.read) {
+        <cd-service-daemon-list
+          [hostname]="hostname"
+          flag="hostDetails"
+          [hiddenColumns]="['hostname']"
+        >
+        </cd-service-daemon-list>
+      }
+    }
+    @case ('performance') {
+      @if (permissions.grafana.read) {
+        <cd-grafana
+          i18n-title
+          title="Host details"
+          [grafanaPath]="'ceph-host-details?var-ceph_hosts=' + hostname"
+          [type]="'metrics'"
+          uid="rtOg0AiWz"
+          grafanaStyle="five"
+        >
+        </cd-grafana>
+      }
+    }
+  }
+} @else {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No hostname found.</cd-alert-panel
+  >
+}

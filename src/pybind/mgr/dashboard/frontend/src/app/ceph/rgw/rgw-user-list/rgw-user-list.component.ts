@@ -21,7 +21,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Account } from '../models/rgw-user-accounts';
 import { catchError, map, switchMap } from 'rxjs/operators';
-import { RgwUser } from '../models/rgw-user';
+import { RgwUser, RGW_MAX_BUCKETS_MAP } from '../models/rgw-user';
 
 const BASE_URL = 'rgw/user';
 
@@ -47,9 +47,10 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
   users: RgwUser[] = [];
   userAccounts: Account[];
   selection: CdTableSelection = new CdTableSelection();
-  userDataSubject = new Subject();
+  userDataSubject: Subject<RgwUser[]> = new Subject<RgwUser[]>();
   declare staleTimeout: number;
   icons = Icons;
+  viewUrl = '/rgw/user';
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -65,6 +66,8 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
 
   ngOnInit() {
     this.permission = this.authStorageService.getPermissions().rgw;
+    this.userAccounts = [];
+    this.tableActions = [];
     this.columns = [
       {
         name: $localize`Username`,
@@ -104,10 +107,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
         prop: 'max_buckets',
         flexGrow: 1,
         cellTransformation: CellTemplate.map,
-        customTemplateConfig: {
-          '-1': $localize`Disabled`,
-          0: $localize`Unlimited`
-        }
+        customTemplateConfig: RGW_MAX_BUCKETS_MAP
       },
       {
         name: $localize`Capacity Limit %`,
@@ -177,7 +177,9 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
 
   mapUsersWithAccount(users: RgwUser[]): RgwUser[] {
     return users.map((user: RgwUser) => {
-      const account: Account = this.userAccounts.find((acc: Account) => acc.id === user.account_id);
+      const account: Account | undefined = this.userAccounts.find(
+        (acc: Account) => acc.id === user.account_id
+      );
       return {
         account: account ? account : { name: '' }, // adding {name: ''} for sorting account name in user list to work
         ...user

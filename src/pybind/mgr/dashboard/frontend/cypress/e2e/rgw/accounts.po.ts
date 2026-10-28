@@ -9,14 +9,14 @@ export class AccountsPageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    tenant: 2,
-    account_id: 3,
-    email: 4,
-    max_users: 5,
-    max_roles: 6,
-    max_groups: 7,
-    max_buckets: 8,
-    max_access_keys: 9
+    tenant: 1,
+    account_id: 2,
+    email: 3,
+    max_users: 4,
+    max_roles: 5,
+    max_groups: 6,
+    max_buckets: 7,
+    max_access_keys: 8
   };
 
   @PageHelper.restrictTo(pages.create.url)
@@ -67,12 +67,14 @@ export class AccountsPageHelper extends PageHelper {
       cy.get('td').eq(this.columnIndex.max_access_keys).should('have.text', 4);
     });
 
-    this.getExpandCollapseElement(account.name).click().wait(1000);
+    this.getResourcePage(account.name).click();
 
-    cy.get('[data-testid="datatable-row-detail"]').first().as('accountDetailsTable');
-    cy.get('@accountDetailsTable').find('legend').its(0).as('accountQuota');
-    cy.get('@accountQuota').should('have.text', 'Account quota');
-    cy.get('@accountDetailsTable').find('cd-table-key-value').its(0).as('accountQuotaTable');
+    cy.contains('section h2.user-account-resource-section__title', /Account\s+Quota/i)
+      .should('be.visible')
+      .closest('section')
+      .find('cd-table-key-value')
+      .first()
+      .as('accountQuotaTable');
     cy.get('@accountQuotaTable')
       .find('tbody tr')
       .first()
@@ -80,15 +82,20 @@ export class AccountsPageHelper extends PageHelper {
       .last()
       .should('have.text', 'Yes');
 
-    cy.get('@accountDetailsTable').find('legend').its(1).as('bucketQuota');
-    cy.get('@bucketQuota').should('have.text', 'Bucket quota');
-    cy.get('@accountDetailsTable').find('cd-table-key-value').its(1).as('bucketQuotaTable');
+    cy.contains('section h2.user-account-resource-section__title', /Bucket\s+Quota/i)
+      .should('be.visible')
+      .closest('section')
+      .find('cd-table-key-value')
+      .first()
+      .as('bucketQuotaTable');
     cy.get('@bucketQuotaTable')
       .find('tbody tr')
       .first()
       .find('td')
       .last()
       .should('have.text', 'Yes');
+
+    this.navigateTo();
   }
 
   @PageHelper.restrictTo(pages.create.url)
@@ -147,12 +154,14 @@ export class AccountsPageHelper extends PageHelper {
         .eq(this.columnIndex.max_access_keys)
         .should('have.text', account.max_access_keys);
     });
-    this.getExpandCollapseElement(account.name).click().wait(1000);
+    this.getResourcePage(account.name).click();
 
-    cy.get('[data-testid="datatable-row-detail"]').first().as('accountDetailsTable');
-    cy.get('@accountDetailsTable').find('legend').eq(0).as('accountQuota');
-    cy.get('@accountQuota').should('have.text', 'Account quota');
-    cy.get('@accountDetailsTable').find('cd-table-key-value').eq(0).as('accountQuotaTable');
+    cy.contains('section h2.user-account-resource-section__title', /Account\s+Quota/i)
+      .should('be.visible')
+      .closest('section')
+      .find('cd-table-key-value')
+      .first()
+      .as('accountQuotaTable');
     cy.get('@accountQuotaTable').find('tbody tr').should('have.length', 3);
     cy.get('@accountQuotaTable')
       .find('tbody tr')
@@ -177,9 +186,12 @@ export class AccountsPageHelper extends PageHelper {
         cy.get('td').last().should('have.text', '1.2 GiB');
       });
 
-    cy.get('@accountDetailsTable').find('legend').eq(1).as('bucketQuota');
-    cy.get('@bucketQuota').should('have.text', 'Bucket quota');
-    cy.get('@accountDetailsTable').find('cd-table-key-value').eq(1).as('bucketQuotaTable');
+    cy.contains('section h2.user-account-resource-section__title', /Bucket\s+Quota/i)
+      .should('be.visible')
+      .closest('section')
+      .find('cd-table-key-value')
+      .first()
+      .as('bucketQuotaTable');
     cy.get('@bucketQuotaTable')
       .find('tbody tr')
       .first()
@@ -202,6 +214,8 @@ export class AccountsPageHelper extends PageHelper {
         cy.get('td').first().should('have.text', 'Maximum size');
         cy.get('td').last().should('have.text', '1.2 GiB');
       });
+
+    this.navigateTo();
   }
 
   invalidCreate() {
