@@ -903,9 +903,9 @@ def get_ceph_mounts_for_type(
                 logger.error(
                     f'Cluster directory {cluster_dir} does not exist.'
                 )
-    if daemon_type == 'osd':
-        mounts['/'] = '/rootfs'
-    elif daemon_type == 'ceph-volume':
+    # rslave: host umounts must propagate, else a host mount (e.g. FUSE)
+    # made before the container started stays pinned by its mount ns
+    if daemon_type in ('osd', 'ceph-volume'):
         mounts['/'] = '/rootfs:rslave'
 
     try:

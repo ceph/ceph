@@ -1,3 +1,0 @@
-tasks:
-- ceph-fuse:
-- print: "**** done client"
