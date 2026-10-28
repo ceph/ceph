@@ -77,7 +77,8 @@ int rgw_admin_user_mutate(const DoutPrefixProvider* dpp,
     }
     break;
   case user_mutate_command::create:
-    if (!user_op.has_existing_user() && (opts.generate_key != 0)) {
+    if (!user_op.has_existing_user()
+        && (!opts.generate_key.has_value() || *opts.generate_key)) {
       user_op.set_generate_key();
     }
     ret = ruser.add(dpp, user_op, null_yield, &err_msg);
