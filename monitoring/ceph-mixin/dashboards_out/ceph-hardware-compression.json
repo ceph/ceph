@@ -1124,7 +1124,11 @@
               "type": "auto"
             },
             "filterable": true,
-            "inspect": false
+            "inspect": false,
+            "disableSortBy": false,
+            "footer": {
+              "reducers": []
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -1132,7 +1136,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": 0
+                "value": null
               }
             ]
           }
@@ -1197,10 +1201,6 @@
                 "value": 2
               },
               {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              },
-              {
                 "id": "custom.cellOptions",
                 "value": {
                   "type": "color-text"
@@ -1233,6 +1233,78 @@
                     }
                   ]
                 }
+              },
+              {
+                "id": "custom.filterable",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.filterable",
+                "value": true
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "3": {
+                        "text": "up/in",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "2": {
+                        "text": "up/out",
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "1": {
+                        "text": "down/in",
+                        "color": "red",
+                        "index": 2
+                      },
+                      "0": {
+                        "text": "down/out",
+                        "color": "red",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used %"
+            },
+            "properties": [
+              {
+                "id": "custom.filterable",
+                "value": true
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 1
               }
             ]
           }
@@ -1250,13 +1322,15 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
           "show": false
         },
         "showHeader": true,
-        "sortBy": []
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "OSD"
+          }
+        ]
       },
       "pluginVersion": "12.3.1",
       "targets": [
@@ -1303,9 +1377,24 @@
           "legendFormat": "Logical Used",
           "range": false,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "(ceph_osd_up{cluster=~\"$cluster\", ceph_daemon=~\"$osd\"} * 2) + on(ceph_daemon) ceph_osd_in{cluster=~\"$cluster\", ceph_daemon=~\"$osd\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Status",
+          "range": false,
+          "refId": "D"
         }
       ],
-      "title": "",
+      "title": "Per-OSD Utilization",
       "transformations": [
         {
           "id": "joinByField",
@@ -1332,7 +1421,12 @@
               "instance 3": true,
               "job 1": true,
               "job 2": true,
-              "job 3": true
+              "job 3": true,
+              "Time 4": true,
+              "__name__ 4": true,
+              "cluster 4": true,
+              "instance 4": true,
+              "job 4": true
             },
             "indexByName": {
               "ceph_daemon": 0,
@@ -1340,13 +1434,15 @@
               "Value #B": 2,
               "Value #C": 3,
               "Capacity Saved": 4,
-              "Compression Ratio": 5
+              "Compression Ratio": 5,
+              "Value #D": 6
             },
             "renameByName": {
               "Value #A": "Physical Size",
               "Value #B": "Physical Used",
               "Value #C": "Logical Used",
-              "ceph_daemon": "OSD"
+              "ceph_daemon": "OSD",
+              "Value #D": "Status"
             }
           }
         },
@@ -1381,16 +1477,33 @@
           }
         },
         {
+          "id": "calculateField",
+          "options": {
+            "alias": "Used %",
+            "binary": {
+              "left": "Physical Used",
+              "operator": "/",
+              "right": "Physical Size"
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
           "id": "organize",
           "options": {
             "excludeByName": {},
             "indexByName": {
               "OSD": 0,
-              "Physical Size": 1,
-              "Physical Used": 2,
-              "Logical Used": 3,
-              "Capacity Saved": 4,
-              "Compression Ratio": 5
+              "Status": 1,
+              "Physical Size": 2,
+              "Physical Used": 3,
+              "Used %": 4,
+              "Logical Used": 5,
+              "Capacity Saved": 6,
+              "Compression Ratio": 7
             },
             "renameByName": {}
           }

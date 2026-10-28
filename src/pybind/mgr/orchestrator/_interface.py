@@ -93,6 +93,16 @@ class OrchestratorValidationError(OrchestratorError):
     """
 
 
+# Keys a node-proxy report must have to be usable.
+NODE_PROXY_REPORT_KEYS = ('host', 'sn', 'status')
+
+
+class HardwareNoReport(OrchestratorError):
+    """
+    Raised when a host has no node-proxy data (unknown host or node-proxy not running).
+    """
+
+
 @contextmanager
 def set_exception_subject(kind: str, subject: str, overwrite: bool = False) -> Iterator[None]:
     try:
@@ -349,6 +359,10 @@ class Orchestrator(object):
         :param category: category
         :param hostname: hostname
         """
+        raise NotImplementedError()
+
+    def node_proxy_list_hosts(self) -> OrchResult[List[str]]:
+        """Return hostnames that have reported node-proxy data."""
         raise NotImplementedError()
 
     def node_proxy_summary(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:

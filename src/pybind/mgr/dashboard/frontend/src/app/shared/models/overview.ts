@@ -1,5 +1,6 @@
 import { ChartTabularData, GaugeChartOptions } from '@carbon/charts-angular';
 import { HealthCheck, HealthSnapshotMap, PgStateCount } from './health.interface';
+import { CompressionStats, HardwareNameMapping, HardwareSummary } from '../enum/hardware.enum';
 import _ from 'lodash';
 
 // Types
@@ -22,6 +23,12 @@ export type TrendPoint = {
 };
 
 export type BreakdownChartData = { group: string; value: number };
+
+export interface OverviewStat {
+  label: string;
+  value: string | null;
+  description: string;
+}
 
 export type CapacityThreshold = 'high' | 'critical' | null;
 
@@ -70,6 +77,24 @@ export interface HealthCardSubStateVM {
   severity: string;
 }
 
+export interface HardwareStatusCount {
+  icon: string;
+  count: number;
+}
+
+export interface HardwareRowVM {
+  key: string;
+  label: string;
+  icon: string;
+  severity: Severity;
+  statusCounts: HardwareStatusCount[];
+}
+
+export interface HardwareCardVM {
+  sections: HardwareRowVM[][];
+  overallSeverity: string;
+}
+
 export interface HealthCardVM {
   fsid: string;
   overallSystemSev: string;
@@ -102,10 +127,71 @@ export interface StorageCardVM {
   breakdownData: BreakdownChartData[];
   isBreakdownLoaded: boolean;
   consumptionTrendData: TrendPoint[];
-  averageDailyConsumption: string;
-  estimatedTimeUntilFull: string;
+  consumptionStats: OverviewStat[];
   threshold: CapacityThreshold;
 }
+
+export interface SavingsCardVM {
+  total: string | null;
+  trendData: TrendPoint[];
+  isTrendingUp: boolean;
+  stats: OverviewStat[];
+}
+
+export const toTrendPoints = (values: [number, string][] = []): TrendPoint[] =>
+  values.map(([timestamp, value]) => ({
+    timestamp: new Date(timestamp * 1000),
+    values: { Used: Number(value) }
+  }));
+
+export const buildConsumptionStats = (
+  estimatedTimeUntilFull: string,
+  averageDailyConsumption: string
+): OverviewStat[] => [
+  {
+    label: $localize`Estimated time until full`,
+    value: estimatedTimeUntilFull,
+    description: $localize`Based on recent average consumption. Actual time until full may vary based on changes in consumption patterns.`
+  },
+  {
+    label: $localize`Average consumption`,
+    value: averageDailyConsumption,
+    description: $localize`Based on the average daily consumption over the last 7 days`
+  }
+];
+
+export const buildSavingsCardVM = (
+  compression: CompressionStats,
+  trendData: TrendPoint[],
+  total: string | null
+): SavingsCardVM => {
+  const toPercent = (value: number | null) => (value === null ? null : `${value}%`);
+
+  return {
+    total,
+    trendData,
+    isTrendingUp:
+      trendData.length > 1 &&
+      trendData[trendData.length - 1].values.Used > trendData[0].values.Used,
+    stats: [
+      {
+        label: $localize`Compression`,
+        value: compression.compression_ratio?.toString() ?? null,
+        description: $localize`Ratio of logical data to physical storage after compression. Higher values indicate better compression efficiency. Needs at least 100 GiB of data to be shown.`
+      },
+      {
+        label: $localize`Efficiency`,
+        value: toPercent(compression.efficiency_percent),
+        description: $localize`Percentage of storage capacity saved through compression. Shows cost savings and infrastructure efficiency. Needs at least 100 GiB of data to be shown.`
+      },
+      {
+        label: $localize`Utilisation`,
+        value: toPercent(compression.phy_util_percent),
+        description: $localize`Current usage of physical storage capacity. Monitor this for capacity planning and expansion decisions.`
+      }
+    ]
+  };
+};
 
 // Constants
 
@@ -475,5 +561,61 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
       value: $localize`${hostsAvailable} / ${hostsTotal} available`,
       severity: SeverityIconMap[hostsSev]
     }
+  };
+}
+
+const HARDWARE_ICON_MAP: Record<string, string> = {
+  memory: 'dataEnrichment',
+  storage: 'vmdkDisk',
+  processors: 'chip',
+  network: 'network1',
+  power: 'plug',
+  fans: 'ibmStreamSets',
+  temperatures: 'temperature'
+};
+
+/**
+ * Mapper: Hardware summary -> HardwareCardVM
+ */
+export function buildHardwareCardVM(hwSummary: HardwareSummary): HardwareCardVM | null {
+  const category = hwSummary?.total?.category;
+  if (!category) return null;
+
+  const severities: Severity[] = [];
+
+  const rows = (Object.keys(HardwareNameMapping) as Array<keyof typeof HardwareNameMapping>).map(
+    (key) => {
+      const ok = Number(category?.[key]?.ok ?? 0);
+      const warn = Number(category?.[key]?.warn ?? 0);
+      const critical = Number(category?.[key]?.critical ?? 0);
+
+      const severity: Severity =
+        critical > 0 ? SEVERITY.err : warn > 0 ? SEVERITY.warn : SEVERITY.ok;
+
+      severities.push(severity);
+
+      const statusCounts: HardwareStatusCount[] = [];
+      if (critical > 0) {
+        statusCounts.push({ icon: SeverityIconMap[SEVERITY.err], count: critical });
+      }
+      if (warn > 0) statusCounts.push({ icon: SeverityIconMap[SEVERITY.warn], count: warn });
+      if (ok > 0) statusCounts.push({ icon: SeverityIconMap[SEVERITY.ok], count: ok });
+
+      return {
+        key,
+        label: HardwareNameMapping[key],
+        icon: HARDWARE_ICON_MAP[key],
+        severity,
+        statusCounts
+      };
+    }
+  );
+
+  const sections = _.chunk(rows, 2);
+  const overallSeverity = maxSeverity(...severities);
+
+  return {
+    sections,
+    overallSeverity: SeverityIconMap[overallSeverity]
   };
 }

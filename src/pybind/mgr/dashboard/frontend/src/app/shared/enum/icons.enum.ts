@@ -111,6 +111,7 @@ export enum Icons {
   upgrade = 'upgrade',
   warningAltFilled = 'warning--alt--filled',
   help = 'help',
+  growth = 'growth',
   incidentReporter = 'incident-reporter',
   ibmStreamSets = 'ibm--streamsets',
   dataEnrichment = 'data-enrichment',
@@ -124,7 +125,8 @@ export enum Icons {
   inProgress = 'in-progress',
   arrowDown = 'arrow--down',
   locked = 'locked', // Access denied, locked state
-  cloudMonitoring = 'cloud--monitoring'
+  cloudMonitoring = 'cloud--monitoring',
+  temperature = 'temperature'
 }
 
 export enum IconSize {
@@ -153,6 +155,7 @@ export const ICON_TYPE = {
   dataCenter: 'data--center',
   upgrade: 'upgrade',
   warningAltFilled: 'warning--alt--filled',
+  growth: 'growth',
   help: 'help',
   incidentReporter: 'incident-reporter',
   ibmStreamSets: 'ibm--streamsets',
@@ -174,7 +177,8 @@ export const ICON_TYPE = {
   leftArrow: 'caret--left',
   rightArrow: 'caret--right',
   locked: 'locked',
-  cloudMonitoring: 'cloud--monitoring'
+  cloudMonitoring: 'cloud--monitoring',
+  temperature: 'temperature'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {

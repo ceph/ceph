@@ -1,7 +1,13 @@
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { MeterChartComponent } from '@carbon/charts-angular';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { OverviewStorageCardComponent } from './overview-storage-card.component';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
+import { OverviewStorageSavingsComponent } from '../storage-savings/overview-storage-savings.component';
+import { SavingsCardVM, TrendPoint } from '~/app/shared/models/overview';
 
 describe('OverviewStorageCardComponent', () => {
   let component: OverviewStorageCardComponent;
@@ -28,8 +34,12 @@ describe('OverviewStorageCardComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [OverviewStorageCardComponent, HttpClientTestingModule],
-      providers: [{ provide: FormatterService, useValue: mockFormatterService }]
+      imports: [OverviewStorageCardComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: FormatterService, useValue: mockFormatterService }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(OverviewStorageCardComponent);
@@ -116,9 +126,103 @@ describe('OverviewStorageCardComponent', () => {
 
   it('should keep default input values for presentational fields', () => {
     expect(component.consumptionTrendData).toEqual([]);
-    expect(component.averageDailyConsumption).toBe('');
-    expect(component.estimatedTimeUntilFull).toBe('');
+    expect(component.consumptionStats()).toEqual([]);
     expect(component.breakdownData).toEqual([]);
     expect(component.isBreakdownLoaded).toBe(false);
+  });
+
+  describe('tabs', () => {
+    const trend: TrendPoint[] = [
+      { timestamp: new Date('2024-01-01T00:00:00Z'), values: { Used: 1 } },
+      { timestamp: new Date('2024-01-02T00:00:00Z'), values: { Used: 2 } }
+    ];
+    const savings: SavingsCardVM = {
+      total: '7 TiB',
+      trendData: trend,
+      isTrendingUp: true,
+      stats: [{ label: 'Compression', value: '2.4', description: 'ratio' }]
+    };
+
+    let element: HTMLElement;
+
+    const render = (inputs: Record<string, unknown>) => {
+      TestBed.resetTestingModule();
+      return TestBed.configureTestingModule({
+        imports: [OverviewStorageCardComponent],
+        providers: [provideHttpClient(), provideHttpClientTesting()]
+      })
+        .overrideComponent(OverviewStorageCardComponent, {
+          remove: {
+            imports: [AreaChartComponent, MeterChartComponent, OverviewStorageSavingsComponent]
+          },
+          add: { schemas: [CUSTOM_ELEMENTS_SCHEMA] }
+        })
+        .compileComponents()
+        .then(() => {
+          fixture = TestBed.createComponent(OverviewStorageCardComponent);
+          Object.entries({
+            consumptionTrendData: trend,
+            storageEmptyState: false,
+            prometheusEmptyState: false,
+            isSavingsLoaded: true,
+            savings: null,
+            ...inputs
+          }).forEach(([name, value]) => fixture.componentRef.setInput(name, value));
+          element = fixture.nativeElement;
+          fixture.detectChanges();
+        });
+    };
+
+    const tabHeadings = () =>
+      Array.from(element.querySelectorAll('cds-tab-headers [role="tab"]')).map((tab) =>
+        tab.textContent?.trim()
+      );
+
+    it('should show Savings first and Consumption second when savings are available', async () => {
+      await render({ savings });
+
+      expect(tabHeadings()).toEqual(['Savings', 'Consumption']);
+      expect(element.querySelector('cd-overview-storage-savings')).not.toBeNull();
+    });
+
+    it('should show only the consumption trend, without tabs, when there are no savings', async () => {
+      await render({});
+
+      expect(element.querySelector('cds-tabs')).toBeNull();
+      expect(element.querySelector('cd-overview-storage-savings')).toBeNull();
+      expect(element.querySelector('cd-area-chart')).not.toBeNull();
+    });
+
+    it('should show skeleton tabs while savings are loading', async () => {
+      await render({ isSavingsLoaded: false });
+
+      expect(element.querySelector('cds-tabs-skeleton')).not.toBeNull();
+      expect(element.querySelector('cd-area-chart')).toBeNull();
+    });
+
+    it('should show skeleton tabs until consumption data arrives', async () => {
+      await render({ consumptionTrendData: [], savings });
+
+      expect(element.querySelector('cds-tabs-skeleton')).not.toBeNull();
+      expect(element.querySelector('cds-tabs')).toBeNull();
+    });
+
+    it.each(['storageEmptyState', 'prometheusEmptyState'])(
+      'should not render tabs when %s is set',
+      async (input) => {
+        await render({ savings, [input]: true });
+
+        expect(element.querySelector('cds-tabs')).toBeNull();
+        expect(element.querySelector('cd-area-chart')).toBeNull();
+      }
+    );
+
+    it('should pass the consumption stats to the stats list', async () => {
+      await render({
+        consumptionStats: [{ label: 'Average', value: '12 GiB/day', description: 'd' }]
+      });
+
+      expect(element.querySelector('cd-overview-stats')?.textContent).toContain('12 GiB/day');
+    });
   });
 });

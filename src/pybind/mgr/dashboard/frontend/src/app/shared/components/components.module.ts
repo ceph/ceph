@@ -110,6 +110,7 @@ import Close16 from '@carbon/icons/es/close/16';
 import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
 import WarningAltFilled32 from '@carbon/icons/es/warning--alt--filled/32';
 import Help16 from '@carbon/icons/es/help/16';
+import Growth16 from '@carbon/icons/es/growth/16';
 import IncidentReporter16 from '@carbon/icons/es/incident-reporter/16';
 import IbmStreamSets16 from '@carbon/icons/es/ibm--streamsets/16';
 import DataEnrichment16 from '@carbon/icons/es/data-enrichment/16';
@@ -132,6 +133,7 @@ import Locked16 from '@carbon/icons/es/locked/16';
 import WebServicesCluster20 from '@carbon/icons/es/web-services--cluster/20';
 import WebServicesCluster32 from '@carbon/icons/es/web-services--cluster/32';
 import CloudMonitoring16 from '@carbon/icons/es/cloud--monitoring/16';
+import Temperature16 from '@carbon/icons/es/temperature/16';
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
@@ -302,6 +304,7 @@ export class ComponentsModule {
       WarningAltFilled16,
       WarningAltFilled32,
       Help16,
+      Growth16,
       IncidentReporter16,
       IbmStreamSets16,
       DataEnrichment16,
@@ -323,7 +326,8 @@ export class ComponentsModule {
       Locked16,
       WebServicesCluster20,
       WebServicesCluster32,
-      CloudMonitoring16
+      CloudMonitoring16,
+      Temperature16
     ]);
   }
 }
