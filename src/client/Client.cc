@@ -16017,7 +16017,7 @@ const Client::VXattr Client::_common_vxattrs[] = {
     setxattr_cb: &Client::_vxattrcb_alternate_name_set,
     readonly: false,
     exists_cb: &Client::_vxattrcb_alternate_name_exists,
-    flags: 0,
+    flags: VXATTR_ALTNAME,
   },
   { name: "" }     /* Required table terminator */
 };
