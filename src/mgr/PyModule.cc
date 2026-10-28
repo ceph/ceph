@@ -157,6 +157,20 @@ std::string peek_pyerror()
   return exc_msg;
 }
 
+void set_wrapped_remote_exception(const std::string &msg,
+				   bool do_crash_dump)
+{
+  PyErr_SetString(PyExc_RuntimeError, msg.c_str());
+  // NotImplementedError is the documented way for a module to signal
+  // that it doesn't implement an optional method; it isn't a fault, so
+  // don't log it as one.
+  if (do_crash_dump) {
+    derr << msg << dendl;
+  } else {
+    dout(10) << msg << dendl;
+  }
+}
+
 std::span<std::byte const> py_bytes_as_span(PyObject *bytes)
 {
   assert(bytes);
