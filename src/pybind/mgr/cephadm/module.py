@@ -4680,7 +4680,7 @@ Then run the following:
                     continue
 
                 if _ceph_service_next_action(
-                        None, daemon.daemon_type, daemon.name(), self, last_config) == 'reconfig':
+                        None, daemon.daemon_type, daemon.name(), self, last_config, dry_run=True) == 'reconfig':
                     to_reconfig.append(daemon.name())
                     continue
 
