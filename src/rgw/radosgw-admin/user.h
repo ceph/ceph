@@ -36,7 +36,7 @@ struct rgw_admin_user_mutate_options {
   std::string access_key;
   std::string subuser;
   bool yes_i_really_mean_it = false;
-  int generate_key = 2; // 0=set-false, 1=set-true, 2=not-set
+  std::optional<bool> generate_key;
 };
 
 int rgw_admin_user_mutate(const DoutPrefixProvider* dpp,
