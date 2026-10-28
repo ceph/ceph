@@ -150,6 +150,14 @@ public:
     return true;
   }
 
+  void invalidate_all(const DoutPrefixProvider* dpp) {
+    ldpp_dout(dpp, 10) << "UserCache: invalidating all cached users" << dendl;
+    std::lock_guard l{mtx};
+    ak_to_uid.clear();
+    uid_to_lru_it.clear();
+    lru.clear();
+  }
+
   void invalidate_user(const DoutPrefixProvider* dpp, const std::string& user_id) {
     ldpp_dout(dpp, 30) << "UserCache: invalidating cached user uid=" << user_id << dendl;
     std::lock_guard l{mtx};
@@ -159,8 +167,11 @@ public:
       for (const auto& [ak, _] : it->second->entry.info.access_keys) {
         ak_to_uid.erase(ak);
       }
-      ldpp_dout(dpp, 30) << "UserCache: evicting user from LRU cache uid=" << it->second->entry.info.user_id.id << ", LRU size=" << lru.size()
-                         << ", access key to user id map size=" << ak_to_uid.size() << ", user id to LRU iterator map size=" << uid_to_lru_it.size() << dendl;
+      ldpp_dout(dpp, 30) << "UserCache: evicting user from LRU cache uid="
+                         << it->second->entry.info.user_id.id << ", LRU size="
+                         << lru.size() << ", access key to user id map size="
+                         << ak_to_uid.size() << ", user id to LRU iterator map size="
+                         << uid_to_lru_it.size() << dendl;
       lru.erase(it->second);
       uid_to_lru_it.erase(it);
     }
