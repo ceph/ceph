@@ -209,3 +209,17 @@ class TestApplyHosts:
         reset.assert_called_once_with('host1')
         assert results[0] == "Added host 'host1' with addr '10.0.0.11'"
         assert cephadm_module.inventory.get_addr('host1') == '10.0.0.11'
+
+    def test_no_overwrite_skips_known_hosts_and_adds_new_ones(self, _resolve_ip, cephadm_module):
+        with mock.patch('cephadm.serve.CephadmServe._run_cephadm', _run_cephadm()):
+            wait(cephadm_module, cephadm_module.apply(_specs('host1')))
+            with mock.patch.object(cephadm_module, '_check_hosts',
+                                   wraps=cephadm_module._check_hosts) as batch:
+                results = wait(cephadm_module, cephadm_module.apply(
+                    _specs('host1', 'host2', 'host3'), no_overwrite=True))
+        assert [s.hostname for s in batch.call_args.args[0]] == ['host2', 'host3']
+        assert results == [
+            'Skipped host1 host spec. To change host spec omit --no-overwrite flag',
+            "Added host 'host2' with addr '10.0.0.2'",
+            "Added host 'host3' with addr '10.0.0.3'",
+        ]
