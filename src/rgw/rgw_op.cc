@@ -6759,6 +6759,13 @@ void RGWCopyObj::execute(optional_yield y)
 	   this,
 	   s->yield);
 
+  // 304 is only an answer to GET and HEAD; a copy whose source preconditions
+  // fail is answered 412 (RFC 9110 13.1.2, 13.1.3). A system request with
+  // copy-if-newer relies on 304 to learn that its copy is already current.
+  if (op_ret == -ERR_NOT_MODIFIED && !copy_if_newer) {
+    op_ret = -ERR_PRECONDITION_FAILED;
+  }
+
   int ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Standard, s->src_object.get(), s, "REST.COPY.OBJECT_GET", etag, obj_size, this, y, true, true);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: COPY operation ignores bucket logging failure of the GET part: " << ret << dendl;
