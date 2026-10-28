@@ -20,7 +20,7 @@ from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
     AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
-    disconnect_from_filesystem
+    disconnect_from_filesystem, AuthMode
 from .metrics.cache import (
     COMPLETE_CACHE_MAX, lru_cache_timeout, PARTIAL_CACHE_MAX,
     metrics_for_dir_and_peers, try_get_from_complete)
@@ -311,6 +311,7 @@ class FSPolicy:
 
 class FSSnapshotMirror:
     PEER_CONFIG_KEY_PREFIX = "cephfs/mirror/peer"
+    SUPER_KEY_PREFIX = "client.mirror_peer."
 
     def __init__(self, mgr):
         self.mgr = mgr
@@ -337,7 +338,7 @@ class FSSnapshotMirror:
     def split_spec(spec):
         try:
             client_id, cluster_name = spec.split('@')
-            _, client_name = client_id.split('.')
+            _, client_name = client_id.split('.', 1)
             return client_name, cluster_name
         except ValueError:
             raise MirrorException(-errno.EINVAL, f'invalid cluster spec {spec}')
@@ -453,7 +454,7 @@ class FSSnapshotMirror:
         if not rem:
             return
         log.debug(f'peer_uuid={peer_uuid} resolved to {rem}')
-        _, client_name = rem['client_name'].split('.')
+        _, client_name = rem['client_name'].split('.', 1)
 
         # fetch auth details from config store
         remote_conf = self.config_get(FSSnapshotMirror.peer_config_key(local_fs_name, peer_uuid))
@@ -665,33 +666,61 @@ class FSSnapshotMirror:
         except Exception as e:
             return e.args[0], '', 'failed to remove peer'
 
-    def peer_bootstrap_create(self, fs_name, client_name, site_name):
+    def peer_bootstrap_create(self, fs_name, client_name, site_name,
+                              auth_mode=AuthMode.legacy):
         """create a bootstrap token for this peer filesystem"""
         try:
             with self.lock:
-                cmd = {'prefix': 'fs authorize',
-                       'filesystem': fs_name,
-                       'entity': client_name,
-                       'caps': ['/', 'rwps']}
-                r, outs, err = self.mgr.mon_command(cmd)
-                if r < 0:
-                    log.error(f'mon command to create peer user failed: {err}')
-                    raise Exception(-errno.EINVAL)
+                peer_uuid = None
+                if auth_mode == AuthMode.per_share:
+                    # the super-key is created by the orchestrator or the
+                    # administrator, not here; only fetch and package it.
+                    prefix = FSSnapshotMirror.SUPER_KEY_PREFIX
+                    if not client_name.startswith(prefix):
+                        raise MirrorException(-errno.EINVAL,
+                                              f'super-key must be named {prefix}<peer_uuid>')
+                    peer_uuid = client_name[len(prefix):]
+                    try:
+                        # accept only the canonical form so the name round-trips
+                        if str(uuid.UUID(peer_uuid)) != peer_uuid:
+                            raise ValueError
+                    except ValueError:
+                        raise MirrorException(-errno.EINVAL,
+                                              f'invalid peer uuid in super-key name {client_name}')
+                else:
+                    cmd = {'prefix': 'fs authorize',
+                           'filesystem': fs_name,
+                           'entity': client_name,
+                           'caps': ['/', 'rwps']}
+                    r, outs, err = self.mgr.mon_command(cmd)
+                    if r < 0:
+                        log.error(f'mon command to create peer user failed: {err}')
+                        raise Exception(-errno.EINVAL)
                 cmd = {'prefix': 'auth get',
                        'entity': client_name,
                        'format': 'json'}
                 r, outs, err = self.mgr.mon_command(cmd)
                 if r < 0:
+                    if peer_uuid and r == -errno.ENOENT:
+                        raise MirrorException(r, f'super-key {client_name} does not exist')
                     log.error(f'mon command to fetch keyring failed: {err}')
                     raise Exception(-errno.EINVAL)
                 outs = json.loads(outs)
                 outs0 = outs[0]
+                if peer_uuid:
+                    caps = outs0.get('caps', {})
+                    if 'mds' in caps or 'osd' in caps:
+                        raise MirrorException(-errno.EINVAL,
+                                              f'super-key {client_name} must not have mds or osd caps')
                 token_dct = {'fsid': self.mgr.rados.get_fsid(),
                              'filesystem': fs_name,
                              'user': outs0['entity'],
                              'site_name': site_name,
                              'key': outs0['key'],
                              'mon_host': self.mgr.rados.conf_get('mon_host')}
+                if peer_uuid:
+                    token_dct['peer_uuid'] = peer_uuid
+                    token_dct['auth_mode'] = auth_mode.value
                 token_str = json.dumps(token_dct).encode('utf-8')
                 encoded_token = base64.b64encode(token_str)
                 return 0, json.dumps({'token': encoded_token.decode('utf-8')}), ''
