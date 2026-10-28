@@ -6,7 +6,7 @@ import ipaddress
 import logging
 import re
 import shlex
-from collections import defaultdict
+from collections import Counter, defaultdict
 from configparser import ConfigParser
 from contextlib import contextmanager
 from functools import wraps
@@ -29,7 +29,7 @@ from ceph.deployment.tls_utils import (
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
     Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, \
-    Awaitable, Iterator
+    Awaitable, Iterator, Union
 
 import datetime
 import os
@@ -551,6 +551,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'the host (in seconds)'
         ),
         Option(
+            'max_parallel_host_checks',
+            type='int',
+            default=10,
+            min=1,
+            desc='Maximum number of hosts checked at the same time when a spec '
+            'adds several hosts',
+            long_desc='Adding a host runs "cephadm check-host" on it over SSH. '
+            'When a spec applied with "ceph orch apply -i" adds several hosts, '
+            'up to this many of those checks run at the same time.'
+        ),
+        Option(
             'ssh_keepalive_interval',
             type='int',
             default=7,
@@ -735,6 +746,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.cgroups_split = True
             self.log_refresh_metadata = False
             self.default_cephadm_command_timeout = 0
+            self.max_parallel_host_checks = 10
             self.cephadm_log_destination = ''
             self.oob_default_addr = ''
             self.ssh_keepalive_interval = 0
@@ -2296,6 +2308,78 @@ Then run the following:
                 msg = f'Host {host} ({addr}) failed check(s): {errors}'
             raise OrchestratorError(msg)
 
+    def _check_hosts(self, specs: List[HostSpec]) -> Dict[str, Union[str, Exception]]:
+        """Run the checks of _check_valid_addr() for several hosts at once.
+
+        Adding a host waits for 'cephadm check-host' on it, so adding many
+        hosts one after the other keeps the orchestrator busy for the sum of
+        all those checks. Run the checks concurrently instead, at most
+        max_parallel_host_checks at a time, each with the usual timeout.
+
+        Returns, per hostname, the resolved address or the error raised by the
+        check, for _add_host(). Invalid specs and hostnames that appear more
+        than once are left out, and checked by _add_host() as before.
+        """
+        counts = Counter(spec.hostname for spec in specs)
+        results: Dict[str, Union[str, Exception]] = {}
+        to_check: Dict[str, Tuple[str, str]] = {}  # hostname -> (addr, resolved address)
+        for spec in specs:
+            if counts[spec.hostname] > 1:
+                continue
+            try:
+                HostSpec.validate(spec)
+            except Exception:
+                continue
+            # as in _add_host(): do not let check-host reuse a connection to
+            # the old address of a host being re-added with a new one
+            if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
+                self.ssh.reset_con(spec.hostname)
+            try:
+                ip_addr = self._resolve_host_addr(spec.hostname, spec.addr)
+            except Exception as e:
+                results[spec.hostname] = e
+                continue
+            to_check[spec.hostname] = (spec.addr, ip_addr)
+        if not to_check:
+            return results
+
+        timeout = max(self.default_cephadm_command_timeout, 60)
+        max_parallel = max(self.max_parallel_host_checks, 1)
+
+        async def _check_all() -> List[Optional[BaseException]]:
+            sem = asyncio.Semaphore(max_parallel)
+
+            async def _check_one(host: str, addr: str) -> None:
+                async with sem:
+                    await asyncio.wait_for(self._check_host(host, addr), timeout)
+
+            return await asyncio.gather(
+                *(_check_one(host, addr) for host, (addr, _) in to_check.items()),
+                return_exceptions=True)
+
+        # Every check is bounded by its own timeout above, so wait for all of
+        # them without an overall one. Not wait_async(): it would apply
+        # default_cephadm_command_timeout to the whole batch.
+        errors = self.event_loop.get_result(_check_all(), None)
+        for (host, (_, ip_addr)), error in zip(to_check.items(), errors):
+            if error is None:
+                results[host] = ip_addr
+                continue
+            # report errors as _check_valid_addr() does
+            try:
+                with self.async_timeout_handler(host, f'cephadm check-host --expect-hostname {host}'):
+                    raise error
+            except ssh.HostConnectionError as e:
+                results[host] = OrchestratorError(str(e))
+            except Exception as e:
+                results[host] = e
+            # as in _add_host(): a failed check may have added the host to
+            # offline_hosts. Undo that now for hosts we never registered, as
+            # apply() may stop before reaching this host's _add_host().
+            if host not in self.inventory:
+                self.offline_hosts_remove(host)
+        return results
+
     def _get_cephadm_version_for_host_prep(self) -> Optional[str]:
         """Extract cephadm version from cluster version string."""
         try:
@@ -2337,22 +2421,30 @@ Then run the following:
             )
         self.log.info('Successfully prepared host %s for sudo hardening', hostname)
 
-    def _add_host(self, spec):
-        # type: (HostSpec) -> str
+    def _add_host(self, spec: HostSpec, precheck: Optional[Union[str, Exception]] = None) -> str:
         """
         Add a host to be managed by the orchestrator.
 
-        :param host: host name
+        :param spec: host spec
+        :param precheck: result of the host check, when it was already run
+            by _check_hosts(): the resolved address, or the error the check
+            raised
         """
         HostSpec.validate(spec)
         # Drop the cached SSH connection when re-adding a host with a new
         # address. Otherwise check-host may reuse the old connection and
-        # validate the wrong machine.
+        # validate the wrong machine. _check_hosts() already did it before
+        # running the check.
         addr_changed = spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr
-        if addr_changed:
+        if addr_changed and precheck is None:
             self.ssh.reset_con(spec.hostname)
         try:
-            ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+            if precheck is None:
+                ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+            elif isinstance(precheck, Exception):
+                raise precheck
+            else:
+                ip_addr = precheck
         except Exception:
             # Validation failed. Clear the connection we just created to the
             # wrong address so future operations use a fresh connection.
@@ -4987,6 +5079,15 @@ Then run the following:
         no_overwrite: bool = False,
         continue_on_error: bool = True
     ) -> List[str]:
+        # When the specs add several hosts, check them all at once first
+        # instead of one by one as each host is added.
+        host_specs = [
+            cast(HostSpec, spec) for spec in specs
+            if spec.service_type == 'host'
+            and not (no_overwrite and cast(HostSpec, spec).hostname in self.inventory)
+        ]
+        prechecks = self._check_hosts(host_specs) if len(host_specs) > 1 else {}
+
         results = []
         for spec in specs:
             if no_overwrite:
@@ -4999,7 +5100,11 @@ Then run the following:
                                    % (cast(ServiceSpec, spec).service_name(), cast(ServiceSpec, spec).service_name()))
                     continue
             try:
-                res = self._apply(spec)
+                if spec.service_type == 'host':
+                    host_spec = cast(HostSpec, spec)
+                    res = self._add_host(host_spec, prechecks.get(host_spec.hostname))
+                else:
+                    res = self._apply(spec)
                 results.append(res)
             except Exception as e:
                 if continue_on_error:
