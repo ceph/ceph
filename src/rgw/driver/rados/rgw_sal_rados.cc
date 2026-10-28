@@ -1227,6 +1227,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				 string& marker,
 				 const string& delim,
 				 const int& max_uploads,
+                                 const bool allow_unordered,
 				 vector<std::unique_ptr<MultipartUpload>>& uploads,
 				 map<string, bool> *common_prefixes,
 				 bool *is_truncated, optional_yield y)
@@ -1239,6 +1240,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
   params.marker = marker;
   params.ns = RGW_OBJ_NS_MULTIPART;
   params.access_list_filter = MultipartMetaFilter;
+  params.allow_unordered = allow_unordered;
 
   int ret = list(dpp, params, max_uploads, results, y);
 
@@ -1269,6 +1271,8 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
 				  CephContext* cct, optional_yield y)
 {
   constexpr int max = 1000;
+  constexpr bool allow_unordered = true;
+
   int ret, num_deleted = 0;
   vector<std::unique_ptr<MultipartUpload>> uploads;
   string marker;
@@ -1279,7 +1283,8 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
 
   do {
     ret = list_multiparts(dpp, empty_prefix, marker, empty_delim,
-			  max, uploads, nullptr, &is_truncated, y);
+			  max, allow_unordered,
+                          uploads, nullptr, &is_truncated, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR : calling list_bucket_multiparts; ret=" << ret <<

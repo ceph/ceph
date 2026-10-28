@@ -699,6 +699,7 @@ int DaosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
 int DaosBucket::list_multiparts(
     const DoutPrefixProvider* dpp, const string& prefix, string& marker,
     const string& delim, const int& max_uploads,
+    const bool allow_unordered, // currently ignored
     vector<std::unique_ptr<MultipartUpload>>& uploads,
     map<string, bool>* common_prefixes, bool* is_truncated) {
   ldpp_dout(dpp, 20) << "DEBUG: list_multiparts" << dendl;

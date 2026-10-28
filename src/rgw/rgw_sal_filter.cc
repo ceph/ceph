@@ -991,6 +991,7 @@ int FilterBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  std::string& marker,
 				  const std::string& delim,
 				  const int& max_uploads,
+                                  const bool allow_unordered,
 				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				  std::map<std::string, bool> *common_prefixes,
 				  bool *is_truncated, optional_yield y)
@@ -998,8 +999,9 @@ int FilterBucket::list_multiparts(const DoutPrefixProvider *dpp,
   std::vector<std::unique_ptr<MultipartUpload>> nup;
   int ret;
 
-  ret = next->list_multiparts(dpp, prefix, marker, delim, max_uploads, nup,
-			      common_prefixes, is_truncated, y);
+  ret = next->list_multiparts(dpp, prefix, marker, delim, max_uploads,
+                              allow_unordered,
+                              nup, common_prefixes, is_truncated, y);
   if (ret < 0)
     return ret;
 

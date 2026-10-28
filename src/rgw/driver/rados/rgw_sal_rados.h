@@ -794,6 +794,7 @@ class RadosBucket : public StoreBucket {
 				std::string& marker,
 				const std::string& delim,
 				const int& max_uploads,
+                                const bool allow_unordered,
 				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				std::map<std::string, bool> *common_prefixes,
 				bool *is_truncated, optional_yield y) override;

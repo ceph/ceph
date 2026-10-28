@@ -190,11 +190,12 @@ protected:
       virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
 				const std::string& oid, std::optional<std::string> upload_id,
 				ACLOwner owner={}, ceph::real_time mtime=ceph::real_clock::now()) override;
-      virtual int list_multiparts(const DoutPrefixProvider *dpp,
+    virtual int list_multiparts(const DoutPrefixProvider *dpp,
 				const std::string& prefix,
 				std::string& marker,
 				const std::string& delim,
 				const int& max_uploads,
+                                const bool allow_unordered,
 				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				std::map<std::string, bool> *common_prefixes,
 				bool *is_truncated, optional_yield y) override;

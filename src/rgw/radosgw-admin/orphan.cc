@@ -1207,7 +1207,7 @@ int RGWRadosList::process_bucket(
   list_op.params.marker = rgw_obj_key(marker);
   list_op.params.list_versions = true;
   list_op.params.enforce_ns = false;
-  list_op.params.allow_unordered = false;
+  list_op.params.allow_unordered = true;
   list_op.params.prefix = prefix;
 
   bool truncated;
@@ -1501,6 +1501,11 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 {
   constexpr int max_uploads = 1000;
   constexpr int max_parts = 1000;
+  constexpr bool allow_unordered = true;
+
+  const std::string empty_prefix;
+  const std::string& empty_delim = empty_prefix;
+
   std::string marker;
   vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
   bool is_truncated;
@@ -1510,7 +1515,10 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 
   do {
     uploads.clear();
-    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated, null_yield);
+    ret = bucket->list_multiparts(dpp, empty_prefix, marker, empty_delim,
+                                  max_uploads, allow_unordered,
+                                  uploads, nullptr, &is_truncated,
+                                  null_yield);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
       ldpp_dout(dpp, 5) << "RGWRadosList::" << __func__ <<
