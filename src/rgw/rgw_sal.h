@@ -1554,6 +1554,9 @@ public:
   // only a few (currently CRC) checksums are not composite
   uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_COMPOSITE};
 
+  // mtime of the completed object; zero means the time of completion
+  ceph::real_time set_mtime;
+
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
 
