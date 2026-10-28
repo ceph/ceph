@@ -292,7 +292,7 @@ class SubvolBase(SubvolOps):
     # ----- helpers for operating on subvol/subvol mnt path -----
 
 
-    def write_files(self, path=None, data='00000', num=1):
+    def write_files(self, path=None, data='00000', num=1, sfx=''):
         if path:
             if self.build_and_get_mnt_path() not in path:
                 path = path[1:] if path[0] == '/' else path
@@ -301,7 +301,7 @@ class SubvolBase(SubvolOps):
             path = './' + self.build_and_get_mnt_path()
 
         for i in range(num):
-            file_path = join(path, f'file-{i}')
+            file_path = join(path, f'file-{sfx}-{i}')
             self.mount.write_file(file_path, data)
 
 
@@ -629,6 +629,12 @@ class SubvolV3(SubvolBase):
 
     # ----- v3 helpers -----
 
+
+    def get_uuid_for_mnt_path(self):
+        return basename(dirname(self.build_and_get_base_path()))
+
+    def get_uuid_for_snap_path(self):
+        return basename(dirname(dirname(self.build_and_get_base_path())))
 
     def build_and_get_incar_base_path(self):
         if not self._incar_base_path:

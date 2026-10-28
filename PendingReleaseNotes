@@ -71,6 +71,22 @@
   This means that account users will now require an Allow from identity policy
   to assume roles in other accounts.
 
+* CephFS: Introduce subvolume v3 which comes with an upgraded layout for better
+  housing of subvolume data, metadata, subvolume snapshots within as well as
+  across different subvolume incarnation. This enables users to keep and manage
+  multiple incarnation for a subvolume along with their individual metadata and
+  snapsh without any collision.
+* CephFS: With the introduction of subvolume v3, v1 and v2 subvolumes are auto-
+  upgraded to v3 seamlessly during subvolume discovery (which happen whenever a
+  "ceph fs subvolume" command opens a subvolume). The auto-upgrade first upgrades
+  the subvolume layout, preserves the snapshots of v1 and v2 subvolumes as it is
+  if they, and then updates the .meta file to reflect v3 subvolume details. Any
+  IO running on the subvolume during the upgrade remains uninterrupted and
+  undisturbed despite of change in path hierarchy. Yet, it is recommeneded for
+  the administrators to update the MDS caps assigned to CephX client; it would
+  contains v1 or v2 subvolume mount path which ideally should be v3 mount path
+  after upgrade.
+
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
   ``$GETOPT`` environment override so GNU getopt can be selected
