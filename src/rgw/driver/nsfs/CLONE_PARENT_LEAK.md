@@ -8,9 +8,9 @@ to clean up these parents, causing them to accumulate on disk.
 
 ## Background
 
-`GPFSStrategy::clone_file()` (`fs_strategy.cc:635`) creates an immutable
+`GPFSStrategy::clone_file()` (`fs_strategy.cc`) creates an immutable
 snapshot `.clone_parent.<dst_name>` and a mutable clone child.  Cleanup
-is handled by `cleanup_clone()` (`fs_strategy.cc:710`), which calls
+is handled by `GPFSStrategy::cleanup_clone()`, which calls
 `gpfs_clone_unsnap()` to break the clone relationship, then `unlinkat()`
 to remove the parent file.
 
@@ -21,12 +21,12 @@ the directory fd passed to it.
 ## Leak 1 — Demote without cleanup
 
 When a cloned current-version object is demoted to `.versions/` (by
-versioned PUT, CopyObject, or DELETE-creating-delete-marker), none of
-the three demote paths call `cleanup_clone()`:
-
-- Versioned PUT (`rgw_sal_nsfs.cc:6999`): `safe_link` to `.versions/`
-- Versioned CopyObject (`rgw_sal_nsfs.cc:4142`): same pattern
-- Versioned DELETE without versionId (`rgw_sal_nsfs.cc:5841`): same
+versioned PUT, CopyObject, or DELETE-creating-delete-marker), the demote
+does not call `cleanup_clone()`.  All three now demote through
+`demote_current_version()` (`rgw_sal_nsfs.cc`), which moves the current
+file into `.versions/` with `safe_link`;  `cleanup_clone()` is called
+only from `NSFSObject`'s own removal of a current object (checked
+2026-10-28).
 
 The `.clone_parent.<name>` remains in the bucket directory.  A
 subsequent `clone_file()` to the same object name self-cleans (it calls
@@ -36,7 +36,8 @@ DELETE does not.
 ## Leak 2 — Permanent version delete
 
 When a specific version in `.versions/` is permanently deleted
-(`DELETE ?versionId=`), the code at `rgw_sal_nsfs.cc:5648` uses raw
+(`DELETE ?versionId=`), the version delete in
+`NSFSObject::NSFSDeleteOp::delete_obj()` uses raw
 `unlinkat()`.  This does not go through `File::remove()` and does not
 call `cleanup_clone()`.
 
@@ -49,7 +50,7 @@ The lookup would target the wrong directory and find nothing.
 ## Self-copy missed optimization
 
 Self-copy (same-key CopyObject, MetadataDirective=REPLACE) at
-`rgw_sal_nsfs.cc:4197` skips GPFS cloning entirely, falling back to a
+`NSFSObject::copy_object()` skips GPFS cloning entirely, falling back to a
 data copy via `O_TMPFILE`.  `GPFSStrategy::clone_fd()` delegates to
 `POSIXStrategy::clone_fd()` because `clone_file()` takes pathnames and
 after demote the source pathname is unlinked.  The fd is still valid

@@ -1,11 +1,12 @@
 # GPFS interfaces: what nsfs uses, what NooBaa uses, what neither uses
 
 Measured from source on 2026-09-25.  Ours is `fs_strategy.{h,cc}`;
-NooBaa's is `src/native/fs/fs_napi.cpp` at `68ca22d33`, the revision
-`NOOBAA_VARIANCE.md` pins.  Header references are to
+NooBaa's is `src/native/fs/fs_napi.cpp` at `68ca22d33`, the parent of
+the 5.23.0 commit `08d063f86` and the same source.  Header references are to
 `src/rgw/driver/nsfs/gpfs/gpfs.h` unless stated.
 
-This is an API-usage comparison.  On-disk format is `NOOBAA_VARIANCE.md`.
+This is an API-usage comparison, not a description of either on-disk
+format.
 
 ## Bound by both
 

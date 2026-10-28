@@ -9,7 +9,7 @@ strategies one level up — `xattr_strategy`, `path_strategy`,
 `mpu_strategy`, `fs_strategy`, `bucket_state_strategy` — are the other
 case:  they are selected per bucket and consulted per request, and
 `bucket_state_strategy`'s NooBaa branch reads their bucket record on the
-request path in the `serve` mode of `NSFS_ADOPTION.md` §7.  So they
+request path for a bucket not yet adopted (`NSFS_ADOPTION.md` §7).  So they
 stay where they are even though they are format-specific.
 
 | | |
@@ -17,9 +17,11 @@ stay where they are even though they are format-specific.
 | `noobaa_config_store` | reads their configuration store;  writes nothing.  I1 |
 | `noobaa_master_keys` | their master keys, and the secrets they open.  I2 |
 | `noobaa_import_plan` | what a store becomes on the RGW side, and the collision gate.  I3 |
+| `noobaa_schema` | the fields and object attributes the reviewed NooBaa releases write, and the checks that refuse anything else.  X4 |
+| `noobaa_import` | the store's identities into RGW:  accounts, IAM users, roles and the anonymous identity, with their rows.  I4, I7 to I9 |
+| `noobaa_bucket_import` | one bucket's record into RGW's bucket state and its placement row.  I5, P6 |
 
-`docs/ACCOUNT_IMPORT.md` §9 is the stage list these are lettered
-against, and `docs/NSFS_WORK_PLAN.md` is the ordered one.
+The letters are the stages of `docs/NSFS_WORK_PLAN.md`.
 
 **The store is an import source, not a backing store.**  It is read
 once and what the import produces is RGW's own state;  after a bucket

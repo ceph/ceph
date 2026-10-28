@@ -14,9 +14,8 @@ treated separately in [HANDLE_IDENTITY.md](HANDLE_IDENTITY.md) — including
 the measured result that a filesystem's own persistent handle *is*
 rename-invariant, which would remove the constraint in §5.3.
 
-Sibling documents: [DESIGN.md](DESIGN.md),
-[ETAG_STRATEGY.md](ETAG_STRATEGY.md),
-[NOOBAA_VARIANCE.md](NOOBAA_VARIANCE.md).
+Sibling documents: [HANDLE_IDENTITY.md](HANDLE_IDENTITY.md),
+[ETAG_STRATEGY.md](ETAG_STRATEGY.md).
 
 ---
 

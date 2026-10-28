@@ -12,9 +12,9 @@ It exists because those questions are the ones an upstream reviewer will
 ask, and because the answer to "should this be on?" is probably not a
 per-cluster performance judgement at all.  See §5.
 
-Sibling documents: [DESIGN.md](DESIGN.md) for the driver,
-[NOOBAA_VARIANCE.md](NOOBAA_VARIANCE.md) for where our on-disk format
-diverges from NooBaa's.
+Sibling documents: [RENAME_DESIGN.md](RENAME_DESIGN.md) and
+[HANDLE_IDENTITY.md](HANDLE_IDENTITY.md).  The driver itself is
+described by its headers, `bucket_profile.h` first.
 
 ---
 

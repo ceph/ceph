@@ -131,8 +131,7 @@ const std::string mp_ns = "multipart";
 /* The multipart staging layout -- where an in-flight upload's parts live
  * and what they are called -- now belongs to MPUStrategy (mpu_strategy.h),
  * because it is the part of nsfs that has to differ from NooBaa's and,
- * separately, has to differ on a filesystem which cannot share extents.
- * See DESIGN.md. */
+ * separately, has to differ on a filesystem which cannot share extents. */
 static const std::string VERSIONS_LOCK_NAME{nsfs::VERSIONS_LOCK};
 
 /* Names this driver creates on disk which are not objects.  Listing
@@ -2123,7 +2122,7 @@ int resolve_key_path(const DoutPrefixProvider* dpp,
      * moving the file there would rename the object rather than
      * re-represent it.  NooBaa has the same constraint and returns
      * 404, which says the object is absent when a conflicting one is
-     * present.  See DESIGN.md. */
+     * present. */
     if (dpp) {
       ldpp_dout(dpp, 4) << "nsfs: rejecting key " << key.name
 	<< ":  a component of it is an existing object" << dendl;

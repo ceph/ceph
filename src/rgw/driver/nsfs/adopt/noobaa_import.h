@@ -15,9 +15,10 @@
  * so the keys go on the user (§3.4).  The account also gets an nsfs
  * identity row, which is where the POSIX fields and the placement
  * fields live -- neither of which RGW has anywhere to put.  An IAM user
- * gets no row:  on Scale every member of an account runs as the
- * account (§2.8).  Every identity's `_id` is recorded in the NooBaa id
- * table, against the owner it became.
+ * gets a row too, holding the copy of its account's tuple NooBaa keeps
+ * for it;  whether it runs as that row or its account's is
+ * rgw_nsfs_user_identity_override.  Every identity's `_id` is recorded
+ * in the NooBaa id table, against the owner it became.
  *
  * TWO PASSES, IN ONE OPERATION.  Identities first, then the policies.
  * A trust policy's principals are rewritten through the identity
