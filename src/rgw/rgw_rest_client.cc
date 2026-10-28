@@ -760,37 +760,6 @@ void set_str_from_headers(map<string, string>& out_headers, const string& header
   }
 }
 
-static int parse_rgwx_mtime(const DoutPrefixProvider *dpp, CephContext *cct, const string& s, ceph::real_time *rt)
-{
-  string err;
-  vector<string> vec;
-
-  get_str_vec(s, ".", vec);
-
-  if (vec.empty()) {
-    return -EINVAL;
-  }
-
-  long secs = strict_strtol(vec[0].c_str(), 10, &err);
-  long nsecs = 0;
-  if (!err.empty()) {
-    ldpp_dout(dpp, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
-    return -EINVAL;
-  }
-
-  if (vec.size() > 1) {
-    nsecs = strict_strtol(vec[1].c_str(), 10, &err);
-    if (!err.empty()) {
-      ldpp_dout(dpp, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
-      return -EINVAL;
-    }
-  }
-
-  *rt = utime_t(secs, nsecs).to_real_time();
-
-  return 0;
-}
-
 static void send_prepare_convert(const rgw_obj& obj, string *resource)
 {
   string urlsafe_bucket, urlsafe_object;
@@ -952,7 +921,7 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
       string mtime_str;
       set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
       if (!mtime_str.empty()) {
-        int ret = parse_rgwx_mtime(this, cct, mtime_str, mtime);
+        int ret = parse_rgwx_mtime(this, mtime_str, mtime);
         if (ret < 0) {
           return ret;
         }

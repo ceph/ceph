@@ -4889,6 +4889,14 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
+  ceph::real_time set_mtime; // zero means "now"
+  op_ret = get_system_mtime_param(s, &set_mtime);
+  if (op_ret < 0) {
+    ldpp_dout(this, 20) << "get_system_mtime_param() returned ret="
+		      << op_ret << dendl;
+    return;
+  }
+
   if (supplied_md5_b64) {
     need_calc_md5 = true;
 
@@ -5348,7 +5356,7 @@ void RGWPutObj::execute(optional_yield y)
   const req_context rctx{this, s->yield, s->trace.get()};
 
   op_ret =
-    processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
+    processor->complete(s->obj_size, etag, &mtime, set_mtime, attrs,
 			cksum, (delete_at ? *delete_at : real_time()),
 			if_match, if_nomatch,
 			(user_data.empty() ? nullptr : &user_data),
@@ -7691,11 +7699,16 @@ void RGWCompleteMultipart::execute(optional_yield y)
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
   off_t ofs = 0;
   uint64_t olh_epoch = 0;
+  ceph::real_time set_mtime; // zero means "now"
 
   op_ret = get_params(y);
   if (op_ret < 0)
     return;
   op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
+  if (op_ret < 0) {
+    return;
+  }
+  op_ret = get_system_mtime_param(s, &set_mtime);
   if (op_ret < 0) {
     return;
   }
@@ -7733,6 +7746,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+  upload->set_mtime = set_mtime;
 
   rgw_placement_rule* dest_placement;
   op_ret = upload->get_info(this, s->yield, &dest_placement);
