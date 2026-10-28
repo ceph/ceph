@@ -5334,6 +5334,26 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 // INODE UPDATES
 
 
+/*
+ * alternate_name on a remote dentry does not touch the inode. The
+ * inode's auth may be another MDS, and journal_dirty_inode would cow
+ * the primary link there.
+ */
+class C_MDS_remote_dentry_update_finish : public ServerLogContext {
+  CDentry *dn;
+  version_t pv;
+public:
+  C_MDS_remote_dentry_update_finish(Server *s, const MDRequestRef& r,
+                                    CDentry *d, version_t v) :
+    ServerLogContext(s, r), dn(d), pv(v) {}
+  void finish(int r) override {
+    ceph_assert(r == 0);
+    dn->mark_dirty(pv, mdr->ls);
+    mdr->apply();
+    server->respond_to_request(mdr, 0);
+  }
+};
+
 /* 
  * finisher for basic inode updates
  */
@@ -6957,11 +6977,6 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       return;
     }
 
-    MutationImpl::LockOpVec lov;
-    lov.add_xlock(&dn->lock);
-    if (!mds->locker->acquire_locks(mdr, lov))
-      return;
-
     if (value.size() > alternate_name_max) {
       dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
       respond_to_request(mdr, -ENAMETOOLONG);
@@ -6979,10 +6994,30 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       return;
     }
 
+    if (dn->get_projected_linkage()->is_remote()) {
+      // The named link is not the inode's primary. Journal this dentry
+      // only; cowing the primary would target a different link.
+      mdr->ls = mdlog->get_current_segment();
+      EUpdate *le = new EUpdate(mdlog, "set vxattr alternate_name");
+      le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
+      CDir *dir = dn->get_dir();
+      auto pf = dir->project_fnode(mdr);
+      mdcache->journal_cow_dentry(mdr.get(), &le->metablob, dn);
+      dn->set_alternate_name(value);
+      version_t pv = dn->pre_dirty();
+      pf->version = pv;
+      le->metablob.add_dir_context(dir);
+      le->metablob.add_dir(dir, true);
+      le->metablob.add_remote_dentry(dn, true);
+
+      journal_and_reply(mdr, cur, dn, le,
+                        new C_MDS_remote_dentry_update_finish(this, mdr, dn, pv));
+      return;
+    }
+
     auto pi = cur->project_inode(mdr);
     pip = pi.inode.get();
-
-    dn->set_alternate_name(value);
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -EINVAL);
@@ -7207,6 +7242,21 @@ void Server::handle_client_setxattr(const MDRequestRef& mdr)
 
   // is a ceph virtual xattr?
   if (is_ceph_vxattr(name)) {
+    if (name == "ceph.alternate_name"sv) {
+      // Per-dentry field. Lock the link the client named.
+      CDentry *dn = rdlock_path_xlock_dentry(mdr, false, true, false);
+      if (!dn)
+        return;
+
+      CInode *cur = dn->get_projected_linkage()->get_inode();
+      if (!cur) {
+        respond_to_request(mdr, -ESTALE);
+        return;
+      }
+      handle_client_setvxattr(mdr, cur);
+      return;
+    }
+
     // can't use rdlock_path_pin_ref because we need to xlock snaplock/policylock
     CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
     if (!cur)
