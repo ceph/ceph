@@ -3935,22 +3935,6 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
   }
 #endif
 
-  if (params.mod_ptr || params.unmod_ptr) {
-    if (params.mod_ptr && !params.if_nomatch) {
-      ldpp_dout(dpp, 10) << "If-Modified-Since: " << *params.mod_ptr << " Last-Modified: " << source->get_mtime() << dendl;
-      if (!(*params.mod_ptr < source->get_mtime())) {
-        return -ERR_NOT_MODIFIED;
-      }
-    }
-
-    if (params.unmod_ptr && !params.if_match) {
-      ldpp_dout(dpp, 10) << "If-Modified-Since: " << *params.unmod_ptr << " Last-Modified: " << source->get_mtime() << dendl;
-      if (*params.unmod_ptr < source->get_mtime()) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-    }
-  }
-
   if (params.if_match) {
     std::string if_match_str = rgw_string_unquote(params.if_match);
     ldpp_dout(dpp, 10) << "If-Match: " << if_match_str << " ETAG: " << etag_bl.c_str() << dendl;
@@ -3964,6 +3948,22 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     ldpp_dout(dpp, 10) << "If-No-Match: " << if_nomatch_str << " ETAG: " << etag_bl.c_str() << dendl;
     if (if_nomatch_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) == 0) {
       return -ERR_NOT_MODIFIED;
+    }
+  }
+
+  if (params.mod_ptr || params.unmod_ptr) {
+    if (params.mod_ptr && !params.if_nomatch) {
+      ldpp_dout(dpp, 10) << "If-Modified-Since: " << *params.mod_ptr << " Last-Modified: " << source->get_mtime() << dendl;
+      if (!(*params.mod_ptr < source->get_mtime())) {
+        return -ERR_NOT_MODIFIED;
+      }
+    }
+
+    if (params.unmod_ptr && !params.if_match) {
+      ldpp_dout(dpp, 10) << "If-Modified-Since: " << *params.unmod_ptr << " Last-Modified: " << source->get_mtime() << dendl;
+      if (*params.unmod_ptr < source->get_mtime()) {
+        return -ERR_PRECONDITION_FAILED;
+      }
     }
   }
 
