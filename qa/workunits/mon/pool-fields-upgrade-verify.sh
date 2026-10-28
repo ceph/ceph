@@ -8,6 +8,12 @@ rule=pool_fields_upgrade_rule
 
 pool_map=$(ceph osd pool ls detail -f json)
 
+# the commit records itself in the OSDMap
+if ! ceph osd dump -f json | jq -r .flags | grep -q stretch_zones; then
+    echo "the upgrade commit did not set the OSDMap flag stretch_zones"
+    exit 1
+fi
+
 check_pool_fields() {
     local zones=$1 replica=$2 size=$3 min_size=$4
     if ! jq -e \
