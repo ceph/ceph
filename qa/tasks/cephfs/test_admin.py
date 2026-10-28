@@ -190,8 +190,8 @@ class TestAdminCommands(CephFSTestCase):
     def gen_health_warn_mds_trim(self):
         health_warn = 'MDS_TRIM'
 
-        # for generating health warning MDS_TRIM
-        self.config_set('mds', 'mds_debug_subtrees', 'true')
+        # for generating health warning MDS_TRIM: a segment per event
+        self.config_set('mds', 'mds_log_events_per_segment', '1')
         # this will really really slow the trimming, so that MDS_TRIM stays
         # for longer.
         self.config_set('mds', 'mds_log_trim_decay_rate', '60')

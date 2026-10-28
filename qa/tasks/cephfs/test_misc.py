@@ -811,6 +811,45 @@ class TestSkipReplayInoTable(CephFSTestCase):
         self.assertEqual(ls_out, set({"dir1", "dir2"}))
 
 
+class TestDebugSubtreesSegments(CephFSTestCase):
+    MDSS_REQUIRED = 1
+    CLIENTS_REQUIRED = 1
+
+    def _mds_log(self):
+        return self.fs.rank_asok(['perf', 'dump', 'mds_log'])['mds_log']
+
+    def test_test_subtree_map_no_segment(self):
+        """
+        That the test subtree maps journaled for mds_debug_subtrees do not
+        start log segments, and that a journal holding them replays.
+        """
+
+        self.config_set('mds', 'mds_debug_subtrees', True)
+        self.addCleanup(self.config_rm, 'mds', 'mds_debug_subtrees')
+        self.mount_a.run_shell(["mkdir", "test_dir"])
+
+        n = 200
+        before = self._mds_log()
+        self.mount_a.run_shell_payload(f"""
+for i in $(seq 1 {n}); do
+    mkdir test_dir/$i
+done
+""")
+        after = self._mds_log()
+
+        # each mkdir journals an EUpdate followed by a test subtree map
+        events = after['evadd'] - before['evadd']
+        self.assertGreaterEqual(events, 2 * n)
+        # while a segment holds mds_log_events_per_segment events
+        segments = after['segadd'] - before['segadd']
+        self.assertLess(segments, 4)
+
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+
+        self.assertEqual(len(self.mount_a.ls("test_dir")), n)
+
+
 class TestNewFSCreation(CephFSTestCase):
     MDSS_REQUIRED = 1
     TEST_FS = "test_fs"
