@@ -2059,6 +2059,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  rbd_with_crc32c: bool = True,
                  tgt_cmd_extra_args: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
+                 sock_impl_options: Optional[Dict[str, Dict[str, int]]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
                  notifications_interval: Optional[int] = 60,
                  cnc_enable: bool = False,
@@ -2289,6 +2290,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
         #: List of extra arguments for SPDK iobuf in the form opt=value
         self.iobuf_options: Optional[Dict[str, int]] = iobuf_options
+        #: List of extra arguments for SPDK socket implementation options
+        self.sock_impl_options: Optional[Dict[str, Dict[str, int]]] = sock_impl_options
         #: ``qos_timeslice_in_usecs`` timeslice for QOS code, in micro seconds
         self.qos_timeslice_in_usecs = qos_timeslice_in_usecs
         #: ``notifications_interval`` read SPDK notifications interval, in seconds
