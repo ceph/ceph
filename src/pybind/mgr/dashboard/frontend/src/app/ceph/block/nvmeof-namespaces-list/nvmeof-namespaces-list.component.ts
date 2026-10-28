@@ -73,6 +73,10 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         prop: 'nsid'
       },
       {
+        name: $localize`Bdev Name`,
+        prop: 'bdev_name'
+      },
+      {
         name: $localize`Size`,
         prop: 'rbd_image_size',
         pipe: this.dimlessBinaryPipe
