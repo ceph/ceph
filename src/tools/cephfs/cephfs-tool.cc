@@ -1611,8 +1611,9 @@ bench_async_read_worker(
   }
 }
 
-// Zero-copy write worker: ceph_ll_async_write with wrap_iov of a stable
-// per-slot buffer (consume-at-submit). Fsync via the async_write fsync flag.
+// Zero-copy write worker: upper-layer style — ceph_bufferlist_alloc, fill via
+// to_iovec from a stable per-slot pattern buffer, ceph_ll_async_write consume.
+// (Matches Ganesha alloc path; claim/wrap are fallbacks only.)
 void
 bench_zerocopy_write_worker(
     int thread_id,
@@ -1772,12 +1773,9 @@ bench_zerocopy_write_worker(
       available_ctx->completed.store(false, std::memory_order_release);
       available_ctx->result = 0;
 
-      struct iovec iov;
-      iov.iov_base = available_ctx->write_buf.data();
-      iov.iov_len = to_write;
-      ceph_bufferlist* wbl = ceph_bufferlist_wrap_iov(&iov, 1);
+      ceph_bufferlist* wbl = ceph_bufferlist_alloc(to_write);
       if (!wbl) {
-        ss << "Thread " << thread_id << " ceph_bufferlist_wrap_iov failed"
+        ss << "Thread " << thread_id << " ceph_bufferlist_alloc failed"
            << std::endl;
         stats.errors++;
         stop_signal = true;
@@ -1785,6 +1783,22 @@ bench_zerocopy_write_worker(
         available_ctx->completed.store(true, std::memory_order_release);
         queue_semaphore.release();
         break;
+      }
+      {
+        struct iovec iov;
+        int n = ceph_bufferlist_to_iovec(wbl, &iov, 1);
+        if (n != 1 || iov.iov_len < to_write) {
+          ss << "Thread " << thread_id
+             << " ceph_bufferlist_to_iovec failed after alloc" << std::endl;
+          ceph_bufferlist_put(wbl);
+          stats.errors++;
+          stop_signal = true;
+          write_error = true;
+          available_ctx->completed.store(true, std::memory_order_release);
+          queue_semaphore.release();
+          break;
+        }
+        std::memcpy(iov.iov_base, available_ctx->write_buf.data(), to_write);
       }
 
       if (config.measure_latencies) {
