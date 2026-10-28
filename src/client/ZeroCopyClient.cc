@@ -16,6 +16,7 @@
 
 #include <errno.h>
 
+#include <cstdlib>
 #include <mutex>
 
 #include "client/Client.h"
@@ -25,6 +26,7 @@
 #include "common/Clock.h"
 #include "common/Cond.h"
 #include "common/Finisher.h"
+#include "common/deleter.h"
 #include "include/Context.h"
 #include "include/ceph_assert.h"
 #include "include/ceph_fs.h"
@@ -315,6 +317,51 @@ bufferlist ZeroCopyClient::wrap_static(const struct iovec* iov, int iovcnt)
     }
     bl.push_back(buffer::create_static(iov[i].iov_len,
                                        static_cast<char*>(iov[i].iov_base)));
+  }
+  return bl;
+}
+
+namespace {
+
+::deleter make_claim_deleter(ZeroCopyClient::ClaimDeleter del, void* priv,
+                             char* buf, size_t len)
+{
+  if (del == nullptr) {
+    return make_free_deleter(buf);
+  }
+  // Capture buf/len/priv by value; del runs when raw_claim_buffer is destroyed.
+  return make_deleter([del, priv, buf, len]() { del(buf, len, priv); });
+}
+
+} // namespace
+
+bufferlist ZeroCopyClient::claim(char* buf, size_t len, ClaimDeleter del,
+                                 void* priv)
+{
+  bufferlist bl;
+  if (len == 0 || buf == nullptr) {
+    return bl;
+  }
+  bl.push_back(buffer::claim_buffer(len, buf,
+                                    make_claim_deleter(del, priv, buf, len)));
+  return bl;
+}
+
+bufferlist ZeroCopyClient::claim_iov(const struct iovec* iov, int iovcnt,
+                                     ClaimDeleter del, void* priv)
+{
+  bufferlist bl;
+  if (iov == nullptr || iovcnt <= 0) {
+    return bl;
+  }
+  for (int i = 0; i < iovcnt; ++i) {
+    if (iov[i].iov_base == nullptr || iov[i].iov_len == 0) {
+      continue;
+    }
+    auto* base = static_cast<char*>(iov[i].iov_base);
+    const size_t len = iov[i].iov_len;
+    bl.push_back(buffer::claim_buffer(
+        len, base, make_claim_deleter(del, priv, base, len)));
   }
   return bl;
 }

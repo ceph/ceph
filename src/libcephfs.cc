@@ -2404,6 +2404,17 @@ extern "C" ceph_bufferlist* ceph_bufferlist_wrap_iov(const struct iovec* iov,
   return out;
 }
 
+extern "C" ceph_bufferlist* ceph_bufferlist_claim_iov(
+    const struct iovec* iov, int iovcnt, ceph_buffer_deleter_t del, void* priv)
+{
+  auto* out = new (std::nothrow) ceph_bufferlist();
+  if (!out) {
+    return nullptr;
+  }
+  out->bl = ceph::ZeroCopyClient::claim_iov(iov, iovcnt, del, priv);
+  return out;
+}
+
 extern "C" int ceph_ll_async_read(struct ceph_mount_info* cmount, struct Fh* fh,
                                   uint64_t off, uint64_t len,
                                   struct ceph_io_completion* c)
@@ -2428,12 +2439,15 @@ extern "C" int ceph_ll_async_read(struct ceph_mount_info* cmount, struct Fh* fh,
 
 extern "C" int ceph_ll_async_write(struct ceph_mount_info* cmount,
                                    struct Fh* fh, uint64_t off,
-                                   ceph_bufferlist* data, bool fsync,
+                                   ceph_bufferlist* data, int flags,
                                    struct ceph_io_completion* c)
 {
   if (!cmount || !fh || !data || !c || !c->cb) {
     return -EINVAL;
   }
+  const bool fsync = (flags & CEPH_LL_WRITE_FSYNC) != 0;
+  const bool syncdataonly = fsync &&
+                            ((flags & CEPH_LL_WRITE_SYNCDATAONLY) != 0);
   ceph::ZeroCopyClient zc(cmount->get_client());
   // Consume handle at submit: move bl out, then delete the opaque wrapper.
   ceph::bufferlist payload = std::move(data->bl);
@@ -2441,7 +2455,7 @@ extern "C" int ceph_ll_async_write(struct ceph_mount_info* cmount,
   return zc.async_write(
       fh, off, std::move(payload),
       [c](ceph::IoResult&& r) { c->cb(r.result, nullptr, c->priv); }, fsync,
-      false);
+      syncdataonly);
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)

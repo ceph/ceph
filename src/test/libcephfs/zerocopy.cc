@@ -16,7 +16,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <condition_variable>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -94,7 +96,7 @@ TEST(LibCephFS, ZeroCopyAsyncRoundTrip)
 
   ZcWait wwait;
   struct ceph_io_completion wcomp{zc_io_cb, &wwait};
-  ASSERT_EQ(0, ceph_ll_async_write(cmount, fh, 0, wbl, false, &wcomp));
+  ASSERT_EQ(0, ceph_ll_async_write(cmount, fh, 0, wbl, 0, &wcomp));
   // handle consumed at submit
   ASSERT_EQ(static_cast<int64_t>(len), wwait.wait());
   EXPECT_EQ(nullptr, wwait.data);
@@ -159,8 +161,8 @@ TEST(LibCephFS, ZeroCopyWrapIovWrite)
 
   ZcWait wwait;
   struct ceph_io_completion wcomp{zc_io_cb, &wwait};
-  ASSERT_EQ(0,
-            ceph_ll_async_write(cmount, fh, 0, wbl, true /* fsync */, &wcomp));
+  ASSERT_EQ(0, ceph_ll_async_write(cmount, fh, 0, wbl, CEPH_LL_WRITE_FSYNC,
+                                   &wcomp));
   ASSERT_EQ(static_cast<int64_t>(total), wwait.wait());
 
   ZcWait rwait;
@@ -224,4 +226,46 @@ TEST(LibCephFS, ZeroCopyReadEmptyFile)
   ASSERT_EQ(0, ceph_ll_unlink(cmount, root, filename, perms));
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
+}
+
+namespace {
+
+struct ClaimStats {
+  std::atomic<int> calls{0};
+  std::atomic<size_t> bytes{0};
+};
+
+void claim_count_deleter(void* buf, size_t len, void* priv)
+{
+  auto* st = static_cast<ClaimStats*>(priv);
+  st->calls.fetch_add(1, std::memory_order_relaxed);
+  st->bytes.fetch_add(len, std::memory_order_relaxed);
+  std::free(buf);
+}
+
+} // namespace
+
+TEST(LibCephFS, ZeroCopyClaimIov)
+{
+  ClaimStats st;
+  constexpr size_t len = 64;
+  char* buf = static_cast<char*>(std::malloc(len));
+  ASSERT_NE(nullptr, buf);
+  std::memset(buf, 0x5a, len);
+  struct iovec iov = {buf, len};
+
+  ceph_bufferlist* bl = ceph_bufferlist_claim_iov(&iov, 1, claim_count_deleter,
+                                                  &st);
+  ASSERT_NE(nullptr, bl);
+  EXPECT_EQ(len, ceph_bufferlist_length(bl));
+  EXPECT_EQ(0, st.calls.load());
+
+  struct iovec out;
+  ASSERT_EQ(1, ceph_bufferlist_to_iovec(bl, &out, 1));
+  EXPECT_EQ(buf, out.iov_base);
+  EXPECT_EQ(len, out.iov_len);
+
+  ceph_bufferlist_put(bl);
+  EXPECT_EQ(1, st.calls.load());
+  EXPECT_EQ(len, st.bytes.load());
 }

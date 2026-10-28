@@ -14,6 +14,8 @@
 
 #include <errno.h>
 
+#include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -72,6 +74,81 @@ TEST(ZeroCopyClientBuffer, WrapStaticIovec)
   EXPECT_EQ(a, it->c_str());
   ++it;
   EXPECT_EQ(b, it->c_str());
+}
+
+namespace {
+
+struct ClaimStats {
+  std::atomic<int> calls{0};
+  std::atomic<size_t> bytes{0};
+};
+
+void claim_count_deleter(void* buf, size_t len, void* priv)
+{
+  auto* st = static_cast<ClaimStats*>(priv);
+  st->calls.fetch_add(1, std::memory_order_relaxed);
+  st->bytes.fetch_add(len, std::memory_order_relaxed);
+  std::free(buf);
+}
+
+} // namespace
+
+TEST(ZeroCopyClientBuffer, ClaimSingleFree)
+{
+  ClaimStats st;
+  constexpr size_t len = 128;
+  char* buf = static_cast<char*>(std::malloc(len));
+  ASSERT_NE(nullptr, buf);
+  std::memset(buf, 0xcd, len);
+
+  {
+    auto bl = ceph::ZeroCopyClient::claim(buf, len, claim_count_deleter, &st);
+    ASSERT_EQ(len, bl.length());
+    ASSERT_EQ(1u, bl.get_num_buffers());
+    EXPECT_EQ(buf, bl.buffers().front().c_str());
+    EXPECT_EQ(0, st.calls.load());
+  }
+  EXPECT_EQ(1, st.calls.load());
+  EXPECT_EQ(len, st.bytes.load());
+}
+
+TEST(ZeroCopyClientBuffer, ClaimIovecCustomDeleter)
+{
+  ClaimStats st;
+  constexpr size_t la = 64;
+  constexpr size_t lb = 96;
+  char* a = static_cast<char*>(std::malloc(la));
+  char* b = static_cast<char*>(std::malloc(lb));
+  ASSERT_NE(nullptr, a);
+  ASSERT_NE(nullptr, b);
+
+  struct iovec iov[2] = {{a, la}, {b, lb}};
+
+  {
+    auto bl = ceph::ZeroCopyClient::claim_iov(iov, 2, claim_count_deleter, &st);
+    ASSERT_EQ(la + lb, bl.length());
+    ASSERT_EQ(2u, bl.get_num_buffers());
+    auto it = bl.buffers().begin();
+    EXPECT_EQ(a, it->c_str());
+    ++it;
+    EXPECT_EQ(b, it->c_str());
+    EXPECT_EQ(0, st.calls.load());
+  }
+
+  EXPECT_EQ(2, st.calls.load());
+  EXPECT_EQ(la + lb, st.bytes.load());
+}
+
+TEST(ZeroCopyClientBuffer, ClaimIovecNullDeleterUsesFree)
+{
+  // nullptr deleter → free(3); just ensure no crash / length correct.
+  constexpr size_t len = 32;
+  char* buf = static_cast<char*>(std::malloc(len));
+  ASSERT_NE(nullptr, buf);
+  struct iovec iov = {buf, len};
+  auto bl = ceph::ZeroCopyClient::claim_iov(&iov, 1, nullptr, nullptr);
+  ASSERT_EQ(len, bl.length());
+  bl.clear();
 }
 
 TEST(ZeroCopyClientBuffer, BufferlistToIovec)

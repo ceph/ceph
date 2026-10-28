@@ -52,16 +52,26 @@ using IoCallback = std::function<void(IoResult&&)>;
  * not extend @c ceph_ll_io_info with zerocopy/release fields; callers that need
  * a C ABI should use the opaque @c ceph_bufferlist helpers in ceph_buffer.h.
  *
- * Data path is Filer → Objecter only (no ObjectCacher). Buffer helpers and
- * async/sync I/O are implemented; FSCrypt is identity (passthrough) for v1.
+ * Data path is Filer → Objecter only today (ObjectCacher routing is separate).
+ * Buffer helpers and async/sync I/O are implemented; FSCrypt is identity
+ * (passthrough) for v1.
  *
  * Write ownership rule: @c async_write consumes the caller's @c bufferlist at
  * submit. If the caller needs a view after submit, it must retain its own
  * share (copy/share the list) before calling. For @c wrap_static buffers, the
- * wrapped memory must remain valid until the write callback runs.
+ * wrapped memory must remain valid until the write callback runs. For
+ * @c claim / @c claim_iov buffers, ownership transferred at claim time; the
+ * deleter runs when the last @c buffer::ptr drops the @c raw (not necessarily
+ * at write CB).
  */
 class ZeroCopyClient {
 public:
+  /**
+   * Per-segment release callback for @c claim / @c claim_iov.
+   * Invoked with the claimed @p buf / @p len when that raw is destroyed.
+   */
+  using ClaimDeleter = void (*)(void* buf, size_t len, void* priv);
+
   explicit ZeroCopyClient(Client* client);
 
   Client* get_client() const { return client; }
@@ -70,12 +80,27 @@ public:
   static bufferlist alloc_buffers(size_t len);
 
   /**
-   * Wrap caller memory without copying.
+   * Wrap caller memory without copying (non-owning).
    * Lifetime: @p buf / @p iov bases must remain valid until write completion
-   * (or until the returned list is destroyed if never submitted).
+   * (or until the returned list is destroyed if never submitted). Unsafe to
+   * hold in ObjectCacher after the caller frees the memory.
    */
   static bufferlist wrap_static(char* buf, size_t len);
   static bufferlist wrap_static(const struct iovec* iov, int iovcnt);
+
+  /**
+   * Claim ownership of caller memory without copying (@c buffer::claim_buffer).
+   * After return the caller must not free @p buf; @p del runs when the last
+   * ptr drops the raw (may be off-thread). If @p del is nullptr, uses free(3).
+   */
+  static bufferlist claim(char* buf, size_t len, ClaimDeleter del, void* priv);
+
+  /**
+   * Claim each non-empty iovec segment (same deleter / priv for all).
+   * Empty / null segments are skipped. @p del may be nullptr (free(3) each).
+   */
+  static bufferlist claim_iov(const struct iovec* iov, int iovcnt,
+                              ClaimDeleter del, void* priv);
 
   /**
    * Fill @p iov with views into @p bl segments (no byte copy).
