@@ -633,3 +633,63 @@ TEST(LibCephFS, AlternateName) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
+
+// alternate_name is per dentry. Setting it through one hardlink must
+// leave the other link unchanged.
+TEST(LibCephFS, AlternateNameHardlink) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  ASSERT_EQ(ceph_conf_set(cmount, "client_fscrypt_as", "false"), 0);
+  ASSERT_EQ(ceph_conf_set(cmount, "client_alternate_name_visible", "true"), 0);
+
+  char dir_a[NAME_MAX];
+  char dir_b[NAME_MAX];
+  char file_path[NAME_MAX];
+  char link_path[NAME_MAX];
+  snprintf(dir_a, sizeof(dir_a), "altname_a_%d", getpid());
+  snprintf(dir_b, sizeof(dir_b), "altname_b_%d", getpid());
+  snprintf(file_path, sizeof(file_path), "%s/file", dir_a);
+  snprintf(link_path, sizeof(link_path), "%s/link", dir_b);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_a, 0777));
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_b, 0777));
+
+  int fd = ceph_open(cmount, file_path, O_RDWR|O_CREAT, 0666);
+  ASSERT_GE(fd, 0);
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_link(cmount, file_path, link_path));
+
+  const char *xattr = "ceph.alternate_name";
+  const char *link_value = "from-link";
+  const char *file_value = "from-file";
+  char buf[64];
+
+  ASSERT_EQ(0, ceph_setxattr(cmount, link_path, xattr, link_value, strlen(link_value), 0));
+
+  memset(buf, 0, sizeof(buf));
+  ASSERT_EQ((int)strlen(link_value), ceph_getxattr(cmount, link_path, xattr, buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(buf, link_value, strlen(link_value)));
+
+  ASSERT_EQ(-ENODATA, ceph_getxattr(cmount, file_path, xattr, buf, sizeof(buf)));
+
+  ASSERT_EQ(0, ceph_setxattr(cmount, file_path, xattr, file_value, strlen(file_value), 0));
+
+  memset(buf, 0, sizeof(buf));
+  ASSERT_EQ((int)strlen(file_value), ceph_getxattr(cmount, file_path, xattr, buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(buf, file_value, strlen(file_value)));
+
+  memset(buf, 0, sizeof(buf));
+  ASSERT_EQ((int)strlen(link_value), ceph_getxattr(cmount, link_path, xattr, buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(buf, link_value, strlen(link_value)));
+
+  ASSERT_EQ(0, ceph_unlink(cmount, link_path));
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_b));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_a));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
