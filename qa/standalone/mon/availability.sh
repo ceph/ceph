@@ -126,14 +126,20 @@ function TEST_availablity_score() {
     ceph -s
     ceph osd pool availability-status
 
-    # wait for 10 seconds so availability score is refreshed
-    # check ceph heath and availability score
+    # wait for the availability score to be refreshed:
+    # poll until the pool is unavailable and the score dropped
     sleep 10
     ceph -s
-    ceph osd pool availability-status
-    AVAILABILITY_STATUS=$(ceph osd pool availability-status | grep -w "foo")
-    IS_AVAILABLE=$(echo "$AVAILABILITY_STATUS" | awk '{print $8}')
-    NEW_SCORE=$(echo "$AVAILABILITY_STATUS" | awk '{print $7}')
+    for _ in {1..30}; do
+      AVAILABILITY_STATUS=$(ceph osd pool availability-status | grep -w "foo")
+      echo "$AVAILABILITY_STATUS"
+      IS_AVAILABLE=$(echo "$AVAILABILITY_STATUS" | awk '{print $8}')
+      NEW_SCORE=$(echo "$AVAILABILITY_STATUS" | awk '{print $7}')
+      if [ $IS_AVAILABLE -eq 0 ] && (( $(echo "$NEW_SCORE < $SCORE" | bc -l) )); then
+        break
+      fi
+      sleep 1
+    done
     if [ $IS_AVAILABLE -ne 0 ]; then
       echo "Failed: Pool is available in availabilty status when unfound objects present"
       return 1
@@ -149,7 +155,7 @@ function TEST_availablity_score() {
     ceph osd pool clear-availability-status foo
     AVAILABILITY_STATUS=$(ceph osd pool availability-status | grep -w "foo")
     NEW_UPTIME_DURATION=$(echo "$AVAILABILITY_STATUS" | awk '{print $2}')
-    NEW_UPTIME_SECONDS=$(( ${UPTIME_DURATION%[sm]} * (${UPTIME_DURATION: -1} == "m" ? 60 : 1) ))
+    NEW_UPTIME_SECONDS=$(( ${NEW_UPTIME_DURATION%[sm]} * (${NEW_UPTIME_DURATION: -1} == "m" ? 60 : 1) ))
     if [ "$NEW_UPTIME_SECONDS" -gt "$UPTIME_SECONDS" ]; then
       echo "Failed: Availability score for the pool did not drop after clearing"
       return 1
