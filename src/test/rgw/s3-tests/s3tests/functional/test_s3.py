@@ -6037,7 +6037,7 @@ def generate_random(size, part_size=5*1024*1024):
         if (x == size):
             return
 
-def _multipart_upload(bucket_name, key, size, part_size=5*1024*1024, client=None, content_type=None, metadata=None, resend_parts=[], tagging=None):
+def _multipart_upload(bucket_name, key, size, part_size=5*1024*1024, client=None, content_type=None, metadata=None, resend_parts=[], tagging=None, storage_class=None):
     """
     generate a multi-part upload for a random file of specifed size,
     if requested, generate a list of the parts
@@ -6046,14 +6046,17 @@ def _multipart_upload(bucket_name, key, size, part_size=5*1024*1024, client=None
     if client == None:
         client = get_client()
 
+    kwargs = {}
+    if storage_class is not None:
+        kwargs['StorageClass'] = storage_class
 
     if content_type == None and metadata == None:
       if tagging is not None:
-        response = client.create_multipart_upload(Bucket=bucket_name, Key=key, Tagging=tagging)
+        response = client.create_multipart_upload(Bucket=bucket_name, Key=key, Tagging=tagging, **kwargs)
       else:
-        response = client.create_multipart_upload(Bucket=bucket_name, Key=key)
+        response = client.create_multipart_upload(Bucket=bucket_name, Key=key, **kwargs)
     else:
-        response = client.create_multipart_upload(Bucket=bucket_name, Key=key, Metadata=metadata, ContentType=content_type)
+        response = client.create_multipart_upload(Bucket=bucket_name, Key=key, Metadata=metadata, ContentType=content_type, **kwargs)
 
     upload_id = response['UploadId']
     s = ''
@@ -6816,8 +6819,7 @@ def test_multipart_upload_incorrect_etag():
     assert status == 400
     assert error_code == 'InvalidPart'
 
-@pytest.mark.fails_on_dbstore
-def test_multipart_get_part():
+def _test_multipart_get_part(storage_class=None):
     bucket_name = get_new_bucket()
     client = get_client()
     key = "mymultipart"
@@ -6827,7 +6829,8 @@ def test_multipart_get_part():
     part_count = len(part_sizes)
     total_size = sum(part_sizes)
 
-    (upload_id, data, parts) = _multipart_upload(bucket_name, key, total_size, part_size, resend_parts=[2])
+    (upload_id, data, parts) = _multipart_upload(bucket_name, key, total_size, part_size, resend_parts=[2],
+                                                 storage_class=storage_class)
 
     # request part before complete
     e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key, PartNumber=1)
@@ -6837,6 +6840,14 @@ def test_multipart_get_part():
 
     res = client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts})
     assert len(parts) == part_count
+
+    if storage_class is not None:
+        response = client.head_object(Bucket=bucket_name, Key=key)
+        assert response['StorageClass'] == storage_class
+
+        response = client.get_object_attributes(Bucket=bucket_name, Key=key, ObjectAttributes=['ObjectParts'])
+        check_parts_count(response['ObjectParts'], part_count)
+        assert [part['Size'] for part in response['ObjectParts']['Parts']] == part_sizes
 
     for part, size in zip(parts, part_sizes):
         response = client.head_object(Bucket=bucket_name, Key=key, PartNumber=part['PartNumber'])
@@ -6857,6 +6868,19 @@ def test_multipart_get_part():
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 400
     assert error_code == 'InvalidPart'
+
+@pytest.mark.fails_on_dbstore
+def test_multipart_get_part():
+    _test_multipart_get_part()
+
+@pytest.mark.storage_class
+@pytest.mark.fails_on_dbstore
+def test_multipart_get_part_storage_class():
+    sc = configured_storage_classes()
+    if len(sc) < 2:
+        pytest.skip('requires a storage class other than STANDARD')
+
+    _test_multipart_get_part(storage_class=sc[1])
 
 @pytest.mark.encryption
 @pytest.mark.fails_on_dbstore
