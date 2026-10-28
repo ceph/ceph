@@ -3,11 +3,10 @@ import { Component, OnInit, ViewEncapsulation } from '@angular/core';
 import _ from 'lodash';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
-import { HostService } from '~/app/shared/api/host.service';
+import { HostFactsCapacitySource, HostService } from '~/app/shared/api/host.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
-import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 
@@ -25,14 +24,14 @@ export class CreateClusterReviewComponent implements OnInit {
   totalCapacity = 0;
   services: Array<CephServiceSpec> = [];
   totalCPUs = 0;
-  totalMemory = 0;
+  /** Raw bytes; formatted in the template (sum-then-format). */
+  totalMemory: number | undefined;
   deploymentDescText: string = '-';
   isSimpleDeployment = true;
 
   constructor(
     public wizardStepsService: WizardStepsService,
     public cephServiceService: CephServiceService,
-    private dimlessBinary: DimlessBinaryPipe,
     public hostService: HostService,
     private osdService: OsdService,
     private authStorageService: AuthStorageService
@@ -51,12 +50,11 @@ export class CreateClusterReviewComponent implements OnInit {
     this.hostService.list(hostContext.toParams(), 'true').subscribe((resp: object[]) => {
       this.hosts = resp;
       this.hostsCount = this.hosts.length;
-      _.forEach(this.hosts, (hostKey) => {
-        this.totalCPUs = this.totalCPUs + hostKey['cpu_count'];
-        // convert to bytes
-        this.totalMemory = this.totalMemory + hostKey['memory_total_kb'] * 1024;
-      });
-      this.totalMemory = this.dimlessBinary.transform(this.totalMemory);
+      this.totalCPUs = _.sumBy(this.hosts, (hostKey) => Number(hostKey['cpu_count']) || 0);
+      // Authoritative total: sum raw bytes, format once in the template.
+      this.totalMemory = this.hostService.getHostsTotalMemoryBytes(
+        this.hosts as HostFactsCapacitySource[]
+      );
     });
 
     if (this.osdService.osdDevices['data']) {
