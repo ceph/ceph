@@ -5095,7 +5095,7 @@ Then run the following:
                     results.append('Skipped %s host spec. To change %s spec omit --no-overwrite flag'
                                    % (cast(HostSpec, spec).hostname, spec.service_type))
                     continue
-                elif cast(ServiceSpec, spec).service_name() in self.spec_store:
+                elif spec.service_type != 'host' and cast(ServiceSpec, spec).service_name() in self.spec_store:
                     results.append('Skipped %s service spec. To change %s spec omit --no-overwrite flag'
                                    % (cast(ServiceSpec, spec).service_name(), cast(ServiceSpec, spec).service_name()))
                     continue
