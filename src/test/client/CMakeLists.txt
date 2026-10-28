@@ -57,4 +57,20 @@ if(${WITH_CEPHFS})
     )
   install(TARGETS ceph_test_client_async_full
     DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+  if(LINUX)
+    add_executable(unittest_client_fscrypt_denc
+      fscrypt_denc.cc
+      $<TARGET_OBJECTS:unit-main>
+      )
+    target_link_libraries(unittest_client_fscrypt_denc
+      client
+      global
+      ceph-common
+      ${UNITTEST_LIBS}
+      ${EXTRALIBS}
+      ${CMAKE_DL_LIBS}
+      )
+    add_ceph_unittest(unittest_client_fscrypt_denc)
+  endif(LINUX)
 endif(${WITH_CEPHFS})
