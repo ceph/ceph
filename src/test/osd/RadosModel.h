@@ -72,7 +72,8 @@ enum TestOpType {
   TEST_OP_SET_CHUNK,
   TEST_OP_TIER_EVICT,
   TEST_OP_MAPEXT,
-  TEST_OP_WRITE_ZEROS
+  TEST_OP_WRITE_ZEROS,
+  NUM_TEST_OP_TYPES // not an op: number of enumerators above; must remain last
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -195,7 +196,7 @@ public:
   const uint64_t max_stride_size;
   AttrGenerator attr_gen;
   bool no_omap;
-  const bool no_sparse;
+  bool no_sparse;
   bool pool_snaps;
   bool write_fadvise_dontneed;
   std::string low_tier_pool_name;
@@ -462,6 +463,11 @@ public:
   void set_no_omap(bool value)
   {
     no_omap = value;
+  }
+
+  void set_no_sparse(bool value)
+  {
+    no_sparse = value;
   }
 
   void loop(TestOpGenerator *gen)
