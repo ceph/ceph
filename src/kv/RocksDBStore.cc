@@ -1568,11 +1568,14 @@ void RocksDBStore::get_statistics(Formatter *f)
       f->dump_string("block_cache_pinned_blocks_usage", str);
       str.clear();
     }
-    db->GetProperty("rocksdb.cur-size-all-mem-tables", &str);
-    f->dump_string("rocksdb_memtable_usage", str);
-    str.clear();
-    db->GetProperty("rocksdb.estimate-table-readers-mem", &str);
-    f->dump_string("rocksdb_index_filter_blocks_usage", str);
+    // every column family: GetProperty() without a handle answers for the default
+    // family only, which on a sharded store (O, L, P, M...) holds almost nothing
+    uint64_t v = 0;
+    db->GetAggregatedIntProperty("rocksdb.cur-size-all-mem-tables", &v);
+    f->dump_string("rocksdb_memtable_usage", stringify(v));
+    v = 0;
+    db->GetAggregatedIntProperty("rocksdb.estimate-table-readers-mem", &v);
+    f->dump_string("rocksdb_index_filter_blocks_usage", stringify(v));
     f->close_section();
   }
 }
