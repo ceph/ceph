@@ -650,10 +650,12 @@ TEST(LibCephFS, AlternateNameHardlink) {
   char dir_b[NAME_MAX];
   char file_path[NAME_MAX];
   char link_path[NAME_MAX];
+  char snap_link_path[NAME_MAX];
   snprintf(dir_a, sizeof(dir_a), "altname_a_%d", getpid());
   snprintf(dir_b, sizeof(dir_b), "altname_b_%d", getpid());
   snprintf(file_path, sizeof(file_path), "%s/file", dir_a);
   snprintf(link_path, sizeof(link_path), "%s/link", dir_b);
+  snprintf(snap_link_path, sizeof(snap_link_path), "%s/.snap/snap1/link", dir_b);
 
   ASSERT_EQ(0, ceph_mkdir(cmount, dir_a, 0777));
   ASSERT_EQ(0, ceph_mkdir(cmount, dir_b, 0777));
@@ -662,6 +664,8 @@ TEST(LibCephFS, AlternateNameHardlink) {
   ASSERT_GE(fd, 0);
   ASSERT_EQ(0, ceph_close(cmount, fd));
   ASSERT_EQ(0, ceph_link(cmount, file_path, link_path));
+  // Snapshot the hardlink while its alternate_name is still empty.
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_b, "snap1", 0755, nullptr, 0));
 
   const char *xattr = "ceph.alternate_name";
   const char *link_value = "from-link";
@@ -673,6 +677,9 @@ TEST(LibCephFS, AlternateNameHardlink) {
   memset(buf, 0, sizeof(buf));
   ASSERT_EQ((int)strlen(link_value), ceph_getxattr(cmount, link_path, xattr, buf, sizeof(buf)));
   ASSERT_EQ(0, memcmp(buf, link_value, strlen(link_value)));
+
+  // The cow clone keeps the pre-update name.
+  ASSERT_EQ(-ENODATA, ceph_getxattr(cmount, snap_link_path, xattr, buf, sizeof(buf)));
 
   ASSERT_EQ(-ENODATA, ceph_getxattr(cmount, file_path, xattr, buf, sizeof(buf)));
 
@@ -686,6 +693,7 @@ TEST(LibCephFS, AlternateNameHardlink) {
   ASSERT_EQ((int)strlen(link_value), ceph_getxattr(cmount, link_path, xattr, buf, sizeof(buf)));
   ASSERT_EQ(0, memcmp(buf, link_value, strlen(link_value)));
 
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_b, "snap1"));
   ASSERT_EQ(0, ceph_unlink(cmount, link_path));
   ASSERT_EQ(0, ceph_unlink(cmount, file_path));
   ASSERT_EQ(0, ceph_rmdir(cmount, dir_b));
