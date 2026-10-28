@@ -901,7 +901,7 @@ int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const
 
   bufferlist newbl;
 
-  uint64_t end = off + data_len;
+  uint64_t end = pos + data_len;
   uint64_t cur_block = fscrypt_block_from_ofs(pos);
   uint64_t block_off = fscrypt_block_start(pos);
 
