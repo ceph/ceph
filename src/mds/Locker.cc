@@ -3181,7 +3181,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   mut->auth_pin(in);
 
   // make max_size _increase_ timely
-  if (max_increased)
+  if (max_increased || _need_flush_file_update(in, mut))
     mds->mdlog->flush();
 
   return true;
@@ -3241,6 +3241,41 @@ bool Locker::_need_flush_mdlog(CInode *in, int wanted, bool lock_state_any)
       ((wanted & (CEPH_CAP_XATTR_SHARED|CEPH_CAP_XATTR_EXCL)) &&
        (lock_state_any ? in->xattrlock.is_locked() : in->xattrlock.is_unstable_and_locked())))
     return true;
+  return false;
+}
+
+/*
+ * Does a lock that an update holds until it is journaled (wrlock or
+ * xlock) keep back caps that a client wants?  The lock may be stable,
+ * e.g. LOCK with a wrlock from another client's file update, so
+ * _need_flush_mdlog() does not see it.
+ */
+bool Locker::_need_flush_held_caps(CInode *in, int wanted)
+{
+  auto held = [](const SimpleLock &lock) {
+    return lock.is_wrlocked() || lock.is_xlocked();
+  };
+  return ((wanted & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_SHARED|CEPH_CAP_FILE_EXCL)) &&
+	  held(in->filelock)) ||
+	 ((wanted & (CEPH_CAP_AUTH_SHARED|CEPH_CAP_AUTH_EXCL)) && held(in->authlock)) ||
+	 ((wanted & (CEPH_CAP_LINK_SHARED|CEPH_CAP_LINK_EXCL)) && held(in->linklock)) ||
+	 ((wanted & (CEPH_CAP_XATTR_SHARED|CEPH_CAP_XATTR_EXCL)) && held(in->xattrlock));
+}
+
+/*
+ * A file update holds its wrlocks and its auth pin on the inode until the
+ * journal entry is safe.  Flush the log if that blocks others: requests
+ * waiting for one of the locks to finish a gather, or a freeze of the
+ * inode or its dirfrag.  Nothing else flushes for them before the next tick.
+ */
+bool Locker::_need_flush_file_update(CInode *in, const MutationRef& mut)
+{
+  if (in->is_freezing())
+    return true;
+  for (const auto& p : mut->locks) {
+    if (p.lock->is_unstable_and_locked() && p.lock->has_any_waiter())
+      return true;
+  }
   return false;
 }
 
@@ -3687,6 +3722,9 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
 	share_inode_max_size(in, cap);
       }
     }
+
+    if (!need_flush && in->is_auth() && (cap->wanted() & ~cap->pending()))
+      need_flush = _need_flush_held_caps(in, cap->wanted() & ~cap->pending());
 
     if (need_flush)
       mds->mdlog->flush();
@@ -4251,7 +4289,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 							      ack, client));
   if (need_flush && !*need_flush &&
       ((change_max && new_max) || // max INCREASE
-       _need_flush_mdlog(in, dirty)))
+       _need_flush_mdlog(in, dirty) ||
+       _need_flush_file_update(in, mut)))
     *need_flush = true;
 
   return true;
