@@ -11,6 +11,12 @@ trap 'rm -rf "$tmpdir"' EXIT
 
 pool_map=$(ceph osd pool ls detail -f json)
 
+# the commit records itself in the OSDMap
+if ! ceph osd dump -f json | jq -r .flags | grep -q stretch_zones; then
+    echo "the upgrade commit did not set the OSDMap flag stretch_zones"
+    exit 1
+fi
+
 # the objects of pool p as the setup workunit wrote them
 check_objects() {
     local p=$1 i
