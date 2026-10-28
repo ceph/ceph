@@ -8569,8 +8569,14 @@ void BlueStore::inject_bluefs_file(std::string_view dir, std::string_view name, 
 // fully committed to db.
 void BlueStore::debug_force_reshard(
   coll_t cid, ghobject_t oid,
-  BlueStore::ExtentMap::ReshardPlan& rp)
+  const std::vector<bluestore_onode_t::shard_info>& new_shard_info,
+  unsigned shard_index_begin,
+  unsigned shard_index_end,
+  uint32_t spanning_scan_begin,
+  uint32_t spanning_scan_end)
 {
+  bluestore::ExtentMap::ReshardPlan rp(
+    new_shard_info, shard_index_begin, shard_index_end, spanning_scan_begin, spanning_scan_end);
   OnodeRef o;
   CollectionRef c = _get_collection(cid);
   ceph_assert(c);
