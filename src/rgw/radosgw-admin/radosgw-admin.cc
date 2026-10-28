@@ -56,11 +56,7 @@ extern "C" {
 #include "radosgw-admin/sync_checkpoint.h"
 #endif
 #include "radosgw-admin/radosgw-admin.h"
-<<<<<<< HEAD
-=======
-#include "radosgw-admin/account.h"
 #include "radosgw-admin/user.h"
->>>>>>> 497e893a2a53 (rgw/radosgw-admin: extract user commands into a module)
 
 #include "rgw/async_utils.h"
 
@@ -6881,7 +6877,17 @@ int main(int argc, const char **argv)
     mutate_opts.access_key = access_key;
     mutate_opts.subuser = subuser;
     mutate_opts.yes_i_really_mean_it = yes_i_really_mean_it;
-    mutate_opts.generate_key = static_cast<int>(generate_key);
+    switch (generate_key) {
+    case OPTION_SET_TRUE:
+      mutate_opts.generate_key = true;
+      break;
+    case OPTION_SET_FALSE:
+      mutate_opts.generate_key = false;
+      break;
+    default:
+      mutate_opts.generate_key = std::nullopt;
+      break;
+    }
     ret = rgw_admin_user_mutate(dpp(), driver, formatter.get(), ruser,
                                 user_op, user, mutate_opts, err_msg);
     if (ret != 0) {
