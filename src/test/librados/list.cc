@@ -589,7 +589,13 @@ void SetUpMigrationTest(rados_t *cluster,
     const char *cmd[2] = { c.c_str(), 0 };
     char *outbuf, *outs;
     size_t outbuflen, outslen;
-    ASSERT_EQ(0, rados_mon_command(*cluster, cmd, 1, "", 0, &outbuf, &outbuflen, &outs, &outslen));
+    int r = rados_mon_command(*cluster, cmd, 1, "", 0, &outbuf, &outbuflen, &outs, &outslen);
+    if (r == -EPERM && std::string(outs, outslen).find("experimental") != std::string::npos) {
+      rados_ioctx_destroy(*src_ioctx);
+      ASSERT_EQ(0, destroy_one_pool(src_pool_name, cluster));
+      GTEST_SKIP() << "pool migration is not enabled";
+    }
+    ASSERT_EQ(0, r);
     ASSERT_EQ(0, rados_wait_for_latest_osdmap(*cluster));
   }
 
@@ -610,7 +616,10 @@ TEST_F(LibRadosList, PoolMigrationRadosLSBasic) {
 
   // --- SETUP ---
   // Pass addresses (&) of handles so the function can fill them using pointers
-  SetUpMigrationTest(&cluster, src_pool_name, tgt_pool_name, &src_ioctx, &tgt_ioctx);
+  ASSERT_NO_FATAL_FAILURE(SetUpMigrationTest(&cluster, src_pool_name, tgt_pool_name, &src_ioctx, &tgt_ioctx));
+  if (IsSkipped()) {
+    return;
+  }
 
   //Add object to the src pool
   {
@@ -679,7 +688,10 @@ TEST_F(LibRadosList, PoolMigrationRadosLSMultiple) {
 
   // --- SETUP ---
   // Pass addresses (&) of handles so the function can fill them using pointers
-  SetUpMigrationTest(&cluster, src_pool_name, tgt_pool_name, &src_ioctx, &tgt_ioctx);
+  ASSERT_NO_FATAL_FAILURE(SetUpMigrationTest(&cluster, src_pool_name, tgt_pool_name, &src_ioctx, &tgt_ioctx));
+  if (IsSkipped()) {
+    return;
+  }
 
   //Add objects to the src & tgt pools
   for (int i=0; i < 6; i++) {
