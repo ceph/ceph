@@ -58,6 +58,7 @@ class GrafanaService(CephadmService):
                                          'cert': oneline_cert,
                                          'key': oneline_key,
                                          'security_enabled': security_enabled,
+                                         'mgmt_gw_enabled': mgmt_gw_enabled,
                                          'loki_host': self.get_loki_host()})
 
     def generate_grafana_ini(self,
