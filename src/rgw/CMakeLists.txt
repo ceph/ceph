@@ -297,6 +297,7 @@ list(APPEND librgw_posix_srcs
 list(APPEND librgw_nsfs_srcs
   driver/nsfs/rgw_sal_nsfs.cc
   driver/posix/posixDB.cc
+  driver/posix/fs_notification.cc
   driver/nsfs/fs_strategy.cc
   driver/nsfs/mpu_strategy.cc
   driver/nsfs/xattr_strategy.cc

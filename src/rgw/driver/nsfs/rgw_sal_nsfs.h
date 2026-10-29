@@ -27,6 +27,7 @@
 #include "../posix/multipart_cache.h"
 #include "../posix/posixDB.h"
 #include "../posix/user_cache.h"
+#include "../posix/fs_notification.h"
 #include "../posix/qd2_pending.h"
 #include "../posix/posix_io_uring.h"
 #include "fs_strategy.h"
@@ -2053,50 +2054,6 @@ class UnmarkPasskey {
       const std::map<std::string, std::string>& params,
       std::map<std::string, std::string>* out);
   UnmarkPasskey() = default;
-};
-
-class NSFSNotification : public StoreNotification {
-protected:
-  NSFSDriver* driver;
-  rgw::sal::Bucket* bucket = nullptr;
-  std::string user_id;
-  std::string user_tenant;
-  std::string req_id;
-  rgw_pubsub_bucket_topics bucket_topics;
-  /* each topic a notification applies to, with the event type it
-   * matched, as the rados driver's reservation holds them */
-  std::vector<std::pair<rgw_pubsub_topic_filter, rgw::notify::EventType>> matched;
-  RGWObjTags* obj_tags_ptr = nullptr;
-  KeyValueMap x_meta_map;
-  /* the client's address, as the policy environment holds it;  empty
-   * for the driver's own events */
-  std::string source_ip;
-  friend class NSFSDriver;
-public:
- NSFSNotification(NSFSDriver* _driver,
-		   Object* _obj,
-		   Object* _src_obj,
-		   const rgw::notify::EventTypeList& _types)
-		   : StoreNotification(_obj, _src_obj, _types),
-		     driver(_driver) {}
- NSFSNotification(NSFSDriver* _driver,
-		   Object* _obj,
-		   Object* _src_obj,
-		   const rgw::notify::EventTypeList& _types,
-		   rgw::sal::Bucket* _bucket,
-		   std::string _user_id,
-		   std::string _user_tenant,
-		   std::string _req_id)
-		   : StoreNotification(_obj, _src_obj, _types),
-		     driver(_driver), bucket(_bucket),
-		     user_id(std::move(_user_id)),
-		     user_tenant(std::move(_user_tenant)),
-		     req_id(std::move(_req_id)) {}
- ~NSFSNotification() = default;
-
- virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override;
- virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-			   const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;
 };
 
 class NSFSUser : public StoreUser {
