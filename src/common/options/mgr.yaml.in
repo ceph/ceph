@@ -71,8 +71,8 @@ options:
   long_desc: Sets the maximum total bytes of messages queued in the mgr dispatch
     throttle. Overrides ms_dispatch_throttle_bytes for the mgr process. Should be
     set to at least the sum of all per-type byte throttles (mgr_osd_bytes +
-    mgr_mds_bytes + mgr_client_bytes) to avoid the dispatch queue becoming a
-    bottleneck before per-connection throttles engage.
+    mgr_mds_bytes + mgr_mon_bytes + mgr_client_bytes) to avoid the dispatch queue
+    becoming a bottleneck before per-connection throttles engage.
   default: 1_G
   services:
   - mgr
@@ -81,51 +81,204 @@ options:
 - name: mgr_client_bytes
   type: size
   level: dev
+  desc: Max bytes of client messages the Manager may read and buffer
+  long_desc: All client connections share this one limit. That includes the ceph CLI
+    and daemons that connect as clients, such as RGW. Before reading a message off
+    the network, a connection takes the message's size from this limit and gives the
+    bytes back once the Manager has finished with the message. When the limit is
+    reached, every client connection stops reading at its next message and retries
+    every ms_client_throttle_retry_time_interval until enough is given back, so
+    commands and client reports wait in the senders. On the active Manager, the
+    throttle-mgr_client_bytes perf counters then show val at or near max and
+    get_or_fail_fail rising. Raising it helps when bursts of messages fill it while
+    the Manager keeps up with its work, which shows as val falling back between
+    bursts. If val stays at or near max, the Manager itself is falling behind, and a
+    higher limit only holds more messages in memory. A single message larger than
+    the limit is still read. 0 means no limit. The value is read when a Manager
+    becomes active, so a change takes effect only after the active Manager restarts
+    or fails over, for example with 'ceph mgr fail'. Until then, the max perf
+    counter still shows the old limit.
   default: 128_M
   services:
   - mgr
+  see_also:
+  - mgr_client_messages
+  - mgr_dispatch_throttle_bytes
 - name: mgr_client_messages
   type: uint
   level: dev
+  desc: Max number of client messages the Manager may read and buffer
+  long_desc: All client connections share this one limit. That includes the ceph CLI
+    and daemons that connect as clients, such as RGW. Before reading a message off
+    the network, a connection takes one from this limit and gives it back once the
+    Manager has finished with the message. When the limit is reached, every client
+    connection stops reading at its next message and retries every
+    ms_client_throttle_retry_time_interval until enough is given back, so commands
+    and client reports wait in the senders. On the active Manager, the
+    throttle-mgr_client_messages perf counters then show val at or near max and
+    get_or_fail_fail rising. Raising it helps when many small messages arrive in
+    bursts while the Manager keeps up with its work, which shows as val falling back
+    between bursts. If val stays at or near max, the Manager itself is falling
+    behind, and a higher limit only holds more messages in memory. 0 means no limit.
+    The value is read when a Manager becomes active, so a change takes effect only
+    after the active Manager restarts or fails over, for example with 'ceph mgr
+    fail'. Until then, the max perf counter still shows the old limit.
   default: 512
   services:
   - mgr
+  see_also:
+  - mgr_client_bytes
 - name: mgr_osd_bytes
   type: size
   level: dev
+  desc: Max bytes of OSD messages the Manager may read and buffer
+  long_desc: All OSD connections share this one limit. OSDs send their reports and
+    PG stats over them. Before reading a message off the network, a connection takes
+    the message's size from this limit and gives the bytes back once the Manager has
+    finished with the message. When the limit is reached, every OSD connection stops
+    reading at its next message and retries every
+    ms_client_throttle_retry_time_interval until enough is given back, so OSD
+    reports and PG stats reach the Manager late. On the active Manager, the
+    throttle-mgr_osd_bytes perf counters then show val at or near max and
+    get_or_fail_fail rising. Raising it helps when bursts of messages fill it while
+    the Manager keeps up with its work, which shows as val falling back between
+    bursts. If val stays at or near max, the Manager itself is falling behind, and a
+    higher limit only holds more messages in memory. A single message larger than
+    the limit is still read. 0 means no limit. The value is read when a Manager
+    becomes active, so a change takes effect only after the active Manager restarts
+    or fails over, for example with 'ceph mgr fail'. Until then, the max perf
+    counter still shows the old limit.
   default: 512_M
   services:
   - mgr
+  see_also:
+  - mgr_osd_messages
+  - mgr_dispatch_throttle_bytes
 - name: mgr_osd_messages
   type: uint
   level: dev
+  desc: Max number of OSD messages the Manager may read and buffer
+  long_desc: All OSD connections share this one limit. OSDs send their reports and
+    PG stats over them. Before reading a message off the network, a connection takes
+    one from this limit and gives it back once the Manager has finished with the
+    message. When the limit is reached, every OSD connection stops reading at its
+    next message and retries every ms_client_throttle_retry_time_interval until
+    enough is given back, so OSD reports and PG stats reach the Manager late. On the
+    active Manager, the throttle-mgr_osd_messages perf counters then show val at or
+    near max and get_or_fail_fail rising. Raising it helps when many small messages
+    arrive in bursts while the Manager keeps up with its work, which shows as val
+    falling back between bursts. If val stays at or near max, the Manager itself is
+    falling behind, and a higher limit only holds more messages in memory. 0 means
+    no limit. The value is read when a Manager becomes active, so a change takes
+    effect only after the active Manager restarts or fails over, for example with
+    'ceph mgr fail'. Until then, the max perf counter still shows the old limit.
   default: 8_K
   services:
   - mgr
+  see_also:
+  - mgr_osd_bytes
+  - mgr_stats_period_autotune_queue_threshold
 - name: mgr_mds_bytes
   type: size
   level: dev
+  desc: Max bytes of MDS messages the Manager may read and buffer
+  long_desc: All MDS connections share this one limit. MDS daemons send their
+    reports over them. Before reading a message off the network, a connection takes
+    the message's size from this limit and gives the bytes back once the Manager has
+    finished with the message. When the limit is reached, every MDS connection stops
+    reading at its next message and retries every
+    ms_client_throttle_retry_time_interval until enough is given back, so MDS
+    reports reach the Manager late. On the active Manager, the
+    throttle-mgr_mds_bytes perf counters then show val at or near max and
+    get_or_fail_fail rising. Raising it helps when bursts of messages fill it while
+    the Manager keeps up with its work, which shows as val falling back between
+    bursts. If val stays at or near max, the Manager itself is falling behind, and a
+    higher limit only holds more messages in memory. A single message larger than
+    the limit is still read. 0 means no limit. The value is read when a Manager
+    becomes active, so a change takes effect only after the active Manager restarts
+    or fails over, for example with 'ceph mgr fail'. Until then, the max perf
+    counter still shows the old limit.
   default: 128_M
   services:
   - mgr
+  see_also:
+  - mgr_mds_messages
+  - mgr_dispatch_throttle_bytes
 - name: mgr_mds_messages
   type: uint
   level: dev
+  desc: Max number of MDS messages the Manager may read and buffer
+  long_desc: All MDS connections share this one limit. MDS daemons send their
+    reports over them. Before reading a message off the network, a connection takes
+    one from this limit and gives it back once the Manager has finished with the
+    message. When the limit is reached, every MDS connection stops reading at its
+    next message and retries every ms_client_throttle_retry_time_interval until
+    enough is given back, so MDS reports reach the Manager late. On the active
+    Manager, the throttle-mgr_mds_messages perf counters then show val at or near
+    max and get_or_fail_fail rising. Raising it helps when many small messages
+    arrive in bursts while the Manager keeps up with its work, which shows as val
+    falling back between bursts. If val stays at or near max, the Manager itself is
+    falling behind, and a higher limit only holds more messages in memory. 0 means
+    no limit. The value is read when a Manager becomes active, so a change takes
+    effect only after the active Manager restarts or fails over, for example with
+    'ceph mgr fail'. Until then, the max perf counter still shows the old limit.
   default: 128
   services:
   - mgr
+  see_also:
+  - mgr_mds_bytes
+  - mgr_stats_period_autotune_queue_threshold
 - name: mgr_mon_bytes
   type: size
   level: dev
+  desc: Max bytes of Monitor messages the Manager may read and buffer
+  long_desc: All Monitor connections share this one limit. Monitors send their
+    reports over them and forward Manager commands that clients sent to a Monitor.
+    Before reading a message off the network, a connection takes the message's size
+    from this limit and gives the bytes back once the Manager has finished with the
+    message. When the limit is reached, every Monitor connection stops reading at
+    its next message and retries every ms_client_throttle_retry_time_interval until
+    enough is given back, so Monitor reports and forwarded commands reach the
+    Manager late. On the active Manager, the throttle-mgr_mon_bytes perf counters
+    then show val at or near max and get_or_fail_fail rising. Raising it helps when
+    bursts of messages fill it while the Manager keeps up with its work, which shows
+    as val falling back between bursts. If val stays at or near max, the Manager
+    itself is falling behind, and a higher limit only holds more messages in memory.
+    A single message larger than the limit is still read. 0 means no limit. The
+    value is read when a Manager becomes active, so a change takes effect only after
+    the active Manager restarts or fails over, for example with 'ceph mgr fail'.
+    Until then, the max perf counter still shows the old limit.
   default: 128_M
   services:
   - mgr
+  see_also:
+  - mgr_mon_messages
+  - mgr_dispatch_throttle_bytes
 - name: mgr_mon_messages
   type: uint
   level: dev
+  desc: Max number of Monitor messages the Manager may read and buffer
+  long_desc: All Monitor connections share this one limit. Monitors send their
+    reports over them and forward Manager commands that clients sent to a Monitor.
+    Before reading a message off the network, a connection takes one from this limit
+    and gives it back once the Manager has finished with the message. When the limit
+    is reached, every Monitor connection stops reading at its next message and
+    retries every ms_client_throttle_retry_time_interval until enough is given back,
+    so Monitor reports and forwarded commands reach the Manager late. On the active
+    Manager, the throttle-mgr_mon_messages perf counters then show val at or near
+    max and get_or_fail_fail rising. Raising it helps when many small messages
+    arrive in bursts while the Manager keeps up with its work, which shows as val
+    falling back between bursts. If val stays at or near max, the Manager itself is
+    falling behind, and a higher limit only holds more messages in memory. 0 means
+    no limit. The value is read when a Manager becomes active, so a change takes
+    effect only after the active Manager restarts or fails over, for example with
+    'ceph mgr fail'. Until then, the max perf counter still shows the old limit.
   default: 128
   services:
   - mgr
+  see_also:
+  - mgr_mon_bytes
+  - mgr_stats_period_autotune_queue_threshold
 - name: mgr_service_beacon_grace
   type: float
   level: advanced
