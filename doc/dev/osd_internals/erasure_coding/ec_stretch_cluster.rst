@@ -2957,7 +2957,9 @@ first-epoch steps and from the pools they leave pending:
 
    ``min_size`` is at least 1 and at most ``replica``. Other stretch pools keep one zone and their
    ``min_size``: individual stretch pools, and pools of global stretch mode with an odd ``size``,
-   another bucket target or another placement.
+   another bucket target or another placement. ``STRETCH_MODE_POOL_NOT_CONVERTED`` names the
+   pools of global stretch mode that keep one zone, before the commit, while they can still be
+   changed, and after it, as ``disable_stretch_mode`` leaves them stretched.
 3. Forces an op resend on every stretch pool, setting all three resend epochs, which the kernel
    client needs. The peering rules change for every stretch pool, so its PGs start a new interval
    that clients cannot see, and replicas drop the reads that clients sent before it.
