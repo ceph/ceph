@@ -5557,6 +5557,13 @@ void MDCache::rejoin_gather_finish()
   ceph_assert(mds->is_rejoin());
   ceph_assert(rejoin_ack_gather.count(mds->get_nodeid()));
 
+  // mds_debug_rejoin_ack_delay already deferred our acks; the queued
+  // event sends them.
+  if (rejoin_ack_delay_event) {
+    dout(10) << " rejoin acks already deferred" << dendl;
+    return;
+  }
+
   if (open_undef_inodes_dirfrags())
     return;
 
@@ -5566,8 +5573,30 @@ void MDCache::rejoin_gather_finish()
   choose_lock_states_and_reconnect_caps();
 
   identify_files_to_recover();
+
+  // Test-only hook (tracker 80407): defer sending our rejoin acks so a
+  // surviving peer has time to trim and send a cache expire while we are
+  // still processing expires.  We keep dispatching messages during the
+  // wait, so the race window is widened, not merely slept through.
+  auto ack_delay = g_conf().get_val<double>("mds_debug_rejoin_ack_delay");
+  if (ack_delay > 0) {
+    dout(1) << "rejoin_gather_finish: deferring rejoin_send_acks by "
+	    << ack_delay << "s (mds_debug_rejoin_ack_delay)" << dendl;
+    rejoin_ack_delay_event = mds->timer.add_event_after(ack_delay,
+      new LambdaContext([this](int) {
+        rejoin_ack_delay_event = nullptr;
+        rejoin_send_acks_and_finish();
+      }));
+    return;
+  }
+
+  rejoin_send_acks_and_finish();
+}
+
+void MDCache::rejoin_send_acks_and_finish()
+{
   rejoin_send_acks();
-  
+
   // signal completion of fetches, rejoin_gather_finish, etc.
   rejoin_ack_gather.erase(mds->get_nodeid());
 
