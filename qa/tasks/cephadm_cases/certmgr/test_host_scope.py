@@ -94,3 +94,30 @@ class TestCertMgrHostScope(GrafanaTestCase):
             self.rm_service('grafana')
             for host in hosts:
                 self.rm_cert_key('grafana_ssl_cert', host=host)
+
+    def test_grafana_reference_separate_cert_and_key_set(self) -> None:
+        """A per-host reference certificate provisioned with 'cert set' and
+        'key set' is served, and both the certificate and the key set by the
+        user are still in the store once grafana has been deployed (deploying
+        reconciles the service's certificates)."""
+        host = self.host_names[0]
+        leaf = self.leaf(f'grafana-sep-{host}', ips=[self.hosts[host]], dns=['grafana_servers'])
+        try:
+            self.ceph('orch', 'certmgr', 'cert', 'set', 'grafana_ssl_cert',
+                      '--hostname', host, '-i', leaf['chain'])
+            self.ceph('orch', 'certmgr', 'key', 'set', 'grafana_ssl_key',
+                      '--hostname', host, '-i', leaf['key'])
+            self.apply('grafana', self.grafana_spec([host], certificate_source='reference'))
+            expected = leaf['fingerprint']
+            self.wait_served(host, self.GRAFANA_PORT, lambda r: r['fingerprint'] == expected,
+                             'grafana reference certificate')
+            self.assertEqual(self.fingerprint_of(self.get_cert('grafana_ssl_cert', host=host)),
+                             expected, 'the certificate set with "cert set" was not kept')
+            self.assertEqual(self.get_key('grafana_ssl_key', host=host),
+                             self.read(leaf['key']).strip(),
+                             'the key set with "key set" was not kept')
+            self.assertIn('All certificates are valid',
+                          '\n'.join(self.ceph_json('orch', 'certmgr', 'cert', 'check')))
+        finally:
+            self.rm_service('grafana')
+            self.rm_cert_key('grafana_ssl_cert', host=host)
