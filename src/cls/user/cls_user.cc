@@ -336,6 +336,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return 0;
   }
 
+  dec_sc_stats(header.storage_class_stats, entry);
   dec_header_stats(&header.stats, entry);
 
   CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.stats.total_bytes, (long long)header.stats.total_entries);

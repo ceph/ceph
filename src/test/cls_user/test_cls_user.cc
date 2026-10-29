@@ -678,3 +678,34 @@ TEST_F(ClsUserStorageClass, ResetStatsThreeCalls) {
   EXPECT_EQ((*header.storage_class_stats)["HDD"].total_entries, 1250u);
   EXPECT_EQ((*header.storage_class_stats)["HDD"].total_bytes, 1250u * 1024u);
 }
+
+TEST_F(ClsUserStorageClass, RemoveBucketDecrementsSc) {
+  // e.g. radosgw-admin bucket unlink of a bucket with objects
+  std::string oid = "user.remove-bucket-sc";
+  cls_user_header header;
+  header.storage_class_stats.emplace();
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, header));
+
+  auto b1 = sc_bucket_entry("bucket1", "COLD", 3, 3072);
+  auto b2 = sc_bucket_entry("bucket2", "STANDARD", 2, 2048);
+  set_bucket(ioctx, oid, b1, true);
+  set_bucket(ioctx, oid, b2, true);
+
+  librados::ObjectWriteOperation op;
+  cls_user_remove_bucket(op, b1.bucket);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 2u);
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ((*header.storage_class_stats)["COLD"].total_entries, 0u);
+  EXPECT_EQ((*header.storage_class_stats)["COLD"].total_bytes, 0u);
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_entries, 2u);
+
+  // link and sync it again: no double counting
+  set_bucket(ioctx, oid, b1, true);
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 5u);
+  EXPECT_EQ((*header.storage_class_stats)["COLD"].total_entries, 3u);
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_entries, 2u);
+}
