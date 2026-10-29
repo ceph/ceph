@@ -350,10 +350,12 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
     * the pending recovery operations.
     */
    struct RecoveryHandle {
+     /// Data read to push an object is read once; do not let it fill the
+     /// store's buffer cache.  Cleared where a client is waiting for the object.
      bool cache_dont_need;
      std::map<pg_shard_t, std::vector<std::pair<hobject_t, eversion_t> > > deletes;
 
-     RecoveryHandle(): cache_dont_need(false) {}
+     RecoveryHandle(): cache_dont_need(true) {}
      virtual ~RecoveryHandle() {}
    };
 
