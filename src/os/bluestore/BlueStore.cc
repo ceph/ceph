@@ -1740,8 +1740,14 @@ void *BlueStore::MempoolThread::entry()
       if (pcm != nullptr) {
         pcm->shift_bins();
       } else {
-        // onode cache admission needs the bins to move even without autotune
+        // cache admission needs the bins to move even without autotune
         meta_cache->shift_bins();
+        if (binned_kv_cache != nullptr) {
+          binned_kv_cache->shift_bins();
+        }
+        if (binned_kv_onode_cache != nullptr) {
+          binned_kv_onode_cache->shift_bins();
+        }
       }
       next_bin_rotation = ceph_clock_now();
       next_bin_rotation += age_bin_interval;

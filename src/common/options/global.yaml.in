@@ -3674,6 +3674,21 @@ options:
     https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters for more
     information.'
   default: 20
+- name: rocksdb_cache_probation_ratio
+  type: float
+  level: advanced
+  desc: Share of a binned_lru RocksDB block cache that holds blocks used only once.
+    A new block sits in this probation part and moves to the main part only
+    when it is used again in a later cache age bin; the memory tuner does not
+    grow the cache for blocks still on probation. One pass over many keys (a
+    collection listing, an omap scan) then recycles the probation part instead
+    of filling the cache. 0 disables it. Read when the daemon starts.
+  default: 0.1
+  min: 0
+  max: 1
+  see_also:
+  - rocksdb_cache_type
+  - bluestore_cache_age_bin_interval
 - name: rocksdb_cache_index_and_filter_blocks
   type: bool
   level: dev
