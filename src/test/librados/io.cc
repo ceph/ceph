@@ -523,5 +523,61 @@ TEST_P(LibRadosIoEC, XattrRollbackOnFailedOp) {
   check_xattr_rollback_on_failed_op(ioctx);
 }
 
+static int cmp_xattr(rados_ioctx_t ioctx, const char *oid, const char *name,
+                     uint8_t cmp_op, const char *value, size_t value_len)
+{
+  rados_read_op_t op = rados_create_read_op();
+  rados_read_op_cmpxattr(op, name, cmp_op, value, value_len);
+  int r = rados_read_op_operate(op, ioctx, oid, 0);
+  rados_release_read_op(op);
+  return r;
+}
+
+static void check_cmpxattr(rados_ioctx_t ioctx)
+{
+  const char *oid = "cmpxattr";
+  char data[] = "ceph";
+  char v1[] = "value1";
+  char v2[] = "value2";
+
+  rados_write_op_t create = rados_create_write_op();
+  rados_write_op_write_full(create, data, sizeof(data));
+  rados_write_op_setxattr(create, "key", v1, sizeof(v1));
+  int r = rados_write_op_operate(create, ioctx, oid, NULL, 0);
+  rados_release_write_op(create);
+  ASSERT_EQ(0, r);
+
+  // a true comparison returns 1 on a read op
+  ASSERT_EQ(1, cmp_xattr(ioctx, oid, "key", LIBRADOS_CMPXATTR_OP_EQ,
+                         v1, sizeof(v1)));
+  ASSERT_EQ(-ECANCELED, cmp_xattr(ioctx, oid, "key", LIBRADOS_CMPXATTR_OP_EQ,
+                                  v2, sizeof(v2)));
+  ASSERT_EQ(1, cmp_xattr(ioctx, oid, "key", LIBRADOS_CMPXATTR_OP_NE,
+                         v2, sizeof(v2)));
+  ASSERT_EQ(-ECANCELED, cmp_xattr(ioctx, oid, "no_such_key",
+                                  LIBRADOS_CMPXATTR_OP_EQ, v1, sizeof(v1)));
+
+  // guarded write, as RGW does with its id tag
+  rados_write_op_t guarded = rados_create_write_op();
+  rados_write_op_cmpxattr(guarded, "key", LIBRADOS_CMPXATTR_OP_EQ,
+                          v1, sizeof(v1));
+  rados_write_op_setxattr(guarded, "key", v2, sizeof(v2));
+  r = rados_write_op_operate(guarded, ioctx, oid, NULL, 0);
+  rados_release_write_op(guarded);
+  ASSERT_EQ(0, r);
+
+  char buf[128];
+  ASSERT_EQ((int)sizeof(v2), rados_getxattr(ioctx, oid, "key", buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(v2, buf, sizeof(v2)));
+}
+
+TEST_P(LibRadosIo, CmpXattr) {
+  check_cmpxattr(ioctx);
+}
+
+TEST_P(LibRadosIoEC, CmpXattr) {
+  check_cmpxattr(ioctx);
+}
+
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosIo);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosIoEC);
