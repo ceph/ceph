@@ -368,6 +368,8 @@
 * Monitoring: Added ``NVMeoFHostKeepAliveTimeout`` Prometheus alert that fires
   when an NVMe-oF host keepalive times out.
 
+* Monitoring: Added ``CephOSDFreeSpaceFragmentation`` Prometheus alert that fires
+  when the ``BLUESTORE_FREE_FRAGMENTATION`` health check is active (warning severity).
 * Monitoring: Certificate management health checks now generate Prometheus
   alerts and dashboard warnings for certificate expiration and errors.
 

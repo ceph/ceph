@@ -268,6 +268,17 @@
           },
         },
         {
+          alert: 'CephOSDFreeSpaceFragmentation',
+          'for': '1m',
+          expr: 'ceph_health_detail{name="BLUESTORE_FREE_FRAGMENTATION"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#bluestore-fragmentation',
+            summary: 'BlueStore free space fragmentation is high%(cluster)s' % $.MultiClusterSummary(),
+            description: '{{ $labels.message }}. High free-space fragmentation can degrade write performance.',
+          },
+        },
+        {
           alert: 'CephPGImbalance',
           'for': '5m',
           expr: |||

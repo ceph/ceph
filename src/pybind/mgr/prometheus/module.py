@@ -233,6 +233,12 @@ HEALTH_CHECKS = [
 ]
 
 HEALTHCHECK_DETAIL = ('name', 'severity', 'message')
+BLUESTORE_FREE_FRAGMENTATION = 'BLUESTORE_FREE_FRAGMENTATION'
+HEALTH_CHECKS_WITH_MESSAGE = (
+    'CEPHADM_CERT_ERROR',
+    'CEPHADM_CERT_WARNING',
+    BLUESTORE_FREE_FRAGMENTATION,
+)
 
 
 class Severity(enum.Enum):
@@ -1173,10 +1179,31 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.log.info('Config changed, signaling serve loop to restart engine')
         self.config_change_event.set()
 
-    def _process_cert_health_detail(self, alert_id: str, health_data: dict) -> None:
-        """Process certificate health check details and set metrics."""
+    def _process_health_checks_with_message(self, health_check: str, health_data: dict) -> None:
+        """Process health checks that expose message details."""
         severity = health_data.get('severity', 'unknown')
-        detail_messages = health_data.get('detail', [])
+        if health_check in ('CEPHADM_CERT_ERROR', 'CEPHADM_CERT_WARNING'):
+            detail_messages = health_data.get('detail', [])
+        else:
+            summary = health_data.get('summary', {})
+            if isinstance(summary, dict):
+                msg = summary.get('message', '')
+            elif isinstance(summary, str):
+                msg = summary
+            else:
+                msg = ''
+
+            if health_check == BLUESTORE_FREE_FRAGMENTATION and msg:
+                osd_details = [
+                    entry['message'].strip()
+                    for entry in health_data.get('detail', [])
+                    if entry.get('message', '').strip()
+                ]
+                if osd_details:
+                    msg = f"{msg}. Affected OSDs: {', '.join(osd_details)}"
+
+            detail_messages = [{'message': msg}] if msg else []
+
         if not detail_messages:
             return
 
@@ -1189,13 +1216,13 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.metrics['health_detail'].set(
                     1,
                     (
-                        alert_id,
+                        health_check,
                         str(severity),
                         str(message)
                     )
                 )
             except Exception as e:
-                self.log.error(f"Failed to process {alert_id} message '{message}': {e}")
+                self.log.error(f"Failed to process {health_check} message '{message}': {e}")
 
     @profile_method()
     def get_health(self) -> None:
@@ -1246,15 +1273,15 @@ class Module(MgrModule, OrchestratorClientMixin):
                     # health check is not active, so give it a default of 0
                     self.metrics[path].set(0)
 
-        for alert_id in ('CEPHADM_CERT_ERROR', 'CEPHADM_CERT_WARNING'):
-            if alert_id in active_names:
-                self._process_cert_health_detail(alert_id, active_healthchecks[alert_id])
+        for health_check in HEALTH_CHECKS_WITH_MESSAGE:
+            if health_check in active_names:
+                self._process_health_checks_with_message(health_check, active_healthchecks[health_check])
 
         self.health_history.check(health)
 
         for name, info in self.health_history.healthcheck.items():
-            # Skip CEPHADM_CERT_ERROR and CEPHADM_CERT_WARNING as they're handled specially above with message details
-            if name in ('CEPHADM_CERT_ERROR', 'CEPHADM_CERT_WARNING'):
+            # These health checks are handled separately to expose message details.
+            if name in HEALTH_CHECKS_WITH_MESSAGE:
                 continue
             v = 1 if info.active else 0
             self.metrics['health_detail'].set(

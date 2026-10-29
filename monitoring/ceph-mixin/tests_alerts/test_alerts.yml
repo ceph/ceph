@@ -3554,3 +3554,31 @@ tests:
         exp_annotations:
           summary: Ceph certificate warning detected on cluster mycluster
           description: "Certificate expires soon. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue."
+
+# BlueStore Free Space Fragmentation Alert
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="BLUESTORE_FREE_FRAGMENTATION", cluster="mycluster", message="3 OSD(s) experiencing high free space fragmentation of BlueStore"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="BLUESTORE_FREE_FRAGMENTATION"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="BLUESTORE_FREE_FRAGMENTATION", cluster="mycluster", message="3 OSD(s) experiencing high free space fragmentation of BlueStore"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDFreeSpaceFragmentation
+    - eval_time: 5m
+      alertname: CephOSDFreeSpaceFragmentation
+      exp_alerts:
+      - exp_labels:
+          name: BLUESTORE_FREE_FRAGMENTATION
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+          message: 3 OSD(s) experiencing high free space fragmentation of BlueStore
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#bluestore-fragmentation
+          summary: BlueStore free space fragmentation is high on cluster mycluster
+          description: "3 OSD(s) experiencing high free space fragmentation of BlueStore. High free-space fragmentation can degrade write performance."

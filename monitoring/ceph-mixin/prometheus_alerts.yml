@@ -233,6 +233,16 @@ groups:
         labels:
           severity: "warning"
           type: "ceph_default"
+      - alert: "CephOSDFreeSpaceFragmentation"
+        annotations:
+          description: "{{ $labels.message }}. High free-space fragmentation can degrade write performance."
+          documentation: "https://docs.ceph.com/en/latest/rados/operations/health-checks#bluestore-fragmentation"
+          summary: "BlueStore free space fragmentation is high on cluster {{ $labels.cluster }}"
+        expr: "ceph_health_detail{name=\"BLUESTORE_FREE_FRAGMENTATION\"} == 1"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
       - alert: "CephPGImbalance"
         annotations:
           description: "OSD {{ $labels.ceph_daemon }} on {{ $labels.hostname }} deviates by more than 30% from average PG count in the device class {{ $labels.device_class }}."
