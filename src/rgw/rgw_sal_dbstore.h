@@ -992,7 +992,6 @@ public:
       virtual int meta_remove(const DoutPrefixProvider *dpp, std::string& metadata_key, optional_yield y) override;
 
       virtual const RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }
-      virtual std::string get_host_id() { return ""; }
 
       std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) override;
       virtual std::unique_ptr<RGWRole> get_role(std::string name,
