@@ -7472,7 +7472,9 @@ int NSFSNotification::publish_commit(const DoutPrefixProvider* dpp,
       event.bucket_ownerIdentity = to_string(bucket->get_owner());
       event.bucket_id = bucket->get_bucket_id();
       rgw::ARN bucket_arn(bucket->get_key());
-      bucket_arn.region = region;
+      if (driver->ctx()->_conf.get_val<bool>("rgw_notification_bucket_arn_region")) {
+	bucket_arn.region = region;
+      }
       event.bucket_arn = to_string(bucket_arn);
     }
     if (obj) {
