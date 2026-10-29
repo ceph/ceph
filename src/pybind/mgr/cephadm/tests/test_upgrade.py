@@ -789,6 +789,45 @@ def test_enough_mds_for_ok_to_stop(get, get_daemons_by_service, cephadm_module: 
         DaemonDescription(daemon_type='mds', daemon_id='myfs.test.host1.gfknd', service_name='mds.myfs.test'))
 
 
+def _mds_need_upgrade_entries() -> List[Tuple[DaemonDescription, bool]]:
+    return [
+        (DaemonDescription(
+            daemon_type='mds',
+            daemon_id=f'cephfs.host{i}.abcdef',
+            hostname=f'host{i}',
+            container_image_id='old_digest',
+            service_name='mds.cephfs',
+        ), False)
+        for i in range(1, 4)
+    ]
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch.object(CephadmUpgrade, '_enough_mds_for_ok_to_stop', return_value=True)
+@mock.patch.object(CephadmUpgrade, '_wait_for_ok_to_stop', return_value=True)
+def test_to_upgrade_batches_mds_when_fail_fs(
+        _wait_for_ok_to_stop: mock.MagicMock,
+        _enough_mds_for_ok_to_stop: mock.MagicMock,
+        cephadm_module: CephadmOrchestrator):
+    # https://tracker.ceph.com/issues/78304
+    need_upgrade = _mds_need_upgrade_entries()
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'pid', fail_fs=True)
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 3
+    assert [d[0].name() for d in to_upgrade] == [d[0].name() for d in need_upgrade]
+    _wait_for_ok_to_stop.assert_not_called()
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'pid', fail_fs=False)
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 1
+    assert to_upgrade[0][0].name() == need_upgrade[0][0].name()
+
+
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
                          [
                              # several candidate versions (from different major versions)
