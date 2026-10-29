@@ -1,11 +1,13 @@
 import json
 import pytest
+import errno
 from unittest.mock import MagicMock, patch
 from typing import Dict, List
 from ceph.utils import datetime_now
 
 from cephadm.services.nvmeof import NvmeofService, NVMEOF_CLIENT_CERT_LABEL
 from cephadm.module import CephadmOrchestrator
+from orchestrator import DaemonDescriptionStatus
 from cephadm import utils
 from ceph.deployment.service_spec import NvmeofServiceSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
@@ -966,6 +968,523 @@ timeout = 1.0
         )
 
         assert step.action is utils.Action.REDEPLOY
+
+    def test_ok_to_stop_allowed(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr,
+            'cache',
+            create=True,
+        ) as cache, patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(0, '{"result": true}', ''),
+        ):
+            cache.get_daemons_by_type.return_value = [daemon]
+
+            result = self.nvmeof_service.ok_to_stop(
+                [daemon.daemon_id]
+            )
+
+        assert result.retval == 0
+
+    def test_check_and_disable_gateway_denied(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(0, '{"result": false}', ''),
+        ):
+            result, gateway_disabled = (
+                self.nvmeof_service.check_and_disable_gateway(
+                    daemon
+                )
+            )
+
+        assert result.retval == -errno.EBUSY
+        assert gateway_disabled is False
+
+    def test_check_and_disable_gateway_enoent_is_safe(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(-errno.ENOENT, '', 'not found'),
+        ):
+            result, gateway_disabled = (
+                self.nvmeof_service.check_and_disable_gateway(
+                    daemon
+                )
+            )
+
+        assert result.retval == 0
+        assert gateway_disabled is False
+
+    def test_enable_gateway(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(0, '', ''),
+        ) as mon_command:
+            result = self.nvmeof_service.enable_gateway(
+                daemon
+            )
+
+        assert result.retval == 0
+
+        mon_command.assert_called_once_with({
+            'prefix': 'nvme-gw enable',
+            'id': self.nvmeof_service._gateway_id(daemon),
+            'pool': 'testpool',
+            'group': 'testgroup',
+        })
+
+    def test_enable_gateway_failure(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(
+                -errno.EIO,
+                '',
+                'failed to enable gateway',
+            ),
+        ):
+            result = self.nvmeof_service.enable_gateway(
+                daemon
+            )
+
+        assert result.retval == -errno.EIO
+        assert result.stderr == 'failed to enable gateway'
+
+    def test_ok_to_redeploy_running_gateway(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+        daemon.status = DaemonDescriptionStatus.running
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(0, '{"result": true}', ''),
+        ):
+            result, group, gateway_disabled = (
+                self.nvmeof_service.ok_to_redeploy(
+                    daemon,
+                    set(),
+                )
+            )
+
+        assert result.retval == 0
+        assert group == ('testpool', 'testgroup')
+        assert gateway_disabled is True
+
+    def test_ok_to_redeploy_force_bypasses_mon(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+        daemon.status = DaemonDescriptionStatus.running
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+        ) as mon_command:
+            result, group, gateway_disabled = (
+                self.nvmeof_service.ok_to_redeploy(
+                    daemon,
+                    set(),
+                    force=True,
+                )
+            )
+
+        assert result.retval == 0
+        assert group == ('testpool', 'testgroup')
+        assert gateway_disabled is False
+        mon_command.assert_not_called()
+
+    def test_ok_to_redeploy_down_gateway_bypasses_mon(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+        daemon.status = DaemonDescriptionStatus.error
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+        ) as mon_command:
+            result, group, gateway_disabled = (
+                self.nvmeof_service.ok_to_redeploy(
+                    daemon,
+                    set(),
+                )
+            )
+
+        assert result.retval == 0
+        assert group == ('testpool', 'testgroup')
+        assert gateway_disabled is False
+        mon_command.assert_not_called()
+
+    def test_ok_to_redeploy_same_group_already_redeployed(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host2.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+        daemon.status = DaemonDescriptionStatus.running
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+        ) as mon_command:
+            result, group, gateway_disabled = (
+                self.nvmeof_service.ok_to_redeploy(
+                    daemon,
+                    {('testpool', 'testgroup')},
+                )
+            )
+
+        assert result.retval == -errno.EBUSY
+        assert group == ('testpool', 'testgroup')
+        assert gateway_disabled is False
+        mon_command.assert_not_called()
+
+    def test_ok_to_stop_denied(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr,
+            'cache',
+            create=True,
+        ) as cache, patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(0, '{"result": false}', ''),
+        ):
+            cache.get_daemons_by_type.return_value = [daemon]
+
+            result = self.nvmeof_service.ok_to_stop(
+                [daemon.daemon_id]
+            )
+
+        assert result.retval == -errno.EBUSY
+
+    def test_ok_to_stop_missing_daemon(self):
+        with patch.object(
+            self.mgr,
+            'cache',
+            create=True,
+        ) as cache, patch.object(
+            self.mgr,
+            'mon_command',
+        ) as mon_command:
+            cache.get_daemons_by_type.return_value = []
+
+            result = self.nvmeof_service.ok_to_stop(
+                ['missing-daemon']
+            )
+
+        assert result.retval == -errno.EINVAL
+        mon_command.assert_not_called()
+
+    def test_ok_to_stop_missing_spec(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        with patch.object(
+            self.mgr,
+            'cache',
+            create=True,
+        ) as cache, patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=None,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+        ) as mon_command:
+            cache.get_daemons_by_type.return_value = [daemon]
+
+            result = self.nvmeof_service.ok_to_stop(
+                [daemon.daemon_id]
+            )
+
+        assert result.retval == -errno.EINVAL
+        mon_command.assert_not_called()
+
+    def test_ok_to_stop_mon_error(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr,
+            'cache',
+            create=True,
+        ) as cache, patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(
+                -errno.EBUSY,
+                '',
+                'Device or resource busy',
+            ),
+        ):
+            cache.get_daemons_by_type.return_value = [daemon]
+
+            result = self.nvmeof_service.ok_to_stop(
+                [daemon.daemon_id]
+            )
+
+        assert result.retval == -errno.EBUSY
+        assert result.stderr == 'Device or resource busy'
+
+    def test_ok_to_stop_does_not_disable_gateway(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr,
+            'cache',
+            create=True,
+        ) as cache, patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(0, '{"result": true}', ''),
+        ) as mon_command:
+            cache.get_daemons_by_type.return_value = [daemon]
+
+            result = self.nvmeof_service.ok_to_stop(
+                [daemon.daemon_id]
+            )
+
+        assert result.retval == 0
+
+        mon_command.assert_called_once_with({
+            'prefix': 'nvme-gw ok-to-stop',
+            'pool': 'testpool',
+            'group': 'testgroup',
+            'format': 'json',
+        })
+
+    def test_check_and_disable_gateway_allowed(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(0, '{"result": true}', ''),
+        ) as mon_command:
+            result, gateway_disabled = (
+                self.nvmeof_service.check_and_disable_gateway(
+                    daemon
+                )
+            )
+
+        assert result.retval == 0
+        assert gateway_disabled is True
+
+        mon_command.assert_called_once_with({
+            'prefix': 'nvme-gw ok-to-stop',
+            'pool': 'testpool',
+            'group': 'testgroup',
+            'format': 'json',
+            'gw_id': self.nvmeof_service._gateway_id(daemon),
+        })
+
+    @pytest.mark.parametrize(
+        'response',
+        [
+            'not-json',
+            '[]',
+            '{}',
+            '{"result": "false"}',
+            '{"result": 1}',
+        ],
+    )
+    def test_ok_to_stop_malformed_response(
+        self,
+        response,
+    ):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr,
+            'cache',
+            create=True,
+        ) as cache, patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(0, response, ''),
+        ):
+            cache.get_daemons_by_type.return_value = [daemon]
+
+            result = self.nvmeof_service.ok_to_stop(
+                [daemon.daemon_id]
+            )
+
+        assert result.retval == -errno.EIO
 
 
 class TestNvmeofTLSBundle:

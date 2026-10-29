@@ -30,7 +30,8 @@ from cephadm.utils import (
 from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 from ceph.cephadm.version_entry import UpgradeStatus
-
+from ceph.deployment.service_spec import NvmeofServiceSpec
+from cephadm.services.nvmeof import NvmeofService
 from mgr_module import MonCommandFailed
 
 if TYPE_CHECKING:
@@ -359,6 +360,7 @@ class CephadmUpgrade:
         # report (``osds_in_crush_bucket``). Used so ok-to-stop ``known`` (cluster-wide)
         # cannot schedule OSDs outside the bucket.
         self._ok_to_upgrade_osds_in_crush_bucket: Optional[Set[str]] = None
+        self._nvmeof_disabled_daemons: Set[str] = set()
 
     @property
     def target_image(self) -> str:
@@ -1713,6 +1715,8 @@ class CephadmUpgrade:
         selected_rgws_by_host: Dict[str, List[DaemonDescription]] = {}
         known_ok_to_stop: List[str] = []
         known_ok_to_upgrade: List[str] = []
+        nvmeof_upgrade_groups: Set[Tuple[str, str]] = set()
+        nvmeof_seen = False
         self._ok_to_upgrade_all_osds_upgraded = False
         for d_entry in need_upgrade:
             d = d_entry[0]
@@ -1801,6 +1805,27 @@ class CephadmUpgrade:
                         and not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return False, to_upgrade
 
+            if d.daemon_type == 'nvmeof':
+                nvme_spec = self.mgr.spec_store.all_specs.get(
+                    d.service_name()
+                )
+                if not nvme_spec:
+                    logger.warning(
+                        'Upgrade: unable to find NVMe-oF service spec for %s; '
+                        'continuing upgrade without NVMe-oF group safety checks',
+                        d.name(),
+                    )
+                else:
+                    nvmeof_seen = True
+                    nvme_spec = cast(NvmeofServiceSpec, nvme_spec)
+                    group_key = (
+                        nvme_spec.pool,
+                        nvme_spec.group,
+                    )
+                    if group_key in nvmeof_upgrade_groups:
+                        continue
+                    nvmeof_upgrade_groups.add(group_key)
+
             if (
                 d.daemon_type == 'osd'
                 and self._upgrade_uses_ok_to_upgrade_for_osds()
@@ -1867,6 +1892,9 @@ class CephadmUpgrade:
                         and self.upgrade_state.fail_fs):
                     continue  # do not break
                 break
+
+        if nvmeof_seen and not to_upgrade:
+            return False, to_upgrade
 
         return True, self._limit_gateway_upgrade_batch(to_upgrade)
 
@@ -2066,7 +2094,8 @@ class CephadmUpgrade:
                         )
 
         for d_entry in to_upgrade:
-            daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d_entry[0])
+            daemon = d_entry[0]
+            daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(daemon)
 
             if daemon_spec.daemon_type in ['osd', 'mds'] and daemon_spec.name() in insecure_key_daemons:
                 # if _rotate_key fails fails it will mark the upgrade as
@@ -2075,12 +2104,69 @@ class CephadmUpgrade:
                     return
 
             action = 'Upgrading' if not d_entry[1] else 'Redeploying'
+            nvmeof_service: Optional[NvmeofService] = None
+            gateway_disabled = (
+                daemon_spec.name() in self._nvmeof_disabled_daemons
+            )
             try:
+                if daemon_spec.daemon_type == 'nvmeof':
+                    nvmeof_service = cast(
+                        NvmeofService,
+                        service_registry.get_service(
+                            daemon_type_to_service('nvmeof')
+                        ),
+                    )
+
+                    # Only ask MON to stop a gateway which is currently
+                    # running. An already-down gateway must remain repairable.
+                    #
+                    # If this gateway was disabled by a previous failed
+                    # redeploy attempt, don't disable it again.
+                    if (
+                        daemon.status == DaemonDescriptionStatus.running
+                        and not gateway_disabled
+                        and self.mgr.spec_store.all_specs.get(
+                            daemon.service_name()
+                        )
+                    ):
+                        result, gateway_disabled = (
+                            nvmeof_service.check_and_disable_gateway(
+                                daemon
+                            )
+                        )
+
+                        if result.retval:
+                            logger.info(
+                                'Upgrade: %s is not safe to stop: %s',
+                                daemon.name(),
+                                result.stderr,
+                            )
+                            continue
+
+                        if gateway_disabled:
+                            self._nvmeof_disabled_daemons.add(
+                                daemon_spec.name()
+                            )
                 self.mgr._daemon_action(
                     daemon_spec,
                     'redeploy',
                     image=target_image if not d_entry[1] else None
                 )
+                if gateway_disabled:
+                    assert nvmeof_service is not None
+                    enable_result = nvmeof_service.enable_gateway(
+                        daemon
+                    )
+                    if enable_result.retval:
+                        raise OrchestratorError(
+                            f'Failed to re-enable NVMe-oF gateway '
+                            f'{daemon_spec.name()} after '
+                            f'{action.lower()}: '
+                            f'{enable_result.stderr}'
+                        )
+                    self._nvmeof_disabled_daemons.discard(
+                        daemon_spec.name()
+                    )
                 self.mgr.cache.metadata_up_to_date[daemon_spec.host] = False
             except Exception as e:
                 logger.exception(
