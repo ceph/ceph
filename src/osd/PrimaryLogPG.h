@@ -1727,6 +1727,8 @@ public:
   void pool_migration_source_start_delete_head(hobject_t oid);
   void pool_migration_source_start_delete(hobject_t oid);
   bool pool_migration_source_delete(hobject_t oid);
+  void pool_migration_source_delete_pending();
+  void queue_pool_migration_source_deletes();
   void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark,
                                     HBHandle *handle = nullptr);
 
