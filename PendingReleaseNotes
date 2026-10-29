@@ -136,6 +136,16 @@
   A stale ``rwl`` in ceph.conf or the Monitor config store is merely ignored,
   and such an image simply runs without a cache. Note that ``ceph config set
   ... rwl`` now fails, which may break automation.
+* cephadm: During ``ceph orch upgrade``, CephFS filesystems are now prepared
+  and restored one at a time during the MDS phase, so at most one filesystem
+  is offline (``fail_fs = true``) or degraded (scaled down to ``max_mds 1``)
+  at any moment, instead of all filesystems simultaneously. Total upgrade
+  duration is unchanged, as MDS daemons were already redeployed serially.
+  Preparing all targeted filesystems at once can be restored with
+  ``ceph config set mgr mgr/cephadm/upgrade_fs_one_at_a_time false``.
+  In both modes, only the filesystems whose MDS daemons are part of the
+  upgrade are prepared, and only filesystems failed by the upgrade itself
+  are made joinable again on completion.
 
 >=21.0.0
 * CephFS: The ``fs subvolumegroup create`` command now supports the
