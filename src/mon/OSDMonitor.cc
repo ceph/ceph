@@ -15934,22 +15934,30 @@ bool OSDMonitor::_is_removed_snap(int64_t pool, snapid_t snap)
 	     << " - purged, [" << begin << "," << end << ")" << dendl;
     return true;
   }
-  // check the migration target pool
+  // A removal is recorded against the migration target of its time, which a
+  // later migration makes a source: check the target and every source
   const pg_pool_t *pi = osdmap.get_pg_pool(pool);
   if (pi && pi->migration_target.has_value()) {
     int64_t target_pool = pi->migration_target.value();
-    if (osdmap.in_removed_snaps_queue(target_pool, snap)) {
-      dout(10) << __func__ << " pool " << pool << " snap " << snap
-	       << " - in osdmap removed_snaps_queue for migration target pool "
-	       << target_pool << dendl;
-      return true;
-    }
-    r = lookup_purged_snap(target_pool, snap, &begin, &end);
-    if (r == 0) {
-      dout(10) << __func__ << " pool " << pool << " snap " << snap
-	       << " - purged in migration target pool " << target_pool
-	       << ", [" << begin << "," << end << ")" << dendl;
-      return true;
+    for (const auto& [chain_pool, chain_pi] : osdmap.get_pools()) {
+      if (chain_pool == pool ||
+          (chain_pool != target_pool &&
+           chain_pi.migration_target != target_pool)) {
+        continue;
+      }
+      if (osdmap.in_removed_snaps_queue(chain_pool, snap)) {
+        dout(10) << __func__ << " pool " << pool << " snap " << snap
+                 << " - in osdmap removed_snaps_queue for migration pool "
+                 << chain_pool << dendl;
+        return true;
+      }
+      r = lookup_purged_snap(chain_pool, snap, &begin, &end);
+      if (r == 0) {
+        dout(10) << __func__ << " pool " << pool << " snap " << snap
+                 << " - purged in migration pool " << chain_pool
+                 << ", [" << begin << "," << end << ")" << dendl;
+        return true;
+      }
     }
   }
   return false;
