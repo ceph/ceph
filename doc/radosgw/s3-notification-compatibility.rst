@@ -72,7 +72,10 @@ Unsupported Fields in the Event Record
 
 The records sent for bucket notification follows the format described in:
 `Event Message Structure`_.
-However, the ``requestParameters.sourceIPAddress`` field will be sent empty.
+The ``requestParameters.sourceIPAddress`` field is the client's address, as
+``rgw_remote_addr_param`` selects it, or the connection's when that is unset.
+It is empty for an event no client request caused, such as a lifecycle
+expiration or the completion of a restore.
 
 The bucket ARN, ``s3.bucket.arn``, names the zonegroup in its region field,
 ``arn:aws:s3:<zonegroup>::<bucket>``.  With

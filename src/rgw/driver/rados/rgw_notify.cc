@@ -1004,6 +1004,7 @@ static inline void populate_event(reservation_t& res,
   event.eventTime = mtime;
   event.eventName = to_event_string(event_type);
   event.userIdentity = res.user_id;    // user that triggered the change
+  event.sourceIPAddress = res.source_ip;
   event.x_amz_request_id = res.req_id; // request ID of the original change
   event.x_amz_id_2 = res.store->getRados()->host_id; // RGW on which the change was made
   // configurationId is filled from notification configuration
@@ -1384,6 +1385,13 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
   return 0;
 }
 
+// the client's address, as rgw_build_iam_environment() resolved it from
+// rgw_remote_addr_param or REMOTE_ADDR
+static std::string source_ip_of(const req_state* s) {
+  const auto i = s->env.find("aws:SourceIp");
+  return i == s->env.end() ? std::string{} : i->second;
+}
+
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::RadosStore* _store,
 			     const req_state* _s,
@@ -1399,6 +1407,7 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   user_id(to_string(_s->owner.id)),
   user_tenant(_s->user->get_id().tenant),
   req_id(_s->trans_id),
+  source_ip(source_ip_of(_s)),
   yield(y)
 {
   filter_amz_meta(x_meta_map, _s->info.x_meta_map);

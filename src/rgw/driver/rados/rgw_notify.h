@@ -77,6 +77,9 @@ struct reservation_t {
   const std::string user_id;
   const std::string user_tenant;
   const std::string req_id;
+  // the client's address, as the policy environment holds it;  empty
+  // for a non-request caller
+  const std::string source_ip;
   optional_yield yield;
 
   /* ctor for rgw_op callers */
