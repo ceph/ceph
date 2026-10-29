@@ -26,61 +26,37 @@ function run() {
     done
 }
 
-# Test create-stretch-replicated fails when insufficient number of zones, hosts, and osds
-function TEST_stretch_replicated() {
+# Test osd pool create for stretch replica builds its rule from the root and
+# failure domains it is not given in the osd_pool_default_* options
+function TEST_pool_create_stretch_replica_option_defaults() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
     run_mon $dir b --public-addr=$CEPH_MON_B || return 1
     run_mon $dir c --public-addr=$CEPH_MON_C || return 1
-    run_osd $dir 0 || return 1
-    run_osd $dir 1 || return 1
-    run_osd $dir 2 || return 1
-    run_osd $dir 3 || return 1
+    for osd in 0 1 2 3; do
+        run_osd $dir $osd || return 1
+    done
+    ceph osd crush add-bucket other root || return 1
+    for dc in 1 2; do
+        ceph osd crush add-bucket room$dc room || return 1
+        ceph osd crush move room$dc root=other || return 1
+    done
+    ceph osd crush set osd.0 1.0 host=h1 room=room1 root=other || return 1
+    ceph osd crush set osd.1 1.0 host=h1 room=room1 root=other || return 1
+    ceph osd crush set osd.2 1.0 host=h2 room=room2 root=other || return 1
+    ceph osd crush set osd.3 1.0 host=h2 room=room2 root=other || return 1
+    ceph mon set_location a room=room1 || return 1
+    ceph mon set_location b room=room2 || return 1
+    ceph mon set_location c room=arbiter || return 1
 
-    ceph osd crush add-bucket dc1 datacenter || return 1
-    ceph osd crush add-bucket dc2 datacenter || return 1
-    ceph osd crush move dc1 root=default || return 1
-    ceph osd crush move dc2 root=default || return 1
-
-    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
-
-    ceph osd crush add-bucket host1 host || return 1
-    ceph osd crush move host1 datacenter=dc1 || return 1
-    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
-
-    ceph osd crush add-bucket host2 host || return 1
-    ceph osd crush move host2 datacenter=dc1 || return 1
-    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
-
-    ceph osd crush set osd.0 1.0 host=host1 || return 1
-    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
-
-    ceph osd crush set osd.1 1.0 host=host2 || return 1
-    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
-
-    ceph osd crush add-bucket host3 host || return 1
-    ceph osd crush move host3 datacenter=dc2 || return 1
-    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
-
-    ceph osd crush add-bucket host4 host || return 1
-    ceph osd crush move host4 datacenter=dc2 || return 1
-    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
-
-
-    ceph osd crush set osd.2 1.0 host=host3 || return 1
-    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
-
-    ceph osd crush set osd.3 1.0 host=host4 || return 1
-
-    ceph osd crush rule create-stretch-replicated || return 1
-
-    ceph osd crush rule dump stretch_replica_rule | jq '.steps[1].op' | grep "choose_firstn" || return 1
-    ceph osd crush rule dump stretch_replica_rule | jq '.steps[1].num' | grep "2" || return 1
-    ceph osd crush rule dump stretch_replica_rule | jq '.steps[1].type' | grep "datacenter" || return 1
-
-    ceph osd crush rule dump stretch_replica_rule | jq '.steps[2].op' | grep "chooseleaf_firstn" || return 1
-    ceph osd crush rule dump stretch_replica_rule | jq '.steps[2].num' | grep "2" || return 1
-    ceph osd crush rule dump stretch_replica_rule | jq '.steps[2].type' | grep "host" || return 1
+    ceph config set global osd_pool_default_root other || return 1
+    ceph config set global osd_pool_default_zone_failure_domain room || return 1
+    ceph config set global osd_pool_default_osd_failure_domain osd || return 1
+    ceph osd pool create from_options --num_zones 2 --replica 2 || return 1
+    ceph osd crush rule dump from_options > $dir/rule.json || return 1
+    jq -e '.steps[] | select(.op == "take" and .item_name == "other")' $dir/rule.json || return 1
+    jq -e '.steps[] | select(.type == "room")' $dir/rule.json || return 1
+    jq -e '.steps[] | select(.type == "osd")' $dir/rule.json || return 1
 }
 
 # Test create-erasure fails when insufficient number of zones, hosts, and osds
@@ -318,8 +294,9 @@ function TEST_pool_create_stretch_replica() {
     ceph osd crush rule dump data0 | jq '.steps[2].type' | grep "host" || return 1
 }
 
-# Test create stretch crush rule fails for device classes
-function TEST_stretch_replicated_with_class() {
+# Test osd pool create for stretch replica fails for device classes with
+# insufficient hosts
+function TEST_pool_create_stretch_replica_with_class() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
     run_mon $dir b --public-addr=$CEPH_MON_B || return 1
@@ -360,8 +337,12 @@ function TEST_stretch_replicated_with_class() {
     ceph osd crush set-device-class ssd osd.0 osd.1 osd.2 osd.3 || return 1
     ceph osd crush set-device-class hdd osd.4 osd.5 || return 1
 
-    ceph osd crush rule create-stretch-replicated --rule-name=stretch_ssd --class=ssd || return 1
-    ceph osd crush rule create-stretch-replicated --rule-name=stretch_hdd --class=hdd 2>&1 | grep "Error EINVAL: zone dc1~hdd does not have 2 hosts with at least one OSD" || return 1
+    ceph mon set_location a datacenter=dc1 || return 1
+    ceph mon set_location b datacenter=dc2 || return 1
+    ceph mon set_location c datacenter=arbiter || return 1
+
+    ceph osd pool create stretch_ssd --num_zones 2 --replica 2 --class ssd || return 1
+    ceph osd pool create stretch_hdd --num_zones 2 --replica 2 --class hdd 2>&1 | grep "Error EINVAL: zone dc1~hdd does not have 2 hosts with at least one OSD (osd_pool_default_zone_failure_domain, osd_pool_default_osd_failure_domain, osd_pool_default_root)" || return 1
     ceph osd crush add-bucket host7 host || return 1
     ceph osd crush add-bucket host8 host || return 1
     ceph osd crush move host7 datacenter=dc1 || return 1
@@ -373,7 +354,7 @@ function TEST_stretch_replicated_with_class() {
     ceph osd crush set osd.6 1.0 host=host7 || return 1
     ceph osd crush set osd.7 1.0 host=host8 || return 1
 
-    ceph osd crush rule create-stretch-replicated --rule-name=stretch_hdd --class=hdd || return 1
+    ceph osd pool create stretch_hdd --num_zones 2 --replica 2 --class hdd || return 1
 }
 
 function TEST_stretch_ec_with_class() {
@@ -507,7 +488,7 @@ function TEST_stretch_diff_sites() {
     ceph osd pool create data0 || return 1
     ceph osd pool create data1 || return 1
 
-    ceph osd crush rule create-stretch-replicated --rule-name=stretch_ssd --class=ssd || return 1
+    add_stretch_rule $dir stretch_ssd default datacenter 2 host 2 ssd || return 1
     ceph mon set election_strategy connectivity || return 1
 
     ceph mon set_location a datacenter=dc1 || return 1
@@ -602,9 +583,9 @@ function TEST_stretch_replica_device_class_pools() {
     ceph mon set_location c datacenter=arbiter || return 1
 
     # Create pools using different device classes
-    ceph osd crush rule create-stretch-replicated --rule-name=stretch_ssd --class=ssd || return 1
+    add_stretch_rule $dir stretch_ssd default datacenter 2 host 2 ssd || return 1
 
-    ceph osd crush rule create-stretch-replicated --rule-name=stretch_hdd --class=hdd || return 1
+    add_stretch_rule $dir stretch_hdd default datacenter 2 host 2 hdd || return 1
 
     ceph osd pool create pool_ssd || return 1
 
@@ -769,7 +750,7 @@ function TEST_stretch_diff_bucket_barrier() {
     ceph mon set_location c zone=arbiter || return 1
 
 
-    ceph osd crush rule create-stretch-replicated --rule-name=stretch_zone --zone_failure_domain=zone --class=ssd  || return 1
+    add_stretch_rule $dir stretch_zone default zone 2 host 2 ssd || return 1
 
     ceph osd pool create pool_zone || return 1
 
@@ -892,11 +873,15 @@ function TEST_stretch_unstretch_clean() {
     ceph osd pool create data_recovery --num_zones 2 --replica 2 || return 1
 
     # Recovery stretch mode is entered from degraded stretch mode, and only
-    # with a monitor in quorum in every zone: kill the OSDs of dc2, not mon.b
+    # with a monitor in quorum in every zone: lose dc2, then bring back
+    # mon.b but not the OSDs
+    kill_daemons $dir TERM mon.b
     kill_daemons $dir TERM osd.2
     kill_daemons $dir TERM osd.3
     ceph osd down 2 3 || return 1
     wait_for_output "^degraded_stretch_mode 1" ceph osd dump || return 1
+    activate_mon $dir b || return 1
+    wait_for_quorum 60 3 || return 1
 
     ceph osd force_recovery_stretch_mode --yes-i-really-mean-it || return 1
     wait_for_output "^recovering_stretch_mode 1" ceph osd dump || return 1
