@@ -328,11 +328,13 @@ function TEST_pool_migrate_inherit_params() {
   ceph osd pool migrate inherited --inherit-params || return 1
 
   ceph osd dump --format=json > $dir/osdmap.json || return 1
+  # the source's pg_num freeze during the migration is not a setting
   pool_settings() {
     jq -S ".pools[] | select(.pool_name == \"$1\") |
       del(.pool, .pool_name, .create_time, .last_change, .migration_src,
           .migration_target, .migration_root, .migrating_pgs,
-          .lowest_migrated_pg)" $dir/osdmap.json
+          .lowest_migrated_pg, .flags, .pg_autoscale_mode) |
+      .flags_names |= (split(\",\") - [\"nopgchange\"] | join(\",\"))" $dir/osdmap.json
   }
   test "$(pool_settings defaulted | jq .type)" = 1 || return 1
   test "$(pool_settings inherited | jq -r .erasure_code_profile)" = ec-prof || return 1
