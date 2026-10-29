@@ -9,7 +9,7 @@ from ceph.deployment.service_spec import PlacementSpec
 
 from .. import mgr
 from ..controllers._version import APIVersion
-from ..controllers.osd import Osd, OsdUi
+from ..controllers.osd import Osd, OsdFlagsController, OsdUi
 from ..services.osd import OsdDeploymentOptions
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
@@ -530,3 +530,25 @@ class OsdTest(ControllerTestCase):
         removing_osds = osd.get_removing_osds()
 
         self.assertEqual(removing_osds, [7, 8])
+
+
+class OsdFlagsTest(ControllerTestCase):
+    FLAGS = ['pglog_hardlimit', 'purged_snapdirs', 'recovery_deletes',
+             'sortbitwise']
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([OsdFlagsController])
+
+    @mock.patch('dashboard.controllers.osd.CephService')
+    def test_stretch_zones_is_not_a_flag(self, ceph_service):
+        osd_map = {'flags_set': self.FLAGS + ['stretch_zones']}
+        with mock.patch.object(mgr, 'get', return_value=osd_map):
+            self._get('/api/osd/flags')
+            self.assertStatus(200)
+            self.assertJsonBody(self.FLAGS)
+            self._put('/api/osd/flags', {'flags': self.FLAGS + ['noout']})
+            self.assertStatus(200)
+            self.assertJsonBody(sorted(self.FLAGS + ['noout']))
+        ceph_service.send_command.assert_called_once_with(
+            'mon', 'osd set', '', key='noout')
