@@ -32,6 +32,7 @@
 #include "impersonate.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
+#include <boost/algorithm/hex.hpp>
 #include "rgw_object_ownership.h"
 #include "rgw_s3_filter.h"
 #include <dirent.h>
@@ -6567,8 +6568,14 @@ std::unique_ptr<Notification> NSFSDriver::get_notification(rgw::sal::Object* obj
       s->bucket.get(),
       to_string(s->owner.id),
       s->owner.id.index() == 0 ? std::get<rgw_user>(s->owner.id).tenant : "",
-      s->req_id);
-  notif->x_meta_map = s->info.x_meta_map;
+      s->trans_id);
+  /* the request's user metadata, as the rados driver's reservation
+   * filters it */
+  for (const auto& [k, v] : s->info.x_meta_map) {
+    if (k.starts_with(RGW_AMZ_META_PREFIX)) {
+      notif->x_meta_map.emplace(k, v);
+    }
+  }
   return notif;
 }
 
@@ -7349,19 +7356,10 @@ int NSFSNotification::publish_reserve(const DoutPrefixProvider *dpp,
 
   const std::string obj_name = obj ? obj->get_name() : "";
 
+  /* one entry per event type a topic matches, as the rados driver's
+   * publish_reserve() makes them, so each event is named for its own
+   * type */
   for (auto& [name, filter] : bucket_topics.topics) {
-    bool event_match = false;
-    for (auto req_type : event_types) {
-      for (auto cfg_type : filter.events) {
-	if (static_cast<uint64_t>(req_type) & static_cast<uint64_t>(cfg_type)) {
-	  event_match = true;
-	  break;
-	}
-      }
-      if (event_match) break;
-    }
-    if (!event_match) continue;
-
     if (!match(filter.s3_filter.key_filter, obj_name)) {
       continue;
     }
@@ -7382,10 +7380,39 @@ int NSFSNotification::publish_reserve(const DoutPrefixProvider *dpp,
       }
     }
 
-    matched.push_back(filter);
+    for (auto req_type : event_types) {
+      if (match(filter.events, req_type)) {
+	matched.emplace_back(filter, req_type);
+      }
+    }
   }
 
   return 0;
+}
+
+/* The object a notification's metadata and tags are read from:  a
+ * copy's source, else the object, with its attributes loaded.  The rados
+ * driver's get_object_with_attributes().  Null when they cannot be. */
+static rgw::sal::Object* object_with_attributes(const DoutPrefixProvider* dpp,
+						rgw::sal::Object* obj,
+						rgw::sal::Object* src_obj,
+						rgw::sal::Bucket* bucket)
+{
+  auto* o = src_obj ? src_obj : obj;
+  if (!o) {
+    return nullptr;
+  }
+  if (o->get_attrs().empty()) {
+    if (!o->get_bucket()) {
+      o->set_bucket(bucket);
+    }
+    if (int ret = o->get_obj_attrs(null_yield, dpp); ret < 0) {
+      ldpp_dout(dpp, 20) << "failed to get attributes from object: "
+	<< o->get_key() << ". ret = " << ret << dendl;
+      return nullptr;
+    }
+  }
+  return o;
 }
 
 int NSFSNotification::publish_commit(const DoutPrefixProvider* dpp,
@@ -7398,7 +7425,35 @@ int NSFSNotification::publish_commit(const DoutPrefixProvider* dpp,
     return 0;
   }
 
-  for (auto& filter : matched) {
+  /* The record is the rados driver's populate_event()'s, field for
+   * field, so a consumer reads one schema whichever driver sent it.
+   * The metadata and tags are read once, for every topic. */
+  KeyValueMap meta = x_meta_map;
+  KeyMultiValueMap tags;
+  if (auto* o = object_with_attributes(dpp, obj, src_obj, bucket); o) {
+    for (auto& [k, v] : o->get_attrs()) {
+      if (k.starts_with(RGW_ATTR_META_PREFIX)) {
+	meta.emplace(k.substr(sizeof(RGW_ATTR_PREFIX) - 1), v.to_str().c_str());
+      }
+    }
+    if (obj_tags_ptr && !obj_tags_ptr->get_tags().empty()) {
+      tags = obj_tags_ptr->get_tags();
+    } else if (auto t = o->get_attrs().find(RGW_ATTR_TAGS);
+	       t != o->get_attrs().end()) {
+      RGWObjTags obj_tags;
+      try {
+	auto bi = t->second.cbegin();
+	decode(obj_tags, bi);
+	tags = obj_tags.get_tags();
+      } catch (const buffer::error&) {
+	/* not able to decode tags */
+      }
+    }
+  }
+  const std::string region =
+    driver->get_zone()->get_zonegroup().get_api_name();
+
+  for (auto& [filter, event_type] : matched) {
     const auto& dest = filter.topic.dest;
     if (dest.push_endpoint.empty()) {
       continue;
@@ -7406,14 +7461,19 @@ int NSFSNotification::publish_commit(const DoutPrefixProvider* dpp,
 
     rgw_pubsub_s3_event event;
     event.eventTime = mtime;
-    event.eventName = rgw::notify::to_string(event_types.front());
+    event.eventName = rgw::notify::to_event_string(event_type);
     event.userIdentity = user_id;
     event.x_amz_request_id = req_id;
+    event.x_amz_id_2 = driver->get_host_id();
     event.configurationId = filter.s3_id;
+    event.opaque_data = filter.topic.opaque_data;
     if (bucket) {
       event.bucket_name = bucket->get_name();
       event.bucket_ownerIdentity = to_string(bucket->get_owner());
       event.bucket_id = bucket->get_bucket_id();
+      rgw::ARN bucket_arn(bucket->get_key());
+      bucket_arn.region = region;
+      event.bucket_arn = to_string(bucket_arn);
     }
     if (obj) {
       event.object_key = obj->get_name();
@@ -7421,6 +7481,14 @@ int NSFSNotification::publish_commit(const DoutPrefixProvider* dpp,
     event.object_size = size;
     event.object_etag = etag;
     event.object_versionId = version;
+    event.awsRegion = region;
+    /* the timestamp as the key's sequence id, hex encoded */
+    const utime_t ts(real_clock::now());
+    boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t),
+			  std::back_inserter(event.object_sequencer));
+    set_event_id(event.id, etag, ts);
+    event.x_meta_map = meta;
+    event.tags = tags;
 
     try {
       RGWHTTPArgs args(dest.push_endpoint_args, dpp);
@@ -12283,6 +12351,13 @@ int NSFSObject::copy_object(const ACLOwner& owner,
 	bcache->add_entry(dpp, db->get_name(), bde);
       }
     }
+  }
+
+  /* the copy's mtime, which RGWCopyObj gives its notification as the
+   * event's time */
+  if (auto* ent = dobj->get_fsent(); mtime && ent &&
+      (ent->stat(dpp, /*force=*/true) == 0)) {
+    *mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
   }
 
   return 0;
@@ -18146,6 +18221,11 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
    * size from before it. */
   if (auto* ent = obj->get_fsent(); ent) {
     obj->set_obj_size(ent->get_stx().stx_size);
+    /* the caller's mtime, which RGWPutObj gives its notification as the
+     * event's time */
+    if (mtime) {
+      *mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
+    }
   }
 
   driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),

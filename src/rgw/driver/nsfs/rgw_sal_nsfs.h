@@ -2064,7 +2064,9 @@ protected:
   std::string user_tenant;
   std::string req_id;
   rgw_pubsub_bucket_topics bucket_topics;
-  std::vector<rgw_pubsub_topic_filter> matched;
+  /* each topic a notification applies to, with the event type it
+   * matched, as the rados driver's reservation holds them */
+  std::vector<std::pair<rgw_pubsub_topic_filter, rgw::notify::EventType>> matched;
   RGWObjTags* obj_tags_ptr = nullptr;
   KeyValueMap x_meta_map;
   friend class NSFSDriver;
