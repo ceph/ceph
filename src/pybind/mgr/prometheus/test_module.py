@@ -3,6 +3,7 @@ from unittest import TestCase, mock
 import errno
 
 from prometheus.module import Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict, Module
+import json
 import threading
 
 
@@ -120,6 +121,247 @@ class HealthHistoryTest(TestCase):
 
         self.assertFalse(t.is_alive(), "Deadlock detected: Thread is still hung!")
         self.mgr.set_store.assert_called()
+
+
+class HealthDetailTest(TestCase):
+    def setUp(self):
+        from prometheus.module import HEALTHCHECK_DETAIL
+        self.module = mock.MagicMock(spec=Module)
+        self.module.log = mock.MagicMock()
+        self.module.get_localized_module_option.return_value = 1000
+        self.module.get_store.return_value = "{}"
+        self.module.health_history = HealthHistory(self.module)
+        self.module.metrics = {
+            'health_status': Metric('gauge', 'health_status', ''),
+            'health_detail': Metric('untyped', 'health_detail', '', HEALTHCHECK_DETAIL),
+        }
+        self.module._process_health_checks_with_message = (
+            Module._process_health_checks_with_message.__get__(self.module)
+        )
+        self.module.get_health = Module.get_health.__get__(self.module)
+
+    def test_bluestore_free_fragmentation_summary_with_details(self):
+        health_data = {
+            'status': 'HEALTH_WARN',
+            'checks': {
+                'BLUESTORE_FREE_FRAGMENTATION': {
+                    'severity': 'HEALTH_WARN',
+                    'summary': {
+                        'message': '2 OSD(s) experiencing high free space fragmentation of BlueStore',
+                        'count': 2
+                    },
+                    'detail': [
+                        {'message': ' osd.4 0.301470'},
+                        {'message': ' osd.15 0.309722'}
+                    ]
+                }
+            }
+        }
+        self.module.get.return_value = {'json': json.dumps(health_data)}
+        self.module.get_health()
+
+        expected_labels = (
+            'BLUESTORE_FREE_FRAGMENTATION',
+            'HEALTH_WARN',
+            '2 OSD(s) experiencing high free space fragmentation of BlueStore. Affected OSDs: osd.4 0.301470, osd.15 0.309722'
+        )
+        self.assertEqual(
+            self.module.metrics['health_detail'].value.get(expected_labels),
+            1
+        )
+        self.assertNotIn(
+            ('BLUESTORE_FREE_FRAGMENTATION', 'HEALTH_WARN', 'osd.4 0.301470'),
+            self.module.metrics['health_detail'].value
+        )
+
+    def test_bluestore_free_fragmentation_summary_without_details(self):
+        health_data = {
+            'status': 'HEALTH_WARN',
+            'checks': {
+                'BLUESTORE_FREE_FRAGMENTATION': {
+                    'severity': 'HEALTH_WARN',
+                    'summary': {
+                        'message': '3 OSD(s) experiencing high free space fragmentation of BlueStore',
+                        'count': 3
+                    }
+                }
+            }
+        }
+        self.module.get.return_value = {'json': json.dumps(health_data)}
+        self.module.get_health()
+
+        expected_labels = (
+            'BLUESTORE_FREE_FRAGMENTATION',
+            'HEALTH_WARN',
+            '3 OSD(s) experiencing high free space fragmentation of BlueStore'
+        )
+        self.assertEqual(
+            self.module.metrics['health_detail'].value.get(expected_labels),
+            1
+        )
+
+    def test_bluestore_string_summary(self):
+        health_data = {
+            'status': 'HEALTH_WARN',
+            'checks': {
+                'BLUESTORE_FREE_FRAGMENTATION': {
+                    'severity': 'HEALTH_WARN',
+                    'summary': '3 OSD(s) experiencing high free space fragmentation of BlueStore',
+                    'detail': [
+                        {'message': 'osd.0 0.000089'}
+                    ]
+                }
+            }
+        }
+        self.module.get.return_value = {'json': json.dumps(health_data)}
+        self.module.get_health()
+
+        expected_labels = (
+            'BLUESTORE_FREE_FRAGMENTATION',
+            'HEALTH_WARN',
+            '3 OSD(s) experiencing high free space fragmentation of BlueStore. Affected OSDs: osd.0 0.000089'
+        )
+        self.assertEqual(
+            self.module.metrics['health_detail'].value.get(expected_labels),
+            1
+        )
+
+    def test_bluestore_empty_or_missing_summary(self):
+        health_data = {
+            'status': 'HEALTH_WARN',
+            'checks': {
+                'BLUESTORE_FREE_FRAGMENTATION': {
+                    'severity': 'HEALTH_WARN',
+                    'summary': {}
+                }
+            }
+        }
+        self.module.get.return_value = {'json': json.dumps(health_data)}
+        self.module.get_health()
+
+        self.assertNotIn(
+            ('BLUESTORE_FREE_FRAGMENTATION', 'HEALTH_WARN', ''),
+            self.module.metrics['health_detail'].value
+        )
+
+    def test_generic_health_check_without_message(self):
+        health_data = {
+            'status': 'HEALTH_WARN',
+            'checks': {
+                'OSD_DOWN': {
+                    'severity': 'HEALTH_WARN',
+                    'summary': {
+                        'message': '1 osds down',
+                        'count': 1
+                    }
+                }
+            }
+        }
+        self.module.get.return_value = {'json': json.dumps(health_data)}
+        self.module.get_health()
+
+        expected_labels = ('OSD_DOWN', 'HEALTH_WARN', '')
+        self.assertEqual(
+            self.module.metrics['health_detail'].value.get(expected_labels),
+            1
+        )
+
+    def test_string_summary(self):
+        health_data = {
+            'status': 'HEALTH_WARN',
+            'checks': {
+                'MON_CLOCK_SKEW': {
+                    'severity': 'HEALTH_WARN',
+                    'summary': 'clock skew detected'
+                }
+            }
+        }
+        self.module.get.return_value = {'json': json.dumps(health_data)}
+        self.module.get_health()
+
+        expected_labels = ('MON_CLOCK_SKEW', 'HEALTH_WARN', '')
+        self.assertEqual(
+            self.module.metrics['health_detail'].value.get(expected_labels),
+            1
+        )
+
+    def test_empty_or_missing_summary(self):
+        health_data = {
+            'status': 'HEALTH_WARN',
+            'checks': {
+                'CHECK_EMPTY_SUMMARY': {
+                    'severity': 'HEALTH_WARN',
+                    'summary': {}
+                },
+                'CHECK_NO_SUMMARY': {
+                    'severity': 'HEALTH_WARN'
+                }
+            }
+        }
+        self.module.get.return_value = {'json': json.dumps(health_data)}
+        self.module.get_health()
+
+        self.assertEqual(
+            self.module.metrics['health_detail'].value.get(('CHECK_EMPTY_SUMMARY', 'HEALTH_WARN', '')),
+            1
+        )
+        self.assertEqual(
+            self.module.metrics['health_detail'].value.get(('CHECK_NO_SUMMARY', 'HEALTH_WARN', '')),
+            1
+        )
+
+    def test_inactive_health_check(self):
+        # First active
+        active_health = {
+            'status': 'HEALTH_WARN',
+            'checks': {
+                'OSD_DOWN': {
+                    'severity': 'HEALTH_WARN',
+                    'summary': {'message': '1 osds down'}
+                }
+            }
+        }
+        self.module.get.return_value = {'json': json.dumps(active_health)}
+        self.module.get_health()
+
+        # Then recovered / OK
+        recovered_health = {
+            'status': 'HEALTH_OK',
+            'checks': {}
+        }
+        self.module.get.return_value = {'json': json.dumps(recovered_health)}
+        self.module.get_health()
+
+        self.assertEqual(
+            self.module.metrics['health_detail'].value.get(('OSD_DOWN', 'HEALTH_WARN', '')),
+            0
+        )
+
+    def test_cert_checks_preserved(self):
+        health_data = {
+            'status': 'HEALTH_ERR',
+            'checks': {
+                'CEPHADM_CERT_ERROR': {
+                    'severity': 'HEALTH_ERR',
+                    'summary': {'message': 'cert expired'},
+                    'detail': [
+                        {'message': 'Certificate expired on host1'},
+                        {'message': 'Certificate expired on host2'}
+                    ]
+                }
+            }
+        }
+        self.module.get.return_value = {'json': json.dumps(health_data)}
+        self.module.get_health()
+
+        self.assertEqual(
+            self.module.metrics['health_detail'].value.get(('CEPHADM_CERT_ERROR', 'HEALTH_ERR', 'Certificate expired on host1')),
+            1
+        )
+        self.assertEqual(
+            self.module.metrics['health_detail'].value.get(('CEPHADM_CERT_ERROR', 'HEALTH_ERR', 'Certificate expired on host2')),
+            1
+        )
 
 
 class ThreadSafeLRUCacheDictTest(TestCase):
