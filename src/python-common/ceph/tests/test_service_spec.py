@@ -525,6 +525,7 @@ spec:
     mapping:
       nobody-group: nfsnobody
       nobody-user: nfsnobody
+  objecter_dispatch_to_session_strand: true
   port: 1234
 ---
 service_type: iscsi

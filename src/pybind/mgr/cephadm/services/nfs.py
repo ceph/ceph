@@ -229,11 +229,20 @@ class NFSService(CephService):
         return f'{service_name}'
 
     @staticmethod
-    def _cephfs_client_log_ceph_conf(spec: NFSServiceSpec) -> Optional[str]:
-        if not spec.enable_cephfs_client_log:
-            return None
-        level = 10 if spec.cephfs_client_log_level is None else spec.cephfs_client_log_level
-        return f'\n[client]\n\tdebug client = {level}\n\tlog file = /var/log/ceph/$name.$pid.log\n'
+    def _extra_ceph_conf(spec: NFSServiceSpec) -> Optional[str]:
+        strand = spec.objecter_dispatch_to_session_strand
+
+        conf_lines = [
+            '[client]',
+            f'\tobjecter_dispatch_to_session_strand = {str(strand).lower()}',
+        ]
+
+        if spec.enable_cephfs_client_log:
+            level = 10 if spec.cephfs_client_log_level is None else spec.cephfs_client_log_level
+            conf_lines.append(f'\tdebug client = {level}')
+            conf_lines.append('\tlog file = /var/log/ceph/$name.$pid.log')
+
+        return '\n'.join(conf_lines) + '\n'
 
     def _get_cephfs_client_log_dir(self, spec: NFSServiceSpec) -> str:
         if spec.cephfs_client_log_dir:
@@ -487,7 +496,7 @@ class NFSService(CephService):
                     daemon_type, daemon_id,
                     keyring=rados_keyring,
                     host=host,
-                    extra_ceph_config=self._cephfs_client_log_ceph_conf(nfs_spec),
+                    extra_ceph_config=self._extra_ceph_conf(nfs_spec),
                 )
             )
             if nfs_spec.enable_cephfs_client_log:
