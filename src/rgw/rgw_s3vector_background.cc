@@ -1076,7 +1076,6 @@ private:
     const StorageMode mode = backend_config.storage_mode.value_or(StorageMode::S3_BUCKET);
     auto lock_result = try_acquire_lock(table_name.ns, mode, bucket_name, index_name, y);
     if (lock_result.token.empty()) {
-      restore_pending(table_name);
       if (lock_result.ret < 0 && lock_result.ret != -ENOENT) {
         // MAJOR error: the lock-storage bucket could not be accessed, so no rebuild
         // can run for this index. Surface it loudly (ERROR log + event-log entry +
@@ -1087,10 +1086,14 @@ private:
             << lock_result.ret << "); index will NOT be rebuilt until resolved" << dendl;
         record_event(rebuild_event_t::Type::LOCK_BUCKET_LOAD_FAIL,
                      table_name.ns.name(), bucket_name, index_name);
+        // Re-queue so we retry once the lock bucket recovers.
+        restore_pending(table_name);
         return lock_result.ret;
       }
-      // benign: the lock is genuinely held by another instance, or the bucket is
-      // gone (e.g. the vector bucket was deleted) — nothing to rebuild here.
+      // Benign: lock held by another RGW instance (it will rebuild the index),
+      // or the bucket is gone (nothing to rebuild). Do NOT restore into
+      // pending_mutations — the table re-enters naturally on the next
+      // notify_index_mutation, preventing a tight spawn→open→skip loop.
       ldpp_dout(this, 5) << "INFO: lock held by another process (or bucket gone) for "
           << bucket_name << "." << index_name << ", skipping" << dendl;
       return RESULT_SKIPPED;
