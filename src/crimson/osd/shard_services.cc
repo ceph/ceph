@@ -321,6 +321,91 @@ seastar::future<> OSDSingletonState::send_to_osd(
   }
 }
 
+seastar::future<> ShardServices::send_to_osd(
+  int peer, MessageURef m, epoch_t from_epoch)
+{
+  if (!cluster_lane_msgr) {
+    co_await with_singleton([](auto &singleton, auto&&... args) {
+      return singleton.send_to_osd(std::forward<decltype(args)>(args)...);
+    }, peer, std::move(m), from_epoch);
+    co_return;
+  }
+  LOG_PREFIX(ShardServices::send_to_osd);
+  const auto &osdmap = local_state.get_osdmap();
+  if (osdmap->is_down(peer)) {
+    INFO("osd.{} is_down", peer);
+    co_return;
+  }
+  if (osdmap->get_info(peer).up_from > from_epoch) {
+    INFO("osd.{} {} > {}", peer,
+	 osdmap->get_info(peer).up_from, from_epoch);
+    co_return;
+  }
+  auto conn = cluster_lane_msgr->connect(
+      osdmap->get_cluster_addrs(peer).front(), CEPH_ENTITY_TYPE_OSD);
+  co_await conn->send_with_throttling(std::move(m));
+}
+
+seastar::future<> ShardServices::start_cluster_lane(
+  uint32_t nonce,
+  entity_addrvec_t addrs,
+  uint64_t osd_required,
+  crimson::net::Dispatcher &dispatcher,
+  crimson::auth::AuthClient *auth_client,
+  crimson::auth::AuthServer *auth_server)
+{
+  LOG_PREFIX(ShardServices::start_cluster_lane);
+  using crimson::net::SocketPolicy;
+  // Bind this reactor's lane without listening on every reactor. Sharing the
+  // port scan that way collides until a reactor exhausts the bind range and
+  // aborts the OSD.
+  cluster_lane_msgr = crimson::net::Messenger::create(
+    entity_name_t::OSD(local_state.whoami), "cluster_lane", nonce,
+    true /* dispatch_only_on_this_shard */,
+    true /* listen_on_primary_only */);
+  // the MonClient lives on reactor 0, the handshake calls it there
+  cluster_lane_msgr->set_auth_client(auth_client);
+  cluster_lane_msgr->set_auth_server(auth_server);
+  cluster_lane_msgr->set_auth_shard(PRIMARY_CORE);
+  cluster_lane_msgr->set_default_policy(SocketPolicy::stateless_server(0));
+  cluster_lane_msgr->set_policy(entity_name_t::TYPE_OSD,
+                                SocketPolicy::lossless_peer(osd_required));
+  // Peers dial the osdmap address. The lane's own port is only used when
+  // a peer reconnects a session this lane started.
+  for (auto &addr : addrs.v) {
+    addr.set_port(0);
+  }
+  co_await cluster_lane_msgr->bind(addrs).handle_error(
+    crimson::net::Messenger::bind_ertr::assert_all_func(
+      [FNAME](const std::error_code& e) {
+      ERROR("cluster lane bind(): {}", e);
+    }));
+  INFO("reactor {} cluster lane {}",
+       seastar::this_shard_id(), cluster_lane_msgr->get_myaddrs());
+  co_await cluster_lane_msgr->start({&dispatcher});
+}
+
+void ShardServices::stop_cluster_lane()
+{
+  if (cluster_lane_msgr) {
+    cluster_lane_msgr->stop();
+  }
+}
+
+seastar::future<> ShardServices::shutdown_cluster_lane()
+{
+  if (cluster_lane_msgr) {
+    co_await cluster_lane_msgr->shutdown();
+  }
+}
+
+seastar::future<> ShardServices::mark_down_cluster_lane(entity_addr_t addr)
+{
+  if (cluster_lane_msgr) {
+    co_await cluster_lane_msgr->mark_down_all_ports(addr);
+  }
+}
+
 seastar::future<> OSDSingletonState::osdmap_subscribe(
   version_t epoch, bool force_request)
 {

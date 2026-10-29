@@ -38,11 +38,13 @@ namespace crimson::net {
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
                                  uint32_t nonce,
-                                 bool dispatch_only_on_this_shard)
+                                 bool dispatch_only_on_this_shard,
+                                 bool listen_on_primary_only)
   : sid{seastar::this_shard_id()},
     logic_name{logic_name},
     nonce{nonce},
     dispatch_only_on_sid{dispatch_only_on_this_shard},
+    listen_on_primary_only{listen_on_primary_only},
     my_name{myname}
 {}
 
@@ -97,7 +99,8 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
   set_myaddrs(addrs);
   return seastar::futurize_invoke([this] {
     if (!listener) {
-      return ShardedServerSocket::create(dispatch_only_on_sid
+      return ShardedServerSocket::create(
+        dispatch_only_on_sid, listen_on_primary_only
       ).then([this] (auto _listener) {
         listener = _listener;
       });
@@ -267,6 +270,24 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
     seastar::make_shared<SocketConnection>(*this, dispatchers);
   conn->start_connect(peer_addr, peer_name);
   return conn->get_local_shared_foreign_from_this();
+}
+
+seastar::future<> SocketMessenger::mark_down_all_ports(const entity_addr_t& a)
+{
+  assert(seastar::this_shard_id() == sid);
+  std::vector<SocketConnectionRef> found;
+  for (auto& [addr, conn] : connections) {
+    if (addr.get_type() == a.get_type() &&
+        addr.is_same_host(a) &&
+        addr.get_nonce() == a.get_nonce()) {
+      found.push_back(conn);
+    }
+  }
+  return seastar::parallel_for_each(std::move(found), [](auto conn) {
+    return seastar::smp::submit_to(conn->get_shard_id(), [c=conn.get()] {
+      c->mark_down();
+    }).then([conn] {});
+  });
 }
 
 seastar::future<> SocketMessenger::shutdown()

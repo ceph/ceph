@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <seastar/core/smp.hh>
+
 #include "Fwd.h"
 #include "crimson/common/throttle.h"
 #include "msg/Message.h"
@@ -58,7 +60,15 @@ public:
 
   virtual void set_auth_server(crimson::auth::AuthServer *) = 0;
 
+  /// the reactor the auth client and server live on, if not this
+  /// messenger's; the handshake then calls them there
+  virtual void set_auth_shard(seastar::shard_id) = 0;
+
   virtual seastar::future<> mark_down(const entity_addr_t &addr) = 0;
+
+  /// mark down every connection from the peer process at addr: same
+  /// type, IP and nonce, any port
+  virtual seastar::future<> mark_down_all_ports(const entity_addr_t &addr) = 0;
 
   using bind_ertr = crimson::errorator<
     crimson::ct_error::address_in_use, // The address (range) is already bound
@@ -112,7 +122,8 @@ public:
   create(const entity_name_t& name,
          const std::string& lname,
          uint64_t nonce,
-         bool dispatch_only_on_this_shard);
+         bool dispatch_only_on_this_shard,
+         bool listen_on_primary_only = false);
 
 #ifdef UNIT_TESTS_BUILT
   virtual void set_interceptor(Interceptor *) = 0;
