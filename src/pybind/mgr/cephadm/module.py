@@ -980,6 +980,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 timeout = 60
         return self.event_loop.get_result(coro, timeout)
 
+    def _any_inventory_host(self) -> Optional[str]:
+        """Return an arbitrary inventory host (the first one), or None."""
+        return next(iter(self.inventory.keys()), None)
+
     def update_host_timeout_error(self, host: str, remove: bool = False) -> None:
         if 'CEPHADM_HOST_TIMEOUT_ERROR' in self.health_checks:
             hosts = self.health_checks['CEPHADM_HOST_TIMEOUT_ERROR'].get('detail', [])

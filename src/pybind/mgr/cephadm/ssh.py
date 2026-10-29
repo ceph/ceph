@@ -133,6 +133,16 @@ class EventLoopThread(Thread):
             future.cancel()
             raise
 
+    def spawn(self, coro: Awaitable[T]) -> 'concurrent.futures.Future':
+        """Start coro on the event loop without waiting for it.
+
+        Unlike get_result() this never blocks the calling thread and never
+        cancels the coroutine on a timeout. The returned
+        concurrent.futures.Future is safe to poll from other threads with
+        done()/result().
+        """
+        return asyncio.run_coroutine_threadsafe(coro, self._loop)
+
 
 class SSHManager:
 

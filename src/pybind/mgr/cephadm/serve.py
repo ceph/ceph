@@ -1854,11 +1854,14 @@ class CephadmServe:
                                 image: Optional[str] = "",
                                 log_output: Optional[bool] = True,
                                 use_current_daemon_image: bool = False,
+                                timeout: Optional[int] = None,
                                 ) -> Any:
         try:
             out, err, code = await self._run_cephadm(
                 host, entity, command, args, no_fsid=no_fsid, error_ok=error_ok,
-                image=image, log_output=log_output, use_current_daemon_image=use_current_daemon_image)
+                image=image, log_output=log_output,
+                use_current_daemon_image=use_current_daemon_image,
+                timeout=timeout)
             if code:
                 raise OrchestratorError(f'host {host} `cephadm {command}` returned {code}: {err}')
         except Exception as e:
@@ -2051,12 +2054,10 @@ class CephadmServe:
                 f'cephadm exited with an error code: {code}, stderr: {err}')
         return [out], [err], code
 
-    async def _get_container_image_info(self, image_name: str) -> ContainerInspectInfo:
-        # pick a random host...
-        host = None
-        for host_name in self.mgr.inventory.keys():
-            host = host_name
-            break
+    async def _get_container_image_info(
+            self, image_name: str,
+            timeout: Optional[int] = None) -> ContainerInspectInfo:
+        host = self.mgr._any_inventory_host()
         if not host:
             raise OrchestratorError('no hosts defined')
         if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
@@ -2067,7 +2068,7 @@ class CephadmServe:
             try:
                 j = await self._run_cephadm_json(host, '', 'inspect-image', [],
                                                  image=image_name, no_fsid=True,
-                                                 error_ok=True)
+                                                 error_ok=True, timeout=timeout)
             except OrchestratorError:
                 pass
 
@@ -2077,7 +2078,8 @@ class CephadmServe:
                 pullargs.append("--insecure")
 
             j = await self._run_cephadm_json(host, '', 'pull', pullargs,
-                                             image=image_name, no_fsid=True)
+                                             image=image_name, no_fsid=True,
+                                             timeout=timeout)
         r = ContainerInspectInfo(
             j['image_id'],
             j.get('ceph_version'),
