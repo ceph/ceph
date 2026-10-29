@@ -504,6 +504,9 @@ private:
     const std::function<bool(const pg_pool_t&)>& pred) const;
   // whether stretch mode is enabled, or enabled by the pending changes
   bool stretch_mode_enabled_or_pending() const;
+  // also true while only the MonMap is in stretch mode, as enable_stretch_mode
+  // leaves a cluster with no pools until a pool has two zones
+  bool cluster_stretch_mode_or_pending() const;
   // legacy individual stretch pools ('osd pool stretch set' while stretch
   // mode is off) and stretch mode cannot be combined
   int check_no_legacy_individual_stretch_pools(int64_t skip_pool,
@@ -1003,6 +1006,12 @@ public:
   int validate_joining_pool(CrushWrapper& crush, int crush_rule,
                             const std::string& zone_failure_domain,
                             int64_t pool, std::ostream *ss) const;
+  // Whether the Monitors can divide the cluster by zone for a pool that puts
+  // it in stretch mode: with the tiebreaker they would choose, or with theirs
+  // while only the MonMap is in stretch mode, as enable_stretch_mode leaves a
+  // cluster with no pools
+  int validate_monitor_stretch(const std::string& zone,
+                               const CrushWrapper& crush, std::ostream *ss);
 
   // The release that ships per-pool num_zones. Until require_osd_release
   // reaches it the monitors keep the behavior of earlier releases.
@@ -1202,13 +1211,26 @@ public:
    * Update each pool that is stretched once inc is applied, including
    * pools that inc creates or changes, for a stretch mode transition:
    * force an op resend and, if bucket_count is non-zero, set the peering
-   * bucket count and mandatory member.
+   * bucket count and mandatory member. A pool of one zone, whose min_size
+   * counts all its copies as in earlier releases, also has min_size halved
+   * when a zone is lost and set to mon_stretch_pool_min_size once healthy,
+   * as earlier releases did.
    */
   static void apply_stretch_transition_to_pools(
       const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
       OSDMap::Incremental& inc,
       uint32_t bucket_count = 0,
       int mandatory_member = CRUSH_ITEM_NONE);
+  /**
+   * In the update that commits the upgrade, with tmp the OSDMap once inc
+   * is applied: give each pool of global stretch mode that has its copies
+   * evenly in its two zones two zones and min_size per zone, and force an
+   * op resend on every stretch pool, as the peering rules change.
+   */
+  static void convert_stretch_pools_at_commit(
+      const OSDMap& tmp,
+      OSDMap::Incremental& inc,
+      unsigned stretch_pool_min_size);
   /**
    * Obtain the crush rule being used for stretch pools.
    * Note that right now this is heuristic and simply selects the

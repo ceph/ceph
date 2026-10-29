@@ -281,6 +281,28 @@ TEST_F(OSDMonitorStretchTest, ECPoolFails) {
             ss.str());
 }
 
+// Test failure when an individual stretch pool exists, which earlier releases
+// took over
+TEST_F(OSDMonitorStretchTest, IndividualStretchPoolFails) {
+  create_replicated_pool(1, "test_pool", 3, 2, 0);
+  pools[1].peering_crush_bucket_count = 2;
+  pools[1].peering_crush_bucket_target = 3;
+  pools[1].peering_crush_bucket_barrier = 1;
+
+  bool okay = false;
+  int errcode = 0;
+  stringstream ss;
+
+  validate_pools("replicated_rule", &okay, &errcode, ss);
+
+  EXPECT_FALSE(okay);
+  EXPECT_EQ(errcode, -EINVAL);
+  EXPECT_EQ("pool 'test_pool' is a legacy individual stretch pool; legacy "
+            "individual stretch pools and stretch mode cannot be combined, so "
+            "unstretch it first with 'ceph osd pool stretch unset'",
+            ss.str());
+}
+
 // Test failure when specified CRUSH rule does not exist
 TEST_F(OSDMonitorStretchTest, NonexistentCrushRuleFails) {
   create_replicated_pool(1, "test_pool", 3, 2, 0);
@@ -529,6 +551,9 @@ protected:
     p.peering_crush_bucket_count = bucket_count;
     p.peering_crush_bucket_target = bucket_count ? 2 : 0;
     p.peering_crush_mandatory_member = mandatory_member;
+    // a stretch pool is over zones, with min_size per zone
+    p.num_zones = bucket_count ? 2 : 1;
+    p.replica = p.size / p.num_zones;
     return p;
   }
 
@@ -599,6 +624,253 @@ TEST_F(OSDMonitorStretchTransitionTest, RecoveryCoversPendingPools) {
   expect_transitioned(1, 1, zone1);
   expect_transitioned(2, 1, zone1);
   EXPECT_FALSE(pending_inc.new_pools.contains(3));
+}
+
+// Before the upgrade is committed a pool of global stretch mode keeps the
+// earlier release's one zone and min_size over all its copies, which that
+// release's OSDs read. The transitions must change min_size as its monitor
+// did: halved when a zone is lost, mon_stretch_pool_min_size once healthy.
+// Otherwise older OSDs require copies in both zones while OSDs of this
+// release write with fewer.
+class OSDMonitorPreCommitStretchTransitionTest
+  : public OSDMonitorStretchTransitionTest {
+protected:
+  unique_ptr<CephContext> cct;
+
+  void SetUp() override {
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_MON));
+    g_ceph_context = cct.get();
+    common_init_finish(g_ceph_context);
+  }
+
+  void TearDown() override {
+    g_ceph_context = nullptr;
+  }
+
+  static pg_pool_t make_legacy_pool() {
+    pg_pool_t p = make_pool(2);
+    p.num_zones = 1;
+    p.replica = p.size;
+    return p;
+  }
+};
+
+TEST_F(OSDMonitorPreCommitStretchTransitionTest, MinSizeAsEarlierRelease) {
+  pools[1] = make_legacy_pool();
+  OSDMonitor::apply_stretch_transition_to_pools(pools, pending_inc, 1, zone2);
+  ASSERT_TRUE(pending_inc.new_pools.contains(1));
+  EXPECT_EQ(1u, pending_inc.new_pools.at(1).min_size);
+
+  // as the earlier release's monitor left the pool in degraded stretch mode
+  pg_pool_t degraded = make_legacy_pool();
+  degraded.peering_crush_bucket_count = 1;
+  degraded.peering_crush_mandatory_member = zone2;
+  degraded.min_size = 1;
+  pools[1] = degraded;
+  OSDMap::Incremental recovery_inc{epoch + 1};
+  OSDMonitor::apply_stretch_transition_to_pools(pools, recovery_inc);
+  ASSERT_TRUE(recovery_inc.new_pools.contains(1));
+  EXPECT_EQ(1u, recovery_inc.new_pools.at(1).min_size);
+
+  OSDMap::Incremental healthy_inc{epoch + 2};
+  OSDMonitor::apply_stretch_transition_to_pools(pools, healthy_inc, 2,
+                                                CRUSH_ITEM_NONE);
+  ASSERT_TRUE(healthy_inc.new_pools.contains(1));
+  EXPECT_EQ(cct->_conf.get_val<uint64_t>("mon_stretch_pool_min_size"),
+            healthy_inc.new_pools.at(1).min_size);
+}
+
+// The update that commits the upgrade gives each pool of global stretch mode
+// its two zones and min_size per zone, never fewer copies than before, and
+// forces a resend on every stretch pool, as the peering rules change.
+class OSDMonitorStretchCommitTest
+  : public OSDMonitorValidateStretchModeNewPoolTest {
+protected:
+  static constexpr int zone_type = 9;
+  OSDMap tmp;
+  epoch_t commit_epoch = 0;
+  OSDMap::Incremental inc;
+  int zone1_id = 0;
+
+  void SetUp() override {
+    OSDMonitorValidateStretchModeNewPoolTest::SetUp();
+    zone1_id = crush.get_item_id("zone1");
+  }
+
+  // a pool of global stretch mode as earlier releases have it
+  pg_pool_t legacy_pool(unsigned size, unsigned min_size) const {
+    pg_pool_t p;
+    p.type = pg_pool_t::TYPE_REPLICATED;
+    p.size = size;
+    p.min_size = min_size;
+    p.num_zones = 1;
+    p.replica = size;
+    p.crush_rule = stretch_replica_rule;
+    p.set_pg_num(8);
+    p.set_pgp_num(8);
+    p.peering_crush_bucket_count = 2;
+    p.peering_crush_bucket_target = 2;
+    p.peering_crush_bucket_barrier = zone_type;
+    p.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    return p;
+  }
+
+  // as the monitor leaves it once zone2 is lost
+  pg_pool_t degraded(pg_pool_t p, int mandatory) const {
+    p.peering_crush_bucket_count = 1;
+    p.peering_crush_mandatory_member = mandatory;
+    return p;
+  }
+
+  // tmp holds the pools before the commit, in global stretch mode or not,
+  // degraded (and recovering) or not
+  void make_map(const map<int64_t, pg_pool_t>& pools, bool stretch_mode,
+                bool is_degraded = false, bool recovering = false) {
+    uuid_d fsid;
+    tmp.build_simple(g_ceph_context, 1, fsid, 12);
+    bufferlist crush_bl;
+    crush.encode(crush_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    auto p = crush_bl.cbegin();
+    tmp.crush->decode(p);
+    tmp.stretch_mode_enabled = stretch_mode;
+    tmp.stretch_bucket_count = stretch_mode ? 2 : 0;
+    tmp.degraded_stretch_mode = is_degraded ? 1 : 0;
+    tmp.recovering_stretch_mode = recovering ? 1 : 0;
+    tmp.stretch_mode_bucket = stretch_mode ? zone_type : 0;
+    OSDMap::Incremental setup(tmp.get_epoch() + 1);
+    setup.fsid = tmp.get_fsid();
+    setup.new_flags = tmp.get_flags() & ~CEPH_OSDMAP_STRETCH_ZONES;
+    for (const auto& [id, pool] : pools) {
+      setup.new_pools[id] = pool;
+      setup.new_pool_names[id] = "pool" + std::to_string(id);
+    }
+    ASSERT_EQ(0, tmp.apply_incremental(setup));
+    commit_epoch = tmp.get_epoch() + 1;
+    inc = OSDMap::Incremental(commit_epoch);
+  }
+
+  void convert(unsigned stretch_pool_min_size = 2) {
+    OSDMonitor::convert_stretch_pools_at_commit(tmp, inc,
+                                                stretch_pool_min_size);
+  }
+
+  const pg_pool_t& converted(int64_t id) {
+    EXPECT_TRUE(inc.new_pools.contains(id)) << "pool " << id;
+    return inc.new_pools[id];
+  }
+
+  void expect_zones(int64_t id, unsigned min_size) {
+    SCOPED_TRACE("pool " + std::to_string(id));
+    const pg_pool_t& p = converted(id);
+    EXPECT_EQ(2u, p.get_num_zones());
+    EXPECT_EQ(2u, p.get_replica());
+    EXPECT_EQ(4u, p.get_size());
+    EXPECT_EQ(min_size, p.get_min_size());
+    EXPECT_EQ(commit_epoch, p.get_last_force_op_resend());
+  }
+
+  void expect_one_zone(int64_t id, const pg_pool_t& before) {
+    SCOPED_TRACE("pool " + std::to_string(id));
+    const pg_pool_t& p = converted(id);
+    EXPECT_EQ(1u, p.get_num_zones());
+    EXPECT_EQ(before.get_replica(), p.get_replica());
+    EXPECT_EQ(before.get_size(), p.get_size());
+    EXPECT_EQ(before.get_min_size(), p.get_min_size());
+    EXPECT_EQ(commit_epoch, p.get_last_force_op_resend());
+  }
+};
+
+// min_size 2 over four copies becomes 1 per zone, and an odd total rounds up
+TEST_F(OSDMonitorStretchCommitTest, HealthyCommitGivesZones) {
+  make_map({{1, legacy_pool(4, 1)}, {2, legacy_pool(4, 2)},
+            {3, legacy_pool(4, 3)}, {4, legacy_pool(4, 4)}}, true);
+  convert();
+  expect_zones(1, 1);
+  expect_zones(2, 1);
+  expect_zones(3, 2);
+  expect_zones(4, 2);
+  EXPECT_EQ(CRUSH_ITEM_NONE, converted(2).peering_crush_mandatory_member);
+}
+
+// Degraded, the pool's min_size was halved and becoming healthy no longer
+// restores it, so it comes from mon_stretch_pool_min_size
+TEST_F(OSDMonitorStretchCommitTest, DegradedCommitUsesStretchPoolMinSize) {
+  for (unsigned stretch_min_size : {2u, 3u, 4u}) {
+    SCOPED_TRACE("mon_stretch_pool_min_size " +
+                 std::to_string(stretch_min_size));
+    make_map({{1, degraded(legacy_pool(4, stretch_min_size / 2), zone1_id)}},
+             true, true);
+    convert(stretch_min_size);
+    expect_zones(1, (stretch_min_size + 1) / 2);
+    EXPECT_EQ(1u, converted(1).peering_crush_bucket_count);
+    EXPECT_EQ(zone1_id, converted(1).peering_crush_mandatory_member);
+  }
+}
+
+TEST_F(OSDMonitorStretchCommitTest, RecoveringCommitUsesStretchPoolMinSize) {
+  make_map({{1, degraded(legacy_pool(4, 1), zone1_id)}}, true, true, true);
+  convert(3);
+  expect_zones(1, 2);
+}
+
+// A pool created while degraded has no mandatory zone; per zone it would
+// need copies in the lost zone too, so it gets the surviving one
+TEST_F(OSDMonitorStretchCommitTest, PoolCreatedWhileDegradedGetsSurvivingZone) {
+  make_map({{1, degraded(legacy_pool(4, 1), zone1_id)},
+            {2, degraded(legacy_pool(4, 1), CRUSH_ITEM_NONE)}}, true, true);
+  convert();
+  expect_zones(2, 1);
+  EXPECT_EQ(zone1_id, converted(2).peering_crush_mandatory_member);
+}
+
+// Pools whose copies are not evenly in two zones keep one zone and their
+// min_size, but are forced to resend as the peering rules change
+TEST_F(OSDMonitorStretchCommitTest, OtherStretchPoolsKeepOneZone) {
+  pg_pool_t odd = legacy_pool(3, 2);
+  pg_pool_t one_bucket = legacy_pool(2, 1);  // an earlier leader, degraded
+  one_bucket.peering_crush_bucket_count = 1;
+  one_bucket.peering_crush_bucket_target = 1;
+  pg_pool_t erasure = legacy_pool(4, 3);
+  erasure.type = pg_pool_t::TYPE_ERASURE;
+  erasure.crush_rule = stretch_ec_rule;
+  pg_pool_t uneven = legacy_pool(6, 3);  // the rule puts 2 in each zone
+  make_map({{1, odd}, {2, one_bucket}, {3, erasure}, {4, uneven}}, true);
+  convert();
+  expect_one_zone(1, odd);
+  expect_one_zone(2, one_bucket);
+  expect_one_zone(3, erasure);
+  expect_one_zone(4, uneven);
+}
+
+// Without global stretch mode a stretch pool is an individual stretch pool
+TEST_F(OSDMonitorStretchCommitTest, IndividualStretchPoolKeepsOneZone) {
+  const pg_pool_t p = legacy_pool(4, 2);
+  make_map({{1, p}}, false);
+  convert();
+  expect_one_zone(1, p);
+}
+
+TEST_F(OSDMonitorStretchCommitTest, PlainAndDeletedPoolsUntouched) {
+  pg_pool_t plain = legacy_pool(3, 2);
+  plain.peering_crush_bucket_count = 0;
+  plain.peering_crush_bucket_target = 0;
+  plain.peering_crush_bucket_barrier = 0;
+  make_map({{1, plain}, {2, legacy_pool(4, 2)}}, true);
+  inc.old_pools.insert(2);
+  convert();
+  EXPECT_FALSE(inc.new_pools.contains(1));
+  EXPECT_FALSE(inc.new_pools.contains(2));
+}
+
+// A change the pending update made after tmp was built is kept
+TEST_F(OSDMonitorStretchCommitTest, KeepsPendingPoolChanges) {
+  make_map({{1, legacy_pool(4, 2)}}, true);
+  pg_pool_t pending = *tmp.get_pg_pool(1);
+  pending.flags |= pg_pool_t::FLAG_OMAP;
+  inc.new_pools[1] = pending;
+  convert();
+  expect_zones(1, 1);
+  EXPECT_TRUE(converted(1).has_flag(pg_pool_t::FLAG_OMAP));
 }
 
 class OSDMonitorStretchPlanTest : public ::testing::Test {
@@ -957,7 +1229,7 @@ TEST_F(OSDMonitorCommitDefaultsTest, NoStretchModeNoDefaults) {
 TEST_F(OSDMonitorCommitDefaultsTest, StretchModeDefaults) {
   const map<string, string> expected = {
     {"osd_pool_default_num_zones", "2"},
-    {"osd_pool_default_replica", "2"},
+    {"osd_pool_default_size", "2"},
     {"osd_pool_default_zone_failure_domain", "zone"}};
   EXPECT_EQ(expected, defaults(true, crush.get_type_id("zone")));
 }
@@ -972,13 +1244,13 @@ TEST_F(OSDMonitorCommitDefaultsTest, DatacenterStretchBucket) {
 // Test a stretch pool size of 6 gives 3 replicas per zone
 TEST_F(OSDMonitorCommitDefaultsTest, StretchPoolSizeSix) {
   EXPECT_EQ("3", defaults(true, crush.get_type_id("zone"), 6)
-                   .at("osd_pool_default_replica"));
+                   .at("osd_pool_default_size"));
 }
 
 // Test an odd stretch pool size rounds the replicas per zone down
 TEST_F(OSDMonitorCommitDefaultsTest, StretchPoolSizeFive) {
   EXPECT_EQ("2", defaults(true, crush.get_type_id("zone"), 5)
-                   .at("osd_pool_default_replica"));
+                   .at("osd_pool_default_size"));
 }
 
 // Test an unknown stretch bucket type leaves the zone failure domain alone
@@ -992,7 +1264,7 @@ TEST_F(OSDMonitorCommitDefaultsTest, UnknownBucketTypeKeepsZoneDefault) {
 TEST(OSDMonitorStretchPoolDefaultsTest, TwoZones) {
   const map<string, string> expected = {
     {"osd_pool_default_num_zones", "2"},
-    {"osd_pool_default_replica", "2"},
+    {"osd_pool_default_size", "2"},
     {"osd_pool_default_zone_failure_domain", "datacenter"}};
   EXPECT_EQ(expected, OSDMonitor::stretch_pool_defaults(2, 2, "datacenter"));
 }
@@ -1001,7 +1273,7 @@ TEST(OSDMonitorStretchPoolDefaultsTest, TwoZones) {
 TEST(OSDMonitorStretchPoolDefaultsTest, OneZone) {
   const map<string, string> expected = {
     {"osd_pool_default_num_zones", "1"},
-    {"osd_pool_default_replica", "3"}};
+    {"osd_pool_default_size", "3"}};
   EXPECT_EQ(expected, OSDMonitor::stretch_pool_defaults(1, 3, ""));
 }
 

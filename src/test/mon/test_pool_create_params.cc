@@ -913,7 +913,7 @@ TEST_F(PoolParamsTest, StretchFailureNamesDefault) {
 // Test an error of building or checking the rule of a pool over zones names
 // the defaults that gave its values: those the command line did not give
 TEST_F(PoolParamsTest, RuleErrorsNameDefaults) {
-  EXPECT_EQ(" (osd_pool_default_replica, osd_pool_default_zone_failure_domain, "
+  EXPECT_EQ(" (osd_pool_default_size, osd_pool_default_zone_failure_domain, "
             "osd_pool_default_osd_failure_domain, osd_pool_default_root)",
             rule_from_defaults(with({{"num_zones", int64_t(2)}})));
   EXPECT_EQ("", rule_from_defaults(with({})));
