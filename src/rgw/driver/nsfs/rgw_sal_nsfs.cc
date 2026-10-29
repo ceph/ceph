@@ -6576,6 +6576,9 @@ std::unique_ptr<Notification> NSFSDriver::get_notification(rgw::sal::Object* obj
       notif->x_meta_map.emplace(k, v);
     }
   }
+  if (auto i = s->env.find("aws:SourceIp"); i != s->env.end()) {
+    notif->source_ip = i->second;
+  }
   return notif;
 }
 
@@ -7463,6 +7466,7 @@ int NSFSNotification::publish_commit(const DoutPrefixProvider* dpp,
     event.eventTime = mtime;
     event.eventName = rgw::notify::to_event_string(event_type);
     event.userIdentity = user_id;
+    event.sourceIPAddress = source_ip;
     event.x_amz_request_id = req_id;
     event.x_amz_id_2 = driver->get_host_id();
     event.configurationId = filter.s3_id;

@@ -2068,6 +2068,9 @@ protected:
   std::vector<std::pair<rgw_pubsub_topic_filter, rgw::notify::EventType>> matched;
   RGWObjTags* obj_tags_ptr = nullptr;
   KeyValueMap x_meta_map;
+  /* the client's address, as the policy environment holds it;  empty
+   * for the driver's own events */
+  std::string source_ip;
   friend class NSFSDriver;
 public:
  NSFSNotification(NSFSDriver* _driver,
