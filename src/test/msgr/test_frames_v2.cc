@@ -423,6 +423,87 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::ValuesIn(round_trip_instances),
         ::testing::ValuesIn(modes)));
 
+// ProtocolV2 may crc a large segment in chunks while reading it and hand
+// FrameAssembler the result (ms_crc_data_rx_chunk_size). The epilogue check
+// must then use that value, still catch corruption, and forget it by the
+// next frame.
+class PrecomputedRxCrcTest : public ::testing::TestWithParam<bool> {};
+
+TEST_P(PrecomputedRxCrcTest, Checks) {
+  const bool is_rev1 = GetParam();
+  ceph::crypto::onwire::rxtx_t crypto;
+  ceph::compression::onwire::rxtx_t comp;
+  FrameAssembler tx_frame_asm(&crypto, is_rev1, true, &comp);
+  FrameAssembler rx_frame_asm(&crypto, is_rev1, true, &comp);
+  const auto header = make_bufferlist(16, 'H');
+  const auto front = make_bufferlist(64, 'F');
+  const auto middle = make_bufferlist(32, 'M');
+  const auto data = make_bufferlist(3 << 20, 'D');
+  const size_t data_idx = 3;
+
+  auto encode = [&] {
+    return TestFrame::Encode(header, front, middle, data).get_buffer(
+        tx_frame_asm);
+  };
+  // receive one frame; at_segment sees each segment once it has been read,
+  // where ProtocolV2 would set the crc it computed while reading it
+  auto receive = [&](bufferlist frame_bl, auto at_segment) {
+    bufferlist preamble_bl, epilogue_bl;
+    segment_bls_t segment_bls;
+    frame_bl.splice(0, rx_frame_asm.get_preamble_onwire_len(), &preamble_bl);
+    rx_frame_asm.disassemble_preamble(preamble_bl);
+    for (size_t i = 0; i < rx_frame_asm.get_num_segments(); i++) {
+      segment_bls.emplace_back();
+      if (auto len = rx_frame_asm.get_segment_onwire_len(i); len > 0) {
+        frame_bl.splice(0, len, &segment_bls.back());
+      }
+      at_segment(i, segment_bls.back());
+    }
+    frame_bl.splice(0, rx_frame_asm.get_epilogue_onwire_len(), &epilogue_bl);
+    EXPECT_TRUE(rx_frame_asm.disassemble_segments(
+        preamble_bl, segment_bls.data(), epilogue_bl));
+    return segment_bls;
+  };
+  auto own_crc = [&](size_t i, bufferlist& bl) {
+    if (rx_frame_asm.can_precompute_rx_crc(i)) {
+      rx_frame_asm.set_precomputed_rx_crc(i, bl.crc32c(-1));
+    }
+  };
+  // flip a bit in a copy: the segment shares its buffer with `data`
+  auto corrupt = [&](size_t i, bufferlist& bl) {
+    if (i == data_idx) {
+      std::string s = bl.to_str();
+      s[12345] ^= 0x40;
+      bl.clear();
+      bl.append(s);
+    }
+  };
+
+  // the receiver's own crc of what it read is accepted
+  auto segment_bls = receive(encode(), own_crc);
+  EXPECT_TRUE(data.contents_equal(segment_bls[data_idx]));
+
+  // and that value is what is checked: a wrong one fails on intact data
+  EXPECT_THROW(receive(encode(), [&](size_t i, bufferlist& bl) {
+    if (i == data_idx) {
+      rx_frame_asm.set_precomputed_rx_crc(i, bl.crc32c(-1) ^ 1);
+    }
+  }), FrameError);
+
+  // data corrupted on the wire: the crc of what arrived doesn't match
+  EXPECT_THROW(receive(encode(), [&](size_t i, bufferlist& bl) {
+    corrupt(i, bl);
+    own_crc(i, bl);
+  }), FrameError);
+
+  // a value set for one frame doesn't carry over to the next
+  receive(encode(), own_crc);
+  EXPECT_THROW(receive(encode(), corrupt), FrameError);
+}
+
+INSTANTIATE_TEST_SUITE_P(PrecomputedRxCrc, PrecomputedRxCrcTest,
+                         ::testing::Bool());
+
 class RoundTripPerfTest : public RoundTripTestBase {};
 
 TEST_P(RoundTripPerfTest, DISABLED_Basic) {
