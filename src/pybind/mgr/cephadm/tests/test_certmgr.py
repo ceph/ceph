@@ -1528,7 +1528,9 @@ class TestCertMgr(object):
         assert "cephadm-signed" in warning
         assert "reference" in warning
         assert "per-host certificates" in warning
-        assert "ceph orch certmgr cert set" in warning
+        assert ("ceph orch certmgr cert-key set --consumer grafana --service-name grafana "
+                "--hostname <host> -i <cert-key-pem-file>") in warning
+        assert "certmgr key set" not in warning
 
     def test_check_cert_source_all_transitions_warn(self, cephadm_module: CephadmOrchestrator):
         """Every cross-source transition should produce a certificate_source warning."""
