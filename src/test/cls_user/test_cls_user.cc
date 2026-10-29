@@ -654,3 +654,27 @@ TEST_F(ClsUserStorageClass, ResetStatsV1) {
   EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_entries, 5u);
   EXPECT_EQ((*header.storage_class_stats)["HDD"].total_entries, 5u);
 }
+
+TEST_F(ClsUserStorageClass, ResetStatsThreeCalls) {
+  // 2500 buckets need three reset_user_stats2 calls (up to 1000 entries
+  // each). an empty bucket that was just linked has no per-storage-class
+  // stats, but it must not make them unknown
+  std::string oid = "user.reset-sc-three-calls";
+  add_buckets_with_sc(ioctx, oid, 2500, -1);
+  cls_user_bucket_entry link;
+  link.bucket.name = "bucket-empty";
+  set_bucket(ioctx, oid, link, true);
+
+  // clear the header, then rebuild it
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, cls_user_header{}));
+  reset_user_stats_test(ioctx, oid);
+
+  cls_user_header header;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 2500u);
+  EXPECT_EQ(header.stats.total_bytes, 2500u * 1024u);
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_entries, 1250u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_entries, 1250u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_bytes, 1250u * 1024u);
+}
