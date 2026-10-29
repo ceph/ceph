@@ -105,6 +105,17 @@ public:
     out << ")";
   }
 
+  void clear_buffers() override {
+    // the op history keeps this message after the push is applied; keep
+    // what print() shows of each push, drop the data it carried
+    for (auto& p : pushes) {
+      p.data.clear();
+      p.omap_header.clear();
+      p.omap_entries.clear();
+      p.attrset.clear();
+    }
+  }
+
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
