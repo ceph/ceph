@@ -1678,7 +1678,10 @@ void ReplicatedBackend::prepare_pull(
   pull_info.head_ctx = headctx;
   pull_info.recovery_info = op.recovery_info;
   pull_info.recovery_progress = op.recovery_progress;
-  pull_info.cache_dont_need = h->cache_dont_need;
+  // only reads are kept out of the cache: a pull source already reads with
+  // DONTNEED (handle_pull), and this OSD, which serves the reads that follow,
+  // keeps the recovered copy it writes, as before
+  pull_info.cache_dont_need = false;
   pull_info.lock_manager = std::move(lock_manager);
 }
 
