@@ -2470,6 +2470,122 @@ TEST_F(OSDMapTest, BUG_43124) {
   }
 }
 
+TEST_F(OSDMapTest, calc_pg_upmaps_no_primary_bias) {
+  // https://tracker.ceph.com/issues/82280
+  //
+  // When the balancer has to move many shards into a CRUSH bucket that CRUSH
+  // itself under-places (e.g. a rack whose bucket weight is lower than the
+  // sum of its OSD weights), the remapped shards used to land at position 0
+  // (the primary / EC shard 0) far more often than at any other position,
+  // concentrating primaries on that bucket's OSDs.
+  //
+  // 160 osds: 20 racks x 2 hosts x 4 osds, EC-like pool of size 8 with
+  // "chooseleaf indep 0 type rack". rack-0 gets 1/4 of its real weight in
+  // the root bucket, so the balancer (which targets leaf weights) must fill it.
+  const int racks = 20, hosts_per_rack = 2, osds_per_host = 4;
+  const int n_osds = racks * hosts_per_rack * osds_per_host;
+  set_up_map(n_osds, true);
+
+  for (int i = 0; i < n_osds; i++) {
+    int host = i / osds_per_host;
+    int rack = host / hosts_per_rack;
+    vector<string> move_to = {
+      "root=default",
+      "rack=rack-" + std::to_string(rack),
+      "host=host-" + std::to_string(host)};
+    ASSERT_EQ(0, crush_move(osdmap, "osd." + std::to_string(i), move_to));
+  }
+
+  CrushWrapper crush;
+  get_crush(osdmap, crush);
+  int root = crush.get_item_id("default");
+  int rack0 = crush.get_item_id("rack-0");
+  ASSERT_LT(rack0, 0);
+  ASSERT_GT(crush.adjust_item_weight_in_bucket(
+    g_ceph_context, rack0, crush.get_item_weight(rack0) / 4, root, false), 0);
+
+  int rno;
+  for (rno = 0; rno < crush.get_max_rules(); rno++) {
+    if (!crush.rule_exists(rno))
+      break;
+  }
+  crush_rule *rule = crush_make_rule(5, pg_pool_t::TYPE_ERASURE);
+  int step = 0;
+  crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_INDEP, 0, 3 /* rack */);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
+  ASSERT_GE(crush_add_rule(crush.get_crush_map(), rule, rno), 0);
+  crush.set_rule_name(rno, "ec_rack");
+  {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    crush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    osdmap.apply_incremental(pending_inc);
+  }
+
+  const int pg_num = 1024;
+  int64_t pool_id;
+  {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_pool_max = osdmap.get_pool_max();
+    pool_id = ++pending_inc.new_pool_max;
+    pg_pool_t empty;
+    auto p = pending_inc.get_new_pool(pool_id, &empty);
+    p->size = 8;
+    p->min_size = 7;
+    p->set_pg_num(pg_num);
+    p->set_pgp_num(pg_num);
+    p->type = pg_pool_t::TYPE_ERASURE;
+    p->crush_rule = rno;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    pending_inc.new_pool_names[pool_id] = "ec_rack";
+    osdmap.apply_incremental(pending_inc);
+  }
+
+  // balance until nothing is left to do
+  set<int64_t> only_pools = {pool_id};
+  std::random_device::result_type seed = 42;
+  for (int round = 0; round < 1000; ++round) {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    int did = osdmap.calc_pg_upmaps(g_ceph_context, 1, 100, only_pools,
+                                    &pending_inc, &seed);
+    if (did == 0)
+      break;
+    osdmap.apply_incremental(pending_inc);
+  }
+
+  // where did remapped shards land, and how many primaries does rack-0 hold?
+  map<int, int> remapped_by_pos;
+  int remapped = 0;
+  int rack0_primaries = 0;
+  for (int ps = 0; ps < pg_num; ++ps) {
+    pg_t pg(ps, pool_id);
+    vector<int> raw, up;
+    osdmap.pg_to_raw_upmap(pg, &raw, &up);
+    ASSERT_EQ(raw.size(), up.size());
+    for (unsigned i = 0; i < up.size(); ++i) {
+      if (raw[i] != up[i]) {
+        ++remapped_by_pos[i];
+        ++remapped;
+      }
+    }
+    if (up[0] >= 0 && up[0] < osds_per_host * hosts_per_rack)
+      ++rack0_primaries;
+  }
+  ASSERT_GT(remapped, 0);
+  double pos0_share = (double)remapped_by_pos[0] / remapped;
+  double mean_primaries = (double)pg_num / n_osds;
+  double rack0_avg = (double)rack0_primaries / (osds_per_host * hosts_per_rack);
+  std::cout << "remapped shards " << remapped
+            << ", position 0 share " << pos0_share
+            << ", rack-0 primaries/osd " << rack0_avg
+            << " (pool mean " << mean_primaries << ")" << std::endl;
+  // with no bias each of the 8 positions gets ~12.5% of the remaps
+  ASSERT_LT(pos0_share, 0.2);
+  ASSERT_LT(rack0_avg, 1.5 * mean_primaries);
+}
+
 TEST_F(OSDMapTest, BUG_48884)
 {
 
