@@ -3,6 +3,7 @@
 
 #include "include/types.h"
 #include "cls/refcount/cls_refcount_client.h"
+#include "cls/refcount/cls_refcount_ops.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
@@ -15,6 +16,137 @@ using namespace std;
 
 static librados::ObjectWriteOperation *new_op() {
   return new librados::ObjectWriteOperation();
+}
+
+class TestClsRefcount : public ::testing::Test {
+protected:
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name;
+
+  void SetUp() override {
+    pool_name = get_temp_pool_name();
+    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  }
+
+  void TearDown() override {
+    ioctx.close();
+    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+  }
+
+  void get(const string& oid, const string& tag, const string& src_tag = "") {
+    librados::ObjectWriteOperation op;
+    cls_refcount_get(op, tag, true, src_tag);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  void put(const string& oid, const string& tag) {
+    librados::ObjectWriteOperation op;
+    cls_refcount_put(op, tag, true);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  void check_refcount(const string& oid, const set<string>& refs,
+                      const set<string>& retired,
+                      const string& owner = "") {
+    bufferlist bl;
+    ASSERT_GT(ioctx.getxattr(oid, "refcount", bl), 0);
+    obj_refcount actual;
+    auto p = bl.cbegin();
+    decode(actual, p);
+    set<string> tags;
+    for (const auto& [tag, _] : actual.refs) {
+      tags.insert(tag);
+    }
+    EXPECT_EQ(refs, tags);
+    EXPECT_EQ(retired, actual.retired_refs);
+    EXPECT_EQ(owner, actual.wildcard_owner);
+  }
+};
+
+TEST_F(TestClsRefcount, owned_wildcard)
+{
+  const string oid = "owned_wildcard";
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  // the first source owns the wildcard, and puts retire nothing
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy", "source"));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy2", "other"));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy"));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy2"));
+  // a replayed put can't drop the owned wildcard
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy"));
+  ASSERT_NO_FATAL_FAILURE(check_refcount(oid, {""}, {}, "source"));
+
+  ASSERT_NO_FATAL_FAILURE(put(oid, "source"));
+  ASSERT_EQ(-ENOENT, ioctx.stat(oid, nullptr, nullptr));
+}
+
+TEST_F(TestClsRefcount, wildcard_without_owner)
+{
+  const string oid = "no_owner";
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "live"));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "retired"));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "retired"));
+
+  // a source with a ref of its own, live or retired, doesn't own the wildcard
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy", "live"));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy2", "retired"));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "self", "self"));
+  // with no owner, a replayed put could still drop the wildcard
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy"));
+  ASSERT_NO_FATAL_FAILURE(check_refcount(oid, {"", "live", "copy2", "self"},
+                                         {"retired", "copy"}));
+}
+
+TEST_F(TestClsRefcount, retired_tags_dropped)
+{
+  const string oid = "retired_dropped";
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy"));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy"));
+  ASSERT_NO_FATAL_FAILURE(check_refcount(oid, {""}, {"copy"}));
+
+  // the first owner drops the retired tags, and a replay can't drop its wildcard
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy2", "source"));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy"));
+  ASSERT_NO_FATAL_FAILURE(check_refcount(oid, {"", "copy2"}, {}, "source"));
+
+  // nothing stays retired once the wildcard is gone
+  ASSERT_NO_FATAL_FAILURE(put(oid, "source"));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "source"));
+  ASSERT_NO_FATAL_FAILURE(check_refcount(oid, {"copy2"}, {}));
+}
+
+TEST_F(TestClsRefcount, retired_tags_dropped_without_wildcard)
+{
+  // tails whose wildcard was dropped before it could have an owner
+  const string oid = "no_wildcard";
+  obj_refcount objr;
+  objr.refs = {{"a", true}, {"b", true}};
+  objr.retired_refs = {"old"};
+  bufferlist bl;
+  encode(objr, bl);
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  ASSERT_EQ(0, ioctx.setxattr(oid, "refcount", bl));
+
+  ASSERT_NO_FATAL_FAILURE(put(oid, "a"));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "old"));
+  ASSERT_NO_FATAL_FAILURE(check_refcount(oid, {"b"}, {}));
+}
+
+TEST(ObjRefcount, compat)
+{
+  auto compat = [](const obj_refcount& objr) {
+    bufferlist bl;
+    encode(objr, bl);
+    return bl[1];
+  };
+  obj_refcount objr;
+  EXPECT_EQ(1, compat(objr));
+  objr.wildcard_owner = "source";
+  EXPECT_EQ(3, compat(objr));
 }
 
 TEST(cls_refcount, test_implicit) /* test refcount using implicit referencing of newly created objects */
