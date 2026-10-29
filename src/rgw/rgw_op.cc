@@ -2853,15 +2853,109 @@ void RGWGetObj::execute(optional_yield y)
   }
 
   attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
-  if (attr_iter != attrs.end() && !skip_manifest) {
-    is_slo = true;
-    op_ret = handle_slo_manifest(attr_iter->second, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret
-		       << dendl;
-      goto done_err;
+  if (attr_iter != attrs.end()) {
+    // swift ?multipart-manifest=get: return the manifest json instead of
+    // assembling segments. manifest_get is only ever set by the swift
+    // frontend for this purpose.
+    if (manifest_get) {
+      is_slo = true;
+      RGWSLOInfo slo_info;
+      try {
+        auto bliter = attr_iter->second.cbegin();
+        decode(slo_info, bliter);
+      } catch (buffer::error& err) {
+        ldpp_dout(this, 0) << "ERROR: failed to decode slo manifest" << dendl;
+        op_ret = -EIO;
+        goto done_err;
+      }
+
+      /* swift returns the segment path with exactly one leading '/' in both
+       * formats; rgw stores the path exactly as the client sent it on PUT */
+      auto normalized_path = [](const std::string& path) {
+        auto pos = path.find_first_not_of('/');
+        return "/" + (pos == std::string::npos ? std::string{}
+                                               : path.substr(pos));
+      };
+
+      /* plain multipart-manifest=get returns swift's "user" format
+       * (name/hash/bytes), which python-swiftclient depends on;
+       * &format=raw returns the format that was put
+       * (path/etag/size_bytes). see swift's slo middleware
+       * (_return_manifest_response) */
+      ceph::JSONFormatter jf(false);
+      jf.open_array_section("");
+      for (const auto& entry : slo_info.entries) {
+        jf.open_object_section("");
+        if (manifest_get_raw) {
+          encode_json("path", normalized_path(entry.path), &jf);
+          encode_json("etag", entry.etag, &jf);
+          encode_json("size_bytes", entry.size_bytes, &jf);
+        } else {
+          encode_json("name", normalized_path(entry.path), &jf);
+          encode_json("hash", entry.etag, &jf);
+          encode_json("bytes", entry.size_bytes, &jf);
+        }
+        jf.close_section();
+      }
+      jf.close_section();
+
+      bufferlist manifest_bl;
+      jf.flush(manifest_bl);
+
+      /* full body length; also the Content-Range total */
+      s->obj_size = manifest_bl.length();
+
+      if (!manifest_get_raw) {
+        /* plain get: swift forces this content-type */
+        bufferlist ct_bl;
+        ct_bl.append("application/json; charset=utf-8");
+        attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
+      } else {
+        /* raw: the body is regenerated, so its md5 is the etag, like
+         * swift's convert_segment_listing() */
+        MD5 etag_hash;
+        // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+        etag_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+        etag_hash.Update((const unsigned char *)manifest_bl.c_str(),
+                         manifest_bl.length());
+        std::string raw_etag;
+        complete_etag(etag_hash, &raw_etag);
+        bufferlist etag_bl;
+        etag_bl.append(raw_etag);
+        attrs[RGW_ATTR_ETAG] = etag_bl;
+      }
+
+      /* apply Range to the manifest body like a regular object read;
+       * range_to_ofs resolves suffix ranges and clamps end */
+      op_ret = s->object->range_to_ofs(s->obj_size, ofs, end);
+      if (op_ret < 0) {
+        goto done_err; /* -ERANGE -> 416 */
+      }
+      total_len = (ofs <= end ? end + 1 - ofs : 0);
+
+      op_ret = send_response_data(manifest_bl, ofs, total_len);
+      if (op_ret < 0) {
+        ldpp_dout(this, 0) << "ERROR: failed to send_response_data ret="
+                           << op_ret << dendl;
+        goto done_err;
+      }
+      return;
     }
-    return;
+
+    // skip_manifest is also set by multisite sync requests
+    // (rgwx-sync-manifest): those must read the raw manifest object itself
+    // and fall through to the normal read path below, as the segments are
+    // synced as separate objects
+    if (!skip_manifest) {
+      is_slo = true;
+      op_ret = handle_slo_manifest(attr_iter->second, y);
+      if (op_ret < 0) {
+        ldpp_dout(this, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret
+                           << dendl;
+        goto done_err;
+      }
+      return;
+    }
   }
 
   /**

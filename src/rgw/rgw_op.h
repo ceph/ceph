@@ -437,6 +437,8 @@ protected:
   bool ignore_invalid_range;
   bool range_parsed;
   bool skip_manifest;
+  bool manifest_get{false}; /* swift GET ?multipart-manifest=get: return the manifest itself */
+  bool manifest_get_raw{false}; /* swift GET ?multipart-manifest=get&format=raw: return the put format (path/etag/size_bytes) */
   bool skip_decrypt{false};
   bool sync_cloudtiered{false};
   utime_t gc_invalidate_time;
