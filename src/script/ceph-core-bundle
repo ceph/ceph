@@ -766,11 +766,9 @@ class CephRepo:
         loc = next(d.find(ns + "location").get("href")
                    for d in md.findall(ns + "data")
                    if d.get("type") == "filelists")
-        fl = os.path.join(cachedir, "filelists.xml.gz")
-        download(base + loc, fl)
         p2p, b2p, pf, pu = {}, {}, {}, {}
         tag = "{http://linux.duke.edu/metadata/filelists}"
-        with gzip.open(fl) as g:
+        with open_meta(base + loc) as g:
             for _ev, el in ET.iterparse(g):
                 if el.tag != tag + "package":
                     continue
@@ -788,7 +786,6 @@ class CephRepo:
                             p.endswith(".debug"):
                         b2p[p[25:27] + p[28:-6]] = rpm
                 el.clear()
-        os.unlink(fl)
         return {"path2pkg": p2p, "bid2pkg": b2p, "pkgfiles": pf,
                 "pkgurl": pu}
 
