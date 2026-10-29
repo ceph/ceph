@@ -490,6 +490,9 @@ template <class Func>
 auto OpsExecuter::do_write_op_attr_cache(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   check_init_op_params(m);
+  if (!attr_cache_backup) {
+    attr_cache_backup = obc->attr_cache;
+  }
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn, obc->attr_cache);
 }
 OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
@@ -664,8 +667,10 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.get_xattrs(os, attr_cache, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_CMPXATTR:
-    return do_read_op([this, &osd_op](auto& backend, const auto& os) {
-      return backend.cmp_xattr(os, osd_op, delta_stats);
+    return do_read_attr_cache([this, &osd_op](auto& backend,
+					      const auto& attr_cache,
+					      const auto& os) {
+      return backend.cmp_xattr(os, attr_cache, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_RMXATTR:
     return do_write_op_attr_cache([&osd_op](auto& backend, auto& os, auto& txn, auto& attr_cache) {

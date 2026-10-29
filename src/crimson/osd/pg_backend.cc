@@ -1182,6 +1182,28 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   });
 }
 
+PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
+PGBackend::get_xattr_maybe_from_cache(
+  const ObjectState& os,
+  const ObjectContext::attr_cache_t& attr_cache,
+  std::string&& name) const
+{
+  if (!is_erasure()) {
+    logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
+    return getxattr(os.oi.soid, std::move(name));
+  }
+  if (!os.exists) {
+    logger().debug("getxattr: object {} does not exist (erasure)", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
+  if (auto cache_it = attr_cache.find(name); cache_it != std::end(attr_cache)) {
+    return get_attr_ierrorator::make_ready_future<ceph::bufferlist>(
+      cache_it->second);
+  }
+  logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
+  return crimson::ct_error::enodata::make();
+}
+
 PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
   const ObjectState& os,
   const ObjectContext::attr_cache_t& attr_cache,
@@ -1195,24 +1217,9 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
   }
-  auto get_attr_maybe_from_cache =
-    [&] () mutable -> get_attr_ierrorator::future<ceph::bufferlist> {
-    if (!is_erasure()) {
-      logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
-      return getxattr(os.oi.soid, std::move(name));
-    }
-    if (auto cache_it = attr_cache.find(name); cache_it != std::end(attr_cache)) {
-      return get_attr_ierrorator::make_ready_future<ceph::bufferlist>(
-        cache_it->second);
-    }
-    logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
-    return crimson::ct_error::enodata::make();
-  };
-  if (is_erasure() && !os.exists) {
-    logger().debug("getxattr: object {} does not exist (erasure)", os.oi.soid);
-    return crimson::ct_error::enoent::make();
-  }
-  return get_attr_maybe_from_cache().safe_then_interruptible(
+  return get_xattr_maybe_from_cache(
+    os, attr_cache, std::move(name)
+  ).safe_then_interruptible(
     [&delta_stats, &osd_op] (ceph::bufferlist&& val) {
     osd_op.outdata = std::move(val);
     osd_op.op.xattr.value_len = osd_op.outdata.length();
@@ -1299,6 +1306,7 @@ static int do_xattr_cmp_u64(int op, uint64_t lhs, bufferlist& rhs_xattr)
 
 PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
   const ObjectState& os,
+  const ObjectContext::attr_cache_t& attr_cache,
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
@@ -1307,7 +1315,9 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
   bp.copy(osd_op.op.xattr.name_len, name);
  
   logger().debug("cmpxattr on obj={} for attr={}", os.oi.soid, name);
-  return getxattr(os.oi.soid, std::move(name)).safe_then_interruptible(
+  return get_xattr_maybe_from_cache(
+    os, attr_cache, std::move(name)
+  ).safe_then_interruptible(
     [&delta_stats, &osd_op] (auto &&xattr) -> cmp_xattr_ierrorator::future<> {
     delta_stats.num_rd++;
     delta_stats.num_rd_kb += shift_round_up(osd_op.op.xattr.value_len, 10);
