@@ -3,6 +3,7 @@
 #include <ostream>
 
 #include "ceph_ver.h"
+#include "include/ceph_features.h"
 
 std::ostream& operator<<(std::ostream& os, const ceph_release_t r)
 {
@@ -12,6 +13,38 @@ std::ostream& operator<<(std::ostream& os, const ceph_release_t r)
 ceph_release_t ceph_release()
 {
   return ceph_release_t{CEPH_RELEASE};
+}
+
+uint64_t ceph_release_server_feature(ceph_release_t r)
+{
+  switch (r) {
+  case ceph_release_t::kraken:
+    return CEPH_FEATUREMASK_SERVER_KRAKEN;
+  case ceph_release_t::luminous:
+    return CEPH_FEATUREMASK_SERVER_LUMINOUS;
+  case ceph_release_t::mimic:
+    return CEPH_FEATUREMASK_SERVER_MIMIC;
+  case ceph_release_t::nautilus:
+    return CEPH_FEATUREMASK_SERVER_NAUTILUS;
+  case ceph_release_t::octopus:
+    return CEPH_FEATUREMASK_SERVER_OCTOPUS;
+  case ceph_release_t::pacific:
+    return CEPH_FEATUREMASK_SERVER_PACIFIC;
+  case ceph_release_t::quincy:
+    return CEPH_FEATUREMASK_SERVER_QUINCY;
+  case ceph_release_t::reef:
+    return CEPH_FEATUREMASK_SERVER_REEF;
+  case ceph_release_t::squid:
+    return CEPH_FEATUREMASK_SERVER_SQUID;
+  case ceph_release_t::tentacle:
+    return CEPH_FEATUREMASK_SERVER_TENTACLE;
+  case ceph_release_t::umbrella:
+    return CEPH_FEATUREMASK_SERVER_UMBRELLA;
+  case ceph_release_t::vampire:
+    return CEPH_FEATUREMASK_SERVER_VAMPIRE;
+  default:
+    return 0;
+  }
 }
 
 ceph_release_t ceph_release_from_name(std::string_view s)
