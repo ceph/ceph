@@ -16,6 +16,7 @@ tasks:
            - rgw/test_rgw_orphan_list.sh
            - rgw/test_rgw_heap_profiler.sh
            - rgw/run-radosgw-admin-exit-codes.sh
+           - rgw/test_rgw_slo_manifest.sh
     env:
       # rgw/run-radosgw-admin-exit-codes.sh creates a bucket with the aws CLI,
       # which sends the region as the LocationConstraint. The rgw task above
