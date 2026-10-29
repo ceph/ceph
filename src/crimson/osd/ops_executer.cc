@@ -1132,6 +1132,11 @@ ObjectContextRef OpsExecuter::prepare_clone(
 
   clone_obc->set_clone_state(std::move(clone_obs));
   clone_obc->ssc = obc->ssc;
+  // No op of this request has run yet, so obc->attr_cache holds the
+  // xattrs that clone_for_write() copies to the clone. The clone does
+  // not get SS_ATTR.
+  clone_obc->attr_cache = obc->attr_cache;
+  clone_obc->attr_cache.erase(SS_ATTR);
   return clone_obc;
 }
 
