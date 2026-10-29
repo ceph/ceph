@@ -16607,11 +16607,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if (prefix == "mon enable_stretch_mode") {
       string new_crush_rule, dividing_bucket, tiebreaker_mon;
-      if (!cmd_getval(cmdmap, "new_crush_rule", new_crush_rule)) {
-        ss << "must specify a new crush rule that spreads out copies over multiple sites";
-        err = -EINVAL;
-        goto reply_no_propose;
-      }
+      // without a rule each replicated pool gets one of its own
+      cmd_getval(cmdmap, "new_crush_rule", new_crush_rule);
       if (!cmd_getval(cmdmap, "dividing_bucket", dividing_bucket)) {
         ss << "must specify a dividing bucket";
         err = -EINVAL;
@@ -18273,19 +18270,21 @@ int OSDMonitor::validate_enable_stretch_mode(
     *ss << dividing_bucket << " is not a valid crush bucket type";
     return -ENOENT;
   }
-  const int rule = crush.get_rule_id(new_crush_rule);
-  if (rule < 0) {
-    *ss << "unrecognized crush rule " << new_crush_rule;
-    return rule;
-  }
-  if (crush.get_rule_type(rule) != pg_pool_t::TYPE_REPLICATED) {
-    *ss << "crush rule " << new_crush_rule << " is not a replicated rule";
-    return -EINVAL;
-  }
-  int r = validate_stretch_mode_new_pool(crush, rule, 2, *dividing_id, pools,
-                                         dividing_bucket, ss);
-  if (r < 0) {
-    return r;
+  if (!new_crush_rule.empty()) {
+    const int rule = crush.get_rule_id(new_crush_rule);
+    if (rule < 0) {
+      *ss << "unrecognized crush rule " << new_crush_rule;
+      return rule;
+    }
+    if (crush.get_rule_type(rule) != pg_pool_t::TYPE_REPLICATED) {
+      *ss << "crush rule " << new_crush_rule << " is not a replicated rule";
+      return -EINVAL;
+    }
+    int r = validate_stretch_mode_new_pool(crush, rule, 2, *dividing_id, pools,
+                                           dividing_bucket, ss);
+    if (r < 0) {
+      return r;
+    }
   }
   for (const auto& [id, p] : pools) {
     if (p.is_erasure() && !p.has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
@@ -18424,18 +18423,27 @@ int OSDMonitor::enable_stretch_mode(ostream& ss,
     }
   }
 
-  // the EC pools get rules of their own, which must be committed first
+  // the EC pools, and without new_crush_rule the replicated pools, get rules
+  // of their own, which must be committed first
   cmdmap_t ec_cmdmap;
   ec_cmdmap["zone_failure_domain"] = dividing_bucket;
+  cmdmap_t replicated_cmdmap = ec_cmdmap;
+  replicated_cmdmap["replica"] = int64_t(STRETCH_MODE_REPLICA);
   bool created = false;
   for (const auto& [id, change] : plan) {
     const pg_pool_t& p = osdmap.pools.at(id);
-    if (change != StretchModeChange::STRETCH || !p.is_erasure()) {
+    if (p.is_replicated() && !new_crush_rule.empty()) {
       continue;
     }
     int rule = -1;
-    r = prepare_num_zones_crush_rule(ec_cmdmap, osdmap.pool_name.at(id), 2, p,
-                                     &rule, &ss);
+    if (change == StretchModeChange::STRETCH) {
+      r = prepare_num_zones_crush_rule(
+        p.is_erasure() ? ec_cmdmap : replicated_cmdmap,
+        osdmap.pool_name.at(id), 2, p, &rule, &ss);
+    } else {
+      r = prepare_stretch_replica_crush_rule(osdmap.pool_name.at(id),
+                                             dividing_bucket, &rule, &ss);
+    }
     if (r == -EAGAIN) {
       created = true;
     } else if (r < 0) {

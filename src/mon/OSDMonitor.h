@@ -850,6 +850,12 @@ public:
   static std::string num_zones_zone_failure_domain(
     const cmdmap_t& cmdmap, const pg_pool_t& p,
     const ErasureCodeProfile& profile, const std::string& dflt);
+  // The rule enable_stretch_mode generates, without a rule of its own, for a
+  // replicated pool that already has two zones and another replica count:
+  // <pool>-replica-2 over zone_failure_domain, from the pool defaults
+  int prepare_stretch_replica_crush_rule(const std::string& poolstr,
+                                         const std::string& zone_failure_domain,
+                                         int *crush_rule, std::ostream *ss);
   int prepare_num_zones_crush_rule(const cmdmap_t& cmdmap,
                                    const std::string& poolstr,
                                    int64_t n,
