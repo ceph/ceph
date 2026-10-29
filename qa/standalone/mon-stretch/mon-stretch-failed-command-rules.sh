@@ -41,8 +41,7 @@ function TEST_failed_pool_create_removes_its_rule() {
     # and so is the profile generated for it
     ! ceph osd erasure-code-profile ls | grep -qx bigec-k2-m1 || return 1
 
-    ceph osd crush rule create-stretch-replicated --rule-name big \
-        --num-replica-per-zone 2 || return 1
+    add_stretch_rule $dir big default datacenter 2 host 2 || return 1
     expect_failure $dir "exceeds the" \
         ceph osd pool create big --num_zones 2 --replica 2 --pg_num 64 \
         --autoscale_mode off || return 1
@@ -95,7 +94,7 @@ function TEST_failed_stretch_mode_removes_its_rules() {
     ceph osd pool create ec 8 8 erasure ec21 || return 1
     ceph osd pool set ec allow_ec_optimizations true || return 1
     ceph osd pool create rep 8 8 replicated || return 1
-    ceph osd crush rule create-stretch-replicated --rule-name=stretch_rule || return 1
+    add_stretch_rule $dir stretch_rule default datacenter 2 host 2 || return 1
     ceph mon set election_strategy connectivity || return 1
 
     ceph osd pool set rep nosizechange true || return 1

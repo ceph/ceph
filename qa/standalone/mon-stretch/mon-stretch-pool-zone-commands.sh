@@ -140,6 +140,21 @@ function TEST_create_erasure_zone_type() {
     test "$(rule_zone_type by_profile)" = datacenter || return 1
 }
 
+# num_zones takes the zone type of an erasure coded pool from its profile,
+# as pool creation does
+function TEST_set_num_zones_erasure_zone_type() {
+    local dir=$1
+    two_zone_cluster $dir || return 1
+
+    ceph osd erasure-code-profile set dcs plugin=isa k=2 m=1 \
+        crush-failure-domain=osd crush-zone-failure-domain=datacenter || return 1
+    ceph config set mon osd_pool_default_zone_failure_domain host || return 1
+    ceph osd pool create e erasure dcs || return 1
+    ceph osd pool set e allow_ec_optimizations true || return 1
+    ceph osd pool set e num_zones 2 || return 1
+    test "$(rule_zone_type e-stretch)" = datacenter || return 1
+}
+
 # --root confines a pool to a subtree, and --class to a device class, also
 # when replica changes
 function TEST_root_and_class_rules() {

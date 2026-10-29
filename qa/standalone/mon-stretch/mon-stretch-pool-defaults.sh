@@ -63,9 +63,9 @@ function TEST_set_writes_global_values() {
     run_mon $dir a || return 1
 
     ceph osd pool default set --replica 2 --min_size 1 --pg_num 16 || return 1
-    test "$(ceph config get mon osd_pool_default_replica)" = 2 || return 1
+    test "$(ceph config get mon osd_pool_default_size)" = 2 || return 1
     test "$(default_field replica value)" = 2 || return 1
-    test "$(default_field replica option)" = osd_pool_default_replica || return 1
+    test "$(default_field replica option)" = osd_pool_default_size || return 1
     test "$(default_field replica source)" = global || return 1
     test "$(default_field min_size value)" = 1 || return 1
     test "$(default_field pg_num value)" = 16 || return 1
@@ -78,23 +78,17 @@ function TEST_set_writes_global_values() {
     test "$(default_field bulk value)" = false || return 1
 }
 
-# Test the legacy --size sets the replicas per zone
-function TEST_set_legacy_size() {
+# Test the defaults have no --size
+function TEST_set_refuses_size() {
     local dir=$1
     run_mon $dir a || return 1
 
-    ceph osd pool default set --size 4 || return 1
-    test "$(ceph config get mon osd_pool_default_replica)" = 4 || return 1
-    expect_failure $dir "cannot specify both 'size' and 'replica'" \
-        ceph osd pool default set --size 3 --replica 3 || return 1
-    # the legacy size gives the copies of a single-zone pool
-    ceph osd pool default set --size 3 --num_zones 1 || return 1
-    expect_failure $dir "cannot specify 'size' with num_zones > 1" \
-        ceph osd pool default set --size 3 --num_zones 2 || return 1
+    ceph osd pool default set --size 4 && return 1
+    test "$(default_field replica value)" = 3 || return 1
 }
 
-# Test replica 0 shows the legacy osd_pool_default_size as its option
-function TEST_get_replica_from_legacy_size() {
+# Test replica shows a value set with ceph config set
+function TEST_get_replica_from_size_option() {
     local dir=$1
     run_mon $dir a || return 1
 
@@ -207,10 +201,10 @@ function TEST_set_refuses_overridden_values() {
     # run_mon sets this one on the command line
     expect_failure $dir "local configuration of mon.a" \
         ceph osd pool default set --autoscale_mode on || return 1
-    ceph config set mon osd_pool_default_replica 3 || return 1
+    ceph config set mon osd_pool_default_size 3 || return 1
     expect_failure $dir "section mon of the configuration database" \
         ceph osd pool default set --replica 2 || return 1
-    ceph config rm mon osd_pool_default_replica || return 1
+    ceph config rm mon osd_pool_default_size || return 1
     ceph osd pool default set --replica 2 || return 1
 }
 
@@ -220,7 +214,7 @@ function TEST_health_ignores_mask_of_other_host() {
     run_mon $dir a || return 1
 
     ceph osd pool default set --replica 2 || return 1
-    ceph config set global/host:nosuchhost osd_pool_default_replica 4 || return 1
+    ceph config set global/host:nosuchhost osd_pool_default_size 4 || return 1
     sleep 10
     ceph health detail | grep -q POOL_DEFAULT_CONFIG_OVERRIDE && return 1
     return 0
@@ -233,14 +227,14 @@ function TEST_health_warns_of_override() {
 
     ceph osd pool default set --replica 2 || return 1
     ceph health detail | grep -q POOL_DEFAULT_CONFIG_OVERRIDE && return 1
-    ceph config set mon osd_pool_default_replica 3 || return 1
+    ceph config set mon osd_pool_default_size 3 || return 1
     local i
     for i in $(seq 1 30); do
         ceph health detail | grep -q POOL_DEFAULT_CONFIG_OVERRIDE && break
         sleep 1
     done
-    ceph health detail | grep "osd_pool_default_replica is set in section mon" || return 1
-    ceph config rm mon osd_pool_default_replica || return 1
+    ceph health detail | grep "osd_pool_default_size is set in section mon" || return 1
+    ceph config rm mon osd_pool_default_size || return 1
     for i in $(seq 1 30); do
         ceph health detail | grep -q POOL_DEFAULT_CONFIG_OVERRIDE || return 0
         sleep 1

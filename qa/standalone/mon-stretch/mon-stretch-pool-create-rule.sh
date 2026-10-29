@@ -31,8 +31,7 @@ function TEST_pool_create_rule_must_span_zones() {
     ! ceph osd pool ls | grep -qx bad || return 1
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
 
-    ceph osd crush rule create-stretch-replicated --rule-name two_dc \
-        --num-replica-per-zone 2 || return 1
+    add_stretch_rule $dir two_dc default datacenter 2 host 2 || return 1
     ceph osd pool create good --num_zones 2 --replica 2 --rule two_dc || return 1
     test "$(pool_field good num_zones)" = 2 || return 1
 }
@@ -47,14 +46,12 @@ function TEST_pool_set_rule_must_span_zones() {
 
     ! ceph osd pool set p crush_rule replicated_rule > $dir/out 2>&1 || return 1
     grep "does not place the pool in 2 buckets of type datacenter" $dir/out || return 1
-    ceph osd crush rule create-stretch-replicated --rule-name one_per_dc \
-        --num-replica-per-zone 1 || return 1
+    add_stretch_rule $dir one_per_dc default datacenter 2 host 1 || return 1
     ! ceph osd pool set p crush_rule one_per_dc > $dir/out 2>&1 || return 1
     grep "does not place 2 items in each datacenter" $dir/out || return 1
     test "$(pool_field p crush_rule)" = "$rule" || return 1
 
-    ceph osd crush rule create-stretch-replicated --rule-name two_per_dc \
-        --num-replica-per-zone 2 || return 1
+    add_stretch_rule $dir two_per_dc default datacenter 2 host 2 || return 1
     ceph osd pool set p crush_rule two_per_dc || return 1
 }
 
@@ -142,8 +139,7 @@ function TEST_individual_stretch_pool_blocks_stretch_mode() {
     local dir=$1
 
     two_zone_cluster $dir 2 || return 1
-    ceph osd crush rule create-stretch-replicated --rule-name two_dc \
-        --num-replica-per-zone 2 || return 1
+    add_stretch_rule $dir two_dc default datacenter 2 host 2 || return 1
     ceph osd pool create ind 8 8 replicated two_dc || return 1
     ceph osd pool stretch set ind 2 2 datacenter two_dc 4 2 || return 1
 
@@ -174,8 +170,7 @@ function TEST_individual_stretch_pool_to_one_zone() {
     two_zone_cluster $dir 2 || return 1
     ceph mon set election_strategy disallow || return 1
     ceph mon add disallowed_leader c || return 1
-    ceph osd crush rule create-stretch-replicated --rule-name two_dc \
-        --num-replica-per-zone 2 || return 1
+    add_stretch_rule $dir two_dc default datacenter 2 host 2 || return 1
     ceph osd pool create ind 8 8 replicated two_dc || return 1
     ceph osd pool stretch set ind 2 2 datacenter two_dc 4 2 || return 1
     test "$(pool_field ind num_zones)" = 1 || return 1

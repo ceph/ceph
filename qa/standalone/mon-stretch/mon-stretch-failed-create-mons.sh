@@ -28,4 +28,48 @@ function TEST_failed_stretch_pool_create_leaves_mons() {
     test "$(ceph mon dump -f json | jq -r .tiebreaker_mon)" = "" || return 1
 }
 
+# A refused num_zones change must not leave the monitors in stretch mode
+function TEST_failed_stretch_pool_set_leaves_mons() {
+    local dir=$1
+    two_zone_cluster $dir || return 1
+    ceph osd pool create data0 erasure --k 2 --m 1 || return 1
+    ceph osd pool set data0 allow_ec_optimizations true || return 1
+    # dc2 weighs twice as much as dc1
+    for osd in 3 4 5; do
+        ceph osd crush reweight osd.$osd 2.0 || return 1
+    done
+
+    expect_failure $dir "Failed to validate pool stretch mode" \
+        ceph osd pool set data0 num_zones 2 || return 1
+    # commits are ordered, so any monmap change the set staged is in
+    ceph osd set noout || return 1
+    test "$(ceph mon dump -f json | jq .stretch_mode)" = false || return 1
+    test "$(ceph mon dump -f json | jq -r .tiebreaker_mon)" = "" || return 1
+}
+
+# The monitors enter stretch mode in the same commit as the pool
+function TEST_stretch_pool_create_commits_with_mons() {
+    local dir=$1
+    two_zone_cluster $dir || return 1
+    # delay every proposal that is not forced
+    for id in a b c; do
+        ceph tell mon.$id config set paxos_propose_interval 10 || return 1
+        ceph tell mon.$id config set paxos_min_wait 10 || return 1
+    done
+
+    timeout 300 ceph osd pool create data0 erasure --num_zones 2 --k 2 --m 1 &
+    local pid=$!
+    # one report holds both maps at the same commit
+    while kill -0 $pid 2>/dev/null; do
+        ceph report > $dir/report.json 2>/dev/null || return 1
+        if test "$(jq .monmap.stretch_mode $dir/report.json)" = true; then
+            jq -e '.osdmap.pools[] | select(.pool_name == "data0")' \
+                $dir/report.json > /dev/null || return 1
+        fi
+        sleep 1
+    done
+    wait $pid || return 1
+    test "$(ceph mon dump -f json | jq .stretch_mode)" = true || return 1
+}
+
 main mon-stretch-failed-create-mons "$@"

@@ -64,9 +64,6 @@ function TEST_crush_rule_create_replicated_reports_id() {
     out=$(ceph osd crush rule create-replicated rep0 default host 2>&1) || return 1
     local id=$(ceph osd crush rule dump rep0 --format json | jq '.rule_id')
     echo "$out" | grep "created rule rep0 at $id" || return 1
-    out=$(ceph osd crush rule create-stretch-replicated --rule-name srep0 --force 2>&1) || return 1
-    id=$(ceph osd crush rule dump srep0 --format json | jq '.rule_id')
-    echo "$out" | grep "created rule srep0 at $id" || return 1
 }
 
 function TEST_crush_rule_dump() {

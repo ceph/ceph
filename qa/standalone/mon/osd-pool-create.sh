@@ -130,6 +130,25 @@ function TEST_default_profile_odd_stripe_unit() {
     ! ceph osd crush rule ls | grep -qx e || return 1
 }
 
+# --yes-i-really-mean-it creates a pool with such a stripe unit, from a named
+# profile or from the default one
+function TEST_odd_stripe_unit_yes_i_really_mean_it() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set odd plugin=isa k=2 m=1 \
+        stripe_unit=2048 --force || return 1
+    expect_failure $dir "only ceph osd pool create --yes-i-really-mean-it" \
+        ceph osd pool create named 8 8 erasure odd || return 1
+    ceph osd pool create named 8 8 erasure odd --yes-i-really-mean-it || return 1
+    ceph osd erasure-code-profile set default plugin=isa k=2 m=1 \
+        stripe_unit=2048 --force --yes-i-really-mean-it || return 1
+    ceph osd pool create generated 8 8 erasure --yes-i-really-mean-it || return 1
+    for pool in named generated; do
+        test "$(ceph osd dump -f json |
+            jq ".pools[] | select(.pool_name == \"$pool\") | .stripe_width")" = 4096 || return 1
+    done
+}
+
 function TEST_erasure_crush_rule() {
     local dir=$1
     run_mon $dir a || return 1

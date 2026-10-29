@@ -141,10 +141,7 @@ function TEST_pool_replica_crush_rule_name() {
     assert_pool_rule "$poolname" "$poolname" 2 1 || return 1
 
     # Exercise reuse of a committed rule, rather than only rule creation.
-    ceph osd crush rule create-stretch-replicated \
-        --rule_name "$poolname-replica-3" --root default \
-        --zone_failure_domain zone --osd_failure_domain host \
-        --num_zones 2 --num_replica_per_zone 3 || return 1
+    add_stretch_rule $dir "$poolname-replica-3" default zone 2 host 3 || return 1
     ceph osd pool set "$poolname" replica 3 || return 1
     assert_pool_rule "$poolname" "$poolname-replica-3" 3 2 || return 1
 
@@ -203,7 +200,7 @@ function TEST_pool_replica_crush_rule_name() {
         '.num_zones == 2 and .size == 6 and .min_size == 2 and
         .crush_rule == $rule' "$dir/ec-pool.json" || return 1
     ceph osd pool set "$ec_poolname" num_zones 2 || return 1
-    ceph osd pool set "$ec_poolname" num_zones 1 || return 1
+    ceph osd pool set "$ec_poolname" num_zones 1 --yes-i-really-mean-it || return 1
     ceph osd pool get "$ec_poolname" all --format json > "$dir/ec-pool.json" || return 1
     jq -e --arg rule "$ec_poolname-single-zone" \
         '.num_zones == 1 and .size == 3 and .min_size == 2 and
@@ -230,11 +227,28 @@ function TEST_pool_replica_limits() {
     grep 'yes-i-really-mean-it' "$dir/error.txt" || return 1
     ceph osd pool set single replica 1 --yes-i-really-mean-it || return 1
     test "$(ceph osd pool get single size | awk '{print $2}')" = 1 || return 1
-    # as with size, a min_size above the new size is reset
+    # as with size, min_size is reset to its default for the new size
     test "$(ceph osd pool get single min_size | awk '{print $2}')" = 1 || return 1
     # the reply's parts are separated
     ceph osd pool set single replica 2 > "$dir/out.txt" 2>&1 || return 1
     grep -F "size set to 2; set pool" "$dir/out.txt" || return 1
+}
+
+# Setting size, or replica, resets min_size to its default for the new size,
+# as setting size does on main
+function TEST_pool_size_resets_min_size() {
+    local dir=$1
+
+    run_mon $dir a --public-addr "$CEPH_MON_A" || return 1
+    wait_for_quorum 300 1 || return 1
+
+    ceph osd pool create single 8 8 replicated || return 1
+    ceph osd pool set single min_size 1 || return 1
+    ceph osd pool set single size 4 || return 1
+    test "$(ceph osd pool get single min_size | awk '{print $2}')" = 2 || return 1
+    ceph osd pool set single min_size 1 || return 1
+    ceph osd pool set single replica 5 || return 1
+    test "$(ceph osd pool get single min_size | awk '{print $2}')" = 3 || return 1
 }
 
 # The options of num_zones are refused with other variables, which would

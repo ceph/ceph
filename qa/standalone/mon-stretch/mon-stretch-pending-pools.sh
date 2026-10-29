@@ -36,8 +36,7 @@ function two_stretch_pools() {
 
     two_zone_cluster $dir 2 || return 1
     ceph config set mon mon_allow_pool_delete true || return 1
-    ceph osd crush rule create-stretch-replicated --rule-name two_dc \
-        --num-replica-per-zone 2 || return 1
+    add_stretch_rule $dir two_dc default datacenter 2 host 2 || return 1
     create_stretch_pool a || return 1
     create_stretch_pool b || return 1
     test "$(stretch_flags)" = "true true" || return 1
@@ -50,8 +49,7 @@ function TEST_stretch_set_while_stretch_mode_pending() {
     local dir=$1
 
     two_zone_cluster $dir 2 || return 1
-    ceph osd crush rule create-stretch-replicated --rule-name two_dc \
-        --num-replica-per-zone 2 || return 1
+    add_stretch_rule $dir two_dc default datacenter 2 host 2 || return 1
     ceph osd pool create ind 8 8 replicated two_dc || return 1
     ceph tell mon.\* config set paxos_propose_interval 5 || return 1
     # an OSDMap change just committed delays the next proposal
@@ -89,8 +87,7 @@ function TEST_delete_last_stretch_pool_while_creating_one() {
     # the new pools get rules of their own: a rule that its last pool leaves
     # is removed, also in the epoch that creates the next pool
     for rule in rule_c rule_d; do
-        ceph osd crush rule create-stretch-replicated --rule-name $rule \
-            --num-replica-per-zone 2 || return 1
+        add_stretch_rule $dir $rule default datacenter 2 host 2 || return 1
     done
     ceph osd pool rm a a --yes-i-really-really-mean-it || return 1
     ceph tell mon.\* config set paxos_propose_interval 5 || return 1

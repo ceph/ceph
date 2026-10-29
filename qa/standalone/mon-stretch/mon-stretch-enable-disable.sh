@@ -90,10 +90,14 @@ EOF
 }
 
 # three OSDs in each zone
+# six OSDs, and a Manager unless the second argument is nomgr
 function setup_osds() {
     local dir=$1
+    local mgr=${2:-mgr}
 
-    run_mgr $dir x || return 1
+    if [ "$mgr" = mgr ]; then
+        run_mgr $dir x || return 1
+    fi
     local osd
     for osd in 0 1 2 3 4 5; do
         run_osd $dir $osd || return 1
@@ -160,6 +164,136 @@ function TEST_enable_stretches_every_pool() {
     wait_for_clean || return 1
 }
 
+function pool_rule_name() {
+    ceph osd pool get $1 crush_rule -f json | jq -r .crush_rule
+}
+
+# Test enabling without a CRUSH rule gives each pool a rule generated for it,
+# and that disabling removes those rules
+function TEST_enable_generates_rules() {
+    local dir=$1
+    setup_zones $dir || return 1
+    setup_osds $dir || return 1
+    ceph osd pool create rep 8 8 replicated --num_zones 1 || return 1
+    ceph osd erasure-code-profile set ec21 plugin=isa k=2 m=1 \
+        crush-failure-domain=osd || return 1
+    ceph osd pool create ec 8 8 erasure ec21 || return 1
+    ceph osd pool set ec allow_ec_optimizations true || return 1
+    # over two zones already, with another replica count
+    ceph osd pool create two 8 8 replicated --num_zones 2 --replica 1 \
+        --zone_failure_domain zone || return 1
+
+    ceph mon enable_stretch_mode --dividing_bucket zone || return 1
+    test "$(pool_num_zones rep)" = 2 || return 1
+    test "$(pool_field rep size)" = 4 || return 1
+    test "$(pool_rule_name rep)" = rep || return 1
+    ceph osd crush rule dump rep | \
+        jq -e '[.steps[] | select(.op == "choose_firstn") | .type] == ["zone"]' || return 1
+    test "$(pool_field ec size)" = 6 || return 1
+    test "$(pool_rule_name ec)" = ec-stretch || return 1
+    test "$(pool_field two size)" = 4 || return 1
+    test "$(pool_rule_name two)" = two-replica-2 || return 1
+    wait_for_clean || return 1
+
+    # a rule given to the command is still given to the replicated pools
+    ceph osd pool create later 8 8 replicated --num_zones 1 || return 1
+    ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    test "$(pool_rule_name later)" = stretch_rule || return 1
+
+    ceph mon disable_stretch_mode --yes-i-really-mean-it || return 1
+    local rule
+    for rule in rep ec-stretch two-replica-2; do
+        ! ceph osd crush rule ls | grep -qx $rule || return 1
+    done
+    wait_for_clean || return 1
+}
+
+# Test enabling with no pools enters stretch mode in the MonMap and sets the
+# defaults, and the first pool over two zones sets the cluster stretch flags
+function TEST_enable_without_pools() {
+    local dir=$1
+    setup_zones $dir || return 1
+    test -z "$(ceph osd pool ls)" || return 1
+
+    ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    test "$(ceph mon dump -f json | jq .stretch_mode)" = true || return 1
+    test "$(ceph mon dump -f json | jq -r .tiebreaker_mon)" = c || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
+    test "$(default_value num_zones)" = 2 || return 1
+    test "$(default_value zone_failure_domain)" = zone || return 1
+
+    # no individual stretch pool meanwhile
+    ceph osd pool create one 8 8 replicated --num_zones 1 || return 1
+    expect_failure $dir "cannot be used while stretch mode is enabled" \
+        ceph osd pool stretch set one 2 2 zone replicated_rule 4 2 || return 1
+    ceph osd pool rm one one --yes-i-really-really-mean-it || return 1
+
+    # disabling and enabling again work while no pool has two zones
+    ceph mon disable_stretch_mode --yes-i-really-mean-it || return 1
+    test "$(ceph mon dump -f json | jq .stretch_mode)" = false || return 1
+    test "$(default_value num_zones)" = 1 || return 1
+    ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    test "$(ceph mon dump -f json | jq .stretch_mode)" = true || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
+
+    # the first pool over two zones must divide them as the tiebreaker was
+    # chosen for: two regions hold the zones, but no Monitor is in one, so
+    # stretch mode by region would crash the Monitors. No Manager yet, which
+    # would create .mgr over the zones first.
+    setup_osds $dir nomgr || return 1
+    local region
+    for region in 1 2; do
+        ceph osd crush add-bucket region$region region || return 1
+        ceph osd crush move region$region root=default || return 1
+    done
+    ceph osd crush move iris region=region1 || return 1
+    ceph osd crush move pze region=region2 || return 1
+    expect_failure $dir "monitor stretch mode" \
+        ceph osd pool create other 8 8 replicated \
+        --zone_failure_domain region || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
+
+    # the first pool over two zones sets the cluster stretch flags
+    ceph osd pool create rep 8 8 replicated || return 1
+    test "$(pool_num_zones rep)" = 2 || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_bucket_count)" = 2 || return 1
+    local zone_type=$(ceph osd crush dump | jq '.types[] | select(.name == "zone") | .type_id')
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_bucket)" = "$zone_type" || return 1
+    test "$(ceph mon dump -f json | jq -r .tiebreaker_mon)" = c || return 1
+    run_mgr $dir x || return 1
+    wait_for_clean || return 1
+}
+
+# Test Rook's pool create in a stretch cluster: the stretch rule and --size 4,
+# before and after enable_stretch_mode, whatever osd_pool_default_size is
+function TEST_size_of_defaults_in_stretch_mode() {
+    local dir=$1
+    setup_zones $dir || return 1
+    setup_osds $dir || return 1
+    ceph osd pool create before 8 replicated stretch_rule --size 4 || return 1
+    test "$(pool_field before size)" = 4 || return 1
+
+    ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    test "$(pool_num_zones before)" = 2 || return 1
+    ceph osd pool create rook 8 replicated stretch_rule --size 4 || return 1
+    test "$(pool_num_zones rook)" = 2 || return 1
+    test "$(pool_field rook size)" = 4 || return 1
+    test "$(pool_field rook crush_rule)" = 1 || return 1
+    # Rook re-applies a user's osd_pool_default_size on every reconcile
+    ceph config set global osd_pool_default_size 3 || return 1
+    ceph osd pool create rook2 8 replicated stretch_rule --size 4 || return 1
+    test "$(pool_field rook2 size)" = 4 || return 1
+    test "$(pool_field rook2 replica)" = 2 || return 1
+    expect_failure $dir "unless it is a multiple of num_zones 2" \
+        ceph osd pool create other 8 replicated stretch_rule --size 5 || return 1
+    expect_failure $dir "cannot specify 'size' with num_zones > 1" \
+        ceph osd pool create other 8 replicated stretch_rule --size 4 \
+        --num_zones 2 || return 1
+    wait_for_clean || return 1
+}
+
 # Test a pool created through librados takes the pool creation defaults, as
 # ceph osd pool create <pool> does: in stretch mode it is stretched
 function TEST_librados_pool_takes_defaults() {
@@ -206,9 +340,7 @@ function TEST_enable_checks_rule_of_pools_over_zones() {
     ceph osd crush move osd.4 host=node-4 || return 1
     ceph osd crush move osd.5 host=node-5 || return 1
     ceph osd crush remove $(hostname -s) || return 1
-    ceph osd crush rule create-stretch-replicated --rule_name three_per_zone \
-        --zone_failure_domain zone --osd_failure_domain osd \
-        --num_replica_per_zone 3 || return 1
+    add_stretch_rule $dir three_per_zone default zone 2 osd 3 || return 1
     ceph osd pool create rep3 --num_zones 2 --replica 3 \
         --zone_failure_domain zone --osd_failure_domain osd || return 1
     local rule=$(pool_field rep3 crush_rule)
@@ -294,7 +426,7 @@ function TEST_disable_resets_defaults_without_stretch_mode() {
 
     # unstretching every pool leaves stretch mode but not its defaults
     for pool in $(ceph osd pool ls); do
-        ceph osd pool set $pool num_zones 1 || return 1
+        ceph osd pool set $pool num_zones 1 --yes-i-really-mean-it || return 1
     done
     for i in $(seq 60); do
         test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false && break
