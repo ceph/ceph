@@ -10,6 +10,71 @@ from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
+# where to get the RabbitMQ packages from on deb based distros
+DEB_SOURCES = ('ubuntu', 'cloudsmith')
+DEB_DEFAULT_SOURCE = 'ubuntu'
+
+CLOUDSMITH_KEYS = {
+    'erlang': 'https://github.com/rabbitmq/signing-keys/releases/download/3.0/'
+              'cloudsmith.rabbitmq-erlang.E495BB49CC4BBE5B.key',
+    'server': 'https://github.com/rabbitmq/signing-keys/releases/download/3.0/'
+              'cloudsmith.rabbitmq-server.9F4587F226208342.key',
+}
+
+# the erlang packages that rabbitmq-server needs, as listed in the RabbitMQ
+# apt installation guide (the "erlang" metapackage is not provided there)
+CLOUDSMITH_ERLANG_PKGS = [
+    'erlang-base', 'erlang-asn1', 'erlang-crypto', 'erlang-eldap',
+    'erlang-ftp', 'erlang-inets', 'erlang-mnesia', 'erlang-os-mon',
+    'erlang-parsetools', 'erlang-public-key', 'erlang-runtime-tools',
+    'erlang-snmp', 'erlang-ssl', 'erlang-syntax-tools', 'erlang-tftp',
+    'erlang-tools', 'erlang-xmerl',
+]
+
+
+def _deb_source(client_config):
+    """
+    Return the package source selected for a client, defaulting to the
+    distro packages.
+    """
+    source = (client_config or {}).get('source', DEB_DEFAULT_SOURCE)
+    assert source in DEB_SOURCES, \
+        "rabbitmq 'source' must be one of {}, got {!r}".format(DEB_SOURCES, source)
+    return source
+
+
+def _setup_cloudsmith_apt(ctx, client):
+    """
+    Add the RabbitMQ team's Cloudsmith apt repositories (erlang and
+    rabbitmq-server), following the RabbitMQ "Install on Debian/Ubuntu" guide.
+    """
+    cluster = ctx.cluster.only(client)
+    cluster.run(args=[
+        'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', 'install',
+        'curl', 'gnupg', 'apt-transport-https', 'lsb-release',
+    ])
+    for name, url in CLOUDSMITH_KEYS.items():
+        cluster.run(args=[
+            'curl', '-1sLf', url, run.Raw('|'), 'sudo', 'gpg', '--dearmor',
+            '--yes', '-o', '/usr/share/keyrings/rabbitmq.{}.gpg'.format(name),
+        ])
+
+    sources = (
+        'deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/rabbitmq.erlang.gpg] '
+        'https://deb1.rabbitmq.com/rabbitmq-erlang/ubuntu/$codename $codename main\n'
+        'deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/rabbitmq.erlang.gpg] '
+        'https://deb2.rabbitmq.com/rabbitmq-erlang/ubuntu/$codename $codename main\n'
+        'deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/rabbitmq.server.gpg] '
+        'https://deb1.rabbitmq.com/rabbitmq-server/ubuntu/$codename $codename main\n'
+        'deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/rabbitmq.server.gpg] '
+        'https://deb2.rabbitmq.com/rabbitmq-server/ubuntu/$codename $codename main\n'
+    )
+    cluster.run(args=[
+        'sudo', 'bash', '-c',
+        'codename=$(lsb_release -cs) && '
+        'printf "{}" > /etc/apt/sources.list.d/rabbitmq.list'.format(sources),
+    ])
+
 
 @contextlib.contextmanager
 def install_rabbitmq(ctx, config):
@@ -19,11 +84,31 @@ def install_rabbitmq(ctx, config):
     assert isinstance(config, dict)
     log.info('Installing RabbitMQ...')
 
-    os_version = teuthology.get_distro_version(ctx)
-    os_major_version = int(os_version.split('.')[0])
-
-    for (client, _) in config.items():
+    for (client, client_config) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
+
+        if remote.os.package_type == 'deb':
+            pkgs = ['rabbitmq-server']
+            if _deb_source(client_config) == 'cloudsmith':
+                log.info('Using the RabbitMQ Cloudsmith apt repositories')
+                ctx.cluster.only(client).run(args=[
+                     'sudo', 'apt-get', 'update'
+                ])
+                _setup_cloudsmith_apt(ctx, client)
+                pkgs = CLOUDSMITH_ERLANG_PKGS + pkgs
+            else:
+                log.info('Using the distro RabbitMQ packages')
+            ctx.cluster.only(client).run(args=[
+                 'sudo', 'apt-get', 'update'
+            ])
+            ctx.cluster.only(client).run(args=[
+                 'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y',
+                 'install'] + pkgs
+            )
+            continue
+
+        os_version = teuthology.get_distro_version(ctx)
+        os_major_version = int(os_version.split('.')[0])
 
         ctx.cluster.only(client).run(args=[
              'sudo', 'dnf', '-y', 'install', 'epel-release'
@@ -90,10 +175,25 @@ def install_rabbitmq(ctx, config):
     finally:
         log.info('Removing packaged dependencies of RabbitMQ...')
 
-        for (client, _) in config.items():
-            ctx.cluster.only(client).run(args=[
-                 'sudo', 'dnf', '-y', 'remove', 'rabbitmq-server.noarch'
-            ])
+        for (client, client_config) in config.items():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+
+            if remote.os.package_type == 'deb':
+                ctx.cluster.only(client).run(args=[
+                     'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get',
+                     '-y', 'purge', 'rabbitmq-server'
+                ])
+                if _deb_source(client_config) == 'cloudsmith':
+                    ctx.cluster.only(client).run(args=[
+                         'sudo', 'rm', '-f',
+                         '/etc/apt/sources.list.d/rabbitmq.list',
+                         '/usr/share/keyrings/rabbitmq.erlang.gpg',
+                         '/usr/share/keyrings/rabbitmq.server.gpg',
+                    ])
+            else:
+                ctx.cluster.only(client).run(args=[
+                     'sudo', 'dnf', '-y', 'remove', 'rabbitmq-server.noarch'
+                ])
 
 
 @contextlib.contextmanager
@@ -119,7 +219,7 @@ def run_rabbitmq(ctx, config):
         )
 
         ctx.cluster.only(client).run(args=[
-             'sudo', 'systemctl', 'start', 'rabbitmq-server'
+             'sudo', 'systemctl', 'restart', 'rabbitmq-server'
             ],
         )
 
@@ -151,6 +251,17 @@ def task(ctx,config):
     tasks:
     - rabbitmq:
         client.0:
+
+    On deb based distros (ubuntu) the packages come from the distro archive by
+    default. To use the RabbitMQ team's Cloudsmith apt repositories instead
+    (newer erlang/rabbitmq-server), set ``source`` per client::
+
+    tasks:
+    - rabbitmq:
+        client.0:
+          source: cloudsmith
+
+    ``source`` is ignored on rpm based distros.
     """
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
