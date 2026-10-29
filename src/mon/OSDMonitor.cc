@@ -3582,30 +3582,15 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  // We should not allow booting of pre-umbrella OSDs once you have set require_osd_release
-  if (!HAVE_FEATURE(m->osd_features, SERVER_UMBRELLA) &&
-    osdmap.require_osd_release >= ceph_release_t::umbrella) {
-    mon.clog->info() << "disallowing boot of pre-umbrella OSDs "
-                      << m->get_orig_source_inst()
-                      << " because require_osd_release = umbrella";
-    goto ignore;
-  }
-
-  // We should not allow booting of pre-tentacle OSDs once you have set require_osd_release
-  if (!HAVE_FEATURE(m->osd_features, SERVER_TENTACLE) &&
-    osdmap.require_osd_release >= ceph_release_t::tentacle) {
-    mon.clog->info() << "disallowing boot of pre-tentacle OSDs "
-                      << m->get_orig_source_inst()
-                      << " because require_osd_release = tentacle";
-    goto ignore;
-  }
-
-  // We should not allow booting of pre-squid OSDs once you have set require_osd_release
-  if (!HAVE_FEATURE(m->osd_features, SERVER_SQUID) &&
-    osdmap.require_osd_release >= ceph_release_t::squid) {
-    mon.clog->info() << "disallowing boot of pre-squid OSDs "
-                      << m->get_orig_source_inst()
-                      << " because require_osd_release = squid";
+  // once the upgrade to a release is committed, OSDs of earlier releases
+  // must not join
+  if (uint64_t need = ceph_release_server_feature(osdmap.require_osd_release);
+      (m->osd_features & need) != need) {
+    mon.clog->info() << "disallowing boot of OSD "
+                     << m->get_orig_source_inst()
+                     << " because require_osd_release is "
+                     << osdmap.require_osd_release
+                     << " and the osd is of an earlier release";
     goto ignore;
   }
 

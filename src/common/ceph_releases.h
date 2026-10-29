@@ -84,6 +84,9 @@ bool can_upgrade_from(ceph_release_t from_release,
 
 ceph_release_t ceph_release_from_name(std::string_view sv);
 ceph_release_t ceph_release();
+/// The SERVER_* feature of release r, which every OSD and Monitor of r or a
+/// later release has; 0 before kraken.
+std::uint64_t ceph_release_server_feature(ceph_release_t r);
 
 inline std::string_view to_string(ceph_release_t r) {
   return ceph_release_name(static_cast<int>(r));

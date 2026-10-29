@@ -36,6 +36,22 @@ TEST(features, release_from_features) {
 	    ceph_release_from_features(1152323339925389307));
 }
 
+TEST(features, release_server_feature) {
+  // a release without its feature here lets OSDs of earlier releases boot
+  // once require_osd_release reaches it
+  uint64_t previous = 0;
+  for (auto r = ceph_release_t::kraken; r <= ceph_release(); ++r) {
+    uint64_t f = ceph_release_server_feature(r);
+    ASSERT_NE(0u, f) << "no SERVER_* feature for " << r;
+    EXPECT_EQ(f, CEPH_FEATURES_ALL & f) << r;
+    EXPECT_NE(previous, f) << r;
+    previous = f;
+  }
+  const uint64_t umbrella_osd = CEPH_FEATURES_ALL & ~CEPH_FEATURE_SERVER_VAMPIRE;
+  const uint64_t need = ceph_release_server_feature(ceph_release_t::vampire);
+  EXPECT_NE(need, umbrella_osd & need);
+}
+
 int main(int argc, char **argv)
 {
   auto args = argv_to_vec(argc, argv);
