@@ -1035,7 +1035,7 @@ public:
   // The release that ships per-pool num_zones. The update that raises
   // require_osd_release to it sets the OSDMap flag stretch_zones; until
   // then the monitors keep the behavior of earlier releases.
-  static constexpr ceph_release_t NUM_ZONES_RELEASE = ceph_release_t::umbrella;
+  static constexpr ceph_release_t NUM_ZONES_RELEASE = ceph_release_t::vampire;
   bool num_zones_supported() const {
     return osdmap.stretch_zones();
   }

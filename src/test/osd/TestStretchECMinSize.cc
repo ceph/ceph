@@ -687,7 +687,7 @@ protected:
     OSDMap::Incremental inc(m.get_epoch() + 1);
     inc.fsid = m.get_fsid();
     inc.new_require_osd_release =
-      committed ? ceph_release_t::umbrella : ceph_release_t::tentacle;
+      committed ? ceph_release_t::vampire : ceph_release_t::umbrella;
     inc.new_flags = committed
       ? m.get_flags() | CEPH_OSDMAP_STRETCH_ZONES
       : m.get_flags() & ~CEPH_OSDMAP_STRETCH_ZONES;

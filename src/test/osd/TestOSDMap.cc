@@ -3824,7 +3824,7 @@ TEST_F(OSDMapTest, EncodingFollowsStretchZonesFlag) {
     OSDMap::Incremental inc(m.get_epoch() + 1);
     inc.fsid = m.get_fsid();
     inc.new_require_osd_release =
-      committed ? ceph_release_t::umbrella : ceph_release_t::tentacle;
+      committed ? ceph_release_t::vampire : ceph_release_t::umbrella;
     inc.new_flags = committed ? m.get_flags() | CEPH_OSDMAP_STRETCH_ZONES
                               : m.get_flags() & ~CEPH_OSDMAP_STRETCH_ZONES;
     pg_pool_t p = *m.get_pg_pool(my_rep_pool);
@@ -3889,7 +3889,7 @@ TEST_F(OSDMapTest, LegacyGlobalStretchPoolBeforeCommit) {
                  (degraded ? " degraded" : ""));
     OSDMap::Incremental inc(osdmap.get_epoch() + 1);
     inc.fsid = osdmap.get_fsid();
-    inc.new_require_osd_release = ceph_release_t::tentacle;
+    inc.new_require_osd_release = ceph_release_t::umbrella;
     inc.new_flags = osdmap.get_flags() & ~CEPH_OSDMAP_STRETCH_ZONES;
     inc.change_stretch_mode = true;
     inc.stretch_mode_enabled = true;
@@ -3917,7 +3917,7 @@ TEST_F(OSDMapTest, LegacyGlobalStretchPoolBeforeCommit) {
     OSDMap applied;
     applied.deepish_copy_from(osdmap);
     ASSERT_EQ(0, applied.apply_incremental(older_inc));
-    ASSERT_EQ(ceph_release_t::tentacle, applied.require_osd_release);
+    ASSERT_EQ(ceph_release_t::umbrella, applied.require_osd_release);
 
     // the full map as the monitor stores it before the commit
     bufferlist map_bl;

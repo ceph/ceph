@@ -1318,7 +1318,7 @@ TEST_F(OSDMonitorProfileCopyNameTest, OtherContents) {
 // Test the commit hint names the command and the release
 TEST(OSDMonitorUpgradeHintTest, NamesCommandAndRelease) {
   EXPECT_EQ("the upgrade is committed with 'ceph osd require-osd-release "
-            "umbrella'", OSDMonitor::num_zones_upgrade_hint());
+            "vampire'", OSDMonitor::num_zones_upgrade_hint());
 }
 
 class OSDMonitorCrushRuleSuitsPoolTest
