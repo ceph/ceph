@@ -22,6 +22,14 @@ class GrafanaTestCase(CertMgrTestCase):
     def grafana_spec(self, hosts: List[str], **spec: Any) -> Dict[str, Any]:
         return {'service_type': 'grafana', 'placement': {'hosts': hosts}, 'spec': spec}
 
+    def host_fqdn(self, host: str) -> str:
+        """The FQDN cephadm reports for a host (cephadm's get_fqdn(), run on it)."""
+        for remote in self.ctx.cluster.remotes.keys():
+            if remote.shortname == host:
+                script = 'import socket; print(socket.getfqdn() or socket.gethostname())'
+                return remote.sh(['python3', '-c', script]).strip().lower()
+        raise AssertionError(f'no remote for host {host}')
+
 
 class TestCertMgrHostScope(GrafanaTestCase):
     """grafana (host scope)."""
@@ -122,6 +130,24 @@ class TestCertMgrHostScope(GrafanaTestCase):
         finally:
             self.rm_service('grafana')
             self.rm_cert_key('grafana_ssl_cert', host=host)
+
+    def test_grafana_reference_registered_under_fqdn(self) -> None:
+        """A per-host reference certificate registered under the host FQDN,
+        as the documentation used to recommend, is still served."""
+        host = self.host_names[0]
+        fqdn = self.host_fqdn(host)
+        if fqdn == host:
+            self.skipTest(f'the FQDN of {host} is its host name')
+        leaf = self.leaf(f'grafana-fqdn-{host}', ips=[self.hosts[host]], dns=['grafana_servers'])
+        try:
+            self.set_pair('grafana', leaf, host=fqdn)
+            self.apply('grafana', self.grafana_spec([host], certificate_source='reference'))
+            expected = leaf['fingerprint']
+            self.wait_served(host, self.GRAFANA_PORT, lambda r: r['fingerprint'] == expected,
+                             'grafana reference certificate registered under the FQDN')
+        finally:
+            self.rm_service('grafana')
+            self.rm_cert_key('grafana_ssl_cert', host=fqdn)
 
 
 class TestCertMgrHostScopeMissingCert(GrafanaTestCase):
