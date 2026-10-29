@@ -26,6 +26,12 @@ ACCESS_KEY = 'LTA662PVVDTDWX6M2AB0'
 SECRET_KEY = 'pvtchqajgzqx5581t6qbddbkj0bgf3a69qdkjcea'
 BUCKET_NAME = 'versioning-bucket'
 DATA_POOL = 'default.rgw.buckets.data'
+CEPH_CFG_PROPAGATION_WAIT = 5  # seconds for 'ceph config set/rm' to reach radosgw
+
+def head_objects(key):
+    """ the key's head object in the data pool, if any (not its version instances) """
+    out = exec_cmd(f'rados -p {DATA_POOL} ls')
+    return [o for o in out.decode().split() if o.endswith(f'_{key}') and '__:' not in o]
 
 def main():
     """
@@ -118,6 +124,132 @@ def main():
         exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
     get_resp = bucket.Object(key).get()
     assert put_resp.e_tag == get_resp['ETag'], 'get did not return null version with correct etag'
+    # the rollback of the failed olh upgrade must not change the null version's mtime
+    head_resp = connection.meta.client.head_object(Bucket=BUCKET_NAME, Key=key, VersionId='null')
+    list_resp = connection.meta.client.list_object_versions(Bucket=BUCKET_NAME, Prefix=key)
+    null_version = [v for v in list_resp['Versions'] if v['VersionId'] == 'null'][0]
+    assert head_resp['LastModified'] == null_version['LastModified'], \
+      'null version mtime changed after failed olh upgrade'
+
+    # TESTCASE 'verify that null object version mtime matches its index entry after a failed olh upgrade races with an overwrite'
+    log.debug('TEST: verify that null object version mtime matches its index entry after a failed olh upgrade races with an overwrite\n')
+    connection.BucketVersioning(BUCKET_NAME).suspend()
+    key = str(uuid.uuid4())
+    bucket.put_object(Key=key, Body=b"data")  # "null" version
+    connection.BucketVersioning(BUCKET_NAME).enable()
+
+    put_errors = []
+    def failed_put():
+        try:
+            bucket.put_object(Key=key, Body=b"versioned data")
+        except Exception as e:
+            log.debug(e)
+            put_errors.append(e)
+
+    try:
+        exec_cmd('ceph config set client rgw_debug_inject_set_olh_err 2')
+        # hold the rollback longer than the two waits and the overwrite below
+        exec_cmd(f'ceph config set client rgw_inject_delay_sec {6 * CEPH_CFG_PROPAGATION_WAIT}')
+        exec_cmd('ceph config set client rgw_inject_delay_pattern delay_olh_cancel_modification')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+
+        # trigger rollback by failed put; the put doesn't return until its delayed
+        # rollback is done
+        t = threading.Thread(target=failed_put)
+        t.start()
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+
+        # overwrite the null version while the rollback is delayed
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+        connection.BucketVersioning(BUCKET_NAME).suspend()
+        put_resp = connection.meta.client.put_object(Bucket=BUCKET_NAME, Key=key, Body=b"new data")
+        assert t.is_alive(), 'rollback was not held during the overwrite'
+        t.join()
+        assert put_errors, 'versioned put did not fail as expected'
+    finally:
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
+        exec_cmd('ceph config rm client rgw_inject_delay_sec')
+        exec_cmd('ceph config rm client rgw_inject_delay_pattern')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+
+    # the rollback must not leave its pending olh entry on the head
+    xattrs = exec_cmd(f'rados -p {DATA_POOL} listxattr {head_objects(key)[0]}')
+    assert b'user.rgw.olh.pending.' not in xattrs, 'pending olh entry left on the head after the rollback'
+    # the overwrite's mtime must survive the delayed rollback
+    get_resp = bucket.Object(key).get()
+    assert put_resp['ETag'] == get_resp['ETag'], 'get did not return the overwritten null version'
+    head_resp = connection.meta.client.head_object(Bucket=BUCKET_NAME, Key=key, VersionId='null')
+    list_resp = connection.meta.client.list_object_versions(Bucket=BUCKET_NAME, Prefix=key)
+    null_version = [v for v in list_resp['Versions'] if v['VersionId'] == 'null'][0]
+    assert head_resp['LastModified'] == null_version['LastModified'], \
+      'null version mtime changed after failed olh upgrade raced with an overwrite'
+
+    # TESTCASE 'verify that null object version mtime matches its index entry after a stale pending olh entry is removed'
+    log.debug('TEST: verify that null object version mtime matches its index entry after a stale pending olh entry is removed\n')
+    connection.BucketVersioning(BUCKET_NAME).suspend()
+    key = str(uuid.uuid4())
+    bucket.put_object(Key=key, Body=b"data")  # "null" version
+    connection.BucketVersioning(BUCKET_NAME).enable()
+    try:
+        # leave the pending olh entry on the head, as if the rollback never ran,
+        # and let it time out right away
+        exec_cmd('ceph config set client rgw_debug_inject_set_olh_err 2')
+        exec_cmd('ceph config set client rgw_debug_inject_olh_cancel_modification_err true')
+        exec_cmd('ceph config set client rgw_olh_pending_timeout_sec 1')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+        try:
+            bucket.put_object(Key=key, Body=b"new data")
+        except Exception as e:
+            log.debug(e)
+        else:
+            raise AssertionError('versioned put did not fail as expected')
+        # wait past rgw_olh_pending_timeout_sec
+        time.sleep(2)
+        # reading the key removes the timed out pending entry from the head
+        bucket.Object(key).get()
+    finally:
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
+        exec_cmd('ceph config rm client rgw_debug_inject_olh_cancel_modification_err')
+        exec_cmd('ceph config rm client rgw_olh_pending_timeout_sec')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+    # the read must have removed the timed out pending entry
+    xattrs = exec_cmd(f'rados -p {DATA_POOL} listxattr {head_objects(key)[0]}')
+    assert b'user.rgw.olh.pending.' not in xattrs, 'timed out pending olh entry was not removed'
+    # removing the timed out pending entry must not change the null version's mtime
+    head_resp = connection.meta.client.head_object(Bucket=BUCKET_NAME, Key=key, VersionId='null')
+    list_resp = connection.meta.client.list_object_versions(Bucket=BUCKET_NAME, Prefix=key)
+    null_version = [v for v in list_resp['Versions'] if v['VersionId'] == 'null'][0]
+    assert head_resp['LastModified'] == null_version['LastModified'], \
+      'null version mtime changed after a stale pending olh entry was removed'
+
+    # TESTCASE 'verify that the olh object is cleaned up after deleting the last version with a stale pending olh entry'
+    log.debug('TEST: verify that the olh object is cleaned up after deleting the last version with a stale pending olh entry\n')
+    connection.BucketVersioning(BUCKET_NAME).suspend()
+    key = str(uuid.uuid4())
+    bucket.put_object(Key=key, Body=b"data")  # "null" version
+    connection.BucketVersioning(BUCKET_NAME).enable()
+    try:
+        exec_cmd('ceph config set client rgw_debug_inject_set_olh_err 2')
+        exec_cmd('ceph config set client rgw_debug_inject_olh_cancel_modification_err true')
+        exec_cmd('ceph config set client rgw_olh_pending_timeout_sec 1')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+        try:
+            bucket.put_object(Key=key, Body=b"new data")
+        except Exception as e:
+            log.debug(e)
+        else:
+            raise AssertionError('versioned put did not fail as expected')
+        # wait past rgw_olh_pending_timeout_sec
+        time.sleep(2)
+        # deleting the only linked version clears the olh, removing the timed out pending entry first
+        connection.ObjectVersion(bucket.name, key, 'null').delete()
+    finally:
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
+        exec_cmd('ceph config rm client rgw_debug_inject_olh_cancel_modification_err')
+        exec_cmd('ceph config rm client rgw_olh_pending_timeout_sec')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+    assert not head_objects(key), 'olh object was not cleaned up'
 
     # TESTCASE 'verify that concurrent delete requests do not leave behind olh entries'
     log.debug('TEST: verify that concurrent delete requests do not leave behind olh entries\n')
