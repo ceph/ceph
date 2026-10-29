@@ -336,6 +336,7 @@ class SubvolumeBase(object):
                                                "ceph.dir.layout.pool")
         if xattr_key and xattr_val:
             try:
+                xattr_val = to_utf8b(xattr_val)
                 self.fs.setxattr(path, xattr_key, xattr_val.encode('utf-8'), 0)
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])

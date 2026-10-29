@@ -888,7 +888,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             create_clone_index(self.fs, self.vol_spec)
             with open_clone_index(self.fs, self.vol_spec) as index:
-                track_idx = index.track(tgt_subvolume.base_path)
+                track_idx = index.track(tgt_subvolume.gen_mnt_path())
                 self._add_snap_clone(track_idx, snapname)
         except (IndexException, MetadataMgrException) as e:
             log.warning("error creating clone index: {0}".format(e))

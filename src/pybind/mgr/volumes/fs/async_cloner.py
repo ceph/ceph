@@ -186,13 +186,13 @@ def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(fs_client, volname) as fs_handle:
         with open_clone_subvol_pair_in_group(fs_client.mgr, fs_handle, volspec,
                 volname, groupname, subvolname, lockless=False) as \
-                (subvol0, subvol1, subvol2):
-            src_path = subvol1.snapshot_data_path(subvol2)
-            dst_path = subvol0.path
+                (dst_subvol, src_subvol, src_snap_name):
+            src_path = src_subvol.snapshot_data_path(src_snap_name)
+            dst_path = dst_subvol.gen_mnt_path()
             # XXX: this is where cloning (of subvolume's snapshots) actually
             # happens.
             bulk_copy(fs_handle, src_path, dst_path, should_cancel)
-            set_quota_on_clone(fs_handle, (subvol0, subvol1, subvol2))
+            set_quota_on_clone(fs_handle, (dst_subvol, src_subvol, src_snap_name))
 
 def update_clone_failure_status(fs_client, volspec, volname, groupname, subvolname, ve):
     with open_at_volume(fs_client, volspec, volname, groupname, subvolname,
@@ -337,7 +337,7 @@ class Cloner(AsyncJobs):
 
     def get_clone_tracking_index(self, fs_handle, clone_subvolume):
         with open_clone_index(fs_handle, self.vc.volspec) as index:
-            return index.find_clone_entry_index(clone_subvolume.base_path)
+            return index.find_clone_entry_index(clone_subvolume.gen_mnt_path())
 
     def _cancel_pending_clone(self, fs_handle, clone_subvolume, clone_subvolname, clone_groupname, status, track_idx):
         clone_state = SubvolumeStates.from_value(status['state'])
@@ -374,9 +374,10 @@ class Cloner(AsyncJobs):
                             raise VolumeException(-errno.EINVAL, "cannot cancel -- clone finished (check clone status)")
                         track_idx = self.get_clone_tracking_index(fs_handle, clone_subvolume)
                         if not track_idx:
-                            log.warning("cannot lookup clone tracking index for {0}".format(clone_subvolume.base_path))
+                            log.warning('found no clone tracking index for '
+                                        f'{clone_subvolume.gen_mnt_path()}')
                             raise VolumeException(-errno.EINVAL, "error canceling clone")
-                        clone_job = (track_idx, clone_subvolume.base_path)
+                        clone_job = (track_idx, clone_subvolume.gen_mnt_path())
                         jobs = [j[0] for j in self.jobs[volname]]
                         with lock_timeout_log(self.lock):
                             if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE, clone_state) and not clone_job in jobs:
@@ -392,7 +393,8 @@ class Cloner(AsyncJobs):
                 with open_volume_lockless(self.fs_client, volname) as fs_handle:
                     with open_group(fs_handle, self.vc.volspec, groupname) as group:
                         with open_subvol(self.fs_client.mgr, fs_handle, self.vc.volspec, group, clonename, SubvolumeOpType.CLONE_CANCEL) as clone_subvolume:
-                            if not self._cancel_job(volname, (track_idx, clone_subvolume.base_path)):
+                            if not self._cancel_job(volname, (track_idx,
+                                                              clone_subvolume.gen_mnt_path())):
                                 raise VolumeException(-errno.EINVAL, "cannot cancel -- clone finished (check clone status)")
         except (IndexException, MetadataMgrException) as e:
             log.error("error cancelling clone {0}: ({1})".format(job, e))

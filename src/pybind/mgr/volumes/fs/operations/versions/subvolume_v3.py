@@ -652,6 +652,59 @@ class SubvolumeV3(SubvolHelper, SubvolumeV2):
             raise VolumeException(exception=e)
 
 
+    # ----- methods for subvol snap clone op -----
+
+
+    def add_clone_src_to_meta_file(self, volname, subvolume, snap_name):
+        self.md.add_section("source")
+        self.md.update_section("source", "volume", volname)
+        if not subvolume.group.is_default_group():
+            self.md.update_section("source", "group", subvolume.group_name)
+        self.md.update_section("source", "subvolume", subvolume.subvol_name)
+        self.md.update_section("source", "incar", self.uuid)
+        self.md.update_section("source", "snapshot", snap_name)
+        self.md.flush()
+
+    def add_clone_failure_to_meta_file(self, errno, errmsg):
+        try:
+            self.md.add_section(self.md.CLONE_FAILURE_SECTION)
+            self.md.update_section(self.md.CLONE_FAILURE_SECTION,
+                                   self.md.CLONE_FAILURE_META_KEY_ERRNO, errno)
+            self.md.update_section(self.md.CLONE_FAILURE_SECTION,
+                                   self.md.CLONE_FAILURE_META_KEY_ERROR_MSG,
+                                   errmsg)
+            self.md.flush()
+        except MetadataMgrException as e:
+            raise VolumeException(exception=e)
+
+    def create_as_clone(self, pool, src_volname, src_subvol, snap_name):
+        try:
+            # source snapshot attrs are used to create clone subvolume
+            # attributes of subvolume's content though, are synced during the
+            # cloning process.
+            attrs = src_subvol.get_attrs(
+                        src_subvol.get_snap_data_path(snap_name))
+
+            # The source of the clone may have exceeded its quota limit as
+            # CephFS quotas are imprecise. Cloning such a source may fail if
+            # the quota on the destination is set before starting the clone
+            # copy. So always set the quota on destination after cloning is
+            # successful.
+            attrs["quota"] = None
+
+            # override snapshot pool setting, if one is provided for the clone
+            if pool is not None:
+                attrs["data_pool"] = pool
+                attrs["pool_namespace"] = None
+
+            self._create(attrs, SubvolumeTypes.TYPE_CLONE, write_auth_md=False)
+            self.add_clone_src_to_meta_file(src_volname, src_subvol, snap_name)
+        except (VolumeException, MetadataMgrException, Error) as e:
+            self._cleanup_on_creation_failure(e)
+        except Exception as e:
+            raise VolumeException(exception=e)
+
+
     # ==================================================================
     # Methods that makes code of this class compatible with SubvolumeV2,
     # SubvolumeV1 and SubvolumeBase.
@@ -733,3 +786,6 @@ class SubvolumeV3(SubvolHelper, SubvolumeV2):
 
     def snapshot_info(self, snap_name):
         return self.get_snap_info(snap_name)
+
+    def create_clone(self, pool, src_volname, src_subvol, snap_name):
+        self.create_as_clone(pool, src_volname, src_subvol, snap_name)

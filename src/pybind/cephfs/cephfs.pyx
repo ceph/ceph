@@ -3390,15 +3390,8 @@ cdef class LibCephFS(object):
 
         If src is regfile, symlink or something else, copy it to dst and return.
         '''
-        if isinstance(src_path, str):
-            src_path = src_path.encode('utf-8')
-        else:
-            assert isinstance(src_path, bytes)
-
-        if isinstance(dst_path, str):
-            dst_path = dst_path.encode('utf-8')
-        else:
-            assert isinstance(dst_path, bytes)
+        src_path = cstr(src_path, 'src_path')
+        dst_path = cstr(dst_path, 'dst_path')
 
         if not should_cancel:
             should_cancel = lambda: False
