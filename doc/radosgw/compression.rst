@@ -85,6 +85,70 @@ For example:
 .. note:: A ``default`` zone is created for you if you have not done any
    previous :ref:`Multisite Configuration <multisite>`.
 
+Minimum Object Size
+-------------------
+
+Small objects gain little from compression but still cost CPU time and
+compression metadata. The ``--compression-min-size=<size>`` option of
+``radosgw-admin zone placement modify`` sets the smallest object size that is
+compressed for a storage class. Objects smaller than this are stored
+uncompressed. The default of ``0`` compresses objects of any size.
+
+For example, to compress only objects of 64 KiB or larger:
+
+.. prompt:: bash #
+
+   radosgw-admin zone placement modify --rgw-zone default \
+                                         --placement-id default-placement \
+                                         --storage-class STANDARD \
+                                         --compression zstd \
+                                         --compression-min-size 64K
+
+The size is stored in bytes:
+
+::
+
+  "STANDARD": {
+      "data_pool": "default.rgw.buckets.data",
+      "compression_type": "zstd",
+      "compression_min_size": 65536
+  }
+
+The size is compared with an object's logical (uncompressed) size. It applies
+to S3 and Swift object uploads whose size is known in advance, object copies,
+lifecycle transitions, and objects replicated by multisite sync. Multipart
+uploads, uploads without a known size, POST uploads, Swift bulk uploads,
+writes through librgw and ``radosgw-admin object put`` ignore the minimum size.
+
+Copies, lifecycle transitions and multisite sync store an object that is below
+the minimum size uncompressed even if its source is compressed, unless the
+object is encrypted and is copied without being decrypted. Multisite sync
+applies the destination zone's setting to the whole object, so a small object
+that was uploaded in parts can be stored uncompressed in another zone.
+
+.. note:: ``radosgw-admin`` from a release without this option drops the
+   setting, for every storage class, whenever it writes the zone.
+
+Multipart Uploads
+-----------------
+
+The compression ``type`` of a multipart upload is determined when the upload is
+initiated, and all of its parts use it. Changing the setting while a multipart
+upload is in progress does not affect that upload; only multipart uploads
+initiated afterwards use the new ``type``.
+
+.. note:: Multipart uploads initiated before upgrading to a release with this
+   behavior do not record their compression ``type``, so their remaining parts
+   use the current setting. If the setting changes while such an upload is in
+   progress, CompleteMultipartUpload can fail with ``InvalidPart``. Avoid
+   changing the compression ``type`` until all RGW daemons are upgraded and
+   multipart uploads that were in progress during the upgrade have completed.
+
+.. note:: For encrypted multipart uploads, toggling the
+   :ref:`feature_compress_encrypted` zonegroup feature while an upload is in
+   progress can still cause CompleteMultipartUpload to fail with
+   ``InvalidPart``.
+
 
 Statistics
 ==========
