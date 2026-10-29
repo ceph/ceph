@@ -516,8 +516,11 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
   cls_user_header header;
   string from_index{op.marker}, prefix;
   cls_user_reset_stats2_ret ret;
-  ret.storage_class_stats.emplace();
-  bool storage_classes_present = op.storage_class_stats.has_value();
+  /* continue from the stats accumulated by the previous calls. an older
+   * client sends no per-storage-class stats, so they stay unknown */
+  cls_user_stats acc_stats = op.acc_stats;
+  sc_stats_t sc_stats = op.storage_class_stats;
+
   map<string, buffer::list> keys;
   int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES,
 				&keys, &ret.truncated);
@@ -528,12 +531,6 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
   CLS_LOG(20, "%s: read %lu key-values, truncated=%d",
 	  __func__, keys.size(), ret.truncated);
 
-  auto* stats_to_update = &ret.acc_stats;
-  auto* storage_classes_to_update = &ret.storage_class_stats;
-  if (!ret.truncated) {
-    stats_to_update = &op.acc_stats;
-    storage_classes_to_update = &op.storage_class_stats;
-  }
   for (const auto& kv : keys) {
     cls_user_bucket_entry e;
     try {
@@ -545,29 +542,30 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
 	      __func__, kv.first.c_str());
       return -EIO;
     }
-    add_header_stats(stats_to_update, e);
-    if (!storage_classes_present) {
-      /* an older client sent no per-storage-class stats */
-      storage_classes_to_update->reset();
-    } else {
-      add_sc_stats(*storage_classes_to_update, e);
-    }
+    add_header_stats(&acc_stats, e);
+    add_sc_stats(sc_stats, e);
   }
 
   if (! ret.truncated) {
     buffer::list bl;
     header.last_stats_update = op.time;
-    header.stats = op.acc_stats;
-    header.storage_class_stats = op.storage_class_stats;
+    header.stats = acc_stats;
+    header.storage_class_stats = std::move(sc_stats);
     encode(header, bl);
 
     CLS_LOG(20, "%s: updating header", __func__);
     rc = cls_cxx_map_write_header(hctx, &bl);
 
-    /* return final result */
+    /* return final result. the reply to a write is limited to
+     * osd_max_write_op_reply_len (64 bytes), so it doesn't carry the
+     * per-storage-class stats */
+    ret.acc_stats = acc_stats;
     encode(ret, *out);
     return rc;
   }
+
+  ret.acc_stats = acc_stats;
+  ret.storage_class_stats = std::move(sc_stats);
 
   /* try-update marker */
   if(!keys.empty())
