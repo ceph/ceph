@@ -150,6 +150,14 @@ Event Types
 +--------------------------------------------------------+-------------------------------------------+
 | ``s3:ObjectRestore:Delete``                            | Supported                                 |
 +--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectTagging:*``                                 | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectTagging:Put``                               | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectTagging:Delete``                            | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectAcl:Put``                                   | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
 | ``s3:ReducedRedundancyLostObject``                     | Not applicable                            |
 +--------------------------------------------------------+-------------------------------------------+
 
@@ -167,6 +175,12 @@ Event Types
 
    The ``s3:ObjectSynced:Create`` event is sent when an object successfully
    syncs to a zone. It must be explicitly set for each zone.
+
+.. note::
+
+   The ``s3:ObjectAcl:Put`` event is sent when a request sets an object's
+   ACL, and only when the ACL it sets differs from the one it replaces.
+   A bucket's ACL sends no event.
 
 Topic Configuration
 -------------------

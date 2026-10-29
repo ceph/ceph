@@ -1534,11 +1534,40 @@ void RGWPutObjTags::execute(optional_yield y)
     return;
   }
 
+  // make reservation for notification if needed;  the filter sees the
+  // tags as this request sets them
+  RGWObjTags new_tags;
+  try {
+    auto iter = tags_bl.cbegin();
+    decode(new_tags, iter);
+  } catch (const buffer::error&) {
+    // get_params() encoded them;  a filter on tags then sees none
+  }
+  std::unique_ptr<rgw::sal::Notification> res
+    = driver->get_notification(s->object.get(), nullptr, s,
+			       rgw::notify::ObjectTaggingPut, y);
+  op_ret = res->publish_reserve(this, &new_tags);
+  if (op_ret < 0) {
+    return;
+  }
+
   s->object->set_atomic(true);
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this,
 				       authenticated_user(s));
   if (op_ret == -ECANCELED){
     op_ret = -ERR_TAG_CONFLICT;
+  }
+  if (op_ret < 0) {
+    return;
+  }
+
+  // send request to notification manager
+  int ret = res->publish_commit(this, s->object->get_size(),
+				ceph::real_clock::now(), etag,
+				s->object->get_instance());
+  if (ret < 0) {
+    ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
+    // too late to rollback operation, hence op_ret is not set here
   }
 }
 
@@ -1588,8 +1617,29 @@ void RGWDeleteObjTags::execute(optional_yield y)
     return;
   }
 
+  // make reservation for notification if needed
+  std::unique_ptr<rgw::sal::Notification> res
+    = driver->get_notification(s->object.get(), nullptr, s,
+			       rgw::notify::ObjectTaggingDelete, y);
+  op_ret = res->publish_reserve(this);
+  if (op_ret < 0) {
+    return;
+  }
+
   op_ret = s->object->delete_obj_attrs(this, RGW_ATTR_TAGS, y,
 				       authenticated_user(s));
+  if (op_ret < 0) {
+    return;
+  }
+
+  // send request to notification manager
+  int ret = res->publish_commit(this, s->object->get_size(),
+				ceph::real_clock::now(), etag,
+				s->object->get_instance());
+  if (ret < 0) {
+    ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
+    // too late to rollback operation, hence op_ret is not set here
+  }
 }
 
 int RGWGetBucketTags::verify_permission(optional_yield y)
@@ -7127,10 +7177,32 @@ void RGWPutACLs::execute(optional_yield y)
   map<string, bufferlist> attrs;
 
   if (!rgw::sal::Object::empty(s->object.get())) {
+    // make reservation for notification if needed:  an object's ACL, and
+    // only one this request changes, as s3:ObjectAcl:Put is defined
+    std::unique_ptr<rgw::sal::Notification> res;
+    if (!(existing_policy == new_policy)) {
+      res = driver->get_notification(s->object.get(), nullptr, s,
+				     rgw::notify::ObjectAclPut, y);
+      op_ret = res->publish_reserve(this);
+      if (op_ret < 0) {
+	return;
+      }
+    }
     s->object->set_atomic(true);
     //if instance is empty, we should modify the latest object
     op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this,
 					 authenticated_user(s));
+    if (res && (op_ret == 0)) {
+      // send request to notification manager
+      const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+      int ret = res->publish_commit(this, s->object->get_size(),
+				    ceph::real_clock::now(), etag,
+				    s->object->get_instance());
+      if (ret < 0) {
+	ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
+	// too late to rollback operation, hence op_ret is not set here
+      }
+    }
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;

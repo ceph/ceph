@@ -43,6 +43,12 @@ namespace rgw::notify {
     ObjectRestoreInitiated                 = 0x100000000,
     ObjectRestoreCompleted                 = 0x200000000,
     ObjectRestoreExpired                   = 0x400000000,
+    // above UnknownEvent's bit, which a match by intersection must not share
+    ObjectTagging                          = 0xF0000000000,
+    ObjectTaggingPut                       = 0x10000000000,
+    ObjectTaggingDelete                    = 0x20000000000,
+    ObjectAcl                              = 0xF00000000000,
+    ObjectAclPut                           = 0x100000000000,
     UnknownEvent                           = 0x1000000000
 };
 
