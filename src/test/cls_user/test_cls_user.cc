@@ -513,3 +513,144 @@ TEST_F(ClsUserStorageClass, ResetStatsPaginationLegacyLastPage) {
   // should be empty as a legacy bucket exists
   ASSERT_FALSE(header.storage_class_stats.has_value());
 }
+
+// bucket entry with all objects in one storage class
+static cls_user_bucket_entry sc_bucket_entry(const std::string& name,
+                                             const std::string& storage_class,
+                                             uint64_t count, uint64_t size)
+{
+  cls_user_bucket_entry entry;
+  entry.bucket.name = name;
+  entry.count = count;
+  entry.size = size;
+  entry.size_rounded = size;
+  entry.storage_class_stats.emplace();
+  cls_user_bucket_entry& sc = (*entry.storage_class_stats)[storage_class];
+  sc.count = count;
+  sc.size = size;
+  sc.size_rounded = size;
+  return entry;
+}
+
+// bucket entry from an older client: no per-storage-class stats
+static cls_user_bucket_entry legacy_bucket_entry(const std::string& name,
+                                                 uint64_t count, uint64_t size)
+{
+  cls_user_bucket_entry entry;
+  entry.bucket.name = name;
+  entry.count = count;
+  entry.size = size;
+  entry.size_rounded = size;
+  entry.storage_class_stats = std::nullopt;
+  return entry;
+}
+
+TEST_F(ClsUserStorageClass, OldClientSyncMakesScUnknown) {
+  std::string oid = "user.old-client-sync";
+  cls_user_header header;
+  header.storage_class_stats.emplace();
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, header));
+
+  auto entry = sc_bucket_entry("bucket", "COLD", 3, 3072);
+  set_bucket(ioctx, oid, entry, true); // link and sync
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ((*header.storage_class_stats)["COLD"].total_entries, 3u);
+
+  // an older client syncs the same bucket without per-storage-class stats
+  auto legacy = legacy_bucket_entry("bucket", 3, 3072);
+  set_bucket(ioctx, oid, legacy, false);
+
+  // totals stay right, the per-storage-class stats become unknown (not zero)
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 3u);
+  EXPECT_EQ(header.stats.total_bytes, 3072u);
+  EXPECT_FALSE(header.storage_class_stats.has_value());
+}
+
+TEST_F(ClsUserStorageClass, NewUserOldClientSync) {
+  // user created during an upgrade: empty header, bucket written and synced
+  // by an older client
+  std::string oid = "user.new-user-old-client";
+  cls_user_bucket_entry link; // as rgwrados::buckets::add() sends it
+  link.bucket.name = "bucket";
+  set_bucket(ioctx, oid, link, true);
+
+  cls_user_header header;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value()); // no objects yet
+
+  auto legacy = legacy_bucket_entry("bucket", 15, 15360);
+  set_bucket(ioctx, oid, legacy, false);
+
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 15u);
+  EXPECT_FALSE(header.storage_class_stats.has_value());
+}
+
+TEST_F(ClsUserStorageClass, LinkKeepsSc) {
+  std::string oid = "user.link-keeps-sc";
+  cls_user_header header;
+  header.storage_class_stats.emplace();
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, header));
+
+  auto entry = sc_bucket_entry("bucket1", "COLD", 2, 2048);
+  set_bucket(ioctx, oid, entry, true); // link and sync
+
+  // link a new, empty bucket, as rgwrados::buckets::add() does
+  cls_user_bucket_entry link;
+  link.bucket.name = "bucket2";
+  set_bucket(ioctx, oid, link, true);
+
+  // link the existing bucket again (e.g. radosgw-admin bucket link)
+  cls_user_bucket_entry relink;
+  relink.bucket.name = "bucket1";
+  set_bucket(ioctx, oid, relink, true);
+
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 2u);
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ((*header.storage_class_stats)["COLD"].total_entries, 2u);
+  EXPECT_EQ((*header.storage_class_stats)["COLD"].total_bytes, 2048u);
+}
+
+TEST_F(ClsUserStorageClass, ResetStats2EmptyLinkedBucket) {
+  // an empty bucket that was just linked has no per-storage-class stats, but
+  // it must not make them unknown
+  std::string oid = "user.reset2-empty-linked";
+  add_buckets_with_sc(ioctx, oid, 10, -1);
+  cls_user_bucket_entry link;
+  link.bucket.name = "bucket-empty";
+  set_bucket(ioctx, oid, link, true);
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, cls_user_header{}));
+
+  reset_user_stats_test(ioctx, oid);
+
+  cls_user_header header;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 10u);
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_entries, 5u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_entries, 5u);
+}
+
+TEST_F(ClsUserStorageClass, ResetStatsV1) {
+  // the older reset_user_stats method, with an empty linked bucket
+  std::string oid = "user.reset-sc-v1";
+  add_buckets_with_sc(ioctx, oid, 10, -1);
+  cls_user_bucket_entry link;
+  link.bucket.name = "bucket-empty";
+  set_bucket(ioctx, oid, link, true);
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, cls_user_header{}));
+
+  librados::ObjectWriteOperation op;
+  cls_user_reset_stats(op);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  cls_user_header header;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 10u);
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_entries, 5u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_entries, 5u);
+}
