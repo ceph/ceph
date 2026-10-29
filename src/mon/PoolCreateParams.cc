@@ -605,7 +605,7 @@ string pool_default_value(const PoolCreateParams& p, const string& param)
     return p.root;
   } else if (param == "class") {
     return p.device_class;
-  } else if (param == "replica" || param == "size") {
+  } else if (param == "replica") {
     return std::to_string(p.copies_per_zone());
   } else if (param == "min_size") {
     return std::to_string(p.min_size);

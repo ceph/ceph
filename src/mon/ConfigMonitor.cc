@@ -1121,10 +1121,6 @@ void ConfigMonitor::dump_pool_defaults(Formatter *f, ostream& out)
       // kept in the OSDMap, not an option; the option makes default if missing
       return have_default_profile ? "-" : "osd_pool_default_erasure_code_profile";
     }
-    if (param == "replica" &&
-        g_conf().get_val<uint64_t>("osd_pool_default_replica") == 0) {
-      return "osd_pool_default_size";
-    }
     return pool_default_options().at(param);
   };
 
@@ -1205,8 +1201,7 @@ int ConfigMonitor::prepare_pool_default_set(
   if (err) {
     return err;
   }
-  if ((p.is_given("replica") && p.replica == 1) ||
-      (p.is_given("size") && p.size == 1)) {
+  if (p.is_given("replica") && p.replica == 1) {
     err = check_size_one(
       g_conf().get_val<bool>("mon_allow_pool_size_one"),
       cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false), &ss);
@@ -1267,7 +1262,7 @@ int ConfigMonitor::check_pool_default_overrides(
     if (local_overrides.contains(name)) {
       ss << name << " is set in the local configuration of mon."
          << mon.name << " (file, environment or command line), which "
-            "overrides the configuration database";
+            "overrides the configuration database; remove it there";
       return -EINVAL;
     }
   }

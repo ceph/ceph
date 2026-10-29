@@ -1079,11 +1079,10 @@ TEST_F(PoolParamsTest, DefaultValueStrings) {
   EXPECT_EQ("false", pool_default_value(p, "crimson"));
 }
 
-// Test --size is written as the replicas per zone
-TEST_F(PoolParamsTest, DefaultValueSizeIsReplica) {
-  const PoolCreateParams p = with({{"size", int64_t(2)}});
-  EXPECT_EQ("2", pool_default_value(p, "size"));
-  EXPECT_EQ("2", pool_default_value(p, "replica"));
+// Test --replica is written as the replicas per zone
+TEST_F(PoolParamsTest, DefaultValueReplica) {
+  EXPECT_EQ("2", pool_default_value(with({{"replica", int64_t(2)}}),
+                                    "replica"));
 }
 
 // Test k and m are values of the default profile, not a whole profile
@@ -1140,24 +1139,21 @@ TEST(CheckPoolReplicaCopiesTest, Limits) {
   EXPECT_EQ("replica must be between 1 and 10", ss.str());
 }
 
-// Test the size and replica options allow the copies the commands allow
-TEST(CheckPoolReplicaCopiesTest, OptionsShareTheLimit) {
-  for (const string name :
-       {"osd_pool_default_size", "osd_pool_default_replica"}) {
-    auto o = std::find_if(ceph_options.begin(), ceph_options.end(),
-                          [&](const Option& o) { return o.name == name; });
-    ASSERT_NE(ceph_options.end(), o) << name;
-    EXPECT_EQ(uint64_t(MAX_POOL_REPLICA_COPIES), std::get<uint64_t>(o->max))
-        << name;
-  }
+// Test osd_pool_default_size allows the copies the commands allow
+TEST(CheckPoolReplicaCopiesTest, OptionSharesTheLimit) {
+  auto o = std::find_if(ceph_options.begin(), ceph_options.end(),
+                        [](const Option& o) {
+                          return o.name == "osd_pool_default_size";
+                        });
+  ASSERT_NE(ceph_options.end(), o);
+  EXPECT_EQ(uint64_t(MAX_POOL_REPLICA_COPIES), std::get<uint64_t>(o->max));
 }
 
-// Test the written options are unique and use the new replica name
+// Test the written options are unique
 TEST(PoolDefaultOptionsTest, OptionNames) {
   const auto names = pool_default_option_names();
   EXPECT_EQ(14u, names.size());
-  EXPECT_TRUE(names.contains("osd_pool_default_replica"));
-  EXPECT_FALSE(names.contains("osd_pool_default_size"));
+  EXPECT_TRUE(names.contains("osd_pool_default_size"));
   EXPECT_FALSE(names.contains("osd_pool_default_erasure_code_profile"));
 }
 
@@ -1185,15 +1181,15 @@ protected:
 
 // Test an unmasked global value is not an override
 TEST_F(PoolDefaultOverridesTest, GlobalValueIsNotAnOverride) {
-  add("global", "osd_pool_default_replica", "2");
+  add("global", "osd_pool_default_size", "2");
   EXPECT_TRUE(db_pool_default_overrides(config_map).empty());
 }
 
 // Test a value in the mon section is an override
 TEST_F(PoolDefaultOverridesTest, MonSectionOverrides) {
-  add("global", "osd_pool_default_replica", "2");
-  add("mon", "osd_pool_default_replica", "3");
-  const map<string, string> expected = {{"osd_pool_default_replica", "mon"}};
+  add("global", "osd_pool_default_size", "2");
+  add("mon", "osd_pool_default_size", "3");
+  const map<string, string> expected = {{"osd_pool_default_size", "mon"}};
   EXPECT_EQ(expected, db_pool_default_overrides(config_map));
 }
 
@@ -1214,26 +1210,26 @@ TEST_F(PoolDefaultOverridesTest, MaskedGlobalOverrides) {
 
 // Test a value for OSDs or for another daemon is not an override
 TEST_F(PoolDefaultOverridesTest, OtherDaemonsDoNotOverride) {
-  add("osd", "osd_pool_default_replica", "3");
-  add("osd.1", "osd_pool_default_replica", "3");
-  add("mgr", "osd_pool_default_replica", "3");
+  add("osd", "osd_pool_default_size", "3");
+  add("osd.1", "osd_pool_default_size", "3");
+  add("mgr", "osd_pool_default_size", "3");
   EXPECT_TRUE(db_pool_default_overrides(config_map).empty());
 }
 
 // Test a mon section value of an option that is not a pool default is ignored
 TEST_F(PoolDefaultOverridesTest, OtherOptionsIgnored) {
-  add("mon", "osd_pool_default_size", "3");
+  add("mon", "osd_pool_default_flag_nodelete", "true");
   add("mon", "mon_allow_pool_size_one", "true");
   EXPECT_TRUE(db_pool_default_overrides(config_map).empty());
 }
 
 // Test every overridden option is listed once
 TEST_F(PoolDefaultOverridesTest, SeveralOverrides) {
-  add("mon", "osd_pool_default_replica", "3");
-  add("mon.a", "osd_pool_default_replica", "4");
+  add("mon", "osd_pool_default_size", "3");
+  add("mon.a", "osd_pool_default_size", "4");
   add("mon.a", "osd_pool_default_type", "erasure");
   const map<string, string> expected = {
-    {"osd_pool_default_replica", "mon"},
+    {"osd_pool_default_size", "mon"},
     {"osd_pool_default_type", "mon.a"}};
   EXPECT_EQ(expected, db_pool_default_overrides(config_map));
 }
@@ -1246,7 +1242,7 @@ TEST_F(PoolDefaultOverridesTest, NoLocalOverrideByDefault) {
 
 // Test a value from the configuration database is not a local override
 TEST_F(PoolDefaultOverridesTest, MonValueIsNotLocalOverride) {
-  map<string, string, less<>> mon_vals = {{"osd_pool_default_replica", "2"}};
+  map<string, string, less<>> mon_vals = {{"osd_pool_default_size", "2"}};
   cct->_conf.set_mon_vals(cct.get(), mon_vals, nullptr);
   EXPECT_TRUE(local_pool_default_overrides(
     cct->_conf.get_config_values()).empty());
@@ -1260,10 +1256,11 @@ TEST_F(PoolDefaultOverridesTest, LocalValueOverrides) {
             local_pool_default_overrides(cct->_conf.get_config_values()));
 }
 
-// Test a locally set legacy size is not a local override of replica
-TEST_F(PoolDefaultOverridesTest, LocalLegacySizeIsNotOverride) {
+// Test a locally set osd_pool_default_size is a local override of replica
+TEST_F(PoolDefaultOverridesTest, LocalSizeOverrides) {
   ASSERT_EQ(0, cct->_conf.set_val("osd_pool_default_size", "2"));
-  EXPECT_TRUE(local_pool_default_overrides(
-    cct->_conf.get_config_values()).empty());
+  const set<string> expected = {"osd_pool_default_size"};
+  EXPECT_EQ(expected,
+            local_pool_default_overrides(cct->_conf.get_config_values()));
 }
 

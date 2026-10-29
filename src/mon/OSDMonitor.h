@@ -1026,11 +1026,12 @@ public:
   int validate_monitor_stretch(const std::string& zone,
                                const CrushWrapper& crush, std::ostream *ss);
 
-  // The release that ships per-pool num_zones. Until require_osd_release
-  // reaches it the monitors keep the behavior of earlier releases.
+  // The release that ships per-pool num_zones. The update that raises
+  // require_osd_release to it sets the OSDMap flag stretch_zones; until
+  // then the monitors keep the behavior of earlier releases.
   static constexpr ceph_release_t NUM_ZONES_RELEASE = ceph_release_t::umbrella;
   bool num_zones_supported() const {
-    return osdmap.require_osd_release >= NUM_ZONES_RELEASE;
+    return osdmap.stretch_zones();
   }
   // the pending update commits the upgrade
   bool num_zones_commit_pending() const {

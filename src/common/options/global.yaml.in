@@ -2621,12 +2621,16 @@ options:
 - name: osd_pool_default_size
   type: uint
   level: advanced
-  desc: the number of copies of an object for new replicated pools; legacy name of
-    osd_pool_default_replica, used only while that option is 0
-  fmt_desc: Sets the number of replicas for objects in the pool. The default
-    value is the same as
-    ``ceph osd pool set {pool-name} size {size}``. This is the legacy name of
-    ``osd_pool_default_replica``, and is used only while that option is ``0``.
+  desc: the number of copies in each zone of an object for new replicated pools
+  long_desc: A replicated pool over num_zones zones gets num_zones times this many copies,
+    so this option is the default replica of a pool, not its size. It keeps the name size
+    for backward compatibility; for a pool of one zone, replica and size are the same.
+  fmt_desc: Sets the number of replicas in each zone for objects in new replicated
+    pools, the ``replica`` of the pool. A pool over ``num_zones`` zones gets
+    ``num_zones`` times this many copies. The option keeps the name ``size`` for
+    backward compatibility; for a pool of one zone, ``replica`` and ``size`` are the
+    same. The default value is the same as
+    ``ceph osd pool set {pool-name} replica {replica}``.
   default: 3
   services:
   - mon
