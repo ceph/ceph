@@ -216,6 +216,42 @@ function TEST_balancer2() {
     teardown $dir || return 1
 }
 
+# A pg_num decrease removes the pool's pg_upmap_primary entries, which a merge
+# needs. The monitor clears the entry of a merge source when pgp_num drops,
+# but not that of a merge target.
+function TEST_merge_with_upmap_primary() {
+    local dir=$1
+
+    CEPH_ARGS+="--osd_pool_default_pg_autoscale_mode=off "
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for i in 0 1 2
+    do
+      run_osd $dir $i || return 1
+    done
+    ceph osd set-require-min-compat-client reef || return 1
+    create_pool $TEST_POOL1 4 || return 1
+    wait_for_clean || return 1
+
+    local pool_id=$(ceph osd dump --format=json | jq ".pools[] | select(.pool_name == \"$TEST_POOL1\") | .pool")
+    local pgid=$pool_id.1
+    local other=$(ceph pg map $pgid --format=json | jq '.acting[1]')
+    ceph osd pg-upmap-primary $pgid $other || return 1
+    test "$(ceph osd dump --format=json | jq '.pg_upmap_primaries | length')" = 1 || return 1
+
+    ceph osd pool set $TEST_POOL1 pg_num 2 || return 1
+    for i in $(seq 1 60)
+    do
+      test "$(ceph osd pool get $TEST_POOL1 pg_num --format=json | jq '.pg_num')" = 2 && break
+      sleep 2
+    done
+    test "$(ceph osd pool get $TEST_POOL1 pg_num --format=json | jq '.pg_num')" = 2 || return 1
+    test "$(ceph osd dump --format=json | jq '.pg_upmap_primaries | length')" = 0 || return 1
+
+    teardown $dir || return 1
+}
+
 main balancer "$@"
 
 # Local Variables:
