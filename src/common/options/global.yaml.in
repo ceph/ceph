@@ -3404,6 +3404,12 @@ options:
   type: int
   level: dev
   default: 0
+# hold a read lock on the next object a pool migration deletes from its source,
+# for this many seconds, then self-clear
+- name: osd_debug_pool_migration_hold_source_delete
+  type: float
+  level: dev
+  default: 0
 - name: osd_debug_misdirected_ops
   type: bool
   level: dev

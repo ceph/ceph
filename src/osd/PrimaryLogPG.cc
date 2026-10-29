@@ -1877,14 +1877,18 @@ void PrimaryLogPG::release_object_locks(
   std::list<std::pair<ObjectContextRef, std::list<OpRequestRef> > > to_req;
   bool requeue_recovery = false;
   bool requeue_snaptrim = false;
+  bool requeue_pool_migration = false;
   lock_manager.put_locks(
     &to_req,
     &requeue_recovery,
-    &requeue_snaptrim);
+    &requeue_snaptrim,
+    &requeue_pool_migration);
   if (requeue_recovery)
     queue_recovery();
   if (requeue_snaptrim)
     snap_trimmer_machine.process_event(TrimWriteUnblocked());
+  if (requeue_pool_migration)
+    queue_pool_migration_source_deletes();
 
   if (!to_req.empty()) {
     // requeue at front of scrub blocking queue if we are blocked by scrub
@@ -16001,6 +16005,23 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
 {
   ObjectContextRef obc = get_object_context(oid, false);
   ceph_assert(obc);
+  if (double hold = cct->_conf.get_val<double>(
+        "osd_debug_pool_migration_hold_source_delete"); hold > 0) {
+    cct->_conf.set_val("osd_debug_pool_migration_hold_source_delete", "0");
+    auto reader = std::make_shared<ObcLockManager>();
+    if (reader->try_get_read_lock(oid, obc)) {
+      derr << __func__ << " injecting a read of " << oid << " for "
+           << hold << "s" << dendl;
+      PrimaryLogPGRef pg(this);
+      std::lock_guard l(osd->recovery_request_lock);
+      osd->recovery_request_timer.add_event_after(
+        hold,
+        new LambdaContext([pg, reader](int) {
+          std::scoped_lock locker{*pg};
+          pg->release_object_locks(*reader);
+        }));
+    }
+  }
   OpContextUPtr ctx = simple_opc_create(obc);
 
   if (!ctx->lock_manager.get_pool_migration_write(oid, obc, std::nullopt)) {
@@ -16047,17 +16068,7 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
               stat_diff.num_bytes_migrated = object_size;
               new_pool_migration_interval_in_flight = false;
               on_global_recover(oid, stat_diff, false);
-              while (!pool_migration_source_delete_pending_lock.empty()) {
-                hobject_t oid = *pool_migration_source_delete_pending_lock.begin();
-                if (oid != pool_migration_watermark) {
-                  // Wait for an earlier copy to complete
-                  ceph_assert(pool_migrations_in_flight.contains(pool_migration_watermark));
-                  break;
-                }
-                if (!pool_migration_source_delete(oid)) {
-                  break;
-                }
-              }
+              pool_migration_source_delete_pending();
             });
   ctx->at_version = get_next_version();
   ceph_assert(ctx->new_obs.exists);
@@ -16069,6 +16080,34 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
   finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
   simple_opc_submit(std::move(ctx));
   return true;
+}
+
+void PrimaryLogPG::pool_migration_source_delete_pending()
+{
+  while (!pool_migration_source_delete_pending_lock.empty()) {
+    hobject_t oid = *pool_migration_source_delete_pending_lock.begin();
+    if (oid != pool_migration_watermark) {
+      // Wait for an earlier copy to complete
+      ceph_assert(pool_migrations_in_flight.contains(pool_migration_watermark));
+      break;
+    }
+    if (!pool_migration_source_delete(oid)) {
+      break;
+    }
+  }
+}
+
+void PrimaryLogPG::queue_pool_migration_source_deletes()
+{
+  // Not left to recovery: the object whose delete waited holds a recovery
+  // slot until the delete completes
+  schedule_recovery_work(
+    bless_unlocked_gencontext(
+      make_gen_lambda_context<ThreadPool::TPHandle&>(
+        [this](ThreadPool::TPHandle&) {
+          pool_migration_source_delete_pending();
+        }).release()),
+    1);
 }
 
 void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg,
