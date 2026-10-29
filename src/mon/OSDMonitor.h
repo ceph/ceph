@@ -844,6 +844,12 @@ public:
   // Recompute the shards of a FastEC pool that cannot become a primary, for
   // its num_zones.
   int update_nonprimary_shards(pg_pool_t& p, std::ostream *ss);
+  // The zone failure domain that ceph osd pool set num_zones gives pool p:
+  // --zone_failure_domain, else for an erasure coded pool its profile's, else
+  // dflt.
+  static std::string num_zones_zone_failure_domain(
+    const cmdmap_t& cmdmap, const pg_pool_t& p,
+    const ErasureCodeProfile& profile, const std::string& dflt);
   int prepare_num_zones_crush_rule(const cmdmap_t& cmdmap,
                                    const std::string& poolstr,
                                    int64_t n,
@@ -1000,6 +1006,13 @@ public:
                                           OSDMap::Incremental& inc,
                                           int64_t pool, unsigned old_size,
                                           unsigned new_size);
+  // The root and the zone and OSD failure domain types of a replicated rule
+  // over num_zones zones, from which ceph osd pool set <pool> replica builds
+  // the pool's new rule
+  static int stretch_replicated_rule_layout(const CrushWrapper& crush,
+                                            int rule, int64_t num_zones,
+                                            int *root, int *zone_type,
+                                            int *osd_type, std::ostream *ss);
   // validate_stretch_mode_new_pool() for a pool joining stretch mode, which
   // may be entered in the pending update, against the pools it leaves; the
   // joining pool, if it exists, is not compared with itself

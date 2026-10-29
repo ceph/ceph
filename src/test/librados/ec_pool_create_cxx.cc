@@ -185,7 +185,7 @@ int set_pool_num_zones(Rados &cluster, const std::string &pool_name,
                        int num_zones) {
   std::string cmd = "{\"prefix\": \"osd pool set\", \"pool\": \"" +
     pool_name + "\", \"var\": \"num_zones\", \"val\": \"" +
-    std::to_string(num_zones) + "\"}";
+    std::to_string(num_zones) + "\", \"yes_i_really_mean_it\": true}";
   bufferlist outbl;
   int ret = cluster.mon_command(std::move(cmd), {}, &outbl, nullptr);
   if (ret == 0) {
