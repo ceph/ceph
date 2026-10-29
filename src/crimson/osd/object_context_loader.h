@@ -223,7 +223,7 @@ public:
   /**
    * create_cached_obc_from_push_data
    *
-   * Creates a fresh cached obc from passed oi and ssc.
+   * Creates a fresh cached obc from passed oi, ssc and attrs.
    * Overwrites any obc already in cache for this object.
    *
    * Note, this interface may be used to create a clone obc
@@ -238,7 +238,8 @@ public:
    */
   ObjectContextRef create_cached_obc_from_push_data(
     const object_info_t &oi,
-    SnapSetContextRef ssc) {
+    SnapSetContextRef ssc,
+    const ObjectContext::attr_cache_t &attrs) {
     auto obc = obc_registry.get_cached_obc(oi.soid).first;
     if (oi.soid.is_head()) {
       ceph_assert(ssc); // head, ssc may not be null
@@ -248,6 +249,7 @@ public:
       obc->set_clone_state(ObjectState(oi, true));
       obc->set_clone_ssc(SnapSetContextRef(ssc));
     }
+    obc->attr_cache = attrs;
     return obc;
   }
 

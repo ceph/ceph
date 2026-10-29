@@ -909,7 +909,8 @@ ReplicatedRecoveryBackend::_handle_pull_response(
     pull_info.obc = recovery_waiter.obc =
       pg.obc_loader.create_cached_obc_from_push_data(
 	pull_info.recovery_info.oi,
-	ssc);
+	ssc,
+	push_op.attrset);
   };
 
   const bool first = pull_info.recovery_progress.first;
@@ -1113,7 +1114,8 @@ ReplicatedRecoveryBackend::handle_push(
     replica_push_targets[push_op.recovery_info.soid] =
       pg.obc_loader.create_cached_obc_from_push_data(
 	oi,
-	ssc);
+	ssc,
+	push_op.attrset);
   }
 
   co_await submit_push_data(

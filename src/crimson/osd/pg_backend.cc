@@ -825,7 +825,8 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   object_stat_sum_t& delta_stats,
   crimson::osd::ObjectContextRef head,
   crimson::osd::ObjectContextLoader& obc_loader,
-  const SnapContext &snapc)
+  const SnapContext &snapc,
+  ObjectContext::attr_cache_t& attr_cache)
 {
   const ceph_osd_op& op = osd_op.op;
   snapid_t snapid = (uint64_t)op.snap.snapid;
@@ -836,7 +837,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   target_coid.snap = snapid;
   return obc_loader.with_clone_obc_only<RWState::RWWRITE>(
     head, target_coid,
-    [this, &os, &txn, &delta_stats, &osd_op_params, snapid]
+    [this, &os, &txn, &delta_stats, &osd_op_params, snapid, &attr_cache]
     (auto head_obc, auto resolved_obc) {
     if (resolved_obc->obs.oi.soid.is_head()) {
       // no-op: The resolved oid returned the head object
@@ -864,6 +865,8 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     // 2) Clone correct snapshot into head
     txn.clone(coll->get_cid(), ghobject_t{resolved_obc->obs.oi.soid},
                                ghobject_t{os.oi.soid});
+    //    The head now has the xattrs of the clone
+    attr_cache = resolved_obc->attr_cache;
     //    Copy clone obc.os.oi to os.oi
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     os.oi.copy_user_bits(resolved_obc->obs.oi);
@@ -898,13 +901,14 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     // if there's no snapshot, we delete the object;
     // otherwise, do nothing.
     crimson::ct_error::enoent::handle(
-    [this, &os, snapid, &txn, &delta_stats, &snapc, &ss, &osd_op_params] {
+    [this, &os, snapid, &txn, &delta_stats, &snapc, &ss, &osd_op_params,
+     &attr_cache] {
       logger().debug("PGBackend::rollback: deleting head on {}"
                      " with snap_id of {}"
                      " because got ENOENT|whiteout on obc lookup",
                      os.oi.soid, snapid);
       return remove(os, txn, osd_op_params, delta_stats,
-                    should_whiteout(ss, snapc), os.oi.size
+                    should_whiteout(ss, snapc), os.oi.size, attr_cache
       ).handle_error_interruptible(
 	crimson::ct_error::enoent::handle([] {
 	  // We consider rolling back a non-existing head to
@@ -1051,7 +1055,8 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
   osd_op_params_t& osd_op_params,
   object_stat_sum_t& delta_stats,
   bool whiteout,
-  int num_bytes)
+  int num_bytes,
+  ObjectContext::attr_cache_t& attr_cache)
 {
   if (!os.exists) {
     logger().debug("{} {} does not exist",__func__, os.oi.soid);
@@ -1063,6 +1068,7 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
   }
   txn.remove(coll->get_cid(),
 	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
+  attr_cache.clear();
 
   if (os.oi.is_omap()) {
     os.oi.clear_flag(object_info_t::FLAG_OMAP);
