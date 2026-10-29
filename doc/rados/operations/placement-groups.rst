@@ -1050,4 +1050,4 @@ about it entirely (if it is too new to have a previous version). To mark the
         pg-concepts
 
 
-.. _Mapping PGs to OSDs: ../../../architecture#mapping-pgs-to-osds
+.. _Mapping PGs to OSDs: ../../../architecture/dynamic-cluster-management#mapping-pgs-to-osds
