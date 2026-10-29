@@ -1518,11 +1518,21 @@ private:
               [this, table_name = name, max_concurrent](boost::asio::yield_context yield) {
             const auto build_start = ceph::coarse_real_clock::now();
             const int rc = process_table(table_name, yield);
-            if (rc == 0) {
-              // Store the rebuild epoch atomically — no mutex needed: the map
-              // entry was created under pending_mutex by notify_index_mutation,
-              // and the distributed lock ensures at most one coroutine writes
-              // this entry at a time.
+            // Update the last-evaluation epoch for every outcome that does NOT
+            // put the table back into pending_mutations:
+            //   rc == 0  (RESULT_SUCCESS):         successful rebuild
+            //   rc == 1  (RESULT_SKIPPED):         below threshold / lock gone
+            //   rc == 3  (RESULT_REBUILD_DISABLED): thresholds disabled
+            // Excluded (restore_pending was already called, table will retry):
+            //   rc == 2  (RESULT_ALREADY_BUILDING): this instance building it
+            //   rc <  0  (error):                   transient failure
+            // Without this, a RESULT_SKIPPED evaluation (below threshold) does
+            // not advance the epoch → cooldown never fires → table is
+            // re-selected on every scan tick that has a pending mutation.
+            if (rc >= 0 && rc != RESULT_ALREADY_BUILDING) {
+              // No mutex needed: the map entry was created under pending_mutex
+              // by notify_index_mutation, and at most one coroutine reaches
+              // this point per table at a time (distributed lock).
               auto it = last_rebuild_epoch.find(table_name);
               if (it != last_rebuild_epoch.end()) {
                 it->second.store(

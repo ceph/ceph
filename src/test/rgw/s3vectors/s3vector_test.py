@@ -7382,3 +7382,112 @@ def test_vector_bucket_session_admin():
     finally:
         _clean_s3_objects_for_vector_bucket(bucket_name)
         _delete_vector_bucket(conn, bucket_name)
+
+
+def test_sustained_writes_below_threshold_bounded_spawns():
+    """Continuous put_vectors calls while staying below the rebuild threshold
+    must not cause a coroutine spawn on every call. The last_rebuild_epoch is
+    updated on RESULT_SKIPPED, so the cooldown gate fires and the table is not
+    re-selected on every scan tick.
+
+    Setup:
+    - min_rows = 256 (default)
+    - cooldown = 5s
+    - insert 20 vectors per batch (20 batches × 1s apart = ~20s), always staying
+      below the 256-row threshold
+    - each batch triggers a notify_index_mutation → name enters pending_mutations
+
+    Expected: at most ~5 spawn events (1 per cooldown window over 20s) regardless
+    of how many put_vectors calls were made. Without the fix, up to 20 spawns would
+    be observed (1 per put_vectors call collapsing to 1 per scan tick ≈ 1/s).
+    """
+    dimension = 16
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    index_name = 'bounded-spawn-test'
+
+    _grant_admin_caps()
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # set a known cooldown so the assertion bound is deterministic
+    set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 5)
+    # ensure rebuilds are enabled
+    set_rgw_config_option('rgw_s3vector_max_concurrent_rebuilds', 4)
+
+    try:
+        before_time = int(time.time())
+
+        # 20 put_vectors calls, 1s apart, 20 vectors each → 400 total rows at end
+        # but each call stays below 256 until ~batch 13, so early batches are
+        # always below threshold.  We care about the spawn count during the
+        # below-threshold phase; once above threshold a real rebuild fires.
+        num_batches = 20
+        batch_size = 20
+        for i in range(num_batches):
+            vectors = generate_vectors(batch_size, dimension)
+            for j, v in enumerate(vectors):
+                v['key'] = f'b{i}-v{j}'
+            result = conn.put_vectors(
+                vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            time.sleep(1)
+
+        # allow one more cooldown window for any trailing spawn to finish
+        time.sleep(6)
+
+        status = get_rebuild_admin_status(since=before_time, bucket=bucket_name)
+        events = status['rebuild_events']
+
+        spawn_events = [e for e in events
+                        if e['type'] == 'spawn' and e.get('bucket') == bucket_name]
+        finish_events = [e for e in events
+                         if e['type'] == 'finish' and e.get('bucket') == bucket_name]
+        skipped_finish = [e for e in finish_events
+                          if e.get('result') == 'skipped']
+
+        log.info('bounded-spawn test: %d spawns, %d finishes (%d skipped)',
+                 len(spawn_events), len(finish_events), len(skipped_finish))
+        def event_offset(e):
+            ts = e.get('timestamp', '')
+            try:
+                return int(datetime.fromisoformat(ts.rstrip('Z')).replace(
+                    tzinfo=timezone.utc).timestamp()) - before_time
+            except Exception:
+                return 0
+        for e in spawn_events:
+            log.info('  spawn  at t+%ds: %s.%s active=%d',
+                     event_offset(e),
+                     e.get('bucket', ''), e.get('index', ''),
+                     e.get('active_rebuilds', 0))
+        for e in finish_events:
+            log.info('  finish at t+%ds: %s.%s result=%s duration_ms=%d',
+                     event_offset(e),
+                     e.get('bucket', ''), e.get('index', ''),
+                     e.get('result', ''), e.get('duration_ms', 0))
+
+        # 20s test window / 5s cooldown = at most 4 cooldown windows → ≤5 spawns
+        # (one extra allowed for the boundary: first evaluation fires immediately,
+        # then at most one per 5s cooldown window)
+        max_expected_spawns = 6
+        assert len(spawn_events) <= max_expected_spawns, (
+            f'too many spawns ({len(spawn_events)}) for below-threshold table — '
+            f'expected ≤{max_expected_spawns} (one per cooldown window). '
+            f'This indicates the cooldown is not being applied on RESULT_SKIPPED. '
+            f'Events: {spawn_events}')
+
+        log.info('PASS: %d spawns in 20s with 5s cooldown (limit %d)',
+                 len(spawn_events), max_expected_spawns)
+
+    finally:
+        _clean_s3_objects_for_vector_bucket(bucket_name)
+        _delete_vector_bucket(conn, bucket_name)
+        set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 5)
+        set_rgw_config_option('rgw_s3vector_max_concurrent_rebuilds', 4)
