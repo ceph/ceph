@@ -399,6 +399,34 @@ function TEST_degraded_commit() {
 }
 
 # Test the commit leaves the defaults of a cluster without stretch mode alone
+# Test the warning for a pool of stretch mode that the commit cannot split
+# over two zones: before the commit, while it can be changed, and after it
+function TEST_commit_warns_of_unconverted_pools() {
+    local dir=$1
+    stretchable_cluster $dir || return 1
+    ceph osd pool create rep 8 8 replicated || return 1
+    ceph osd pool create odd 8 8 replicated || return 1
+    ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    ceph osd pool set odd size 3 || return 1
+    wait_for_health "will keep one zone when the upgrade is committed" || return 1
+    ceph health detail > $dir/health || return 1
+    grep -q "^\[WRN\] STRETCH_MODE_POOL_NOT_CONVERTED: 1 stretch pool(s)" $dir/health || return 1
+    grep -q "pool 'odd' has size 3" $dir/health || return 1
+    ! grep -q "pool 'rep'" $dir/health || return 1
+
+    ceph osd require-osd-release vampire || return 1
+    expect_pool rep 2 2 4 1 || return 1
+    expect_pool odd 1 3 3 2 || return 1
+    wait_for_health "kept one zone when the upgrade was committed" || return 1
+    ceph health detail > $dir/health || return 1
+    grep -q "pool 'odd' has size 3" $dir/health || return 1
+    ! grep -q "pool 'rep'" $dir/health || return 1
+
+    ceph mon disable_stretch_mode --yes-i-really-mean-it || return 1
+    test "$(pool_num_zones rep)" = 1 || return 1
+    test "$(pool_field odd peering_crush_bucket_count)" = 2 || return 1
+}
+
 function TEST_commit_without_stretch_mode() {
     local dir=$1
     run_mons $dir || return 1
