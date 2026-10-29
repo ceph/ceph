@@ -2923,8 +2923,8 @@ options:
   desc: Default CRUSH failure domain within a zone for new pools
   long_desc: The CRUSH bucket type (for example, host or rack) that the copies of a replicated
     pool over more than one zone are spread over, within each zone. It is used only for the
-    CRUSH rule generated for such a pool and by ceph osd crush rule create-stretch-replicated.
-    Erasure coded pools take it from their profile instead.
+    CRUSH rules generated for such pools. Erasure coded pools take it from their profile
+    instead.
   default: host
   services:
   - mon
@@ -2936,9 +2936,8 @@ options:
   type: str
   level: advanced
   desc: Default CRUSH root for new pools
-  long_desc: The CRUSH root of the rule generated for a replicated pool over more than one
-    zone, and the default root of ceph osd crush rule create-stretch-replicated. Erasure
-    coded pools take it from their profile instead.
+  long_desc: The CRUSH root of the rules generated for replicated pools over more than one
+    zone. Erasure coded pools take it from their profile instead.
   default: default
   services:
   - mon

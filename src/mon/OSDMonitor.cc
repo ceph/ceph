@@ -9311,6 +9311,23 @@ string OSDMonitor::num_zones_zone_failure_domain(
     p.is_erasure() ? profile_zone_failure_domain(profile, dflt) : dflt);
 }
 
+static string stretch_replica_rule_name(const string& poolstr)
+{
+  return poolstr + "-replica-" + stringify(OSDMonitor::STRETCH_MODE_REPLICA);
+}
+
+int OSDMonitor::prepare_stretch_replica_crush_rule(
+    const string& poolstr, const string& zone_failure_domain, int *crush_rule,
+    ostream *ss)
+{
+  const PoolCreateParams d = load_pool_defaults(g_conf());
+  const string name = stretch_replica_rule_name(poolstr);
+  const int err = crush_rule_create_replica(
+    name, d.root, 2, STRETCH_MODE_REPLICA, zone_failure_domain,
+    d.osd_failure_domain, d.device_class, false, crush_rule, ss);
+  return handle_crush_rule_creation_result(err, name);
+}
+
 int OSDMonitor::prepare_num_zones_crush_rule(
     const cmdmap_t& cmdmap, const string& poolstr, int64_t n,
     const pg_pool_t& p, int *crush_rule, ostream *ss)
@@ -13273,46 +13290,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     getline(ss, rs);
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
                                               get_last_committed() + 1));
-    return true;
-
-  } else if (prefix == "osd crush rule create-stretch-replicated") {
-    string name = cmd_getval_or<string>(cmdmap, "rule_name", "stretch_replica_rule");
-    // crush_rule_create_replica() takes an empty root or failure domain from
-    // its osd_pool_default_* option
-    string root = cmd_getval_or<string>(cmdmap, "root", "");
-    int64_t num_zones = cmd_getval_or<int64_t>(cmdmap, "num_zones", 2);
-    int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
-    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", "");
-    string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "");
-    bool force = false;
-    cmd_getval(cmdmap, "force", force);
-    string device_class;
-    cmd_getval(cmdmap, "class", device_class);
-
-    int rule;
-    err = crush_rule_create_replica(name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, force, &rule, &ss);
-    if (err < 0) {
-      switch(err) {
-      case -EEXIST: // return immediately
-        ss << "rule " << name << " already exists";
-        err = 0;
-        goto reply_no_propose;
-      case -EALREADY: // wait for pending to be proposed
-        ss << "rule " << name << " already exists";
-        err = 0;
-        break;
-      case -EAGAIN: // the rule is pending
-        goto wait;
-      default: // non recoverable error
-        goto reply_no_propose;
-      }
-    } else {
-      ss << "created rule " << name << " at " << rule;
-    }
-
-    getline(ss, rs);
-    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
-					      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd erasure-code-profile rm") {
@@ -18479,30 +18456,31 @@ int OSDMonitor::enable_stretch_mode(ostream& ss,
     }
     stringstream pss;
     if (change == StretchModeChange::STRETCH) {
-      cmdmap_t cmdmap = ec_cmdmap;
-      if (p.is_replicated()) {
+      cmdmap_t cmdmap = p.is_replicated() ? replicated_cmdmap : ec_cmdmap;
+      if (p.is_replicated() && !new_crush_rule.empty()) {
         cmdmap["crush_rule"] = new_crush_rule;
-        cmdmap["replica"] = int64_t(STRETCH_MODE_REPLICA);
       }
       r = prepare_command_pool_set_num_zones(cmdmap, id, name, 2, "2", "", p,
                                              pss);
     } else {
       const int old_rule = p.crush_rule;
+      const int rule = new_crush_rule.empty()
+        ? crush.get_rule_id(stretch_replica_rule_name(name)) : new_rule;
       const unsigned size = p.get_num_zones() * STRETCH_MODE_REPLICA;
       r = check_size_change(p, &pss);
       if (r == 0) {
-        r = check_rule_places_pool(new_rule, p.get_type(), p.get_num_zones(),
+        r = check_rule_places_pool(rule, p.get_type(), p.get_num_zones(),
                                    dividing_bucket, size, &pss);
       }
       if (r == 0) {
-        r = check_pg_num(id, p.get_pg_num(), size, new_rule, &pss);
+        r = check_pg_num(id, p.get_pg_num(), size, rule, &pss);
       }
       if (r == 0) {
         p.replica = STRETCH_MODE_REPLICA;
         p.size = size;
         p.min_size = g_conf().get_osd_pool_default_min_size(p.replica);
-        p.crush_rule = new_rule;
-        if (old_rule != new_rule) {
+        p.crush_rule = rule;
+        if (old_rule != rule) {
           maybe_remove_unused_crush_rule(id, old_rule);
         }
       }
