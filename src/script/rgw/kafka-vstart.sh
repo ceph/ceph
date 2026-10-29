@@ -3,13 +3,13 @@
 # Bootstrap a local Kafka broker for RGW notification testing.
 #
 # Starts a single-node Kafka container via podman (KRaft mode, no
-# ZooKeeper), creates a health-check topic, and writes the [kafka]
-# section to s3tests.conf.
+# ZooKeeper) and creates a health-check topic.  When S3TEST_CONF names
+# a file, it also writes the [kafka] section there;  without one the
+# suite's notification tests find the broker at 127.0.0.1:9092 anyway.
 #
 # Prerequisites:
 #   - podman
 #   - radosgw running (from rgw-vstart.sh)
-#   - S3TEST_CONF pointing to s3tests.conf (or ./s3tests.conf in build dir)
 #
 # Usage:
 #   kafka-vstart.sh              # start + provision
@@ -30,8 +30,7 @@ KAFKA_PORT=9092
 KAFKA_CONTAINER=kafka-vstart
 KAFKA_IMAGE=docker.io/apache/kafka:latest
 
-BUILD_DIR="$(pwd)"
-S3CONF="${S3TEST_CONF:-$BUILD_DIR/s3tests.conf}"
+S3CONF="${S3TEST_CONF:-}"
 
 if [[ "${1:-}" == "--stop" ]]; then
 	echo "==> stopping Kafka container"
@@ -40,9 +39,8 @@ if [[ "${1:-}" == "--stop" ]]; then
 	exit 0
 fi
 
-if [[ ! -f "$S3CONF" ]]; then
-	echo "error: $S3CONF not found" >&2
-	echo "Run rgw-vstart.sh first, or set S3TEST_CONF to your config file." >&2
+if [[ -n "$S3CONF" && ! -f "$S3CONF" ]]; then
+	echo "error: S3TEST_CONF names $S3CONF, which does not exist" >&2
 	exit 1
 fi
 
@@ -95,20 +93,25 @@ else
 	fi
 fi
 
-# --- write [kafka] to s3tests.conf ---
+# --- write [kafka] to s3tests.conf, when there is one ---
 
-echo "==> writing [kafka] to $S3CONF"
+if [[ -n "$S3CONF" ]]; then
+	echo "==> writing [kafka] to $S3CONF"
 
-# remove existing section if present
-if grep -q '^\[kafka\]' "$S3CONF" 2>/dev/null; then
-	sed -i '/^\[kafka\]/,/^\[/{/^\[kafka\]/d;/^\[/!d}' "$S3CONF"
-fi
+	# remove existing section if present
+	if grep -q '^\[kafka\]' "$S3CONF" 2>/dev/null; then
+		sed -i '/^\[kafka\]/,/^\[/{/^\[kafka\]/d;/^\[/!d}' "$S3CONF"
+	fi
 
-cat >> "$S3CONF" << EOF
+	cat >> "$S3CONF" << EOF
 
 [kafka]
 broker = 127.0.0.1:${KAFKA_PORT}
 EOF
+else
+	echo "==> no S3TEST_CONF:  the notification tests find this broker at" \
+		"127.0.0.1:${KAFKA_PORT} without one"
+fi
 
 echo ""
 echo "==> Kafka ready on port ${KAFKA_PORT}"

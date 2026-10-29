@@ -145,7 +145,7 @@ since stale rows from interrupted runs can cause false test failures.
 Starts a local Keycloak container via podman for WebIdentity testing.
 Provisions a realm, client, and test user, extracts tokens and
 thumbprint, and writes the `[webidentity]` section to the file
-`S3TEST_CONF` names.
+`S3TEST_CONF` names, or prints it to add by hand when none is named.
 
 **Prerequisites:** podman, jq, openssl, curl
 
@@ -162,7 +162,9 @@ To stop Keycloak manually:
 
 Starts a single-node Kafka broker via podman (KRaft mode, no
 ZooKeeper) for S3 bucket notification testing.  Writes the `[kafka]`
-section, with the broker endpoint, to the file `S3TEST_CONF` names.
+section, with the broker endpoint, to the file `S3TEST_CONF` names;
+without one, the suite's notification tests find the broker at
+`127.0.0.1:9092` anyway.
 
 **Prerequisites:** podman
 

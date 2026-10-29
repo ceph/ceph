@@ -3,13 +3,13 @@
 # Bootstrap a local Keycloak instance for RGW WebIdentity testing.
 #
 # Creates a Keycloak container via podman, provisions a realm/client/user,
-# extracts tokens and thumbprint, creates the OIDC provider in RGW, and
-# writes the [webidentity] section to s3tests.conf.
+# and extracts tokens and thumbprint for the [webidentity] section of
+# s3tests.conf:  written to the file S3TEST_CONF names, or printed, to
+# add by hand, when it names none.
 #
 # Prerequisites:
 #   - podman, jq, openssl, curl
 #   - radosgw running (from rgw-vstart.sh)
-#   - S3TEST_CONF pointing to s3tests.conf (or ~/dev/s3tests.conf)
 #
 # Usage:
 #   keycloak-vstart.sh              # start + provision
@@ -35,7 +35,7 @@ KC_IMAGE=quay.io/keycloak/keycloak:24.0
 
 BUILD_DIR="$(pwd)"
 CONF="$BUILD_DIR/ceph.conf"
-S3CONF="${S3TEST_CONF:-$BUILD_DIR/s3tests.conf}"
+S3CONF="${S3TEST_CONF:-}"
 
 if [[ "${1:-}" == "--stop" ]]; then
 	echo "==> stopping Keycloak container"
@@ -44,9 +44,8 @@ if [[ "${1:-}" == "--stop" ]]; then
 	exit 0
 fi
 
-if [[ ! -f "$S3CONF" ]]; then
-	echo "error: $S3CONF not found" >&2
-	echo "Run rgw-vstart.sh first, or set S3TEST_CONF to your config file." >&2
+if [[ -n "$S3CONF" && ! -f "$S3CONF" ]]; then
+	echo "error: S3TEST_CONF names $S3CONF, which does not exist" >&2
 	exit 1
 fi
 
@@ -197,24 +196,29 @@ echo "    aud=$AUD sub=$SUB azp=$AZP"
 # Note: the OIDC provider in RGW is created by the test itself via
 # the IAM CreateOpenIDConnectProvider API, not by radosgw-admin.
 
-echo "==> writing [webidentity] to $S3CONF"
-
-# remove existing section if present
-if grep -q '^\[webidentity\]' "$S3CONF" 2>/dev/null; then
-	sed -i '/^\[webidentity\]/,/^\[/{/^\[webidentity\]/d;/^\[/!d}' "$S3CONF"
-fi
-
-cat >> "$S3CONF" << EOF
-
-[webidentity]
+WEBIDENTITY="[webidentity]
 token = ${TOKEN}
 thumbprint = ${THUMBPRINT}
 aud = ${AUD}
 sub = ${SUB}
 azp = ${AZP}
 user_token = ${USER_TOKEN}
-KC_REALM = ${KC_REALM}
-EOF
+KC_REALM = ${KC_REALM}"
+
+if [[ -n "$S3CONF" ]]; then
+	echo "==> writing [webidentity] to $S3CONF"
+
+	# remove existing section if present
+	if grep -q '^\[webidentity\]' "$S3CONF" 2>/dev/null; then
+		sed -i '/^\[webidentity\]/,/^\[/{/^\[webidentity\]/d;/^\[/!d}' "$S3CONF"
+	fi
+
+	printf '\n%s\n' "$WEBIDENTITY" >> "$S3CONF"
+else
+	echo "==> no S3TEST_CONF:  add this to the s3tests.conf the suite reads"
+	echo ""
+	echo "$WEBIDENTITY"
+fi
 
 echo ""
 echo "==> Keycloak ready on port ${KC_PORT}"
