@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      # raised on purpose: grafana is applied before its certificate exists
+      - CEPHADM_DAEMON_PLACE_FAIL
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.certmgr.test_host_scope.TestCertMgrHostScopeMissingCert

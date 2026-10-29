@@ -20,7 +20,10 @@ per suite facet:
   test_service_scope.py       TestCertMgrServiceScope: RGW (service scope)
                               through all certificate sources
   test_host_scope.py          TestCertMgrHostScope: grafana (host scope)
-                              through cephadm-signed and per-host user certs
+                              through cephadm-signed and per-host user certs;
+                              TestCertMgrHostScopeMissingCert: grafana with
+                              no user cert (own facet, raises
+                              CEPHADM_DAEMON_PLACE_FAIL)
   test_global_scope.py        TestCertMgrGlobalScope: mgmt-gateway (global
                               scope)
   test_renewal.py             TestCertMgrRenewal: automated rotation of
