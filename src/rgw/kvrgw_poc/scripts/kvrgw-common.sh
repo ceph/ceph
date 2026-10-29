@@ -771,6 +771,7 @@ kvrgw_run_fast_tests() {
   if [[ "${KVRGW_INSTANCES}" -gt 1 ]]; then
     "${ROOT}/scripts/test_multi_rgw_rr.sh"
   fi
+  "${ROOT}/scripts/run_multipart_tests.sh"
   FAST_TEST_STATUS="${GREEN}ok${NC}"
 }
 

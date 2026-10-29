@@ -96,8 +96,13 @@ public:
   // Lifetime tied to this holder.
   std::string_view value() const noexcept {
     assert(ready_ && present_);
-    return {reinterpret_cast<const char*>(data_),
-            static_cast<size_t>(len_)};
+    return {reinterpret_cast<const char*>(data_), static_cast<size_t>(len_)};
+  }
+
+  // Returns value() if present, empty string_view otherwise.
+  std::string_view value_or_empty() const noexcept {
+    assert(ready_);
+    return present_ ? value() : std::string_view{};
   }
 
 private:
@@ -232,7 +237,7 @@ class KvStore {
   KvStore& operator=(const KvStore&) = delete;
 
   std::expected<std::optional<std::string>, fdb_error_t> get(std::string_view key);
-  std::expected<void, fdb_error_t> set(std::string_view key, std::string_view value);
+  fdb_error_t set(std::string_view key, std::string_view value);
   // disable_ryw: when true, sets FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE on the
   // transaction before the GetRange call. This disables the client-side
   // Read-Your-Writes (RYW) cache — an in-process cache that stores all read
@@ -288,7 +293,7 @@ class KvTransaction {
   std::expected<std::optional<std::string>, fdb_error_t> kv_wait_get(FdbFuture& f);
   std::expected<std::optional<std::string>, fdb_error_t> kv_get(std::string_view key);
 
-  std::expected<void, fdb_error_t> disable_ryw();
+  fdb_error_t disable_ryw();
   FdbFuture kv_async_get_range(std::string_view start, bool exclusive_begin,
                                std::string_view end, int limit,
                                FDBStreamingMode mode = FDB_STREAMING_MODE_EXACT);
@@ -314,9 +319,9 @@ class KvTransaction {
       std::string_view end,
       int limit);
 
-  std::expected<void, fdb_error_t> commit();
+  fdb_error_t commit();
   FdbFuture commit_async();
-  static std::expected<void, fdb_error_t> resolve_commit(FdbFuture& f);
+  static fdb_error_t resolve_commit(FdbFuture& f);
 
  private:
   friend class KvStore;
@@ -346,22 +351,22 @@ auto KvStore::run_transaction(Fn&& fn, TxnRetryPolicy policy)
     auto& tr = *tr_result;
     auto result = fn(*tr);
     if (!result) return result;
-    auto rc = tr->commit();
-    if (rc) {
+    fdb_error_t err = tr->commit();
+    if (!err) {
       txn_stats_.commits.fetch_add(1, std::memory_order_relaxed);
       return result;
     }
-    if (fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE_NOT_COMMITTED, rc.error())) {
+    if (fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE_NOT_COMMITTED, err)) {
       txn_stats_.conflicts.fetch_add(1, std::memory_order_relaxed);
       if (policy == TxnRetryPolicy::kNoRetry) {
-        return std::unexpected(rc.error());
+        return std::unexpected(err);
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(10 * (attempt + 1)));
       continue;
     }
     txn_stats_.internals.fetch_add(1, std::memory_order_relaxed);
-    std::cerr << "run_transaction: non-retriable error " << rc.error() << "\n";
-    return std::unexpected(rc.error());
+    std::cerr << "run_transaction: non-retriable error " << err << "\n";
+    return std::unexpected(err);
   }
   txn_stats_.conflicts.fetch_add(1, std::memory_order_relaxed);
   return std::unexpected(static_cast<fdb_error_t>(1020));

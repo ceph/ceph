@@ -103,6 +103,10 @@ void fill_object_meta(const ObjectValue &v, kvrgw_object_meta *meta)
               v.hdr.version_id.to_hex());
   }
   meta->tags_count = v.hdr.tags_count;
+  if (v.hdr.chunk_type == kvrgw::CHUNK_MULTIPART ||
+      v.hdr.chunk_type == kvrgw::CHUNK_MULTIPART_REF) {
+    meta->parts_count = v.hdr.part_count;
+  }
 }
 
 kvrgw_err_t fill_kv_pairs(std::span<const MetaPair> kvs, uint32_t n,
@@ -176,7 +180,7 @@ kvrgw_err_t encode_kv_tags(const kvrgw_kv *tags, size_t n,
     pairs[i] = {sv(tags[i].key, tags[i].key_len),
                 sv(tags[i].value, tags[i].value_len)};
   }
-  if (!kvrgw::encode(std::span<const TagPair>(pairs.data(), n), out)) {
+  if (!kvrgw::encode_tags(std::span<const TagPair>(pairs.data(), n), out)) {
     return KVRGW_ERR_INVALID_TAG;
   }
   return KVRGW_ERR_OK;
@@ -548,7 +552,7 @@ kvrgw_err_t kvrgw_put_object(
 kvrgw_err_t kvrgw_get_object(
     KvRgwHandle *h, uint32_t tenant_id, const char *bucket, size_t bucket_len,
     const char *key, size_t key_len, const char *version_id,
-    size_t version_id_len, const kvrgw_byte_range *range,
+    size_t version_id_len, const kvrgw_byte_range *range, uint16_t part_number,
     kvrgw_object_meta *meta, uint8_t *body, size_t body_cap, size_t *body_len,
     kvrgw_kv *metadata, uint32_t metadata_cap, uint32_t *metadata_count,
     char *meta_arena, size_t meta_arena_cap)
@@ -570,7 +574,8 @@ kvrgw_err_t kvrgw_get_object(
     kvrgw::KvRgwServiceImpl::GetObjectResult out;
     const auto ec =
         s->get_object(tenant_id, sv(bucket, bucket_len), sv(key, key_len),
-                      parse_version(version_id, version_id_len), brp, &out);
+                      parse_version(version_id, version_id_len), brp,
+                      part_number, &out);
     std::memset(meta, 0, sizeof(*meta));
     *body_len = out.body.size();
     if (!out.error_detail.empty()) {
@@ -597,6 +602,7 @@ kvrgw_err_t kvrgw_head_object(KvRgwHandle *h, uint32_t tenant_id,
                               const char *bucket, size_t bucket_len,
                               const char *key, size_t key_len,
                               const char *version_id, size_t version_id_len,
+                              uint16_t part_number,
                               kvrgw_object_meta *meta, kvrgw_kv *metadata,
                               uint32_t metadata_cap, uint32_t *metadata_count,
                               char *meta_arena, size_t meta_arena_cap)
@@ -610,7 +616,7 @@ kvrgw_err_t kvrgw_head_object(KvRgwHandle *h, uint32_t tenant_id,
     std::string error_detail;
     const auto ec = s->head_object(
         tenant_id, sv(bucket, bucket_len), sv(key, key_len),
-        parse_version(version_id, version_id_len), &value, &error_detail);
+        parse_version(version_id, version_id_len), part_number, &value, &error_detail);
     std::memset(meta, 0, sizeof(*meta));
     if (!error_detail.empty()) {
       copy_cstr(meta->error_detail, sizeof(meta->error_detail), error_detail);
@@ -622,6 +628,85 @@ kvrgw_err_t kvrgw_head_object(KvRgwHandle *h, uint32_t tenant_id,
     return fill_decoded_metadata(value.metadata_frame, value.hdr.metadata_count,
                                  metadata, metadata_cap, metadata_count,
                                  meta_arena, meta_arena_cap);
+  });
+}
+
+kvrgw_err_t kvrgw_get_object_attributes(
+    KvRgwHandle *h, uint32_t tenant_id,
+    const char *bucket, size_t bucket_len,
+    const char *key, size_t key_len,
+    const char *version_id, size_t version_id_len,
+    uint16_t part_number_marker, uint32_t max_parts,
+    kvrgw_object_meta *meta,
+    int *has_parts, uint32_t *total_parts_count,
+    kvrgw_object_attr_part *parts, uint32_t parts_cap, uint32_t *parts_count,
+    int *is_truncated, uint16_t *next_part_number_marker)
+{
+  return abi_guard([&]() -> kvrgw_err_t {
+    auto *s = svc(h);
+    if (s == nullptr || meta == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    std::memset(meta, 0, sizeof(*meta));
+    if (has_parts != nullptr) {
+      *has_parts = 0;
+    }
+    if (total_parts_count != nullptr) {
+      *total_parts_count = 0;
+    }
+    if (parts_count != nullptr) {
+      *parts_count = 0;
+    }
+    if (is_truncated != nullptr) {
+      *is_truncated = 0;
+    }
+    if (next_part_number_marker != nullptr) {
+      *next_part_number_marker = 0;
+    }
+
+    const uint16_t capped_max_parts =
+        static_cast<uint16_t>(std::min<uint32_t>(max_parts, parts_cap));
+    kvrgw::KvRgwServiceImpl::GetObjectAttributesResult out;
+    const auto ec = s->get_object_attributes(
+        tenant_id, sv(bucket, bucket_len), sv(key, key_len),
+        parse_version(version_id, version_id_len), capped_max_parts,
+        part_number_marker, &out);
+    if (!out.error_detail.empty()) {
+      copy_cstr(meta->error_detail, sizeof(meta->error_detail), out.error_detail);
+    }
+    if (!ok(ec)) {
+      return ec;
+    }
+    fill_object_meta(out.value, meta);
+
+    if (has_parts != nullptr) {
+      *has_parts = out.has_parts ? 1 : 0;
+    }
+    if (!out.has_parts) {
+      return KVRGW_ERR_OK;
+    }
+    if (total_parts_count != nullptr) {
+      *total_parts_count = out.total_parts_count;
+    }
+    if (out.part_numbers.size() > parts_cap) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    if (parts_count != nullptr) {
+      *parts_count = static_cast<uint32_t>(out.part_numbers.size());
+    }
+    if (parts != nullptr) {
+      for (size_t i = 0; i < out.part_numbers.size(); ++i) {
+        parts[i].part_number = out.part_numbers[i];
+        parts[i].size = out.part_sizes[i];
+      }
+    }
+    if (is_truncated != nullptr) {
+      *is_truncated = out.parts_truncated ? 1 : 0;
+    }
+    if (next_part_number_marker != nullptr) {
+      *next_part_number_marker = out.next_part_number_marker;
+    }
+    return KVRGW_ERR_OK;
   });
 }
 
@@ -1108,6 +1193,273 @@ kvrgw_err_t kvrgw_delete_object_tagging(KvRgwHandle *h, uint32_t tenant_id,
     }
     return s->delete_object_tagging(tenant_id, sv(bucket, bucket_len),
                                     sv(key, key_len));
+  });
+}
+
+// --- Multipart upload ---
+
+kvrgw_err_t kvrgw_initiate_multipart_upload(
+    KvRgwHandle *h, uint32_t tenant_id, const char *bucket, size_t bucket_len,
+    const char *key, size_t key_len, const char *content_type,
+    size_t content_type_len, const kvrgw_kv *tags, size_t tags_count,
+    const kvrgw_kv *metadata, size_t metadata_count, char *upload_id_out,
+    size_t upload_id_cap)
+{
+  return abi_guard([&]() -> kvrgw_err_t {
+    auto *s = svc(h);
+    if (s == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    if (tags_count > kMaxTags) {
+      return KVRGW_ERR_INVALID_TAG;
+    }
+    if (sv(content_type, content_type_len).size() > kMaxContentTypeLen) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    if (tags_count > 0 && tags == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    kvrgw::TagPair tag_pairs[kvrgw::MAX_TAG_COUNT];
+    for (size_t i = 0; i < tags_count; ++i) {
+      tag_pairs[i] = {sv(tags[i].key, tags[i].key_len),
+                      sv(tags[i].value, tags[i].value_len)};
+    }
+
+    if (metadata_count > 0 && metadata == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    if (metadata_count > kvrgw::MAX_META_COUNT) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    kvrgw::MetaPair meta_pairs[kvrgw::MAX_META_COUNT];
+    size_t metadata_size = 0;
+    for (size_t i = 0; i < metadata_count; ++i) {
+      metadata_size += (metadata[i].key_len + metadata[i].value_len);
+      meta_pairs[i] = {sv(metadata[i].key, metadata[i].key_len),
+                       sv(metadata[i].value, metadata[i].value_len)};
+    }
+    if (metadata_size > kvrgw::AWS_MaxMetadataBytes) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+
+    auto result = s->initiate_multipart_upload(
+        tenant_id, sv(bucket, bucket_len), sv(key, key_len),
+        sv(content_type, content_type_len),
+        std::span<const kvrgw::TagPair>(tag_pairs, tags_count),
+        std::span<const kvrgw::MetaPair>(meta_pairs, metadata_count));
+    if (!ok(result.error_code)) {
+      return result.error_code;
+    }
+    copy_cstr(upload_id_out, upload_id_cap, result.upload_id);
+    return KVRGW_ERR_OK;
+  });
+}
+
+kvrgw_err_t kvrgw_upload_part(KvRgwHandle *h, uint32_t tenant_id,
+                              const char *bucket, size_t bucket_len,
+                              const char *key, size_t key_len,
+                              const char *upload_id, size_t upload_id_len,
+                              uint16_t part_number, const uint8_t *data,
+                              size_t data_len, char *etag_out, size_t etag_cap)
+{
+  return abi_guard([&]() -> kvrgw_err_t {
+    auto *s = svc(h);
+    if (s == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    if (data_len > 0 && data == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    auto result = s->upload_part(tenant_id, sv(bucket, bucket_len),
+                                 sv(key, key_len),
+                                 sv(upload_id, upload_id_len), part_number,
+                                 data, data_len);
+    if (!ok(result.error_code)) {
+      return result.error_code;
+    }
+    copy_cstr(etag_out, etag_cap, result.etag);
+    return KVRGW_ERR_OK;
+  });
+}
+
+kvrgw_err_t kvrgw_complete_multipart_upload(
+    KvRgwHandle *h, uint32_t tenant_id, const char *bucket, size_t bucket_len,
+    const char *key, size_t key_len, const char *upload_id,
+    size_t upload_id_len, const kvrgw_mpu_part *parts, size_t parts_count,
+    const char *if_match, size_t if_match_len, const char *if_none_match,
+    size_t if_none_match_len, char *etag_out, size_t etag_cap,
+    char *version_id_out, size_t version_id_cap)
+{
+  return abi_guard([&]() -> kvrgw_err_t {
+    auto *s = svc(h);
+    if (s == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    if (parts_count > 0 && parts == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    std::vector<kvrgw::KvRgwServiceImpl::CompletedPart> client_parts;
+    client_parts.reserve(parts_count);
+    for (size_t i = 0; i < parts_count; ++i) {
+      client_parts.push_back({parts[i].part_number,
+                              std::string(sv(parts[i].etag, parts[i].etag_len))});
+    }
+
+    auto result = s->complete_multipart_upload(
+        tenant_id, sv(bucket, bucket_len), sv(key, key_len),
+        sv(upload_id, upload_id_len),
+        std::span<const kvrgw::KvRgwServiceImpl::CompletedPart>(client_parts),
+        sv(if_match, if_match_len), sv(if_none_match, if_none_match_len));
+    if (!ok(result.error_code)) {
+      return result.error_code;
+    }
+    copy_cstr(etag_out, etag_cap, result.etag);
+    if (result.version_id.is_valid() && !result.version_id.is_null()) {
+      copy_cstr(version_id_out, version_id_cap, result.version_id.to_hex());
+    }
+    else if (version_id_out != nullptr && version_id_cap > 0) {
+      version_id_out[0] = '\0';
+    }
+    return KVRGW_ERR_OK;
+  });
+}
+
+kvrgw_err_t kvrgw_abort_multipart_upload(KvRgwHandle *h, uint32_t tenant_id,
+                                         const char *bucket, size_t bucket_len,
+                                         const char *key, size_t key_len,
+                                         const char *upload_id,
+                                         size_t upload_id_len)
+{
+  return abi_guard([&]() -> kvrgw_err_t {
+    auto *s = svc(h);
+    if (s == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    return s->abort_multipart_upload(tenant_id, sv(bucket, bucket_len),
+                                     sv(key, key_len),
+                                     sv(upload_id, upload_id_len));
+  });
+}
+
+kvrgw_err_t kvrgw_list_parts(KvRgwHandle *h, uint32_t tenant_id,
+                             const char *bucket, size_t bucket_len,
+                             const char *key, size_t key_len,
+                             const char *upload_id, size_t upload_id_len,
+                             uint16_t part_number_marker, uint32_t max_parts,
+                             kvrgw_list_part_entry *entries,
+                             uint32_t entries_cap, uint32_t *entries_count,
+                             char *arena, size_t arena_cap, int *is_truncated,
+                             uint16_t *next_part_number_marker)
+{
+  return abi_guard([&]() -> kvrgw_err_t {
+    auto *s = svc(h);
+    if (s == nullptr || entries_count == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    kvrgw::KvRgwServiceImpl::ListPartsResult out;
+    const auto ec =
+        s->list_parts(tenant_id, sv(bucket, bucket_len), sv(key, key_len),
+                      sv(upload_id, upload_id_len), part_number_marker,
+                      max_parts, &out);
+    if (!ok(ec)) {
+      return ec;
+    }
+    if (out.parts.size() > entries_cap) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    size_t used = 0;
+    *entries_count = static_cast<uint32_t>(out.parts.size());
+    for (size_t i = 0; i < out.parts.size(); ++i) {
+      auto &e = entries[i];
+      e.part_number = out.parts[i].part_number;
+      e.size = out.parts[i].size;
+      e.last_modified_unix = out.parts[i].last_modified_unix;
+      if (auto a = arena_put(arena, arena_cap, &used, out.parts[i].etag,
+                             &e.etag_off, &e.etag_len);
+          a != KVRGW_ERR_OK) {
+        return a;
+      }
+    }
+    if (is_truncated != nullptr) {
+      *is_truncated = out.is_truncated ? 1 : 0;
+    }
+    if (next_part_number_marker != nullptr) {
+      *next_part_number_marker = out.next_part_number_marker;
+    }
+    return KVRGW_ERR_OK;
+  });
+}
+
+kvrgw_err_t kvrgw_list_multipart_uploads(
+    KvRgwHandle *h, uint32_t tenant_id, const char *bucket, size_t bucket_len,
+    const char *prefix, size_t prefix_len, const char *key_marker,
+    size_t key_marker_len, const char *upload_id_marker,
+    size_t upload_id_marker_len, uint32_t max_uploads,
+    kvrgw_list_mpu_entry *entries, uint32_t entries_cap,
+    uint32_t *entries_count, char *arena, size_t arena_cap, int *is_truncated,
+    char *next_key_marker, size_t next_key_marker_cap,
+    size_t *next_key_marker_len, char *next_upload_id_marker,
+    size_t next_upload_id_marker_cap, size_t *next_upload_id_marker_len)
+{
+  return abi_guard([&]() -> kvrgw_err_t {
+    auto *s = svc(h);
+    if (s == nullptr || entries_count == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    kvrgw::KvRgwServiceImpl::ListMultipartUploadsResult out;
+    const auto ec = s->list_multipart_uploads(
+        tenant_id, sv(bucket, bucket_len), sv(prefix, prefix_len),
+        sv(key_marker, key_marker_len),
+        sv(upload_id_marker, upload_id_marker_len), max_uploads, &out);
+    if (!ok(ec)) {
+      return ec;
+    }
+    if (out.uploads.size() > entries_cap) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    size_t used = 0;
+    *entries_count = static_cast<uint32_t>(out.uploads.size());
+    for (size_t i = 0; i < out.uploads.size(); ++i) {
+      auto &e = entries[i];
+      e.initiated_unix = out.uploads[i].initiated_unix;
+      if (auto a = arena_put(arena, arena_cap, &used,
+                             out.uploads[i].object_name, &e.key_off,
+                             &e.key_len);
+          a != KVRGW_ERR_OK) {
+        return a;
+      }
+      if (auto a = arena_put(arena, arena_cap, &used, out.uploads[i].upload_id,
+                             &e.upload_id_off, &e.upload_id_len);
+          a != KVRGW_ERR_OK) {
+        return a;
+      }
+    }
+    if (is_truncated != nullptr) {
+      *is_truncated = out.is_truncated ? 1 : 0;
+    }
+    if (next_key_marker_len != nullptr) {
+      *next_key_marker_len = out.next_key_marker.size();
+    }
+    if (!out.next_key_marker.empty()) {
+      if (next_key_marker == nullptr ||
+          next_key_marker_cap < out.next_key_marker.size()) {
+        return KVRGW_ERR_INVALID_ARGUMENT;
+      }
+      std::memcpy(next_key_marker, out.next_key_marker.data(),
+                  out.next_key_marker.size());
+    }
+    if (next_upload_id_marker_len != nullptr) {
+      *next_upload_id_marker_len = out.next_upload_id_marker.size();
+    }
+    if (!out.next_upload_id_marker.empty()) {
+      if (next_upload_id_marker == nullptr ||
+          next_upload_id_marker_cap < out.next_upload_id_marker.size()) {
+        return KVRGW_ERR_INVALID_ARGUMENT;
+      }
+      std::memcpy(next_upload_id_marker, out.next_upload_id_marker.data(),
+                  out.next_upload_id_marker.size());
+    }
+    return KVRGW_ERR_OK;
   });
 }
 

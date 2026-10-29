@@ -16,6 +16,7 @@
 
 #include <cstdio>
 #include <endian.h>
+#include <openssl/evp.h>
 
 namespace kvrgw {
 
@@ -174,6 +175,58 @@ std::string ETag::to_hex() const
   char buf[kEtagMaxBufSize];
   const int len = to_hex(buf, sizeof(buf));
   return std::string(buf, static_cast<size_t>(len));
+}
+
+//--------------------------------------------------------------------------------
+struct CompositeEtagBuilder::Impl {
+  EVP_MD_CTX* ctx{nullptr};
+};
+
+//--------------------------------------------------------------------------------
+CompositeEtagBuilder::CompositeEtagBuilder() : impl_(std::make_unique<Impl>())
+{
+  impl_->ctx = EVP_MD_CTX_new();
+  if (impl_->ctx != nullptr) {
+    EVP_DigestInit_ex(impl_->ctx, EVP_md5(), nullptr);
+  }
+}
+
+//--------------------------------------------------------------------------------
+CompositeEtagBuilder::~CompositeEtagBuilder()
+{
+  if (impl_ && impl_->ctx) {
+    EVP_MD_CTX_free(impl_->ctx);
+  }
+}
+
+//--------------------------------------------------------------------------------
+void CompositeEtagBuilder::fold(const ETag& part_etag)
+{
+  if (impl_->ctx == nullptr) {
+    return;
+  }
+  EVP_DigestUpdate(impl_->ctx, part_etag.bytes_, kMd5Bytes);
+  ++part_count_;
+}
+
+//--------------------------------------------------------------------------------
+ETag CompositeEtagBuilder::finalize() const
+{
+  unsigned char digest[kMd5Bytes]{};
+  unsigned int digest_len = 0;
+  if (impl_->ctx != nullptr) {
+    // EVP_DigestFinal_ex is destructive -- operate on a copy so finalize()
+    // can stay a const, repeatable-if-called-twice observer.
+    EVP_MD_CTX* tmp = EVP_MD_CTX_new();
+    if (tmp != nullptr) {
+      EVP_MD_CTX_copy_ex(tmp, impl_->ctx);
+      EVP_DigestFinal_ex(tmp, digest, &digest_len);
+      EVP_MD_CTX_free(tmp);
+    }
+  }
+  ETag result;
+  result.load_raw(digest, part_count_);
+  return result;
 }
 
 } // namespace kvrgw

@@ -89,13 +89,13 @@ KvrgwErrorCode LKeyNumericCounter::allocate( KvStore& store,
     encode_numeric_counter(next, std::span<char, sizeof(uint64_t)>(buf, sizeof(buf)));
     tr->kv_put(key.view(), std::string_view(buf, sizeof(buf)));
 
-    auto rc = tr->commit();
-    if (rc) {
+    fdb_error_t err = tr->commit();
+    if (!err) {
       out_id = next;
       return KVRGW_ERR_OK;
     }
 
-    auto ec = fdb_to_error(rc.error());
+    auto ec = fdb_to_error(err);
     if (!is_retriable(ec)) {
       return ec;
     }

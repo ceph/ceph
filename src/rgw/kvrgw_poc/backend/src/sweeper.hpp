@@ -35,6 +35,9 @@ class Sweeper {
   void sweep_once();
   void sweep_range(std::string_view prefix, std::string_view end, bool force);
   void process_group_po_entry(std::string_view key, std::string_view value, int64_t now);
+  // P:M — multipart cleanup entry (see plans/fixing_agent_mess.md Section
+  // 4). No-op if `key`/`value` don't parse as a P:M entry.
+  void process_pm_entry(std::string_view key, std::string_view value, bool force, int64_t now);
   static std::string compute_exclusive_end(std::string_view prefix);
 
   KvStore& store_;

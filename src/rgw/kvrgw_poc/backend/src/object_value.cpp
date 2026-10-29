@@ -35,6 +35,7 @@ void hdr_to_be(ObjectValueHeader &hdr)
   hdr.version_id = hdr.version_id.to_be();
   hdr.next_vid = hdr.next_vid.to_be();
   hdr.metadata_count = htons(hdr.metadata_count);
+  hdr.part_count = htons(hdr.part_count);
 }
 
 void hdr_from_be(ObjectValueHeader &hdr)
@@ -46,6 +47,7 @@ void hdr_from_be(ObjectValueHeader &hdr)
   hdr.version_id = hdr.version_id.from_be();
   hdr.next_vid = hdr.next_vid.from_be();
   hdr.metadata_count = be16toh(hdr.metadata_count);
+  hdr.part_count = be16toh(hdr.part_count);
 }
 
 std::string ObjectValue::etag_display() const { return get_etag().to_hex(); }
@@ -71,7 +73,8 @@ size_t object_payload_offset(const ObjectValueHeader &hdr,
   if (hdr.chunk_type == CHUNK_CHILD_D_REF) {
     tail_offset += kBucketIdSize + kRefTagSize;
   }
-  else if (hdr.chunk_type == CHUNK_STORAGE_REF) {
+  else if (hdr.chunk_type == CHUNK_STORAGE_REF ||
+           hdr.chunk_type == CHUNK_MULTIPART_REF) {
     tail_offset += kRefTagSize;
   }
   return tail_offset;
@@ -119,7 +122,8 @@ std::optional<ObjectValue> parse_object_value(std::string_view data)
   const char ct_byte = static_cast<char>(value.hdr.chunk_type);
   if (ct_byte != CHUNK_INLINE && ct_byte != CHUNK_CHILD_D &&
       ct_byte != CHUNK_CHILD_D_REF && ct_byte != CHUNK_STORAGE &&
-      ct_byte != CHUNK_STORAGE_REF) {
+      ct_byte != CHUNK_STORAGE_REF && ct_byte != CHUNK_MULTIPART &&
+      ct_byte != CHUNK_MULTIPART_REF) {
     return std::nullopt;
   }
 
@@ -153,7 +157,8 @@ std::optional<ObjectValue> parse_object_value(std::string_view data)
                                   data.data() + tail_offset, bid);
     tail_offset += sizeof(RefTag);
   }
-  else if (value.hdr.chunk_type == CHUNK_STORAGE_REF) {
+  else if (value.hdr.chunk_type == CHUNK_STORAGE_REF ||
+           value.hdr.chunk_type == CHUNK_MULTIPART_REF) {
     if (data.size() < tail_offset + sizeof(RefTag)) {
       return std::nullopt;
     }
@@ -178,6 +183,17 @@ std::optional<ObjectValue> parse_object_value(std::string_view data)
       return std::nullopt;
     }
     value.metadata_frame.assign(rest.data(), rest.data() + frame_size);
+    tail_offset += frame_size;
+  }
+
+  if (value.hdr.chunk_type == CHUNK_MULTIPART ||
+      value.hdr.chunk_type == CHUNK_MULTIPART_REF) {
+    // Always the last tail segment -- no length prefix, "rest of the
+    // value" (see write_object_value).
+    if (tail_offset >= data.size()) {
+      return std::nullopt;
+    }
+    value.manifest_body.assign(data.substr(tail_offset));
   }
 
   return value;

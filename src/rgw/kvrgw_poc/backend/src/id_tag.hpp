@@ -70,8 +70,8 @@ static constexpr size_t MAX_KEY_SIZE = 128;
 static constexpr size_t MAX_VALUE_SIZE = 256;
 static constexpr size_t SIZES_PER_TAG_BYTES = sizeof(tag_size_t) * 2;
 
-bool encode(std::span<const TagPair> tags, std::vector<uint8_t>& out);
-bool decode(std::span<const uint8_t> input_buffer, std::array<TagPair, MAX_TAG_COUNT>& out_tags);
+bool encode_tags(std::span<const TagPair> tags, std::vector<uint8_t>& out);
+bool decode_tags(std::span<const uint8_t> input_buffer, std::array<TagPair, MAX_TAG_COUNT>& out_tags);
 bool encoded_tag_frame_size(std::span<const uint8_t> input, size_t& out_size);
 
 }  // namespace kvrgw

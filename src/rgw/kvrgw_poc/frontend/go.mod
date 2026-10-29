@@ -2,6 +2,12 @@ module github.com/kv-poc/frontend
 
 go 1.25.0
 
+// kvrgw local patch: fixes tag-order randomization in GetObjectTagging /
+// GetBucketTagging and the wrong error Code on ErrObjectTaggingLimited /
+// ErrBucketTaggingLimited. See third_party/versitygw and
+// plans/fix-tagging-order-and-limit-plan.md.
+replace github.com/versity/versitygw => ./third_party/versitygw
+
 require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.0
 	github.com/gofiber/fiber/v3 v3.4.0

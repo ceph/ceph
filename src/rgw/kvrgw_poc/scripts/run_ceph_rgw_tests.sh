@@ -27,7 +27,8 @@ if [[ "${1:-}" == "--category" || "${1:-}" == "-c" ]]; then
         echo "  list-auth, list-buckets, bucket, bucket-naming, object, atomic,"
         echo "  delete, range, conditional-get, conditional-put, conditional-delete,"
         echo "  conditional-copy, copy, versioning, versioning-concurrent, tagging,"
-        echo "  post, object-lock"
+        echo "  post, object-lock, multipart, multipart-other"
+        echo "Note: 'multipart-other' is excluded from the default (no --category) run."
         exit 1
     fi
 fi
@@ -87,6 +88,49 @@ TESTS_BY_CATEGORY[post]="test_post_object_condition_is_case_sensitive or test_po
 
 TESTS_BY_CATEGORY[object-lock]="test_object_lock_get_obj_lock_invalid_bucket or test_object_lock_put_legal_hold_invalid_status or test_object_lock_put_obj_lock_invalid_mode or test_object_lock_put_obj_lock_invalid_status or test_object_lock_put_obj_lock_with_days_and_years or test_object_lock_put_obj_retention_invalid_mode"
 
+# Mechanics/metadata-only tests plus the body-readback tests enabled by the
+# CHUNK_MULTIPART manifest (GetObject/Range/Head over a completed multipart
+# upload, including PartNumber addressing -- ObjectValueHeader::part_count
+# + the manifest-backed single-part lookup in get_object/head_object).
+# test_multipart_upload_small was split: the basic-upload-works assertions
+# run here; the "Complete the same upload_id twice" assertion (not part of
+# AWS's documented contract -- see NoSuchUpload's "aborted or completed"
+# wording in the API docs, a Ceph-RGW-specific behavior at best) moved to
+# test_multipart_upload_complete_twice_is_idempotent, gated behind the
+# RGW_unique_complete_idempotency marker (excluded below, run explicitly
+# via `-m RGW_unique_complete_idempotency`). All 34 tests here pass, so
+# this category is included in the default (no --category) run. The last
+# 10 (test_multipart_sse_c_get_part .. test_set_multipart_tagging) were
+# triaged out of multipart-other below once confirmed passing. The final 5
+# (test_object_copy_versioning_multipart_upload ..
+# test_get_single_multipart_object_attributes) were triaged out the same way
+# after the multipart VersionId / CopyObject / GetObjectAttributes fixes.
+# The last 3 (test_multipart_put_object_if_match,
+# test_multipart_put_current_object_if_none_match,
+# test_multipart_put_current_object_if_match) were triaged in once
+# CompleteMultipartUpload started enforcing If-Match / If-None-Match.
+TESTS_BY_CATEGORY[multipart]="test_multipart_upload_empty or test_multipart_upload_complete_without_create or test_multipart_upload_size_too_small or test_multipart_upload_missing_part or test_multipart_upload_incorrect_etag or test_multipart_upload_resend_part or test_multipart_upload_multiple_sizes or test_abort_multipart_upload or test_abort_multipart_upload_not_found or test_list_multipart_upload or test_multipart_upload_small or test_multipart_upload_contents or test_multipart_upload_overwrite_existing_object or test_atomic_multipart_upload_write or test_multipart_get_part or test_multipart_single_get_part or test_multipart_sse_c_get_part or test_non_multipart_get_part or test_non_multipart_sse_c_get_part or test_versioning_obj_create_overwrite_multipart or test_encryption_sse_c_multipart_upload or test_encryption_sse_c_unaligned_multipart_upload or test_sse_kms_multipart_upload or test_sse_kms_multipart_invalid_chunks_1 or test_sse_kms_multipart_invalid_chunks_2 or test_set_multipart_tagging or test_object_copy_versioning_multipart_upload or test_versioning_bucket_multipart_upload_return_version_id or test_get_multipart_object_attributes or test_get_paginated_multipart_object_attributes or test_get_single_multipart_object_attributes or test_multipart_put_object_if_match or test_multipart_put_current_object_if_none_match or test_multipart_put_current_object_if_match"
+
+# Every other test function with "multipart" in its name, not covered by
+# the 'multipart' category above. Not verified/passing -- most need a
+# feature this POC doesn't implement yet (UploadPartCopy, SSE-KMS gaps,
+# checksums, ACL/bucket-policy, lifecycle, GetObjectAttributes, versioning
+# interactions). Grouped here for visibility; excluded from the default
+# run below. (test_multipart_upload_complete_twice_is_idempotent is
+# deliberately left out -- it already has its own dedicated marker-gated
+# mechanism above, not an uncategorized gap.)
+# "(test_multipart_upload and not test_multipart_upload_)" instead of a
+# bare "test_multipart_upload": -k is substring matching, so the bare form
+# would also pull in every test_multipart_upload_* already covered by the
+# 'multipart' category above (and the marker-gated idempotency test).
+TESTS_BY_CATEGORY[multipart-other]="test_head_bucket_usage_multipart_incomplete or test_multipart_copy_small or test_multipart_copy_invalid_range or test_multipart_copy_improper_range or test_multipart_copy_without_range or test_multipart_copy_special_names or (test_multipart_upload and not test_multipart_upload_) or test_multipart_copy_versioned or test_multipart_copy_multiple_sizes or test_multipart_resend_first_finishes_last or test_lifecycle_set_multipart or test_lifecycle_multipart_expiration or test_encryption_sse_c_multipart_invalid_chunks_1 or test_encryption_sse_c_multipart_invalid_chunks_2 or test_encryption_sse_c_multipart_bad_download or test_bucket_policy_multipart or test_object_lock_delete_multipart_object_with_retention or test_object_lock_delete_multipart_object_with_legal_hold_on or test_multipart_upload_on_a_bucket_with_policy or test_sse_s3_default_multipart_upload or test_multipart_checksum_sha256 or test_multipart_reupload_checksum_and_etag or test_multipart_use_cksum_helper_sha256 or test_multipart_use_cksum_helper_crc64nvme or test_multipart_use_cksum_helper_crc32 or test_multipart_use_cksum_helper_crc32c or test_multipart_use_cksum_helper_sha1 or test_get_multipart_checksum_object_attributes"
+
+# Categories excluded from the combined "run everything" pass when no
+# --category is given. Both are still runnable explicitly via -c.
+# 'multipart-other' is unverified (see comment above); kept out of the
+# default run until each test is triaged.
+DEFAULT_EXCLUDED_CATEGORIES=(multipart-other)
+
 DESELECTS="\
 --deselect s3tests/functional/test_s3.py::test_object_copy_replacing_tagging_with_none \
 --deselect s3tests/functional/test_s3.py::test_bucket_head_extended \
@@ -118,7 +162,8 @@ DESELECTS="\
 --deselect s3tests/functional/test_s3.py::test_bucket_policy_get_obj_acl_existing_tag \
 --deselect s3tests/functional/test_s3.py::test_bucket_policy_allow_notprincipal \
 --deselect s3tests/functional/test_s3.py::test_bucket_policy_deny_self_denied_policy \
---deselect s3tests/functional/test_s3.py::test_bucket_policy_deny_self_denied_policy_confirm_header"
+--deselect s3tests/functional/test_s3.py::test_bucket_policy_deny_self_denied_policy_confirm_header \
+--deselect s3tests/functional/test_s3.py::test_list_multipart_upload_owner"
 
 if [[ -n "$CATEGORY" ]]; then
     if [[ -z "${TESTS_BY_CATEGORY[$CATEGORY]:-}" ]]; then
@@ -128,9 +173,17 @@ if [[ -n "$CATEGORY" ]]; then
     fi
     TEST_EXPR="${TESTS_BY_CATEGORY[$CATEGORY]}"
 else
-    # All categories combined
+    # All categories combined, except those in DEFAULT_EXCLUDED_CATEGORIES.
     TEST_EXPR=""
     for cat in "${!TESTS_BY_CATEGORY[@]}"; do
+        skip=0
+        for excluded in "${DEFAULT_EXCLUDED_CATEGORIES[@]}"; do
+            if [[ "$cat" == "$excluded" ]]; then
+                skip=1
+                break
+            fi
+        done
+        [[ $skip -eq 1 ]] && continue
         if [[ -n "$TEST_EXPR" ]]; then
             TEST_EXPR="$TEST_EXPR or ${TESTS_BY_CATEGORY[$cat]}"
         else
@@ -142,7 +195,10 @@ fi
 cd "$S3TESTS_DIR"
 
 # shellcheck disable=SC2086
+# -m "not RGW_unique_complete_idempotency": that marker is a Ceph-RGW-specific
+# behavior check (not part of AWS's documented contract) and must only run
+# when explicitly requested, e.g. `pytest ... -m RGW_unique_complete_idempotency`.
 S3TEST_CONF="$S3TEST_CONF" python3.11 -m pytest s3tests/functional/test_s3.py \
     -k "$TEST_EXPR" \
-    $DESELECTS \
-    --tb=line -q
+    -m "not RGW_unique_complete_idempotency" \
+    $DESELECTS

@@ -36,20 +36,6 @@ void run_network()
   }
 }
 
-std::string prefix_range_end(std::string_view prefix)
-{
-  std::string end(prefix);
-  while (!end.empty()) {
-    const unsigned char last = static_cast<unsigned char>(end.back());
-    if (last < 0xFF) {
-      end.back() = static_cast<char>(last + 1);
-      return end;
-    }
-    end.pop_back();
-  }
-  return std::string("\xFF", 1);
-}
-
 int64_t now_unix()
 {
   return std::chrono::duration_cast<std::chrono::seconds>(
@@ -63,8 +49,8 @@ void txn_put(kvrgw::KvStore &store, std::string_view key,
   auto tr = store.begin_transaction();
   assert(tr);
   (*tr)->kv_put(key, value);
-  auto rc = (*tr)->commit();
-  assert(rc);
+  fdb_error_t err = (*tr)->commit();
+  assert(!err);
 }
 
 void txn_del(kvrgw::KvStore &store, std::string_view key)
@@ -72,14 +58,14 @@ void txn_del(kvrgw::KvStore &store, std::string_view key)
   auto tr = store.begin_transaction();
   assert(tr);
   (*tr)->kv_del(key);
-  auto rc = (*tr)->commit();
-  assert(rc);
+  fdb_error_t err = (*tr)->commit();
+  assert(!err);
 }
 
 void cleanup_tenant_buckets(kvrgw::KvStore &store, kvrgw::tenant_id_t tenant_id)
 {
   const auto prefix = kvrgw::make_bucket_prefix(tenant_id);
-  const auto end = prefix_range_end(prefix.view());
+  const auto end = kvrgw::prefix_range_end(prefix.view());
   auto rows = store.range_scan(prefix.view(), end, 0);
   assert(rows);
   for (const auto &row : *rows) {
@@ -139,14 +125,14 @@ int main()
     }
 
     const auto prefix = kvrgw::make_bucket_prefix(tenant_id);
-    const auto end = prefix_range_end(prefix.view());
+    const auto end = kvrgw::prefix_range_end(prefix.view());
     auto rows = store.range_scan(prefix.view(), end, 0);
     assert(rows);
     assert(rows->size() == 4);
 
     const kvrgw::bucket_id_t unused_bucket_id(kvrgw::kNullBucket);
     const auto object_prefix = kvrgw::make_object_prefix(unused_bucket_id);
-    const auto object_end = prefix_range_end(object_prefix.view());
+    const auto object_end = kvrgw::prefix_range_end(object_prefix.view());
     auto empty_objects = store.range_scan(object_prefix.view(), object_end, 1);
     assert(empty_objects);
     assert(empty_objects->empty());
@@ -209,20 +195,20 @@ int main()
       assert(b_read);
 
       (*a)->kv_put(conflict_key, "from-a");
-      auto a_commit = (*a)->commit();
-      assert(a_commit);
+      fdb_error_t a_err = (*a)->commit();
+      assert(!a_err);
 
       (*b)->kv_put(conflict_key, "from-b");
-      auto b_commit = (*b)->commit();
-      assert(!b_commit);
-      assert(b_commit.error() == 1020);
-      assert(kvrgw::is_retriable(kvrgw::fdb_to_error(b_commit.error())));
+      fdb_error_t b_err = (*b)->commit();
+      assert(b_err);
+      assert(b_err == 1020);
+      assert(kvrgw::is_retriable(kvrgw::fdb_to_error(b_err)));
 
       auto retry = store.begin_transaction();
       assert(retry);
       (*retry)->kv_put(conflict_key, "from-b-retry");
-      auto retry_commit = (*retry)->commit();
-      assert(retry_commit);
+      fdb_error_t retry_err = (*retry)->commit();
+      assert(!retry_err);
 
       txn_del(store, conflict_key);
       std::cout << "  live fdb error test: conflict (1020) passed\n";
@@ -270,10 +256,10 @@ int main()
       assert(tr);
       const std::string huge_key(11000, 'K');
       (*tr)->kv_put(huge_key, "value");
-      auto rc = (*tr)->commit();
-      assert(!rc);
-      assert(rc.error() == 2102);
-      assert(!kvrgw::is_retriable(kvrgw::fdb_to_error(rc.error())));
+      fdb_error_t err = (*tr)->commit();
+      assert(err);
+      assert(err == 2102);
+      assert(!kvrgw::is_retriable(kvrgw::fdb_to_error(err)));
       std::cout << "  live fdb error test: key_too_large (2102) passed\n";
     }
   }

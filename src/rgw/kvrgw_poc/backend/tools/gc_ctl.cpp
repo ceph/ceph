@@ -44,20 +44,6 @@ void run_network()
   }
 }
 
-std::string prefix_range_end(std::string_view prefix)
-{
-  std::string end(prefix);
-  while (!end.empty()) {
-    const unsigned char last = static_cast<unsigned char>(end.back());
-    if (last < 0xFF) {
-      end.back() = static_cast<char>(last + 1);
-      return end;
-    }
-    end.pop_back();
-  }
-  return std::string("\xFF", 1);
-}
-
 std::optional<uint64_t> blob_file_size(const kvrgw::DataStore &data_store,
                                        std::string_view ref_tag)
 {
@@ -158,7 +144,7 @@ std::vector<GcEntry> scan_gc_entries(kvrgw::KvStore &store,
                                      int scan_limit)
 {
   const auto prefix = kvrgw::make_g_prefix();
-  const auto end = prefix_range_end(prefix.view());
+  const auto end = kvrgw::prefix_range_end(prefix.view());
   auto rows_result = store.range_scan(prefix.view(), end, scan_limit);
   if (!rows_result) {
     std::cerr << "range_scan failed: " << fdb_get_error(rows_result.error())
@@ -767,9 +753,9 @@ int main(int argc, char **argv)
         }
         else {
           (*tr)->kv_put(key, val);
-          auto crc = (*tr)->commit();
-          if (!crc) {
-            std::cerr << "commit failed: " << fdb_get_error(crc.error())
+          fdb_error_t err = (*tr)->commit();
+          if (err) {
+            std::cerr << "commit failed: " << fdb_get_error(err)
                       << '\n';
             rc = 1;
           }

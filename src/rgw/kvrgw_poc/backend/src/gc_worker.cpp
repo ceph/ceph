@@ -17,6 +17,7 @@
 #include "constants.hpp"
 #include "gc_value.hpp"
 #include "keys.hpp"
+#include "multipart_value.hpp"
 #include "ref_count.hpp"
 #include "ref_tag.hpp"
 
@@ -44,6 +45,166 @@ uint64_t blob_bytes_for(const DataStore &data_store, std::string_view filename)
 }
 
 } // namespace
+
+bool GcWorker::process_gu_entry(const GuKeyParts &parts, std::string_view value,
+                                RateWindow *rate, const GcPolicy &policy)
+{
+  auto gu = parse_gu_value(value);
+  if (!gu) {
+    return true;  // corrupt value -- skip, mirrors G:O's malformed-value handling
+  }
+
+  for (uint8_t i = 0; i < gu->count; ++i) {
+    const auto &e = gu->entries[i];
+    const std::string fname =
+        part_filename(parts.ref_tag, e.part_number, e.generation);
+    if (fname.empty()) {
+      continue;
+    }
+    const uint64_t blob_bytes = blob_bytes_for(data_store_, fname);
+    if (!rate_allow(rate, policy, blob_bytes)) {
+      return false;  // rate-limited -- key left in place, retried next cycle
+    }
+    (void)data_store_.remove(fname);
+  }
+
+  KeyBuf gu_key;
+  make_gu_key(parts.bucket_id, parts.ref_tag.view(), parts.part_number,
+             parts.generation, gu_key);
+  auto tr = store_.begin_transaction();
+  if (!tr) {
+    return false;
+  }
+  (*tr)->kv_del(gu_key.view());
+  (*tr)->commit();
+  return true;
+}
+
+bool GcWorker::process_gm_entry(const GmKeyParts &parts, std::string_view key,
+                                std::string_view value, RateWindow *rate,
+                                const GcPolicy &policy)
+{
+  auto gm = parse_gm_value(value);
+  if (!gm) {
+    return true;  // corrupt value -- skip, mirrors G:O's malformed-value handling
+  }
+
+  // FREE_PARTS -- the completed CHUNK_MULTIPART :O: was deleted/overwritten
+  // after Complete's own G:M{MIXED} pass already finished (no S:U rows for
+  // this ref_tag remain -- the manifest carried on this entry is the only
+  // remaining record of which part files are still on disk). Decode it and
+  // free every (part_number, generation) file directly; no S:U scan, no
+  // clearRange -- just delete this G:M key once the whole list is freed.
+  if (gm->mode == GM_MODE_FREE_PARTS) {
+    auto decoded = decode_manifest_body(gm->body);
+    if (!decoded) {
+      return true;  // corrupt body -- skip, same as a top-level parse failure
+    }
+    for (size_t i = 0; i < decoded->included_parts.size(); ++i) {
+      const std::string fname =
+          part_filename(parts.ref_tag, decoded->included_parts[i], decoded->generations[i]);
+      if (fname.empty()) {
+        continue;
+      }
+      const uint64_t blob_bytes = blob_bytes_for(data_store_, fname);
+      if (!rate_allow(rate, policy, blob_bytes)) {
+        return false;  // rate-limited -- key left in place, retried next cycle
+                        // (idempotent: already-removed files are simply
+                        // skipped by blob_bytes_for/remove)
+      }
+      (void)data_store_.remove(fname);
+    }
+    auto tr = store_.begin_transaction();
+    if (!tr) {
+      return false;
+    }
+    (*tr)->kv_del(key);
+    (*tr)->commit();
+    return true;
+  }
+
+  const std::string_view rt_view = parts.ref_tag.view();
+  KeyBuf u_prefix;
+  make_u_prefix(parts.bucket_id, rt_view, u_prefix);
+  const std::string scan_end = prefix_range_end(u_prefix.view());
+
+  // Incremental decode -- walks Knob 1 (membership) + Knob 2 (deviating
+  // generation) in lockstep with the S:U scan below, which already visits
+  // every row in ascending part_number order. Never materializes a full
+  // keep-list.
+  ManifestKeepCursor keep_cursor(gm->mode == GM_MODE_MIXED ? gm->body : std::string_view{});
+  if (gm->mode == GM_MODE_MIXED && !keep_cursor.valid()) {
+    return true;  // corrupt body -- skip this cycle, same as a top-level parse failure
+  }
+
+  // DEEP (empty keep_list): free every S:U row's data individually.
+  // MIXED: free every row NOT in the keep-list -- the ones chosen for the
+  // final object stay on disk, referenced going forward only by the
+  // :O: entry's ChunkDescriptor, never again by this G:M key.
+  std::string scan_pos(u_prefix.view());
+  bool exclusive = false;
+  for (;;) {
+    if (stop_flag_) {
+      return false;
+    }
+    auto scan_tr = store_.begin_transaction();
+    if (!scan_tr) {
+      return false;
+    }
+    FdbRangeHolder holder((*scan_tr)->kv_async_get_range_holder(
+        scan_pos, exclusive, scan_end, kGcMaxKeys));
+    if (holder.wait()) {
+      return false;
+    }
+    if (holder.count() == 0) {
+      break;
+    }
+    exclusive = true;
+    const bool more = holder.more();
+    std::string next_pos(holder.back().key);
+
+    for (const auto &[row_key, row_value] : holder) {
+      auto u_parts = parse_u_key(row_key);
+      if (!u_parts) {
+        continue;
+      }
+      const bool kept = gm->mode == GM_MODE_MIXED &&
+          keep_cursor.is_kept(u_parts->part_number, u_parts->generation);
+      if (kept) {
+        continue;
+      }
+      const std::string fname = part_filename(
+          parts.ref_tag, u_parts->part_number, u_parts->generation);
+      if (fname.empty()) {
+        continue;
+      }
+      const uint64_t blob_bytes = blob_bytes_for(data_store_, fname);
+      if (!rate_allow(rate, policy, blob_bytes)) {
+        return false;  // rate-limited -- key left in place, rescans from the
+                        // top next cycle (idempotent: already-removed files
+                        // are simply skipped by blob_bytes_for/remove)
+      }
+      (void)data_store_.remove(fname);
+    }
+
+    if (!more) {
+      break;
+    }
+    scan_pos.assign(next_pos);
+  }
+
+  // All out-of-keep-list data is freed -- one clearRange covers every
+  // S:U row (kept or not; kept rows' KV entries are no longer needed once
+  // the final object's own :O: entry exists) plus the G:M key itself.
+  auto tr = store_.begin_transaction();
+  if (!tr) {
+    return false;
+  }
+  (*tr)->kv_range_clear(u_prefix.view(), scan_end);
+  (*tr)->kv_del(key);
+  (*tr)->commit();
+  return true;
+}
 
 GcWorker::GcWorker(KvStore &store, DataStore &data_store, GcConfigState &config,
                    std::atomic<bool> &stop_flag)
@@ -131,6 +292,19 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
       }
     }
 
+    if (const auto gu_parts = parse_gu_key(key)) {
+      if (!process_gu_entry(*gu_parts, value, rate, entry_policy)) {
+        return;
+      }
+      continue;
+    }
+    if (const auto gm_parts = parse_gm_key(key)) {
+      if (!process_gm_entry(*gm_parts, key, value, rate, entry_policy)) {
+        return;
+      }
+      continue;
+    }
+
     const auto parts = parse_go_key(key);
     if (!parts) {
       const auto group_parts = parse_group_go_key(key);
@@ -181,7 +355,9 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
       txn.kv_range_clear(c_prefix.view(), c_end.view());
     };
 
-    if (ct == CHUNK_STORAGE || ct == CHUNK_STORAGE_REF) {
+    if (ct == CHUNK_STORAGE || ct == CHUNK_STORAGE_REF ||
+        ct == CHUNK_MULTIPART || ct == CHUNK_MULTIPART_REF) {
+      const bool is_multipart = (ct == CHUNK_MULTIPART || ct == CHUNK_MULTIPART_REF);
       if (shared) {
         const auto r_key = make_r_key(rt_view);
         auto tr = store_.begin_transaction();
@@ -201,9 +377,43 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
             (*tr)->commit();
             continue;
           }
+          // Truly last reference.
+          if (is_multipart) {
+            // rv->chunk_descriptor holds the manifest body verbatim (see
+            // copy_object's CHUNK_MULTIPART/_REF case) -- hand off to the
+            // existing rate-limited GM_MODE_FREE_PARTS free loop
+            // (process_gm_entry) instead of duplicating a per-part free
+            // loop here.
+            KeyBuf gm_key;
+            make_gm_key(bucket_id, rt_view, gm_key);
+            GmValueBuf gm_buf;
+            gm_buf.data[0] = static_cast<uint8_t>(GM_MODE_FREE_PARTS);
+            std::memcpy(gm_buf.data + 1, rv->chunk_descriptor.data(),
+                       rv->chunk_descriptor.size());
+            gm_buf.len = 1 + rv->chunk_descriptor.size();
+            (*tr)->kv_put(gm_key.view(), gm_buf.view());
+            (*tr)->kv_del(r_key.view());
+            (*tr)->kv_del(key);
+            (*tr)->commit();
+            continue;
+          }
           (*tr)->kv_del(r_key.view());
         }
-        (void)data_store_.remove(rt_filename);
+        if (!is_multipart) {
+          (void)data_store_.remove(rt_filename);
+        }
+        (*tr)->kv_del(key);
+        clean_children(**tr);
+        (*tr)->commit();
+      }
+      else if (is_multipart) {
+        // Shouldn't occur -- an unshared CHUNK_MULTIPART is freed directly
+        // by move_object_to_g's own G:M{FREE_PARTS} hand-off and never
+        // creates a G:O entry in the first place. Defensive cleanup only.
+        auto tr = store_.begin_transaction();
+        if (!tr) {
+          continue;
+        }
         (*tr)->kv_del(key);
         clean_children(**tr);
         (*tr)->commit();

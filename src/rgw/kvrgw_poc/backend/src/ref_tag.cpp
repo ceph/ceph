@@ -37,15 +37,46 @@ std::string_view RefTag::view() const
 }
 
 //--------------------------------------------------------------------------------
-std::string RefTag::to_hex() const
+void RefTag::to_hex(char* dst) const
 {
   static constexpr char kHex[] = "0123456789abcdef";
-  char buf[kRefTagSize * 2];
   for (size_t i = 0; i < kRefTagSize; ++i) {
-    buf[i * 2]     = kHex[bytes_[i] >> 4];
-    buf[i * 2 + 1] = kHex[bytes_[i] & 0xf];
+    dst[i * 2]     = kHex[bytes_[i] >> 4];
+    dst[i * 2 + 1] = kHex[bytes_[i] & 0xf];
   }
+}
+
+//--------------------------------------------------------------------------------
+std::string RefTag::to_hex() const
+{
+  char buf[kRefTagSize * 2];
+  to_hex(buf);
   return std::string(buf, sizeof(buf));
+}
+
+//--------------------------------------------------------------------------------
+bool RefTag::from_hex(std::string_view hex, RefTag* out)
+{
+  if (hex.size() != 2 * kRefTagSize) {
+    return false;
+  }
+  uint8_t raw[kRefTagSize];
+  for (size_t i = 0; i < kRefTagSize; ++i) {
+    auto nibble = [](char c) -> int {
+      if (c >= '0' && c <= '9') return c - '0';
+      if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+      if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+      return -1;
+    };
+    const int hi = nibble(hex[2 * i]);
+    const int lo = nibble(hex[2 * i + 1]);
+    if (hi < 0 || lo < 0) {
+      return false;
+    }
+    raw[i] = static_cast<uint8_t>((hi << 4) | lo);
+  }
+  out->load(raw);
+  return true;
 }
 
 //--------------------------------------------------------------------------------

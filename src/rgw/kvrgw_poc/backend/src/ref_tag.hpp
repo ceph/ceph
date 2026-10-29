@@ -52,9 +52,21 @@ class RefTag {
   // Hex representation of the 12 bytes (24 hex chars).
   std::string to_hex() const;
 
+  // Writes exactly kRefTagSize*2 (24) hex chars into dst. No NUL terminator,
+  // no allocation. dst must point to at least kRefTagSize*2 bytes.
+  void to_hex(char* dst) const;
+
+  // Decodes a 24-char lowercase/uppercase hex string (the upload_id wire
+  // format — see "upload_id wire format" note in service_impl_multipart.cpp)
+  // into *out. Returns false on any malformed input (wrong length, invalid
+  // hex char) and leaves *out unspecified — callers treat decode failure
+  // uniformly as NoSuchUpload, mirroring ETag::from_hex's bool-return shape.
+  static bool from_hex(std::string_view hex, RefTag* out);
+
   uint8_t bytes_[kRefTagSize]{};
 
   friend class RefTagGenerator;
+  friend class KvRgwServiceImpl;
 };
 static_assert(sizeof(RefTag) == kRefTagSize);
 

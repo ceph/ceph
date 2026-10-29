@@ -16,10 +16,12 @@
 
 #include "constants.hpp"
 #include "etag.hpp"
+#include "id_meta.hpp"
 #include "ref_tag.hpp"
 #include "typed_ids.hpp"
 
 #include <arpa/inet.h>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <endian.h>
@@ -38,6 +40,26 @@ enum ChunkType : uint8_t {
   CHUNK_CHILD_D_REF  = 'd',
   CHUNK_STORAGE      = 'S',
   CHUNK_STORAGE_REF  = 's',
+  // A completed multipart object -- data lives in N separate part files
+  // (Tier 3, "ref_tag-part_number-generation" each), not one contiguous
+  // blob. hdr.ref_tag is the data's own identity (the upload's ref_tag,
+  // reused as-is), same role it plays for CHUNK_STORAGE -- no extra
+  // ref-tag tail bytes. The manifest (multipart_manifest.hpp's
+  // encode_manifest_body output) describing which parts/generations/
+  // sizes make up the object is carried as this value's own variable-
+  // length tail (see ObjectValue::manifest_body / write_object_value /
+  // parse_object_value) -- always the *last* tail segment, so its length
+  // is implicit ("rest of the value"), no length prefix needed.
+  CHUNK_MULTIPART    = 'P',
+  // Zero-copy-shared copy of a CHUNK_MULTIPART object (server-side copy
+  // of a completed multipart upload). hdr.ref_tag is this object's own
+  // identity (tags/metadata namespace); the *shared* part-file identity
+  // lives in chunk.ref_tag (wire tail, identical layout to
+  // CHUNK_STORAGE_REF's -- just a trailing RefTag, no bucket_id, since
+  // part_filename() doesn't take one). manifest_body is this object's
+  // own copy (cheap metadata, no data duplication) and is still the
+  // value's last tail segment, same as plain CHUNK_MULTIPART.
+  CHUNK_MULTIPART_REF = 'p',
 };
 
 enum ChildValueFlags : uint8_t {
@@ -171,6 +193,14 @@ struct ObjectValueHeader {
   version_id_t next_vid{};
 
   uint16_t metadata_count{};
+  // Valid PartNumber range for GetObject/HeadObject's ?partNumber= query
+  // param is uniformly [1, part_count] for *every* chunk type: 1 for
+  // non-multipart objects (so "PartNumber=1" on an ordinary object reads
+  // the whole object, matching AWS), included_parts.size() for
+  // CHUNK_MULTIPART. The PartsCount response header is still gated on
+  // chunk_type == CHUNK_MULTIPART separately (AWS omits it otherwise),
+  // regardless of this stored value.
+  uint16_t part_count{1};
 };
 
 struct GcValueHeader {
@@ -194,14 +224,20 @@ struct ChildValueHeader {
 
 #pragma pack(pop)
 
-static_assert(sizeof(ObjectValueHeader) == 62);
+static_assert(sizeof(ObjectValueHeader) == 64);
 static_assert(sizeof(GcValueHeader) == 4);
 static_assert(sizeof(BucketValueHeader) == 18);
 static_assert(sizeof(ChildValueHeader) == 8);
 static_assert(kMaxOValueBytes > sizeof(ObjectValueHeader));
 
-struct OValueBuf {
-  static constexpr size_t kMaxSize = kMaxOValueBytes;
+// Templated so a second, much larger instantiation (OValueBufMultipart --
+// see multipart_value.hpp) can carry a completed multipart object's
+// manifest tail without inflating the stack footprint of every other
+// object write, which all keep using the original, compact OValueBuf
+// (kMaxOValueBytes == 1024).
+template <size_t N>
+struct OValueBufT {
+  static constexpr size_t kMaxSize = N;
   uint8_t data[kMaxSize];
   size_t len{};
 
@@ -232,11 +268,16 @@ struct OValueBuf {
   }
 };
 
+using OValueBuf = OValueBufT<kMaxOValueBytes>;
+
 struct ObjectValue {
   ObjectValueHeader hdr{};
   std::string content_type;
   std::vector<uint8_t> inline_data;
   std::vector<uint8_t> metadata_frame;
+  // CHUNK_MULTIPART only -- the manifest body (multipart_manifest.hpp's
+  // encode_manifest_body output). Always the value's last tail segment.
+  std::string manifest_body;
 
   static constexpr uint8_t kFlagExtendedAttrs        = 0x01;
   static constexpr uint8_t kFlagFenced               = 0x02;
@@ -257,7 +298,8 @@ struct ObjectValue {
   // chunk.ref_tag for REF chunk types, hdr.ref_tag otherwise.
   std::string_view data_ref_view() const {
     if (hdr.chunk_type == CHUNK_CHILD_D_REF ||
-        hdr.chunk_type == CHUNK_STORAGE_REF) {
+        hdr.chunk_type == CHUNK_STORAGE_REF ||
+        hdr.chunk_type == CHUNK_MULTIPART_REF) {
       return chunk.ref_tag_view();
     }
     return hdr.ref_tag.view();
@@ -299,7 +341,8 @@ inline const ObjectValueHeader* ovh_ptr(std::string_view data)
   const auto* hdr = reinterpret_cast<const ObjectValueHeader*>(data.data());
   const auto ct = hdr->chunk_type;
   if (ct != CHUNK_INLINE && ct != CHUNK_CHILD_D && ct != CHUNK_CHILD_D_REF &&
-      ct != CHUNK_STORAGE && ct != CHUNK_STORAGE_REF) {
+      ct != CHUNK_STORAGE && ct != CHUNK_STORAGE_REF && ct != CHUNK_MULTIPART &&
+      ct != CHUNK_MULTIPART_REF) {
     return nullptr;
   }
   return hdr;
@@ -326,6 +369,10 @@ inline version_id_t ovh_next_vid(const ObjectValueHeader* h)
 {
   return h->next_vid.from_be();
 }
+inline uint16_t ovh_part_count(const ObjectValueHeader* h)
+{
+  return be16toh(h->part_count);
+}
 // For CHUNK_CHILD_D_REF / CHUNK_STORAGE_REF: extract the extra ref fields
 // that follow the header + content_type in the wire format.
 // Returns false if the buffer is too short.
@@ -346,7 +393,7 @@ inline bool ovh_chunk_ref(std::string_view raw, const ObjectValueHeader* h,
     out.ref_tag = raw.substr(base + kBucketIdSize, kRefTagSize);
     return true;
   }
-  if (h->chunk_type == CHUNK_STORAGE_REF) {
+  if (h->chunk_type == CHUNK_STORAGE_REF || h->chunk_type == CHUNK_MULTIPART_REF) {
     const size_t need = base + kRefTagSize;
     if (raw.size() < need) {
       return false;
@@ -355,6 +402,32 @@ inline bool ovh_chunk_ref(std::string_view raw, const ObjectValueHeader* h,
     return true;
   }
   return false;
+}
+
+// CHUNK_MULTIPART only -- zero-copy view of the manifest body, which is
+// always the value's last tail segment (content_type, then metadata_frame
+// if present, then the manifest -- see write_object_value/
+// parse_object_value). Used by move_object_to_g to copy the bytes
+// verbatim into a G:M{FREE_PARTS} entry without a full parse. Returns an
+// empty view if `raw`/`h` don't actually carry a metadata frame of the
+// declared size (corrupt value).
+inline std::string_view ovh_multipart_manifest_body(std::string_view raw,
+                                                     const ObjectValueHeader* h)
+{
+  size_t off = sizeof(ObjectValueHeader) + h->content_type_len;
+  if (off > raw.size()) {
+    return {};
+  }
+  if (h->metadata_count > 0) {
+    const std::span<const uint8_t> rest(
+        reinterpret_cast<const uint8_t*>(raw.data() + off), raw.size() - off);
+    size_t frame_size = 0;
+    if (!encoded_metadata_frame_size(rest, frame_size) || off + frame_size > raw.size()) {
+      return {};
+    }
+    off += frame_size;
+  }
+  return raw.substr(off);
 }
 
 std::string ovh_etag_display(const ObjectValueHeader* h);
@@ -406,5 +479,73 @@ inline VersioningState bvh_versioning_state(const BucketValueHeader* h)
 
 void hdr_to_be(ObjectValueHeader& hdr);
 void hdr_from_be(ObjectValueHeader& hdr);
+
+// Stamps hdr.last_modified_sec / last_modified_nsec from the current wall clock.
+inline void stamp_mtime(ObjectValueHeader& hdr) {
+  using namespace std::chrono;
+  const auto tp = system_clock::now();
+  const auto s  = duration_cast<seconds>(tp.time_since_epoch());
+  const auto ns = duration_cast<nanoseconds>(tp.time_since_epoch())
+                - duration_cast<nanoseconds>(s);
+  hdr.last_modified_sec  = static_cast<uint32_t>(s.count());
+  hdr.last_modified_nsec = static_cast<uint32_t>(ns.count());
+}
+
+// Serializes `value` into `buf` (any OValueBufT<N> -- OValueBuf for every
+// ordinary object, OValueBufMultipart for CHUNK_MULTIPART -- see
+// multipart_value.hpp). Templated (not just overloaded) so both
+// instantiations share one body; the two live call sites each already
+// know statically which buffer size they need.
+template <size_t N>
+bool write_object_value(OValueBufT<N>& buf, const ObjectValue& value)
+{
+  ObjectValueHeader wire = value.hdr;
+  wire.content_type_len = static_cast<uint8_t>(value.content_type.size());
+  hdr_to_be(wire);
+  if (!buf.set_header(wire)) {
+    return false;
+  }
+  if (!buf.append(value.content_type)) {
+    return false;
+  }
+  if (value.hdr.chunk_type == CHUNK_INLINE && !value.inline_data.empty()) {
+    if (!buf.append({reinterpret_cast<const char*>(value.inline_data.data()),
+                     value.inline_data.size()})) {
+      return false;
+    }
+  }
+  if (value.hdr.chunk_type == CHUNK_CHILD_D_REF) {
+    if (!buf.append(value.chunk.bucket_id_view())) {
+      return false;
+    }
+    if (!buf.append(value.chunk.ref_tag_view())) {
+      return false;
+    }
+  }
+  else if (value.hdr.chunk_type == CHUNK_STORAGE_REF ||
+           value.hdr.chunk_type == CHUNK_MULTIPART_REF) {
+    if (!buf.append(value.chunk.ref_tag_view())) {
+      return false;
+    }
+  }
+  if (value.hdr.metadata_count > 0) {
+    if (value.metadata_frame.empty()) {
+      return false;
+    }
+    if (!buf.append({reinterpret_cast<const char*>(value.metadata_frame.data()),
+                     value.metadata_frame.size()})) {
+      return false;
+    }
+  }
+  if (value.hdr.chunk_type == CHUNK_MULTIPART ||
+      value.hdr.chunk_type == CHUNK_MULTIPART_REF) {
+    // Always the last tail segment -- no length prefix, decode reads
+    // "rest of the value" (see parse_object_value).
+    if (value.manifest_body.empty() || !buf.append(value.manifest_body)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 }  // namespace kvrgw

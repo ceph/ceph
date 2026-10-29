@@ -465,9 +465,9 @@ TEST(txn_commit_propagates_1020)
   inject::push_commit_error(1020);
   auto store = *kvrgw::KvStore::create();
   auto tr = *store.begin_transaction();
-  auto result = tr->commit();
-  ASSERT_TRUE(!result);
-  ASSERT_EQ(result.error(), static_cast<fdb_error_t>(1020));
+  fdb_error_t err = tr->commit();
+  ASSERT_TRUE(err);
+  ASSERT_EQ(err, static_cast<fdb_error_t>(1020));
 }
 
 TEST(txn_commit_propagates_2000)
@@ -476,9 +476,9 @@ TEST(txn_commit_propagates_2000)
   inject::push_commit_error(2000);
   auto store = *kvrgw::KvStore::create();
   auto tr = *store.begin_transaction();
-  auto result = tr->commit();
-  ASSERT_TRUE(!result);
-  ASSERT_EQ(result.error(), static_cast<fdb_error_t>(2000));
+  fdb_error_t err = tr->commit();
+  ASSERT_TRUE(err);
+  ASSERT_EQ(err, static_cast<fdb_error_t>(2000));
 }
 
 TEST(txn_commit_success)
@@ -487,8 +487,8 @@ TEST(txn_commit_success)
   inject::push_commit_success();
   auto store = *kvrgw::KvStore::create();
   auto tr = *store.begin_transaction();
-  auto result = tr->commit();
-  ASSERT_TRUE(result.has_value());
+  fdb_error_t err = tr->commit();
+  ASSERT_TRUE(!err);
 }
 
 // ---------------------------------------------------------------------------

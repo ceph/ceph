@@ -81,6 +81,20 @@ const char *KvrgwErrorCode_Name(KvrgwErrorCode code)
     return "KVRGW_ERR_TRANSACTION_CONFLICT";
   case KVRGW_ERR_MAX_RETRIES_EXCEEDED:
     return "KVRGW_ERR_MAX_RETRIES_EXCEEDED";
+  case KVRGW_ERR_NO_SUCH_UPLOAD:
+    return "KVRGW_ERR_NO_SUCH_UPLOAD";
+  case KVRGW_ERR_INVALID_PART:
+    return "KVRGW_ERR_INVALID_PART";
+  case KVRGW_ERR_INVALID_PART_ORDER:
+    return "KVRGW_ERR_INVALID_PART_ORDER";
+  case KVRGW_ERR_ENTITY_TOO_SMALL:
+    return "KVRGW_ERR_ENTITY_TOO_SMALL";
+  case KVRGW_ERR_ENTITY_TOO_LARGE:
+    return "KVRGW_ERR_ENTITY_TOO_LARGE";
+  case KVRGW_ERR_UPLOAD_PART_BUSY:
+    return "KVRGW_ERR_UPLOAD_PART_BUSY";
+  case KVRGW_ERR_UPLOAD_IN_PROGRESS:
+    return "KVRGW_ERR_UPLOAD_IN_PROGRESS";
   default:
     return "UNKNOWN";
   }
@@ -149,6 +163,20 @@ const char *kvrgw_strerror(KvrgwErrorCode code)
     return "Transaction conflict limit exceeded";
   case KVRGW_ERR_MAX_RETRIES_EXCEEDED:
     return "Max retries exceeded";
+  case KVRGW_ERR_NO_SUCH_UPLOAD:
+    return "The specified multipart upload does not exist";
+  case KVRGW_ERR_INVALID_PART:
+    return "One or more of the specified parts could not be found";
+  case KVRGW_ERR_INVALID_PART_ORDER:
+    return "The list of parts was not in ascending order";
+  case KVRGW_ERR_ENTITY_TOO_SMALL:
+    return "Your proposed upload is smaller than the minimum allowed size";
+  case KVRGW_ERR_ENTITY_TOO_LARGE:
+    return "Your proposed upload exceeds the maximum allowed size";
+  case KVRGW_ERR_UPLOAD_PART_BUSY:
+    return "Too many concurrent uploads of this part; retry shortly";
+  case KVRGW_ERR_UPLOAD_IN_PROGRESS:
+    return "The upload is being completed; retry shortly";
   default:
     return "Unknown error";
   }

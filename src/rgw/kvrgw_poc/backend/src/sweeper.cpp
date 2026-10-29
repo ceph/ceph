@@ -18,9 +18,11 @@
 #include "fdb_latency.hpp"
 #include "gc_value.hpp"
 #include "keys.hpp"
+#include "multipart_value.hpp"
 #include "object_value.hpp"
 #include "ref_tag.hpp"
 
+#include <cstring>
 #include <iostream>
 #include <thread>
 
@@ -69,6 +71,13 @@ void Sweeper::process_bucket(bucket_id_t bucket_id, bool force)
 {
   const auto prefix = make_p_bucket_prefix(bucket_id);
   sweep_range(prefix.view(), compute_exclusive_end(prefix.view()), force);
+
+  // P:M's key layout places `cat` right after `ns` (same convention as
+  // P:O), so it can't share a single contiguous per-bucket prefix scan
+  // with P:O above -- swept separately (see plans/fixing_agent_mess.md
+  // Section 4's "same pattern extends to P:M").
+  const auto pm_prefix = make_pm_bucket_prefix(bucket_id);
+  sweep_range(pm_prefix.view(), compute_exclusive_end(pm_prefix.view()), force);
 }
 
 // Scans [prefix, end) of the P: namespace and promotes aged-out entries to
@@ -114,15 +123,137 @@ void Sweeper::sweep_range(std::string_view prefix, std::string_view end, bool fo
       if (move_po_to_go(**tr, *parts, po_entry->gc, po_entry->object_name) != 0) {
         continue;
       }
-      auto commit_rc = (*tr)->commit();
-      if (!commit_rc) {
+      if (fdb_error_t err = (*tr)->commit()) {
         std::cerr << "sweeper: commit failed: "
-                  << fdb_get_error(commit_rc.error()) << std::endl;
+                  << fdb_get_error(err) << std::endl;
       }
       continue;
     }
 
+    if (parse_pm_key(key)) {
+      process_pm_entry(key, value, force, now);
+      continue;
+    }
+
     process_group_po_entry(key, value, now);
+  }
+}
+
+// Handles one P:M row — the Sweeper-driven multipart cleanup entry (see
+// plans/fixing_agent_mess.md Section 4). No-op if `key` doesn't match the
+// P:M pattern.
+void Sweeper::process_pm_entry(std::string_view key, std::string_view value,
+                                bool force, int64_t now)
+{
+  const auto parts = parse_pm_key(key);
+  if (!parts) {
+    return;
+  }
+  auto pm = parse_pm_value(value);
+  if (!pm) {
+    return;
+  }
+  if (!force && now - static_cast<int64_t>(pm->mtime) < min_age_sec_) {
+    return;
+  }
+
+  const std::string_view rt_view = parts->ref_tag.view();
+
+  // Past the timeout: RangeScan S:U by ref_tag. COMMITTED rows are left
+  // untouched here -- they're destined for the keep-list handoff below.
+  // Each remaining PENDING row resolves one of two ways: either its owner
+  // eventually reaches its own Phase 3 and self-migrates it to GC (head
+  // already deleted, so Phase 3 finds no head and does the delete-S:U-
+  // write-G:U itself), or, if the owner never returns, this force-cleans
+  // it the same way. Both paths converge on the identical outcome, race-
+  // safe via FDB's own conflict detection -- whichever commits first wins,
+  // the other no-ops. No new PENDING row can appear at this point (the
+  // S:M head is already gone), so a single pass here is enough to clear
+  // the range.
+  KeyBuf prefix_buf;
+  make_u_prefix(parts->bucket_id, rt_view, prefix_buf);
+  const std::string scan_end = compute_exclusive_end(prefix_buf.view());
+
+  std::string scan_pos(prefix_buf.view());
+  bool exclusive = false;
+  for (;;) {
+    auto scan_tr = store_.begin_transaction();
+    if (!scan_tr) {
+      return;
+    }
+    FdbRangeHolder holder((*scan_tr)->kv_async_get_range_holder(
+        scan_pos, exclusive, scan_end, kSweeperMaxKeys));
+    if (holder.wait()) {
+      return;
+    }
+    if (holder.count() == 0) {
+      break;
+    }
+    exclusive = true;
+    const bool more = holder.more();
+    std::string next_pos(holder.back().key);
+
+    for (const auto &[row_key, row_value] : holder) {
+      auto u_parts = parse_u_key(row_key);
+      if (!u_parts) {
+        continue;
+      }
+      auto pv = parse_m_part_value(row_value);
+      if (!pv || pv->state != M_PART_PENDING) {
+        continue;  // COMMITTED (or unparsable) -- leave untouched
+      }
+      auto tr = store_.begin_transaction();
+      if (!tr) {
+        continue;
+      }
+      KeyBuf gu_key;
+      make_gu_key(parts->bucket_id, rt_view, u_parts->part_number,
+                 u_parts->generation, gu_key);
+      const GuEntry entry{u_parts->part_number, u_parts->generation};
+      GuValueBuf gu_buf;
+      make_gu_value(gu_buf, &entry, 1, pv->size);
+      (*tr)->kv_put(gu_key.view(), gu_buf.view());
+      (*tr)->kv_del(row_key);
+      if (fdb_error_t err = (*tr)->commit()) {
+        // Best-effort -- a conflict here just means the owner's own
+        // Phase 3 won the race (row already gone); any other failure is
+        // retried on the next sweep cycle.
+        (void)err;
+      }
+    }
+
+    if (!more) {
+      break;
+    }
+    scan_pos.assign(next_pos);
+  }
+
+  // Range is now clear of PENDING rows -- hand off the committed portion
+  // to GC and delete P:M.
+  KeyBuf gm_key;
+  make_gm_key(parts->bucket_id, rt_view, gm_key);
+  auto tr = store_.begin_transaction();
+  if (!tr) {
+    return;
+  }
+  // P:M's body and G:M{MIXED}'s body are the identical keep-list shape
+  // (plans/fixing_agent_mess.md Section 4 -- "same shape/meaning"), so
+  // the COMMIT case copies the already-encoded body bytes verbatim
+  // instead of decoding and re-encoding through the codec.
+  GmValueBuf gm_buf;
+  if (pm->state == PM_STATE_COMMIT) {
+    gm_buf.data[0] = static_cast<uint8_t>(GM_MODE_MIXED);
+    std::memcpy(gm_buf.data + 1, pm->body.data(), pm->body.size());
+    gm_buf.len = 1 + pm->body.size();
+  }
+  else {
+    make_gm_value(gm_buf, GM_MODE_DEEP, ManifestInput{});
+  }
+  (*tr)->kv_put(gm_key.view(), gm_buf.view());
+  (*tr)->kv_del(key);
+  if (fdb_error_t err = (*tr)->commit()) {
+    std::cerr << "sweeper: P:M commit failed: "
+              << fdb_get_error(err) << std::endl;
   }
 }
 
@@ -222,10 +353,9 @@ void Sweeper::process_group_po_entry(std::string_view key, std::string_view valu
     (*tr)->kv_del(key);
   }
 
-  auto commit_rc = (*tr)->commit();
-  if (!commit_rc) {
+  if (fdb_error_t err = (*tr)->commit()) {
     std::cerr << "sweeper: group commit failed: "
-              << fdb_get_error(commit_rc.error()) << std::endl;
+              << fdb_get_error(err) << std::endl;
   }
 }
 

@@ -55,7 +55,7 @@ bool encoded_tag_frame_size(std::span<const uint8_t> input, size_t &out_size)
   return true;
 }
 
-bool encode(std::span<const TagPair> tags_in, std::vector<uint8_t> &out)
+bool encode_tags(std::span<const TagPair> tags_in, std::vector<uint8_t> &out)
 {
   out.clear();
 
@@ -130,8 +130,8 @@ bool encode(std::span<const TagPair> tags_in, std::vector<uint8_t> &out)
   return true;
 }
 
-bool decode(std::span<const uint8_t> input_buffer,
-            std::array<TagPair, MAX_TAG_COUNT> &out_tags)
+bool decode_tags(std::span<const uint8_t> input_buffer,
+                 std::array<TagPair, MAX_TAG_COUNT> &out_tags)
 {
   size_t total_required_bytes = 0;
   if (!encoded_tag_frame_size(input_buffer, total_required_bytes)) {

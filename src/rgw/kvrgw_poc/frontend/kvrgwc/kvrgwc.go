@@ -31,6 +31,13 @@ const (
 	ErrInvalidRequest      = int32(C.KVRGW_ERR_INVALID_REQUEST)
 	ErrInvalidTag          = int32(C.KVRGW_ERR_INVALID_TAG)
 	ErrInternal            = int32(C.KVRGW_ERR_INTERNAL)
+	ErrNoSuchUpload        = int32(C.KVRGW_ERR_NO_SUCH_UPLOAD)
+	ErrInvalidPart         = int32(C.KVRGW_ERR_INVALID_PART)
+	ErrInvalidPartOrder    = int32(C.KVRGW_ERR_INVALID_PART_ORDER)
+	ErrEntityTooSmall      = int32(C.KVRGW_ERR_ENTITY_TOO_SMALL)
+	ErrEntityTooLarge      = int32(C.KVRGW_ERR_ENTITY_TOO_LARGE)
+	ErrUploadPartBusy      = int32(C.KVRGW_ERR_UPLOAD_PART_BUSY)
+	ErrUploadInProgress    = int32(C.KVRGW_ERR_UPLOAD_IN_PROGRESS)
 )
 
 const (
@@ -42,6 +49,8 @@ const (
 const (
 	MaxListKeys    = 1000
 	MaxListBuckets = 10000
+	MaxListParts   = 10000
+	UploadIDCap    = int(C.KVRGW_UPLOAD_ID_CAP)
 )
 
 type Handle struct {
@@ -68,6 +77,10 @@ type ObjectMeta struct {
 	VersionID        string
 	TagsCount        uint32
 	ErrorDetail      string
+	// Only non-zero when the object was uploaded as a multipart upload
+	// (mirrors AWS's x-amz-mp-parts-count / PartsCount). Callers should
+	// only surface it in the response when PartNumber was requested.
+	PartsCount uint32
 }
 
 type GetObjectResult struct {
@@ -164,6 +177,57 @@ type DeleteMultiOut struct {
 	VersionID   string
 	CreatedDM   bool
 	DMVersionID uint32
+}
+
+type CompletedPart struct {
+	PartNumber uint16
+	ETag       string
+}
+
+type PartEntry struct {
+	PartNumber       uint16
+	ETag             string
+	Size             uint64
+	LastModifiedUnix int64
+}
+
+type ListPartsResult struct {
+	Parts                []PartEntry
+	Truncated            bool
+	NextPartNumberMarker uint16
+}
+
+// AttrPartEntry is GetObjectAttributes' own, slimmer per-part shape -- just
+// PartNumber/Size (no ETag/LastModified; AWS's own ObjectPart carries
+// per-part checksums too, which this backend doesn't compute yet).
+type AttrPartEntry struct {
+	PartNumber uint16
+	Size       uint64
+}
+
+type GetObjectAttributesResult struct {
+	Meta ObjectMeta
+	// HasParts is false for every non-multipart object -- no ObjectParts
+	// to report at all (not even a synthetic "1 part"), matching AWS's own
+	// GetObjectAttributes behavior.
+	HasParts             bool
+	TotalPartsCount      uint32
+	Parts                []AttrPartEntry
+	Truncated            bool
+	NextPartNumberMarker uint16
+}
+
+type MultipartUploadEntry struct {
+	Key           string
+	UploadID      string
+	InitiatedUnix int64
+}
+
+type ListMultipartUploadsResult struct {
+	Uploads            []MultipartUploadEntry
+	Truncated          bool
+	NextKeyMarker      string
+	NextUploadIDMarker string
 }
 
 type callPin struct {
@@ -266,6 +330,7 @@ func metaFromC(m *C.kvrgw_object_meta) ObjectMeta {
 		VersionID:        goCArr(&m.version_id[0]),
 		TagsCount:        uint32(m.tags_count),
 		ErrorDetail:      goCArr(&m.error_detail[0]),
+		PartsCount:       uint32(m.parts_count),
 	}
 }
 
@@ -420,7 +485,7 @@ func (h *Handle) PutObject(tenantID uint32, bucket, key string, data []byte, con
 	return nzterm(etagBuf), nzterm(vidBuf), int32(ec)
 }
 
-func (h *Handle) GetObject(tenantID uint32, bucket, key, versionID string, rng *ByteRange) (GetObjectResult, int32) {
+func (h *Handle) GetObject(tenantID uint32, bucket, key, versionID string, rng *ByteRange, partNumber uint16) (GetObjectResult, int32) {
 	b, bn := cstr(bucket)
 	k, kn := cstr(key)
 	v, vn := cstr(versionID)
@@ -452,7 +517,8 @@ func (h *Handle) GetObject(tenantID uint32, bucket, key, versionID string, rng *
 		ap, acap := pin.chars(arena)
 		var bodyLen C.size_t
 		var mdn C.uint32_t
-		ec := C.kvrgw_get_object(h.h, C.uint32_t(tenantID), b, bn, k, kn, v, vn, crp, &meta,
+		ec := C.kvrgw_get_object(h.h, C.uint32_t(tenantID), b, bn, k, kn, v, vn, crp,
+			C.uint16_t(partNumber), &meta,
 			bp, bcap, &bodyLen, &md[0], C.uint32_t(len(md)), &mdn, ap, acap)
 		result.Meta = metaFromC(&meta)
 		if int32(ec) != ErrInvalidArgument {
@@ -482,7 +548,7 @@ func (h *Handle) GetObject(tenantID uint32, bucket, key, versionID string, rng *
 	return result, ErrInvalidArgument
 }
 
-func (h *Handle) HeadObject(tenantID uint32, bucket, key, versionID string) (HeadObjectResult, int32) {
+func (h *Handle) HeadObject(tenantID uint32, bucket, key, versionID string, partNumber uint16) (HeadObjectResult, int32) {
 	b, bn := cstr(bucket)
 	k, kn := cstr(key)
 	v, vn := cstr(versionID)
@@ -497,7 +563,8 @@ func (h *Handle) HeadObject(tenantID uint32, bucket, key, versionID string) (Hea
 		pin.p.Pin(&md[0])
 		ap, acap := pin.chars(arena)
 		var mdn C.uint32_t
-		ec := C.kvrgw_head_object(h.h, C.uint32_t(tenantID), b, bn, k, kn, v, vn, &meta,
+		ec := C.kvrgw_head_object(h.h, C.uint32_t(tenantID), b, bn, k, kn, v, vn,
+			C.uint16_t(partNumber), &meta,
 			&md[0], C.uint32_t(len(md)), &mdn, ap, acap)
 		result.Meta = metaFromC(&meta)
 		if int32(ec) != ErrInvalidArgument {
@@ -515,6 +582,63 @@ func (h *Handle) HeadObject(tenantID uint32, bucket, key, versionID string) (Hea
 			continue
 		}
 		arenaSize *= 2
+		pin.done()
+	}
+	return result, ErrInvalidArgument
+}
+
+func (h *Handle) GetObjectAttributes(tenantID uint32, bucket, key, versionID string,
+	partNumberMarker uint16, maxParts uint32) (GetObjectAttributesResult, int32) {
+	if maxParts > MaxListParts {
+		maxParts = MaxListParts
+	}
+	b, bn := cstr(bucket)
+	k, kn := cstr(key)
+	v, vn := cstr(versionID)
+	nCap := int(maxParts)
+	if nCap <= 0 {
+		nCap = 1
+	}
+	var result GetObjectAttributesResult
+	for range 6 {
+		var pin callPin
+		var meta C.kvrgw_object_meta
+		parts := make([]C.kvrgw_object_attr_part, nCap)
+		pin.p.Pin(&parts[0])
+		var hasParts C.int
+		var totalParts C.uint32_t
+		var npart C.uint32_t
+		var trunc C.int
+		var nextMarker C.uint16_t
+		ec := C.kvrgw_get_object_attributes(h.h, C.uint32_t(tenantID), b, bn, k, kn, v, vn,
+			C.uint16_t(partNumberMarker), C.uint32_t(maxParts), &meta,
+			&hasParts, &totalParts, &parts[0], C.uint32_t(len(parts)), &npart,
+			&trunc, &nextMarker,
+		)
+		result.Meta = metaFromC(&meta)
+		if int32(ec) != ErrInvalidArgument {
+			if ec != C.KVRGW_ERR_OK {
+				pin.done()
+				return result, int32(ec)
+			}
+			result.HasParts = hasParts != 0
+			result.TotalPartsCount = uint32(totalParts)
+			n := int(npart)
+			result.Parts = make([]AttrPartEntry, n)
+			for i := 0; i < n; i++ {
+				result.Parts[i] = AttrPartEntry{
+					PartNumber: uint16(parts[i].part_number),
+					Size:       uint64(parts[i].size),
+				}
+			}
+			result.Truncated = trunc != 0
+			result.NextPartNumberMarker = uint16(nextMarker)
+			pin.done()
+			return result, 0
+		}
+		if int(npart) > nCap {
+			nCap = int(npart)
+		}
 		pin.done()
 	}
 	return result, ErrInvalidArgument
@@ -890,4 +1014,201 @@ func (h *Handle) DeleteObjectTagging(tenantID uint32, bucket, key string) int32 
 	b, bn := cstr(bucket)
 	k, kn := cstr(key)
 	return int32(C.kvrgw_delete_object_tagging(h.h, C.uint32_t(tenantID), b, bn, k, kn))
+}
+
+// --- Multipart upload ---
+
+func (h *Handle) InitiateMultipartUpload(tenantID uint32, bucket, key, contentType string,
+	tags, metadata []KV) (uploadID string, errCode int32) {
+	var pin callPin
+	defer pin.done()
+	b, bn := pin.str(bucket)
+	k, kn := pin.str(key)
+	ct, ctn := pin.str(contentType)
+	tagArr := pin.kvs(tags)
+	var tagPtr *C.kvrgw_kv
+	if len(tagArr) > 0 {
+		tagPtr = &tagArr[0]
+	}
+	metaArr := pin.kvs(metadata)
+	var metaPtr *C.kvrgw_kv
+	if len(metaArr) > 0 {
+		metaPtr = &metaArr[0]
+	}
+	idBuf := make([]byte, UploadIDCap)
+	pin.p.Pin(&idBuf[0])
+	ec := C.kvrgw_initiate_multipart_upload(h.h, C.uint32_t(tenantID), b, bn, k, kn, ct, ctn,
+		tagPtr, C.size_t(len(tags)), metaPtr, C.size_t(len(metadata)),
+		(*C.char)(unsafe.Pointer(&idBuf[0])), C.size_t(len(idBuf)))
+	return nzterm(idBuf), int32(ec)
+}
+
+func (h *Handle) UploadPart(tenantID uint32, bucket, key, uploadID string, partNumber uint16,
+	data []byte) (etag string, errCode int32) {
+	var pin callPin
+	defer pin.done()
+	b, bn := pin.str(bucket)
+	k, kn := pin.str(key)
+	u, un := pin.str(uploadID)
+	d, dn := pin.bytes(data)
+	etagBuf := make([]byte, 48)
+	pin.p.Pin(&etagBuf[0])
+	ec := C.kvrgw_upload_part(h.h, C.uint32_t(tenantID), b, bn, k, kn, u, un,
+		C.uint16_t(partNumber), d, dn,
+		(*C.char)(unsafe.Pointer(&etagBuf[0])), C.size_t(len(etagBuf)))
+	return nzterm(etagBuf), int32(ec)
+}
+
+func (h *Handle) CompleteMultipartUpload(tenantID uint32, bucket, key, uploadID string,
+	parts []CompletedPart, ifMatch, ifNoneMatch string) (etag, versionID string, errCode int32) {
+	var pin callPin
+	defer pin.done()
+	b, bn := pin.str(bucket)
+	k, kn := pin.str(key)
+	u, un := pin.str(uploadID)
+	im, imn := pin.str(ifMatch)
+	inm, inmn := pin.str(ifNoneMatch)
+	var partsPtr *C.kvrgw_mpu_part
+	if n := len(parts); n > 0 {
+		cparts := make([]C.kvrgw_mpu_part, n)
+		for i := range parts {
+			cparts[i].part_number = C.uint16_t(parts[i].PartNumber)
+			cparts[i].etag, cparts[i].etag_len = pin.str(parts[i].ETag)
+		}
+		pin.p.Pin(&cparts[0])
+		partsPtr = &cparts[0]
+	}
+	etagBuf := make([]byte, 48)
+	vidBuf := make([]byte, 9)
+	pin.p.Pin(&etagBuf[0])
+	pin.p.Pin(&vidBuf[0])
+	ec := C.kvrgw_complete_multipart_upload(h.h, C.uint32_t(tenantID), b, bn, k, kn, u, un,
+		partsPtr, C.size_t(len(parts)), im, imn, inm, inmn,
+		(*C.char)(unsafe.Pointer(&etagBuf[0])), C.size_t(len(etagBuf)),
+		(*C.char)(unsafe.Pointer(&vidBuf[0])), C.size_t(len(vidBuf)))
+	return nzterm(etagBuf), nzterm(vidBuf), int32(ec)
+}
+
+func (h *Handle) AbortMultipartUpload(tenantID uint32, bucket, key, uploadID string) int32 {
+	b, bn := cstr(bucket)
+	k, kn := cstr(key)
+	u, un := cstr(uploadID)
+	return int32(C.kvrgw_abort_multipart_upload(h.h, C.uint32_t(tenantID), b, bn, k, kn, u, un))
+}
+
+func (h *Handle) ListParts(tenantID uint32, bucket, key, uploadID string,
+	partNumberMarker uint16, maxParts uint32) (ListPartsResult, int32) {
+	if maxParts > MaxListParts {
+		maxParts = MaxListParts
+	}
+	b, bn := cstr(bucket)
+	k, kn := cstr(key)
+	u, un := cstr(uploadID)
+	nCap := int(maxParts)
+	if nCap <= 0 {
+		nCap = 1
+	}
+	arenaSize := 1 << 16
+	var result ListPartsResult
+	for range 6 {
+		entries := make([]C.kvrgw_list_part_entry, nCap)
+		arena := make([]byte, arenaSize)
+		ap, acap := cbuf(arena)
+		var nent C.uint32_t
+		var trunc C.int
+		var nextMarker C.uint16_t
+		ec := C.kvrgw_list_parts(h.h, C.uint32_t(tenantID), b, bn, k, kn, u, un,
+			C.uint16_t(partNumberMarker), C.uint32_t(maxParts),
+			&entries[0], C.uint32_t(len(entries)), &nent, ap, acap, &trunc, &nextMarker)
+		if int32(ec) != ErrInvalidArgument {
+			if ec != C.KVRGW_ERR_OK {
+				return result, int32(ec)
+			}
+			n := int(nent)
+			result.Parts = make([]PartEntry, n)
+			for i := 0; i < n; i++ {
+				e := entries[i]
+				result.Parts[i] = PartEntry{
+					PartNumber:       uint16(e.part_number),
+					ETag:             arenaStr(arena, e.etag_off, e.etag_len),
+					Size:             uint64(e.size),
+					LastModifiedUnix: int64(e.last_modified_unix),
+				}
+			}
+			result.Truncated = trunc != 0
+			result.NextPartNumberMarker = uint16(nextMarker)
+			return result, 0
+		}
+		if int(nent) > nCap {
+			nCap = int(nent)
+			continue
+		}
+		arenaSize *= 2
+	}
+	return result, ErrInvalidArgument
+}
+
+func (h *Handle) ListMultipartUploads(tenantID uint32, bucket, prefix, keyMarker, uploadIDMarker string,
+	maxUploads uint32) (ListMultipartUploadsResult, int32) {
+	b, bn := cstr(bucket)
+	p, pn := cstr(prefix)
+	km, kmn := cstr(keyMarker)
+	uim, uimn := cstr(uploadIDMarker)
+	nCap := int(maxUploads)
+	if nCap <= 0 {
+		nCap = 1
+	}
+	arenaSize := 1 << 16
+	nextKeySize := 4096
+	nextUploadIDSize := UploadIDCap
+	var result ListMultipartUploadsResult
+	for range 6 {
+		entries := make([]C.kvrgw_list_mpu_entry, nCap)
+		arena := make([]byte, arenaSize)
+		nk := make([]byte, nextKeySize)
+		nu := make([]byte, nextUploadIDSize)
+		ap, acap := cbuf(arena)
+		nkp, nkcap := cbuf(nk)
+		nup, nucap := cbuf(nu)
+		var nent C.uint32_t
+		var trunc C.int
+		var nkl, nul C.size_t
+		ec := C.kvrgw_list_multipart_uploads(h.h, C.uint32_t(tenantID), b, bn, p, pn,
+			km, kmn, uim, uimn, C.uint32_t(maxUploads),
+			&entries[0], C.uint32_t(len(entries)), &nent, ap, acap, &trunc,
+			nkp, nkcap, &nkl, nup, nucap, &nul)
+		if int32(ec) != ErrInvalidArgument {
+			if ec != C.KVRGW_ERR_OK {
+				return result, int32(ec)
+			}
+			n := int(nent)
+			result.Uploads = make([]MultipartUploadEntry, n)
+			for i := 0; i < n; i++ {
+				e := entries[i]
+				result.Uploads[i] = MultipartUploadEntry{
+					Key:           arenaStr(arena, e.key_off, e.key_len),
+					UploadID:      arenaStr(arena, e.upload_id_off, e.upload_id_len),
+					InitiatedUnix: int64(e.initiated_unix),
+				}
+			}
+			result.Truncated = trunc != 0
+			result.NextKeyMarker = string(nk[:int(nkl)])
+			result.NextUploadIDMarker = string(nu[:int(nul)])
+			return result, 0
+		}
+		if int(nent) > nCap {
+			nCap = int(nent)
+			continue
+		}
+		if int(nkl) > nextKeySize {
+			nextKeySize = int(nkl)
+			continue
+		}
+		if int(nul) > nextUploadIDSize {
+			nextUploadIDSize = int(nul)
+			continue
+		}
+		arenaSize *= 2
+	}
+	return result, ErrInvalidArgument
 }

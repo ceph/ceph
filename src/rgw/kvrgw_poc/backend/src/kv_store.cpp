@@ -60,8 +60,7 @@ std::expected<FdbRangePage, fdb_error_t> fdb_wait_get_range(FdbFuture &future)
   const ::FDBKeyValue *kv = nullptr;
   int count = 0;
   fdb_bool_t more = false;
-  if (fdb_error_t err =
-          fdb_future_get_keyvalue_array(future.raw(), &kv, &count, &more)) {
+  if (fdb_error_t err = fdb_future_get_keyvalue_array(future.raw(), &kv, &count, &more)) {
     return std::unexpected(err);
   }
 
@@ -71,8 +70,7 @@ std::expected<FdbRangePage, fdb_error_t> fdb_wait_get_range(FdbFuture &future)
   for (int i = 0; i < count; ++i) {
     FdbKeyValue row;
     row.key.assign(reinterpret_cast<const char *>(kv[i].key), kv[i].key_length);
-    row.value.assign(reinterpret_cast<const char *>(kv[i].value),
-                     kv[i].value_length);
+    row.value.assign(reinterpret_cast<const char *>(kv[i].value), kv[i].value_length);
     page.rows.push_back(std::move(row));
   }
   return page;
@@ -103,8 +101,7 @@ range_scan_in_transaction(FDBTransaction *tr, std::string_view start,
   }
   while (true) {
     const int remaining = limit - static_cast<int>(results.size());
-    auto page =
-        fdb_get_range(tr, range_begin, begin_or_equal, 1, end, remaining, mode);
+    auto page = fdb_get_range(tr, range_begin, begin_or_equal, 1, end, remaining, mode);
     if (!page) {
       return std::unexpected(page.error());
     }
@@ -175,12 +172,11 @@ KvStore::get(std::string_view key)
   return (*tr)->kv_get(key);
 }
 
-std::expected<void, fdb_error_t> KvStore::set(std::string_view key,
-                                              std::string_view value)
+fdb_error_t KvStore::set(std::string_view key, std::string_view value)
 {
   auto tr = begin_transaction();
   if (!tr) {
-    return std::unexpected(tr.error());
+    return tr.error();
   }
   (*tr)->kv_put(key, value);
   return (*tr)->commit();
@@ -264,8 +260,7 @@ KvTransaction::kv_wait_get(FdbFuture &f)
   const uint8_t *value = nullptr;
   int value_length = 0;
 
-  fdb_error_t err =
-      fdb_future_get_value(f.raw(), &present, &value, &value_length);
+  fdb_error_t err = fdb_future_get_value(f.raw(), &present, &value, &value_length);
   if (err) {
     return std::unexpected(err);
   }
@@ -286,13 +281,10 @@ KvTransaction::kv_get(std::string_view key)
 }
 
 //---------------------------------------------------------------------------------
-std::expected<void, fdb_error_t> KvTransaction::disable_ryw()
+fdb_error_t KvTransaction::disable_ryw()
 {
-  if (fdb_error_t err = fdb_transaction_set_option(
-          impl_->tr, FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, nullptr, 0)) {
-    return std::unexpected(err);
-  }
-  return {};
+  return fdb_transaction_set_option(impl_->tr, FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE,
+                                    nullptr, 0);
 }
 
 //---------------------------------------------------------------------------------
@@ -333,8 +325,8 @@ fdb_error_t FdbRangeHolder::wait() noexcept
     return err;
   }
   fdb_bool_t more = 0;
-  if (fdb_error_t err = fdb_future_get_keyvalue_array(
-          f_.raw(), &kv_, &count_, &more)) {
+  fdb_error_t err = fdb_future_get_keyvalue_array(f_.raw(), &kv_, &count_, &more);
+  if (err) {
     return err;
   }
   more_ = more != 0;
@@ -406,16 +398,13 @@ KvTransaction::kv_range_scan(std::string_view start, std::string_view end,
                                    exclusive_scan);
 }
 
-std::expected<void, fdb_error_t> KvTransaction::commit()
+fdb_error_t KvTransaction::commit()
 {
   FdbFuture future(fdb_transaction_commit(impl_->tr));
   if (fdb_error_t err = fdb_future_block_until_ready(future.raw())) {
-    return std::unexpected(err);
+    return err;
   }
-  if (fdb_error_t err = fdb_future_get_error(future.raw())) {
-    return std::unexpected(err);
-  }
-  return {};
+  return fdb_future_get_error(future.raw());
 }
 
 FdbFuture KvTransaction::commit_async()
@@ -423,12 +412,9 @@ FdbFuture KvTransaction::commit_async()
   return FdbFuture(fdb_transaction_commit(impl_->tr));
 }
 
-std::expected<void, fdb_error_t> KvTransaction::resolve_commit(FdbFuture &f)
+fdb_error_t KvTransaction::resolve_commit(FdbFuture &f)
 {
-  if (fdb_error_t err = fdb_future_get_error(f.raw())) {
-    return std::unexpected(err);
-  }
-  return {};
+  return fdb_future_get_error(f.raw());
 }
 
 } // namespace kvrgw

@@ -311,7 +311,14 @@ func (b *KvRgwBackend) GetObject(ctx context.Context, input *s3.GetObjectInput) 
 		}
 	}
 
-	res, ec := b.handle.GetObject(b.cachedTenantID(), deref(input.Bucket), deref(input.Key), versionID, br)
+	var partNumber uint16
+	partNumberRequested := false
+	if input.PartNumber != nil {
+		partNumber = uint16(*input.PartNumber)
+		partNumberRequested = true
+	}
+
+	res, ec := b.handle.GetObject(b.cachedTenantID(), deref(input.Bucket), deref(input.Key), versionID, br, partNumber)
 	if err := mapErrorCode(ec); err != nil {
 		if _, _, ok := parseDeleteMarkerDetail([]byte(res.Meta.ErrorDetail)); ok {
 			return nil, s3err.GetAPIError(s3err.ErrNoSuchKey)
@@ -345,6 +352,10 @@ func (b *KvRgwBackend) GetObject(ctx context.Context, input *s3.GetObjectInput) 
 		tagCount := int32(tc)
 		out.TagCount = &tagCount
 	}
+	if partNumberRequested && res.Meta.PartsCount > 0 {
+		pc := int32(res.Meta.PartsCount)
+		out.PartsCount = &pc
+	}
 
 	if rangeRequested && br != nil {
 		rangeLen := rangeContentLength(br, size)
@@ -363,7 +374,14 @@ func (b *KvRgwBackend) HeadObject(ctx context.Context, input *s3.HeadObjectInput
 	if input.VersionId != nil && *input.VersionId != "" {
 		versionID = versionIDToInternal(*input.VersionId)
 	}
-	res, ec := b.handle.HeadObject(b.cachedTenantID(), deref(input.Bucket), deref(input.Key), versionID)
+	var partNumber uint16
+	partNumberRequested := false
+	if input.PartNumber != nil {
+		partNumber = uint16(*input.PartNumber)
+		partNumberRequested = true
+	}
+
+	res, ec := b.handle.HeadObject(b.cachedTenantID(), deref(input.Bucket), deref(input.Key), versionID, partNumber)
 	if err := mapErrorCode(ec); err != nil {
 		if vid, mtime, ok := parseDeleteMarkerDetail([]byte(res.Meta.ErrorDetail)); ok {
 			out := &s3.HeadObjectOutput{LastModified: &mtime}
@@ -397,8 +415,79 @@ func (b *KvRgwBackend) HeadObject(ctx context.Context, input *s3.HeadObjectInput
 		tagCount := int32(tc)
 		out.TagCount = &tagCount
 	}
+	if partNumberRequested && res.Meta.PartsCount > 0 {
+		pc := int32(res.Meta.PartsCount)
+		out.PartsCount = &pc
+	}
 	if m := kvToMap(res.Metadata); len(m) > 0 {
 		out.Metadata = m
+	}
+	return out, nil
+}
+
+func (b *KvRgwBackend) GetObjectAttributes(ctx context.Context, input *s3.GetObjectAttributesInput) (s3response.GetObjectAttributesResponse, error) {
+	versionID := ""
+	if input.VersionId != nil && *input.VersionId != "" {
+		versionID = versionIDToInternal(*input.VersionId)
+	}
+	maxParts := uint32(1000)
+	if input.MaxParts != nil && *input.MaxParts > 0 {
+		maxParts = uint32(*input.MaxParts)
+	}
+	var partNumberMarker uint16
+	if input.PartNumberMarker != nil && *input.PartNumberMarker != "" {
+		if v, err := strconv.ParseUint(*input.PartNumberMarker, 10, 16); err == nil {
+			partNumberMarker = uint16(v)
+		}
+	}
+
+	res, ec := b.handle.GetObjectAttributes(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
+		versionID, partNumberMarker, maxParts)
+	if err := mapErrorCode(ec); err != nil {
+		if vid, mtime, ok := parseDeleteMarkerDetail([]byte(res.Meta.ErrorDetail)); ok {
+			out := s3response.GetObjectAttributesResponse{LastModified: &mtime}
+			if vid != "" {
+				out.VersionId = &vid
+			}
+			dm := true
+			out.DeleteMarker = &dm
+			return out, s3err.GetAPIError(s3err.ErrNoSuchKey)
+		}
+		return s3response.GetObjectAttributesResponse{}, err
+	}
+
+	size := int64(res.Meta.Size)
+	etag := res.Meta.ETag
+	out := s3response.GetObjectAttributesResponse{
+		ETag:         &etag,
+		ObjectSize:   &size,
+		StorageClass: types.StorageClassStandard,
+	}
+	if vid := res.Meta.VersionID; vid != "" {
+		extVid := versionIDToExternal(uint32(mustParseUint(vid)))
+		out.VersionId = &extVid
+	}
+	if res.HasParts {
+		parts := make([]types.ObjectPart, 0, len(res.Parts))
+		for _, p := range res.Parts {
+			pn := int32(p.PartNumber)
+			sz := int64(p.Size)
+			parts = append(parts, types.ObjectPart{
+				PartNumber: &pn,
+				Size:       &sz,
+			})
+		}
+		objParts := &s3response.ObjectParts{
+			PartNumberMarker: int(partNumberMarker),
+			MaxParts:         int(maxParts),
+			IsTruncated:      res.Truncated,
+			Parts:            parts,
+			PartsCount:       int(res.TotalPartsCount),
+		}
+		if res.Truncated {
+			objParts.NextPartNumberMarker = int(res.NextPartNumberMarker)
+		}
+		out.ObjectParts = objParts
 	}
 	return out, nil
 }
@@ -836,6 +925,192 @@ func (b *KvRgwBackend) DeleteObjectTagging(ctx context.Context, bucket, object, 
 	return mapErrorCode(b.handle.DeleteObjectTagging(b.cachedTenantID(), bucket, object))
 }
 
+// --- Multipart upload operations ---
+
+func (b *KvRgwBackend) CreateMultipartUpload(ctx context.Context, input s3response.CreateMultipartUploadInput) (s3response.InitiateMultipartUploadResult, error) {
+	contentType := "application/octet-stream"
+	if input.ContentType != nil && *input.ContentType != "" {
+		contentType = *input.ContentType
+	}
+	var tags []kvrgwc.KV
+	if input.Tagging != nil && *input.Tagging != "" {
+		tags = parseTaggingHeader(*input.Tagging)
+		if len(tags) == 0 {
+			return s3response.InitiateMultipartUploadResult{}, s3err.GetAPIError(s3err.ErrInvalidTagKey)
+		}
+	}
+	metadata := mapToKV(input.Metadata)
+
+	uploadID, ec := b.handle.InitiateMultipartUpload(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
+		contentType, tags, metadata)
+	if err := mapErrorCode(ec); err != nil {
+		return s3response.InitiateMultipartUploadResult{}, err
+	}
+	return s3response.InitiateMultipartUploadResult{
+		Bucket:   deref(input.Bucket),
+		Key:      deref(input.Key),
+		UploadId: uploadID,
+	}, nil
+}
+
+func (b *KvRgwBackend) UploadPart(ctx context.Context, input *s3.UploadPartInput) (*s3.UploadPartOutput, error) {
+	var data []byte
+	if input.Body != nil {
+		var err error
+		data, err = io.ReadAll(input.Body)
+		if err != nil {
+			return nil, err
+		}
+	}
+	partNumber := uint16(0)
+	if input.PartNumber != nil {
+		partNumber = uint16(*input.PartNumber)
+	}
+
+	etag, ec := b.handle.UploadPart(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
+		deref(input.UploadId), partNumber, data)
+	if err := mapErrorCode(ec); err != nil {
+		return nil, err
+	}
+	etag = fmt.Sprintf(`"%s"`, etag)
+	return &s3.UploadPartOutput{ETag: &etag}, nil
+}
+
+func (b *KvRgwBackend) CompleteMultipartUpload(ctx context.Context, input *s3.CompleteMultipartUploadInput) (s3response.CompleteMultipartUploadResult, string, error) {
+	var parts []kvrgwc.CompletedPart
+	if input.MultipartUpload != nil {
+		parts = make([]kvrgwc.CompletedPart, 0, len(input.MultipartUpload.Parts))
+		for _, p := range input.MultipartUpload.Parts {
+			var partNumber uint16
+			if p.PartNumber != nil {
+				partNumber = uint16(*p.PartNumber)
+			}
+			etag := ""
+			if p.ETag != nil {
+				etag = strings.Trim(*p.ETag, `"`)
+			}
+			parts = append(parts, kvrgwc.CompletedPart{PartNumber: partNumber, ETag: etag})
+		}
+	}
+
+	ifMatch := ""
+	if input.IfMatch != nil && *input.IfMatch != "" {
+		ifMatch = strings.Trim(*input.IfMatch, `"`)
+	}
+	ifNoneMatch := ""
+	if input.IfNoneMatch != nil && *input.IfNoneMatch != "" {
+		ifNoneMatch = strings.Trim(*input.IfNoneMatch, `"`)
+	}
+
+	etag, versionID, ec := b.handle.CompleteMultipartUpload(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
+		deref(input.UploadId), parts, ifMatch, ifNoneMatch)
+	if err := mapErrorCode(ec); err != nil {
+		return s3response.CompleteMultipartUploadResult{}, "", err
+	}
+	etag = fmt.Sprintf(`"%s"`, etag)
+	bucket := deref(input.Bucket)
+	key := deref(input.Key)
+	result := s3response.CompleteMultipartUploadResult{
+		Bucket: &bucket,
+		Key:    &key,
+		ETag:   &etag,
+	}
+	return result, versionIDFromProto(versionID), nil
+}
+
+func (b *KvRgwBackend) AbortMultipartUpload(ctx context.Context, input *s3.AbortMultipartUploadInput) error {
+	return mapErrorCode(b.handle.AbortMultipartUpload(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
+		deref(input.UploadId)))
+}
+
+func (b *KvRgwBackend) ListMultipartUploads(ctx context.Context, input *s3.ListMultipartUploadsInput) (s3response.ListMultipartUploadsResult, error) {
+	maxUploads := uint32(1000)
+	if input.MaxUploads != nil && *input.MaxUploads > 0 {
+		maxUploads = uint32(*input.MaxUploads)
+	}
+
+	resp, ec := b.handle.ListMultipartUploads(b.cachedTenantID(), deref(input.Bucket), deref(input.Prefix),
+		deref(input.KeyMarker), deref(input.UploadIdMarker), maxUploads)
+	if err := mapErrorCode(ec); err != nil {
+		return s3response.ListMultipartUploadsResult{}, err
+	}
+
+	owner := s3response.Owner{ID: b.rootAccess, DisplayName: b.rootAccess}
+	uploads := make([]s3response.Upload, 0, len(resp.Uploads))
+	for _, u := range resp.Uploads {
+		uploads = append(uploads, s3response.Upload{
+			Key:       u.Key,
+			UploadID:  u.UploadID,
+			Initiator: s3response.Initiator(owner),
+			Owner:     owner,
+			Initiated: time.Unix(u.InitiatedUnix, 0).UTC(),
+		})
+	}
+
+	result := s3response.ListMultipartUploadsResult{
+		Bucket:         deref(input.Bucket),
+		KeyMarker:      deref(input.KeyMarker),
+		UploadIDMarker: deref(input.UploadIdMarker),
+		Delimiter:      deref(input.Delimiter),
+		Prefix:         deref(input.Prefix),
+		MaxUploads:     int(maxUploads),
+		IsTruncated:    resp.Truncated,
+		Uploads:        uploads,
+	}
+	if resp.Truncated {
+		result.NextKeyMarker = resp.NextKeyMarker
+		result.NextUploadIDMarker = resp.NextUploadIDMarker
+	}
+	return result, nil
+}
+
+func (b *KvRgwBackend) ListParts(ctx context.Context, input *s3.ListPartsInput) (s3response.ListPartsResult, error) {
+	maxParts := uint32(1000)
+	if input.MaxParts != nil && *input.MaxParts > 0 {
+		maxParts = uint32(*input.MaxParts)
+	}
+	var partNumberMarker uint16
+	if input.PartNumberMarker != nil && *input.PartNumberMarker != "" {
+		if v, err := strconv.ParseUint(*input.PartNumberMarker, 10, 16); err == nil {
+			partNumberMarker = uint16(v)
+		}
+	}
+
+	resp, ec := b.handle.ListParts(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
+		deref(input.UploadId), partNumberMarker, maxParts)
+	if err := mapErrorCode(ec); err != nil {
+		return s3response.ListPartsResult{}, err
+	}
+
+	owner := s3response.Owner{ID: b.rootAccess, DisplayName: b.rootAccess}
+	parts := make([]s3response.Part, 0, len(resp.Parts))
+	for _, p := range resp.Parts {
+		etag := fmt.Sprintf(`"%s"`, p.ETag)
+		parts = append(parts, s3response.Part{
+			PartNumber:   int(p.PartNumber),
+			ETag:         etag,
+			Size:         int64(p.Size),
+			LastModified: time.Unix(p.LastModifiedUnix, 0).UTC(),
+		})
+	}
+
+	result := s3response.ListPartsResult{
+		Bucket:           deref(input.Bucket),
+		Key:              deref(input.Key),
+		UploadID:         deref(input.UploadId),
+		PartNumberMarker: int(partNumberMarker),
+		MaxParts:         int(maxParts),
+		IsTruncated:      resp.Truncated,
+		Parts:            parts,
+		Initiator:        s3response.Initiator(owner),
+		Owner:            owner,
+	}
+	if resp.Truncated {
+		result.NextPartNumberMarker = int(resp.NextPartNumberMarker)
+	}
+	return result, nil
+}
+
 func parseCopySource(src string) (bucket, key, versionId string) {
 	src = strings.TrimPrefix(src, "/")
 	if idx := strings.Index(src, "?versionId="); idx >= 0 {
@@ -899,6 +1174,20 @@ func mapErrorCode(code int32) error {
 		return s3err.GetAPIError(s3err.ErrNoSuchKey)
 	case kvrgwc.ErrNoSuchTenant:
 		return s3err.GetAPIError(s3err.ErrInternalError)
+	case kvrgwc.ErrNoSuchUpload:
+		return s3err.GetAPIError(s3err.ErrNoSuchUpload)
+	case kvrgwc.ErrInvalidPart:
+		return s3err.GetAPIError(s3err.ErrInvalidPart)
+	case kvrgwc.ErrInvalidPartOrder:
+		return s3err.GetAPIError(s3err.ErrInvalidPartOrder)
+	case kvrgwc.ErrEntityTooSmall:
+		return s3err.GetAPIError(s3err.ErrEntityTooSmall)
+	case kvrgwc.ErrEntityTooLarge:
+		return s3err.GetAPIError(s3err.ErrEntityTooLarge)
+	case kvrgwc.ErrUploadPartBusy, kvrgwc.ErrUploadInProgress:
+		// Both are "retry shortly" conditions (fixing_agent_mess.md §3/§5) — no
+		// dedicated S3 error code for either, SlowDown/503 is the closest match.
+		return s3err.GetAPIError(s3err.ErrSlowDown)
 	default:
 		return s3err.GetAPIError(s3err.ErrInternalError)
 	}

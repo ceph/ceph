@@ -39,7 +39,8 @@ bool parse_gc_value(std::string_view data, GcValue &val)
   std::memcpy(&val.hdr, data.data(), sizeof(GcValueHeader));
   const char ct = static_cast<char>(val.hdr.chunk_type);
   if (ct != CHUNK_INLINE && ct != CHUNK_CHILD_D && ct != CHUNK_CHILD_D_REF &&
-      ct != CHUNK_STORAGE && ct != CHUNK_STORAGE_REF) {
+      ct != CHUNK_STORAGE && ct != CHUNK_STORAGE_REF &&
+      ct != CHUNK_MULTIPART && ct != CHUNK_MULTIPART_REF) {
     return false;
   }
   val.gc.load(reinterpret_cast<const uint8_t*>(data.data()) + sizeof(GcValueHeader));
@@ -47,15 +48,15 @@ bool parse_gc_value(std::string_view data, GcValue &val)
 }
 
 // Single P:O value: [GcDescriptor 36B][object_name_len 2B BE][object_name variable]
-void make_po_value(PoValueBuf& buf, const PoEntry& entry)
+void make_po_value(PoValueBuf& buf, const GcDescriptor& gc, std::string_view object_name)
 {
-  entry.gc.serialize(buf.data);
+  gc.serialize(buf.data);
   buf.len = sizeof(GcDescriptor);
-  const uint16_t len_be = htons(static_cast<uint16_t>(entry.object_name.size()));
+  const uint16_t len_be = htons(static_cast<uint16_t>(object_name.size()));
   std::memcpy(buf.data + buf.len, &len_be, sizeof(len_be));
   buf.len += sizeof(len_be);
-  std::memcpy(buf.data + buf.len, entry.object_name.data(), entry.object_name.size());
-  buf.len += entry.object_name.size();
+  std::memcpy(buf.data + buf.len, object_name.data(), object_name.size());
+  buf.len += object_name.size();
 }
 
 std::optional<PoEntryView> parse_po_value_view(std::string_view data)

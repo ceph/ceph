@@ -568,7 +568,7 @@ void get_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     }
     KvRgwServiceImpl::GetObjectResult out;
     const auto ec = service.get_object(
-        tenant_id, bucket_name, object_names[idx], std::nullopt, nullptr, &out);
+        tenant_id, bucket_name, object_names[idx], std::nullopt, nullptr, 0, &out);
     if (ec == KVRGW_ERR_OK) {
       result.ops.fetch_add(1, std::memory_order_relaxed);
     }

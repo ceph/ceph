@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstring>
 #include <endian.h>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -92,7 +93,36 @@ class __attribute__((packed)) ETag {
 
  private:
   uint8_t bytes_[kSize]{};  // [0..15] MD5, [16..17] part_count BE
+
+  friend class CompositeEtagBuilder;
 };
 static_assert(sizeof(ETag) == 18);
+
+// Composite (multipart) ETag builder — MD5 of the concatenation of each
+// included part's raw MD5 digest, following the same "ETag of ETags"
+// convention S3 itself uses. See "Composite ETag — locked design" in
+// plans/multipart.md. Declared a friend of ETag for direct access to
+// bytes_[0..15] (the raw per-part MD5 digest) — no new public ETag accessor
+// needed.
+class CompositeEtagBuilder {
+ public:
+  CompositeEtagBuilder();
+  ~CompositeEtagBuilder();
+
+  CompositeEtagBuilder(const CompositeEtagBuilder&) = delete;
+  CompositeEtagBuilder& operator=(const CompositeEtagBuilder&) = delete;
+
+  // Fold in one part's ETag, in ascending part_number order.
+  void fold(const ETag& part_etag);
+
+  // MD5 of the concatenated per-part digests, tagged with the number of
+  // folds so far as the resulting ETag's part_count.
+  ETag finalize() const;
+
+ private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+  uint16_t part_count_{0};
+};
 
 }  // namespace kvrgw

@@ -53,6 +53,19 @@ struct KeyBuf {
     return true;
   }
 
+  KeyBuf() = default;
+  KeyBuf(const KeyBuf& other) noexcept : len(other.len) {
+    std::memcpy(data, other.data, other.len);
+  }
+
+  KeyBuf& operator=(const KeyBuf& other) noexcept {
+    if (this != &other) {
+      len = other.len;
+      std::memcpy(data, other.data, other.len);
+    }
+    return *this;
+  }
+
   std::string_view view() const {
     return {reinterpret_cast<const char*>(data), len};
   }
@@ -119,6 +132,22 @@ struct KeyHeaderPOGroup {
   char cat{'G'};
 };
 static_assert(sizeof(KeyHeaderPOGroup) == 2);
+
+// Single P:M key — Sweeper-driven multipart cleanup entry (see
+// plans/fixing_agent_mess.md Section 4). Same layout convention as P:O.
+// Wire layout: [ns='P'][cat='M'][bucket_id 8B] — 10B, followed by ref_tag
+// (12B) → 22B total key.
+struct KeyHeaderPM {
+  char ns{'P'};
+  char cat{'M'};
+  bucket_id_t bucket_id;
+
+  KeyHeaderPM() = default;
+  explicit KeyHeaderPM(bucket_id_t bid) {
+    bucket_id = bid;
+  }
+};
+static_assert(sizeof(KeyHeaderPM) == 10);
 
 struct KeyHeaderD {
   char ns;

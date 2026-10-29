@@ -51,11 +51,28 @@ enum KvrgwErrorCode : int32_t {
   KVRGW_ERR_VALUE_TOO_LARGE = 403,
   KVRGW_ERR_TRANSACTION_CONFLICT = 404,
   KVRGW_ERR_MAX_RETRIES_EXCEEDED = 405,
+  KVRGW_ERR_NO_SUCH_UPLOAD = 500,
+  KVRGW_ERR_INVALID_PART = 501,
+  KVRGW_ERR_INVALID_PART_ORDER = 502,
+  KVRGW_ERR_ENTITY_TOO_SMALL = 503,
+  KVRGW_ERR_ENTITY_TOO_LARGE = 504,
+  // Too many outstanding (not-yet-resolved, all-PENDING) generations
+  // already exist for this part_number -- see
+  // plans/fixing_agent_mess.md Section 3's N-bound eviction rule. Not
+  // auto-retried internally by upload_part_phase1; surfaced directly to
+  // upload_part()'s caller to retry/back off.
+  KVRGW_ERR_UPLOAD_PART_BUSY = 505,
+  // UploadPart arrived while the head was IN_TRANSIENT (Complete
+  // consolidating) and it stayed that way through the whole poll window
+  // (plans/fixing_agent_mess.md Section 5). Maps to HTTP 503 / S3
+  // `SlowDown` at the API layer -- a client-level retriable condition, not
+  // auto-retried internally.
+  KVRGW_ERR_UPLOAD_IN_PROGRESS = 506,
 };
 
-// Was `KvrgwErrorCode_MAX + 1` (protobuf convention); KVRGW_ERR_MAX_RETRIES_EXCEEDED=405 is
-// the highest value.
-inline constexpr int KvrgwErrorCode_ARRAYSIZE = 406;
+// Was `KvrgwErrorCode_MAX + 1` (protobuf convention); KVRGW_ERR_UPLOAD_IN_PROGRESS=506
+// is the highest value.
+inline constexpr int KvrgwErrorCode_ARRAYSIZE = 507;
 
 // Returns the bare enumerator name (e.g. "KVRGW_ERR_OK"), matching protobuf's Name().
 // Implemented in error_codes.cpp (mirrors the existing kvrgw_strerror() switch below it).

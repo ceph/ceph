@@ -105,7 +105,7 @@ int main(void)
   uint32_t md_count = 0;
   memset(&meta, 0, sizeof(meta));
   ec = kvrgw_head_object(h, tenant_id, bucket, sizeof(bucket) - 1, key, sizeof(key) - 1,
-                         NULL, 0, &meta, md_out, 8, &md_count, meta_arena, sizeof(meta_arena));
+                         NULL, 0, 0, &meta, md_out, 8, &md_count, meta_arena, sizeof(meta_arena));
   CHECK(ec, "kvrgw_head_object");
   if (meta.size != sizeof(body) - 1) {
     fprintf(stderr, "FAIL head size got=%llu want=%zu\n",
@@ -125,7 +125,7 @@ int main(void)
   md_count = 0;
   memset(&meta, 0, sizeof(meta));
   ec = kvrgw_get_object(h, tenant_id, bucket, sizeof(bucket) - 1, key, sizeof(key) - 1,
-                        NULL, 0, NULL, &meta, got, sizeof(got), &got_len,
+                        NULL, 0, NULL, 0, &meta, got, sizeof(got), &got_len,
                         md_out, 8, &md_count, meta_arena, sizeof(meta_arena));
   CHECK(ec, "kvrgw_get_object");
   if (got_len != sizeof(body) - 1 || memcmp(got, body, got_len) != 0) {
@@ -144,7 +144,7 @@ int main(void)
   got_len = 0;
   memset(&meta, 0, sizeof(meta));
   ec = kvrgw_get_object(h, tenant_id, bucket, sizeof(bucket) - 1, key, sizeof(key) - 1,
-                        NULL, 0, &rng, &meta, got, sizeof(got), &got_len,
+                        NULL, 0, &rng, 0, &meta, got, sizeof(got), &got_len,
                         NULL, 0, NULL, NULL, 0);
   CHECK(ec, "kvrgw_get_object range");
   if (got_len != 5 || memcmp(got, "hello", 5) != 0) {
@@ -181,7 +181,7 @@ int main(void)
 
   memset(&meta, 0, sizeof(meta));
   ec = kvrgw_head_object(h, tenant_id, bucket, sizeof(bucket) - 1, key, sizeof(key) - 1,
-                         NULL, 0, &meta, NULL, 0, NULL, NULL, 0);
+                         NULL, 0, 0, &meta, NULL, 0, NULL, NULL, 0);
   if (ec != KVRGW_ERR_NO_SUCH_KEY) {
     fprintf(stderr, "FAIL head after delete ec=%d want=%d\n", (int)ec, KVRGW_ERR_NO_SUCH_KEY);
     kvrgw_stop(h);

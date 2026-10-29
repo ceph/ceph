@@ -84,16 +84,10 @@ struct GroupGcValueBuf {
 };
 static_assert(sizeof(GroupGcValueBuf::data) == sizeof(uint16_t) + kMaxBatchSize * sizeof(GcDescriptor));
 
-// In-memory representation of a single P:O value.
+// Result of parsing a single P:O value (parse_po_value_view()). object_name
+// is a view into the source buffer (e.g. an FdbRangeHolder's row value) --
+// only valid for as long as that buffer remains alive.
 // Wire: [GcDescriptor 36B][object_name_len 2B BE][object_name variable]
-struct PoEntry {
-  GcDescriptor gc{};
-  std::string  object_name;
-};
-
-// Zero-copy variant of PoEntry — object_name is a view into the source
-// buffer (e.g. an FdbRangeHolder's row value). Only valid for as long as
-// the buffer that was passed to parse_po_value_view() remains alive.
 struct PoEntryView {
   GcDescriptor     gc{};
   std::string_view object_name;
@@ -167,7 +161,7 @@ struct GroupGcValue {
 void make_gc_value(GcValueBuf& buf, const GcValueHeader& hdr, const GcDescriptor& gc);
 bool parse_gc_value(std::string_view data, GcValue& val);
 
-void make_po_value(PoValueBuf& buf, const PoEntry& entry);
+void make_po_value(PoValueBuf& buf, const GcDescriptor& gc, std::string_view object_name);
 std::optional<PoEntryView> parse_po_value_view(std::string_view data);
 
 void make_group_po_value(GroupPoValueBuf& buf, const GroupPoValue& gpv);

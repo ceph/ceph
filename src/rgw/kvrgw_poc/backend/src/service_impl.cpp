@@ -46,22 +46,8 @@
 using namespace std::chrono;
 namespace kvrgw {
 constexpr FDBStreamingMode streamingMode = FDB_STREAMING_MODE_EXACT;
-namespace {
 
-//--------------------------------------------------------------------------------
-std::string prefix_range_end(std::string_view prefix)
-{
-  std::string end(prefix);
-  while (!end.empty()) {
-    const unsigned char last = static_cast<unsigned char>(end.back());
-    if (last < 0xFF) {
-      end.back() = static_cast<char>(last + 1);
-      return end;
-    }
-    end.pop_back();
-  }
-  return std::string("\xFF", 1);
-}
+namespace {
 
 // base64: every 3 raw bytes encode to 4 characters (with '=' padding as needed).
 constexpr int kBase64RawBlockSize     = 3;
@@ -109,13 +95,6 @@ std::optional<std::string> base64_decode(std::string_view data)
 
   out.resize(static_cast<size_t>(len - pad));
   return out;
-}
-
-//--------------------------------------------------------------------------------
-bool starts_with(std::string_view value, std::string_view prefix)
-{
-  return value.size() >= prefix.size() &&
-         value.substr(0, prefix.size()) == prefix;
 }
 
 //--------------------------------------------------------------------------------
@@ -174,49 +153,6 @@ bool is_valid_bucket_name(std::string_view name)
 }
 
 } // namespace
-
-//--------------------------------------------------------------------------------
-bool write_object_value(OValueBuf &buf, const ObjectValue &value)
-{
-  ObjectValueHeader wire = value.hdr;
-  wire.content_type_len = static_cast<uint8_t>(value.content_type.size());
-  hdr_to_be(wire);
-  if (!buf.set_header(wire)) {
-    return false;
-  }
-  if (!buf.append(value.content_type)) {
-    return false;
-  }
-  if (value.hdr.chunk_type == CHUNK_INLINE && !value.inline_data.empty()) {
-    if (!buf.append({reinterpret_cast<const char*>(value.inline_data.data()),
-                     value.inline_data.size()})) {
-      return false;
-    }
-  }
-  if (value.hdr.chunk_type == CHUNK_CHILD_D_REF) {
-    if (!buf.append(value.chunk.bucket_id_view())) {
-      return false;
-    }
-    if (!buf.append(value.chunk.ref_tag_view())) {
-      return false;
-    }
-  }
-  else if (value.hdr.chunk_type == CHUNK_STORAGE_REF) {
-    if (!buf.append(value.chunk.ref_tag_view())) {
-      return false;
-    }
-  }
-  if (value.hdr.metadata_count > 0) {
-    if (value.metadata_frame.empty()) {
-      return false;
-    }
-    if (!buf.append({reinterpret_cast<const char*>(value.metadata_frame.data()),
-                     value.metadata_frame.size()})) {
-      return false;
-    }
-  }
-  return true;
-}
 
 // --- BatchCommitQueue ---
 
@@ -295,9 +231,9 @@ void BatchCommitQueue::run()
           continue;
         }
         any_progress = true;
-        auto rc = KvTransaction::resolve_commit(ib.commit_future);
-        if (!rc) {
-          auto ec = fdb_to_error(rc.error());
+        fdb_error_t err = KvTransaction::resolve_commit(ib.commit_future);
+        if (err) {
+          auto ec = fdb_to_error(err);
           service_.error_stats_->record(ec);
           for (int j = 0; j < ib.entry_count; ++j) {
             ib.entries[j].promise.set_value(ec);
@@ -367,8 +303,8 @@ void BatchCommitQueue::run()
           continue;
         }
         any_progress = true;
-        auto rc = KvTransaction::resolve_commit(ib.commit_future);
-        if (rc) {
+        fdb_error_t err = KvTransaction::resolve_commit(ib.commit_future);
+        if (!err) {
           // Record committed stats.
           int64_t bs = static_cast<int64_t>(ib.entry_count);
           stats_.committed_batch_commits.fetch_add(1, std::memory_order_relaxed);
@@ -387,7 +323,7 @@ void BatchCommitQueue::run()
           ib.reset();
         }
         else {
-          auto ec = fdb_to_error(rc.error());
+          auto ec = fdb_to_error(err);
           if (is_retriable(ec) && ib.p3_attempt < 10) {
             service_.latency_stats_.txn_retries.fetch_add(
                 1, std::memory_order_relaxed);
@@ -656,13 +592,12 @@ void BatchCommitQueue::start_batch(InFlightBatch &ib)
   };
 
   auto flush_as_single_po = [&](std::unique_ptr<KvTransaction>& tr) {
-    PoEntry po{};
-    po.gc = accumulator.entries[0].gc;
-    po.object_name = accumulator.entries[0].object_name;
+    const auto& gc = accumulator.entries[0].gc;
+    const std::string_view object_name = accumulator.entries[0].object_name;
     KeyBuf& key = ib.phase1_keys[ib.phase1_key_count];
-    make_po_key(po.gc.chunk.get_bucket_id(), po.gc.chunk.ref_tag_view(), key);
+    make_po_key(gc.chunk.get_bucket_id(), gc.chunk.ref_tag_view(), key);
     PoValueBuf val_buf;
-    make_po_value(val_buf, po);
+    make_po_value(val_buf, gc, object_name);
     tr->kv_put(key.view(), val_buf.view());
     ib.phase1_key_count++;
     accumulator = GroupPoValue{};
@@ -888,27 +823,187 @@ KvRgwServiceImpl::KvRgwServiceImpl(KvStore &store, DataStore &data_store,
 
 //--------------------------------------------------------------------------------
 void KvRgwServiceImpl::put_bucket_cache(tenant_id_t tenant_id,
-                                        const std::string &bucket_name,
+                                        std::string_view bucket_name,
                                         bucket_id_t bucket_id,
-                                        uint8_t access_flags)
+                                        uint8_t access_flags,
+                                        VersioningState versioning_state)
 {
-  std::lock_guard lock(cache_mu_);
-  bucket_cache_[BucketCacheKey{tenant_id, bucket_name}] =
-      BucketCacheEntry{bucket_id, access_flags, VERSIONING_DISABLED,
-                       std::chrono::steady_clock::now()};
+  std::unique_lock lock(cache_mu_);
+  auto timepoint = std::chrono::steady_clock::now();
+  // The only allocation point in the bucket-cache API: building the owning
+  // map key from the caller's view, done once here on insert/update.
+  bucket_cache_[BucketCacheKey{tenant_id, std::string(bucket_name)}] =
+      BucketCacheEntry{bucket_id, access_flags, versioning_state, timepoint};
 }
 
 //--------------------------------------------------------------------------------
 void KvRgwServiceImpl::invalidate_bucket_cache(tenant_id_t tenant_id,
-                                               const std::string &bucket_name)
+                                               std::string_view bucket_name)
 {
-  std::lock_guard lock(cache_mu_);
-  bucket_cache_.erase(BucketCacheKey{tenant_id, bucket_name});
+  std::unique_lock lock(cache_mu_);
+  // Heterogeneous find + erase(iterator) -- allocation-free (erase iterator)
+  const auto it = bucket_cache_.find(BucketCacheKeyView{tenant_id, bucket_name});
+  if (it != bucket_cache_.end()) {
+    bucket_cache_.erase(it);
+  }
+}
+
+//--------------------------------------------------------------------------------
+std::expected<std::optional<KvRgwServiceImpl::BucketState>, fdb_error_t>
+KvRgwServiceImpl::get_bucket_id_cached(tenant_id_t tenant_id,
+                                       std::string_view bucket_name)
+{
+  {
+    std::shared_lock lock(cache_mu_);
+    // Heterogeneous find -- no allocation for the lookup.
+    const auto it = bucket_cache_.find(BucketCacheKeyView{tenant_id, bucket_name});
+    if (it != bucket_cache_.end()) {
+      const auto age = std::chrono::steady_clock::now() - it->second.cached_at;
+      if (age <= kBucketCacheTtl) {
+        return std::optional<BucketState>(
+            BucketState{it->second.bucket_id, it->second.access_flags,
+                        it->second.versioning_state, 0});
+      }
+    }
+  }
+  // read_bucket_state() still takes an owning std::string (out of scope for
+  // this refactor) -- only materialized here, on an actual cache miss, right
+  // before the much more expensive KV round-trip it's about to perform.
+  return read_bucket_state(tenant_id, bucket_name);
+}
+
+//--------------------------------------------------------------------------------
+std::expected<std::optional<KvRgwServiceImpl::BucketState>, fdb_error_t>
+KvRgwServiceImpl::read_bucket_state(tenant_id_t tenant_id,
+                                    std::string_view bucket_name)
+{
+  if (!is_valid_bucket_name(bucket_name)) {
+    return std::optional<BucketState>(std::nullopt);
+  }
+  KeyBuf key;
+  make_bucket_key(tenant_id, bucket_name, key);
+  auto value = store_.get(key.view());
+  if (!value) {
+    return std::unexpected(value.error());
+  }
+  if (!*value) {
+    invalidate_bucket_cache(tenant_id, bucket_name);
+    return std::optional<BucketState>(std::nullopt);
+  }
+  auto bv = parse_bucket_value(**value);
+  if (!bv) {
+    return std::optional<BucketState>(std::nullopt);
+  }
+  BucketState state{bv->bucket_id, bv->access_flags, bv->versioning_state,
+                    bv->created_at_unix};
+  put_bucket_cache(tenant_id, bucket_name, state.bucket_id, state.access_flags,
+                   state.versioning_state);
+  return std::optional<BucketState>(state);
+}
+
+//--------------------------------------------------------------------------------
+namespace {
+
+// Fixed-capacity, std::string-like bucket-name buffer -- no heap allocation.
+// Capacity matches AWS_MaxBucketNameLen (63); a single length byte suffices.
+class bucket_name_t {
+  char data_[AWS_MaxBucketNameLen]{};
+  uint8_t len_{};
+
+ public:
+  bucket_name_t() = default;
+
+  // Returns false (leaves *this cleared) if name exceeds capacity.
+  bool assign(std::string_view name) {
+    if (name.size() > AWS_MaxBucketNameLen) [[unlikely]] {
+      return false;
+    }
+    std::memcpy(data_, name.data(), name.size());
+    len_ = static_cast<uint8_t>(name.size());
+    return true;
+  }
+
+  std::string_view view() const { return {data_, len_}; }
+  size_t size() const { return len_; }
+
+  bool operator==(const bucket_name_t& o) const {
+    return len_ == o.len_ && std::memcmp(data_, o.data_, len_) == 0;
+  }
+};
+
+// Thread-local micro-cache in front of KvRgwServiceImpl::bucket_cache_,
+// consulted (and maintained) only by bucket_cache_fast_refresh(). Touches
+// only this thread's own memory -- no locks, no atomics, no cross-core
+// traffic -- so it's cheap to check on every resolve_bucket_verify() call.
+// Fixed-size, statically allocated: 10 entries x (64B name + 4B tenant_id +
+// 8B bucket_id + 8B last-check timestamp).
+constexpr int kLocalBucketCacheSize = 10;
+
+struct LocalBucketCacheEntry {
+  bucket_name_t bucket_name{};
+  bucket_id_t bucket_id{};
+  int64_t last_check_ns{};
+  tenant_id_t tenant_id{};
+};
+
+thread_local LocalBucketCacheEntry g_local_bucket_cache[kLocalBucketCacheSize];
+}  // namespace
+
+//--------------------------------------------------------------------------------
+void KvRgwServiceImpl::bucket_cache_fast_refresh(tenant_id_t tenant_id,
+                                                 std::string_view bucket_name_in,
+                                                 bucket_id_t bucket_id,
+                                                 uint8_t access_flags,
+                                                 VersioningState versioning_state)
+{
+  constexpr int64_t kHalfTtlNs = duration_cast<nanoseconds>(kBucketCacheTtl / 2).count();
+  bucket_name_t bucket_name;
+  if (!bucket_name.assign(bucket_name_in)) [[unlikely]] {
+    // Defensive only -- AWS_MaxBucketNameLen (63) already guarantees this
+    // never happens, but never let an oversized name touch the fixed-size
+    // local table.
+    put_bucket_cache(tenant_id, bucket_name_in, bucket_id, access_flags, versioning_state);
+    return;
+  }
+
+  const int64_t now = steady_now_ns();
+  int oldest_idx = 0;
+  // use first entry as an LRU anchor
+  int64_t oldest_time = g_local_bucket_cache[0].last_check_ns;
+
+  for (int i = 0; i < kLocalBucketCacheSize; ++i) {
+    auto &e = g_local_bucket_cache[i];
+    if (e.tenant_id == tenant_id && e.bucket_name == bucket_name) {
+      if (e.bucket_id == bucket_id && (now - e.last_check_ns) <= kHalfTtlNs) {
+        return;  // fresh per this thread's own record already exists
+      }
+
+      // Locally stale -- refresh unconditionally, no reader-lock pre-check.
+      put_bucket_cache(tenant_id, bucket_name_in, bucket_id, access_flags, versioning_state);
+      e.bucket_id = bucket_id;
+      e.last_check_ns = now;
+      return;
+    }
+
+    if (e.last_check_ns < oldest_time) {
+      oldest_time = e.last_check_ns;
+      oldest_idx = i;
+    }
+  }
+
+  // Not found locally -- refresh unconditionally and insert at the
+  // least-recently-checked slot
+  put_bucket_cache(tenant_id, bucket_name_in, bucket_id, access_flags, versioning_state);
+  auto &slot = g_local_bucket_cache[oldest_idx];
+  slot.bucket_name = bucket_name;
+  slot.tenant_id = tenant_id;
+  slot.bucket_id = bucket_id;
+  slot.last_check_ns = now;
 }
 
 //--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::check_access(tenant_id_t tenant_id,
-                                              const std::string &bucket_name,
+                                              std::string_view bucket_name,
                                               const BucketState &cached,
                                               uint8_t deny_mask)
 {
@@ -933,7 +1028,7 @@ KvrgwErrorCode KvRgwServiceImpl::check_access(tenant_id_t tenant_id,
 //--------------------------------------------------------------------------------
 FdbGetHolder KvRgwServiceImpl::issue_bucket_get(KvTransaction &tr,
                                                 tenant_id_t tenant_id,
-                                                const std::string &bucket_name)
+                                                std::string_view bucket_name)
 {
   KeyBuf bucket_key;
   make_bucket_key(tenant_id, bucket_name, bucket_key);
@@ -943,7 +1038,7 @@ FdbGetHolder KvRgwServiceImpl::issue_bucket_get(KvTransaction &tr,
 //--------------------------------------------------------------------------------
 std::expected<KvRgwServiceImpl::BucketState, KvrgwErrorCode>
 KvRgwServiceImpl::resolve_bucket_verify(tenant_id_t tenant_id,
-                                        const std::string &bucket_name,
+                                        std::string_view bucket_name,
                                         FdbGetHolder &holder,
                                         bucket_id_t expected_bucket_id,
                                         uint8_t deny_mask)
@@ -962,11 +1057,21 @@ KvRgwServiceImpl::resolve_bucket_verify(tenant_id_t tenant_id,
     return std::unexpected(KVRGW_ERR_CORRUPT_VALUE);
   }
   const bucket_id_t bucket_id = bvh_bucket_id(bvh);
+  const auto access_flags = bvh_access_flags(bvh);
   if (bucket_id != expected_bucket_id) [[unlikely]] {
-    invalidate_bucket_cache(tenant_id, bucket_name);
+    // bucket was deleted and re-created underneath us -- refresh the cache
+    // with the fresh state we just read instead of merely invalidating it,
+    // so the caller's retry hits the cache instead of re-fetching.
+    put_bucket_cache(tenant_id, bucket_name, bucket_id, access_flags,
+                      bvh_versioning_state(bvh));
     return std::unexpected(KVRGW_ERR_BUCKET_ID_MISMATCH);
   }
-  const auto access_flags = bvh_access_flags(bvh);
+  // Opportunistic cache refresh: we already paid for this authoritative read,
+  // so extend the cache's life for free (no extra KV round-trip) rather than
+  // letting it hard-expire and force a future get_bucket_id_cached() miss to
+  // re-fetch. Thread-local fast path -- no reader-lock check first.
+  bucket_cache_fast_refresh(tenant_id, bucket_name, bucket_id, access_flags,
+                            bvh_versioning_state(bvh));
   if (deny_mask != 0 && (access_flags & deny_mask)) [[unlikely]] {
     return std::unexpected(KVRGW_ERR_ACCESS_DENIED);
   }
@@ -975,79 +1080,23 @@ KvRgwServiceImpl::resolve_bucket_verify(tenant_id_t tenant_id,
 }
 
 //--------------------------------------------------------------------------------
-std::expected<KvRgwServiceImpl::BucketState, KvrgwErrorCode>
-KvRgwServiceImpl::verify_bucket_in_txn(KvTransaction &tr, tenant_id_t tenant_id,
-                                       const std::string &bucket_name,
-                                       bucket_id_t expected_bucket_id,
-                                       uint8_t deny_mask)
-{
-  // TBD: consider removing this function!!!
-  auto holder = issue_bucket_get(tr, tenant_id, bucket_name);
-  return resolve_bucket_verify(tenant_id, bucket_name, holder,
-                               expected_bucket_id, deny_mask);
-}
-
-//--------------------------------------------------------------------------------
-std::expected<std::optional<KvRgwServiceImpl::BucketState>, fdb_error_t>
-KvRgwServiceImpl::get_bucket_id_cached(tenant_id_t tenant_id,
-                                       const std::string &bucket_name)
-{
-  {
-    std::lock_guard lock(cache_mu_);
-    const auto it = bucket_cache_.find(BucketCacheKey{tenant_id, bucket_name});
-    if (it != bucket_cache_.end()) {
-      const auto age = std::chrono::steady_clock::now() - it->second.cached_at;
-      if (age <= kBucketCacheTtl) {
-        return std::optional<BucketState>(
-            BucketState{it->second.bucket_id, it->second.access_flags,
-                        it->second.versioning_state, 0});
-      }
-    }
-  }
-  return read_bucket_state(tenant_id, bucket_name);
-}
-
-//--------------------------------------------------------------------------------
-std::expected<std::optional<KvRgwServiceImpl::BucketState>, fdb_error_t>
-KvRgwServiceImpl::read_bucket_state(tenant_id_t tenant_id,
-                                    const std::string &bucket_name)
-{
-  if (!is_valid_bucket_name(bucket_name)) {
-    return std::optional<BucketState>(std::nullopt);
-  }
-  KeyBuf key;
-  make_bucket_key(tenant_id, bucket_name, key);
-  auto value = store_.get(key.view());
-  if (!value) {
-    return std::unexpected(value.error());
-  }
-  if (!*value) {
-    invalidate_bucket_cache(tenant_id, bucket_name);
-    return std::optional<BucketState>(std::nullopt);
-  }
-  auto bv = parse_bucket_value(**value);
-  if (!bv) {
-    return std::optional<BucketState>(std::nullopt);
-  }
-  BucketState state{bv->bucket_id, bv->access_flags, bv->versioning_state,
-                    bv->created_at_unix};
-  put_bucket_cache(tenant_id, bucket_name, state.bucket_id, state.access_flags);
-  return std::optional<BucketState>(state);
-}
-
-//--------------------------------------------------------------------------------
 void KvRgwServiceImpl::put_tenant_cache(std::string_view tenant_name,
                                         tenant_id_t tenant_id)
 {
-  std::lock_guard lock(cache_mu_);
+  std::unique_lock lock(cache_mu_);
+  // The only allocation point: building the owning map key on insert/update.
   tenant_cache_.insert_or_assign(std::string(tenant_name), tenant_id);
 }
 
 //--------------------------------------------------------------------------------
-void KvRgwServiceImpl::invalidate_tenant_cache(const std::string &tenant_name)
+void KvRgwServiceImpl::invalidate_tenant_cache(std::string_view tenant_name)
 {
-  std::lock_guard lock(cache_mu_);
-  tenant_cache_.erase(tenant_name);
+  std::unique_lock lock(cache_mu_);
+  // Heterogeneous find + erase(iterator) -- allocation-free.
+  const auto it = tenant_cache_.find(tenant_name);
+  if (it != tenant_cache_.end()) {
+    tenant_cache_.erase(it);
+  }
 }
 
 //--------------------------------------------------------------------------------
@@ -1055,8 +1104,9 @@ std::expected<std::optional<tenant_id_t>, fdb_error_t>
 KvRgwServiceImpl::resolve_tenant_id(std::string_view tenant_name)
 {
   {
-    std::lock_guard lock(cache_mu_);
-    const auto it = tenant_cache_.find(std::string(tenant_name));
+    std::shared_lock lock(cache_mu_);
+    // Heterogeneous find -- no allocation for the lookup.
+    const auto it = tenant_cache_.find(tenant_name);
     if (it != tenant_cache_.end()) {
       return std::optional<tenant_id_t>(it->second);
     }
@@ -1118,15 +1168,15 @@ KvrgwErrorCode KvRgwServiceImpl::add_tenant(std::string_view tenant_name,
     }
     auto &tr = *tr_res;
     tr->kv_put(tenant_key.view(), make_tenant_value(tenant_id, now_unix()));
-    auto rc = tr->commit();
-    if (rc) {
+    fdb_error_t err = tr->commit();
+    if (!err) {
       put_tenant_cache(tenant_name, tenant_id);
       if (out_id) {
         *out_id = tenant_id;
       }
       return KVRGW_ERR_OK;
     }
-    auto commit_ec = fdb_to_error(rc.error());
+    auto commit_ec = fdb_to_error(err);
     if (!is_retriable(commit_ec)) {
       return commit_ec;
     }
@@ -1155,9 +1205,10 @@ KvrgwErrorCode KvRgwServiceImpl::resolve_tenant(std::string_view tenant_name,
   return KVRGW_ERR_OK;
 }
 
+//---------------------------------------------------------------------------------
 std::expected<std::optional<ObjectValue>, fdb_error_t>
 KvRgwServiceImpl::load_object(bucket_id_t bucket_id,
-                              const std::string &object_name)
+                              std::string_view object_name)
 {
   KeyBuf key;
   make_object_key(bucket_id, object_name, key);
@@ -1171,9 +1222,10 @@ KvRgwServiceImpl::load_object(bucket_id_t bucket_id,
   return parse_object_value(**value);
 }
 
+//---------------------------------------------------------------------------------
 std::expected<std::optional<KvRgwServiceImpl::LoadResult>, fdb_error_t>
 KvRgwServiceImpl::load_object_with_data(bucket_id_t bucket_id,
-                                        const std::string &object_name)
+                                        std::string_view object_name)
 {
   auto tr_result = store_.begin_transaction();
   if (!tr_result) {
@@ -1261,8 +1313,15 @@ static bool must_defer_to_gc(ChunkType chunk_type,
                              bool      kv_store_coalescing,
                              uint16_t  annotations_count)
 {
-  return (chunk_type == CHUNK_STORAGE     ||
-          chunk_type == CHUNK_STORAGE_REF ||
+  // A plain, unshared CHUNK_MULTIPART still goes straight to a G:M{FREE_PARTS}
+  // entry (see the `else` branch below) -- only once it's actually shared
+  // (kFlagSharedData, i.e. at least one CHUNK_MULTIPART_REF copy exists) does
+  // its deletion need to go through the ref-counted R:-key path instead.
+  const bool shared = (flags & ObjectValue::kFlagSharedData) != 0;
+  return (chunk_type == CHUNK_STORAGE       ||
+          chunk_type == CHUNK_STORAGE_REF   ||
+          chunk_type == CHUNK_MULTIPART_REF ||
+          (chunk_type == CHUNK_MULTIPART && shared) ||
           kv_store_coalescing             ||
           (flags & ObjectValue::kFlagExternalAnnotations && annotations_count > 0));
 }
@@ -1300,7 +1359,23 @@ bool KvRgwServiceImpl::move_object_to_g(KvTransaction &tr,
     gc_hdr.chunk_type = h->chunk_type;
     gc_hdr.flags = h->flags;
     GcDescriptor gc{};
-    gc.chunk = ChunkDescriptor(h->chunk_type, ref_tag_sv.data(), parts->bucket_id);
+    if (h->chunk_type == CHUNK_MULTIPART_REF) {
+      // Unlike plain (shared) CHUNK_MULTIPART, this object's own ref_tag
+      // (used below only to build a unique G:O key) is *not* the shared
+      // part-file identity -- that lives in the wire-tail ref_tag, same
+      // split as CHUNK_CHILD_D_REF's a few lines above.
+      OvhChunkRef cref;
+      if (ovh_chunk_ref(raw_value, h, cref)) {
+        gc.chunk = ChunkDescriptor(h->chunk_type, cref.ref_tag.data(), kNullBucket);
+      }
+      else {
+        tr.kv_del(object_key);
+        return false;
+      }
+    }
+    else {
+      gc.chunk = ChunkDescriptor(h->chunk_type, ref_tag_sv.data(), parts->bucket_id);
+    }
     gc.object_size = obj_size;
     gc.mtime = mtime;
     make_go_key(parts->shard_count, parts->shard_id, parts->bucket_id, ref_tag_sv,
@@ -1324,6 +1399,23 @@ bool KvRgwServiceImpl::move_object_to_g(KvTransaction &tr,
         make_d_key(cref.bucket_id, st, cref.ref_tag, mtime, key_buf);
         const bool shared = (h->flags & ObjectValue::kFlagSharedData) != 0;
         decrement_or_del_child_d(tr, key_buf.view(), obj_size, shared);
+      }
+    }
+    else if (h->chunk_type == CHUNK_MULTIPART) {
+      // By now every S:U row for this ref_tag is long gone (Complete's own
+      // G:M{MIXED} pass already cleared them) -- the manifest carried on
+      // this :O: value is the only remaining record of which part files
+      // are still on disk. Hand it to GcWorker verbatim (no decode/
+      // re-encode -- same trick as P:M -> G:M{MIXED} above) as a
+      // G:M{FREE_PARTS} entry.
+      const std::string_view manifest_body = ovh_multipart_manifest_body(raw_value, h);
+      if (!manifest_body.empty()) {
+        make_gm_key(parts->bucket_id, ref_tag_sv, key_buf);
+        GmValueBuf gm_buf;
+        gm_buf.data[0] = static_cast<uint8_t>(GM_MODE_FREE_PARTS);
+        std::memcpy(gm_buf.data + 1, manifest_body.data(), manifest_body.size());
+        gm_buf.len = 1 + manifest_body.size();
+        tr.kv_put(key_buf.view(), gm_buf.view());
       }
     }
 
@@ -1396,6 +1488,108 @@ void KvRgwServiceImpl::displace_old_object(KvTransaction &tr,
 }
 
 //--------------------------------------------------------------------------------
+// Shared helper: displace the old object (if any) per versioning_state, then
+// compute the new object's (version_id, next_vid).
+KvRgwServiceImpl::NewVersionIds KvRgwServiceImpl::displace_and_version(
+    KvTransaction &tr, VersioningState vs, std::string_view object_key,
+    const ObjectValueHeader *old_hdr, std::string_view old_raw)
+{
+  if (old_hdr) {
+    displace_old_object(tr, vs, object_key, old_raw);
+  }
+  return compute_new_version(vs, old_hdr);
+}
+
+//--------------------------------------------------------------------------------
+// Pure If-Match / If-None-Match evaluation. No writes.
+KvrgwErrorCode
+KvRgwServiceImpl::check_put_condition(const PutCondition *cond,
+                                      const ObjectValueHeader *old_hdr)
+{
+  if (!cond) {
+    return KVRGW_ERR_OK;
+  }
+  if (cond->flags.if_match()) {
+    if (!old_hdr || ovh_is_delete_marker(old_hdr)) {
+      return KVRGW_ERR_NO_SUCH_KEY;
+    }
+    if (!cond->flags.etag_is_star() && old_hdr->etag != cond->etag) {
+      return KVRGW_ERR_PRECONDITION_FAILED;
+    }
+  }
+  if (cond->flags.if_none_match()) {
+    if (cond->flags.if_none_match_star() && old_hdr &&
+        !ovh_is_delete_marker(old_hdr)) {
+      return KVRGW_ERR_PRECONDITION_FAILED;
+    }
+    if (!cond->flags.if_none_match_star() && old_hdr &&
+        !ovh_is_delete_marker(old_hdr) && old_hdr->etag == cond->etag) {
+      return KVRGW_ERR_PRECONDITION_FAILED;
+    }
+  }
+  return KVRGW_ERR_OK;
+}
+
+//--------------------------------------------------------------------------------
+// check condition -> displace -> version -> stamp. All reads/validation happen
+// before the first write on `tr`.
+std::expected<KvRgwServiceImpl::NewVersionIds, KvrgwErrorCode>
+KvRgwServiceImpl::install_object_value( KvTransaction &tr,
+                                        VersioningState vs,
+                                        std::string_view object_key,
+                                        std::string_view old_raw,
+                                        const PutCondition *cond,
+                                        ObjectValue &new_value)
+{
+  const ObjectValueHeader *old_hdr = nullptr;
+  if (!old_raw.empty()) {
+    old_hdr = ovh_ptr(old_raw);
+    if (!old_hdr) [[unlikely]] {
+      return std::unexpected(KVRGW_ERR_CORRUPT_VALUE);
+    }
+  }
+
+  if (auto ec = check_put_condition(cond, old_hdr); ec != KVRGW_ERR_OK) {
+    return std::unexpected(ec);
+  }
+
+  auto ids = displace_and_version(tr, vs, object_key, old_hdr, old_raw);
+  new_value.hdr.version_id = ids.version_id;
+  new_value.hdr.next_vid = ids.next_vid;
+  return ids;
+}
+
+//--------------------------------------------------------------------------------
+// Picks the buffer size by chunk type, serializes and kv_put()s the :O: value.
+bool KvRgwServiceImpl::write_o_value(KvTransaction &tr,
+                                     std::string_view object_key,
+                                     const ObjectValue &value,
+                                     size_t *out_size)
+{
+  if (value.hdr.chunk_type == CHUNK_MULTIPART ||
+      value.hdr.chunk_type == CHUNK_MULTIPART_REF) {
+    OValueBufMultipart buf;
+    if (!write_object_value(buf, value)) {
+      return false;
+    }
+    tr.kv_put(object_key, buf.view());
+    if (out_size) {
+      *out_size = buf.view().size();
+    }
+    return true;
+  }
+  OValueBuf buf;
+  if (!write_object_value(buf, value)) {
+    return false;
+  }
+  tr.kv_put(object_key, buf.view());
+  if (out_size) {
+    *out_size = buf.view().size();
+  }
+  return true;
+}
+
+//--------------------------------------------------------------------------------
 std::expected<KvRgwServiceImpl::DeleteBatchCtx, KvrgwErrorCode>
 KvRgwServiceImpl::delete_prepare_batch(KvTransaction &tr, tenant_id_t tenant_id,
                                        const std::string &bucket_name,
@@ -1424,7 +1618,7 @@ KvRgwServiceImpl::delete_prepare_batch(KvTransaction &tr, tenant_id_t tenant_id,
 
 //--------------------------------------------------------------------------------
 void KvRgwServiceImpl::delete_prepare_key(KvTransaction &tr, bucket_id_t bucket_id,
-                                          const std::string &object_name,
+                                          std::string_view object_name,
                                           DeleteContext &ctx)
 {
   make_object_key(bucket_id, object_name, ctx.object_key);
@@ -1536,10 +1730,11 @@ KvRgwServiceImpl::delete_apply(KvTransaction &tr, DeleteContext &ctx,
   }
 }
 
+//--------------------------------------------------------------------------------
 std::expected<KvRgwServiceImpl::DeleteResult, KvrgwErrorCode>
 KvRgwServiceImpl::delete_single(KvTransaction &tr, tenant_id_t tenant_id,
                                 const std::string &bucket_name,
-                                const std::string &object_name,
+                                std::string_view object_name,
                                 const GetCondition *cond)
 {
   auto batch = delete_prepare_batch(tr, tenant_id, bucket_name, kNullBucket);
@@ -1662,7 +1857,7 @@ bool KvRgwServiceImpl::delete_multi_try_commit(
     tr->kv_put(go_key.view(), go_buf.view());
   }
 
-  if (tr->commit()) {
+  if (tr->commit() == 0) {
     return true;
   }
   out->resize(base);
@@ -1698,14 +1893,14 @@ void KvRgwServiceImpl::delete_multi_one_key(
   }
 
   DeleteContext ctx;
-  delete_prepare_key(*tr, batch->bucket_id, std::string(key), ctx);
+  delete_prepare_key(*tr, batch->bucket_id, key, ctx);
 
   auto bs = delete_verify_bucket(*batch);
   DeleteMultiKeyOutcome outcome;
   outcome.key = std::string(key);
   if (bs) {
     auto result = delete_apply(*tr, ctx, *bs, nullptr);
-    if (result && tr->commit()) {
+    if (result && tr->commit() == 0) {
       outcome.status = DeleteMultiKeyOutcome::Status::Deleted;
       outcome.created_dm = result->created_dm;
       outcome.dm_version_id = result->dm_version_id;
@@ -1755,7 +1950,8 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_phase3(
     tenant_id_t tenant_id, const std::string &bucket_name,
     bucket_id_t bucket_id, const std::string &object_name,
     ObjectValue &new_value, VersioningState *out_versioning_state,
-    std::span<const uint8_t> tags, std::span<const uint8_t> metadata)
+    const PutCondition *cond, std::span<const uint8_t> tags,
+    std::span<const uint8_t> metadata)
 {
   constexpr int kMaxRetries = 3;
   static const std::string empty_data;
@@ -1773,7 +1969,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_phase3(
     auto &tr = *tr_result;
 
     PutInTxnParams params{tenant_id, bucket_name, bucket_id, object_name,
-                          new_value, &empty_data, nullptr,
+                          new_value, &empty_data, cond,
                           tags,      false,       true,      metadata};
     auto ec = put_object_in_txn(*tr, params, out_versioning_state);
     if (ec != KVRGW_ERR_OK) {
@@ -1781,15 +1977,28 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_phase3(
         sleep_for_msec(10 * (attempt + 1));
         continue;
       }
+      if (ec == KVRGW_ERR_PRECONDITION_FAILED || ec == KVRGW_ERR_NO_SUCH_KEY) {
+        // put_finalize queued the blob's move to GC on this transaction.
+        // Commit it; whatever the result, report the precondition error (if
+        // the commit fails, the sweeper reaches the same outcome later).
+        const fdb_error_t cerr = tr->commit();
+        if (cerr && is_retriable(fdb_to_error(cerr)) &&
+            attempt + 1 < kMaxRetries) {
+          // A concurrent change to :O: -- re-evaluate the condition.
+          sleep_for_msec(10 * (attempt + 1));
+          continue;
+        }
+      }
       return ec;
     }
 
-    auto rc = tr->commit();
-    if (rc) {
-      put_bucket_cache(tenant_id, bucket_name, bucket_id);
+    fdb_error_t err = tr->commit();
+    if (!err) {
+      put_bucket_cache(tenant_id, bucket_name, bucket_id, 0,
+                       out_versioning_state ? *out_versioning_state : VERSIONING_DISABLED);
       return KVRGW_ERR_OK;
     }
-    auto commit_ec = fdb_to_error(rc.error());
+    auto commit_ec = fdb_to_error(err);
     if (!is_retriable(commit_ec)) {
       return commit_ec;
     }
@@ -1808,7 +2017,7 @@ KvrgwErrorCode KvRgwServiceImpl::create_bucket(tenant_id_t tenant_id,
     return KVRGW_ERR_INVALID_BUCKET_NAME;
   }
 
-  auto state = read_bucket_state(tenant_id, std::string(bucket_name));
+  auto state = read_bucket_state(tenant_id, bucket_name);
   if (!state) {
     return fdb_to_error(state.error());
   }
@@ -1838,12 +2047,12 @@ KvrgwErrorCode KvRgwServiceImpl::create_bucket(tenant_id_t tenant_id,
     }
     auto &tr = *tr_res;
     tr->kv_put(bucket_key.view(), make_bucket_value(bucket_id, now_unix()));
-    auto rc = tr->commit();
-    if (rc) {
-      put_bucket_cache(tenant_id, std::string(bucket_name), bucket_id);
+    fdb_error_t err = tr->commit();
+    if (!err) {
+      put_bucket_cache(tenant_id, bucket_name, bucket_id);
       return KVRGW_ERR_OK;
     }
-    auto commit_ec = fdb_to_error(rc.error());
+    auto commit_ec = fdb_to_error(err);
     if (!is_retriable(commit_ec)) {
       return commit_ec;
     }
@@ -1859,7 +2068,7 @@ KvrgwErrorCode KvRgwServiceImpl::bucket_exists(tenant_id_t tenant_id,
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kBucketExists);
   ops_stats_.inc(OpType::kBucketExists);
-  auto state = read_bucket_state(tenant_id, std::string(bucket_name));
+  auto state = read_bucket_state(tenant_id, bucket_name);
   if (!state) {
     return fdb_to_error(state.error());
   }
@@ -1875,12 +2084,27 @@ KvRgwServiceImpl::bucket_exists_cached(tenant_id_t tenant_id,
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kBucketExists);
   ops_stats_.inc(OpType::kBucketExists);
-  auto state = get_bucket_id_cached(tenant_id, std::string(bucket_name));
+  auto state = get_bucket_id_cached(tenant_id, bucket_name);
   if (!state) {
     return fdb_to_error(state.error());
   }
   *out_exists = state->has_value();
   return KVRGW_ERR_OK;
+}
+
+//--------------------------------------------------------------------------------
+std::expected<std::optional<bucket_id_t>, KvrgwErrorCode>
+KvRgwServiceImpl::resolve_bucket_id(tenant_id_t tenant_id,
+                                     std::string_view bucket_name)
+{
+  auto state = get_bucket_id_cached(tenant_id, bucket_name);
+  if (!state) {
+    return std::unexpected(fdb_to_error(state.error()));
+  }
+  if (!state->has_value()) {
+    return std::nullopt;
+  }
+  return (**state).bucket_id;
 }
 
 //--------------------------------------------------------------------------------
@@ -1940,10 +2164,15 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
         break;
       }
     }
+#if 0
+    assert(found);
+    return KVRGW_ERR_INTERNAL;
+#else
     if (!found) {
       // TBD: why are we doing blocking get ???
-      auto vb = verify_bucket_in_txn(tr, params.tenant_id, params.bucket_name,
-                                     params.bucket_id, kDenyWrite);
+      auto holder = issue_bucket_get(tr, params.tenant_id, params.bucket_name);
+      auto vb = resolve_bucket_verify(params.tenant_id, params.bucket_name, holder,
+                                      params.bucket_id, kDenyWrite);
       if (!vb) {
         return vb.error();
       }
@@ -1953,6 +2182,7 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
       slot.bucket_name = &params.bucket_name;
       slot.state = *vb;
     }
+#endif
   }
   if (out_versioning_state) {
     *out_versioning_state = vs;
@@ -1990,9 +2220,6 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
           tr.kv_del(ctx.po_key.view());
           return KVRGW_ERR_OK;
         }
-        if (h) {
-          displace_old_object(tr, vs, ctx.object_key.view(), existing.value());
-        }
       }
     }
     else {
@@ -2001,20 +2228,33 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
         if (h && h->ref_tag == params.value.hdr.ref_tag) {
           return KVRGW_ERR_OK;
         }
-        if (h) {
-          displace_old_object(tr, vs, ctx.object_key.view(), existing.value());
-        }
       }
     }
 
-    const ObjectValueHeader *old_hdr = nullptr;
-    if (existing.present()) {
-      old_hdr = ovh_ptr(existing.value());
+    auto ids = install_object_value(
+        tr, vs, ctx.object_key.view(),
+        existing.value_or_empty(),
+        params.cond, params.value);
+    if (!ids) {
+      const auto ec = ids.error();
+      if ((ec == KVRGW_ERR_PRECONDITION_FAILED || ec == KVRGW_ERR_NO_SUCH_KEY) &&
+          ctx.po_key.size() > 0) {
+        // Single-request path: the blob and P:O were written in phase 2.
+        // Move them to GC in this same transaction (the caller commits it
+        // for these two codes). tr holds only reads at this point.
+        GcDescriptor gc{};
+        gc.chunk = ChunkDescriptor(CHUNK_STORAGE, params.value.hdr.ref_tag,
+                                   params.bucket_id);
+        gc.object_size = params.value.hdr.size;
+        gc.mtime = static_cast<uint32_t>(now_unix());
+        PoKeyParts po_parts;
+        po_parts.bucket_id = params.bucket_id;
+        po_parts.ref_tag = params.value.hdr.ref_tag;
+        [[maybe_unused]] const fdb_error_t gc_err =
+            move_po_to_go(tr, po_parts, gc, params.object_name);
+      }
+      return ec;
     }
-
-    auto ids = compute_new_version(vs, old_hdr);
-    params.value.hdr.version_id = ids.version_id;
-    params.value.hdr.next_vid = ids.next_vid;
 
     if (!params.metadata.empty()) {
       params.value.metadata_frame.assign(params.metadata.begin(),
@@ -2026,13 +2266,11 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
                           params.value.hdr.ref_tag.view());
     }
 
-    OValueBuf vbuf;
-    if (!write_object_value(vbuf, params.value)) {
+    size_t written = 0;
+    if (!write_o_value(tr, ctx.object_key.view(), params.value, &written)) {
       return KVRGW_ERR_VALUE_TOO_LARGE;
     }
-
-    tr.kv_put(ctx.object_key.view(), vbuf.view());
-    store_.fdb_put_stats().record_value(vbuf.view().size());
+    store_.fdb_put_stats().record_value(written);
 
     if (ctx.po_key.size() > 0) {
       tr.kv_del(ctx.po_key.view());
@@ -2048,47 +2286,13 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
     if (err) return fdb_to_error(err);
   }
 
-  const ObjectValueHeader *old_hdr = nullptr;
-  std::string_view old_raw;
-  if (existing.present()) {
-    old_raw = existing.value();
-    old_hdr = ovh_ptr(old_raw);
-    if (!old_hdr) {
-      return KVRGW_ERR_CORRUPT_VALUE;
-    }
+  auto ids = install_object_value(
+      tr, vs, ctx.object_key.view(),
+      existing.value_or_empty(),
+      params.cond, params.value);
+  if (!ids) {
+    return ids.error();
   }
-
-  if (params.cond) {
-    const PutCondition *cond = params.cond;
-    if (cond->flags.if_match()) {
-      if (!old_hdr || ovh_is_delete_marker(old_hdr)) {
-        return KVRGW_ERR_NO_SUCH_KEY;
-      }
-      if (!cond->flags.etag_is_star() &&
-          old_hdr->etag != cond->etag) {
-        return KVRGW_ERR_PRECONDITION_FAILED;
-      }
-    }
-    if (cond->flags.if_none_match()) {
-      if (cond->flags.if_none_match_star() && old_hdr &&
-          !ovh_is_delete_marker(old_hdr)) {
-        return KVRGW_ERR_PRECONDITION_FAILED;
-      }
-      if (!cond->flags.if_none_match_star() && old_hdr &&
-          !ovh_is_delete_marker(old_hdr) &&
-          old_hdr->etag == cond->etag) {
-        return KVRGW_ERR_PRECONDITION_FAILED;
-      }
-    }
-  }
-
-  if (old_hdr) {
-    displace_old_object(tr, vs, ctx.object_key.view(), old_raw);
-  }
-
-  auto ids = compute_new_version(vs, old_hdr);
-  params.value.hdr.version_id = ids.version_id;
-  params.value.hdr.next_vid = ids.next_vid;
   if (out_versioning_state) {
     *out_versioning_state = vs;
   }
@@ -2103,12 +2307,11 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
                         params.value.hdr.ref_tag.view());
   }
 
-  OValueBuf vbuf;
-  if (!write_object_value(vbuf, params.value)) {
+  size_t written = 0;
+  if (!write_o_value(tr, ctx.object_key.view(), params.value, &written)) {
     return KVRGW_ERR_VALUE_TOO_LARGE;
   }
-  tr.kv_put(ctx.object_key.view(), vbuf.view());
-  store_.fdb_put_stats().record_value(vbuf.view().size());
+  store_.fdb_put_stats().record_value(written);
 
   if (params.value.hdr.chunk_type == CHUNK_CHILD_D && params.data) {
     const uint8_t st = d_size_tier_from_size(params.data->size());
@@ -2180,12 +2383,13 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_single_txn(
       return ec;
     }
 
-    auto rc = tr->commit();
-    if (rc) {
-      put_bucket_cache(tenant_id, bucket_name, bucket_id);
+    fdb_error_t err = tr->commit();
+    if (!err) {
+      put_bucket_cache(tenant_id, bucket_name, bucket_id, 0,
+                       out_versioning_state ? *out_versioning_state : VERSIONING_DISABLED);
       return KVRGW_ERR_OK;
     }
-    auto commit_ec = fdb_to_error(rc.error());
+    auto commit_ec = fdb_to_error(err);
     error_stats_->record(commit_ec);
     if (!is_retriable(commit_ec)) {
       latency_stats_.txn_hard_failures.fetch_add(1, std::memory_order_relaxed);
@@ -2232,16 +2436,15 @@ KvrgwErrorCode KvRgwServiceImpl::select_storage_tier(
   KeyBuf po_key;
   const auto& ref_tag = object_value.hdr.ref_tag;
   make_po_key(bid, ref_tag.view(), po_key);
-  PoEntry po_entry{};
-  po_entry.gc.chunk = ChunkDescriptor(CHUNK_STORAGE, ref_tag, bid);
-  po_entry.gc.object_size = estimated_size;
-  po_entry.gc.mtime = static_cast<uint32_t>(now_unix());
-  po_entry.object_name.assign(object_name);
+  GcDescriptor po_gc{};
+  po_gc.chunk = ChunkDescriptor(CHUNK_STORAGE, ref_tag, bid);
+  po_gc.object_size = estimated_size;
+  po_gc.mtime = static_cast<uint32_t>(now_unix());
   PoValueBuf po_val_buf;
-  make_po_value(po_val_buf, po_entry);
-  auto po_rc = store_.set(po_key.view(), po_val_buf.view());
-  if (!po_rc) {
-    return fdb_to_error(po_rc.error());
+  make_po_value(po_val_buf, po_gc, object_name);
+  fdb_error_t err = store_.set(po_key.view(), po_val_buf.view());
+  if (err) {
+    return fdb_to_error(err);
   }
 
   const Stopwatch ds_t0;
@@ -2258,7 +2461,8 @@ KvrgwErrorCode KvRgwServiceImpl::select_storage_tier(
   }
 
   return put_object_phase3(tenant_id, bucket_name, bid, object_name,
-                           object_value, out_versioning_state, tags, metadata);
+                           object_value, out_versioning_state, cond, tags,
+                           metadata);
 }
 
 //--------------------------------------------------------------------------------
@@ -2303,17 +2507,12 @@ KvRgwServiceImpl::put_object(tenant_id_t tenant_id,
   object_value.hdr.ref_tag = ref_tag;
   object_value.set_etag_raw(digest);
   object_value.hdr.size = data_len;
-  const auto now_tp = std::chrono::system_clock::now();
-  const auto now_s  = duration_cast<seconds>(now_tp.time_since_epoch());
-  const auto now_ns = duration_cast<nanoseconds>(now_tp.time_since_epoch())
-    - duration_cast<nanoseconds>(now_s);
-  object_value.hdr.last_modified_sec = static_cast<uint32_t>(now_s.count());
-  object_value.hdr.last_modified_nsec = static_cast<uint32_t>(now_ns.count());
+  stamp_mtime(object_value.hdr);
   object_value.content_type = std::string(content_type);
 
   std::vector<uint8_t> tag_buf;
   if (!tags.empty()) {
-    if (!encode(tags, tag_buf)) {
+    if (!encode_tags(tags, tag_buf)) {
       return PutObjectResult{KVRGW_ERR_INVALID_TAG};
     }
   }
@@ -2554,9 +2753,8 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
   ScopedRequestLatency _lat(latency_stats_, OpType::kListObjects);
   ops_stats_.inc(OpType::kListObjects);
   *out = {};
-  const std::string bname(bucket_name);
-  const std::string list_prefix(prefix);
-  const std::string delim(delimiter);
+  const std::string_view list_prefix = prefix;
+  const std::string_view delim = delimiter;
   const bool use_delimiter = !delim.empty();
   max_keys = std::min((max_keys > 0 ? max_keys : AWS_MaxKeys), AWS_MaxKeys);
 
@@ -2572,7 +2770,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     *out = {};
 
-    auto cached = get_bucket_id_cached(tenant_id, bname);
+    auto cached = get_bucket_id_cached(tenant_id, bucket_name);
     if (!cached) {
       auto ec = fdb_to_error(cached.error());
       if (is_retriable(ec)) {
@@ -2634,7 +2832,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
         tr->disable_ryw();
       }
 
-      auto f_bkt = issue_bucket_get(*tr, tenant_id, bname);
+      auto f_bkt = issue_bucket_get(*tr, tenant_id, bucket_name);
       const Stopwatch scan_t0;
       FdbRangeHolder holder(tr->kv_async_get_range_holder(scan_begin, exclusive_scan,
                                                           scan_end, batch_limit, streamingMode));
@@ -2681,8 +2879,10 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
             : object_name->substr(list_prefix.size());
           const auto delim_pos = relative.find(delim);
           if (delim_pos != std::string::npos) {
-            const std::string common =
-              list_prefix + std::string(relative.substr(0, delim_pos + delim.size()));
+            std::string common;
+            common.reserve(list_prefix.size() + delim_pos + delim.size());
+            common.append(list_prefix);
+            common.append(relative.substr(0, delim_pos + delim.size()));
             if (common != last_common_prefix) {
               if (budget >= max_keys) {
                 truncated = true;
@@ -2713,7 +2913,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
       }
 
       // check bucket future now (no latency added)
-      auto vb = resolve_bucket_verify(tenant_id, bname, f_bkt, bucket_id,
+      auto vb = resolve_bucket_verify(tenant_id, bucket_name, f_bkt, bucket_id,
                                       kDenyList);
       if (!vb) [[unlikely]] {
         iter_ec = vb.error();
@@ -2790,7 +2990,6 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kDeleteObjectVersion);
   ops_stats_.inc(OpType::kDeleteObjectVersion);
-  const std::string bname(bucket_name);
 
   GetCondition bin_cond{};
   if (aws_cond) {
@@ -2802,7 +3001,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
       return ec;
     }
   }
-  auto bucket_id_res = get_bucket_id_cached(tenant_id, bname);
+  auto bucket_id_res = get_bucket_id_cached(tenant_id, bucket_name);
   if (!bucket_id_res) {
     return fdb_to_error(bucket_id_res.error());
   }
@@ -2980,11 +3179,11 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
       tr->kv_del(v_key.view());
     }
 
-    auto rc = tr->commit();
-    if (rc) {
+    fdb_error_t err = tr->commit();
+    if (!err) {
       return KVRGW_ERR_OK;
     }
-    auto commit_ec = fdb_to_error(rc.error());
+    auto commit_ec = fdb_to_error(err);
     if (!is_retriable(commit_ec)) {
       return commit_ec;
     }
@@ -3027,23 +3226,23 @@ KvRgwServiceImpl::delete_multi(tenant_id_t tenant_id,
   if (!objects.empty()) {
     out->reserve(out->size() + objects.size());
     for (const auto &obj : objects) {
-      const std::string key(obj.key);
       if (obj.version_id) {
-        const auto ec = delete_object_version(tenant_id, bname, key,
+        const auto ec = delete_object_version(tenant_id, bname, obj.key,
                                               *obj.version_id, nullptr);
         if (ec == KVRGW_ERR_OK) {
-          out->emplace_back(DeleteMultiKeyOutcome::Status::Deleted, key, "");
+          out->emplace_back(DeleteMultiKeyOutcome::Status::Deleted,
+                            std::string(obj.key), "");
           out->back().version_id = *obj.version_id;
         }
         else {
-          out->emplace_back(DeleteMultiKeyOutcome::Status::Error, key,
-                            "InternalError");
+          out->emplace_back(DeleteMultiKeyOutcome::Status::Error,
+                            std::string(obj.key), "InternalError");
           out->back().error_message = kvrgw_strerror(ec);
           out->back().version_id = *obj.version_id;
         }
       }
       else {
-        delete_multi_one_key(tenant_id, bname, bucket_id, key, *out);
+        delete_multi_one_key(tenant_id, bname, bucket_id, obj.key, *out);
       }
     }
     return KVRGW_ERR_OK;
@@ -3090,9 +3289,8 @@ KvrgwErrorCode KvRgwServiceImpl::delete_bucket(tenant_id_t tenant_id,
   // generate key to the bucket entry
   KeyBuf bucket_key;
   make_bucket_key(tenant_id, bucket_name, bucket_key);
-  const std::string name(bucket_name);
 
-  auto cached = get_bucket_id_cached(tenant_id, name);
+  auto cached = get_bucket_id_cached(tenant_id, bucket_name);
   if (!cached) {
     // failure
     return fdb_to_error(cached.error());
@@ -3102,7 +3300,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_bucket(tenant_id_t tenant_id,
     return KVRGW_ERR_OK;
   }
 
-  auto ac = check_access(tenant_id, name, **cached, kDenyDeleteBucket);
+  auto ac = check_access(tenant_id, bucket_name, **cached, kDenyDeleteBucket);
   if (ac != KVRGW_ERR_OK) {
     return ac;
   }
@@ -3135,7 +3333,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_bucket(tenant_id_t tenant_id,
 
     if (!*bkt) {
       // bucket-already gone -> abort
-      invalidate_bucket_cache(tenant_id, name);
+      invalidate_bucket_cache(tenant_id, bucket_name);
       return KVRGW_ERR_OK;
     }
 
@@ -3182,13 +3380,13 @@ KvrgwErrorCode KvRgwServiceImpl::delete_bucket(tenant_id_t tenant_id,
     }
 
     tr->kv_del(bucket_key.view());
-    auto rc = tr->commit();
-    if (rc) {
-      invalidate_bucket_cache(tenant_id, name);
+    fdb_error_t err = tr->commit();
+    if (!err) {
+      invalidate_bucket_cache(tenant_id, bucket_name);
       sweeper_.process_bucket(bucket_id, true);
       return KVRGW_ERR_OK;
     }
-    auto ec = fdb_to_error(rc.error());
+    auto ec = fdb_to_error(err);
     if (is_retriable(ec)) {
       // A retriable FDB error poisons that txn -> restart a fresh txn
       continue;
@@ -3207,7 +3405,6 @@ KvrgwErrorCode KvRgwServiceImpl::put_bucket_policy(tenant_id_t tenant_id,
   ops_stats_.inc(OpType::kPutBucketPolicy);
   KeyBuf bucket_key;
   make_bucket_key(tenant_id, bucket_name, bucket_key);
-  const std::string name(bucket_name);
 
   auto existing = store_.get(bucket_key.view());
   if (!existing) {
@@ -3230,11 +3427,11 @@ KvrgwErrorCode KvRgwServiceImpl::put_bucket_policy(tenant_id_t tenant_id,
     return fdb_to_error(tr.error());
   }
   (*tr)->kv_put(bucket_key.view(), new_val);
-  auto rc = (*tr)->commit();
-  if (!rc) {
-    return fdb_to_error(rc.error());
+  fdb_error_t err = (*tr)->commit();
+  if (err) {
+    return fdb_to_error(err);
   }
-  invalidate_bucket_cache(tenant_id, name);
+  invalidate_bucket_cache(tenant_id, bucket_name);
   return KVRGW_ERR_OK;
 }
 
@@ -3271,7 +3468,6 @@ KvRgwServiceImpl::delete_bucket_policy(tenant_id_t tenant_id,
   ops_stats_.inc(OpType::kDeleteBucketPolicy);
   KeyBuf bucket_key;
   make_bucket_key(tenant_id, bucket_name, bucket_key);
-  const std::string name(bucket_name);
 
   auto existing = store_.get(bucket_key.view());
   if (!existing) {
@@ -3293,24 +3489,23 @@ KvRgwServiceImpl::delete_bucket_policy(tenant_id_t tenant_id,
     return fdb_to_error(tr.error());
   }
   (*tr)->kv_put(bucket_key.view(), new_val);
-  auto rc = (*tr)->commit();
-  if (!rc) {
-    return fdb_to_error(rc.error());
+  if (fdb_error_t err = (*tr)->commit()) {
+    return fdb_to_error(err);
   }
-  invalidate_bucket_cache(tenant_id, name);
+  invalidate_bucket_cache(tenant_id, bucket_name);
   return KVRGW_ERR_OK;
 }
 
 //---------------------------------------------------------------------------------
-KvrgwErrorCode KvRgwServiceImpl::put_bucket_versioning(
-    tenant_id_t tenant_id, std::string_view bucket_name, VersioningState state)
+KvrgwErrorCode KvRgwServiceImpl::put_bucket_versioning(tenant_id_t tenant_id,
+                                                       std::string_view bucket_name,
+                                                       VersioningState state)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kPutBucketVersioning);
   ops_stats_.inc(OpType::kPutBucketVersioning);
   constexpr int kMaxRetries = 3;
   KeyBuf bucket_key;
   make_bucket_key(tenant_id, bucket_name, bucket_key);
-  const std::string name(bucket_name);
 
   // start txn
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
@@ -3349,12 +3544,12 @@ KvrgwErrorCode KvRgwServiceImpl::put_bucket_versioning(
                           state, bv->policy_json);
     tr->kv_put(bucket_key.view(), new_val);
 
-    auto rc = tr->commit();
-    if (rc) {
-      invalidate_bucket_cache(tenant_id, name);
+    fdb_error_t err = tr->commit();
+    if (!err) {
+      invalidate_bucket_cache(tenant_id, bucket_name);
       return KVRGW_ERR_OK;
     }
-    auto commit_ec = fdb_to_error(rc.error());
+    auto commit_ec = fdb_to_error(err);
     if (is_retriable(commit_ec)) {
       // A retriable FDB error poisons that txn -> restart a fresh txn
       sleep_for_msec(10 * (attempt + 1));
@@ -3373,7 +3568,7 @@ KvRgwServiceImpl::get_bucket_versioning(tenant_id_t tenant_id,
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kGetBucketVersioning);
   ops_stats_.inc(OpType::kGetBucketVersioning);
-  auto state = read_bucket_state(tenant_id, std::string(bucket_name));
+  auto state = read_bucket_state(tenant_id, bucket_name);
   if (!state) {
     return fdb_to_error(state.error());
   }
@@ -3391,10 +3586,10 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
   ScopedRequestLatency _lat(latency_stats_, OpType::kCopyObject);
   ops_stats_.inc(OpType::kCopyObject);
   const tenant_id_t tenant_id = req.tenant_id;
-  const std::string src_bucket(req.src_bucket_name);
-  const std::string dst_bucket(req.dst_bucket_name);
-  const std::string src_key(req.src_key);
-  const std::string dst_key(req.dst_key);
+  const std::string_view src_bucket = req.src_bucket_name;
+  const std::string_view dst_bucket = req.dst_bucket_name;
+  const std::string_view src_key = req.src_key;
+  const std::string_view dst_key = req.dst_key;
 
   auto src_cached = get_bucket_id_cached(tenant_id, src_bucket);
   if (!src_cached) {
@@ -3618,15 +3813,15 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
           return KVRGW_ERR_INTERNAL;
         }
         tr->kv_put(dst_o_key.view(), buf.view());
-        auto rc = tr->commit();
-        if (rc) {
+        fdb_error_t err = tr->commit();
+        if (!err) {
           out->etag = src.etag_display();
           out->last_modified_unix = src.hdr.last_modified_sec;
           out->copy_source_version_id = src.hdr.version_id;
           return KVRGW_ERR_OK;
         }
         {
-          auto ec = fdb_to_error(rc.error());
+          auto ec = fdb_to_error(err);
           if (!is_retriable(ec)) {
             return ec;
           }
@@ -3765,6 +3960,55 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
       new_value.hdr.flags |= ObjectValue::kFlagSharedData;
       break;
     }
+    case CHUNK_MULTIPART:
+    case CHUNK_MULTIPART_REF: {
+      // Zero-copy sharing for a completed multipart object -- same
+      // ref-counted pattern as CHUNK_STORAGE/CHUNK_STORAGE_REF above, but
+      // the R: value's chunk_descriptor payload slot carries the
+      // manifest body (verbatim) instead of a GcValueBuf, since GcWorker
+      // needs the manifest itself (not just a ref_tag+size+mtime) once
+      // the last reference is dropped -- see gc_once's CHUNK_MULTIPART/
+      // _REF handling.
+      const std::string_view src_data_ref = src.data_ref_view();
+      const auto r_key = make_r_key(src_data_ref);
+
+      if (src.has_shared_data()) {
+        auto r_raw = tr->kv_get(r_key.view());
+        if (!r_raw) {
+          auto ec = fdb_to_error(r_raw.error());
+          if (is_retriable(ec)) {
+            sleep_for_msec(10 * (attempt + 1));
+            continue;
+          }
+          return ec;
+        }
+        if (!*r_raw) {
+          return KVRGW_ERR_INTERNAL;
+        }
+        auto rv = parse_r_value(**r_raw);
+        if (!rv) {
+          return KVRGW_ERR_CORRUPT_VALUE;
+        }
+        tr->kv_put(r_key.view(),
+                   write_r_value(rv->ref_count + 1, rv->chunk_descriptor));
+      }
+      else {
+        tr->kv_put(r_key.view(), write_r_value(2, src.manifest_body));
+
+        src.hdr.flags |= ObjectValue::kFlagSharedData;
+        OValueBufMultipart src_buf;
+        if (write_object_value(src_buf, src)) {
+          tr->kv_put(src_entry_key, src_buf.view());
+        }
+      }
+
+      new_value.hdr.chunk_type = CHUNK_MULTIPART_REF;
+      new_value.hdr.part_count = src.hdr.part_count;
+      new_value.manifest_body = src.manifest_body;
+      new_value.chunk = ChunkDescriptor(CHUNK_MULTIPART_REF, src_data_ref.data(), kNullBucket);
+      new_value.hdr.flags |= ObjectValue::kFlagSharedData;
+      break;
+    }
     default:
       return KVRGW_ERR_INTERNAL;
     }
@@ -3798,22 +4042,18 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     }
 
     // --- Displace destination + versioning ---
-    if (dst_hdr) {
-      displace_old_object(*tr, vb->versioning_state, dst_o_key.view(), dst_raw);
-    }
-    auto ids = compute_new_version(vb->versioning_state, dst_hdr);
+    auto ids = displace_and_version(*tr, vb->versioning_state, dst_o_key.view(),
+                                    dst_hdr, dst_raw);
     new_value.hdr.version_id = ids.version_id;
     new_value.hdr.next_vid = ids.next_vid;
 
     // --- Write destination O: ---
-    OValueBuf dst_buf;
-    if (!write_object_value(dst_buf, new_value)) {
+    if (!write_o_value(*tr, dst_o_key.view(), new_value)) {
       return KVRGW_ERR_INTERNAL;
     }
-    tr->kv_put(dst_o_key.view(), dst_buf.view());
 
-    auto rc = tr->commit();
-    if (rc) {
+    fdb_error_t err = tr->commit();
+    if (!err) {
       out->etag = new_value.etag_display();
       out->last_modified_unix = new_value.hdr.last_modified_sec;
       if (vb->versioning_state == VERSIONING_ENABLED) {
@@ -3823,7 +4063,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
       return KVRGW_ERR_OK;
     }
     {
-      auto ec = fdb_to_error(rc.error());
+      auto ec = fdb_to_error(err);
       if (!is_retriable(ec)) {
         return ec;
       }
@@ -3847,7 +4087,7 @@ std::string delete_marker_detail(const ObjectValue &v)
 // on failure read a fresh bucket-state copy, replacing error code if needed
 // should use it for all failures using cached bucket-state
 KvrgwErrorCode KvRgwServiceImpl::resolve_bucket_error(tenant_id_t tenant_id,
-                                                      const std::string &bucket_name,
+                                                      std::string_view bucket_name,
                                                       KvrgwErrorCode tentative_err_code)
 {
   auto state = read_bucket_state(tenant_id, bucket_name);
@@ -3864,8 +4104,8 @@ KvrgwErrorCode KvRgwServiceImpl::resolve_bucket_error(tenant_id_t tenant_id,
 
 //--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(tenant_id_t tenant_id,
-                                                      const std::string &bucket_name,
-                                                      std::string_view key,
+                                                      std::string_view bucket_name,
+                                                      std::string_view object_name,
                                                       std::optional<version_id_t> version_id,
                                                       bool load_kv_data,
                                                       ObjectValue *value,
@@ -3884,7 +4124,6 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(tenant_id_t tenant_id,
     return ec;
   }
   const bucket_id_t bucket_id = (**bucket_id_res).bucket_id;
-  const std::string object_name(key);
 
   auto accept = [&](ObjectValue obj, std::string data) -> KvrgwErrorCode {
     if (obj.is_delete_marker()) {
@@ -3996,24 +4235,72 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(tenant_id_t tenant_id,
   return accept(std::move(**object_value), {});
 }
 
+namespace {
+
+// Resolves a validated (1-based) PartNumber to its (generation, size)
+// within an already-decoded manifest. included_parts is sorted ascending
+// (decode_manifest_body's contract), so a binary search finds the exact
+// match in O(log n). Returns false if part_number isn't actually present
+// in the manifest (shouldn't happen once the caller's bounds check
+// against hdr.part_count has passed, but checked defensively).
+// CHUNK_MULTIPART_REF's part files live under the *shared* ref_tag
+// (chunk.get_ref_tag()), not this object's own identity (hdr.ref_tag) --
+// same split as CHUNK_STORAGE_REF's data_ref_view(). Plain CHUNK_MULTIPART
+// has no such split; hdr.ref_tag is both its identity and the data's.
+const RefTag &multipart_data_ref_tag(const ObjectValue &v)
+{
+  if (v.hdr.chunk_type == CHUNK_MULTIPART_REF) {
+    return v.chunk.get_ref_tag();
+  }
+  return v.hdr.ref_tag;
+}
+
+bool resolve_manifest_part(const DecodedManifestBody &decoded,
+                           uint16_t part_number, uint32_t *out_generation,
+                           uint64_t *out_size)
+{
+  const auto it = std::lower_bound(decoded.included_parts.begin(),
+                                   decoded.included_parts.end(), part_number);
+  if (it == decoded.included_parts.end() || *it != part_number) {
+    return false;
+  }
+  const size_t idx = static_cast<size_t>(it - decoded.included_parts.begin());
+  *out_generation = decoded.generations[idx];
+  *out_size = decoded.sizes[idx];
+  return true;
+}
+
+}  // namespace
+
 //--------------------------------------------------------------------------------
 KvrgwErrorCode
 KvRgwServiceImpl::get_object(tenant_id_t tenant_id,
-                             std::string_view bucket_name, std::string_view key,
+                             std::string_view bucket_name,
+                             std::string_view object_name,
                              std::optional<version_id_t> version_id,
-                             const ByteRange *range, GetObjectResult *out)
+                             const ByteRange *range,
+                             uint16_t part_number,
+                             GetObjectResult *out)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kGetObject);
   ops_stats_.inc(OpType::kGetObject);
   *out = {};
-  const std::string bname(bucket_name);
+
   ObjectValue object_value;
   std::string kv_data;
-  const auto ec =
-      load_object_for_read(tenant_id, bname, key, version_id, true,
-                           &object_value, &kv_data, &out->error_detail);
+  const auto ec = load_object_for_read(tenant_id, bucket_name, object_name, version_id, true,
+                                       &object_value, &kv_data, &out->error_detail);
   if (ec != KVRGW_ERR_OK) {
     return ec;
+  }
+
+  // PartNumber is validated uniformly across every chunk type: valid range
+  // is [1, part_count] -- 1 for non-multipart objects (so PartNumber=1
+  // reads the whole object, below), included_parts.size() for
+  // CHUNK_MULTIPART (see object_value.hpp's ObjectValueHeader::part_count).
+  if (part_number != 0 &&
+      (part_number < 1 || part_number > object_value.hdr.part_count)) {
+    return KVRGW_ERR_INVALID_PART;
   }
 
   const int64_t object_size = static_cast<int64_t>(object_value.hdr.size);
@@ -4031,6 +4318,100 @@ KvRgwServiceImpl::get_object(tenant_id_t tenant_id,
       if (slice) {
         body = body.substr(static_cast<size_t>(slice->start),
                            static_cast<size_t>(slice->length));
+      }
+    }
+  }
+  else if (object_value.hdr.chunk_type == CHUNK_MULTIPART ||
+           object_value.hdr.chunk_type == CHUNK_MULTIPART_REF) {
+    auto decoded = decode_manifest_body(object_value.manifest_body);
+    if (!decoded || decoded->included_parts.empty()) [[unlikely]] {
+      return KVRGW_ERR_CORRUPT_VALUE;
+    }
+    const RefTag &data_ref_tag = multipart_data_ref_tag(object_value);
+
+    if (part_number != 0) {
+      // PartNumber addressing: whole-part read, no range slicing. ETag
+      // stays the whole object's composite ETag (set by load_object_for_read
+      // above); only the reported size is overridden to this one part's.
+      uint32_t generation = 0;
+      uint64_t part_size = 0;
+      if (!resolve_manifest_part(*decoded, part_number, &generation, &part_size)) [[unlikely]] {
+        return KVRGW_ERR_CORRUPT_VALUE;
+      }
+      const std::string fname =
+          part_filename(data_ref_tag, part_number, generation);
+      if (fname.empty()) [[unlikely]] {
+        return KVRGW_ERR_INTERNAL;
+      }
+      const Stopwatch ds_t0;
+      auto rd_ec = data_store_.read(fname, 0, part_size, &body);
+      fdb_record_disk(ds_t0.elapsed_us());
+      if (rd_ec) {
+        return KVRGW_ERR_INTERNAL;
+      }
+      object_value.hdr.size = part_size;
+      out->value = std::move(object_value);
+      out->body = std::move(body);
+      return KVRGW_ERR_OK;
+    }
+
+    const size_t n = decoded->included_parts.size();
+    // prefix[i] = byte offset where part i starts; prefix[n] = total size.
+    std::vector<uint64_t> prefix(n + 1, 0);
+    for (size_t i = 0; i < n; ++i) {
+      prefix[i + 1] = prefix[i] + decoded->sizes[i];
+    }
+
+    uint64_t range_start = 0;
+    uint64_t range_len = static_cast<uint64_t>(object_size);
+    if (range) {
+      bool invalid = false;
+      const auto slice = resolve_byte_range(*range, object_size, &invalid);
+      if (invalid) {
+        return KVRGW_ERR_INVALID_RANGE;
+      }
+      if (slice) {
+        range_start = static_cast<uint64_t>(slice->start);
+        range_len = static_cast<uint64_t>(slice->length);
+      }
+    }
+
+    if (range_len > 0) {
+      // Find the first part holding data at range_start -- part i occupies
+      // [prefix[i], prefix[i+1]) -- then read serially, one part after
+      // another, until range_len bytes are collected. Full (no-range)
+      // reads are just this same loop starting at range_start=0.
+      auto it = std::upper_bound(prefix.begin(), prefix.end(), range_start);
+      size_t part_idx = static_cast<size_t>(it - prefix.begin());
+      part_idx = part_idx > 0 ? part_idx - 1 : 0;
+
+      body.reserve(static_cast<size_t>(range_len));
+      uint64_t cur_pos = range_start;
+      uint64_t remaining = range_len;
+      for (; part_idx < n && remaining > 0; ++part_idx) {
+        const uint64_t part_start = prefix[part_idx];
+        const uint64_t part_size = decoded->sizes[part_idx];
+        if (part_size == 0 || cur_pos >= part_start + part_size) {
+          continue;
+        }
+        const uint64_t read_off = cur_pos - part_start;
+        const uint64_t to_read = std::min(part_size - read_off, remaining);
+        const std::string fname = part_filename(data_ref_tag,
+                                                decoded->included_parts[part_idx],
+                                                decoded->generations[part_idx]);
+        if (fname.empty()) [[unlikely]] {
+          return KVRGW_ERR_INTERNAL;
+        }
+        std::string part_body;
+        const Stopwatch ds_t0;
+        auto rd_ec = data_store_.read(fname, read_off, to_read, &part_body);
+        fdb_record_disk(ds_t0.elapsed_us());
+        if (rd_ec) {
+          return KVRGW_ERR_INTERNAL;
+        }
+        body += part_body;
+        cur_pos += to_read;
+        remaining -= to_read;
       }
     }
   }
@@ -4080,15 +4461,81 @@ KvRgwServiceImpl::get_object(tenant_id_t tenant_id,
 
 //--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::head_object(
-    tenant_id_t tenant_id, std::string_view bucket_name, std::string_view key,
-    std::optional<version_id_t> version_id, ObjectValue *out,
+    tenant_id_t tenant_id, std::string_view bucket_name, std::string_view object_name,
+    std::optional<version_id_t> version_id, uint16_t part_number, ObjectValue *out,
     std::string *error_detail)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kHeadObject);
   ops_stats_.inc(OpType::kHeadObject);
-  const std::string bname(bucket_name);
-  return load_object_for_read(tenant_id, bname, key, version_id, false, out,
-                              nullptr, error_detail);
+  const auto ec = load_object_for_read(tenant_id, bucket_name, object_name, version_id, false, out,
+                                       nullptr, error_detail);
+  if (ec != KVRGW_ERR_OK) {
+    return ec;
+  }
+
+  // Same uniform [1, part_count] bounds check as get_object's.
+  if (part_number != 0 &&
+      (part_number < 1 || part_number > out->hdr.part_count)) {
+    return KVRGW_ERR_INVALID_PART;
+  }
+  if (part_number != 0 &&
+      (out->hdr.chunk_type == CHUNK_MULTIPART ||
+       out->hdr.chunk_type == CHUNK_MULTIPART_REF)) {
+    auto decoded = decode_manifest_body(out->manifest_body);
+    if (!decoded || decoded->included_parts.empty()) [[unlikely]] {
+      return KVRGW_ERR_CORRUPT_VALUE;
+    }
+    uint32_t generation = 0;
+    uint64_t part_size = 0;
+    if (!resolve_manifest_part(*decoded, part_number, &generation, &part_size)) [[unlikely]] {
+      return KVRGW_ERR_CORRUPT_VALUE;
+    }
+    out->hdr.size = part_size;
+  }
+  return KVRGW_ERR_OK;
+}
+
+//--------------------------------------------------------------------------------
+KvrgwErrorCode KvRgwServiceImpl::get_object_attributes(
+    tenant_id_t tenant_id, std::string_view bucket_name, std::string_view key,
+    std::optional<version_id_t> version_id, uint16_t max_parts,
+    uint16_t part_number_marker, GetObjectAttributesResult *out)
+{
+  ScopedRequestLatency _lat(latency_stats_, OpType::kOther);
+  ops_stats_.inc(OpType::kOther);
+  const auto ec = load_object_for_read(tenant_id, bucket_name, key, version_id, false,
+                                       &out->value, nullptr, &out->error_detail);
+  if (ec != KVRGW_ERR_OK) {
+    return ec;
+  }
+
+  if (out->value.hdr.chunk_type != CHUNK_MULTIPART &&
+      out->value.hdr.chunk_type != CHUNK_MULTIPART_REF) {
+    return KVRGW_ERR_OK;
+  }
+
+  auto decoded = decode_manifest_body(out->value.manifest_body);
+  if (!decoded || decoded->included_parts.empty()) [[unlikely]] {
+    return KVRGW_ERR_CORRUPT_VALUE;
+  }
+
+  out->has_parts = true;
+  out->total_parts_count = static_cast<uint32_t>(decoded->included_parts.size());
+
+  const auto it = std::upper_bound(decoded->included_parts.begin(),
+                                   decoded->included_parts.end(), part_number_marker);
+  size_t idx = static_cast<size_t>(it - decoded->included_parts.begin());
+  const size_t n = decoded->included_parts.size();
+  for (; idx < n && out->part_numbers.size() < max_parts; ++idx) {
+    out->part_numbers.push_back(decoded->included_parts[idx]);
+    out->part_sizes.push_back(decoded->sizes[idx]);
+  }
+  if (idx < n) {
+    out->parts_truncated = true;
+    out->next_part_number_marker = out->part_numbers.empty()
+        ? part_number_marker : out->part_numbers.back();
+  }
+  return KVRGW_ERR_OK;
 }
 
 namespace {
@@ -4262,14 +4709,13 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
   ScopedRequestLatency _lat(latency_stats_, OpType::kListObjectVersions);
   ops_stats_.inc(OpType::kListObjectVersions);
   *out = {};
-  const std::string bname(bucket_name);
-  const std::string list_prefix(prefix);
+  const std::string_view list_prefix = prefix;
   max_keys = std::min((max_keys > 0 ? max_keys : AWS_MaxKeys), AWS_MaxKeys);
 
   constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     *out = {};
-    auto cached = get_bucket_id_cached(tenant_id, bname);
+    auto cached = get_bucket_id_cached(tenant_id, bucket_name);
     if (!cached) [[unlikely]] {
       auto ec = fdb_to_error(cached.error());
       if (is_retriable(ec)) {
@@ -4314,9 +4760,9 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     if (!list_prefix.empty()) {
       v_dom.append(list_prefix.data(), list_prefix.size());
     }
-    const std::string v_domain(v_dom.view());
+    const std::string_view v_domain = v_dom.view();
     const std::string v_end = prefix_range_end(v_domain);
-    const std::string v_begin = last_v.empty() ? v_domain : last_v;
+    const std::string_view v_begin = last_v.empty() ? v_domain : last_v;
 
     auto tr_result = store_.begin_transaction();
     if (!tr_result) [[unlikely]] {
@@ -4333,7 +4779,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
       tr->disable_ryw();
     }
 
-    auto f_bkt = issue_bucket_get(*tr, tenant_id, bname);
+    auto f_bkt = issue_bucket_get(*tr, tenant_id, bucket_name);
     const Stopwatch scan_t0;
     FdbRangeHolder o_holder(tr->kv_async_get_range_holder(
         o_begin, !last_o.empty(), o_end, max_keys, streamingMode));
@@ -4365,7 +4811,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     merge_version_streams(o_holder, v_holder, list_prefix, max_keys, &last_o,
                           &last_v, out);
 
-    auto vb = resolve_bucket_verify(tenant_id, bname, f_bkt, bucket_id,
+    auto vb = resolve_bucket_verify(tenant_id, bucket_name, f_bkt, bucket_id,
                                     kDenyList);
     if (!vb) [[unlikely]] {
       const auto ec = vb.error();
@@ -4400,14 +4846,13 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
 //--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::delete_object(tenant_id_t tenant_id,
                                                std::string_view bucket_name,
-                                               std::string_view key,
+                                               std::string_view object_name,
                                                const AWSDeleteCondition *aws_cond,
                                                DeleteResult *out)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kDeleteObject);
   ops_stats_.inc(OpType::kDeleteObject);
   const std::string bname(bucket_name);
-  const std::string object_name(key);
 
   GetCondition bin_cond{};
   const GetCondition *cond_ptr = nullptr;
@@ -4440,14 +4885,14 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object(tenant_id_t tenant_id,
       return result.error();
     }
 
-    auto rc = tr->commit();
-    if (rc) {
+    fdb_error_t err = tr->commit();
+    if (!err) {
       if (out) {
         *out = *result;
       }
       return KVRGW_ERR_OK;
     }
-    auto ec = fdb_to_error(rc.error());
+    auto ec = fdb_to_error(err);
     if (!is_retriable(ec)) {
       return ec;
     }
@@ -4457,21 +4902,21 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object(tenant_id_t tenant_id,
 }
 
 //--------------------------------------------------------------------------------
-KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
-    tenant_id_t tenant_id, std::string_view bucket_name, std::string_view key,
-    std::span<const uint8_t> tags)
+KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(tenant_id_t tenant_id,
+                                                    std::string_view bucket_name,
+                                                    std::string_view key,
+                                                    std::span<const uint8_t> tags)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kPutObjectTagging);
   ops_stats_.inc(OpType::kPutObjectTagging);
-  const std::string bname(bucket_name);
-  auto cached = get_bucket_id_cached(tenant_id, bname);
+  auto cached = get_bucket_id_cached(tenant_id, bucket_name);
   if (!cached) {
     return fdb_to_error(cached.error());
   }
   if (!*cached) {
     return KVRGW_ERR_NO_SUCH_BUCKET;
   }
-  if (auto ac = check_access(tenant_id, bname, **cached, kDenyWrite);
+  if (auto ac = check_access(tenant_id, bucket_name, **cached, kDenyWrite);
       ac != KVRGW_ERR_OK) {
     return ac;
   }
@@ -4492,10 +4937,10 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
     }
     auto &tr = *tr_result;
 
-    auto f_bkt = issue_bucket_get(*tr, tenant_id, bname);
+    auto f_bkt = issue_bucket_get(*tr, tenant_id, bucket_name);
     auto f_obj = tr->kv_async_get(object_key.view());
 
-    auto vb = resolve_bucket_verify(tenant_id, bname, f_bkt, bucket_id,
+    auto vb = resolve_bucket_verify(tenant_id, bucket_name, f_bkt, bucket_id,
                                     kDenyWrite);
     if (!vb) {
       return vb.error();
@@ -4534,12 +4979,12 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
     }
     tr->kv_put(object_key.view(), buf.view());
 
-    auto rc = tr->commit();
-    if (rc) {
+    fdb_error_t err = tr->commit();
+    if (!err) {
       return KVRGW_ERR_OK;
     }
     {
-      auto ec = fdb_to_error(rc.error());
+      auto ec = fdb_to_error(err);
       if (!is_retriable(ec)) {
         return ec;
       }
@@ -4561,15 +5006,14 @@ KvrgwErrorCode KvRgwServiceImpl::get_object_tagging(
     return KVRGW_ERR_INVALID_ARGUMENT;
   }
   *out_count = 0;
-  const std::string bname(bucket_name);
-  auto cached = get_bucket_id_cached(tenant_id, bname);
+  auto cached = get_bucket_id_cached(tenant_id, bucket_name);
   if (!cached) {
     return fdb_to_error(cached.error());
   }
   if (!*cached) {
     return KVRGW_ERR_NO_SUCH_BUCKET;
   }
-  if (auto ac = check_access(tenant_id, bname, **cached, kDenyRead);
+  if (auto ac = check_access(tenant_id, bucket_name, **cached, kDenyRead);
       ac != KVRGW_ERR_OK) {
     return ac;
   }
@@ -4622,7 +5066,7 @@ KvrgwErrorCode KvRgwServiceImpl::get_object_tagging(
   }
   live.assign(reinterpret_cast<const uint8_t *>(payload.data()),
               reinterpret_cast<const uint8_t *>(payload.data()) + frame_size);
-  if (!decode(std::span<const uint8_t>(live.data(), live.size()), out_tags)) {
+  if (!decode_tags(std::span<const uint8_t>(live.data(), live.size()), out_tags)) {
     return KVRGW_ERR_CORRUPT_VALUE;
   }
   *out_count = value->hdr.tags_count;
@@ -4635,15 +5079,14 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kDeleteObjectTagging);
   ops_stats_.inc(OpType::kDeleteObjectTagging);
-  const std::string bname(bucket_name);
-  auto cached = get_bucket_id_cached(tenant_id, bname);
+  auto cached = get_bucket_id_cached(tenant_id, bucket_name);
   if (!cached) {
     return fdb_to_error(cached.error());
   }
   if (!*cached) {
     return KVRGW_ERR_NO_SUCH_BUCKET;
   }
-  if (auto ac = check_access(tenant_id, bname, **cached, kDenyWrite);
+  if (auto ac = check_access(tenant_id, bucket_name, **cached, kDenyWrite);
       ac != KVRGW_ERR_OK) {
     return ac;
   }
@@ -4664,10 +5107,10 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(
     }
     auto &tr = *tr_result;
 
-    auto f_bkt = issue_bucket_get(*tr, tenant_id, bname);
+    auto f_bkt = issue_bucket_get(*tr, tenant_id, bucket_name);
     auto f_obj = tr->kv_async_get(object_key.view());
 
-    auto vb = resolve_bucket_verify(tenant_id, bname, f_bkt, bucket_id,
+    auto vb = resolve_bucket_verify(tenant_id, bucket_name, f_bkt, bucket_id,
                                     kDenyWrite);
     if (!vb) {
       return vb.error();
@@ -4700,12 +5143,12 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(
     }
     tr->kv_put(object_key.view(), buf.view());
 
-    auto rc = tr->commit();
-    if (rc) {
+    fdb_error_t err = tr->commit();
+    if (!err) {
       return KVRGW_ERR_OK;
     }
     {
-      auto ec = fdb_to_error(rc.error());
+      auto ec = fdb_to_error(err);
       if (!is_retriable(ec)) {
         return ec;
       }

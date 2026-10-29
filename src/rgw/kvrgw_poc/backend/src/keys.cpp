@@ -24,6 +24,39 @@
 #include <endian.h>
 
 namespace kvrgw {
+// Shared with service_impl_multipart.cpp (declared in service_impl.hpp) —
+//--------------------------------------------------------------------------------
+std::string prefix_range_end(std::string_view prefix, std::string_view *suffix)
+{
+  std::string end;
+  if (!suffix) {
+    end.reserve(prefix.size());
+    end.append(prefix);
+  }
+  else {
+    end.reserve(prefix.size() + suffix->size());
+    end.append(prefix);
+    end.append(*suffix);
+  }
+
+  while (!end.empty()) {
+    const unsigned char last = static_cast<unsigned char>(end.back());
+    if (last < 0xFF) {
+      end.back() = static_cast<char>(last + 1);
+      return end;
+    }
+    end.pop_back();
+  }
+  return std::string("\xFF", 1);
+}
+
+//--------------------------------------------------------------------------------
+bool starts_with(std::string_view value, std::string_view prefix)
+{
+  return value.size() >= prefix.size() &&
+         value.substr(0, prefix.size()) == prefix;
+}
+
 uint8_t size_tier_from_size(uint64_t object_size_bytes)
 {
   if (object_size_bytes == 0) {
@@ -310,6 +343,35 @@ bool parse_group_po_key(std::string_view key)
          key[offsetof(KeyHeaderPOGroup, cat)] == kOpTypeGroup;
 }
 
+void make_pm_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
+{
+  KeyHeaderPM hdr(bucket_id);
+  out.set_header(hdr);
+  out.append(ref_tag.data(), ref_tag.size());
+}
+
+KeyBuf make_pm_bucket_prefix(bucket_id_t bucket_id)
+{
+  KeyBuf key;
+  KeyHeaderPM hdr(bucket_id);
+  key.set_header(hdr);
+  return key;
+}
+
+// Single P:M key: [ns='P'][cat='M'][bucket_id 8B][ref_tag 12B] = 22B
+std::optional<PmKeyParts> parse_pm_key(std::string_view key)
+{
+  constexpr size_t kPmKeySize = sizeof(KeyHeaderPM) + kRefTagSize;
+  if (key.size() != kPmKeySize || key[0] != kNamespacePending ||
+      key[offsetof(KeyHeaderPM, cat)] != kCategoryMultipart) [[unlikely]] {
+    return std::nullopt;
+  }
+  PmKeyParts parts;
+  parts.bucket_id.load(key.data() + offsetof(KeyHeaderPM, bucket_id));
+  parts.ref_tag.load(key.data() + sizeof(KeyHeaderPM));
+  return parts;
+}
+
 void make_go_key(uint16_t shard_count, uint16_t shard_id, bucket_id_t bucket_id,
                  std::string_view ref_tag_bytes, uint64_t object_size, KeyBuf& out)
 {
@@ -382,7 +444,7 @@ void make_v_key(bucket_id_t bucket_id, std::string_view object_name,
   KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryVersion);
   out.set_header(hdr);
   out.append(object_name.data(), object_name.size());
-  out.append_byte('\0');
+  out.append_byte(kDelimChar);
   char buff[sizeof(version_id_t)];
   version_id.serialize(buff);
   out.append(buff, sizeof(buff));
@@ -394,20 +456,20 @@ KeyBuf make_v_prefix(bucket_id_t bucket_id, std::string_view object_name)
   KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryVersion);
   key.set_header(hdr);
   key.append(object_name.data(), object_name.size());
-  key.append_byte('\0');
+  key.append_byte(kDelimChar);
   return key;
 }
 
 std::optional<VersionKeyParts> parse_v_key(std::string_view key)
 {
-  constexpr size_t kNul = 1;
+  constexpr size_t kNul = sizeof(kDelimChar);
   if (key.size() < sizeof(KeyHeaderS) + kNul + sizeof(version_id_t) ||
       key[0] != kNamespaceObject ||
       key[offsetof(KeyHeaderS, cat)] != kCategoryVersion) [[unlikely]] {
     return std::nullopt;
   }
   const size_t vid_off = key.size() - sizeof(version_id_t);
-  if (key[vid_off - 1] != '\0') [[unlikely]] {
+  if (key[vid_off - 1] != kDelimChar) [[unlikely]] {
     return std::nullopt;
   }
   VersionKeyParts parts;
@@ -425,14 +487,14 @@ std::optional<VersionKeyParts> parse_v_key(std::string_view key)
 
 std::optional<std::string_view> parse_v_key_view(std::string_view key)
 {
-  constexpr size_t kNul = 1;
+  constexpr size_t kNul = sizeof(kDelimChar);
   constexpr size_t kMinSize = sizeof(KeyHeaderS) + kNul + sizeof(version_id_t);
   if (key.size() < kMinSize || key[0] != kNamespaceObject ||
       key[offsetof(KeyHeaderS, cat)] != kCategoryVersion) [[unlikely]] {
     return std::nullopt;
   }
   const size_t vid_off  = key.size() - sizeof(version_id_t);
-  if (key[vid_off - 1] != '\0') [[unlikely]] {
+  if (key[vid_off - 1] != kDelimChar) [[unlikely]] {
     return std::nullopt;
   }
   const size_t name_off = sizeof(KeyHeaderS);
@@ -486,6 +548,163 @@ std::optional<GroupGoKeyParts> parse_group_go_key(std::string_view key)
   }
   GroupGoKeyParts parts;
   parts.group_ref_tag.load(key.data() + sizeof(KeyHeaderGGroup));
+  return parts;
+}
+
+ //---------------------------------------------------------------------------
+// Multipart upload — S:M
+//---------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------
+void make_m_bucket_prefix(bucket_id_t bucket_id, KeyBuf& out)
+{
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryMultipart);
+  out.set_header(hdr);
+}
+
+//--------------------------------------------------------------------------------
+void make_m_head_key(bucket_id_t bucket_id, std::string_view object_name,
+                     std::string_view ref_tag, KeyBuf& out)
+{
+  make_m_bucket_prefix(bucket_id, out);
+  out.append(object_name.data(), object_name.size());
+  out.append_byte(kDelimChar);
+  out.append(ref_tag.data(), ref_tag.size());
+}
+
+//--------------------------------------------------------------------------------
+void make_u_prefix(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
+{
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryMultipartPart);
+  out.set_header(hdr);
+  out.append(ref_tag.data(), ref_tag.size());
+}
+
+//--------------------------------------------------------------------------------
+void make_u_part_prefix(bucket_id_t bucket_id, std::string_view ref_tag,
+                        uint16_t part_number, KeyBuf& out)
+{
+  make_u_prefix(bucket_id, ref_tag, out);
+  const uint16_t part_number_be = htons(part_number);
+  out.append(&part_number_be, sizeof(part_number_be));
+}
+
+//--------------------------------------------------------------------------------
+void make_u_part_key(bucket_id_t bucket_id, std::string_view ref_tag,
+                     uint16_t part_number, uint32_t generation, KeyBuf& out)
+{
+  make_u_part_prefix(bucket_id, ref_tag, part_number, out);
+  const uint32_t generation_be = htonl(generation);
+  out.append(&generation_be, sizeof(generation_be));
+}
+
+//--------------------------------------------------------------------------------
+std::optional<UKeyParts> parse_u_key(std::string_view key)
+{
+  constexpr size_t kHdrSize = sizeof(KeyHeaderS);
+  constexpr size_t kExpected = kHdrSize + sizeof(RefTag) +
+      sizeof(UKeyParts::part_number) + sizeof(UKeyParts::generation);
+  if (key.size() != kExpected) [[unlikely]] {
+    return std::nullopt;
+  }
+  UKeyParts out;
+  out.bucket_id.load(key.data() + offsetof(KeyHeaderS, bucket_id));
+  out.ref_tag.load(reinterpret_cast<const uint8_t*>(key.data() + kHdrSize));
+  uint16_t pn_be{};
+  uint32_t gen_be{};
+  std::memcpy(&pn_be, key.data() + kHdrSize + kRefTagSize, sizeof(pn_be));
+  std::memcpy(&gen_be, key.data() + kHdrSize + kRefTagSize + sizeof(pn_be), sizeof(gen_be));
+  out.part_number = be16toh(pn_be);
+  out.generation = be32toh(gen_be);
+  return out;
+}
+
+//--------------------------------------------------------------------------------
+std::optional<MHeadKeyParts> parse_m_head_key_view(std::string_view key)
+{
+  constexpr size_t kHdrSize = sizeof(KeyHeaderS);
+  constexpr size_t kDelimSize = sizeof(kDelimChar);
+  // Category 'M' contains only head rows (see keys.hpp) -- no disambiguation
+  // against part rows needed. Tail is '\0'(1) + ref_tag(12) = 13 bytes;
+  // object_name is everything between the header and that fixed tail.
+  constexpr size_t kTail = kDelimSize + kRefTagSize;
+  if (key.size() < kHdrSize + kTail || key[0] != kNamespaceObject ||
+      key[offsetof(KeyHeaderS, cat)] != kCategoryMultipart) [[unlikely]] {
+    return std::nullopt;
+  }
+  const size_t delim_pos = key.size() - kTail;
+  if (key[delim_pos] != kDelimChar) [[unlikely]] {
+    return std::nullopt;
+  }
+  MHeadKeyParts parts;
+  parts.bucket_id.load(key.data() + offsetof(KeyHeaderS, bucket_id));
+  parts.object_name = key.substr(kHdrSize, delim_pos - kHdrSize);
+  parts.ref_tag.load(key.data() + delim_pos + kDelimSize);
+  return parts;
+}
+
+//---------------------------------------------------------------------------
+// G:M — whole-upload cleanup directive
+//---------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------
+void make_gm_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
+{
+  KeyHeaderG hdr(0, kShardCount, kShardId, bucket_id, kOpTypeMultipart);
+  out.set_header(hdr);
+  out.append(ref_tag.data(), ref_tag.size());
+}
+
+//--------------------------------------------------------------------------------
+std::optional<GmKeyParts> parse_gm_key(std::string_view key)
+{
+  constexpr size_t kGmKeySize = sizeof(KeyHeaderG) + kRefTagSize;
+  if (key.size() != kGmKeySize || key[0] != kNamespaceGc ||
+      key[offsetof(KeyHeaderG, cat)] != kOpTypeMultipart) [[unlikely]] {
+    return std::nullopt;
+  }
+  GmKeyParts parts;
+  parts.bucket_id.load(key.data() + offsetof(KeyHeaderG, bucket_id));
+  parts.ref_tag.load(key.data() + sizeof(KeyHeaderG));
+  return parts;
+}
+
+//---------------------------------------------------------------------------
+// G:U — per-part-generation re-upload cleanup directive
+//---------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------
+void make_gu_key(bucket_id_t bucket_id, std::string_view ref_tag,
+                 uint16_t part_number, uint32_t generation, KeyBuf& out)
+{
+  KeyHeaderG hdr(0, kShardCount, kShardId, bucket_id, kOpTypeGcU);
+  out.set_header(hdr);
+  out.append(ref_tag.data(), ref_tag.size());
+  const uint16_t pn_be = htons(part_number);
+  out.append(&pn_be, sizeof(pn_be));
+  const uint32_t gen_be = htonl(generation);
+  out.append(&gen_be, sizeof(gen_be));
+}
+
+//--------------------------------------------------------------------------------
+std::optional<GuKeyParts> parse_gu_key(std::string_view key)
+{
+  constexpr size_t kGuKeySize = sizeof(KeyHeaderG) + sizeof(RefTag) +
+      sizeof(GuKeyParts::part_number) + sizeof(GuKeyParts::generation);
+  if (key.size() != kGuKeySize || key[0] != kNamespaceGc ||
+      key[offsetof(KeyHeaderG, cat)] != kOpTypeGcU) [[unlikely]] {
+    return std::nullopt;
+  }
+  GuKeyParts parts;
+  parts.bucket_id.load(key.data() + offsetof(KeyHeaderG, bucket_id));
+  parts.ref_tag.load(key.data() + sizeof(KeyHeaderG));
+  uint16_t pn_be{};
+  uint32_t gen_be{};
+  std::memcpy(&pn_be, key.data() + sizeof(KeyHeaderG) + kRefTagSize, sizeof(pn_be));
+  std::memcpy(&gen_be, key.data() + sizeof(KeyHeaderG) + kRefTagSize + sizeof(uint16_t),
+              sizeof(gen_be));
+  parts.part_number = be16toh(pn_be);
+  parts.generation = be32toh(gen_be);
   return parts;
 }
 

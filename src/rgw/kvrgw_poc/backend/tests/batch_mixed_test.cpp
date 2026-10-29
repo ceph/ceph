@@ -205,7 +205,7 @@ static bool verify_entry(KvRgwServiceImpl  &service,
   KvRgwServiceImpl::GetObjectResult res;
   const auto ec = service.get_object(
       tenant_id, bucket_name, desc.object_name,
-      std::nullopt, nullptr, &res);
+      std::nullopt, nullptr, 0, &res);
 
   if (ec != KVRGW_ERR_OK) {
     std::cerr << "FAIL get_object(" << desc.object_name

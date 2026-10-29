@@ -53,7 +53,22 @@ private:
 
 inline int64_t now_unix() noexcept {
   return std::chrono::duration_cast<std::chrono::seconds>(
-             std::chrono::system_clock::now().time_since_epoch()).count();
+    std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+inline int64_t now_unix_ms() noexcept {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+inline int64_t steady_now_ms() noexcept {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+inline int64_t steady_now_ns() noexcept {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
 // Helper definitions

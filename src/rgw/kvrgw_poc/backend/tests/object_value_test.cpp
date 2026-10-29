@@ -191,13 +191,13 @@ void test_tag_encode_exact_size()
 {
   const kvrgw::TagPair p{"env", "prod"};
   std::vector<uint8_t> encoded;
-  assert(kvrgw::encode(std::span<const kvrgw::TagPair>(&p, 1), encoded));
+  assert(kvrgw::encode_tags(std::span<const kvrgw::TagPair>(&p, 1), encoded));
   assert(!encoded.empty());
   size_t frame_size = 0;
   assert(kvrgw::encoded_tag_frame_size(encoded, frame_size));
   assert(frame_size == encoded.size());
   std::array<kvrgw::TagPair, kvrgw::MAX_TAG_COUNT> tags{};
-  assert(kvrgw::decode(encoded, tags));
+  assert(kvrgw::decode_tags(encoded, tags));
   assert(tags[0].first == "env");
   assert(tags[0].second == "prod");
 
