@@ -60,6 +60,7 @@ from . import (
     get_main_aws_secret_key,
     get_main_display_name,
     get_main_user_id,
+    get_main_account_id,
     get_main_email,
     get_main_api_name,
     get_alt_aws_access_key,
@@ -2103,13 +2104,19 @@ def test_post_object_authenticated_request():
     body = _get_body(response)
     assert body == 'bar'
 
+
+def _get_main_principal_type():
+    # QA creates main users with --account-root when an account is configured.
+    # ConfigObj serializes an unset account_id as the string 'None'.
+    return 'User' if get_main_account_id() in (None, '', 'None') else 'Account'
+
+
 @pytest.mark.bucket_policy
 @pytest.mark.parametrize('signature_version', ['s3', 's3v4'])
-@pytest.mark.parametrize('condition_type, expected_status', [
-    ('User', 403), ('Anonymous', 204),
-])
-def test_post_object_authenticated_principal_type(signature_version, condition_type, expected_status):
+@pytest.mark.parametrize('condition_type', ['Anonymous', 'User', 'Account'])
+def test_post_object_authenticated_principal_type(signature_version, condition_type):
     client = get_v2_client() if signature_version == 's3' else get_client()
+    expected_status = 403 if condition_type == _get_main_principal_type() else 204
     bucket_name = get_new_bucket(client)
     key = 'test.txt'
     post = client.generate_presigned_post(Bucket=bucket_name, Key=key, ExpiresIn=60)
@@ -12431,7 +12438,7 @@ def test_bucket_policy_anonymous_principal_type(effect, anonymous_status):
     'StringEquals', 'StringNotEquals',
     'StringEqualsIfExists', 'StringNotEqualsIfExists',
 ])
-@pytest.mark.parametrize('condition_type', ['Anonymous', 'User'])
+@pytest.mark.parametrize('condition_type', ['Anonymous', 'User', 'Account'])
 @pytest.mark.parametrize('authenticated', [False, True])
 def test_bucket_policy_principal_type_conditions(condition_op, condition_type, authenticated):
     owner = get_client()
@@ -12457,7 +12464,7 @@ def test_bucket_policy_principal_type_conditions(condition_op, condition_type, a
         condition={condition_op: {'aws:PrincipalType': condition_type}}))
     owner.put_bucket_policy(Bucket=bucket_name, Policy=policy.to_json())
 
-    requester_type = 'User' if authenticated else 'Anonymous'
+    requester_type = _get_main_principal_type() if authenticated else 'Anonymous'
     denied = requester_type == condition_type
     if condition_op in ('StringNotEquals', 'StringNotEqualsIfExists'):
         denied = not denied
@@ -12535,8 +12542,8 @@ def _exercise_bucket_policy_principal_type(client, principal_type):
 
 
 @pytest.mark.bucket_policy
-def test_bucket_policy_user_principal_type():
-    _exercise_bucket_policy_principal_type(get_client(), 'User')
+def test_bucket_policy_main_principal_type():
+    _exercise_bucket_policy_principal_type(get_client(), _get_main_principal_type())
 
 
 @pytest.mark.bucket_policy

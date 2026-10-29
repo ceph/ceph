@@ -2175,6 +2175,8 @@ bool RGWFormPost::is_integral()
                        << local_sig << " != " << form_signature << dendl;
     }
     if (r) {
+      // FormPost authenticates after the IAM environment has been built.
+      rgw_update_iam_principal_type(s);
       break;
     }
   }
