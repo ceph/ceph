@@ -313,6 +313,7 @@ class UpgradeState:
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
             'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
             'health_warnings_muted': self.health_warnings_muted,
+            'rotated_osd_mds_keyrings': self.rotated_osd_mds_keyrings,
         }
 
     @classmethod
@@ -1085,6 +1086,87 @@ class CephadmUpgrade:
             tries -= 1
         return False
 
+    def _wait_for_ok_to_upgrade(
+            self,
+            s: DaemonDescription,
+            known: Optional[List[str]] = None,  # NOTE: output argument!
+    ) -> bool:
+        """Ask the service if daemon s is safe to upgrade.
+
+        Calls service.ok_to_upgrade() which each service implements in its own
+        way. Default base class returns safe immediately. NFS overrides with
+        a gRPC call to NFS-Ganesha.
+
+        Error handling based on errno returned by ok_to_upgrade():
+          retval == 0       → safe, proceed
+          retval == ENOTSUP → API not implemented, fall back to traditional upgrade
+          retval == EBUSY   → temporary, retry up to 4 times then pause upgrade
+          retval == EINVAL  → hard error, pause upgrade immediately
+        """
+        assert s.daemon_type is not None
+        assert s.daemon_id is not None
+        assert self.upgrade_state is not None
+
+        service = service_registry.get_service(daemon_type_to_service(s.daemon_type))
+
+        tries = 4
+        while tries > 0:
+            if not self.upgrade_state or self.upgrade_state.paused:
+                return False
+
+            r = service.ok_to_upgrade(
+                to_upgrade=s.name(),
+                known=known,
+            )
+
+            # Success
+            if not r.retval:
+                logger.info(f'Upgrade: {s.name()} is safe to upgrade')
+                return True
+
+            # ENOTSUP: ok_to_upgrade not implemented for this service.
+            # Fall back silently to traditional upgrade.
+            if r.retval == -errno.ENOTSUP:
+                logger.info(
+                    f'Upgrade: ok_to_upgrade not supported for {s.name()}, '
+                    f'proceeding with traditional upgrade'
+                )
+                return True
+
+            # EINVAL: hard error — pause upgrade immediately.
+            if r.retval == -errno.EINVAL:
+                self._fail_upgrade('UPGRADE_EXCEPTION', {
+                    'severity': 'error',
+                    'summary': f'Upgrade: ok-to-upgrade hard error for {s.name()}',
+                    'count': 1,
+                    'detail': [r.stderr],
+                })
+                return False
+
+            # EBUSY: temporary — retry up to 4 times then pause.
+            logger.info(
+                f'Upgrade: ok-to-upgrade not ready for {s.name()} '
+                f'(attempt {5 - tries}/4): {r.stderr}'
+            )
+            time.sleep(15)
+            tries -= 1
+
+        # All 4 retries exhausted — pause upgrade.
+        self._fail_upgrade('UPGRADE_EXCEPTION', {
+            'severity': 'warning',
+            'summary': (
+                f'Upgrade: daemon {s.name()} not ready to upgrade after '
+                f'4 attempts'
+            ),
+            'count': 1,
+            'detail': [
+                f'ok-to-upgrade returned EBUSY 4 times for {s.name()}. '
+                f'Check daemon state and run '
+                f'"ceph orch upgrade resume" once resolved.'
+            ],
+        })
+        return False
+
     def _upgrade_uses_ok_to_upgrade_for_osds(self) -> bool:
         """
         When ``upgrade_start`` persisted CRUSH bucket scope (bucket type/name
@@ -1801,6 +1883,10 @@ class CephadmUpgrade:
                         and not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return False, to_upgrade
 
+            if d.daemon_type == 'nfs':
+                if not self._wait_for_ok_to_upgrade(d, known_ok_to_upgrade):
+                    return False, to_upgrade
+
             if (
                 d.daemon_type == 'osd'
                 and self._upgrade_uses_ok_to_upgrade_for_osds()
@@ -2507,6 +2593,26 @@ class CephadmUpgrade:
 
             if need_upgrade:
                 self.upgrade_info_str = 'Currently upgrading %s daemons' % (daemon_type)
+
+            # NFS with TSM enabled: use parallel rolling upgrade.
+            # TSM-enabled clusters → gRPC ok_to_upgrade, one thread per cluster.
+            # Non-TSM clusters → fall through to normal upgrade path below.
+            if daemon_type == 'nfs' and need_upgrade:
+                from cephadm.services.nfs import NFSService  # avoid circular import
+                nfs_service = cast(NFSService, service_registry.get_service('nfs'))
+                tsm_daemons = [
+                    d for d in need_upgrade
+                    if nfs_service._is_tsm_enabled(d[0].service_name())
+                ]
+                non_tsm_daemons = [
+                    d for d in need_upgrade
+                    if not nfs_service._is_tsm_enabled(d[0].service_name())
+                ]
+                if tsm_daemons:
+                    if not nfs_service.upgrade_nfs_parallel(tsm_daemons, target_image, target_digests):
+                        return
+                # Non-TSM daemons continue to normal path below
+                need_upgrade = non_tsm_daemons
 
             _continue, to_upgrade = self._to_upgrade(need_upgrade, target_image)
             if not _continue:

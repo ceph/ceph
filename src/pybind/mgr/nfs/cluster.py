@@ -3,7 +3,14 @@ import json
 import logging
 import re
 import socket
-from typing import cast, Dict, List, Any, Optional, TYPE_CHECKING, Union
+from typing import cast, Dict, List, Any, Optional, Tuple, TYPE_CHECKING, Union
+
+try:
+    import grpc  # type: ignore
+    from .nfs_grpc_stub import NfsUpgradeStub, OkToUpgradeRequest
+    GRPC_AVAILABLE = True
+except ImportError:
+    GRPC_AVAILABLE = False
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
@@ -1053,3 +1060,110 @@ class NFSCluster:
         except Exception as e:
             log.exception("Failed to update cluster-level QoS config for cluster %s", cluster_id)
             raise ErrorResponse.wrap(e)
+
+    def _get_grpc_channel(self, host_ip: str, port: int,
+                          cluster_id: str = '',
+                          ca_cert: Optional[bytes] = None,
+                          client_cert: Optional[bytes] = None,
+                          client_key: Optional[bytes] = None) -> Any:
+        """Open a TLS gRPC channel to NFS-Ganesha.
+
+        Uses explicit cert bytes if provided, otherwise falls back to insecure.
+        """
+        if not GRPC_AVAILABLE:
+            raise NFSInvalidOperation('grpc library not available. Install grpcio.')
+
+        if ca_cert and client_cert and client_key:
+            credentials = grpc.ssl_channel_credentials(
+                root_certificates=ca_cert,
+                private_key=client_key,
+                certificate_chain=client_cert,
+            )
+            log.info(f'gRPC: TLS channel to {host_ip}:{port}')
+            return grpc.secure_channel(f'{host_ip}:{port}', credentials)
+
+        log.warning(f'gRPC: no certs — using insecure channel to {host_ip}:{port}')
+        return grpc.insecure_channel(f'{host_ip}:{port}')
+
+    def _get_nfs_daemon_and_port(self, cluster_id: str) -> Tuple[Any, Any, Any]:
+        """Return (daemon, host_ip, tsm_port) for any running NFS daemon.
+
+        Uses the ceph inventory IP address (not DNS hostname) to avoid IPv6
+        link-local resolution issues.
+        """
+        completion = self.mgr.list_daemons(daemon_type='nfs')
+        all_daemons = orchestrator.raise_if_exception(completion)
+        cluster_daemons = [d for d in all_daemons if d.service_id() == cluster_id]
+        if not cluster_daemons:
+            raise NFSInvalidOperation(
+                f'No running NFS daemons found for cluster {cluster_id}'
+            )
+        daemon = cluster_daemons[0]
+
+        # Get actual IPv4 from ceph inventory to avoid IPv6 link-local issues
+        host_ip = daemon.hostname
+        try:
+            hosts_completion = self.mgr.get_hosts()
+            hosts = orchestrator.raise_if_exception(hosts_completion)
+            for h in hosts:
+                if h.hostname == daemon.hostname and h.addr:
+                    host_ip = h.addr
+                    break
+        except Exception:
+            pass
+
+        try:
+            spec_completion = self.mgr.describe_service(
+                service_type='nfs', service_name=f'nfs.{cluster_id}'
+            )
+            specs = orchestrator.raise_if_exception(spec_completion)
+            spec = cast(NFSServiceSpec, specs[0].spec) if specs else None
+            tsm_port = getattr(spec, 'tsm_port', None) if spec else None
+        except Exception:
+            tsm_port = None
+        if not tsm_port:
+            raise NFSInvalidOperation(
+                f'TSM port not configured for cluster {cluster_id}. '
+                f'Set tsm_port in the NFS service spec.'
+            )
+        return daemon, host_ip, tsm_port
+
+    def grpc_ok_to_upgrade(self,
+                           cluster_id: str,
+                           daemon_name: str,
+                           ca_cert: Optional[bytes] = None,
+                           client_cert: Optional[bytes] = None,
+                           client_key: Optional[bytes] = None) -> Dict[str, Any]:
+        """Call ok_to_upgrade gRPC API on NFS-Ganesha.
+
+        Sends ganesha_id (integer rank extracted from daemon name).
+        No already_upgraded needed — NFS-Ganesha handles state internally.
+        """
+        daemon, host_ip, tsm_port = self._get_nfs_daemon_and_port(cluster_id)
+        channel = self._get_grpc_channel(
+            host_ip, tsm_port, cluster_id=cluster_id,
+            ca_cert=ca_cert, client_cert=client_cert, client_key=client_key,
+        )
+
+        try:
+            # Look up the specific daemon to get its rank metadata
+            all_daemons = orchestrator.raise_if_exception(
+                self.mgr.list_daemons(daemon_type='nfs'))
+            target = next((d for d in all_daemons if d.name() == daemon_name), None)
+            if target is None or target.rank is None:
+                raise NFSInvalidOperation(f'Daemon {daemon_name} not found or has no rank')
+            ganesha_id = target.rank
+            stub = NfsUpgradeStub(channel)
+            request = OkToUpgradeRequest(ganesha_id=ganesha_id)
+            response = stub.OkToUpgrade(request)
+            log.info(f'ok_to_upgrade for {daemon_name} (ganesha_id={ganesha_id}): ok={response.ok_to_upgrade}')
+            return {
+                'cluster_id': cluster_id,
+                'daemon': daemon_name,
+                'ganesha_id': ganesha_id,
+                'ok_to_upgrade': response.ok_to_upgrade,
+            }
+        except Exception as e:
+            raise NFSInvalidOperation(
+                f'ok_to_upgrade gRPC call for {daemon_name} failed: {e}'
+            )
