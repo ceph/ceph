@@ -13470,8 +13470,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
+    // the zone type of a rule over zones, as for a pool created with the
+    // profile
+    string zone_failure_domain;
+    if (num_zones > 1) {
+      auto params = load_pool_defaults(g_conf());
+      params.pool_type = pg_pool_t::TYPE_ERASURE;
+      params.erasure_code_profile = profile;
+      params.profile = osdmap.get_erasure_code_profile(profile);
+      zone_failure_domain = effective_zone_failure_domain(params);
+    }
     int rule;
-    err = crush_rule_create_erasure(name, num_zones, "", "", "", "", profile, &rule, &ss);
+    err = crush_rule_create_erasure(name, num_zones, "", zone_failure_domain, "",
+                                    "", profile, &rule, &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
