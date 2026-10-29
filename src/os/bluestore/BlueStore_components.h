@@ -556,6 +556,10 @@ namespace bluestore {
     std::array<std::pair<ghobject_t, ceph::mono_clock::time_point>, 64> dumped_onodes;
 
   public:
+    /// bluestore_onode_cache_probation_ratio, kept here so the hot path does
+    /// not look the option up
+    std::atomic<double> probation_ratio = {0.1};
+
     OnodeCacheShard(CephContext* cct) : BlueStore::CacheShard(cct) {}
     static OnodeCacheShard* create(CephContext* cct, std::string type,
       PerfCounters* logger);
@@ -567,7 +571,8 @@ namespace bluestore {
     virtual void _move_pinned(OnodeCacheShard* to, Onode* o) = 0;
 
     virtual void maybe_unpin(Onode* o) = 0;
-    virtual void add_stats(uint64_t* onodes, uint64_t* pinned_onodes) = 0;
+    virtual void add_stats(uint64_t* onodes, uint64_t* pinned_onodes,
+                           uint64_t* probation_onodes) = 0;
     bool empty() {
       return _get_num() == 0;
     }

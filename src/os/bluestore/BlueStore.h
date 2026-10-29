@@ -198,6 +198,7 @@ enum {
   //****************************************
   l_bluestore_onodes,
   l_bluestore_pinned_onodes,
+  l_bluestore_probation_onodes,
   l_bluestore_onode_hits,
   l_bluestore_onode_misses,
   l_bluestore_onode_shard_hits,
