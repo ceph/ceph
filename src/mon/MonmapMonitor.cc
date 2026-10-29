@@ -1076,6 +1076,12 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       err = -EINVAL;
       goto reply_no_propose;
     }
+    if (pending_map.tiebreaker_mon == name &&
+        pending_map.disallowed_leaders.count(name)) {
+      ss << "mon." << name << " is already the tiebreaker";
+      err = 0;
+      goto reply_no_propose;
+    }
     bool sure = false;
     cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
 
