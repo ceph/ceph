@@ -317,7 +317,7 @@ class RbdSnapshot(RESTController):
     def clone(self, image_spec, snapshot_name, child_pool_name,
               child_image_name, child_namespace=None, obj_size=None, features=None,
               stripe_unit=None, stripe_count=None, data_pool=None,
-              configuration=None, metadata=None):
+              configuration=None, metadata=None, clone_by_snap_id=False):
         """
         Clones a snapshot to an image
         """
@@ -334,10 +334,25 @@ class RbdSnapshot(RESTController):
                 # Set features
                 feature_bitmask = format_features(features)
 
+                # When clone_by_snap_id is set, treat snapshot_name as a
+                # numeric snap ID and clone by ID. This is required for
+                # non-user namespace snapshots (e.g. group snapshots) which
+                # cannot be cloned by name. Passing an int to rbd.RBD().clone()
+                # triggers rbd_clone4 (by snap ID) instead of rbd_clone3.
+                # Clone format 2 is enforced here because this flag is intended
+                # for non-user namespace snapshots which cannot be protected
+                # (a prerequisite for clone format 1).
+                snap_ref = snapshot_name
+                clone_format = None
+                if clone_by_snap_id:
+                    snap_ref = int(snapshot_name)
+                    clone_format = 2
+
                 rbd_inst = rbd.RBD()
-                rbd_inst.clone(p_ioctx, image_name, snapshot_name, ioctx,
+                rbd_inst.clone(p_ioctx, image_name, snap_ref, ioctx,
                                child_image_name, feature_bitmask, l_order,
-                               stripe_unit, stripe_count, data_pool)
+                               stripe_unit, stripe_count, data_pool,
+                               clone_format=clone_format)
 
                 RbdConfiguration(pool_ioctx=ioctx, image_name=child_image_name).set_configuration(
                     configuration)
