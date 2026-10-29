@@ -6660,7 +6660,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       pi.snapnode->subvol_prev_path = std::move(value);
     }
 
-    mdr->no_early_reply = false;
+    mdr->no_early_reply = true;
     pip = pi.inode.get();
     adjust_realm = true;
   } else if (name == "ceph.dir.subvolume.snaps.visible"sv) {
