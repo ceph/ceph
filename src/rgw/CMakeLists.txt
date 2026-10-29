@@ -293,6 +293,7 @@ list(APPEND librgw_posix_srcs
   driver/posix/lmdb-safe.cc
   driver/posix/posixDB.cc
   driver/posix/notify.cpp
+  driver/posix/fs_notification.cc
 )
 list(APPEND librgw_nsfs_srcs
   driver/nsfs/rgw_sal_nsfs.cc

@@ -2781,14 +2781,7 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* ob
 			      rgw::notify::EventType event_type, optional_yield y,
 			      const std::string* object_name)
 {
-  rgw::notify::EventTypeList event_types = {event_type};
-  auto notif = std::make_unique<POSIXNotification>(this, obj, src_obj, event_types,
-      s->bucket.get(),
-      to_string(s->owner.id),
-      s->owner.id.index() == 0 ? std::get<rgw_user>(s->owner.id).tenant : "",
-      s->req_id);
-  notif->x_meta_map = s->info.x_meta_map;
-  return notif;
+  return std::make_unique<FSNotification>(this, obj, src_obj, event_type, s);
 }
 
 std::unique_ptr<Notification> POSIXDriver::get_notification(
@@ -2801,7 +2794,7 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(
     std::string& _user_tenant,
     std::string& _req_id,
     optional_yield y) {
-  return std::make_unique<POSIXNotification>(this, obj, src_obj, event_types,
+  return std::make_unique<FSNotification>(this, obj, src_obj, event_types,
       _bucket, _user_id, _user_tenant, _req_id);
 }
 
@@ -3393,116 +3386,6 @@ int POSIXDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
 {
   return get_user_db()->list_oidc_providers(dpp,
       std::string(tenant), providers);
-}
-
-/* --- Notification publish methods --- */
-
-int POSIXNotification::publish_reserve(const DoutPrefixProvider *dpp,
-				       RGWObjTags* obj_tags)
-{
-  obj_tags_ptr = obj_tags;
-
-  if (!bucket) {
-    return 0;
-  }
-
-  int ret = get_bucket_notifications(dpp, bucket, bucket_topics);
-  if (ret < 0) {
-    return ret;
-  }
-
-  const std::string obj_name = obj ? obj->get_name() : "";
-
-  for (auto& [name, filter] : bucket_topics.topics) {
-    bool event_match = false;
-    for (auto req_type : event_types) {
-      for (auto cfg_type : filter.events) {
-	if (static_cast<uint64_t>(req_type) & static_cast<uint64_t>(cfg_type)) {
-	  event_match = true;
-	  break;
-	}
-      }
-      if (event_match) break;
-    }
-    if (!event_match) continue;
-
-    if (!match(filter.s3_filter.key_filter, obj_name)) {
-      continue;
-    }
-
-    if (!filter.s3_filter.metadata_filter.kv.empty()) {
-      if (!match(filter.s3_filter.metadata_filter, x_meta_map)) {
-	continue;
-      }
-    }
-
-    if (!filter.s3_filter.tag_filter.kv.empty()) {
-      KeyMultiValueMap tags;
-      if (obj_tags) {
-	tags = obj_tags->get_tags();
-      }
-      if (!match(filter.s3_filter.tag_filter, tags)) {
-	continue;
-      }
-    }
-
-    matched.push_back(filter);
-  }
-
-  return 0;
-}
-
-int POSIXNotification::publish_commit(const DoutPrefixProvider* dpp,
-				      uint64_t size,
-				      const ceph::real_time& mtime,
-				      const std::string& etag,
-				      const std::string& version)
-{
-  if (matched.empty()) {
-    return 0;
-  }
-
-  for (auto& filter : matched) {
-    const auto& dest = filter.topic.dest;
-    if (dest.push_endpoint.empty()) {
-      continue;
-    }
-
-    rgw_pubsub_s3_event event;
-    event.eventTime = mtime;
-    event.eventName = rgw::notify::to_string(event_types.front());
-    event.userIdentity = user_id;
-    event.x_amz_request_id = req_id;
-    event.configurationId = filter.s3_id;
-    if (bucket) {
-      event.bucket_name = bucket->get_name();
-      event.bucket_ownerIdentity = to_string(bucket->get_owner());
-      event.bucket_id = bucket->get_bucket_id();
-    }
-    if (obj) {
-      event.object_key = obj->get_name();
-    }
-    event.object_size = size;
-    event.object_etag = etag;
-    event.object_versionId = version;
-
-    try {
-      RGWHTTPArgs args(dest.push_endpoint_args, dpp);
-      auto endpoint = RGWPubSubEndpoint::create(
-	  dest.push_endpoint, filter.topic.name, args,
-	  dpp->get_cct());
-      int r = endpoint->send(dpp, event, null_yield);
-      if (r < 0) {
-	ldpp_dout(dpp, 1) << "ERROR: notification endpoint send failed: "
-			  << dest.push_endpoint << " ret=" << r << dendl;
-      }
-    } catch (const RGWPubSubEndpoint::configuration_error& e) {
-      ldpp_dout(dpp, 1) << "ERROR: notification endpoint config error: "
-			<< e.what() << dendl;
-    }
-  }
-
-  return 0;
 }
 
 /* --- Topic SAL methods --- */
@@ -4499,8 +4382,15 @@ int POSIXObject::copy_object(const ACLOwner& owner,
   if (rgw::sal::get_attr(src_attrs, RGW_POSIX_ATTR_OBJECT_TYPE, pot)) {
     attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = pot;
   }
-  return dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP,
-			     authenticated_user);
+  ret = dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP,
+			    authenticated_user);
+  /* the copy's mtime, which RGWCopyObj gives its notification as the
+   * event's time */
+  if (auto* ent = dobj->get_fsent(); (ret == 0) && mtime && ent &&
+      (ent->stat(dpp, /*force=*/true) == 0)) {
+    *mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
+  }
+  return ret;
 }
 
 int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
@@ -6325,6 +6215,13 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   }
   driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
                                             (exists ? 0 : 1), orig_size, accounted_size);
+
+  /* the caller's mtime, which RGWPutObj gives its notification as the
+   * event's time */
+  if (auto* ent = obj->get_fsent(); mtime && ent &&
+      (ent->stat(dpp, /*force=*/true) == 0)) {
+    *mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
+  }
 
   return 0;
 }

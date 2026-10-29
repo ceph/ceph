@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "fs_notification.h"
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
 #include "rgw_quota.h"
@@ -895,45 +896,6 @@ public:
     const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */);
 
   RGWQuotaHandler* get_quota_handler() {return quota_handler;}
-};
-
-class POSIXNotification : public StoreNotification {
-protected:
-  POSIXDriver* driver;
-  rgw::sal::Bucket* bucket = nullptr;
-  std::string user_id;
-  std::string user_tenant;
-  std::string req_id;
-  rgw_pubsub_bucket_topics bucket_topics;
-  std::vector<rgw_pubsub_topic_filter> matched;
-  RGWObjTags* obj_tags_ptr = nullptr;
-  KeyValueMap x_meta_map;
-  friend class POSIXDriver;
-public:
- POSIXNotification(POSIXDriver* _driver,
-		   Object* _obj,
-		   Object* _src_obj,
-		   const rgw::notify::EventTypeList& _types)
-		   : StoreNotification(_obj, _src_obj, _types),
-		     driver(_driver) {}
- POSIXNotification(POSIXDriver* _driver,
-		   Object* _obj,
-		   Object* _src_obj,
-		   const rgw::notify::EventTypeList& _types,
-		   rgw::sal::Bucket* _bucket,
-		   std::string _user_id,
-		   std::string _user_tenant,
-		   std::string _req_id)
-		   : StoreNotification(_obj, _src_obj, _types),
-		     driver(_driver), bucket(_bucket),
-		     user_id(std::move(_user_id)),
-		     user_tenant(std::move(_user_tenant)),
-		     req_id(std::move(_req_id)) {}
- ~POSIXNotification() = default;
-
- virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override;
- virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-			   const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;
 };
 
 class POSIXUser : public StoreUser {
