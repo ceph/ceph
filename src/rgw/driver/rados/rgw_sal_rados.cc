@@ -3661,6 +3661,48 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
   return ret;
 }
 
+namespace {
+
+// The object expirer should check an expired object that object lock protects
+// again when its retention ends. Releasing a legal hold queues the object
+// again (see RGWPutObjLegalHold), so while it is under legal hold only fall
+// back to a daily check, in case that is missed
+constexpr auto legal_hold_recheck_interval = std::chrono::hours(24);
+
+ceph::real_time get_object_lock_retry_time(const DoutPrefixProvider* dpp, const rgw::sal::Attrs& attrs)
+{
+  const auto now = ceph::real_clock::now();
+  ceph::real_time retry_at;
+  if (auto iter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD); iter != attrs.end()) {
+    RGWObjectLegalHold legal_hold;
+    try {
+      auto p = iter->second.cbegin();
+      decode(legal_hold, p);
+    } catch (const buffer::error&) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to decode object legal hold" << dendl;
+    }
+    if (legal_hold.is_enabled()) {
+      retry_at = now + legal_hold_recheck_interval;
+    }
+  }
+  if (auto iter = attrs.find(RGW_ATTR_OBJECT_RETENTION); iter != attrs.end()) {
+    RGWObjectRetention retention;
+    try {
+      auto p = iter->second.cbegin();
+      decode(retention, p);
+      retry_at = std::max(retry_at, retention.get_retain_until_date());
+    } catch (const buffer::error&) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to decode object retention" << dendl;
+    }
+  }
+  if (retry_at <= now) {
+    retry_at = now + legal_hold_recheck_interval;
+  }
+  return retry_at;
+}
+
+} // anonymous namespace
+
 /*
  * If the object is restored temporarily and is expired, delete the data and
  * reset the HEAD object as cloud-transitioned.
@@ -3791,10 +3833,33 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
       return ret;
     }
   }
-  // object is not restored/temporary; go for regular deletion
-    ldpp_dout(dpp, 10) << "Deleting expired obj:" << get_key() << dendl;
 
-    ret = obj->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
+  // object is not restored/temporary; go for regular deletion, unless an
+  // object lock retention or legal hold still protects it
+  ret = verify_object_lock(dpp, attrs, false, false);
+  if (ret == -EACCES) {
+    // the expirer drops this hint, so add a new one to try again once the
+    // retention ends; releasing a legal hold queues it again earlier
+    const ceph::real_time retry_at = get_object_lock_retry_time(dpp, attrs);
+    rgw_obj_index_key index_key;
+    get_obj().key.get_index_key(&index_key);
+    int r = store->getRados()->objexp_hint_add(dpp, retry_at, bucket->get_key(),
+                                               index_key);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to re-add expiration hint for obj:"
+          << get_key() << ", it will not be expired: r=" << r << dendl;
+    }
+    ldpp_dout(dpp, 5) << "Not deleting expired obj:" << get_key()
+        << ", it is protected by object lock retention or legal hold, "
+        << "retrying at " << retry_at << dendl;
+    return ret;
+  } else if (ret < 0) {
+    return ret;
+  }
+
+  ldpp_dout(dpp, 10) << "Deleting expired obj:" << get_key() << dendl;
+
+  ret = obj->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
 
   return ret;
 }

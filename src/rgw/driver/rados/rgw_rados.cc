@@ -11357,6 +11357,15 @@ bool RGWRados::process_expired_objects(const DoutPrefixProvider *dpp, optional_y
   return obj_expirer->inspect_all_shards(dpp, utime_t(), ceph_clock_now(), y);
 }
 
+int RGWRados::objexp_hint_add(const DoutPrefixProvider *dpp,
+                              const ceph::real_time& delete_at,
+                              const rgw_bucket& bucket,
+                              const rgw_obj_index_key& obj_key)
+{
+  return obj_expirer->hint_add(dpp, delete_at, bucket.tenant, bucket.name,
+                               bucket.bucket_id, obj_key);
+}
+
 int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, string& tag,
                                  rgw_obj& obj, optional_yield y)
 {

@@ -4845,6 +4845,100 @@ int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, 
     s, this, rgw::lua::context::putData, *filter, cb);
 }
 
+namespace {
+
+/* Swift X-Delete-At/X-Delete-After must not expire an object version before
+ * its object lock retention ends, or while it's under legal hold. For a new
+ * object without an explicit retention, the bucket's default retention
+ * applies. */
+int verify_delete_at_object_lock(req_state* s,
+                                 const boost::optional<ceph::real_time>& delete_at,
+                                 const RGWObjectRetention* retention,
+                                 const RGWObjectLegalHold* legal_hold,
+                                 bool new_object)
+{
+  if (!delete_at || ceph::real_clock::is_zero(*delete_at) ||
+      !s->bucket->get_info().obj_lock_enabled()) {
+    return 0;
+  }
+  const auto& obj_lock = s->bucket->get_info().obj_lock;
+  ceph::real_time retain_until;
+  if (retention) {
+    retain_until = retention->get_retain_until_date();
+  } else if (new_object && obj_lock.has_rule()) {
+    retain_until = obj_lock.get_lock_until_date(ceph::real_clock::now());
+  }
+  if (*delete_at < retain_until) {
+    s->err.message = "X-Delete-At is earlier than the object's retain-until date";
+    ldpp_dout(s, 4) << s->err.message << dendl;
+    return -EACCES;
+  }
+  if (legal_hold && legal_hold->is_enabled()) {
+    s->err.message = "X-Delete-At can't be set on an object under legal hold";
+    ldpp_dout(s, 4) << s->err.message << dendl;
+    return -EACCES;
+  }
+  return 0;
+}
+
+int verify_delete_at_object_lock(req_state* s,
+                                 const boost::optional<ceph::real_time>& delete_at,
+                                 const rgw::sal::Attrs& attrs)
+{
+  std::optional<RGWObjectRetention> retention;
+  std::optional<RGWObjectLegalHold> legal_hold;
+
+  try {
+    if (auto iter = attrs.find(RGW_ATTR_OBJECT_RETENTION); iter != attrs.end()) {
+      decode(retention.emplace(), iter->second);
+    }
+    if (auto iter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD); iter != attrs.end()) {
+      decode(legal_hold.emplace(), iter->second);
+    }
+  } catch (const buffer::error&) {
+    ldpp_dout(s, 0) << "ERROR: failed to decode object lock attributes" << dendl;
+    return -EIO;
+  }
+  return verify_delete_at_object_lock(s, delete_at, retention ? &*retention : nullptr,
+                                      legal_hold ? &*legal_hold : nullptr, false);
+}
+
+/* The object expirer doesn't delete an expired Swift object while object lock
+ * protects it, and doesn't check it again while it is under legal hold. After
+ * a change to its retention or legal hold, re-write its expiration time so
+ * that the expirer gets a new hint for it. */
+void requeue_object_expiration(const DoutPrefixProvider* dpp, req_state* s,
+                               optional_yield y)
+{
+  auto& attrs = s->object->get_attrs();
+  auto iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (iter == attrs.end()) {
+    return;
+  }
+  ceph::real_time delete_at;
+  try {
+    auto p = iter->second.cbegin();
+    decode(delete_at, p);
+  } catch (const buffer::error&) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode " RGW_ATTR_DELETE_AT << dendl;
+    return;
+  }
+  if (ceph::real_clock::is_zero(delete_at)) {
+    return;
+  }
+
+  // the lock change is logged for multisite already, and other zones add
+  // the hint when they sync it, so don't log this write again
+  bufferlist bl = iter->second;
+  int r = s->object->modify_obj_attrs(RGW_ATTR_DELETE_AT, bl, y, dpp, 0);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to requeue the expiration of " << s->object
+        << ": " << cpp_strerror(r) << dendl;
+  }
+}
+
+} // anonymous namespace
+
 void RGWPutObj::execute(optional_yield y)
 {
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
@@ -4879,6 +4973,12 @@ void RGWPutObj::execute(optional_yield y)
 
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
+  op_ret = verify_delete_at_object_lock(s, delete_at, obj_retention,
+                                        obj_legal_hold, true);
+  if (op_ret < 0) {
     return;
   }
 
@@ -5855,6 +5955,11 @@ void RGWPutMetadataObject::execute(optional_yield y)
     return;
   }
 
+  op_ret = verify_delete_at_object_lock(s, delete_at, s->object->get_attrs());
+  if (op_ret < 0) {
+    return;
+  }
+
   /* Filter currently existing attributes. */
   prepare_add_del_attrs(s->object->get_attrs(), attrs, rmattrs);
   populate_with_generic_attrs(s, attrs);
@@ -6630,6 +6735,11 @@ void RGWCopyObj::execute(optional_yield y)
   s->src_object->set_atomic(true);
   s->object->set_atomic(true);
 
+  op_ret = verify_delete_at_object_lock(s, delete_at, obj_retention,
+                                        obj_legal_hold, true);
+  if (op_ret < 0) {
+    return;
+  }
   encode_delete_at_attr(delete_at, attrs);
 
   if (obj_retention) {
@@ -9940,8 +10050,9 @@ void RGWPutObjRetention::execute(optional_yield y)
   }
 
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl, s->yield, this);
-
-  return;
+  if (op_ret == 0) {
+    requeue_object_expiration(this, s, s->yield);
+  }
 }
 
 int RGWGetObjRetention::verify_permission(optional_yield y)
@@ -10065,7 +10176,9 @@ void RGWPutObjLegalHold::execute(optional_yield y) {
   obj_legal_hold.encode(bl);
   //if instance is empty, we should modify the latest object
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_LEGAL_HOLD, bl, s->yield, this);
-  return;
+  if (op_ret == 0 && !obj_legal_hold.is_enabled()) {
+    requeue_object_expiration(this, s, s->yield);
+  }
 }
 
 int RGWGetObjLegalHold::verify_permission(optional_yield y)
