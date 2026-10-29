@@ -15175,6 +15175,12 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     if (vxattr->flags & VXATTR_ALTNAME) {
       // Path lookup names one link. Inode-only callers have no path, so
       // they fall back to whichever parent is first in the cache.
+      if (!dn && in->dentries.size() > 1) {
+        // bail if inode only caller as we cannot determine which dn is
+        // the correct for a link.
+        return -ENOTSUP;
+      }
+
       Dentry *adn = dn ? dn : in->get_first_parent();
       if (!alternate_name_visible || fscrypt_as || adn->alternate_name.empty()) {
 	r = -ENODATA;
