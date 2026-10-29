@@ -793,7 +793,7 @@ private:
             // n/ack all up to (and including) the tag
             ldout(cct, 20) << "AMQP run: multiple n/acks received with tag=" << tag << " and result=" << result << dendl;
             auto it = conn->callbacks.begin();
-            while (it->tag <= tag && it != conn->callbacks.end()) {
+            while (it != conn->callbacks.end() && it->tag <= tag) {
               ldout(cct, 20) << "AMQP run: invoking callback with tag=" << it->tag << dendl;
               it->cb(result);
               it = conn->callbacks.erase(it);
