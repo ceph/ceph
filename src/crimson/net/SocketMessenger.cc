@@ -17,6 +17,7 @@
 
 #include <seastar/core/sleep.hh>
 
+#include <algorithm>
 #include <tuple>
 #include <boost/functional/hash.hpp>
 #include <fmt/os.h>
@@ -111,8 +112,42 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
       logger().warn("{} do_listen: listener doesn't exist", *this);
       return listen_ertr::now();
     }
-    return listener->listen(listen_addr);
+    std::optional<ShardedServerSocket::port_range_t> shard_port_range;
+    if (client_shard_ports) {
+      using crimson::common::local_conf;
+      shard_port_range.emplace(local_conf()->ms_bind_port_min,
+                               local_conf()->ms_bind_port_max);
+    }
+    return listener->listen(listen_addr, shard_port_range
+    ).safe_then([this] {
+      shard_ports = listener->get_shard_ports();
+    });
   });
+}
+
+bool SocketMessenger::is_client_shard_port(uint16_t port) const
+{
+  return port != 0 &&
+    std::find(shard_ports.begin(), shard_ports.end(), port) != shard_ports.end();
+}
+
+bool SocketMessenger::is_my_addr(const entity_addr_t& addr) const
+{
+  if (get_myaddrs().contains(addr)) {
+    return true;
+  }
+  if (!client_shard_ports) {
+    return false;
+  }
+  for (const auto& mine : get_myaddrs().v) {
+    if (mine.is_same_host(addr) &&
+        mine.get_type() == addr.get_type() &&
+        mine.get_nonce() == addr.get_nonce() &&
+        is_client_shard_port(addr.get_port())) {
+      return true;
+    }
+  }
+  return false;
 }
 
 SocketMessenger::bind_ertr::future<>
@@ -269,6 +304,32 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
   return conn->get_local_shared_foreign_from_this();
 }
 
+seastar::future<> SocketMessenger::mark_down_all_ports(const entity_addr_t& a)
+{
+  assert(seastar::this_shard_id() == sid);
+  std::vector<SocketConnectionRef> found;
+  auto matches = [&a](const entity_addr_t& addr) {
+    return addr.get_type() == a.get_type() &&
+      addr.is_same_host(a) &&
+      addr.get_nonce() == a.get_nonce();
+  };
+  for (auto& [addr, conn] : connections) {
+    if (matches(addr)) {
+      found.push_back(conn);
+    }
+  }
+  for (auto& [key, conn] : shard_port_conns) {
+    if (matches(key.first)) {
+      found.push_back(conn);
+    }
+  }
+  return seastar::parallel_for_each(std::move(found), [](auto conn) {
+    return seastar::smp::submit_to(conn->get_shard_id(), [c=conn.get()] {
+      c->mark_down();
+    }).then([conn] {});
+  });
+}
+
 seastar::future<> SocketMessenger::shutdown()
 {
   assert(seastar::this_shard_id() == sid);
@@ -292,11 +353,33 @@ seastar::future<> SocketMessenger::shutdown()
       return conn.second->close_clean_yielded();
     });
   }).then([this] {
+    // copy: closing unregisters and mutates the map
+    std::vector<SocketConnectionRef> conns;
+    for (auto& [key, conn] : shard_port_conns) {
+      conns.push_back(conn);
+    }
+    return seastar::do_with(std::move(conns), [](auto &conns) {
+      return seastar::parallel_for_each(conns, [](auto conn) {
+        return conn->close_clean_yielded();
+      });
+    });
+  }).then([this] {
+    // copy: closing unregisters and mutates the set
+    auto multi = std::vector<SocketConnectionRef>(
+      multi_session_conns.begin(), multi_session_conns.end());
+    return seastar::do_with(std::move(multi), [](auto &conns) {
+      return seastar::parallel_for_each(conns, [](auto conn) {
+        return conn->close_clean_yielded();
+      });
+    });
+  }).then([this] {
     return seastar::parallel_for_each(closing_conns, [] (auto conn) {
       return conn->close_clean_yielded();
     });
   }).then([this] {
     ceph_assert(connections.empty());
+    ceph_assert(multi_session_conns.empty());
+    ceph_assert(shard_port_conns.empty());
     shutdown_promise.set_value();
   });
 }
@@ -427,6 +510,20 @@ crimson::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr
   }
 }
 
+crimson::net::SocketConnectionRef
+SocketMessenger::lookup_conn(const entity_addr_t& addr, uint16_t shard_port)
+{
+  assert(seastar::this_shard_id() == sid);
+  if (shard_port == 0) {
+    return lookup_conn(addr);
+  }
+  if (auto found = shard_port_conns.find({addr, shard_port});
+      found != shard_port_conns.end()) {
+    return found->second;
+  }
+  return nullptr;
+}
+
 void SocketMessenger::accept_conn(SocketConnectionRef conn)
 {
   assert(seastar::this_shard_id() == sid);
@@ -439,9 +536,58 @@ void SocketMessenger::unaccept_conn(SocketConnectionRef conn)
   accepting_conns.erase(conn);
 }
 
+bool SocketMessenger::is_lossy_client(const SocketConnection &conn)
+{
+  return conn.policy.lossy && conn.get_peer_name().is_client();
+}
+
+seastar::future<> SocketMessenger::mark_down_shard_port(const entity_addr_t& a)
+{
+  assert(seastar::this_shard_id() == sid);
+  std::vector<SocketConnectionRef> matched;
+  for (auto it = shard_port_conns.lower_bound({a, 0});
+       it != shard_port_conns.end() && it->first.first == a; ++it) {
+    matched.push_back(it->second);
+  }
+  return seastar::parallel_for_each(matched, [](auto conn) {
+    return seastar::smp::submit_to(conn->get_shard_id(), [c = conn.get()] {
+      c->mark_down();
+    });
+  });
+}
+
+seastar::future<> SocketMessenger::mark_down_multi_session(const entity_addr_t& a)
+{
+  assert(seastar::this_shard_id() == sid);
+  std::vector<SocketConnectionRef> matched;
+  for (auto &c : multi_session_conns) {
+    if (c->get_peer_addr() == a) {
+      matched.push_back(c);
+    }
+  }
+  return seastar::parallel_for_each(matched, [](auto conn) {
+    return seastar::smp::submit_to(conn->get_shard_id(), [c = conn.get()] {
+      c->mark_down();
+    });
+  });
+}
+
 void SocketMessenger::register_conn(SocketConnectionRef conn)
 {
   assert(seastar::this_shard_id() == sid);
+  if (conn->multi_session) {
+    auto [it, added] = multi_session_conns.insert(conn);
+    std::ignore = it;
+    ceph_assert(added);
+    return;
+  }
+  if (conn->accepted_shard_port) {
+    auto [it, added] = shard_port_conns.emplace(
+      std::make_pair(conn->get_peer_addr(), conn->accepted_shard_port), conn);
+    std::ignore = it;
+    ceph_assert(added);
+    return;
+  }
   auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
   std::ignore = i;
   ceph_assert(added);
@@ -451,6 +597,17 @@ void SocketMessenger::unregister_conn(SocketConnectionRef conn)
 {
   assert(seastar::this_shard_id() == sid);
   ceph_assert(conn);
+  if (conn->multi_session && multi_session_conns.erase(conn)) {
+    return;
+  }
+  if (conn->accepted_shard_port) {
+    auto found = shard_port_conns.find(
+      {conn->get_peer_addr(), conn->accepted_shard_port});
+    ceph_assert(found != shard_port_conns.end());
+    ceph_assert(found->second == conn);
+    shard_port_conns.erase(found);
+    return;
+  }
   auto found = connections.find(conn->get_peer_addr());
   ceph_assert(found != connections.end());
   ceph_assert(found->second == conn);

@@ -30,7 +30,7 @@
 
 class MOSDRepOpReply final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 public:
   epoch_t map_epoch, min_epoch;
@@ -46,6 +46,13 @@ public:
 
   // piggybacked osd state
   eversion_t last_complete_ondisk;
+
+  /// v3, crimson only: the replica's reactor that runs the PG and the port
+  /// on which that reactor accepts cluster connections. 0 == not set. The
+  /// primary may send the PG's later repops to that port so they arrive on
+  /// that reactor; it is a hint, any connection still works.
+  uint16_t pg_core = 0;
+  uint16_t pg_core_port = 0;
 
   ceph::buffer::list::const_iterator p;
   // Decoding flags. Decoding is only needed for messages caught by pipe reader.
@@ -84,6 +91,10 @@ public:
     decode(last_complete_ondisk, p);
 
     decode(from, p);
+    if (header.version >= 3) {
+      decode(pg_core, p);
+      decode(pg_core_port, p);
+    }
     final_decode_needed = false;
   }
   void encode_payload(uint64_t features) override {
@@ -98,6 +109,14 @@ public:
     encode(result, payload);
     encode(last_complete_ondisk, payload);
     encode(from, payload);
+    if (pg_core_port) {
+      // appended last: v2 decoders stop after `from` and ignore it
+      encode(pg_core, payload);
+      encode(pg_core_port, payload);
+    } else {
+      // nothing to add: byte-identical to a v2 reply
+      header.version = 2;
+    }
   }
 
   spg_t get_pg() { return pgid; }
@@ -109,6 +128,13 @@ public:
   int get_result() { return result; }
 
   void set_last_complete_ondisk(eversion_t v) { last_complete_ondisk = v; }
+  void set_pg_core(uint16_t core, uint16_t port) {
+    pg_core = core;
+    pg_core_port = port;
+  }
+  uint16_t get_pg_core() const { return pg_core; }
+  /// 0: the reply names no reactor port
+  uint16_t get_pg_core_port() const { return pg_core_port; }
   eversion_t get_last_complete_ondisk() const { return last_complete_ondisk; }
 
 public:
@@ -149,6 +175,9 @@ public:
       if (ack_type & CEPH_OSD_FLAG_ACK)
         out << " ack";
       out << ", result = " << result;
+      if (pg_core_port) {
+        out << ", core " << pg_core << " port " << pg_core_port;
+      }
     }
     out << ")";
   }

@@ -1415,6 +1415,11 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
     req.get(), pg_whoami, 0,
     map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
   reply->set_last_complete_ondisk(lcod);
+  // crimson_osd_cluster_shard_ports: name this reactor's cluster port, so
+  // the primary sends the PG's later repops straight here
+  if (auto port = shard_services.get_local_cluster_shard_port(); port) {
+    reply->set_pg_core(seastar::this_shard_id(), port);
+  }
   co_return handle_rep_op_ret(std::move(commit_fut), std::move(reply));
 }
 

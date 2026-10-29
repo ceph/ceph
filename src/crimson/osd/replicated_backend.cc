@@ -137,6 +137,10 @@ ReplicatedBackend::submit_transaction(
   std::vector<pg_shard_t> to_push_clone;
   std::vector<pg_shard_t> to_push_delete;
   auto sends = std::make_unique<std::vector<seastar::future<>>>();
+  // repops may go straight to the replica's PG reactor only while the PG
+  // is clean: recovery and backfill messages take the published address,
+  // and must stay ordered with the repops
+  const bool may_route = pg.is_active_clean();
   for (auto &pg_shard : pg_shards) {
     if (pg_shard == whoami) {
       continue;
@@ -166,8 +170,8 @@ ReplicatedBackend::submit_transaction(
     pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
     // TODO: set more stuff. e.g., pg_states
     sends->emplace_back(
-      shard_services.send_to_osd(
-	pg_shard.osd, std::move(m), map_epoch));
+      shard_services.send_repop_to_osd(
+	pg_shard.osd, pg.get_pgid(), std::move(m), map_epoch, may_route));
   }
 
   pg.log_operation(
@@ -233,6 +237,7 @@ void ReplicatedBackend::on_actingset_changed(bool same_primary)
   }
   pending_trans.clear();
   cancel_pct_update();
+  shard_services.forget_replica_routes(pg.get_pgid());
 }
 
 void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
@@ -246,6 +251,8 @@ void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
   auto& peers = found->second;
   for (auto& peer : peers.acked_peers) {
     if (peer.shard == reply.from) {
+      shard_services.repop_replied(
+        reply.from.osd, pg.get_pgid(), reply.get_pg_core_port());
       peer.last_complete_ondisk = reply.get_last_complete_ondisk();
       pg.update_peer_last_complete_ondisk(
 	peer.shard, peer.last_complete_ondisk);
@@ -268,6 +275,7 @@ seastar::future<> ReplicatedBackend::stop()
 	crimson::common::system_shutdown_exception());
   }
   pending_trans.clear();
+  shard_services.forget_replica_routes(pg.get_pgid());
   return seastar::now();
 }
 
@@ -318,8 +326,9 @@ ReplicatedBackend::interruptible_future<> ReplicatedBackend::send_pct_update()
     );
 
     co_await interruptor::make_interruptible(
-      shard_services.send_to_osd(
+      shard_services.send_pg_msg_to_osd(
 	i.osd,
+	pg.get_pgid(),
 	std::move(pct_update),
 	pg.get_osdmap_epoch()));
   }

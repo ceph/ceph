@@ -3,6 +3,8 @@
 
 #include <boost/smart_ptr/make_local_shared.hpp>
 
+#include <limits>
+
 #include "crimson/osd/shard_services.h"
 
 #include "messages/MOSDAlive.h"
@@ -318,6 +320,181 @@ seastar::future<> OSDSingletonState::send_to_osd(
         osdmap->get_cluster_addrs(peer).front(), CEPH_ENTITY_TYPE_OSD);
     // TODO: gate the crosscore sending
     return conn->send_with_throttling(std::move(m));
+  }
+}
+
+bool ShardServices::can_send_to_osd(int peer, epoch_t from_epoch) const
+{
+  LOG_PREFIX(ShardServices::can_send_to_osd);
+  const auto &osdmap = local_state.get_osdmap();
+  if (osdmap->is_down(peer)) {
+    INFO("osd.{} is_down", peer);
+    return false;
+  }
+  if (osdmap->get_info(peer).up_from > from_epoch) {
+    INFO("osd.{} {} > {}", peer,
+	 osdmap->get_info(peer).up_from, from_epoch);
+    return false;
+  }
+  return true;
+}
+
+seastar::future<> ShardServices::send_on_lane(
+  int peer, uint16_t port, MessageURef m)
+{
+  auto addr = local_state.get_osdmap()->get_cluster_addrs(peer).front();
+  if (port) {
+    addr.set_port(port);
+  }
+  auto conn = cluster_lane_msgr->connect(addr, CEPH_ENTITY_TYPE_OSD);
+  co_await conn->send_with_throttling(std::move(m));
+}
+
+seastar::future<> ShardServices::send_to_osd(
+  int peer, MessageURef m, epoch_t from_epoch)
+{
+  if (!cluster_lane_msgr) {
+    co_await with_singleton([](auto &singleton, auto&&... args) {
+      return singleton.send_to_osd(std::forward<decltype(args)>(args)...);
+    }, peer, std::move(m), from_epoch);
+    co_return;
+  }
+  if (!can_send_to_osd(peer, from_epoch)) {
+    co_return;
+  }
+  co_await send_on_lane(peer, 0, std::move(m));
+}
+
+void ShardServices::set_cluster_shard_ports(
+  bool routing, const std::vector<uint16_t>& ports)
+{
+  replica_routing = routing;
+  const auto core = seastar::this_shard_id();
+  local_cluster_shard_port = core < ports.size() ? ports[core] : 0;
+}
+
+seastar::future<> ShardServices::send_repop_to_osd(
+  int peer, spg_t pgid, MessageURef m, epoch_t from_epoch, bool may_route)
+{
+  if (!replica_routing || !cluster_lane_msgr) {
+    co_await send_to_osd(peer, std::move(m), from_epoch);
+    co_return;
+  }
+  if (!can_send_to_osd(peer, from_epoch)) {
+    co_return;
+  }
+  LOG_PREFIX(ShardServices::send_repop_to_osd);
+  auto &route = replica_routes[{pgid, peer}];
+  if (route.inflight == 0) {
+    // nothing of pgid in flight to peer: free to change connection
+    const uint16_t want = may_route ? route.learned : 0;
+    if (want != route.port) {
+      DEBUG("{} to osd.{}: port {} -> {}", pgid, peer, route.port, want);
+      route.port = want;
+    }
+  }
+  ++route.inflight;
+  co_await send_on_lane(peer, route.port, std::move(m));
+}
+
+seastar::future<> ShardServices::send_pg_msg_to_osd(
+  int peer, spg_t pgid, MessageURef m, epoch_t from_epoch)
+{
+  if (!replica_routing || !cluster_lane_msgr) {
+    co_await send_to_osd(peer, std::move(m), from_epoch);
+    co_return;
+  }
+  if (!can_send_to_osd(peer, from_epoch)) {
+    co_return;
+  }
+  uint16_t port = 0;
+  if (auto found = replica_routes.find({pgid, peer});
+      found != replica_routes.end()) {
+    port = found->second.port;
+  }
+  co_await send_on_lane(peer, port, std::move(m));
+}
+
+void ShardServices::repop_replied(int peer, spg_t pgid, uint16_t port)
+{
+  if (!replica_routing) {
+    return;
+  }
+  auto found = replica_routes.find({pgid, peer});
+  if (found == replica_routes.end()) {
+    return;  // forgotten since: a new interval
+  }
+  auto &route = found->second;
+  if (route.inflight > 0) {
+    --route.inflight;
+  }
+  route.learned = port;
+}
+
+void ShardServices::forget_replica_routes(spg_t pgid)
+{
+  if (replica_routes.empty()) {
+    return;
+  }
+  auto it = replica_routes.lower_bound({pgid, std::numeric_limits<int>::min()});
+  while (it != replica_routes.end() && it->first.first == pgid) {
+    it = replica_routes.erase(it);
+  }
+}
+
+seastar::future<> ShardServices::start_cluster_lane(
+  uint32_t nonce,
+  entity_addrvec_t addrs,
+  uint64_t osd_required,
+  crimson::net::Dispatcher &dispatcher,
+  crimson::auth::AuthClient *auth_client,
+  crimson::auth::AuthServer *auth_server)
+{
+  LOG_PREFIX(ShardServices::start_cluster_lane);
+  using crimson::net::SocketPolicy;
+  cluster_lane_msgr = crimson::net::Messenger::create(
+    entity_name_t::OSD(local_state.whoami), "cluster_lane", nonce,
+    true);
+  // the MonClient lives on reactor 0, the handshake calls it there
+  cluster_lane_msgr->set_auth_client(auth_client);
+  cluster_lane_msgr->set_auth_server(auth_server);
+  cluster_lane_msgr->set_auth_shard(PRIMARY_CORE);
+  cluster_lane_msgr->set_default_policy(SocketPolicy::stateless_server(0));
+  cluster_lane_msgr->set_policy(entity_name_t::TYPE_OSD,
+                                SocketPolicy::lossless_peer(osd_required));
+  // Peers dial the osdmap address. The lane's own port is only used when
+  // a peer reconnects a session this lane started.
+  for (auto &addr : addrs.v) {
+    addr.set_port(0);
+  }
+  co_await cluster_lane_msgr->bind(addrs).handle_error(
+    crimson::net::Messenger::bind_ertr::assert_all_func(
+      [FNAME](const std::error_code& e) {
+      ERROR("cluster lane bind(): {}", e);
+    }));
+  INFO("reactor {} cluster lane {}",
+       seastar::this_shard_id(), cluster_lane_msgr->get_myaddrs());
+  co_await cluster_lane_msgr->start({&dispatcher});
+}
+
+void ShardServices::stop_cluster_lane()
+{
+  if (cluster_lane_msgr) {
+    cluster_lane_msgr->stop();
+  }
+}
+
+seastar::future<> ShardServices::shutdown_cluster_lane()
+{
+  if (cluster_lane_msgr) {
+    co_await cluster_lane_msgr->shutdown();
+  }
+}
+
+seastar::future<> ShardServices::mark_down_cluster_lane(entity_addr_t addr)
+{
+  if (cluster_lane_msgr) {
+    co_await cluster_lane_msgr->mark_down_all_ports(addr);
   }
 }
 

@@ -64,6 +64,34 @@ public:
     auth_server = as;
   }
 
+  void set_client_shard_ports(bool on) override {
+    assert(seastar::this_shard_id() == sid);
+    client_shard_ports = on;
+  }
+
+  bool has_client_shard_ports() const {
+    return client_shard_ports;
+  }
+
+  /// Port bound for each reactor (0 = none); empty without client shard
+  /// ports. Set by bind(); read-only afterwards, so any shard may read it.
+  std::vector<uint16_t> get_client_shard_ports() const override {
+    return shard_ports;
+  }
+
+  /// port is one of my reactor ports
+  bool is_client_shard_port(uint16_t port) const;
+
+  /// addr is one of my addresses, or (with client shard ports) the same
+  /// host/type/nonce on one of my reactor ports
+  bool is_my_addr(const entity_addr_t& addr) const;
+
+
+  void set_auth_shard(seastar::shard_id shard) override {
+    assert(seastar::this_shard_id() == sid);
+    auth_shard = shard;
+  }
+
   bind_ertr::future<> bind(const entity_addrvec_t& addr) override;
 
   seastar::future<> start(const dispatchers_t& dispatchers) override;
@@ -122,6 +150,11 @@ public:
     return auth_server;
   }
 
+  seastar::shard_id get_auth_shard() const {
+    assert(seastar::this_shard_id() == sid);
+    return auth_shard;
+  }
+
   uint32_t get_global_seq(uint32_t old=0);
 
   void learned_addr(const entity_addr_t &peer_addr_for_me,
@@ -129,11 +162,19 @@ public:
 
   SocketConnectionRef lookup_conn(const entity_addr_t& addr);
 
+  /// the session from addr accepted on reactor port shard_port (0: the
+  /// registry lookup_conn(addr) uses)
+  SocketConnectionRef lookup_conn(const entity_addr_t& addr,
+                                  uint16_t shard_port);
+
   void accept_conn(SocketConnectionRef);
 
   void unaccept_conn(SocketConnectionRef);
 
   void register_conn(SocketConnectionRef);
+
+  /// lossy connection from a client (may be made multi-session)
+  static bool is_lossy_client(const SocketConnection &conn);
 
   void unregister_conn(SocketConnectionRef);
 
@@ -154,6 +195,25 @@ public:
 #endif
 
   seastar::future<> mark_down(const entity_addr_t& a) final {
+    if (!multi_session_conns.empty()) {
+      return mark_down_multi_session(a).then([this, a] {
+        return mark_down_registered(a);
+      });
+    }
+    return mark_down_registered(a);
+  }
+private:
+  seastar::future<> mark_down_multi_session(const entity_addr_t& a);
+  seastar::future<> mark_down_registered(const entity_addr_t& a) {
+    if (!shard_port_conns.empty()) {
+      return mark_down_shard_port(a).then([this, a] {
+        return mark_down_registered_main(a);
+      });
+    }
+    return mark_down_registered_main(a);
+  }
+  seastar::future<> mark_down_shard_port(const entity_addr_t& a);
+  seastar::future<> mark_down_registered_main(const entity_addr_t& a) {
     auto conn = lookup_conn(a);
     if (conn) {
       return seastar::smp::submit_to(
@@ -165,6 +225,8 @@ public:
     }
     return seastar::now();
   }
+
+  seastar::future<> mark_down_all_ports(const entity_addr_t& a) final;
 private:
   seastar::future<> accept(SocketFRef &&, const entity_addr_t &);
 
@@ -184,10 +246,23 @@ private:
   entity_addrvec_t my_addrs;
   crimson::auth::AuthClient* auth_client = nullptr;
   crimson::auth::AuthServer* auth_server = nullptr;
+  seastar::shard_id auth_shard = seastar::this_shard_id();
 
   ShardedServerSocket *listener = nullptr;
   ChainedDispatchers dispatchers;
+  bool client_shard_ports = false;
+  std::vector<uint16_t> shard_ports;
   std::map<entity_addr_t, SocketConnectionRef> connections;
+  /// Multi-session connections are not keyed by address: one client
+  /// (one entity_addr incl. nonce) may hold several concurrent sessions,
+  /// e.g. shard-steered connections, and none replaces another.
+  std::set<SocketConnectionRef> multi_session_conns;
+  /// Non-lossy sessions accepted on a reactor port, keyed by (peer
+  /// address, port): e.g. a peer OSD's cluster lane holding sessions to
+  /// several of our reactors. Each one is replaced and reconnected only by
+  /// a session to the same port.
+  std::map<std::pair<entity_addr_t, uint16_t>, SocketConnectionRef>
+    shard_port_conns;
   std::set<SocketConnectionRef> accepting_conns;
   std::vector<SocketConnectionRef> closing_conns;
   ceph::net::PolicySet<Throttle> policy_set;

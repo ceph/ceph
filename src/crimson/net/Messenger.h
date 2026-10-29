@@ -15,6 +15,9 @@
 
 #pragma once
 
+#include <vector>
+#include <seastar/core/smp.hh>
+
 #include "Fwd.h"
 #include "crimson/common/throttle.h"
 #include "msg/Message.h"
@@ -58,7 +61,22 @@ public:
 
   virtual void set_auth_server(crimson::auth::AuthServer *) = 0;
 
+  /// Also listen on one port per reactor, taken from the ms_bind_port
+  /// range, each accepted on its reactor. Must precede bind().
+  virtual void set_client_shard_ports(bool) {}
+
+  /// After bind(): the port of each reactor (0 = none), or empty.
+  virtual std::vector<uint16_t> get_client_shard_ports() const { return {}; }
+
+  /// the reactor the auth client and server live on, if not this
+  /// messenger's; the handshake then calls them there
+  virtual void set_auth_shard(seastar::shard_id) = 0;
+
   virtual seastar::future<> mark_down(const entity_addr_t &addr) = 0;
+
+  /// mark down every connection from the peer process at addr: same
+  /// type, IP and nonce, any port
+  virtual seastar::future<> mark_down_all_ports(const entity_addr_t &addr) = 0;
 
   using bind_ertr = crimson::errorator<
     crimson::ct_error::address_in_use, // The address (range) is already bound
