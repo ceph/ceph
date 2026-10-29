@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from concurrent.futures import Future
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
@@ -45,11 +46,11 @@ class UpgradeImagePrePull:
         # Background task handles. They do not survive an mgr restart; on
         # restart the remaining hosts are simply pulled again (a re-pull of
         # an already present image is cheap).
-        self._first_pull_future = None
-        self._first_pull_origin = None  # (progress_id, target_image)
+        self._first_pull_future: Optional[Future] = None
+        self._first_pull_origin: Optional[Tuple[Optional[str], str]] = None
         self.first_pull_host: Optional[str] = None
-        self._batch_future = None
-        self._batch_origin = None      # (progress_id, target_image)
+        self._batch_future: Optional[Future] = None
+        self._batch_origin: Optional[Tuple[Optional[str], str]] = None
         self._batch_hosts: List[str] = []
 
     def enabled(self) -> bool:
@@ -147,7 +148,7 @@ class UpgradeImagePrePull:
 
     # ---- first (metadata) pull -----------------------------------------
 
-    def first_pull_start_or_poll(self, target_image: str) -> Optional[Tuple]:
+    def first_pull_start_or_poll(self, target_image: str) -> Optional[Tuple[str, Any]]:
         """Run the first pull of target_image in the background.
 
         This is the metadata source (digest, ceph version) for the
@@ -186,7 +187,7 @@ class UpgradeImagePrePull:
         except Exception as e:
             return ('error', e)
 
-    async def _first_pull_async(self, target_image: str, timeout: int):
+    async def _first_pull_async(self, target_image: str, timeout: int) -> Any:
         # wait_for bounds mgr-side hangs (e.g. ssh) without blocking serve
         try:
             return await asyncio.wait_for(

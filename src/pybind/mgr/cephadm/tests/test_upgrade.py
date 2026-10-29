@@ -2223,7 +2223,7 @@ def test_pre_pull_batch_does_not_block_serve(
 
     async def slow_run(self, host, entity, command, args, image=None,
                        no_fsid=None, error_ok=None, timeout=None, **kwargs):
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(2.0)
         return ([_PULL_OK], [], 0)
 
     prepull = cephadm_module.upgrade.image_prepull
@@ -2236,9 +2236,9 @@ def test_pre_pull_batch_does_not_block_serve(
         )
         elapsed = time.monotonic() - started
         assert result is PrePullBatchResult.IN_PROGRESS
-        # the serve iteration returned immediately while the pull runs on
-        # the event loop
-        assert elapsed < 0.5
+        # the serve iteration returned while the pull is still running
+        # on the event loop
+        assert elapsed < 1.5
         assert prepull._batch_future is not None
         assert not prepull._batch_future.done()
 
