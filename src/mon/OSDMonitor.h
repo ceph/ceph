@@ -1251,6 +1251,15 @@ public:
       const OSDMap& tmp,
       OSDMap::Incremental& inc,
       unsigned stretch_pool_min_size);
+  // Whether convert_stretch_pools_at_commit() gives pool p two zones
+  static bool converts_at_commit(const OSDMap& osdmap, const pg_pool_t& p);
+  /**
+   * Warn about the pools of global stretch mode that keep one zone at the
+   * commit: before it, while they can still be changed, and after it, as
+   * the stretch mode commands do not handle them.
+   */
+  static void check_unconverted_stretch_pools(const OSDMap& osdmap,
+                                              health_check_map_t* checks);
   /**
    * Obtain the crush rule being used for stretch pools.
    * Note that right now this is heuristic and simply selects the

@@ -2182,6 +2182,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // health
   auto& next = get_health_checks_pending_writeable();
   tmp.check_health(cct, &next);
+  check_unconverted_stretch_pools(tmp, &next);
 }
 
 int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
@@ -18823,13 +18824,7 @@ void OSDMonitor::convert_stretch_pools_at_commit(
     }
     // the pending pool can hold changes made after tmp was built
     pg_pool_t& p = *inc.get_new_pool(id, &committed);
-    if (tmp.stretch_mode_enabled && p.is_replicated() &&
-        p.get_num_zones() == 1 && p.size % 2 == 0 &&
-        p.peering_crush_bucket_target == 2 &&
-        (int)p.peering_crush_bucket_barrier == tmp.stretch_mode_bucket &&
-        rule_items_per_zone(*tmp.crush, p.crush_rule,
-                            p.peering_crush_bucket_barrier,
-                            p.size) == p.size / 2) {
+    if (converts_at_commit(tmp, p)) {
       p.num_zones = 2;
       p.replica = p.size / 2;
       // never fewer copies than before: a degraded pool's min_size was
@@ -18843,4 +18838,43 @@ void OSDMonitor::convert_stretch_pools_at_commit(
     }
     p.set_last_force_op_resend(inc.epoch);
   }
+}
+
+bool OSDMonitor::converts_at_commit(const OSDMap& osdmap, const pg_pool_t& p)
+{
+  return osdmap.stretch_mode_enabled && p.is_stretch_pool() &&
+    p.is_replicated() && p.get_num_zones() == 1 && p.size % 2 == 0 &&
+    p.peering_crush_bucket_target == 2 &&
+    (int)p.peering_crush_bucket_barrier == osdmap.stretch_mode_bucket &&
+    rule_items_per_zone(*osdmap.crush, p.crush_rule,
+                        p.peering_crush_bucket_barrier,
+                        p.size) == p.size / 2;
+}
+
+void OSDMonitor::check_unconverted_stretch_pools(const OSDMap& osdmap,
+                                                 health_check_map_t* checks)
+{
+  if (!osdmap.stretch_mode_enabled) {
+    return;
+  }
+  const bool committed = osdmap.stretch_zones();
+  list<string> detail;
+  for (const auto& [id, p] : osdmap.get_pools()) {
+    if (p.is_stretch_pool() && p.get_num_zones() == 1 &&
+        (committed || !converts_at_commit(osdmap, p))) {
+      detail.push_back("pool '" + osdmap.get_pool_name(id) + "' has size " +
+                       std::to_string(p.size) + " and crush rule '" +
+                       osdmap.crush->get_rule_name(p.crush_rule) + "'");
+    }
+  }
+  if (detail.empty()) {
+    return;
+  }
+  ostringstream ss;
+  ss << detail.size() << " stretch pool(s) "
+     << (committed ? "kept one zone when the upgrade was committed"
+                   : "will keep one zone when the upgrade is committed");
+  auto& d = checks->add("STRETCH_MODE_POOL_NOT_CONVERTED", HEALTH_WARN,
+                        ss.str(), detail.size());
+  d.detail.swap(detail);
 }
