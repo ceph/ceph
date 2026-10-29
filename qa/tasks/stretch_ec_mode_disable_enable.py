@@ -238,6 +238,16 @@ class TestStretchMode(MgrTestCase):
         quorum_names = self.mgr_cluster.mon_manager.get_mon_quorum_names()
         return all([mon not in quorum_names for mon in want_mons])
 
+    def _bring_back_dc(self, dc):
+        """
+        Bring back the osds and mons of the datacenter.
+        """
+        for osd in self._get_osds_by_dc(dc):
+            self.mgr_cluster.mon_manager.revive_osd(osd)
+        for host, mons in self.DC_MONS[dc].items():
+            for mon in mons:
+                self._bring_back_mon(mon)
+
     def _kill_mon(self, mon):
         """
         Kill the mon.
@@ -467,6 +477,17 @@ class TestStretchMode(MgrTestCase):
         # Write some data to the pool
         self._write_some_data(self.WRITE_PERIOD)
 
+        # num_zones 1 without --yes-i-really-mean-it (expects -EPERM 1)
+        self.assertEqual(
+            1,
+            self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
+                'osd',
+                'pool',
+                'set',
+                self.POOL,
+                'num_zones',
+                '1'
+            ))
         # Disable stretch mode by setting num_zones to 1 (expect success 0)
         self.assertEqual(
             0,
@@ -476,7 +497,8 @@ class TestStretchMode(MgrTestCase):
                 'set',
                 self.POOL,
                 'num_zones',
-                '1'
+                '1',
+                '--yes-i-really-mean-it'
             ))
         # Check if stretch mode is disabled correctly
         self._stretch_mode_disabled_correctly(self.SINGLE_ZONE_CRUSH_RULE)
@@ -517,7 +539,9 @@ class TestStretchMode(MgrTestCase):
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
-        # Disable stretch mode by setting num_zones to 1 (expect success 0)
+        # Disable stretch mode by setting num_zones to 1 (expect success 0).
+        # Each PG keeps the shards of its first zone, which is dc1 for about
+        # half of them: those are unavailable until dc1 is back.
         self.assertEqual(
             0,
             self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
@@ -526,13 +550,15 @@ class TestStretchMode(MgrTestCase):
                 'set',
                 self.POOL,
                 'num_zones',
-                '1'
+                '1',
+                '--yes-i-really-mean-it'
             ))
         # Check if stretch mode is disabled correctly
         self._stretch_mode_disabled_correctly(self.SINGLE_ZONE_CRUSH_RULE)
-        # all PGs are active
+        # Those PGs recover once dc1 is back
+        self._bring_back_dc('dc1')
         self.wait_until_true_and_hold(
-            lambda: self.mgr_cluster.mon_manager.pg_all_active(),
+            lambda: self.mgr_cluster.mon_manager.pg_all_active_clean(),
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )

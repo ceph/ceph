@@ -74,7 +74,8 @@ function TEST_num_zones_osd_limit() {
 }
 
 # A pool over zones is a FastEC pool, which a default profile with a stripe
-# unit that is not a multiple of 4096 cannot give; nothing is left behind
+# unit that is not a multiple of 4096 cannot give, even with
+# --yes-i-really-mean-it; nothing is left behind
 function TEST_odd_stripe_unit_default_over_zones() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -83,6 +84,8 @@ function TEST_odd_stripe_unit_default_over_zones() {
         stripe_unit=2048 --force --yes-i-really-mean-it || return 1
     expect_failure $dir "stripe_unit should be a multiple of 4096 bytes" \
         ceph osd pool create e erasure --num_zones 2 || return 1
+    expect_failure $dir "a pool over zones is a FastEC pool" \
+        ceph osd pool create e erasure --num_zones 2 --yes-i-really-mean-it || return 1
     ! ceph osd pool ls | grep -qx e || return 1
     ! ceph osd erasure-code-profile ls | grep -qx e-k2-m1 || return 1
     ! rule_exists e || return 1
@@ -188,7 +191,7 @@ function TEST_rule_lifetime_on_pool_changes() {
     rule_exists erasure-code || return 1
     ceph osd pool set e2 num_zones 2 || return 1
     ! rule_exists erasure-code || return 1
-    ceph osd pool set e1 num_zones 1 || return 1
+    ceph osd pool set e1 num_zones 1 --yes-i-really-mean-it || return 1
     ! rule_exists e1-stretch || return 1
     rule_exists e1-single-zone || return 1
 
@@ -248,7 +251,7 @@ function TEST_rule_errors_name_defaults() {
     local dir=$1
     two_zone_cluster $dir 2 || return 1
 
-    expect_failure $dir "requires at least 3 hosts (osd_pool_default_replica, osd_pool_default_zone_failure_domain, osd_pool_default_osd_failure_domain, osd_pool_default_root)" \
+    expect_failure $dir "requires at least 3 hosts (osd_pool_default_size, osd_pool_default_zone_failure_domain, osd_pool_default_osd_failure_domain, osd_pool_default_root)" \
         ceph osd pool create p --num_zones 2 || return 1
     expect_failure $dir "requires at least 3 hosts (osd_pool_default_zone_failure_domain, osd_pool_default_osd_failure_domain, osd_pool_default_root)" \
         ceph osd pool create p --num_zones 2 --replica 3 || return 1
