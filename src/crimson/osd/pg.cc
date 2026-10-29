@@ -1227,6 +1227,7 @@ PG::run_executer_fut PG::run_executer(
     [FNAME, obc_data = duplicate_obc_data(obc), &ox, this](auto &obc) mutable {
       // First, revert the OBC state
       obc->update_from(obc_data);
+      ox.rollback_attr_cache();
       // Then clean up any prepared clone OBCs
       if (ox.has_cloning_ctx()) {
         const auto coid = ox.get_cloning_coid();

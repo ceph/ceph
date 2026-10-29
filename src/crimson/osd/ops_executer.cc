@@ -490,6 +490,9 @@ template <class Func>
 auto OpsExecuter::do_write_op_attr_cache(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   check_init_op_params(m);
+  if (!attr_cache_backup) {
+    attr_cache_backup = obc->attr_cache;
+  }
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn, obc->attr_cache);
 }
 OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
