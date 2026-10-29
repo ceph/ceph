@@ -151,7 +151,8 @@ public:
     RWState::State type,
     std::list<OpRequestRef> *to_wake,
     bool *requeue_recovery,
-    bool *requeue_snaptrimmer) {
+    bool *requeue_snaptrimmer,
+    bool *requeue_pool_migration) {
     switch (type) {
     case RWState::RWWRITE:
       put_write(to_wake);
@@ -175,7 +176,7 @@ public:
     }
     if (rwstate.empty() && rwstate.pool_migration_write_marker) {
       rwstate.pool_migration_write_marker = false;
-      *requeue_recovery = true;
+      *requeue_pool_migration = true;
     }
   }
   bool is_request_pending() {
@@ -339,14 +340,16 @@ public:
   void put_locks(
     std::list<std::pair<ObjectContextRef, std::list<OpRequestRef> > > *to_requeue,
     bool *requeue_recovery,
-    bool *requeue_snaptrimmer) {
+    bool *requeue_snaptrimmer,
+    bool *requeue_pool_migration) {
     for (auto& p: locks) {
       std::list<OpRequestRef> _to_requeue;
       p.second.obc->put_lock_type(
 	p.second.type,
 	&_to_requeue,
 	requeue_recovery,
-	requeue_snaptrimmer);
+        requeue_snaptrimmer,
+        requeue_pool_migration);
       if (to_requeue) {
         // We can safely std::move here as the whole `locks` is going
         // to die just after the loop.
