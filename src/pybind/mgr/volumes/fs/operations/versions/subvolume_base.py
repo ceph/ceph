@@ -28,7 +28,27 @@ log = logging.getLogger(__name__)
 class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
 
+    @staticmethod
+    def validate_subvolume_name(subvolname):
+        """
+        Reject names that would resolve to the group directory or outside it:
+        empty names, '.', '..', and names containing '/'. Bytes names are decoded
+        as UTF-8; returns the name as str.
+        """
+        try:
+            name = (subvolname.decode('utf-8')
+                    if isinstance(subvolname, bytes) else subvolname)
+        except UnicodeDecodeError:
+            raise VolumeException(-errno.EINVAL,
+                                  f"invalid subvolume name {subvolname!r}")
+        if not name or name in ('.', '..') or '/' in name:
+            raise VolumeException(-errno.EINVAL,
+                                  f"invalid subvolume name {name!r}")
+        return name
+
     def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False):
+        self.subvolname = self.validate_subvolume_name(subvolname)
+
         self.mgr = mgr
         self.fs = fs
         self.auth_mdata_mgr = AuthMetadataManager(fs)
@@ -37,9 +57,25 @@ class SubvolumeBase(object):
         self.group_id = None
         self.vol_spec = vol_spec
         self.group = group
-        self.subvolname = subvolname
         self.legacy_mode = legacy
         self.load_config()
+
+    def _validate_path_within_group(self, path):
+        """
+        Ensure 'path' is a strict descendant of this subvolume's group
+        directory. Used as a last line of defense before marking a
+        directory as a subvolume (ceph.dir.subvolume xattr).
+        """
+        group_path = os.path.normpath(self.group.path)
+        path = os.path.normpath(path)
+        try:
+            contained = os.path.commonpath([group_path, path]) == group_path
+        except ValueError:
+            contained = False
+        if not contained or path == group_path:
+            raise VolumeException(
+                -errno.EINVAL,
+                f"invalid subvolume path resolution for '{self.subvolname}'")
 
     @property
     def uid(self):
