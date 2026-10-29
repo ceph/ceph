@@ -1744,6 +1744,75 @@ class TestCertMgr(object):
     #  scope, remaining daemons, and reference cert preservation.         #
     # ------------------------------------------------------------------ #
 
+    @pytest.mark.parametrize(
+        'by_hostname, by_fqdn, expected',
+        [
+            # complete pair under the host name only
+            (('cert-a', 'key-a'), None, ('cert-a', 'key-a')),
+            # complete pair under the FQDN only
+            (None, ('cert-b', 'key-b'), ('cert-b', 'key-b')),
+            # complete pairs under both names: the host name wins
+            (('cert-a', 'key-a'), ('cert-b', 'key-b'), ('cert-a', 'key-a')),
+            # an incomplete pair under the host name does not block the FQDN pair
+            (('cert-a', None), ('cert-b', 'key-b'), ('cert-b', 'key-b')),
+            # nothing registered
+            (None, None, ('', '')),
+        ],
+        ids=['hostname', 'fqdn', 'both-hostname-wins', 'incomplete-hostname', 'missing'],
+    )
+    def test_reference_host_scope_lookup_precedence(self, by_hostname, by_fqdn, expected,
+                                                    cephadm_module: CephadmOrchestrator):
+        """Host-scoped reference certificates are taken from the first complete
+        cert/key pair found under the orchestrator host name, then the FQDN."""
+        from ceph.deployment.service_spec import GrafanaSpec
+        from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+        from cephadm.services.service_registry import service_registry
+
+        cephadm_module._init_cert_mgr()
+        cm = cephadm_module.cert_mgr
+        for target, pair in (('host1', by_hostname), ('host1.example.com', by_fqdn)):
+            if not pair:
+                continue
+            cert, key = pair
+            cm.save_cert('grafana_ssl_cert', cert, host=target, user_made=True, editable=True)
+            if key:
+                cm.save_key('grafana_ssl_key', key, host=target, user_made=True, editable=True)
+
+        creds = service_registry.get_service('grafana')._get_certificates_from_certmgr_store(
+            GrafanaSpec(certificate_source='reference'),
+            CephadmDaemonDeploySpec(host='host1', daemon_id='host1', service_name='grafana',
+                                    daemon_type='grafana'),
+            ['host1.example.com', 'grafana_servers'],
+            'grafana_ssl_cert', 'grafana_ssl_key')
+
+        assert (creds.cert, creds.key) == expected
+
+    def test_reference_service_scope_lookup_ignores_host(self, cephadm_module: CephadmOrchestrator):
+        """Service-scoped reference certificates are looked up once, by service,
+        whatever host the daemon runs on."""
+        from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+        from cephadm.services.service_registry import service_registry
+
+        cephadm_module._init_cert_mgr()
+        cm = cephadm_module.cert_mgr
+        svc_spec = mock.MagicMock()
+        svc_spec.service_name.return_value = 'ingress.foo'
+        daemon_spec = CephadmDaemonDeploySpec(host='host1', daemon_id='foo.host1',
+                                              service_name='ingress.foo', daemon_type='haproxy')
+        ingress = service_registry.get_service('ingress')
+
+        with mock.patch.object(cm, 'get_cert', wraps=cm.get_cert) as get_cert:
+            creds = ingress._get_certificates_from_certmgr_store(
+                svc_spec, daemon_spec, ['host1.example.com'], 'ingress_ssl_cert', 'ingress_ssl_key')
+        assert not creds.cert and not creds.key
+        assert get_cert.call_count == 1
+
+        cm.save_cert('ingress_ssl_cert', 'ref-cert', service_name='ingress.foo', user_made=True, editable=True)
+        cm.save_key('ingress_ssl_key', 'ref-key', service_name='ingress.foo', user_made=True, editable=True)
+        creds = ingress._get_certificates_from_certmgr_store(
+            svc_spec, daemon_spec, ['host1.example.com'], 'ingress_ssl_cert', 'ingress_ssl_key')
+        assert (creds.cert, creds.key) == ('ref-cert', 'ref-key')
+
     def test_cli_cert_and_key_set_survive_reference_reconciliation(self, cephadm_module: CephadmOrchestrator):
         """Cert and key provisioned through 'certmgr cert set' and 'certmgr key set'
         are kept as editable user-made objects when a reference service reconciles."""
