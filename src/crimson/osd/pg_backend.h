@@ -160,7 +160,8 @@ public:
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats,
     bool whiteout,
-    int num_bytes);
+    int num_bytes,
+    ObjectContext::attr_cache_t& attr_cache);
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
@@ -214,7 +215,8 @@ public:
     object_stat_sum_t& delta_stats,
     crimson::osd::ObjectContextRef head,
     crimson::osd::ObjectContextLoader& obc_loader,
-    const SnapContext &snapc);
+    const SnapContext &snapc,
+    ObjectContext::attr_cache_t& attr_cache);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
