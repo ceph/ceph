@@ -9161,6 +9161,23 @@ void RGWRados::olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWB
     return;
   }
 
+  // for testing: hold the rollback, to reproduce a race with a concurrent
+  // overwrite of the head
+  if (cct->_conf->rgw_inject_delay_sec > 0 &&
+      std::string_view(cct->_conf->rgw_inject_delay_pattern) == "delay_olh_cancel_modification") {
+    ldpp_dout(dpp, 0) << __func__ << ": injecting delay of " << cct->_conf->rgw_inject_delay_sec
+                      << "s for " << olh_obj << dendl;
+    const auto delay = ceph::make_timespan(cct->_conf->rgw_inject_delay_sec);
+    if (y) {
+      auto yield = y.get_yield_context();
+      boost::asio::steady_timer timer{yield.get_executor(), delay};
+      boost::system::error_code ec;
+      timer.async_wait(yield[ec]);
+    } else {
+      std::this_thread::sleep_for(delay);
+    }
+  }
+
   rgw_rados_ref ref;
   int r = get_obj_head_ref(dpp, bucket_info, olh_obj, &ref);
   if (r < 0) {
@@ -9171,13 +9188,40 @@ void RGWRados::olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWB
   attr_name.append(op_tag);
 
   // first remove the relevant pending prefix
-  ObjectWriteOperation op;
-  bucket_index_guard_olh_op(dpp, state, op);
-  op.rmxattr(attr_name.c_str());
-  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+  auto remove_pending = [&] (const real_time& mtime, const bufferlist& obj_tag) {
+    ObjectWriteOperation op;
+    bucket_index_guard_olh_op(dpp, state, op);
+    // pin mtime only if the head object wasn't overwritten (RGW_ATTR_ID_TAG unchanged)
+    op.cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, obj_tag);
+    struct timespec mtime_ts = real_clock::to_timespec(mtime);
+    op.mtime2(&mtime_ts);
+    op.rmxattr(attr_name.c_str());
+    return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+  };
+
+  // try to preserve the head object's original mtime
+  r = remove_pending(state.mtime, state.obj_tag);
+  // if received -ECANCELED, the head may have been overwritten
+  // then try to preserve its current mtime instead
+  constexpr int max_retries = 3;
+  for (int i = 0; r == -ECANCELED && i < max_retries; i++) {
+    real_time mtime;
+    map<string, bufferlist> attrs;
+    r = raw_obj_stat(dpp, ref.obj, nullptr, &mtime, nullptr, &attrs, nullptr, nullptr, y);
+    if (r < 0) {
+      break;
+    }
+    if (!attrs[RGW_ATTR_OLH_ID_TAG].contents_equal(state.olh_tag)) {
+      // olh itself removed/re-created, no need to retry anymore
+      r = -ECANCELED;
+      break;
+    }
+    r = remove_pending(mtime, attrs[RGW_ATTR_ID_TAG]);
+  }
+
   if (r < 0) {
     if (r != -ENOENT && r != -ECANCELED) {
-      ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " rmxattr rgw_rados_operate() returned " << r << dendl;
+      ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " removing olh pending xattr returned " << r << dendl;
     }
     return;
   }
@@ -10576,10 +10620,33 @@ int RGWRados::remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RG
   // trim no more than 1000 entries per osd op
   constexpr int max_entries = 1000;
 
+  // read the head's current mtime and ID_TAG: the caller's state can be stale, e.g. in
+  // clear_olh() it's cached from before apply_olh_log() removed the null version's data
+  real_time mtime;
+  map<string, bufferlist> attrs;
+  r = raw_obj_stat(dpp, ref.obj, nullptr, &mtime, nullptr, &attrs, nullptr, nullptr, y);
+  if (r == -ENOENT) {
+    return 0;
+  }
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": could not stat oid \"" << ref.obj.oid << "\", r=" << r << dendl;
+    return r;
+  }
+  struct timespec mtime_ts = real_clock::to_timespec(mtime);
+  // a head without the tag (e.g. its data was removed by apply_olh_log()) compares as empty
+  // cmpxattr below also checks that the tag is still absent
+  bufferlist obj_tag;
+  if (auto it = attrs.find(RGW_ATTR_ID_TAG); it != attrs.end()) {
+    obj_tag = it->second;
+  }
+
   auto i = pending_attrs.begin();
   while (i != pending_attrs.end()) {
     ObjectWriteOperation op;
     bucket_index_guard_olh_op(dpp, state, op);
+    // preserve the head object's mtime, unless it was overwritten since we read it
+    op.cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, obj_tag);
+    op.mtime2(&mtime_ts);
 
     for (int n = 0; n < max_entries && i != pending_attrs.end(); ++n, ++i) {
       op.rmxattr(i->first.c_str());
