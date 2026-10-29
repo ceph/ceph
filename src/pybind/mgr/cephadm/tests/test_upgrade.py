@@ -11,6 +11,7 @@ from cephadm.upgrade import (
     MID_UPGRADE_MUTED_WARNINGS,
     OkToUpgradeMonReport,
     UpgradeState,
+    _short_ceph_version,
     parse_ok_to_upgrade_mon_json,
     request_osd_ok_to_upgrade_report,
 )
@@ -2004,3 +2005,17 @@ def test_do_upgrade_persists_skipped_health_warning_mutes(
     cephadm_module.upgrade._do_upgrade()
 
     _mute_upgrade_related_health_warnings.assert_called_once_with()
+
+
+def test_short_ceph_version():
+    # full ``ceph version ...`` output as reported by inspect-image
+    assert _short_ceph_version(
+        'ceph version 19.2.0 (hash) squid (stable)') == '19.2.0'
+    # already-short version strings pass through unchanged; the old
+    # ``target_version.split(' ')[2]`` mangled or rejected these
+    assert _short_ceph_version('19.2.0') == '19.2.0'
+    assert _short_ceph_version('19.2.0-5-gabc') == '19.2.0-5-gabc'
+    # unusable input
+    assert _short_ceph_version(None) is None
+    assert _short_ceph_version('') is None
+    assert _short_ceph_version('ceph version') is None

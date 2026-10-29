@@ -242,6 +242,17 @@ def request_osd_ok_to_upgrade_report(
     return report
 
 
+def _short_ceph_version(version: Optional[str]) -> Optional[str]:
+    if not version:
+        return None
+    if version.startswith('ceph version'):
+        parts = version.split(' ')
+        if len(parts) >= 3 and parts[2]:
+            return parts[2]
+        return None
+    return version
+
+
 class UpgradeState:
     def __init__(self,
                  target_name: str,
@@ -378,6 +389,15 @@ class CephadmUpgrade:
 
         # FIXME: we assume the first digest is the best one to use
         return self.upgrade_state.target_digests[0]
+
+    def _announce_target(self, target_version: str,
+                         target_digests: Optional[List[str]]) -> None:
+        (target_major, _) = target_version.split('.', 1)
+        target_major_name = self.mgr.lookup_release_name(int(target_major))
+        logger.info('Upgrade: Target is version %s (%s)' % (
+            target_version, target_major_name))
+        logger.info('Upgrade: Target container is %s, digests %s' % (
+            self.target_image, target_digests))
 
     def _upgrade_status_osd_bucket_scope_active(self) -> bool:
         """True when upgrade state selects OSD bucket scope"""
@@ -2425,11 +2445,20 @@ class CephadmUpgrade:
                     'detail': ['unable to extract ceph version from container'],
                 })
                 return
+            version_token = _short_ceph_version(target_version)
+            if not version_token:
+                self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                    'severity': 'warning',
+                    'summary': 'Upgrade: failed to pull target image',
+                    'count': 1,
+                    'detail': ['unable to extract ceph version from container'],
+                })
+                return
             self.upgrade_state.target_id = target_id
             # Short token from ``ceph version …`` inside the target image; this
             # is what the monitor expects for ``osd ok-to-upgrade`` ceph_version
             # (may differ from CLI --ceph-version, e.g. full build id vs tag).
-            self.upgrade_state.target_version = target_version.split(' ')[2]
+            self.upgrade_state.target_version = version_token
             self.upgrade_state.target_digests = target_digests
             self._save_upgrade_state()
             target_image = self.target_image
@@ -2445,10 +2474,7 @@ class CephadmUpgrade:
         target_major_name = self.mgr.lookup_release_name(int(target_major))
 
         if first:
-            logger.info('Upgrade: Target is version %s (%s)' % (
-                target_version, target_major_name))
-            logger.info('Upgrade: Target container is %s, digests %s' % (
-                target_image, target_digests))
+            self._announce_target(target_version, target_digests)
 
         version_error = self._check_target_version(target_version)
         if version_error:
