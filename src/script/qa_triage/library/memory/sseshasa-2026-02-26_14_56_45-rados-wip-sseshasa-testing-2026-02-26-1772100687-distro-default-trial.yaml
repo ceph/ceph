@@ -1,0 +1,39 @@
+run: sseshasa-2026-02-26_14:56:45-rados-wip-sseshasa-testing-2026-02-26-1772100687-distro-default-trial
+signatures:
+  cluster-log/health | WRN MON_NETSPLIT:
+    '71344': 1
+  ? cluster-log/message/backfill-reject-injected | WRN mon pg <pg> is active+remapped+backfill_toofull, acting [#,#,#] | PG backfill_toofull from injected backfill reservation rejection
+  : '70716': 1
+  ? 'cluster-log/other/cephadm-pull-manifest-not-found | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: manifest for quay.ceph.io/ceph-ci/ceph not found: manifest unknown'
+  : '73921': 1
+  ? 'command/unexplained | curl --silent -L https://#.chacra.ceph.com/binaries/ceph/wip-sseshasa-testing-#-#-#-#/<sha>/centos/#/x#_#/flavors/default/cephadm > cephadm && ls: #'
+  : '55838': 1
+  ? 'crash/client/unnamed | Command failed (workunit test rados/test.sh) on <host> with status #: ''mkdir -p -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && cd -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && CEPH_CLI_TEST_DUP_COMMAND=# CEPH_REF=<sha> TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="#" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.# CEPH_ROOT=/home/ubuntu/cephtest/clone.client.# CEPH_MNT=/home/ubuntu/cephtest/mnt.# ALLOW_TIMEOUTS=# adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout #h /home/ubuntu/cephtest/clone.client.#/qa/workunits/rados/test.sh'''
+  : '70772': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  ? 'infra/other | install: Command failed on <host> with status #: ''sudo DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install ceph=<pg>.#-#-gf#b#e#e#-#jammy cephadm=<pg>.#-#-gf#b#e#e#-#jammy ceph-mds=<pg>.#-#-gf#b#e#e#-#jammy ceph-mgr=<pg>.#-#-gf#b#e#e#-#jammy ceph-common=<pg>.#-#-gf#b#e#e#-#jammy ceph-fuse=<pg>.#-#-gf#b#e#e#-#jammy ceph-test=<pg>.#-#-gf#b#e#e#-#jammy ceph-volume=<pg>.#-#-gf#b#e#e#-#jammy radosgw=<pg>.#-#-gf#b#e#e#-#jammy python#-rados=<pg>.#-#-gf#b#e#e#-#jammy python#-rgw=<pg>.#-#-gf#b#e#e#-#jammy python#-cephfs=<pg>.#-#-gf#b#e#e#-#jammy python#-rbd=<pg>.#-#-gf#b#e#e#-#jammy libcephfs#=<pg>.#-#-gf#b#e#e#-#jammy libcephfs-dev=<pg>.#-#-gf#b#e#e#-#jammy librados#=<pg>.#-#-gf#b#e#e#-#jammy librbd#=<pg>.#-#-gf#b#e#e#-#jammy rbd-fuse=<pg>.#-#-gf#b#e#e#-#jammy'''
+  : '74679': 1
+  other | <fail with no reason>:
+    '71005': 1
+  'test/unittest | tasks.mgr.test_progress.TestProgress.test_osd_came_back: IndexError: list index out of range':
+    '70320': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '55838': '"download_cephadm" step fails'
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '70320': test_osd_came_back fails when test does not detect that osd.0 is back in
+  '70716': 'rados/thrash-old-clients: "pg backfill_toofull" warning in cluster log'
+  '70772': 'rados/verify: rados/test.sh hangs indefinitely after completing all api tests successfully.'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '73921': 'rados/encoder: Container image quay.ceph.io/ceph-ci/ceph:quincy with tag quincy not found leading to test failure'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74679': Jammy packages fail to install on trial nodes
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff

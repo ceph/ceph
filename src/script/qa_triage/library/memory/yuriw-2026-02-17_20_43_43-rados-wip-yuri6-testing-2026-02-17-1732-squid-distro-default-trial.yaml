@@ -1,0 +1,18 @@
+run: yuriw-2026-02-17_20:43:43-rados-wip-yuri6-testing-2026-02-17-1732-squid-distro-default-trial
+signatures:
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '74148': 1
+  other | <fail with no reason>:
+    '71005': 1
+  ? 'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_standby: AssertionError: ''text/html;charset=utf-#'' != ''text/plain;charset=utf-#'''
+  : '74149': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '74148': Prometheus module experiences connection issues related to cherrypy
+  '74149': Prometheus module fails when trying to load security configuration JSON
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)

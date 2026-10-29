@@ -1,0 +1,20 @@
+run: yaarit-2026-02-26_20:19:38-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-26-1772108951-distro-default-trial
+signatures:
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '65728': 1
+  timeout/unexplained | MaxWhileTries:
+    '75218': 1
+  ? 'workunit/set-e | cephadm/test_iscsi_setup.sh: container_gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; podman exec -i <sha> gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; set -e'
+  : '74873': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '67555': 1
+  ? 'workunit/set-e/test-repos-add-repo-metadata-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: Traceback (most recent call last): | test_repos.sh: add-repo repository metadata #'
+  : '67555': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '65728': Daemon managed by cephadm in an unknown state (CEPHADM_FAILED_DAEMON)
+  '67555': failed to fetch repository task/test_cephadm_repos
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '74873': 'cephadm/test_iscsi_setup.sh - Auth: ACL_ENABLED, Hosts: 0'
+  '75218': Orchestrater test fails while waiting for 8 OSDs to deploy

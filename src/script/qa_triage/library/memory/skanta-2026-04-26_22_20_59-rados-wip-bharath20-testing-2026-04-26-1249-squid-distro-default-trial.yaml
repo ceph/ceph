@@ -1,0 +1,9 @@
+run: skanta-2026-04-26_22:20:59-rados-wip-bharath20-testing-2026-04-26-1249-squid-distro-default-trial
+signatures:
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+titles:
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'

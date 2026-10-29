@@ -1,0 +1,6 @@
+run: jcollin-2026-02-18_03:11:55-fs-wip-jcollin-testing-20260218.004834-squid-distro-default-trial
+signatures:
+  ? cluster-log/message | WRN osd OSD bench result of <pg> IOPS is not within the threshold limit range of <pg> IOPS and <pg> IOPS for osd.#. IOPS capacity is unchanged at <pg> IOPS. The recommendation is to establish the osd's IOPS capacity using other benchmark tools (e.g. Fio) and then override osd_mclock_max_capacity_iops_[hdd|ssd].
+  : '74501': 2
+titles:
+  '74501': '"IOPS is not within the threshold limit" errors'

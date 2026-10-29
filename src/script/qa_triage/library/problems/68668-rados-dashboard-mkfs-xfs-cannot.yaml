@@ -1,0 +1,26 @@
+id: "68668"
+tracker: https://tracker.ceph.com/issues/68668
+title: "rados/dashboard: mkfs.xfs: cannot open /dev/vg_nvme/lv_2: Device or resource busy"
+kind: test
+match:
+  reason: 'mkfs\.xfs'
+confirm:
+  - file: teuthology.log
+    pattern: 'mkfs\.xfs: cannot open /dev/\S+: Device or resource busy'
+  - file: teuthology.log
+    pattern: 'tasks\.cephadm:Deploying osd\.\d+ on \S+ with /dev/vg_nvme/lv_\d+'
+notes: |
+  The cause: the rados/dashboard e2e job (and other jobs in that suite) lists both the
+  cephadm task and the ceph task. The cephadm task deploys OSD containers on the
+  /dev/vg_nvme/lv_N logical volumes and waits for them to come up. The ceph task then
+  runs 'yes | sudo mkfs.xfs -f -i size=2048 <dev>' (qa/tasks/ceph.py, cluster()) on the
+  LVs of its osd roles, which overlap the ones cephadm already uses, so mkfs.xfs fails
+  with 'cannot open /dev/vg_nvme/lv_N: Device or resource busy' (status 1) and the job
+  fails with CommandFailedError. The squid runs have the same command with a second
+  '-f' ('mkfs.xfs -f -i size=2048 -f /dev/...') and the same failure. The confirm
+  checks need both the busy error and the cephadm deployment on a vg_nvme LV, which is
+  what shows the device is held by an OSD and not by something else. The tracker is
+  still open.
+examples:
+  - jayaprakash-2026-02-06_12:54:34-rados-jaya-bs-testing-05-02-2026-distro-default-trial/38111
+  - lflores-2026-03-31_22:52:22-rados-wip-yuri6-testing-2026-03-20-1643-squid-distro-default-trial/128691

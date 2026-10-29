@@ -1,0 +1,6 @@
+run: nmordech-2026-02-23_13:38:59-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-23-1771833711-distro-default-trial
+signatures:
+  'test/unittest | tasks.mgr.test_progress.TestProgress.test_osd_came_back: IndexError: list index out of range':
+    '70320': 1
+titles:
+  '70320': test_osd_came_back fails when test does not detect that osd.0 is back in

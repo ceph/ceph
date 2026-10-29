@@ -1,0 +1,32 @@
+id: "80977"
+tracker: https://tracker.ceph.com/issues/80977
+title: "Job failed due to various missing Ubuntu Noble packages"
+kind: infra
+fixes:
+  - pr: https://github.com/ceph/ceph-build/pull/2735
+    branch: main
+  - pr: https://github.com/ceph/chacra/pull/355
+    branch: main
+tree: infra/other
+facts:
+  task: '^install$'
+confirm:
+  - file: teuthology.log
+    pattern: "E: Version '.*' for '.*' was not found"
+notes: |
+  The apt install task failed because one or more Ceph packages were absent from
+  the published apt index on chacra.ceph.com, even though chacra reported the repo
+  as ready. The root cause was a race condition in chacra's repo-build pipeline:
+  the x86_64 and arm64 legs of a release build each end with a `chacractl repo
+  update` POST that clears the repo's `is_updating` flag. When the arm64 request
+  arrived while the x86_64 reprepro run was still in progress, chacra started a
+  second overlapping build of the same repo. The two reprepro processes fought over
+  the lock file, each silently skipping packages it could not add (891 "failed to
+  add binary" errors in the celery log), leaving 17 amd64 and 43 arm64 packages
+  missing from the published Packages index while chacra still reported the repo
+  as `ready`. Fixed by ceph-build PR #2735 (upload script waits for any in-flight
+  repo build before requesting an update) and chacra PR #355 (per-repo lock
+  preventing overlapping builds; repos with unrecoverable reprepro failures
+  reported `failed` instead of `ready`), both deployed on 10-01.
+examples:
+  - skanta-2026-09-20_02:51:43-rados-wip-bharath22-testing-20260920.002814-main-distro-default-trial/570131

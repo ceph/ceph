@@ -1,0 +1,10 @@
+run: mattywilliams-2026-09-16_14:35:09-rbd-main-distro-default-trial
+jobs:
+  '560984':
+    problem: '81661'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in no known problem in 81661, this one among them.
+    summary: Not a client crash. cluster1's osd.1, then osd.2, aborted on ceph_abort_msg("out of order op") in PrimaryLogPG::execute_ctx on EC pg 2.7 of the allow_ec_optimizations rbd pool, which is tracker 81661. The watchdog then killed cluster1 and rbd migration commit timed out with 110. Added record 81661 and taught crash/client/unexplained to recognise this.
+    status: fail
+    description: rbd/migration-external/{1-base/install 2-clusters/2-node 3-objectstore/bluestore-comp-zstd 5-pool-types/meta-ec-data-ec 6-prepare/native-clone-conf 7-io-workloads/qemu_xfstests 8-migrate-workloads/execute conf/{disable-pool-app} supported-random-distro/{centos_9.stream}}
+    reason: 'Command failed on trial142 with status 110: "sudo TESTDIR=/home/ubuntu/cephtest bash -c ''rbd --cluster cluster1 migration commit client.0.0''"'

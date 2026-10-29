@@ -1,0 +1,18 @@
+run: jayaprakash-2026-07-24_10:03:54-rados-wip-jaya-bs-testing-tentacle-23-07-2026-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/MissingLoc.h FAILED ceph_assert(# == "unexpected need for missing item") in void MissingLoc::add_active_missing(const pg_missing_t&)
+  : '75962': 1
+  infra/build | build:
+    '75763': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  ? 'workunit/set-e/test-repos-add-repo-metadata-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: Traceback (most recent call last): | test_repos.sh: add-repo repository metadata #'
+  : '78153': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '75358': 1
+titles:
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75763': 'rados/encoder: teuthology: VersionNotFoundError when fetching ''reef'' Ceph packages for Rocky 10.1 from shaman'
+  '75962': OSD crashes with FAILED ceph_assert(0 == "unexpected need for missing item") in MissingLoc::add_active_missing() during EC thrash
+  '78153': 'Cephadm: failure to fetch GPG key when adding quincy repo'

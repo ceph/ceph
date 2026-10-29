@@ -1,0 +1,26 @@
+run: skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial
+jobs:
+  '127723':
+    problem: '65728'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 75797, this one among them, and no record names it yet: the tool placed them in 65728. A record for it should place them all; others are .'
+    summary: Job 127723 is the transient CEPHADM_FAILED_DAEMON (daemon in 'unknown' state) problem of 65728; tracker 75797 is the same cause, so it is added to that record's `also`.
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_22.04 agent/on mon_election/connectivity task/test_rgw_multisite}
+    reason: '"2026-03-31T12:11:57.637125+0000 mon.a (mon.0) 442 : cluster [WRN] Health check failed: 1 failed cephadm daemon(s) (CEPHADM_FAILED_DAEMON)" in cluster log'
+  '127739':
+    problem: '75488'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 8 jobs in 75488, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143072, skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/166143, skanta-2026-05-07_14:11:34-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial/197898, skanta-2026-05-12_11:16:42-rados-wip-bharath18-testing-2026-05-12-0450-distro-default-trial/208780, skanta-2026-05-26_00:44:20-rados-wip-bharath17-testing-2026-05-25-1331-distro-default-trial/237416.'
+    summary: TEST_recovery_pool_priority in osd-recovery-prio.sh read the OSD reservations after the small log-based recovery had finished, because the test did not set norecover (tracker 75488, PR 69416); no record covered it.
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{ubuntu_latest} workloads/osd}
+    reason: 'Command failed (workunit test osd/osd-recovery-prio.sh) on trial188 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=28b9e5c34588a27cefa72e1df3b74de09d177c8b TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/osd/osd-recovery-prio.sh'''
+  '127724':
+    problem: '70669'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 62972, this one among them, and no record names it yet: the tool placed them in 70669. A record for it should place them all; others are .'
+    summary: 'The job was right in 70669: a config reset deleted the per-mgr ssl_server_port keys, so the dashboard respawned on 8443. People also place such jobs in 62972, so 62972 goes under 70669''s `also`.'
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/connectivity random-objectstore$/{bluestore-low-osd-mem-target} tasks/dashboard}
+    reason: 'Test failure: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module)'

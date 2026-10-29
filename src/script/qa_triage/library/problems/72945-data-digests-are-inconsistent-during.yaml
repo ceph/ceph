@@ -1,0 +1,51 @@
+id: "72945"
+tracker: https://tracker.ceph.com/issues/72945
+title: "Data digests are inconsistent during scrubbing"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/65623
+    branch: main
+    fixed_in: v20.3.0-5156-gdfa42f1600
+tree: cluster-log/message
+facts:
+  level: '^ERR$'
+  message: 'data digests are inconsistent$'
+  reporter: '^osd\.'
+confirm:
+  - file: teuthology.log
+    pattern: 'cluster \[ERR\] \S+ \S+data digests are inconsistent'
+notes: |
+  During deep scrub of an erasure-coded pool with optimized EC (ec_optimizations_on), the
+  ScrubBackend (src/osd/scrubber/scrub_backend.cc) logs '<pg> <object>data digests are
+  inconsistent' as an [ERR] to the cluster log although the data is fine. The teardown
+  cluster-log scan treats any un-ignored [ERR] as a failure. The cause is in the scrub code:
+  crc buffers were compared beyond their end, logical_to_ondisk_size was called twice when
+  creating the crcs of zero buffers so they were mis-sized, and smaller shards were not padded
+  although shards must be the same size for the parity comparison. PR 65623 fixes all three
+  (merged as v20.3.0-5156-gdfa42f1600). Builds older than that, such as 20.3.0-4929-g58ab6e40,
+  still have the bug. The error names the PG and the object, so the failure text differs
+  between jobs (benchmark_data_* objects of ec-radosbench, or objects of other workloads such
+  as the rados api tests); the PG is not damaged and the scrub only fails to compare correctly.
+examples:
+  - skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19850
+  - skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19851
+  - skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19853
+  - skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19859
+  - skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19860
+  - skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19865
+  - lflores-2026-01-21_20:56:39-rados-main-distro-default-trial/11872
+  - lflores-2026-01-21_20:56:39-rados-main-distro-default-trial/11947
+  - lflores-2026-01-23_19:07:45-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/15315
+  - lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19075
+  - nmordech-2026-01-28_16:11:20-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/23361
+  - nmordech-2026-02-04_08:13:49-rados-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial/33924
+  - skanta-2026-01-26_08:54:40-rados-wip-bharath4-testing-2026-01-26-1300-distro-default-trial/17686
+  - skanta-2026-01-26_08:54:40-rados-wip-bharath4-testing-2026-01-26-1300-distro-default-trial/17689
+  - skanta-2026-01-27_05:35:03-rados-wip-bharath1-testing-2026-01-26-1242-distro-default-trial/19748
+  - skanta-2026-01-27_05:35:03-rados-wip-bharath1-testing-2026-01-26-1242-distro-default-trial/19757
+  - skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19875
+  - skanta-2026-01-29_13:05:02-rados-wip-bharath5-testing-2026-01-28-2018-distro-default-trial/25719
+  - skanta-2026-01-30_23:46:16-rados-wip-bharath7-testing-2026-01-29-2016-distro-default-trial/28583
+  - skanta-2026-02-04_08:34:03-rados-wip-bharath2-testing-2026-02-03-0542-distro-default-trial/34223
+  - skanta-2026-02-06_03:29:50-rados-wip-bharath16-testing-2026-02-05-1716-distro-default-trial/37357
+  - yuriw-2026-01-05_23:00:35-rados-wip-yuri7-testing-2026-01-05-2021-distro-default-trial/1966

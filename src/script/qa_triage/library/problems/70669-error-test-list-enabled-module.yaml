@@ -1,0 +1,53 @@
+id: "70669"
+tracker: https://tracker.ceph.com/issues/70669
+title: "ERROR: test_list_enabled_module: cephfs resource temporarily unavailable"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67728
+    branch: main
+match:
+  reason: 'test_list_enabled_module'
+confirm:
+  - file: teuthology.log
+    pattern: "HTTPSConnectionPool\\(host='[^']+', port=77\\d\\d\\): Max retries exceeded with url: /api/mgr/module"
+  - file: teuthology.log
+    pattern: '^2026-0\d-\d\dT'
+exclude:
+  - file: teuthology.log
+    pattern: "Health check failed: Module 'dashboard' has failed: Port 8443 not free"
+notes: |
+  The cause: CephTestCase.tearDown() runs "ceph config reset <conf_epoch>" after
+  every test (conf_epoch is 1 in these jobs), which deletes the per-mgr dashboard
+  ports (config/mgr/mgr/dashboard/{x,y,z}/ssl_server_port = 7789/7790/7791) that
+  MgrTestCase.setup_mgrs() wrote later. The running dashboard keeps its port, so the
+  earlier tests pass. test_list_enabled_module then runs "ceph mgr module enable
+  iostat", which respawns all the mgrs; each finds no ssl_server_port and starts the
+  dashboard on the default 8443 (mgr.y and mgr.z on the same host then collide: "Port
+  8443 not free on ::"). The test keeps requesting the assigned port and is refused.
+  This is the original issue's "iostat module enabled -> mgr respawned -> dashboard
+  restart binds 8443 -> Port 8443 unavailable". Tracker #81857 was filed on
+  2026-10-18 for the same mechanism. The last confirm check (log lines dated before
+  October 2026) and the matching exclude in 81857 only split the jobs between the two
+  trackers by run date; the two trackers should be merged. Jobs whose cluster log
+  shows the health error "Module 'dashboard' has failed: Port 8443 not free"
+  (MGR_MODULE_ERROR) are filed under #75358, which is that symptom; the exclude check
+  keeps them out of this record. People also place jobs without that health error
+  (only the mgr's own "Unhandled exception from module 'dashboard' ... Port 8443 not
+  free on ::" in the cluster log) in #75358, e.g. lflores run 374651; #75358 is the
+  same cause (its fix is the same PR 67728, and it is "related to #70669"), so it is
+  listed under `also`.
+  People also place these jobs in the older tracker #62972 ("ERROR: test_list_enabled_module
+  (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest)"), whose own fixes (PRs 59530,
+  60511, 61744: retries and a longer wait in the test) are merged and cannot help here:
+  the dashboard is really on 8443 and the test asks 7789. #62972 is "related to #70669"
+  and its recent watcher comments are this same failure, e.g. run
+  skanta-2026-03-31_12:00:11 job 127724, so it is listed under `also` too.
+examples:
+  - skanta-2026-09-20_02:51:43-rados-wip-bharath22-testing-20260920.002814-main-distro-default-trial/570130
+  - skanta-2026-06-14_23:24:50-rados-wip-bharath11-testing-2026-06-12-0509-distro-default-trial/293708
+  - lflores-2026-07-17_23:28:16-rados-wip-lflores-testing-3-2026-07-17-1417-distro-default-trial/374651
+  - skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127724
+  - jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90378
+also:
+  - "75358"
+  - "62972"

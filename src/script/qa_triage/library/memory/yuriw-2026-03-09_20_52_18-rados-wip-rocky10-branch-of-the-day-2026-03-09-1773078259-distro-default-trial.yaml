@@ -1,0 +1,12 @@
+run: yuriw-2026-03-09_20:52:18-rados-wip-rocky10-branch-of-the-day-2026-03-09-1773078259-distro-default-trial
+signatures:
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN # pool(s) full':
+    '75360': 1
+  ? 'infra/other | pexec: valgrind error: Leak_StillReachable operator new[](unsigned long) UnknownInlinedFun _GLOBAL__sub_I_error_handler.cc.lto_priv.#'
+  : '75430': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+titles:
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75360': 'Rocky10 - rados/upgrade: Alertmanager fails to send a webhook to the dashboard'
+  '75430': Rocky10 - Leak_StillReachable RocksDB error_handler

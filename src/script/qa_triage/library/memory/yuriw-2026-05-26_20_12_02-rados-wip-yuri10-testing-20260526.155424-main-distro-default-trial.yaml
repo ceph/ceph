@@ -1,0 +1,15 @@
+run: yuriw-2026-05-26_20:12:02-rados-wip-yuri10-testing-20260526.155424-main-distro-default-trial
+signatures:
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '76979': 3
+  'infra/other | pexec: expected valgrind issues and found none':
+    '76473': 1
+  'timeout/slow-ops | snap_trimming: slow ops':
+    '68960': 1
+  ? 'timeout/unexplained/thrasher-min-size-list-remove | The WatchDog barked due to Thrasher OSDThrasher threw except... | OSDThrasher test_pool_min_size: kill_osd ValueError list.remove'
+  : '70519': 1
+titles:
+  '68960': 'ec-pool-snaps-few-objects-overwrites: failed to complete snap trimming before timeout'
+  '70519': 'test_pool_min_size: test fails when non "active+clean" pg is chosen from EC pool'
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '76979': 'cephadm: Failure to re-authenticate an osd'

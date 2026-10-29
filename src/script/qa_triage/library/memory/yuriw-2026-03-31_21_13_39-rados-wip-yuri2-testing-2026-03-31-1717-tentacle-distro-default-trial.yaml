@@ -1,0 +1,15 @@
+run: yuriw-2026-03-31_21:13:39-rados-wip-yuri2-testing-2026-03-31-1717-tentacle-distro-default-trial
+signatures:
+  ? 'test/unittest | tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam: ConnectionRefusedError: [Errno #] Connection refused'
+  : '69954': 1
+  ? 'workunit/set-e | cephadm/test_cephadm.sh: /usr/sbin/cephadm --image quay.ceph.io/ceph-ci/ceph:main bootstrap --mon-id a --mgr-id x: Error: Container release umbrella != cephadm release tentacle; please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
+  : '75821': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '69954': 'test_selftest_command_spam: ConnectionRefusedError: [Errno 111] Connection refused'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '75821': 'tentacle: Error: Container release umbrella != cephadm release tentacle; please use matching version of cephadm'

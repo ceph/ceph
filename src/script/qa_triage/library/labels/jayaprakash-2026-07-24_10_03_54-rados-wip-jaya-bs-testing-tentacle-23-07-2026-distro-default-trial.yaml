@@ -1,0 +1,18 @@
+run: jayaprakash-2026-07-24_10:03:54-rados-wip-jaya-bs-testing-tentacle-23-07-2026-distro-default-trial
+jobs:
+  '396115':
+    problem: '52109'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'grafana.a never started (invalid IP address: localhost) and the workunit ended on grafana is not available; the dashboard Port 8443 line is earlier, in the dumped mgr log, and the workunit carried on past it'
+    summary: duplicate 52109 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/centos_9.stream_runc agent/on mon_election/connectivity task/test_cephadm}
+    reason: 'Command failed (workunit test cephadm/test_cephadm.sh) on trial133 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=3ddda7e4da3127a44afce2fc60b5c8f81554b910 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_cephadm.sh'''
+  '396128':
+    problem: '67555'
+    by: Claude Code for aainscow, as the reviewer
+    why: add-repo on Rocky 10 failed fetching repomd.xml (HTTPError 404, failed to fetch repository metadata); no release.gpg 404, so not 78153
+    summary: duplicate 67555 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/rocky_10 agent/off mon_election/classic task/test_cephadm_repos}
+    reason: 'Command failed (workunit test cephadm/test_repos.sh) on trial081 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=3ddda7e4da3127a44afce2fc60b5c8f81554b910 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_repos.sh'''

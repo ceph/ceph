@@ -1,0 +1,6 @@
+run: yuriw-2026-03-21_15:09:36-upgrade:reef-x-tentacle-release-distro-default-trial
+signatures:
+  'hung/command | parallel: cephadm --image quay.ceph.io/ceph-ci/ceph:reef shell --fsid <uuid> -- ceph':
+    '75570': 1
+titles:
+  '75570': 'upgrade/stress-split: Thrasher fails to revive an OSD during upgrade test'

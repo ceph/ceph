@@ -1,0 +1,34 @@
+id: "74605"
+tracker: https://tracker.ceph.com/issues/74605
+title: "Rocky10 - ERROR: test_sql_autocommit1 (tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit1)"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67632
+    branch: main
+    fixed_in: v20.3.0-6220-g2de737fa18
+tree: test/unittest
+facts:
+  test: '^tasks\.mgr\.test_devicehealth\.TestDeviceHealth\.test_sql_autocommit1$'
+match:
+  reason: 'test_sql_autocommit1'
+confirm:
+  - file: teuthology.log
+    pattern: 'tasks\.mgr\.test_devicehealth\.TestDeviceHealth\.test_sql_autocommit1'
+  - file: teuthology.log
+    pattern: 'self\._wait_for_killpoint_death\(\)'
+notes: |
+  In tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit1, the test
+  sets mgr/devicehealth/sqlite3_killpoint to 1 and calls _wait_for_killpoint_death()
+  to verify that the active mgr terminates when hitting the killpoint. In
+  mgr_module.py, the sqlite3 killpoint called os._exit(120), but cephadm/module.py
+  monkeypatched os._exit with os_exit_noop to prevent cherrypy exit calls from
+  terminating the process. Consequently, os._exit was a no-op, the mgr daemon
+  remained alive, and the test's wait_until_true timed out after 30 seconds.
+  Fixed in PR #67632 by calling _ceph_exit instead of os._exit for killpoints.
+examples:
+  - nmordech-2026-01-25_11:10:14-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/17021
+  - nmordech-2026-01-29_15:32:36-rados:mgr-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/26335
+  - nmordech-2026-02-17_05:44:40-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial/51654
+  - nmordech-2026-02-21_21:31:01-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial/62998
+  - nmordech-2026-02-25_11:34:16-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial/69835
+  - nmordech-2026-02-25_11:36:23-rados-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial/70008

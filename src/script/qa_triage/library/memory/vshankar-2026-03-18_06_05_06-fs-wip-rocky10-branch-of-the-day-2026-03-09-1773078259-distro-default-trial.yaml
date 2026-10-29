@@ -1,0 +1,6 @@
+run: vshankar-2026-03-18_06:05:06-fs-wip-rocky10-branch-of-the-day-2026-03-09-1773078259-distro-default-trial
+signatures:
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error EINVAL: invalid command'
+  : '75440': 1
+titles:
+  '75440': Upgrade test fails when cephadm tries to add an OSD with "--objectstore bluestore" setting

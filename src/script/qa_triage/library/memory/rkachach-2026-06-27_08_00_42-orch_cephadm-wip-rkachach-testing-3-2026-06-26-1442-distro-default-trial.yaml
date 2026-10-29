@@ -1,0 +1,9 @@
+run: rkachach-2026-06-27_08:00:42-orch:cephadm-wip-rkachach-testing-3-2026-06-26-1442-distro-default-trial
+signatures:
+  ? 'command/unexplained/download-cephadm-failed | test -s cephadm && test $(stat -c%s cephadm): # | download cephadm: file too small'
+  : '55838': 1
+  timeout/unexplained | MaxWhileTries:
+    '77835': 1
+titles:
+  '55838': '"download_cephadm" step fails'
+  '77835': 'mgr/cephadm: fail_fs upgrade does not wait for multi-rank MDS to become up:active'

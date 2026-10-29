@@ -1,0 +1,45 @@
+run: yuriw-2026-07-22_14:51:00-rados-wip-yuri8-testing-20260721.164157-umbrella-distro-default-trial
+signatures:
+  ? 'command/error | echo TrustedUserCAKeys /etc/ssh/ca-key.pub | tee -a /etc/ssh/sshd_config &&: Failed to restart sshd.service: Unit sshd.service not found.'
+  : '77991': 1
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '78780': 3
+  ? 'hung/command/ceph-daemon-config-set-hang | exec: sudo TESTDIR=/home/ubuntu/cephtest bash -c ''for f in # # # # ; do sudo ceph daemon osd.$f config set osd_recovery_sleep # ; sudo ceph daemon osd.$f config set osd_recovery_max_active # ; done'' | exec hung: ceph daemon config set on restarting OSD'
+  : '77743': 1
+  ? 'hung/command/host-drain-osd-not-scheduled | cephadm.shell: exit #; fi | host drain: OSD not scheduled for removal, only reconfigured'
+  : '78429': 1
+  ? 'infra/other/kernel-reconnect-timeout | kernel: Failed to reconnect to <host> | kernel: wait_for_reboot: Failed to reconnect'
+  : '78458': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 3
+  ? 'other/injected-leak-suppressed | expected valgrind issues and found none: injected leak hidden by the UnknownInlinedFun suppression'
+  : '76473': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 2
+  'timeout/slow-ops | snap_trimming: slow ops':
+    '68960': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 2
+  ? 'workunit/set-e/test-repos-add-repo-metadata-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: Traceback (most recent call last): | test_repos.sh: add-repo repository metadata #'
+  : '67555': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+  ? 'workunit/unexplained/ganesha-nfsv3-tcp-register | cephadm/test_cephadm.sh | test_cephadm.sh: ganesha Cannot register NFS V# on TCP'
+  : '75358': 1
+titles:
+  '67555': failed to fetch repository task/test_cephadm_repos
+  '68960': 'ec-pool-snaps-few-objects-overwrites: failed to complete snap trimming before timeout'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '77106': nvme list json command failed, retrying...
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '77743': Radosbench test times out
+  '77991': setup_ca_signed_keys hardcodes 'sshd' systemd unit, fails on Ubuntu/Debian
+  '78429': 'rados/cephadm: test_host_drain hangs after reconfiguring osd.5'
+  '78458': 'ConnectionError: Failed to reconnect to trialXXX'
+  '78780': 'Dead: rados/cephadm: ceph cephadm osd activate fails to reactivate OSD, teuthology hangs'

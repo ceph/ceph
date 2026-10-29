@@ -1,0 +1,6 @@
+run: jenkins-build-2026-10-18_06:04:45-rados-tentacle-distro-default-trial
+signatures:
+  workunit/standalone | mon/availability.sh TEST_availablity_score:
+    '81932': 1
+titles:
+  '81932': 'TEST_availablity_score: Failed: Availability score for the pool did not drop'

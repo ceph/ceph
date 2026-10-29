@@ -1,0 +1,18 @@
+run: skanta-2026-06-14_23:24:50-rados-wip-bharath11-testing-2026-06-12-0509-distro-default-trial
+jobs:
+  '293706':
+    problem: '77106'
+    by: the QA reviewers, via qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 77106, but the tool said new (explain -> prefilter -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said unsure . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 77106 by itself, with no judge.
+    summary: nvme_loop's 'nvme list -o json' failed 15 times, raising MaxWhileTries (tracker 77106); the tool found no log and left it new.
+    status: fail
+    description: rados/cephadm/osds/{0-distro/ubuntu_24.04 0-nvme-loop 1-start 2-ops/rm-zap-add}
+    reason: reached maximum tries (15) after waiting for 15 seconds
+  '293708':
+    problem: '70669'
+    by: the QA reviewers, via qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 70669, but the tool said new (explain -> prefilter -> confirm -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said unsure . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 70669 by itself, with no judge.
+    summary: test_list_enabled_module failed because config reset deleted ssl_server_port keys and mgr restarted dashboard on default port 8443
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/classic random-objectstore$/{bluestore-stupid} tasks/dashboard}
+    reason: 'Test failure: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module)'

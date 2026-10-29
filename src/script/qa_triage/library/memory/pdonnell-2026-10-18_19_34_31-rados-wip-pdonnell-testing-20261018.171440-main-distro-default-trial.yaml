@@ -1,0 +1,9 @@
+run: pdonnell-2026-10-18_19:34:31-rados-wip-pdonnell-testing-20261018.171440-main-distro-default-trial
+signatures:
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? 'workunit/unexplained/cephtool-osd-epoch-race | cephtool/test.sh | cephtool/test.sh test_mon_osd: info_plain != dump_plain (epoch race)'
+  : '75468': 1
+titles:
+  '75468': 'rados/cephtool: test_mon_osd_pool_set fails on wait_for_clean, slow op and PGs stuck in peering'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'

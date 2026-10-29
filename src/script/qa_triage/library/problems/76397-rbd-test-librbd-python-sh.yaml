@@ -1,0 +1,18 @@
+id: "76397"
+tracker: https://tracker.ceph.com/issues/76397
+title: "rbd/test_librbd_python.sh: ImportError: cannot import name 'RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT' from 'rbd'"
+kind: test
+tree: workunit/set-e/rbd-lock-mode-exclusive-transient
+facts:
+  script: '^rbd/test_librbd_python\.sh$'
+confirm:
+  - file: teuthology.log
+    pattern: "cannot import name 'RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT' from 'rbd'"
+notes: |
+  In rbd/test_librbd_python.sh, pytest failed during collection of test_rbd.py
+  with "ImportError: cannot import name 'RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT' from 'rbd'"
+  because the installed system rbd python binding does not define the constant
+  RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT expected by the test module.
+examples:
+  - skanta-2026-05-07_14:11:34-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial/197877
+  - skanta-2026-05-07_14:11:34-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial/197889

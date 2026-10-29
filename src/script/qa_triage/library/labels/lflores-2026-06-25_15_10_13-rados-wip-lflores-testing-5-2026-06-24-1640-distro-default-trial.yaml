@@ -1,0 +1,10 @@
+run: lflores-2026-06-25_15:10:13-rados-wip-lflores-testing-5-2026-06-24-1640-distro-default-trial
+jobs:
+  '316558':
+    problem: '76992'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in no known problem in 76992, this one among them.
+    summary: 'This is a known problem, 76992: during the squid-to-umbrella upgrade, the mon''s periodic health-detail report logged the OSD_UPGRADE_FINISHED detail as an indented line that the ignorelist doesn''t cover. No record for 76992 existed, so I added one at cluster-log/message, limited to the umbrella warning.'
+    status: fail
+    description: rados/upgrade/parallel/{0-random-distro$/{centos_9.stream} 0-start 1-tasks mon_election/classic overrides/{upgrade_ignorelist_health} upgrade-sequence workload/{ec-rados-default rados_api rados_loadgenbig rbd_import_export test_rbd_api test_rbd_python}}
+    reason: '"2026-06-25T16:20:00.000099+0000 mon.a (mon.0) 723 : cluster [WRN] all OSDs are running umbrella or later but require_osd_release < umbrella" in cluster log'

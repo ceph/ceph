@@ -1,0 +1,18 @@
+run: skanta-2026-08-22_23:37:38-rados-wip-bharath8-testing-20260822.101926-tentacle-distro-default-trial
+jobs:
+  '506409':
+    problem: '74678'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 74678, this one among them.
+    summary: mclock-config.sh TEST_recovery_limit_adjustment_mclock failed because the OSD bench result (80475 IOPS) was just above the 80000 IOPS threshold; this is tracker 74678, which the tool missed for lack of a record.
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{centos_9.stream} workloads/misc}
+    reason: 'Command failed (workunit test misc/mclock-config.sh) on trial097 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=8b605293de1f054b9043d95d0ae6b6827118e2cd TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/misc/mclock-config.sh'''
+  '506531':
+    problem: '74800'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 6 jobs in 74800, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-03-30_23:35:19-rados-wip-bharath13-testing-2026-03-30-1730-tentacle-distro-default-trial/127306, skanta-2026-10-04_04:00:51-rados-wip-bharath22-testing-20261004.002656-tentacle-distro-default-trial/605902, yaarit-2026-03-04_01:35:25-rados-wip-rocky10-branch-of-the-day-2026-03-03-1772543694-tentacle-distro-default-trial/80299, yuriw-2026-02-03_16:00:06-rados-wip-yuri4-testing-2026-02-02-2122-distro-default-trial/32061, yuriw-2026-05-15_20:57:42-rados-wip-yuriw-testing-20260515.172309-tentacle-wip-yuri12-testing-distro-default-trial/216268.'
+    summary: 'osd.0 aborted in OSDService::build_incremental_map_msg (OSD.cc:1484) after it could not load map 28; this is tracker #74800, not a client crash, and no record named it.'
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{centos_9.stream} workloads/osd}
+    reason: 'Command failed (workunit test osd/divergent-priors.sh) on trial020 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=8b605293de1f054b9043d95d0ae6b6827118e2cd TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/osd/divergent-priors.sh'''

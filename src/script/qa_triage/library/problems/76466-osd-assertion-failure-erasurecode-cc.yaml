@@ -1,0 +1,27 @@
+id: "76466"
+tracker: https://tracker.ceph.com/issues/76466
+title: "OSD Assertion Failure: ErasureCode.cc: 252: FAILED ceph_assert(chunk.is_contiguous())"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69023
+    branch: main
+    fixed_in: v21.3.0-2667-gf9b268c675
+tree: crash/assert/specific
+facts:
+  source: '^erasure-code/ErasureCode\.cc$'
+  message: 'chunk\.is_contiguous\(\)'
+  function: 'ceph::ErasureCode::encode_prepare'
+notes: |
+  An OSD crashes with FAILED ceph_assert(chunk.is_contiguous()) in
+  ceph::ErasureCode::encode_prepare (src/erasure-code/ErasureCode.cc:252),
+  called from ceph::ErasureCode::encode during EC transaction generation.
+  The cause: buffer::list::rebuild_aligned_size_and_memory (src/common/buffer.cc)
+  did not drop zero-sized buffer pointers when rebuilding buffer lists,
+  resulting in non-contiguous chunks passed into erasure coding.
+  Fixed by PR #69023 (common: Make buffer::list::rebuild_aligned_size_and_memory
+  correctly handle zero-sized buffers), merged at v21.3.0-2667-gf9b268c675.
+  Earlier tracker 72710 reported the same assertion failure.
+examples:
+  - skanta-2026-04-09_03:57:47-rados-wip-bharath16-testing-2026-04-08-1405-distro-default-trial/141122
+also:
+  - "72710"

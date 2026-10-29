@@ -1,0 +1,22 @@
+id: "69497"
+tracker: https://tracker.ceph.com/issues/69497
+title: "[ERR] OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order in cluster log"
+kind: test
+tree: cluster-log/message
+facts:
+  message: 'OSD_OUT_OF_ORDER_FULL'
+confirm:
+  - file: remote/*/log/*/ceph-mon.*.log.gz
+    pattern: 'osd set-full-ratio'
+notes: |
+  The thrashosds task calls thrash_cluster_full() in qa/tasks/ceph_manager.py,
+  which sets osd full-ratio to 0.001 and restores it to 0.95. While at 0.001,
+  full_ratio < backfillfull_ratio (0.9), so the monitor fires the health check
+  OSD_OUT_OF_ORDER_FULL. The cluster log records this as:
+    [ERR] OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order
+  The test's log-ignorelist (thrashosds-health.yaml) contains '\(OSD_', which
+  only matches lines where the check name appears in parentheses, e.g.
+  '(OSD_DOWN)'. The bare form '[ERR] OSD_OUT_OF_ORDER_FULL:' is not suppressed,
+  so the teardown cluster-log scan fails the job.
+examples:
+  - skanta-2026-09-24_03:23:39-rados-wip-bharath10-testing-20260924.010810-main-distro-default-trial/577494

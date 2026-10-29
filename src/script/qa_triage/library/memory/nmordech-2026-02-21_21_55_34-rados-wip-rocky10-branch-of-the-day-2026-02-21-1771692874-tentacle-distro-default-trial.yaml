@@ -1,0 +1,19 @@
+run: nmordech-2026-02-21_21:55:34-rados-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial
+signatures:
+  ? 'infra/other | ansible.cephlab: ["Unexpected failure during module execution: [Errno #] No space left on device: ''/home/teuthworker/.ansible/tmp/ansible-local-#nbwfg#s/ansiballz_cache/ansible_collections.community.general.plugins.modules.filesystem-ZIP_DEFLATED-part''"]'
+  : '74754': 1
+  ? 'infra/other | ansible.cephlab: ["Unexpected failure during module execution: [Errno #] No space left on device: ''/home/teuthworker/.ansible/tmp/ansible-local-#nnyxqazs/tmp#_tft#u''"]'
+  : '74754': 1
+  other | <fail with no reason>:
+    '71005': 1
+  ? 'test/unittest | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused'
+  : '74164': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '74164': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+titles:
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '74164': '[mgmt-gateway] monitoring problems, origin not allowed in grafana'
+  '74754': '(teuthworker home dir) ansible: Unexpected failure during module execution: [Errno 28] No space left on device'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff

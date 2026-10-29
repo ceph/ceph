@@ -1,0 +1,35 @@
+id: "72312"
+tracker: https://tracker.ceph.com/issues/72312
+title: "rados/thrash-old-clients squid HEALTH_WARN Degraded data redundancy: 3204/90723 objects degraded (3.532%), 2 pgs degraded, 3 pgs undersized\" in cluster log"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/64844
+    branch: main
+    fixed_in: v20.3.0-2909-gcc02dd516d
+tree: cluster-log/message
+facts:
+  level: '^WRN$'
+  message: '^Health detail: HEALTH_WARN Degraded data redundancy: \d+/\d+ objects degraded'
+confirm:
+  - file: teuthology.log
+    pattern: 'Health detail: HEALTH_WARN Degraded data redundancy: \d+/\d+ objects degraded'
+  - file: teuthology.log
+    pattern: '^\s+- pg degraded$'
+notes: |
+  The thrashosds task kills, revives, reweights and out/ins OSDs on purpose, so PGs are
+  degraded and undersized for a while. The log-ignorelist from qa/tasks/thrashosds-health.yaml
+  has 'PG_DEGRADED' and '\(PG_', which only match the 'Health check failed: ... (PG_DEGRADED)'
+  form, and the per-PG patterns 'pg .*? is .*?degraded.*?, acting' and 'pg .*? is stuck'. The
+  mon's periodic summary '[WRN] Health detail: HEALTH_WARN Degraded data redundancy: N/M objects
+  degraded, X pgs degraded, Y pgs undersized' has no check name and matches none of them, so the
+  teardown cluster-log scan fails the job on an expected warning. The cluster behaves as intended;
+  the cause is the incomplete ignorelist, a test problem. The second confirm check shows that the
+  job uses the thrashosds-health ignorelist (which is the one that lacks the pattern). The summary
+  line without object counts (e.g. 'Degraded data redundancy: 1 pg undersized') is a different
+  warning and is not claimed here. The fix is PR 64844 (qa/tasks/thrashosds-health: fine tune
+  ignorelist for degraded and undersized pgs), merged on main and being backported to squid and
+  tentacle (#72936, #72937).
+examples:
+  - yuriw-2026-06-03_14:56:29-rados-wip-yuriw-testing-20260602.202207-squid-wip-yuri2-testing-20260602.202206-squid-distro-default-trial/260414
+  - yuriw-2026-06-22_18:46:50-rados-wip-yuri3-testing-20260622.144259-squid-distro-default-trial/306736
+  - yuriw-2026-06-27_19:16:06-rados-squid-release-distro-default-trial/319803

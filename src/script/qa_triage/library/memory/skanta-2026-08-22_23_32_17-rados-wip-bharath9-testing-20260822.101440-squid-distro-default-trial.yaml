@@ -1,0 +1,24 @@
+run: skanta-2026-08-22_23:32:17-rados-wip-bharath9-testing-20260822.101440-squid-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  ? cluster-log/message/backfill-reject-injected | WRN mon pg <pg> is active+remapped+backfill_toofull, acting [#,#,#] | PG backfill_toofull from injected backfill reservation rejection
+  : '70716': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'crash/client/unexplained/old-client-aes256k-keyring | ceph_test_cls_rbd | ceph_test_cls_rbd of an old release: cluster.connect failed with error -# on an aes#k cluster'
+  : '80146': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '79943': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '70716': 'rados/thrash-old-clients: "pg backfill_toofull" warning in cluster log'
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '79943': qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of "cephx_auth_aes256k"
+  '79946': After rebuilding the mondb, authentication starts failing
+  '80146': '[Squid] test_cls_rbd: TestClsRbd.mirror fails during pool creation with unhandled error -5 (-EIO)'

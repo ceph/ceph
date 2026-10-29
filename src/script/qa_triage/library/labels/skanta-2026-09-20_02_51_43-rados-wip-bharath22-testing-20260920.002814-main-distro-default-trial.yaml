@@ -1,0 +1,58 @@
+run: skanta-2026-09-20_02:51:43-rados-wip-bharath22-testing-20260920.002814-main-distro-default-trial
+jobs:
+  '570117':
+    problem: '71816'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-71816.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: Right record (71816), but the tree stopped at the symptom and the record only checked the stderr line; added a node at infra/other for the nvme-cli host identity cause and rewrote the record's notes and checks.
+    status: fail
+    description: rados/cephadm/smoke/{0-distro/ubuntu_24.04 0-nvme-loop agent/off fixed-2 mon_election/connectivity start}
+    reason: 'Command failed on trial116 with status 234: ''sudo nvme connect -t loop -n lv_1'''
+  '570051':
+    problem: '74774'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-74774.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: Record 74774 is correct but missing the fix PR; notes need to name the root cause (paddles race condition).
+    status: dead
+    description: rados/cephadm/osds/{0-distro/centos_9.stream_runc 0-nvme-loop 1-start 2-ops/rmdir-reactivate}
+    reason: '[''Cannot change VG vg_nvme while PVs are missing.'', ''Cannot process volume group vg_nvme'', "Creating logical volume ''lv_1'' failed", "Creating logical volume ''lv_2'' failed", "Creating logical volume ''lv_3'' failed", "Creating logical volume ''lv_4'' failed", ''Device /dev/nvme1n1 has no PVID (devices file pBXkIrY61gaj16RDeasuYooASEgD6CFX)'', ''See vgreduce --removemissing and vgextend --restoremissing.'', ''Volume group "vg_nvme" not found'', ''Volume group vg_nvme does not exist.'', "WARNING: Couldn''t find device with uuid lcrEz9-LPb7-nwkb-WuU9-YfXD-UjHV-oSdq6n.", ''WARNING: VG vg_nvme is missing PV lcrEz9-LPb7-nwkb-WuU9-YfXD-UjHV-oSdq6n (last written to /dev/nvme2n1).'']'
+  '570131':
+    problem: '80977'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-80977.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: Record 80977 matched correctly but its notes describe the wrong cause and it lacks the fix PRs found in the tracker.
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro/{ubuntu_24.04}}
+    reason: 'Command failed on trial116 with status 100: ''sudo DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install ceph=21.1.1-1noble cephadm=21.1.1-1noble ceph-mds=21.1.1-1noble ceph-mgr=21.1.1-1noble ceph-osd=21.1.1-1noble ceph-common=21.1.1-1noble ceph-fuse=21.1.1-1noble ceph-test=21.1.1-1noble radosgw=21.1.1-1noble python3-rados=21.1.1-1noble python3-rgw=21.1.1-1noble python3-cephfs=21.1.1-1noble python3-rbd=21.1.1-1noble libcephfs2=21.1.1-1noble libcephfs-dev=21.1.1-1noble librados2=21.1.1-1noble librbd1=21.1.1-1noble rbd-fuse=21.1.1-1noble'''
+  '570211':
+    problem: '79946'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-79946.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: 'Result (duplicate of 79946) is right, but the record named the symptom, not the cause: the rebuilt mondb lacks client.0''s key because the rebuild only used /etc/ceph/ceph.keyring.'
+    status: fail
+    description: rados/singleton/{all/rebuild-mondb mon_election/classic msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-2} onode-segment$/{512K-onoff} write$/{v1/{compr$/{no$/{no}} v1}}}} rados supported-random-distro/{ubuntu_24.04}}
+    reason: 'Command failed on trial124 with status 1: "/bin/sh -c ''adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage rados --no-log-to-stderr --name=client.0 --pool=unique_pool_1 bench --concurrent-ios=16 --object-size=65536 --block-size=65536 30 write''"'
+  '570342':
+    problem: '80746'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-80746.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: Job 570342 belongs to 80746, but the record blames secret rotation. The tracker's last finding is that the OSDs stopped getting auth replies from the mon, so I rewrote the notes and added a confirm check for the repeated ticket requests.
+    status: fail
+    description: rados/thrash-erasure-code-isa/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-2} onode-segment$/{512K} write$/{random/{compr$/{yes$/{zstd}} random}}}} rados recovery-overrides/{more-active-recovery} supported-random-distro/{centos_9.stream} thrashers/pggrow_host thrashosds-health workloads/ec-rados-plugin=isa-k=10-m=4}
+    reason: 'The WatchDog barked due to Thrasher OSDThrasher threw exception wait_for_recovery: failed before timeout expired'
+  '570130':
+    problem: '70669'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 70669, but the tool said duplicate 81857 (explain -> prefilter -> confirm -> fix-check), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 70669 by itself, with no judge.
+    summary: Port-reset dashboard failure of test_list_enabled_module belongs to the older tracker 70669; add a 70669 record and keep 81857 for the later jobs.
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/classic random-objectstore$/{bluestore-stupid} tasks/dashboard}
+    reason: 'Test failure: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module)'
+  '570113':
+    problem: '68586'
+    by: the RADOS reviewers (wiki), via qa_triage (bob-analyst)
+    why: 'The RADOS reviewers placed this job, and 25 other test_iscsi_container jobs that hit the max job timeout, in 68586 (cephadm: task/test_iscsi_container test hits max timeout); the tool places them all on 54360, the generic rm-cluster hang. An earlier lesson found that the cephadm agent blocked rm-cluster during teardown, which is 68586.'
+    summary: cephadm rm-cluster hung during teardown because the cephadm agent was left running and repeatedly querying the stopped mgr endpoint
+    status: dead
+    description: rados/cephadm/workunits/{0-distro/ubuntu_24.04 agent/on mon_election/classic task/test_iscsi_container/{centos_9.stream test_iscsi_container}}
+    reason: hit max job timeout

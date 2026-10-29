@@ -1,0 +1,24 @@
+run: yuriw-2026-07-30_01:03:32-rados-wip-yuri13-testing-20260729.211123-tentacle-distro-default-trial
+signatures:
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '79119': 1
+  infra/build | build:
+    '75763': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '75358': 1
+titles:
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '75763': 'rados/encoder: teuthology: VersionNotFoundError when fetching ''reef'' Ceph packages for Rocky 10.1 from shaman'
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '79119': 'rados/cephadm: Saw trial118 in CRUSH map after it should have been removed causes failure'

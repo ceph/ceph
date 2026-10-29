@@ -1,0 +1,30 @@
+id: "74332"
+tracker: https://tracker.ceph.com/issues/74332
+title: "ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67069
+    branch: main
+    fixed_in: v21.0.0-367-gf30b831400
+tree: crash/client/unnamed/ceph-kvstore-tool-close-db-segfault
+facts:
+  program: '^ceph-kvstore-tool$'
+match:
+  reason: 'test_kvstore_tool\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'RocksDBStore::get_wholespace_iterator\('
+  - file: teuthology.log
+    pattern: 'BlueStore::umount\(\)'
+notes: |
+  ceph-kvstore-tool, run with a bluestore-kv store by qa/workunits/cephtool/test_kvstore_tool.sh
+  (here after 'destructive-repair'), crashes with SIGSEGV while it closes the store. The StoreTool
+  Deleter in src/tools/kvstore_tool.h calls BlueStore::umount() on a store that was opened with
+  open_db_environment(), so BlueStore::_close_db() runs RocksDBStore::get_iterator >
+  get_wholespace_iterator on a db that is already closed. The backtrace is
+  get_wholespace_iterator < get_iterator < BlueStore::_close_db < BlueStore::umount <
+  ceph-kvstore-tool. The workunit's status 139 and the coredump warning are symptoms. PR 67069
+  (tracker 74332, merged, fixed in v21.0.0-367-gf30b831400) replaces the umount() with
+  close_db_environment(). Backports went to tentacle, squid and umbrella (75939, 75940).
+examples:
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122164

@@ -1,0 +1,6 @@
+run: jjperez-2026-09-22_14:59:10-crimson-rados-wip-perezjos-crimson-only-22-09-2026-PR69087-distro-debug-trial
+signatures:
+  ? 'crash/client/ceph/ping-monitor-abort | ceph: Fatal Python error: Aborted | python# abort in rados ping_monitor from test_rados.py test_ping_monitor'
+  : '80239': 1
+titles:
+  '80239': 'test_rados.py: terminated with signal SIGABRT core dump python3'

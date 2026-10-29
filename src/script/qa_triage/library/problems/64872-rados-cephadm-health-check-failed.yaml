@@ -1,0 +1,31 @@
+id: "64872"
+tracker: https://tracker.ceph.com/issues/64872
+title: "rados/cephadm: Health check failed: 1 stray daemon(s) not managed by cephadm (CEPHADM_STRAY_DAEMON) in cluster log"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/58126
+    branch: main
+    fixed_in: v19.3.0-3016-g64880d7c87
+tree: cluster-log/health/cephadm-stray-daemon-transient
+facts:
+  check: '^CEPHADM_STRAY_DAEMON$'
+confirm:
+  - file: teuthology.log
+    pattern: 'Health check cleared: CEPHADM_STRAY_DAEMON'
+notes: |
+  A daemon is transiently seen as stray (not managed by cephadm) during a
+  cephadm reconfiguration triggered by a test operation such as applying a new
+  mon spec with crush_locations via 'ceph orch apply'. The CEPHADM_STRAY_DAEMON
+  health warning appears and clears within seconds as cephadm re-registers the
+  daemon after the reconfiguration completes. The cluster log retains the warning,
+  and the teardown cluster-log scan finds it and fails the job even though the
+  cluster was healthy throughout the test.
+  In this job osd.2 on trial061 was transiently stray during the monmap change
+  triggered by the test_set_mon_crush_locations workunit's 'orch apply'; the
+  warning appeared at 22:14:05 and cleared at 22:14:09; wait_until_healthy had
+  already completed successfully before the warning appeared.
+  PR #58126 adds CEPHADM_STRAY_DAEMON to the ignorelist for certain test YAML
+  files (smoke/start, test_monitoring_stack_basic, test_rgw_multisite) but does
+  not cover all affected tests such as test_set_mon_crush_locations.
+examples:
+  - yuriw-2026-01-23_21:16:01-rados-wip-yuri13-testing-2026-01-23-1852-reef-distro-default-trial/15685

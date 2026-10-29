@@ -1,0 +1,31 @@
+run: skanta-2026-09-25_03:59:04-rados-wip-bharath29-testing-20260924.231744-main-distro-default-trial
+signatures:
+  cluster-log/message | WRN osd PG <pg> marked LAGGY; acting [#,#,#]:
+    '79576': 1
+  ? 'infra/other/chacra-http-error | install: # Server Error: Internal Server Error for url: https://chacra.ceph.com/repos/ceph/reef/<sha>/centos/#/flavors/default/repo | install: chacra.ceph.com HTTP error'
+  : '58224': 3
+  ? 'infra/other/chacra-http-error | install: # Server Error: Internal Server Error for url: https://chacra.ceph.com/repos/ceph/squid/<sha>/centos/#/flavors/default/repo | install: chacra.ceph.com HTTP error'
+  : '58224': 3
+  ? 'infra/other/chacra-http-error | install: # Server Error: Internal Server Error for url: https://chacra.ceph.com/repos/ceph/tentacle/<sha>/centos/#/flavors/default/repo | install: chacra.ceph.com HTTP error'
+  : '58224': 2
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 2
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 3
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/mon-bind.sh TEST_mon_client_connect:
+    '80756': 1
+  ? workunit/unexplained/cephtool-hang/bad-caps-key-left-behind | cephtool/test.sh | cephtool/test.sh hung with AUTH_BAD_CAPS HEALTH_ERR | cephtool test_mon_caps left client.bug with empty mon caps (AUTH_BAD_CAPS)
+  : '72888': 2
+titles:
+  '58224': 'cephadm/test_repos.sh: urllib.error.HTTPError: HTTP Error 504: Gateway Timeout'
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '72888': 'rados/singleton-bluestore: cephtool.sh workunit hangs on various tests'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '79576': 'rados/singleton: PG marked LAGGY during [osd-recovery| backfill-toofull | ec-esb-fio]  tests'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '80756': 'qa/standalone/mon/mon-bind.sh: TEST_mon_client_connect fails from error pinging monitor'

@@ -1,0 +1,10 @@
+run: skanta-2026-07-29_01:45:42-rados-wip-bharath23-testing-2026-07-28-1848-distro-default-trial
+jobs:
+  '407437':
+    problem: '77739'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 77739, but the tool said new (explain -> prefilter -> explained), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 77739 by itself, with no judge.
+    summary: The tool said new but the job belongs to tracker 77739 (rados API tests ran too slowly under valgrind memcheck, hitting the 8-hour timeout); a new node at hung/test and a new record for 77739 teach the tool to decide this automatically.
+    status: dead
+    description: rados/verify/{ceph clusters/fixed-4 d-thrash/none mon_election/connectivity msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{avl} base mem$/{normal-1} onode-segment$/{512K} write$/{v2/{compr$/{yes$/{zstd}} v2}}}} rados read-affinity/balance rpm_latest tasks/rados_api_tests validater/valgrind}
+    reason: hit max job timeout

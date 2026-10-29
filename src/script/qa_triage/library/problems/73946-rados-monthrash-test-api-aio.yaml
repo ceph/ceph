@@ -1,0 +1,43 @@
+id: "73946"
+tracker: https://tracker.ceph.com/issues/73946
+title: "rados/monthrash: Test api_aio_pp TIMED OUT after 5400 seconds"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/66430
+    branch: main
+    fixed_in: v21.0.0-1171-g19338a1cf0
+tree: workunit/unexplained
+facts:
+  workunit: '^rados/test\.sh$'
+match:
+  reason: 'workunit test rados/test\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'ERROR: Test api_aio_pp \(\d+\) - TIMED OUT after \d+ seconds'
+  - file: teuthology.log
+    pattern: '"flags_names":"[^"]*eio'
+exclude:
+  - file: teuthology.log
+    pattern: 'ceph_test_neorados_completions: command not found'
+notes: |
+  A deadlock in the test, not in the cluster (tracker #73946, PR 66430).
+  LibRadosAio.PoolEIOFlag (src/test/librados/aio_cxx.cc) submits aio writes in a loop
+  that holds the shared my_lock, and a helper thread sets the pool's eio flag with an
+  "osd pool set ... eio true" mon command and then takes my_lock. When the main thread
+  leaves the loop it calls t->join() while still holding my_lock, so it waits for the
+  thread, which waits for the lock. The test never finishes, ceph_test_rados_api_aio_pp
+  hangs, and qa/workunits/rados/test.sh gives up on it after 5400 s: "ERROR: Test
+  api_aio_pp (PID) - TIMED OUT after 5400 seconds", then kill -9, then "failed with
+  non-zero exit status". The workunit then fails with status 1. The workunit failure,
+  the timeout and the missing gtest FAILED line are all symptoms.
+  The cause is shown by the pool that is left with the eio flag (flags_names contains
+  "eio" in the osd dump at teardown): only PoolEIOFlag sets it, and a hung test never
+  deletes its pool. The cluster is healthy, with no crash and no OSD exit status 42,
+  which tells it apart from 77739 (a valgrind-killed cluster). Jobs where the neorados
+  binaries are missing ("ceph_test_neorados_completions: command not found", 77417)
+  are excluded, so they stay with 77417.
+  PR 66430 fixes it by unlocking before the join and by running the submit loop until
+  the EIO is seen. It is merged to main (Fixed In v21.0.0-1171-g19338a1cf0) and is
+  being backported to tentacle and squid.
+examples:
+  - skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148429

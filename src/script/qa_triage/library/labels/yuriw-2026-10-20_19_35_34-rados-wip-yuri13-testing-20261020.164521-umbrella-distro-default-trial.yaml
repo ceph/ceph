@@ -1,0 +1,26 @@
+run: yuriw-2026-10-20_19:35:34-rados-wip-yuri13-testing-20261020.164521-umbrella-distro-default-trial
+jobs:
+  '662399':
+    problem: '78780'
+    by: aainscow
+    why: A search of tracker.ceph.com for this failure's signature found tracker 78780; the tool called the job new.
+    summary: The job hung until the max job timeout because `ceph cephadm osd activate` created no OSD after the rmdir step. This is tracker 78780, which had no record, so the tool wrongly called the job new.
+    status: dead
+    description: rados/cephadm/osds/{0-distro/centos_9.stream_runc 0-nvme-loop 1-start 2-ops/rmdir-reactivate}
+    reason: hit max job timeout
+  '662534':
+    problem: '79878'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-79878.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: The triage result is correct; record 79878 accurately captures the cause, confirm checks, and fix details for this MDS_ALL_DOWN health check failure.
+    status: fail
+    description: rados/singleton-bluestore/{all/cephtool mon_election/connectivity msgr-failures/many msgr/async-v1only objectstore/bluestore/{alloc$/{bitmap} base mem$/{low} onode-segment$/{1M} write$/{random/{compr$/{no$/{no}} random}}} rados supported-random-distro/{rocky_10}}
+    reason: '"2026-10-20T21:07:17.747669+0000 mon.a (mon.0) 3815 : cluster [ERR] Health check failed: 1 filesystem is offline (MDS_ALL_DOWN)" in cluster log'
+  '663059':
+    problem: '76472'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: It failed the way pdonnell-2026-08-26_21:44:10-rados-wip-pdonnell-testing-20260826.182613-umbrella-distro-default-trial/517317 did, which people placed in 76472.
+    summary: TEST_mon_features in mon/misc.sh failed because jqfilter was not updated when checking nvmeof_beacon_diff (tracker 76472), not from cephx_auth_aes256k (tracker 79943).
+    status: fail
+    description: rados/standalone/{supported-random-distro/{centos_9.stream} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial157 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=2dcbba55b58916fa8f43131f0662ac4e05f48332 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''

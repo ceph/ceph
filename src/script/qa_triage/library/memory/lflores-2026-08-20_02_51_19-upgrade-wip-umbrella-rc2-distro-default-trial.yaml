@@ -1,0 +1,6 @@
+run: lflores-2026-08-20_02:51:19-upgrade-wip-umbrella-rc2-distro-default-trial
+signatures:
+  ? 'command/error/upgraded-daemon-keyring-malformed | cephadm --image quay.ceph.io/ceph-ci/ceph:tentacle shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error EINVAL: Cannot set values for --daemon-types, --services or --hosts when upgrade already in progress. | upgrade paused: mgr cannot parse the type-# key in its keyring'
+  : '79694': 1
+titles:
+  '79694': 'upgrade/tentacle-x/stress-split: auth: error parsing file /var/lib/ceph/mgr/ceph-x/keyring'

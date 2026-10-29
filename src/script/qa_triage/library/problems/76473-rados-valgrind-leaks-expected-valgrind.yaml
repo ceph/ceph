@@ -1,0 +1,44 @@
+id: "76473"
+tracker: https://tracker.ceph.com/issues/76473
+title: "rados/valgrind-leaks: expected valgrind issues and found none"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69278
+    branch: main
+    fixed_in: v21.3.0-536-g54de613cdd
+  - pr: https://github.com/ceph/ceph/pull/69977
+    branch: umbrella
+  - pr: https://github.com/ceph/ceph/pull/69975
+    branch: tentacle
+match:
+  reason: 'expected valgrind issues and found none'
+confirm:
+  - file: remote/*/log/valgrind/*.log.gz
+    pattern: '<name>ignore \*all\* ceph-mgr python crap'
+notes: |
+  rados/valgrind-leaks/2-inject-leak/{mon,osd} run 'ceph tell <daemon> leak_some_memory'
+  and set expect_valgrind_errors, so valgrind_post (qa/tasks/ceph.py) must find a
+  valgrind error at teardown. Instead it raises 'expected valgrind issues and found
+  none': the injected leak is swallowed by the suppression 'ignore *all* ceph-mgr
+  python crap.  this is overkill, but better than nothing' in qa/valgrind.supp
+  (Memcheck:Leak, match-leak-kinds: all, ... fun:UnknownInlinedFun ...). It was added
+  for the mgr unit tests (#72938) and hides any leak whose stack has a frame valgrind
+  prints as UnknownInlinedFun. On Rocky 10 (rpm_latest) the compiler inlines
+  CephContext::do_command, which calls leak_some_memory, so the injected leak's stack
+  has such a frame.
+  In the logs: the target daemon's valgrind XML log (remote/*/log/valgrind/<daemon>.log.gz)
+  ends normally, with an empty <errorcounts> and this suppression in <suppcounts>.
+  The leaked daemon counts one more match of it than its siblings (osd.0 904 vs
+  osd.1 903 in the example).
+  The record does not pin a tree location: on Rocky the install_rocky_packages pexec
+  task is the last task started before the teardown failure, so the tree may reach the
+  job through infra/other (task=pexec) instead of other/; both paths learn
+  injected-leak-suppressed.
+  Fix: PR 69278 (main) and its backports (umbrella 69977, tentacle 69975) mark
+  do_command noinline and log the leak. PR 69311 (#77138) later replaced the broad
+  suppression with specific lttng/glibc ones.
+examples:
+  - lflores-2026-06-25_15:37:19-rados-wip-lflores-testing-4-2026-06-24-1644-umbrella-distro-default-trial/317066
+  - skanta-2026-05-12_11:16:42-rados-wip-bharath18-testing-2026-05-12-0450-distro-default-trial/208777
+also:
+  - "77138"

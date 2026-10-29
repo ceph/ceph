@@ -1,0 +1,6 @@
+run: nmordech-2026-01-28_16:11:20-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial
+signatures:
+  '- | Error reimaging machines: reached maximum tries (#) after waiting for # seconds':
+    '74565': 4
+titles:
+  '74565': Rocky10 - reimage timeout

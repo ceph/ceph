@@ -1,0 +1,10 @@
+run: skanta-2026-06-29_11:58:47-rados-wip-bharath7-testing-2026-06-29-1510-tentacle-distro-default-trial
+jobs:
+  '325067':
+    problem: '77809'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 3 jobs in 77809, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-06-08_15:58:51-rados-wip-bharath21-testing-2026-06-05-2111-tentacle-distro-default-trial/278289, skanta-2026-08-24_10:34:23-rados-wip-vallari2-testing-20260819.130432-tentacle-distro-default-trial/509299.'
+    summary: mon_thrash ran 'ceph tell mon.h sync_force' on a mon in 'electing' state, got ENXIO, the thrasher died and the watchdog killed all daemons; the job then idled to the max job timeout (tracker 77809, no record existed).
+    status: dead
+    description: rados/monthrash/{ceph clusters/9-mons mon_election/connectivity msgr-failures/mon-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{avl} base mem$/{normal-2} onode-segment$/{none} write$/{random/{compr$/{no$/{no}} random}}}} rados supported-random-distro$/{centos_9.stream} thrashers/force-sync-many workloads/snaps-few-objects}
+    reason: hit max job timeout

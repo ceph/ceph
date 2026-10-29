@@ -1,0 +1,6 @@
+run: yuriw-2026-04-17_17:04:20-upgrade:reef-x-squid-release-distro-default-trial
+signatures:
+  ? 'cluster-log/message | WRN mon pg <pg> is stuck undersized for #s, current state active+recovering+undersized+remapped, last acting [#,#]'
+  : '69456': 1
+titles:
+  '69456': 'upgrade: pg is stuck peering'

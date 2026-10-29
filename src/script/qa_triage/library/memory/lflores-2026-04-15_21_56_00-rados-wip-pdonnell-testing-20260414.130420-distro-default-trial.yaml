@@ -1,0 +1,7 @@
+run: lflores-2026-04-15_21:56:00-rados-wip-pdonnell-testing-20260414.130420-distro-default-trial
+signatures:
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:#a#da#d#fd#f#e#b#bbb#a#d#d#f#c#f#ef#ca#cb#cae#e# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmpxhs#tn#:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:#a#da#d#fd#f#e#b#bbb#a#d#d#f#c#f#ef#ca#cb#cae#e# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+titles:
+  '75764': 'rados/cephadm: cephadm task involving ''ceph orch osd rm 1'' fails as the device couldn''t be zapped'

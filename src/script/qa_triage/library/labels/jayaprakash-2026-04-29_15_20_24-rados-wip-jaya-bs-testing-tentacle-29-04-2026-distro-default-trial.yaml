@@ -1,0 +1,10 @@
+run: jayaprakash-2026-04-29_15:20:24-rados-wip-jaya-bs-testing-tentacle-29-04-2026-distro-default-trial
+jobs:
+  '185489':
+    problem: '75218'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 13 jobs in 75218, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are jayaprakash-2026-04-20_13:52:18-rados-wip-jaya-bs-testing-20-04-2026-distro-default-trial/164524, lflores-2026-04-17_22:03:40-rados-wip-lflores-testing-2-2026-04-08-1424-tentacle-distro-default-trial/159086, nmordech-2026-02-25_11:36:23-rados-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial/69969, nmordech-2026-03-18_09:51:02-rados-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial/107259, nmordech-2026-03-22_08:25:20-rados:cephadm-wip-rocky10-branch-of-the-day-2026-03-22-1774160434-tentacle-distro-default-trial/116046.'
+    summary: 'rados/cephadm: ceph_osds times out waiting for 8 OSDs to deploy when raw method is used'
+    status: fail
+    description: rados/cephadm/osds/{0-distro/centos_9.stream_runc 0-nvme-loop 1-start 2-ops/deploy-raw}
+    reason: reached maximum tries (120) after waiting for 120 seconds

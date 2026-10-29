@@ -1,0 +1,6 @@
+run: yuriw-2026-06-05_21:08:09-orch-wip-pdonnell-testing-20260605.171913-tentacle-distro-default-trial
+signatures:
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '75365': 1
+titles:
+  '75365': 'Grafana container fails to start: grafana-apiserver rejects "localhost" as invalid IP address'

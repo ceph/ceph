@@ -1,0 +1,27 @@
+id: "76549"
+tracker: https://tracker.ceph.com/issues/76549
+title: "Ansible failure: Failed to download metadata for repo 'lab-extras': Cannot download repomd.xml causes Dead job - this could be a lot more efficient"
+kind: infra
+tree: infra/ansible
+facts:
+  task: '^ansible\.cephlab$'
+match:
+  reason: 'Failed to download metadata for repo'
+confirm:
+  - file: teuthology.log
+    pattern: 'Failed to download metadata for repo.*Cannot download'
+notes: |
+  The ansible.cephlab task installs or removes packages on the test machines with
+  the yum module. The module first downloads the metadata of the enabled repos,
+  and when it cannot get it from any mirror it fails with
+  "Failed to download metadata for repo '<repo>': ... Cannot download ...
+  all mirrors were already tried". The job then dies in ansible.cephlab before
+  any ceph code runs. The tracker issue names the lab-extras repo and repomd.xml;
+  the same failure was seen for the Rocky 10 baseos repo (primary.xml.gz) on both
+  hosts of one job, right after the playbook had rewritten the repo definitions
+  with the mirror list, while an earlier yum install in the same job had
+  downloaded the same metadata fine. It is a lab or mirror problem, so
+  re-running the job is the usual remedy. The check is deliberately not
+  limited to one repo or file name.
+examples:
+  - skanta-2026-10-03_03:26:16-rados-wip-bharath19-testing-20261002.123021-main-distro-default-trial/603334

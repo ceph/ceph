@@ -1,0 +1,45 @@
+run: pdonnell-2026-08-27_01:45:31-rados-wip-pdonnell-testing-20260826.223123-squid-distro-default-trial
+signatures:
+  cluster-log/health | WRN BLUESTORE_SLOW_OP_ALERT:
+    '68337': 1
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  cluster-log/health | WRN POOL_APP_NOT_ENABLED:
+    '63192': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'command/unexplained/not-found | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: # | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found'
+  : '79571': 1
+  ? 'crash/client/unexplained/old-client-aes256k-keyring | ceph_test_cls_rbd | ceph_test_cls_rbd of an old release: cluster.connect failed with error -# on an aes#k cluster'
+  : '80146': 1
+  ? 'infra/other | ansible.cephlab: [''Cannot change VG vg_nvme while PVs are missing.'', ''Cannot process volume group vg_nvme'', "Creating logical volume ''lv_#'' failed", "Creating logical volume ''lv_#'' failed", "Creating logical volume ''lv_#'' failed", "Creating logical volume ''lv_#'' failed", ''See vgreduce --removemissing and vgextend --restoremissing.'', "WARNING: Couldn''t find device with uuid tp#KYx-WVsh-t#gP-F#dP-qlnp-YHPQ-o#JwJO.", ''WARNING: VG vg_nvme is missing PV tp#KYx-WVsh-t#gP-F#dP-qlnp-YHPQ-o#JwJO (last written to /dev/nvme#n#).'']'
+  : '74774': 1
+  other | <pg> not in backfilling:
+    '80218': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '79943': 1
+  workunit/standalone | osd/osd-recovery-prio.sh TEST_recovery_pool_priority:
+    '77113': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '52109': 1
+titles:
+  '52109': 'test_cephadm.sh: Failed to connect to grafana.a: Failed to connect to localhost port 3000 after 0 ms: Connection refused'
+  '63192': Fix the POOL_APP_NOT_ENABLED warning to only be generated after the new pool has no application for some amount of time
+  '68337': OSD(s) experiencing slow operations in BlueStore (BLUESTORE_SLOW_OP_ALERT) in cluster log
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74774': Multiple jobs running same host same time
+  '77113': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_priority: ''Recovery never started on both PGs'''
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79943': qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of "cephx_auth_aes256k"
+  '79946': After rebuilding the mondb, authentication starts failing
+  '80146': '[Squid] test_cls_rbd: TestClsRbd.mirror fails during pool creation with unhandled error -5 (-EIO)'
+  '80218': 'qa/tasks/backfill_toofull.py: AssertionError: 2.0 not in backfilling'

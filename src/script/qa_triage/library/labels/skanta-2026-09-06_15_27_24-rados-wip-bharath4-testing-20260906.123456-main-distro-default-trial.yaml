@@ -1,0 +1,10 @@
+run: skanta-2026-09-06_15:27:24-rados-wip-bharath4-testing-20260906.123456-main-distro-default-trial
+jobs:
+  '541271':
+    problem: '80643'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 80643, but the tool said new (explain -> prefilter -> explained), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 80643 by itself, with no judge.
+    summary: 'POOL_NEARFULL health warning in rados/singleton thrash-backfill-full, not in the job''s log-ignorelist: tracker 80643, which had no record.'
+    status: fail
+    description: rados/singleton/{all/thrash-backfill-full mon_election/classic msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{avl} base mem$/{low} onode-segment$/{512K-onoff} write$/{random/{compr$/{no$/{no}} random}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: '"2026-09-06T18:09:19.318999+0000 mon.a (mon.0) 364 : cluster [WRN] Health check failed: 2 pool(s) nearfull (POOL_NEARFULL)" in cluster log'

@@ -1,0 +1,6 @@
+run: lflores-2026-03-10_15:30:45-upgrade-wip-rocky10-branch-of-the-day-2026-03-04-1772633736-66244-revert-distro-default-trial
+signatures:
+  ? 'command/error/mgr-modules-not-loaded | cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error EINVAL: Cannot set values for --daemon-types, --services or --hosts when upgrade already in progress. | orch upgrade status: mgr module not loaded just after a mgr restart'
+  : '71631': 1
+titles:
+  '71631': Commands using Mgr Modules fail if run immediately post a mgr failover/ restart

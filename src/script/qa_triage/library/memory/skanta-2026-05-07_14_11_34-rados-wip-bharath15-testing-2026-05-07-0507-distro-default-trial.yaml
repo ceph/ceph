@@ -1,0 +1,57 @@
+run: skanta-2026-05-07_14:11:34-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial
+signatures:
+  ? cluster-log/message/mgr-session-evicted | WRN mds evicting unresponsive client <host>:x (#), after <pg> seconds | MDS evicted the unresponsive libcephfs session of a restarted mgr
+  : '76497': 4
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:#b#c#b#e#e#a#de#f#ede#c#f#ddb#e#cb#a#a#ba#d#c#d# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmp#flhskns:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:#b#c#b#e#e#a#de#f#ede#c#f#ddb#e#cb#a#a#ba#d#c#d# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:#b#c#b#e#e#a#de#f#ede#c#f#ddb#e#cb#a#a#ba#d#c#d# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmp#tbc#wq:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:#b#c#b#e#e#a#de#f#ede#c#f#ddb#e#cb#a#a#ba#d#c#d# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:#b#c#b#e#e#a#de#f#ede#c#f#ddb#e#cb#a#a#ba#d#c#d# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmp#wy_s#sr:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:#b#c#b#e#e#a#de#f#ede#c#f#ddb#e#cb#a#a#ba#d#c#d# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:#b#c#b#e#e#a#de#f#ede#c#f#ddb#e#cb#a#a#ba#d#c#d# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmp_qp#ozgp:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:#b#c#b#e#e#a#de#f#ede#c#f#ddb#e#cb#a#a#ba#d#c#d# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:#b#c#b#e#e#a#de#f#ede#c#f#ddb#e#cb#a#a#ba#d#c#d# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmprcd_ne#:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:#b#c#b#e#e#a#de#f#ede#c#f#ddb#e#cb#a#a#ba#d#c#d# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+  'infra/other | pexec: expected valgrind issues and found none':
+    '76473': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  ? 'timeout/unexplained/thrasher-min-size-list-remove | The WatchDog barked due to Thrasher OSDThrasher threw except... | OSDThrasher test_pool_min_size: kill_osd ValueError list.remove'
+  : '76390': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '51858': 1
+  ? 'workunit/set-e/rbd-lock-mode-exclusive-transient | rbd/test_librbd_python.sh: python# -m pytest -v clone.client.#/qa/workunits/rbd/../../../src/test/pybind/test_rbd.py: collecting ... collected # items / # error | test_librbd_python.sh: cannot import ''RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT'' from ''rbd'''
+  : '76397': 2
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  workunit/unexplained | cephadm/test_cephadm.sh:
+    '75358': 1
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '76297': 2
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '75406': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | readable.sh: ceph-dencoder failed to decode corpus object'
+  : '74074': 1
+titles:
+  '51858': 'octopus: rados/test_crash.sh failure'
+  '74074': ceph-dencoder - failed with 20.3 corpus repo
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75406': 'qa/standalone/ceph-helpers: is_pg_clean hang after osd teardown'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '75764': 'rados/cephadm: cephadm task involving ''ceph orch osd rm 1'' fails as the device couldn''t be zapped'
+  '76297': test_iscsi_container - cephadm/test_iscsi_setup.sh fails on sudo ls /dev/disk/by-path
+  '76390': 'rados/thrash-erasure-code The WatchDog barked due to Thrasher OSDThrasher threw exception list.remove(x): x not in list'
+  '76397': 'rbd/test_librbd_python.sh: ImportError: cannot import name ''RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT'' from ''rbd'''
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '76497': rados/singleton-bluestore/cephtool - evicting unresponsive client warnings
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'

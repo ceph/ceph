@@ -1,0 +1,25 @@
+id: "78215"
+tracker: https://tracker.ceph.com/issues/78215
+title: "tasks/rados_workunit_loadgen_mostlyread fails with \"ceph-coverage: not found\" during teardown"
+kind: test
+tree: infra/ssh
+confirm:
+  - file: teuthology.log
+    pattern: 'adjust-ulimits: \d+: exec: ceph-coverage: not found'
+  - file: teuthology.log
+    pattern: 'Command failed on \S+ with status 127: .*adjust-ulimits ceph-coverage'
+notes: |
+  The workunit finishes, and the ceph task teardown (wait_for_clean) runs
+  'sudo adjust-ulimits ceph-coverage ... ceph --cluster ceph pg dump'. The
+  command fails with status 127 and
+  '/usr/bin/adjust-ulimits: 16: exec: ceph-coverage: not found', although
+  ceph-coverage worked earlier in the job and the ceph packages were installed.
+  This is the first failure. Teardown carries on, and a later step, such as the
+  'Compressing logs' find/gzip on the same host, is cut off with
+  ConnectionLostError. That ConnectionLostError is what ends up as the job's
+  failure_reason, and the tree stops at infra/ssh. The SSH loss is a side effect:
+  teuthology reconnects to the host afterwards. Why ceph-coverage disappears
+  during the run is not known; the tracker has no cause or fix yet, and the
+  owner of the test is asked to look first.
+examples:
+  - skanta-2026-07-12_15:01:05-rados-wip-bharath4-testing-2026-07-09-1342-distro-default-trial/358474

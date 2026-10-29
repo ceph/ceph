@@ -1,0 +1,6 @@
+run: rkachach-2026-07-12_14:03:50-orch:cephadm-wip-rkachach-testing-2026-07-11-1552-distro-default-trial
+signatures:
+  'workunit/unexplained/test-repos-gpg-404 | cephadm/test_repos.sh | test_repos.sh: release.gpg # from download.ceph.com':
+    '78179': 1
+titles:
+  '78179': 'cephadm: repo_gpgkey() references release.gpg / autobuild.gpg, which 404 on download.ceph.com'

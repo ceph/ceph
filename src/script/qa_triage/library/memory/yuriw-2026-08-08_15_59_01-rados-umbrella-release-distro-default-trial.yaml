@@ -1,0 +1,15 @@
+run: yuriw-2026-08-08_15:59:01-rados-umbrella-release-distro-default-trial
+signatures:
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '77106': nvme list json command failed, retrying...

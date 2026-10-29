@@ -1,0 +1,39 @@
+id: "79443"
+tracker: https://tracker.ceph.com/issues/79443
+title: "Health check failed: 1 OSD(s) experiencing slow discard operations (BLOCK_DEVICE_DISCARD_QUEUE)"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72467
+    branch: main
+tree: cluster-log/health
+facts:
+  check: 'DEVICE_DISCARD_QUEUE$'
+match:
+  reason: 'BLOCK_DEVICE_DISCARD_QUEUE'
+confirm:
+  - file: teuthology.log
+    pattern: 'Health check failed: .*slow discard operations'
+  - file: remote/*/log/ceph-mon.*.log.gz
+    pattern: 'osd\.\d+ Slow discard on \w+, queue: \d+ items'
+notes: |
+  The rados/singleton/all/ec-esb-fio test runs fio against an erasure-coded pool
+  on OSDs with 'bdev enable discard' and async discard. The heavy write load
+  makes an OSD's discard queue exceed 80% of bdev_discard_max_bytes or
+  bdev_async_discard_max_pending, so BlockDevice::collect_alerts raises
+  BLOCK_DEVICE_DISCARD_QUEUE (also DB_/WAL_ variants) and the mon logs
+  '[WRN] Health check failed: 1 OSD(s) experiencing slow discard operations'.
+  The mon's health detail names the OSD, e.g. 'osd.4 Slow discard on BLOCK,
+  queue: 402611 items 9.3 GiB'. The test's ceph log-ignorelist (POOL_APP_NOT_ENABLED,
+  OSDMAP_FLAGS, OSD_, OBJECT_, PG_, SLOW_OPS, overall HEALTH, slow request) does
+  not cover it, so the teardown cluster-log scan fails the job. This is a test
+  problem, not a product bug. The fix, PR 72467 (still open), adds
+  (BLOCK/DB/WAL)_DEVICE_DISCARD_QUEUE to the ignorelist of ec-esb-fio.yaml.
+  Tracker 73771 ('Slow discard on BLOCK ... (BLOCK_DEVICE_DISCARD_QUEUE)' in
+  cluster log) is the older issue for the same warning, first seen in
+  fs:workload and later in rados runs; reviewers place ec-esb-fio jobs there
+  too, so it is listed in `also`. The warning itself was added by PR 61286.
+examples:
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631307
+  - skanta-2026-08-10_02:01:18-rados-wip-bharath5-testing-20260810.001955-main-distro-default-trial/450281
+also:
+  - "73771"

@@ -1,0 +1,30 @@
+id: "80239"
+tracker: https://tracker.ceph.com/issues/80239
+title: "test_rados.py: terminated with signal SIGABRT core dump python3"
+kind: product
+tree: crash/client/ceph/ping-monitor-abort
+facts:
+  call: '^ping_monitor$'
+confirm:
+  - file: teuthology.log
+    pattern: 'stderr:Fatal Python error: Aborted'
+  - file: teuthology.log
+    pattern: 'stderr:\s+File "[^"]+", line \d+ in \w*ping_monitor\w*'
+notes: |
+  python3 running src/test/pybind/test_rados.py (rados/test_python.sh) aborts with
+  SIGABRT and dumps core while TestRados::test_ping_monitor calls
+  rados.ping_monitor(). teuthology.log shows only "Fatal Python error: Aborted".
+  faulthandler's innermost frame is test_rados.py's ping_monitor line, followed by
+  "Aborted (core dumped)" and status 134. No daemon crashes. The tree's
+  program=ceph comes from CEPH_ARGS in the command line; the program that
+  crashed is python3.
+  The abort is in librados, not in the test. The core (see the tracker) shows
+  ceph::__ceph_assert_fail in MonConnection::get_auth_request, called from
+  MonClientPinger::get_auth_request on a messenger thread: the temporary connection
+  that MonClient::ping_monitor builds. MonClientPinger::get_auth_request calls
+  mc->get_auth_request without taking monc_lock. The first assert in
+  MonConnection::get_auth_request is ceph_mutex_is_locked_by_me(monc_lock), which
+  only a debug build checks. So far it has been seen only in crimson-rados
+  distro-debug runs. The tracker says it is related to 79732.
+examples:
+  - jjperez-2026-09-01_13:33:40-crimson-rados-wip-perezjos-crimson-only-01-09-2026-PR71057-distro-debug-trial/527954

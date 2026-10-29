@@ -1,0 +1,15 @@
+run: yaarit-2026-03-05_03:07:52-rados-wip-rocky10-branch-of-the-day-2026-03-04-1772624857-tentacle-distro-default-trial
+signatures:
+  ? 'test/unittest | tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam: ConnectionRefusedError: [Errno #] Connection refused'
+  : '74199': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '75365': 1
+titles:
+  '74199': ceph dashboard not starting
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75365': 'Grafana container fails to start: grafana-apiserver rejects "localhost" as invalid IP address'

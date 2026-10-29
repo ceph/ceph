@@ -1,0 +1,18 @@
+run: lflores-2026-04-17_22:03:40-rados-wip-lflores-testing-2-2026-04-08-1424-tentacle-distro-default-trial
+jobs:
+  '159143':
+    problem: '70716'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 15 jobs in 70716, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are nmordech-2026-04-29_15:16:37-rados-wip-nmordech-testing-20260429.100618-distro-default-trial/185271, pdonnell-2026-06-13_16:54:44-rados-wip-pdonnell-testing-20260613.133611-tentacle-distro-default-trial/292360, skanta-2026-04-06_10:52:21-rados-wip-bharath15-testing-2026-04-06-1414-tentacle-distro-default-trial/133268, skanta-2026-06-24_12:23:36-rados-wip-bharath10-testing-2026-06-24-1142-tentacle-distro-default-trial/313565, skanta-2026-08-22_23:32:17-rados-wip-bharath9-testing-20260822.101440-squid-distro-default-trial/506231.'
+    summary: The un-ignored 'pg … backfill_toofull' warning is caused by the injected backfill rejection (tracker 70716). A node decides it and a record for 70716 hangs on that node.
+    status: fail
+    description: rados/thrash-old-clients/{0-distro$/{centos_9.stream} 0-size-min-size-overrides/3-size-2-min-size 1-install/squid backoff/normal ceph clusters/{three-plus-one} d-balancer/on mon_election/classic msgr-failures/osd-delay rados thrashers/default thrashosds-health workloads/radosbench}
+    reason: '"2026-04-18T05:40:00.000164+0000 mon.a (mon.0) 2161 : cluster [WRN] pg 3.0 is active+remapped+backfill_toofull, acting [11,9,6]" in cluster log'
+  '159228':
+    problem: '71344'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 26 jobs in 71344, this one among them, and no record names it yet: the tool placed them in 79814, no known problem. A record for it should place them all; others are lflores-2026-07-08_14:24:37-rados-wip-lflores-testing-2026-07-07-1045-tentacle-distro-default-trial/346030, pdonnell-2026-06-13_16:54:44-rados-wip-pdonnell-testing-20260613.133611-tentacle-distro-default-trial/292157, skanta-2026-01-28_09:27:17-rados-wip-bharath2-testing-2026-01-27-0639-squid-distro-default-trial/22934, skanta-2026-04-06_10:52:21-rados-wip-bharath15-testing-2026-04-06-1414-tentacle-distro-default-trial/133352, skanta-2026-04-21_10:52:38-rados-wip-bharath4-testing-2026-04-20-1017-tentacle-distro-default-trial/165867.'
+    summary: 'MON_NETSPLIT after a mon restart is tracker 71344: the restarted mon reconnects late (stale global_seq check), so two running mons dead-ping each other for longer than the 9s netsplit grace period; the tool called it new because no record names it.'
+    status: fail
+    description: rados/multimon/{clusters/21 mon_election/connectivity msgr-failures/many msgr/async-v1only no_pools objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{1M} write$/{v2/{compr$/{yes$/{zstd}} v2}}}} rados supported-random-distro$/{centos_latest} tasks/mon_recovery}
+    reason: '"2026-04-18T06:09:37.497926+0000 mon.l (mon.11) 55 : cluster [WRN] Health check failed: 1 network partition detected (MON_NETSPLIT)" in cluster log'

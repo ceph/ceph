@@ -1,0 +1,6 @@
+run: nmordech-2026-03-18_09:59:45-rados:cephadm-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial
+signatures:
+  ? 'workunit/set-e/test-repos-add-repo-metadata-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: Traceback (most recent call last): | test_repos.sh: add-repo repository metadata #'
+  : '67555': 1
+titles:
+  '67555': failed to fetch repository task/test_cephadm_repos

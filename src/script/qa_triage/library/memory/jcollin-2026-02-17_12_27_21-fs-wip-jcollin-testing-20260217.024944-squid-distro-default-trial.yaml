@@ -1,0 +1,6 @@
+run: jcollin-2026-02-17_12:27:21-fs-wip-jcollin-testing-20260217.024944-squid-distro-default-trial
+signatures:
+  cluster-log/health | WRN BLUESTORE_SLOW_OP_ALERT:
+    '68337': 1
+titles:
+  '68337': OSD(s) experiencing slow operations in BlueStore (BLUESTORE_SLOW_OP_ALERT) in cluster log

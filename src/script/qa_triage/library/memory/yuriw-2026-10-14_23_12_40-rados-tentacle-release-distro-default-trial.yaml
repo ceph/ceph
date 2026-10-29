@@ -1,0 +1,24 @@
+run: yuriw-2026-10-14_23:12:40-rados-tentacle-release-distro-default-trial
+signatures:
+  cluster-log/health | WRN POOL_NEARFULL:
+    '80643': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '81913': 1
+  'command/not-found | grep -E (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found':
+    '79571': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'hung/command/thrasher-min-size-pgs-not-active | rados: ceph --admin-daemon /var/run/ceph/ceph-osd.#.asok dump_historic_ops | OSDThrasher test_pool_min_size: PGs not active or peered'
+  : '76298': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 1
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 1
+titles:
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76298': rados/thrash-erasure-code failure - not all PGs are active or peered
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '80643': 'rados/singleton/{all/thrash-backfill-full: pools reached nearfull (POOL_NEARFULL)'
+  '81913': 'cephx: "Permission denied" during request for auth_session_key for client.0'

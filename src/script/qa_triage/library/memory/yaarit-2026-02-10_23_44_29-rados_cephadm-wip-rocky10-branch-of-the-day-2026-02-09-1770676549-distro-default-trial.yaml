@@ -1,0 +1,12 @@
+run: yaarit-2026-02-10_23:44:29-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-09-1770676549-distro-default-trial
+signatures:
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  timeout/unexplained | MaxWhileTries:
+    '74574': 1
+  ? 'workunit/set-e | cephadm/test_iscsi_setup.sh: container_gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; podman exec -i <sha> gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; set -e'
+  : '74873': 1
+titles:
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74574': 'Error reimaging machines: reached maximum tries (120) after waiting for 1800 seconds'
+  '74873': 'cephadm/test_iscsi_setup.sh - Auth: ACL_ENABLED, Hosts: 0'

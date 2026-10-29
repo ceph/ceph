@@ -1,0 +1,33 @@
+run: yuriw-2026-10-16_15:50:03-rados-tentacle-release-distro-default-trial
+signatures:
+  cluster-log/health | WRN PG_AVAILABILITY:
+    '72462': 1
+  'cluster-log/message | ERR osd full status failsafe engaged, dropping updates, now #% full':
+    '80415': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '81913': 1
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+  ? crash/assert/specific | osd os/bluestore/bluestore_types.cc FAILED ceph_assert(!end_it->is_valid()) in void bluestore_blob_t::allocated(uint#_t, uint#_t, const PExtentVector&)
+  : '81934': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: Traceback (most recent call last):':
+    '77248': 1
+  workunit/standalone | mon/availability.sh TEST_availablity_score:
+    '81932': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand_with_allocmap_recovery:
+    '80616': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '75217': 1
+titles:
+  '72462': '"stuck peering for" warning is still misleading'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '75217': 'ceph-objectstore-tool: No object id ''NOTEXISTS'' found or invalid JSON specified'
+  '77248': 'rados/cephadm: The repository ''https://download.ceph.com/debian-quincy noble Release'' does not have a Release file. '
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'
+  '80415': 'src/osd/ReplicatedBackend.cc: ceph_abort_msg("Out of space (failsafe) processing push request")'
+  '80616': 'TEST_bluestore_expand_with_allocmap_recovery: return 1'
+  '81913': 'cephx: "Permission denied" during request for auth_session_key for client.0'
+  '81932': 'TEST_availablity_score: Failed: Availability score for the pool did not drop'
+  '81934': 'src/os/bluestore/bluestore_types.cc: FAILED ceph_assert(!end_it->is_valid())'

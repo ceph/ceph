@@ -1,0 +1,17 @@
+id: "74701"
+tracker: https://tracker.ceph.com/issues/74701
+title: "Uncaught exception: reached maximum tries (100) after waiting for 600 seconds when Pushing job info to paddles"
+kind: infra
+match:
+  reason: 'Error reimaging machines'
+confirm:
+  - file: supervisor.*.log
+    pattern: 'reached maximum tries \(100\) after waiting for 600 seconds'
+notes: |
+  The teuthology supervisor failed while reimaging test machines via FOG because
+  the machine did not become ready within 100 tries (600 seconds). The supervisor
+  log shows repeated "Unable to connect to port 22" warnings followed by a
+  MaxWhileTries exception from teuthology/provision/fog.py and an uncaught exception
+  during supervisor execution.
+examples:
+  - skanta-2026-09-24_03:23:39-rados-wip-bharath10-testing-20260924.010810-main-distro-default-trial/577330

@@ -1,0 +1,42 @@
+run: skanta-2026-06-15_22:17:34-rados-wip-bharath12-testing-2026-06-15-1114-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_DB_LIST_FAILED:
+    '77250': 1
+  'hung/command | cephfs_test_runner: radosgw-admin --log-to-stderr json -n client.# gc process':
+    '76948': 1
+  ? 'hung/command/ceph-daemon-config-set-hang | exec: sudo TESTDIR=/home/ubuntu/cephtest bash -c ''for f in # # # # ; do sudo ceph daemon osd.$f config set osd_recovery_sleep # ; sudo ceph daemon osd.$f config set osd_recovery_max_active # ; done'' | exec hung: ceph daemon config set on restarting OSD'
+  : '77443': 1
+  infra/build | build:
+    '75763': 1
+  ? 'other/injected-leak-suppressed | expected valgrind issues and found none: injected leak hidden by the UnknownInlinedFun suppression'
+  : '76473': 1
+  ? 'test/unittest | tasks.mgr.test_insights.TestInsights.test_crash_history: teuthology.exceptions.CommandFailedError: Command failed on <host> with status #: ''sudo adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout # ceph --cluster ceph insights'''
+  : '77458': 1
+  ? 'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_file_sd_command: teuthology.exceptions.CommandFailedError: Command failed on <host> with status #: ''sudo adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout # ceph --cluster ceph prometheus file_sd_config'''
+  : '72380': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '74794': 1
+  ? 'workunit/set-e | cephadm/test_cephadm.sh: /usr/sbin/cephadm --image quay.ceph.io/ceph-ci/ceph:main logs --fsid <uuid> --name nfs.a: Jun # #:#:# <host> bash[#]: Initializing memory and logging#/#/# #:#:# : epoch <sha> : <host> : ganesha.nfsd-#[main] main :MAIN :EVENT :ganesha.nfsd Starting: Ganesha Version <pg>'
+  : '71506': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? 'workunit/unexplained/test-localpool-unrecognized-config-option | mgr/test_localpool.sh | test_localpool.sh: unrecognized config option mgr/localpool/subtree'
+  : '77461': 1
+  ? 'workunit/unexplained/test-repos-release-file-missing | cephadm/test_repos.sh | test_repos.sh: download.ceph.com apt repo has no Release file'
+  : '77248': 1
+titles:
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '72380': 'Prometheus module failure: TypeError: not all arguments converted during string formatting'
+  '74794': ' rados/thrash -  The WatchDog barked due to Thrasher ceph.osd.9 threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean'
+  '75763': 'rados/encoder: teuthology: VersionNotFoundError when fetching ''reef'' Ceph packages for Rocky 10.1 from shaman'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '76948': 'rados/basic: slow request in cluster log causing test failure'
+  '77248': 'rados/cephadm: The repository ''https://download.ceph.com/debian-quincy noble Release'' does not have a Release file. '
+  '77250': 'rados/mgr: Failed to list/create InfluxDB database (MGR_INFLUX_DB_LIST_FAILED)'
+  '77443': 'rados/singleton: Test related to recovery-preemption could not revive an osd that was brought down and ultimately timed out after ~6hrs.'
+  '77458': 'rados/mgr: Test failure: test_crash_history (tasks.mgr.test_insights.TestInsights.test_crash_history)'
+  '77461': 'mgr/test_localpool.sh: unrecognized config option ''mgr/localpool/subtree'''

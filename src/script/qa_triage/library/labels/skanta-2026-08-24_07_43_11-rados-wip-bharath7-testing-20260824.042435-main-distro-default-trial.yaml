@@ -1,0 +1,18 @@
+run: skanta-2026-08-24_07:43:11-rados-wip-bharath7-testing-20260824.042435-main-distro-default-trial
+jobs:
+  '508965':
+    problem: '79814'
+    by: qa_triage (bob-analyst)
+    why: 'No record placed this job, and the tree explained it conclusively, so the tool calls it new: mon.g logged [WRN] health check MON_NETSPLIT: 3 network partitions detected. Nobody has looked for its cause. Find it, beyond the symptom where the tree stopped: read the logs around the failure, the daemons'' logs and the source. Search the tracker: if an issue describes this failure, add a record for it. If none does, leave "problem" null, and say in the summary what failed and why, for a person to file. If the explanation stops at a symptom, teach the tree the cause, with a learned node at "": it is asked after the tree''s answer, and answers done with the cause, or unknown to leave the explanation as it is.'
+    summary: 'mon-stretch-pool failed because a MON_NETSPLIT warning stuck after the test restarted all mons at once. A restarted mon''s pings to three peers are never retried, so those peers stay marked dead. This is tracker #79814, with a fix in PR 72713 that is not yet merged.'
+    status: fail
+    description: rados/singleton/{all/mon-stretch-pool mon_election/classic msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{hybrid} base mem$/{normal-1} onode-segment$/{256K} write$/{v1/{compr$/{no$/{no}} v1}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: '"2026-08-24T09:15:16.658517+0000 mon.g (mon.6) 49 : cluster [WRN] Health check failed: 3 network partitions detected (MON_NETSPLIT)" in cluster log'
+  '509169':
+    problem: '79943'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'misc.sh:292 checks persistent features length == 14 with cephx_auth_aes256k present: 79943, as Laura Flores wrote on 74827 (comment 76); 74827 is the earlier nvmeof_beacon_diff count'
+    summary: duplicate 79943 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/standalone/{supported-random-distro/{ubuntu_24.04} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial006 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=42a6de6288637bb91015c4ae18e12bedd3b1826b TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''

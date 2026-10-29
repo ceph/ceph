@@ -1,0 +1,9 @@
+run: yuriw-2026-04-07_16:17:27-rados-wip-yuri7-testing-2026-04-06-1954-tentacle-distro-default-trial
+signatures:
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+titles:
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)

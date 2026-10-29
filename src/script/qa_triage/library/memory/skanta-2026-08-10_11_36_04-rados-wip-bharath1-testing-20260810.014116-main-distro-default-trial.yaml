@@ -1,0 +1,18 @@
+run: skanta-2026-08-10_11:36:04-rados-wip-bharath1-testing-20260810.014116-main-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/MissingLoc.h FAILED ceph_assert(# == "unexpected need for missing item") in void MissingLoc::add_active_missing(const pg_missing_t&)
+  : '75962': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 2
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75962': OSD crashes with FAILED ceph_assert(0 == "unexpected need for missing item") in MissingLoc::add_active_missing() during EC thrash
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'

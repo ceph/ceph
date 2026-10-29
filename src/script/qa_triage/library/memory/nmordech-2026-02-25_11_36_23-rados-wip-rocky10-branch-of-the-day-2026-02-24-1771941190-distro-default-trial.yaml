@@ -1,0 +1,72 @@
+run: nmordech-2026-02-25_11:36:23-rados-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial
+signatures:
+  cluster-log/health | ERR MGR_MODULE_ERROR:
+    '75213': 1
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '65728': 1
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '74860': 2
+  'command/unexplained | yes | mkfs.xfs -f -i size=# /dev/vg_nvme/lv_#: #':
+    '68668': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? crash/assert/specific | osd osd/PrimaryLogPG.cc FAILED ceph_assert(is_primary()) in virtual void PrimaryLogPG::on_local_recover(const hobject_t&, const ObjectRecoveryInfo&, ObjectContextRef, bool, ObjectStore::Transaction*)
+  : '75211': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 1
+  'infra/other | ansible.cephlab: ["Wanted # disks of ~# GB (rotational=False), but only matched #: [''nvme#n#'']"]':
+    '75208': 1
+  ? 'infra/other | ansible.cephlab: [''Problem reading disk in BasicMBRData::ReadMBRData()!'', ''Warning! GPT main header not overwritten! Error is #'', ''Warning! MBR not overwritten! Error is #!'', ''Warning! Read error #; strange behavior now likely!'']'
+  : '75219': 1
+  other | <fail with no reason>:
+    '71005': 1
+  other | Exiting scrub checking -- not all pgs scrubbed.:
+    '68770': 1
+  ? 'test/unittest | tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit#: tasks.ceph_test_case.TestTimeoutError: Timed out after #s and # retries'
+  : '74605': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '75216': 1
+  timeout/unexplained | MaxWhileTries:
+    '75218': 1
+  ? 'valgrind/MismatchedFree | valgrind error: MismatchedFree operator delete[](void*, unsigned long, std::align_val_t) UnknownInlinedFun UnknownInlinedFun'
+  : '73822': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '75217': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 1
+  ? 'workunit/unexplained/cephtool-mds-not-configured | cephtool/test.sh | cephtool/test.sh do_messenger_dump_basics_test: mds.a ENOENT'
+  : '74607': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | readable.sh: ceph-dencoder failed to decode corpus object'
+  : '74074': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '65728': Daemon managed by cephadm in an unknown state (CEPHADM_FAILED_DAEMON)
+  '68668': 'rados/dashboard: mkfs.xfs: cannot open /dev/vg_nvme/lv_2: Device or resource busy'
+  '68770': PG scrub timing out
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '73822': 'Rocky10 - rados/verify - valgrind error: MismatchedFree operator delete[](void*, unsigned long, std::align_val_t) RocksDBStore::close() RocksDBStore::~RocksDBStore() '
+  '74074': ceph-dencoder - failed with 20.3 corpus repo
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74605': 'Rocky10 - ERROR: test_sql_autocommit1 (tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit1)'
+  '74607': 'do_messenger_dump_basics_test: Error ENOENT: problem getting command descriptions from mds.a'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '74860': 'Rocky10 - openssl: command not found when rocky10 container is used'
+  '75208': 'Rocky10, Centos9 - AnsibleFailedError: "Wanted 2 disks of type nvme1n1, but only matched 1"'
+  '75211': 'src/osd/PrimaryLogPG.cc: FAILED ceph_assert(is_primary())'
+  '75213': 'Dashboard module fails from "AttributeError: ''NoneType'' object has no attribute ''unsubscribe''"'
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'
+  '75217': 'ceph-objectstore-tool: No object id ''NOTEXISTS'' found or invalid JSON specified'
+  '75218': Orchestrater test fails while waiting for 8 OSDs to deploy
+  '75219': trial110 bad disk
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'

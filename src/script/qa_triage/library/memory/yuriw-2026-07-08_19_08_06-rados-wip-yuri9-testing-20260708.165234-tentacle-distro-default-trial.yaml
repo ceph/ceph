@@ -1,0 +1,30 @@
+run: yuriw-2026-07-08_19:08:06-rados-wip-yuri9-testing-20260708.165234-tentacle-distro-default-trial
+signatures:
+  'cluster-log/message | ERR mon Health detail: HEALTH_ERR # filesystem is degraded; # filesystem is offline':
+    '73557': 1
+  ? 'cluster-log/other/cephadm-pull-manifest-not-found | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: manifest for quay.ceph.io/ceph-ci/ceph not found: manifest unknown'
+  : '73921': 1
+  ? 'hung/command/thrasher-min-size-pgs-not-active | rados: ceph osd unset nodeep-scrub | OSDThrasher test_pool_min_size: PGs not active or peered'
+  : '76298': 1
+  ? 'workunit/set-e/test-repos-add-repo-gpg-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: failed to fetch GPG repo key from https://download.ceph.com/keys/release.gpg: HTTP Error #: Not Found | test_repos.sh: release.gpg # from download.ceph.com'
+  : '78153': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '76472': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+  'workunit/unexplained/test-repos-gpg-404 | cephadm/test_repos.sh | test_repos.sh: release.gpg # from download.ceph.com':
+    '78154': 1
+titles:
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '73557': 'rados/upgrade/parallel - cluster [ERR] Health detail: HEALTH_ERR 1 filesystem is degraded; 1 filesystem is offline'
+  '73921': 'rados/encoder: Container image quay.ceph.io/ceph-ci/ceph:quincy with tag quincy not found leading to test failure'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '76298': rados/thrash-erasure-code failure - not all PGs are active or peered
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '78153': 'Cephadm: failure to fetch GPG key when adding quincy repo'
+  '78154': 'Status code: 404 for https://download.ceph.com/keys/release.gpg'

@@ -1,0 +1,10 @@
+run: jayaprakash-2026-04-20_13:52:18-rados-wip-jaya-bs-testing-20-04-2026-distro-default-trial
+jobs:
+  '164518':
+    problem: '67555'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 10 jobs in 67555, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are jayaprakash-2026-06-19_10:43:50-rados-wip-jaya-bs-testing-18-06-2026-distro-default-trial/300593, nmordech-2026-01-26_18:32:32-rados:cephadm-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/18795, nmordech-2026-02-24_07:14:52-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-23-1771833711-distro-default-trial/67703, nmordech-2026-03-18_09:59:45-rados:cephadm-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial/107602, yaarit-2026-02-05_17:05:15-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial/37013.'
+    summary: cephadm add-repo gets HTTP 404 for repomd.xml on Rocky 10 (quincy not published for el10); tracker 67555 had no record, so I added one and taught workunit/set-e to recognise it.
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/rocky_10 agent/off mon_election/connectivity task/test_cephadm_repos}
+    reason: 'Command failed (workunit test cephadm/test_repos.sh) on trial020 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=aaf6a36c861e4437e69b1aeb5de306fd9711e775 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_repos.sh'''

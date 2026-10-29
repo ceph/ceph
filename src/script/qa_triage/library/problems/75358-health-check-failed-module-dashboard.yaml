@@ -1,0 +1,47 @@
+id: "75358"
+tracker: https://tracker.ceph.com/issues/75358
+title: "Health check failed: Module 'dashboard' has failed: Port 8443 not free"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67728
+    branch: main
+tree: test/unittest/dashboard-port-reset
+facts:
+  test: '^tasks\.mgr\.dashboard\.test_mgr_module\.MgrModuleTest\.test_list_enabled_module$'
+match:
+  reason: 'test_list_enabled_module'
+confirm:
+  - file: teuthology.log
+    pattern: "HTTPSConnectionPool\\(host='[^']+', port=77\\d\\d\\): Max retries exceeded with url: /api/mgr/module"
+  - file: remote/*/log/ceph-mgr.*.log.gz
+    pattern: 'ssl_server_port not found'
+  - file: teuthology.log
+    pattern: "Health check failed: Module 'dashboard' has failed: Port 8443 not free"
+  - file: teuthology.log
+    pattern: '^2026-0\d-\d\dT'
+notes: |
+  The cause: CephTestCase.tearDown() runs "ceph config reset <conf_epoch>" after every
+  test, which deletes the per-mgr dashboard ssl_server_port keys that
+  MgrTestCase.setup_mgrs() wrote. test_list_enabled_module then runs "ceph mgr module
+  enable iostat", which respawns the mgrs; each finds no ssl_server_port and starts the
+  dashboard on the default 8443. Two mgrs share a host, so one cannot bind 8443 and
+  logs "Port 8443 not free on ::" (portend.Timeout), and the mon raises the cluster
+  error "Module 'dashboard' has failed: Port 8443 not free" (MGR_MODULE_ERROR). The
+  test keeps requesting its assigned port and is refused. This record is for jobs that
+  show that MGR_MODULE_ERROR; the same failure without it stays with #70669, and jobs
+  from October 2026 on with #81857 (the date check keeps the split). Fix PR 67728 is
+  open, not merged.
+  #70669 is the same cause, not just a similar symptom: its original report already
+  shows "Health check failed: Module 'dashboard' has failed: Timeout('Port 8443 not
+  free on ::.') (MGR_MODULE_ERROR)", it is "related to #75358", and its PR 67728 (the
+  fix named here too) describes "iostat module enabled -> mgr respawned -> dashboard
+  restart (attempts to bind to 8443) -> Port 8443 unavailable". People keep placing
+  jobs with this MGR_MODULE_ERROR in #70669 (e.g. 356674), so 70669 is listed under
+  `also`: a job placed here is right for either tracker. The split between the
+  records is only by the health-error line and the run date; the trackers should be
+  merged.
+examples:
+  - skanta-2026-09-16_04:01:33-rados-wip-bharath19-testing-20260915.234926-main-distro-default-trial/558377
+  - skanta-2026-07-12_00:12:33-rados-wip-bharath10-testing-2026-07-11-1405-distro-default-trial/356674
+also:
+  - "70669"

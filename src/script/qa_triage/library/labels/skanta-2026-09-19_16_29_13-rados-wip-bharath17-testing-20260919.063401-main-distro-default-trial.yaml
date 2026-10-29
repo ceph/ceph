@@ -1,0 +1,18 @@
+run: skanta-2026-09-19_16:29:13-rados-wip-bharath17-testing-20260919.063401-main-distro-default-trial
+jobs:
+  '569758':
+    problem: '75216'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 75216, but the tool said new (explain -> prefilter -> explained), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 75216 by itself, with no judge.
+    summary: No record for tracker 75216; added one for pggrow_host thrash-erasure-code-isa wait_for_recovery timeout
+    status: fail
+    description: rados/thrash-erasure-code-isa/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{avl} base mem$/{normal-1} onode-segment$/{512K-onoff} write$/{random/{compr$/{yes$/{zstd}} random}}}} rados recovery-overrides/{default} supported-random-distro/{centos_9.stream} thrashers/pggrow_host thrashosds-health workloads/ec-rados-plugin=isa-k=10-m=4}
+    reason: 'The WatchDog barked due to Thrasher OSDThrasher threw exception wait_for_recovery: failed before timeout expired'
+  '569755':
+    problem: '79943'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'misc.sh:292 checks persistent features length == 14 with cephx_auth_aes256k present: 79943, as Laura Flores wrote on 74827 (comment 76); 74827 is the earlier nvmeof_beacon_diff count'
+    summary: duplicate 79943 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/standalone/{supported-random-distro/{rocky_10} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial018 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=d55de26829cf6c7acb36ec35fed95e36f961a381 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''

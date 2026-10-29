@@ -1,0 +1,12 @@
+run: yuriw-2026-10-14_23:29:09-upgrade-tentacle-release-distro-default-trial
+signatures:
+  'command/unexplained | rm -rf clone.client.# && git clone https://git.ceph.com/ceph.git clone.client.#: #':
+    '82012': 1
+  'hung/command | parallel: cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell --fsid <uuid> -- ceph':
+    '75570': 1
+  'infra/other | install: ''package_manager_version''':
+    '81994': 1
+titles:
+  '75570': 'upgrade/stress-split: Thrasher fails to revive an OSD during upgrade test'
+  '81994': Missing package_manager_version attribute from shaman response
+  '82012': '"git fetch" command fails with "fetch-pack: invalid index-pack output"'

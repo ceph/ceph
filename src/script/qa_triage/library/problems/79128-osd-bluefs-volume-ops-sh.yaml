@@ -1,0 +1,22 @@
+id: "79128"
+tracker: https://tracker.ceph.com/issues/79128
+title: "osd-bluefs-volume-ops.sh: TEST_bluestore - Assertion FAILED ceph_assert(offset
+  + length <= uint64_t(device_size))"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/70952
+    branch: main
+    fixed_in: v21.3.0-2438-g3d6069900e
+tree: crash/client/unnamed/ceph-bluestore-tool-avl-assert
+confirm:
+  - file: teuthology.log
+    pattern: "AvlAllocator\\.cc.*FAILED ceph_assert\\(offset \\+ length <= uint64_t\\(device_size\\)\\)"
+notes: |
+  ceph-bluestore-tool bluefs-bdev-expand calls BlueStore::expand_devices, which calls
+  BlueStore::_open_db_and_around -> BlueStore::_init_alloc -> AvlAllocator::init_add_free.
+  KernelDevice::refresh_size returns the device size without the alignment applied on open,
+  so the allocator receives a free extent that exceeds the aligned device boundary and
+  asserts: offset + length <= uint64_t(device_size).
+  The fix (PR 70952) aligns the refreshed size the same way as on open.
+examples:
+  - yuriw-2026-07-28_17:11:12-rados-wip-yuri3-testing-20260728.135610-main-distro-default-trial/406329

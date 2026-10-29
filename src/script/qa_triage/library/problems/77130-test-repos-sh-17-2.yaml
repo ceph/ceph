@@ -1,0 +1,32 @@
+id: "77130"
+tracker: https://tracker.ceph.com/issues/77130
+title: "test_repos.sh: 17.2.6 jammy Release' does not have a Release file"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69299
+    branch: main
+    fixed_in: v21.3.0-58-ga46a9e45a3
+tree: workunit/set-e
+facts:
+  script: '^cephadm/test_repos\.sh$'
+  command: 'add-repo --release 17\.2\.6$'
+match:
+  reason: 'workunit test cephadm/test_repos\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: "The repository 'https://download\\.ceph\\.com/debian-17\\.2\\.6 \\S+ Release' does not have a Release file"
+notes: |
+  qa/workunits/cephadm/test_repos.sh runs 'cephadm add-repo --release 17.2.6' to check
+  version-string repo handling. The debian-17.2.6 tree on download.ceph.com only has
+  focal and bullseye suites; jammy packages were first built for 17.2.7. On Ubuntu 22.04
+  nodes cephadm therefore writes a 'debian-17.2.6 jammy' apt source, 'apt-get update'
+  exits 100 with '404 Not Found', and cephadm raises 'RuntimeError: Failed command:
+  apt-get update: E: The repository ... debian-17.2.6 jammy Release does not have a
+  Release file'. The GPG key install succeeds; only the Release file is missing. Fixed in
+  the test by PR 69299, which bumps the release to 17.2.7. Unlike 77248, the release is
+  17.2.6 and the host is jammy, not quincy on noble.
+examples:
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122190
+also:
+  - "65719"
+  - "76391"

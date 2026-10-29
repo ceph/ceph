@@ -1,0 +1,35 @@
+run: skanta-2026-01-29_02:19:11-rados-wip-bharath5-testing-2026-01-28-2018-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  cluster-log/health | WRN POOL_NEARFULL:
+    '74518': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  ? 'hung/command/dispatch-delay-queued-for-pg | rados: ceph --admin-daemon /var/run/ceph/ceph-osd.#.asok dump_blocked_ops | rados hung: dispatch-delay ops queued for pg'
+  : '69497': 1
+  ? 'hung/command/dispatch-delay-queued-for-pg | rados: ceph --admin-daemon /var/run/ceph/ceph-osd.#.asok dump_historic_ops | rados hung: dispatch-delay ops queued for pg'
+  : '69497': 1
+  timeout/unexplained | MaxWhileTries:
+    '66415': 1
+  workunit/unexplained | mon/availability.sh:
+    '74178': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '74004': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 2
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | test_readable.py: ceph-dencoder subprocess error'
+  : '74074': 1
+titles:
+  '66415': max while retries rados/cephadm/osds/{0-distro/centos_9.stream 0-nvme-loop 1-start 2-ops/rmdir-reactivate}
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '69497': '"[ERR] OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order" in cluster log'
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '74004': 'qa/standalone/ceph-helpers: ceph pg query hangs indefinitely'
+  '74074': ceph-dencoder - failed with 20.3 corpus repo
+  '74178': 'qa/standalone/mon/availability.sh: line 64: Syntax error due to missing availability status'
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74518': 'rados/perf: pools reached nearfull (POOL_NEARFULL)'
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'

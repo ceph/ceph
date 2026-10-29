@@ -1,0 +1,12 @@
+run: skanta-2026-10-06_23:12:02-rados-wip-bharath31-testing-20261006.075505-main-distro-default-trial
+signatures:
+  ? 'workunit/set-e | mon/mon-stretch-mode-#-mons-#-osds.sh: ceph mon enable_stretch_mode e stretch_rule datacenter: Error EINVAL: stretch mode is already engaged'
+  : '81136': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/mon-bind.sh TEST_mon_client_connect:
+    '80756': 1
+titles:
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '80756': 'qa/standalone/mon/mon-bind.sh: TEST_mon_client_connect fails from error pinging monitor'
+  '81136': 'mon/mon-stretch-mode-5-mons-8-osds.sh: Error EINVAL: stretch mode is already engaged'

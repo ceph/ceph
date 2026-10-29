@@ -1,0 +1,6 @@
+run: yuriw-2026-03-09_21:03:30-smoke-wip-rocky10-branch-of-the-day-2026-03-09-1773079353-tentacle-distro-default-trial
+signatures:
+  workunit/unexplained | suites/iozone.sh:
+    '75381': 1
+titles:
+  '75381': 'Rocky10 - iozone: command not found'

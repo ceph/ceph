@@ -1,0 +1,29 @@
+id: "81494"
+tracker: https://tracker.ceph.com/issues/81494
+title: "error in loading k8sevents module"
+kind: test
+tree: cluster-log/message
+facts:
+  message: 'Failed to load ceph-mgr modules: .*\bk8sevents\b'
+  reporter: '^mgr\.'
+confirm:
+  - file: teuthology.log
+    pattern: "ModuleNotFoundError: No module named 'kubernetes\\.client\\.models\\.v1_event'"
+notes: |
+  The cause: upgrade jobs that start from reef on centos_9.stream install the released
+  reef packages (ceph-mgr-k8sevents 2:18.2.1-0.el9) with python3-kubernetes 1:26.1.0
+  from EPEL. The reef mgr's k8sevents/module.py (line 70) runs
+  'from kubernetes.client.models.v1_event import V1Event'. Newer kubernetes clients
+  renamed that model to core_v1_event.CoreV1Event, so the import fails with
+  "ModuleNotFoundError: No module named 'kubernetes.client.models.v1_event'". The mgr
+  logs "Error loading module 'k8sevents'" and then the cluster log line
+  '[ERR] Failed to load ceph-mgr modules: k8sevents'. That line is not on the
+  ignorelist, so the teardown cluster-log scan fails the job. The traceback appears
+  in teuthology.log as the mgr's stderr (tasks.ceph.mgr.*.stderr).
+  Squid and later already try core_v1_event.CoreV1Event first and fall back to
+  v1_event, so only the old reef mgr breaks, not the build under test. Plain squid
+  rgw/upgrade runs fail the same way. The released reef package can't be changed:
+  the fix belongs in the upgrade suites (ignore this error when starting from reef,
+  or keep the newer python3-kubernetes away from the old mgr).
+examples:
+  - anuchaithra-2026-10-06_05:22:06-rgw-wip-anuchaithra-testing-20261005.063039-squid-distro-default-trial/610140

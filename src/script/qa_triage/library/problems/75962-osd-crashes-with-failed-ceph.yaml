@@ -1,0 +1,42 @@
+id: "75962"
+tracker: https://tracker.ceph.com/issues/75962
+title: "OSD crashes with FAILED ceph_assert(0 == \"unexpected need for missing item\") in MissingLoc::add_active_missing() during EC thrash"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/68727
+    branch: main
+    fixed_in: v21.0.0-1793-ga502b26a8f
+tree: crash/assert/specific
+facts:
+  source: '^osd/MissingLoc\.h$'
+  message: 'unexpected need for missing item'
+confirm:
+  - file: teuthology.log
+    pattern: 'osd_pool_default_flag_ec_optimizations: true'
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: "unexpected need for \\S+ have \\S+ flags = .* tried to add \\S+"
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: '_merge_object_divergent_entries: hoid \S+ missing, \S+ flags = .* adjusting'
+notes: |
+  An OSD hits ceph_assert(0 == "unexpected need for missing item") at
+  osd/MissingLoc.h:242 in MissingLoc::add_active_missing(), called from
+  PeeringState::activate, in optimized EC (ec_optimizations) thrash tests. The
+  assert means two OSDs disagree about which version of an object is missing.
+  The cause (Bill Scales, tracker; PR 68727): when divergent log entries are
+  merged (rewind_divergent_log -> _merge_object_divergent_entries), a partial write
+  that was rolled forward and updated the missing list is not rolled back
+  correctly, so the object's need version is miscalculated. In the logs, a shard
+  logs '_merge_object_divergent_entries: ignoring partial write V2 (V1)' and then
+  'hoid X missing, V2 ... adjusting' / 'missing.have is 0'0, adjusting' (case 3 in
+  PGLog.h, revise_need(hoid, V1)), while other shards need the object at a later
+  version; on activation the primary logs 'unexpected need for X have V3 ... tried
+  to add V1' and asserts. This is a different cause from #73249 (pwlc advancing
+  last_update without updating the missing list), which raises the same assert.
+  The tracker gives the fix as merged in v21.0.0-1793-ga502b26a8f, but job
+  skanta-2026-08-10_11:36:04-.../452044 ran 21.3.0-1878-g22417d07 and still showed
+  the same signature, so a job like it may be a variant the fix did not cover and
+  needs a person to look at it.
+examples:
+  - skanta-2026-08-10_11:36:04-rados-wip-bharath1-testing-20260810.014116-main-distro-default-trial/452044
+also:
+  - '78779'

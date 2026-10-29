@@ -1,0 +1,6 @@
+run: yuriw-2026-04-11_14:18:59-upgrade:squid-p2p-squid-release-distro-default-trial
+signatures:
+  workunit/gtest | rados/test.sh NeoRadosCls.RemoteReads:
+    '76030': 1
+titles:
+  '76030': 'upgrade/squid-p2p: NeoRadosCls.RemoteReads fails post-upgrade'

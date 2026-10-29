@@ -1,0 +1,27 @@
+id: "78250"
+tracker: https://tracker.ceph.com/issues/78250
+title: "rados/upgrade/parallel: cluster [WRN] Health check failed: 1 failed cephadm daemon(s) (CEPHADM_FAILED_DAEMON) due to grafana restart failing due to timeout"
+kind: product
+tree: cluster-log/health
+facts:
+  check: '^CEPHADM_FAILED_DAEMON$'
+match:
+  reason: 'CEPHADM_FAILED_DAEMON'
+confirm:
+  - file: remote/*/log/*/ceph-mgr.*.log.gz
+    pattern: 'systemctl: stderr Job for ceph-\S+@grafana\.\S+\.service failed because a timeout was exceeded'
+  - file: teuthology.log
+    pattern: 'Health check failed: \d+ failed cephadm daemon\(s\) \(CEPHADM_FAILED_DAEMON\)'
+notes: |
+  The cause: during the rados/upgrade/parallel upgrade, the cephadm mgr reconfigures
+  grafana.a ('Reconfiguring daemon grafana.a', after a changed certificate_source dependency).
+  cephadm runs 'systemctl restart ceph-<fsid>@grafana.a' on the grafana host and that systemd job
+  fails with 'a timeout was exceeded'. The mgr logs '[ERR] cephadm exited with an error code: 1'
+  with that stderr, the daemon is left in an unknown state, and the mon logs
+  '[WRN] Health check failed: 1 failed cephadm daemon(s) (CEPHADM_FAILED_DAEMON)'; the
+  cluster log then lists 'daemon grafana.a on <host> is in unknown state'. The upgrade_ignorelist_health
+  overrides do not ignore CEPHADM_FAILED_DAEMON, so the teardown cluster-log scan fails the job.
+  The check clears and returns later in the run when cephadm retries. Why systemd times out
+  restarting grafana is not known; the tracker is open and no fix exists yet.
+examples:
+  - skanta-2026-07-12_04:39:06-rados-wip-bharath12-testing-2026-07-09-1411-distro-default-trial/356712

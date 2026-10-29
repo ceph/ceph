@@ -1,0 +1,36 @@
+run: lflores-2026-01-23_19:07:45-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial
+signatures:
+  cluster-log/health | WRN CEPHADM_AGENT_DOWN:
+    '66603': 1
+  cluster-log/health | WRN POOL_NEARFULL:
+    '74518': 1
+  ? 'cluster-log/message | ERR mgr Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port # not free on <ip>.'')'
+  : '71506': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 1
+  other | <fail with no reason>:
+    '71005': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  timeout/unexplained | MaxWhileTries:
+    '74519': 1
+  workunit/standalone | scrub/osd-scrub-test.sh TEST_just_deep_scrubs:
+    '74603': 1
+  workunit/unexplained | mon/availability.sh:
+    '74178': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '74004': 1
+titles:
+  '66603': 'rados/cephadm/smoke: CEPHADM_AGENT_DOWN: 2 Cephadm Agent(s) are not reporting. Hosts may be offline'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '74004': 'qa/standalone/ceph-helpers: ceph pg query hangs indefinitely'
+  '74178': 'qa/standalone/mon/availability.sh: line 64: Syntax error due to missing availability status'
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh
+  '74518': 'rados/perf: pools reached nearfull (POOL_NEARFULL)'
+  '74519': 'cephadm/osds: Error: statfs /etc/ceph/ceph.client.admin.keyring: no such file or directory'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74603': 'qa/standalone/scrub/osd-scrub-test.sh: TEST_just_deep_scrubs scrub duration check fails'

@@ -1,0 +1,5 @@
+about: the operations ceph_test_rados ran, from teuthology.log, and which depended on which
+run: extract_ceph_test_rados_output
+files: teuthology.log
+pattern: 'INFO:tasks\.rados\.rados\.'
+args: '--oid OID [--history] for one object, or --op OPID for one operation'

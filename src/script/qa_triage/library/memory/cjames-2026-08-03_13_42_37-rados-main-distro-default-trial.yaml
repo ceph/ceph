@@ -1,0 +1,6 @@
+run: cjames-2026-08-03_13:42:37-rados-main-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/PrimaryLogPG.cc FAILED ceph_assert(!get_acting_recovery_backfill().empty()) in bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t&)
+  : '79140': 1
+titles:
+  '79140': 'src/osd/PrimaryLogPG.cc: 666: FAILED ceph_assert(!get_acting_recovery_backfill().empty()) - dedup + balanced reads'

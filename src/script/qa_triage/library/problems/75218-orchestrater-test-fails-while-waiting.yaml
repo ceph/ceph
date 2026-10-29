@@ -1,0 +1,42 @@
+id: "75218"
+tracker: https://tracker.ceph.com/issues/75218
+title: "Orchestrater test fails while waiting for 8 OSDs to deploy"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67953
+    branch: main
+    fixed_in: v21.0.0-344-g93aa3cb449
+tree: timeout
+facts:
+  task: '^cephadm$'
+  wait: '^MaxWhileTries$'
+match:
+  reason: 'reached maximum tries'
+confirm:
+  - file: teuthology.log
+    pattern: 'tasks\.cephadm:Waiting for \d+ OSDs to come up\.\.\.'
+  - file: teuthology.log
+    pattern: 'in ceph_osds'
+notes: |
+  In rados/cephadm/osds with 2-ops/deploy-raw, the cephadm task deploys OSDs using
+  `ceph orch apply osd --all-available-devices --method raw` and then waits for all
+  scratch devices to become up OSDs with `ceph osd stat -f json` in a safe_while
+  loop (sleep=1, tries=120) logging "Waiting for N OSDs to come up...".
+  When raw OSDs are deployed without first wiping disks that previously had partitions
+  or signatures, some devices are not created as OSDs (e.g. only 7 of 8 come up),
+  causing `ceph_osds` to time out after 120 seconds and raise `MaxWhileTries`.
+  PR 67953 fixes this in main (v21.0.0-344-g93aa3cb449) by ensuring disks are wiped
+  before raw OSD deployment.
+examples:
+  - jayaprakash-2026-04-29_15:20:24-rados-wip-jaya-bs-testing-tentacle-29-04-2026-distro-default-trial/185489
+  - jayaprakash-2026-04-20_13:52:18-rados-wip-jaya-bs-testing-20-04-2026-distro-default-trial/164524
+  - lflores-2026-04-17_22:03:40-rados-wip-lflores-testing-2-2026-04-08-1424-tentacle-distro-default-trial/159086
+  - nmordech-2026-02-25_11:36:23-rados-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial/69969
+  - nmordech-2026-03-18_09:51:02-rados-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial/107259
+  - nmordech-2026-03-22_08:25:20-rados:cephadm-wip-rocky10-branch-of-the-day-2026-03-22-1774160434-tentacle-distro-default-trial/116046
+  - skanta-2026-06-04_15:14:33-rados-wip-bharath7-testing-2026-06-04-1630-distro-default-trial/265565
+  - skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/166131
+also:
+  - "76480"
+  - "74519"
+  - "66415"

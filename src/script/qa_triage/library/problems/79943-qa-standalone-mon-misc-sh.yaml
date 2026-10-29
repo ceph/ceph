@@ -1,0 +1,30 @@
+id: "79943"
+tracker: https://tracker.ceph.com/issues/79943
+title: "qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of cephx_auth_aes256k"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71629
+    branch: main
+    fixed_in: v21.3.0-3574-ge324a2a052
+match:
+  reason: 'workunit test mon/misc\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'TEST_mon_features:\s+return 1'
+  - file: teuthology.log
+    pattern: '"cephx_auth_aes256k"[,\]]'
+exclude:
+  - file: teuthology.log
+    pattern: 'select\(\. == "cephx_auth_aes256k"\)'
+  - file: teuthology.log
+    pattern: '\[\[ "tentacle" == .*n.v.m.e.o.f'
+notes: |
+  TEST_mon_features in qa/standalone/mon/misc.sh hardcodes the expected count and
+  names of the monitor persistent features list. When the cephx_auth_aes256k
+  feature was added to the persistent list, the list grew by one entry, breaking
+  the feature count length check (e.g. '.monmap.features.persistent | length == 14'
+  on main/umbrella or length == 11 on squid).
+  The presence of 'cephx_auth_aes256k' in the feature list confirms the cause when
+  not excluded by the tentacle/nvmeof_beacon_diff filter bug (issue 76472).
+examples:
+  - yuriw-2026-10-20_17:12:24-rados-wip-yuri12-testing-20261020.153859-squid-distro-default-trial/662093

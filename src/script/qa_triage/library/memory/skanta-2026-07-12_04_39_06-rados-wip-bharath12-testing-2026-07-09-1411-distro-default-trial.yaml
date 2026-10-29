@@ -1,0 +1,33 @@
+run: skanta-2026-07-12_04:39:06-rados-wip-bharath12-testing-2026-07-09-1411-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_DB_LIST_FAILED:
+    '77250': 1
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '78250': 1
+  ? 'cluster-log/message/pg-not-ready-to-merge | WRN mon osd.# reported pg <pg> not ready to merge; backing off pg_num decrease for pool ''unique_pool_#'' | mon: osd reported pg not ready to merge; backing off pg_num decrease'
+  : '77459': 7
+  'hung/command/ceph-daemon-config-set-hang | exec: for f in # # # # ; | exec hung: ceph daemon config set on restarting OSD':
+    '77443': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  timeout/unexplained | wait_until_healthy:
+    '77110': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? 'workunit/set-e/test-repos-add-repo-gpg-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: failed to fetch GPG repo key from https://download.ceph.com/keys/release.gpg: HTTP Error #: Not Found | test_repos.sh: release.gpg # from download.ceph.com'
+  : '77248': 1
+  'workunit/unexplained/test-repos-gpg-404 | cephadm/test_repos.sh | test_repos.sh: release.gpg # from download.ceph.com':
+    '78154': 2
+titles:
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '77106': nvme list json command failed, retrying...
+  '77110': 'rados/cephadm: wait_until_healthy times out due to CEPHADM_STRAY_DAEMON HEALTH_WARN'
+  '77248': 'rados/cephadm: The repository ''https://download.ceph.com/debian-quincy noble Release'' does not have a Release file. '
+  '77250': 'rados/mgr: Failed to list/create InfluxDB database (MGR_INFLUX_DB_LIST_FAILED)'
+  '77443': 'rados/singleton: Test related to recovery-preemption could not revive an osd that was brought down and ultimately timed out after ~6hrs.'
+  '77459': 'rados/thrash-erasure-code: tests failing with not ready to merge warning '
+  '78154': 'Status code: 404 for https://download.ceph.com/keys/release.gpg'
+  '78250': 'rados/upgrade/parallel: cluster [WRN] Health check failed: 1 failed cephadm daemon(s) (CEPHADM_FAILED_DAEMON)" in cluster log due to grafana restart failing due to timeout.'

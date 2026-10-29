@@ -1,0 +1,24 @@
+run: skanta-2026-10-11_21:56:20-rados-wip-bharath30-testing-20261011.144835-umbrella-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_DB_LIST_FAILED:
+    '77250': 1
+  ? 'cluster-log/health/dead-ping-not-retried | WRN MON_NETSPLIT | MON_NETSPLIT: mon ping to dead peer not retried after reconnect'
+  : '79814': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '79943': 1
+titles:
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '77250': 'rados/mgr: Failed to list/create InfluxDB database (MGR_INFLUX_DB_LIST_FAILED)'
+  '79814': 'Health check failed: network partition detected (MON_NETSPLIT)'
+  '79943': qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of "cephx_auth_aes256k"
+  '79946': After rebuilding the mondb, authentication starts failing
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'

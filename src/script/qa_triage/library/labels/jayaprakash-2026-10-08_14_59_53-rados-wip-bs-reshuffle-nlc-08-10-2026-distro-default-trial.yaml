@@ -1,0 +1,10 @@
+run: jayaprakash-2026-10-08_14:59:53-rados-wip-bs-reshuffle-nlc-08-10-2026-distro-default-trial
+jobs:
+  '620038':
+    problem: '81857'
+    by: aainscow
+    why: ''
+    summary: The tree found the right cause (after "config reset", test_list_enabled_module's iostat enable restarts the dashboard on 8443), and 81857 and 70669 are the same bug split by run date; adding 70669 to 81857's `also` makes this placement right for the 70669 the person chose.
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/classic random-objectstore$/{bluestore-bitmap} tasks/dashboard}
+    reason: 'Test failure: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module)'

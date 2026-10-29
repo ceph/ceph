@@ -1,0 +1,30 @@
+id: "67555"
+tracker: https://tracker.ceph.com/issues/67555
+title: "failed to fetch repository task/test_cephadm_repos"
+kind: test
+tree: workunit/set-e/test-repos-add-repo-metadata-404
+facts:
+  script: '^cephadm/test_repos\.sh$'
+match:
+  reason: 'workunit test cephadm/test_repos\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: "unable to fetch repo metadata: <HTTPError 404: 'Not Found'>"
+  - file: teuthology.log
+    pattern: 'Error: failed to fetch repository metadata\. please check the provided parameters are correct'
+exclude:
+  - file: teuthology.log
+    pattern: 'failed to fetch GPG repo key from https://download\.ceph\.com/keys/release\.gpg'
+notes: |
+  qa/workunits/cephadm/test_repos.sh runs 'cephadm -v add-repo --release quincy' as its
+  first step. For rpm distros (YumDnf.validate in src/cephadm/cephadmlib/packagers.py)
+  cephadm probes <repo_url>/rpm-<release>/<distro_code>/noarch/repodata/repomd.xml with
+  urlopen. On Rocky 10 (el10) that URL returns HTTP 404, because quincy was never
+  published for this distro. cephadm logs 'unable to fetch repo metadata: <HTTPError 404:
+  Not Found>' and raises 'failed to fetch repository metadata. please check the provided
+  parameters are correct and try again'; the workunit runs with 'bash -ex' and exits 1.
+  The test never checks that the release exists for the host's distro. This differs from
+  78153/78154 (release.gpg key 404) and from 77248/77130 (apt 'does not have a Release
+  file' on Ubuntu).
+examples:
+  - jayaprakash-2026-04-20_13:52:18-rados-wip-jaya-bs-testing-20-04-2026-distro-default-trial/164518

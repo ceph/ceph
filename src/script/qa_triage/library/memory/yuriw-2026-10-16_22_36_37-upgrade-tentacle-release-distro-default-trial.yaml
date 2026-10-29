@@ -1,0 +1,6 @@
+run: yuriw-2026-10-16_22:36:37-upgrade-tentacle-release-distro-default-trial
+signatures:
+  timeout/unexplained | wait_for_recovery:
+    '82013': 1
+titles:
+  '82013': 'upgrade: Recovery expires from PGs in "active+recovery_unfound+undersized+degraded+remapped" during stress-split test'

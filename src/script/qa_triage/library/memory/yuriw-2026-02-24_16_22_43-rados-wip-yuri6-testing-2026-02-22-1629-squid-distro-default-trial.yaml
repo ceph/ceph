@@ -1,0 +1,35 @@
+run: yuriw-2026-02-24_16:22:43-rados-wip-yuri6-testing-2026-02-22-1629-squid-distro-default-trial
+signatures:
+  cluster-log/health | WRN BLUESTORE_SLOW_OP_ALERT:
+    '68337': 7
+  cluster-log/health | WRN MON_NETSPLIT:
+    '71344': 2
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '75277': 1
+  'command/unexplained | yes | mkfs.xfs -f -i size=# -f /dev/vg_nvme/lv_#: #':
+    '68668': 2
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 2
+  other | <fail with no reason>:
+    '71005': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 2
+  ? 'workunit/unexplained/cephtool-osd-epoch-race | cephtool/test.sh | cephtool/test.sh test_mon_osd: info_plain != dump_plain (epoch race)'
+  : '66881': 3
+    '75468': 1
+titles:
+  '66881': 'qa/workunits/cephtool/test.sh: cannot remove ''/tmp/foo'': Operation not permitted'
+  '68337': OSD(s) experiencing slow operations in BlueStore (BLUESTORE_SLOW_OP_ALERT) in cluster log
+  '68668': 'rados/dashboard: mkfs.xfs: cannot open /dev/vg_nvme/lv_2: Device or resource busy'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '75277': smoke-singlehost test fails on transient CEPHADM_FAILED_DAEMON
+  '75468': 'rados/cephtool: test_mon_osd_pool_set fails on wait_for_clean, slow op and PGs stuck in peering'

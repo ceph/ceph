@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+import argparse
+import re
+import sys
+from collections import deque
+
+def build_event_graph(log_file_path):
+    """
+    Parses the entire log file to build a graph of all operations,
+    linking each event to its predecessor. This is the core of the new script.
+
+    Args:
+        log_file_path (str): The path to the teuthology.log file.
+
+    Returns:
+        tuple: A tuple containing (list of events, dict of last event per oid,
+                                  dict of snapshot definitions).
+    """
+    # Regex to find and parse ceph_test_rados output lines.
+    rados_log_line_regex = re.compile(
+        r"^([\w\d\-\.:,T]+)\s+"
+        r"INFO:tasks\.rados\.rados\..*?\.(?:stdout|stderr):"
+        r"\s?(.*)"
+    )
+    # Regexes to parse specific operations.
+    copy_from_regex = re.compile(r'copy_from\s+oid\s+(\d+)\s+from\s+oid\s+(\d+)')
+    rollback_regex = re.compile(r'rollback\s+oid\s+(\d+)\s+to\s+(\d+)')
+    rw_regex = re.compile(r'(?:\bread|write\b).*\boid\s+(\d+)')
+    
+    events = []
+    last_event_for_oid = {} # Maps an OID to the index of the last event that modified it.
+    snap_definitions = {} # Maps a snap ID to the index of the event that defines its state.
+
+    print(f"INFO: Building event graph from '{log_file_path}'...", file=sys.stderr)
+    try:
+        with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                log_match = rados_log_line_regex.search(line.strip())
+                if not log_match:
+                    continue
+                
+                timestamp, content = log_match.groups()
+                event_idx = len(events)
+                event = {'idx': event_idx, 'timestamp': timestamp, 'content': content}
+
+                copy_match = copy_from_regex.search(content)
+                rollback_match = rollback_regex.search(content)
+                rw_match = rw_regex.search(content)
+
+                # Determine event type and link to parent
+                if copy_match:
+                    dest_oid, source_oid = copy_match.groups()
+                    event.update({'type': 'copy_from', 'oid': dest_oid, 'source_oid': source_oid})
+                    if source_oid in last_event_for_oid:
+                        event['parent_idx'] = last_event_for_oid[source_oid]
+                    last_event_for_oid[dest_oid] = event_idx
+                
+                elif rollback_match:
+                    oid, target_snap = rollback_match.groups()
+                    event.update({'type': 'rollback', 'oid': oid, 'target_snap': target_snap})
+                    # The parent of a rollback is the previous operation on the same object.
+                    if oid in last_event_for_oid:
+                        event['parent_idx'] = last_event_for_oid[oid]
+                    # The "flashback" context comes from the snapshot definition.
+                    if target_snap in snap_definitions:
+                        event['flashback_idx'] = snap_definitions[target_snap]
+                    # The new state of the object is this rollback event.
+                    last_event_for_oid[oid] = event_idx
+
+                elif rw_match:
+                    oid = rw_match.group(1)
+                    op_type = "write" if "write" in content else "read"
+                    event.update({'type': op_type, 'oid': oid})
+                    # Reads depend on the last state, but don't change it.
+                    if oid in last_event_for_oid:
+                        event['parent_idx'] = last_event_for_oid[oid]
+                    # Only writes create a new state for subsequent operations.
+                    if op_type == "write":
+                        last_event_for_oid[oid] = event_idx
+
+                events.append(event)
+
+                # Check if this event defines a snapshot state
+                snap_def_match = re.search(r'current snap is\s+(\d+)', content)
+                if snap_def_match:
+                    snap_id = snap_def_match.group(1)
+                    # The snapshot captures the state of the object modified in this event
+                    snap_definitions[snap_id] = event_idx
+
+        print("INFO: Event graph built successfully.", file=sys.stderr)
+        return events, last_event_for_oid, snap_definitions
+
+    except FileNotFoundError:
+        print(f"Error: Log file not found at '{log_file_path}'", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"An unexpected error occurred during parsing: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def trace_history_from_graph(events, last_event_for_oid, snap_definitions, start_oid):
+    """
+    Traces the history of an OID by walking backwards through the event graph,
+    correctly handling rollbacks and including reads.
+    """
+    print(f"\n--- True History Trace for OID {start_oid} ---")
+    
+    # 1. Build the backbone of state-changing events
+    backbone_chain = deque()
+    current_idx = last_event_for_oid.get(start_oid)
+    
+    if current_idx is None:
+        print(f"INFO: No operations found for oid {start_oid}.", file=sys.stderr)
+        return
+        
+    visited_indices = set()
+    while current_idx is not None:
+        if current_idx in visited_indices:
+            print(f"ERROR: Circular dependency detected at event index {current_idx}. Stopping trace.", file=sys.stderr)
+            break
+        visited_indices.add(current_idx)
+        
+        event = events[current_idx]
+        
+        # For rollbacks, we need to find the true parent by searching backwards
+        if event.get('type') == 'rollback' and 'flashback_idx' in event:
+            backbone_chain.appendleft(event) # Add the rollback event itself
+            
+            snap_event_idx = event['flashback_idx']
+            rollback_oid = event['oid']
+            
+            # Start searching backwards from the snap definition event
+            # to find the true state of the object at that time.
+            true_parent_idx = None
+            for i in range(snap_event_idx, -1, -1):
+                potential_parent = events[i]
+                # Check if this event is a state-changing op for our rolled-back object
+                if (potential_parent.get('oid') == rollback_oid and 
+                    potential_parent.get('type') in ('write', 'copy_from', 'rollback')):
+                    true_parent_idx = i
+                    break
+            
+            current_idx = true_parent_idx
+        else:
+            backbone_chain.appendleft(event)
+            current_idx = event.get('parent_idx')
+
+    # 2. Collect all events for the final output
+    final_events = list(backbone_chain)
+    all_oids_in_history = {e.get('oid') for e in backbone_chain if e.get('oid')} | {e.get('source_oid') for e in backbone_chain if e.get('source_oid')}
+
+    # 3. For each OID in the history, find its lifetime window and collect reads
+    for oid in all_oids_in_history:
+        # Find the start of this OID's life within the backbone
+        window_start = None
+        for event in backbone_chain:
+            if event.get('oid') == oid and event.get('type') in ('write', 'copy_from', 'rollback'):
+                window_start = event['timestamp']
+                break
+        if not window_start:
+            continue
+            
+        # Find the end of this OID's life within the backbone
+        window_end = '9999-99-99T99:99:99.999' # A very late timestamp
+        for event in backbone_chain:
+            if event.get('source_oid') == oid:
+                window_end = event['timestamp']
+                break
+                
+        # Find all reads for this OID that fall within its lifetime window
+        all_reads_for_oid = [e for e in events if e.get('type') == 'read' and e.get('oid') == oid]
+        for read_event in all_reads_for_oid:
+            if window_start <= read_event['timestamp'] < window_end:
+                final_events.append(read_event)
+                
+    # 4. Sort and print
+    sorted_events = sorted(final_events, key=lambda x: x['timestamp'])
+
+    for event in sorted_events:
+        print(f"{event['timestamp']}: {event['content']}")
+    
+    print("--- End of Trace ---")
+
+def trace_op_details(events, op_id):
+    """
+    Finds and prints all log lines related to a specific operation ID.
+    An operation is defined by lines starting with the op ID and a colon.
+
+    Args:
+        events (list): The list of all parsed log events.
+        op_id (str): The operation ID to trace.
+    """
+    print(f"\n--- Full Details for Op ID: {op_id} ---")
+
+    # Regex to find the op id at the start of the content, surrounded by word boundaries.
+    op_regex = re.compile(r'^\s*\b' + re.escape(op_id) + r':')
+    
+    found_match = False
+    for event in events:
+        if op_regex.search(event['content']):
+            print(f"{event['timestamp']}: {event['content']}")
+            found_match = True
+    
+    if not found_match:
+        print(f"INFO: No lines found for op {op_id}.", file=sys.stderr)
+
+    print(f"--- End of Trace for Op ID: {op_id} ---")
+
+def print_all_rados_lines(events):
+    """
+    Prints all captured ceph_test_rados log lines.
+    
+    Args:
+        events (list): The list of all parsed log events.
+    """
+    print(f"\n--- All ceph_test_rados Log Lines ---")
+    for event in events:
+        print(f"{event['timestamp']}: {event['content']}")
+    print(f"--- End of Log Lines ---")
+
+def main():
+    """Main function to parse command-line arguments and run the extraction."""
+    parser = argparse.ArgumentParser(
+        description="Extract and analyze `ceph_test_rados` output from a teuthology log file.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+This script builds an event graph from the log to provide powerful,
+time-aware tracing and analysis of ceph_test_rados operations.
+
+Example Usage:
+  # Extract all rados output from 'teuthology.log'
+  python3 %(prog)s
+
+  # Extract all reads/writes for object ID 46
+  python3 %(prog)s --oid 46
+
+  # Trace the true, linked history of all operations leading to the final state of OID 46
+  python3 %(prog)s --oid 46 --history
+
+  # Print all lines related to operation 1500
+  python3 %(prog)s --op 1500
+"""
+    )
+    parser.add_argument(
+        'logfile',
+        nargs='?',
+        default='teuthology.log',
+        help='The full path to the teuthology.log file (default: teuthology.log).'
+    )
+    parser.add_argument(
+        '--oid',
+        dest='oid_to_trace',
+        help='The specific object ID (oid) to trace in the output.'
+    )
+    parser.add_argument(
+        '--history',
+        action='store_true',
+        help='When used with --oid, traces the full, true history of an object by following its dependency graph.'
+    )
+    parser.add_argument(
+        '--op',
+        dest='op_to_trace',
+        help='The specific operation ID to trace across all log lines.'
+    )
+
+    args = parser.parse_args()
+
+    # --- Argument validation for mutually exclusive modes ---
+    modes_selected = sum([args.history is True, args.op_to_trace is not None, args.oid_to_trace is not None and not args.history])
+    if modes_selected > 1:
+        parser.error("Modes --history, --op, and --oid (without --history) are mutually exclusive.")
+
+    if args.history and not args.oid_to_trace:
+        parser.error("--history requires the --oid argument to be specified.")
+
+    # --- Main Execution ---
+    events, last_event_for_oid, snap_definitions = build_event_graph(args.logfile)
+
+    if args.history:
+        trace_history_from_graph(events, last_event_for_oid, snap_definitions, args.oid_to_trace)
+    elif args.op_to_trace:
+        trace_op_details(events, args.op_to_trace)
+    elif args.oid_to_trace:
+        # If not history, just print all events for the given OID
+        print(f"\n--- All Events for OID {args.oid_to_trace} ---")
+        for event in events:
+            if event.get('oid') == args.oid_to_trace:
+                print(f"{event['timestamp']}: {event['content']}")
+    else:
+        # Default behavior: Print all captured lines if no specific mode is chosen.
+        print_all_rados_lines(events)
+
+
+if __name__ == "__main__":
+    main()
+

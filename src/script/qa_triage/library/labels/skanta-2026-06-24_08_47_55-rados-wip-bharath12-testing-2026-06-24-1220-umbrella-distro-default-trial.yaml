@@ -1,0 +1,10 @@
+run: skanta-2026-06-24_08:47:55-rados-wip-bharath12-testing-2026-06-24-1220-umbrella-distro-default-trial
+jobs:
+  '313203':
+    problem: '77743'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 5 jobs that the tool placed in no known problem in 77743, this one among them.
+    summary: Hang in 'ceph daemon osd.N config set' on a restarted OSD is tracker 77743; the record wrongly excluded plain onode-segment 512K jobs.
+    status: dead
+    description: rados/singleton/{all/recovery-preemption mon_election/connectivity msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-2} onode-segment$/{512K} write$/{v2/{compr$/{yes$/{lz4}} v2}}}} rados supported-random-distro/{ubuntu_24.04}}
+    reason: hit max job timeout

@@ -1,0 +1,26 @@
+run: skanta-2026-08-25_01:57:44-rados-wip-bharath10-testing-20260824.234243-main-distro-default-trial
+jobs:
+  '511229':
+    problem: '80024'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 80024, but the tool said new (explain -> prefilter -> confirm -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said unsure 80024. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 80024 by itself, with no judge.
+    summary: osd-recovery-space.sh TEST_recovery_test_simple timed out waiting for recovery_toofull and failed due to bug 80024
+    status: fail
+    description: rados/standalone/{supported-random-distro/{ubuntu_24.04} workloads/osd}
+    reason: 'Command failed (workunit test osd/osd-recovery-space.sh) on trial015 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=bee5ab83bb942b2f4e5690726c03fb1d85d6e745 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/osd/osd-recovery-space.sh'''
+  '511489':
+    problem: '79943'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'misc.sh:292 checks persistent features length == 14 with cephx_auth_aes256k present: 79943, as Laura Flores wrote on 74827 (comment 76); 74827 is the earlier nvmeof_beacon_diff count'
+    summary: duplicate 79943 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/standalone/{supported-random-distro/{rocky_10} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial051 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=bee5ab83bb942b2f4e5690726c03fb1d85d6e745 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''
+  '511365':
+    problem: '79576'
+    by: Claude Code for aainscow, as the reviewer
+    why: cluster log [WRN] PG 2.3 marked LAGGY under ms inject socket failures, not in the ignorelist; no MDS_ALL_DOWN, so not 79878
+    summary: duplicate 79576 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/singleton/{all/random-eio mon_election/connectivity msgr-failures/many msgr/async-v2only objectstore/{bluestore/{alloc$/{bitmap} base mem$/{normal-1} onode-segment$/{512K} write$/{v1/{compr$/{yes$/{zstd}} v1}}}} rados supported-random-distro/{rocky_10}}
+    reason: '"2026-08-25T07:04:57.616429+0000 osd.1 (osd.1) 572 : cluster [WRN] PG 2.3 marked LAGGY; acting [1,2,4]" in cluster log'

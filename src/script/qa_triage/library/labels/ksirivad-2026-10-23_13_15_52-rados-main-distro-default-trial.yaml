@@ -1,0 +1,10 @@
+run: ksirivad-2026-10-23_13:15:52-rados-main-distro-default-trial
+jobs:
+  '670863':
+    problem: '71005'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-71005.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: Right record (71005), but it only described the compression-ratio symptom; notes and confirm checks now include the unbounded time-based rados bench writes that tracker 71005 and PR 67829 identify as the cause.
+    status: fail
+    description: rados/singleton/{all/backfill-toofull mon_election/connectivity msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{bitmap} base mem$/{low} onode-segment$/{512K} write$/{v2/{compr$/{yes$/{lz4}} v2}}}} rados supported-random-distro$/{ubuntu_latest}}
+    reason: ''

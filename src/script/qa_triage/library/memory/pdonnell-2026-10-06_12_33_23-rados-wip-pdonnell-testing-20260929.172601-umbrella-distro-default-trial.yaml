@@ -1,0 +1,9 @@
+run: pdonnell-2026-10-06_12:33:23-rados-wip-pdonnell-testing-20260929.172601-umbrella-distro-default-trial
+signatures:
+  ? 'cluster-log/health/discard-queue-overload | WRN BLOCK_DEVICE_DISCARD_QUEUE | BLOCK_DEVICE_DISCARD_QUEUE: discard queue overload'
+  : '79443': 1
+  other | <pg> not in backfilling:
+    '80218': 1
+titles:
+  '79443': 'Health check failed: 1 OSD(s) experiencing slow discard operations (BLOCK_DEVICE_DISCARD_QUEUE)'
+  '80218': 'qa/tasks/backfill_toofull.py: AssertionError: 2.0 not in backfilling'

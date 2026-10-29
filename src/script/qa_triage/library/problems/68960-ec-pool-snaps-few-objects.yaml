@@ -1,0 +1,33 @@
+id: "68960"
+tracker: https://tracker.ceph.com/issues/68960
+title: "ec-pool-snaps-few-objects-overwrites: failed to complete snap trimming before timeout"
+kind: test
+tree: timeout
+facts:
+  wait: '^snap_trimming$'
+match:
+  reason: 'failed to complete snap trimming before timeout'
+confirm:
+  - file: teuthology.log
+    pattern: 'manager\.wait_snap_trimming_complete\(pool\)'
+  - file: teuthology.log
+    pattern: 'AssertionError: failed to complete snap trimming before timeout'
+  - file: teuthology.log
+    pattern: 'pool_snaps: true'
+notes: |
+  The rados task with pool_snaps: true (workloads/pool-snaps-few-objects, and the older
+  ec-pool-snaps-few-objects-overwrites) ends by calling wait_snap_trimming_complete in
+  qa/tasks/ceph_manager.py. It polls the pgmap every 10 s and asserts 'failed to complete snap
+  trimming before timeout' if any PG of the pool still has snaptrim in its state after
+  FATAL_TIMEOUT = 600 s. The PGs sit in active+clean+snaptrim_wait (and active+clean+snaptrim)
+  for the whole 600 s. The failing jobs are mostly rados/thrash with thrashers/morepggrow and
+  msgr-failures/osd-dispatch-delay, so the pool is growing and PGs keep re-peering while the
+  trim queue is non-empty, but the root cause is not found yet; the tracker has no analysis.
+  Tracker 80190 has the same description and traceback and points to this issue. The timeout
+  and the one-op SLOW_OPS warning are symptoms. Different causes of a wait timeout, such as
+  wait_for_recovery (74794, 75216) or ops queued for pg (79024), end in other assertions.
+examples:
+  - skanta-2026-09-06_23:02:16-rados-wip-bharath14-testing-20260906.123257-main-distro-default-trial/541453
+  - skanta-2026-08-25_00:08:14-rados-wip-bharath11-testing-20260824.222329-main-distro-default-trial/510637
+also:
+  - "80190"

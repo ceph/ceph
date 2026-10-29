@@ -1,0 +1,9 @@
+run: skanta-2026-04-06_10:26:47-rados-wip-bharath14-testing-2026-04-06-1412-squid-distro-default-trial
+signatures:
+  'other/ec-inconsistent-hinfo-assert | ec_inconsistent_hinfo: assert ''clean'' in pg[''state''].split(''+'')':
+    '71181': 1
+  ? 'test/unittest | tasks.stretch_mode_disable_enable.TestStretchMode.test_disable_stretch_mode: tasks.ceph_test_case.TestTimeoutError: Timed out after #s and # retries'
+  : '75887': 1
+titles:
+  '71181': 'qa/tasks/ec_inconsistent_hinfo.py: pg not clean when expected'
+  '75887': test_disable_stretch_mode fails with admin_socket timeout after OSD restart

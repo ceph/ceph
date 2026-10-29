@@ -1,0 +1,56 @@
+run: lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial
+signatures:
+  'command/unexplained | yes | mkfs.xfs -f -i size=# /dev/vg_nvme/lv_#: #':
+    '68668': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'command/unexplained/prometheus-module-inactive | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | prometheus module inactive: CephMgrPrometheusModuleInactive is firing'
+  : '74148': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 1
+  ? crash/signal/backtrace | osd Segmentation fault in ErasureCodeJerasureCauchyGood::prepare() < ErasureCodeJerasure::init(std::map<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&, std::ostream*) < ErasureCodePluginJerasure::factory(std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::map<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx#::basic_string<char,
+    std::char_traits<char>, std::allocator<char> > const, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&, std::shared_ptr<ceph::ErasureCodeInterface>*, std::ostream*)
+  : '73246': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  ? 'infra/other/dpkg-file-conflict | install: Command failed on <host> with status #: ''sudo DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install ceph=<pg>.#-#-g#d#b#b#d-#jammy cephadm=<pg>.#-#-g#d#b#b#d-#jammy ceph-mds=<pg>.#-#-g#d#b#b#d-#jammy ceph-mgr=<pg>.#-#-g#d#b#b#d-#jammy ceph-osd=<pg>.#-#-g#d#b#b#d-#jammy ceph-osd-classic=<pg>.#-#-g#d#b#b#d-#jammy ceph-common=<pg>.#-#-g#d#b#b#d-#jammy ceph-fuse=<pg>.#-#-g#d#b#b#d-#jammy ceph-test=<pg>.#-#-g#d#b#b#d-#jammy ceph-volume=<pg>.#-#-g#d#b#b#d-#jammy radosgw=<pg>.#-#-g#d#b#b#d-#jammy python#-rados=<pg>.#-#-g#d#b#b#d-#jammy python#-rgw=<pg>.#-#-g#d#b#b#d-#jammy python#-cephfs=<pg>.#-#-g#d#b#b#d-#jammy python#-rbd=<pg>.#-#-g#d#b#b#d-#jammy libcephfs#=<pg>.#-#-g#d#b#b#d-#jammy libcephfs-dev=<pg>.#-#-g#d#b#b#d-#jammy librados#=<pg>.#-#-g#d#b#b#d-#jammy librbd#=<pg>.#-#-g#d#b#b#d-#jammy rbd-fuse=<pg>.#-#-g#d#b#b#d-#jammy libradosstriper-dev=<pg>.#-#-g#d#b#b#d-#jammy
+    librados-dev=<pg>.#-#-g#d#b#b#d-#jammy libradospp-dev=<pg>.#-#-g#d#b#b#d-#jammy'' | install: dpkg: libradospp-dev overwrites a file of librados-dev'
+  : '74679': 1
+  other | <fail with no reason>:
+    '71005': 1
+  ? 'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_standby: AssertionError: ''text/html;charset=utf-#'' != ''text/plain;charset=utf-#'''
+  : '74149': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  'timeout/slow-ops | snap_trimming: slow ops':
+    '68960': 1
+  ? 'workunit/set-e | objectstore/test_fuse.sh: rmdir store_test_fuse_mnt/#.#_head: rmdir: failed to remove ''store_test_fuse_mnt/#.#_head'': Directory not empty'
+  : '73630': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  workunit/unexplained | mon/availability.sh:
+    '74178': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | test_readable.py: ceph-dencoder subprocess error'
+  : '75099': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '68668': 'rados/dashboard: mkfs.xfs: cannot open /dev/vg_nvme/lv_2: Device or resource busy'
+  '68960': 'ec-pool-snaps-few-objects-overwrites: failed to complete snap trimming before timeout'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '73246': 'rados/thrash-erasure-code-big: Segmentation fault with cauchy technique'
+  '73630': 'objectstore/test_fuse.sh: line 126: fusermount: command not found'
+  '74148': Prometheus module experiences connection issues related to cherrypy
+  '74149': Prometheus module fails when trying to load security configuration JSON
+  '74178': 'qa/standalone/mon/availability.sh: line 64: Syntax error due to missing availability status'
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74679': Jammy packages fail to install on trial nodes
+  '75099': 'qa/workunits/dencoder/test-dencoder.sh: test-dencoder.sh fails with status 1 as it couldn''t decode multiple types'

@@ -1,0 +1,6 @@
+run: pdonnell-2026-08-11_03:33:58-rados-wip-pdonnell-testing-20260811.003705-distro-default-trial
+signatures:
+  workunit/gtest | rados/test.sh OmapTest.NoOmapRecoveryZeroSized/Replicated,:
+    '79491': 1
+titles:
+  '79491': OmapTest.NoOmapRecoveryZeroSized/Replicated failure

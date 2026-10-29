@@ -1,0 +1,23 @@
+id: "80124"
+tracker: https://tracker.ceph.com/issues/80124
+title: "Error mounting mon config to rootfs"
+kind: infra
+tree: command/error/runc-mountpoint-moved
+confirm:
+  - file: teuthology.log
+    pattern: 'error mounting "\S+/config" to rootfs at "/etc/ceph/ceph\.conf": reopen mountpoint after mount: mountpoint "/etc/ceph/ceph\.conf" was moved while re-opening'
+notes: |
+  A 'cephadm shell' command (here 'ceph orch apply mgr' in the cephadm task) runs
+  a throwaway container with the daemon's config file bind-mounted over
+  /etc/ceph/ceph.conf. docker/runc failed to create that container: 'error during
+  container init: error mounting <fsid>/mon.<id>/config to rootfs at
+  /etc/ceph/ceph.conf: reopen mountpoint after mount: mountpoint
+  "/etc/ceph/ceph.conf" was moved while re-opening'. The wrapper exits with docker's
+  status 125 and the cephadm task fails. No ceph command ran; an identical
+  'cephadm shell' on the same host succeeded seconds earlier. This is a race in the
+  container runtime's mount handling on the test host, not in ceph or the test.
+  The tree reaches it at command/error when the error fact starts with 'docker: Error
+  response from daemon' and teuthology.log has the full runc line (the error fact
+  itself is cut before the 'was moved' text).
+examples:
+  - pdonnell-2026-08-26_21:44:10-rados-wip-pdonnell-testing-20260826.182613-umbrella-distro-default-trial/517073

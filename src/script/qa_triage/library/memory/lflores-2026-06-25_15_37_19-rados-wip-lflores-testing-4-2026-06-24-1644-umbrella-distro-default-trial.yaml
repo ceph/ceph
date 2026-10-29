@@ -1,0 +1,30 @@
+run: lflores-2026-06-25_15:37:19-rados-wip-lflores-testing-4-2026-06-24-1644-umbrella-distro-default-trial
+signatures:
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '76979': 1
+  'hung/test/rados-api-tests-valgrind-slowdown | waiting for io | rados_api_tests: api_* test timed out under valgrind':
+    '76953': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '76297': 1
+  ? 'other/injected-leak-suppressed | expected valgrind issues and found none: injected leak hidden by the UnknownInlinedFun suppression'
+  : '76473': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+  workunit/unexplained | rados/test.sh:
+    '77417': 3
+  ? 'workunit/unexplained/test-repos-release-file-missing | cephadm/test_repos.sh | test_repos.sh: download.ceph.com apt repo has no Release file'
+  : '77248': 1
+titles:
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76297': test_iscsi_container - cephadm/test_iscsi_setup.sh fails on sudo ls /dev/disk/by-path
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '76953': Valgrind UninitCondition error in ECTransaction::Generate::Generate()
+  '76979': 'cephadm: Failure to re-authenticate an osd'
+  '77248': 'rados/cephadm: The repository ''https://download.ceph.com/debian-quincy noble Release'' does not have a Release file. '
+  '77417': ceph-test packages missing ceph_test_neorados_completions; smoke mon_thrash and rados_api_tests fail on Ubuntu

@@ -1,0 +1,18 @@
+run: skanta-2026-06-03_22:47:45-rados-wip-bharath13-testing-2026-06-02-1957-tentacle-distro-default-trial
+signatures:
+  ? 'cluster-log/other/cephadm-pull-manifest-unknown | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: reading manifest in quay.ceph.io/ceph-ci/ceph: manifest unknown'
+  : '73921': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '73921': 'rados/encoder: Container image quay.ceph.io/ceph-ci/ceph:quincy with tag quincy not found leading to test failure'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'

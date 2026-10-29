@@ -1,0 +1,15 @@
+run: yaarit-2026-02-26_20:20:34-rados-wip-rocky10-branch-of-the-day-2026-02-26-1772108951-distro-default-trial
+signatures:
+  ? 'test/unittest | tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit#: tasks.ceph_test_case.TestTimeoutError: Timed out after #s and # retries'
+  : '74605': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+titles:
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74605': 'Rocky10 - ERROR: test_sql_autocommit1 (tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit1)'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'

@@ -1,0 +1,34 @@
+id: "74148"
+tracker: https://tracker.ceph.com/issues/74148
+title: "Prometheus module experiences connection issues related to cherrypy"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/66571
+    branch: main
+    fixed_in: v20.3.0-5831-g7d9f8f3b5f
+tree: command/unexplained/prometheus-module-inactive
+facts: {}
+notes: |
+  The mgr/prometheus module deadlocks in HealthHistory.check() when trying to
+  acquire a Lock it already holds. Using RLock resolves this issue. The deadlock
+  makes the prometheus module unreachable and inactive, triggering the alert
+  "CephMgrPrometheusModuleInactive". The monitoring test then fails to assert
+  "CephMonDown" because no such alert fires (status 4 from jq -e).
+examples:
+  - lflores-2026-01-21_20:56:39-rados-main-distro-default-trial/11956
+  - lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19097
+  - skanta-2026-01-27_05:35:03-rados-wip-bharath1-testing-2026-01-26-1242-distro-default-trial/19767
+  - skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19866
+  - skanta-2026-01-30_23:46:16-rados-wip-bharath7-testing-2026-01-29-2016-distro-default-trial/28574
+  - skanta-2026-02-05_03:38:32-rados-wip-bharath2-testing-2026-02-03-0542-distro-default-trial/35658
+  - nmordech-2026-01-25_11:10:14-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/17059
+  - nmordech-2026-01-28_16:11:20-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/23326
+  - nmordech-2026-01-28_16:11:20-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/23463
+  - nmordech-2026-02-04_08:13:49-rados-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial/33967
+  - yaarit-2026-02-05_03:52:11-rados-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial/35766
+  - yaarit-2026-02-05_03:52:11-rados-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial/35903
+also:
+  - "74564"
+  - "74784"
+  - "75344"
+  - "75345"

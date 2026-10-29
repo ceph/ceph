@@ -1,0 +1,19 @@
+id: "58224"
+tracker: https://tracker.ceph.com/issues/58224
+title: "cephadm/test_repos.sh: urllib.error.HTTPError: HTTP Error 504: Gateway Timeout"
+kind: infra
+tree: infra/other
+facts:
+  error: '^chacra-http-error$'
+confirm:
+  - file: teuthology.log
+    pattern: 'HTTPError.*chacra\.ceph\.com'
+notes: |
+  The install task tried to fetch the repo URL from chacra.ceph.com and received
+  an HTTP error (500 Internal Server Error or 504 Gateway Timeout). No ceph code
+  ran. This is a transient infra problem with the chacra build-artifact server;
+  re-running the job is the usual remedy. The tree sets error=chacra-http-error at
+  infra/other when the failure reason names chacra.ceph.com and teuthology.log has
+  the HTTPError line for that URL.
+examples:
+  - skanta-2026-09-25_03:59:04-rados-wip-bharath29-testing-20260924.231744-main-distro-default-trial/581509

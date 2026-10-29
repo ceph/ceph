@@ -1,0 +1,10 @@
+run: jenkins-build-2026-06-25_06:03:13-smoke-main-distro-default-trial
+jobs:
+  '314801':
+    problem: '78294'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in no known problem in 78294, this one among them.
+    summary: 'OmapTest.LargeOmapRecovery''s wait_for_upmap timed out because smoke/basic runs thrashosds alongside a plain rados/test.sh: 78294 (filed as 77808, a duplicate). The workunit/gtest node now recognises both 78294 failures, and the record hangs at its branch.'
+    status: fail
+    description: smoke/basic/{clusters/{fixed-3-cephfs} objectstore/bluestore-bitmap supported-random-distro/{ubuntu_22.04} tasks/{0-install test/rados_api_tests}}
+    reason: 'Command failed (workunit test rados/test.sh) on trial177 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=41c9db3444ac5fc80f3b37a0ce27949403b89af6 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/test.sh'''

@@ -1,0 +1,33 @@
+id: "75360"
+tracker: https://tracker.ceph.com/issues/75360
+title: "Rocky10 - rados/upgrade: Alertmanager fails to send a webhook to the dashboard"
+kind: infra
+tree: command/unexplained/git-clone-ci-dns-fallback-missing-tree
+facts:
+  dns_host: '^(github|git\.ceph)\.com$'
+confirm:
+  - file: teuthology.log
+    pattern: "failed to check out '\\w+' from https://(github\\.com/ceph|git\\.ceph\\.com)/ceph-ci\\.git; will also try in https://(github\\.com/ceph|git\\.ceph\\.com)/ceph\\.git"
+  - file: teuthology.log
+    pattern: 'fatal: unable to access \S+: Could not resolve host: (github|git\.ceph)\.com'
+  - file: teuthology.log
+    pattern: 'fatal: unable to read tree \(\w+\)'
+notes: |
+  DNS resolution issues in the Sepia lab caused hostnames to fail to resolve (such
+  as "dial tcp: lookup ... server misbehaving" or "fatal: unable to access ... Could not
+  resolve host: github.com" or "... Could not resolve host: git.ceph.com"). During workunit
+  setup, cloning ceph-ci.git failed because the git host (github.com, or git.ceph.com
+  when teuthology clones from there) could not be resolved, and fallback cloning of
+  ceph.git then failed with "fatal: unable to read tree" as the test ref was only present
+  in ceph-ci.
+  The infra team resolved this by configuring DHCP to hand out two DNS servers and adding
+  the proper search domain.
+  Tracker 76471 ("Could not resolve host: github.com") is the same cause seen in this
+  workunit clone: its jobs show the same ceph-ci DNS failure followed by the ceph.git
+  fallback failing with "unable to read tree", also when the host is git.ceph.com.
+examples:
+  - skanta-2026-04-09_03:57:47-rados-wip-bharath16-testing-2026-04-08-1405-distro-default-trial/141085
+  - skanta-2026-06-02_04:58:02-rados-wip-bharath3-testing-2026-06-02-0837-distro-default-trial/253496
+  - nmordech-2026-06-03_18:29:30-rados-wip-bharath2-testing-2026-06-03-0438-distro-default-trial/260829
+also:
+  - "76471"

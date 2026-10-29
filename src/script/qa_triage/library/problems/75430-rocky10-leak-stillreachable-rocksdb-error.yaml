@@ -1,0 +1,20 @@
+id: "75430"
+tracker: https://tracker.ceph.com/issues/75430
+title: "Rocky10 - Leak_StillReachable RocksDB error_handler"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67733
+    branch: main
+    fixed_in: v21.0.0-314-g88ecc71eec
+tree: valgrind/Leak_StillReachable/rocksdb-error-handler
+notes: |
+  On Rocky10 (with GCC 14 and LTO), RocksDB's static initialization in
+  error_handler.cc allocates memory that is still reachable at process exit.
+  Valgrind reports Leak_StillReachable in operator new[] called from
+  _GLOBAL__sub_I_error_handler.cc during startup.
+  The fix adds a suppression to qa/valgrind.supp (PR #67733).
+examples:
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122168
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122189
+  - skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127713
+  - skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127735

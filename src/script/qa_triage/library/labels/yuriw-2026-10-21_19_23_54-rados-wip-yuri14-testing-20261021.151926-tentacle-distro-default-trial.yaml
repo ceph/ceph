@@ -1,0 +1,26 @@
+run: yuriw-2026-10-21_19:23:54-rados-wip-yuri14-testing-20261021.151926-tentacle-distro-default-trial
+jobs:
+  '664526':
+    problem: '68586'
+    by: the RADOS reviewers (wiki), via qa_triage (bob-analyst)
+    why: It failed the way skanta-2026-09-20_02:51:43-rados-wip-bharath22-testing-20260920.002814-main-distro-default-trial/570113 did, which people placed in 68586.
+    summary: cephadm rm-cluster hung during teardown because the cephadm agent was left running and repeatedly querying the stopped mgr endpoint
+    status: dead
+    description: rados/cephadm/workunits/{0-distro/ubuntu_24.04 agent/on mon_election/classic task/test_iscsi_container/{centos_9.stream test_iscsi_container}}
+    reason: hit max job timeout
+  '664818':
+    problem: '75406'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: It failed the way skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122177 did, which people placed in 75406.
+    summary: Job is 75406 (is_pg_clean ceph pg query hangs without a timeout after the OSD is killed, after the 74004 fix is applied); create a 75406 record and add an exclude to 74004 for the WAIT_FOR_CLEAN_TIMEOUT=10 case.
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{rocky_10} workloads/misc}
+    reason: 'Command failed (workunit test misc/test-ceph-helpers.sh) on trial174 with status 124: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=44b37fc0d9b8b29515f3a1c4b879148df7fa6dab TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/misc/test-ceph-helpers.sh'''
+  '664947':
+    problem: '74524'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-74524.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: 'TEST_backfill_pool_priority failed due to a test timing race querying dump_recovery_reservations without polling small backfills (#74524, fixed by PR #67295).'
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{rocky_10} workloads/osd-backfill}
+    reason: 'Command failed (workunit test osd-backfill/osd-backfill-prio.sh) on trial058 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=44b37fc0d9b8b29515f3a1c4b879148df7fa6dab TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/osd-backfill/osd-backfill-prio.sh'''

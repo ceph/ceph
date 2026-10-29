@@ -1,0 +1,27 @@
+run: skanta-2026-02-07_00:06:33-rados-wip-bharath3-testing-2026-02-06-1157-distro-default-trial
+signatures:
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'command/unexplained/prometheus-module-inactive | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | prometheus module inactive: CephMgrPrometheusModuleInactive is firing'
+  : '74148': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  ? 'hung/command/dispatch-delay-queued-for-pg | rados: ceph --admin-daemon /var/run/ceph/ceph-osd.#.asok dump_ops_in_flight | rados hung: dispatch-delay ops queued for pg'
+  : '74794': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '62972': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '76472': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '75358': 1
+titles:
+  '62972': 'ERROR: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest)'
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '74148': Prometheus module experiences connection issues related to cherrypy
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74794': ' rados/thrash -  The WatchDog barked due to Thrasher ceph.osd.9 threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff

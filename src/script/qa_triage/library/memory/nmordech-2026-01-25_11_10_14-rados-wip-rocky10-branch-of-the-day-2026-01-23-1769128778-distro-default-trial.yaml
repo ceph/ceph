@@ -1,0 +1,27 @@
+run: nmordech-2026-01-25_11:10:14-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial
+signatures:
+  '- | Error reimaging machines: reached maximum tries (#) after waiting for # seconds':
+    '74565': 1
+  infra/build | build:
+    '74609': 1
+  ? 'test/unittest | tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit#: tasks.ceph_test_case.TestTimeoutError: Timed out after #s and # retries'
+  : '74605': 1
+  ? 'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_standby: AssertionError: ''text/html;charset=utf-#'' != ''text/plain;charset=utf-#'''
+  : '74149': 1
+  ? 'valgrind/MismatchedFree | valgrind error: MismatchedFree operator delete[](void*, unsigned long, std::align_val_t) RocksDBStore::close() RocksDBStore::~RocksDBStore()'
+  : '74604': 1
+  ? 'workunit/set-e | objectstore/test_fuse.sh: rmdir store_test_fuse_mnt/#.#_head: rmdir: failed to remove ''store_test_fuse_mnt/#.#_head'': Directory not empty'
+  : '73630': 1
+  'workunit/set-e | rados/test_librados_build.sh: make all-system: make: *** [Makefile:#: hello_world_cpp] Error #':
+    '74568': 1
+  ? 'workunit/unexplained/cephtool-mds-not-configured | cephtool/test.sh | cephtool/test.sh do_messenger_dump_basics_test: mds.a ENOENT'
+  : '74607': 1
+titles:
+  '73630': 'objectstore/test_fuse.sh: line 126: fusermount: command not found'
+  '74149': Prometheus module fails when trying to load security configuration JSON
+  '74565': Rocky10 - reimage timeout
+  '74568': 'Rocky10 - g++ missing '
+  '74604': Rocky10 - MismatchedFree delete coming from ceph-osd-classic code
+  '74605': 'Rocky10 - ERROR: test_sql_autocommit1 (tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit1)'
+  '74607': 'do_messenger_dump_basics_test: Error ENOENT: problem getting command descriptions from mds.a'
+  '74609': 'Rocky10 - rados/upgrade: failure to install reef rocky10 packages'

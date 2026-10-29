@@ -1,0 +1,21 @@
+run: yuriw-2026-01-29_18:33:05-rados-wip-yuri2-testing-2026-01-28-1643-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  ? 'cluster-log/other/cephadm-pull-manifest-unknown | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: reading manifest in quay.ceph.io/ceph-ci/ceph: manifest unknown'
+  : '73921': 1
+  ? 'command/unexplained/prometheus-module-inactive | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | prometheus module inactive: CephMgrPrometheusModuleInactive is firing'
+  : '74148': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  workunit/unexplained | mon/availability.sh:
+    '74178': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 2
+titles:
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '73921': 'rados/encoder: Container image quay.ceph.io/ceph-ci/ceph:quincy with tag quincy not found leading to test failure'
+  '74148': Prometheus module experiences connection issues related to cherrypy
+  '74178': 'qa/standalone/mon/availability.sh: line 64: Syntax error due to missing availability status'
+  '74517': drop.ceph.com is unreachable (ceph-post-file)

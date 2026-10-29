@@ -1,0 +1,9 @@
+run: yuriw-2026-01-26_20:16:51-smoke-reef-release-distro-default-trial
+signatures:
+  cluster-log/health | WRN PG_AVAILABILITY:
+    '68005': 1
+  'cluster-log/message | WRN mon overall HEALTH_WARN # pool(s) do not have an application enabled':
+    '70589': 1
+titles:
+  '68005': 'smoke/basic: "Health check failed: Reduced data availability: 1 pg peering (PG_AVAILABILITY)" in cluster log'
+  '70589': 'smoke/basic: "1 pool(s) do not have an application enabled" in cluster log'

@@ -1,0 +1,6 @@
+run: vshankar-2026-02-26_08:18:54-fs-wip-vshankar-testing-20260226.041846-testing-default-trial
+signatures:
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '71830': 1
+titles:
+  '71830': Upgrade tests stuck when upgrading ceph-mgr daemon

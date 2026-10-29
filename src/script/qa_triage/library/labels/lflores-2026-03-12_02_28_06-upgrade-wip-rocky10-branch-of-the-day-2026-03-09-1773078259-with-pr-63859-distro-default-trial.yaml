@@ -1,0 +1,10 @@
+run: lflores-2026-03-12_02:28:06-upgrade-wip-rocky10-branch-of-the-day-2026-03-09-1773078259-with-pr-63859-distro-default-trial
+jobs:
+  '99689':
+    problem: '75414'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'fails on the un-ignored ''Health detail: HEALTH_WARN 2 pool(s) full'' (75414); a parallel upgrade with no thrasher, so not 75570''s failed OSD revive'
+    summary: duplicate 75414 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: upgrade/tentacle-x/parallel/{0-random-distro$/{ubuntu_22.04} 0-start 1-tasks mon_election/classic overrides/ignorelist_health upgrade-sequence workload/{ec-rados-default rados_api rados_loadgenbig rbd_import_export test_rbd_api test_rbd_python}}
+    reason: '"2026-03-12T03:50:00.000076+0000 mon.a (mon.0) 3404 : cluster [WRN] Health detail: HEALTH_WARN 2 pool(s) full" in cluster log'

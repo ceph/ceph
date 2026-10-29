@@ -1,0 +1,24 @@
+run: skanta-2026-06-30_08:55:20-rados-wip-bharath20-testing-2026-06-30-1029-umbrella-distro-default-trial
+signatures:
+  ? 'hung/command/ceph-daemon-config-set-hang | exec: sudo TESTDIR=/home/ubuntu/cephtest bash -c ''for f in # # # # ; do sudo ceph daemon osd.$f config set osd_recovery_sleep # ; sudo ceph daemon osd.$f config set osd_recovery_max_active # ; done'' | exec hung: ceph daemon config set on restarting OSD'
+  : '77443': 1
+  ? 'hung/test/rados-api-tests-valgrind-slowdown | waiting for api_misc_pp | rados_api_tests: api_* test timed out under valgrind'
+  : '76953': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  ? 'other/injected-leak-suppressed | expected valgrind issues and found none: injected leak hidden by the UnknownInlinedFun suppression'
+  : '76473': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/unexplained | rados/test.sh:
+    '77417': 1
+  ? 'workunit/unexplained/test-repos-release-file-missing | cephadm/test_repos.sh | test_repos.sh: download.ceph.com apt repo has no Release file'
+  : '77130': 1
+titles:
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '76953': Valgrind UninitCondition error in ECTransaction::Generate::Generate()
+  '77106': nvme list json command failed, retrying...
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '77417': ceph-test packages missing ceph_test_neorados_completions; smoke mon_thrash and rados_api_tests fail on Ubuntu
+  '77443': 'rados/singleton: Test related to recovery-preemption could not revive an osd that was brought down and ultimately timed out after ~6hrs.'

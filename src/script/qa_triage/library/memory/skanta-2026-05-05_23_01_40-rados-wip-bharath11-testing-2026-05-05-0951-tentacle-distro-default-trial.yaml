@@ -1,0 +1,9 @@
+run: skanta-2026-05-05_23:01:40-rados-wip-bharath11-testing-2026-05-05-0951-tentacle-distro-default-trial
+signatures:
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+titles:
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)

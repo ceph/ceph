@@ -1,0 +1,33 @@
+run: skanta-2026-08-24_07:43:11-rados-wip-bharath7-testing-20260824.042435-main-distro-default-trial
+signatures:
+  ? 'cluster-log/health/dead-ping-not-retried | WRN MON_NETSPLIT | MON_NETSPLIT: mon ping to dead peer not retried after reconnect'
+  : '79814': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 2
+  ? 'infra/other/nvme-cli-host-identity | nvme_loop: Command failed on <host> with status #: ''sudo nvme connect -t loop -n lv_#'' | nvme_loop: nvme connect: Failed to write to /dev/nvme-fabrics'
+  : '71816': 5
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 2
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 3
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? workunit/unexplained/cephtool-hang/bad-caps-key-left-behind | cephtool/test.sh | cephtool/test.sh hung with AUTH_BAD_CAPS HEALTH_ERR | cephtool test_mon_caps left client.bug with empty mon caps (AUTH_BAD_CAPS)
+  : '72888': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '71816': 'Failed to write to /dev/nvme-fabrics: Invalid argument'
+  '72888': 'rados/singleton-bluestore: cephtool.sh workunit hangs on various tests'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '79814': 'Health check failed: network partition detected (MON_NETSPLIT)'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '79946': After rebuilding the mondb, authentication starts failing

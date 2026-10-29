@@ -1,0 +1,18 @@
+run: pdonnell-2026-08-15_01:21:59-rados-wip-pdonnell-testing-20260814.230134-distro-default-trial
+signatures:
+  ? 'cluster-log/message/laggy-socket-failures | WRN osd PG <pg> marked LAGGY; acting [#,#,#] | PG marked LAGGY: read lease expired under injected socket failures'
+  : '79576': 1
+  ? 'hung/command/host-drain-osd-not-scheduled | cephadm.shell: exit #; fi | host drain: OSD not scheduled for removal, only reconfigured'
+  : '78429': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 1
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  ? 'workunit/set-e/test-repos-add-repo-shaman-http-error | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --dev main: Traceback (most recent call last): | test_repos.sh: shaman.ceph.com HTTP error'
+  : '58224': 1
+titles:
+  '58224': 'cephadm/test_repos.sh: urllib.error.HTTPError: HTTP Error 504: Gateway Timeout'
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '78429': 'rados/cephadm: test_host_drain hangs after reconfiguring osd.5'
+  '79576': 'rados/singleton: PG marked LAGGY during [osd-recovery| backfill-toofull | ec-esb-fio]  tests'

@@ -1,0 +1,12 @@
+run: yuriw-2026-07-21_13:59:31-rados-wip-yuri9-testing-20260720.212103-squid-distro-default-trial
+signatures:
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'

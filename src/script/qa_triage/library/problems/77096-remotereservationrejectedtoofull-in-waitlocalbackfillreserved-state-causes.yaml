@@ -1,0 +1,24 @@
+id: "77096"
+tracker: https://tracker.ceph.com/issues/77096
+title: "RemoteReservationRejectedTooFull in WaitLocalBackfillReserved state causes PeeringState::Crashed abort"
+kind: product
+tree: crash/abort/specific
+facts:
+  source: '^osd/PeeringState\.cc$'
+  message: 'we got a bad state machine event'
+confirm:
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: 'RemoteReservationRejectedTooFull'
+notes: |
+  A race in the backfill reservation state machine: the primary releases prior
+  reservations and starts a new local reservation (entering WaitLocalBackfillReserved),
+  but a late REJECT_TOOFULL from the previous reservation attempt arrives in the new
+  state. The peering state machine has no handler for RemoteReservationRejectedTooFull
+  in WaitLocalBackfillReserved, so it transitions to Crashed and hits
+  ceph_abort_msg("we got a bad state machine event") at PeeringState.cc:5264.
+  The race is made more likely by messenger delay injection (osd-dispatch-delay)
+  and by many simultaneously backfilling shards. Related to tracker 76751, which
+  describes a similar race in a different state. Fix: ignore
+  RemoteReservationRejectedTooFull in WaitLocalBackfillReserved.
+examples:
+  - skanta-2026-06-02_04:58:02-rados-wip-bharath3-testing-2026-06-02-0837-distro-default-trial/253356

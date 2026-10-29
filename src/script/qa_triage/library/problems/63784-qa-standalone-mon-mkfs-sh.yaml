@@ -1,0 +1,43 @@
+id: "63784"
+tracker: https://tracker.ceph.com/issues/63784
+title: "qa/standalone/mon/mkfs.sh:'mkfs/a' already exists and is not empty: monitor may already exist"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/58324
+    branch: main
+    fixed_in: v19.3.0-3421-g415f7ca0e8
+tree: workunit/standalone
+facts:
+  script: '^mon/mon-cluster-log\.sh$'
+  test: '^TEST_cluster_log_level$'
+match:
+  reason: 'mon/mon-cluster-log\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'TEST_cluster_log_level:\s+wait_for_osd up 0'
+  - file: teuthology.log
+    pattern: 'ceph-helpers\.sh:\d+: wait_for_osd:\s+return 1'
+notes: |
+  63784 covers the qa/standalone/mon tests that PR #58324 fixed: mkfs.sh
+  auth_cephx_key and mon-cluster-log.sh TEST_cluster_log_level /
+  TEST_journald_cluster_log_level. This record covers the mon-cluster-log.sh failure
+  that people file in #68773 ("mon-cluster-log.sh: TEST_cluster_log_level fails in
+  wait_for_osd"), which is closed as a duplicate of 63784.
+
+  TEST_cluster_log_level starts a cluster with one mon, one mgr and a single OSD. It
+  runs 'ceph osd down 0' (or, later, 'ceph osd down osd.0' while noup is set) and
+  then 'TIMEOUT=20 wait_for_osd up 0', expecting the OSD to see it was wrongly marked
+  down and boot again. In the failing jobs the OSD never learns it was marked down.
+  The mon sends the new osdmap only to the mgr and to the 'ceph osd dump' clients
+  that wait_for_osd runs. osd.0 has no peers, so nobody else passes the map on.
+  osd.0.log keeps logging 'osd.0 <old epoch> tick_without_osd_lock' each second and
+  has no handle_osd_map, 'wrongly marked me down' or boot line. wait_for_osd returns
+  1 and the test fails at the line that calls it (mon-cluster-log.sh:63 on squid,
+  :64 in older versions). The fix is merged on main; the squid backport was still
+  pending in 2026-08, and squid keeps failing this way.
+  'osd.0 is already down.' right after 'ceph osd down 0' is not a clue: it comes
+  from CEPH_CLI_TEST_DUP_COMMAND=1 sending each command twice.
+examples:
+  - skanta-2026-08-16_10:49:09-rados-wip-bharath14-testing-20260815.072239-squid-distro-default-trial/480171
+also:
+  - "68773"

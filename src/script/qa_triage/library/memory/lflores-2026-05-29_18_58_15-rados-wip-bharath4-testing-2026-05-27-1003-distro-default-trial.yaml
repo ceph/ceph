@@ -1,0 +1,12 @@
+run: lflores-2026-05-29_18:58:15-rados-wip-bharath4-testing-2026-05-27-1003-distro-default-trial
+signatures:
+  ? cluster-log/message/mgr-session-evicted | WRN mds evicting unresponsive client <host>:x (#), after <pg> seconds | MDS evicted the unresponsive libcephfs session of a restarted mgr
+  : '76497': 1
+  infra/build | build:
+    '77053': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '74794': 1
+titles:
+  '74794': ' rados/thrash -  The WatchDog barked due to Thrasher ceph.osd.9 threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean'
+  '76497': rados/singleton-bluestore/cephtool - evicting unresponsive client warnings
+  '77053': 'rados/encoder: failure to find umbrella packages'

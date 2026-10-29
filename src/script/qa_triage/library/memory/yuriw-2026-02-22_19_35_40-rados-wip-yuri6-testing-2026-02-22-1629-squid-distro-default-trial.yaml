@@ -1,0 +1,6 @@
+run: yuriw-2026-02-22_19:35:40-rados-wip-yuri6-testing-2026-02-22-1629-squid-distro-default-trial
+signatures:
+  ? 'workunit/unexplained/cephtool-osd-epoch-race | cephtool/test.sh | cephtool/test.sh test_mon_osd: info_plain != dump_plain (epoch race)'
+  : '75468': 1
+titles:
+  '75468': 'rados/cephtool: test_mon_osd_pool_set fails on wait_for_clean, slow op and PGs stuck in peering'

@@ -1,0 +1,50 @@
+id: "75208"
+tracker: https://tracker.ceph.com/issues/75208
+title: 'Rocky10, Centos9 - AnsibleFailedError: "Wanted 2 disks of type nvme1n1, but only matched 1"'
+kind: infra
+tree: infra/other
+facts:
+  task: '^ansible\.cephlab$'
+match:
+  reason: '^\["Wanted \d+ disks of [^"]*"\]$'
+confirm:
+  - file: teuthology.log
+    pattern: 'AnsibleFailedError.*Wanted \d+ disks of .*but only matched \d+'
+exclude:
+  - file: teuthology.log
+    pattern: 'trial114'
+  - file: teuthology.log
+    pattern: 'trial195'
+  - file: ansible_failures.yaml
+    pattern: '^trial062\.front\.sepia\.ceph\.com:'
+notes: |
+  The ansible.cephlab task runs ceph-cm-ansible's cephlab.yml on the job's
+  test nodes. The playbook checks that each node has the expected number of
+  non-rotational scratch disks of the expected size (two ~1700 GB NVMe devices
+  on the trial nodes). If a node has fewer, because a disk failed, is missing,
+  or the OS was installed on one of them, the playbook fails with "Wanted N
+  disks of ~SIZE GB (rotational=False), but only matched M: [...]" and
+  teuthology raises AnsibleFailedError. The job dies before any ceph code runs.
+  This is a lab hardware problem on one test node, not a ceph bug.
+  Tracker 75208 is the general issue for this failure, seen on many distros
+  and branches. The infra team handles it per machine; teuthology PR 2236 adds
+  automation to mark down testnodes lacking the required NVMe/scratch devices.
+  The match key requires the failure reason to hold exactly one "Wanted N
+  disks" entry, so only one node lacked its disks. Jobs where several nodes
+  failed the check list several entries and are left for a judge.
+  Some machines have their own trackers: 81126 for trial114, 81282 for
+  trial195 and 78379 for trial062. The first two records are confirmed by
+  their host name in teuthology.log; 78379 is confirmed by trial062 being the
+  failing host in ansible_failures.yaml. This record excludes those same host
+  names so a job is never claimed by both.
+  Jobs on trial134 are also placed here: trial134 lost NVMe drives (drives
+  112510AB511E and 112510AB5371, see the RMA support issue 77787), and its failing
+  disk check is ansible_failures.yaml's only entry. Its auto-filed tracker 78368
+  ("trial134: last 10 jobs all failed or died") is closed as a duplicate of 77787.
+  It is the same cause as here, so both are listed in `also`.
+examples:
+  - jayaprakash-2026-07-17_09:59:00-rados-wip-jaya-bs-testing-16-07-2026-distro-default-trial/373025
+  - xuxuehan-2026-07-17_12:19:21-crimson-rados-wip-seastore-new-trans-cc-distro-debug-trial/373776
+also:
+  - "78368"
+  - "77787"

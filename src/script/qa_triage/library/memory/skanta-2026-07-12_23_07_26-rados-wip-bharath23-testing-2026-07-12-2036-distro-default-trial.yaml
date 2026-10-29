@@ -1,0 +1,35 @@
+run: skanta-2026-07-12_23:07:26-rados-wip-bharath23-testing-2026-07-12-2036-distro-default-trial
+signatures:
+  ? 'hung/command/ceph-daemon-config-set-hang | exec: sudo TESTDIR=/home/ubuntu/cephtest bash -c ''for f in # # # # ; do sudo ceph daemon osd.$f config set osd_recovery_sleep # ; sudo ceph daemon osd.$f config set osd_recovery_max_active # ; done'' | exec hung: ceph daemon config set on restarting OSD'
+  : '77743': 1
+  ? 'infra/other/kernel-reconnect-timeout | kernel: Failed to reconnect to <host> | kernel: wait_for_reboot: Failed to reconnect'
+  : '78458': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 2
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '75216': 1
+  timeout/unexplained | MaxWhileTries:
+    '78490': 1
+  timeout/unexplained | wait_until_healthy:
+    '77110': 1
+  ? timeout/unexplained/thrasher-wait-for-recovery-failed | MaxWhileTries | wait_for_recovery failed, watchdog killed daemons, then a wait timed out
+  : '75216': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? 'workunit/set-e/test-repos-add-repo-gpg-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: failed to fetch GPG repo key from https://download.ceph.com/keys/release.gpg: HTTP Error #: Not Found | test_repos.sh: release.gpg # from download.ceph.com'
+  : '78153': 1
+  'workunit/unexplained/test-repos-gpg-404 | cephadm/test_repos.sh | test_repos.sh: release.gpg # from download.ceph.com':
+    '78154': 2
+titles:
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '77106': nvme list json command failed, retrying...
+  '77110': 'rados/cephadm: wait_until_healthy times out due to CEPHADM_STRAY_DAEMON HEALTH_WARN'
+  '77743': Radosbench test times out
+  '78153': 'Cephadm: failure to fetch GPG key when adding quincy repo'
+  '78154': 'Status code: 404 for https://download.ceph.com/keys/release.gpg'
+  '78458': 'ConnectionError: Failed to reconnect to trialXXX'
+  '78490': 'cephadm: Timed out waiting for 8 OSDs to come up'

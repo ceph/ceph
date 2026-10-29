@@ -1,0 +1,28 @@
+id: "78379"
+tracker: https://tracker.ceph.com/issues/78379
+title: "trial062: NVMe RMA"
+kind: infra
+tree: infra/other
+facts:
+  task: '^ansible\.cephlab$'
+match:
+  reason: 'Wanted \d+ disks of'
+confirm:
+  - file: ansible_failures.yaml
+    pattern: '^trial062\.front\.sepia\.ceph\.com:'
+  - file: ansible_failures.yaml
+    pattern: 'Wanted \d+ disks of .*but only matched \d+'
+notes: |
+  trial062 lost one of its two ~1700 GB NVMe drives (serial 012510B00241 is missing
+  from 'nvme list'), so the disk check in ceph-cm-ansible's cephlab.yml fails on that
+  node with "Wanted 2 disks of ~1700 GB (rotational=False), but only matched 1:
+  ['nvme2n1']" and teuthology raises AnsibleFailedError in the ansible.cephlab task.
+  The job dies before any ceph code runs. The tracker was filed by testnode-monitor
+  after trial062 failed 10 jobs in a row; an RMA was opened and the NVMe was replaced
+  on 2026-08-26. Only the failing host matters: a job may use trial062 without it
+  being the node that failed, so the confirm checks read ansible_failures.yaml, which
+  names the failing host, not teuthology.log, which lists every host of the job.
+  Other machines with the same symptom have their own trackers: 81126 for trial114
+  and 81282 for trial195; 75208 is the general issue.
+examples:
+  - jayaprakash-2026-07-17_20:06:54-rados-wip-jaya-bs-testing-BatchA-17-07-2026-distro-default-trial/374344

@@ -1,0 +1,18 @@
+run: pdonnell-2026-08-26_21:44:10-rados-wip-pdonnell-testing-20260826.182613-umbrella-distro-default-trial
+jobs:
+  '517317':
+    problem: '76472'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 3 jobs that the tool placed in 79943 in 76472, this one among them.
+    summary: TEST_mon_features in mon/misc.sh failed because jqfilter was not updated when checking nvmeof_beacon_diff (tracker 76472), not from cephx_auth_aes256k (tracker 79943).
+    status: fail
+    description: rados/standalone/{supported-random-distro/{rocky_10} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial064 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=e704632a29404c3d6503a35d1c09861d38dbfc67 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''
+  '517073':
+    problem: '80124'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 80124, this one among them.
+    summary: The cephadm shell container on trial186 failed to start because runc hit the 'mountpoint was moved while re-opening' error when bind-mounting mon.c/config. This is tracker 80124, but the tool had no record or node for it and called it new.
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_22.04 agent/off mon_election/classic task/test_mgmt_gateway}
+    reason: 'Command failed on trial186 with status 125: "sudo /home/ubuntu/cephtest/cephadm --image quay.ceph.io/ceph-ci/ceph:e704632a29404c3d6503a35d1c09861d38dbfc67 shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring --fsid 8d3ea706-a1c5-11f1-813c-d404e6e7d460 -- ceph orch apply mgr ''2;trial159=a;trial174=b''"'

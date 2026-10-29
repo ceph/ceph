@@ -1,0 +1,39 @@
+id: "65728"
+tracker: https://tracker.ceph.com/issues/65728
+title: "Daemon managed by cephadm in an unknown state (CEPHADM_FAILED_DAEMON)"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/68290
+    branch: main
+    fixed_in: v21.3.0-845-g368ecc5d05
+tree: cluster-log/health/cephadm-failed-daemon-transient
+facts:
+  check: '^CEPHADM_FAILED_DAEMON$'
+match:
+  reason: 'CEPHADM_FAILED_DAEMON'
+exclude:
+  - file: remote/*/log/*/ceph-mgr.*.log.gz
+    pattern: 'systemctl: stderr Job for ceph-\S+@grafana\.\S+\.service failed because a timeout was exceeded'
+notes: |
+  The cause: cephadm's _refresh_host_daemons (module.py line 1059) maps cephadm ls
+  state='unknown' to DaemonDescriptionStatus.error, which raises CEPHADM_FAILED_DAEMON
+  for any daemon still in the process of starting up. The warning clears on the next
+  cephadm refresh (typically within seconds) once the daemon has started. Because the
+  teardown cluster-log scan does not ignore CEPHADM_FAILED_DAEMON, the job fails even
+  though the cluster was healthy. The fix (PR #68290) maps 'unknown' to .unknown instead
+  of .error so unknown daemons no longer trigger the health warning.
+  The tree node (cluster-log/health) confirms the warning cleared before returning done:
+  only jobs where it cleared reach the record's tree path, so jobs where the warning
+  persisted (a real failure) are not matched. The exclude prevents this record from
+  matching the grafana-timeout case (record 78250), where a systemctl timeout error
+  appears in the mgr log.
+  Trackers 67869 and 75797 are the same cause: mon reports 'daemon ... is in unknown state',
+  the check clears moments later and the OSD logs show no problem, so jobs placed there
+  belong here too.
+examples:
+  - skanta-2026-07-02_01:10:52-rados-wip-bharath2-testing-2026-07-01-2021-distro-default-trial/335079
+  - skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127723
+  - nmordech-2026-02-25_11:35:39-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial/69855
+also:
+  - "67869"
+  - "75797"

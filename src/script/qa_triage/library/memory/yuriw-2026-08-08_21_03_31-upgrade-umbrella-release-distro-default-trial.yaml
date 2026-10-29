@@ -1,0 +1,11 @@
+run: yuriw-2026-08-08_21:03:31-upgrade-umbrella-release-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/PrimaryLogPG.cc FAILED ceph_assert(latest->is_update() || latest->is_delete()) in uint#_t PrimaryLogPG::recover_primary(uint#_t, ThreadPool::TPHandle&)
+  : '79450': 2
+  'hung/command | parallel: cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell --fsid <uuid> -- ceph':
+    '75570': 1
+  'hung/command | parallel: cephadm --image quay.ceph.io/ceph-ci/ceph:tentacle shell --fsid <uuid> -- ceph':
+    '75570': 1
+titles:
+  '75570': 'upgrade/stress-split: Thrasher fails to revive an OSD during upgrade test'
+  '79450': 'osd/PrimaryLogPG.cc: FAILED ceph_assert(latest->is_update() || latest->is_delete())'

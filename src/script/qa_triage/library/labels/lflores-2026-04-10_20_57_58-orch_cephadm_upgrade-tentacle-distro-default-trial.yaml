@@ -1,0 +1,10 @@
+run: lflores-2026-04-10_20:57:58-orch:cephadm:upgrade-tentacle-distro-default-trial
+jobs:
+  '144426':
+    problem: '71631'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 5 jobs that the tool placed in no known problem in 71631, this one among them.
+    summary: 'The reef→tentacle upgrade''s wait loop ran ''ceph orch upgrade status'' just after the mgr failover and got ENOTSUP (module ''orchestrator'' not loaded), so it ended early and ''ceph versions | jq length == 1'' saw mixed versions: this is tracker 71631, not new.'
+    status: fail
+    description: orch:cephadm:upgrade/{1-start-distro/1-start-ubuntu_22.04-reef 2-repo_digest/repo_digest 3-upgrade/simple 4-wait 5-upgrade-ls agent/on mon_election/connectivity}
+    reason: 'Command failed on trial030 with status 1: ''sudo /home/ubuntu/cephtest/cephadm --image quay.io/ceph/ceph:v18.2.8 shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring --fsid 210035de-3521-11f1-8cf0-d404e6e7d460 -e sha1=ff309bba00c8a136d95cbefafa71a75e48713d73 -- bash -c \''ceph versions | jq -e \''"\''"\''.overall | length == 1\''"\''"\''\'''''

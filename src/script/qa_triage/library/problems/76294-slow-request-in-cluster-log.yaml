@@ -1,0 +1,31 @@
+id: "76294"
+tracker: https://tracker.ceph.com/issues/76294
+title: "slow request in cluster log causing test failure"
+kind: test
+tree: cluster-log/message
+facts:
+  message: 'slow requests \(by type \[ ''(?!waiting for sub ops)'
+  reporter: '^osd\.'
+match:
+  description: 'stretch-mode-5-mons-8-osds'
+confirm:
+  - file: teuthology.log
+    pattern: 'cluster \[WRN\] \d+ slow requests \(by type \[ ''(?!waiting for sub ops)'
+notes: |
+  The rados/singleton/all/stretch-mode-5-mons-8-osds job runs
+  tasks.stretch_mode_disable_enable, which enables and disables stretch mode and
+  fails over a whole datacenter's OSDs and mons. The test's first client read
+  (on the rbd pool's PG) is queued while the PG is still peering, and the OSD
+  logs 'slow request ... currently waiting for peered' for ~30s (32s latency when
+  the PG finally peers). The OSD's [WRN] 'N slow requests (by type [ 'delayed' :
+  N ] most affected pool [ 'rbd' : N ])' reaches the cluster log, and the
+  teardown cluster-log scan treats any un-ignored warning as a failure. The test
+  itself passes its own checks. The tracker notes the test is the only one that
+  hits it, and that about 1 in 50 runs has a PG stuck in peering for over 60s even
+  with extra waiting. Slow requests of type 'waiting for sub ops' (for example on
+  stretch_pool) are a different cause, a replication sub-op that did not complete,
+  and are not this problem. PR 70009 (qa/tasks: wait for PG recovery after
+  enabling stretch mode) was proposed as the fix; it is closed with no merged
+  version, so no fix is listed.
+examples:
+  - skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148463

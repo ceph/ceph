@@ -1,0 +1,6 @@
+run: skanta-2026-02-04_08:34:03-rados-wip-bharath2-testing-2026-02-03-0542-distro-default-trial
+signatures:
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '74577': 1
+titles:
+  '74577': test_iscsi_setup.sh - No such path /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/iqn.1994-05.com.redhat:client1

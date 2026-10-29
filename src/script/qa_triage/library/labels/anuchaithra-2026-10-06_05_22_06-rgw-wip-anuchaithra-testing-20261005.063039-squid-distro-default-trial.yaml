@@ -1,0 +1,10 @@
+run: anuchaithra-2026-10-06_05:22:06-rgw-wip-anuchaithra-testing-20261005.063039-squid-distro-default-trial
+jobs:
+  '610140':
+    problem: '81494'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 2 jobs that the tool placed in no known problem in 81494, this one among them.
+    summary: 'The job is tracker 81494, not new. The reef 18.2.1 mgr that the upgrade test installs first can''t import k8sevents with EPEL''s python3-kubernetes 26.1.0 (kubernetes.client.models.v1_event is gone), so it logs ''[ERR] Failed to load ceph-mgr modules: k8sevents''. No record for 81494 existed, so I added one.'
+    status: fail
+    description: rgw/upgrade/{1-install/reef/{distro$/{centos_9.stream} install overrides} 2-setup 3-upgrade-sequence/rgws-then-osds cluster frontend/beast ignore-pg-availability objectstore/bluestore-bitmap overrides}
+    reason: '"2026-10-06T05:29:11.554363+0000 mgr.x (mgr.4105) 1 : cluster [ERR] Failed to load ceph-mgr modules: k8sevents" in cluster log'

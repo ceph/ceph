@@ -1,0 +1,42 @@
+id: "75488"
+tracker: https://tracker.ceph.com/issues/75488
+title: "qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn't become the in progress item [on remote]"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69416
+    branch: main
+    fixed_in: v21.3.0-363-g6158e8efcb
+tree: workunit/unexplained/backfill-prio-not-in-progress
+facts:
+  script: '^osd/osd-recovery-prio\.sh$'
+confirm:
+  - file: teuthology.log
+    pattern: "TEST_recovery_pool_priority:\\s+echo 'The primary PG for \\S+ didn'"
+exclude:
+  - file: teuthology.log
+    pattern: 'TEST_recovery_pool_priority:\s+ceph osd set norecover'
+notes: |
+  A race in the test, not a regression in the code (tracker #75488, PR 69416).
+  TEST_recovery_pool_priority in qa/standalone/osd/osd-recovery-prio.sh raises two
+  size-1 pools to size 2, polls until 'ceph pg dump pgs' shows both PGs recovering, and
+  then queries dump_recovery_reservations on both OSDs, without pausing recovery. The
+  recovery is log based and small, and on the faster lab machines it can finish between
+  the pg dump and the admin-socket queries, so one PG has no in-progress reservation
+  (item null) on the primary and on the remote, and the test prints "The primary PG for
+  testX didn't become the in progress item" (and '... on remote'), counts errors and
+  returns 1. The failed workunit and those messages are symptoms; the cause is the
+  unpaused recovery. Same cause as 77113, which fails the earlier polling check.
+  This is the osd/osd-recovery-prio.sh test. The same message from
+  osd-backfill/osd-backfill-prio.sh is the sibling race in the backfill test (74524,
+  fixed by PR 67295 in that test only); people also file osd-recovery-prio.sh jobs
+  under 74524, so it is listed in `also`.
+  PR 69416 fixes the test: it sets norecover while the reservation state is inspected.
+  Builds before v21.3.0-363-g6158e8efcb (and squid/tentacle/umbrella before the
+  backports) do not have it; a log that shows 'ceph osd set norecover' in the test is
+  excluded.
+examples:
+  - skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127739
+  - jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90321
+also:
+  - 77113
+  - 74524

@@ -1,0 +1,9 @@
+run: yaarit-2026-03-04_01:19:54-rados-wip-rocky10-branch-of-the-day-2026-03-03-1772558532-distro-default-trial
+signatures:
+  'other/ec-inconsistent-hinfo-assert | ec_inconsistent_hinfo: assert ''clean'' in pg[''state''].split(''+'')':
+    '71181': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+titles:
+  '71181': 'qa/tasks/ec_inconsistent_hinfo.py: pg not clean when expected'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)

@@ -1,0 +1,26 @@
+id: "74607"
+tracker: https://tracker.ceph.com/issues/74607
+title: "do_messenger_dump_basics_test: Error ENOENT: problem getting command descriptions from mds.a"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67640
+    branch: main
+    fixed_in: v20.3.0-5934-g040bf60da1
+tree: workunit/unexplained/cephtool-mds-not-configured
+match:
+  reason: 'workunit test cephtool/test\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'Error ENOENT: problem getting command descriptions from mds\.a'
+notes: |
+  The rados/singleton-bluestore suite does not configure an MDS. Commit
+  75a02c25db6a added do_messenger_dump_basics_test (called via test_mds_messenger_dump)
+  to qa/workunits/cephtool/test.sh; it runs "ceph tell mds.a messenger dump"
+  unconditionally. With no MDS running the client logs "no MDS daemons found by
+  name 'a'" and returns "Error ENOENT: problem getting command descriptions from
+  mds.a"; expect_true returns 1 and the workunit exits with status 1. PR #67640
+  adds an MDS to qa/suites/rados/singleton-bluestore/all/cephtool.yaml; it is
+  merged to main (fixed_in v20.3.0-5934-g040bf60da1) but was not yet backported
+  to tentacle at the time of these failures.
+examples:
+  - skanta-2026-06-24_04:55:40-rados-wip-bharath14-testing-2026-06-19-0657-tentacle-distro-default-trial/311608

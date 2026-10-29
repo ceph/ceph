@@ -1,0 +1,24 @@
+id: "77379"
+tracker: https://tracker.ceph.com/issues/77379
+title: "rados/thrash-erasure-code-shec: Failed to resolve '1.chacra.ceph.com' ([Errno -3] Temporary failure in name resolution)"
+kind: infra
+tree: infra/other
+facts:
+  error: '^chacra-dns-failure$'
+confirm:
+  - file: teuthology.log
+    pattern: "Failed to resolve '[^']*chacra\\.ceph\\.com'.*Temporary failure in name resolution"
+notes: |
+  The install task could not pull the repo file from chacra.ceph.com because the
+  test node's DNS lookup of the chacra host (e.g. 1.chacra.ceph.com) failed with
+  'Temporary failure in name resolution'. urllib3 raises NameResolutionError and
+  then MaxRetryError, and requests.exceptions.ConnectionError ends the install
+  task. No ceph code ran. The cause is a transient name-resolution failure in the
+  lab network, not a chacra HTTP error and not a missing build: shaman had just
+  answered the search for the same sha1. The tracker was closed as Can't reproduce
+  after DNS lookups, supervisor and ansible logs and dmesg showed nothing. The tree
+  sets error=chacra-dns-failure at infra/other when the failure reason names
+  chacra.ceph.com and teuthology.log has the 'Failed to resolve' line. Re-running
+  the job is the usual remedy.
+examples:
+  - skanta-2026-06-04_15:14:33-rados-wip-bharath7-testing-2026-06-04-1630-distro-default-trial/265561

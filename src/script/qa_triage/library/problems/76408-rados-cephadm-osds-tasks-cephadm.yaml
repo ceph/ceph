@@ -1,0 +1,34 @@
+id: "76408"
+tracker: https://tracker.ceph.com/issues/76408
+title: "rados/cephadm/osds: tasks.cephadm:Hit timeout while adding host"
+kind: product
+tree: timeout/unexplained/host-config-key-missing
+facts:
+  task: '^cephadm$'
+  wait: '^MaxWhileTries$'
+match:
+  reason: 'reached maximum tries'
+confirm:
+  - file: teuthology.log
+    pattern: 'tasks\.cephadm:Hit timeout while adding host \S+: reached maximum tries'
+  - file: teuthology.log
+    pattern: 'Host got config-key entry: False'
+notes: |
+  In rados/cephadm/osds with 2-ops/deploy-raw, after bootstrapping the cluster on
+  the first host the cephadm task calls `ceph orch host add <host>` for each extra
+  host, then waits up to 50 seconds (sleep=5, tries=10) in ceph_bootstrap for three
+  conditions to hold: the host appears in `ceph orch host ls`, has a per-host entry
+  in `ceph config-key ls` (e.g. mgr/cephadm/host.<name>), and appears in the
+  mgr/cephadm/inventory config-key.
+  The bug: the cephadm mgr module writes the host to host ls and to inventory but
+  never writes the per-host config-key entry, so the second condition stays False on
+  every retry and MaxWhileTries is raised from ceph_bootstrap:
+    Host add for <host> incomplete
+    Host in host ls: True
+    Host got config-key entry: False
+    Host in cephadm inventory config-key entry: True
+  Distinct from issue 75218, which times out in ceph_osds waiting for OSDs to deploy.
+examples:
+  - jayaprakash-2026-04-29_15:21:37-rados-wip-jaya-bs-testing-tentacle-29-04-2026-distro-default-trial/185886
+  - jayaprakash-2026-08-13_15:17:09-rados-wip-jaya-bs-testing-13-08-2026-distro-default-trial/465954
+  - yuriw-2026-07-22_00:55:43-rados-wip-yuri8-testing-20260721.164157-umbrella-distro-default-trial/384113

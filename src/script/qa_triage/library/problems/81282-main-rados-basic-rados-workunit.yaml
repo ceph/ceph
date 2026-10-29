@@ -1,0 +1,24 @@
+id: "81282"
+tracker: https://tracker.ceph.com/issues/81282
+title: "main: rados/basic/rados_workunit_loadgen_mix Wanted 2 disks of ~1700 GB (rotational=False), but only matched 1: ['nvme2n1']"
+kind: infra
+tree: infra/other
+facts:
+  task: '^ansible\.cephlab$'
+match:
+  reason: 'Wanted \d+ disks of'
+confirm:
+  - file: teuthology.log
+    pattern: 'AnsibleFailedError.*Wanted \d+ disks of .*but only matched \d+'
+  - file: teuthology.log
+    pattern: 'trial195'
+notes: |
+  The ansible.cephlab task (ceph-cm-ansible) sets up the NVMe disks of a test
+  machine and checks that it has the number of non-rotational disks of the size
+  it expects. When fewer disks match, for example only nvme2n1 instead of two
+  ~1700 GB devices on trial195, the playbook fails with "Wanted N disks of ~SIZE GB
+  (rotational=False), but only matched M: [...]" and teuthology raises
+  AnsibleFailedError. On trial195, the root drive had been replaced without
+  kernelDevice set in FOG, causing FOG to install the OS on the OSD drive.
+examples:
+  - skanta-2026-09-24_04:14:51-rados-wip-bharath20-testing-20260924.011348-main-distro-default-trial/577799

@@ -1,0 +1,24 @@
+run: skanta-2026-08-13_04:40:13-rados-wip-bharath8-testing-20260813.003211-main-distro-default-trial
+signatures:
+  ? 'cluster-log/message/laggy-socket-failures | WRN osd PG <pg> marked LAGGY; acting [#,#] | PG marked LAGGY: read lease expired under injected socket failures'
+  : '79576': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 2
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  timeout/unexplained | wait_until_healthy:
+    '77110': 1
+  'valgrind/InvalidRead | valgrind error: InvalidRead UnknownInlinedFun UnknownInlinedFun AsyncConnection::mark_down()':
+    '75133': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+titles:
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '75133': 'osd: Valgrind InvalidRead in AsyncConnection::mark_down() during MonClient destructor at shutdown'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '77106': nvme list json command failed, retrying...
+  '77110': 'rados/cephadm: wait_until_healthy times out due to CEPHADM_STRAY_DAEMON HEALTH_WARN'
+  '79576': 'rados/singleton: PG marked LAGGY during [osd-recovery| backfill-toofull | ec-esb-fio]  tests'

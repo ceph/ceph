@@ -1,0 +1,9 @@
+run: pdonnell-2026-08-26_21:30:54-upgrade-wip-pdonnell-testing-20260826.182613-umbrella-distro-default-trial
+signatures:
+  'hung/command | parallel: cephadm --image quay.ceph.io/ceph-ci/ceph:tentacle shell --fsid <uuid> -- ceph':
+    '75570': 1
+  'other/chacra-build-not-ready | chacra get_binary_url: cannot pull file, newest build not ready':
+    '80122': 1
+titles:
+  '75570': 'upgrade/stress-split: Thrasher fails to revive an OSD during upgrade test'
+  '80122': 'RuntimeError: cannot pull file with status: building'

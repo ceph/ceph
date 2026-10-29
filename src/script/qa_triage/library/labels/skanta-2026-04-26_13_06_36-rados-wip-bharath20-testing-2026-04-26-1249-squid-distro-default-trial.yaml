@@ -1,0 +1,10 @@
+run: skanta-2026-04-26_13:06:36-rados-wip-bharath20-testing-2026-04-26-1249-squid-distro-default-trial
+jobs:
+  '178964':
+    problem: '75695'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 3 jobs that the tool placed in no known problem in 75695, this one among them.
+    summary: 'wait_until_healthy timed out on persistent OSD_SLOW_PING_TIME_BACK/FRONT warnings (slow OSD heartbeats between trial022 and trial169): tracker 75695, which the tool did not match.'
+    status: fail
+    description: rados/cephadm/smoke/{0-distro/ubuntu_22.04 0-nvme-loop agent/off fixed-2 mon_election/classic start}
+    reason: timeout expired in wait_until_healthy

@@ -1,0 +1,26 @@
+id: "74524"
+tracker: https://tracker.ceph.com/issues/74524
+title: "standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: \"The primary PG X.X didn't become the in progress item on remote\""
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67295
+    branch: main
+    fixed_in: v20.3.0-5533-g157336f4d8
+tree: workunit/unexplained/backfill-prio-not-in-progress
+facts:
+  script: '^osd-backfill/osd-backfill-prio\.sh$'
+confirm:
+  - file: teuthology.log
+    pattern: "didn't become the in progress item"
+notes: |
+  In qa/standalone/osd-backfill/osd-backfill-prio.sh, TEST_backfill_pool_priority
+  creates 10MB objects across two pools, increases pool sizes from 1 to 2 to trigger
+  backfill, and queries dump_recovery_reservations via the OSD admin socket once
+  after a fixed 5-second sleep without polling. On faster or varied test hardware,
+  the small backfill dataset completes too quickly or reservations have not yet
+  begun when the single check runs, leaving in_progress[0].item as null.
+  PR #67295 fixed this timing race in the test by increasing object sizes from
+  10MB to 100MB to prolong backfill duration and adding a polling loop to wait
+  for recovery reservations to start before validating.
+examples:
+  - yuriw-2026-10-21_19:23:54-rados-wip-yuri14-testing-20261021.151926-tentacle-distro-default-trial/664947

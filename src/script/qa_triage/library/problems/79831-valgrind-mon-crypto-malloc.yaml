@@ -1,0 +1,30 @@
+id: "79831"
+tracker: https://tracker.ceph.com/issues/79831
+title: "Leak_StillReachable monitor valgrind error CRYPTO_malloc"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71606
+    branch: main
+tree: valgrind/Leak_StillReachable
+facts:
+  kind: '^Leak_StillReachable$'
+  frames: 'CRYPTO_malloc'
+match:
+  reason: 'valgrind error: Leak_StillReachable.*CRYPTO_malloc'
+confirm:
+  - file: remote/*/log/valgrind/mon.*.log.gz
+    pattern: '<fn>CRYPTO_malloc</fn>'
+  - file: remote/*/log/valgrind/mon.*.log.gz
+    pattern: '<fn>EVP_CIPHER_fetch</fn>'
+notes: |
+  The cause: commit 2a86ab29cf9 introduced CryptoAES256KRB5 which calls
+  EVP_CIPHER_fetch (via CRYPTO_malloc) from Crypto.cc during
+  AuthRegistry::AuthRegistry (AuthRegistry.cc:27) at monitor startup.
+  OpenSSL allocates cipher-fetch memory via CRYPTO_malloc that it never
+  explicitly frees at process exit; valgrind flags it as
+  Leak_StillReachable. The fix adds a suppression to qa/valgrind.supp
+  (PR #71606); no ceph product code change is needed.
+examples:
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631151
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631208
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631318

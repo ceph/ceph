@@ -1,0 +1,30 @@
+run: yuriw-2026-07-24_14:18:54-rados-wip-yuri15-testing-20260723.210930-umbrella-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_DB_LIST_FAILED:
+    '77250': 1
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '78780': 1
+  ? 'hung/command/ceph-daemon-config-set-hang | exec: sudo TESTDIR=/home/ubuntu/cephtest bash -c ''for f in # # # # ; do sudo ceph daemon osd.$f config set osd_recovery_sleep # ; sudo ceph daemon osd.$f config set osd_recovery_max_active # ; done'' | exec hung: ceph daemon config set on restarting OSD'
+  : '77743': 1
+  ? 'hung/command/dispatch-delay-queued-for-pg | rados: ceph --admin-daemon /var/run/ceph/ceph-osd.#.asok dump_ops_in_flight | rados hung: dispatch-delay ops queued for pg'
+  : '79024': 1
+  ? 'other/injected-leak-suppressed | expected valgrind issues and found none: injected leak hidden by the UnknownInlinedFun suppression'
+  : '76473': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+  ? 'workunit/unexplained/test-repos-release-file-missing | cephadm/test_repos.sh | test_repos.sh: download.ceph.com apt repo has no Release file'
+  : '77248': 1
+titles:
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '77248': 'rados/cephadm: The repository ''https://download.ceph.com/debian-quincy noble Release'' does not have a Release file. '
+  '77250': 'rados/mgr: Failed to list/create InfluxDB database (MGR_INFLUX_DB_LIST_FAILED)'
+  '77743': Radosbench test times out
+  '78780': 'Dead: rados/cephadm: ceph cephadm osd activate fails to reactivate OSD, teuthology hangs'
+  '79024': rados/thrash/pool-snaps-few-objects - slow op stuck "queued for pg" during morepggrow peering storm with pool_snaps

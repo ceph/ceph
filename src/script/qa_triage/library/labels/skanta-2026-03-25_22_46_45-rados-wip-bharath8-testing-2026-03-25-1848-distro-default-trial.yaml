@@ -1,0 +1,82 @@
+run: skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial
+jobs:
+  '122165':
+    problem: '74517'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 11 jobs in 74517, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122184, skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127710, skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127730, skanta-2026-04-09_03:57:47-rados-wip-bharath16-testing-2026-04-08-1405-distro-default-trial/141119, skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143033.'
+    summary: 'post-file.sh failed because ceph-post-file could not ssh to drop.ceph.com (unreachable since the lab migration, tracker #74517); the tool left it as new/unsure because no record or node knew it.'
+    status: fail
+    description: rados/singleton-nomsgr/{all/ceph-post-file mon_election/connectivity rados supported-random-distro$/{ubuntu_latest}}
+    reason: 'Command failed (workunit test post-file.sh) on trial055 with status 255: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=65048e6102d3c68d0193d06ecddcda822ac7d743 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/post-file.sh'''
+  '122168':
+    problem: '75430'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 6 jobs in 75430, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122175, skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122189, skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127713, skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127719, skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127735.'
+    summary: Valgrind detected a Leak_StillReachable in RocksDB error_handler static initialization (tracker 75430).
+    status: fail
+    description: rados/verify/{ceph clusters/fixed-4 d-thrash/none mon_election/connectivity msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{hybrid} base mem$/{normal-1} onode-segment$/{none} write$/{v1/{compr$/{no$/{no}} v1}}}} rados read-affinity/balance rpm_latest tasks/rados_api_tests validater/valgrind}
+    reason: 'valgrind error: Leak_StillReachable operator new[](unsigned long) UnknownInlinedFun _GLOBAL__sub_I_error_handler.cc.lto_priv.0'
+  '122169':
+    problem: '75764'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 33 jobs in 75764, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122173, skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122181, skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122188, skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122197, skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127714.'
+    summary: '`ceph orch osd rm status` threw ''cannot pickle CephadmOrchestrator'' in the mgr, so the test zapped a device osd.1 still held (tracker 75764); no record covered it.'
+    status: fail
+    description: rados/cephadm/osds/{0-distro/rocky_10 0-nvme-loop 1-start 2-ops/rm-zap-add}
+    reason: 'Command failed on trial130 with status 22: ''sudo /home/ubuntu/cephtest/cephadm --image quay.ceph.io/ceph-ci/ceph:65048e6102d3c68d0193d06ecddcda822ac7d743 shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring --fsid 5756ae35-289d-11f1-8444-d404e6e7d460 -- bash -c \''set -e\nset -x\nceph orch ps\nceph orch device ls\nDEVID=$(ceph device ls | grep osd.1 | awk \''"\''"\''{print $1}\''"\''"\'')\nHOST=$(ceph orch device ls | grep $DEVID | awk \''"\''"\''{print $1}\''"\''"\'')\nDEV=$(ceph orch device ls | grep $DEVID | awk \''"\''"\''{print $2}\''"\''"\'')\necho "host $HOST, dev $DEV, devid $DEVID"\nceph orch osd rm 1\nwhile ceph orch osd rm status | grep ^1 ; do sleep 5 ; done\nceph orch device zap $HOST $DEV --force\nceph orch daemon add osd $HOST:$DEV\nwhile ! ceph osd dump | grep osd.1 | grep up ; do sleep 5 ; done\n\'''''
+  '122177':
+    problem: '75406'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 8 jobs in 75406, this one among them, and no record names it yet: the tool placed them in 74004, 74794. A record for it should place them all; others are skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127722, skanta-2026-04-09_03:57:47-rados-wip-bharath16-testing-2026-04-08-1405-distro-default-trial/141099, skanta-2026-04-09_03:57:47-rados-wip-bharath16-testing-2026-04-08-1405-distro-default-trial/141109, skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143049, skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148500.'
+    summary: Job is 75406 (is_pg_clean ceph pg query hangs without a timeout after the OSD is killed, after the 74004 fix is applied); create a 75406 record and add an exclude to 74004 for the WAIT_FOR_CLEAN_TIMEOUT=10 case.
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{rpm_latest} workloads/misc}
+    reason: 'Command failed (workunit test misc/test-ceph-helpers.sh) on trial052 with status 124: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=65048e6102d3c68d0193d06ecddcda822ac7d743 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/misc/test-ceph-helpers.sh'''
+  '122185':
+    problem: '76472'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 20 jobs in 74827, this one among them, and no record names it yet: the tool placed them in 76472, 79943. A record for it should place them all; others are skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127731, skanta-2026-04-09_03:57:47-rados-wip-bharath16-testing-2026-04-08-1405-distro-default-trial/141121, skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143062, skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148561, skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/166084.'
+    summary: Tool correctly identified the nvmeof_beacon_diff TEST_mon_features failure, but record 76472 lacks also:74827, so the tool placed jobs in 76472 while people filed them in 74827 (the original issue of which 76472 is a copy).
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{ubuntu_latest} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial108 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=65048e6102d3c68d0193d06ecddcda822ac7d743 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''
+  '122190':
+    problem: '77130'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 10 jobs in 77130, this one among them, and no record names it yet: the tool placed them in 77248, no known problem. A record for it should place them all; others are skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127736, skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143067, skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148580, skanta-2026-05-07_14:11:34-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial/197896, skanta-2026-05-12_11:16:42-rados-wip-bharath18-testing-2026-05-12-0450-distro-default-trial/208778.'
+    summary: cephadm/test_repos.sh runs `add-repo --release 17.2.6`, but debian-17.2.6 has no jammy suite, so apt-get update 404s on Ubuntu 22.04 (tracker 77130); no record covered it.
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_22.04 agent/on mon_election/connectivity task/test_cephadm_repos}
+    reason: 'Command failed (workunit test cephadm/test_repos.sh) on trial163 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=65048e6102d3c68d0193d06ecddcda822ac7d743 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_repos.sh'''
+  '122162':
+    problem: '75414'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 7 jobs in 75414, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122180, skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127725, skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148384, skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/166056, skanta-2026-05-26_00:44:20-rados-wip-bharath17-testing-2026-05-25-1331-distro-default-trial/237379.'
+    summary: 'The job failed on the bare ''Health detail: HEALTH_WARN 2 pool(s) full'' line, which the upgrade suites'' log-ignorelist does not cover (tracker #75414). The tool called it new, but a record should claim it.'
+    status: fail
+    description: rados/upgrade/parallel/{0-random-distro$/{centos_9.stream_runc} 0-start 1-tasks mon_election/classic overrides/ignorelist_health upgrade-sequence workload/{ec-rados-default rados_api rados_loadgenbig rbd_import_export test_rbd_api test_rbd_python}}
+    reason: '"2026-03-25T23:50:00.000081+0000 mon.a (mon.0) 3139 : cluster [WRN] Health detail: HEALTH_WARN 2 pool(s) full" in cluster log'
+  '122164':
+    problem: '74332'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 17 jobs in 74332, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122166, skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122174, skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122183, skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122192, skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127709.'
+    summary: ceph-kvstore-tool segfaults in BlueStore::umount() > _close_db() > RocksDBStore::get_wholespace_iterator in test_kvstore_tool.sh (tracker 74332); the tool left it unplaced, so I added a record, now with its fix, and a tree node.
+    status: fail
+    description: rados/singleton-nomsgr/{all/ceph-kvstore-tool mon_election/classic rados supported-random-distro$/{ubuntu_latest}}
+    reason: 'Command failed (workunit test cephtool/test_kvstore_tool.sh) on trial020 with status 139: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=65048e6102d3c68d0193d06ecddcda822ac7d743 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephtool/test_kvstore_tool.sh'''
+  '122186':
+    problem: '75211'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 75211, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: 'osd.4 hit FAILED ceph_assert(is_primary()) in PrimaryLogPG::on_local_recover during EC recovery push (ec_optimizations on): known bug #75211, which had no record.'
+    status: fail
+    description: rados/thrash-erasure-code-big/{ceph cluster/{12-osds} ec_optimizations/ec_optimizations_on mon_election/classic msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{stupid} base mem$/{low} onode-segment$/{512K-onoff} write$/{random/{compr$/{yes$/{zlib}} random}}}} rados recovery-overrides/{more-async-recovery} supported-random-distro$/{rpm_latest} thrashers/fastread thrashosds-health workloads/ec-rados-plugin=jerasure-k=4-m=2}
+    reason: The WatchDog barked due to Daemon ceph.osd.4 has failed
+  '122172':
+    problem: '79024'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 1 jobs that the tool placed in 79024 in 68960, this one among them.
+    summary: Tool correctly placed job in 79024; add 68960 to 79024's also list as the same root cause with a different failure mode
+    status: dead
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{more-async-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-5} backoff/normal ceph clusters/{fixed-4} crc-failures/default d-balancer/crush-compat mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{hybrid} base mem$/{normal-2} onode-segment$/{1M} write$/{random/{compr$/{yes$/{zstd}} random}}}} rados supported-random-distro$/{rpm_latest} thrashers/morepggrow thrashosds-health workloads/pool-snaps-few-objects}
+    reason: hit max job timeout

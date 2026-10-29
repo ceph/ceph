@@ -1,0 +1,39 @@
+run: skanta-2026-09-16_04:01:33-rados-wip-bharath19-testing-20260915.234926-main-distro-default-trial
+signatures:
+  cluster-log/message | WRN osd PG <pg> marked LAGGY; acting [#,#,#]:
+    '79576': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+  ? crash/abort/specific | osd osd/ReplicatedBackend.cc ceph_abort_msg("Out of space (failsafe) processing push request") in void ReplicatedBackend::_do_push(OpRequestRef)
+  : '80415': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  ? 'infra/other/nvme-cli-host-identity | nvme_loop: Command failed on <host> with status #: ''sudo nvme connect -t loop -n lv_#'' | nvme_loop: nvme connect: Failed to write to /dev/nvme-fabrics'
+  : '71816': 5
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '74794': 1
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 3
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '79943': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '71816': 'Failed to write to /dev/nvme-fabrics: Invalid argument'
+  '74794': ' rados/thrash -  The WatchDog barked due to Thrasher ceph.osd.9 threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '79576': 'rados/singleton: PG marked LAGGY during [osd-recovery| backfill-toofull | ec-esb-fio]  tests'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '79943': qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of "cephx_auth_aes256k"
+  '79946': After rebuilding the mondb, authentication starts failing
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'
+  '80415': 'src/osd/ReplicatedBackend.cc: ceph_abort_msg("Out of space (failsafe) processing push request")'

@@ -1,0 +1,55 @@
+run: skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial
+signatures:
+  'cluster-log/message | ERR osd <pg> #:#:::benchmark_data_trial#_#_object#:headdata digests are inconsistent':
+    '72945': 1
+  'cluster-log/message | ERR osd <pg> #:<sha>:::<host>-#:#data digests are inconsistent':
+    '72945': 2
+  'cluster-log/message | ERR osd <pg> #:<sha>:::<host>-#:#ddata digests are inconsistent':
+    '72945': 1
+  'cluster-log/message | ERR osd <pg> #:<sha>:::<host>-#:#edata digests are inconsistent':
+    '72945': 1
+  'cluster-log/message | ERR osd <pg> #:<sha>:::<host>-#:bdata digests are inconsistent':
+    '72945': 1
+  'cluster-log/message | ERR osd <pg> #:<sha>:::<host>-#:headdata digests are inconsistent':
+    '72945': 3
+  'command/unexplained | yes | mkfs.xfs -f -i size=# /dev/vg_nvme/lv_#: #':
+    '68668': 2
+  ? 'command/unexplained/prometheus-module-inactive | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | prometheus module inactive: CephMgrPrometheusModuleInactive is firing'
+  : '74148': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 7
+  other | <fail with no reason>:
+    '71005': 1
+  ? 'test/unittest | tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam: ConnectionRefusedError: [Errno #] Connection refused'
+  : '69954': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '69954': 1
+    '70669': 1
+  'timeout/slow-ops | snap_trimming: slow ops':
+    '68960': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  workunit/unexplained | mon/availability.sh:
+    '74178': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 2
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | test_readable.py: ceph-dencoder subprocess error'
+  : '74074': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '70669': 2
+titles:
+  '68668': 'rados/dashboard: mkfs.xfs: cannot open /dev/vg_nvme/lv_2: Device or resource busy'
+  '68960': 'ec-pool-snaps-few-objects-overwrites: failed to complete snap trimming before timeout'
+  '69954': 'test_selftest_command_spam: ConnectionRefusedError: [Errno 111] Connection refused'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '72945': Data digests are inconsistent during scrubbing
+  '74074': ceph-dencoder - failed with 20.3 corpus repo
+  '74148': Prometheus module experiences connection issues related to cherrypy
+  '74178': 'qa/standalone/mon/availability.sh: line 64: Syntax error due to missing availability status'
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)

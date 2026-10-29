@@ -1,0 +1,42 @@
+id: "80986"
+tracker: https://tracker.ceph.com/issues/80986
+title: "LibRadosIoECPP test failure: Perf counter 'objecter.op_reply' has incorrect value after operate()"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72234
+    branch: main
+    fixed_in: v21.3.0-4449-g05a7656731
+tree: workunit/gtest/shard-bounced-direct-read
+match:
+  reason: 'workunit test rados/test\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: '\[  FAILED  \] LibRadosIoECPPParamCombination/LibRadosIoECPP\.'
+  - file: teuthology.log
+    pattern: "Perf counter 'objecter\\.op_reply' has incorrect value"
+notes: |
+  A race in the test, not a regression in the code (tracker #80986, PR 72234). The
+  test writes an object and immediately reads it back with a split (EC direct) read.
+  The primary tells the client the write is done at the same time as it sends the
+  other shards the roll-forward, so a sub-read can reach a shard first. That shard
+  still has an unstable write, logs "unstable write on shard, bouncing to primary"
+  (only at debug osd 20) and returns -EAGAIN, and the Objecter re-reads the whole
+  object through the primary: one more objecter.op_reply than the test expects (3
+  instead of 2). With debug ms 1 the bounce shows in the OSD log as
+  "osd_op_reply(N zero_trunc_8k [read ...,get-internal-versions] ... = -11 ((11)
+  Resource temporarily unavailable))".
+  The failed workunit, the gtest FAILED line and the perf counter message are
+  symptoms. The cause is the OSD's bounce. The record hangs at the path the learned
+  node at workunit/gtest gives only when it finds the bounce (either log line), so a
+  job with the same symptoms but no bounce is not claimed here: the same extra
+  op_reply also comes from injected socket failures (rados/basic msgr-failures/many
+  with a rados/test.sh run without --external-error-inject), which is 78294. A job
+  can have the injection configured and still be this problem, when a shard bounced
+  the read.
+  PR 72234 fixes the test: it flushes the write through (ensure_log_committed)
+  before issuing the direct reads. The fix is not in builds before
+  v21.3.0-4449-g05a7656731.
+examples:
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631086
+  - rkachach-2026-09-24_08:15:57-orch:cephadm-wip-rkachach-testing-2-2026-09-23-2352-distro-default-trial/579039
+  - skanta-2026-09-30_04:36:41-rados-wip-bharath14-testing-20260930.003013-main-distro-default-trial/593594

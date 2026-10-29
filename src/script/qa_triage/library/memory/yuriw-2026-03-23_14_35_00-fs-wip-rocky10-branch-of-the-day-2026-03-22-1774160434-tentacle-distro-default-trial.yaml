@@ -1,0 +1,6 @@
+run: yuriw-2026-03-23_14:35:00-fs-wip-rocky10-branch-of-the-day-2026-03-22-1774160434-tentacle-distro-default-trial
+signatures:
+  crash/signal/no-backtrace | mon Segmentation fault in ? | no backtrace:
+    '75738': 1
+titles:
+  '75738': ceph-mon segfault (probably during shutdown)

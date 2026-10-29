@@ -1,0 +1,48 @@
+run: yuriw-2026-01-27_16:01:09-rados-reef-release-distro-default-trial
+signatures:
+  cluster-log/health | WRN CEPHADM_STRAY_DAEMON:
+    '64872': 1
+  cluster-log/health | WRN POOL_APP_NOT_ENABLED:
+    '63192': 1
+  ? 'cluster-log/message | WRN mon Health detail: HEALTH_WARN noscrub,nodeep-scrub flag(s) set; Degraded data redundancy: #/# objects degraded (<pg>%), # pgs degraded'
+  : '65824': 1
+  ? 'cluster-log/other/cephadm-pull-manifest-unknown | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: reading manifest in quay.ceph.io/ceph-ci/ceph: manifest unknown'
+  : '76028': 1
+  ? 'command/error | ceph_test_cls_rbd --gtest_filter=-TestClsRbd.get_features:TestClsRbd.parents:TestClsRbd.mirror: Error response from daemon: cannot kill container: ceph-<uuid>-osd.#: No such container: ceph-<uuid>-osd.#'
+  : '66504': 1
+  'command/unexplained | yes | mkfs.xfs -f -i size=# -f /dev/vg_nvme/lv_#: #':
+    '68668': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 1
+  other | <fail with no reason>:
+    '71005': 1
+  'other/saw-valgrind-issues | saw valgrind issues: Leak_StillReachable':
+    '74566': 1
+  ? 'test/unittest | tasks.stretch_mode_disable_enable.TestStretchMode.test_disable_stretch_mode: AttributeError: ''CephManager'' object has no attribute ''get_mon_quorum_names''. Did you mean: ''get_mon_quorum''?'
+  : '73944': 1
+  ? 'workunit/set-e/test-repos-add-repo-shaman-http-error | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --dev main: Traceback (most recent call last): | test_repos.sh: shaman.ceph.com HTTP error'
+  : '58224': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  workunit/unexplained | mon/mkfs.sh:
+    '63784': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 1
+titles:
+  '58224': 'cephadm/test_repos.sh: urllib.error.HTTPError: HTTP Error 504: Gateway Timeout'
+  '63192': Fix the POOL_APP_NOT_ENABLED warning to only be generated after the new pool has no application for some amount of time
+  '63784': 'qa/standalone/mon/mkfs.sh:''mkfs/a'' already exists and is not empty: monitor may already exist'
+  '64872': 'rados/cephadm: Health check failed: 1 stray daemon(s) not managed by cephadm (CEPHADM_STRAY_DAEMON) in cluster log'
+  '65824': 'rados/thrash-old-clients: cluster [WRN] Health detail: HEALTH_WARN noscrub flag(s) set" in cluster log'
+  '66504': 'rados/thrash-old-clients: TestClsRbd.mirror_snapshot fails'
+  '68668': 'rados/dashboard: mkfs.xfs: cannot open /dev/vg_nvme/lv_2: Device or resource busy'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '73944': 'AttributeError: ''CephManager'' object has no attribute ''get_mon_quorum_names'''
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74566': Leak_StillReachable monitor valgrind error in glibc
+  '76028': 'squid: upgrade jobs fail from missing untagged versions of reef and quincy'

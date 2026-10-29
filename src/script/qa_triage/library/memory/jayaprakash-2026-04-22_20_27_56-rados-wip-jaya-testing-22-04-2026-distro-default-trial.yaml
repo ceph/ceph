@@ -1,0 +1,15 @@
+run: jayaprakash-2026-04-22_20:27:56-rados-wip-jaya-testing-22-04-2026-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/osd_types.h FAILED ceph_assert(it->second == oid) in void pg_missing_set<TrackChanges>::add(const hobject_t&, eversion_t, eversion_t, bool) [with bool TrackChanges = false]
+  : '75778': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+titles:
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75778': 'osd/osd_types.h: 5250: FAILED ceph_assert(it->second == oid)'
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'

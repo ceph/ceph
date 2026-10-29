@@ -1,0 +1,10 @@
+run: pdonnell-2026-10-18_19:36:29-rados-wip-pdonnell-testing-20261008.145657-main-distro-default-trial
+jobs:
+  '653971':
+    problem: null
+    by: aainscow
+    why: 'Record 74774 hangs at tree ''infra'' with no facts, so it nearly fits every failure of the test infrastructure: this build failure, and about 160 others in this run, lost their certainty when it was added. Narrow 74774 to the failures it describes.'
+    summary: Build not on shaman (VersionNotFoundError in internal.check_packages); record 74774 was too broad and made the 'new' verdict unsure.
+    status: fail
+    description: rados/thrash-erasure-code/{ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on fast/normal mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{bitmap} base mem$/{normal-2} onode-segment$/{none} write$/{v2/{compr$/{no$/{no}} v2}}}} rados recovery-overrides/{more-async-partial-recovery} supported-random-distro/{ubuntu_24.04} thrashers/fastread thrashosds-health workloads/ec-small-objects-many-deletes}
+    reason: Failed to fetch package version from https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=default&distros=ubuntu%2F24.04%2Fx86_64&ref=wip-pdonnell-testing-20261008.145657-main

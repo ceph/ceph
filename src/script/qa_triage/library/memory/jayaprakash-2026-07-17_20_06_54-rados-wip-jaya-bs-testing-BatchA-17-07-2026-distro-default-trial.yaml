@@ -1,0 +1,6 @@
+run: jayaprakash-2026-07-17_20:06:54-rados-wip-jaya-bs-testing-BatchA-17-07-2026-distro-default-trial
+signatures:
+  'infra/other | ansible.cephlab: ["Wanted # disks of ~# GB (rotational=False), but only matched #: [''nvme#n#'']"]':
+    '78379': 1
+titles:
+  '78379': 'trial062: NVMe RMA'

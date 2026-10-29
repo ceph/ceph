@@ -1,0 +1,82 @@
+run: skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial
+jobs:
+  '631199':
+    problem: '81136'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-81136.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: Verdict duplicate 81136 is correct; record notes need updating to reflect the root cause confirmed by PR 72711.
+    status: fail
+    description: rados/singleton/{all/stretch-mode-5-mons-8-osds mon_election/connectivity msgr-failures/many msgr/async-v2only objectstore/{bluestore/{alloc$/{avl} base mem$/{normal-2} onode-segment$/{512K-onoff} write$/{random/{compr$/{yes$/{zlib}} random}}}} rados supported-random-distro/{rocky_10}}
+    reason: 'Command failed (workunit test mon/mon-stretch-mode-5-mons-8-osds.sh) on trial188 with status 22: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=f64c8d74724c3bad3c8220c4313baf8b590afbb9 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/mon/mon-stretch-mode-5-mons-8-osds.sh'''
+  '631182':
+    problem: '59079'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-59079.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: Record confirm checks show only the symptom and the test trigger, not the cause; adding an OSD-log confirm check for fbmap_alloc shutdown and a node at timeout/admin-socket naming the osd-init-deadlock.
+    status: fail
+    description: rados/singleton/{all/recovery-preemption mon_election/connectivity msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{bitmap} base mem$/{normal-1} onode-segment$/{512K-onoff} write$/{v2/{compr$/{yes$/{snappy}} v2}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: timeout expired in wait_for_all_osds_up
+  '631238':
+    problem: '81135'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 81135, but the tool said new (explain -> prefilter -> confirm -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said duplicate 81135. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 81135 by itself, with no judge.
+    summary: ceph_test_rados aborts in WriteOp::_finish with -110 (ETIMEDOUT) due to rados_osd_op_timeout in thrashing EC suite (tracker 81135)
+    status: fail
+    description: rados/thrash-erasure-code/{ceph clusters/fixed-4 erasure-code/{ec_optimizations/on/{on profile/jerasure-k=2-m=1} fast/fast} mon_election/classic msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{bitmap} base mem$/{normal-1} onode-segment$/{256K} write$/{v1/{compr$/{yes$/{zstd}} v1}}}} rados recovery-overrides/{default} supported-random-distro/{rocky_10} thrashers/morepggrow thrashosds-health workloads/rados-snaps-overwrites}
+    reason: 'Command failed on trial172 with status 1: ''CEPH_CLIENT_ID=0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage daemon-helper kill ceph_test_rados --max-ops 4000 --objects 50 --max-in-flight 16 --size 4000000 --min-stride-size 400000 --max-stride-size 800000 --max-seconds 0 --op read 100 --op write 50 --op delete 50 --op snap_create 50 --op snap_remove 50 --op rollback 50 --op copy_from 50 --op write_excl 50 --pool unique_pool_0'''
+  '631204':
+    problem: '76470'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-76470.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: rados/test_crash.sh failed because ceph-crash did not fallback to client.admin when client.crash.<host> failed without a keyring, leaving induced crashes unposted.
+    status: fail
+    description: rados/singleton/{all/test-crash mon_election/classic msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{bitmap} base mem$/{normal-2} onode-segment$/{none} write$/{random/{compr$/{yes$/{zstd}} random}}}} rados supported-random-distro/{rocky_10}}
+    reason: 'Command failed (workunit test rados/test_crash.sh) on trial004 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=f64c8d74724c3bad3c8220c4313baf8b590afbb9 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/test_crash.sh'''
+  '631307':
+    problem: '79443'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-79443.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: 'Duplicate of 79443 is right: ec-esb-fio raised BLOCK_DEVICE_DISCARD_QUEUE because an OSD''s discard queue overloaded and the test''s log-ignorelist does not cover it; record and tree now name that cause.'
+    status: fail
+    description: rados/singleton/{all/ec-esb-fio mon_election/connectivity msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{none} write$/{v2/{compr$/{no$/{no}} v2}}}} rados supported-random-distro/{rocky_10}}
+    reason: '"2026-10-13T05:16:44.538091+0000 mon.a (mon.0) 455 : cluster [WRN] Health check failed: 1 OSD(s) experiencing slow discard operations (BLOCK_DEVICE_DISCARD_QUEUE)" in cluster log'
+  '631151':
+    problem: '79831'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-79831.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: 'Correct duplicate of #79831, but record lacks tree/facts, notes miss the EVP_CIPHER_fetch root cause, confirm is too loose; a node at valgrind/Leak_StillReachable teaches the tree the cause.'
+    status: fail
+    description: rados/verify/{ceph clusters/fixed-4 d-thrash/none mon_election/connectivity msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-2} onode-segment$/{1M} write$/{v1/{compr$/{yes$/{lz4}} v1}}}} rados read-affinity/balance rpm_latest tasks/rados_api_tests validater/valgrind}
+    reason: 'valgrind error: Leak_StillReachable malloc CRYPTO_malloc'
+  '631306':
+    problem: '79948'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-79948.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: Right record, but it only checked the symptom; the cause is a reef ceph-authtool unable to read the aes256k (type-2) client.admin key in /etc/ceph/ceph.keyring.
+    status: fail
+    description: rados/thrash-old-clients/{0-distro$/{centos_9.stream} 0-size-min-size-overrides/2-size-2-min-size 1-install/reef backoff/peering_and_degraded ceph clusters/{three-plus-one} d-balancer/crush-compat mon_election/connectivity msgr-failures/few rados thrashers/careful thrashosds-health workloads/rbd_cls}
+    reason: 'Command failed on trial153 with status 1: ''sudo ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.2.keyring'''
+  '631299':
+    problem: '80756'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-80756.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: 'Correctly matched to 80756: `ceph ping mon.a` in mon-bind.sh TEST_mon_client_connect fails with ENOENT. The tracker has no confirmed cause and no fix, so the record needs no change.'
+    status: fail
+    description: rados/standalone/{supported-random-distro/{ubuntu_24.04} workloads/mon}
+    reason: 'Command failed (workunit test mon/mon-bind.sh) on trial152 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=f64c8d74724c3bad3c8220c4313baf8b590afbb9 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/mon-bind.sh'''
+  '631086':
+    problem: '80986'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-80986.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: 'Right: the job is a duplicate of 80986, a race in the LibRadosIoECPP test. The OSD bounce line is no longer a confirm check, because job 593594 has the same failure without it. The tree node now finds the cause where the line exists.'
+    status: fail
+    description: rados/basic/{ceph clusters/{fixed-2} mon_election/connectivity msgr-failures/many msgr/async-v1only objectstore/{bluestore/{alloc$/{bitmap} base mem$/{low} onode-segment$/{512K-onoff} write$/{v2/{compr$/{no$/{no}} v2}}}} rados supported-random-distro/{rocky_10} tasks/rados_api_tests}
+    reason: 'Command failed (workunit test rados/test.sh) on trial106 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=f64c8d74724c3bad3c8220c4313baf8b590afbb9 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/test.sh'''
+  '631092':
+    problem: '81857'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-81857.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: 'Right record, but its confirm checks found only the symptom: it now confirms the cause (config reset deletes the mgr ssl_server_port keys, so the dashboard falls back to 8443), and the tree learns that cause.'
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/classic random-objectstore$/{bluestore-low-osd-mem-target} tasks/dashboard}
+    reason: 'Test failure: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module)'

@@ -1,0 +1,10 @@
+run: skanta-2026-10-17_23:23:20-rados-wip-bharath4-testing-20261016.224944-main-distro-default-trial
+jobs:
+  '650737':
+    problem: '82182'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 82182, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: test_disable_stretch_mode fails because disable_stretch_mode returns EINVAL on Paxos replay; record for tracker 82182 added with node at test/unittest/disable-stretch-mode-replay
+    status: fail
+    description: rados/singleton/{all/stretch-mode-5-mons-8-osds mon_election/connectivity msgr-failures/many msgr/async-v2only objectstore/{bluestore/{alloc$/{bitmap} base mem$/{normal-2} onode-segment$/{512K-onoff} write$/{v2/{compr$/{no$/{no}} v2}}}} rados supported-random-distro/{rocky_10}}
+    reason: 'Test failure: test_disable_stretch_mode (tasks.stretch_mode_disable_enable.TestStretchMode.test_disable_stretch_mode)'

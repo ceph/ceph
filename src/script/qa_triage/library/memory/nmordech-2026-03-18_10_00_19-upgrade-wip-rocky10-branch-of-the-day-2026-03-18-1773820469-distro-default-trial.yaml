@@ -1,0 +1,15 @@
+run: nmordech-2026-03-18_10:00:19-upgrade-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial
+signatures:
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '65728': 1
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN # pool(s) full':
+    '75414': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:reef shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error EINVAL: invalid command'
+  : '75440': 1
+  'hung/command | parallel: cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell --fsid <uuid> -- ceph':
+    '75570': 3
+titles:
+  '65728': Daemon managed by cephadm in an unknown state (CEPHADM_FAILED_DAEMON)
+  '75414': 'upgrade: pool full warning variation'
+  '75440': Upgrade test fails when cephadm tries to add an OSD with "--objectstore bluestore" setting
+  '75570': 'upgrade/stress-split: Thrasher fails to revive an OSD during upgrade test'

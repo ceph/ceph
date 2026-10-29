@@ -1,0 +1,6 @@
+run: jcollin-2026-03-05_14:28:01-fs-wip-jcollin-testing-20260305.104944-tentacle-distro-default-trial
+signatures:
+  'cluster-log/message | WRN mon [WRN] OSD_SLOW_PING_TIME_BACK: Slow OSD heartbeats on back (longest #.#ms)':
+    '75695': 1
+titles:
+  '75695': 'cluster [WRN] [WRN] OSD_SLOW_PING_TIME_BACK: Slow OSD heartbeats on back (longest 1313.681ms)" in cluster log'

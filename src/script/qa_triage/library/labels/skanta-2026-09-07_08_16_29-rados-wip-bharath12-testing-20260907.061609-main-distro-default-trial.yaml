@@ -1,0 +1,18 @@
+run: skanta-2026-09-07_08:16:29-rados-wip-bharath12-testing-20260907.061609-main-distro-default-trial
+jobs:
+  '541954':
+    problem: '79024'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 1 jobs that the tool placed in no known problem in 79024, this one among them.
+    summary: Record 79024 missed this job because the last command at kill time was dump_blocked_ops instead of dump_ops_in_flight; broaden the record's facts and node to match either command.
+    status: dead
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{more-async-partial-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-5} backoff/normal ceph clusters/{fixed-4} crc-failures/default d-balancer/crush-compat mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-1} onode-segment$/{1M} write$/{v2/{compr$/{yes$/{zlib}} v2}}}} rados supported-random-distro/{ubuntu_24.04} thrashers/morepggrow thrashosds-health workloads/pool-snaps-few-objects}
+    reason: hit max job timeout
+  '542066':
+    problem: '79943'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'misc.sh:292 checks persistent features length == 14 with cephx_auth_aes256k present: 79943, as Laura Flores wrote on 74827 (comment 76); 74827 is the earlier nvmeof_beacon_diff count'
+    summary: duplicate 79943 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/standalone/{supported-random-distro/{rocky_10} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial010 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=8db90f59a07dd97960ed4624e61ae7b122acc732 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''

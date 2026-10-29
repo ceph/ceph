@@ -1,0 +1,6 @@
+run: skanta-2026-02-07_05:16:09-rados-wip-bharath5-testing-2026-02-06-2052-distro-default-trial
+signatures:
+  ? 'cluster-log/message | ERR osd osd.#(#) found snap mapper error on pg <pg> oid #:<sha>:::<host>-#:# snaps missing in mapper, should be: {#e, #} ...repaired'
+  : '75007': 1
+titles:
+  '75007': rados/thrash-erasure-code ec_optimizations_off osd.2(0) found snap mapper error on pg 3.36s0 oid 3:6cc032a5:::trial18728466-404:30

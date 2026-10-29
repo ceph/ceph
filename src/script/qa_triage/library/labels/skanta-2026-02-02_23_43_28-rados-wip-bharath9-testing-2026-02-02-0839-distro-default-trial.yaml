@@ -1,0 +1,10 @@
+run: skanta-2026-02-02_23:43:28-rados-wip-bharath9-testing-2026-02-02-0839-distro-default-trial
+jobs:
+  '30415':
+    problem: '69954'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 74199, this one among them, and no record names it yet: the tool placed them in 69954. A record for it should place them all; others are yaarit-2026-03-04_01:34:54-rados:mgr-wip-rocky10-branch-of-the-day-2026-03-03-1772543694-tentacle-distro-default-trial/80255, yaarit-2026-03-05_03:07:52-rados-wip-rocky10-branch-of-the-day-2026-03-04-1772624857-tentacle-distro-default-trial/86691, yuriw-2026-03-09_21:03:52-rados-wip-rocky10-branch-of-the-day-2026-03-09-1773079353-tentacle-distro-default-trial/96666.'
+    summary: Record 69954 is the right match, but lacks 74199 (and its parent 74268) in its `also` field; adding them lets the tool agree with the 4 jobs people placed in 74199.
+    status: fail
+    description: rados/mgr/{clusters/{2-node-mgr} debug/mgr distro/{ubuntu_latest} mgr_ttl_cache/enable mon_election/connectivity random-objectstore$/{bluestore/{alloc$/{bitmap} base mem$/{normal-1} onode-segment$/{none} write$/{random/{compr$/{yes$/{snappy}} random}}}} tasks/{1-install 2-ceph 3-mgrmodules 4-units/module_selftest}}
+    reason: 'Test failure: test_selftest_command_spam (tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam)'

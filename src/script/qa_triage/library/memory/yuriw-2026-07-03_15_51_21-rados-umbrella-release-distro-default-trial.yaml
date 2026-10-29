@@ -1,0 +1,12 @@
+run: yuriw-2026-07-03_15:51:21-rados-umbrella-release-distro-default-trial
+signatures:
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '62972': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+titles:
+  '62972': 'ERROR: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest)'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '77106': nvme list json command failed, retrying...

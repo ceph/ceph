@@ -1,0 +1,25 @@
+id: "77459"
+tracker: https://tracker.ceph.com/issues/77459
+title: "rados/thrash-erasure-code: tests failing with not ready to merge warning"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69544
+    branch: main
+    fixed_in: v21.3.0-928-gfbeb1d4e54
+tree: cluster-log/message
+facts:
+  message: 'not ready to merge; backing off pg_num decrease'
+  reporter: '^mon\.'
+confirm:
+  - file: remote/*/log/ceph.log.gz
+    pattern: 'not ready to merge; backing off pg_num decrease'
+notes: |
+  The mon's OSDMonitor::prepare_pg_ready_to_merge() emits a [WRN] when an OSD
+  reports that a PG is not yet ready for merging, to back off a pg_num
+  decrease. This warning was introduced for Crimson/seastore pool merges but
+  was not gated on crimson-only pools, so it fires for classic EC pools too
+  whenever the thrashosds task decreases pg_num and an OSD hasn't caught up
+  yet. The cluster log check in the thrash task treats any un-ignored [WRN] as
+  a failure. Fixed by PR #69544 which adds the crimson-pool guard.
+examples:
+  - skanta-2026-07-12_15:01:05-rados-wip-bharath4-testing-2026-07-09-1342-distro-default-trial/358458

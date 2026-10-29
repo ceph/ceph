@@ -1,0 +1,6 @@
+run: yuriw-2026-07-03_15:58:25-powercycle-umbrella-release-distro-default-trial
+signatures:
+  workunit/gtest | rados/test.sh LibRadosIoECPPParamCombination/LibRadosIoECPP.ReadOpPP/#,:
+    '78294': 1
+titles:
+  '78294': Some Rados API tests can fail when the test suite is doing error inject

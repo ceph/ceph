@@ -1,0 +1,51 @@
+run: pdonnell-2026-09-10_12:59:36-rados-wip-pdonnell-testing-20260910.003149-umbrella-distro-default-trial
+signatures:
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error: OCI runtime error: runc: runc create failed: unable to start container process: error during container init: error mounting "/etc/ceph/ceph.conf" to rootfs at "/etc/ceph/ceph.conf": reopen mountpoint after mount: mountpoint "/etc/ceph/ceph.conf" was moved while re-opening'
+  : '80124': 1
+  ? 'command/error | echo TrustedUserCAKeys /etc/ssh/ca-key.pub | tee -a /etc/ssh/sshd_config &&: Failed to restart sshd.service: Unit sshd.service not found.'
+  : '77991': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'command/error | systemctl stop ceph-<uuid>@mon.b: Failed to stop ceph-<uuid>@mon.b.service: Unit ceph-<uuid>@mon.b.service not loaded.'
+  : '80585': 1
+  'command/not-found | grep -E (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found':
+    '79571': 1
+  ? crash/abort/specific | osd osd/ReplicatedBackend.cc ceph_abort_msg("abort() called") in void ReplicatedBackend::_do_push(OpRequestRef)
+  : '80415': 1
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '78780': 1
+  ? 'hung/command/host-drain-osd-not-scheduled | cephadm.shell: exit #; fi | host drain: OSD not scheduled for removal, only reconfigured'
+  : '80588': 1
+  infra/build | build:
+    '80294': 1
+  ? 'infra/other | install: Command failed on <host> with status #: "set -o pipefail; test -s /etc/apt/trusted.gpg.d/ceph-autobuild.asc || curl -sSfL ''https://git.ceph.com/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc'' | sudo tee /etc/apt/trusted.gpg.d/ceph-autobuild.asc > /dev/null"'
+  : '80584': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 1
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? 'workunit/set-e/test-repos-add-repo-shaman-http-error | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --dev main: Traceback (most recent call last): | test_repos.sh: shaman.ceph.com HTTP error'
+  : '58224': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+  workunit/standalone | osd/osd-recovery-space.sh TEST_recovery_test_simple:
+    '70670': 1
+titles:
+  '58224': 'cephadm/test_repos.sh: urllib.error.HTTPError: HTTP Error 504: Gateway Timeout'
+  '70670': 'qa/standalone/osd/osd-recovery-space.sh: TEST_recovery_test_simple fails when it doesn''t find a pg in "recovery_toofull"'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '77991': setup_ca_signed_keys hardcodes 'sshd' systemd unit, fails on Ubuntu/Debian
+  '78780': 'Dead: rados/cephadm: ceph cephadm osd activate fails to reactivate OSD, teuthology hangs'
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '79946': After rebuilding the mondb, authentication starts failing
+  '80124': Error mounting mon config to rootfs
+  '80294': 'rados/encoder: no Rocky10 packages for older releases'
+  '80415': 'src/osd/ReplicatedBackend.cc: ceph_abort_msg("Out of space (failsafe) processing push request")'
+  '80584': Installation fails during attempt to curl https://git.ceph.com/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+  '80585': 'rados/cephadm: host is filtered out due to lack of stored host network'
+  '80588': 'task/test_host_drain: Error response from mon daemon claiming "no such container"'

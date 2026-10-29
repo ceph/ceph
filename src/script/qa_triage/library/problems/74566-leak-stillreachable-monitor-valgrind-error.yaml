@@ -1,0 +1,28 @@
+id: "74566"
+tracker: https://tracker.ceph.com/issues/74566
+title: "Leak_StillReachable monitor valgrind error in glibc"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/68218
+    branch: main
+    fixed_in: v21.0.0-318-g3fcf439630
+tree: other/saw-valgrind-issues
+facts:
+  kind: '^Leak_StillReachable$'
+match:
+  reason: 'saw valgrind issues'
+confirm:
+  - file: teuthology.log
+    pattern: 'saw valgrind issue.*<kind>Leak_StillReachable</kind>.*valgrind/mon\.'
+notes: |
+  The cause: libceph-common's static initializer (_sub_I_65535_0.0 in
+  libceph-common.so.2) calls dlopen to load a shared library during monitor
+  startup. Glibc's dynamic linker (ld-linux-x86-64.so.2) allocates memory via
+  malloc (_dl_new_object, _dl_map_object_from_fd, _dl_open_worker_begin, etc.)
+  that it never frees at process exit. Valgrind reports the allocations as
+  Leak_StillReachable in all monitor valgrind logs (mon.a, mon.b, mon.c).
+  The fix (PR #68218, "qa: suppress reachable dlopen leak in libceph-common")
+  adds a suppression to qa/valgrind.supp. Seen on reef and squid with the
+  valgrind validater.
+examples:
+  - yuriw-2026-01-23_21:16:01-rados-wip-yuri13-testing-2026-01-23-1852-reef-distro-default-trial/15588

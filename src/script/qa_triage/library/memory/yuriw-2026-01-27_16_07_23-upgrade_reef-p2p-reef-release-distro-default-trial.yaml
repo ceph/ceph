@@ -1,0 +1,12 @@
+run: yuriw-2026-01-27_16:07:23-upgrade:reef-p2p-reef-release-distro-default-trial
+signatures:
+  ? 'infra/other | install.upgrade: Command failed on <host> with status #: "wget -q -O- ''http://git.ceph.com/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc'' | sudo apt-key add -"'
+  : '75035': 1
+  ? 'infra/other | install.upgrade: Command failed on <host> with status #: ''sudo DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install ceph=<pg>.#-#-g#a-#focal cephadm=<pg>.#-#-g#a-#focal ceph-mds=<pg>.#-#-g#a-#focal ceph-mgr=<pg>.#-#-g#a-#focal ceph-common=<pg>.#-#-g#a-#focal ceph-fuse=<pg>.#-#-g#a-#focal ceph-test=<pg>.#-#-g#a-#focal ceph-volume=<pg>.#-#-g#a-#focal radosgw=<pg>.#-#-g#a-#focal python#-rados=<pg>.#-#-g#a-#focal python#-rgw=<pg>.#-#-g#a-#focal python#-cephfs=<pg>.#-#-g#a-#focal python#-rbd=<pg>.#-#-g#a-#focal libcephfs#=<pg>.#-#-g#a-#focal libcephfs-dev=<pg>.#-#-g#a-#focal librados#=<pg>.#-#-g#a-#focal librbd#=<pg>.#-#-g#a-#focal rbd-fuse=<pg>.#-#-g#a-#focal'''
+  : '75036': 1
+  workunit/unexplained | suites/blogbench.sh:
+    '75038': 1
+titles:
+  '75035': No space left on trial104
+  '75036': No space left on trial082
+  '75038': Dashboard module and Prometheus module fail to load during upgrade test

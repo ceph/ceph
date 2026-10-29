@@ -1,0 +1,35 @@
+id: "76295"
+tracker: https://tracker.ceph.com/issues/76295
+title: "Rocky10 - test_cephadm.sh failure caused by Cannot register NFS V3 on UDP"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/68976
+    branch: main
+    fixed_in: v21.0.0-1630-ga3735791f0
+tree: workunit/unexplained/ganesha-nfsv3-udp-register
+facts:
+  script: '^cephadm/test_cephadm\.sh$'
+match:
+  reason: 'workunit test cephadm/test_cephadm\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'ganesha\.nfsd.*__Register_program :DISP :MAJ :Cannot register NFS V3 on UDP'
+  - file: teuthology.log
+    pattern: 'nfs is not available'
+  - file: teuthology.log
+    pattern: 'nfs\.a\.service: Main process exited, code=exited, status=2/INVALIDARGUMENT'
+notes: |
+  The cause: test_cephadm.sh deploys nfs.a via src/cephadm/samples/nfs.json. Before
+  PR #68976 that sample lacked Enable_UDP = false in NFS_CORE_PARAM. On Rocky 10 no
+  portmapper (rpcbind) runs in the container, so Ganesha tried to register NFS V3 on
+  UDP, logged "Cannot register NFS V3 on UDP", and exited with status 2 (systemd:
+  status=2/INVALIDARGUMENT). The wait loop ended with "nfs is not available" and the
+  workunit exited 1. Fixed by PR #68976, which adds Protocols = 3, 4 and Enable_UDP =
+  false to samples/nfs.json to match the mgr ganesha.conf.j2 template. After that fix,
+  Ganesha no longer tries UDP but still exits without rpcbind when registering on TCP;
+  that later failure is the sibling issue #76981.
+examples:
+  - yuriw-2026-05-15_14:18:16-rados-wip-yuri-testing-2026-05-14-1648-distro-default-trial/213609
+  - skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148569
+also:
+  - "76981"

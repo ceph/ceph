@@ -1,0 +1,6 @@
+run: jayaprakash-2026-04-29_15:20:24-rados-wip-jaya-bs-testing-tentacle-29-04-2026-distro-default-trial
+signatures:
+  timeout/unexplained | MaxWhileTries:
+    '75218': 1
+titles:
+  '75218': Orchestrater test fails while waiting for 8 OSDs to deploy

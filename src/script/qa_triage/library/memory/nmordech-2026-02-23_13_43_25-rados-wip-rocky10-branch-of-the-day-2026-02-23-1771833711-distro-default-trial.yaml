@@ -1,0 +1,13 @@
+run: nmordech-2026-02-23_13:43:25-rados-wip-rocky10-branch-of-the-day-2026-02-23-1771833711-distro-default-trial
+signatures:
+  ? crash/signal/backtrace | osd Segmentation fault in ErasureCodeJerasureCauchyGood::prepare() < ErasureCodeJerasure::init(std::map<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&, std::ostream*) < ErasureCodePluginJerasure::factory(std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::map<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx#::basic_string<char,
+    std::char_traits<char>, std::allocator<char> > const, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&, std::shared_ptr<ceph::ErasureCodeInterface>*, std::ostream*)
+  : '73246': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+titles:
+  '73246': 'rados/thrash-erasure-code-big: Segmentation fault with cauchy technique'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff

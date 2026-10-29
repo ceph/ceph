@@ -1,0 +1,20 @@
+id: "77713"
+tracker: https://tracker.ceph.com/issues/77713
+title: "HostControllerTest setup fails due to Invalid argument Module 'test_orchestrator' not found"
+kind: test
+match:
+  reason: 'setUpClass.*HostControllerTest'
+confirm:
+  - file: teuthology.log*
+    pattern: "Error EINVAL: Module 'test_orchestrator' not found"
+notes: |
+  The dashboard HostControllerTest.setUpClass calls 'ceph orch set backend
+  test_orchestrator' to activate the test orchestrator mgr module. This fails
+  with 'Error EINVAL: Module test_orchestrator not found' when the module is
+  not available in the build under test. The CommandFailedError propagates
+  through helper.py and is reported as a test setup failure. Jobs showing this
+  failure typically have only teuthology.log.gz (not plain teuthology.log), so
+  the tree root returns unknown and the tree path is empty; the confirm check
+  uses teuthology.log* to match either compressed or plain form.
+examples:
+  - skanta-2026-06-17_03:50:08-rados-wip-yuri7-testing-2026-06-16-0346-distro-default-trial/296702

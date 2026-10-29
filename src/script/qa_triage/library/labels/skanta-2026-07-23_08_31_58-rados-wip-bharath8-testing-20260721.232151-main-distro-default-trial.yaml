@@ -1,0 +1,10 @@
+run: skanta-2026-07-23_08:31:58-rados-wip-bharath8-testing-20260721.232151-main-distro-default-trial
+jobs:
+  '390227':
+    problem: '80294'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 1 jobs that the tool placed in 80294 in 75763, this one among them.
+    summary: The job is tracker 80294 (Rocky 10 has no squid packages on shaman); 75763 is the same cause, so I added it to 80294's `also`.
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro/{rocky_10}}
+    reason: Failed to fetch package version from https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=default&distros=rocky%2F10%2Fx86_64&ref=squid

@@ -1,0 +1,10 @@
+run: skanta-2026-09-03_10:37:47-rados-wip-bharath10-testing-20260903.050751-main-distro-default-trial
+jobs:
+  '534781':
+    problem: '56097'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 56097, but the tool said new (explain -> prefilter -> explained), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 56097 by itself, with no judge.
+    summary: 'The reviewers are right: `ceph tell osd.13 flush_pg_stats` got ENXIO because osd.13 had stopped answering, which is the 56097 signature, but no record for 56097 existed.'
+    status: fail
+    description: rados/thrash/{0-size-min-size-overrides/2-size-2-min-size 1-pg-log-overrides/normal_pg_log 2-recovery-overrides/{more-async-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-5} backoff/peering_and_degraded ceph clusters/{fixed-4} crc-failures/bad_map_crc_failure d-balancer/on mon_election/classic msgr-failures/fastclose msgr/async objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-2} onode-segment$/{512K} write$/{v2/{compr$/{yes$/{lz4}} v2}}}} rados supported-random-distro/{ubuntu_24.04} thrashers/careful_host thrashosds-health workloads/redirect_promote_tests}
+    reason: 'Command failed on trial010 with status 6: ''sudo adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 120 ceph --cluster ceph tell osd.13 flush_pg_stats'''

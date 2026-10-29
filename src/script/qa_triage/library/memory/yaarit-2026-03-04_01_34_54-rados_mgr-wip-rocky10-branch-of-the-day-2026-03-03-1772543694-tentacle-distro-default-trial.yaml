@@ -1,0 +1,6 @@
+run: yaarit-2026-03-04_01:34:54-rados:mgr-wip-rocky10-branch-of-the-day-2026-03-03-1772543694-tentacle-distro-default-trial
+signatures:
+  ? 'test/unittest | tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam: ConnectionRefusedError: [Errno #] Connection refused'
+  : '74199': 1
+titles:
+  '74199': ceph dashboard not starting

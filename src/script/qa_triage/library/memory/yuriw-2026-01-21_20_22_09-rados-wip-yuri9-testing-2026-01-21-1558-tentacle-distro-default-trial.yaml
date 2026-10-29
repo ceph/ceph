@@ -1,0 +1,15 @@
+run: yuriw-2026-01-21_20:22:09-rados-wip-yuri9-testing-2026-01-21-1558-tentacle-distro-default-trial
+signatures:
+  ? 'command/unexplained/prometheus-module-inactive | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | prometheus module inactive: CephMgrPrometheusModuleInactive is firing'
+  : '74148': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 1
+titles:
+  '74148': Prometheus module experiences connection issues related to cherrypy
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)

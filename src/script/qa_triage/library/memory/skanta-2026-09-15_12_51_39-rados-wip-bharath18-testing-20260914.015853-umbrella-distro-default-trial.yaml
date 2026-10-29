@@ -1,0 +1,21 @@
+run: skanta-2026-09-15_12:51:39-rados-wip-bharath18-testing-20260914.015853-umbrella-distro-default-trial
+signatures:
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  'command/not-found | grep -E (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found':
+    '79571': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '62972': 2
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 2
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '79943': 1
+titles:
+  '62972': 'ERROR: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest)'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '79943': qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of "cephx_auth_aes256k"
+  '79946': After rebuilding the mondb, authentication starts failing

@@ -1,0 +1,45 @@
+run: yuriw-2026-02-03_16:00:06-rados-wip-yuri4-testing-2026-02-02-2122-distro-default-trial
+signatures:
+  '- | Error reimaging machines: reached maximum tries (#) after waiting for # seconds':
+    '74574': 3
+  'command/unexplained | yes | mkfs.xfs -f -i size=# /dev/vg_nvme/lv_#: #':
+    '68668': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'command/unexplained/prometheus-module-inactive | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | prometheus module inactive: CephMgrPrometheusModuleInactive is firing'
+  : '74148': 1
+  ? 'crash/client/unnamed | Command failed (workunit test osd/divergent-priors.sh) on <host> with status #: ''mkdir -p -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && cd -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && CEPH_CLI_TEST_DUP_COMMAND=# CEPH_REF=<sha> TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="#" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.# CEPH_ROOT=/home/ubuntu/cephtest/clone.client.# CEPH_MNT=/home/ubuntu/cephtest/mnt.# adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout #h /home/ubuntu/cephtest/clone.client.#/qa/standalone/osd/divergent-priors.sh'''
+  : '74800': 1
+  other | <fail with no reason>:
+    '71005': 1
+  ? 'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_standby: AssertionError: ''text/html;charset=utf-#'' != ''text/plain;charset=utf-#'''
+  : '74149': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  ? 'workunit/set-e | objectstore/test_fuse.sh: rmdir store_test_fuse_mnt/#.#_head: rmdir: failed to remove ''store_test_fuse_mnt/#.#_head'': Directory not empty'
+  : '73630': 1
+  workunit/unexplained | mon/availability.sh:
+    '74178': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '74004': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | test_readable.py: ceph-dencoder subprocess error'
+  : '74074': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '68668': 'rados/dashboard: mkfs.xfs: cannot open /dev/vg_nvme/lv_2: Device or resource busy'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '73630': 'objectstore/test_fuse.sh: line 126: fusermount: command not found'
+  '74004': 'qa/standalone/ceph-helpers: ceph pg query hangs indefinitely'
+  '74074': ceph-dencoder - failed with 20.3 corpus repo
+  '74148': Prometheus module experiences connection issues related to cherrypy
+  '74149': Prometheus module fails when trying to load security configuration JSON
+  '74178': 'qa/standalone/mon/availability.sh: line 64: Syntax error due to missing availability status'
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74574': 'Error reimaging machines: reached maximum tries (120) after waiting for 1800 seconds'
+  '74800': 'qa/standalone/osd/divergent-priors.sh: Core dump generated from call to OSDService::maybe_share_map'

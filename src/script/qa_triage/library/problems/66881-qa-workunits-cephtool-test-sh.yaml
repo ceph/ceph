@@ -1,0 +1,29 @@
+id: "66881"
+tracker: https://tracker.ceph.com/issues/66881
+title: "qa/workunits/cephtool/test.sh: cannot remove '/tmp/foo': Operation not permitted"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/58566
+    branch: main
+    fixed_in: v19.3.0-3465-g6822f4bf15
+tree: workunit/unexplained/cephtool-tmp-foo-rm-not-permitted
+match:
+  reason: 'workunit test cephtool/test\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: "rm: cannot remove '/tmp/foo': Operation not permitted"
+notes: |
+  test_tell_output_file in qa/workunits/cephtool/test.sh runs 'ceph tell
+  --daemon-output-file=/tmp/foo <daemon> version', checks the file and then
+  'rm -f /tmp/foo'. The daemon (running with other privileges, a workaround for
+  an infrastructure issue where files are made with root privileges) wrote the
+  file, so the test's user cannot remove it: 'rm: cannot remove /tmp/foo:
+  Operation not permitted'. With set -e the workunit exits with status 1 right
+  after the last expect_true passed. PR 58566 adds the extra privileges (sudo)
+  to the script; the squid backport is tracked in #70370. The failed workunit
+  and its status 1 are symptoms; the rm error is the cause.
+examples:
+  - yuriw-2026-02-24_16:22:43-rados-wip-yuri6-testing-2026-02-22-1629-squid-distro-default-trial/68630
+  - skanta-2026-01-28_09:27:17-rados-wip-bharath2-testing-2026-01-27-0639-squid-distro-default-trial/23144
+  - yuriw-2026-02-24_16:22:43-rados-wip-yuri6-testing-2026-02-22-1629-squid-distro-default-trial/68636
+  - yuriw-2026-02-24_16:22:43-rados-wip-yuri6-testing-2026-02-22-1629-squid-distro-default-trial/68640

@@ -1,0 +1,12 @@
+run: yaarit-2026-03-03_02:44:53-rados-wip-rocky10-branch-of-the-day-2026-03-02-1772457124-tentacle-distro-default-trial
+signatures:
+  ? 'test/unittest | tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam: ConnectionRefusedError: [Errno #] Connection refused'
+  : '69954': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '69954': 'test_selftest_command_spam: ConnectionRefusedError: [Errno 111] Connection refused'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff

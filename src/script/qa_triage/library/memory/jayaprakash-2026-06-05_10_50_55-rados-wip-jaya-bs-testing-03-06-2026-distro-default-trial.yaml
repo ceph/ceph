@@ -1,0 +1,24 @@
+run: jayaprakash-2026-06-05_10:50:55-rados-wip-jaya-bs-testing-03-06-2026-distro-default-trial
+signatures:
+  ? cluster-log/message/mgr-session-evicted | WRN mds evicting unresponsive client <host>:x (#), after <pg> seconds | MDS evicted the unresponsive libcephfs session of a restarted mgr
+  : '76497': 1
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '77242': 1
+  infra/build | build:
+    '75763': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  timeout/unexplained | wait_until_healthy:
+    '77110': 1
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '76297': 1
+titles:
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '75763': 'rados/encoder: teuthology: VersionNotFoundError when fetching ''reef'' Ceph packages for Rocky 10.1 from shaman'
+  '76297': test_iscsi_container - cephadm/test_iscsi_setup.sh fails on sudo ls /dev/disk/by-path
+  '76497': rados/singleton-bluestore/cephtool - evicting unresponsive client warnings
+  '77106': nvme list json command failed, retrying...
+  '77110': 'rados/cephadm: wait_until_healthy times out due to CEPHADM_STRAY_DAEMON HEALTH_WARN'
+  '77242': 'rados/cephadm: test_mgmt_gateway failed: curl -k -s https://${MGMT_GTW_IP}:9876/health returned exit status 7'

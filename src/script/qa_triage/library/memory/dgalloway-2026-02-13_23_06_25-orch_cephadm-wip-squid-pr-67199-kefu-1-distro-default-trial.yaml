@@ -1,0 +1,6 @@
+run: dgalloway-2026-02-13_23:06:25-orch:cephadm-wip-squid-pr-67199-kefu-1-distro-default-trial
+signatures:
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '75277': 1
+titles:
+  '75277': smoke-singlehost test fails on transient CEPHADM_FAILED_DAEMON

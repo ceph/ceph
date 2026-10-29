@@ -1,0 +1,29 @@
+run: lflores-2026-04-17_22:03:40-rados-wip-lflores-testing-2-2026-04-08-1424-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN POOL_NEARFULL:
+    '74518': 1
+  'cluster-log/health/mon-restart-reconnect-delay | WRN MON_NETSPLIT | MON_NETSPLIT: slow mon reconnect after a mon restart':
+    '71344': 1
+  ? cluster-log/message/backfill-reject-injected | WRN mon pg <pg> is active+remapped+backfill_toofull, acting [#,#,#] | PG backfill_toofull from injected backfill reservation rejection
+  : '70716': 1
+  'command/unexplained | yes | mkfs.xfs -f -i size=# /dev/vg_nvme/lv_#: #':
+    '68668': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '68668': 1
+  timeout/unexplained | MaxWhileTries:
+    '75218': 1
+  ? 'workunit/set-e | cephadm/test_cephadm.sh: /usr/sbin/cephadm --image quay.ceph.io/ceph-ci/ceph:main bootstrap --mon-id a --mgr-id x: Error: Container release umbrella != cephadm release tentacle; please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
+  : '75821': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '68668': 'rados/dashboard: mkfs.xfs: cannot open /dev/vg_nvme/lv_2: Device or resource busy'
+  '70716': 'rados/thrash-old-clients: "pg backfill_toofull" warning in cluster log'
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh
+  '74518': 'rados/perf: pools reached nearfull (POOL_NEARFULL)'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '75218': Orchestrater test fails while waiting for 8 OSDs to deploy
+  '75821': 'tentacle: Error: Container release umbrella != cephadm release tentacle; please use matching version of cephadm'

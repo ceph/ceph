@@ -1,0 +1,6 @@
+run: yuriw-2026-10-23_17:09:01-rados-umbrella-release-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/MissingLoc.h FAILED ceph_assert(# == "unexpected need for missing item") in void MissingLoc::add_active_missing(const pg_missing_t&)
+  : '73249': 1
+titles:
+  '73249': 'osd/MissingLoc.h: FAILED ceph_assert(0 == "unexpected need for missing item")'

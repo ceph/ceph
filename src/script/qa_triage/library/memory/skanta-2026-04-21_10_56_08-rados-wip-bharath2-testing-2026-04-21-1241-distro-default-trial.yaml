@@ -1,0 +1,74 @@
+run: skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial
+signatures:
+  cluster-log/health | WRN BLUESTORE_SLOW_OP_ALERT:
+    '68337': 1
+  cluster-log/health | WRN CEPHADM_DAEMON_PLACE_FAIL:
+    '70714': 2
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN # pool(s) full':
+    '75414': 1
+  ? cluster-log/message/mgr-session-evicted | WRN mds evicting unresponsive client <host>:x (#), after <pg> seconds | MDS evicted the unresponsive libcephfs session of a restarted mgr
+  : '76281': 4
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:b#dd#bdc#ac#c#a#de#e#eb#ab#f#bfe#a#c#fc#a#b#d# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmp#avt#d#:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:b#dd#bdc#ac#c#a#de#e#eb#ab#f#bfe#a#c#fc#a#b#d# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:b#dd#bdc#ac#c#a#de#e#eb#ab#f#bfe#a#c#fc#a#b#d# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmpgiql#v#w:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:b#dd#bdc#ac#c#a#de#e#eb#ab#f#bfe#a#c#fc#a#b#d# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:b#dd#bdc#ac#c#a#de#e#eb#ab#f#bfe#a#c#fc#a#b#d# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmps#wt#ae:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:b#dd#bdc#ac#c#a#de#e#eb#ab#f#bfe#a#c#fc#a#b#d# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:b#dd#bdc#ac#c#a#de#e#eb#ab#f#bfe#a#c#fc#a#b#d# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmpxhthng#o:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:b#dd#bdc#ac#c#a#de#e#eb#ab#f#bfe#a#c#fc#a#b#d# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph@sha#:b#dd#bdc#ac#c#a#de#e#eb#ab#f#bfe#a#c#fc#a#b#d# -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /var/lib/ceph/<uuid>/crash:/var/lib/ceph/crash:z -v /run/systemd/journal:/run/systemd/journal -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /var/lib/ceph/<uuid>/selinux:/sys/fs/selinux:ro -v /:/rootfs:rslave -v /etc/hosts:/etc/hosts:ro -v /tmp/ceph-tmpxsfwersr:/etc/ceph/ceph.conf:z quay.ceph.io/ceph-ci/ceph@sha#:b#dd#bdc#ac#c#a#de#e#eb#ab#f#bfe#a#c#fc#a#b#d# lvm zap --destroy
+    /dev/nvme#n#'
+  : '75764': 1
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '70714': 1
+  ? 'hung/command/dispatch-delay-queued-for-pg | rados: ceph --admin-daemon /var/run/ceph/ceph-osd.#.asok dump_blocked_ops | rados hung: dispatch-delay ops queued for pg'
+  : '74709': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  timeout/unexplained | MaxWhileTries:
+    '66415': 1
+  'timeout/unexplained/registry-pull-failed | MaxWhileTries | cephadm: daemon placement failed, container registry error':
+    '70714': 1
+  ? 'timeout/unexplained/thrasher-min-size-list-remove | The WatchDog barked due to Thrasher OSDThrasher threw except... | OSDThrasher test_pool_min_size: kill_osd ValueError list.remove'
+  : '76390': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '65719': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76392': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  workunit/unexplained | cephadm/test_cephadm.sh:
+    '71506': 1
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '76297': 2
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '75406': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 2
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | readable.sh: ceph-dencoder failed to decode corpus object'
+  : '74074': 1
+titles:
+  '65719': debian-17.2.6 jammy repository does not have a Release file
+  '66415': max while retries rados/cephadm/osds/{0-distro/centos_9.stream 0-nvme-loop 1-start 2-ops/rmdir-reactivate}
+  '68337': OSD(s) experiencing slow operations in BlueStore (BLUESTORE_SLOW_OP_ALERT) in cluster log
+  '70714': 'rados/cephadm: CEPHADM_DAEMON_PLACE_FAIL - Failed to extract uid/gid for path /var/lib/grafana'
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '74074': ceph-dencoder - failed with 20.3 corpus repo
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74709': 'ceph-mgr crash:  Unhandled exception from module ''devicehealth'' while running on mgr.y: unknown operation'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75406': 'qa/standalone/ceph-helpers: is_pg_clean hang after osd teardown'
+  '75414': 'upgrade: pool full warning variation'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '75764': 'rados/cephadm: cephadm task involving ''ceph orch osd rm 1'' fails as the device couldn''t be zapped'
+  '76281': 'mds : cluster [WRN]   evicting unresponsive client trial044:x (6212), after 303.555 seconds'
+  '76297': test_iscsi_container - cephadm/test_iscsi_setup.sh fails on sudo ls /dev/disk/by-path
+  '76390': 'rados/thrash-erasure-code The WatchDog barked due to Thrasher OSDThrasher threw exception list.remove(x): x not in list'
+  '76392': rados/singleton/test_crash.sh - ceph pg dump hung for 2 minutes after OSD teardown (the fix for 75406 (pr 67715) won't fix this)

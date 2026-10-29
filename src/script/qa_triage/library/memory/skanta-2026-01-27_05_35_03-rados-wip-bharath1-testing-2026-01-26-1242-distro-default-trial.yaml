@@ -1,0 +1,39 @@
+run: skanta-2026-01-27_05:35:03-rados-wip-bharath1-testing-2026-01-26-1242-distro-default-trial
+signatures:
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'command/unexplained/prometheus-module-inactive | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | prometheus module inactive: CephMgrPrometheusModuleInactive is firing'
+  : '74148': 1
+  infra/ansible | ansible:
+    '24347': 1
+  other | <fail with no reason>:
+    '71005': 1
+  ? 'test/unittest | tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam: ConnectionRefusedError: [Errno #] Connection refused'
+  : '69954': 1
+  ? 'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_standby: AssertionError: ''text/html;charset=utf-#'' != ''text/plain;charset=utf-#'''
+  : '74149': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '70279': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  workunit/unexplained | mon/availability.sh:
+    '74178': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '74004': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | test_readable.py: ceph-dencoder subprocess error'
+  : '75099': 1
+titles:
+  '24347': Improving CI's reliability by running local centos/epel repositories
+  '69954': 'test_selftest_command_spam: ConnectionRefusedError: [Errno 111] Connection refused'
+  '70279': 'rados/thrash: Assertion error: wait_for_recovery: failed before timeout expired due to "undersized+peered" pg'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '74004': 'qa/standalone/ceph-helpers: ceph pg query hangs indefinitely'
+  '74148': Prometheus module experiences connection issues related to cherrypy
+  '74149': Prometheus module fails when trying to load security configuration JSON
+  '74178': 'qa/standalone/mon/availability.sh: line 64: Syntax error due to missing availability status'
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '75099': 'qa/workunits/dencoder/test-dencoder.sh: test-dencoder.sh fails with status 1 as it couldn''t decode multiple types'

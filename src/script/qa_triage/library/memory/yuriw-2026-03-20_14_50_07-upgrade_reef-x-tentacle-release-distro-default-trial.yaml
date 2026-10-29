@@ -1,0 +1,6 @@
+run: yuriw-2026-03-20_14:50:07-upgrade:reef-x-tentacle-release-distro-default-trial
+signatures:
+  cluster-log/health | WRN OBJECT_UNFOUND:
+    '75570': 1
+titles:
+  '75570': 'upgrade/stress-split: Thrasher fails to revive an OSD during upgrade test'

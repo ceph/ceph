@@ -1,0 +1,26 @@
+id: "81515"
+tracker: https://tracker.ceph.com/issues/81515
+title: "CBT: KeyError in monitoring/perf_monitoring.py Line 41: perf_cmd = f\"{self._perf_cmd} {self._args_template} &\".format(perf_dir=perf_dir)"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/cbt/pull/372
+    branch: main
+tree: command/unexplained/cbt-perf-keyerror-pid
+facts:
+  command: '^cbt-venv/bin/python cbt/cbt\.py'
+confirm:
+  - file: teuthology.log
+    pattern: 'perf_monitoring\.py'
+  - file: teuthology.log
+    pattern: "KeyError: 'pid'"
+notes: |
+  CBT's perf_monitoring.py start() builds a perf command as an f-string embedding
+  self._perf_cmd and self._args_template, then calls .format(perf_dir=perf_dir) on
+  the result. When the args template contains {pid} (e.g. 'stat -p {pid} -o
+  {perf_dir}/perf_stat.{pid}' used by the rados/perf workloads), .format() raises
+  KeyError: 'pid' because only perf_dir is supplied. Introduced by CBT PR #367
+  (backported from PR #357 into the umbrella branch). Triggered when ceph PR #72206
+  switched the cbt task to pull from the CBT umbrella branch instead of master.
+  Fixed by CBT PR #372.
+examples:
+  - skanta-2026-09-30_21:49:09-rados-wip-bharath8-testing-20260930.133801-main-distro-default-trial/597283

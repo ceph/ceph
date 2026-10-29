@@ -1,0 +1,24 @@
+run: jayaprakash-2026-04-01_18:25:08-rados-wip-jaya-bs-testing1-01-04-2026-distro-default-trial
+signatures:
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '75931': 1
+  'hung/command | rados: ceph osd unset noscrub':
+    '75216': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  workunit/unexplained | cephadm/test_cephadm.sh:
+    '75358': 1
+  workunit/unexplained | rados/test.sh:
+    '75930': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | readable.sh: ceph-dencoder failed to decode corpus object'
+  : '74074': 1
+titles:
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '74074': ceph-dencoder - failed with 20.3 corpus repo
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75930': 'rados/thrash: Assertion error: wait_for_recovery: failed before timeout expired with many "laggy" and "scrubbing" PGs'
+  '75931': 'rados/upgrade/parallel: Health check failed: Upgrade: failed to pull target image (UPGRADE_FAILED_PULL)'

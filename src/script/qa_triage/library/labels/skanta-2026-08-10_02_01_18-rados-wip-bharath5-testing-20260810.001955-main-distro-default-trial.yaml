@@ -1,0 +1,10 @@
+run: skanta-2026-08-10_02:01:18-rados-wip-bharath5-testing-20260810.001955-main-distro-default-trial
+jobs:
+  '450281':
+    problem: '79443'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in 79443 in 73771, this one among them.
+    summary: 'Right: osd.1''s BLOCK discard queue overflowed and raised BLOCK_DEVICE_DISCARD_QUEUE, which ec-esb-fio doesn''t ignore. That is 79443, and 73771 is the older tracker for the same warning, so it goes in 79443''s `also`.'
+    status: fail
+    description: rados/singleton/{all/ec-esb-fio mon_election/connectivity msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{avl} base mem$/{normal-1} onode-segment$/{256K} write$/{random/{compr$/{no$/{no}} random}}}} rados supported-random-distro/{ubuntu_22.04}}
+    reason: '"2026-08-10T05:01:03.083395+0000 mon.a (mon.0) 442 : cluster [WRN] Health check failed: 1 OSD(s) experiencing slow discard operations (BLOCK_DEVICE_DISCARD_QUEUE)" in cluster log'

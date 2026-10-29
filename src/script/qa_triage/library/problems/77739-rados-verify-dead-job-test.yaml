@@ -1,0 +1,46 @@
+id: "77739"
+tracker: https://tracker.ceph.com/issues/77739
+title: "rados/verify/ Dead Job - test api_lock/api_snapshots/api_misc_pp etc hung for 1.5 hours and then it starts the next test up. Resulting in 8 hour timeout"
+kind: test
+tree: hung/test/rados-api-tests-valgrind-slowdown
+facts:
+  test: '^(api_|(cls|cmd|completions|handler_error|io|ec_io|list|ec_list|misc|pool|read_operations|snapshots|watch_notify|write_operations)$)'
+  hung_task: '^workunit$'
+confirm:
+  - file: teuthology.log
+    pattern: 'running \w+\.\w+ under valgrind'
+notes: |
+  The rados_api_tests workunit (qa/workunits/rados/test.sh) starts the librados API
+  gtest programs (api_*) and the neorados tests (cls, cmd, io, ec_io, ...) in parallel,
+  then waits for each in turn, up to 5400 seconds per test ("+ timeout=5400"). In
+  rados/verify with validater/valgrind every daemon runs under valgrind memcheck with
+  --exit-on-first-error, so the first memcheck error in a daemon makes it exit with
+  status 42 ("daemon-helper: command failed with exit status 42").
+
+  The tree's branch is named "valgrind slowdown", but the tests are not slow: they are
+  stuck on a dead cluster. Within seconds of the API tests starting, several OSDs exit
+  with status 42. The daemon watchdog reports them failed and then barks ("BARK!
+  unmounting mounts and killing all daemons"). With no cluster left, every test still
+  running hangs until test.sh gives up on it after 5400 s ("ERROR: Test api_snapshots
+  (PID ...) failed with non-zero exit status", one every 1.5 hours, which is the
+  tracker's "hung for 1.5 hours and then it starts the next test"). The job is then
+  killed at the max job timeout while the workunit is still "Waiting for test ...".
+
+  The valgrind error that kills the OSDs is in remote/*/log/valgrind/osd.N.log.gz of
+  the OSDs that exited with status 42. In
+  lflores-2026-06-25_15:37:19-...-umbrella-.../316911 it is tracker 76953: UninitCondition
+  "Conditional jump or move depends on uninitialised value(s)" on tp_osd_tp in
+  ECTransaction::Generate::Generate (ECTransaction.cc, the test of the uninitialised
+  ECCommon member first_write_in_interval), called from
+  ECTransaction::generate_transactions / ECBackend::submit_transaction. It is fixed on main
+  by PR 70333 (v21.3.0-1487); the umbrella backport is still pending. The same PR fixes a
+  second UninitCondition in ECCommon::read_result_t::print from
+  ECBackend::handle_sub_read_reply. 77739 was filed while 76953 failed this test every
+  time, and people place these dead jobs in 76953 too, so it is listed in also. Test.sh
+  going on to wait for the next test after the cluster is gone is 77739's own complaint.
+examples:
+  - skanta-2026-07-29_01:45:42-rados-wip-bharath23-testing-2026-07-28-1848-distro-default-trial/407437
+  - lflores-2026-07-17_23:28:16-rados-wip-lflores-testing-3-2026-07-17-1417-distro-default-trial/374705
+  - lflores-2026-06-25_15:37:19-rados-wip-lflores-testing-4-2026-06-24-1644-umbrella-distro-default-trial/316911
+also:
+  - "76953"

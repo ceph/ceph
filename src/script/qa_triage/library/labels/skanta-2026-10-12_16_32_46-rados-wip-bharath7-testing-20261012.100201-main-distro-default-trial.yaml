@@ -1,0 +1,10 @@
+run: skanta-2026-10-12_16:32:46-rados-wip-bharath7-testing-20261012.100201-main-distro-default-trial
+jobs:
+  '629034':
+    problem: null
+    by: a reviewer
+    why: I don't think that reads and write should be reordered in a CLS command - Ithink CLS relies on this behaviour, so this is NOT harmless
+    summary: The node wrongly called the failure harmless; the EC-optimized CLS CALL path reorders reads and writes within a single CLS operation — a real product bug
+    status: fail
+    description: rados/verify/{ceph clusters/fixed-2 d-thrash/default/{default thrashosds-health} mon_election/classic msgr-failures/few msgr/async-v2only objectstore/{bluestore/{alloc$/{avl} base mem$/{normal-2} onode-segment$/{1M} write$/{v1/{compr$/{yes$/{snappy}} v1}}}} rados read-affinity/default rpm_latest tasks/rados_cls_all validater/lockdep}
+    reason: '"2026-10-12T20:56:49.022882+0000 osd.4 (osd.4) 3 : cluster [ERR] Error -2 reading object 33:40961bb0:TestSDKCoverageReplay%2fFastEC_1791838609019400414::myobject:head" in cluster log'

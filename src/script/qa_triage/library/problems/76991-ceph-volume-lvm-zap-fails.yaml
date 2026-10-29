@@ -1,0 +1,27 @@
+id: "76991"
+tracker: https://tracker.ceph.com/issues/76991
+title: "ceph-volume: lvm zap fails with RuntimeError on missing /dev/mapper/ceph-* device"
+kind: product
+tree: command/error/zap-device-missing
+match:
+  reason: 'lvm zap'
+confirm:
+  - file: teuthology.log
+    pattern: 'stderr RuntimeError: /dev/mapper/ceph--\S+ not found\.'
+  - file: teuthology.log
+    pattern: 'ceph_volume/devices/lvm/zap\.py", line \d+, in main'
+notes: |
+  The cephadm task zaps each OSD disk with `cephadm ceph-volume -- lvm zap /dev/nvmeXnY`
+  (qa/tasks/cephadm.py ceph_osds). ceph-volume parses the device argument with
+  arg_validators, whose Device() calls disk.get_devices(); that calls
+  UdevData(block[1]) for each block device and raises
+  `RuntimeError: /dev/mapper/ceph--<vg>-osd--block--<uuid> not found.` when the
+  LV's device-mapper node has vanished in the meantime (in 263770 the osd.6 container
+  logs `lvchange -an` on that very LV a fraction of a second earlier). The zap then
+  exits 1 and cephadm.py raises CommandFailedError. The failure is in ceph-volume's
+  device listing, which does not tolerate a device removed during enumeration, not in
+  the test. Seen in rados/cephadm/smoke 0-nvme-loop jobs on ubuntu_22.04. Other jobs
+  whose lvm zap fails differently are not this problem: the tree node command/error
+  only answers zap-device-missing when this traceback is in the log.
+examples:
+  - skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263770

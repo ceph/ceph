@@ -1,0 +1,21 @@
+run: skanta-2026-09-24_06:17:59-rados-wip-bharath26-testing-20260924.011509-squid-distro-default-trial
+signatures:
+  'command/not-found | grep -E (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found':
+    '79571': 1
+  ? 'crash/client/unexplained/old-client-aes256k-keyring | ceph_test_cls_rbd | ceph_test_cls_rbd of an old release: cluster.connect failed with error -# on an aes#k cluster'
+  : '80146': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '79943': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79943': qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of "cephx_auth_aes256k"
+  '80146': '[Squid] test_cls_rbd: TestClsRbd.mirror fails during pool creation with unhandled error -5 (-EIO)'

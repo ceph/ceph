@@ -1,0 +1,10 @@
+run: skanta-2026-06-30_22:37:03-rados-wip-bharath18-testing-2026-06-30-2012-distro-default-trial
+jobs:
+  '329184':
+    problem: '77743'
+    by: Claude Code for aainscow, as the reviewer
+    why: recovery-preemption's admin socket call to a restarted osd.1 never returns (77743); the job ran no valgrind, so not 76953
+    summary: duplicate 77743 (explain -> prefilter -> confirm -> fix-check)
+    status: dead
+    description: rados/singleton/{all/recovery-preemption mon_election/connectivity msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{hybrid} base mem$/{low} onode-segment$/{256K} write$/{random/{compr$/{no$/{no}} random}}}} rados supported-random-distro/{ubuntu_22.04}}
+    reason: hit max job timeout

@@ -1,0 +1,45 @@
+id: "74074"
+tracker: https://tracker.ceph.com/issues/74074
+title: "test/encoding/readable: backward incompat checks missing; dencoder fails to decode newer corpus objects"
+kind: product
+also:
+  - "75099"
+  - "76982"
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/66544
+    branch: main
+    fixed_in: v20.3.0-5364-ga2ef9da35f
+tree: workunit/unexplained/dencoder-decode-failure
+match:
+  description: 'rados/encoder'
+confirm:
+  - file: teuthology.log
+    pattern: "Error encountered in subprocess\\. Command: \\['ceph-dencoder'|\\*\\*\\*\\* failed to decode type \\S+ from archive \\S+"
+notes: |
+  The workunit dencoder/test-dencoder.sh runs ceph-dencoder against every object in
+  ceph-object-corpus (via test_readable.py in older builds, via src/test/encoding/readable.sh
+  in newer ones). For archive versions 20.2.0-380-gdbcbbd3f281 and 20.3.0-4314-g034eb49a9ce,
+  ceph-dencoder returns exit code 1 for types including OSDMap, OSDMap::Incremental,
+  pg_pool_t, bluefs_fnode_t and bluefs_super_t.
+  The cause is that those corpus objects have a min_compat field bumped from 1 to 3
+  (commit 18968bc07f8cd4d30901dd0b3ee6efdbb04d271e) that older decoders reject with
+  "no longer understand old encoding version N < M". The test lacked backward_incompat
+  checks (added in PR #66544) to skip such objects when testing older decoders against
+  newer corpus objects. test_readable.py reports the failure as "Error encountered in
+  subprocess. Command: ['ceph-dencoder' ..."'; readable.sh reports it as
+  "**** failed to decode type X from archive V object O ... ****" and ends with
+  "FAILED n / m tests.". The record accepts either line. Jobs where the workunit runs an
+  old decoder (e.g. 18.2.7, the N-2 reef release) against the newest corpus fail this way too.
+  Tracker 76982 was filed when the same problem reappeared on main after the fix in PR #66544
+  was not yet in the builds under test.
+examples:
+  - jayaprakash-2026-02-06_12:54:34-rados-jaya-bs-testing-05-02-2026-distro-default-trial/38187
+  - lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19067
+  - skanta-2026-01-27_05:35:03-rados-wip-bharath1-testing-2026-01-26-1242-distro-default-trial/19744
+  - skanta-2026-01-30_23:46:16-rados-wip-bharath7-testing-2026-01-29-2016-distro-default-trial/28557
+  - skanta-2026-02-05_03:38:32-rados-wip-bharath2-testing-2026-02-03-0542-distro-default-trial/35640
+  - skanta-2026-02-07_00:02:26-rados-wip-bharath7-testing-2026-02-06-0906-distro-default-trial/39108
+  - jayaprakash-2026-03-20_14:58:50-rados-aclamk-fcm-2026-03-20-1106-distro-default-trial/113276
+  - jayaprakash-2026-05-27_10:33:30-rados-wip-jaya-bs-testing-26-05-2026-distro-default-trial/240897
+  - skanta-2026-05-27_06:21:57-rados-wip-bharath4-testing-2026-05-27-1003-distro-default-trial/239832
+  - skanta-2026-08-24_10:34:23-rados-wip-vallari2-testing-20260819.130432-tentacle-distro-default-trial/509250

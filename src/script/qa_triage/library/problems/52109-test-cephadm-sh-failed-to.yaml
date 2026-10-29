@@ -1,0 +1,38 @@
+id: "52109"
+tracker: https://tracker.ceph.com/issues/52109
+title: "test_cephadm.sh: Failed to connect to grafana.a: Failed to connect to localhost port 3000 after 0 ms: Connection refused"
+kind: test
+tree: workunit/unexplained/grafana-invalid-ip-address
+facts:
+  workunit: '^cephadm/test_cephadm\.sh'
+match:
+  reason: 'workunit test cephadm/test_cephadm\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'grafana-apiserver.*invalid IP address: localhost'
+  - file: teuthology.log
+    pattern: 'grafana is not available'
+notes: |
+  test_cephadm.sh deploys grafana.a from src/cephadm/samples/grafana.json,
+  whose [server] section sets 'http_addr = localhost'. The grafana image used
+  rejects a host name there: grafana-apiserver fails to start with
+  'invalid IP address: localhost', grafana.a exits with status 1, systemd
+  restarts it until 'Start request repeated too quickly', and the workunit's
+  is_available() loop polling https://localhost:3000 gives up after 50 tries
+  with 'grafana is not available' (curl: Connection refused). The failed
+  workunit and the refused connection are symptoms; the cause is the
+  invalid http_addr in the sample config the test deploys (the test, not the
+  product). Older reports in the tracker had other causes for the same symptom
+  (dashboard 'Port 8443 not free'); the confirm checks pin this one.
+  People also place these jobs in tracker #71506 ("cephadm/test_cephadm.sh:
+  Unhandled exception from module 'dashboard' while running on mgr.y:
+  Timeout('Port 8443 not free on ::.')"). Its own "Finally breaking at" log is
+  this same grafana.a restart loop ending in 'Start request repeated too
+  quickly'. These jobs also log the dashboard's 'Port 8443 not free' error from
+  mgr.y, but the workunit goes on after it; what fails the job is grafana never
+  coming up. #71506 is listed under `also` for the jobs that fail this way.
+examples:
+  - pdonnell-2026-08-27_01:45:31-rados-wip-pdonnell-testing-20260826.223123-squid-distro-default-trial/518570
+  - lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19064
+also:
+  - "71506"

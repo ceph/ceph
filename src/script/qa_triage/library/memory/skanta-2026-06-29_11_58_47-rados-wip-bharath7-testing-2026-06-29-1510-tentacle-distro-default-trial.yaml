@@ -1,0 +1,27 @@
+run: skanta-2026-06-29_11:58:47-rados-wip-bharath7-testing-2026-06-29-1510-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  cluster-log/health | WRN MON_NETSPLIT:
+    '71344': 1
+  'hung/command | rados: ceph tell mon.h sync_force --yes-i-really-mean-it':
+    '77809': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/cephtool-mds-not-configured | cephtool/test.sh | cephtool/test.sh do_messenger_dump_basics_test: mds.a ENOENT'
+  : '74607': 1
+titles:
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74607': 'do_messenger_dump_basics_test: Error ENOENT: problem getting command descriptions from mds.a'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '77809': daemon_watchdog - After BARK - one of the daemon show "No such daemon running" and hang for ~6hr

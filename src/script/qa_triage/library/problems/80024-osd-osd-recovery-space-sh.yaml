@@ -1,0 +1,42 @@
+id: "80024"
+tracker: https://tracker.ceph.com/issues/80024
+title: "osd/osd-recovery-space.sh TEST_recovery_test_simple failure - it's back!"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71393
+    branch: main
+    fixed_in: v21.3.0-3121-g76957bab1f
+tree: workunit/standalone
+facts:
+  test: '^TEST_recovery_test_simple$'
+  script: '^osd/osd-recovery-space\.sh$'
+confirm:
+  - file: teuthology.log
+    pattern: 'Error: Recovery toofull timeout|One pool should have been in recovery_toofull'
+notes: |
+  TEST_recovery_test_simple in osd/osd-recovery-space.sh times out waiting for
+  PGs to enter recovery_toofull state. Two bugs caused this:
+
+  1. Timing race: the test injects fake_statfs_for_testing to simulate a full OSD
+     and increases the pool size from 1 to 2, expecting recovery to be blocked.
+     fake_statfs_for_testing only reports the OSD as full once the recovered data
+     has landed, so on fast hardware the small (~3MB) recovery can complete (PG
+     active+clean) before the OSD ever reports itself full via the periodic
+     osd_stat/heartbeat update, and recovery_toofull never triggers.
+
+  2. Bash bug: wait_for_recovery_toofull() called wait_for_state but tested an
+     unset $ret instead of capturing the return code with 'local ret=$?', so the
+     timeout was silently swallowed and the helper always returned success.
+
+  PR #71393 fixed both: it adds 'osd_recovery_sleep 0.05' via injectargs to
+  throttle recovery so the full-status check reliably fires first, and fixes
+  the missing 'local ret=$?' in wait_for_recovery_toofull().
+
+  However, when OSDs run with osd_mclock_override_recovery_settings=true (as
+  this test does via ceph-helpers.sh run_osd), mClock disables osd_recovery_sleep.
+  The injectargs call for '--osd_recovery_sleep 0.05' then returns
+  "osd_recovery_sleep = ''" (empty) rather than the requested value, the throttle
+  has no effect, and the timing race persists even with the fix applied.
+examples:
+  - skanta-2026-08-25_01:57:44-rados-wip-bharath10-testing-20260824.234243-main-distro-default-trial/511229
+  - skanta-2026-09-30_04:36:41-rados-wip-bharath14-testing-20260930.003013-main-distro-default-trial/593536

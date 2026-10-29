@@ -1,0 +1,6 @@
+run: yaarit-2026-02-08_02:23:05-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial
+signatures:
+  'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_urls: AssertionError: Lists differ: [''/metrics''] != []':
+    '74819': 1
+titles:
+  '74819': tasks.mgr.test_prometheus.TestPrometheus.test_urls - metrics url fail with 400

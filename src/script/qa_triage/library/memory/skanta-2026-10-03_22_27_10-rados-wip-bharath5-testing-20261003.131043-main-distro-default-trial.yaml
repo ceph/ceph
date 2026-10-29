@@ -1,0 +1,33 @@
+run: skanta-2026-10-03_22:27:10-rados-wip-bharath5-testing-20261003.131043-main-distro-default-trial
+signatures:
+  ? 'cluster-log/message/laggy-socket-failures | WRN osd PG <pg> marked LAGGY; acting [#,#,#] | PG marked LAGGY: read lease expired under injected socket failures'
+  : '79576': 1
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+  ? 'command/unexplained/cbt-perf-keyerror-pid | cbt-venv/bin/python cbt/cbt.py -a archive/cbt archive/cbt/cbt_config.yaml: # | cbt perf_monitoring.py: KeyError: pid'
+  : '81515': 13
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 3
+  ? 'workunit/gtest/shard-bounced-direct-read | rados/test.sh LibRadosIoECPPParamCombination/LibRadosIoECPP.ZeroAndTruncateSameRequest/#, | LibRadosIoECPP: op_reply count off after a shard bounced a direct read'
+  : '80986': 1
+  ? 'workunit/set-e | mon/mon-stretch-mode-#-mons-#-osds.sh: ceph mon enable_stretch_mode e stretch_rule datacenter: Error EINVAL: stretch mode is already engaged'
+  : '81136': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/mon-bind.sh TEST_mon_client_connect:
+    '80756': 1
+  ? workunit/unexplained/cephtool-hang/bad-caps-key-left-behind | cephtool/test.sh | cephtool/test.sh hung with AUTH_BAD_CAPS HEALTH_ERR | cephtool test_mon_caps left client.bug with empty mon caps (AUTH_BAD_CAPS)
+  : '72888': 1
+titles:
+  '72888': 'rados/singleton-bluestore: cephtool.sh workunit hangs on various tests'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '79576': 'rados/singleton: PG marked LAGGY during [osd-recovery| backfill-toofull | ec-esb-fio]  tests'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'
+  '80756': 'qa/standalone/mon/mon-bind.sh: TEST_mon_client_connect fails from error pinging monitor'
+  '80986': 'LibRadosIoECPP test failure: Perf counter ''objecter.op_reply'' has incorrect value after operate()'
+  '81136': 'mon/mon-stretch-mode-5-mons-8-osds.sh: Error EINVAL: stretch mode is already engaged'
+  '81515': 'CBT: KeyError in monitoring/perf_monitoring.py Line 41: perf_cmd = f"{self._perf_cmd} {self._args_template} &".format(perf_dir=perf_dir)'

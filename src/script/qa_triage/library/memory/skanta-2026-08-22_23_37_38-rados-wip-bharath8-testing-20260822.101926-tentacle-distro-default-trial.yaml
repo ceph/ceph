@@ -1,0 +1,56 @@
+run: skanta-2026-08-22_23:37:38-rados-wip-bharath8-testing-20260822.101926-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  cluster-log/health | WRN PG_AVAILABILITY:
+    '75358': 1
+  'cluster-log/message | ERR osd full status failsafe engaged, dropping updates, now #% full':
+    '80415': 1
+  ? cluster-log/message/backfill-reject-injected | WRN mon pg <pg> is active+remapped+backfill_toofull, acting [#,#,#] | PG backfill_toofull from injected backfill reservation rejection
+  : '70716': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'command/unexplained/not-found | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: # | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found'
+  : '79571': 1
+  ? crash/abort/specific | osd osd/ReplicatedBackend.cc ceph_abort_msg("abort() called") in void ReplicatedBackend::_do_push(OpRequestRef)
+  : '80415': 1
+  'crash/client/ceph | ceph: ERROR: Failure due to cores found':
+    '74800': 1
+  ? 'hung/command/thrasher-min-size-pgs-not-active | rados: ceph osd unset nodeep-scrub | OSDThrasher test_pool_min_size: PGs not active or peered'
+  : '76298': 1
+  infra/build | build:
+    '80294': 1
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  workunit/standalone | misc/mclock-config.sh TEST_recovery_limit_adjustment_mclock:
+    '74678': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '79943': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '70716': 'rados/thrash-old-clients: "pg backfill_toofull" warning in cluster log'
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74678': 'qa/standalone/osd/mclock-config: test case might fails when running on SSD device.'
+  '74800': 'qa/standalone/osd/divergent-priors.sh: Core dump generated from call to OSDService::maybe_share_map'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76298': rados/thrash-erasure-code failure - not all PGs are active or peered
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '79943': qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of "cephx_auth_aes256k"
+  '79946': After rebuilding the mondb, authentication starts failing
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'
+  '80294': 'rados/encoder: no Rocky10 packages for older releases'
+  '80415': 'src/osd/ReplicatedBackend.cc: ceph_abort_msg("Out of space (failsafe) processing push request")'

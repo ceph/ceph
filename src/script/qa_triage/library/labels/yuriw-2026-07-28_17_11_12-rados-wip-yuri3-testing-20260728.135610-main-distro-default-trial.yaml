@@ -1,0 +1,26 @@
+run: yuriw-2026-07-28_17:11:12-rados-wip-yuri3-testing-20260728.135610-main-distro-default-trial
+jobs:
+  '406329':
+    problem: '79128'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 79128, but the tool said new (explain -> prefilter -> explained -> agent -> verify-quotes), sure, after its judge (bob) said new . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 79128 by itself, with no judge.
+    summary: ceph-bluestore-tool bluefs-bdev-expand crashed with FAILED ceph_assert(offset + length <= uint64_t(device_size)) in AvlAllocator.cc (tracker 79128); reviewers are right, new record and node at crash/client/unnamed needed
+    status: fail
+    description: rados/standalone/{supported-random-distro/{ubuntu_22.04} workloads/osd}
+    reason: 'Command failed (workunit test osd/osd-bluefs-volume-ops.sh) on trial147 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=ff08fd85e6e9d59c865fd3984af8e63075858527 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/osd/osd-bluefs-volume-ops.sh'''
+  '406415':
+    problem: '77106'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 77106, but the tool said new (explain -> prefilter -> confirm -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said duplicate 77106. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 77106 by itself, with no judge.
+    summary: 'nvme_loop: nvme list -o json failed 15 times on trial105 (MaxWhileTries); the node checked the hostnqn connect error first and returned the wrong branch'
+    status: fail
+    description: rados/cephadm/smoke/{0-distro/ubuntu_24.04 0-nvme-loop agent/on fixed-2 mon_election/classic start}
+    reason: reached maximum tries (15) after waiting for 15 seconds
+  '406311':
+    problem: '56652'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 1 jobs that the tool placed in no known problem in 58224, this one among them.
+    summary: test_repos.sh failed because cephadm add-repo --dev main got HTTP 504 from shaman.ceph.com (tracker 58224/56652); record 58224 only covered the infra/other/chacra path, not workunit/set-e
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/rocky_10 agent/on mon_election/connectivity task/test_cephadm_repos}
+    reason: 'Command failed (workunit test cephadm/test_repos.sh) on trial184 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=ff08fd85e6e9d59c865fd3984af8e63075858527 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_repos.sh'''

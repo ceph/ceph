@@ -1,0 +1,50 @@
+id: "78294"
+tracker: https://tracker.ceph.com/issues/78294
+title: "Some Rados API tests can fail when the test suite is doing error inject"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/70157
+    branch: main
+    fixed_in: v21.3.0-1776-g47f638fd5a
+tree: workunit/gtest/external-error-inject
+match:
+  reason: 'workunit test rados/test\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'ms inject socket failures: \d+|INFO:tasks\.thrashosds\.thrasher:'
+notes: |
+  Some rados API gtests (src/test/librados) assume the cluster is not being disturbed.
+  Two kinds are known:
+  - The split-op tests count Objecter perf counters around each operate()
+    (AssertOperateWithSplitOp in testcase_cxx.h: objecter.split_op_reads and
+    objecter.op_reply). When the suite injects errors itself, for example msgr-failures
+    ('ms inject socket failures: N'), the Objecter resends an op after a dropped
+    connection and the counts come out wrong (op_reply Expected 2, Actual 3).
+  - The omap recovery tests in omap_cxx.cc (OmapTest.OmapRecovery, NoOmapRecovery,
+    LargeOmapRecovery, GenerationalObjectRecovery) set a pg-upmap that swaps the PG's
+    first and last OSDs, then poll for 60 s (wait_for_upmap) for the new primary to lead
+    the acting set. When thrashosds runs at the same time (smoke/basic
+    tasks/test/rados_api_tests.yaml runs it with pg_num grow/shrink, primary affinity, pg
+    upmap items and inject_pause), the osdmap changes every second, the wanted primary
+    never shows up, and the test fails with 'omap_cxx.cc:661: Failure' / 'Value of: res2
+    == 0' and '[  FAILED  ] OmapTest.LargeOmapRecovery/Replicated'. 77808 is the tracker
+    filed for that smoke/basic case, closed as a duplicate of this one.
+  The tracker's fix, PR 70157, adds --external-error-inject to rados/test.sh, which skips
+  the *DoesErrorInject* tests (the omap recovery tests) and makes AssertOperateWithSplitOp
+  skip its counter checks when CEPH_TEST_EXTERNAL_ERROR_INJECT is set. It changed the qa
+  yaml of powercycle/osd, rados/monthrash, rados/thrash, rados/verify and smoke/basic only;
+  rados/basic still runs plain rados/test.sh together with msgr-failures/many, so it can
+  still fail this way in builds that have the PR (seen on 21.3.0-3283, after the fix).
+  The failed workunit, the gtest FAILED line, the perf counter message and the upmap wait
+  timeout are symptoms. The cause is the suite's own error injection (socket failures, or
+  OSD thrashing) with a rados/test.sh run without --external-error-inject.
+  The record hangs at the branch the learned node at workunit/gtest gives when it finds
+  one of the two: the split-op assertion with 'ms inject socket failures' in the config
+  and no OSD log bouncing a direct read ('unstable write on shard, bouncing to primary',
+  which is 80986), or an OmapTest *Recovery test whose upmap wait failed while the
+  thrashosds thrasher ran. The confirm check re-checks the injection. A thrasher line alone
+  is not enough: powercycle/osd runs thrashosds too, and its jobs fail other ways (77417).
+examples:
+  - jenkins-build-2026-06-25_06:03:13-smoke-main-distro-default-trial/314801
+also:
+  - "77808"

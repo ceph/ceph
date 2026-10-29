@@ -1,0 +1,49 @@
+id: "80415"
+tracker: https://tracker.ceph.com/issues/80415
+title: "src/osd/ReplicatedBackend.cc: ceph_abort_msg(\"Out of space (failsafe) processing push request\")"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71833
+    branch: main
+    fixed_in: v21.3.0-3519-g2be4923358
+tree: crash/abort/specific
+facts:
+  source: '^osd/ReplicatedBackend\.cc$'
+  message: 'Out of space \(failsafe\) processing (push request|pull response)'
+confirm:
+  - file: teuthology.log
+    pattern: '^\s+type: (rand|seq)\s*$'
+notes: |
+  An OSD aborts in ReplicatedBackend::_do_push ("processing push request", line 994)
+  or in ReplicatedBackend::_do_pull_response ("processing pull response (push)",
+  line 1072) because it is failsafe-full
+  (OSDService::check_failsafe_full(), >= osd_failsafe_full_ratio, 0.95), which
+  is by design. The cause is a test-side runaway: after commit a6b09589f66
+  (qa/tasks/radosbench: avoid object-size parameter for non-write), the
+  populate run that radosbench does before a seq/rand run no longer passed
+  --object-size/--block-size, so it wrote default 4 MB objects for 60s with no
+  cap and filled the cluster about 27x more than intended. The OSDs go
+  nearfull, backfillfull, then failsafe full (cluster log: OSD_NEARFULL,
+  OSD_BACKFILLFULL, 'full status failsafe engaged, dropping updates, now 96%
+  full'), and the first OSD to receive a recovery push or pull response while
+  failsafe-full aborts, during thrashing in rados/singleton thrash-eio,
+  random-eio or thrash-backfill-full. Also contributing: PR #71825 (tracker
+  80564), the mon reads 'mon osd {full,backfillfull,nearfull}_ratio' only from
+  [mon], not from [osd], so the qa overrides were ignored.
+  Fixed by PR #71833 (qa/radosbench: keep object/block size on the populate
+  run, and add a max_objects guardrail), merged at v21.3.0-3519-g2be4923358.
+  Backports: #80741 (umbrella), tentacle.
+  The record does not require 'full status failsafe engaged' in ceph.log: the
+  OSD sends that cluster-log message in the same heartbeat tick in which it can
+  abort, and when the OSD that first crosses the failsafe ratio is the one that
+  aborts, the message never reaches the mon. In 558506 osd.3 logged it at
+  04:58:20.959 (store_statfs 0x10c580000 free of 0x1680000000) and aborted 4 ms
+  later; the line is only in ceph-osd.3.log, not in ceph.log. The abort message
+  'Out of space (failsafe)' (the record's facts) is itself the OSD's proof that
+  it was failsafe-full, and the confirm check shows a seq/rand radosbench, whose
+  populate run is what filled it. In these jobs the benchmark objects on the
+  OSDs are 4 MB (size 0x400000) although the job sets objectsize: 1048576.
+examples:
+  - skanta-2026-09-18_23:45:18-rados-wip-bharath3-testing-20260918.154843-main-distro-default-trial/568120
+  - skanta-2026-09-18_02:38:43-rados-wip-bharath24-testing-20260918.001059-main-distro-default-trial/566061
+  - skanta-2026-09-16_04:01:33-rados-wip-bharath19-testing-20260915.234926-main-distro-default-trial/558506

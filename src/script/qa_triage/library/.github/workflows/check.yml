@@ -1,0 +1,28 @@
+# On every push and pull request, qa_triage lint checks the records, the learned
+# nodes, the settled jobs and the memory, with qa_triage from its branch.
+name: check
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: library
+      - uses: actions/checkout@v4
+        with:
+          repository: aainscow/ceph
+          ref: wip-qa-triage
+          path: ceph
+          sparse-checkout: src/script/qa_triage
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml
+      - run: >
+          python ceph/src/script/qa_triage --archive https
+          --problems library/problems --nodes library/nodes --labels library/labels lint

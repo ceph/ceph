@@ -1,0 +1,10 @@
+run: skanta-2026-07-28_05:39:53-rados-wip-bharath9-testing-20260728.022342-tentacle-distro-default-trial
+jobs:
+  '404010':
+    problem: '52109'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'grafana.a never started (invalid IP address: localhost) and the workunit ended on grafana is not available; the dashboard Port 8443 line is a bystander in the dumped mgr log'
+    summary: duplicate 52109 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/centos_9.stream agent/off mon_election/classic task/test_cephadm}
+    reason: 'Command failed (workunit test cephadm/test_cephadm.sh) on trial172 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=896d2986aaaa50f51cc02f4da589a032e9a012ac TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_cephadm.sh'''

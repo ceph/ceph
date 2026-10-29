@@ -1,0 +1,25 @@
+id: "77337"
+tracker: https://tracker.ceph.com/issues/77337
+title: "TEST_b_crimson_save_and_compare is called on classic osd tests"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69513
+    branch: main
+    fixed_in: v21.3.0-1871-ga26a694f91
+tree: workunit/standalone
+facts:
+  test: '^TEST_b_crimson_save_and_compare$'
+  script: '^osd/pg-subcommands\.sh$'
+match:
+  reason: 'workunit test osd/pg-subcommands\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'ERROR: crimson-osd binary not found'
+notes: |
+  TEST_b_crimson_save_and_compare in qa/standalone/osd/pg-subcommands.sh runs
+  run_crimson_osd to start a Crimson OSD and compare its PG subcommand output
+  with classic OSD. When pg-subcommands.sh is executed in classic OSD test suites
+  where crimson-osd is not built or installed, run_crimson_osd prints
+  'ERROR: crimson-osd binary not found' and returns 1, causing the test to fail.
+examples:
+  - yuriw-2026-10-23_17:09:01-rados-umbrella-release-distro-default-trial/671302

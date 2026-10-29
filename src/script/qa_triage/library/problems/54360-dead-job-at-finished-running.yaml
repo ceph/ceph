@@ -1,0 +1,18 @@
+id: "54360"
+tracker: https://tracker.ceph.com/issues/54360
+title: "Dead job at \"Finished running handlers\" in rados/cephadm/osds/.../rm-zap-wait"
+kind: product
+tree: hung/command/cephadm-rm-cluster
+match:
+  reason: 'hit max job timeout'
+confirm:
+  - file: teuthology.log
+    pattern: 'cephadm rm-cluster --fsid \S+ --force --keep-logs'
+exclude:
+  - file: teuthology.log
+    pattern: 'test_iscsi_container'
+  - file: remote/*/log/cephadm.log*
+    pattern: 'Failed to send metadata to mgr: non-200 response'
+notes: |
+  During cephadm task teardown, the cleanup command "cephadm rm-cluster --fsid <fsid> --force --keep-logs"
+  hangs indefinitely until the job hits max job timeout and teuthology is killed with SIGTERM.

@@ -1,0 +1,47 @@
+id: "75764"
+tracker: https://tracker.ceph.com/issues/75764
+title: "rados/cephadm: cephadm task involving 'ceph orch osd rm 1' fails as the device couldn't be zapped"
+kind: product
+tree: command/error
+facts:
+  task: '^cephadm\.shell$'
+  error: '--entrypoint /usr/sbin/ceph-volume'
+  command: 'ceph:[0-9a-f]{40} shell'
+match:
+  reason: 'ceph orch osd rm status'
+confirm:
+  - file: teuthology.log
+    pattern: "cannot pickle 'CephadmOrchestrator' object|error from zap: \\(16\\) Device or resource busy"
+notes: |
+  The rados/cephadm/osds rm-zap-add and rm-zap-wait tests run `ceph orch osd rm 1`
+  and then wait with `while ceph orch osd rm status | grep ^1 ; do sleep 5 ; done`.
+  In the mgr, `ceph orch osd rm status` fails with "Error EINVAL ... RuntimeError:
+  Remote method threw exception: TypeError: cannot pickle 'CephadmOrchestrator'
+  object" (orchestrator mgr_module.remote of remove_osds_status). Because the command
+  is a while-loop condition, set -e does not stop the script and the loop exits at
+  once without waiting for the OSD removal. The test then runs `ceph orch device zap
+  <host> <dev> --force` while the removal is still in progress, so `ceph-volume lvm
+  zap --destroy` fails with ceph-bluestore-tool "error from zap: (16) Device or
+  resource busy" and cephadm exits with status 22.
+  The zap failure is a symptom; the cause is the mgr error from `osd rm status`.
+  The record hangs at command/error with facts for the ceph-volume podman failure of
+  the cephadm shell, and the confirm check wants the pickle error or the busy zap, so
+  that older rocky10 branch jobs (image tag ending in -rocky10) that failed some other
+  way are not claimed.
+  Tracker 74862 (Rocky10 - cephadm: OSD class cannot be pickled) is the same cause and
+  is listed in `also`. Its fix, PR 67236 (add OSD.__getstate__), is in the build under
+  test (source/src/pybind/mgr/cephadm/services/osd.py) but does not work: __getstate__
+  sets the key 'remove_util' to None, while the attribute is named 'rm_util', so the
+  pickle error persists (Yuri Weinstein's 2026-05-10 comment on 74862 shows it on main
+  too). No `fixes` entry is given, so these jobs are not sent to seen-after-fix.
+examples:
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122169
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122173
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122181
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122188
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122197
+  - skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127714
+  - skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143037
+  - skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143042
+also:
+  - "74862"

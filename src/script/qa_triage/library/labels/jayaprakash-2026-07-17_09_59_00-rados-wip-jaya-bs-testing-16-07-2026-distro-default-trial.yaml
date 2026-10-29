@@ -1,0 +1,10 @@
+run: jayaprakash-2026-07-17_09:59:00-rados-wip-jaya-bs-testing-16-07-2026-distro-default-trial
+jobs:
+  '373025':
+    problem: '75208'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 5 jobs that the tool placed in no known problem in 75208, this one among them.
+    summary: 'Infra failure: ansible.cephlab''s disk check found only 1 of the 2 required ~1700 GB NVMe disks on a test node (trial108/trial134). This is tracker 75208, which lists this exact job, but no record existed for it, so the tool called it new.'
+    status: dead
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/connectivity random-objectstore$/{bluestore-bitmap} tasks/dashboard}
+    reason: '["Wanted 2 disks of ~1700 GB (rotational=False), but only matched 1: [''nvme1n1'']"]'

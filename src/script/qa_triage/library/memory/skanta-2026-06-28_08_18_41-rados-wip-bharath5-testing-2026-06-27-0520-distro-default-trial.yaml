@@ -1,0 +1,27 @@
+run: skanta-2026-06-28_08:18:41-rados-wip-bharath5-testing-2026-06-27-0520-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_DB_LIST_FAILED:
+    '77250': 1
+  ? 'cluster-log/message/pg-not-ready-to-merge | WRN mon osd.# reported pg <pg> not ready to merge; backing off pg_num decrease for pool ''unique_pool_#'' | mon: osd reported pg not ready to merge; backing off pg_num decrease'
+  : '77459': 9
+  ? 'hung/command/ceph-daemon-config-set-hang | exec: sudo TESTDIR=/home/ubuntu/cephtest bash -c ''for f in # # # # ; do sudo ceph daemon osd.$f config set osd_recovery_sleep # ; sudo ceph daemon osd.$f config set osd_recovery_max_active # ; done'' | exec hung: ceph daemon config set on restarting OSD'
+  : '77743': 1
+  ? 'hung/test/rados-api-tests-valgrind-slowdown | waiting for api_misc_pp | rados_api_tests: api_* test timed out under valgrind'
+  : '77739': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 2
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '75216': 2
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? 'workunit/unexplained/test-repos-release-file-missing | cephadm/test_repos.sh | test_repos.sh: download.ceph.com apt repo has no Release file'
+  : '77130': 1
+titles:
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '77250': 'rados/mgr: Failed to list/create InfluxDB database (MGR_INFLUX_DB_LIST_FAILED)'
+  '77459': 'rados/thrash-erasure-code: tests failing with not ready to merge warning '
+  '77739': ' rados/verify/ Dead Job - test api_lock/api_snapshots/api_misc_pp etc hung for 1.5 hours and then it starts the next test up. Resulting in 8 hour timeout '
+  '77743': Radosbench test times out

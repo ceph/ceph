@@ -1,0 +1,6 @@
+run: yuriw-2026-09-03_16:42:24-upgrade:squid-p2p-squid-release-distro-default-trial
+signatures:
+  workunit/unexplained | rados/test.sh:
+    '80613': 2
+titles:
+  '80613': 'upgrade p2p-parallel tests: error in completions during rados/test.sh'

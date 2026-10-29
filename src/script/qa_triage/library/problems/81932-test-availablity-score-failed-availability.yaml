@@ -1,0 +1,35 @@
+id: "81932"
+tracker: https://tracker.ceph.com/issues/81932
+title: "TEST_availablity_score: Failed: Availability score for the pool did not drop"
+kind: product
+tree: workunit/standalone
+facts:
+  test: '^TEST_availablity_score$'
+  script: '^mon/availability\.sh$'
+match:
+  reason: 'workunit test mon/availability\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'Failed: Availability score for the pool did not drop'
+  - file: teuthology.log
+    pattern: 'stdout:foo\s+\S+\s+0s\s+[1-9]\d*\s+\S+\s+\S+\s+1\s+0\s*$'
+notes: |
+  qa/standalone/mon/availability.sh TEST_availablity_score kills osd.1, sleeps
+  10s and expects pool foo's availability SCORE to drop. The pool's status row
+  then shows it unavailable (AVAILABLE 0) with one failure counted (NUMFAILURES
+  1), but DOWNTIME is still 0s and SCORE still 1:
+    foo  2m  0s  1  2m  0s  1  0
+  In MgrStatMonitor::calc_pool_availability the Available->Unavailable step only
+  bumps num_failures and records last_downtime; downtime (and so a lower score)
+  only builds up on a later Unavailable->Unavailable recalculation. That
+  recalculation only runs from MgrStatMonitor::update_from_paxos on the leader
+  mon. Since the mon health-check refactor in v20.2.4 (PR #71161, commit
+  aa1ab675c97 "mon: refactor health check map through PaxosMap"), MgrStatMonitor
+  only proposes paxos state when the mgr sends a report, not on every change in
+  health state, so the score is not refreshed within the test's 10s window.
+  Not seen in v20.2.3. The confirm checks need the test's "did not drop" message
+  and the stuck status row (unavailable, failures >= 1, downtime 0s, score 1);
+  the test's other checks (e.g. "Pool is available ... when unfound objects
+  present") are different failures.
+examples:
+  - jenkins-build-2026-10-18_06:04:45-rados-tentacle-distro-default-trial/652091

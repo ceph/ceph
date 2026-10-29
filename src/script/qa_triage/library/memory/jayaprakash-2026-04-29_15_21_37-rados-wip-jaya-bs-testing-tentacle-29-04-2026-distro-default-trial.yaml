@@ -1,0 +1,30 @@
+run: jayaprakash-2026-04-29_15:21:37-rados-wip-jaya-bs-testing-tentacle-29-04-2026-distro-default-trial
+signatures:
+  ? 'cluster-log/other/cephadm-pull-manifest-unknown | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: reading manifest in quay.ceph.io/ceph-ci/ceph: manifest unknown'
+  : '76028': 1
+  'command/unexplained | yes | mkfs.xfs -f -i size=# /dev/vg_nvme/lv_#: #':
+    '67860': 1
+  'infra/other | install: ':
+    '74708': 1
+  ? 'test/unittest | tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam: ConnectionRefusedError: [Errno #] Connection refused'
+  : '69954': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  timeout/unexplained | MaxWhileTries:
+    '76408': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 1
+titles:
+  '67860': 'Error : Command failed on smithi050 with status 1: ''''yes | sudo mkfs.xfs   -f -i size=2048 /dev/vg_nvme/lv_2'
+  '69954': 'test_selftest_command_spam: ConnectionRefusedError: [Errno 111] Connection refused'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74708': Failed to download metadata for repo 'epel' causes 'sudo yum install -y kernel' to fail on trial129
+  '76028': 'squid: upgrade jobs fail from missing untagged versions of reef and quincy'
+  '76408': 'rados/cephadm/osds: tasks.cephadm:Hit timeout while adding host trial165'

@@ -1,0 +1,15 @@
+run: pdonnell-2026-06-13_16:37:37-upgrade-wip-pdonnell-testing-20260613.133611-tentacle-distro-default-trial
+signatures:
+  ? 'cluster-log/message | ERR mgr Unhandled exception from module ''dashboard'' while running on mgr.x: No socket could be created -- ((''<ip>'', #): [Errno #] Cannot assign requested address)'
+  : '76970': 1
+  'cluster-log/message | WRN mon [WRN] SLOW_OPS: # slow ops, oldest one blocked for # sec, osd.# has slow ops':
+    '75695': 1
+  ? cluster-log/message | WRN mon telemetry module includes new collections; please re-opt-in to new collections with `ceph telemetry on`
+  : '77382': 1
+  cluster-log/message | WRN osd Monitor daemon marked osd.# down, but it is still running:
+    '76962': 1
+titles:
+  '75695': 'cluster [WRN] [WRN] OSD_SLOW_PING_TIME_BACK: Slow OSD heartbeats on back (longest 1313.681ms)" in cluster log'
+  '76962': 'rados/upgrade/parallel: "Monitor daemon marked osd.x down, but it is still running" in cluster log'''
+  '76970': 'pybind/mgr/dashboard: OSError: No socket could be created -- ((''10.20.193.190'', 8443): [Errno 99] Cannot assign requested '
+  '77382': 'upgrade: cluster [WRN] telemetry module includes new collections; please re-opt-in to new collections with `ceph telemetry on`" in cluster log'

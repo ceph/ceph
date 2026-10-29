@@ -1,0 +1,28 @@
+id: "56097"
+tracker: https://tracker.ceph.com/issues/56097
+title: "Timeout on `sudo adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 120 ceph --cluster ceph tell osd.1 flush_pg_stats`"
+kind: test
+tree: command/error
+facts:
+  command: '^ceph tell osd\.\d+ flush_pg_stats$'
+  error: '^Error ENXIO: problem getting command descriptions from osd\.\d+$'
+confirm:
+  - file: teuthology.log
+    pattern: 'Error ENXIO: problem getting command descriptions from osd\.\d+'
+  - file: teuthology.log
+    pattern: 'heartbeat_check: no reply from \S+ osd\.\d+'
+notes: |
+  A qa task (here thrashosds, in its teardown flush_all_pg_stats; ceph_manager
+  flush_pg_stats) runs 'ceph tell osd.N flush_pg_stats' and one OSD does not
+  answer: the command fails with status 6 and
+  'Error ENXIO: problem getting command descriptions from osd.N'. The command
+  and ENXIO are symptoms. The cause is an OSD the qa task treats as up that is
+  not reachable at that moment: the other OSDs log 'heartbeat_check: no reply
+  from ... osd.N' and the mon marks it failed seconds later (in 534781 osd.13
+  was never killed by the thrasher and did not crash; it just stopped answering
+  right after 'all up' passed, with the bad_map_crc_failure and fastclose
+  injections active). The tracker's comments blame a thrashed OSD that was
+  restarted and is not yet up; PR 50126 (wait till the osd is up before
+  injecting args) is closed and not merged, so no fix is known.
+examples:
+  - skanta-2026-09-03_10:37:47-rados-wip-bharath10-testing-20260903.050751-main-distro-default-trial/534781

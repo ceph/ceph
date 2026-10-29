@@ -1,0 +1,6 @@
+run: lflores-2026-03-12_02:28:06-upgrade-wip-rocky10-branch-of-the-day-2026-03-09-1773078259-with-pr-63859-distro-default-trial
+signatures:
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN # pool(s) full':
+    '75414': 1
+titles:
+  '75414': 'upgrade: pool full warning variation'

@@ -1,0 +1,27 @@
+id: "77785"
+tracker: https://tracker.ceph.com/issues/77785
+title: "qa/standalone/mon-stretch/mon-stretch-uneven-crush-weights.sh: ceph-mgr crashes with ceph_assert(osd_weight.count(oid))"
+kind: product
+tree: crash/client/unnamed/balancer-osd-weight-assert
+facts:
+  function: '^OSDMap::calc_deviations$'
+  message: 'osd_weight\.count\(oid\)'
+confirm:
+  - file: remote/*/log/*mgr.*.log*
+    pattern: 'OSDMap\.cc: \d+: FAILED ceph_assert\(osd_weight\.count\(oid\)\)'
+notes: |
+  ceph-mgr's balancer (do_upmap -> OSDMap::calc_pg_upmaps -> calc_deviations) aborts on
+  ceph_assert(osd_weight.count(oid)) at osd/OSDMap.cc: every OSD that a PG's up set maps
+  to (pgs_by_osd) must have an entry in osd_weight. But build_pool_pgs_info/get_osds_weight
+  leave out OSDs whose adjusted weight (reweight x crush weight under the pool's rule) is 0.
+  mon-stretch-uneven-crush-weights.sh sets osd.0 and osd.1, the only OSDs in zone iris,
+  to crush weight 0 to raise STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE. stretch_rule still
+  takes from iris, so PGs keep mapping to those OSDs while they have no weight, and the
+  balancer's next upmap pass (about a second later) asserts.
+  In a standalone test the mgr's output is not in teuthology.log: teardown only reports
+  "Failure due to cores found", and teuthology says the core is from 'ceph-mgr --id x'.
+  The assert and its backtrace are in the mgr's own log (remote/*/log/mgr.x.log).
+  Tracker 48896 (FAILED ceph_assert(osd_weight.count(i.first)) in older calc_pg_upmaps
+  code) is a similar assert; check whether it is the same cause before adding it to also.
+examples:
+  - jayaprakash-2026-06-26_11:26:01-rados-wip-jaya-bs-testing-25-06-2026-distro-default-trial/318075

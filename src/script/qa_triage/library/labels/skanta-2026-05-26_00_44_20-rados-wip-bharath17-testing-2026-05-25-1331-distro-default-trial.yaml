@@ -1,0 +1,26 @@
+run: skanta-2026-05-26_00:44:20-rados-wip-bharath17-testing-2026-05-25-1331-distro-default-trial
+jobs:
+  '237418':
+    problem: '76298'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 76298, this one among them.
+    summary: 'Job 237418 is tracker 76298: the minsize_recovery OSDThrasher ran out of tries waiting for PGs to be active or peered, the watchdog killed all daemons, and the `ceph status` timeout is only the later symptom; the record now matches that end of the failure as well as the one the tree explains.'
+    status: fail
+    description: rados/thrash-erasure-code/{ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_off fast/normal mon_election/classic msgr-failures/osd-delay objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-2} onode-segment$/{256K} write$/{v1/{compr$/{no$/{no}} v1}}}} rados recovery-overrides/{more-async-recovery} supported-random-distro/{rpm_latest} thrashers/minsize_recovery thrashosds-health workloads/ec-rados-plugin=jerasure-k=8-m=6-crush}
+    reason: 'Command failed on trial053 with status 124: ''sudo adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 120 ceph --cluster ceph status --format=json'''
+  '237391':
+    problem: '76297'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 4 jobs that the tool placed in 76297 in 74577, this one among them.
+    summary: The job failed in cephadm/test_iscsi_setup.sh when verifying the iSCSI block device with 'sudo ls /dev/disk/by-path | grep iscsi', matching issue 76297 which shares root cause tracking with 74577.
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/centos_9.stream agent/off mon_election/classic task/test_iscsi_container/{centos_9.stream test_iscsi_container}}
+    reason: 'Command failed (workunit test cephadm/test_iscsi_setup.sh) on trial043 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=e8a9c2b79d9ccf556a3928de6a2430ca001e50fb TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_iscsi_setup.sh'''
+  '237405':
+    problem: '76981'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'ganesha.nfsd: Cannot register NFS V3 on TCP, nfs.a exited status=2, then nfs is not available; the Port 8443 lines are bystanders in the dumped mgr log'
+    summary: duplicate 76981 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/rocky_10 agent/off mon_election/classic task/test_cephadm}
+    reason: 'Command failed (workunit test cephadm/test_cephadm.sh) on trial109 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=e8a9c2b79d9ccf556a3928de6a2430ca001e50fb TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_cephadm.sh'''

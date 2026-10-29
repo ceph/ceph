@@ -1,0 +1,21 @@
+run: skanta-2026-01-30_23:12:23-rados-wip-bharath10-testing-2026-01-30-1531-distro-default-trial
+signatures:
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'crash/client/unnamed | Command failed (workunit test osd/divergent-priors.sh) on <host> with status #: ''mkdir -p -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && cd -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && CEPH_CLI_TEST_DUP_COMMAND=# CEPH_REF=<sha> TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="#" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.# CEPH_ROOT=/home/ubuntu/cephtest/clone.client.# CEPH_MNT=/home/ubuntu/cephtest/mnt.# adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout #h /home/ubuntu/cephtest/clone.client.#/qa/standalone/osd/divergent-priors.sh'''
+  : '56034': 1
+  ? 'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_standby: AssertionError: ''text/html;charset=utf-#'' != ''text/plain;charset=utf-#'''
+  : '75101': 1
+  ? 'workunit/set-e | objectstore/test_fuse.sh: rmdir store_test_fuse_mnt/#.#_head: rmdir: failed to remove ''store_test_fuse_mnt/#.#_head'': Directory not empty'
+  : '36113': 1
+  workunit/unexplained | mon/availability.sh:
+    '74178': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '36113': fusestore test umount failed?
+  '56034': qa/standalone/osd/divergent-priors.sh fails in test TEST_divergent_3()
+  '74178': 'qa/standalone/mon/availability.sh: line 64: Syntax error due to missing availability status'
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '75101': 'Test failure: test_standby (tasks.mgr.test_prometheus.TestPrometheus)'

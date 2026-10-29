@@ -1,0 +1,18 @@
+run: nmordech-2026-01-26_18:32:32-rados:cephadm-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial
+signatures:
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'infra/other/nvme-cli-host-identity | nvme_loop: Command failed on <host> with status #: ''sudo mkdir -p /sys/kernel/config/nvmet/subsystems/lv_# && echo # | sudo tee /sys/kernel/config/nvmet/subsystems/lv_#/attr_allow_any_host && sudo mkdir -p /sys/kernel/config/nvmet/subsystems/lv_#/namespaces/# && echo -n /dev/vg_nvme/lv_# | sudo tee /sys/kernel/config/nvmet/subsystems/lv_#/namespaces/#/device_path && echo # | sudo tee /sys/kernel/config/nvmet/subsystems/lv_#/namespaces/#/enable && sudo ln -s /sys/kernel/config/nvmet/subsystems/lv_# /sys/kernel/config/nvmet/ports/#/subsystems/lv_# && sudo nvme connect -t loop -n lv_# -q hostnqn'' | nvme_loop: nvme connect: Failed to write to /dev/nvme-fabrics'
+  : '73823': 4
+  timeout/unexplained | MaxWhileTries:
+    '74519': 1
+  ? 'workunit/set-e/test-repos-add-repo-metadata-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: Traceback (most recent call last): | test_repos.sh: add-repo repository metadata #'
+  : '67555': 1
+  ? 'workunit/unexplained/iscsi-gwcli-host-not-found | cephadm/test_iscsi_setup.sh | gwcli: No such path /iscsi-targets/.../hosts/...'
+  : '74577': 1
+titles:
+  '67555': failed to fetch repository task/test_cephadm_repos
+  '73823': 'orch/cephadm: nvme-loop task fails on rocky 10'
+  '74519': 'cephadm/osds: Error: statfs /etc/ceph/ceph.client.admin.keyring: no such file or directory'
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74577': test_iscsi_setup.sh - No such path /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/iqn.1994-05.com.redhat:client1

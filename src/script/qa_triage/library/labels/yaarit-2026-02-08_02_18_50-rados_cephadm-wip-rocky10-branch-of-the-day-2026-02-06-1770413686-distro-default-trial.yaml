@@ -1,0 +1,10 @@
+run: yaarit-2026-02-08_02:18:50-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial
+jobs:
+  '39771':
+    problem: '74818'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 74818, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are yaarit-2026-02-08_02:18:50-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/39774, yaarit-2026-02-08_02:18:50-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/39776, yaarit-2026-02-08_02:18:50-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/39782.'
+    summary: 'CEPHADM_APPLY_SPEC_FAIL for osd.default is tracker 74818: cephadm passes ''OSDType.classic'' as --osd-type to ceph-volume lvm batch; no record existed, so it was wrongly reported as new.'
+    status: fail
+    description: rados:cephadm/smoke/{0-distro/ubuntu_22.04 0-nvme-loop agent/off fixed-2 mon_election/classic start}
+    reason: '"2026-02-08T02:27:47.421534+0000 mon.a (mon.0) 279 : cluster [WRN] Health check failed: Failed to apply 1 service(s): osd.default (CEPHADM_APPLY_SPEC_FAIL)" in cluster log'

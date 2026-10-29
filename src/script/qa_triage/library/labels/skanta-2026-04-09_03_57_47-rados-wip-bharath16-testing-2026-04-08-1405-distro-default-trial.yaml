@@ -1,0 +1,42 @@
+run: skanta-2026-04-09_03:57:47-rados-wip-bharath16-testing-2026-04-08-1405-distro-default-trial
+jobs:
+  '141085':
+    problem: '75360'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 75360, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: 'Workunit git clone failed due to DNS resolution failure for github.com, matching infra issue #75360.'
+    status: fail
+    description: rados/upgrade/parallel/{0-random-distro$/{centos_9.stream_runc} 0-start 1-tasks mon_election/classic overrides/ignorelist_health upgrade-sequence workload/{ec-rados-default rados_api rados_loadgenbig rbd_import_export test_rbd_api test_rbd_python}}
+    reason: 'Command failed on trial059 with status 128: ''rm -rf /home/ubuntu/cephtest/clone.client.0 && git clone https://github.com/ceph/ceph.git /home/ubuntu/cephtest/clone.client.0 && cd /home/ubuntu/cephtest/clone.client.0 && git checkout e4f1db16ea5f5ee2e7dd2ccfc281e2a7b9d7d871'''
+  '141122':
+    problem: '76466'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 76466, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: OSD crashed with ceph_assert(chunk.is_contiguous()) in ErasureCode::encode_prepare due to zero-sized buffers in bufferlist rebuild
+    status: fail
+    description: rados/singleton/{all/ec-esb-fio mon_election/connectivity msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{bitmap} base mem$/{low} onode-segment$/{512K} write$/{v2/{compr$/{yes$/{zlib}} v2}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: 'Command failed (workunit test rados/ec-esb-fio.sh) on trial027 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=e4f1db16ea5f5ee2e7dd2ccfc281e2a7b9d7d871 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/ec-esb-fio.sh'''
+  '141133':
+    problem: '75852'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 75852, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: 'ceph-bluestore-tool bluefs-bdev-expand aborted on ceph_assert(rs_before == range_tree.end() || rs_before->end <= start) in AvlAllocator::_add_to_tree: tracker #75852, which had no record and which the tree could not name.'
+    status: fail
+    description: rados/standalone/{supported-random-distro/{rpm_latest} workloads/osd}
+    reason: 'Command failed (workunit test osd/osd-bluefs-volume-ops.sh) on trial189 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=e4f1db16ea5f5ee2e7dd2ccfc281e2a7b9d7d871 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/osd/osd-bluefs-volume-ops.sh'''
+  '141128':
+    problem: '77130'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 2 jobs in 65719, this one among them, and no record names it yet: the tool placed them in 77130. A record for it should place them all; others are skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/166103.'
+    summary: 'cephadm add-repo --release 17.2.6 fails on Ubuntu 22.04 because download.ceph.com has no jammy repository for 17.2.6 (#77130, also #65719)'
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_22.04 agent/on mon_election/connectivity task/test_cephadm_repos}
+    reason: 'Command failed (workunit test cephadm/test_repos.sh) on trial125 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=e4f1db16ea5f5ee2e7dd2ccfc281e2a7b9d7d871 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_repos.sh'''
+  '141099':
+    problem: '74794'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'thrashers/morepggrow: OSDThrasher wait_for_recovery failed before timeout and the watchdog barked; 75406''s comment names job 141109 of this run, not 141099'
+    summary: duplicate 74794 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{more-async-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-5} backoff/normal ceph clusters/{fixed-4} crc-failures/default d-balancer/crush-compat mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{hybrid} base mem$/{normal-1} onode-segment$/{512K} write$/{random/{compr$/{yes$/{zstd}} random}}}} rados supported-random-distro/{ubuntu_latest} thrashers/morepggrow thrashosds-health workloads/pool-snaps-few-objects}
+    reason: 'The WatchDog barked due to Thrasher OSDThrasher threw exception wait_for_recovery: failed before timeout expired'

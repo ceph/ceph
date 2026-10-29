@@ -1,0 +1,25 @@
+id: "74708"
+tracker: https://tracker.ceph.com/issues/74708
+title: "Failed to download metadata for repo 'epel' causes 'sudo yum install -y kernel' to fail"
+kind: infra
+tree: infra/packages/epel-mirror-404
+facts:
+  task: '^kernel$'
+confirm:
+  - file: teuthology.log
+    pattern: "Failed to download metadata for repo 'epel':.*Cannot download"
+notes: |
+  The kernel task runs 'sudo yum install -y kernel' before ceph-cm-ansible has a
+  chance to configure the lab's internal EPEL mirror. DNF refreshes the upstream
+  EPEL repo metadata and finds that the specific metadata file (e.g.
+  updateinfo.xml.zst) is missing from every mirror (HTTP 404). All mirrors are tried
+  and every attempt fails, so yum exits with status 1 and teuthology raises
+  CommandFailedError. The root cause is that the EPEL mirror pool published a new
+  repodata index before all mirrors had the referenced files. The fix was to bake
+  the lab's internal EPEL mirror into the FOG OS image so that the kernel task uses
+  it before ansible.cephlab runs. This is a transient infra problem; re-running the
+  job is the usual remedy once the mirrors have caught up.
+examples:
+  - skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263741
+  - skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263893
+  - skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263901

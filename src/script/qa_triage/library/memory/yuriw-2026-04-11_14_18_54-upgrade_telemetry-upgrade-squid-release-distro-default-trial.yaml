@@ -1,0 +1,6 @@
+run: yuriw-2026-04-11_14:18:54-upgrade:telemetry-upgrade-squid-release-distro-default-trial
+signatures:
+  ? 'cluster-log/other/cephadm-pull-manifest-unknown | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: reading manifest in quay.ceph.io/ceph-ci/ceph: manifest unknown'
+  : '76028': 1
+titles:
+  '76028': 'squid: upgrade jobs fail from missing untagged versions of reef and quincy'

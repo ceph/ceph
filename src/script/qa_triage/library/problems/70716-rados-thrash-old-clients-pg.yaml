@@ -1,0 +1,30 @@
+id: "70716"
+tracker: https://tracker.ceph.com/issues/70716
+title: "rados/thrash-old-clients: \"pg backfill_toofull\" warning in cluster log"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/64377
+    branch: main
+    fixed_in: v20.3.0-3623-g751a54aa6d
+tree: cluster-log/message/backfill-reject-injected
+facts:
+  message: '^pg \S+ is \S*backfill_toofull, acting'
+notes: |
+  The thrashers (rados/thrash-old-clients/thrashers/default.yaml and others) set
+  'osd debug reject backfill probability: .3'. PG.cc then rejects some backfill
+  reservations at random ('backfill reservation rejected: failure injection'), which
+  puts the PG in backfill_toofull although the OSDs have plenty of space (the pgmap
+  shows 8.2 TiB of 8.2 TiB available). The mon logs the warning in its periodic
+  'Health detail: HEALTH_WARN ... PG_BACKFILL_FULL' summary as
+  '[WRN] pg 3.0 is active+remapped+backfill_toofull, acting [11,9,6]'. The
+  thrashosds-health.yaml log-ignorelist has 'PG_BACKFILL_FULL' and
+  'Low space hindering backfill .*? backfill_toofull' but nothing that matches the
+  per-PG detail line, so the teardown cluster-log scan fails the job. PR 64377 adds the
+  missing ignorelist entry for the injected rejection. The tree node
+  cluster-log/message/backfill-reject-injected finds the injection setting in the job's
+  config; jobs where a real full OSD caused backfill_toofull do not set it and are not
+  this problem.
+examples:
+  - lflores-2026-04-17_22:03:40-rados-wip-lflores-testing-2-2026-04-08-1424-tentacle-distro-default-trial/159143
+  - pdonnell-2026-06-13_16:54:44-rados-wip-pdonnell-testing-20260613.133611-tentacle-distro-default-trial/292360
+  - jenkins-build-2026-10-18_06:04:45-rados-tentacle-distro-default-trial/652514

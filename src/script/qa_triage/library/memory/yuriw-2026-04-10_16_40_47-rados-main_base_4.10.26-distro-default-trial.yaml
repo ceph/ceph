@@ -1,0 +1,6 @@
+run: yuriw-2026-04-10_16:40:47-rados-main_base_4.10.26-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/MissingLoc.h FAILED ceph_assert(# == "unexpected need for missing item") in void MissingLoc::add_active_missing(const pg_missing_t&)
+  : '75962': 1
+titles:
+  '75962': OSD crashes with FAILED ceph_assert(0 == "unexpected need for missing item") in MissingLoc::add_active_missing() during EC thrash

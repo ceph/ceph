@@ -1,0 +1,48 @@
+id: "79515"
+tracker: https://tracker.ceph.com/issues/79515
+title: "osd: coroutine lifecycle bugs in PrimaryLogPG/ECBackend"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71327
+    branch: main
+    fixed_in: v21.3.0-3523-g787a82eb5c
+tree: valgrind
+facts:
+  kind: '^Leak_(Definitely|Possibly)Lost$'
+  frames: '^malloc UnknownInlinedFun UnknownInlinedFun'
+match:
+  reason: 'valgrind error: Leak_(Definitely|Possibly)Lost malloc'
+confirm:
+  - file: remote/*/log/valgrind/osd.*.log.gz
+    pattern: 'create_control_block'
+  - file: remote/*/log/valgrind/osd.*.log.gz
+    pattern: '<fn>PrimaryLogPG::do_op\('
+notes: |
+  For a CALL (cls) op on an EC pool, PrimaryLogPG::do_op() runs the op in a
+  boost::coroutines2 push coroutine (EC sync reads, PR 67079), owned by
+  coro_resumer. The coroutine gets its own 128 KiB heap stack
+  (boost::context fixedsize_stack). The coroutine body ends with
+  'coro_resumer = nullptr; on_coroutine_complete();': it destroys its own owner
+  while still running on that stack, so when the op finishes without yielding
+  (an early exit in do_op_impl) the stack is never unwound or freed.
+  on_change() can also reset coro_resumer while the coroutine is suspended on
+  an EC read.
+  At OSD shutdown under valgrind (rados/verify validater/valgrind,
+  rados_api_tests) most OSDs exit with status 42. Each OSD valgrind log has one
+  error: N x 131,072 bytes Leak_DefinitelyLost or Leak_PossiblyLost, in malloc,
+  fixedsize_stack.hpp, create_control_block.ipp, push_coroutine.ipp, unique_ptr,
+  then PrimaryLogPG::do_op (PrimaryLogPG.cc, the coroutine lambda), and
+  OSD::dequeue_op. The failure reason shows only 'malloc UnknownInlinedFun
+  UnknownInlinedFun'; the confirm checks look for the coroutine control block
+  and the do_op frame in the OSD valgrind logs.
+  The leak was hidden by a broad 'fun:UnknownInlinedFun' suppression in
+  qa/valgrind.supp until PR 69311 narrowed it.
+  PR 71327 fixed the on_change() use-after-free but kept the in-body reset.
+  The leak of a coroutine that completes without yielding continues after it
+  as tracker 81777 (PR 72704). There the frames are named
+  (malloc allocate create_control_block<...PrimaryLogPG::do_op...>). On main
+  the mon CRYPTO_malloc leak (79831) is often reported first and hides it.
+examples:
+  - skanta-2026-08-11_22:46:54-rados-wip-bharath7-testing-20260811.152323-main-distro-default-trial/458958
+also:
+  - "81777"

@@ -1,0 +1,18 @@
+run: skanta-2026-08-10_00:08:11-rados-wip-bharath10-testing-20260807.040605-main-distro-default-trial
+jobs:
+  '449638':
+    problem: '80294'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 80294, but the tool said seen-after-fix 75763 (explain -> prefilter -> confirm -> fix-check), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 80294 by itself, with no judge.
+    summary: Rocky 10 rados/encoder job failing to fetch squid packages from shaman is tracker 80294, not 75763 (whose fix is already in the build).
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro/{rocky_10}}
+    reason: Failed to fetch package version from https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=default&distros=rocky%2F10%2Fx86_64&ref=squid
+  '449635':
+    problem: '74774'
+    by: qa_triage (bob-analyst)
+    why: 'No record placed this job, and the judge (bob) said duplicate 74774: Error reimaging machines: trial125 found rocky 10.1 instead of centos 9.stream — two jobs sharing same host (74774). If a tracker issue already describes this failure, find it and add a record for it, so that the checks place jobs like this one. If none does, say so: a person will file one.'
+    summary: Reimaging check found rocky 10.1 on trial125 because job 449636 held it at the same time; this is tracker 74774, but the record could not place a job without teuthology.log.
+    status: dead
+    description: rados/cephadm/workunits/{0-distro/centos_9.stream agent/off mon_election/connectivity task/test_mgmt_gateway}
+    reason: 'Error reimaging machines: Expected trial125''s OS to be centos 9.stream but found rocky 10.1'

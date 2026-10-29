@@ -1,0 +1,27 @@
+id: "68586"
+tracker: https://tracker.ceph.com/issues/68586
+title: "cephadm: task/test_iscsi_container test hits max timeout"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/66613
+    branch: main
+    fixed_in: v21.3.0-3554-ga8b8780fb8
+tree: hung/command/cephadm-rm-cluster
+match:
+  reason: 'hit max job timeout'
+  description: 'test_iscsi_container'
+confirm:
+  - file: teuthology.log
+    pattern: 'cephadm rm-cluster --fsid \S+ --force --keep-logs'
+notes: |
+  During test_iscsi_container with cephadm agent enabled, cephadm disables the mgr
+  module and shuts down the cluster during teardown, but the agent service is left
+  running. The agent continuously retries sending metadata to the stopped mgr endpoint
+  ("Failed to send metadata to mgr: non-200 response <-1> from agent endpoint: [Errno 111] Connection refused"),
+  blocking "cephadm rm-cluster" from completing teardown until teuthology hits the max job timeout.
+examples:
+  - lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19091
+  - skanta-2026-09-20_02:51:43-rados-wip-bharath22-testing-20260920.002814-main-distro-default-trial/570113
+  - yuriw-2026-08-31_17:43:40-rados-wip-yuri4-testing-20260831.140425-main-distro-default-trial/525339
+also:
+  - "79955"

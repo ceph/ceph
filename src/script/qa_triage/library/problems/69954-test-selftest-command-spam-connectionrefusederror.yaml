@@ -1,0 +1,49 @@
+id: "69954"
+tracker: https://tracker.ceph.com/issues/69954
+title: "test_selftest_command_spam: ConnectionRefusedError: [Errno 111] Connection refused"
+kind: test
+tree: test/unittest
+facts:
+  test: '^tasks\.mgr\.test_module_selftest\.TestModuleSelftest\.test_selftest_command_spam$'
+  error: 'Connection refused'
+match:
+  reason: 'test_selftest_command_spam'
+confirm:
+  - file: teuthology.log
+    pattern: "HTTPSConnectionPool\\(host='[^']+', port=\\d+\\): Max retries exceeded with url: / .*Connection refused"
+  - file: teuthology.log
+    pattern: 'qa/tasks/mgr/test_module_selftest\.py", line \d+, in test_selftest_command_spam'
+exclude:
+  - file: teuthology.log
+    pattern: 'ssl_server_port not found'
+notes: |
+  test_selftest_command_spam (qa/tasks/mgr/test_module_selftest.py) loads the
+  selftest and dashboard modules, assigns the dashboard an ssl_server_port via
+  mgr/dashboard/<mgr>/ssl_server_port, starts the mgr command_spam background
+  workload and polls the dashboard with requests.get(verify=False). When the
+  dashboard is not listening on its assigned port the request is refused:
+  ConnectionRefusedError [Errno 111] wrapped in requests ConnectionError.
+  The connection error is the symptom; several causes can sit behind it. In the
+  job this record was written from (a tentacle build, 20.2.1-255-gdbc149ca) the
+  dashboard mgr module crashed while starting: dashboard/controllers/smb.py does
+  "from smb.enums import Intent" and raises ModuleNotFoundError: No module named
+  'smb' (the smb package was not installed on the test nodes), mgr.x logged
+  "Unhandled exception from module 'dashboard'" and the mon raised "Health check
+  failed: Module 'dashboard' has failed: No module named 'smb' (MGR_MODULE_ERROR)".
+  Nothing listened on port 7789, so the test's request was refused. Other runs
+  of this tracker (jobs listed in the tracker comments) may have a different
+  reason for the dashboard not answering; the dashboard restart on the default
+  port 8443 after 'config reset' is a different problem (#75358, #81857,
+  tests under tasks.mgr.dashboard) and is excluded by the 'ssl_server_port not
+  found' check. PR 62135 (qa/tests: fix test_selftest_span conn refused error)
+  was closed without merging.
+  The same smb-import crash is also tracked as #74199 ('ceph dashboard not
+  starting', closed as duplicate of #74268).
+examples:
+  - jayaprakash-2026-04-29_15:21:37-rados-wip-jaya-bs-testing-tentacle-29-04-2026-distro-default-trial/185969
+  - skanta-2026-02-02_23:43:28-rados-wip-bharath9-testing-2026-02-02-0839-distro-default-trial/30415
+also:
+  - "70662"
+  - "69494"
+  - "74199"
+  - "74268"

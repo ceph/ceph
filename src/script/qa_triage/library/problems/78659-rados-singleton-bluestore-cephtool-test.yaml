@@ -1,0 +1,26 @@
+id: "78659"
+tracker: https://tracker.ceph.com/issues/78659
+title: "rados/singleton-bluestore - cephtool test_mon_osd: ceph osd info and ceph osd dump return different up_thru values (epoch race)"
+kind: test
+tree: workunit/unexplained/cephtool-osd-epoch-race
+match:
+  reason: 'workunit test cephtool/test\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'test_mon_osd:.*\[\[ osd\.'
+exclude:
+  - file: teuthology.log
+    pattern: 'Error ENOENT: problem getting command descriptions from mds\.a'
+notes: |
+  In qa/workunits/cephtool/test.sh, test_mon_osd compares the plain-text output
+  of 'ceph osd info' (info_plain) with 'ceph osd dump | grep ^osd' (dump_plain)
+  at line 1655: [["${info_plain}" == "${dump_plain}"]]. These are two separate
+  ceph commands, and the OSD map can advance an epoch between them: osd.0's
+  up_thru was 229 in info_plain but 231 in dump_plain (~0.2 s apart). The
+  comparison fails with status 1 (set -e exits immediately), and bash prints the
+  [[ command in xtrace with the RHS entirely backslash-escaped (\o\s\d\.\0\ ...).
+  The workunit exits immediately (status 1, not 124). The exclude check prevents
+  matching jobs where the [[ comparison passed but the workunit later failed in
+  do_messenger_dump_basics_test (issue 74607).
+examples:
+  - lflores-2026-07-17_23:28:16-rados-wip-lflores-testing-3-2026-07-17-1417-distro-default-trial/374619

@@ -1,0 +1,33 @@
+id: "72747"
+tracker: https://tracker.ceph.com/issues/72747
+title: "No InfluxDB server configured (MGR_INFLUX_NO_SERVER)"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/66376
+    branch: main
+    fixed_in: v20.3.0-5333-gfd91d11bca
+  - pr: https://github.com/ceph/ceph/pull/67649
+    branch: main
+tree: cluster-log/health
+facts:
+  check: '^MGR_INFLUX_NO_SERVER$'
+confirm:
+  - file: teuthology.log
+    pattern: 'Health check failed: No InfluxDB server configured \(MGR_INFLUX_NO_SERVER\)'
+notes: |
+  The mgr module selftests (qa/tasks/mgr/test_module_selftest.py, run by
+  rados/mgr/.../4-units/module_selftest) turn on the influx mgr module. If
+  mgr/influx/hostname is not set, the module raises MGR_INFLUX_NO_SERVER and the
+  mon logs "[WRN] Health check failed: No InfluxDB server configured". The suite's
+  log-ignorelist only ignores "influxdb python module not found", so teuthology's
+  teardown cluster-log scan fails the job.
+  The fix takes two PRs: 66376 sets mgr/influx/hostname=testhost before
+  test_module_remote loads influx, and 67649 does the same before test_influx.
+  A branch that has only the first (as tentacle 20.2.4-401 did) still fails
+  this way, from test_influx. The fixed_in of 67649 is not known here.
+  A related failure, MGR_INFLUX_DB_LIST_FAILED from the testhost workaround,
+  is tracker 77250.
+examples:
+  - ksirivad-2026-09-17_00:40:59-rados-wip-ksirivad-tentacle-revert-only-msgr-distro-default-trial/561967
+also:
+  - "72777"

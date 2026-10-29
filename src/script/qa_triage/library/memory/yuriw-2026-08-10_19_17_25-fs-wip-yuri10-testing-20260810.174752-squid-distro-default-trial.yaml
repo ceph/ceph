@@ -1,0 +1,8 @@
+run: yuriw-2026-08-10_19:17:25-fs-wip-yuri10-testing-20260810.174752-squid-distro-default-trial
+signatures:
+  'valgrind/Leak_StillReachable | valgrind error: Leak_StillReachable malloc':
+    '74566': 2
+  'valgrind/Leak_StillReachable | valgrind error: Leak_StillReachable malloc malloc _dl_new_object':
+    '74566': 1
+titles:
+  '74566': Leak_StillReachable monitor valgrind error in glibc

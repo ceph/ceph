@@ -1,0 +1,9 @@
+run: skanta-2026-05-07_03:53:58-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial
+signatures:
+  'infra/other | pexec: expected valgrind issues and found none':
+    '76473': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+titles:
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'

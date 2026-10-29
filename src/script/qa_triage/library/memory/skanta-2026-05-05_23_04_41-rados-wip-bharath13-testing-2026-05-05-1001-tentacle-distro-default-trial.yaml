@@ -1,0 +1,24 @@
+run: skanta-2026-05-05_23:04:41-rados-wip-bharath13-testing-2026-05-05-1001-tentacle-distro-default-trial
+signatures:
+  'cluster-log/health/mon-restart-reconnect-delay | WRN MON_NETSPLIT | MON_NETSPLIT: slow mon reconnect after a mon restart':
+    '71344': 1
+  ? 'cluster-log/other/cephadm-pull-manifest-not-found | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: manifest for quay.ceph.io/ceph-ci/ceph not found: manifest unknown'
+  : '73921': 1
+  ? 'test/unittest | tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam: ConnectionRefusedError: [Errno #] Connection refused'
+  : '69954': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  ? 'workunit/set-e | cephadm/test_cephadm.sh: /usr/sbin/cephadm --image quay.ceph.io/ceph-ci/ceph:main bootstrap --mon-id a --mgr-id x: Error: Container release umbrella != cephadm release tentacle; please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
+  : '75821': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '69954': 'test_selftest_command_spam: ConnectionRefusedError: [Errno 111] Connection refused'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '73921': 'rados/encoder: Container image quay.ceph.io/ceph-ci/ceph:quincy with tag quincy not found leading to test failure'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75821': 'tentacle: Error: Container release umbrella != cephadm release tentacle; please use matching version of cephadm'

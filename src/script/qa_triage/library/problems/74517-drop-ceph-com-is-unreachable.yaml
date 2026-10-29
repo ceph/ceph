@@ -1,0 +1,25 @@
+id: "74517"
+tracker: https://tracker.ceph.com/issues/74517
+title: "drop.ceph.com is unreachable (ceph-post-file)"
+kind: infra
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/68366
+    branch: main
+    fixed_in: v21.0.0-867-gbcb2045ed2
+tree: workunit/unexplained/ceph-post-file-drop-unreachable
+facts:
+  workunit: '^post-file\.sh'
+match:
+  reason: 'workunit test post-file\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'ssh: connect to host drop\.ceph\.com port \d+: '
+notes: |
+  Since the lab migration drop.ceph.com has been unreachable. The rados/singleton-nomsgr/all/ceph-post-file
+  test runs qa/workunits/post-file.sh, whose `ceph-post-file` uploads a directory to drop.ceph.com over
+  ssh. The ssh connection times out ('ssh: connect to host drop.ceph.com port 22: Connection timed out'),
+  ssh exits with status 255, and the workunit fails with 'Command failed (workunit test post-file.sh) ...
+  status 255'. PR #68366 temporarily disables the test (qa/suites/rados/singleton-nomsgr/all/ceph-post-file.yaml);
+  a replacement is planned in #75995. Jobs run on builds without that PR still fail.
+examples:
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122165

@@ -1,0 +1,11 @@
+run: skanta-2026-10-17_23:46:38-rados-wip-bharath17-testing-20261016.230103-main-distro-default-trial
+jobs:
+  '650981':
+    problem: '79445'
+    by: qa_triage (bob-analyst)
+    why: 'No record placed this job, and the judge (bob) said new : The osd-recovery-incomplete test failed with an AssertionError at ''assert not manager.is_recovered()''. This test expects OSD recovery to remain incomplete (OSDs are marked out and recovery delay is set), but recovery completed unexpectedly. The assertion fires around line 7979 of teuthology.log after OSDs 0 and 1 were marked out (line 2542) and recovery delay was injected (line 2526). The developer should examine what allowed recovery to complete despite the injected delay, starting from teuthology.log lines 7971–7981.. The tree could not explain it by itself: it stopped at "other". Teach it to explain failures like this one without a judge: add a learned node at "other", or change the learned file that has one there, so that the tree explains this job conclusively. If a tracker issue describes this failure, add a record for it as well. Searching the tracker for "osd-recovery-incomplete assert is_recovered", "osd recovery
+      incomplete AssertionError recovered", "osd_recovery_delay_start recovery completes unexpectedly" found: #79445 Bug #79445 (New): rados/singleton/{all/osd-recovery-incomplete: PGs unexpectedly recover during induced state of recovery; #51847 Bug #51847 (New): A PG in "incomplete" state may end up in a backfill loop..'
+    summary: 'osd-recovery-incomplete test hit AssertionError at ''assert not manager.is_recovered()''; added node at ''other'' and record for tracker #79445'
+    status: fail
+    description: rados/singleton/{all/osd-recovery-incomplete mon_election/classic msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{stupid} base mem$/{low} onode-segment$/{1M} write$/{random/{compr$/{no$/{no}} random}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: ''

@@ -1,0 +1,33 @@
+run: yuriw-2026-05-15_20:57:42-rados-wip-yuriw-testing-20260515.172309-tentacle-wip-yuri12-testing-distro-default-trial
+signatures:
+  ? 'cluster-log/other/cephadm-pull-manifest-unknown | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: reading manifest in quay.ceph.io/ceph-ci/ceph: manifest unknown'
+  : '75886': 1
+  ? 'crash/client/unnamed | Command failed (workunit test osd/divergent-priors.sh) on <host> with status #: ''mkdir -p -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && cd -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && CEPH_CLI_TEST_DUP_COMMAND=# CEPH_REF=<sha> TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="#" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.# CEPH_ROOT=/home/ubuntu/cephtest/clone.client.# CEPH_MNT=/home/ubuntu/cephtest/mnt.# adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout #h /home/ubuntu/cephtest/clone.client.#/qa/standalone/osd/divergent-priors.sh'''
+  : '74800': 1
+  ? 'hung/command/thrasher-min-size-pgs-not-active | pexec: ceph osd unset nodeep-scrub | OSDThrasher test_pool_min_size: PGs not active or peered'
+  : '63531': 1
+  'infra/other | pexec: valgrind error: InvalidRead UnknownInlinedFun UnknownInlinedFun AsyncConnection::mark_down()':
+    '75133': 1
+  infra/packages | packages:
+    '74833': 1
+  timeout/unexplained | MaxWhileTries:
+    '76408': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  workunit/standalone | scrub/osd-scrub-test.sh TEST_just_deep_scrubs:
+    '74603': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '63531': 'Error authenticating with smithiXXX.front.sepia.ceph.com: SSHException(''No existing session'') (No SSH private key found!)'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74603': 'qa/standalone/scrub/osd-scrub-test.sh: TEST_just_deep_scrubs scrub duration check fails'
+  '74800': 'qa/standalone/osd/divergent-priors.sh: Core dump generated from call to OSDService::maybe_share_map'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '74833': 'Could not resolve host: apt-mirror.sepia.ceph.com'
+  '75133': 'osd: Valgrind InvalidRead in AsyncConnection::mark_down() during MonClient destructor at shutdown'
+  '75886': 'tentacle: upgrade/parallel: failure to pull reef image during upgrade'
+  '76408': 'rados/cephadm/osds: tasks.cephadm:Hit timeout while adding host trial165'
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'

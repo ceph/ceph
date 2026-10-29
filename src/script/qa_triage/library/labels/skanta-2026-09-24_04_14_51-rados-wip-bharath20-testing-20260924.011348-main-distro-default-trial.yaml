@@ -1,0 +1,26 @@
+run: skanta-2026-09-24_04:14:51-rados-wip-bharath20-testing-20260924.011348-main-distro-default-trial
+jobs:
+  '577674':
+    problem: '74794'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 74794, but the tool said new (explain -> prefilter -> explained), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 74794 by itself, with no judge.
+    summary: wait_for_recovery timed out under morepggrow because aggressive pg_num growth left most PGs peering or activating with slow ops. That is tracker 74794, which had no record, so the tool called the job new.
+    status: fail
+    description: rados/thrash-erasure-code-big/{ceph cluster/{12-osds} ec_optimizations/ec_optimizations_on mon_election/classic msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{stupid} base mem$/{low} onode-segment$/{1M} write$/{v1/{compr$/{yes$/{snappy}} v1}}}} rados recovery-overrides/{more-async-recovery} supported-random-distro/{ubuntu_24.04} thrashers/morepggrow thrashosds-health workloads/ec-rados-plugin=lrc-k=4-m=2-l=3}
+    reason: 'The WatchDog barked due to Thrasher OSDThrasher threw exception wait_for_recovery: failed before timeout expired'
+  '577799':
+    problem: '81282'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 81282, but the tool said new (explain -> prefilter -> confirm -> explained -> agent -> verify-quotes), sure, after its judge (bob) said new . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 81282 by itself, with no judge.
+    summary: ansible.cephlab failed because the test machine had only 1 of the 2 ~1700 GB non-rotational NVMe disks it needed (tracker 81282); no record existed, so the tool said new.
+    status: dead
+    description: rados/basic/{ceph clusters/{fixed-2} mon_election/connectivity msgr-failures/many msgr/async-v1only objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{none} write$/{random/{compr$/{yes$/{zstd}} random}}}} rados supported-random-distro/{centos_9.stream} tasks/rados_workunit_loadgen_mix}
+    reason: '["Wanted 2 disks of ~1700 GB (rotational=False), but only matched 1: [''nvme2n1'']"]'
+  '577639':
+    problem: '74574'
+    by: qa_triage (bob-analyst)
+    why: 'No record placed this job, and the judge (bob) said new : Infrastructure failure: reached maximum tries (100) while reimaging machines, no teuthology log generated.. If a tracker issue already describes this failure, find it and add a record for it, so that the checks place jobs like this one. If none does, say so: a person will file one. Searching the tracker for "reimaging machines", "Error reimaging machines" found: #81836 Bug #81836 (In Progress): smithi039: last 10 jobs all failed or died; #81835 Bug #81835 (In Progress): smithi199: last 10 jobs all failed or died; #81834 Bug #81834 (In Progress): smithi197: last 10 jobs all failed or died; #74574 Bug #74574 (In Progress): Error reimaging machines: reached maximum tries (120) after waiting for 1800 seconds.'
+    summary: 'Machine reimaging timed out before teuthology started; this is a known infra failure tracked in #74574; adding a record to place it automatically.'
+    status: dead
+    description: rados/cephadm/smoke/{0-distro/ubuntu_24.04 0-nvme-loop agent/off fixed-2 mon_election/connectivity start}
+    reason: 'Error reimaging machines: reached maximum tries (100) after waiting for 600 seconds'

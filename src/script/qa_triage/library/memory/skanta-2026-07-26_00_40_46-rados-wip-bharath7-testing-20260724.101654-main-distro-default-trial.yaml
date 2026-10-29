@@ -1,0 +1,27 @@
+run: skanta-2026-07-26_00:40:46-rados-wip-bharath7-testing-20260724.101654-main-distro-default-trial
+signatures:
+  '- | Error reimaging machines: Expected <host>''s OS to be ubuntu <pg> but found rocky <pg>':
+    '74774': 1
+  ? 'hung/test/rados-api-tests-valgrind-slowdown | waiting for api_misc_pp | rados_api_tests: api_* test timed out under valgrind'
+  : '77739': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 3
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 2
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '75216': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? workunit/unexplained/cephtool-hang/bad-caps-key-left-behind | cephtool/test.sh | cephtool/test.sh hung with AUTH_BAD_CAPS HEALTH_ERR | cephtool test_mon_caps left client.bug with empty mon caps (AUTH_BAD_CAPS)
+  : '72888': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '72888': 'rados/singleton-bluestore: cephtool.sh workunit hangs on various tests'
+  '74774': Multiple jobs running same host same time
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '77106': nvme list json command failed, retrying...
+  '77739': ' rados/verify/ Dead Job - test api_lock/api_snapshots/api_misc_pp etc hung for 1.5 hours and then it starts the next test up. Resulting in 8 hour timeout '

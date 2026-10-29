@@ -1,0 +1,22 @@
+id: "82182"
+tracker: https://tracker.ceph.com/issues/82182
+title: "test_disabled_stretch_mode failed: disable_stretch_mode returns EINVAL on Paxos replay after lost reply"
+kind: product
+tree: test/unittest/disable-stretch-mode-replay
+confirm:
+  - file: teuthology.log
+    pattern: 'Error EINVAL: stretch mode is already disabled'
+notes: |
+  The test calls ceph mon disable_stretch_mode --yes-i-really-mean-it.
+  Injected socket failures (msgr-failures/many) cause the Paxos reply to be
+  lost after the monitor commits the change (stretch_mode set to false in
+  the monmap). On retry the MonmapMonitor handler checks
+  !pending_map.stretch_mode_enabled, which is now false after the commit,
+  and returns -EINVAL "stretch mode is already disabled" instead of 0.
+  The test at line 504 of stretch_mode_disable_enable.py expects return code
+  0, gets 22 (EINVAL), producing AssertionError: 0 != 22.
+  The enable_stretch_mode handler handles the symmetric case correctly by
+  returning err=0 when already engaged in the committed monmap;
+  disable_stretch_mode should do the same but does not.
+examples:
+  - skanta-2026-10-17_23:23:20-rados-wip-bharath4-testing-20261016.224944-main-distro-default-trial/650737

@@ -1,0 +1,34 @@
+id: "74004"
+tracker: https://tracker.ceph.com/issues/74004
+title: "qa/standalone/ceph-helpers: ceph pg query hangs indefinitely"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/66457
+    branch: main
+    fixed_in: v20.3.0-4787-gbd20e52da8
+tree: workunit/unexplained/ceph-pg-query-hung
+match:
+  reason: 'workunit test'
+confirm:
+  - file: teuthology.log
+    pattern: 'test_pg_scrub:\s+kill_daemons \S+ KILL osd'
+  - file: teuthology.log
+    pattern: 'is_pg_clean:\s+ceph pg \S+ query'
+  - file: teuthology.log
+    pattern: 'status 124|result: 124'
+exclude:
+  - file: teuthology.log
+    pattern: 'test_pg_scrub:\s+WAIT_FOR_CLEAN_TIMEOUT=10'
+notes: |
+  In qa/standalone/ceph-helpers.sh, test_pg_scrub kills its only OSD (kill_daemons KILL
+  osd) and then calls pg_scrub 1.0, expecting it to fail. Before PR 66457 that call
+  passed no WAIT_FOR_CLEAN_TIMEOUT and flush_pg_stats ran `ceph tell osd.N flush_pg_stats`
+  with no timeout, so wait_for_pg_clean waited on the dead OSD (the mgr reports its PGs
+  stale) until the workunit's `timeout 3h` killed it with status 124. PR 66457 passes
+  WAIT_FOR_CLEAN_TIMEOUT=10 TIMEOUT=2 and adds a timeout to flush_pg_stats.
+  The hang came back after that fix, in the same test: with the OSD dead,
+  is_pg_clean's `ceph pg $pgid query` has no timeout and never returns. The tracker
+  split that case off as #75406 (fixed by PR 67715, a timeout on ceph pg query).
+  The failed workunit and status 124 are symptoms; the cause is the OSD killed in
+  test_pg_scrub plus a ceph helper command with no timeout.
+  When WAIT_FOR_CLEAN_TIMEOUT=10 is present (post-PR-66457), the failure is #75406.

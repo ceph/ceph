@@ -1,0 +1,41 @@
+id: "71118"
+tracker: https://tracker.ceph.com/issues/71118
+title: "qa/standalone/mon/mon-cluster-log.sh: TEST_journald_cluster_log_level fails from insufficient permissions"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/58324
+    branch: main
+    fixed_in: v19.3.0-3421-g415f7ca0e8
+tree: workunit/standalone
+facts:
+  script: '^mon/mon-cluster-log\.sh$'
+  test: '^TEST_journald_cluster_log_level$'
+match:
+  reason: 'mon/mon-cluster-log\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'No journal files were opened due to insufficient permissions'
+  - file: teuthology.log
+    pattern: 'mon-cluster-log\.sh:\d+: TEST_journald_cluster_log_level:\s+journalctl _COMM=ceph-mon'
+notes: |
+  TEST_journald_cluster_log_level in qa/standalone/mon/mon-cluster-log.sh reads the
+  cluster log from the journal with 'journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster
+  PRIORITY=N --output=json-pretty --since "60 seconds ago" | jq .MESSAGE'. Only the call
+  at line 151 (the one that looks for the osd boot entry) uses sudo. The calls at lines
+  137, 169, 183 and 196 do not. On the test host the unprivileged journalctl prints 'No
+  journal files were opened due to insufficient permissions.' and journal.log is empty,
+  so the greps find nothing. The DBG, WRN and INF checks then fail ('Failed : Could not
+  find DBG log ...', 'No WRN entries found ...'), and the test ends with 'TEST FAILED
+  WITH 2 ERRORS' and 'return 1' at line 206 on squid.
+  The fix is PR #58324 (qa/standalone/mon: Fix mkfs test & TEST_LOG failures), merged
+  on main, which was missed in the squid backport. The backport was still being
+  resolved in 2026-09, and squid keeps failing this way.
+  This is a different cause from 63784 / 68773, which is TEST_cluster_log_level failing
+  in wait_for_osd. Here wait_for_osd up 0 succeeds.
+  'osd.0 is already down.' right after 'ceph osd down 0' is not a clue: it comes from
+  CEPH_CLI_TEST_DUP_COMMAND=1 sending each command twice.
+examples:
+  - skanta-2026-04-06_14:05:55-rados-wip-bharath14-testing-2026-04-06-1412-squid-distro-default-trial/133548
+  - yuriw-2026-04-11_19:57:35-rados-squid-release-distro-default-trial/145903
+  - yuriw-2026-06-22_18:46:50-rados-wip-yuri3-testing-20260622.144259-squid-distro-default-trial/306932
+  - yuriw-2026-06-23_17:14:52-rados-wip-yuri5-testing-20260623.145428-squid-distro-default-trial/310908

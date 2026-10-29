@@ -1,0 +1,20 @@
+id: "77416"
+tracker: https://tracker.ceph.com/issues/77416
+title: "trial169 NIC RMA"
+kind: infra
+tree: test/unexplained/ssh-connection-lost
+facts:
+  host: '^trial169$'
+match:
+  reason: 'Test failure: setUpClass \(tasks\.mgr\.test_devicehealth\.TestDeviceHealth\)'
+confirm:
+  - file: teuthology.log
+    pattern: 'tasks\.cephfs_test_runner:.*ConnectionLostError: SSH connection to trial169 was lost'
+notes: |
+  During the devicehealth test run, the SSH connection to test machine trial169
+  dropped unexpectedly because of repeated Intel E810 NIC / PCIe issues (HMC Error,
+  AMD-Vi IO page faults, and failed resets logged by the ice kernel driver). Teuthology
+  raised ConnectionLostError during mgr daemon cleanup in setUpClass, causing the
+  test runner to fail. An RMA was opened to replace the NIC / investigate the blade.
+examples:
+  - skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263736

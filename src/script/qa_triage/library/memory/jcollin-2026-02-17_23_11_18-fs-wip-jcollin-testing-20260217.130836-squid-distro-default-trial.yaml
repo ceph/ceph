@@ -1,0 +1,6 @@
+run: jcollin-2026-02-17_23:11:18-fs-wip-jcollin-testing-20260217.130836-squid-distro-default-trial
+signatures:
+  ? 'cluster-log/other/cephadm-pull-manifest-unknown | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: reading manifest in quay.ceph.io/ceph-ci/ceph: manifest unknown'
+  : '76028': 5
+titles:
+  '76028': 'squid: upgrade jobs fail from missing untagged versions of reef and quincy'

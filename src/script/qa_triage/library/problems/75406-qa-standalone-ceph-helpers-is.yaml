@@ -1,0 +1,39 @@
+id: "75406"
+tracker: https://tracker.ceph.com/issues/75406
+title: "qa/standalone/ceph-helpers: is_pg_clean hang after osd teardown"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67715
+    branch: main
+    fixed_in: v21.0.0-1245-g2643ea61a5
+tree: workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout
+facts:
+  command: '^ceph pg query$'
+confirm:
+  - file: teuthology.log
+    pattern: 'test_pg_scrub:\s+WAIT_FOR_CLEAN_TIMEOUT=10'
+  - file: teuthology.log
+    pattern: 'is_pg_clean:\s+ceph pg \S+ query'
+also:
+  - "74004"
+  - "75217"
+notes: |
+  In qa/standalone/ceph-helpers.sh, after PR #66457 fixed #74004 by adding
+  WAIT_FOR_CLEAN_TIMEOUT=10 TIMEOUT=2 to the pg_scrub call in test_pg_scrub,
+  the same test still hangs: is_pg_clean's `ceph pg $pgid query`
+  (ceph-helpers.sh:1574) has no timeout, so after the OSD is killed the query
+  to the dead OSD never returns. The workunit's outer `timeout 3h` eventually
+  kills it with status 124. PR #67715 fixes this by adding a timeout to ceph pg
+  query in is_pg_clean.
+  Tracker #75217 (ceph-objectstore-tool: No object id 'NOTEXISTS' found) lists
+  these jobs too, but its NOTEXISTS line is test_objectstore_tool's expected
+  failure (`! objectstore_tool ... NOTEXISTS get-bytes`, ceph-helpers.sh:1310),
+  not the cause; the hang is the same as here.
+examples:
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122177
+  - skanta-2026-03-31_12:00:11-rados-wip-bharath12-testing-2026-03-30-1431-distro-default-trial/127722
+  - skanta-2026-04-09_03:57:47-rados-wip-bharath16-testing-2026-04-08-1405-distro-default-trial/141109
+  - skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143049
+  - skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148500
+  - yuriw-2026-10-21_19:23:54-rados-wip-yuri14-testing-20261021.151926-tentacle-distro-default-trial/664818
+  - nmordech-2026-02-25_11:36:23-rados-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial/70083

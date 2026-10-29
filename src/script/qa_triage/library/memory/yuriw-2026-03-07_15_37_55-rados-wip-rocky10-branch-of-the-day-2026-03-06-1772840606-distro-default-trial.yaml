@@ -1,0 +1,15 @@
+run: yuriw-2026-03-07_15:37:55-rados-wip-rocky10-branch-of-the-day-2026-03-06-1772840606-distro-default-trial
+signatures:
+  'valgrind/MismatchedFree | valgrind error: MismatchedFree operator delete[](void*, std::align_val_t) __cxa_finalize':
+    '75212': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+titles:
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75212': Rocky10 - MismatchedFree leak coming from ceph::common::CephContext via ceph-mon
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'

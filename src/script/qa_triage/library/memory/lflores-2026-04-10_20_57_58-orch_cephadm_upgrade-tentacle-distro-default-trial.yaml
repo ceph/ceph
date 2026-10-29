@@ -1,0 +1,6 @@
+run: lflores-2026-04-10_20:57:58-orch:cephadm:upgrade-tentacle-distro-default-trial
+signatures:
+  ? 'command/unexplained | cephadm --image quay.io/ceph/ceph:v#.<pg> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '71631': 1
+titles:
+  '71631': Commands using Mgr Modules fail if run immediately post a mgr failover/ restart

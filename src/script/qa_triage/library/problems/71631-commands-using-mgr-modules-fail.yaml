@@ -1,0 +1,48 @@
+id: "71631"
+tracker: https://tracker.ceph.com/issues/71631
+title: "Commands using Mgr Modules fail if run immediately post a mgr failover/ restart"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/63859
+    branch: main
+    fixed_in: v20.3.0-6266-gbbfedafcf5
+tree: command
+facts:
+  module: '^[a-z_]+$'
+confirm:
+  - file: teuthology.log
+    pattern: "Module '[a-z_]+' is not enabled/loaded \\(required by command 'orch upgrade"
+exclude:
+  - file: teuthology.log
+    pattern: 'auth: error parsing file \S+/keyring: error setting modifier for \[\S+\] type=key val=Ag\S*: Malformed input'
+  - file: teuthology.log
+    pattern: 'Upgrade: Paused due to UPGRADE_[A-Z_]+'
+notes: |
+  The mgr tells the mon it is active before all its modules have finished loading
+  (they are still in pending_modules). Any mgr-module command run right after a mgr
+  restart or failover then fails with 'Error ENOTSUP: Warning: due to ceph-mgr restart,
+  some PG states may not be up to date / Module X is not enabled/loaded (required by
+  command ...)'. In the upgrade suites the cephadm task runs 'ceph orch upgrade start',
+  which fails the mgrs over. The wait loop
+  'while ceph orch upgrade status | jq .in_progress | grep true && ! ... | grep Error'
+  runs 'ceph orch upgrade status' just after the failover and gets ENOTSUP from the
+  orchestrator module, so the loop exits as if the upgrade were done. What fails next
+  depends on the suite: in upgrade/squid-x stress-split the next
+  'ceph orch upgrade start ... --daemon-types mon --limit 1' fails with status 22,
+  'Error EINVAL: Cannot set values for --daemon-types, --services or --hosts when upgrade
+  already in progress', because the mgr upgrade is still running (the tree path is
+  command/error/mgr-modules-not-loaded); in orch:cephadm:upgrade (reef to tentacle) the
+  next check 'ceph versions | jq -e .overall | length == 1' prints false and exits 1,
+  because the mons and osds are still on the old release (the tree path is
+  command/unexplained/mgr-modules-not-loaded-upgrade-status). The later failure is
+  only the symptom; the ENOTSUP from the freshly restarted mgr is the cause. The record
+  hangs at 'command' to cover both paths; the facts check on 'module' (set only by those
+  two tree branches) keeps it from being a candidate for other command failures. It
+  excludes a malformed keyring (79694) and a paused upgrade. Fixed by PR 63859 (mgr:
+  ensure that all modules have started before advertising active mgr), in
+  v20.3.0-6266-gbbfedafcf5; backported to squid and tentacle (75564, 75565).
+examples:
+  - lflores-2026-03-10_15:30:45-upgrade-wip-rocky10-branch-of-the-day-2026-03-04-1772633736-66244-revert-distro-default-trial/98366
+  - lflores-2026-04-10_20:57:58-orch:cephadm:upgrade-tentacle-distro-default-trial/144426
+also:
+  - "75422"

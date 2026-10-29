@@ -1,0 +1,6 @@
+run: ivancich-2026-04-08_18:35:15-rgw-main-distro-default-trial
+signatures:
+  'infra/packages/epel-mirror-404 | packages | epel repo metadata: all mirrors #':
+    '74708': 4
+titles:
+  '74708': Failed to download metadata for repo 'epel' causes 'sudo yum install -y kernel' to fail on trial129

@@ -1,0 +1,27 @@
+run: yuriw-2026-06-27_19:16:06-rados-squid-release-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  cluster-log/health | WRN MON_NETSPLIT:
+    '71344': 1
+  ? 'cluster-log/message | WRN mon Health detail: HEALTH_WARN Degraded data redundancy: #/# objects degraded (<pg>%), # pgs degraded, # pgs undersized'
+  : '72312': 1
+  'cluster-log/message | WRN mon [WRN] POOL_FULL: # pool(s) full':
+    '75414': 1
+  'cluster-log/message | WRN mon overall HEALTH_WARN # pool(s) do not have an application enabled':
+    '62776': 1
+  ? 'crash/client/unnamed/ceph-bluestore-tool-avl-inconsistent-tree | ceph-bluestore-tool bluefs-bdev-expand: AvlAllocator assert rs_before inconsistent tree'
+  : '75852': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '68337': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '62776': 'rados/basic: cluster [WRN] overall HEALTH_WARN - do not have an application enabled'
+  '68337': OSD(s) experiencing slow operations in BlueStore (BLUESTORE_SLOW_OP_ALERT) in cluster log
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '72312': 'rados/thrash-old-clients squid HEALTH_WARN Degraded data redundancy: 3204/90723 objects degraded (3.532%), 2 pgs degraded, 3 pgs undersized" in cluster log'
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '75414': 'upgrade: pool full warning variation'
+  '75852': Failed ceph_assert in AvlAllocator

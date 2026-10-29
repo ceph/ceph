@@ -1,0 +1,28 @@
+id: "78999"
+tracker: https://tracker.ceph.com/issues/78999
+title: "trial056: last 10 jobs all failed or died"
+kind: test
+tree: other/workunit-keyring-attribute
+match:
+  reason: "'Namespace' object has no attribute 'keyring'"
+confirm:
+  - file: teuthology.log
+    pattern: "AttributeError: 'Namespace' object has no attribute 'keyring'"
+  - file: teuthology.log
+    pattern: 'qa/tasks/workunit\.py", line \d+, in _run_tests'
+notes: |
+  testnode-monitor filed this issue automatically because trial056 failed its last ten
+  jobs, but the node was not at fault. As David Galloway's comment says, two causes
+  combined. One is the dpkg overwrite conflict between radosgw and ceph-common (PR 70729,
+  tracked in 78903). The other is this one. The branch under test has the commit
+  "qa/tasks/workunit: add admin key to workunit keyring". In _run_tests it sets
+  'tmp_keyring = ctx.ceph[cluster].keyring' (qa/tasks/workunit.py, line 398).
+  ctx.ceph[cluster] is only given a .keyring by the ceph task (qa/tasks/ceph.py, line 847).
+  The cephadm task, used by the upgrade suites such as upgrade/tentacle-x/stress-split,
+  creates a bare argparse.Namespace with only .bootstrapped and .image
+  (qa/tasks/cephadm.py, line 2098). So the first workunit (rbd/test_librbd.sh) dies with
+  "AttributeError: 'Namespace' object has no attribute 'keyring'" in
+  workunit.py _run_tests, before it runs. The traceback shows it. It is a test bug in
+  the qa workunit task, not a cluster or node problem.
+examples:
+  - pdonnell-2026-08-03_19:49:29-upgrade-wip-pdonnell-testing-20260802.185424-distro-default-trial/424717

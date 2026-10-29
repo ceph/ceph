@@ -1,0 +1,11 @@
+run: aainscow-2026-03-25_13:40:24-upgrade-wip-aainscow-pdonnell-testing-20260324.150853-with-tag-distro-default-trial
+signatures:
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error EINVAL: invalid command'
+  : '75731': 1
+  'hung/command | parallel: cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell --fsid <uuid> -- ceph':
+    '75731': 1
+  infra/packages | packages:
+    '75730': 1
+titles:
+  '75730': Upgrades to umbrella broken due to missing ceph-osd-classic
+  '75731': Cephadm API Incompatibility in Upgrade Tests

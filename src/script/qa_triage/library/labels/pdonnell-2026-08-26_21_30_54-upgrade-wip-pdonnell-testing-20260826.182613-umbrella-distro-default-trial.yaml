@@ -1,0 +1,10 @@
+run: pdonnell-2026-08-26_21:30:54-upgrade-wip-pdonnell-testing-20260826.182613-umbrella-distro-default-trial
+jobs:
+  '516663':
+    problem: '80122'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 80122, this one among them.
+    summary: cephadm task failed because qa/tasks/util/chacra.py get_binary_url() took the newest shaman result, a squid build still in 'building', instead of the newest ready one (tracker 80122, no record existed).
+    status: fail
+    description: upgrade/squid-x/stress-split/{0-distro/ubuntu_22.04 0-roles 1-start 2-first-half-tasks/rbd-cls 3-stress-tasks/{radosbench rbd-cls rbd-import-export rbd_api readwrite snaps-few-objects} 4-second-half-tasks/radosbench mon_election/connectivity overrides/{upgrade_ignorelist_health}}
+    reason: 'cannot pull file with status: building'

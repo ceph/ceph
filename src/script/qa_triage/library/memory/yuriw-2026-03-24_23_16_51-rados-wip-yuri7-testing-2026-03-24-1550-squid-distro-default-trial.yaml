@@ -1,0 +1,6 @@
+run: yuriw-2026-03-24_23:16:51-rados-wip-yuri7-testing-2026-03-24-1550-squid-distro-default-trial
+signatures:
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'

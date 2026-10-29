@@ -1,0 +1,50 @@
+id: "73249"
+tracker: https://tracker.ceph.com/issues/73249
+title: "osd/MissingLoc.h: FAILED ceph_assert(0 == \"unexpected need for missing item\")"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/65747
+    branch: main
+tree: crash/assert/specific
+facts:
+  source: '^osd/MissingLoc\.h$'
+  message: 'unexpected need for missing item'
+confirm:
+  - file: teuthology.log
+    pattern: 'osd_pool_default_flag_ec_optimizations: true'
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: "unexpected need for \\S+ have \\S+ flags = .* tried to add \\S+"
+exclude:
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: '_merge_object_divergent_entries: hoid \S+ missing, \S+ flags = .* adjusting'
+notes: |
+  An OSD hits ceph_assert(0 == "unexpected need for missing item") at
+  osd/MissingLoc.h:242 in MissingLoc::add_active_missing(), called from
+  PeeringState::activate. The test then fails later, with a symptom such as a
+  thrasher or watchdog timeout waiting for the admin socket of a restarted OSD, or
+  slow ops, because the OSDs that peer the PG hit the same assert and crash.
+  The cause (Bill Scales, tracker): a bug in optimized EC (FastEC,
+  ec_optimizations) only. A shard that is recovering or backfilling, or is a stray
+  (last_complete != last_update, non-empty missing list), advances last_update from
+  partial_writes_last_complete (pwlc), because the writes it missed were partial
+  writes that did not touch it. Advancing last_update alone does not update its
+  missing list, because the primary does not send it the log entries. If object X
+  was missing at V1 and a partial write moved it to V2, the shard still reports V1.
+  When the shard becomes active, the primary combines the missing lists, finds X
+  needed at different versions, and asserts. It is more likely with wide EC
+  profiles (such as k=8 m=6) and with teuthology's closely spaced error injects.
+  In the logs: the OSD log has 'unexpected need for <obj> have V2 ... tried to add
+  V1' just before the assert (here 3.18, have 176'135, tried to add 176'134), and
+  the job runs with osd_pool_default_flag_ec_optimizations: true. The pwlc advance
+  itself was not logged in this job's OSD logs. Earlier fixes for the same assert
+  (#56779, #56895) did not cover this case; many different FastEC bugs raise this
+  assert, so the confirm checks only establish FastEC plus a stale missing need.
+  Jobs whose OSD logs show a divergent merge of a partial write adjusting the
+  missing need (_merge_object_divergent_entries: hoid X missing, V ... adjusting)
+  are #75962 instead, a different cause that raises the same assert, and are
+  excluded here.
+  The fix is PR 65747 (avoid applying pwlc when last_complete != last_update, so
+  the primary sends the log and the shard updates its missing list); the tracker
+  issue is Fix Under Review and the PR is not merged yet, so there is no fixed_in.
+examples:
+  - skanta-2026-09-30_21:49:09-rados-wip-bharath8-testing-20260930.133801-main-distro-default-trial/597359

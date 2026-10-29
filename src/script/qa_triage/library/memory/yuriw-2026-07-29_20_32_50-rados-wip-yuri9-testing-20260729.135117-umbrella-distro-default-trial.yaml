@@ -1,0 +1,6 @@
+run: yuriw-2026-07-29_20:32:50-rados-wip-yuri9-testing-20260729.135117-umbrella-distro-default-trial
+signatures:
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'

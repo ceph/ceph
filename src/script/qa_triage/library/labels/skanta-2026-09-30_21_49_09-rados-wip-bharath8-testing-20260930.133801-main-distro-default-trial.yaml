@@ -1,0 +1,34 @@
+run: skanta-2026-09-30_21:49:09-rados-wip-bharath8-testing-20260930.133801-main-distro-default-trial
+jobs:
+  '597283':
+    problem: '81515'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-81515.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: Record 81515 is missing the fix PR (https://github.com/ceph/cbt/pull/372) documented in the tracker; add it to the fixes field.
+    status: fail
+    description: rados/perf/{ceph mon_election/connectivity objectstore/bluestore-stupid scheduler/dmclock_1Shard_16Threads settings/optimized ubuntu_latest workloads/fio_4K_rand_read}
+    reason: 'Command failed on trial172 with status 1: ''/home/ubuntu/cephtest/cbt-venv/bin/python /home/ubuntu/cephtest/cbt/cbt.py -a /home/ubuntu/cephtest/archive/cbt /home/ubuntu/cephtest/archive/cbt/cbt_config.yaml'''
+  '597359':
+    problem: '73249'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-73249.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: 'Right: osd.5 hit the MissingLoc::add_active_missing assert on an optimized-EC (FastEC) pool, tracker 73249; the record needed the real cause in its notes and confirm checks that show it.'
+    status: fail
+    description: rados/thrash-erasure-code-isa/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{none} write$/{v2/{compr$/{no$/{no}} v2}}}} rados recovery-overrides/{more-partial-recovery} supported-random-distro/{ubuntu_24.04} thrashers/careful_host thrashosds-health workloads/ec-rados-plugin=isa-k=8-m=6-technique=cauchy}
+    reason: The WatchDog barked due to Thrasher OSDThrasher threw exception timed out waiting for admin_socket to appear after osd.9 restart
+  '597588':
+    problem: '81135'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-81135.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: 'Correctly a duplicate of 81135: ceph_test_rados aborted on -ETIMEDOUT from the 900s rados_osd_op_timeout in a thrashing EC suite; the fix (PR 72389) is not in this build.'
+    status: fail
+    description: rados/thrash-erasure-code-isa/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{btree} base mem$/{low} onode-segment$/{256K} write$/{random/{compr$/{yes$/{lz4}} random}}}} rados recovery-overrides/{more-active-recovery} supported-random-distro/{rocky_10} thrashers/pggrow_host thrashosds-health workloads/ec-rados-plugin=isa-k=10-m=4}
+    reason: 'Command failed on trial190 with status 1: ''CEPH_CLIENT_ID=0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage daemon-helper kill ceph_test_rados --ec-pool --max-ops 4000 --objects 50 --max-in-flight 16 --size 4000000 --min-stride-size 400000 --max-stride-size 800000 --max-seconds 0 --op read 100 --op write 0 --op delete 50 --op snap_create 50 --op snap_remove 50 --op rollback 50 --op setattr 25 --op rmattr 25 --op copy_from 50 --op append 100 --pool unique_pool_0'''
+  '597540':
+    problem: '81857'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 3 jobs that the tool placed in 81857 in 75358, this one among them.
+    summary: 'Right cause, already decided without a judge: the per-mgr dashboard ports were deleted by tearDown''s "config reset 1", and when the iostat enable respawned the mgrs they started on 8443 instead of 7789. #75358 has the same cause, so it goes into 81857''s `also`.'
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/connectivity random-objectstore$/{bluestore-bitmap} tasks/dashboard}
+    reason: 'Test failure: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module)'

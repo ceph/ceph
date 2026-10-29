@@ -1,0 +1,9 @@
+run: rkachach-2026-04-07_08:52:26-orch:cephadm-wip-rkachach-testing-2026-04-06-1500-distro-default-trial
+signatures:
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: + echo ''(jq parse error or no match)'''
+  : '75934': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:tentacle shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error EPERM: require_osd_release cannot be lowered once it has been set'
+  : '75944': 1
+titles:
+  '75934': nvmeof orch smoke test case is broken
+  '75944': mds upgrade test case is failing

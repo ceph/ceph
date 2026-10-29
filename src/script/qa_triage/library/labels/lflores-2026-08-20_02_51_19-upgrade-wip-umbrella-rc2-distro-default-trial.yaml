@@ -1,0 +1,10 @@
+run: lflores-2026-08-20_02:51:19-upgrade-wip-umbrella-rc2-distro-default-trial
+jobs:
+  '495501':
+    problem: '79694'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in no known problem in 79694, this one among them.
+    summary: 'Wrongly called new: the ''upgrade already in progress'' EINVAL is a symptom; the umbrella mgr.x could not parse the type-2 key in its keyring that tentacle wrote (Malformed input), the upgrade paused with UPGRADE_NO_STANDBY_MGR, and the next ''upgrade start --daemon-types mon'' was refused. This is tracker 79694.'
+    status: fail
+    description: upgrade/tentacle-x/stress-split/{0-distro/centos_9.stream_runc 0-roles 1-start 2-first-half-tasks/rbd-cls 3-stress-tasks/{radosbench rbd-cls rbd-import-export rbd_api readwrite snaps-few-objects} 4-second-half-tasks/rbd-import-export mon_election/connectivity overrides/{upgrade_ignorelist_health}}
+    reason: 'Command failed on trial030 with status 22: "sudo /home/ubuntu/cephtest/cephadm --image quay.ceph.io/ceph-ci/ceph:tentacle shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring --fsid d5bae6a9-9c9b-11f1-a3c4-d404e6e7d460 -e sha1=e1a1c0e9969129c5af88a5c1b6f36c2829ecfab2 -- bash -c ''ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon --limit 1''"'

@@ -1,0 +1,30 @@
+id: "76980"
+tracker: https://tracker.ceph.com/issues/76980
+title: "qa/workunits/mon/pg_autoscaler.sh: autoscaler test fails when pool does not reach target PG number in time"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69176
+    branch: main
+    fixed_in: v21.0.0-2111-g6d92b5650e
+tree: workunit/set-e
+facts:
+  script: '^mon/pg_autoscaler\.sh$'
+match:
+  reason: 'workunit test mon/pg_autoscaler\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: "bash -c 'ceph osd pool get \\S+ pg_num \\| grep"
+notes: |
+  In qa/workunits/mon/pg_autoscaler.sh, wait_for loops for 300 seconds waiting for
+  a pool's pg_num to reach the target pg_num calculated by the test. Because
+  autoscale mode was not enabled properly in all test cases and mon_target_pg_per_osd
+  prevented scaling on small pg differences, the pool (such as bulk0 or data0) never
+  reached the target pg_num in time. wait_for echoes 'failed' and returns 1, causing
+  the workunit to fail under set -e. Fixed by PR #69176.
+examples:
+  - skanta-2026-05-27_06:21:57-rados-wip-bharath4-testing-2026-05-27-1003-distro-default-trial/239861
+  - skanta-2026-05-27_06:21:57-rados-wip-bharath4-testing-2026-05-27-1003-distro-default-trial/239873
+  - skanta-2026-06-02_04:58:02-rados-wip-bharath3-testing-2026-06-02-0837-distro-default-trial/253404
+  - skanta-2026-06-02_04:58:02-rados-wip-bharath3-testing-2026-06-02-0837-distro-default-trial/253416
+  - skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263720
+  - lflores-2026-06-05_19:26:14-rados-wip-lflores-testing-3-2026-06-05-1057-distro-default-trial/269103

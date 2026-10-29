@@ -1,0 +1,34 @@
+id: "79946"
+tracker: https://tracker.ceph.com/issues/79946
+title: "After rebuilding the mondb, authentication starts failing"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71654
+    branch: main
+    fixed_in: v21.3.0-3586-gb9debef3f7
+tree: command/error
+facts:
+  error: '^failed to fetch mon config \(--no-mon-config to skip\)$'
+match:
+  description: 'rebuild-mondb'
+confirm:
+  - file: teuthology.log
+    pattern: 'ceph-monstore-tool \S+ rebuild -- --keyring /etc/ceph/ceph\.keyring'
+  - file: teuthology.log
+    pattern: 'dd of=/etc/ceph/ceph\.client\.0\.keyring'
+  - file: teuthology.log
+    pattern: 'handle_auth_bad_method failed to auth with my available methods.*Permission denied'
+notes: |
+  The qa task rebuild_mondb rebuilds the monitor database with
+  'ceph-monstore-tool ... rebuild -- --keyring /etc/ceph/ceph.keyring'. The
+  osd.* keys are reconstructed from the OSDs' own store data, but client.0
+  (used by radosbench) and mgr.x have no OSD-side representation: they only exist
+  in their own keyring files (e.g. /etc/ceph/ceph.client.0.keyring), so they are
+  silently dropped from the rebuilt auth db. After the mons are revived, the mgr
+  logs "monclient(hunting): handle_auth_bad_method failed to auth with my available
+  methods: (13) Permission denied", and the radosbench that follows exits at once
+  with "failed to fetch mon config (--no-mon-config to skip)". Fixed in the test
+  by PR 71654, which imports the client and mgr keyrings into keyring_path before
+  the rebuild.
+examples:
+  - skanta-2026-09-20_02:51:43-rados-wip-bharath22-testing-20260920.002814-main-distro-default-trial/570211

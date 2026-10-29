@@ -1,0 +1,9 @@
+run: skanta-2026-09-04_04:06:36-rados-wip-bharath7-testing-20260904.011528-main-distro-default-trial
+signatures:
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '74794': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '69010': 1
+titles:
+  '69010': 'test-crash: killing osds intentionally to test for crashes results in PG_DEGRADED warning'
+  '74794': ' rados/thrash -  The WatchDog barked due to Thrasher ceph.osd.9 threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean'

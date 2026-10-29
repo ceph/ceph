@@ -1,0 +1,18 @@
+id: "77461"
+tracker: https://tracker.ceph.com/issues/77461
+title: "mgr/test_localpool.sh: unrecognized config option 'mgr/localpool/subtree'"
+kind: infra
+tree: workunit/unexplained/test-localpool-unrecognized-config-option
+facts:
+  script: '^mgr/test_localpool\.sh$'
+confirm:
+  - file: teuthology.log
+    pattern: "Error EINVAL: unrecognized config option 'mgr/localpool/subtree'"
+notes: |
+  mgr/test_localpool.sh failed immediately when setting localpool config options:
+  'ceph config set mgr mgr/localpool/subtree host' failed with status 22 (EINVAL)
+  because the mgr localpool module package was missing from the repository built on chacra.
+examples:
+  - skanta-2026-06-17_03:50:08-rados-wip-yuri7-testing-2026-06-16-0346-distro-default-trial/296715
+also:
+  - "77500"

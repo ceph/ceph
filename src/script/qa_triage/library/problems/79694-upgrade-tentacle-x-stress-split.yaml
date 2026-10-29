@@ -1,0 +1,33 @@
+id: "79694"
+tracker: https://tracker.ceph.com/issues/79694
+title: "upgrade/tentacle-x/stress-split: auth: error parsing file /var/lib/ceph/mgr/ceph-x/keyring"
+kind: product
+tree: command/error/upgraded-daemon-keyring-malformed
+match:
+  description: 'tentacle-x'
+confirm:
+  - file: teuthology.log
+    pattern: 'auth: error parsing file \S+/keyring: error setting modifier for \[\S+\] type=key val=Ag\S*: Malformed input'
+notes: |
+  The cluster is installed on tentacle 20.2.4, which has the cephx changes of the
+  v20.2.4/v19.2.6 combo release and writes type-2 (aes256k) keys: in the keyring,
+  base64 starting 'Ag', key type 2. The umbrella build under test does not have those
+  changes yet. When cephadm redeploys a daemon (here mgr.x, the first one upgraded
+  by 'ceph orch upgrade start --daemon-types mgr') on the umbrella image, the new
+  daemon cannot parse its own keyring:
+  'auth: error parsing file /var/lib/ceph/mgr/ceph-x/keyring: error setting modifier
+  for [mgr.x] type=key val=Ag...: Malformed input', then '(5) Input/output error'.
+  It keeps restarting and failing the same way. With no working standby mgr, the
+  active mgr cannot upgrade itself, and the upgrade pauses with
+  'Upgrade: Paused due to UPGRADE_NO_STANDBY_MGR: Upgrade: Need standby mgr daemon'.
+  The stress-split wait loop exits when the upgrade status message contains 'Error'.
+  The next 'ceph orch upgrade start ... --daemon-types mon --limit 1' then fails with
+  status 22, 'Error EINVAL: Cannot set values for --daemon-types, --services or
+  --hosts when upgrade already in progress', because the paused upgrade still counts
+  as in progress. The EINVAL is only a symptom; the keyring line is the cause.
+  Per the tracker this is expected until Umbrella gets the cephx (aes256k) changes;
+  no fix PR is linked yet. upgrade/squid-x jobs of the same run fail at the same
+  command, with the squid image; they likely have the same cause, since squid 19.2.6
+  got the same cephx changes. They are not claimed here until someone checks their logs.
+examples:
+  - lflores-2026-08-20_02:51:19-upgrade-wip-umbrella-rc2-distro-default-trial/495501

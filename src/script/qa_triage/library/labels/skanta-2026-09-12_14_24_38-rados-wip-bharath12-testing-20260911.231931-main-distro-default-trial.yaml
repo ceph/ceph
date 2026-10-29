@@ -1,0 +1,18 @@
+run: skanta-2026-09-12_14:24:38-rados-wip-bharath12-testing-20260911.231931-main-distro-default-trial
+jobs:
+  '553732':
+    problem: '51370'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 51370, but the tool said new (explain -> prefilter -> explained -> agent -> verify-quotes), sure, after its judge (bob) said new . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 51370 by itself, with no judge.
+    summary: 'ceph_test_objectstore hung in SyntheticMatrixCsumAlgorithm.Test/0 until the max job timeout: tracker 51370, which had no record and which the tree could not recognise.'
+    status: dead
+    description: rados/objectstore/{backends/objectstore-memstore supported-random-distro/{centos_9.stream}}
+    reason: hit max job timeout
+  '553961':
+    problem: '79943'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'misc.sh:292 checks persistent features length == 14 with cephx_auth_aes256k present: 79943, as Laura Flores wrote on 74827 (comment 76); 74827 is the earlier nvmeof_beacon_diff count'
+    summary: duplicate 79943 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/standalone/{supported-random-distro/{centos_9.stream} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial080 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=c5cbcced7e5797c0fe88de62578705461dddfab1 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''

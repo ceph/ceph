@@ -1,0 +1,9 @@
+run: nmordech-2026-04-29_15:16:37-rados-wip-nmordech-testing-20260429.100618-distro-default-trial
+signatures:
+  cluster-log/health | WRN POOL_NEARFULL:
+    '74518': 1
+  ? cluster-log/message/backfill-reject-injected | WRN mon pg <pg> is active+remapped+backfill_toofull, acting [#,#,#] | PG backfill_toofull from injected backfill reservation rejection
+  : '70716': 1
+titles:
+  '70716': 'rados/thrash-old-clients: "pg backfill_toofull" warning in cluster log'
+  '74518': 'rados/perf: pools reached nearfull (POOL_NEARFULL)'

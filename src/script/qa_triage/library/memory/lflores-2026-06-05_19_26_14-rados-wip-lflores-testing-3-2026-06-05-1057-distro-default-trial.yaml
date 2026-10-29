@@ -1,0 +1,38 @@
+run: lflores-2026-06-05_19:26:14-rados-wip-lflores-testing-3-2026-06-05-1057-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_DB_LIST_FAILED:
+    '77250': 1
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '76979': 1
+  infra/build | build:
+    '77053': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '74794': 1
+    '75216': 1
+  'workunit/set-e | mon/pg_autoscaler.sh: [ # -eq # ]: failed':
+    '76980': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '76297': 1
+  ? 'workunit/unexplained/test-repos-release-file-missing | cephadm/test_repos.sh | test_repos.sh: download.ceph.com apt repo has no Release file'
+  : '77248': 1
+titles:
+  '74794': ' rados/thrash -  The WatchDog barked due to Thrasher ceph.osd.9 threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean'
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76297': test_iscsi_container - cephadm/test_iscsi_setup.sh fails on sudo ls /dev/disk/by-path
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '76979': 'cephadm: Failure to re-authenticate an osd'
+  '76980': 'qa/workunits/mon/pg_autoscaler.sh: autoscaler test fails when pool does not reach target PG number in time'
+  '77053': 'rados/encoder: failure to find umbrella packages'
+  '77106': nvme list json command failed, retrying...
+  '77248': 'rados/cephadm: The repository ''https://download.ceph.com/debian-quincy noble Release'' does not have a Release file. '
+  '77250': 'rados/mgr: Failed to list/create InfluxDB database (MGR_INFLUX_DB_LIST_FAILED)'

@@ -1,0 +1,6 @@
+run: skanta-2026-04-30_03:32:50-rados-wip-bharath4-testing-2026-04-29-1417-tentacle-distro-default-trial
+signatures:
+  crash/client/unexplained | ceph_test_rados:
+    '75216': 1
+titles:
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'

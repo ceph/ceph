@@ -1,0 +1,30 @@
+id: "74818"
+tracker: https://tracker.ceph.com/issues/74818
+title: "ceph-volume lvm batch: error: argument --osd-type: invalid choice: 'OSDType.classic'"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67264
+    branch: main
+    fixed_in: v20.3.0-5293-g5ccdd6ad16
+tree: cluster-log/health
+facts:
+  check: '^CEPHADM_APPLY_SPEC_FAIL$'
+  message: 'osd\.default'
+confirm:
+  - file: teuthology.log
+    pattern: 'Health check failed: Failed to apply 1 service\(s\): osd\.default \(CEPHADM_APPLY_SPEC_FAIL\)'
+notes: |
+  The cause: cephadm's ceph-volume command builder (src/python-common/ceph/deployment/translate.py)
+  does cmd += " --osd-type {}".format(self.spec.osd_type). OSDType is a (str, enum.Enum),
+  so format() expands to 'OSDType.classic' instead of 'classic', and
+  'ceph-volume lvm batch ... --osd-type OSDType.classic' fails with 'invalid choice'.
+  The mgr then cannot apply the osd service spec (osd.default), and the mon logs
+  [WRN] Health check failed: Failed to apply 1 service(s): osd.default
+  (CEPHADM_APPLY_SPEC_FAIL); the warning flaps as cephadm retries. The suite does
+  not ignore it, so the teardown cluster-log scan fails the job. Fixed by PR 67264,
+  which passes OSDType.value. The job's archive may hold only teuthology.log, so the
+  ceph-volume error text is not always visible and the confirm check is the symptom
+  line; the tracker names the example jobs. Builds 20.3.0-5184 (before v20.3.0-5293)
+  have the bug.
+examples:
+  - yaarit-2026-02-08_02:18:50-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/39771

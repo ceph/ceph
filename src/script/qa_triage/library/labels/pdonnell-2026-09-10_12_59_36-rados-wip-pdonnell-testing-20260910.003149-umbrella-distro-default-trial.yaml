@@ -1,0 +1,10 @@
+run: pdonnell-2026-09-10_12:59:36-rados-wip-pdonnell-testing-20260910.003149-umbrella-distro-default-trial
+jobs:
+  '548612':
+    problem: '77991'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 77991, this one among them.
+    summary: qa/tasks/cephadm.py setup_ca_signed_keys hardcodes 'systemctl restart sshd', which does not exist on Ubuntu 24.04 (ssh.service); this was tracker 77991 but had no record.
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_24.04 agent/on mon_election/classic task/test_ca_signed_key}
+    reason: 'Command failed on trial030 with status 5: "sudo echo ''TrustedUserCAKeys /etc/ssh/ca-key.pub'' | sudo tee -a /etc/ssh/sshd_config && sudo systemctl restart sshd"'

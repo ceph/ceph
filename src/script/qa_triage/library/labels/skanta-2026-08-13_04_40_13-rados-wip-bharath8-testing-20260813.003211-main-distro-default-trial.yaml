@@ -1,0 +1,18 @@
+run: skanta-2026-08-13_04:40:13-rados-wip-bharath8-testing-20260813.003211-main-distro-default-trial
+jobs:
+  '464220':
+    problem: '77106'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 77106, but the tool said probable-duplicate 71816 (explain -> prefilter -> confirm -> explained -> agent -> verify-quotes -> fix-check), sure, after its judge (bob) said duplicate 71816. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 77106 by itself, with no judge.
+    summary: The job fails because nvme list -o json crashes 15 times after loop devices were connected (77106); the hostnqn connect error (71816) only hit lv_1 once and was recovered from.
+    status: fail
+    description: rados/cephadm/osds/{0-distro/ubuntu_24.04 0-nvme-loop 1-start 2-ops/repave-all}
+    reason: reached maximum tries (15) after waiting for 15 seconds
+  '464335':
+    problem: '75133'
+    by: Claude Code for aainscow, as the reviewer
+    why: valgrind InvalidRead in AsyncConnection::mark_down() at OSD shutdown (75133); 57892 is a node-setup dd failure
+    summary: duplicate 75133 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/verify/{ceph clusters/fixed-4 d-thrash/none mon_election/connectivity msgr-failures/few msgr/async objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-2} onode-segment$/{256K} write$/{v1/{compr$/{yes$/{zlib}} v1}}}} rados read-affinity/default rpm_latest tasks/mon_recovery validater/valgrind}
+    reason: 'valgrind error: InvalidRead UnknownInlinedFun UnknownInlinedFun AsyncConnection::mark_down()'

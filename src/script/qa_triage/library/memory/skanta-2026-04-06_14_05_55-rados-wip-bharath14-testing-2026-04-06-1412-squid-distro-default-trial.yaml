@@ -1,0 +1,24 @@
+run: skanta-2026-04-06_14:05:55-rados-wip-bharath14-testing-2026-04-06-1412-squid-distro-default-trial
+signatures:
+  cluster-log/health | WRN BLUESTORE_SLOW_OP_ALERT:
+    '68337': 1
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  ? 'cluster-log/other/cephadm-pull-manifest-unknown | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: reading manifest in quay.ceph.io/ceph-ci/ceph: manifest unknown'
+  : '75886': 1
+  'command/unexplained | yes | mkfs.xfs -f -i size=# -f /dev/vg_nvme/lv_#: #':
+    '68668': 1
+  workunit/standalone | mon/mon-cluster-log.sh TEST_journald_cluster_log_level:
+    '71118': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 1
+titles:
+  '68337': OSD(s) experiencing slow operations in BlueStore (BLUESTORE_SLOW_OP_ALERT) in cluster log
+  '68668': 'rados/dashboard: mkfs.xfs: cannot open /dev/vg_nvme/lv_2: Device or resource busy'
+  '71118': 'qa/standalone/mon/mon-cluster-log.sh: TEST_journald_cluster_log_level fails from insufficient permissions'
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '75886': 'tentacle: upgrade/parallel: failure to pull reef image during upgrade'

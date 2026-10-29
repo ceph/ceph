@@ -1,0 +1,45 @@
+id: "75763"
+tracker: https://tracker.ceph.com/issues/75763
+title: "rados/encoder: teuthology: VersionNotFoundError when fetching 'reef' Ceph packages for Rocky 10.1 from shaman"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/68326
+    branch: main
+    fixed_in: v21.0.0-1247-gc4330d1ad2
+tree: infra/build
+match:
+  description: 'rados/encoder'
+confirm:
+  - file: teuthology.log
+    pattern: 'VersionNotFoundError.*rocky%2F10.*ref=(?:reef|squid)'
+exclude:
+  - file: teuthology.log
+    pattern: '^ {1,3}branch: wip-\S+-main$'
+notes: |
+  The rados/encoder test matrix runs backward compatibility tests against older Ceph
+  releases (such as reef and squid), but included rocky10 in supported-random-distro.
+  Because rocky10 is only supported starting in tentacle, shaman has no builds for
+  reef or squid on rocky10, leading to a VersionNotFoundError during install. Fixed
+  by PR #68326 which removed rocky from supported distros for rados/encoder.
+  Jobs of a wip-...-main testing branch whose matrix explicitly names
+  supported-random-distro/{rocky_10} are tracker 80294 (the matrix selected rocky_10
+  again, and PR #71558 skips the tests when Rocky is the distro); the exclude check
+  leaves them to that record. Older date-style testing branches
+  (wip-...-YYYY-MM-DD-HHMM, such as the June 2026 job whose matrix named rocky_10 and
+  failed at ref=squid) belong here, before the fix of 80294 existed. Jobs of the
+  tentacle-release branch whose rocky_10 matrix failed at ref=reef belong here too
+  (the fix of this issue is backported to tentacle in #76512).
+  Tracker 59193 is a closed umbrella ticket for "Failed to fetch package version from
+  shaman"; its closing note names rocky/10 x squid/reef/quincy (never built) as one of
+  its causes, and people place these jobs there too, so it is listed in `also`.
+  Tracker 80294 covers the same root cause (rocky10 selected, no shaman packages for
+  older releases); people place date-style-branch jobs of this kind in either issue,
+  so 80294 is listed in `also`.
+examples:
+  - yuriw-2026-10-23_17:09:01-rados-umbrella-release-distro-default-trial/671548
+  - skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263690
+  - skanta-2026-07-12_00:12:33-rados-wip-bharath10-testing-2026-07-11-1405-distro-default-trial/356675
+  - yuriw-2026-10-16_22:53:13-rados-tentacle-release-distro-default-trial/649458
+also:
+  - "59193"
+  - "80294"

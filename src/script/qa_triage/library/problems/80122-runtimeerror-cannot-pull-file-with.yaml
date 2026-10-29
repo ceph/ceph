@@ -1,0 +1,32 @@
+id: "80122"
+tracker: https://tracker.ceph.com/issues/80122
+title: "RuntimeError: cannot pull file with status: building"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71452
+    branch: main
+    fixed_in: v21.3.0-3129-g32c9ed7fdb
+tree: other/chacra-build-not-ready
+match:
+  reason: 'cannot pull file with status'
+confirm:
+  - file: teuthology.log
+    pattern: 'qa/tasks/util/chacra\.py", line \d+, in get_binary_url'
+  - file: teuthology.log
+    pattern: 'RuntimeError: cannot pull file with status: building'
+notes: |
+  qa/tasks/cephadm.py _fetch_stable_branch_cephadm_from_chacra() calls
+  qa/tasks/util/chacra.py get_binary_url() to fetch the 'compiled' cephadm of a
+  stable branch (e.g. squid, used by the upgrade suites). get_binary_url() searches
+  shaman with no status filter, takes result[0], the newest build, and raises
+  'cannot pull file with status: <status>' if it is not 'ready'. When the stable
+  branch is being rebuilt, its newest build is 'building' while older ready builds
+  are still in the same results, so the job fails in the cephadm task before any
+  ceph daemon starts. The build under test was ready; this is a race with the
+  stable-branch rebuild, not a scheduling problem.
+  In the logs: the 'Downloading "compiled" cephadm from cachra' line, then a
+  traceback through chacra.py get_binary_url and the RuntimeError.
+  Fix: PR 71452 filters the results to ready builds and takes the newest one.
+  Backports are tracked as 81238, 81239 and 81240.
+examples:
+  - pdonnell-2026-08-26_21:30:54-upgrade-wip-pdonnell-testing-20260826.182613-umbrella-distro-default-trial/516663

@@ -1,0 +1,27 @@
+run: yuriw-2026-10-07_19:32:30-rados-wip-yuri7-testing-20261007.155121-squid-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'command/unexplained/not-found | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: # | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found'
+  : '79571': 1
+  ? 'crash/client/unexplained/old-client-aes256k-keyring | ceph_test_cls_rbd | ceph_test_cls_rbd of an old release: cluster.connect failed with error -# on an aes#k cluster'
+  : '80146': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '79943': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '75358': 1
+titles:
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79943': qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of "cephx_auth_aes256k"
+  '79946': After rebuilding the mondb, authentication starts failing
+  '80146': '[Squid] test_cls_rbd: TestClsRbd.mirror fails during pool creation with unhandled error -5 (-EIO)'

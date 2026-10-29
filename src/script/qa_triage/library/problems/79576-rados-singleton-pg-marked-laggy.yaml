@@ -1,0 +1,34 @@
+id: "79576"
+tracker: https://tracker.ceph.com/issues/79576
+title: "rados/singleton: PG marked LAGGY during [osd-recovery| backfill-toofull | ec-esb-fio]  tests"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72024
+    branch: main
+    fixed_in: v21.3.0-4476-g895778ba72
+match:
+  reason: 'marked LAGGY'
+confirm:
+  - file: teuthology.log
+    pattern: 'cluster \[WRN\] PG \S+ marked LAGGY'
+  - file: teuthology.log
+    pattern: 'ms inject socket failures: \d+'
+notes: |
+  Not a functional bug: a cluster-log ignorelist gap. The suites inject messenger
+  socket failures (msgr-failures/few or many, 'ms inject socket failures'), so OSD
+  heartbeat connections fault and reopen repeatedly. A primary PG's read lease then
+  runs out: PrimaryLogPG::check_laggy logs 'check_laggy mnow X > readable_until Y'
+  and sets PG_STATE_LAGGY, and the OSD logs '[WRN] PG ... marked LAGGY; acting [...]'
+  to the cluster log. The laggy state clears by itself and the test passes its own
+  checks (recovery or backfill finishes, the cluster goes clean, no traceback), but
+  the end-of-run cluster-log scan fails the job because 'marked LAGGY' is not in
+  the test's log-ignorelist.
+  PR 72024 added '- marked LAGGY' to the ignorelist of only three tests:
+  rados/singleton/all/osd-recovery, backfill-toofull and ec-esb-fio. The tracker
+  files all such LAGGY failures under injected socket failures here, and other
+  singleton tests have the same gap: ec-inconsistent-hinfo (an example below) still
+  has no entry. Those jobs have this cause, but PR 72024 does not cover them, so
+  fix-check will report them as seen-after-fix. They need the same ignorelist entry
+  in their yaml.
+examples:
+  - pdonnell-2026-10-19_23:53:32-rados-wip-pdonnell-testing-20261019.181708-main-distro-default-trial/658865

@@ -1,0 +1,18 @@
+run: skanta-2026-09-05_09:19:06-rados-wip-bharath2-testing-20260904.234041-squid-distro-default-trial
+signatures:
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'command/unexplained/not-found | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: # | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found'
+  : '79571': 1
+  ? 'crash/client/unexplained/old-client-aes256k-keyring | ceph_test_cls_rbd | ceph_test_cls_rbd of an old release: cluster.connect failed with error -# on an aes#k cluster'
+  : '80146': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '70669': 1
+titles:
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79946': After rebuilding the mondb, authentication starts failing
+  '80146': '[Squid] test_cls_rbd: TestClsRbd.mirror fails during pool creation with unhandled error -5 (-EIO)'

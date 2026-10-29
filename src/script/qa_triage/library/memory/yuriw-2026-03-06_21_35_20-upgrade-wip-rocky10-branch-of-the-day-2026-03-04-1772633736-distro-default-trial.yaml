@@ -1,0 +1,9 @@
+run: yuriw-2026-03-06_21:35:20-upgrade-wip-rocky10-branch-of-the-day-2026-03-04-1772633736-distro-default-trial
+signatures:
+  cluster-log/health | ERR PG_DAMAGED:
+    '75418': 1
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '65728': 1
+titles:
+  '65728': Daemon managed by cephadm in an unknown state (CEPHADM_FAILED_DAEMON)
+  '75418': 'upgrade: [ERR] Health check failed: Possible data damage: 2 pgs recovery_unfound (PG_DAMAGED) in cluster log'

@@ -1,0 +1,6 @@
+run: nmordech-2026-03-18_10:01:55-smoke:basic-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial
+signatures:
+  infra/packages | packages:
+    '75607': 1
+titles:
+  '75607': 'smoke/basic: Some index files failed to download (jammy)'

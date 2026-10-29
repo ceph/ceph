@@ -1,0 +1,6 @@
+run: yuriw-2026-03-07_15:42:20-rados:cephadm-wip-rocky10-branch-of-the-day-2026-03-06-1772840606-distro-default-trial
+signatures:
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'

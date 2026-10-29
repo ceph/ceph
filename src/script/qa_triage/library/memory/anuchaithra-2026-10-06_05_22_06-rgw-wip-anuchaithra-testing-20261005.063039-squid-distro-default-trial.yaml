@@ -1,0 +1,6 @@
+run: anuchaithra-2026-10-06_05:22:06-rgw-wip-anuchaithra-testing-20261005.063039-squid-distro-default-trial
+signatures:
+  'cluster-log/message | ERR mgr Failed to load ceph-mgr modules: k#sevents':
+    '81494': 2
+titles:
+  '81494': 'error in loading k8sevents module '

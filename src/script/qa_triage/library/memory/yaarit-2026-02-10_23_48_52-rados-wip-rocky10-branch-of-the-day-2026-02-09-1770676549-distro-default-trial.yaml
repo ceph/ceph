@@ -1,0 +1,9 @@
+run: yaarit-2026-02-10_23:48:52-rados-wip-rocky10-branch-of-the-day-2026-02-09-1770676549-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/PrimaryLogPG.cc FAILED ceph_assert(is_primary()) in virtual void PrimaryLogPG::on_local_recover(const hobject_t&, const ObjectRecoveryInfo&, ObjectContextRef, bool, ObjectStore::Transaction*)
+  : '74306': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '74004': 1
+titles:
+  '74004': 'qa/standalone/ceph-helpers: ceph pg query hangs indefinitely'
+  '74306': Out-of-order divergent logs can corrupt missing list and assert in pg_missing_set::get_oldest_need()

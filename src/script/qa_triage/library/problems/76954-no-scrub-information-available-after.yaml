@@ -1,0 +1,30 @@
+id: "76954"
+tracker: https://tracker.ceph.com/issues/76954
+title: "No scrub information available after deep scrub due to scrubls pg ops being balanced with rados_replica_read_policy = balanced"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/70629
+    branch: main
+    fixed_in: v21.3.0-3876-g1b14e27c8c
+tree: command/error
+facts:
+  task: '^scrub_test$'
+  command: '^rados list-inconsistent-obj'
+match:
+  reason: 'rados list-inconsistent-obj'
+confirm:
+  - file: teuthology.log
+    pattern: 'No scrub information available for pg'
+  - file: teuthology.log
+    pattern: 'error 2: \(2\) No such file or directory'
+notes: |
+  When rados_replica_read_policy is set to balance (e.g. via balance_reads_on.yaml),
+  the client (librados/objecter) attaches balanced read flags to all read ops,
+  including PG-level ops such as `rados list-inconsistent-obj` (scrubls).
+  Scrub state (m_store) is only maintained on the primary OSD of the replica pool;
+  non-primary replicas return -ENOENT ((2) No such file or directory) with
+  "No scrub information available for pg ...".
+  Fixed in Ceph by PR #70629 (tracker #76954), which ignores BALANCED/LOCALIZE READS
+  flags for PG ops and watch/notify ops, ensuring they are routed to the primary OSD.
+examples:
+  - yuriw-2026-05-15_14:18:16-rados-wip-yuri-testing-2026-05-14-1648-distro-default-trial/213373

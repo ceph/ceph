@@ -1,0 +1,42 @@
+run: skanta-2026-09-24_03:23:39-rados-wip-bharath10-testing-20260924.010810-main-distro-default-trial
+signatures:
+  '- | Error reimaging machines: reached maximum tries (#) after waiting for # seconds':
+    '74701': 2
+  ? 'cluster-log/health/discard-queue-overload | WRN BLOCK_DEVICE_DISCARD_QUEUE | BLOCK_DEVICE_DISCARD_QUEUE: discard queue overload'
+  : '79443': 1
+  ? 'cluster-log/message/out-of-order-full | ERR mon [ERR] OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order | OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order from thrash_cluster_full'
+  : '69497': 1
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+  'command/not-found | grep -E (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found':
+    '79571': 1
+  'infra/other | ansible.cephlab: ["Wanted # disks of ~# GB (rotational=False), but only matched #: [''nvme#n#'']"]':
+    '81126': 1
+  'infra/other | kernel: failed to install new kernel version within timeout':
+    '81300': 1
+  ? 'infra/other/nvme-cli-host-identity | nvme_loop: Command failed on <host> with status #: ''sudo nvme connect -t loop -n lv_#'' | nvme_loop: nvme connect: Failed to write to /dev/nvme-fabrics'
+  : '71816': 5
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  ? 'workunit/set-e | mon/mon-stretch-mode-#-mons-#-osds.sh: ceph mon enable_stretch_mode e stretch_rule datacenter: Error EINVAL: stretch mode is already engaged'
+  : '81136': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/mon-bind.sh TEST_mon_client_connect:
+    '80756': 1
+  ? 'workunit/standalone/mclock-overrides-sleep | osd/osd-recovery-space.sh TEST_recovery_test_simple | osd-recovery-space.sh TEST_recovery_test_simple: mClock overrides osd_recovery_sleep'
+  : '80024': 1
+titles:
+  '69497': '"[ERR] OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order" in cluster log'
+  '71816': 'Failed to write to /dev/nvme-fabrics: Invalid argument'
+  '74701': 'Uncaught exception: reached maximum tries (100) after waiting for 600 seconds when Pushing job info to paddles'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '79443': 'Health check failed: 1 OSD(s) experiencing slow discard operations (BLOCK_DEVICE_DISCARD_QUEUE)'
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'
+  '80024': osd/osd-recovery-space.sh TEST_recovery_test_simple failure - it's back!
+  '80756': 'qa/standalone/mon/mon-bind.sh: TEST_mon_client_connect fails from error pinging monitor'
+  '81126': '(trial114) Wanted 2 disks of ~1700 GB (rotational=False), but only matched 1: [''nvme2n1'']'
+  '81136': 'mon/mon-stretch-mode-5-mons-8-osds.sh: Error EINVAL: stretch mode is already engaged'
+  '81300': Failed to install new kernel version within timeout

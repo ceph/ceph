@@ -1,0 +1,21 @@
+run: nmordech-2026-02-09_08:34:53-rados-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial
+signatures:
+  'infra/other | ansible.cephlab: ':
+    '74833': 1
+  other | <fail with no reason>:
+    '71005': 1
+  'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_urls: AssertionError: Lists differ: [''/metrics''] != []':
+    '74819': 2
+  ? 'workunit/set-e | cephadm/test_iscsi_setup.sh: container_gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; podman exec -i <sha> gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; set -e'
+  : '74577': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 2
+titles:
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74577': test_iscsi_setup.sh - No such path /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/iqn.1994-05.com.redhat:client1
+  '74819': tasks.mgr.test_prometheus.TestPrometheus.test_urls - metrics url fail with 400
+  '74833': 'Could not resolve host: apt-mirror.sepia.ceph.com'

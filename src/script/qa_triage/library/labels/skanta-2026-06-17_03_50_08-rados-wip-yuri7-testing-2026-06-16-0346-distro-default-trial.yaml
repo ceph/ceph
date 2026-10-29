@@ -1,0 +1,58 @@
+run: skanta-2026-06-17_03:50:08-rados-wip-yuri7-testing-2026-06-16-0346-distro-default-trial
+jobs:
+  '296701':
+    problem: '77417'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 77417, but the tool said new (explain -> prefilter -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said unsure . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 77417 by itself, with no judge.
+    summary: ceph_test_neorados_completions missing from ceph-test packages causes rados/test.sh failure
+    status: fail
+    description: rados/basic/{ceph clusters/{fixed-2} mon_election/connectivity msgr-failures/many msgr/async-v1only objectstore/{bluestore/{alloc$/{hybrid} base mem$/{low} onode-segment$/{512K-onoff} write$/{v2/{compr$/{yes$/{zlib}} v2}}}} rados supported-random-distro/{rocky_10} tasks/rados_api_tests}
+    reason: 'Command failed (workunit test rados/test.sh) on trial050 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=87d418e14269d487651fc9450772591fad95fee5 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/test.sh'''
+  '296698':
+    problem: '76297'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 76297, but the tool said new (explain -> prefilter -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said unsure . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 76297 by itself, with no judge.
+    summary: test_iscsi_setup.sh failed when sudo ls /dev/disk/by-path | grep iscsi found no iSCSI disk; reviewers are right; adding a new record for 76297
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_24.04 agent/on mon_election/classic task/test_iscsi_container/{centos_9.stream test_iscsi_container}}
+    reason: 'Command failed (workunit test cephadm/test_iscsi_setup.sh) on trial019 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=87d418e14269d487651fc9450772591fad95fee5 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_iscsi_setup.sh'''
+  '296702':
+    problem: '77713'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 77713, but the tool said new (explain -> prefilter -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said unsure . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 77713 by itself, with no judge.
+    summary: Dashboard HostControllerTest setUpClass failed because Module 'test_orchestrator' not found; reviewers are right, add a new record for tracker 77713
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/classic random-objectstore$/{bluestore-comp-lz4} tasks/dashboard}
+    reason: 'Test failure: setUpClass (tasks.mgr.dashboard.test_host.HostControllerTest)'
+  '296694':
+    problem: '72888'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 72888, but the tool said new (explain -> prefilter -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said unsure . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 72888 by itself, with no judge.
+    summary: Workunit cephtool/test.sh hit its 3h timeout (status 124) because test_mon_caps left client.bug with empty mon caps (AUTH_BAD_CAPS); this is tracker 72888, missed because the archive has only teuthology.log.gz, so the tree stopped at its root and the record's checks never read the log.
+    status: fail
+    description: rados/singleton-bluestore/{all/cephtool mon_election/connectivity msgr-failures/many msgr/async-v1only objectstore/bluestore/{alloc$/{stupid} base mem$/{normal-2} onode-segment$/{none} write$/{v2/{compr$/{yes$/{snappy}} v2}}} rados supported-random-distro/{centos_9.stream}}
+    reason: 'Command failed (workunit test cephtool/test.sh) on trial099 with status 124: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=87d418e14269d487651fc9450772591fad95fee5 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephtool/test.sh'''
+  '296715':
+    problem: '77461'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 77461, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: mgr/test_localpool.sh failed because 'mgr/localpool/subtree' was unrecognized due to missing localpool module packages from chacra
+    status: fail
+    description: rados/mgr/{clusters/{2-node-mgr} debug/mgr mon_election/classic random-objectstore$/{bluestore/{alloc$/{hybrid} base mem$/{low} onode-segment$/{1M} write$/{random/{compr$/{yes$/{zlib}} random}}}} supported-random-distro/{centos_9.stream} tasks/{1-install 2-ceph 3-mgrmodules 4-units/workunits}}
+    reason: 'Command failed (workunit test mgr/test_localpool.sh) on trial057 with status 22: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=87d418e14269d487651fc9450772591fad95fee5 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/mgr/test_localpool.sh'''
+  '296696':
+    problem: '72380'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 72380, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: Create problem record for tracker 72380 (prometheus module failure causing file_sd_config command to return EINVAL).
+    status: fail
+    description: rados/mgr/{clusters/{2-node-mgr} debug/mgr mon_election/classic random-objectstore$/{bluestore/{alloc$/{bitmap} base mem$/{normal-2} onode-segment$/{512K} write$/{v1/{compr$/{no$/{no}} v1}}}} supported-random-distro/{centos_9.stream} tasks/{1-install 2-ceph 3-mgrmodules 4-units/prometheus}}
+    reason: 'Test failure: test_file_sd_command (tasks.mgr.test_prometheus.TestPrometheus.test_file_sd_command)'
+  '296725':
+    problem: '79024'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 1 jobs that the tool placed in 79024 in 75216, this one among them.
+    summary: Job 296725 is a rados/thrash-erasure-code-isa/pggrow_host job that belongs in both 79024 and 75216; adding 75216 to 79024's also list resolves the mismatch.
+    status: dead
+    description: rados/thrash-erasure-code-isa/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-2} onode-segment$/{512K-onoff} write$/{v2/{compr$/{yes$/{lz4}} v2}}}} rados recovery-overrides/{more-active-recovery} supported-random-distro/{rocky_10} thrashers/pggrow_host thrashosds-health workloads/ec-rados-plugin=isa-k=10-m=4}
+    reason: hit max job timeout

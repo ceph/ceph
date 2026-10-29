@@ -1,0 +1,39 @@
+id: "77106"
+tracker: https://tracker.ceph.com/issues/77106
+title: "nvme list json command failed, retrying..."
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69837
+    branch: main
+    fixed_in: v21.3.0-3600-gba5e354fff
+match:
+  reason: 'reached maximum tries'
+confirm:
+  - file: 'teuthology.log*'
+    pattern: 'WARNING:tasks\.nvme_loop:nvme list -o json command failed, retrying\.\.\.'
+exclude:
+  - file: 'teuthology.log*'
+    pattern: 'tasks\.cephadm:Waiting for \d+ OSDs to come up\.\.\.'
+notes: |
+  The nvme_loop task connects NVMe loop devices and then calls 'sudo nvme list
+  -o json' inside a safe_while(sleep=1, tries=15) loop to discover them. On
+  some systems (e.g. Ubuntu 24.04 with newer nvme-cli), 'nvme list -o json'
+  crashes (CommandCrashedError, exit non-zero) even though the loop devices are
+  present and visible in 'lsblk'. After 15 failures safe_while raises
+  MaxWhileTries. The loop devices were connected successfully; the issue is
+  purely in the discovery step. PR 69837 adds a sysfs-based fallback that walks
+  /sys/class/nvme-subsystem to discover the loop namespaces when 'nvme list'
+  fails.
+  On some jobs (e.g. 406415) the hostnqn connect error (71816 symptom) is also
+  present alongside the list failure: the first connect attempt with '-q hostnqn'
+  fails with 'Invalid argument', the fallback without -q succeeds, but then the
+  list loop fails. The list failure is the actual cause of MaxWhileTries.
+  The record has no tree path on purpose: in job 293706 the archive held only
+  teuthology.log.gz and the tree stopped at its root ('the job has no
+  teuthology.log'), so a record tied to infra/other/nvme-list-json-failed could
+  not be a candidate. The reason match and the strict confirm on the warning
+  line (in teuthology.log or teuthology.log.gz) choose the job instead.
+examples:
+  - skanta-2026-08-13_04:40:13-rados-wip-bharath8-testing-20260813.003211-main-distro-default-trial/464220
+  - yuriw-2026-07-28_17:11:12-rados-wip-yuri3-testing-20260728.135610-main-distro-default-trial/406415
+  - skanta-2026-06-14_23:24:50-rados-wip-bharath11-testing-2026-06-12-0509-distro-default-trial/293706

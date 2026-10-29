@@ -1,0 +1,10 @@
+run: skanta-2026-01-26_08:54:40-rados-wip-bharath4-testing-2026-01-26-1300-distro-default-trial
+jobs:
+  '17728':
+    problem: '74794'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 4 jobs that the tool placed in no known problem in 74794, this one among them.
+    summary: Tracker 74794 (morepggrow's unthrottled pg_num growth). The record's last confirm check read remote/*/log/ceph.log.gz, which this archive lacks, so I moved it to the equivalent not-active+clean PG lines in teuthology.log.
+    status: fail
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{more-partial-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-1} backoff/normal ceph clusters/{fixed-4} crc-failures/default d-balancer/crush-compat mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{bitmap} base mem$/{low} onode-segment$/{512K} write$/{v1/{compr$/{yes$/{lz4}} v1}}}} rados supported-random-distro$/{ubuntu_latest} thrashers/morepggrow thrashosds-health workloads/pool-snaps-few-objects}
+    reason: 'The WatchDog barked due to Thrasher ceph.osd.0 threw exception wait_for_recovery: failed before timeout expired'

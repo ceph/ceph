@@ -1,0 +1,42 @@
+id: "81126"
+tracker: https://tracker.ceph.com/issues/81126
+title: "(trial114) Wanted 2 disks of ~1700 GB (rotational=False), but only matched 1: ['nvme2n1']"
+kind: infra
+tree: infra/other
+facts:
+  host: '^(trial114|trial195)$'
+match:
+  reason: 'Wanted \d+ disks of|failed to install new kernel version within timeout'
+confirm:
+  - file: teuthology.log
+    pattern: 'AnsibleFailedError.*Wanted \d+ disks of .*but only matched \d+|current kernel version is \S+ vs \S+'
+  - file: teuthology.log
+    pattern: 'trial114|trial195'
+notes: |
+  Two failure modes share the same root cause: the machine's kernelDevice was
+  not set in FOG, so after a reboot or OS reinstall the machine boots from the
+  wrong disk.
+
+  Mode 1 (trial114, ansible.cephlab): the ansible.cephlab task runs
+  ceph-cm-ansible. The playbook checks non-rotational scratch disk counts.
+  Because trial114 booted the OS onto an OSD drive (kernelDevice not set),
+  it has fewer NVMe disks than expected and the playbook fails with
+  "Wanted N disks of ~SIZE GB (rotational=False), but only matched M",
+  raising AnsibleFailedError. The job dies before any ceph code runs.
+
+  Mode 2 (trial195, kernel): the kernel task reboots trial195 to install the
+  distro kernel. Because trial195's FOG kernelDevice entry is missing, it
+  boots from the wrong disk and uname -r returns 5.15.0-191-generic (the old
+  kernel) instead of 6.8.0-142-generic. After the timeout, wait_for_reboot()
+  asserts "failed to install new kernel version within timeout". Tracker
+  81300 is the duplicate issue filed for this mode.
+
+  The confirm checks use OR patterns so both failure modes confirm this
+  record. The host fact (trial114|trial195) restricts candidacy to these two
+  machines, preventing kernel-timeout failures on other machines from
+  becoming 'nearly fit' candidates.
+examples:
+  - skanta-2026-09-24_03:23:39-rados-wip-bharath10-testing-20260924.010810-main-distro-default-trial/577244
+  - skanta-2026-09-24_03:23:39-rados-wip-bharath10-testing-20260924.010810-main-distro-default-trial/577254
+also:
+  - "81300"

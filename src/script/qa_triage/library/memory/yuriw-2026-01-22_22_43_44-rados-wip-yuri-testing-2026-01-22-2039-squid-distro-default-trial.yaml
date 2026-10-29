@@ -1,0 +1,9 @@
+run: yuriw-2026-01-22_22:43:44-rados-wip-yuri-testing-2026-01-22-2039-squid-distro-default-trial
+signatures:
+  other | <fail with no reason>:
+    '71005': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+titles:
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)

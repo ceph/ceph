@@ -1,0 +1,12 @@
+run: jayaprakash-2026-07-15_18:38:17-rados-wip-jaya-bs-testing2-15-07-2026-distro-default-trial
+signatures:
+  ? 'hung/command/host-drain-osd-not-scheduled | cephadm.shell: exit #; fi | host drain: OSD not scheduled for removal, only reconfigured'
+  : '78429': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  ? 'workunit/set-e/test-repos-add-repo-shaman-http-error | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --dev main: Traceback (most recent call last): | test_repos.sh: shaman.ceph.com HTTP error'
+  : '58224': 1
+titles:
+  '58224': 'cephadm/test_repos.sh: urllib.error.HTTPError: HTTP Error 504: Gateway Timeout'
+  '77106': nvme list json command failed, retrying...
+  '78429': 'rados/cephadm: test_host_drain hangs after reconfiguring osd.5'

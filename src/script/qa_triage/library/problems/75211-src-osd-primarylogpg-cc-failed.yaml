@@ -1,0 +1,39 @@
+id: "75211"
+tracker: https://tracker.ceph.com/issues/75211
+title: "src/osd/PrimaryLogPG.cc: FAILED ceph_assert(is_primary())"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67870
+    branch: main
+    fixed_in: v21.0.0-1143-g277f43c7f9
+tree: crash/assert/specific
+facts:
+  source: '^osd/PrimaryLogPG\.cc$'
+  message: 'ceph_assert\(is_primary\(\)\)'
+  function: 'PrimaryLogPG::on_local_recover'
+confirm:
+  - file: teuthology.log
+    pattern: 'osd_pool_default_flag_ec_optimizations: [Tt]rue'
+  - file: teuthology.log
+    pattern: 'ECCommon::RecoveryBackend::handle_recovery_push'
+notes: |
+  An OSD hits FAILED ceph_assert(is_primary()) at osd/PrimaryLogPG.cc:433 in
+  PrimaryLogPG::on_local_recover(), called from
+  ECCommon::RecoveryBackend::handle_recovery_push / ECBackend::handle_recovery_push
+  (an EC recovery push onto a non-primary shard). The job then fails on a symptom
+  such as the watchdog barking because the daemon failed.
+  The cause (Bill Scales, tracker): optimized EC (ec_optimizations) only. A
+  non-primary shard rolls back divergent log entries and ignores partial writes it
+  did not take part in (PR 66698 / #74221). If a clone and a partial write are
+  followed by a full write and another partial write, all rolled back, the shard
+  marks the object missing but sets the need version from the prior_version of the
+  full write instead of that of the ignored partial write. The primary correctly
+  recovers the older version and pushes it; on_local_recover finds the pushed
+  version older than the missing need version, so the assert fires. The check
+  needs the EC handle_recovery_push frame and ec_optimizations on: the same assert
+  from another caller would be a different bug.
+  Fixed by PR 67870 (osd: PGLog Attach correct version to missing list when
+  ignoring log entries), merged as 277f43c7f9 (tracker Fixed In
+  v21.0.0-1143-g277f43c7f9; backport to tentacle #75583).
+examples:
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122186

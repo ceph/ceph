@@ -1,0 +1,57 @@
+id: "81857"
+tracker: https://tracker.ceph.com/issues/81857
+title: "qa/mgr/dashboard: test_list_enabled_module times out because the dashboard restarts on the default port 8443 instead of the assigned 7789"
+kind: test
+match:
+  reason: 'test_list_enabled_module'
+confirm:
+  - file: teuthology.log
+    pattern: "HTTPSConnectionPool\\(host='[^']+', port=77\\d\\d\\): Max retries exceeded with url: /api/mgr/module"
+  - file: remote/*/log/ceph-mgr.*.log.gz
+    pattern: 'ssl_server_port not found'
+exclude:
+  - file: teuthology.log
+    pattern: '^2026-0\d-\d\dT'
+notes: |
+  The cause: CephTestCase.tearDown() runs "ceph config reset <conf_epoch>" after
+  every test, with conf_epoch captured at cluster bring-up (1 in these jobs). The
+  per-mgr dashboard ports (config/mgr/mgr/dashboard/{x,y,z}/ssl_server_port =
+  7789/7790/7791) are written later, by MgrTestCase.setup_mgrs() through
+  DashboardTestCase.MODULE_PORTS, so the first tearDown deletes them (mon.a logs
+  "encode_pending_to_kvmon rm config/mgr/mgr/dashboard/x/ssl_server_port").
+  The running dashboard keeps its port, so test_get and test_list_disabled_module
+  still pass. test_list_enabled_module then runs "ceph mgr module enable iostat",
+  which respawns all the mgrs; each finds no ssl_server_port ("[x/]ssl_server_port
+  not found") and starts the dashboard on the default 8443. The test keeps
+  requesting the assigned port (7789..7791), gets ECONNREFUSED, and its
+  wait_until_rest_api_accessible retries run out. "Port 8443 not free" is logged
+  only when another mgr on the same host already holds 8443 (mgr.y and mgr.z
+  share a host), sometimes with the cluster error "Module 'dashboard' has failed:
+  Port 8443 not free on ::. (MGR_MODULE_ERROR)". The tracker issue is open and has
+  no fix or PR yet; the suspected trigger is that commit 4af78378a9d moved port
+  assignment to MODULE_PORTS in setup_mgrs() and nothing re-establishes the keys
+  after a reset. Older tracker #62972, with the same test and symptom, was fixed
+  for a different cause. The same mechanism is the older tracker #70669 (its PR
+  67728: "iostat module enabled -> mgr respawned -> dashboard restart (attempts to
+  bind to 8443) -> Port 8443 unavailable"), which has its own record: jobs that
+  ran before October 2026 (before this issue was filed) go there, which is why the
+  exclude checks the dates of the log lines. People still place the October jobs
+  this record claims in #70669 (e.g. 603525 and 620038, both commented on #70669
+  on 2026-10-12), so 70669 is listed under `also`: a job placed here is right for
+  either tracker. People also place them in #75358 ("Health check failed: Module
+  'dashboard' has failed: Port 8443 not free"), whose fix PR is the same 67728 and
+  which is the same failure seen through its MGR_MODULE_ERROR symptom: e.g.
+  597540 and 597377 (run skanta-2026-09-30_21:49:09, whose log lines are dated
+  2026-10-01) were commented on #75358 on 2026-10-15, and 605197/605363 on
+  2026-10-07, whether or not the health error appears in the job. So 75358 is
+  listed under `also` too. The three trackers should be merged.
+examples:
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631092
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631262
+  - skanta-2026-10-18_00:07:27-rados-wip-bharath19-testing-20261016.230223-main-distro-default-trial/651293
+  - skanta-2026-10-03_03:26:16-rados-wip-bharath19-testing-20261002.123021-main-distro-default-trial/603525
+  - jayaprakash-2026-10-08_14:59:53-rados-wip-bs-reshuffle-nlc-08-10-2026-distro-default-trial/620038
+  - skanta-2026-09-30_21:49:09-rados-wip-bharath8-testing-20260930.133801-main-distro-default-trial/597540
+also:
+  - "70669"
+  - "75358"

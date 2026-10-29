@@ -1,0 +1,33 @@
+id: "73921"
+tracker: https://tracker.ceph.com/issues/73921
+title: "rados/encoder: Container image quay.ceph.io/ceph-ci/ceph:quincy with tag quincy not found leading to test failure"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/66337
+    branch: main
+    fixed_in: v20.3.0-4449-gde563eea2b
+tree: cluster-log/other/cephadm-pull-manifest-not-found
+match:
+  reason: 'No such file or directory'
+confirm:
+  - file: teuthology.log
+    pattern: 'manifest for quay\.ceph\.io/ceph-ci/ceph:\S+ not found: manifest unknown'
+notes: |
+  The rados/encoder suite deploys a cephadm cluster using a named (floating) tag for an
+  older release, e.g. quay.ceph.io/ceph-ci/ceph:quincy. When that tag no longer exists
+  on the registry, Docker fails with:
+    /usr/bin/docker: stderr Error response from daemon: manifest for
+    quay.ceph.io/ceph-ci/ceph:quincy not found: manifest unknown: manifest unknown
+  Because cephadm pull fails before the cluster is deployed, teardown's cluster-log check
+  runs grep on /var/log/ceph/<fsid>/ceph.log, which was never created. cephadm
+  misinterprets the grep stderr as a cluster-log error and records
+  '"grep: /var/log/ceph/<fsid>/ceph.log: No such file or directory" in cluster log'
+  as the failure reason.
+  PR #66337 fixes the encoder suite yaml to replace the floating quincy tag with a
+  pinned tentacle tag.
+  Related: record 76028 covers the same root cause in squid upgrade suites but with the
+  podman error format ('reading manifest <tag> in <repo>: manifest unknown').
+examples:
+  - skanta-2026-03-07_15:39:05-rados-wip-bharath4-testing-2026-03-05-1456-tentacle-distro-default-trial/93028
+also:
+  - "76028"

@@ -1,0 +1,26 @@
+run: jayaprakash-2026-07-24_10:10:00-rados-wip-jaya-bs-testing-umbrella-23-07-2026-distro-default-trial
+jobs:
+  '396332':
+    problem: '77743'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in 77743 in 77443, this one among them.
+    summary: 'Placing the job in 77743 was right, but 77443 is the same failure, reported earlier: osd.1, SIGKILLed and restarted, wedged in BlueStore''s NCB allocator recovery, so ''ceph daemon osd.1 config set'' (no client timeout) blocked until the job timeout. Fix: add 77443 to 77743''s `also` (and the reverse).'
+    status: dead
+    description: rados/singleton/{all/recovery-preemption mon_election/classic msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-2} onode-segment$/{1M} write$/{random/{compr$/{yes$/{snappy}} random}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: hit max job timeout
+  '396316':
+    problem: '75216'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 5 jobs that the tool placed in 75216 in 74794, this one among them.
+    summary: pggrow_host thrasher with mgr_debug_aggressive_pg_num_changes=true grew pg_num into a peering storm (35→215 PGs, up to 78 remapped+peering, ops 'queued for pg'), so wait_for_recovery timed out. This is the 74794 cause, which 75216's pggrow_host failures share, so 74794 is added to 75216's `also`.
+    status: fail
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{more-async-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-1} backoff/peering ceph clusters/{fixed-4} crc-failures/default d-balancer/upmap-read mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{avl} base mem$/{normal-2} onode-segment$/{none} write$/{random/{compr$/{yes$/{zstd}} random}}}} rados supported-random-distro/{rocky_10} thrashers/pggrow_host thrashosds-health workloads/pool-snaps-few-objects}
+    reason: 'The WatchDog barked due to Thrasher OSDThrasher threw exception wait_for_recovery: failed before timeout expired'
+  '396304':
+    problem: '76981'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'ganesha (nfs.a) cannot register NFS V3 on TCP and exits status 2 on Rocky 10, so ''nfs is not available'' fails test_cephadm.sh: 76981 (its umbrella backport 80071 says it was copied from 76981). The dashboard ''Port 8443 not free'' (75358, where it was listed) is only in the dumped mgr logs. The tree stops at workunit/unexplained for it; teach it, and give 76981 a record.'
+    summary: 'test_cephadm.sh failed because ganesha (nfs.a) could not register NFS V3 on TCP (no portmapper on Rocky 10) and exited 2, so ''nfs is not available'': tracker 76981, not a new problem.'
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/rocky_10 agent/off mon_election/classic task/test_cephadm}
+    reason: 'Command failed (workunit test cephadm/test_cephadm.sh) on trial086 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=0a2d0502dcecee348b119f8164f81d3dc822c3b1 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_cephadm.sh'''

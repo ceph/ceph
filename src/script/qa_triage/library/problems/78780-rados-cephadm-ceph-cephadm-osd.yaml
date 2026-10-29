@@ -1,0 +1,47 @@
+id: "78780"
+tracker: https://tracker.ceph.com/issues/78780
+title: "rados/cephadm: ceph cephadm osd activate fails to reactivate OSD, teuthology hangs"
+kind: product
+match:
+  description: 'rmdir-reactivate'
+  reason: 'killed|hit max job timeout'
+confirm:
+  - file: teuthology.log
+    pattern: 'Created no osd\(s\) on host \S+; already created\?'
+  - file: teuthology.log
+    pattern: 'stray daemon osd\.\d+ on host \S+ not managed by cephadm'
+notes: |
+  The rados/cephadm/osds rmdir-reactivate test stops an OSD, removes it with
+  "ceph orch daemon rm osd.N --force", re-adds its auth key and runs
+  "ceph cephadm osd activate <host>". The activate prints "Created no osd(s) on host
+  <host>; already created?" and does not redeploy the OSD. The test then waits in
+  "while ! ceph orch ps --daemon_type osd | grep osd.N | grep running; do sleep 5; done"
+  which has no exit condition, so the job hangs until the max job timeout and teuthology
+  is killed (Got signal 15). The cluster stays healthy (pgs active+clean), and the mon
+  later raises CEPHADM_STRAY_DAEMON "stray daemon osd.N on host <host> not managed by
+  cephadm": the OSD data is still on the device but cephadm neither adopted nor deployed
+  it. The hang and the timeout are symptoms; the confirm checks use the activate message
+  and the stray daemon line.
+  The cause (tracker 76979, which 78780 duplicates): 1-start deploys the OSDs with the
+  all-available-devices spec, so their LVs carry ceph.osdspec_affinity=all-available-devices.
+  "ceph cephadm osd activate" calls deploy_osd_daemons_for_existing_osds
+  (src/pybind/mgr/cephadm/services/osd.py) with a synthetic DriveGroupSpec whose
+  service_id is '', and the unconditional filter
+  "if osd['tags']['ceph.osdspec_affinity'] != spec.service_id: continue" skips every OSD;
+  the mgr log shows "[cephadm DEBUG cephadm.services.osd] mismatched service id, skipping"
+  for each LV on the host, the removed OSD's among them. PR 69247 ("mgr/cephadm: Don't skip
+  OSDs with non-empty osdspec_affinity") fixes it in main (v21.3.0-60-gf2de87a95a); the
+  umbrella backport is tracked in 77722, and umbrella builds without it keep failing this way.
+  Tracker 77411 ("Dead job waits forever after CEPHADM_STRAY_DAEMON warning") reports the
+  same failure from its symptoms: the stray daemon warning repeating until the job times out
+  (jobs 263739 and 263869 of the skanta bharath5 run).
+  teuthology reports the kill either as failure_reason="killed" (when teuthology is signalled
+  directly) or as "hit max job timeout"; both are signal 15 at the wall-clock limit.
+examples:
+  - yuriw-2026-10-20_19:35:34-rados-wip-yuri13-testing-20261020.164521-umbrella-distro-default-trial/662399
+  - lflores-2026-06-25_15:37:19-rados-wip-lflores-testing-4-2026-06-24-1644-umbrella-distro-default-trial/317038
+  - skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263739
+  - jayaprakash-2026-05-27_10:33:30-rados-wip-jaya-bs-testing-26-05-2026-distro-default-trial/241013
+also:
+  - "76979"
+  - "77411"

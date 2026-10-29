@@ -1,0 +1,6 @@
+run: jenkins-build-2026-06-25_06:03:13-smoke-main-distro-default-trial
+signatures:
+  ? 'workunit/gtest/external-error-inject | rados/test.sh OmapTest.LargeOmapRecovery/Replicated, | rados/test.sh: OmapTest recovery upmap wait timed out under thrashosds'
+  : '78294': 1
+titles:
+  '78294': Some Rados API tests can fail when the test suite is doing error inject

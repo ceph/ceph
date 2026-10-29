@@ -1,0 +1,10 @@
+run: skanta-2026-05-12_11:16:42-rados-wip-bharath18-testing-2026-05-12-0450-distro-default-trial
+jobs:
+  '208777':
+    problem: '76473'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 6 jobs that the tool placed in no known problem in 76473, this one among them.
+    summary: Tracker 76473 (over-broad UnknownInlinedFun valgrind suppression hides the injected leak on Rocky 10) was misfiled by the tree as an infra/pexec failure; teach infra/other to recognise it and let the 76473 record match from any tree path.
+    status: fail
+    description: rados/valgrind-leaks/{1-start 2-inject-leak/osd rpm_latest}
+    reason: expected valgrind issues and found none

@@ -1,0 +1,6 @@
+run: yuriw-2026-10-16_15:33:21-upgrade-tentacle-release-distro-default-trial
+signatures:
+  workunit/unexplained | rados/test.sh:
+    '80613': 1
+titles:
+  '80613': 'upgrade p2p-parallel tests: error in completions during rados/test.sh'

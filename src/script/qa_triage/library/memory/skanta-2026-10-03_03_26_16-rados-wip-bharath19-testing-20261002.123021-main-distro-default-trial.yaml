@@ -1,0 +1,30 @@
+run: skanta-2026-10-03_03:26:16-rados-wip-bharath19-testing-20261002.123021-main-distro-default-trial
+signatures:
+  ? 'cluster-log/message/laggy-socket-failures | WRN osd PG <pg> marked LAGGY; acting [#,#,#] | PG marked LAGGY: read lease expired under injected socket failures'
+  : '79576': 1
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+  ? 'crash/client/ceph_test_rados/dispatch-delay-op-timeout | ceph_test_rados: /ceph/rpmbuild/BUILD/ceph-<pg>.#-#-g#e#ef#b#/src/test/osd/RadosModel.h: #: ceph_abort_msg("abort() called") | ceph_test_rados: -# with osd dispatch delay injection and compression'
+  : '81629': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 3
+  ? 'workunit/set-e | mon/mon-stretch-mode-#-mons-#-osds.sh: ceph mon enable_stretch_mode e stretch_rule datacenter: Error EINVAL: stretch mode is already engaged'
+  : '81136': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/mon-bind.sh TEST_mon_client_connect:
+    '80756': 1
+  ? workunit/unexplained/cephtool-hang/bad-caps-key-left-behind | cephtool/test.sh | cephtool/test.sh hung with AUTH_BAD_CAPS HEALTH_ERR | cephtool test_mon_caps left client.bug with empty mon caps (AUTH_BAD_CAPS)
+  : '72888': 1
+titles:
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '72888': 'rados/singleton-bluestore: cephtool.sh workunit hangs on various tests'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '79576': 'rados/singleton: PG marked LAGGY during [osd-recovery| backfill-toofull | ec-esb-fio]  tests'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'
+  '80756': 'qa/standalone/mon/mon-bind.sh: TEST_mon_client_connect fails from error pinging monitor'
+  '81136': 'mon/mon-stretch-mode-5-mons-8-osds.sh: Error EINVAL: stretch mode is already engaged'
+  '81629': 'qa/rados: osd-dispatch-delay injection probability (0.1) starves the OSD op queue with compression on wide EC pools'

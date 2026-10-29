@@ -1,0 +1,39 @@
+id: "74754"
+tracker: https://tracker.ceph.com/issues/74754
+title: "(teuthworker home dir) ansible: Unexpected failure during module execution: [Errno 28] No space left on device"
+kind: infra
+tree: infra/other
+facts:
+  task: '^ansible\.cephlab$'
+match:
+  reason: 'No space left on device'
+confirm:
+  - file: teuthology.log
+    pattern: 'AnsibleFailedError.*\[Errno 28\] No space left on device'
+notes: |
+  The ansible.cephlab task runs ceph-cm-ansible's cephlab.yml with ansible-playbook
+  on the teuthology host. Ansible writes its module cache and temp files under
+  /home/teuthworker/.ansible/tmp on that host (ansiballz_cache/..., tmpXXXX). When
+  that file system is full the module execution fails with "Unexpected failure
+  during module execution: [Errno 28] No space left on device:
+  '/home/teuthworker/.ansible/tmp/...'" and teuthology raises AnsibleFailedError.
+  The job dies before any ceph code runs. This is a lab problem on the teuthology
+  host, not a test node, a test or a ceph bug. David Galloway first traced it to
+  apt services acting up on a lab host, then moved /home/teuthworker to a separate
+  1.5TB NVMe drive, and old ceph repo checkouts are now pruned. Re-running the job
+  is the usual remedy. The failing path differs between jobs and several entries
+  may be listed when several hosts fail, so the checks do not depend on it. The
+  confirm check needs the Errno 28 text in the AnsibleFailedError line, so other
+  ansible.cephlab failures (missing disks, repo metadata downloads) are not
+  claimed.
+examples:
+  - nmordech-2026-02-04_08:13:49-rados-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial/33887
+  - nmordech-2026-02-04_08:13:49-rados-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial/33886
+  - nmordech-2026-02-21_21:55:34-rados-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial/63279
+  - nmordech-2026-02-21_21:55:34-rados-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial/63285
+  - skanta-2026-02-22_05:22:34-rados-wip-bharath9-testing-2026-02-21-2044-tentacle-distro-default-trial/63453
+  - skanta-2026-02-22_05:22:34-rados-wip-bharath9-testing-2026-02-21-2044-tentacle-distro-default-trial/63457
+  - skanta-2026-02-22_05:22:34-rados-wip-bharath9-testing-2026-02-21-2044-tentacle-distro-default-trial/63458
+  - skanta-2026-02-22_05:22:34-rados-wip-bharath9-testing-2026-02-21-2044-tentacle-distro-default-trial/63462
+  - skanta-2026-02-22_05:22:34-rados-wip-bharath9-testing-2026-02-21-2044-tentacle-distro-default-trial/63464
+  - skanta-2026-02-22_05:22:34-rados-wip-bharath9-testing-2026-02-21-2044-tentacle-distro-default-trial/63472

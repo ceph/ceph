@@ -1,0 +1,18 @@
+run: nmordech-2026-02-09_08:34:53-rados-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial
+jobs:
+  '41298':
+    problem: '74819'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 8 jobs in 74819, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are nmordech-2026-02-09_08:34:53-rados-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/41075, yaarit-2026-02-08_02:23:05-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/39836, yaarit-2026-02-08_02:25:21-rados-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/39890, yaarit-2026-02-10_02:32:59-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-09-1770676549-distro-default-trial/42040, yaarit-2026-02-10_02:32:59-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-09-1770676549-distro-default-trial/42050.'
+    summary: test_urls fails because /metrics returns 503 before the prometheus cache thread has populated collect_cache
+    status: fail
+    description: rados/mgr/{clusters/{2-node-mgr} debug/mgr distro/{rpm_latest} mgr_ttl_cache/disable mon_election/classic random-objectstore$/{bluestore/{alloc$/{btree} base mem$/{low} onode-segment$/{1M} write$/{v2/{compr$/{no$/{no}} v2}}}} tasks/{1-install 2-ceph 3-mgrmodules 4-units/prometheus}}
+    reason: 'Test failure: test_urls (tasks.mgr.test_prometheus.TestPrometheus.test_urls)'
+  '41227':
+    problem: '74873'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 3 jobs that the tool placed in 74873 in 74577, this one among them.
+    summary: Job correctly matches 74873, but 74873 needs also:74577 since both records describe the same iSCSI FQDN-mismatch root cause.
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/centos_9.stream agent/off mon_election/classic task/test_iscsi_container/{centos_9.stream test_iscsi_container}}
+    reason: 'Command failed (workunit test cephadm/test_iscsi_setup.sh) on trial059 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=a1ac97f8290bb2544f44f608df68f43689827c55 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_iscsi_setup.sh'''

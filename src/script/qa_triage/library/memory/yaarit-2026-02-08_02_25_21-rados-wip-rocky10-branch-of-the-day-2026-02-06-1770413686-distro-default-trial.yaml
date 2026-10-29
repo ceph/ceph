@@ -1,0 +1,35 @@
+run: yaarit-2026-02-08_02:25:21-rados-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial
+signatures:
+  ? 'command/error | cd /home/ubuntu/cephtest && env OPENSSL_ia#cap=~<hex> valgrind --trace-children=no --child-silent-after-fork=yes: daemon-helper: command failed with exit status #'
+  : '73822': 1
+  'command/unexplained | cbt/cbt.py -a archive/cbt archive/cbt/cbt_config.yaml: #':
+    '74834': 1
+  ? 'crash/client/unnamed | Command failed (workunit test osd/osd-bluefs-volume-ops.sh) on <host> with status #: ''mkdir -p -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && cd -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && CEPH_CLI_TEST_DUP_COMMAND=# CEPH_REF=<sha> TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="#" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.# CEPH_ROOT=/home/ubuntu/cephtest/clone.client.# CEPH_MNT=/home/ubuntu/cephtest/mnt.# adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout #h /home/ubuntu/cephtest/clone.client.#/qa/standalone/osd/osd-bluefs-volume-ops.sh'''
+  : '74765': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 2
+  infra/packages | packages:
+    '74832': 1
+    '74833': 1
+  'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_urls: AssertionError: Lists differ: [''/metrics''] != []':
+    '74819': 1
+  timeout/unexplained | MaxWhileTries:
+    '74519': 1
+  ? 'workunit/set-e | cephadm/test_iscsi_setup.sh: container_gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; podman exec -i <sha> gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; set -e'
+  : '74577': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '73822': 'Rocky10 - rados/verify - valgrind error: MismatchedFree operator delete[](void*, unsigned long, std::align_val_t) RocksDBStore::close() RocksDBStore::~RocksDBStore() '
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74519': 'cephadm/osds: Error: statfs /etc/ceph/ceph.client.admin.keyring: no such file or directory'
+  '74577': test_iscsi_setup.sh - No such path /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/iqn.1994-05.com.redhat:client1
+  '74765': './src/os/bluestore/BlueStore.h: 4588: FAILED ceph_assert(cur >= size_less)'
+  '74819': tasks.mgr.test_prometheus.TestPrometheus.test_urls - metrics url fail with 400
+  '74832': 'Could not resolve host: rocky-linux-us-east4.production.gcp.mirrors.ctrliq. cloud'
+  '74833': 'Could not resolve host: apt-mirror.sepia.ceph.com'
+  '74834': ' Was not able to gethostbyname: trial099.front.sepia.ceph.com'

@@ -1,0 +1,6 @@
+run: mattywilliams-2026-09-16_14:35:09-rbd-main-distro-default-trial
+signatures:
+  ? crash/client/unexplained/ec-optimized-out-of-order-op | rbd | osd PrimaryLogPG.cc ceph_abort_msg("out of order op") on an EC pg with allow_ec_optimizations
+  : '81661': 1
+titles:
+  '81661': 'osd: "out of order op" assert in execute_ctx for same-oid Cls call ops in Fast EC'

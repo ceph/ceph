@@ -1,0 +1,26 @@
+id: "55838"
+tracker: https://tracker.ceph.com/issues/55838
+title: '"download_cephadm" step fails'
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/70161
+    branch: main
+    fixed_in: v21.3.0-3462-g332ff9a6c9
+tree: command/unexplained/download-cephadm-failed
+facts:
+  command: '^test -s cephadm && test \$\(stat -c%s cephadm\)'
+confirm:
+  - file: teuthology.log
+    pattern: 'Downloading cephadm \(repo \S+ ref \S+\)\.\.\.'
+  - file: teuthology.log
+    pattern: 'Command failed on \S+ with status 1: ''test -s /home/ubuntu/cephtest/cephadm && test \$\(stat -c%s /home/ubuntu/cephtest/cephadm\) -gt 1000 && chmod \+x /home/ubuntu/cephtest/cephadm'''
+notes: |
+  Downloading cephadm from Github failed because the binary cephadm file under src/cephadm/cephadm
+  does not exist on Github at the specified ref/branch, resulting in a 404 response of size 14.
+  Subsequent test check fails: test -s /home/ubuntu/cephtest/cephadm && test $(stat -c%s /home/ubuntu/cephtest/cephadm) -gt 1000 && chmod +x /home/ubuntu/cephtest/cephadm
+  as the file size is only 14 bytes (instead of being > 1000 bytes).
+examples:
+  - rkachach-2026-06-27_08:00:42-orch:cephadm-wip-rkachach-testing-3-2026-06-26-1442-distro-default-trial/319284
+also:
+  - "80689"
+  - "80690"

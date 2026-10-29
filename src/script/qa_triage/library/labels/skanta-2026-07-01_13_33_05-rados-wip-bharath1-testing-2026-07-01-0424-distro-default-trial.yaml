@@ -1,0 +1,18 @@
+run: skanta-2026-07-01_13:33:05-rados-wip-bharath1-testing-2026-07-01-0424-distro-default-trial
+jobs:
+  '331682':
+    problem: '74794'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in 74794 in 75216, this one among them.
+    summary: Duplicate of tracker 74794; added 75216 to its also list as people filed jobs with this same failure under both trackers.
+    status: fail
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{more-partial-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-3} backoff/normal ceph clusters/{fixed-4} crc-failures/default d-balancer/crush-compat mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-1} onode-segment$/{256K} write$/{v1/{compr$/{yes$/{snappy}} v1}}}} rados supported-random-distro/{centos_9.stream} thrashers/morepggrow thrashosds-health workloads/pool-snaps-few-objects}
+    reason: 'The WatchDog barked due to Thrasher OSDThrasher threw exception wait_for_recovery: failed before timeout expired'
+  '331676':
+    problem: '75763'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'install failed: VersionNotFoundError for squid on rocky/10 from shaman, before any test; 76470 is a test_crash.sh failure'
+    summary: duplicate 75763 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro/{rocky_10}}
+    reason: Failed to fetch package version from https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=default&distros=rocky%2F10%2Fx86_64&ref=squid

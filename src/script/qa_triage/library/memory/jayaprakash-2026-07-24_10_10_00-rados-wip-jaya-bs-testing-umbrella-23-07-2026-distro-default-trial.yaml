@@ -1,0 +1,24 @@
+run: jayaprakash-2026-07-24_10:10:00-rados-wip-jaya-bs-testing-umbrella-23-07-2026-distro-default-trial
+signatures:
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '78780': 1
+  ? 'hung/command/ceph-daemon-config-set-hang | exec: sudo TESTDIR=/home/ubuntu/cephtest bash -c ''for f in # # # # ; do sudo ceph daemon osd.$f config set osd_recovery_sleep # ; sudo ceph daemon osd.$f config set osd_recovery_max_active # ; done'' | exec hung: ceph daemon config set on restarting OSD'
+  : '77443': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '74794': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? 'workunit/unexplained/ganesha-nfsv3-tcp-register | cephadm/test_cephadm.sh | test_cephadm.sh: ganesha Cannot register NFS V# on TCP'
+  : '76981': 1
+titles:
+  '74794': ' rados/thrash -  The WatchDog barked due to Thrasher ceph.osd.9 threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76981': Rocky10 - test_cephadm.sh failure cause by Cannot register NFS V3 on TCP
+  '77106': nvme list json command failed, retrying...
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '77443': 'rados/singleton: Test related to recovery-preemption could not revive an osd that was brought down and ultimately timed out after ~6hrs.'
+  '78780': 'Dead: rados/cephadm: ceph cephadm osd activate fails to reactivate OSD, teuthology hangs'

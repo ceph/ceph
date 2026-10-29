@@ -1,0 +1,6 @@
+run: yuriw-2026-05-21_13:40:32-rados-tentacle-release-distro-default-trial
+signatures:
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 1
+titles:
+  '74517': drop.ceph.com is unreachable (ceph-post-file)

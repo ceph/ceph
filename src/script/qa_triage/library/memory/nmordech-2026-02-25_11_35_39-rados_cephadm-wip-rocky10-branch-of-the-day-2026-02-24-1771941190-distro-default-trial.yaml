@@ -1,0 +1,15 @@
+run: nmordech-2026-02-25_11:35:39-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial
+signatures:
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '65728': 1
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '74860': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '65728': Daemon managed by cephadm in an unknown state (CEPHADM_FAILED_DAEMON)
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74860': 'Rocky10 - openssl: command not found when rocky10 container is used'

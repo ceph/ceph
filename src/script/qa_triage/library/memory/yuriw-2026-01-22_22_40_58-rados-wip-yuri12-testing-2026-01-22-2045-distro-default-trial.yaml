@@ -1,0 +1,7 @@
+run: yuriw-2026-01-22_22:40:58-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial
+signatures:
+  ? crash/signal/backtrace | osd Segmentation fault in ErasureCodeJerasureCauchyGood::prepare() < ErasureCodeJerasure::init(std::map<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&, std::ostream*) < ErasureCodePluginJerasure::factory(std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::map<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx#::basic_string<char,
+    std::char_traits<char>, std::allocator<char> > const, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&, std::shared_ptr<ceph::ErasureCodeInterface>*, std::ostream*)
+  : '73246': 1
+titles:
+  '73246': 'rados/thrash-erasure-code-big: Segmentation fault with cauchy technique'

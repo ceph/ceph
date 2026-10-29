@@ -1,0 +1,58 @@
+run: skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial
+signatures:
+  ? 'cluster-log/health/cephadm-refresh-failed-transient | WRN CEPHADM_REFRESH_FAILED | CEPHADM_REFRESH_FAILED: transient probe failure during daemon startup'
+  : '77415': 2
+  ? cluster-log/message/mgr-session-evicted | WRN mds evicting unresponsive client <host>:x (#), after <pg> seconds | MDS evicted the unresponsive libcephfs session of a restarted mgr
+  : '76497': 4
+  ? 'command/error/zap-device-missing | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> ceph-volume -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: RuntimeError: Failed command: /usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=# --net=host --entrypoint /usr/sbin/ceph-volume --privileged --group-add=disk --init -e CONTAINER_IMAGE=quay.ceph.io/ceph-ci/ceph:<sha> -e NODE_NAME=<host> -e CEPH_VOLUME_SKIP_RESTORECON=yes -e CEPH_VOLUME_DEBUG=# -v /var/run/ceph/<uuid>:/var/run/ceph:z -v /var/log/ceph/<uuid>:/var/log/ceph:z -v /dev:/dev -v /run/udev:/run/udev -v /sys:/sys -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm -v /:/rootfs:rslave -v /tmp/ceph-tmpajxphqtj:/etc/ceph/ceph.conf:z -v /tmp/ceph-tmpuoexkqyg:/var/lib/ceph/bootstrap-osd/ceph.keyring:z quay.ceph.io/ceph-ci/ceph:<sha> lvm zap /dev/nvme#n# | ceph-volume: device scan found /dev/mapper/ceph-* missing'
+  : '76991': 1
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '77411': 2
+  infra/build | build:
+    '75763': 1
+  'infra/other | pexec: expected valgrind issues and found none':
+    '76473': 1
+  'infra/packages/epel-mirror-404 | packages | epel repo metadata: all mirrors #':
+    '74708': 3
+  ? 'test/unexplained/ssh-connection-lost | Test failure: setUpClass (tasks.mgr.test_devicehealth.TestDeviceHealth) | SSH connection to <host> was lost'
+  : '77416': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '75216': 1
+  ? 'timeout/unexplained/thrasher-min-size-pgs-not-active | MaxWhileTries | OSDThrasher test_pool_min_size: PGs not active or peered'
+  : '76298': 1
+  ? 'workunit/set-e | cephadm/test_cephadm.sh: /usr/sbin/cephadm --image quay.ceph.io/ceph-ci/ceph:main logs --fsid <uuid> --name nfs.a: Jun # #:#:# <host> bash[#]: #/#/# #:#:# : epoch <sha> : <host> : ganesha.nfsd-#[main] main :MAIN :EVENT :ganesha.nfsd Starting: Ganesha Version <pg>'
+  : '75358': 2
+  'workunit/set-e | mon/pg_autoscaler.sh: [ # -eq # ]: failed':
+    '76980': 1
+  'workunit/set-e | mon/pg_autoscaler.sh: sec=#: failed':
+    '76980': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '76297': 3
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  ? 'workunit/unexplained/test-repos-release-file-missing | cephadm/test_repos.sh | test_repos.sh: download.ceph.com apt repo has no Release file'
+  : '77248': 1
+titles:
+  '74708': Failed to download metadata for repo 'epel' causes 'sudo yum install -y kernel' to fail on trial129
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '75763': 'rados/encoder: teuthology: VersionNotFoundError when fetching ''reef'' Ceph packages for Rocky 10.1 from shaman'
+  '76297': test_iscsi_container - cephadm/test_iscsi_setup.sh fails on sudo ls /dev/disk/by-path
+  '76298': rados/thrash-erasure-code failure - not all PGs are active or peered
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '76497': rados/singleton-bluestore/cephtool - evicting unresponsive client warnings
+  '76980': 'qa/workunits/mon/pg_autoscaler.sh: autoscaler test fails when pool does not reach target PG number in time'
+  '76991': 'ceph-volume: lvm zap fails with RuntimeError on missing /dev/mapper/ceph-* device'
+  '77248': 'rados/cephadm: The repository ''https://download.ceph.com/debian-quincy noble Release'' does not have a Release file. '
+  '77411': 'rados/cephadm: Dead job waits forever after CEPHADM_STRAY_DAEMON warning'
+  '77415': rados/cephadm fails with CEPHADM_REFRESH_FAILED
+  '77416': trial169 NIC RMA

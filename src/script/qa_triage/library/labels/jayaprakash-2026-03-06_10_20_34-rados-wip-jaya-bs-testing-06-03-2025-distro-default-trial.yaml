@@ -1,0 +1,43 @@
+run: jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial
+jobs:
+  '90354':
+    problem: '74523'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 44 jobs in 74523, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are lflores-2026-01-21_20:56:39-rados-main-distro-default-trial/12016, lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19112, nmordech-2026-01-26_18:32:32-rados:cephadm-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/18793, nmordech-2026-02-17_05:41:58-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial/51634, nmordech-2026-02-21_21:52:07-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial/63022.'
+    summary: task/test_set_mon_crush_locations jq check fails comparing crush_location list of objects with a string
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/centos_9.stream agent/off mon_election/classic task/test_set_mon_crush_locations}
+    reason: 'Command failed on trial121 with status 1: ''sudo /home/ubuntu/cephtest/cephadm --image quay.ceph.io/ceph-ci/ceph:48c31344c3d9ec8d6697e6c62a2f5aa862ff291f shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring --fsid e4171381-19c0-11f1-969c-d404e6e7d460 -- bash -c \''set -ex\n# since we don\''"\''"\''t know the real hostnames before the test, the next\n# bit is in order to replace the fake hostnames "host.a/b/c" with\n# the actual names cephadm knows the host by within the mon spec\nceph orch host ls --format json | jq -r \''"\''"\''.[] | .hostname\''"\''"\'' > realnames\necho $\''"\''"\''host.a\\nhost.b\\nhost.c\''"\''"\'' > fakenames\necho $\''"\''"\''a\\nb\\nc\''"\''"\'' > mon_ids\necho $\''"\''"\''{datacenter=a}\\n{datacenter=b,rack=2}\\n{datacenter=a,rack=3}\''"\''"\'' > crush_locs\nceph orch ls --service-name mon --export > mon.yaml\nMONSPEC=`cat mon.yaml`\necho "$MONSPEC"\nwhile read realname <&3 && read fakename <&4; do\n MONSPEC="${MONSPEC//$fakename/$realname}"\ndone
+      3<realnames 4<fakenames\necho "$MONSPEC" > mon.yaml\ncat mon.yaml\n# now the spec should have the real hostnames, so let\''"\''"\''s re-apply\nceph orch apply -i mon.yaml\nsleep 90\nceph orch ps --refresh\nceph orch ls --service-name mon --export > mon.yaml; ceph orch apply -i mon.yaml\nsleep 90\nceph mon dump\nceph mon dump --format json\n# verify all the crush locations got set from "ceph mon dump" output\nwhile read monid <&3 && read crushloc <&4; do\n ceph mon dump --format json | jq --arg monid "$monid" --arg crushloc "$crushloc" -e \''"\''"\''.mons | .[] | select(.name == $monid) | .crush_location == $crushloc\''"\''"\''\ndone 3<mon_ids 4<crush_locs\n\'''''
+  '90373':
+    problem: '52109'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'the workunit fails on ''grafana is not available'': grafana rejects http_addr = localhost (52109); the dashboard ''Port 8443 not free'' is a standby mgr''s and not what failed it'
+    summary: duplicate 52109 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_22.04 agent/off mon_election/classic task/test_cephadm}
+    reason: 'Command failed (workunit test cephadm/test_cephadm.sh) on trial036 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=48c31344c3d9ec8d6697e6c62a2f5aa862ff291f TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_cephadm.sh'''
+  '90321':
+    problem: '75488'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 6 jobs that the tool placed in 75488 in 74524, this one among them.
+    summary: osd-recovery-prio.sh TEST_recovery_pool_priority hit the unpaused-recovery race of 75488, so the tool's record was right. 74524 (the same symptom in the backfill test) goes into its `also`, and the tree gains the missing branch that 68669's example needs.
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{centos_latest} workloads/osd}
+    reason: 'Command failed (workunit test osd/osd-recovery-prio.sh) on trial156 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=48c31344c3d9ec8d6697e6c62a2f5aa862ff291f TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/osd/osd-recovery-prio.sh'''
+  '90378':
+    problem: '70669'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 11 jobs that the tool placed in no known problem in 70669, this one among them.
+    summary: Job 90378 is tracker 70669 but record 70669's confirms require ceph-mgr.*.log.gz absent from this archive; replace mgr-log confirms with teuthology.log HTTPSConnectionPool + date pattern that work for all 70669 jobs
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/classic random-objectstore$/{bluestore-low-osd-mem-target} tasks/dashboard}
+    reason: 'Test failure: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module)'
+  '90431':
+    problem: '75513'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 7 jobs in 75513, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90432, jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90438, jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90443, jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90444, jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90451.'
+    summary: git.ceph.com returned HTTP 504 during workunit clone; the workunit task failed before running any test
+    status: dead
+    description: rados/singleton-nomsgr/{all/crushdiff mon_election/connectivity rados supported-random-distro$/{ubuntu_latest}}
+    reason: ''

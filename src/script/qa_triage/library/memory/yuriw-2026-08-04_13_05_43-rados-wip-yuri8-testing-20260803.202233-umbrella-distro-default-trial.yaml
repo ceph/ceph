@@ -1,0 +1,18 @@
+run: yuriw-2026-08-04_13:05:43-rados-wip-yuri8-testing-20260803.202233-umbrella-distro-default-trial
+signatures:
+  'hung/command | kernel: echo ttyS# | tee /sys/module/kgdboc/parameters/kgdboc':
+    '79379': 3
+  'hung/command | kernel: sudo apt-get update':
+    '79380': 2
+  ? 'other/injected-leak-suppressed | expected valgrind issues and found none: injected leak hidden by the UnknownInlinedFun suppression'
+  : '76473': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '62972': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '77248': 1
+titles:
+  '62972': 'ERROR: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest)'
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '77248': 'rados/cephadm: The repository ''https://download.ceph.com/debian-quincy noble Release'' does not have a Release file. '
+  '79379': Mirror ubuntu repos in the lab
+  '79380': Several dead jobs while installing distro kernel on ubuntu

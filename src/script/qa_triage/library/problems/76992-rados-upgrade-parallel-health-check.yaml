@@ -1,0 +1,33 @@
+id: "76992"
+tracker: https://tracker.ceph.com/issues/76992
+title: "rados/upgrade/parallel: \"Health check failed: OSDs are running umbrella or later but require_osd_release < umbrella\""
+kind: test
+tree: cluster-log/message
+facts:
+  message: '^all OSDs are running umbrella or later but require_osd_release < umbrella$'
+  reporter: '^mon\.'
+match:
+  reason: 'require_osd_release < umbrella'
+confirm:
+  - file: teuthology.log
+    pattern: 'cluster \[WRN\] {2,}all OSDs are running umbrella or later but require_osd_release < umbrella'
+notes: |
+  The cause: during a cephadm upgrade to umbrella (rados/upgrade/parallel, squid -> umbrella)
+  there is a short window after the last OSD is upgraded and before cephadm's
+  _complete_osd_upgrade runs 'osd require-osd-release'. In that window OSDMap::check_health
+  raises OSD_UPGRADE_FINISHED ('all OSDs are running umbrella or later but
+  require_osd_release < umbrella') and pushes the same text as its detail line. If the mon's
+  periodic health report (do_health_to_clog_interval, every mon_health_to_clog_interval =
+  10 min) falls in that window and the summary has changed, the mon logs a multi-line
+  'Health detail: ... [WRN] OSD_UPGRADE_FINISHED: ...' entry. In ceph.log each line gets its
+  own header, so the detail line appears as
+  'cluster [WRN]     all OSDs are running umbrella or later but require_osd_release < umbrella'.
+  That line contains neither 'OSD_UPGRADE_FINISHED' nor 'overall HEALTH_', which are the
+  entries the suite's log-ignorelist (qa/suites/upgrade/squid-x/parallel/0-start.yaml) has.
+  The cephadm teardown cluster-log scan therefore fails the job, even though the warning is
+  transient and expected. The fix belongs in the ignorelist: also ignore
+  'require_osd_release <' (or the detail text). This record covers the umbrella form that
+  the tracker is about. The same warning naming tentacle, in upgrade/tentacle runs, is not
+  placed in this tracker.
+examples:
+  - lflores-2026-06-25_15:10:13-rados-wip-lflores-testing-5-2026-06-24-1640-distro-default-trial/316558

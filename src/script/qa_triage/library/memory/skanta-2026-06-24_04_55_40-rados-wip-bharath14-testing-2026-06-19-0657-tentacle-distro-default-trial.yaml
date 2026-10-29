@@ -1,0 +1,30 @@
+run: skanta-2026-06-24_04:55:40-rados-wip-bharath14-testing-2026-06-19-0657-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  cluster-log/health | WRN MON_NETSPLIT:
+    '71344': 1
+  cluster-log/message | ERR osd map e# had wrong cluster addr ([v#:<ip>,v#:<ip>] != my [v#:<ip>,v#:<ip>]):
+    '69805': 1
+  'command/error | ceph tell osd.# flush_pg_stats: Error ENXIO: problem getting command descriptions from osd.#':
+    '56097': 1
+  infra/build | build:
+    '59193': 1
+  timeout/unexplained | MaxWhileTries:
+    '66415': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/cephtool-mds-not-configured | cephtool/test.sh | cephtool/test.sh do_messenger_dump_basics_test: mds.a ENOENT'
+  : '74607': 1
+titles:
+  '56097': Timeout on `sudo adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 120 ceph --cluster ceph tell osd.1 flush_pg_stats`
+  '59193': '"Failed to fetch package version from https://shaman.ceph.com/api/search ..."'
+  '66415': max while retries rados/cephadm/osds/{0-distro/centos_9.stream 0-nvme-loop 1-start 2-ops/rmdir-reactivate}
+  '69805': 'log [ERR] : map eXX had wrong cluster addr'
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74607': 'do_messenger_dump_basics_test: Error ENOENT: problem getting command descriptions from mds.a'

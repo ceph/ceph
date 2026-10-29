@@ -1,0 +1,18 @@
+run: skanta-2026-06-09_02:42:07-rados-wip-bharath2-testing-2026-06-09-0416-distro-default-trial
+jobs:
+  '280494':
+    problem: '77053'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in 77053 in 59193, this one among them.
+    summary: rados/encoder failed with VersionNotFoundError querying shaman for ref=umbrella packages; correctly triaged as 77053, with umbrella tracker 59193 added to also.
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro/{ubuntu_22.04}}
+    reason: Failed to fetch package version from https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=default&distros=ubuntu%2F22.04%2Fx86_64&ref=umbrella
+  '280648':
+    problem: '70669'
+    by: Claude Code for aainscow, as the reviewer
+    why: test_list_enabled_module failed with Connection refused on port 7789 after config reset cleared ssl_server_port; the Port 8443 not free line is the mgrs falling back to 8443, not 71506's test_cephadm.sh collision
+    summary: duplicate 70669 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/connectivity random-objectstore$/{bluestore-comp-lz4} tasks/dashboard}
+    reason: 'Test failure: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module)'

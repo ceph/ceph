@@ -1,0 +1,6 @@
+run: yuriw-2026-05-24_18:07:59-upgrade-tentacle-release-distro-default-trial
+signatures:
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN # filesystem is degraded':
+    '76932': 1
+titles:
+  '76932': 'tentacle: upgrade suite cluster log warnings - 2'

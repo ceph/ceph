@@ -1,0 +1,22 @@
+run: skanta-2026-01-26_08:54:40-rados-wip-bharath4-testing-2026-01-26-1300-distro-default-trial
+signatures:
+  cluster-log/health | WRN POOL_NEARFULL:
+    '74518': 1
+  ? crash/signal/backtrace | osd Segmentation fault in ErasureCodeJerasureCauchyGood::prepare() < ErasureCodeJerasure::init(std::map<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&, std::ostream*) < ErasureCodePluginJerasure::factory(std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::map<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx#::basic_string<char,
+    std::char_traits<char>, std::allocator<char> > const, std::__cxx#::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&, std::shared_ptr<ceph::ErasureCodeInterface>*, std::ostream*)
+  : '73246': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '74794': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  workunit/unexplained | mon/availability.sh:
+    '74178': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '73246': 'rados/thrash-erasure-code-big: Segmentation fault with cauchy technique'
+  '74178': 'qa/standalone/mon/availability.sh: line 64: Syntax error due to missing availability status'
+  '74518': 'rados/perf: pools reached nearfull (POOL_NEARFULL)'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74794': ' rados/thrash -  The WatchDog barked due to Thrasher ceph.osd.9 threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean'

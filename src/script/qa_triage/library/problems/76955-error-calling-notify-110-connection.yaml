@@ -1,0 +1,39 @@
+id: "76955"
+tracker: https://tracker.ceph.com/issues/76955
+title: "error calling notify: (110) Connection timed out due to notify ack ops being balanced with rados_replica_read_policy = balanced"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/70629
+    branch: main
+    fixed_in: v21.3.0-3876-g1b14e27c8c
+tree: command/error
+facts:
+  task: '^watch_notify_same_primary$'
+  error: 'Connection timed out'
+match:
+  reason: 'rados -p \S+ notify '
+confirm:
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: 'notify-ack in=\d+b\].*balance_reads'
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: 'watch-notify\(notify_complete .* ret -110\)'
+notes: |
+  With rados_replica_read_policy = balance (qa balance_reads/balance_reads_on), the
+  client flags watch, notify and notify_ack ops with balance_reads. A watch sets up
+  volatile state on the primary OSD, and the primary also runs the notify and waits
+  for the acks. The notify_ack is balanced to a replica, which handles it as a plain
+  read and replies 0, so the primary never gets the ack. About 10 s later the
+  primary sends notify_complete with ret -110, and `rados notify` fails with error
+  110 (Connection timed out). The watch_notify_same_primary task then fails with
+  CommandFailedError.
+  The OSD logs show the cause: a notify-ack op with +balance_reads on a replica
+  (r=1) of the pg, and the primary's watch-notify notify_complete ... ret -110.
+  The timeout and the failed rados command are symptoms; a notify can also time out
+  for other reasons, so the checks need those two OSD log lines.
+  Fixed by PR 70629 (Ignore BALANCED/LOCALIZE READS flags for watch/notify/
+  notify_ack and pg ops): the client ignores the flags for these ops, and the OSD
+  fails them with EAGAIN on a non-primary so the client reissues them to the
+  primary. Either half is enough. The fix is not in builds before
+  v21.3.0-3876-g1b14e27c8c.
+examples:
+  - yuriw-2026-05-15_14:18:16-rados-wip-yuri-testing-2026-05-14-1648-distro-default-trial/213362

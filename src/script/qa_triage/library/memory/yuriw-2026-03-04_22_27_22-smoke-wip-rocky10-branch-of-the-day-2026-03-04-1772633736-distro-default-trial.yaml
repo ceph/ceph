@@ -1,0 +1,6 @@
+run: yuriw-2026-03-04_22:27:22-smoke-wip-rocky10-branch-of-the-day-2026-03-04-1772633736-distro-default-trial
+signatures:
+  ? 'infra/other/chacra-http-error | install: # Server Error: Internal Server Error for url: https://#.chacra.ceph.com/repos/ceph/wip-rocky#-branch-of-the-day-#-#-#-#/<sha>/rocky/#/flavors/default/repo | install: chacra.ceph.com HTTP error'
+  : '75356': 1
+titles:
+  '75356': 'HTTPError: 500 Server Error: Internal Server Error for chacra url'

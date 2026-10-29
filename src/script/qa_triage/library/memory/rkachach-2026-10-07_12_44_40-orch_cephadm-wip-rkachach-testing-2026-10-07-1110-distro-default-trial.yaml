@@ -1,0 +1,6 @@
+run: rkachach-2026-10-07_12:44:40-orch:cephadm-wip-rkachach-testing-2026-10-07-1110-distro-default-trial
+signatures:
+  ? 'workunit/gtest/shard-bounced-direct-read | rados/test.sh LibRadosIoECPPParamCombination/LibRadosIoECPP.ZeroAndTruncateSameRequest/#, | LibRadosIoECPP: op_reply count off after a shard bounced a direct read'
+  : '80986': 1
+titles:
+  '80986': 'LibRadosIoECPP test failure: Perf counter ''objecter.op_reply'' has incorrect value after operate()'

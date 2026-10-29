@@ -1,0 +1,10 @@
+run: lflores-2026-03-10_15:30:45-upgrade-wip-rocky10-branch-of-the-day-2026-03-04-1772633736-66244-revert-distro-default-trial
+jobs:
+  '98366':
+    problem: '71631'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 6 jobs in 71631, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are lflores-2026-03-10_16:00:35-upgrade-main-distro-default-trial/98532, lflores-2026-04-10_20:57:58-orch:cephadm:upgrade-tentacle-distro-default-trial/144426, nmordech-2026-03-17_06:34:53-upgrade-wip-rocky10-branch-of-the-day-2026-03-16-1773712510-distro-default-trial/104084, yuriw-2026-03-05_16:01:59-upgrade-wip-rocky10-branch-of-the-day-2026-03-04-1772633736-distro-default-trial/89047, yuriw-2026-03-05_16:01:59-upgrade-wip-rocky10-branch-of-the-day-2026-03-04-1772633736-distro-default-trial/89072.'
+    summary: 'Known problem #71631: the wait loop''s `orch upgrade status` hit a just-restarted mgr whose orchestrator module wasn''t loaded, so the upgrade looked finished and the next `orch upgrade start` was refused as already in progress.'
+    status: fail
+    description: upgrade/squid-x/stress-split/{0-distro/centos_9.stream 0-roles 1-start 2-first-half-tasks/readwrite 3-stress-tasks/{radosbench rbd-cls rbd-import-export rbd_api readwrite snaps-few-objects} 4-second-half-tasks/radosbench mon_election/classic overrides/ignorelist_health}
+    reason: 'Command failed on trial056 with status 22: "sudo /home/ubuntu/cephtest/cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring --fsid 28714193-1c99-11f1-a27b-d404e6e7d460 -e sha1=86e5ba28861047da2c72c64915482674fa85e958 -- bash -c ''ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon --limit 1''"'

@@ -1,0 +1,42 @@
+id: "76213"
+tracker: https://tracker.ceph.com/issues/76213
+title: "rados/thrash-erasure-code-isa: scrub detects object info version incorrect with matching digests"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/68609
+    branch: main
+    fixed_in: v21.0.0-1264-gf29b2917c0
+tree: cluster-log/message
+facts:
+  level: '^ERR$'
+  message: 'object info version incorrect'
+  reporter: '^osd\.'
+match:
+  description: 'thrash-erasure-code-isa.*ec_optimizations_on'
+confirm:
+  - file: teuthology.log
+    pattern: 'cluster \[ERR\] \S+ soid \S+ : object info version incorrect auth_oi=(\S+)\(\d+''\d+ (.+shard_versions=\{\d+: \d+''\d+.*)\) candidate_oi=\1\(\d+''\d+ \2\)'
+notes: |
+  On an erasure-coded pool with optimized EC (ec_optimizations_on), a partial write updates
+  only some shards' object info (OI) and leaves the others at an older version, which the
+  primary records in shard_versions. When such a write is rolled back during peering,
+  PGBackend::rollback_setattrs (only_oi case) restored the OI taken from the primary on
+  every shard, so non-primary shards got an OI version they never had. A later deep scrub
+  then logs '<pg> soid <obj> : object info version incorrect auth_oi=... candidate_oi=...'
+  as [ERR] to the cluster log although the data digests match. The teardown cluster-log scan
+  treats any un-ignored [ERR] as a failure. The data is not damaged. Fixed by PR 68609,
+  which makes the rollback set the version from shard_versions for the shard and clear
+  shard_versions (merged as v21.0.0-1264-gf29b2917c0). Builds older than that, such as
+  21.0.0-576-g255db821, still have the bug.
+  The record is limited to rados/thrash-erasure-code-isa jobs with ec_optimizations_on, the
+  suite the tracker names, and the confirm check requires the signature of this cause:
+  auth_oi and candidate_oi are for the same object and identical in everything after the
+  version (size, data digest, client op and the non-empty shard_versions), so only the
+  version differs. Scrub errors where the two OIs differ in more than the version, or where
+  shard_versions is empty, have another cause and are not placed here. The OSD logs of the
+  archive did not hold the rollback lines of the object, so the rollback itself is not
+  confirmed.
+examples:
+  - jayaprakash-2026-04-15_11:49:14-rados-wip-jaya-bs-testing-14-04-2026-distro-default-trial/153577
+  - jayaprakash-2026-04-21_16:29:26-rados-main-distro-default-trial/167322
+  - jayaprakash-2026-04-21_16:29:26-rados-main-distro-default-trial/167330

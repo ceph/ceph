@@ -1,0 +1,26 @@
+run: jayaprakash-2026-04-29_15:21:37-rados-wip-jaya-bs-testing-tentacle-29-04-2026-distro-default-trial
+jobs:
+  '185866':
+    problem: '76028'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 18 jobs in 76028, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are jcollin-2026-02-17_23:11:18-fs-wip-jcollin-testing-20260217.130836-squid-distro-default-trial/55097, jcollin-2026-02-17_23:11:18-fs-wip-jcollin-testing-20260217.130836-squid-distro-default-trial/55142, jcollin-2026-02-17_23:11:18-fs-wip-jcollin-testing-20260217.130836-squid-distro-default-trial/55223, jcollin-2026-02-17_23:11:18-fs-wip-jcollin-testing-20260217.130836-squid-distro-default-trial/55238, jcollin-2026-02-17_23:11:18-fs-wip-jcollin-testing-20260217.130836-squid-distro-default-trial/55277.'
+    summary: cephadm failed to pull container image quay.ceph.io/ceph-ci/ceph:quincy due to missing manifest, causing cephadm teardown to falsely report missing ceph.log as a cluster log error
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro$/{centos_latest}}
+    reason: '"grep: /var/log/ceph/b88c52c8-4430-11f1-8e6d-d404e6e7d460/ceph.log: No such file or directory" in cluster log'
+  '185969':
+    problem: '69954'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 11 jobs in 69954, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-01-27_05:35:03-rados-wip-bharath1-testing-2026-01-26-1242-distro-default-trial/19763, skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19862, skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19868, skanta-2026-03-07_15:39:05-rados-wip-bharath4-testing-2026-03-05-1456-tentacle-distro-default-trial/93048, skanta-2026-04-14_02:25:39-rados-wip-bharath1-testing-2026-04-14-0415-tentacle-distro-default-trial/150166.'
+    summary: 'test_selftest_command_spam is refused on its assigned dashboard port 7789 because the dashboard module crashed on startup (No module named ''smb''). This is tracker #69954, which has no record yet, so the job was wrongly called new.'
+    status: fail
+    description: rados/mgr/{clusters/{2-node-mgr} debug/mgr distro/{ubuntu_latest} mgr_ttl_cache/enable mon_election/connectivity random-objectstore$/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{512K-onoff} write$/{random/{compr$/{yes$/{snappy}} random}}}} tasks/{1-install 2-ceph 3-mgrmodules 4-units/module_selftest}}
+    reason: 'Test failure: test_selftest_command_spam (tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam)'
+  '185886':
+    problem: '76408'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 76408, this one among them, and no record names it yet: the tool placed them in 75218, no known problem. A record for it should place them all; others are jayaprakash-2026-08-13_15:17:09-rados-wip-jaya-bs-testing-13-08-2026-distro-default-trial/465954, yuriw-2026-05-15_20:57:42-rados-wip-yuriw-testing-20260515.172309-tentacle-wip-yuri12-testing-distro-default-trial/216231, yuriw-2026-07-22_00:55:43-rados-wip-yuri8-testing-20260721.164157-umbrella-distro-default-trial/384113.'
+    summary: The job timed out in ceph_bootstrap waiting for a per-host config-key entry; new record for 76408 and new branch in timeout-unexplained.py; job 216231 is excluded from examples as it matches 75218 instead
+    status: fail
+    description: rados/cephadm/osds/{0-distro/centos_9.stream 0-nvme-loop 1-start 2-ops/deploy-raw}
+    reason: reached maximum tries (10) after waiting for 50 seconds

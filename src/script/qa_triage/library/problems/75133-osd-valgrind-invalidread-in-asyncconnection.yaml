@@ -1,0 +1,30 @@
+id: "75133"
+tracker: https://tracker.ceph.com/issues/75133
+title: "osd: Valgrind InvalidRead in AsyncConnection::mark_down() during MonClient destructor at shutdown"
+kind: product
+tree: valgrind/InvalidRead
+facts:
+  kind: '^InvalidRead$'
+  frames: 'AsyncConnection::mark_down\(\)'
+match:
+  reason: 'valgrind error: InvalidRead.*AsyncConnection::mark_down'
+confirm:
+  - file: remote/*/log/valgrind/*.log.gz
+    pattern: '<fn>MonConnection::~MonConnection\(\)</fn>'
+  - file: remote/*/log/valgrind/*.log.gz
+    pattern: '<fn>MonClient::~MonClient\(\)</fn>'
+notes: |
+  The cause: at daemon shutdown (ceph_osd.cc main), the messenger created by
+  Messenger::create is deleted before the MonClient is destroyed. ~MonClient
+  destroys its map of MonConnection; ~MonConnection calls
+  AsyncConnection::mark_down(), which reads async_msgr->cct through
+  SubsystemMap::should_gather from the already freed messenger. Valgrind
+  reports an Invalid read of size 8, with the block freed in main and
+  allocated in Messenger::create, and with --exit-on-first-error the daemon
+  exits with status 42, failing the job when the daemons are stopped.
+  Seen mostly on tentacle and main with the valgrind validater.
+  Related: PR 72378 (mon/MonClient: drop the ping connection before deleting
+  its messenger, tracker 81400) may be the same family but is not confirmed
+  as the fix.
+examples:
+  - skanta-2026-07-19_00:55:49-rados-wip-bharath5-testing-2026-07-19-0500-distro-default-trial/376388

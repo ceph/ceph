@@ -1,0 +1,29 @@
+id: "80145"
+tracker: https://tracker.ceph.com/issues/80145
+title: "Test timed out waiting for OSD to return"
+kind: product
+tree: hung/command/osd-down-never-returned
+match:
+  reason: 'hit max job timeout'
+confirm:
+  - file: teuthology.log
+    pattern: 'ceph_manager\.ceph:waiting for all up'
+  - file: remote/*/log/ceph.log.gz
+    pattern: 'cluster \[INF\] osd\.\d+ failed \(root='
+  - file: remote/*/log/ceph.log.gz
+    pattern: 'cluster \[INF\] Marking osd\.\d+ out \(has been down for \d+ seconds\)'
+notes: |
+  In a rados/thrash job, an OSD that the thrasher did not kill is marked down by the
+  monitors ("osd.N failed ... reporters from different osd after ... >= grace") while its
+  process keeps running. It never boots again: the cluster log shows no new boot, and the
+  mon marks it out after 600 s ("Marking osd.N out (has been down for 602 seconds)"). When
+  the thrashosds task ends, ceph_manager logs "waiting for all up" and polls
+  `ceph osd dump --format=json` every 3 s; the OSD never shows up, so the job runs until
+  teuthology is killed at the max job timeout (Got signal 15). The timeout and the dump loop
+  are symptoms. handle_auth_bad_method "(13) Permission denied" lines may appear in the OSD's
+  stderr, but in the example they start nine minutes after the OSD was marked down, so they
+  look like a consequence. Why the OSD stopped answering is not known: the tracker has no
+  analysis yet ("Why was the OSD never brought back up?"), and the OSD log shows its
+  monclient asking mon.c for new tickets every second just before it was marked down.
+examples:
+  - skanta-2026-08-25_00:08:14-rados-wip-bharath11-testing-20260824.222329-main-distro-default-trial/510700

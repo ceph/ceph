@@ -1,0 +1,9 @@
+run: yaarit-2026-03-04_01:33:26-rados:cephadm-wip-rocky10-branch-of-the-day-2026-03-03-1772543694-tentacle-distro-default-trial
+signatures:
+  timeout/unexplained | MaxWhileTries:
+    '75218': 1
+  ? 'workunit/set-e | cephadm/test_iscsi_setup.sh: container_gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; podman exec -i <sha> gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; set -e'
+  : '74873': 1
+titles:
+  '74873': 'cephadm/test_iscsi_setup.sh - Auth: ACL_ENABLED, Hosts: 0'
+  '75218': Orchestrater test fails while waiting for 8 OSDs to deploy

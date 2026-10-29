@@ -1,0 +1,34 @@
+run: skanta-2026-09-25_03:59:04-rados-wip-bharath29-testing-20260924.231744-main-distro-default-trial
+jobs:
+  '581509':
+    problem: '58224'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 58224, but the tool said new (explain -> prefilter -> confirm -> explained -> agent -> verify-quotes), sure, after its judge (bob) said new . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 58224 by itself, with no judge.
+    summary: 'install task failed: chacra.ceph.com returned HTTP 500; reviewers are right; a new record and node branch are needed'
+    status: fail
+    description: rados/thrash-old-clients/{0-distro$/{centos_9.stream} 0-size-min-size-overrides/2-size-2-min-size 1-install/reef backoff/peering_and_degraded ceph clusters/{three-plus-one} d-balancer/crush-compat mon_election/connectivity msgr-failures/few rados thrashers/careful thrashosds-health workloads/test_rbd_api}
+    reason: '500 Server Error: Internal Server Error for url: https://chacra.ceph.com/repos/ceph/reef/efac5a54607c13fa50d4822e50242b86e6e446df/centos/9/flavors/default/repo'
+  '581512':
+    problem: '58224'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 58224, but the tool said new (explain -> prefilter -> confirm -> explained -> agent -> verify-quotes), sure, after its judge (bob) said new . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 58224 by itself, with no judge.
+    summary: Install task got HTTP 500 from chacra.ceph.com; this is known problem 58224, and the current tree and record already place it there with no judge.
+    status: fail
+    description: rados/upgrade/cephx/release-X/{conf distro ignore_health ms_bind/v1 roles tasks/{00-from/v19.2.2 01-debug 02-workload/none 03-upgrade 04-allow-aes256k 05-service-auth-keys 06-insecure-create 07-client-auth-keys/all 08-allowed-ciphers/aes256k 09-cephx-service-upgrade 10-wipe-service-keys/sleep 11-daemon-restart/yes 12-workload-after-rotate/radosbench 13-healthy}}
+    reason: '500 Server Error: Internal Server Error for url: https://chacra.ceph.com/repos/ceph/squid/0eceb0defba60152a8182f7bd87d164b639885b8/centos/9/flavors/default/repo'
+  '581564':
+    problem: '58224'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 58224, but the tool said new (explain -> prefilter -> confirm -> explained -> agent -> verify-quotes), sure, after its judge (bob) said new . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 58224 by itself, with no judge.
+    summary: install task failed on a chacra.ceph.com 500 error; the tool already places it in 58224 without a judge, so the result was right
+    status: fail
+    description: rados/upgrade/cephx/release-X/{conf distro ignore_health ms_bind/v2 roles tasks/{00-from/v20.2.0 01-debug 02-workload/radosbench 03-upgrade 04-allow-aes256k 05-service-auth-keys 06-insecure-create 07-client-auth-keys/admin 08-allowed-ciphers/insecure 09-cephx-service-upgrade 10-wipe-service-keys/yes 11-daemon-restart/no 12-workload-after-rotate/radosbench 13-healthy}}
+    reason: '500 Server Error: Internal Server Error for url: https://chacra.ceph.com/repos/ceph/tentacle/69f84cc2651aa259a15bc192ddaabd3baba07489/centos/9/flavors/default/repo'
+  '581671':
+    problem: '79024'
+    by: qa_triage (bob-analyst)
+    why: 'No record placed this job, and the judge (bob) said unsure : Thrash job hung to max timeout with OSD slow ops (PG pushes, client ops queued for pg) under dispatch-delay and lz4; cause unclear. If a tracker issue already describes this failure, find it and add a record for it, so that the checks place jobs like this one. If none does, say so: a person will file one. Searching the tracker for "osd-dispatch-delay thrash hit max job timeout", "pool-snaps-few-objects morepggrow slow ops", "MOSDPGPush slow ops queued for pg" found: #79024 Bug #79024 (Need More Info): rados/thrash/pool-snaps-few-objects - slow op stuck "queued for pg" during morepggrow peering storm with pool_snaps.'
+    summary: 'The rados thrash task hung at max timeout because dispatch-delay injection + morepggrow peering churn left client ops permanently stuck ''queued for pg''; matches tracker #79024. Added a record and a node to decide this without a judge.'
+    status: dead
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{more-async-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-5} backoff/normal ceph clusters/{fixed-4} crc-failures/default d-balancer/crush-compat mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{none} write$/{v1/{compr$/{yes$/{lz4}} v1}}}} rados supported-random-distro/{centos_9.stream} thrashers/morepggrow thrashosds-health workloads/pool-snaps-few-objects}
+    reason: hit max job timeout

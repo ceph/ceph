@@ -1,0 +1,44 @@
+id: "81629"
+tracker: https://tracker.ceph.com/issues/81629
+title: "qa/rados: osd-dispatch-delay injection probability (0.1) starves the OSD op queue with compression on wide EC pools"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72502
+    branch: main
+tree: crash/client/unexplained/dispatch-delay-op-timeout
+facts:
+  program: '^ceph_test_rados$'
+match:
+  reason: 'ceph_test_rados'
+confirm:
+  - file: teuthology.log
+    pattern: 'dispatch[ _]delay[ _]probability: 0?\.0*[1-9]'
+  - file: teuthology.log
+    pattern: 'bluestore[ _]compression[ _]mode: (aggressive|force)'
+notes: |
+  The qa facet msgr-failures/osd-dispatch-delay sets osd_debug_inject_dispatch_delay_probability
+  to 0.1 with a 0.1 s duration. The delay is injected in fast dispatch and twice per item in
+  ShardedOpWQ::_process() (OSD.cc), so every op queue item pays an expected ~20 ms sleep. The
+  compression objectstore facets limit each OSD to 1 shard x 2 threads (osd op num shards: 1),
+  which caps an OSD at about 95 queue items/s. pggrow thrashing on wide EC pools (k=10 m=4)
+  pushes arrivals past that: every map epoch queues a NullEvt to each PG and the thrasher
+  toggles noscrub/nodeep-scrub every ~2 s. Peering events are served ahead of client work, so
+  the backlog never drains and client ops and EC sub-read replies starve for more than 10 min.
+  When the suite sets 'rados osd op timeout' (e.g. thrash-erasure-code-isa, 900 s), the client
+  fails ops with -ETIMEDOUT and ceph_test_rados (RadosModel.h) ceph_abort()s on any error other
+  than -ENOENT, so the job fails with -110 error lines before the core dump; those jobs take
+  the tree path crash/client/ceph_test_rados (tracker 81135, also 81629). When the suite sets
+  no osd op timeout (e.g. thrash-erasure-code-crush-4-nodes), ceph_test_rados instead hangs
+  waiting for in-flight ops that never complete; after --max-seconds 600 it stops issuing ops
+  and the job watchdog kills it with SIGKILL, producing a bare CommandCrashedError with no
+  error output; those jobs take crash/client/unexplained. Both are symptoms of the same root
+  cause: the injected dispatch delay combined with compression's single op shard. The OSD logs
+  nothing about the injection, so the job's config in teuthology.log (dispatch delay
+  probability, compression mode) is what shows it. The fix lowers the probability to 0.01 in
+  the QA yaml (PR 72502). People also place these jobs in 75216 (the pggrow_host /
+  wait_for_recovery variant of the same overload), hence also.
+examples:
+  - skanta-2026-10-03_10:12:06-rados-wip-bharath19-testing-20261002.123021-main-distro-default-trial/604392
+  - skanta-2026-04-30_03:32:50-rados-wip-bharath4-testing-2026-04-29-1417-tentacle-distro-default-trial/186841
+also:
+  - '75216'

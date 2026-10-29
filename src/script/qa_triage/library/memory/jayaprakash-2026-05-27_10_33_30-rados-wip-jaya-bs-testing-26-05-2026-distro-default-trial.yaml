@@ -1,0 +1,18 @@
+run: jayaprakash-2026-05-27_10:33:30-rados-wip-jaya-bs-testing-26-05-2026-distro-default-trial
+signatures:
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '76979': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '76297': 1
+  workunit/unexplained | cephadm/test_repos.sh:
+    '77130': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | readable.sh: ceph-dencoder failed to decode corpus object'
+  : '76982': 1
+titles:
+  '76297': test_iscsi_container - cephadm/test_iscsi_setup.sh fails on sudo ls /dev/disk/by-path
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76979': 'cephadm: Failure to re-authenticate an osd'
+  '76982': 'rados/encoder: multiple decoder errors'
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'

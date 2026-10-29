@@ -1,0 +1,34 @@
+run: pdonnell-2026-08-27_01:45:31-rados-wip-pdonnell-testing-20260826.223123-squid-distro-default-trial
+jobs:
+  '518577':
+    problem: '79571'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 11 jobs that the tool placed in no known problem in 79571, this one among them.
+    summary: 'the test failed when egrep found no defer messages in OSD logs due to decreased default OSD debugging (tracker #79571)'
+    status: fail
+    description: rados/singleton/{all/recovery-preemption mon_election/classic msgr-failures/many msgr/async-v1only objectstore/bluestore-comp-zstd rados supported-random-distro$/{ubuntu_latest}}
+    reason: 'Command failed on trial139 with status 1: ''sudo TESTDIR=/home/ubuntu/cephtest bash -c \''egrep \''"\''"\''(defer backfill|defer recovery)\''"\''"\'' /var/log/ceph/ceph-osd.*.log\'''''
+  '518763':
+    problem: '80146'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 8 jobs that the tool placed in no known problem in 80146, this one among them.
+    summary: 'ceph_test_cls_rbd (Quincy client) cannot connect as client.admin to a cluster whose bootstrap keyring is aes256k: tracker 80146, not a new problem.'
+    status: fail
+    description: rados/thrash-old-clients/{0-distro$/{centos_9.stream} 0-size-min-size-overrides/3-size-2-min-size 1-install/quincy backoff/normal ceph clusters/{openstack three-plus-one} d-balancer/on mon_election/connectivity msgr-failures/few rados thrashers/mapgap thrashosds-health workloads/rbd_cls}
+    reason: 'Command crashed: "sudo TESTDIR=/home/ubuntu/cephtest bash -c ''ceph_test_cls_rbd --gtest_filter=-TestClsRbd.get_features:TestClsRbd.parents:TestClsRbd.mirror''"'
+  '518570':
+    problem: '52109'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 52109, this one among them.
+    summary: test_cephadm.sh fails because grafana.a crash-loops on the sample config's `http_addr = localhost`, which grafana rejects as an invalid IP address; the tool explained it but no record (tracker 52109) existed.
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_22.04 agent/on mon_election/classic task/test_cephadm}
+    reason: 'Command failed (workunit test cephadm/test_cephadm.sh) on trial142 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=e2d309bb1fa97681f434c2465bd0d72048e0df93 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_cephadm.sh'''
+  '518637':
+    problem: '77113'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 77113, this one among them.
+    summary: TEST_recovery_pool_priority in osd-recovery-prio.sh raced recovery (never saw both PGs recovering at once); this is tracker 77113, which had no record, so the job was wrongly called new.
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{centos_latest} workloads/osd}
+    reason: 'Command failed (workunit test osd/osd-recovery-prio.sh) on trial100 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=e2d309bb1fa97681f434c2465bd0d72048e0df93 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/osd/osd-recovery-prio.sh'''

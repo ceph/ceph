@@ -1,0 +1,6 @@
+run: vshankar-2026-10-05_08:14:13-fs-wip-vshankar-testing-20261005.055402-distro-default-trial
+signatures:
+  timeout/unexplained | wait_until_healthy:
+    '69497': 1
+titles:
+  '69497': '"[ERR] OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order" in cluster log'

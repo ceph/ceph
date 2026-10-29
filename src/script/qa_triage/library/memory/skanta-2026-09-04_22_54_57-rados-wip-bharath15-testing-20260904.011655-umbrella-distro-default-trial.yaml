@@ -1,0 +1,36 @@
+run: skanta-2026-09-04_22:54:57-rados-wip-bharath15-testing-20260904.011655-umbrella-distro-default-trial
+signatures:
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  'command/not-found | grep -E (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found':
+    '79571': 1
+  'command/unexplained | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: #':
+    '79948': 1
+  ? crash/abort/specific | osd osd/ReplicatedBackend.cc ceph_abort_msg("abort() called") in void ReplicatedBackend::_do_push(OpRequestRef)
+  : '80415': 1
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '78780': 3
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '62972': 2
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 2
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+  ? 'workunit/unexplained/cephtool-osd-epoch-race | cephtool/test.sh | cephtool/test.sh test_mon_osd: info_plain != dump_plain (epoch race)'
+  : '78659': 1
+titles:
+  '62972': 'ERROR: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest)'
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '78659': 'rados/singleton-bluestore - Command failed (workunit test cephtool/test.sh) test_mon_osd /home/ubuntu/cephtest'': Directory not empty'
+  '78780': 'Dead: rados/cephadm: ceph cephadm osd activate fails to reactivate OSD, teuthology hangs'
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '79946': After rebuilding the mondb, authentication starts failing
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'
+  '80415': 'src/osd/ReplicatedBackend.cc: ceph_abort_msg("Out of space (failsafe) processing push request")'

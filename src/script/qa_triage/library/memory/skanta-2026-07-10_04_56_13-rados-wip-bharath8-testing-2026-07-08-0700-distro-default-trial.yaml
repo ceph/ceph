@@ -1,0 +1,27 @@
+run: skanta-2026-07-10_04:56:13-rados-wip-bharath8-testing-2026-07-08-0700-distro-default-trial
+signatures:
+  ? 'hung/command/ceph-daemon-config-set-hang | exec: sudo TESTDIR=/home/ubuntu/cephtest bash -c ''for f in # # # # ; do sudo ceph daemon osd.$f config set osd_recovery_sleep # ; sudo ceph daemon osd.$f config set osd_recovery_max_active # ; done'' | exec hung: ceph daemon config set on restarting OSD'
+  : '77443': 1
+  'hung/test/rados-api-tests-valgrind-slowdown | waiting for api_io | rados_api_tests: api_* test timed out under valgrind':
+    '76953': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  timeout/unexplained | wait_until_healthy:
+    '77110': 1
+  ? timeout/unexplained/thrasher-wait-for-recovery-failed | MaxWhileTries | wait_for_recovery failed, watchdog killed daemons, then a wait timed out
+  : '74794': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? 'workunit/set-e/test-repos-add-repo-gpg-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: failed to fetch GPG repo key from https://download.ceph.com/keys/release.gpg: HTTP Error #: Not Found | test_repos.sh: release.gpg # from download.ceph.com'
+  : '78153': 1
+  'workunit/unexplained/test-repos-gpg-404 | cephadm/test_repos.sh | test_repos.sh: release.gpg # from download.ceph.com':
+    '78178': 2
+titles:
+  '74794': ' rados/thrash -  The WatchDog barked due to Thrasher ceph.osd.9 threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76953': Valgrind UninitCondition error in ECTransaction::Generate::Generate()
+  '77106': nvme list json command failed, retrying...
+  '77110': 'rados/cephadm: wait_until_healthy times out due to CEPHADM_STRAY_DAEMON HEALTH_WARN'
+  '77443': 'rados/singleton: Test related to recovery-preemption could not revive an osd that was brought down and ultimately timed out after ~6hrs.'
+  '78153': 'Cephadm: failure to fetch GPG key when adding quincy repo'
+  '78178': 'cephadm/test_repos.sh: test fails with due to zypper package missing '

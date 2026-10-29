@@ -1,0 +1,26 @@
+run: jayaprakash-2026-02-06_12:54:34-rados-jaya-bs-testing-05-02-2026-distro-default-trial
+jobs:
+  '38111':
+    problem: '68668'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 23 jobs in 68668, this one among them, and no record names it yet: the tool placed them in 70669, no known problem. A record for it should place them all; others are jayaprakash-2026-03-09_16:16:59-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/95097, lflores-2026-01-21_20:56:39-rados-main-distro-default-trial/11902, lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19084, lflores-2026-04-17_22:03:40-rados-wip-lflores-testing-2-2026-04-08-1424-tentacle-distro-default-trial/159233, lflores-2026-04-17_22:03:40-rados-wip-lflores-testing-2-2026-04-08-1424-tentacle-distro-default-trial/159301.'
+    summary: The e2e suite runs both the cephadm and ceph tasks, so the ceph task's mkfs.xfs hits an LV still held by a cephadm OSD (tracker 68668); no record named it and the tree stopped unsure.
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/classic random-objectstore$/{bluestore-comp-zstd} tasks/e2e}
+    reason: 'Command failed on trial085 with status 1: ''yes | sudo mkfs.xfs -f -i size=2048 /dev/vg_nvme/lv_2'''
+  '38128':
+    problem: '74525'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 62 jobs in 74525, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are jayaprakash-2026-04-29_15:21:37-rados-wip-jaya-bs-testing-tentacle-29-04-2026-distro-default-trial/185748, lflores-2026-01-21_20:56:39-rados-main-distro-default-trial/12054, lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19121, lflores-2026-07-08_14:24:37-rados-wip-lflores-testing-2026-07-07-1045-tentacle-distro-default-trial/346201, nmordech-2026-02-17_05:46:21-rados-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial/51694.'
+    summary: 'TEST_bluestore_expand in osd-bluefs-volume-ops.sh failed on the free space added check (tracker #74525).'
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{centos_latest} workloads/osd}
+    reason: 'Command failed (workunit test osd/osd-bluefs-volume-ops.sh) on trial129 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=72ccb6b54df50310bea4d2e7b9e76a5b32ea647b TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/osd/osd-bluefs-volume-ops.sh'''
+  '38187':
+    problem: '74074'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 6 jobs in 75099, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19067, skanta-2026-01-27_05:35:03-rados-wip-bharath1-testing-2026-01-26-1242-distro-default-trial/19744, skanta-2026-01-30_23:46:16-rados-wip-bharath7-testing-2026-01-29-2016-distro-default-trial/28557, skanta-2026-02-05_03:38:32-rados-wip-bharath2-testing-2026-02-03-0542-distro-default-trial/35640, skanta-2026-02-07_00:02:26-rados-wip-bharath7-testing-2026-02-06-0906-distro-default-trial/39108.'
+    summary: test-dencoder.sh failed because ceph-dencoder could not decode corpus objects from archive versions 20.2.0 and 20.3.0 (backward compatibility break); this is tracker 75099 (duplicate of 74074), which has no record yet
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro$/{ubuntu_latest}}
+    reason: 'Command failed (workunit test dencoder/test-dencoder.sh) on trial063 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=72ccb6b54df50310bea4d2e7b9e76a5b32ea647b TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/dencoder/test-dencoder.sh'''

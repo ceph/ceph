@@ -1,0 +1,15 @@
+run: skanta-2026-05-05_10:12:40-rados-wip-bharath13-testing-2026-05-05-1001-tentacle-distro-default-trial
+signatures:
+  'hung/command | rados: ceph osd unset nodeep-scrub':
+    '75218': 1
+  other | Exiting scrub checking -- not all pgs scrubbed.:
+    '68770': 1
+  'test/unittest | tasks.mgr.test_progress.TestProgress.test_osd_came_back: IndexError: list index out of range':
+    '70320': 1
+  ? 'valgrind/InvalidRead | valgrind error: InvalidRead should_gather<#, #> operator()<ceph::common::CephContext*, ceph_subsys_id_t, int> AsyncConnection::mark_down()'
+  : '75133': 1
+titles:
+  '68770': PG scrub timing out
+  '70320': test_osd_came_back fails when test does not detect that osd.0 is back in
+  '75133': 'osd: Valgrind InvalidRead in AsyncConnection::mark_down() during MonClient destructor at shutdown'
+  '75218': Orchestrater test fails while waiting for 8 OSDs to deploy

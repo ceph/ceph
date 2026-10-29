@@ -1,0 +1,6 @@
+run: avan-2026-03-04_06:04:17-orch:cephadm:smb-wip-athakkar-testing-2026-03-03-2255-distro-default-trial
+signatures:
+  'command/unexplained | bash -ex -c grep Number of nodes:# (including: #':
+    '75369': 1
+titles:
+  '75369': 'deploy_smb_ctdb_node_gone_state test fails: CTDB status does not output "(including X deleted nodes)" string'

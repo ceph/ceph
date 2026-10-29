@@ -1,0 +1,6 @@
+run: yuriw-2026-09-04_14:38:08-upgrade-clients:client-upgrade-reef-squid-squid-release-distro-default-trial
+signatures:
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --name=mgr.x --cap mon allow profile mgr: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+titles:
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'

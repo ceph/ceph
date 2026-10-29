@@ -1,0 +1,6 @@
+run: yuriw-2026-05-21_16:37:43-upgrade-tentacle-release-distro-default-trial
+signatures:
+  ? cluster-log/message | WRN mon telemetry module includes new collections; please re-opt-in to new collections with `ceph telemetry on`
+  : '77382': 1
+titles:
+  '77382': 'upgrade: cluster [WRN] telemetry module includes new collections; please re-opt-in to new collections with `ceph telemetry on`" in cluster log'

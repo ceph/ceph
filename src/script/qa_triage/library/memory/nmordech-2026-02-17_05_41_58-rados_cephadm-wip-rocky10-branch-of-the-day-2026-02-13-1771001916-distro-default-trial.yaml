@@ -1,0 +1,15 @@
+run: nmordech-2026-02-17_05:41:58-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial
+signatures:
+  cluster-log/health | WRN CEPHADM_APPLY_SPEC_FAIL:
+    '74978': 1
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '74860': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'workunit/set-e | cephadm/test_iscsi_setup.sh: container_gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; podman exec -i <sha> gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; set -e'
+  : '74873': 1
+titles:
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74860': 'Rocky10 - openssl: command not found when rocky10 container is used'
+  '74873': 'cephadm/test_iscsi_setup.sh - Auth: ACL_ENABLED, Hosts: 0'
+  '74978': 'mon: Cannot place <MONSpec for service_name=mon> on trial189: Unknown hosts'

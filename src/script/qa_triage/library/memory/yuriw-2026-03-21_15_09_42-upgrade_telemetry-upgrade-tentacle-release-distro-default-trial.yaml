@@ -1,0 +1,6 @@
+run: yuriw-2026-03-21_15:09:42-upgrade:telemetry-upgrade-tentacle-release-distro-default-trial
+signatures:
+  workunit/unexplained | test_telemetry_squid.sh:
+    '74609': 1
+titles:
+  '74609': 'Rocky10 - rados/upgrade: failure to install reef rocky10 packages'

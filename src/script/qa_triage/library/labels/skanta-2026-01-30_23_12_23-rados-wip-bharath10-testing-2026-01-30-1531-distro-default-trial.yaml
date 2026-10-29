@@ -1,0 +1,10 @@
+run: skanta-2026-01-30_23:12:23-rados-wip-bharath10-testing-2026-01-30-1531-distro-default-trial
+jobs:
+  '28478':
+    problem: '74149'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 5 jobs in 75101, this one among them, and no record names it yet: the tool placed them in 74149. A record for it should place them all; others are skanta-2026-02-22_05:18:48-rados-wip-bharath21-testing-2026-02-20-1039-distro-default-trial/63357, skanta-2026-03-03_23:53:54-rados-wip-bharath6-testing-2026-03-03-1755-distro-default-trial/79743, skanta-2026-03-04_23:53:38-rados-wip-bharath1-testing-2026-03-04-1011-distro-default-trial/85642, yuriw-2026-03-02_18:34:01-rados-wip-yuri3-testing-2026-03-02-1622-distro-default-trial/76731.'
+    summary: Job correctly matches record 74149; add 75101 to that record's `also` so all five jobs placed in 75101 are covered
+    status: fail
+    description: rados/mgr/{clusters/{2-node-mgr} debug/mgr distro/{centos_latest} mgr_ttl_cache/disable mon_election/classic random-objectstore$/{bluestore/{alloc$/{bitmap} base mem$/{low} onode-segment$/{512K-onoff} write$/{v2/{compr$/{yes$/{zlib}} v2}}}} tasks/{1-install 2-ceph 3-mgrmodules 4-units/prometheus}}
+    reason: 'Test failure: test_standby (tasks.mgr.test_prometheus.TestPrometheus.test_standby)'

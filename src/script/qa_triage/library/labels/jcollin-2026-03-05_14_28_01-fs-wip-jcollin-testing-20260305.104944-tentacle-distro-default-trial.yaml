@@ -1,0 +1,10 @@
+run: jcollin-2026-03-05_14:28:01-fs-wip-jcollin-testing-20260305.104944-tentacle-distro-default-trial
+jobs:
+  '88074':
+    problem: '75695'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 75695, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are pdonnell-2026-06-13_16:37:37-upgrade-wip-pdonnell-testing-20260613.133611-tentacle-distro-default-trial/291756, skanta-2026-04-26_13:06:36-rados-wip-bharath20-testing-2026-04-26-1249-squid-distro-default-trial/178964, yuriw-2026-06-12_16:41:17-upgrade-wip-pdonnell-testing-20260612.133827-tentacle-distro-default-trial/287627.'
+    summary: OSD_SLOW_PING_TIME_BACK/FRONT [WRN] messages from a slow, overloaded test environment fail the cluster-log scan; no record covered tracker 75695.
+    status: fail
+    description: fs/workload/{0-centos_9.stream begin/{0-install 1-cephadm 2-logrotate 3-kernel} clusters/1a11s-mds-1c-client-3node conf/{client mds mgr mon osd} mount/kclient/{base/{mount-syntax/{v1} mount overrides/{distro/testing/k-testing ms-die-on-skipped}} ms_mode/crc wsync/no} objectstore-ec/bluestore-comp-ec-root omap_limit/10 overrides/{cephsqlite-timeout frag ignorelist_health ignorelist_wrongly_marked_down osd-asserts pg_health session_timeout} ranks/multi/{balancer/automatic export-check n/3 replication/always} standby-replay tasks/{0-subvolume/{with-namespace-isolated} 1-check-counter 2-scrub/no 3-snaps/no 4-flush/no 5-quiesce/no 6-workunit/suites/dbench}}
+    reason: '"2026-03-06T03:21:04.015821+0000 mon.a (mon.0) 1483 : cluster [WRN] [WRN] OSD_SLOW_PING_TIME_BACK: Slow OSD heartbeats on back (longest 1313.681ms)" in cluster log'

@@ -1,0 +1,6 @@
+run: yuriw-2026-07-03_15:48:55-upgrade-umbrella-release-distro-default-trial
+signatures:
+  'cluster-log/message | WRN mon pg <pg> is stuck stale for #s, current state stale+undersized+peered, last acting [#]':
+    '78160': 1
+titles:
+  '78160': 'upgrade/squid-x/stress-split: thrashosds causes pg 1.16 is stuck stale for 108s, current state stale+undersized+peered, last acting [3]" in cluster log'

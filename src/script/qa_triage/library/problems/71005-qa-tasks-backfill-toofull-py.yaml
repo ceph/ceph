@@ -1,0 +1,33 @@
+id: "71005"
+tracker: https://tracker.ceph.com/issues/71005
+title: "qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67829
+    branch: main
+    fixed_in: v21.0.0-91-g9cbdecd972
+match:
+  description: 'all/backfill-toofull'
+confirm:
+  - file: teuthology.log
+    pattern: 'assert backfillfull < 0\.9'
+  - file: teuthology.log
+    pattern: 'compress_ratio: \d'
+  - file: teuthology.log
+    pattern: 'rados -p \S+ bench 120 write --no-cleanup'
+notes: |
+  The backfill_toofull test is faulty when compression is enabled (e.g. lz4 or zstd).
+  Two causes, both in qa/tasks/backfill_toofull.py, fixed by PR 67829:
+  1. The test computes backfillfull = (used_kb + primary_used_kb) * compress_ratio / total_kb,
+     which is in terms of uncompressed data. With a high compression ratio (e.g. 16x) this
+     easily exceeds 1.0, so 'assert backfillfull < 0.9' (line 155) fails. The fix asserts
+     backfillfull < 0.9 * compress_ratio.
+  2. The test writes data for a fixed time ('rados bench 120 write --no-cleanup', then
+     'bench 60 write --no-cleanup') with no limit, so with fast storage and compression it
+     fills far more of the OSD than intended. The fix limits writes with --max-objects to
+     50% of the available capacity in the first phase and 20% in the re-write phase.
+  The logs show 'compress_ratio: N' (N >> 1) immediately before the AssertionError, and the
+  unbounded time-based rados bench commands. A job whose suite already has --max-objects
+  does not have this cause.
+examples:
+  - ksirivad-2026-10-23_13:15:52-rados-main-distro-default-trial/670863

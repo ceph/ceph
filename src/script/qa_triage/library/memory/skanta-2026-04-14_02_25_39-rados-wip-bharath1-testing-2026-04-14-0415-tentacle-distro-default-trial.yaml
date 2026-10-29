@@ -1,0 +1,42 @@
+run: skanta-2026-04-14_02:25:39-rados-wip-bharath1-testing-2026-04-14-0415-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN POOL_NEARFULL:
+    '74518': 1
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN Reduced data availability: # pg inactive, # pg peering':
+    '73147': 1
+  'cluster-log/other | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log':
+    '76020': 1
+  ? 'cluster-log/other/cephadm-pull-manifest-not-found | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: manifest for quay.ceph.io/ceph-ci/ceph not found: manifest unknown'
+  : '73921': 1
+  ? 'cluster-log/other/cephadm-pull-manifest-unknown | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log | cephadm pull: reading manifest in quay.ceph.io/ceph-ci/ceph: manifest unknown'
+  : '75886': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  ? 'test/unittest | tasks.mgr.test_module_selftest.TestModuleSelftest.test_selftest_command_spam: ConnectionRefusedError: [Errno #] Connection refused'
+  : '69954': 1
+  'test/unittest | tasks.mgr.test_progress.TestProgress.test_osd_came_back: IndexError: list index out of range':
+    '70320': 1
+  timeout/unexplained | MaxWhileTries:
+    '75218': 1
+  ? 'valgrind/InvalidRead | valgrind error: InvalidRead should_gather<#, #> operator()<ceph::common::CephContext*, ceph_subsys_id_t, int> AsyncConnection::mark_down()'
+  : '75133': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  workunit/unexplained | cephtool/test.sh:
+    '70142': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '69954': 'test_selftest_command_spam: ConnectionRefusedError: [Errno 111] Connection refused'
+  '70142': Rotating keyring disabled access
+  '70320': test_osd_came_back fails when test does not detect that osd.0 is back in
+  '73147': 'rados/thrash-old-clients: Health detail: "HEALTH_WARN Reduced data availability: 1 pg inactive" in cluster log'
+  '73921': 'rados/encoder: Container image quay.ceph.io/ceph-ci/ceph:quincy with tag quincy not found leading to test failure'
+  '74518': 'rados/perf: pools reached nearfull (POOL_NEARFULL)'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '75133': 'osd: Valgrind InvalidRead in AsyncConnection::mark_down() during MonClient destructor at shutdown'
+  '75218': Orchestrater test fails while waiting for 8 OSDs to deploy
+  '75886': 'tentacle: upgrade/parallel: failure to pull reef image during upgrade'
+  '76020': 'rados/thrash-old-clients: Image based deployment failed complaining about not able to copy from source docker.'

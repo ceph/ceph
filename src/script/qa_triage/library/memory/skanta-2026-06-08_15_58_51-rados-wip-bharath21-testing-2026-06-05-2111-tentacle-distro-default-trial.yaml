@@ -1,0 +1,36 @@
+run: skanta-2026-06-08_15:58:51-rados-wip-bharath21-testing-2026-06-05-2111-tentacle-distro-default-trial
+signatures:
+  'hung/command | rados: ceph tell mon.d sync_force --yes-i-really-mean-it':
+    '77809': 1
+  infra/build | build:
+    '80294': 1
+  ? 'test/unittest | tasks.mgr.test_insights.TestInsights.test_health_history: AssertionError: datetime.datetime(#, #, #, #, #, #, #) not greater than datetime.datetime(#, #, #, #, #, #, #)'
+  : '55854': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  ? 'workunit/set-e | cephadm/test_cephadm.sh: /usr/sbin/cephadm --image quay.ceph.io/ceph-ci/ceph:main bootstrap --mon-id a --mgr-id x: Error: Container release umbrella != cephadm release tentacle; please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
+  : '75821': 2
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  workunit/standalone | misc/ok-to-upgrade.sh TEST_ok_to_upgrade_erasure_pool:
+    '74610': 1
+  workunit/standalone | osd/osd-recovery-prio.sh TEST_recovery_pool_priority:
+    '75488': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/cephtool-mds-not-configured | cephtool/test.sh | cephtool/test.sh do_messenger_dump_basics_test: mds.a ENOENT'
+  : '74607': 1
+titles:
+  '55854': Datetime AssertionError in test_health_history (tasks.mgr.test_insights.TestInsights)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74607': 'do_messenger_dump_basics_test: Error ENOENT: problem getting command descriptions from mds.a'
+  '74610': '[ok-to-upgrade] ceph osd ok-to-upgrade command accepts empty strings and random strings for ceph version parameter'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '75821': 'tentacle: Error: Container release umbrella != cephadm release tentacle; please use matching version of cephadm'
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '77809': daemon_watchdog - After BARK - one of the daemon show "No such daemon running" and hang for ~6hr
+  '80294': 'rados/encoder: no Rocky10 packages for older releases'

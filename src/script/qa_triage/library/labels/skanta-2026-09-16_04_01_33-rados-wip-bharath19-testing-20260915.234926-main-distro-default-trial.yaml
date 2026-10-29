@@ -1,0 +1,18 @@
+run: skanta-2026-09-16_04:01:33-rados-wip-bharath19-testing-20260915.234926-main-distro-default-trial
+jobs:
+  '558377':
+    problem: '75358'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 75358, but the tool said duplicate 70669 (explain -> prefilter -> confirm -> fix-check), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 75358 by itself, with no judge.
+    summary: test_list_enabled_module failed because the mgrs respawned without ssl_server_port and mgr.z hit 'Port 8443 not free', the MGR_MODULE_ERROR of tracker 75358; the tool matched 70669.
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/classic random-objectstore$/{bluestore-comp-lz4} tasks/dashboard}
+    reason: 'Test failure: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module)'
+  '558506':
+    problem: '80415'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in no known problem in 80415, this one among them.
+    summary: osd.3 went failsafe-full (95%) from the runaway radosbench populate run and aborted in ReplicatedBackend::_do_push, which is 80415. The record missed the job only because osd.3 died 4 ms after logging 'failsafe engaged', so that line never reached ceph.log; the change drops that check.
+    status: dead
+    description: rados/singleton/{all/thrash-eio mon_election/connectivity msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{avl} base mem$/{low} onode-segment$/{512K-onoff} write$/{random/{compr$/{no$/{no}} random}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: hit max job timeout

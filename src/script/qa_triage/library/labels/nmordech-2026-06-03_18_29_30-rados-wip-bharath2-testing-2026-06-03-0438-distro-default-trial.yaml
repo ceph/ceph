@@ -1,0 +1,10 @@
+run: nmordech-2026-06-03_18:29:30-rados-wip-bharath2-testing-2026-06-03-0438-distro-default-trial
+jobs:
+  '260829':
+    problem: '75360'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 76471, this one among them.
+    summary: 'Workunit clone failed on DNS (''Could not resolve host: git.ceph.com'') for ceph-ci.git and the ceph.git fallback then lacked the ref: the 76471/75360 lab DNS problem, missed because the tool only knew github.com.'
+    status: fail
+    description: rados/thrash-old-clients/{0-distro$/{centos_9.stream} 0-size-min-size-overrides/2-size-2-min-size 1-install/tentacle backoff/peering ceph clusters/{three-plus-one} d-balancer/crush-compat mon_election/connectivity msgr-failures/fastclose rados thrashers/mapgap thrashosds-health workloads/rbd_cls}
+    reason: 'Command failed on trial166 with status 128: ''rm -rf /home/ubuntu/cephtest/clone.client.2 && git clone https://git.ceph.com/ceph.git /home/ubuntu/cephtest/clone.client.2 && cd /home/ubuntu/cephtest/clone.client.2 && git checkout 3d27c4a405d07d475483c91b2daf84af24793f3b'''

@@ -1,0 +1,9 @@
+run: nmordech-2026-05-07_14:43:36-upgrade-wip-nmordech-testing-20260507.065818-distro-default-trial
+signatures:
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN # osds down':
+    '69795': 1
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN Reduced data availability: # pgs inactive, # pgs peering':
+    '76502': 1
+titles:
+  '69795': 'rados/upgrade: "HEALTH_WARN 1 osds down" in cluster log'
+  '76502': upgrade/telemetry-upgrade - HEALTH_WARN Reduced data availability

@@ -1,0 +1,43 @@
+id: "72888"
+tracker: https://tracker.ceph.com/issues/72888
+title: "rados/singleton-bluestore: cephtool.sh workunit hangs on various tests"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72164
+    branch: main
+match:
+  reason: 'workunit test cephtool/test\.sh'
+confirm:
+  - file: 'teuthology.log*'
+    pattern: 'test_mon_caps:\s+ceph-authtool -n client\.bug --cap mon '''''
+  - file: 'teuthology.log*'
+    pattern: 'Health check failed: \d+ auth entities have invalid capabilities \(AUTH_BAD_CAPS\)'
+  - file: 'teuthology.log*'
+    pattern: 'overall HEALTH_ERR \d+ auth entities have invalid capabilities'
+  - file: 'teuthology.log*'
+    pattern: 'status 124'
+notes: |
+  The cause (tracker PR 72164, still open): test_mon_caps in qa/workunits/cephtool/test.sh
+  deliberately creates client.bug with an empty mon caps string
+  ('ceph-authtool -n client.bug --cap mon ""' then 'ceph auth add client.bug'), to get a
+  'Permission denied' from rados lspools. Unlike the earlier part of the function it never
+  runs 'ceph auth del client.bug' afterwards, so the cluster keeps the health check
+  AUTH_BAD_CAPS ('Health check failed: 1 auth entities have invalid capabilities') and the
+  mon logs '[ERR] overall HEALTH_ERR 1 auth entities have invalid capabilities' every 10
+  minutes. Later steps of the workunit, seen in test_mds_tell / test_tell_output_file
+  ('ceph tell ... mds.cephfs:0 version', without_test_dup_command) and
+  test_mon_tell_help_command, then hang until the workunit's own 'timeout 3h' kills it, so
+  teuthology reports status 124. PR 72164 also fixes test_mon_messenger_dump, which ran
+  'ceph tell "" messenger dump' with an undefined target. The PR is open, so no fixed_in is
+  recorded. The MDS_ALL_DOWN [ERR] lines in these logs come from the expected fail_all_mds
+  and are not the cause. The timeout and the failed workunit are symptoms; the confirm
+  checks look for the leftover bad-caps key and the AUTH_BAD_CAPS health check, plus the
+  repeated HEALTH_ERR and the status 124. The record has no tree and its checks read
+  'teuthology.log*': some archives hold only teuthology.log.gz, so the tree stops at its root
+  ('the job has no teuthology.log') and never reaches workunit/unexplained/cephtool-hang; the
+  confirm checks alone show the cause. Related: #76296 is a duplicate of this issue; the
+  tracker lists #41254 (a 2019 nautilus cephtool failure) as the issue this duplicates, but
+  its logs show a different symptom and no cause.
+examples:
+  - skanta-2026-10-03_22:27:10-rados-wip-bharath5-testing-20261003.131043-main-distro-default-trial/605162
+  - skanta-2026-06-17_03:50:08-rados-wip-yuri7-testing-2026-06-16-0346-distro-default-trial/296694

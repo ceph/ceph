@@ -1,0 +1,35 @@
+id: "75695"
+tracker: https://tracker.ceph.com/issues/75695
+title: "cluster [WRN] [WRN] OSD_SLOW_PING_TIME_BACK: Slow OSD heartbeats on back (longest 1313.681ms)\" in cluster log"
+kind: infra
+match:
+  reason: '\[WRN\] OSD_SLOW_PING_TIME|timeout expired in wait_until_healthy'
+confirm:
+  - file: teuthology.log
+    pattern: '"OSD_SLOW_PING_TIME_(BACK|FRONT)":\{"severity"|\[WRN\] OSD_SLOW_PING_TIME'
+notes: |
+  Two forms of the same problem. (1) The cluster-log scan at teardown fails the job on a
+  [WRN] OSD_SLOW_PING_TIME_BACK (or _FRONT) message, 'Slow OSD heartbeats on back/front
+  (longest N ms)', because the job's log-ignorelist does not cover it. (2) The cephadm
+  task's wait_until_healthy times out ('timeout expired in wait_until_healthy') because
+  OSD_SLOW_PING_TIME_BACK/FRONT stay raised until the 300 s wait is over: in job 178964
+  osd.1 got no heartbeat reply from osd.5 on the other test machine from 13:59:29, the mons
+  went through repeated elections (MON_DOWN), one SLOW_OPS warning appeared at 14:01 and was
+  replaced by OSD_SLOW_PING_TIME warnings with ping times near 110 s, and every later health
+  poll showed only those two checks (68 s at the end) while all 132 PGs were active+clean.
+  The slow op is a symptom; the cause is the same slow OSD heartbeats between the nodes.
+  The OSDs' heartbeat pings took far longer than a second: the test machines or their
+  network were slow or overloaded. In the first example the dbench workunit's warmup latency
+  was 131-139 seconds, a PG went active+clean+laggy, and at the same moment the mons raised
+  BLUESTORE_SLOW_OP_ALERT (2 OSDs), OSD_SLOW_PING_TIME_BACK and OSD_SLOW_PING_TIME_FRONT, with
+  ping times rising to several seconds; later MON_DOWN and OSD_DOWN were logged, which the fs
+  ignorelist covers. The tracker (RADOS, still In Progress) says it is likely due to the
+  environment and collects occurrences in fs, rados/cephadm and upgrade suites on tentacle
+  and squid; Laura Flores added job 178964 (rados/cephadm, squid) on 2026-05-26. No fix is
+  known. The record has no tree, so it matches the cluster-log/message path of form (1) and
+  the timeout/slow-ops/slow-ping-time path of form (2). The first match alternative needs
+  '[WRN] ' before OSD_SLOW_PING_TIME, so jobs whose reason is the 'Health check failed: Slow
+  OSD heartbeats ...' form, which take cluster-log/health, are not claimed here.
+examples:
+  - jcollin-2026-03-05_14:28:01-fs-wip-jcollin-testing-20260305.104944-tentacle-distro-default-trial/88074
+  - skanta-2026-04-26_13:06:36-rados-wip-bharath20-testing-2026-04-26-1249-squid-distro-default-trial/178964

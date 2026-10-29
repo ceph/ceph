@@ -1,0 +1,6 @@
+run: yuriw-2026-08-19_23:14:34-rados-wip-yuri3-testing-20260819.151734-tentacle-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/PGLog.h FAILED ceph_assert(miter == missing.get_items().end() || (miter->second.need == i->version && miter->second.have == eversion_t())) in static void PGLog::read_log_and_missing(ceph::common::CephContext*, ObjectStore*, ObjectStore::CollectionHandle&, ghobject_t, const pg_info_t&, IndexedLog&, missing_type&, std::ostringstream&, bool, bool, bool*, const DoutPrefixProvider*, std::set<std::__cxx#::basic_string<char> >*, bool) [with missing_type = pg_missing_set<true>; ObjectStore::CollectionHandle = boost::intrusive_ptr<ObjectStore::CollectionImpl>; std::ostringstream = std::__cxx#::basic_ostringstream<char>]
+  : '79743': 1
+titles:
+  '79743': 'rados/thrash-erasure-code: FAILED ceph_assert(miter == missing.get_items().end() || (miter->second.need == i->version && miter->second.have == eversion_t()))'

@@ -1,0 +1,44 @@
+id: "73278"
+tracker: https://tracker.ceph.com/issues/73278
+title: "qa: cluster [WRN] evicting unresponsive client smithi181:x with tasks/mgr-osd-full"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/65693
+    branch: main
+    fixed_in: v20.3.0-3841-g1530ebd44b
+tree: cluster-log/message/mgr-session-evicted
+facts:
+  message: '^evicting unresponsive client \S+:[xyz] \(\d+\)'
+  reporter: '^mds\.'
+confirm:
+  - file: remote/*/log/ceph.log.gz
+    pattern: 'mds\.\S+ .*cluster \[WRN\] evicting unresponsive client \S+:[xyz] \(\d+\)'
+notes: |
+  The cause: a test restarts or respawns ceph-mgr, and the old mgr process's libcephfs
+  session (named <host>:<mgr id>, e.g. trial181:x) is not cleaned up. About 300 seconds
+  later the MDS evicts it and logs '[WRN] evicting unresponsive client trial181:x (6265),
+  after 304 seconds' to the cluster log. That warning is not in the job's log-ignorelist,
+  so the teardown cluster-log scan fails the job. Originally seen in fs/full with
+  tasks/mgr-osd-full (subvolume_ls.sh restarts the mgr). The same thing happens in
+  rados/singleton-bluestore/all/cephtool: test_mon_misc runs 'ceph mgr module enable
+  foodne --force', which changes the set of enabled modules, so MgrStandby::handle_mgr_map
+  respawns the mgr ('respawning because set of enabled modules changed!'). PR 65693 only
+  adds the ignore to qa/suites/fs/full/tasks/mgr-osd-full.yaml; other suites need the same
+  log-ignorelist entry in their yaml.
+  Tracker 76497 is the same problem for rados/singleton-bluestore/cephtool: people place
+  those jobs there, and its fix (PR 68837) adds 'evicting unresponsive client' to the
+  log-ignorelist of qa/suites/rados/singleton-bluestore/all/cephtool.yaml. The tracker blames
+  a slow client under bluestore_allocator=stupid; the logs of these jobs show the mgr
+  respawn about 300 s before the eviction (job 247285, which ran the bitmap allocator:
+  respawns at 19:27:28 and 19:27:30, eviction at 19:32:30).
+  Tracker 76281 is also the same problem for the same jobs: it blames missed MDS beacons,
+  but in job 165940 the cephtool workunit ran 'ceph mgr module enable foodne --force' at
+  22:58:58 and mds.a evicted trial072:x at 23:04:02, 303.5 s later; its 'missed beacon ack'
+  at 22:59:17 came after that clock had started.
+examples:
+  - skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143035
+  - lflores-2026-05-29_18:58:15-rados-wip-bharath4-testing-2026-05-27-1003-distro-default-trial/247285
+  - skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/165940
+also:
+  - 76497
+  - 76281

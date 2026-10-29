@@ -1,0 +1,10 @@
+run: lflores-2026-08-06_20:16:33-rados:singleton-nomsgr-main-distro-default-trial
+jobs:
+  '438132':
+    problem: '79133'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in no known problem in 79133, this one among them.
+    summary: The job was marked new, but it is tracker 79133. The mgr registers the "heap" asok command twice, and DaemonServer::init asserts on the EEXIST when the mgr goes active. This adds a record for 79133 at crash/assert/specific.
+    status: fail
+    description: rados:singleton-nomsgr/{all/read-balancer-operations mon_election/connectivity rados supported-random-distro/{rocky_10}}
+    reason: 'Command failed on trial191 with status 124: ''sudo adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 120 ceph --cluster ceph pg dump --format=json'''

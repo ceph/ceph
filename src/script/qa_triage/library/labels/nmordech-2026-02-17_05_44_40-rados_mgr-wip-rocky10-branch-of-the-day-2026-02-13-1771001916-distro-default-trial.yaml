@@ -1,0 +1,10 @@
+run: nmordech-2026-02-17_05:44:40-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial
+jobs:
+  '51650':
+    problem: '74819'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 74980, this one among them, and no record names it yet: the tool placed them in 74819. A record for it should place them all; others are nmordech-2026-02-17_05:46:21-rados-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial/51710, nmordech-2026-02-17_05:46:21-rados-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial/51932, nmordech-2026-02-21_21:31:01-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial/62994.'
+    summary: test_urls fails because '/metrics' gets HTTP 400 for a double-slash URL; this is 74819's problem, and 74980 is the same cause, so it goes in 74819's `also` and the record's notes (which blamed a 503) are corrected.
+    status: fail
+    description: rados:mgr/{clusters/{2-node-mgr} debug/mgr distro/{rpm_latest} mgr_ttl_cache/disable mon_election/classic random-objectstore$/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{512K} write$/{v2/{compr$/{yes$/{zstd}} v2}}}} tasks/{1-install 2-ceph 3-mgrmodules 4-units/prometheus}}
+    reason: 'Test failure: test_urls (tasks.mgr.test_prometheus.TestPrometheus.test_urls)'

@@ -1,0 +1,10 @@
+run: skanta-2026-03-07_15:39:05-rados-wip-bharath4-testing-2026-03-05-1456-tentacle-distro-default-trial
+jobs:
+  '93028':
+    problem: '73921'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 18 jobs in 73921, this one among them, and no record names it yet: the tool placed them in 76028, no known problem. A record for it should place them all; others are pdonnell-2026-06-13_16:54:44-rados-wip-pdonnell-testing-20260613.133611-tentacle-distro-default-trial/292411, skanta-2026-03-31_12:07:57-rados-wip-bharath13-testing-2026-03-30-1730-tentacle-distro-default-trial/127822, skanta-2026-04-06_10:52:21-rados-wip-bharath15-testing-2026-04-06-1414-tentacle-distro-default-trial/133287, skanta-2026-04-14_02:25:39-rados-wip-bharath1-testing-2026-04-14-0415-tentacle-distro-default-trial/150062, skanta-2026-05-05_10:05:55-rados-wip-bharath11-testing-2026-05-05-0951-tentacle-distro-default-trial/193413.'
+    summary: rados/encoder fails because Docker cannot find quay.ceph.io/ceph-ci/ceph:quincy; result should be tracker 73921, not unsure
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro$/{ubuntu_latest}}
+    reason: '"grep: /var/log/ceph/0e132a59-1aa5-11f1-afe3-d404e6e7d460/ceph.log: No such file or directory" in cluster log'

@@ -1,0 +1,36 @@
+id: "77113"
+tracker: https://tracker.ceph.com/issues/77113
+title: "qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_priority: 'Recovery never started on both PGs'"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69416
+    branch: main
+    fixed_in: v21.3.0-363-g6158e8efcb
+tree: workunit/standalone
+facts:
+  test: '^TEST_recovery_pool_priority$'
+  script: '^osd/osd-recovery-prio\.sh$'
+  check: '^osd-recovery-prio\.sh:449$'
+confirm:
+  - file: teuthology.log
+    pattern: 'Recovery never started on both PGs'
+notes: |
+  A race in the test, not a regression in the code (tracker #77113, PR 69416).
+  TEST_recovery_pool_priority in qa/standalone/osd/osd-recovery-prio.sh writes
+  10MB objects to two size-1 pools, raises both pools to size 2 and then polls
+  (10 tries, 2s apart) until 'ceph pg dump pgs' shows both PGs in a 'recovering'
+  state at the same time, without pausing recovery. The two PGs have different
+  primaries and little data, so recovery can finish (or only one PG be seen
+  recovering at a time) before the poll sees both: the count of recovering PGs
+  goes 0, 1, 0 and never reaches 2, and the test prints 'Recovery never started
+  on both PGs' and returns 1 at osd-recovery-prio.sh:449. The failed workunit and
+  that message are symptoms; the cause is the unpaused recovery.
+  The record only hangs at the polling check (osd-recovery-prio.sh:449): the same
+  test fails at other checks for other causes (for example the reservation-state
+  checks after the poll), and those jobs are not candidates here.
+  PR 69416 fixes the test: it sets norecover while the reservation state is
+  inspected, so recovery cannot complete before the admin-socket dump. Builds
+  before v21.3.0-363-g6158e8efcb (and squid/tentacle/umbrella before the
+  backports 77619, 77620, 77621) do not have it.
+examples:
+  - pdonnell-2026-08-27_01:45:31-rados-wip-pdonnell-testing-20260826.223123-squid-distro-default-trial/518637

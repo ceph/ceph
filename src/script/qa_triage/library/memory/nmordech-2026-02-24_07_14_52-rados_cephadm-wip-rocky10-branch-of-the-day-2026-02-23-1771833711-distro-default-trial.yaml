@@ -1,0 +1,9 @@
+run: nmordech-2026-02-24_07:14:52-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-23-1771833711-distro-default-trial
+signatures:
+  ? 'workunit/set-e | cephadm/test_iscsi_setup.sh: container_gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; podman exec -i <sha> gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; set -e'
+  : '74873': 1
+  ? 'workunit/set-e/test-repos-add-repo-metadata-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: Traceback (most recent call last): | test_repos.sh: add-repo repository metadata #'
+  : '67555': 1
+titles:
+  '67555': failed to fetch repository task/test_cephadm_repos
+  '74873': 'cephadm/test_iscsi_setup.sh - Auth: ACL_ENABLED, Hosts: 0'

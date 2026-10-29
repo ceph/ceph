@@ -1,0 +1,18 @@
+run: jayaprakash-2026-08-13_15:17:09-rados-wip-jaya-bs-testing-13-08-2026-distro-default-trial
+signatures:
+  ? 'crash/client/unnamed/ceph-bluestore-tool-avl-assert | ceph-bluestore-tool bluefs-bdev-expand: AvlAllocator assert offset+length'
+  : '79128': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 1
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  timeout/unexplained | MaxWhileTries:
+    '76408': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '76408': 'rados/cephadm/osds: tasks.cephadm:Hit timeout while adding host trial165'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '79128': 'osd-bluefs-volume-ops.sh: TEST_bluestore - Assertion FAILED ceph_assert(offset + length <= uint64_t(device_size))'

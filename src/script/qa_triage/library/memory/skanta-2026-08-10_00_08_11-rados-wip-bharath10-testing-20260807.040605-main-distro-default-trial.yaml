@@ -1,0 +1,27 @@
+run: skanta-2026-08-10_00:08:11-rados-wip-bharath10-testing-20260807.040605-main-distro-default-trial
+signatures:
+  ? 'cluster-log/health/discard-queue-overload | WRN BLOCK_DEVICE_DISCARD_QUEUE | BLOCK_DEVICE_DISCARD_QUEUE: discard queue overload'
+  : '79443': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 2
+  infra/build | build:
+    '80294': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 4
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  ? workunit/unexplained/cephtool-hang/bad-caps-key-left-behind | cephtool/test.sh | cephtool/test.sh hung with AUTH_BAD_CAPS HEALTH_ERR | cephtool test_mon_caps left client.bug with empty mon caps (AUTH_BAD_CAPS)
+  : '72888': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '72888': 'rados/singleton-bluestore: cephtool.sh workunit hangs on various tests'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '77106': nvme list json command failed, retrying...
+  '79443': 'Health check failed: 1 OSD(s) experiencing slow discard operations (BLOCK_DEVICE_DISCARD_QUEUE)'
+  '80294': 'rados/encoder: no Rocky10 packages for older releases'

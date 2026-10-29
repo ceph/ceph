@@ -1,0 +1,6 @@
+run: skanta-2026-01-26_13:06:37-rados-wip-bharath10-testing-2026-01-26-1500-distro-default-trial
+signatures:
+  'infra/packages/epel-mirror-404 | packages | epel repo metadata: all mirrors #':
+    '74708': 1
+titles:
+  '74708': Failed to download metadata for repo 'epel' causes 'sudo yum install -y kernel' to fail on trial129

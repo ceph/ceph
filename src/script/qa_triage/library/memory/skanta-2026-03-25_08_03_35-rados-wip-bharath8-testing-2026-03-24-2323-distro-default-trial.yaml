@@ -1,0 +1,6 @@
+run: skanta-2026-03-25_08:03:35-rados-wip-bharath8-testing-2026-03-24-2323-distro-default-trial
+signatures:
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '75797': 2
+titles:
+  '75797': 'cephadm/task/test_rgw_multisite and test_ca_signed_key: cluster [WRN] Health check failed: 1 osds down (OSD_DOWN)" in cluster log'

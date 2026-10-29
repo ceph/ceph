@@ -1,0 +1,35 @@
+id: "79878"
+tracker: https://tracker.ceph.com/issues/79878
+title: "rados/singleton-bluestore: Health check failed: 1 filesystem is offline (MDS_ALL_DOWN)"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71454
+    branch: main
+    fixed_in: v21.3.0-3136-g9a203c6f68
+match:
+  description: 'cephtool|admin_socket_output'
+  reason: 'MDS_ALL_DOWN'
+confirm:
+  - file: teuthology.log
+    pattern: 'fail_all_mds:.*ceph fs set.*cluster_down|mds\.\S+ Exiting due to admin socket command'
+  - file: teuthology.log
+    pattern: 'Health check failed: 1 filesystem is offline \(MDS_ALL_DOWN\)'
+notes: |
+  MDS_ALL_DOWN used to be added to the cluster-log ignorelist by default and no
+  longer is (see the tracker note on the teuthology change). Tests that
+  deliberately take the only MDS down therefore fail the teardown cluster-log
+  scan with '[ERR] Health check failed: 1 filesystem is offline (MDS_ALL_DOWN)'.
+  Two ways of taking the MDS down are known:
+  - The cephtool/test.sh workunit's test_mon_mds section calls fail_all_mds,
+    which sets cluster_down on the filesystem and marks the MDS as failed.
+  - rados/singleton-nomsgr/all/admin_socket_output sends every admin-socket
+    command to every daemon, including "exit" to mds.a. The log shows 'mds.a
+    Exiting due to admin socket command', and a few seconds later the mon logs
+    the MDS_ALL_DOWN [ERR]. Later 'ceph fs fail cephfs' lines in that test are
+    only teardown and are not the cause.
+  MDS_ALL_DOWN is not in the job's log-ignorelist, so the job fails with the
+  MDS_ALL_DOWN line found in the cluster log. The fix (PR 71454) adds
+  MDS_ALL_DOWN to the ignorelist used by the test.
+examples:
+  - yuriw-2026-10-20_19:35:34-rados-wip-yuri13-testing-20261020.164521-umbrella-distro-default-trial/662534
+  - pdonnell-2026-10-22_20:04:18-rados-wip-pdonnell-testing-20261022.151229-umbrella-distro-default-trial/668466

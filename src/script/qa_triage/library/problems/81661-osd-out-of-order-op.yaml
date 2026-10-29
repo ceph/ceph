@@ -1,0 +1,36 @@
+id: "81661"
+tracker: https://tracker.ceph.com/issues/81661
+title: 'osd: "out of order op" assert in execute_ctx for same-oid Cls call ops in Fast EC'
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72673
+    branch: main
+tree: crash/client/unexplained/ec-optimized-out-of-order-op
+confirm:
+  - file: teuthology.log
+    pattern: 'PrimaryLogPG\.cc: \d+: ceph_abort_msg\("out of order op"\)'
+  - file: teuthology.log
+    pattern: 'pg\[\d+\.[0-9a-f]+s\d+\(.*\] bad op order, already applied \d+ > this \d+'
+notes: |
+  With allow_ec_optimizations enabled on an EC pool (Fast EC), ops that contain
+  CEPH_OSD_OP_CALL (class-method calls, e.g. cls_rbd on an EC rbd metadata pool) run in
+  a coroutine that yields during async backend reads. While it is in flight
+  (coro_op_in_flight), PrimaryLogPG::do_op() parks every incoming op on
+  waiting_for_coro_op with push_back(). An older op parked on an object rw-lock
+  (obc->waiters) is requeued by release_object_locks() while the coroutine is still in
+  flight, and so lands behind newer ops already on waiting_for_coro_op. When
+  on_coroutine_complete() requeues them, the newer op executes first, and the primary
+  OSD logs 'bad op order, already applied N > this M' on the EC shard pg (pg[P.Xs0])
+  and aborts with ceph_abort_msg("out of order op") in PrimaryLogPG::execute_ctx,
+  reached from do_op_impl. Other shards' primaries can abort the same way after the
+  PG remaps. The job's client failure is only a symptom. In the example (rbd/migration-external
+  with 5-pool-types/meta-ec-data-ec, two clusters), cluster1's osd.1 and osd.2 aborted. The
+  daemon watchdog then killed cluster1, and 'rbd migration commit' failed with status 110
+  (monclient authenticate timed out). In multi-cluster jobs the daemon is named
+  tasks.ceph.cluster1.osd.N, which the tree's DAEMON regex does not read, so the job
+  reaches crash/client/unexplained rather than crash/abort/specific. Fix: PR 72673
+  (preserve op ordering when requeuing into waiting_for_coro_op), open.
+  Not the same as TestCls2PCQueue's 'out of order op' (concurrent client threads,
+  replicated pool, crash/abort/specific/cls-2pc-queue-concurrent-op-order).
+examples:
+  - mattywilliams-2026-09-16_14:35:09-rbd-main-distro-default-trial/560984

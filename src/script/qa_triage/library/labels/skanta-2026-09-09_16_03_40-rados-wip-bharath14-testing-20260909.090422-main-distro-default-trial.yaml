@@ -1,0 +1,10 @@
+run: skanta-2026-09-09_16:03:40-rados-wip-bharath14-testing-20260909.090422-main-distro-default-trial
+jobs:
+  '546238':
+    problem: '74794'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 74794, but the tool said new (explain -> prefilter -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said unsure . Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 74794 by itself, with no judge.
+    summary: 'OSDThrasher wait_for_recovery failed during unthrottled pg growth, the watchdog killed the daemons and radosbench hung until MaxWhileTries: 74794, not new'
+    status: fail
+    description: rados/thrash/{0-size-min-size-overrides/2-size-2-min-size 1-pg-log-overrides/normal_pg_log 2-recovery-overrides/{more-async-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-5} backoff/normal ceph clusters/{fixed-4} crc-failures/bad_map_crc_failure d-balancer/upmap-read mon_election/classic msgr-failures/osd-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{bitmap} base mem$/{normal-1} onode-segment$/{512K-onoff} write$/{random/{compr$/{yes$/{zlib}} random}}}} rados supported-random-distro/{ubuntu_24.04} thrashers/pggrow_host thrashosds-health workloads/radosbench}
+    reason: reached maximum tries (500) after waiting for 3000 seconds

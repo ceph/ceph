@@ -1,0 +1,40 @@
+id: "77743"
+tracker: https://tracker.ceph.com/issues/77743
+title: "Radosbench test times out"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69833
+    branch: main
+    fixed_in: v21.3.0-1176-g179b4aeed1
+tree: hung/command/ceph-daemon-config-set-hang
+match:
+  reason: 'hit max job timeout'
+confirm:
+  - file: teuthology.log
+    pattern: 'ceph daemon osd\.\S+ config set'
+exclude:
+  - file: teuthology.log
+    pattern: "'bluestore debug onode segmentation random'"
+notes: |
+  In rados/singleton/all/recovery-preemption, ceph.restart SIGKILLs osd.1 and restarts it with
+  wait-for-up: false, and an exec task then runs "ceph daemon osd.$f config set ..." for each OSD.
+  osd.0 answers; the call for osd.1 never returns, and teuthology is killed at the max job timeout.
+  Before PR #69833 added a 10-second timeout to pybind/ceph_daemon.py, the admin socket client
+  connected without a timeout and blocked on sock.recv(4) while the restarting OSD was in
+  BlueStore mount holding osd_lock.
+  The call blocks for hours because that mount never finishes. The SIGKILLed OSD never saved its
+  NCB allocator file, so the restarted osd.1 logs "No Valid allocation info on disk (empty file)"
+  and "Run Full Recovery from ONodes", its log then stops at "fbmap_alloc ... shutdown", and it
+  never logs "done with init" again. That OSD wedge is the same failure as the older tracker 77443,
+  which people also file these jobs under, with any onode-segment size (256K, 512K, 512K-onoff, 1M);
+  hence `also`. The 77443 record claims the onode-segment 512K-onoff jobs, which are the ones that
+  also set 'bluestore debug onode segmentation random' (the plain 512K jobs set only the size, so
+  they are 77743's); either answer is right.
+  With PR #69833 in, the asok call times out after 10s instead and the job fails as 59079.
+examples:
+  - skanta-2026-07-12_04:39:06-rados-wip-bharath12-testing-2026-07-09-1411-distro-default-trial/356703
+  - skanta-2026-07-19_00:55:49-rados-wip-bharath5-testing-2026-07-19-0500-distro-default-trial/376260
+  - jayaprakash-2026-07-24_10:10:00-rados-wip-jaya-bs-testing-umbrella-23-07-2026-distro-default-trial/396332
+  - skanta-2026-06-24_08:47:55-rados-wip-bharath12-testing-2026-06-24-1220-umbrella-distro-default-trial/313203
+also:
+  - "77443"

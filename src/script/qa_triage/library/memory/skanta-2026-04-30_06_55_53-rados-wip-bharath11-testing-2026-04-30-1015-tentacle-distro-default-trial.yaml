@@ -1,0 +1,6 @@
+run: skanta-2026-04-30_06:55:53-rados-wip-bharath11-testing-2026-04-30-1015-tentacle-distro-default-trial
+signatures:
+  'test/unittest | tasks.stretch_mode_disable_enable.TestStretchMode.test_disable_stretch_mode: AssertionError: # != #':
+    '76403': 1
+titles:
+  '76403': test_disable_stretch_mode - failed with stretch_mode_disable_enable.py", line 504, in test_disable_stretch_mode

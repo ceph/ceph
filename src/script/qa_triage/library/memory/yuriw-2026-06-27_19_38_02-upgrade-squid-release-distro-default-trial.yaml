@@ -1,0 +1,33 @@
+run: yuriw-2026-06-27_19:38:02-upgrade-squid-release-distro-default-trial
+signatures:
+  cluster-log/health | WRN CEPHADM_DAEMON_PLACE_FAIL:
+    '70714': 1
+  cluster-log/health | WRN PG_DEGRADED:
+    '77888': 1
+  'cluster-log/message | WRN mon [WRN] CACHE_POOL_NO_HIT_SET: # cache pools are missing hit_sets':
+    '77889': 1
+  cluster-log/message | WRN mon all OSDs are running squid or later but require_osd_release < squid:
+    '77885': 1
+  cluster-log/message | WRN mon daemon osd.# on <host> is in unknown state:
+    '76747': 1
+  ? cluster-log/message | WRN mon telemetry module includes new collections; please re-opt-in to new collections with `ceph telemetry on`
+  : '77382': 1
+  'cluster-log/other | "grep: /var/log/ceph/<uuid>/ceph.log: No such file or directory" in cluster log':
+    '77887': 1
+  ? 'command/unexplained | cephadm --image quay.io/ceph/ceph:v#.<pg> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '77884': 1
+  'hung/command | parallel: cephadm --image quay.io/ceph/ceph:v#.<pg> shell --fsid <uuid> -- ceph':
+    '75570': 1
+  ? 'infra/other | install.upgrade: Command failed on <host> with status #: "wget -q -O- ''https://git.ceph.com/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc'' | sudo apt-key add -"'
+  : '76193': 1
+titles:
+  '70714': 'rados/cephadm: CEPHADM_DAEMON_PLACE_FAIL - Failed to extract uid/gid for path /var/lib/grafana'
+  '75570': 'upgrade/stress-split: Thrasher fails to revive an OSD during upgrade test'
+  '76193': 'squid p2p test: No space left on device'
+  '76747': cluster [WRN]     daemon osd.1 on trial145 is in unknown state" in cluster log
+  '77382': 'upgrade: cluster [WRN] telemetry module includes new collections; please re-opt-in to new collections with `ceph telemetry on`" in cluster log'
+  '77884': Unable to start container process due to moved mountpoint
+  '77885': cluster [WRN] all OSDs are running squid or later but require_osd_release < squid
+  '77887': 'Unable to pull container v18.2.0: "happened during read: unexpected EOF"'
+  '77888': 'squid-p2p upgrade tests: PG_DEGRADED warning'
+  '77889': 'upgrade: [WRN] CACHE_POOL_NO_HIT_SET: 1 cache pools are missing hit_sets'

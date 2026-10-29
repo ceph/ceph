@@ -1,0 +1,32 @@
+id: "81136"
+tracker: https://tracker.ceph.com/issues/81136
+title: "mon/mon-stretch-mode-5-mons-8-osds.sh: Error EINVAL: stretch mode is already engaged"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72711
+    branch: main
+match:
+  reason: 'workunit test mon/mon-stretch-mode-5-mons-8-osds\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'ceph mon enable_stretch_mode \S+ \S+ \S+'
+  - file: teuthology.log
+    pattern: 'Error EINVAL: stretch mode is already engaged'
+notes: |
+  Cause (confirmed by PR 72711): enabling stretch mode updates the monmap, which
+  triggers a monitor election before the client gets a reply. The mon re-dispatches
+  the pending client message after the election; at that point stretch mode is
+  already committed, so MonmapMonitor::prepare_command returns -EINVAL ("stretch
+  mode is already engaged") even though the original command succeeded.
+  The fix (PR 72711, "mon: make enable_stretch_mode idempotent") returns success
+  if stretch mode is already enabled, and waits for the commit before returning
+  success on uncommitted state. The test runs with CEPH_CLI_TEST_DUP_COMMAND=1.
+  In teuthology.log the workunit stderr shows the enable command ran once and got
+  EINVAL; the mon log (mon.a.log) shows the message was handled twice across the
+  monmap version bump that preceded the error.
+examples:
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631199
+  - skanta-2026-10-13_09:18:31-rados-wip-bharath10-testing-20261012.232418-main-distro-default-trial/633359
+  - skanta-2026-09-19_16:29:13-rados-wip-bharath17-testing-20260919.063401-main-distro-default-trial/569748
+also:
+  - "69107"

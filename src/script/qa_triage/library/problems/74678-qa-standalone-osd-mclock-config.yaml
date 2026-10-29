@@ -1,0 +1,37 @@
+id: "74678"
+tracker: https://tracker.ceph.com/issues/74678
+title: "qa/standalone/osd/mclock-config: test case might fails when running on SSD device."
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67126
+    branch: main
+    fixed_in: v20.3.0-5737-gab12ada51b
+tree: workunit/standalone
+facts:
+  test: '^TEST_recovery_limit_adjustment_mclock$'
+  script: '^misc/mclock-config\.sh$'
+match:
+  reason: 'workunit test misc/mclock-config\.sh'
+confirm:
+  - file: remote/*/log/osd.*.log*
+    pattern: 'OSD bench result of .* IOPS is not within the threshold limit range'
+notes: |
+  TEST_recovery_limit_adjustment_mclock in misc/mclock-config.sh fails at the
+  check that osd_recovery_max_active keeps its default (0) after
+  'ceph config set osd.0 osd_recovery_max_active 10' without
+  osd_mclock_override_recovery_settings; the daemon still reports 10.
+
+  The cause: at OSD start the mclock benchmark returns an IOPS rate outside
+  the allowed threshold range (here 80475 IOPS, above the 80000 upper limit,
+  as happens on fast SSDs). The OSD logs 'OSD bench result of ... IOPS is not
+  within the threshold limit range' and does not persist
+  osd_mclock_max_capacity_iops_[hdd|ssd]. The first config update then arrives
+  with several keys, and OSD::maybe_override_options_for_qos only handled the
+  first matching key, so the recovery limit change was not reverted.
+
+  Fixed by PR 67126 (handle all updated keys in maybe_override_options_for_qos);
+  backports to tentacle and squid are tracked in 75268 and 75269.
+examples:
+  - skanta-2026-08-22_23:37:38-rados-wip-bharath8-testing-20260822.101926-tentacle-distro-default-trial/506409
+also:
+  - "74835"

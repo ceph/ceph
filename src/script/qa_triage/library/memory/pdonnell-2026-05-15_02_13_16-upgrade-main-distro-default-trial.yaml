@@ -1,0 +1,6 @@
+run: pdonnell-2026-05-15_02:13:16-upgrade-main-distro-default-trial
+signatures:
+  cluster-log/health | WRN OSD_ROOT_DOWN:
+    '76620': 1
+titles:
+  '76620': 'qa/suites/upgrade: `cluster [WRN] Health check failed: 1 root (1 osds) down (OSD_ROOT_DOWN)" in cluster log'''

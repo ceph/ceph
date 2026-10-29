@@ -1,0 +1,45 @@
+id: "75570"
+tracker: https://tracker.ceph.com/issues/75570
+title: "upgrade/stress-split: Thrasher fails to revive an OSD during upgrade test"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69871
+    branch: main
+    fixed_in: v21.3.0-2803-gb743fcb98d
+tree: hung/command/osd-start-limit-hit
+match:
+  description: '^upgrade'
+confirm:
+  - file: teuthology.log
+    pattern: "Command failed on \\S+ with status 1: 'sudo systemctl start ceph-\\S+@osd\\.\\d+'"
+  - file: teuthology.log
+    pattern: "ceph-\\S+@osd\\.\\d+\\.service: Failed with result 'start-limit-hit'"
+notes: |
+  The cause: the OSDThrasher kills and revives the same OSD many times in a short while. On a
+  cephadm cluster each revive is 'systemctl stop' followed by 'systemctl start' of the
+  ceph-<fsid>@osd.N unit. systemd counts the starts, and when the unit has started too often
+  it refuses the next one: journalctl shows 'Start request repeated too quickly' and
+  'Failed with result start-limit-hit', and 'systemctl start' exits with status 1 ('Job for
+  ...@osd.N.service failed'). revive_osd in qa/tasks/ceph_manager.py gets CommandFailedError
+  and the thrasher stops, with the OSD still down. Nothing is wrong with the OSD: the unit
+  never ran. The job then either fails at once with the thrasher's traceback or, as in
+  nmordech-2026-03-17.../104134, the remaining tasks keep polling a cluster that stays
+  degraded ('ceph osd dump', pgs undersized, 1 osds down) until the max job timeout kills
+  it. The command the job hangs on differs between jobs ('cephadm shell ... ceph osd dump',
+  'docker kill' of an OSD, and so on); it is only where the job happened to be waiting.
+  The hang and the failed cephadm daemon are symptoms; the failed start with start-limit-hit
+  is the cause.
+  The fix, PR 69871 (tasks/ceph_manager: reset systemd failed state before reviving osd on
+  cephadm), calls 'systemctl reset-failed' on the OSD unit before restarting it. It is not in
+  builds before v21.3.0-2803-gb743fcb98d; backports to tentacle and squid are #80195 and #80196.
+  It was seen in upgrade stress-split runs on several distros and releases (rocky10, centos9,
+  ubuntu 22.04), so it is not tied to a distro. The record hangs at the learned node's path
+  hung/command/osd-start-limit-hit, so only jobs where that node found both lines are claimed.
+examples:
+  - nmordech-2026-03-17_06:34:53-upgrade-wip-rocky10-branch-of-the-day-2026-03-16-1773712510-distro-default-trial/104134
+  - pdonnell-2026-05-27_21:13:45-upgrade-wip-pdonnell-testing-20260527.030902-main-distro-default-trial/243486
+  - pdonnell-2026-05-27_21:13:45-upgrade-wip-pdonnell-testing-20260527.030902-main-distro-default-trial/243543
+  - pdonnell-2026-05-27_21:13:45-upgrade-wip-pdonnell-testing-20260527.030902-main-distro-default-trial/243569
+  - pdonnell-2026-05-27_21:13:45-upgrade-wip-pdonnell-testing-20260527.030902-main-distro-default-trial/243742
+  - pdonnell-2026-05-27_21:13:45-upgrade-wip-pdonnell-testing-20260527.030902-main-distro-default-trial/243773
+  - pdonnell-2026-05-27_21:13:45-upgrade-wip-pdonnell-testing-20260527.030902-main-distro-default-trial/243805

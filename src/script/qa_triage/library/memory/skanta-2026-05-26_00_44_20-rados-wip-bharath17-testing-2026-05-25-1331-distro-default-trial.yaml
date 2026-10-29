@@ -1,0 +1,44 @@
+run: skanta-2026-05-26_00:44:20-rados-wip-bharath17-testing-2026-05-25-1331-distro-default-trial
+signatures:
+  ? 'cluster-log/health/discard-queue-overload | WRN BLOCK_DEVICE_DISCARD_QUEUE | BLOCK_DEVICE_DISCARD_QUEUE: discard queue overload'
+  : '73771': 1
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN # pool(s) full':
+    '75414': 2
+  ? cluster-log/message/mgr-session-evicted | WRN mds evicting unresponsive client <host>:x (#), after <pg> seconds | MDS evicted the unresponsive libcephfs session of a restarted mgr
+  : '76497': 2
+  'command/timed-out | ceph status: timed out':
+    '76298': 1
+  'infra/other | pexec: expected valgrind issues and found none':
+    '76473': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 2
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '75216': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '74577': 2
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | readable.sh: ceph-dencoder failed to decode corpus object'
+  : '74074': 1
+  ? 'workunit/unexplained/ganesha-nfsv3-tcp-register | cephadm/test_cephadm.sh | test_cephadm.sh: ganesha Cannot register NFS V# on TCP'
+  : '75358': 1
+titles:
+  '73771': 'qa: ''Slow discard on BLOCK, queue: 12034 items 8.3 GiB (BLOCK_DEVICE_DISCARD_QUEUE)'' in cluster log'
+  '74074': ceph-dencoder - failed with 20.3 corpus repo
+  '74577': test_iscsi_setup.sh - No such path /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/iqn.1994-05.com.redhat:client1
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75414': 'upgrade: pool full warning variation'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '76298': rados/thrash-erasure-code failure - not all PGs are active or peered
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '76497': rados/singleton-bluestore/cephtool - evicting unresponsive client warnings
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'

@@ -1,0 +1,56 @@
+id: "74518"
+tracker: https://tracker.ceph.com/issues/74518
+title: "rados/perf: pools reached nearfull (POOL_NEARFULL)"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71833
+    branch: main
+    fixed_in: v21.3.0-3519-g2be4923358
+tree: cluster-log/health/radosbench-populate-overfill
+facts:
+  check: '^(OSD|POOL)_NEARFULL$'
+match:
+  reason: 'NEARFULL'
+exclude:
+  - file: teuthology.log
+    pattern: 'chance_test_backfill_full'
+notes: |
+  The job fails only on the teardown cluster-log scan, with the mon's
+  '[WRN] Health check failed: N nearfull osd(s) (OSD_NEARFULL)' or
+  'N pool(s) nearfull (POOL_NEARFULL)', which the test does not ignore. A
+  benchmark writes far more data than the small test cluster should hold and an
+  OSD crosses the nearfull ratio. The tree's cluster-log/health node answers
+  radosbench-populate-overfill for two workloads, after finding the lines that
+  show each, so tree and facts are enough here.
+
+  1. rados/singleton random-eio and thrash-eio, whose radosbench task has type: rand.
+  Before PR 71833, qa/tasks/radosbench.py passed --object-size and --block-size only
+  for write runs; for a seq/rand run it first did a populate run 'rados ...
+  bench --concurrent-ios=16 60 write --no-cleanup' with no object size and no object
+  cap. rados bench then wrote default 4 MB objects for 60 s ('Maintaining 16
+  concurrent writes of 4194304 bytes to objects of size 4194304 for up to 60 seconds
+  or 0 objects'), about 124 GB at ~2 GB/s on trial nodes (x3 replicas over 6 OSDs,
+  16 PGs), ignoring the job's 'objectsize: 1048576'. This is the same runaway as
+  tracker 80415, where it goes on to failsafe full and the ReplicatedBackend 'Out of
+  space (failsafe)' abort; here the job stops at the warning. Fixed by PR 71833 (keep
+  object/block size on the populate run, add a max_objects guardrail), merged at
+  v21.3.0-3519-g2be4923358.
+
+  2. rados/perf radosbench_* (the jobs that opened 74518). They run rados bench
+  through the cbt task, not the radosbench task, so PR 71833 does not touch them.
+  cbt creates the rados-bench-cbt pool (256 PGs on 3 OSDs) and runs two 'rados -p
+  rados-bench-cbt bench -b 4194304 60 write --concurrent-ios 4 ... --no-cleanup'
+  writers for 60 s before the read run. The mgr's pg autoscaler then logs "Pool
+  'rados-bench-cbt' ... using 0.87 of space", the mon logs OSD_NEARFULL and
+  POOL_NEARFULL as the write phase ends, and the teardown scan fails the job. The
+  cause is still open in the tracker: the cbt workload should be sized to the
+  cluster, or POOL_NEARFULL added to the ignorelist.
+
+  thrash-backfill-full jobs with POOL_NEARFULL belong to 80643 (its thrasher fills
+  OSDs on purpose) and are left out by the node and by the exclude.
+examples:
+  - jenkins-build-2026-09-17_06:05:09-rados-main-distro-default-trial/563205
+  - jenkins-build-2026-09-17_06:05:09-rados-main-distro-default-trial/563307
+  - lflores-2026-01-23_19:07:45-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/15326
+also:
+  - "80415"

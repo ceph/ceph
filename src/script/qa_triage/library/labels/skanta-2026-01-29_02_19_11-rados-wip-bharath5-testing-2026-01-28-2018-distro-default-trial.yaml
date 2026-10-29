@@ -1,0 +1,10 @@
+run: skanta-2026-01-29_02:19:11-rados-wip-bharath5-testing-2026-01-28-2018-distro-default-trial
+jobs:
+  '24678':
+    problem: '79024'
+    by: Claude Code for aainscow, as the reviewer
+    why: max job timeout with client ops queued for pg under osd debug inject dispatch delay; health at SIGTERM shows SLOW_OPS but no OSD_OUT_OF_ORDER_FULL (69497)
+    summary: duplicate 79024 (explain -> prefilter -> confirm -> fix-check)
+    status: dead
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{default} 3-scrub-overrides/{max-simultaneous-scrubs-3} backoff/normal ceph clusters/{fixed-4} crc-failures/default d-balancer/crush-compat mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{1M} write$/{v2/{compr$/{yes$/{lz4}} v2}}}} rados supported-random-distro$/{ubuntu_latest} thrashers/morepggrow thrashosds-health workloads/pool-snaps-few-objects}
+    reason: hit max job timeout

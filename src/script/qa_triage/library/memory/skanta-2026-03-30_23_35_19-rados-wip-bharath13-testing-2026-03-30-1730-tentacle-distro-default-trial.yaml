@@ -1,0 +1,9 @@
+run: skanta-2026-03-30_23:35:19-rados-wip-bharath13-testing-2026-03-30-1730-tentacle-distro-default-trial
+signatures:
+  ? 'crash/client/unnamed | Command failed (workunit test osd/divergent-priors.sh) on <host> with status #: ''mkdir -p -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && cd -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && CEPH_CLI_TEST_DUP_COMMAND=# CEPH_REF=<sha> TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="#" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.# CEPH_ROOT=/home/ubuntu/cephtest/clone.client.# CEPH_MNT=/home/ubuntu/cephtest/mnt.# adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout #h /home/ubuntu/cephtest/clone.client.#/qa/standalone/osd/divergent-priors.sh'''
+  : '74800': 1
+  ? 'workunit/unexplained/test-librados-build-git-ceph-com-html | rados/test_librados_build.sh | test_librados_build.sh: Makefile missing separator (git.ceph.com HTML)'
+  : '68669': 1
+titles:
+  '68669': 'rados/test_librados_build.sh: Makefile:1: *** missing separator'
+  '74800': 'qa/standalone/osd/divergent-priors.sh: Core dump generated from call to OSDService::maybe_share_map'

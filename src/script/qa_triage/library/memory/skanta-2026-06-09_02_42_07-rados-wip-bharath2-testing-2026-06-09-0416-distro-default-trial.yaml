@@ -1,0 +1,38 @@
+run: skanta-2026-06-09_02:42:07-rados-wip-bharath2-testing-2026-06-09-0416-distro-default-trial
+signatures:
+  ? cluster-log/message/mgr-session-evicted | WRN mds evicting unresponsive client <host>:x (#), after <pg> seconds | MDS evicted the unresponsive libcephfs session of a restarted mgr
+  : '76497': 4
+  'command/error | ceph tell osd.# flush_pg_stats: Error ENXIO: problem getting command descriptions from osd.#':
+    '56097': 1
+  infra/build | build:
+    '59193': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 2
+  ? 'other/injected-leak-suppressed | expected valgrind issues and found none: injected leak hidden by the UnknownInlinedFun suppression'
+  : '76473': 1
+  ? 'test/unittest | tasks.mgr.test_insights.TestInsights.test_health_history: AssertionError: datetime.datetime(#, #, #, #, #, #, #) not greater than datetime.datetime(#, #, #, #, #, #, #)'
+  : '55854': 2
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '71506': 2
+  workunit/gtest | rados/test.sh AsioRados.AsyncNotifyCallback:
+    '77417': 2
+  ? 'workunit/set-e | cephadm/test_cephadm.sh: /usr/sbin/cephadm --image quay.ceph.io/ceph-ci/ceph:main logs --fsid <uuid> --name nfs.a: Jun # #:#:# <host> bash[#]: #/#/# #:#:# : epoch <sha> : <host> : ganesha.nfsd-#[main] main :MAIN :EVENT :ganesha.nfsd Starting: Ganesha Version <pg>'
+  : '71506': 2
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '76297': 2
+titles:
+  '55854': Datetime AssertionError in test_health_history (tasks.mgr.test_insights.TestInsights)
+  '56097': Timeout on `sudo adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 120 ceph --cluster ceph tell osd.1 flush_pg_stats`
+  '59193': '"Failed to fetch package version from https://shaman.ceph.com/api/search ..."'
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '76297': test_iscsi_container - cephadm/test_iscsi_setup.sh fails on sudo ls /dev/disk/by-path
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '76497': rados/singleton-bluestore/cephtool - evicting unresponsive client warnings
+  '77106': nvme list json command failed, retrying...
+  '77417': ceph-test packages missing ceph_test_neorados_completions; smoke mon_thrash and rados_api_tests fail on Ubuntu

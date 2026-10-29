@@ -1,0 +1,51 @@
+id: "81135"
+tracker: https://tracker.ceph.com/issues/81135
+title: "ceph_test_rados workload aborts on copy_from, returning -ETIMEDOUT on EC pool"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72389
+    branch: main
+    fixed_in: v21.3.0-4447-g3eb359d61c
+tree: crash/client/ceph_test_rados
+facts:
+  program: '^ceph_test_rados$'
+match:
+  reason: 'ceph_test_rados'
+confirm:
+  - file: teuthology.log
+    pattern: 'Error: oid \d+ .*returned (error code|different error codes:).*-110\b|stderr:err -110$|Assertion details: r = -110'
+  - file: teuthology.log
+    pattern: 'rados osd op timeout: \d+'
+notes: |
+  ceph_test_rados (RadosModel.h) aborts when an op on the pool completes with
+  -110 (ETIMEDOUT). The qa config sets client 'rados osd op timeout' (900 s), so
+  Objecter fails ops that stay blocked or slow that long. RadosModel.h only tolerates
+  -ENOENT, so any other error code ends the test with ceph_abort(). The tracker saw
+  it in CopyFromOp::_finish ("copy_from ... returned error code -110"). Other jobs
+  abort in ReadOp::_finish ("read returned different error codes: 0 and -110"), while
+  osd.0, osd.8 and osd.13 reported slow ops blocked for 540-560 s, or in
+  RollbackOp::_finish (RadosModel.h:2044), which prints only a bare "err -110" line
+  before ceph_abort() (pool-snaps workload, slow ops on several OSDs), or in
+  WriteOp::_finish (RadosModel.h:1104, "Error: oid N write returned error code -110";
+  or RadosModel.h:1121, assertf(r >= 0, "r = %d", r) with "Assertion details: r = -110").
+  The job fails with ceph_test_rados exiting on signal 6. The failed command and the
+  abort are symptoms; the cause is the -110 from the op timeout shown in the error line.
+  Why the ops were that slow: in the tracker's job the thrasher (min_in: 2) left 3 of 16
+  OSDs in, below the EC pool's min_size. In this record's examples (593684, 597588,
+  631238, 603575) the job also ran msgr-failures/osd-dispatch-delay (probability 0.1)
+  with bluestore compression (aggressive, osd op num shards 1) on a wide EC pool, and
+  tracker 81629 measured, on 603575 and 604392, the OSD op queue starved by the injected
+  delay: ~95 items/s, all peering events, no client op served for 11-13 min. People
+  place these jobs in 81629 too, hence also 81629; the tree's node at
+  crash/client/ceph_test_rados names that case dispatch-delay-op-timeout. Jobs whose
+  ceph_test_rados aborts without printing an error take crash/client/unexplained and
+  belong to record 81629. Tracker 81135 (resolved by PR 72389, fixed in
+  v21.3.0-4447-g3eb359d61c) removed rados_osd_op_timeout from thrashing suites, which
+  turns the dispatch-delay case into wait_for_recovery timeouts (75216) instead.
+examples:
+  - skanta-2026-09-30_21:49:09-rados-wip-bharath8-testing-20260930.133801-main-distro-default-trial/597588
+  - skanta-2026-09-30_04:36:41-rados-wip-bharath14-testing-20260930.003013-main-distro-default-trial/593684
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631238
+  - skanta-2026-10-03_03:26:16-rados-wip-bharath19-testing-20261002.123021-main-distro-default-trial/603575
+also:
+  - "81629"

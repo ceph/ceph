@@ -1,0 +1,9 @@
+run: jayaprakash-2026-03-09_16:16:59-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial
+signatures:
+  'command/unexplained | yes | mkfs.xfs -f -i size=# /dev/vg_nvme/lv_#: #':
+    '68668': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 1
+titles:
+  '68668': 'rados/dashboard: mkfs.xfs: cannot open /dev/vg_nvme/lv_2: Device or resource busy'
+  '74517': drop.ceph.com is unreachable (ceph-post-file)

@@ -1,0 +1,9 @@
+run: pdonnell-2026-05-14_00:04:32-upgrade-wip-pdonnell-testing-20260513.183829-main-distro-default-trial
+signatures:
+  'cluster-log/message | WRN mon pg <pg> is stuck peering for #s, current state peering, last acting [#,#,#]':
+    '76599': 1
+  crash/signal/no-backtrace | osd Aborted in ? | no backtrace:
+    '76600': 1
+titles:
+  '76599': '[repeat] upgrade: pg is stuck peering'
+  '76600': 'qa/suites/upgrade: `cluster [WRN]     daemon osd.5 on trial179 is in unknown state" in cluster log'''

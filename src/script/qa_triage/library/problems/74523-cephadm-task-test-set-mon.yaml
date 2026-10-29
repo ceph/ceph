@@ -1,0 +1,32 @@
+id: "74523"
+tracker: https://tracker.ceph.com/issues/74523
+title: "cephadm: task/test_set_mon_crush_locations fails because mon.a's crush location is not in datacenter a"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67436
+    branch: main
+    fixed_in: v20.3.0-6111-g0f2e745e87
+tree: command/unexplained/crush-location-json-mismatch
+notes: |
+  In rados/cephadm/workunits task/test_set_mon_crush_locations, the test verifies
+  that monitor CRUSH locations configured in mon.yaml are applied by running
+  'ceph mon dump --format json' and checking each monitor with jq using
+  '.mons | .[] | select(.name == $monid) | .crush_location == $crushloc' where
+  crushloc is a string formatted like '{datacenter=a}'.
+  However, mon_info_t::dump() encodes crush_location as an array of key/val objects
+  (e.g. [{"key":"datacenter","val":"a"}]), so the string comparison with jq returns
+  false and causes jq to exit with status 1.
+  Fixed by PR #67436 (commit 0f2e745e875), which updates the jq check in
+  task/test_set_mon_crush_locations.yaml to query crush_location[].key and .val.
+examples:
+  - jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90354
+  - lflores-2026-01-21_20:56:39-rados-main-distro-default-trial/12016
+  - lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19112
+  - nmordech-2026-01-26_18:32:32-rados:cephadm-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/18793
+  - nmordech-2026-02-17_05:41:58-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial/51634
+  - nmordech-2026-02-21_21:52:07-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial/63022
+  - yuriw-2026-10-22_20:33:51-rados-wip-yuri12-testing-20261022.154156-squid-distro-default-trial/668927
+also:
+  - "81576"
+  - "81577"
+  - "81578"

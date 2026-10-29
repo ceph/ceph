@@ -1,0 +1,50 @@
+id: "79814"
+tracker: https://tracker.ceph.com/issues/79814
+title: "Health check failed: network partition detected (MON_NETSPLIT)"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72713
+    branch: main
+tree: cluster-log/health/dead-ping-not-retried
+facts:
+  check: '^MON_NETSPLIT$'
+match:
+  reason: 'MON_NETSPLIT'
+confirm:
+  - file: teuthology.log
+    pattern: 'Health check failed: \d+ network partitions? detected \(MON_NETSPLIT\)'
+  - file: remote/*/log/ceph-mon.*.log.gz
+    pattern: 'health Netsplit detected between mon\.\w+ and mon\.\w+, elapsed time'
+  - file: remote/*/log/ceph-mon.*.log.gz
+    pattern: 'report_dead_connection peer_rank: \d+ '
+notes: |
+  Cause: after mons restart together (rados/singleton/all/mon-stretch-pool restarts
+  all nine mons in the stretch_cluster test tearDown), a full messenger session
+  reset can drop the last queued mon_ping. Once the peer is marked dead,
+  Elector::dead_ping only updates its connection score and never sends another
+  ping, and the peer never starts pinging back. The pair stays disconnected in the
+  ConnectionTracker although both mons are in quorum, so the leader's
+  HealthMonitor::check_netsplit reports MON_NETSPLIT after mon_netsplit_grace_period
+  (9s). The mon-stretch-pool fragment does not ignore MON_NETSPLIT, so the cluster
+  log check fails the job.
+  In the logs: the leader's mon log has 'health Netsplit detected between mon.X and
+  mon.Y, elapsed time: ...s > mon_netsplit_grace_period: 9s'; mon.X's log has
+  report_dead_connection for the peer's rank every 2 seconds while the peer is in
+  quorum. Fix: PR 72713 'mon: retry pings to dead peers after reconnect' (open).
+  The same cause also shows in other suites that restart or reset mon connections,
+  e.g. rados/thrash-erasure-code with mon_election/connectivity, where none of the
+  tests ignore MON_NETSPLIT (skanta-2026-06-02 job 253538: all three mons marked
+  each other dead at 07:50:13 and mon.b raised the netsplit at 07:57:10 although
+  all three were in quorum).
+  Tracker 71344 is the earlier fix for MON_NETSPLIT after a mon restart: the server
+  rejected the restarted mon's new connection as 'this is a stale connection' (global_seq
+  check in ProtocolV2::handle_existing_connection). Reviewers place jobs here in
+  71344 too, because 79814 was filed as 'related to' it and the symptom is the same.
+  A job whose mon logs show 'this is a stale connection' is 71344's own cause; one
+  with a dead peer that is never pinged again, in a build that has the 71344 fix, is
+  this one.
+examples:
+  - skanta-2026-08-24_07:43:11-rados-wip-bharath7-testing-20260824.042435-main-distro-default-trial/508965
+  - skanta-2026-06-02_04:58:02-rados-wip-bharath3-testing-2026-06-02-0837-distro-default-trial/253538
+also:
+  - "71344"

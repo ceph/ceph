@@ -1,0 +1,27 @@
+id: "77248"
+tracker: https://tracker.ceph.com/issues/77248
+title: "rados/cephadm: The repository 'https://download.ceph.com/debian-quincy noble Release' does not have a Release file."
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69847
+    branch: main
+    fixed_in: v21.3.0-989-g0156ce1be2
+tree: workunit/unexplained/test-repos-release-file-missing
+facts:
+  script: '^cephadm/test_repos\.sh$'
+confirm:
+  - file: teuthology.log
+    pattern: "The repository 'https://download\\.ceph\\.com/debian-\\S+ \\S+ Release' does not have a Release file"
+exclude:
+  - file: teuthology.log
+    pattern: 'Status code: 404 for https://download\.ceph\.com/keys/release\.gpg'
+notes: |
+  cephadm/test_repos.sh always ran 'cephadm add-repo --release quincy' first. On Ubuntu
+  24.04 (noble) cephadm configures 'deb https://download.ceph.com/debian-quincy/ noble main',
+  but Ceph never published quincy (or reef) packages for noble, so 'apt-get update' exits
+  100 with '404 Not Found' and "The repository ... noble Release does not have a Release
+  file". cephadm raises 'RuntimeError: Failed command: apt-get update' and the workunit
+  exits 1. The GPG key install succeeds; only the Release file is missing. Fixed by PR 69847,
+  which probes download.ceph.com and skips releases not published for the host's codename.
+examples:
+  - skanta-2026-07-02_01:10:52-rados-wip-bharath2-testing-2026-07-01-2021-distro-default-trial/335065

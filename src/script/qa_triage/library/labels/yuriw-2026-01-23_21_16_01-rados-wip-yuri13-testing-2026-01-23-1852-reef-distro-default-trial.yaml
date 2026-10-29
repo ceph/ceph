@@ -1,0 +1,18 @@
+run: yuriw-2026-01-23_21:16:01-rados-wip-yuri13-testing-2026-01-23-1852-reef-distro-default-trial
+jobs:
+  '15588':
+    problem: '74566'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 6 jobs in 74566, this one among them, and no record names it yet: the tool placed them in 68337, no known problem. A record for it should place them all; others are yuriw-2026-01-27_16:01:09-rados-reef-release-distro-default-trial/20866, yuriw-2026-02-26_16:03:22-rados-wip-yuri9-testing-2026-02-25-1600-squid-distro-default-trial/72535, yuriw-2026-08-10_19:17:25-fs-wip-yuri10-testing-20260810.174752-squid-distro-default-trial/453006, yuriw-2026-08-10_19:17:25-fs-wip-yuri10-testing-20260810.174752-squid-distro-default-trial/453132, yuriw-2026-08-10_19:17:25-fs-wip-yuri10-testing-20260810.174752-squid-distro-default-trial/453238.'
+    summary: Valgrind Leak_StillReachable in monitors from glibc dlopen in libceph-common static init (tracker 74566); nodes/other.py must handle 'saw valgrind issues' and a new record for 74566 is needed
+    status: fail
+    description: rados/verify/{centos_latest ceph clusters/fixed-4 d-thrash/none mon_election/classic msgr-failures/few msgr/async-v2only objectstore/bluestore-comp-snappy rados tasks/mon_recovery validater/valgrind}
+    reason: saw valgrind issues
+  '15685':
+    problem: '64872'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 64872, this one among them.
+    summary: Transient CEPHADM_STRAY_DAEMON warning cleared 4 s after ceph orch apply; no record existed for tracker 64872
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/centos_9.stream agent/on mon_election/connectivity task/test_set_mon_crush_locations}
+    reason: '"2026-01-23T22:14:05.643517+0000 mon.a (mon.0) 529 : cluster [WRN] Health check failed: 1 stray daemon(s) not managed by cephadm (CEPHADM_STRAY_DAEMON)" in cluster log'

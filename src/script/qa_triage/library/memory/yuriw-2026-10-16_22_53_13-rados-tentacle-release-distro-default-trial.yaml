@@ -1,0 +1,12 @@
+run: yuriw-2026-10-16_22:53:13-rados-tentacle-release-distro-default-trial
+signatures:
+  ? 'cluster-log/message/out-of-order-full | ERR mon [ERR] OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order | OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order from thrash_cluster_full'
+  : '69497': 1
+  infra/build | build:
+    '75763': 1
+  timeout/unexplained | wait_until_healthy:
+    '81936': 1
+titles:
+  '69497': '"[ERR] OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order" in cluster log'
+  '75763': 'rados/encoder: teuthology: VersionNotFoundError when fetching ''reef'' Ceph packages for Rocky 10.1 from shaman'
+  '81936': 'DeviceHealth module: sqlite3.OperationalError: disk I/O error'

@@ -1,0 +1,38 @@
+id: "74827"
+tracker: https://tracker.ceph.com/issues/74827
+title: "TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67307
+    branch: main
+    fixed_in: v20.3.0-5268-gb53f0f8174
+tree: workunit/standalone
+facts:
+  test: '^TEST_mon_features$'
+  script: '^mon/misc\.sh$'
+match:
+  reason: 'workunit test mon/misc\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'TEST_mon_features:\s+return 1'
+  - file: teuthology.log
+    pattern: 'persistent \| length == 12'
+exclude:
+  - file: teuthology.log
+    pattern: '\[\[ "tentacle" == .*n.v.m.e.o.f'
+  - file: teuthology.log
+    pattern: '"cephx_auth_aes256k"'
+notes: |
+  TEST_mon_features in qa/standalone/mon/misc.sh hardcodes the expected count of
+  monitor persistent features. At misc.sh:284-285 it checks
+  '.monmap.features.persistent | length == 12'. When nvmeof_beacon_diff was added
+  as a new persistent monitor feature (by PR #65563), the list grew from 12 to 13
+  entries, causing this check to return false.
+  The fix (PR #67307 for main, backport PR #68065 for tentacle) updates the count
+  to 13. Confirmed by the jqfilter line showing 'length == 12' and jq returning false.
+  Tracker 76472 is the follow-up issue with the same title (copied from this one);
+  people also place jobs that lack the PR #67307 fix there, so it is listed in also.
+also:
+  - "76472"
+examples:
+  - lflores-2026-07-08_14:24:37-rados-wip-lflores-testing-2026-07-07-1045-tentacle-distro-default-trial/346141

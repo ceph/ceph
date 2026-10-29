@@ -1,0 +1,31 @@
+id: "80186"
+tracker: https://tracker.ceph.com/issues/80186
+title: "Error EINVAL: Unable to stop daemon mgr.trial152.ftosdf: ALERT: Cannot stop active Mgr daemon, Please switch active Mgrs with 'ceph mgr fail trial152.ftosdf'"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71831
+    branch: main
+    fixed_in: v21.3.0-3825-g23b9c78880
+tree: command/error
+facts:
+  task: '^cephadm\.shell$'
+  error: 'Cannot stop active Mgr daemon'
+match:
+  description: 'rmdir-reactivate'
+confirm:
+  - file: teuthology.log
+    pattern: 'host \S+, osd mgr\.\S+'
+  - file: teuthology.log
+    pattern: 'Error EINVAL: Unable to stop daemon mgr\.\S+: ALERT: Cannot stop active Mgr daemon'
+notes: |
+  The rados/cephadm/osds rmdir-reactivate test selects an OSD to stop and reactivate
+  using `ceph orch ps $HOST | grep osd | head -n 1 | awk '{print $1}'`.
+  When an active manager daemon running on the host has a randomly generated name
+  containing the substring "osd" (e.g. mgr.trial152.ftosdf), grep matches the mgr
+  daemon before any osd daemons. The test assigns the mgr daemon name to the OSD
+  variable and executes `ceph orch daemon stop mgr.<name>`, which fails with
+  "Error EINVAL: Unable to stop daemon mgr.<name>: ALERT: Cannot stop active Mgr
+  daemon, Please switch active Mgrs with 'ceph mgr fail <name>'".
+  Fixed in PR 71831 by passing `--daemon_type osd` to `ceph orch ps`.
+examples:
+  - yuriw-2026-09-01_15:07:31-rados-wip-yuri2-testing-20260901.132824-main-distro-default-trial/528493

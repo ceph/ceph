@@ -1,0 +1,26 @@
+run: skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial
+jobs:
+  '19850':
+    problem: '72945'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 9 jobs in 72945, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19851, skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19853, skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19859, skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19860, skanta-2026-01-27_07:02:07-rados-wip-bharath3-testing-2026-01-26-1323-distro-default-trial/19865.'
+    summary: 'The job failed on false-positive EC deep-scrub ''data digests are inconsistent'' errors (tracker 72945, fixed by PR #65623, not in this build); no record named it, so I add one that also lists the other jobs with the same error.'
+    status: fail
+    description: rados/thrash-erasure-code/{ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on fast/fast mon_election/connectivity msgr-failures/fastclose objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-2} onode-segment$/{none} write$/{random/{compr$/{no$/{no}} random}}}} rados recovery-overrides/{default} supported-random-distro$/{ubuntu_latest} thrashers/default thrashosds-health workloads/ec-radosbench}
+    reason: '"2026-01-27T22:12:35.384750+0000 osd.13 (osd.13) 6 : cluster [ERR] 3.es0 3:70015517:::benchmark_data_trial148_16735_object83006:headdata digests are inconsistent" in cluster log'
+  '19886':
+    problem: '52109'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'grafana.a never started (grafana-apiserver: invalid IP address: localhost), then grafana is not available; no test_list_enabled_module, so not 70669'
+    summary: duplicate 52109 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/centos_9.stream agent/on mon_election/connectivity task/test_cephadm}
+    reason: 'Command failed (workunit test cephadm/test_cephadm.sh) on trial151 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=58ab6e4054f08aaae01d34c1b74767c3b8f2e768 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_cephadm.sh'''
+  '19845':
+    problem: '52109'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'grafana.a never started (grafana-apiserver: invalid IP address: localhost), then grafana is not available; no test_list_enabled_module, so not 70669'
+    summary: duplicate 52109 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_22.04 agent/on mon_election/connectivity task/test_cephadm}
+    reason: 'Command failed (workunit test cephadm/test_cephadm.sh) on trial123 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=58ab6e4054f08aaae01d34c1b74767c3b8f2e768 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_cephadm.sh'''

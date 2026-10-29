@@ -1,0 +1,10 @@
+run: yuriw-2026-06-03_14:56:29-rados-wip-yuriw-testing-20260602.202207-squid-wip-yuri2-testing-20260602.202206-squid-distro-default-trial
+jobs:
+  '260414':
+    problem: '72312'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 3 jobs in 72312, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are yuriw-2026-06-22_18:46:50-rados-wip-yuri3-testing-20260622.144259-squid-distro-default-trial/306736, yuriw-2026-06-27_19:16:06-rados-squid-release-distro-default-trial/319803.'
+    summary: 'Job failed on the mon''s periodic ''Health detail: HEALTH_WARN Degraded data redundancy: N/M objects degraded'' [WRN] line, which the thrashosds-health ignorelist does not cover (tracker 72312); the tool called it new and no record existed.'
+    status: fail
+    description: rados/thrash-old-clients/{0-distro$/{centos_9.stream} 0-size-min-size-overrides/3-size-2-min-size 1-install/reef backoff/peering ceph clusters/{openstack three-plus-one} d-balancer/crush-compat mon_election/classic msgr-failures/fastclose rados thrashers/pggrow thrashosds-health workloads/radosbench}
+    reason: '"2026-06-03T21:40:00.000102+0000 mon.a (mon.0) 3585 : cluster [WRN] Health detail: HEALTH_WARN Degraded data redundancy: 54730/441165 objects degraded (12.406%), 17 pgs degraded, 1 pg undersized" in cluster log'

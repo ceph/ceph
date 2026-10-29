@@ -1,0 +1,6 @@
+run: vallariag-2026-03-04_09:03:27-rados:mgr-wip-tomer-revive-nvme-module-centos9-only-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+titles:
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)

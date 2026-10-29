@@ -1,0 +1,6 @@
+run: nmordech-2026-01-29_15:32:36-rados:mgr-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial
+signatures:
+  ? 'test/unittest | tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit#: tasks.ceph_test_case.TestTimeoutError: Timed out after #s and # retries'
+  : '74605': 1
+titles:
+  '74605': 'Rocky10 - ERROR: test_sql_autocommit1 (tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit1)'

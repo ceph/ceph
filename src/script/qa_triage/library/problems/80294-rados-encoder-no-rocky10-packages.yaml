@@ -1,0 +1,54 @@
+id: "80294"
+tracker: https://tracker.ceph.com/issues/80294
+title: "rados/encoder: no Rocky10 packages for older releases"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71558
+    branch: main
+    fixed_in: v21.3.0-3407-g02e275be0b
+tree: infra/build
+match:
+  description: 'rados/encoder'
+confirm:
+  - file: teuthology.log
+    pattern: 'VersionNotFoundError.*rocky%2F10.*ref=(?:quincy|reef|squid)'
+  - file: teuthology.log
+    pattern: 'description: rados/encoder/.*supported-random-distro/\{rocky_10\}|VersionNotFoundError.*rocky%2F10.*ref=quincy\b'
+  - file: teuthology.log
+    pattern: '^ {1,3}(?:suite_)?branch: (?!umbrella|tentacle-release|wip-\S+-tentacle|wip-\S+-\d{4}-\d{2}-\d{2}-\d{4}$)|VersionNotFoundError.*rocky%2F10.*ref=quincy\b'
+exclude:
+  - file: teuthology.log
+    pattern: '^ {1,3}(?:suite_)?branch: umbrella'
+notes: |
+  The rados/encoder matrix installs older releases before the branch under test
+  (on main: squid, and formerly reef; on tentacle: quincy first, then reef and squid),
+  but supported-random-distro can still give Rocky 10, either named as rocky_10 or as
+  rpm_latest resolving to Rocky 10.1. Rocky 10 is only supported from tentacle on, so
+  shaman has no Rocky 10 builds for the older releases and the first install task fails
+  with teuthology.exceptions.VersionNotFoundError (shaman search with
+  distros=rocky/10/x86_64 and ref=squid on main, ref=quincy on tentacle). Fixed by PR
+  #71558, which makes qa/suites/rados/encoder/0-start.yaml skip the tests when Rocky is
+  the distro; the umbrella backport is PR #71919 (tracker 80624). It differs from 75763,
+  whose cause was the rpm_latest distro resolving to Rocky 10.1 and whose fix (PR #68326)
+  removed rocky from the supported distros: a job of a main testing branch whose matrix
+  explicitly names rocky_10 after that fix is this problem. Runs of the umbrella branch,
+  and tentacle jobs that failed at reef or squid (testing branches and the tentacle-release
+  branch alike, such as the rocky_10 job that failed at ref=reef on tentacle-release), are
+  left to 75763, where they were settled before. Tentacle jobs fail at ref=quincy, which
+  75763 never claimed, and people place them here (the tracker lists tentacle testing-branch
+  jobs): a Rocky 10 VersionNotFoundError for ref=quincy confirms this record on any branch
+  but umbrella. The second and third confirm checks accept that line in place of the
+  explicit rocky_10 description and of a branch line that is none of umbrella, tentacle-release,
+  a wip-...-tentacle branch, or an older date-style testing branch.
+  Older testing branches named wip-...-YYYY-MM-DD-HHMM, with no -main or -tentacle suffix
+  (such as wip-bharath5-testing-2026-06-02-1032, June 2026), ran before this fix and
+  its matrix change; the tracker places their squid/reef failures in 75763, so the third
+  confirm check does not accept them.
+  People also place main testing-branch jobs of this kind in 75763 (the same cause: the
+  older release has no Rocky 10 build on shaman), so 75763 is listed in `also`.
+examples:
+  - skanta-2026-08-10_00:08:11-rados-wip-bharath10-testing-20260807.040605-main-distro-default-trial/449638
+  - lflores-2026-07-08_14:24:37-rados-wip-lflores-testing-2026-07-07-1045-tentacle-distro-default-trial/345958
+  - skanta-2026-07-23_08:31:58-rados-wip-bharath8-testing-20260721.232151-main-distro-default-trial/390227
+also:
+  - "75763"

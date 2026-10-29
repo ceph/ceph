@@ -1,0 +1,41 @@
+id: "74819"
+tracker: https://tracker.ceph.com/issues/74819
+title: "tasks.mgr.test_prometheus.TestPrometheus.test_urls - metrics url fail with 400"
+kind: test
+tree: test/unittest
+facts:
+  test: '^tasks\.mgr\.test_prometheus\.TestPrometheus\.test_urls$'
+  error: "Lists differ:.*'/metrics'"
+match:
+  reason: 'test_urls'
+confirm:
+  - file: teuthology.log
+    pattern: "AssertionError: Lists differ: \\['/metrics'\\] != \\[\\]"
+notes: |
+  rados/mgr tasks/4-units/prometheus runs qa/tasks/mgr/test_prometheus.py. test_urls
+  loads the prometheus module, finds its URI (which already ends in '/'), and requests
+  base_uri + '/' and base_uri + '/metrics', expecting HTTP 200. The second URL has a
+  double slash ('http://host:7789//metrics'). With the new CherryPyMgr server that
+  branch-of-the-day builds ran (PR #67227, the WSGI server it adds in
+  src/pybind/mgr/cherrypy_mgr.py), the double slash is not normalized and the server
+  answers 400 'Absolute URI not allowed if server is not a proxy.' (found by debugging
+  on tracker 74980; the test's log line is only '/metrics: 400 (50 bytes)'). The test
+  adds '/metrics' to its failures list and assertListEqual(['/metrics'], []) fails.
+  The fix was to adapt the test to strip the extra '/'. Seen only in the rocky10
+  branch-of-the-day runs from 2026-02-08 on (the first notes of this record blamed a
+  503 from PR #66571; the log lines of the 2026-02-17 and 2026-02-21 runs show a 400,
+  not a 503). Tracker 74980 (found as 'Port 7789 still in use, waiting...') is this
+  same problem.
+examples:
+  - nmordech-2026-02-09_08:34:53-rados-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/41298
+  - nmordech-2026-02-09_08:34:53-rados-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/41075
+  - yaarit-2026-02-08_02:23:05-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/39836
+  - yaarit-2026-02-08_02:25:21-rados-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial/39890
+  - yaarit-2026-02-10_02:32:59-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-09-1770676549-distro-default-trial/42040
+  - yaarit-2026-02-10_02:32:59-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-09-1770676549-distro-default-trial/42050
+  - nmordech-2026-02-17_05:44:40-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial/51650
+  - nmordech-2026-02-17_05:46:21-rados-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial/51710
+  - nmordech-2026-02-17_05:46:21-rados-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial/51932
+  - nmordech-2026-02-21_21:31:01-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial/62994
+also:
+  - "74980"

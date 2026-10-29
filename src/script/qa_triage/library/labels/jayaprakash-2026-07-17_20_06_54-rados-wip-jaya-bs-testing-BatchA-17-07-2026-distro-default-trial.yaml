@@ -1,0 +1,10 @@
+run: jayaprakash-2026-07-17_20:06:54-rados-wip-jaya-bs-testing-BatchA-17-07-2026-distro-default-trial
+jobs:
+  '374344':
+    problem: '78379'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 10 jobs that the tool placed in 75208 in 78379, this one among them.
+    summary: Job died in ansible.cephlab because trial062's NVMe drive is missing (tracker 78379, RMA), not the generic 75208 disk-count failure.
+    status: dead
+    description: rados/cephadm/workunits/{0-distro/ubuntu_24.04 agent/on mon_election/connectivity task/test_host_drain}
+    reason: '["Wanted 2 disks of ~1700 GB (rotational=False), but only matched 1: [''nvme2n1'']"]'

@@ -1,0 +1,9 @@
+run: nmordech-2026-03-17_06:15:36-rados-wip-rocky10-branch-of-the-day-2026-03-16-1773712510-distro-default-trial
+signatures:
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  workunit/standalone | osd/osd-recovery-prio.sh TEST_recovery_pool_priority:
+    '75488': 1
+titles:
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'

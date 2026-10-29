@@ -1,0 +1,27 @@
+id: "79133"
+tracker: https://tracker.ceph.com/issues/79133
+title: "DaemonServer::init: FAILED ceph_assert(r == 0)"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/70899
+    branch: main
+    fixed_in: v21.3.0-1839-gd7439cd845
+tree: crash/assert/specific
+facts:
+  source: '^mgr/DaemonServer\.cc$'
+  message: 'FAILED ceph_assert\(r == 0\)'
+  function: 'DaemonServer::init\('
+notes: |
+  ceph-mgr asserts in DaemonServer::init (src/mgr/DaemonServer.cc:282,
+  FAILED ceph_assert(r == 0), called from Mgr::init) as soon as it wins the
+  election and goes active. Two PRs merged into main each register a "heap"
+  admin socket command for the mgr: PR 69939 in MgrStandby::init (at process
+  start), PR 68958 in DaemonServer::init (on activation). The second
+  register_command() returns EEXIST and trips the assert right after it. With
+  the only mgr dead, the ceph task's 'ceph pg dump' (or any later mgr-backed
+  command) times out with status 124, so the job fails at cluster bring-up in
+  whatever suite it runs. Fixed by PR 70899 (mgr: drop the duplicate heap asok
+  command from DaemonServer), merged at v21.3.0-1839-gd7439cd845; builds from
+  between the two heap PRs and that fix hit it.
+examples:
+  - lflores-2026-08-06_20:16:33-rados:singleton-nomsgr-main-distro-default-trial/438132

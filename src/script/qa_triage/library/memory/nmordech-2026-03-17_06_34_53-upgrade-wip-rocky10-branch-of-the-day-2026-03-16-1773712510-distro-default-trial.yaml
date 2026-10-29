@@ -1,0 +1,21 @@
+run: nmordech-2026-03-17_06:34:53-upgrade-wip-rocky10-branch-of-the-day-2026-03-16-1773712510-distro-default-trial
+signatures:
+  cluster-log/health | WRN OSD_HOST_DOWN:
+    '75415': 1
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '65728': 1
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN # pool(s) full':
+    '75414': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:reef shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error EINVAL: invalid command'
+  : '75440': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:tentacle shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error EINVAL: Cannot set values for --daemon-types, --services or --hosts when upgrade already in progress.'
+  : '71631': 1
+  'hung/command | parallel: cephadm --image quay.ceph.io/ceph-ci/ceph:tentacle shell --fsid <uuid> -- ceph':
+    '75570': 1
+titles:
+  '65728': Daemon managed by cephadm in an unknown state (CEPHADM_FAILED_DAEMON)
+  '71631': Commands using Mgr Modules fail if run immediately post a mgr failover/ restart
+  '75414': 'upgrade: pool full warning variation'
+  '75415': 'upgrade: "Health check failed: 1 host (1 osds) down (OSD_HOST_DOWN)" in cluster log'
+  '75440': Upgrade test fails when cephadm tries to add an OSD with "--objectstore bluestore" setting
+  '75570': 'upgrade/stress-split: Thrasher fails to revive an OSD during upgrade test'

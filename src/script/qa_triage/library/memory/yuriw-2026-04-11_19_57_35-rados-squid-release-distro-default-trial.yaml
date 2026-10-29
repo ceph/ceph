@@ -1,0 +1,9 @@
+run: yuriw-2026-04-11_19:57:35-rados-squid-release-distro-default-trial
+signatures:
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  workunit/standalone | mon/mon-cluster-log.sh TEST_journald_cluster_log_level:
+    '71118': 1
+titles:
+  '71118': 'qa/standalone/mon/mon-cluster-log.sh: TEST_journald_cluster_log_level fails from insufficient permissions'
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'

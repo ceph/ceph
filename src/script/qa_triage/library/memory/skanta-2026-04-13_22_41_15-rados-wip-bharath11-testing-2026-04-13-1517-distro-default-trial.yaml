@@ -1,0 +1,9 @@
+run: skanta-2026-04-13_22:41:15-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial
+signatures:
+  workunit/unexplained | cephadm/test_cephadm.sh:
+    '76295': 1
+  ? workunit/unexplained/cephtool-hang/bad-caps-key-left-behind | cephtool/test.sh | cephtool/test.sh hung with AUTH_BAD_CAPS HEALTH_ERR | cephtool test_mon_caps left client.bug with empty mon caps (AUTH_BAD_CAPS)
+  : '72888': 1
+titles:
+  '72888': 'rados/singleton-bluestore: cephtool.sh workunit hangs on various tests'
+  '76295': Rocky10 - test_cephadm.sh failure caused by Cannot register NFS V3 on UDP

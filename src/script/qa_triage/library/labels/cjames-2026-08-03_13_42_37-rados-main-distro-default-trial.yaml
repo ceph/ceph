@@ -1,0 +1,10 @@
+run: cjames-2026-08-03_13:42:37-rados-main-distro-default-trial
+jobs:
+  '423783':
+    problem: '79140'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in no known problem in 79140, this one among them.
+    summary: osd.9, a replica, crashed with ceph_assert(!get_acting_recovery_backfill().empty()) while serving a balanced read of a dedup (manifest) object through maybe_handle_manifest_detail. That is tracker 79140, which had no record, so I added one.
+    status: fail
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{more-async-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-1} backoff/normal balance_reads/balance_reads_on ceph clusters/{fixed-4} crc-failures/default d-balancer/upmap-read mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{hybrid} base mem$/{normal-1} onode-segment$/{none} write$/{v1/{compr$/{yes$/{snappy}} v1}}}} rados supported-random-distro/{ubuntu_22.04} thrashers/pggrow_host thrashosds-health workloads/dedup-io-mixed}
+    reason: The WatchDog barked due to Daemon ceph.osd.10 has failed

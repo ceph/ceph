@@ -1,0 +1,50 @@
+run: skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial
+jobs:
+  '263736':
+    problem: '77416'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 77416, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: setUpClass failed when teuthology lost its SSH connection to trial169 due to a NIC hardware failure (tracker 77416)
+    status: fail
+    description: rados/mgr/{clusters/{2-node-mgr} debug/mgr mgr_ttl_cache/disable mon_election/classic random-objectstore$/{bluestore/{alloc$/{avl} base mem$/{normal-1} onode-segment$/{512K} write$/{v2/{compr$/{yes$/{snappy}} v2}}}} supported-random-distro/{rocky_10} tasks/{1-install 2-ceph 3-mgrmodules 4-units/devicehealth}}
+    reason: 'Test failure: setUpClass (tasks.mgr.test_devicehealth.TestDeviceHealth)'
+  '263741':
+    problem: '74708'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 3 jobs in 74708, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263893, skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263901.'
+    summary: EPEL repo metadata download failed (HTTP 404 on all mirrors) during 'sudo yum install -y kernel' in the kernel task; tracker 74708 tracks exactly this failure — needs a new record and a node at infra/packages.
+    status: fail
+    description: rados/verify/{ceph clusters/fixed-4 d-thrash/none mon_election/connectivity msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{stupid} base mem$/{low} onode-segment$/{none} write$/{v2/{compr$/{yes$/{zlib}} v2}}}} rados read-affinity/balance rpm_latest tasks/rados_api_tests validater/valgrind}
+    reason: 'Command failed on trial061 with status 1: ''sudo yum install -y kernel'''
+  '263690':
+    problem: '75763'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 75763, this one among them.
+    summary: Squid install on Rocky 10.1 finds no shaman build (rados/encoder, tracker 75763); 80294 wrongly also confirmed because its branch check accepted this older date-style testing branch.
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro/{rocky_10}}
+    reason: Failed to fetch package version from https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=default&distros=rocky%2F10%2Fx86_64&ref=squid
+  '263707':
+    problem: '77415'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 2 jobs in 77415, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263779.'
+    summary: CEPHADM_REFRESH_FAILED transient during OSD startup; no record existed — creating record 77415 (at the specific done path) and a node branch to identify it automatically
+    status: fail
+    description: rados/cephadm/smoke-singlehost/{0-random-distro$/{ubuntu_22.04} 1-start 2-services/basic 3-final}
+    reason: '"2026-06-04T11:10:39.657078+0000 mon.trial122 (mon.0) 393 : cluster [WRN] Health check failed: failed to probe daemons or devices (CEPHADM_REFRESH_FAILED)" in cluster log'
+  '263739':
+    problem: '78780'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 2 jobs in 77411, this one among them, and no record names it yet: the tool placed them in 78780. A record for it should place them all; others are skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263869.'
+    summary: Job 263739 is a duplicate of 78780; tracker 77411 describes the same failure by its symptoms, so 77411 is added to that record's `also`.
+    status: dead
+    description: rados/cephadm/osds/{0-distro/rocky_10 0-nvme-loop 1-start 2-ops/rmdir-reactivate}
+    reason: hit max job timeout
+  '263770':
+    problem: '76991'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 76991, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: ceph-volume lvm zap crashes with RuntimeError '/dev/mapper/ceph--… not found' while listing devices (tracker 76991); the tool called it new because no record named it.
+    status: fail
+    description: rados/cephadm/smoke/{0-distro/ubuntu_22.04 0-nvme-loop agent/on fixed-2 mon_election/connectivity start}
+    reason: 'Command failed on trial071 with status 1: ''sudo /home/ubuntu/cephtest/cephadm --image quay.ceph.io/ceph-ci/ceph:2ab72e59e1791d7fc11a15048f0a5382d932de15 ceph-volume -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring --fsid cd603d05-6008-11f1-9973-d404e6e7d460 -- lvm zap /dev/nvme3n1'''

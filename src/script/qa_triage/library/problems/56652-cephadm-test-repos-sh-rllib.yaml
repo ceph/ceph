@@ -1,0 +1,27 @@
+id: "56652"
+tracker: https://tracker.ceph.com/issues/56652
+title: "cephadm/test_repos.sh: rllib.error.HTTPError: HTTP Error 504: Gateway Timeout"
+kind: infra
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/47269
+    branch: main
+    fixed_in: v17.0.0-13853-gf1cbe5225ec
+tree: workunit/set-e/test-repos-add-repo-shaman-http-error
+facts:
+  script: '^cephadm/test_repos\.sh$'
+confirm:
+  - file: teuthology.log
+    pattern: 'HTTP Error \d+.*shaman\.ceph\.com'
+notes: |
+  cephadm add-repo --dev main contacted shaman.ceph.com to look up the dev repo
+  and received an HTTP error (typically 504 Gateway Timeout). This is a transient
+  infra problem with the shaman build-artifact server; re-running the job is the
+  usual remedy. The original 2022 report (56652) was for the master-vs-main naming
+  issue that also produced this traceback, fixed by PR 47269 (test_repos master ->
+  main). The current recurrences are genuine transient shaman unavailability.
+  People file these jobs in tracker 58224, which also covers the chacra variant
+  (at install time, tree infra/other).
+also:
+  - "58224"
+examples:
+  - yuriw-2026-07-28_17:11:12-rados-wip-yuri3-testing-20260728.135610-main-distro-default-trial/406311

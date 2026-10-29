@@ -1,0 +1,6 @@
+run: nmordech-2026-03-22_08:24:35-rados:mgr-wip-rocky10-branch-of-the-day-2026-03-22-1774160434-tentacle-distro-default-trial
+signatures:
+  'infra/other | ansible.cephlab: ["Wanted # disks of ~# GB (rotational=False), but only matched #: [''nvme#n#'']"]':
+    '75208': 1
+titles:
+  '75208': 'Rocky10, Centos9 - AnsibleFailedError: "Wanted 2 disks of type nvme1n1, but only matched 1"'

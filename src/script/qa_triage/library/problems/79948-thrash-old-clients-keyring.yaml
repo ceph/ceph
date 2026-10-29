@@ -1,0 +1,29 @@
+id: "79948"
+tracker: https://tracker.ceph.com/issues/79948
+title: "rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring"
+kind: test
+match:
+  description: 'rados/thrash-old-clients'
+  reason: 'ceph-authtool /etc/ceph/ceph\.keyring --import-keyring'
+confirm:
+  - file: teuthology.log
+    pattern: 'error reading file /etc/ceph/ceph\.keyring'
+  - file: teuthology.log
+    pattern: 'key = Ag[A-Za-z0-9+/]{40,}'
+notes: |
+  The cluster runs with client_key_type: aes, so the mons use the aes256k cipher and
+  the client.admin key in /etc/ceph/ceph.keyring is a type-2 key (base64 starting
+  'Ag', 32-byte key). The hosts of rados/thrash-old-clients have an old release
+  installed (1-install/reef, ceph-common 18.2.1), whose ceph-authtool cannot parse a
+  type-2 key. The workunit task runs 'ceph-authtool /etc/ceph/ceph.keyring
+  --import-keyring /etc/ceph/ceph.client.N.keyring' and it fails with 'error reading
+  file /etc/ceph/ceph.keyring', status 1. The 'current keyring file' dump that the
+  workunit task logs just before shows the 'key = Ag...' line. The same was seen in
+  upgrade-clients reef -> tentacle (keyring with a type-2 client.1 key, no ENOSPC/OOM).
+  The tracker issue is still open and has no fix; where the type-2 key should be
+  kept away from the old client is not decided.
+  Jobs with this cause are also placed in the QA run issue 79955 by reviewers.
+examples:
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631306
+also:
+  - "79955"

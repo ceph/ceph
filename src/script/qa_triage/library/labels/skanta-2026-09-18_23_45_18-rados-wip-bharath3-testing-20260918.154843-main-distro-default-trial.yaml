@@ -1,0 +1,26 @@
+run: skanta-2026-09-18_23:45:18-rados-wip-bharath3-testing-20260918.154843-main-distro-default-trial
+jobs:
+  '568120':
+    problem: '80415'
+    by: qa_triage (bob-analyst)
+    why: 'No record placed this job, and the tree explained it conclusively, so the tool calls it new: "ceph_abort_msg("Out of space (failsafe) processing push request")" in osd/ReplicatedBackend.cc names what went wrong. Nobody has looked for its cause. Find it, beyond the symptom where the tree stopped: read the logs around the failure, the daemons'' logs and the source. Search the tracker: if an issue describes this failure, add a record for it. If none does, leave "problem" null, and say in the summary what failed and why, for a person to file. If the explanation stops at a symptom, teach the tree the cause, with a learned node at "": it is asked after the tree''s answer, and answers done with the cause, or unknown to leave the explanation as it is.'
+    summary: 'osd.0 filled to 96% (failsafe full) because radosbench''s populate run ignored objectsize and wrote unbounded 4 MB objects, then aborted in ReplicatedBackend::_do_push; this is tracker #80415 (fixed in v21.3.0-3519, not in this build).'
+    status: dead
+    description: rados/singleton/{all/thrash-eio mon_election/connectivity msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{btree} base mem$/{low} onode-segment$/{512K-onoff} write$/{v2/{compr$/{no$/{no}} v2}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: hit max job timeout
+  '567985':
+    problem: '78294'
+    by: Claude Code for aainscow, as the reviewer
+    why: ZeroAndTruncateSameRequest/3 counter mismatch in rados/basic with msgr-failures/many (78294); it never ran mon/misc.sh (79943)
+    summary: duplicate 78294 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/basic/{ceph clusters/{fixed-2} mon_election/connectivity msgr-failures/many msgr/async-v1only objectstore/{bluestore/{alloc$/{avl} base mem$/{normal-2} onode-segment$/{1M} write$/{random/{compr$/{no$/{no}} random}}}} rados supported-random-distro/{centos_9.stream} tasks/rados_api_tests}
+    reason: 'Command failed (workunit test rados/test.sh) on trial034 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=896e58467f789f94b5833d386eb539382dfa04c1 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/test.sh'''
+  '568204':
+    problem: '75216'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 1 jobs that the tool placed in 80746 in 74794, this one among them.
+    summary: A pggrow_host wait_for_recovery timeout caused by unthrottled pg_num growth, not an OSD cephx lockout; it belongs in 75216 (74794 is also), not 80746.
+    status: fail
+    description: rados/thrash-erasure-code-isa/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{avl} base mem$/{low} onode-segment$/{none} write$/{v1/{compr$/{yes$/{lz4}} v1}}}} rados recovery-overrides/{more-async-partial-recovery} supported-random-distro/{ubuntu_24.04} thrashers/pggrow_host thrashosds-health workloads/ec-rados-plugin=isa-k=10-m=4}
+    reason: 'The WatchDog barked due to Thrasher OSDThrasher threw exception wait_for_recovery: failed before timeout expired'

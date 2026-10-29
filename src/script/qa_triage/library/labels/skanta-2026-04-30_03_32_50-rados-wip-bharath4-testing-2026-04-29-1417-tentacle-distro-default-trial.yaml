@@ -1,0 +1,10 @@
+run: skanta-2026-04-30_03:32:50-rados-wip-bharath4-testing-2026-04-29-1417-tentacle-distro-default-trial
+jobs:
+  '186841':
+    problem: '81629'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 4 jobs that the tool placed in no known problem in 75216, this one among them.
+    summary: 'ceph_test_rados hung and was killed by the watchdog: osd-dispatch-delay + bluestore-compression starved the OSD op queue; no -110 because this suite sets no osd op timeout; node and record 81629 updated for the no-110 variant'
+    status: fail
+    description: rados/thrash-erasure-code-crush-4-nodes/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{bitmap} base mem$/{normal-1} onode-segment$/{1M} write$/{random/{compr$/{yes$/{zlib}} random}}}} rados recovery-overrides/{more-async-recovery} supported-random-distro$/{ubuntu_latest} thrashers/mapgap thrashosds-health workloads/ec-rados-plugin=jerasure-k=2-m=2-crush}
+    reason: 'Command crashed: ''CEPH_CLIENT_ID=0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage ceph_test_rados --no-omap --ec-pool --max-ops 400000 --objects 1024 --max-in-flight 64 --size 4000000 --min-stride-size 400000 --max-stride-size 800000 --max-seconds 600 --op read 100 --op write 0 --op delete 50 --op snap_create 50 --op snap_remove 50 --op rollback 50 --op setattr 25 --op rmattr 25 --op copy_from 50 --op append 100 --pool unique_pool_0'''

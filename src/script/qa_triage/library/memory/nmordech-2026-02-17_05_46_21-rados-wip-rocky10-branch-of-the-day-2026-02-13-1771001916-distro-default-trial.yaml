@@ -1,0 +1,15 @@
+run: nmordech-2026-02-17_05:46:21-rados-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial
+signatures:
+  'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_urls: AssertionError: Lists differ: [''/metrics''] != []':
+    '74980': 2
+  timeout/unexplained | MaxWhileTries:
+    '74519': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+titles:
+  '74519': 'cephadm/osds: Error: statfs /etc/ceph/ceph.client.admin.keyring: no such file or directory'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '74980': Port 7789 still in use, waiting...

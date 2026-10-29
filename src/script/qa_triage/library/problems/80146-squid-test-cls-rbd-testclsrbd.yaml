@@ -1,0 +1,27 @@
+id: "80146"
+tracker: https://tracker.ceph.com/issues/80146
+title: "[Squid] test_cls_rbd: TestClsRbd.mirror fails during pool creation with unhandled error -5 (-EIO)"
+kind: test
+tree: crash/client/unexplained/old-client-aes256k-keyring
+confirm:
+  - file: teuthology.log
+    pattern: 'cluster\.connect failed with error -5'
+  - file: teuthology.log
+    pattern: 'auth_preferred_cipher\W+(name\W+)?aes256k'
+notes: |
+  In rados/thrash-old-clients the cluster is bootstrapped by cephadm with the aes256k cipher
+  (monmap auth_preferred_cipher aes256k from epoch 1) and the client.admin keyring holds an
+  aes256k key. The workloads/rbd_cls facet runs a bare 'exec: client.2: ceph_test_cls_rbd ...',
+  which sets no client id, so the Quincy (17.2.x) test binary connects as client.admin. Quincy's
+  CryptoHandler only knows the old aes type, so KeyRing::decode() throws malformed_input and
+  KeyRing::load() returns -EIO ('error parsing file'), which librados connect() returns as -5.
+  The gtest fails in SetUp at test_cls_rbd.cc:100 with 'cluster.connect failed with error -5' and
+  the test binary then fails, which teuthology reports as 'Command crashed'. The failure and the
+  crash are symptoms; the cause is the old client reading an aes256k keyring. Only squid shows it,
+  because main already runs the suite through the cls/test_cls_rbd.sh workunit (commit
+  26a632059434c2a90931bc485230d4d2fd4c30fd), which runs as client.2 with an aes key; squid lacks
+  that qa backport. The tracker first suspected transient connect failures from the injected
+  socket failures, which its later analysis ruled out. Same family as 79948 (ceph-authtool of an
+  old release cannot read an aes256k key), but there the failure is in ceph-authtool.
+examples:
+  - pdonnell-2026-08-27_01:45:31-rados-wip-pdonnell-testing-20260826.223123-squid-distro-default-trial/518763

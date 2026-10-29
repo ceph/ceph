@@ -1,0 +1,26 @@
+run: yuriw-2026-08-24_23:11:13-rados-wip-yuri2-testing-20260824.212845-main-distro-default-trial
+jobs:
+  '510403':
+    problem: '79946'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'rebuild-mondb: auth fails after the mondb rebuild, radosbench ''failed to fetch mon config'' (79946); no hang and no timeout, so not 77743'
+    summary: duplicate 79946 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/singleton/{all/rebuild-mondb mon_election/classic msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{hybrid} base mem$/{low} onode-segment$/{1M} write$/{random/{compr$/{yes$/{lz4}} random}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: 'Command failed on trial092 with status 1: "/bin/sh -c ''adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage rados --no-log-to-stderr --name=client.0 --pool=unique_pool_1 bench --concurrent-ios=16 --object-size=65536 --block-size=65536 30 write''"'
+  '510442':
+    problem: '79576'
+    by: Claude Code for aainscow, as the reviewer
+    why: '''PG 3.cs0 marked LAGGY'' with injected socket failures (79576); nothing of 79878''s MDS_ALL_DOWN'
+    summary: duplicate 79576 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/singleton/{all/ec-esb-fio mon_election/classic msgr-failures/many msgr/async objectstore/{bluestore/{alloc$/{btree} base mem$/{low} onode-segment$/{512K-onoff} write$/{v2/{compr$/{yes$/{snappy}} v2}}}} rados supported-random-distro/{rocky_10}}
+    reason: '"2026-08-25T04:54:43.595709+0000 osd.0 (osd.0) 3 : cluster [WRN] PG 3.cs0 marked LAGGY; acting [0,5,1]" in cluster log'
+  '510440':
+    problem: '79943'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'misc.sh:292 checks persistent features length == 14 with cephx_auth_aes256k present: 79943, as Laura Flores wrote on 74827 (comment 76); 74827 is the earlier nvmeof_beacon_diff count'
+    summary: duplicate 79943 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/standalone/{supported-random-distro/{ubuntu_24.04} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial105 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=cd75b262c68d349971d5240e0b024aa0e3823890 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''

@@ -1,0 +1,10 @@
+run: lflores-2026-05-29_18:58:15-rados-wip-bharath4-testing-2026-05-27-1003-distro-default-trial
+jobs:
+  '247285':
+    problem: '73278'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 28 jobs in 76497, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are jayaprakash-2026-06-05_10:50:55-rados-wip-jaya-bs-testing-03-06-2026-distro-default-trial/268262, lflores-2026-06-10_03:35:13-rados-wip-lflores-testing-3-2026-06-09-0950-distro-default-trial/282053, skanta-2026-05-07_14:11:34-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial/197878, skanta-2026-05-07_14:11:34-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial/197885, skanta-2026-05-07_14:11:34-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial/197891.'
+    summary: 'The job is a known problem, record 73278: the MDS evicted the leftover libcephfs session of the mgr that cephtool''s ''ceph mgr module enable foodne --force'' respawned. The record now also covers tracker 76497.'
+    status: fail
+    description: rados/singleton-bluestore/{all/cephtool mon_election/connectivity msgr-failures/none msgr/async-v1only objectstore/bluestore/{alloc$/{bitmap} base mem$/{low} onode-segment$/{1M} write$/{v1/{compr$/{no$/{no}} v1}}} rados supported-random-distro/{rpm_latest}}
+    reason: '"2026-05-29T19:32:30.575456+0000 mds.a (mds.0) 1 : cluster [WRN] evicting unresponsive client trial050:x (6491), after 301.449 seconds" in cluster log'

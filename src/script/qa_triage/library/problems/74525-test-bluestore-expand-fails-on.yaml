@@ -1,0 +1,30 @@
+id: "74525"
+tracker: https://tracker.ceph.com/issues/74525
+title: "TEST_bluestore_expand fails on \"free space added\" check (osd-bluefs-volume-ops.sh)"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67275
+    branch: main
+    fixed_in: v20.3.0-6061-g7b916eaf40
+tree: workunit/standalone
+facts:
+  script: '^osd/osd-bluefs-volume-ops\.sh$'
+  test: '^TEST_bluestore_expand$'
+match:
+  reason: 'osd/osd-bluefs-volume-ops\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: "TEST_bluestore_expand:\\s+echo 'free_space_added\\s+=\\s+-\\d+'"
+notes: |
+  In qa/standalone/osd/osd-bluefs-volume-ops.sh, TEST_bluestore_expand sets
+  an initial block size of 4GB (--bluestore_block_size=4294967296) and later
+  attempts to expand the block device with 'truncate $dir/0/block -s $requested_space'
+  using the same requested_space (4GB). As a result, no new space is added
+  (total_space_added = 0) while allocations during the test cause free space
+  to decrease, resulting in a negative free_space_added (e.g. -30253056).
+  The calculation 'let new_used_space=($total_space_added - $free_space_added)'
+  evaluates to a large positive value that exceeds the 128KB threshold, causing
+  the test to log 'free_space_added  = -...' and return 1 at line 485.
+  PR #67275 fixes this test issue.
+examples:
+  - jayaprakash-2026-02-06_12:54:34-rados-jaya-bs-testing-05-02-2026-distro-default-trial/38128

@@ -1,0 +1,31 @@
+id: "71506"
+tracker: https://tracker.ceph.com/issues/71506
+title: "cephadm/test_cephadm.sh: Unhandled exception from module 'dashboard' while running on mgr.y: Timeout('Port 8443 not free on ::.')"
+kind: product
+tree: cluster-log/message
+facts:
+  message: '^Unhandled exception from module ''dashboard'' while running on mgr\.\w+: Timeout\(''Port \d+ not free on'
+match:
+  reason: 'Unhandled exception from module ''dashboard''.*Port \d+ not free'
+confirm:
+  - file: teuthology.log
+    pattern: 'log \[ERR\] : Unhandled exception from module ''dashboard'' while running on mgr\.\w+: Timeout\(''Port \d+ not free on'
+  - file: teuthology.log
+    pattern: 'cherrypy\.process\.wspbus\.ChannelFailures: Timeout\(''Port \d+ not free on'
+notes: |
+  The dashboard module of a ceph-mgr fails in serve() when it calls cherrypy.engine.start():
+  the engine raises ChannelFailures: Timeout('Port N not free on <ip>.'), the mgr logs
+  "[ERR] Unhandled exception from module 'dashboard' while running on mgr.X" and the mon raises
+  MGR_MODULE_ERROR "Module 'dashboard' has failed: Timeout('Port N not free ...')". The job then
+  fails on that [ERR] line in the final cluster-log scan, whatever the workload was doing. The
+  port is one the same mgr process already holds: 8443/'::' in the original report
+  (test_cephadm.sh), 8765 (cephadm's service-discovery port, shown as *:9283,8765 in
+  'ceph orch ps') in the rados/upgrade/parallel job where mgr.y restarts on the new build. The
+  dashboard (module.py Module.serve) and cephadm's http_server.py both start the process-global
+  cherrypy.engine, so one module starting the engine would start the other's server too; that is
+  the likely cause, but it was not confirmed. The tracker has no fix.
+  Record 52109 keeps the test_cephadm.sh jobs whose workunit fails on the grafana invalid
+  IP address; those are reached through the workunit path of the tree, not this one. The
+  unit-test failures with the same dashboard error are in 75358 and 70669.
+examples:
+  - lflores-2026-01-23_19:07:45-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/15389

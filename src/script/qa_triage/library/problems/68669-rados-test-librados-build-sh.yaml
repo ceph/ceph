@@ -1,0 +1,25 @@
+id: "68669"
+tracker: https://tracker.ceph.com/issues/68669
+title: "rados/test_librados_build.sh: Makefile:1: *** missing separator"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69180
+    branch: main
+    fixed_in: v21.0.0-2014-g50dcf44af1
+tree: workunit/unexplained/test-librados-build-git-ceph-com-html
+facts:
+  script: '^rados/test_librados_build\.sh$'
+match:
+  reason: 'workunit test rados/test_librados_build\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'Makefile:\d+: \*\*\* missing separator'
+notes: |
+  test_librados_build.sh downloads example librados source files from git.ceph.com
+  using curl. The server intermittently returns HTML (e.g. a 504 gateway timeout
+  page) instead of the actual file content. When the downloaded Makefile is HTML,
+  `make all-system` fails with "Makefile:1: *** missing separator. Stop." because
+  HTML is not valid Makefile syntax. PR #69180 fixes this by switching the download
+  URL to GitHub's raw content CDN.
+examples:
+  - skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148464

@@ -1,0 +1,24 @@
+id: "77415"
+tracker: https://tracker.ceph.com/issues/77415
+title: "rados/cephadm fails with CEPHADM_REFRESH_FAILED"
+kind: product
+tree: cluster-log/health/cephadm-refresh-failed-transient
+facts:
+  check: '^CEPHADM_REFRESH_FAILED$'
+confirm:
+  - file: remote/*/log/*/ceph.log.gz
+    pattern: 'Health check cleared: CEPHADM_REFRESH_FAILED'
+notes: |
+  The cause: cephadm's _refresh_hosts_and_daemons (src/pybind/mgr/cephadm/serve.py) tries to
+  probe all daemons on a host; when a daemon (typically an OSD) is still starting up, the
+  probe fails and cephadm calls set_health_warning('CEPHADM_REFRESH_FAILED', 'failed to probe
+  daemons or devices', ...). The mon logs the warning to the cluster log. On the next cephadm
+  refresh cycle the daemon has come up and the warning is cleared. The whole event is
+  transient (typically clears within ~10 seconds), but the teardown cluster-log scan catches
+  the warning before it disappears, failing the job even though the cluster was healthy.
+  The tree node (cluster-log/health) confirms the warning cleared before returning done:
+  only jobs where it cleared reach the record's tree path, so jobs where the warning
+  persisted (a real failure) are not matched.
+examples:
+  - skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263707
+  - skanta-2026-06-04_09:53:35-rados-wip-bharath5-testing-2026-06-02-1032-distro-default-trial/263779

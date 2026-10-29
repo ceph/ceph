@@ -1,0 +1,10 @@
+run: nmordech-2026-03-17_06:34:53-upgrade-wip-rocky10-branch-of-the-day-2026-03-16-1773712510-distro-default-trial
+jobs:
+  '104134':
+    problem: '75570'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 14 jobs in 75570, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are ksirivad-2026-09-17_00:47:47-upgrade-wip-ksirivad-tentacle-revert-only-msgr-distro-default-trial/562050, lflores-2026-04-10_20:41:50-upgrade:reef-x-tentacle-distro-default-trial/144414, nmordech-2026-03-18_10:00:19-upgrade-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial/107624, nmordech-2026-03-18_10:00:19-upgrade-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial/107633, nmordech-2026-03-18_10:00:19-upgrade-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial/107641.'
+    summary: 'The thrasher could not revive osd.5 because systemd''s start limit was hit, and the job then hung until the max job timeout. This is tracker #75570, and no record named it.'
+    status: dead
+    description: upgrade/tentacle-x/stress-split/{0-distro/ubuntu_22.04 0-roles 1-start 2-first-half-tasks/radosbench 3-stress-tasks/{radosbench rbd-cls rbd-import-export rbd_api readwrite snaps-few-objects} 4-second-half-tasks/radosbench mon_election/classic overrides/ignorelist_health}
+    reason: hit max job timeout

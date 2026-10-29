@@ -1,0 +1,35 @@
+id: "74774"
+tracker: https://tracker.ceph.com/issues/74774
+title: "Multiple jobs running same host same time"
+kind: infra
+fixes:
+  - pr: https://github.com/ceph/paddles/pull/154
+    branch: main
+match:
+  reason: 'Error reimaging machines: Expected|Cannot change VG vg_nvme|dmsetup remove hit'
+confirm:
+  - file: '*.log'
+    pattern: 'Cannot change VG vg_nvme while PVs are missing|dmsetup remove hit "Device or resource busy"|Expected \S+ OS to be .+ but found'
+notes: |
+  Paddles had a race condition that allowed the same test machine to be locked
+  by two teuthology jobs at the same time. When a machine was reused without
+  proper cleanup, the previous job's NVMe LVM state (vg_nvme) was left behind,
+  causing ansible.cephlab to fail with LVM errors (missing PVs, failed logical
+  volume creation). Another symptom is the OS reimaging check failing with
+  "Expected <host>'s OS to be X but found Y" when the wrong OS image was
+  deployed due to concurrent reimaging. Fixed in paddles by
+  https://github.com/ceph/paddles/pull/154.
+  The reimaging symptom happens in the teuthology supervisor, before the job
+  starts, so the job is dead with no teuthology.log and the tree has no path
+  to hang the record on; the record therefore has no tree, and its confirm
+  check reads any top-level log (teuthology.log or supervisor.*.log). In
+  supervisor.*.log the cause shows as the RuntimeError "Expected trialNNN's OS
+  to be centos 9.stream but found rocky 10.1" followed by "Was going to unlock
+  trialNNN but it was locked by another job", naming the next job of the run,
+  which held the same machines.
+  A VersionNotFoundError in internal.check_packages does not belong here: it
+  means the build was not on shaman (infra/build), which has nothing to do
+  with the machines.
+examples:
+  - skanta-2026-09-20_02:51:43-rados-wip-bharath22-testing-20260920.002814-main-distro-default-trial/570051
+  - skanta-2026-08-10_00:08:11-rados-wip-bharath10-testing-20260807.040605-main-distro-default-trial/449635

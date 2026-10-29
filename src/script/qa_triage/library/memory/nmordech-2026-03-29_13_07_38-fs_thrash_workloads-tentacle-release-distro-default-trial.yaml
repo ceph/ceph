@@ -1,0 +1,6 @@
+run: nmordech-2026-03-29_13:07:38-fs:thrash:workloads-tentacle-release-distro-default-trial
+signatures:
+  crash/signal/backtrace | mon Segmentation fault in vtable for rocksdb::WriteBatch:
+    '75738': 1
+titles:
+  '75738': ceph-mon segfault (probably during shutdown)

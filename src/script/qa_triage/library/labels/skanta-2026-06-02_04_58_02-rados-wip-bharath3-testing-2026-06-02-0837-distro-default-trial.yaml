@@ -1,0 +1,42 @@
+run: skanta-2026-06-02_04:58:02-rados-wip-bharath3-testing-2026-06-02-0837-distro-default-trial
+jobs:
+  '253356':
+    problem: '77096'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 77096, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: OSD crashed when a stale RemoteReservationRejectedTooFull arrived in WaitLocalBackfillReserved; no record for tracker 77096 existed
+    status: fail
+    description: rados/thrash-erasure-code-isa/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-2} onode-segment$/{1M} write$/{v2/{compr$/{yes$/{zlib}} v2}}}} rados recovery-overrides/{more-active-recovery} supported-random-distro/{rocky_10} thrashers/careful_host thrashosds-health workloads/ec-rados-plugin=isa-k=8-m=6-technique=cauchy}
+    reason: The WatchDog barked due to Daemon ceph.osd.13 has failed
+  '253538':
+    problem: '79814'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 71344, this one among them, and no record names it yet: the tool placed them in 79814. A record for it should place them all; others are .'
+    summary: MON_NETSPLIT here is tracker 79814's dead peer that is never pinged again, not 71344's stale-connection rejection; the result was right, and 71344 is added to the 79814 record's `also`.
+    status: fail
+    description: rados/thrash-erasure-code/{ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on fast/fast mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{hybrid} base mem$/{low} onode-segment$/{256K} write$/{v1/{compr$/{yes$/{zlib}} v1}}}} rados recovery-overrides/{more-async-recovery} supported-random-distro/{ubuntu_22.04} thrashers/careful thrashosds-health workloads/ec-rados-plugin=clay-k=4-m=2}
+    reason: '"2026-06-02T07:57:10.481321+0000 mon.b (mon.1) 70 : cluster [WRN] Health check failed: 1 network partition detected (MON_NETSPLIT)" in cluster log'
+  '253496':
+    problem: '75360'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 2 jobs in 76471, this one among them, and no record names it yet: the tool placed them in 75360, no known problem. A record for it should place them all; others are skanta-2026-06-02_04:58:02-rados-wip-bharath3-testing-2026-06-02-0837-distro-default-trial/253529.'
+    summary: The tool put the job in the right record (75360, the github.com DNS failure), but people also place it in 76471, the same cause; add 76471 to that record's `also`.
+    status: fail
+    description: rados/singleton-nomsgr/{all/pool-access mon_election/classic rados supported-random-distro/{rocky_10}}
+    reason: 'Command failed on trial015 with status 128: ''rm -rf /home/ubuntu/cephtest/clone.client.0 && git clone https://github.com/ceph/ceph.git /home/ubuntu/cephtest/clone.client.0 && cd /home/ubuntu/cephtest/clone.client.0 && git checkout a8adeb5c2b3ea4e1c1e7a6ff9a158459fe9202a5'''
+  '253529':
+    problem: '76471'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 1 jobs that the tool placed in no known problem in 76471, this one among them.
+    summary: 'The workunit''s git clones of ceph-ci.git and ceph.git both failed with ''Could not resolve host: github.com'' (lab DNS, tracker 76471); the tool left it unexplained and had no record for it.'
+    status: fail
+    description: rados/upgrade/parallel/{0-random-distro$/{centos_9.stream} 0-start 1-tasks mon_election/connectivity overrides/{upgrade_ignorelist_health} upgrade-sequence workload/{ec-rados-default rados_api rados_loadgenbig rbd_import_export test_rbd_api test_rbd_python}}
+    reason: 'Command failed on trial004 with status 128: ''rm -rf /home/ubuntu/cephtest/clone.client.0 && git clone --depth 1 --branch squid https://github.com/ceph/ceph.git /home/ubuntu/cephtest/clone.client.0 && cd /home/ubuntu/cephtest/clone.client.0'''
+  '253591':
+    problem: '77248'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'add-repo --release quincy on noble: debian-quincy noble does not have a Release file; the job never reached the 17.2.6 (77130) step'
+    summary: duplicate 77248 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_24.04 agent/off mon_election/connectivity task/test_cephadm_repos}
+    reason: 'Command failed (workunit test cephadm/test_repos.sh) on trial068 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=a8adeb5c2b3ea4e1c1e7a6ff9a158459fe9202a5 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_repos.sh'''

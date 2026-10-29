@@ -1,0 +1,32 @@
+id: "77443"
+tracker: https://tracker.ceph.com/issues/77443
+title: "rados/singleton: Test related to recovery-preemption could not revive an osd that was brought down and ultimately timed out after ~6hrs."
+kind: product
+tree: hung/command/ceph-daemon-config-set-hang
+match:
+  reason: 'hit max job timeout'
+  description: 'onode-segment\$/\{512K-onoff\}'
+confirm:
+  - file: teuthology.log
+    pattern: 'ceph daemon osd\.\S+ config set'
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: 'No Valid allocation info on disk \(empty file\)'
+notes: |
+  In rados/singleton/all/recovery-preemption the ceph.restart task hard-kills (SIGKILL) and
+  restarts osd.1 with wait-for-up: false, then an exec task runs
+  "ceph daemon osd.$f config set ...". The killed OSD never saved its NCB allocator file,
+  so on restart BlueStore logs "No Valid allocation info on disk (empty file)" and "Run Full
+  Recovery from ONodes" and starts rebuilding the allocator by scanning every onode.
+  The OSD never finishes booting (no log_to_monitors / done with init after the restart; its
+  log stops at "fbmap_alloc ... shutdown"), so the ceph daemon config set for osd.1 blocks, and
+  teuthology is killed at the max job timeout. The admin socket client having no timeout
+  (77743, PR 69833) only makes the command hang forever instead of failing; the cause is the
+  wedged OSD in the mount-time allocator recovery.
+  77743 is the same failure, reported later from the client side, and people file these jobs
+  under either issue; hence `also`. The hang is not specific to one onode-segment size (the
+  tracker's first job ran 256K, and 396332 ran 1M). This record only claims the
+  onode-segment$/{512K-onoff} jobs, and the 77743 record claims the rest.
+examples:
+  - lflores-2026-07-17_23:28:16-rados-wip-lflores-testing-3-2026-07-17-1417-distro-default-trial/374729
+also:
+  - "77743"

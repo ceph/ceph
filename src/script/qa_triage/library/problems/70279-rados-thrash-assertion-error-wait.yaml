@@ -1,0 +1,25 @@
+id: "70279"
+tracker: https://tracker.ceph.com/issues/70279
+title: "rados/thrash: Assertion error: wait_for_recovery: failed before timeout expired due to \"undersized+peered\" pg"
+kind: product
+tree: command/unexplained/radosbench-undersized-peered
+facts:
+  command: '^rados .*bench'
+confirm:
+  - file: teuthology.log
+    pattern: 'AssertionError: wait_for_recovery: failed before timeout expired'
+  - file: teuthology.log
+    pattern: "'state': 'undersized\\+peered'"
+notes: |
+  In rados/thrash jobs with 0-size-min-size-overrides/2-size-2-min-size, PGs of a pool
+  can stay undersized+peered (size 2, min_size 2, one replica missing): they peer but
+  never go active, so they never recover. The OSD thrasher's wait_for_recovery then
+  fails with 'AssertionError: wait_for_recovery: failed before timeout expired', and the
+  teuthology.log lists the PGs 'is not active+clean' with state 'undersized+peered'.
+  Client ops to those PGs block until the client's rados osd op timeout, so a workload
+  can fail first as a symptom: here rados bench exits with status 1 and prints only
+  'error during benchmark: (110) Connection timed out'. The failed command and the
+  timeout are symptoms; the cause is the PGs that never became active, shown by the
+  wait_for_recovery assertion and the undersized+peered state.
+examples:
+  - skanta-2026-09-30_04:36:41-rados-wip-bharath14-testing-20260930.003013-main-distro-default-trial/593732

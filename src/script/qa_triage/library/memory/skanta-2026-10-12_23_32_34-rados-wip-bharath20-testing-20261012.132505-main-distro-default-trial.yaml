@@ -1,0 +1,44 @@
+run: skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial
+signatures:
+  ? 'cluster-log/health/discard-queue-overload | WRN BLOCK_DEVICE_DISCARD_QUEUE | BLOCK_DEVICE_DISCARD_QUEUE: discard queue overload'
+  : '79443': 1
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+  ? crash/assert/specific | osd osd/MissingLoc.h FAILED ceph_assert(# == "unexpected need for missing item") in void MissingLoc::add_active_missing(const pg_missing_t&)
+  : '73249': 1
+  ? 'crash/client/ceph_test_rados/dispatch-delay-op-timeout | ceph_test_rados: /ceph/rpmbuild/BUILD/ceph-<pg>.#-#-gf#c#d#/src/test/osd/RadosModel.h: #: ceph_abort_msg("abort() called") | ceph_test_rados: -# with osd dispatch delay injection and compression'
+  : '81135': 1
+  ? 'crash/client/ceph_test_rados/dispatch-delay-op-timeout | ceph_test_rados: Assertion details: r = -# | ceph_test_rados: -# with osd dispatch delay injection and compression'
+  : '81135': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '81857': 2
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  timeout/unexplained | wait_until_healthy:
+    '77110': 1
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 3
+  ? 'workunit/gtest/shard-bounced-direct-read | rados/test.sh LibRadosIoECPPParamCombination/LibRadosIoECPP.ZeroAndTruncateSameRequest/#, | LibRadosIoECPP: op_reply count off after a shard bounced a direct read'
+  : '80986': 1
+  ? 'workunit/set-e | mon/mon-stretch-mode-#-mons-#-osds.sh: ceph mon enable_stretch_mode e stretch_rule datacenter: Error EINVAL: stretch mode is already engaged'
+  : '81136': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/mon-bind.sh TEST_mon_client_connect:
+    '80756': 1
+  ? workunit/unexplained/cephtool-hang/bad-caps-key-left-behind | cephtool/test.sh | cephtool/test.sh hung with AUTH_BAD_CAPS HEALTH_ERR | cephtool test_mon_caps left client.bug with empty mon caps (AUTH_BAD_CAPS)
+  : '72888': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '72888': 'rados/singleton-bluestore: cephtool.sh workunit hangs on various tests'
+  '73249': 'osd/MissingLoc.h: FAILED ceph_assert(0 == "unexpected need for missing item")'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '77110': 'rados/cephadm: wait_until_healthy times out due to CEPHADM_STRAY_DAEMON HEALTH_WARN'
+  '79443': 'Health check failed: 1 OSD(s) experiencing slow discard operations (BLOCK_DEVICE_DISCARD_QUEUE)'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'
+  '80756': 'qa/standalone/mon/mon-bind.sh: TEST_mon_client_connect fails from error pinging monitor'
+  '80986': 'LibRadosIoECPP test failure: Perf counter ''objecter.op_reply'' has incorrect value after operate()'
+  '81135': ceph_test_rados workload aborts on copy_from, returning -ETIMEDOUT on EC pool
+  '81136': 'mon/mon-stretch-mode-5-mons-8-osds.sh: Error EINVAL: stretch mode is already engaged'
+  '81857': 'qa/mgr/dashboard: test_list_enabled_module times out because the dashboard restarts on the default port 8443 instead of the assigned 7789'

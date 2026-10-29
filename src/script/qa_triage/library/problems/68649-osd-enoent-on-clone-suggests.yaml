@@ -1,0 +1,44 @@
+id: "68649"
+tracker: https://tracker.ceph.com/issues/68649
+title: "osd: ENOENT on clone suggests osd bug"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71525
+    branch: main
+    fixed_in: v21.3.0-3159-gadf3339fa6
+tree: crash/abort/bluestore-error/unexplained/enoent-on-object-removed-as-divergent
+facts:
+  error: '^-?2$'
+notes: |
+  An OSD aborts with ceph_abort_msg("unexpected error") in
+  BlueStore::_txc_add_transaction after "_txc_add_transaction error (2) No such
+  file or directory not handled on operation N". It was sent a write (here a
+  snap-trim setattr of a clone, via ECBackend::handle_sub_write) for an object
+  its shard no longer has.
+  The cause (Alex Ainscow, tracker 78658 and PR 71525): the shard had a divergent
+  log entry for the object that could not be rolled back.
+  _merge_object_divergent_entries logged "cannot roll back, removing and adding
+  to missing", deleted the object, and left the shard's log empty, with the object
+  missing. Then either proc_replica_log rewound the log to empty, or a PG split
+  gave the child an empty log, and recovery had not finished.
+  PGLog::reset_complete_to returned early on an empty log, so last_complete stayed
+  equal to last_update and has_missing() said false. The primary's GetMissing
+  took the identical-log fast path, dropped the shard's missing set, and activated
+  it as complete. The next write to the object was sent to the shard as if it had
+  the object, and BlueStore hit ENOENT and aborted.
+  In the logs: the crashing OSD's log has the divergent removal of the same object
+  (hoid without the shard prefix) shortly before the ENOENT, and the PG shows m=1
+  while the primary counts it as not missing. The tree's node at
+  crash/abort/bluestore-error/unexplained finds the unhandled-error line, the
+  object from the "op N got ENOENT on" line just before it, and the divergent
+  removal of that object. That chain is the cause, so the record needs no
+  confirm checks.
+  The fix is PR 71525 (osd/PGLog: lower last_complete in reset_complete_to on an
+  empty log), in v21.3.0-3159-gadf3339fa6; PR 71526 is a recreate test. The
+  original 2024 report was an ENOENT on a clone, from OSD::dispatch_context.
+  Tracker 78658, for the 2026 EC (ec_optimizations, k=8 m=6) recreate, is closed
+  as a duplicate of this issue.
+examples:
+  - lflores-2026-07-17_23:28:16-rados-wip-lflores-testing-3-2026-07-17-1417-distro-default-trial/374634
+also:
+  - "78658"

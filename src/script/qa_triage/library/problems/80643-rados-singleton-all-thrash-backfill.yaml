@@ -1,0 +1,33 @@
+id: "80643"
+tracker: https://tracker.ceph.com/issues/80643
+title: "rados/singleton/{all/thrash-backfill-full: pools reached nearfull (POOL_NEARFULL)"
+kind: test
+tree: cluster-log/health
+facts:
+  check: 'POOL_NEARFULL$'
+match:
+  description: 'thrash-backfill-full'
+  reason: 'POOL_NEARFULL'
+confirm:
+  - file: teuthology.log
+    pattern: 'Health check failed: \d+ pool\(s\) nearfull \(POOL_NEARFULL\)'
+notes: |
+  The rados/singleton/all/thrash-backfill-full test runs thrashosds (chance_test_backfill_full)
+  together with a long radosbench workload (type: rand, objectsize: 1048576). The mon marks the
+  pools nearfull ('encode_pending marking pool ... as nearfull') and logs '[WRN] Health check
+  failed: 2 pool(s) nearfull (POOL_NEARFULL)'. The test's ceph log-ignorelist has
+  \(POOL_BACKFILLFULL\) and \(OSD_ but not POOL_NEARFULL, so the teardown cluster-log scan fails
+  the job. The thrasher's test_backfill_full only injects 'backfillfull' (ignored) and resets it
+  to 'none', so it does not cause the nearfull. The usage is real: the OSDs hold far more data
+  than intended (e.g. '107 GiB data, 307 GiB used' of 450 GiB with one of 6 OSDs out), and an
+  OSD sends osd_full(nearfull) to the mon. The likely cause is the same as tracker 74518: for a
+  rand/seq run, qa/tasks/radosbench.py (before PR 71833) does a 60 s 'write --no-cleanup'
+  populate run without --object-size or an object cap, so rados bench writes default 4 MB
+  objects (the read run reports 'Object size: 4194304' despite objectsize: 1048576). The
+  populate command itself is not visible when teuthology.log is truncated. Reviewers place these
+  jobs in 74518 too, so it is listed in `also`. This is a test/workload problem, not a crash.
+examples:
+  - skanta-2026-09-06_15:27:24-rados-wip-bharath4-testing-20260906.123456-main-distro-default-trial/541271
+  - skanta-2026-08-25_00:08:14-rados-wip-bharath11-testing-20260824.222329-main-distro-default-trial/510670
+also:
+  - "74518"

@@ -1,0 +1,4 @@
+about: recovery and backfill operations that started and never finished, by PG, in the OSDs' logs
+run: find_hung_recovery
+files: remote/*/log/ceph-osd.*.log.gz
+pattern: '(recovery|backfill)\s(starts|started|resuming|complete|finished|done)|continue_recovery_op'

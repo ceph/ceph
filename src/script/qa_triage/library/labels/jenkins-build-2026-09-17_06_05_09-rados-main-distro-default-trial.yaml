@@ -1,0 +1,18 @@
+run: jenkins-build-2026-09-17_06:05:09-rados-main-distro-default-trial
+jobs:
+  '563110':
+    problem: '76298'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 3 jobs that the tool placed in no known problem in 76298, this one among them.
+    summary: 'OSDThrasher test_pool_min_size: after killing osd.4 of a k=2,m=1 EC PG, PG 1.3 went down and stayed down through all 5 ''check for active or peered'' tries, so the watchdog barked: tracker 76298, which had no record; added it and taught timeout/unexplained.'
+    status: fail
+    description: rados/thrash-erasure-code/{ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_off fast/fast mon_election/classic msgr-failures/fastclose objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-1} onode-segment$/{256K} write$/{v1/{compr$/{no$/{no}} v1}}}} rados recovery-overrides/{more-async-recovery} supported-random-distro/{rocky_10} thrashers/minsize_recovery thrashosds-health workloads/ec-small-objects-fast-read}
+    reason: The WatchDog barked due to Thrasher OSDThrasher threw exception 'check for active or peered' reached maximum tries (5) after waiting for 125 seconds
+  '563205':
+    problem: '74518'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 6 jobs that the tool placed in no known problem in 74518, this one among them.
+    summary: The radosbench populate run, which ignores objectsize and has no object cap, wrote ~124 GB of 4 MB objects in 60 s, so an OSD went nearfull (OSD_NEARFULL) and the cluster-log scan failed the job. This is tracker 74518, with the same cause as 80415. No record covered it, so the tool called the job new. The tree now finds the cause and a new 74518 record hangs on that branch.
+    status: fail
+    description: rados/singleton/{all/random-eio mon_election/classic msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-1} onode-segment$/{512K-onoff} write$/{v1/{compr$/{no$/{no}} v1}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: '"2026-09-17T08:16:32.732300+0000 mon.a (mon.0) 173 : cluster [WRN] Health check failed: 1 nearfull osd(s) (OSD_NEARFULL)" in cluster log'

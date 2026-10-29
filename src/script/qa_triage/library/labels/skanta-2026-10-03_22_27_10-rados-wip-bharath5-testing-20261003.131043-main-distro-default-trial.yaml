@@ -1,0 +1,10 @@
+run: skanta-2026-10-03_22:27:10-rados-wip-bharath5-testing-20261003.131043-main-distro-default-trial
+jobs:
+  '605162':
+    problem: '72888'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-72888.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: Right record (72888), but its notes and confirm checks stop at the symptom; the cause is test_mon_caps leaving a bad-caps client.bug key behind (PR 72164, open).
+    status: fail
+    description: rados/singleton-bluestore/{all/cephtool mon_election/connectivity msgr-failures/many msgr/async-v1only objectstore/bluestore/{alloc$/{hybrid} base mem$/{normal-1} onode-segment$/{512K} write$/{random/{compr$/{no$/{no}} random}}} rados supported-random-distro/{rocky_10}}
+    reason: 'Command failed (workunit test cephtool/test.sh) on trial104 with status 124: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=738c1280e2449069f3272872fab60ec5e7eebc93 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephtool/test.sh'''

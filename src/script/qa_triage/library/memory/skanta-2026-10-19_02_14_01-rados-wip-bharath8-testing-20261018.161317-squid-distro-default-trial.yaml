@@ -1,0 +1,27 @@
+run: skanta-2026-10-19_02:14:01-rados-wip-bharath8-testing-20261018.161317-squid-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'command/unexplained/not-found | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: # | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found'
+  : '79571': 1
+  ? crash/signal/backtrace | mon Segmentation fault in AuthServiceHandler::start_session(EntityName const&, unsigned long, bool, ceph::buffer::v#_#_#::list*, AuthCapsInfo*) < Monitor::handle_auth_request(Connection*, AuthConnectionMeta*, bool, unsigned int, ceph::buffer::v#_#_#::list const&, ceph::buffer::v#_#_#::list*) < ProtocolV#::_handle_auth_request(ceph::buffer::v#_#_#::list&, bool)
+  : '78378': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '79943': 1
+  workunit/standalone | osd/osd-recovery-prio.sh TEST_recovery_pool_priority:
+    '75488': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '78378': 'EC thrash test: 1 pg recovery_unfound'
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79943': qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of "cephx_auth_aes256k"
+  '79946': After rebuilding the mondb, authentication starts failing

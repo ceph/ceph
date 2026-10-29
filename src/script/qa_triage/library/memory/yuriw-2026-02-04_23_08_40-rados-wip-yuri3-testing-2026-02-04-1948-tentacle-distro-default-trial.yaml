@@ -1,0 +1,24 @@
+run: yuriw-2026-02-04_23:08:40-rados-wip-yuri3-testing-2026-02-04-1948-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN MON_NETSPLIT:
+    '71344': 1
+  cluster-log/health | WRN POOL_NEARFULL:
+    '74518': 1
+  ? cluster-log/message/backfill-reject-injected | WRN mon pg <pg> is active+remapped+backfill_toofull, acting [#,#,#] | PG backfill_toofull from injected backfill reservation rejection
+  : '70716': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  other | <fail with no reason>:
+    '71005': 1
+  'test/unittest | tasks.mgr.test_progress.TestProgress.test_osd_came_back: IndexError: list index out of range':
+    '70320': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '70320': test_osd_came_back fails when test does not detect that osd.0 is back in
+  '70716': 'rados/thrash-old-clients: "pg backfill_toofull" warning in cluster log'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '74518': 'rados/perf: pools reached nearfull (POOL_NEARFULL)'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'

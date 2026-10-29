@@ -1,0 +1,43 @@
+id: "71816"
+tracker: https://tracker.ceph.com/issues/71816
+title: "Failed to write to /dev/nvme-fabrics: Invalid argument"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71971
+    branch: main
+    fixed_in: v21.3.0-3602-g72a2ef744c
+tree: infra/other/nvme-cli-host-identity
+facts:
+  task: '^nvme_loop$'
+confirm:
+  - file: teuthology.log
+    pattern: "nvme connect -t loop -n \\S+ -q hostnqn"
+  - file: teuthology.log
+    pattern: "Failed to write to /dev/nvme-fabrics: Invalid argument"
+exclude:
+  - file: teuthology.log
+    pattern: "nvme list -o json command failed, retrying\\.\\.\\."
+notes: |
+  The nvme_loop qa task (qa/tasks/nvme_loop.py) attaches the loop targets with
+  'sudo nvme connect -t loop -n <lv> -q hostnqn', where 'hostnqn' is a literal
+  placeholder, not a real NQN. On newer nvme-cli (e.g. Rocky 10, Ubuntu 24.04) the host
+  identity is inconsistent: the kernel logs 'nvme_fabrics: found same hostid
+  ... but different hostnqn hostnqn' and rejects the write to /dev/nvme-fabrics
+  with 'Failed to write to /dev/nvme-fabrics: Invalid argument' (status 234).
+  In older task versions this fails on the single connect attempt; in later versions
+  the task retries without '-q', but nvme-cli then injects its own HostNQN/HostID pair,
+  which is also inconsistent.
+  PR 71971 (merged, fixed in v21.3.0-3602-g72a2ef744c) stopped using
+  nvme connect and writes 'nqn=<subsystem>,transport=loop' straight to
+  /dev/nvme-fabrics, so no host identity is passed. The confirm checks need the
+  connect with the placeholder '-q hostnqn' and the Invalid argument error.
+  The exclude prevents matching jobs where 'nvme list -o json' is what fails
+  (tracker 77106): in that scenario the connects succeed and the list loop runs,
+  logging 'nvme list -o json command failed, retrying...'; in a true 71816
+  failure the connect fails and the list loop never runs, so that message never
+  appears.
+examples:
+  - skanta-2026-09-20_02:51:43-rados-wip-bharath22-testing-20260920.002814-main-distro-default-trial/570117
+  - nmordech-2026-01-26_18:32:32-rados:cephadm-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/18789
+also:
+  - "73823"

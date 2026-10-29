@@ -1,0 +1,55 @@
+run: skanta-2026-06-02_04:58:02-rados-wip-bharath3-testing-2026-06-02-0837-distro-default-trial
+signatures:
+  ? 'cluster-log/health/dead-ping-not-retried | WRN MON_NETSPLIT | MON_NETSPLIT: mon ping to dead peer not retried after reconnect'
+  : '71344': 1
+  'command/unexplained | rm -rf clone.client.# && git clone --depth #: #':
+    '76471': 1
+  ? 'command/unexplained/git-clone-ci-dns-fallback-missing-tree | rm -rf clone.client.# && git clone https://github.com/ceph/ceph.git clone.client.#: # | git clone ceph-ci: Could not resolve host: github.com, fallback ceph.git missing tree'
+  : '76471': 1
+  ? 'crash/abort/specific/remote-reservation-rejected-too-full | osd osd/PeeringState.cc ceph_abort_msg("we got a bad state machine event") in PeeringState::Crashed::Crashed(boost::statechart::state<PeeringState::Crashed, PeeringState::PeeringMachine>::my_context) | PeeringState::Crashed: RemoteReservationRejectedTooFull in WaitLocalBackfillReserved'
+  : '77096': 1
+  ? 'hung/command | cephadm.shell: ceph cephadm osd activate $HOST; while ! ceph orch ps | grep $OSD | grep running ; do sleep # ; done'
+  : '76979': 2
+  infra/build | build:
+    '59193': 1
+  'infra/other | pexec: expected valgrind issues and found none':
+    '76473': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 2
+  'timeout/slow-ops | snap_trimming: slow ops':
+    '68960': 1
+  timeout/unexplained | wait_until_healthy:
+    '77110': 1
+  ? 'workunit/set-e | cephadm/test_cephadm.sh: /usr/sbin/cephadm --image quay.ceph.io/ceph-ci/ceph:main logs --fsid <uuid> --name nfs.a: Jun # #:#:# <host> bash[#]: #/#/# #:#:# : epoch <sha> : <host> : ganesha.nfsd-#[main] main :MAIN :EVENT :ganesha.nfsd Starting: Ganesha Version <pg>'
+  : '75358': 2
+  'workunit/set-e | mon/pg_autoscaler.sh: echo failed: failed':
+    '76980': 1
+  'workunit/set-e | mon/pg_autoscaler.sh: return #: failed':
+    '76980': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+  workunit/standalone | osd/osd-recovery-prio.sh TEST_recovery_pool_priority:
+    '77113': 1
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '76297': 3
+  ? 'workunit/unexplained/test-repos-release-file-missing | cephadm/test_repos.sh | test_repos.sh: download.ceph.com apt repo has no Release file'
+  : '77130': 1
+titles:
+  '59193': '"Failed to fetch package version from https://shaman.ceph.com/api/search ..."'
+  '68960': 'ec-pool-snaps-few-objects-overwrites: failed to complete snap trimming before timeout'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76297': test_iscsi_container - cephadm/test_iscsi_setup.sh fails on sudo ls /dev/disk/by-path
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76471': 'Could not resolve host: github.com'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '76473': 'rados/valgrind-leaks: expected valgrind issues and found none'
+  '76979': 'cephadm: Failure to re-authenticate an osd'
+  '76980': 'qa/workunits/mon/pg_autoscaler.sh: autoscaler test fails when pool does not reach target PG number in time'
+  '77096': 'RemoteReservationRejectedTooFull in state WaitLocalBackfillReserved causes src/osd/PeeringState.cc: 5264: ceph_abort_msg("we got a bad state machine event")'
+  '77110': 'rados/cephadm: wait_until_healthy times out due to CEPHADM_STRAY_DAEMON HEALTH_WARN'
+  '77113': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_priority: ''Recovery never started on both PGs'''
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'

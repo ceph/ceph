@@ -1,0 +1,10 @@
+run: nmordech-2026-01-26_18:32:32-rados:cephadm-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial
+jobs:
+  '18789':
+    problem: '71816'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 73823, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are nmordech-2026-01-26_18:32:32-rados:cephadm-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/18791, nmordech-2026-01-26_18:32:32-rados:cephadm-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/18792, nmordech-2026-01-26_18:32:32-rados:cephadm-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/18796.'
+    summary: nvme_loop task failed connecting NVMe over Fabrics loop target with Invalid argument (status 234) on Rocky 10
+    status: fail
+    description: rados:cephadm/osds/{0-distro/rocky_10 0-nvme-loop 1-start 2-ops/rmdir-reactivate}
+    reason: 'Command failed on trial124 with status 234: ''sudo mkdir -p /sys/kernel/config/nvmet/subsystems/lv_1 && echo 1 | sudo tee /sys/kernel/config/nvmet/subsystems/lv_1/attr_allow_any_host && sudo mkdir -p /sys/kernel/config/nvmet/subsystems/lv_1/namespaces/1 && echo -n /dev/vg_nvme/lv_1 | sudo tee /sys/kernel/config/nvmet/subsystems/lv_1/namespaces/1/device_path && echo 1 | sudo tee /sys/kernel/config/nvmet/subsystems/lv_1/namespaces/1/enable && sudo ln -s /sys/kernel/config/nvmet/subsystems/lv_1 /sys/kernel/config/nvmet/ports/1/subsystems/lv_1 && sudo nvme connect -t loop -n lv_1 -q hostnqn'''

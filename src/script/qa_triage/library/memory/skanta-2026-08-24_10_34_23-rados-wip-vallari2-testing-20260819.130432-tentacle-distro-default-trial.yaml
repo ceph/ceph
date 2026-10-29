@@ -1,0 +1,39 @@
+run: skanta-2026-08-24_10:34:23-rados-wip-vallari2-testing-20260819.130432-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN MON_NETSPLIT:
+    '71344': 1
+  cluster-log/health | WRN POOL_NEARFULL:
+    '74518': 1
+  'command/timed-out | ceph pg dump: timed out':
+    '76298': 1
+  'hung/command | rados: ceph tell mon.c sync_force --yes-i-really-mean-it':
+    '77809': 1
+  'test/unittest | tasks.mgr.test_progress.TestProgress.test_osd_came_back: IndexError: list index out of range':
+    '70320': 1
+  'valgrind/InvalidRead | valgrind error: InvalidRead UnknownInlinedFun UnknownInlinedFun AsyncConnection::mark_down()':
+    '75133': 1
+  'workunit/set-e | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release <pg>.#: Traceback (most recent call last):':
+    '77130': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '75406': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | test_readable.py: ceph-dencoder subprocess error'
+  : '76982': 1
+titles:
+  '70320': test_osd_came_back fails when test does not detect that osd.0 is back in
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '74518': 'rados/perf: pools reached nearfull (POOL_NEARFULL)'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '75133': 'osd: Valgrind InvalidRead in AsyncConnection::mark_down() during MonClient destructor at shutdown'
+  '75406': 'qa/standalone/ceph-helpers: is_pg_clean hang after osd teardown'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '76298': rados/thrash-erasure-code failure - not all PGs are active or peered
+  '76982': 'rados/encoder: multiple decoder errors'
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '77809': daemon_watchdog - After BARK - one of the daemon show "No such daemon running" and hang for ~6hr

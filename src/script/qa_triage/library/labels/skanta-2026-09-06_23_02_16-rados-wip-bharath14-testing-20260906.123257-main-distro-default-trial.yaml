@@ -1,0 +1,18 @@
+run: skanta-2026-09-06_23:02:16-rados-wip-bharath14-testing-20260906.123257-main-distro-default-trial
+jobs:
+  '541453':
+    problem: '68960'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 68960, but the tool said new (explain -> prefilter -> explained -> agent -> verify-quotes), unsure, after its judge (bob) said duplicate 74794. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 68960 by itself, with no judge.
+    summary: 'snap trimming never finished within 600 s in rados/thrash pool-snaps-few-objects with morepggrow and osd-dispatch-delay: tracker 68960 (also logged as 80190), not 74794'
+    status: fail
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{more-async-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-3} backoff/normal ceph clusters/{fixed-4} crc-failures/default d-balancer/crush-compat mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{512K-onoff} write$/{random/{compr$/{yes$/{zstd}} random}}}} rados supported-random-distro/{centos_9.stream} thrashers/morepggrow thrashosds-health workloads/pool-snaps-few-objects}
+    reason: failed to complete snap trimming before timeout
+  '541464':
+    problem: '79943'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'misc.sh:292 checks persistent features length == 14 with cephx_auth_aes256k present: 79943, as Laura Flores wrote on 74827 (comment 76); 74827 is the earlier nvmeof_beacon_diff count'
+    summary: duplicate 79943 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/standalone/{supported-random-distro/{centos_9.stream} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial143 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=38dc193c5baaf0fd2b1e1f27753f6b47d2c5c012 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''

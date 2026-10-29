@@ -1,0 +1,15 @@
+run: jayaprakash-2026-10-08_14:59:53-rados-wip-bs-reshuffle-nlc-08-10-2026-distro-default-trial
+signatures:
+  ? 'cluster-log/message/laggy-socket-failures | WRN osd PG <pg> marked LAGGY; acting [#,#,#] | PG marked LAGGY: read lease expired under injected socket failures'
+  : '79576': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '81857': 1
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 1
+  workunit/standalone | mon/mon-bind.sh TEST_mon_client_connect:
+    '80756': 1
+titles:
+  '79576': 'rados/singleton: PG marked LAGGY during [osd-recovery| backfill-toofull | ec-esb-fio]  tests'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '80756': 'qa/standalone/mon/mon-bind.sh: TEST_mon_client_connect fails from error pinging monitor'
+  '81857': 'qa/mgr/dashboard: test_list_enabled_module times out because the dashboard restarts on the default port 8443 instead of the assigned 7789'

@@ -1,0 +1,24 @@
+id: "68337"
+tracker: https://tracker.ceph.com/issues/68337
+title: "OSD(s) experiencing slow operations in BlueStore (BLUESTORE_SLOW_OP_ALERT) in cluster log"
+kind: test
+tree: cluster-log/health
+facts:
+  check: 'BLUESTORE_SLOW_OP_ALERT$'
+match:
+  reason: 'BLUESTORE_SLOW_OP_ALERT'
+notes: |
+  An OSD's BlueStore::_collect_alerts raises BLUESTORE_SLOW_OP_ALERT ('observed
+  slow operation indications in BlueStore') when its queue of slow-operation
+  events reaches bluestore_slow_ops_warn_threshold (or the scrub equivalent).
+  The mon logs '[WRN] Health check failed: N OSD(s) experiencing slow operations
+  in BlueStore (BLUESTORE_SLOW_OP_ALERT)', and because the suite's
+  log-ignorelist does not cover it, the teardown cluster-log scan fails the job.
+  It is seen on many rados and fs suites, often on slow (valgrind or loaded)
+  nodes. Reviewers asked for the warning to be added to the ignorelists (fs
+  ignorelist_health.yaml already has it). PR 62866 only adds logging to
+  OSD::run_osd_bench_test to find the source and does not fix it, so no fix is
+  listed. The tracker is still open. The tree's path (cluster-log/health with
+  check=BLUESTORE_SLOW_OP_ALERT) already reaches the cause, so no confirm check.
+examples:
+  - skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/165952

@@ -1,0 +1,30 @@
+id: "51370"
+tracker: https://tracker.ceph.com/issues/51370
+title: "StoreTestSpecificAUSize.SyntheticMatrixCsumAlgorithm/2 timed out"
+kind: product
+tree: hung/command/objectstore-synthetic-csum-hang
+facts:
+  test: 'SyntheticMatrixCsumAlgorithm'
+match:
+  reason: 'hit max job timeout'
+  description: 'rados/objectstore'
+confirm:
+  - file: teuthology.log
+    pattern: '\[ RUN      \] \S*SyntheticMatrixCsumAlgorithm'
+exclude:
+  - file: teuthology.log
+    pattern: '\[\s+(?:OK|FAILED)\s+\] \S*SyntheticMatrixCsumAlgorithm'
+notes: |
+  The rados/objectstore job runs the exec task command
+  "ceph_test_objectstore --gtest_filter=*/0" (or */N). One of the BlueStore synthetic
+  matrix tests, SyntheticMatrixCsumAlgorithm, starts ("[ RUN      ]"), prints its
+  "Op N000" progress lines and then stops making progress: it never prints
+  OK or FAILED, and nothing else is logged until teuthology is killed with
+  SIGTERM (Got signal 15) at the max job timeout, hours later. No daemon crashes and
+  no assert is logged. The tracker's gdb stack from a local reproduction shows the
+  test thread waiting in BlueStore::OpSequencer::flush, called from
+  BlueStore::collection_list in SyntheticWorkloadState::scan (store_test.cc), i.e. the
+  BlueStore transaction queue does not drain. The timeout is the symptom; the
+  confirm check is that the test started, and the exclude check is that it reported a result.
+examples:
+  - skanta-2026-09-12_14:24:38-rados-wip-bharath12-testing-20260911.231931-main-distro-default-trial/553732

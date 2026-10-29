@@ -1,0 +1,15 @@
+run: skanta-2026-04-26_13:06:36-rados-wip-bharath20-testing-2026-04-26-1249-squid-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/PrimaryLogPG.cc FAILED ceph_assert(attrs || !recovery_state.get_pg_log().get_missing().is_missing(soid) || (it_objects != recovery_state.get_pg_log().get_log().objects.end() && it_objects->second->op == pg_log_entry_t::LOST_REVERT)) in ObjectContextRef PrimaryLogPG::get_object_context(const hobject_t&, bool, const std::map<std::__cxx#::basic_string<char>, ceph::buffer::v#_#_#::list, std::less<void> >*)
+  : '62167': 1
+  other | expected MON_CLOCK_SKEW but got none:
+    '46877': 1
+  'timeout/slow-ops | wait_until_healthy: slow ops':
+    '75695': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '46877': 'mon_clock_skew_check: expected MON_CLOCK_SKEW but got none'
+  '62167': FAILED ceph_assert(attrs || !recovery_state.get_pg_log().get_missing().is_missing(soid) || (it_objects != recovery_state.get_pg_log().get_log().objects.end() && it_objects->second->op == pg_log_entry_t::LOST_REVERT))
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '75695': 'cluster [WRN] [WRN] OSD_SLOW_PING_TIME_BACK: Slow OSD heartbeats on back (longest 1313.681ms)" in cluster log'

@@ -1,0 +1,12 @@
+run: nmordech-2026-02-21_21:52:07-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial
+signatures:
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '74860': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  timeout/unexplained | MaxWhileTries:
+    '74519': 1
+titles:
+  '74519': 'cephadm/osds: Error: statfs /etc/ceph/ceph.client.admin.keyring: no such file or directory'
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74860': 'Rocky10 - openssl: command not found when rocky10 container is used'

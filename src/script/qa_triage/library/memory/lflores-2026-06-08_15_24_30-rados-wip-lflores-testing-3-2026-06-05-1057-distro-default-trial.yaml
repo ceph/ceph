@@ -1,0 +1,6 @@
+run: lflores-2026-06-08_15:24:30-rados-wip-lflores-testing-3-2026-06-05-1057-distro-default-trial
+signatures:
+  'hung/test/rados-api-tests-valgrind-slowdown | waiting for api_io | rados_api_tests: api_* test timed out under valgrind':
+    '76953': 1
+titles:
+  '76953': Valgrind UninitCondition error in ECTransaction::Generate::Generate()

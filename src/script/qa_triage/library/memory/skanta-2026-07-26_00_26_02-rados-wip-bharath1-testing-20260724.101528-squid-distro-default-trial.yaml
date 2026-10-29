@@ -1,0 +1,21 @@
+run: skanta-2026-07-26_00:26:02-rados-wip-bharath1-testing-20260724.101528-squid-distro-default-trial
+signatures:
+  other | <pg> not in backfilling:
+    '53677': 1
+  workunit/standalone | mon/mon-cluster-log.sh TEST_cluster_log_level:
+    '63784': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+  ? 'workunit/unexplained/test-librados-build-git-ceph-com-html | rados/test_librados_build.sh | test_librados_build.sh: Makefile missing separator (git.ceph.com HTML)'
+  : '68669': 1
+titles:
+  '53677': 'qa/tasks/backfill_toofull.py: AssertionError: 2.0 not in backfilling'
+  '63784': 'qa/standalone/mon/mkfs.sh:''mkfs/a'' already exists and is not empty: monitor may already exist'
+  '68669': 'rados/test_librados_build.sh: Makefile:1: *** missing separator'
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'

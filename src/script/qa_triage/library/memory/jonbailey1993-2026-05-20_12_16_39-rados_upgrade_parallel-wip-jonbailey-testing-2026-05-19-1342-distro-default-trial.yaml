@@ -1,0 +1,6 @@
+run: jonbailey1993-2026-05-20_12:16:39-rados:upgrade:parallel-wip-jonbailey-testing-2026-05-19-1342-distro-default-trial
+signatures:
+  cluster-log/message | WRN osd Monitor daemon marked osd.# down, but it is still running:
+    '76962': 1
+titles:
+  '76962': 'rados/upgrade/parallel: "Monitor daemon marked osd.x down, but it is still running" in cluster log'''

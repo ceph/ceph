@@ -1,0 +1,27 @@
+id: "73630"
+tracker: https://tracker.ceph.com/issues/73630
+title: "objectstore/test_fuse.sh: line 126: fusermount: command not found"
+kind: infra
+tree: workunit/set-e
+facts:
+  script: '^objectstore/test_fuse\.sh$'
+match:
+  reason: 'workunit test objectstore/test_fuse\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'objectstore/test_fuse\.sh: line \d+: fusermount: command not found'
+notes: |
+  qa/workunits/objectstore/test_fuse.sh mounts a bluestore store with
+  ceph-objectstore-tool --op fuse, runs its checks, and ends with `fusermount -u $MNT`
+  (line 126). The test nodes had no fusermount binary (the fuse package was not
+  installed), so bash prints 'fusermount: command not found' and the workunit exits 127.
+  The failed workunit is the symptom. The errors printed earlier, such as
+  'rmdir: failed to remove ... Directory not empty' and 'mkdir: cannot create directory
+  ... Invalid argument', are expected: the script wraps them in expect_false. David
+  Galloway's fix is ceph-cm-ansible PR 816, which installs the missing package, so
+  jobs that ran before it was deployed still fail this way. The tracker was moved to the
+  Infrastructure project and resolved.
+examples:
+  - lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19083
+  - nmordech-2026-01-25_11:10:14-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/17026
+  - yuriw-2026-02-03_16:00:06-rados-wip-yuri4-testing-2026-02-02-2122-distro-default-trial/31522

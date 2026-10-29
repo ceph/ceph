@@ -1,0 +1,30 @@
+id: "74178"
+tracker: https://tracker.ceph.com/issues/74178
+title: "qa/standalone/mon/availability.sh: line 64: Syntax error due to missing availability status"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/67181
+    branch: main
+    fixed_in: v20.3.0-5124-gdf8b82766e
+tree: workunit/unexplained
+facts:
+  workunit: '^mon/availability\.sh$'
+match:
+  reason: 'workunit test mon/availability\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'availability\.sh: line 64:.*syntax error: operand expected'
+notes: |
+  In qa/standalone/mon/availability.sh, TEST_availablity_score enables mon availability
+  tracking (ceph config set mon enable_availability_tracking true) and immediately queries
+  'ceph osd pool availability-status | grep -w foo'. When the status row has not been
+  reported yet, AVAILABILITY_STATUS is empty, leaving UPTIME_DURATION empty. Evaluating
+  UPTIME_SECONDS=$(( ${UPTIME_DURATION%[sm]} * (${UPTIME_DURATION: -1} == "m" ? 60 : 1) ))
+  at line 64 causes bash to fail with a syntax error ("* ( == m ? 60 : 1) : syntax error:
+  operand expected") and exit immediately.
+  Fixed by PR #67181 which retries querying availability-status until output is present.
+also:
+  - "74582"
+  - "74757"
+examples:
+  - lflores-2026-01-21_20:56:39-rados-main-distro-default-trial/12001

@@ -1,0 +1,34 @@
+id: "72380"
+tracker: https://tracker.ceph.com/issues/72380
+title: "Prometheus module failure: TypeError: not all arguments converted during string formatting"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/65033
+    branch: main
+    fixed_in: v20.3.0-3505-g6966e1bf7e
+tree: test/unittest
+facts:
+  test: '^tasks\.mgr\.test_prometheus\.TestPrometheus\.test_file_sd_command$'
+match:
+  reason: 'test_file_sd_command'
+confirm:
+  - file: teuthology.log
+    pattern: "ceph prometheus file_sd_config"
+  - file: teuthology.log
+    pattern: "Error EINVAL: invalid command"
+notes: |
+  The cause: PR #61468 ("Make prometheus TLS config work with Rook orchestrator")
+  added calls to `orch get-security-config` during module initialization/configuration
+  (src/pybind/mgr/prometheus/module.py). When orchestrator is not deployed or
+  returns empty/invalid JSON, json.loads() raises JSONDecodeError, and the error
+  logging called `self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n', exc_info=False)`.
+  In logging.exception, passing the extra keyword argument alongside an f-string
+  caused a `TypeError: not all arguments converted during string formatting`.
+  This unhandled exception caused the prometheus module serve thread to fail,
+  so prometheus CLI commands (like `ceph prometheus file_sd_config`) were not
+  registered and failed with `Error EINVAL: invalid command`.
+  Fixed in PR #65033.
+examples:
+  - skanta-2026-06-17_03:50:08-rados-wip-yuri7-testing-2026-06-16-0346-distro-default-trial/296696
+also:
+  - "72602"

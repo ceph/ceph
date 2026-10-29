@@ -1,0 +1,6 @@
+run: yuriw-2026-01-05_23:00:35-rados-wip-yuri7-testing-2026-01-05-2021-distro-default-trial
+signatures:
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 1
+titles:
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh

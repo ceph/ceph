@@ -1,0 +1,15 @@
+run: yuriw-2026-01-22_22:41:44-rados-wip-yuri10-testing-2026-01-22-2036-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN MGR_INFLUX_NO_SERVER:
+    '72747': 2
+  cluster-log/health | WRN MON_NETSPLIT:
+    '71344': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 7
+  other | <fail with no reason>:
+    '71005': 1
+titles:
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '72747': No InfluxDB server configured (MGR_INFLUX_NO_SERVER)
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh

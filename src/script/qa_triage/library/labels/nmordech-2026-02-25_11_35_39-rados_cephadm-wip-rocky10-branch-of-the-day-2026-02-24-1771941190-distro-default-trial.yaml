@@ -1,0 +1,10 @@
+run: nmordech-2026-02-25_11:35:39-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial
+jobs:
+  '69855':
+    problem: '65728'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 7 jobs that the tool placed in no known problem in 65728, this one among them.
+    summary: CEPHADM_FAILED_DAEMON warning was transient and cleared seconds later during daemon startup, matching tracker 65728
+    status: fail
+    description: rados:cephadm/workunits/{0-distro/centos_9.stream_runc agent/on mon_election/classic task/test_rgw_multisite}
+    reason: '"2026-02-25T12:00:21.592407+0000 mon.a (mon.0) 446 : cluster [WRN] Health check failed: 1 failed cephadm daemon(s) (CEPHADM_FAILED_DAEMON)" in cluster log'

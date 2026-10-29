@@ -1,0 +1,10 @@
+run: xuxuehan-2026-07-17_12:19:21-crimson-rados-wip-seastore-new-trans-cc-distro-debug-trial
+jobs:
+  '373776':
+    problem: '75208'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 9 jobs that the tool placed in 75208 in 78368, this one among them.
+    summary: The disk check failed on trial134, whose NVMe drive is being RMAed (77787, which 78368 duplicates); 75208 is already the same problem, so it only needs those issues in `also`.
+    status: dead
+    description: crimson-rados/cephfs/{0-crimson_install clusters/crimson-fixed-3-cephfs crimson-supported-all-distro/rocky_10 crimson_qa_overrides deploy/ceph objectstore/seastore/rbm$/{crimson_seastore_rbm} tasks/{test/cfuse_workunit_suites_fsstress}}
+    reason: '["Wanted 2 disks of ~1700 GB (rotational=False), but only matched 1: [''nvme1n1'']"]'

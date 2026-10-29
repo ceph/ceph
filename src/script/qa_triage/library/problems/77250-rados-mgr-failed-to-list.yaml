@@ -1,0 +1,25 @@
+id: "77250"
+tracker: https://tracker.ceph.com/issues/77250
+title: "rados/mgr: Failed to list/create InfluxDB database (MGR_INFLUX_DB_LIST_FAILED)"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69420
+    branch: main
+    fixed_in: v21.3.0-1039-g1d0eaf08ee
+tree: cluster-log/health
+facts:
+  check: '^MGR_INFLUX_DB_LIST_FAILED$'
+confirm:
+  - file: teuthology.log
+    pattern: 'Health check failed: Failed to list/create InfluxDB database \(MGR_INFLUX_DB_LIST_FAILED\)'
+notes: |
+  The influx module selftest (TestModuleSelftest) enables the influx module and
+  sets mgr/influx/hostname=testhost to avoid MGR_INFLUX_NO_SERVER, but this
+  causes MGR_INFLUX_DB_LIST_FAILED instead: the influx module tries to connect to
+  testhost:8086 (or cannot find the influxdb Python client) and the mon logs a
+  [WRN] health check failure. The test suite (rados/mgr/.../module_selftest) does
+  not add MGR_INFLUX_DB_LIST_FAILED to its log-ignorelist, so teuthology's
+  teardown cluster-log scan fails the job. Fix: PR 69420 skips influx selftests
+  when the influxdb Python client is not installed and removes the testhost workaround.
+examples:
+  - skanta-2026-07-12_04:39:06-rados-wip-bharath12-testing-2026-07-09-1411-distro-default-trial/356705

@@ -1,0 +1,10 @@
+run: skanta-2026-08-16_10:49:09-rados-wip-bharath14-testing-20260815.072239-squid-distro-default-trial
+jobs:
+  '480171':
+    problem: '63784'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in no known problem in 63784, this one among them.
+    summary: TEST_cluster_log_level in mon-cluster-log.sh timed out waiting for osd.0 to come back after 'ceph osd down 0'. The OSD stayed on osdmap e12 and never learned it was down. This is tracker 68773, a duplicate of 63784, and 68773 lists this job; no 63784 record existed, so I added one.
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{ubuntu_latest} workloads/mon}
+    reason: 'Command failed (workunit test mon/mon-cluster-log.sh) on trial166 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=7c5d9f339e243d41c61b50423442885fda78e279 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/mon-cluster-log.sh'''

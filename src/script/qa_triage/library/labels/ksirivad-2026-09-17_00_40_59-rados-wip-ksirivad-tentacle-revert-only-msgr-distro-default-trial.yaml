@@ -1,0 +1,10 @@
+run: ksirivad-2026-09-17_00:40:59-rados-wip-ksirivad-tentacle-revert-only-msgr-distro-default-trial
+jobs:
+  '561967':
+    problem: '72747'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 2 jobs that the tool placed in no known problem in 72747, this one among them.
+    summary: The job failed because of tracker 72747. The tool called it new only because no record covered MGR_INFLUX_NO_SERVER. test_influx turns on the influx module without a hostname, and this tentacle build lacks PR 67649, which sets one. A new 72747 record fixes this.
+    status: fail
+    description: rados/mgr/{clusters/{2-node-mgr} debug/mgr distro/{centos_9.stream} mgr_ttl_cache/disable mon_election/connectivity random-objectstore$/{bluestore/{alloc$/{avl} base mem$/{normal-1} onode-segment$/{512K-onoff} write$/{random/{compr$/{no$/{no}} random}}}} tasks/{1-install 2-ceph 3-mgrmodules 4-units/module_selftest}}
+    reason: '"2026-09-17T01:49:46.949653+0000 mon.a (mon.0) 537 : cluster [WRN] Health check failed: No InfluxDB server configured (MGR_INFLUX_NO_SERVER)" in cluster log'

@@ -1,0 +1,23 @@
+id: "75513"
+tracker: https://tracker.ceph.com/issues/75513
+title: 'git.ceph.com returned HTTP 504 during workunit clone'
+kind: infra
+tree: hung/command/workunit-clone-git-ceph-com-504
+confirm:
+  - file: teuthology.log
+    pattern: 'git\.ceph\.com.*returned error: 504'
+notes: |
+  The workunit task clones the ceph repository from git.ceph.com to check out
+  the ref under test. When git.ceph.com returns HTTP 504 Gateway Timeout, both
+  clone attempts (ceph-ci.git then ceph.git) fail with git exit status 128;
+  teuthology raises CommandFailedError and the workunit fails before running any
+  test. The workunit had already created the scratch directory
+  /home/ubuntu/cephtest/mnt.0 but did not clean it up; during teardown the
+  internal.base task runs 'find /home/ubuntu/cephtest -ls ; rmdir' which fails
+  with 'Directory not empty', and the job ends as dead.
+examples:
+  - jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90431
+  - jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90432
+  - jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90438
+  - jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90443
+  - jayaprakash-2026-03-06_10:20:34-rados-wip-jaya-bs-testing-06-03-2025-distro-default-trial/90444

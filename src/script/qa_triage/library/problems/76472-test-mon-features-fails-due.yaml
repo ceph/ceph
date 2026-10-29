@@ -1,0 +1,31 @@
+id: "76472"
+tracker: https://tracker.ceph.com/issues/76472
+title: "TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69005
+    branch: main
+    fixed_in: v20.3.0-5268-gb53f0f8174
+match:
+  reason: 'workunit test mon/misc\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'TEST_mon_features:\s+return 1'
+  - file: teuthology.log
+    pattern: '\[\[ "tentacle" == .*n.v.m.e.o.f'
+notes: |
+  TEST_mon_features in qa/standalone/mon/misc.sh tests persistent monitor features.
+  When testing the nvmeof_beacon_diff feature, the test reused the jqfilter from
+  the preceding tentacle check ('select(. == "tentacle")') instead of selecting
+  nvmeof_beacon_diff, causing jq_success to compare "tentacle" against "nvmeof_beacon_diff"
+  and fail at misc.sh:288.
+  Branches without this fix and without the fix for 79943 (the new cephx_auth_aes256k
+  persistent feature, which breaks the later 'length == 13' check) fail the same test
+  twice over; the job stops at line 288, so people also place these jobs in 79943.
+also:
+  - "74827"
+  - "79943"
+examples:
+  - pdonnell-2026-08-26_21:44:10-rados-wip-pdonnell-testing-20260826.182613-umbrella-distro-default-trial/517317
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122185
+  - skanta-2026-09-15_12:51:39-rados-wip-bharath18-testing-20260914.015853-umbrella-distro-default-trial/557903

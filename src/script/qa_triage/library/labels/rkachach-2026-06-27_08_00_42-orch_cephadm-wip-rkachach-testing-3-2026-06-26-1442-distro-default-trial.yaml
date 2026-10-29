@@ -1,0 +1,10 @@
+run: rkachach-2026-06-27_08:00:42-orch:cephadm-wip-rkachach-testing-3-2026-06-26-1442-distro-default-trial
+jobs:
+  '319284':
+    problem: '55838'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 55838, this one among them.
+    summary: Downloading cephadm ref v18.2.0 from GitHub failed with a 404 error (file size of only 14 bytes), causing the subsequent size check and test to fail.
+    status: fail
+    description: orch:cephadm/mgr-nfs-upgrade/{0-centos_9.stream 1-bootstrap/18.2.0 1-start 2-nfs 3-upgrade-with-workload 4-final}
+    reason: 'Command failed on trial032 with status 1: ''test -s /home/ubuntu/cephtest/cephadm && test $(stat -c%s /home/ubuntu/cephtest/cephadm) -gt 1000 && chmod +x /home/ubuntu/cephtest/cephadm'''

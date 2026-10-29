@@ -1,0 +1,12 @@
+run: yuriw-2026-01-28_19:20:17-rados-reef-release-distro-default-trial
+signatures:
+  cluster-log/health | WRN PG_AVAILABILITY:
+    '70469': 1
+  ? 'cluster-log/message | ERR mon Health detail: HEALTH_ERR nodeep-scrub flag(s) set; full ratio(s) out of order; Degraded data redundancy: #/# objects degraded (<pg>%), # pgs degraded'
+  : '69497': 1
+  cluster-log/message | WRN osd Monitor daemon marked osd.# down, but it is still running:
+    '70465': 1
+titles:
+  '69497': '"[ERR] OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order" in cluster log'
+  '70465': 'rados/cephadm/osds: "Monitor daemon marked osd.x down, but it is still running" in cluster log'''
+  '70469': 'rados/cephadm: "Health check failed: Reduced data availability: 1 pg peering (PG_AVAILABILITY)"   in cluster log'

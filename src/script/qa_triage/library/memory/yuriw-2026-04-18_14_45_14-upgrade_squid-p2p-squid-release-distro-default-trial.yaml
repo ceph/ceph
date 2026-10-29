@@ -1,0 +1,9 @@
+run: yuriw-2026-04-18_14:45:14-upgrade:squid-p2p-squid-release-distro-default-trial
+signatures:
+  ? 'infra/other | install.upgrade: Command failed on <host> with status #: "wget -q -O- ''http://git.ceph.com/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc'' | sudo apt-key add -"'
+  : '76192': 2
+  ? 'infra/other | install.upgrade: Command failed on <host> with status #: ''sudo DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install ceph=<pg>.#-#-gbafed#f#-#jammy cephadm=<pg>.#-#-gbafed#f#-#jammy ceph-mds=<pg>.#-#-gbafed#f#-#jammy ceph-mgr=<pg>.#-#-gbafed#f#-#jammy ceph-common=<pg>.#-#-gbafed#f#-#jammy ceph-fuse=<pg>.#-#-gbafed#f#-#jammy ceph-test=<pg>.#-#-gbafed#f#-#jammy ceph-volume=<pg>.#-#-gbafed#f#-#jammy radosgw=<pg>.#-#-gbafed#f#-#jammy python#-rados=<pg>.#-#-gbafed#f#-#jammy python#-rgw=<pg>.#-#-gbafed#f#-#jammy python#-cephfs=<pg>.#-#-gbafed#f#-#jammy python#-rbd=<pg>.#-#-gbafed#f#-#jammy libcephfs#=<pg>.#-#-gbafed#f#-#jammy libcephfs-dev=<pg>.#-#-gbafed#f#-#jammy librados#=<pg>.#-#-gbafed#f#-#jammy librbd#=<pg>.#-#-gbafed#f#-#jammy rbd-fuse=<pg>.#-#-gbafed#f#-#jammy'''
+  : '76193': 1
+titles:
+  '76192': 'squid p2p test: Failed to create directory via template ‘/tmp/apt-key-gpghome.XXXXXXXXXX’: No space left on device'
+  '76193': 'squid p2p test: No space left on device'

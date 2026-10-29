@@ -1,0 +1,36 @@
+run: nmordech-2026-03-18_09:51:02-rados-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial
+signatures:
+  ? crash/assert/specific | osd osd/osd_types.h FAILED ceph_assert(it->second == oid) in void pg_missing_set<TrackChanges>::add(const hobject_t&, eversion_t, eversion_t, bool) [with bool TrackChanges = false]
+  : '75625': 1
+  ? 'crash/client/unnamed | Command crashed: ''sudo TESTDIR=/home/ubuntu/cephtest bash -c \''mkdir $TESTDIR/archive/ostest && cd $TESTDIR/archive/ostest && ulimit -Sn # && CEPH_ARGS="--no-log-to-stderr --log-file $TESTDIR/archive/ceph_test_objectstore.log --debug-bluestore #" ceph_test_objectstore --gtest_filter=*/#:*Matrix*:-*Matrix*Compression* --gtest_catch_exceptions=# --bluestore_write_v#=true\'''''
+  : '69646': 1
+  other | <fail with no reason>:
+    '71005': 1
+  timeout/unexplained | MaxWhileTries:
+    '75218': 1
+  ? 'workunit/set-e | cephadm/test_iscsi_setup.sh: container_gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; podman exec -i <sha> gwcli /iscsi-targets/iqn.#-#.com.redhat.iscsi-gw:iscsi-igw/hosts ls; set -e'
+  : '74873': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '74827': 1
+  workunit/unexplained | cephadm/test_cephadm.sh:
+    '75358': 1
+  workunit/unexplained | mgr/test_mgr_module_loading_time.sh:
+    '75593': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '75217': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | readable.sh: ceph-dencoder failed to decode corpus object'
+  : '74074': 1
+titles:
+  '69646': 'src/test/objectstore/store_test.cc: FAILED ceph_assert(r == 0 || r == -95)'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '74074': ceph-dencoder - failed with 20.3 corpus repo
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '74873': 'cephadm/test_iscsi_setup.sh - Auth: ACL_ENABLED, Hosts: 0'
+  '75217': 'ceph-objectstore-tool: No object id ''NOTEXISTS'' found or invalid JSON specified'
+  '75218': Orchestrater test fails while waiting for 8 OSDs to deploy
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'
+  '75593': nvmeof added to the always enabled - test_mgr_module_loading_time.sh failed
+  '75625': 'rados/thrash-erasure-code: Watchdog barks due to failed OSD'

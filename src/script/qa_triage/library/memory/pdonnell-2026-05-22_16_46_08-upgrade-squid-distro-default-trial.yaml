@@ -1,0 +1,6 @@
+run: pdonnell-2026-05-22_16:46:08-upgrade-squid-distro-default-trial
+signatures:
+  cluster-log/health | WRN OSD_HOST_DOWN:
+    '75415': 1
+titles:
+  '75415': 'upgrade: "Health check failed: 1 host (1 osds) down (OSD_HOST_DOWN)" in cluster log'

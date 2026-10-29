@@ -1,0 +1,10 @@
+run: nmordech-2026-02-04_08:13:49-rados-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial
+jobs:
+  '33887':
+    problem: '74754'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 74754, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are nmordech-2026-02-04_08:13:49-rados-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial/33886, nmordech-2026-02-21_21:55:34-rados-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial/63279, nmordech-2026-02-21_21:55:34-rados-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial/63285.'
+    summary: ansible.cephlab died with Errno 28 (no space left on device) on the teuthology host's /home/teuthworker; tracker 74754 had no record.
+    status: dead
+    description: rados/standalone/{supported-random-distro$/{rpm_latest} workloads/osd}
+    reason: '["Unexpected failure during module execution: [Errno 28] No space left on device: ''/home/teuthworker/.ansible/tmp/ansible-local-970035n0dnqfij/ansiballz_cache/ansible.modules.dnf-ZIP_DEFLATED-part''"]'

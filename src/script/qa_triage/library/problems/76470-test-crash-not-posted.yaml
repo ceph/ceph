@@ -1,0 +1,30 @@
+id: "76470"
+tracker: https://tracker.ceph.com/issues/76470
+title: "rados/test_crash.sh: Induced crashes are not properly posted"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72674
+    branch: main
+match:
+  reason: 'workunit test rados/test_crash\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: "\\+ '?\\['? \\d+ = 4 '?\\]'?"    # /bin/sh: bash quotes the brackets, Ubuntu's dash does not
+  - file: remote/*/syslog/journalctl.log.gz
+    pattern: 'WARNING:ceph-crash:post \S+ as client\.crash\.\S+ failed'
+notes: |
+  ceph-crash tries client.crash.<host>, client.crash and client.admin in turn, but
+  moves on to the next name only when the post fails with EACCES. In teuthology
+  there is no key for client.crash.<host>; that fails with errno 1 ("RADOS
+  permission error"), so client.admin is never tried and no crash is posted. The
+  monitor logs "failed to decode CephXAuthenticate: End of buffer" for these
+  attempts because a client with no key sends only the request header; that is a
+  consequence, not the cause.
+also:
+  - "76392"
+  - "51858"
+examples:
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631204
+  - skanta-2026-09-30_04:36:41-rados-wip-bharath14-testing-20260930.003013-main-distro-default-trial/593704
+  - skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/165994
+  - skanta-2026-05-07_14:11:34-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial/197883

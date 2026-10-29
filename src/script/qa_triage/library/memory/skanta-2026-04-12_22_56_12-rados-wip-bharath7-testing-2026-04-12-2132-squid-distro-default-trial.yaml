@@ -1,0 +1,6 @@
+run: skanta-2026-04-12_22:56:12-rados-wip-bharath7-testing-2026-04-12-2132-squid-distro-default-trial
+signatures:
+  ? 'workunit/set-e | rados/test_librados_build.sh: make all-system: hello_radosstriper.cc:#:#: error: too many decimal points in number'
+  : '68669': 1
+titles:
+  '68669': 'rados/test_librados_build.sh: Makefile:1: *** missing separator'

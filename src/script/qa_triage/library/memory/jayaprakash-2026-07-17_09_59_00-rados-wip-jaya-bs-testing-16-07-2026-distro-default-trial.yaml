@@ -1,0 +1,9 @@
+run: jayaprakash-2026-07-17_09:59:00-rados-wip-jaya-bs-testing-16-07-2026-distro-default-trial
+signatures:
+  ? 'hung/command/host-drain-osd-not-scheduled | cephadm.shell: exit #; fi | host drain: OSD not scheduled for removal, only reconfigured'
+  : '78429': 1
+  'infra/other | ansible.cephlab: ["Wanted # disks of ~# GB (rotational=False), but only matched #: [''nvme#n#'']"]':
+    '75208': 1
+titles:
+  '75208': 'Rocky10, Centos9 - AnsibleFailedError: "Wanted 2 disks of type nvme1n1, but only matched 1"'
+  '78429': 'rados/cephadm: test_host_drain hangs after reconfiguring osd.5'

@@ -1,0 +1,6 @@
+run: yuriw-2026-05-08_16:31:54-nvmeof-main_base_5.8.26-distro-default-trial
+signatures:
+  timeout/unexplained | MaxWhileTries:
+    '76500': 1
+titles:
+  '76500': 'mgr/cephadm: nvmeof service "running" count not refreshed after FAILED_DAEMON recovery,    wait_for_service times out'

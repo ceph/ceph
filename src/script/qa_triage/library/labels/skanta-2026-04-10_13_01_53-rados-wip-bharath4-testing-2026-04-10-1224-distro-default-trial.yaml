@@ -1,0 +1,34 @@
+run: skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial
+jobs:
+  '143035':
+    problem: '73278'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 8 jobs in 73278, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143053, skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143057, skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143071, skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148417, skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148480.'
+    summary: Mgr respawn leaves a libcephfs session that an MDS evicts ~300s later; the [WRN] is not ignorelisted. This is tracker 73278, which had no record.
+    status: fail
+    description: rados/singleton-bluestore/{all/cephtool mon_election/classic msgr-failures/none msgr/async-v2only objectstore/bluestore/{alloc$/{avl} base mem$/{low} onode-segment$/{512K-onoff} write$/{v2/{compr$/{no$/{no}} v2}}} rados supported-random-distro/{ubuntu_latest}}
+    reason: '"2026-04-10T13:20:55.195233+0000 mds.a (mds.0) 1 : cluster [WRN] evicting unresponsive client trial181:x (6265), after 304.076 seconds" in cluster log'
+  '143042':
+    problem: '75764'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 13 jobs in 74862, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143037, skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143054, skanta-2026-04-10_13:01:53-rados-wip-bharath4-testing-2026-04-10-1224-distro-default-trial/143078, skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148430, skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148462.'
+    summary: Job 143042 is correctly a duplicate of 75764. The 'cannot pickle CephadmOrchestrator' error is the same cause as tracker 74862, so 74862 goes in the record's `also`.
+    status: fail
+    description: rados/cephadm/osds/{0-distro/centos_9.stream 0-nvme-loop 1-start 2-ops/rm-zap-wait}
+    reason: 'Command failed on trial020 with status 22: ''sudo /home/ubuntu/cephtest/cephadm --image quay.ceph.io/ceph-ci/ceph:94948b1a3f047f5cb8d50cbd094429cf116d08a1 shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring --fsid f3207bca-34de-11f1-b4a6-d404e6e7d460 -- bash -c \''set -e\nset -x\nceph orch ps\nceph orch device ls\nDEVID=$(ceph device ls | grep osd.1 | awk \''"\''"\''{print $1}\''"\''"\'')\nHOST=$(ceph orch device ls | grep $DEVID | awk \''"\''"\''{print $1}\''"\''"\'')\nDEV=$(ceph orch device ls | grep $DEVID | awk \''"\''"\''{print $2}\''"\''"\'')\necho "host $HOST, dev $DEV, devid $DEVID"\nceph orch osd rm 1\nwhile ceph orch osd rm status | grep ^1 ; do sleep 5 ; done\nceph orch device zap $HOST $DEV --force\nwhile ! ceph osd dump | grep osd.1 | grep up ; do sleep 5 ; done\n\'''''
+  '143053':
+    problem: '75414'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'the cluster-log scan''s only hit is ''Health detail: HEALTH_WARN 2 pool(s) full'', which the ignorelist misses (75414); this job''s ceph.log has no ''evicting unresponsive'' (73278)'
+    summary: duplicate 75414 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/upgrade/parallel/{0-random-distro$/{centos_9.stream} 0-start 1-tasks mon_election/connectivity overrides/ignorelist_health upgrade-sequence workload/{ec-rados-default rados_api rados_loadgenbig rbd_import_export test_rbd_api test_rbd_python}}
+    reason: '"2026-04-10T14:10:00.000102+0000 mon.a (mon.0) 3161 : cluster [WRN] Health detail: HEALTH_WARN 2 pool(s) full" in cluster log'
+  '143046':
+    problem: '76297'
+    by: Claude Code for aainscow, as the reviewer
+    why: iscsiadm login succeeds but no disk appears under /dev/disk/by-path (76297, filed the same day for this); not 74577's earlier 'No such path' at host auth
+    summary: duplicate 76297 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/centos_9.stream agent/off mon_election/classic task/test_iscsi_container/{centos_9.stream test_iscsi_container}}
+    reason: 'Command failed (workunit test cephadm/test_iscsi_setup.sh) on trial080 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=94948b1a3f047f5cb8d50cbd094429cf116d08a1 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_iscsi_setup.sh'''

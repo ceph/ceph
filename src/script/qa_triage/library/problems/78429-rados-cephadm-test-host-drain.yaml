@@ -1,0 +1,25 @@
+id: "78429"
+tracker: https://tracker.ceph.com/issues/78429
+title: "rados/cephadm: test_host_drain hangs after reconfiguring osd.5"
+kind: product
+tree: hung/command/host-drain-osd-not-scheduled
+match:
+  reason: 'hit max job timeout'
+notes: |
+  rados/cephadm/workunits task/test_host_drain runs "ceph orch host drain $HOST_C
+  --zap-osd-devices" and then loops on "ceph orch ps --hostname $HOST_C" until it prints
+  "No daemons reported". The loop has no exit condition. The drain is issued seconds after
+  cephadm deployed the host's last OSD ("Deploying daemon osd.5 on <host>" about 20 s
+  earlier). CephadmOrchestrator.drain_host adds the _no_schedule label and queues for
+  removal only the OSDs already in cephadm's daemon cache for the host
+  (cache.get_daemons_by_host). The new OSD is not in the cache yet, so only the other
+  OSD is queued: the mgr log shows "1 OSDs are scheduled for removal: [osd.4]", and
+  osd.4 is removed, purged and zapped. When the cache later picks up osd.5, cephadm only
+  reconfigures it ("Reconfiguring daemon osd.5 on <host>", monmap changed) and never
+  removes it, because nothing re-queues an OSD found on a drained host. ceph orch ps keeps
+  listing "osd.5 <host> running", and the job runs until teuthology is killed at the max
+  job timeout. The hang is the symptom. The tree's node at hung/command finds the cause:
+  the drain loop still lists an OSD at the kill, and ceph.cephadm.log shows that OSD
+  reconfigured after the _no_schedule label was added and never removed.
+examples:
+  - jayaprakash-2026-07-15_18:38:17-rados-wip-jaya-bs-testing2-15-07-2026-distro-default-trial/366546

@@ -1,0 +1,10 @@
+run: skanta-2026-04-06_10:52:21-rados-wip-bharath15-testing-2026-04-06-1414-tentacle-distro-default-trial
+jobs:
+  '133287':
+    problem: '76028'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 8 jobs that the tool placed in 76028 in 73921, this one among them.
+    summary: Job failed because cephadm could not pull the deleted quincy image (manifest unknown); this is 73921's cause too, so 76028 gets 73921 in `also`.
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro$/{centos_latest}}
+    reason: '"grep: /var/log/ceph/0be711da-31b9-11f1-a891-d404e6e7d460/ceph.log: No such file or directory" in cluster log'

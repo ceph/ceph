@@ -1,0 +1,6 @@
+run: skanta-2026-02-06_03:29:50-rados-wip-bharath16-testing-2026-02-05-1716-distro-default-trial
+signatures:
+  'test/unexplained | Test failure: setUpClass (tasks.mgr.dashboard.test_cluster.ClusterTest)':
+    '75048': 1
+titles:
+  '75048': setUpClass error in tasks.mgr.dashboard.test_cluster.ClusterTest

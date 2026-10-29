@@ -1,0 +1,9 @@
+run: jayaprakash-2026-03-24_09:16:49-rados-aclamk-fcm-2026-03-24-0656-distro-default-trial
+signatures:
+  'command/unexplained | rm -rf clone.client.# && git clone https://git.ceph.com/ceph.git clone.client.#: #':
+    '75513': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 1
+titles:
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh
+  '75513': 'Dead: unable to access ''https://git.ceph.com/ceph-ci.git/'': The requested URL returned error: 504'

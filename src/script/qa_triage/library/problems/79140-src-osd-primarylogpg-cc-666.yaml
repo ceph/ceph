@@ -1,0 +1,37 @@
+id: "79140"
+tracker: https://tracker.ceph.com/issues/79140
+title: "src/osd/PrimaryLogPG.cc: 666: FAILED ceph_assert(!get_acting_recovery_backfill().empty()) - dedup + balanced reads"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/70908
+    branch: main
+    fixed_in: v21.3.0-2134-g094fc2f278
+tree: crash/assert/specific
+facts:
+  source: '^osd/PrimaryLogPG\.cc$'
+  message: 'get_acting_recovery_backfill\(\)\.empty\(\)'
+  function: 'PrimaryLogPG::is_degraded_or_backfilling_object'
+confirm:
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: 'PrimaryLogPG::maybe_handle_manifest_detail\('
+notes: |
+  A replica OSD hits FAILED ceph_assert(!get_acting_recovery_backfill().empty())
+  in PrimaryLogPG::is_degraded_or_backfilling_object() (osd/PrimaryLogPG.cc:666),
+  called from PrimaryLogPG::maybe_handle_manifest_detail() under do_op_impl.
+  The cause: a dedup (manifest) object is read with balanced or localized reads
+  (balance_reads_on), so the read goes to a non-primary shard. The OSD log shows
+  the PG with r>0, an osd_op flagged balance_reads, "can_serve_read can be safely
+  read on this replica", and an object_info with dirty|manifest. The manifest path
+  then checks whether the object is degraded, but only the primary has an
+  acting_recovery_backfill set; on a replica it is empty, so the assert fires.
+  More replicas that get such reads crash the same way, and the job then fails on
+  a symptom such as a daemon watchdog bark for a failed OSD. Seen with
+  rados/thrash workloads/dedup-io-mixed and balance_reads/balance_reads_on.
+  Fixed by PR 70908 (osd: Dedupe needs to redirect balanced/localized reads to
+  the primary: reads of manifest objects on a replica get EAGAIN, so they are
+  redirected to the primary), merged at v21.3.0-2134-g094fc2f278; not backported,
+  because dedup is experimental. The confirm check needs the
+  maybe_handle_manifest_detail frame in the backtrace: the same assert reached
+  from another caller would be a different bug.
+examples:
+  - cjames-2026-08-03_13:42:37-rados-main-distro-default-trial/423783

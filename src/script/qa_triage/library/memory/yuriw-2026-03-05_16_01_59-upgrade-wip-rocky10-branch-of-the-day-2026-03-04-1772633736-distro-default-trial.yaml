@@ -1,0 +1,14 @@
+run: yuriw-2026-03-05_16:01:59-upgrade-wip-rocky10-branch-of-the-day-2026-03-04-1772633736-distro-default-trial
+signatures:
+  cluster-log/health | WRN OSD_HOST_DOWN:
+    '75415': 1
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN # pool(s) full':
+    '75414': 1
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:tentacle shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error EINVAL: Cannot set values for --daemon-types, --services or --hosts when upgrade already in progress.'
+  : '71631': 1
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:squid shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '71631': 1
+titles:
+  '71631': Commands using Mgr Modules fail if run immediately post a mgr failover/ restart
+  '75414': 'upgrade: pool full warning variation'
+  '75415': 'upgrade: "Health check failed: 1 host (1 osds) down (OSD_HOST_DOWN)" in cluster log'

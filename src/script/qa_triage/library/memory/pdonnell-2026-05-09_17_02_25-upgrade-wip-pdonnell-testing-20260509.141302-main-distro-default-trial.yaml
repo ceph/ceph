@@ -1,0 +1,6 @@
+run: pdonnell-2026-05-09_17:02:25-upgrade-wip-pdonnell-testing-20260509.141302-main-distro-default-trial
+signatures:
+  ? 'cluster-log/message | WRN mon pg <pg> is stuck undersized for #s, current state active+recovering+undersized+remapped, last acting [#,#]'
+  : '76585': 1
+titles:
+  '76585': 'qa/upgrade/*/stress-split: cluster [WRN]     pg 6.10 is stuck undersized for 119s, current state active+recovering+undersized+remapped, last acting [0,3]" in cluster log'

@@ -1,0 +1,68 @@
+id: "74794"
+tracker: https://tracker.ceph.com/issues/74794
+title: "rados/thrash - The WatchDog barked due to Thrasher threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72990
+    branch: main
+tree: timeout
+facts:
+  wait: '^wait_for_recovery$'
+match:
+  description: 'morepggrow|pggrow_host|thrash-erasure-code/.*workloads/ec-radosbench'
+  reason: 'wait_for_recovery: failed before timeout expired|reached maximum tries'
+confirm:
+  - file: teuthology.log
+    pattern: 'morepggrow|MaxWhileTries: reached maximum tries \((500|800)\) after waiting for (3000|4800) seconds'
+  - file: teuthology.log
+    pattern: 'config set mgr mgr_debug_aggressive_pg_num_changes true'
+  - file: teuthology.log
+    pattern: 'tasks\.thrashosds\.thrasher:Growing pool'
+  - file: teuthology.log
+    pattern: 'tasks\.ceph\.ceph_manager\.ceph:PG \S+ is not active\+clean'
+notes: |
+  The morepggrow and pggrow_host thrashers raise pg_num/pgp_num of a pool again and again while
+  peering and backfill are still in progress. thrashosds sets mgr_debug_aggressive_pg_num_changes=true
+  by default, which bypasses the mgr adjust_pgs() throttling that would defer splits while the
+  inactive, degraded or misplaced ratios are high. The cluster is overloaded by the PG growth:
+  the pgmap grows from 35 to 135 PGs and most of them sit in peering, activating or
+  remapped+peering for minutes, with unfound objects coming and going and SLOW_OPS on many
+  OSDs in some jobs (some ops 'queued for pg'). The OSDThrasher's wait_for_recovery sees no recovery
+  progress, gives up after its timeout with 'failed before timeout expired' and lists the PGs
+  that are not active+clean, and the daemon watchdog barks and kills the daemons. Depending on
+  what the job was running, the first visible failure can be the wait_for_recovery assertion
+  itself, or a workload that the killed cluster leaves hanging: radosbench stuck until
+  teuthology's run.wait gives up with MaxWhileTries (reached maximum tries (500) after waiting
+  for 3000 seconds, or (800) after 4800 seconds for the five-radosbench full_sequential of
+  rados/thrash-erasure-code ec-radosbench); the tree then explains it at
+  timeout/unexplained/thrasher-wait-for-recovery-failed.
+  The timeout, the slow ops and the 'no progress seen' lines are symptoms; the cause is the
+  unthrottled pg_num growth, shown by the aggressive pg_num config set, the 'Growing pool'
+  thrasher actions and the PGs that wait_for_recovery lists as not active+clean when it gives up
+  (in some jobs a peering storm in the cluster log). The last confirm check reads teuthology.log,
+  not the cluster log, because some jobs have no remote/ logs in their archive (job 17728 has only
+  teuthology.log.gz): wait_for_recovery logs 'PG <id> is not active+clean' for every PG it gives up
+  on. The fix, PR 72990 (open), makes
+  morepggrow leave mgr_debug_aggressive_pg_num_changes unset; it does not touch the
+  rados/thrash-erasure-code thrashers/default yaml, which also grows pools (chance_pgnum_grow: 1,
+  chance_pgnum_shrink: 1, chance_pgpnum_fix: 1) under the same default aggressive setting (job 352233:
+  pool 7 pgp_num raised at 07:36, 2840 degraded objects and 'no progress seen' from 07:41 until the
+  1200 s thrasher timeout ran out at 08:01). The description match takes the ec-radosbench workload of
+  thrash-erasure-code and not every thrashers/default job, so rados/thrash default-thrasher jobs
+  that fail differently are not candidates. The first confirm check keeps
+  pggrow_host jobs that failed with the wait_for_recovery text (tracker 75216, osd-dispatch-delay
+  and compression on wide EC pools) apart: such a job has neither 'morepggrow' in its log
+  nor the MaxWhileTries line of the radosbench wait. A ceph_test_rados -110 abort is what marks tracker 81629,
+  not this wait_for_recovery timeout. People also place morepggrow jobs that fail with the
+  wait_for_recovery text in 75216 (job 321923 ran morepggrow with osd-dispatch-delay and
+  compression on a replicated pool); the cause is the same unthrottled pg_num growth, hence `also`.
+examples:
+  - skanta-2026-09-24_04:14:51-rados-wip-bharath20-testing-20260924.011348-main-distro-default-trial/577674
+  - skanta-2026-09-09_16:03:40-rados-wip-bharath14-testing-20260909.090422-main-distro-default-trial/546238
+  - skanta-2026-07-19_00:55:49-rados-wip-bharath5-testing-2026-07-19-0500-distro-default-trial/376264
+  - skanta-2026-06-28_08:18:41-rados-wip-bharath5-testing-2026-06-27-0520-distro-default-trial/321923
+  - skanta-2026-01-26_08:54:40-rados-wip-bharath4-testing-2026-01-26-1300-distro-default-trial/17728
+  - skanta-2026-07-10_04:56:13-rados-wip-bharath8-testing-2026-07-08-0700-distro-default-trial/352233
+also:
+  - '75625'
+  - '75216'

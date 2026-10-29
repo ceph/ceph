@@ -1,0 +1,24 @@
+id: "77053"
+tracker: https://tracker.ceph.com/issues/77053
+title: "rados/encoder: failure to find umbrella packages"
+kind: infra
+tree: infra/build
+match:
+  description: 'rados/encoder'
+confirm:
+  - file: teuthology.log
+    pattern: 'VersionNotFoundError.*ref=umbrella'
+notes: |
+  The rados/encoder test matrix runs dencoder tests across Ceph releases, including
+  the N version (umbrella). In early June 2026, before umbrella packages were built
+  and published to shaman, the install task failed with
+  teuthology.exceptions.VersionNotFoundError when querying shaman for ref=umbrella
+  packages on centos/9 and ubuntu/24.04. Once umbrella builds were ready, the test
+  passed without reproducing.
+  Tracker 59193 is a closed umbrella ticket for "Failed to fetch package version from
+  shaman" where people also placed jobs failing to fetch umbrella packages for rados/encoder.
+examples:
+  - skanta-2026-06-04_15:14:33-rados-wip-bharath7-testing-2026-06-04-1630-distro-default-trial/265439
+  - skanta-2026-06-09_02:42:07-rados-wip-bharath2-testing-2026-06-09-0416-distro-default-trial/280494
+also:
+  - "59193"

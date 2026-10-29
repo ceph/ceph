@@ -1,0 +1,18 @@
+run: skanta-2026-04-06_14:05:55-rados-wip-bharath14-testing-2026-04-06-1412-squid-distro-default-trial
+jobs:
+  '133531':
+    problem: '76028'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 75886, this one among them, and no record names it yet: the tool placed them in 76028, no known problem. A record for it should place them all; others are skanta-2026-04-14_02:25:39-rados-wip-bharath1-testing-2026-04-14-0415-tentacle-distro-default-trial/150068, yuriw-2026-04-11_14:07:43-rados-squid-release-distro-default-trial/145123, yuriw-2026-05-15_20:57:42-rados-wip-yuriw-testing-20260515.172309-tentacle-wip-yuri12-testing-distro-default-trial/215594.'
+    summary: 'Job failed because cephadm could not pull quay.ceph.io/ceph-ci/ceph:reef (tag deleted/expired); record 76028 missed it because its confirm pattern required ''manifest unknown'' but quay returned ''unknown: Tag reef was deleted or has expired'' instead.'
+    status: fail
+    description: rados/upgrade/parallel/{0-random-distro$/{centos_9.stream_runc} 0-start 1-tasks mon_election/classic overrides/ignorelist_health upgrade-sequence workload/{ec-rados-default rados_api rados_loadgenbig rbd_import_export test_rbd_api test_rbd_python}}
+    reason: '"grep: /var/log/ceph/3fb4e56e-31d2-11f1-ac2d-d404e6e7d460/ceph.log: No such file or directory" in cluster log'
+  '133548':
+    problem: '71118'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 71118, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are yuriw-2026-04-11_19:57:35-rados-squid-release-distro-default-trial/145903, yuriw-2026-06-22_18:46:50-rados-wip-yuri3-testing-20260622.144259-squid-distro-default-trial/306932, yuriw-2026-06-23_17:14:52-rados-wip-yuri5-testing-20260623.145428-squid-distro-default-trial/310908.'
+    summary: 'The failure is tracker #71118: TEST_journald_cluster_log_level runs journalctl without sudo and gets ''No journal files were opened due to insufficient permissions''. No record covered it, so I added one.'
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{centos_latest} workloads/mon}
+    reason: 'Command failed (workunit test mon/mon-cluster-log.sh) on trial125 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=6a077e1213e056f45841f78a876567416f29434b TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/mon-cluster-log.sh'''

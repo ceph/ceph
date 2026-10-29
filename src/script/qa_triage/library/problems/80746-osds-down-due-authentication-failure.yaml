@@ -1,0 +1,35 @@
+id: "80746"
+tracker: https://tracker.ceph.com/issues/80746
+title: "OSDs down due authentication failure"
+kind: product
+tree: timeout/slow-ops/osd-auth-failure
+confirm:
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: 'could not find secret_id|could not get service secret for service osd'
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: 'monclient: _check_auth_tickets getting new tickets!'
+  - file: remote/*/log/ceph-mon.*.log.gz
+    pattern: 'no beacon from osd'
+notes: |
+  Several OSDs of an EC thrash job (wide pool, k=10 m=4) are marked down by the
+  monitors ("no beacon from osd.N ... marking down", ~900 s after the OSD's last
+  beacon) until too many PGs are down+remapped and the thrasher's wait_for_recovery
+  times out. The OSD logs show "handle_auth_bad_method ... (13) Permission denied",
+  "RKR.get_service_secret could not find secret_id=N" and "cephx: verify_authorizer
+  could not get service secret for service osd". Those errors are the symptom, not
+  the cause, and the tracker (status New, no fix, no PR) says this is not a cephx
+  bug (Patrick Donnelly: "For some reason osd.5 stopped getting replies from mon.c").
+  The cause the tracker found: the OSD's monclient stops receiving auth_reply from
+  its monitor. Its ticket requests ("_check_auth_tickets getting new tickets!" and
+  "_check_auth_rotating renewing rotating keys") go out every second with no
+  auth_reply following, whereas earlier in the run every request was answered at
+  once. In this job osd.5 on trial078 does this from 07:21:56 on; its rotating
+  secrets then expire, the secret_id of its tickets is no longer known, and it is
+  locked out of all monitors. It stops sending beacons and is marked down, and the
+  cascade repeats on other OSDs. Why the replies stop is not known: the logs show
+  no cause, and the tracker names none. Rotating the auth secrets was the first
+  guess in the issue and was not confirmed. The ticket-request check alone is weak
+  because healthy OSDs log that line too; it means something only together with
+  the secret_id and no-beacon checks.
+examples:
+  - skanta-2026-09-20_02:51:43-rados-wip-bharath22-testing-20260920.002814-main-distro-default-trial/570342

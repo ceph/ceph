@@ -1,0 +1,33 @@
+id: "77417"
+tracker: https://tracker.ceph.com/issues/77417
+title: "ceph-test packages missing ceph_test_neorados_completions; smoke mon_thrash and rados_api_tests fail on Ubuntu"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69526
+    branch: main
+    fixed_in: v21.3.0-390-g89ff2cbcef
+match:
+  reason: 'workunit test rados/test\.sh'
+confirm:
+  - file: teuthology.log*
+    pattern: 'ceph_test_neorados_completions: command not found'
+notes: |
+  qa/workunits/rados/test.sh runs ceph_test_neorados_completions as part of NEORADOS_TESTS.
+  The binary was built but lacked an install(TARGETS ...) rule in src/test/neorados/CMakeLists.txt,
+  so it was not packaged into the ceph-test packages. The test failed when executing the binary
+  with 'bash: line 1: ceph_test_neorados_completions: command not found'. Fixed in PR #69526
+  (commit 89ff2cbcef00bb60a090d2c385d9978de8699ddd, fixed in v21.3.0-390-g89ff2cbcef).
+
+  The same failure shows up in the upgrade p2p suites (e.g. upgrade/tentacle-p2p, upgrade:squid-p2p).
+  There the workunit comes from the newer branch, but the client runs it with an older
+  released ceph-test package (e.g. 20.2.0) that predates the packaging fix and so lacks the
+  binary. test.sh then logs 'error in completions (<pid>)' and exits 1. People track that
+  case in #80613, which its own comments call technically a duplicate of this issue, so it is
+  listed in `also`. Its fix (PR 72344, qa/workunits/rados/test.sh skips the test when the
+  binary is missing) is separate from #69526. #69526 being in the build does not help
+  p2p jobs, whose old installed release still lacks the binary.
+examples:
+  - skanta-2026-06-17_03:50:08-rados-wip-yuri7-testing-2026-06-16-0346-distro-default-trial/296701
+  - ksirivad-2026-09-17_00:47:47-upgrade-wip-ksirivad-tentacle-revert-only-msgr-distro-default-trial/562063
+also:
+  - "80613"

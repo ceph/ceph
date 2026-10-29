@@ -1,0 +1,18 @@
+id: "71181"
+tracker: https://tracker.ceph.com/issues/71181
+title: "qa/tasks/ec_inconsistent_hinfo.py: pg not clean when expected"
+kind: test
+tree: other/ec-inconsistent-hinfo-assert
+match:
+  description: 'all/ec-inconsistent-hinfo'
+notes: |
+  In qa/tasks/ec_inconsistent_hinfo.py, after marking a non-primary OSD out and waiting
+  for backfilling and clean (via wait_for_clean), the test immediately asserts that 'clean'
+  is in pg['state'].split('+').
+  However, after remapping and backfill completion, the PG enters a new peering interval
+  and momentarily shifts into 'peering' state before transitioning back to active+clean.
+  The assertion fails with AssertionError when pg['state'] is 'peering'.
+examples:
+  - skanta-2026-04-06_10:26:47-rados-wip-bharath14-testing-2026-04-06-1412-squid-distro-default-trial/133240
+  - yaarit-2026-03-04_01:19:54-rados-wip-rocky10-branch-of-the-day-2026-03-03-1772558532-distro-default-trial/79915
+  - yuriw-2026-02-26_01:51:16-rados-wip-yuri9-testing-2026-02-25-1600-squid-distro-default-trial/71132

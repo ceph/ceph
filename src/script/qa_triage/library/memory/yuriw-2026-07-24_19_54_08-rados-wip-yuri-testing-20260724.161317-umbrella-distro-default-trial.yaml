@@ -1,0 +1,21 @@
+run: yuriw-2026-07-24_19:54:08-rados-wip-yuri-testing-20260724.161317-umbrella-distro-default-trial
+signatures:
+  'cluster-log/message | WRN osd # slow requests (by type [ ''delayed'' : # ] most affected pool [ ''rbd'' : # ])':
+    '76294': 1
+  ? 'hung/command/dispatch-delay-queued-for-pg | rados: ceph --admin-daemon /var/run/ceph/ceph-osd.#.asok dump_blocked_ops | rados hung: dispatch-delay ops queued for pg'
+  : '79024': 1
+  infra/build | build:
+    '59193': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '76472': 1
+  ? 'workunit/unexplained/test-repos-release-file-missing | cephadm/test_repos.sh | test_repos.sh: download.ceph.com apt repo has no Release file'
+  : '77248': 1
+titles:
+  '59193': '"Failed to fetch package version from https://shaman.ceph.com/api/search ..."'
+  '76294': slow request in cluster log causing test failure
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76472': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '77248': 'rados/cephadm: The repository ''https://download.ceph.com/debian-quincy noble Release'' does not have a Release file. '
+  '79024': rados/thrash/pool-snaps-few-objects - slow op stuck "queued for pg" during morepggrow peering storm with pool_snaps

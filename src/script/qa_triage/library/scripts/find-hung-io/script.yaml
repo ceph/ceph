@@ -1,0 +1,4 @@
+about: EC write transactions that were submitted and never finished, by object, in the OSDs' logs
+run: find_hung_io
+files: remote/*/log/ceph-osd.*.log.gz
+pattern: 'submit_transaction.*hoid: |finish_rmw.*on_all_commit on Op\('

@@ -1,0 +1,6 @@
+run: lflores-2026-08-06_20:16:33-rados:singleton-nomsgr-main-distro-default-trial
+signatures:
+  ? 'crash/assert/specific | mgr mgr/DaemonServer.cc FAILED ceph_assert(r == #) in int DaemonServer::init(uint#_t, entity_addrvec_t)'
+  : '79133': 1
+titles:
+  '79133': 'DaemonServer::init: FAILED ceph_assert(r == 0)'

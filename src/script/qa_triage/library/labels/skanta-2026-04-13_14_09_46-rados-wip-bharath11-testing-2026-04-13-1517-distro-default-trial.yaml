@@ -1,0 +1,34 @@
+run: skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial
+jobs:
+  '148429':
+    problem: '73946'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 73946, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: 'api_aio_pp hung until test.sh''s 5400 s limit killed it. This is tracker #73946, the LibRadosAio.PoolEIOFlag join-under-lock deadlock, so the "new" verdict was wrong. The record now gives fixed_in and excludes the 77417 packaging failure.'
+    status: fail
+    description: rados/verify/{ceph clusters/fixed-4 d-thrash/none mon_election/connectivity msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{avl} base mem$/{low} onode-segment$/{256K} write$/{random/{compr$/{no$/{no}} random}}}} rados read-affinity/balance rpm_latest tasks/rados_api_tests validater/valgrind}
+    reason: 'Command failed (workunit test rados/test.sh) on trial194 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=bc4b64280cad0d01e4955fb02be0434bd028b214 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 ALLOW_TIMEOUTS=1 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 6h /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/test.sh'''
+  '148457':
+    problem: '79024'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 2 jobs in 76292, this one among them, and no record names it yet: the tool placed them in 79024, no known problem. A record for it should place them all; others are yuriw-2026-05-15_14:18:16-rados-wip-yuri-testing-2026-05-14-1648-distro-default-trial/213499.'
+    summary: rados task hung during morepggrow + osd-dispatch-delay thrashing with ops stuck queued for pg (tracker 76292 / 79024)
+    status: dead
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{more-async-partial-recovery} 3-scrub-overrides/{max-simultaneous-scrubs-5} backoff/normal ceph clusters/{fixed-4} crc-failures/default d-balancer/crush-compat mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{btree} base mem$/{low} onode-segment$/{512K} write$/{v2/{compr$/{yes$/{lz4}} v2}}}} rados supported-random-distro/{centos_9.stream} thrashers/morepggrow thrashosds-health workloads/pool-snaps-few-objects}
+    reason: hit max job timeout
+  '148463':
+    problem: '76294'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 76294, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: Slow request on osd.7 (PG 1.2 waiting for peered ~30s) during the stretch-mode-5-mons-8-osds test is tracker 76294; no record covered it.
+    status: fail
+    description: rados/singleton/{all/stretch-mode-5-mons-8-osds mon_election/connectivity msgr-failures/many msgr/async-v2only objectstore/{bluestore/{alloc$/{hybrid} base mem$/{low} onode-segment$/{512K} write$/{v2/{compr$/{yes$/{zlib}} v2}}}} rados supported-random-distro/{ubuntu_latest}}
+    reason: '"2026-04-13T14:56:44.017040+0000 osd.7 (osd.7) 4 : cluster [WRN] 1 slow requests (by type [ ''delayed'' : 1 ] most affected pool [ ''rbd'' : 1 ])" in cluster log'
+  '148464':
+    problem: '68669'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 68669, this one among them, and no record names it yet: the tool placed them in 68669, by the memory of what people answered alone. A record for it should place them all; others are .'
+    summary: test_librados_build.sh failed because git.ceph.com returned HTML instead of the Makefile; tracker 68669
+    status: fail
+    description: rados/singleton-nomsgr/{all/librados_hello_world mon_election/connectivity rados supported-random-distro/{centos_9.stream}}
+    reason: 'Command failed (workunit test rados/test_librados_build.sh) on trial157 with status 2: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=bc4b64280cad0d01e4955fb02be0434bd028b214 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/test_librados_build.sh'''

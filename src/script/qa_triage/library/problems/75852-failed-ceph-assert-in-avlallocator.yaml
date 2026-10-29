@@ -1,0 +1,26 @@
+id: "75852"
+tracker: https://tracker.ceph.com/issues/75852
+title: "Failed ceph_assert in AvlAllocator"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/68503
+    branch: main
+    fixed_in: v21.3.0-1016-g881d8c9144
+tree: crash/client/unnamed/ceph-bluestore-tool-avl-inconsistent-tree
+confirm:
+  - file: teuthology.log
+    pattern: "AvlAllocator\\.cc.*FAILED ceph_assert\\(rs_before == range_tree\\.end\\(\\) \\|\\| rs_before->end <= start\\)"
+  - file: teuthology.log
+    pattern: "BlueStore::expand_devices"
+notes: |
+  ceph-bluestore-tool bluefs-bdev-expand (BlueStore::expand_devices -> _open_db_and_around ->
+  _init_alloc -> AvlAllocator::init_add_free) aborts with
+  ceph_assert(rs_before == range_tree.end() || rs_before->end <= start) in
+  AvlAllocator::_add_to_tree, after logging 'AvlAllocator _add_to_tree inconsistent tree state'.
+  The OSD was shut down non-gracefully, so the next open runs NCB allocmap recovery, which
+  already marks the expanded space as free. The explicit addition of the expanded space to the
+  allocator then overlaps it. The fix (PR 68503) does not add the expanded space to the
+  allocator after allocmap recovery.
+  Differs from #79128, the offset + length <= device_size assert in the same allocator.
+examples:
+  - skanta-2026-04-09_03:57:47-rados-wip-bharath16-testing-2026-04-08-1405-distro-default-trial/141133

@@ -1,0 +1,25 @@
+id: "78154"
+tracker: https://tracker.ceph.com/issues/78154
+title: "Status code: 404 for https://download.ceph.com/keys/release.gpg"
+kind: infra
+tree: workunit/unexplained/test-repos-gpg-404
+facts:
+  script: '^cephadm/test_repos\.sh$'
+confirm:
+  - file: teuthology.log
+    pattern: 'Status code: 404 for https://download\.ceph\.com/keys/release\.gpg'
+notes: |
+  test_repos.sh fetched the Ceph repo GPG key from download.ceph.com and received HTTP
+  404 because release.gpg had been removed from the server. DNF aborted the cephadm
+  package install and reported the 404. The script then tried the openSUSE install
+  path, running 'sudo zypper -n install cephadm', which failed with 'sudo: zypper: command
+  not found' on the CentOS test host. The script exited 1. The file was later
+  restored by dearmoring release.asc into release.gpg on download.ceph.com. This is a
+  transient infra problem. Tracker 78178 ("test fails due to zypper package missing")
+  describes the same job from the zypper symptom and was closed as a duplicate of this
+  issue.
+examples:
+  - skanta-2026-07-12_15:01:05-rados-wip-bharath4-testing-2026-07-09-1342-distro-default-trial/358456
+  - skanta-2026-07-10_04:56:13-rados-wip-bharath8-testing-2026-07-08-0700-distro-default-trial/352144
+also:
+  - "78178"

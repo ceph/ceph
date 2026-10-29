@@ -1,0 +1,21 @@
+run: yuriw-2026-02-26_01:51:16-rados-wip-yuri9-testing-2026-02-25-1600-squid-distro-default-trial
+signatures:
+  cluster-log/health | WRN MON_NETSPLIT:
+    '71344': 1
+  ? 'cluster-log/health/cephadm-failed-daemon-transient | WRN CEPHADM_FAILED_DAEMON | CEPHADM_FAILED_DAEMON: transient unknown state during startup'
+  : '67869': 1
+  other | <fail with no reason>:
+    '71005': 1
+  'other/ec-inconsistent-hinfo-assert | ec_inconsistent_hinfo: assert ''clean'' in pg[''state''].split(''+'')':
+    '71181': 1
+  workunit/standalone | osd/osd-bluefs-volume-ops.sh TEST_bluestore_expand:
+    '74525': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+titles:
+  '67869': 'qa: cluster [WRN] Health check failed: 1 failed cephadm daemon(s) (CEPHADM_FAILED_DAEMON) with quiesce and fs/misc'
+  '71005': qa/tasks/backfill_toofull.py line 155 - assert backfillfull < 0.9 - for test with compression
+  '71181': 'qa/tasks/ec_inconsistent_hinfo.py: pg not clean when expected'
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '74525': TEST_bluestore_expand fails on "free space added" check (osd-bluefs-volume-ops.sh)

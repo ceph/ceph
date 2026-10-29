@@ -1,0 +1,10 @@
+run: skanta-2026-01-28_09:27:17-rados-wip-bharath2-testing-2026-01-27-0639-squid-distro-default-trial
+jobs:
+  '22974':
+    problem: '65728'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 67869, this one among them, and no record names it yet: the tool placed them in 65728. A record for it should place them all; others are skanta-2026-01-29_13:10:13-rados-wip-bharath6-testing-2026-01-29-0855-squid-distro-default-trial/25766, yuriw-2026-02-26_01:51:16-rados-wip-yuri9-testing-2026-02-25-1600-squid-distro-default-trial/70913, yuriw-2026-02-26_16:03:22-rados-wip-yuri9-testing-2026-02-25-1600-squid-distro-default-trial/72538.'
+    summary: Transient CEPHADM_FAILED_DAEMON health warning caused by daemon startup state mapping in cephadm; tracker 67869 is the same problem and added to also.
+    status: fail
+    description: rados/cephadm/smoke-singlehost/{0-random-distro$/{centos_9.stream} 1-start 2-services/basic 3-final}
+    reason: '"2026-01-28T22:44:31.913645+0000 mon.trial010 (mon.0) 281 : cluster [WRN] Health check failed: 1 failed cephadm daemon(s) (CEPHADM_FAILED_DAEMON)" in cluster log'

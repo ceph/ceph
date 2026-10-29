@@ -1,0 +1,6 @@
+run: yaarit-2026-02-05_03:52:11-rados-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial
+signatures:
+  ? 'crash/client/unnamed | Command failed (workunit test osd/osd-bluefs-volume-ops.sh) on <host> with status #: ''mkdir -p -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && cd -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && CEPH_CLI_TEST_DUP_COMMAND=# CEPH_REF=<sha> TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="#" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.# CEPH_ROOT=/home/ubuntu/cephtest/clone.client.# CEPH_MNT=/home/ubuntu/cephtest/mnt.# adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout #h /home/ubuntu/cephtest/clone.client.#/qa/standalone/osd/osd-bluefs-volume-ops.sh'''
+  : '74765': 1
+titles:
+  '74765': './src/os/bluestore/BlueStore.h: 4588: FAILED ceph_assert(cur >= size_less)'

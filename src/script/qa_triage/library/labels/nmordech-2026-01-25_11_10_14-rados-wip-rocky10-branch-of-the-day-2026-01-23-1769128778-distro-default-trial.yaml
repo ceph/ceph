@@ -1,0 +1,10 @@
+run: nmordech-2026-01-25_11:10:14-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial
+jobs:
+  '17021':
+    problem: '74605'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 8 jobs in 74605, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are nmordech-2026-01-29_15:32:36-rados:mgr-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial/26335, nmordech-2026-02-17_05:44:40-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-13-1771001916-distro-default-trial/51654, nmordech-2026-02-21_21:31:01-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial/62998, nmordech-2026-02-25_11:34:16-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial/69835, nmordech-2026-02-25_11:36:23-rados-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial/70008.'
+    summary: tasks.mgr.test_devicehealth test_sql_autocommit1 timed out waiting for mgr killpoint death because cephadm monkeypatched os._exit to a no-op
+    status: fail
+    description: rados/mgr/{clusters/{2-node-mgr} debug/mgr distro/{rpm_latest} mgr_ttl_cache/disable mon_election/classic random-objectstore$/{bluestore/{alloc$/{avl} base mem$/{normal-2} onode-segment$/{512K} write$/{v1/{compr$/{no$/{no}} v1}}}} tasks/{1-install 2-ceph 3-mgrmodules 4-units/devicehealth}}
+    reason: 'Test failure: test_sql_autocommit1 (tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit1)'

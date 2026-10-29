@@ -1,0 +1,55 @@
+id: "79024"
+tracker: https://tracker.ceph.com/issues/79024
+title: "rados/thrash/pool-snaps-few-objects - slow op stuck \"queued for pg\" during morepggrow peering storm with pool_snaps"
+kind: product
+tree: hung/command/dispatch-delay-queued-for-pg
+facts:
+  hung_task: '^rados$'
+  command: 'dump_(?:ops_in_flight|blocked_ops|historic_ops)'
+match:
+  description: 'osd-dispatch-delay'
+confirm:
+  - file: teuthology.log
+    pattern: 'dispatch[ _]delay[ _]probability: 0?\.0*[1-9]'
+  - file: teuthology.log
+    pattern: '"flag_point":\s*"queued for pg"'
+notes: |
+  The msgr-failures/osd-dispatch-delay facet injects a 0.1 s dispatch delay with probability 0.1
+  into the OSD op dispatch path. Combined with morepggrow thrashing (~1-2 osdmap epochs/sec),
+  this repeatedly interrupts PG peering before GetInfo->GetMissing->Activate can complete: each
+  new osdmap bumps last_peering_reset and discards prior peering messages as stale. Ops enqueued
+  during peering (at epoch E) are never re-dispatched when the PG eventually activates at epoch
+  E+N, particularly when the pool_snaps trim queue is non-empty at activation time (candidate
+  path: PrimaryActive on_activate_complete / op wake-up). The cluster reports slow ops for
+  thousands of seconds (flag_point: "queued for pg"), ceph_manager sees no progress, and the job
+  runs until SIGTERM at the max job timeout. The injected dispatch delay probability in
+  teuthology.log (osd debug inject dispatch delay probability: 0.1) identifies this pattern.
+  The rados task dumps ops per OSD via dump_ops_in_flight then dump_blocked_ops then
+  dump_historic_ops in sequence; the kill signal may arrive during any of these commands, so
+  all three are matched.
+  Tracker 68960 (ec-pool-snaps-few-objects-overwrites: failed to complete snap trimming before
+  timeout) describes the same root cause when snap trimming starvation fires its own assertion
+  before the max job timeout.
+  Tracker 74709 (ceph-mgr devicehealth module: 'unknown operation') is filed for the same job
+  family (osd-dispatch-delay, morepggrow, pool-snaps-few-objects). In such jobs the health output
+  shows MGR_MODULE_ERROR "Module 'devicehealth' has failed: unknown operation" for the whole
+  stall, next to SLOW_OPS and inactive PGs; the module's sqlite database lives in the .mgr pool,
+  so it fails while the PGs are stuck. The devicehealth error is not seen in the mgr logs of
+  job 165980, so the order of the two was not traced; people file the dead job in both issues.
+  Tracker 75216 (rados/thrash-erasure-code-isa: PGs did not recover in time) covers the same
+  dispatch-delay / queued-for-pg symptom in the thrash-erasure-code-isa/pggrow_host variant:
+  on those jobs wait_for_recovery expires first and the OSDThrasher fails, but the rados task
+  is still running dump_historic_ops when SIGTERM arrives, so the tree reaches this node.
+  People place such jobs in both 79024 and 75216.
+examples:
+  - skanta-2026-09-25_03:59:04-rados-wip-bharath29-testing-20260924.231744-main-distro-default-trial/581671
+  - skanta-2026-09-07_08:16:29-rados-wip-bharath12-testing-20260907.061609-main-distro-default-trial/541954
+  - skanta-2026-04-13_14:09:46-rados-wip-bharath11-testing-2026-04-13-1517-distro-default-trial/148457
+  - skanta-2026-03-25_22:46:45-rados-wip-bharath8-testing-2026-03-25-1848-distro-default-trial/122172
+  - skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/165980
+  - skanta-2026-06-17_03:50:08-rados-wip-yuri7-testing-2026-06-16-0346-distro-default-trial/296725
+also:
+  - "76292"
+  - "68960"
+  - "74709"
+  - "75216"

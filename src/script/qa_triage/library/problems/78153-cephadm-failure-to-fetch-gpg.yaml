@@ -1,0 +1,32 @@
+id: "78153"
+tracker: https://tracker.ceph.com/issues/78153
+title: "Cephadm: failure to fetch GPG key when adding quincy repo"
+kind: infra
+tree: workunit/set-e/test-repos-add-repo-gpg-404
+facts:
+  script: '^cephadm/test_repos\.sh$'
+confirm:
+  - file: teuthology.log
+    pattern: 'failed to fetch GPG repo key from https://download\.ceph\.com/keys/release\.gpg: HTTP Error 404: Not Found'
+notes: |
+  In cephadm/test_repos.sh, 'cephadm add-repo --release quincy' failed with
+  'failed to fetch GPG repo key from https://download.ceph.com/keys/release.gpg: HTTP Error 404: Not Found'
+  because release.gpg was temporarily missing from download.ceph.com. This is a
+  transient infra issue. It has the same cause as tracker 78154 ('Status code: 404 for
+  https://download.ceph.com/keys/release.gpg'). That issue is the DNF/CentOS symptom
+  of the same missing file; cephadm's add-repo on Ubuntu shows it as this urllib
+  HTTPError instead. On 78154, Dan Mick restored release.gpg by dearmoring release.asc
+  and noted that cephadm still referenced it. People place these jobs in 78154 too.
+  They also place them in 77248: on Ubuntu 24.04 (noble) the old test_repos.sh runs
+  'add-repo --release quincy' first although quincy is not published for noble, so
+  the job was bound to fail there anyway. PR 69847 (fix of 77248) probes download.ceph.com
+  and skips unpublished releases before any key is fetched, so it would also have avoided
+  this failure. When the key is available, the same job fails later with 77248's
+  'does not have a Release file' error instead.
+examples:
+  - skanta-2026-07-12_15:01:05-rados-wip-bharath4-testing-2026-07-09-1342-distro-default-trial/358483
+  - skanta-2026-07-12_00:12:33-rados-wip-bharath10-testing-2026-07-11-1405-distro-default-trial/356690
+  - skanta-2026-07-12_04:39:06-rados-wip-bharath12-testing-2026-07-09-1411-distro-default-trial/356720
+also:
+  - "78154"
+  - "77248"

@@ -1,0 +1,18 @@
+run: yuriw-2026-09-01_15:07:31-rados-wip-yuri2-testing-20260901.132824-main-distro-default-trial
+jobs:
+  '528493':
+    problem: '80186'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 80186, but the tool said new (explain -> prefilter -> explained), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 80186 by itself, with no judge.
+    summary: rmdir-reactivate matched active manager daemon mgr.trial152.ftosdf containing 'osd' in its name instead of an OSD daemon, failing on ceph orch daemon stop
+    status: fail
+    description: rados/cephadm/osds/{0-distro/ubuntu_22.04 0-nvme-loop 1-start 2-ops/rmdir-reactivate}
+    reason: 'Command failed on trial152 with status 22: ''sudo /home/ubuntu/cephtest/cephadm --image quay.ceph.io/ceph-ci/ceph:e6b0949528350b214a5d47d03abdd14de9f656bc shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring --fsid 5a9abe71-a631-11f1-8022-d404e6e7d460 -- bash -c \''set -e\nset -x\nceph orch ps\nHOST=$(hostname -s)\nOSD=$(ceph orch ps $HOST | grep osd | head -n 1 | awk \''"\''"\''{print $1}\''"\''"\'')\necho "host $HOST, osd $OSD"\nceph orch daemon stop $OSD\nwhile ceph orch ps | grep $OSD | grep running ; do sleep 5 ; done\nceph auth export $OSD > k\nceph orch daemon rm $OSD --force\nceph orch ps --refresh\nwhile ceph orch ps | grep $OSD ; do sleep 5 ; done\nceph auth add $OSD -i k\nceph cephadm osd activate $HOST\nwhile ! ceph orch ps | grep $OSD | grep running ; do sleep 5 ; done\n\'''''
+  '528502':
+    problem: '79943'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'misc.sh:292 checks persistent features length == 14 with cephx_auth_aes256k present: 79943, as Laura Flores wrote on 74827 (comment 76); 74827 is the earlier nvmeof_beacon_diff count'
+    summary: duplicate 79943 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/standalone/{supported-random-distro/{centos_9.stream} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial117 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=e6b0949528350b214a5d47d03abdd14de9f656bc TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''

@@ -1,0 +1,19 @@
+id: "74574"
+tracker: https://tracker.ceph.com/issues/74574
+title: "Error reimaging machines: reached maximum tries (120) after waiting for 1800 seconds"
+kind: infra
+match:
+  reason: 'Error reimaging machines'
+confirm:
+  - file: supervisor.*.log
+    pattern: 'reached maximum tries \(120\) after waiting for 1800 seconds'
+notes: |
+  The teuthology supervisor tried to reimage one or more test machines via FOG
+  before starting the job, but the machine did not come back up (SSH on port 22
+  never became available) within the timeout. The supervisor log shows repeated
+  "Unable to connect to port 22" and "timed out" warnings for the failing machine,
+  then a MaxWhileTries exception from teuthology/provision/fog.py. No teuthology.log
+  is produced because the failure happens before teuthology starts running tasks.
+  The exact try count and timeout vary by teuthology version and configuration.
+examples:
+  - skanta-2026-09-24_04:14:51-rados-wip-bharath20-testing-20260924.011348-main-distro-default-trial/577639

@@ -1,0 +1,29 @@
+id: "76471"
+tracker: https://tracker.ceph.com/issues/76471
+title: "Could not resolve host: github.com"
+kind: infra
+tree: command/unexplained/git-clone-dns-both-failed
+facts:
+  dns_host: '^github\.com$'
+confirm:
+  - file: teuthology.log
+    pattern: "failed to check out '\\w+' from https://github\\.com/ceph/ceph-ci\\.git; will also try in https://github\\.com/ceph/ceph\\.git"
+  - file: teuthology.log
+    pattern: "fatal: unable to access 'https://github\\.com/ceph/ceph-ci\\.git/': Could not resolve host: github\\.com"
+  - file: teuthology.log
+    pattern: "fatal: unable to access 'https://github\\.com/ceph/ceph\\.git/': Could not resolve host: github\\.com"
+notes: |
+  The workunit task clones the ceph repository on the test node. Its git clone of
+  ceph-ci.git failed with 'fatal: unable to access ...: Could not resolve host:
+  github.com', teuthology logged 'failed to check out ... will also try in
+  ceph.git', and the clone of ceph.git failed on DNS the same way. Both exit with git
+  status 128, so the workunit fails (CommandFailedError on the ceph.git clone) before
+  running any test. The cause is the lab's DNS not resolving github.com: the tracker
+  traced it to the lab DNS server soko01 (dnsmasq forwarding, a small NIC RX ring
+  buffer dropping packets) and to systemd-resolved not failing over to the second
+  server. Where only the ceph.git clone fails at checkout with 'unable to read tree',
+  the job takes the other branch (record 75360).
+examples:
+  - skanta-2026-06-02_04:58:02-rados-wip-bharath3-testing-2026-06-02-0837-distro-default-trial/253529
+also:
+  - "75360"

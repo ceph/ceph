@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+import re
+import argparse
+from multiprocessing import Pool, cpu_count
+
+def process_single_log(log_file_path):
+    """
+    Analyzes a single Ceph log file and returns the transaction data.
+
+    This function is designed to be run in a separate process. It reads a
+    log file and returns statistics about started, finished, and pending
+    transactions.
+
+    Args:
+        log_file_path (str): The path to the Ceph log file.
+
+    Returns:
+        dict: A dictionary containing the analysis results for one file.
+              Keys are 'started', 'finished', 'pending', and 'file'.
+    """
+    # Regex to capture the timestamp from the beginning of a line.
+    timestamp_regex = re.compile(r"^(\S+)")
+    
+    # Regex to capture the full object name (including snapshot) from a "submit_transaction" log line.
+    start_tx_regex = re.compile(r"submit_transaction.*hoid: \S+:::(\S+)\s")
+    
+    # Regex to capture the full object name (including snapshot) from a "finish_rmw" log line.
+    finish_tx_regex = re.compile(r"finish_rmw.*on_all_commit on Op\(\S+:::(\S+)\s")
+
+    # The key is the object name, value is a tuple: (line_number, timestamp)
+    pending_transactions = {}
+    started_count = 0
+    finished_count = 0
+
+    try:
+        with open(log_file_path, 'r') as f:
+            for line_num, line in enumerate(f, 1):
+                start_match = start_tx_regex.search(line)
+                if start_match:
+                    object_name = start_match.group(1)
+                    if object_name not in pending_transactions:
+                        timestamp_match = timestamp_regex.match(line)
+                        timestamp = timestamp_match.group(1) if timestamp_match else "N/A"
+                        pending_transactions[object_name] = (line_num, timestamp)
+                        started_count += 1
+                    continue
+
+                finish_match = finish_tx_regex.search(line)
+                if finish_match:
+                    object_name = finish_match.group(1)
+                    if object_name in pending_transactions:
+                        del pending_transactions[object_name]
+                        finished_count += 1
+    except FileNotFoundError:
+        print(f"Warning: Log file not found at '{log_file_path}'. Skipping.")
+        return None
+    except Exception as e:
+        print(f"An unexpected error occurred while processing {log_file_path}: {e}")
+        return None
+
+    # Return a dictionary of results for aggregation later.
+    return {
+        'file': log_file_path,
+        'started': started_count,
+        'finished': finished_count,
+        'pending': pending_transactions
+    }
+
+def analyze_ceph_logs_parallel(log_files):
+    """
+    Analyzes multiple Ceph log files in parallel and prints a summary.
+
+    Args:
+        log_files (list): A list of paths to Ceph log files.
+    """
+    num_processes = min(len(log_files), cpu_count())
+    print(f"--- Starting analysis of {len(log_files)} files using {num_processes} processes ---")
+
+    # Use a multiprocessing Pool to process files in parallel.
+    with Pool(processes=num_processes) as pool:
+        results = pool.map(process_single_log, log_files)
+
+    # Filter out any None results from files that couldn't be opened.
+    results = [res for res in results if res is not None]
+    if not results:
+        print("No log files were successfully analyzed.")
+        return
+
+    # --- Aggregate and Report ---
+    total_started = 0
+    total_finished = 0
+    all_unfinished_objects = {}
+
+    for res in results:
+        total_started += res['started']
+        total_finished += res['finished']
+        # Add file info to the pending object data for better reporting
+        for obj, (line_num, timestamp) in res['pending'].items():
+            all_unfinished_objects[obj] = (res['file'], line_num, timestamp)
+
+    print("\n--- Analysis Complete ---")
+    print(f"Total transactions started across all files: {total_started}")
+    print(f"Total transactions finished across all files: {total_finished}")
+    
+    total_unfinished = len(all_unfinished_objects)
+    print(f"Transactions that did not finish: {total_unfinished}")
+
+    if total_unfinished > 0:
+        print("\nObjects associated with unfinished transactions:")
+        for obj, (file, line_num, timestamp) in all_unfinished_objects.items():
+            print(f"  - Object: {obj} (started at {timestamp} in '{file}' on line {line_num})")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Analyze Ceph logs in parallel to find hung EC I/O transactions."
+    )
+    parser.add_argument(
+        "logfiles",
+        nargs='+',  # This allows one or more logfile arguments
+        help="Path(s) to the Ceph log file(s) to analyze."
+    )
+    args = parser.parse_args()
+    
+    analyze_ceph_logs_parallel(args.logfiles)
+

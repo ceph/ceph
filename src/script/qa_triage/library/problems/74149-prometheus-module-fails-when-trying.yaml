@@ -1,0 +1,45 @@
+id: "74149"
+tracker: https://tracker.ceph.com/issues/74149
+title: "Prometheus module fails when trying to load security configuration JSON"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/66571
+    branch: main
+    fixed_in: v20.3.0-5831-g7d9f8f3b5f
+tree: test/unittest
+facts:
+  test: '^tasks\.mgr\.test_prometheus\.TestPrometheus\.test_standby$'
+  error: "text/html;charset=utf-8' != 'text/plain;charset=utf-8"
+match:
+  reason: 'test_standby'
+confirm:
+  - file: teuthology.log
+    pattern: "AssertionError: 'text/html;charset=utf-8' != 'text/plain;charset=utf-8'"
+  - file: teuthology.log
+    pattern: 'self\.assertEqual\(r\.headers\["content-type"\], "text/plain;charset=utf-8"\)'
+notes: |
+  rados/mgr tasks/4-units/prometheus runs qa/tasks/mgr/test_prometheus.py. test_standby
+  fails the original active mgr, which comes back as a standby, then requests
+  <uri>metrics and asserts status 200, content-type 'text/plain;charset=utf-8' and
+  server 'Ceph-Prometheus'. The standby Root.metrics() in
+  src/pybind/mgr/prometheus/module.py returned '' without setting a content type, so
+  cherrypy answered 'text/html;charset=utf-8' and the assertion at line 50 failed. The
+  header was lost when the module was reworked for tracker 74148 (the locking added by
+  PR 65245 in HealthHistory and the TTL cache changes). PR 66571 (mgr/prometheus: use
+  RLock to fix the deadlock in HealthHistory, add ThreadSafeLRUCacheDict, restore the
+  missing Content-Type: text/plain header for the standby module) fixes it; it landed in
+  v20.3.0-5831-g7d9f8f3b5f, so builds older than that fail. The failed test and the
+  AssertionError are the symptom; the missing header in the standby module is the cause.
+  The mgr log may also show 'Failed to setup cephadm based secure monitoring stack:
+  Expecting value' (the tracker title), which is a harmless fall-back to the default
+  configuration. Seen on main, tentacle and squid test batches; the squid case came from
+  PR 66483 (a backport of 65245) being included in the QA batch by mistake.
+examples:
+  - lflores-2026-01-26_23:21:06-rados-wip-yuri12-testing-2026-01-22-2045-distro-default-trial/19108
+  - skanta-2026-01-30_23:12:23-rados-wip-bharath10-testing-2026-01-30-1531-distro-default-trial/28478
+  - skanta-2026-02-22_05:18:48-rados-wip-bharath21-testing-2026-02-20-1039-distro-default-trial/63357
+  - skanta-2026-03-03_23:53:54-rados-wip-bharath6-testing-2026-03-03-1755-distro-default-trial/79743
+  - skanta-2026-03-04_23:53:38-rados-wip-bharath1-testing-2026-03-04-1011-distro-default-trial/85642
+  - yuriw-2026-03-02_18:34:01-rados-wip-yuri3-testing-2026-03-02-1622-distro-default-trial/76731
+also:
+  - "75101"

@@ -1,0 +1,8 @@
+run: jayaprakash-2026-04-21_16:29:26-rados-main-distro-default-trial
+signatures:
+  ? 'cluster-log/message | ERR osd <pg> soid #:<sha>:::<host>-#:#a : object info version incorrect auth_oi=#:<sha>:::<host>-#:#a(#''# client.<pg>:# dirty|data_digest s # uv # dd <sha> alloc_hint [# # #] shard_versions={#: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#}) candidate_oi=#:<sha>:::<host>-#:#a(#''# client.<pg>:# dirty|data_digest s # uv # dd <sha> alloc_hint [# # #] shard_versions={#: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#})'
+  : '76213': 1
+  ? 'cluster-log/message | ERR osd <pg> soid #:<sha>:::<host>-#:#e : object info version incorrect auth_oi=#:<sha>:::<host>-#:#e(#''# client.<pg>:# dirty|data_digest s # uv # dd <sha> alloc_hint [# # #] shard_versions={#: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#}) candidate_oi=#:<sha>:::<host>-#:#e(#''# client.<pg>:# dirty|data_digest s # uv # dd <sha> alloc_hint [# # #] shard_versions={#: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#, #: #''#})'
+  : '76213': 1
+titles:
+  '76213': 'rados/thrash-erasure-code-isa: scrub detects object info version incorrect with matching digests'

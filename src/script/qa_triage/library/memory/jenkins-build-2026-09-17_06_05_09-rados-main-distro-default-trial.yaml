@@ -1,0 +1,29 @@
+run: jenkins-build-2026-09-17_06:05:09-rados-main-distro-default-trial
+signatures:
+  ? 'cluster-log/health/radosbench-populate-overfill | WRN OSD_NEARFULL | nearfull: radosbench populate run writes uncapped # MB objects'
+  : '74518': 1
+  ? 'cluster-log/health/radosbench-populate-overfill | WRN POOL_NEARFULL | nearfull: radosbench populate run writes uncapped # MB objects'
+  : '74518': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+  ? 'command/unexplained | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: #'
+  : '77242': 1
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  ? 'timeout/unexplained/thrasher-min-size-pgs-not-active | MaxWhileTries | OSDThrasher test_pool_min_size: PGs not active or peered'
+  : '76298': 1
+  ? 'valgrind/Leak_StillReachable/openssl-evp-cipher-fetch | valgrind error: Leak_StillReachable malloc CRYPTO_malloc | valgrind Leak_StillReachable EVP_CIPHER_fetch CRYPTO_malloc'
+  : '79831': 2
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '79943': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '74518': 'rados/perf: pools reached nearfull (POOL_NEARFULL)'
+  '76298': rados/thrash-erasure-code failure - not all PGs are active or peered
+  '77242': 'rados/cephadm: test_mgmt_gateway failed: curl -k -s https://${MGMT_GTW_IP}:9876/health returned exit status 7'
+  '79831': Leak_StillReachable monitor valgrind error CRYPTO_malloc
+  '79943': qa/standalone/mon/misc.sh TEST_mon_features fails from the addition of "cephx_auth_aes256k"
+  '79946': After rebuilding the mondb, authentication starts failing
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'

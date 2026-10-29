@@ -1,0 +1,12 @@
+run: yuriw-2026-04-17_17:06:17-upgrade:quincy-x-squid-release-distro-default-trial
+signatures:
+  'cluster-log/message | WRN mon Health detail: HEALTH_WARN noscrub flag(s) set':
+    '76189': 1
+  'cluster-log/message | WRN mon pg <pg> is stuck peering for #s, current state peering, last acting [#,#,#]':
+    '69456': 1
+  'hung/command | parallel: cephadm --image quay.io/ceph/ceph:v#.<pg> shell --fsid <uuid> -- ceph':
+    '75570': 1
+titles:
+  '69456': 'upgrade: pg is stuck peering'
+  '75570': 'upgrade/stress-split: Thrasher fails to revive an OSD during upgrade test'
+  '76189': 'squid: upgrade/quincy-x/stress-split: "cluster [WRN] Health detail: HEALTH_WARN noscrub flag(s) set" in cluster log'

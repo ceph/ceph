@@ -1,0 +1,6 @@
+run: kchai-2026-06-01_10:53:22-rados:cephadm-main_base_5.29.26-distro-default-trial
+signatures:
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '77105': 1
+titles:
+  '77105': ' cephadm iSCSI on el10 (Rocky 10): bundled tcmu-runner-1.5.4-9.el10cp hangs at startup'

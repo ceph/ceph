@@ -1,0 +1,6 @@
+run: ksirivad-2026-05-19_17:20:42-rados:singleton-main-distro-default-trial
+signatures:
+  'cluster-log/message | WRN osd # slow requests (by type [ ''delayed'' : # ] most affected pool [ ''rbd'' : # ])':
+    '76294': 1
+titles:
+  '76294': slow request in cluster log causing test failure

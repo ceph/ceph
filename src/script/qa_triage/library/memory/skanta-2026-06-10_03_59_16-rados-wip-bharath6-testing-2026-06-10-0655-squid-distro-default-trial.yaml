@@ -1,0 +1,18 @@
+run: skanta-2026-06-10_03:59:16-rados-wip-bharath6-testing-2026-06-10-0655-squid-distro-default-trial
+signatures:
+  ? cluster-log/message/mgr-session-evicted | WRN mds evicting unresponsive client <host>:y (#), after <pg> seconds | MDS evicted the unresponsive libcephfs session of a restarted mgr
+  : '76497': 1
+  ? 'crash/client/unnamed | Command failed (workunit test mon/test_mon_osdmap_prune.sh) on <host> with status #: ''mkdir -p -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && cd -- /home/ubuntu/cephtest/mnt.#/client.#/tmp && CEPH_CLI_TEST_DUP_COMMAND=# CEPH_REF=<sha> TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="#" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.# CEPH_ROOT=/home/ubuntu/cephtest/clone.client.# CEPH_MNT=/home/ubuntu/cephtest/mnt.# adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout #h /home/ubuntu/cephtest/clone.client.#/qa/workunits/mon/test_mon_osdmap_prune.sh'''
+  : '67244': 1
+  'hung/command | osd_recovery: rados -p rbd bench # write -b #':
+    '56097': 1
+  ? 'test/unittest | tasks.mgr.test_insights.TestInsights.test_health_history: AssertionError: datetime.datetime(#, #, #, #, #, #, #) not greater than datetime.datetime(#, #, #, #, #, #, #)'
+  : '55854': 1
+  workunit/standalone | mon/mon-cluster-log.sh TEST_journald_cluster_log_level:
+    '67282': 1
+titles:
+  '55854': Datetime AssertionError in test_health_history (tasks.mgr.test_insights.TestInsights)
+  '56097': Timeout on `sudo adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 120 ceph --cluster ceph tell osd.1 flush_pg_stats`
+  '67244': 'mon/test_mon_osdmap_prune.sh: Calling `ceph osd getmap` results in a coredump'
+  '67282': 'TEST_journald_cluster_log_level/TEST_cluster_log_level:  echo ''TEST FAILED WITH 1 ERRORS'''
+  '76497': rados/singleton-bluestore/cephtool - evicting unresponsive client warnings

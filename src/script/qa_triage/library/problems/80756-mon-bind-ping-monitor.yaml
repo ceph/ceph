@@ -1,0 +1,17 @@
+id: "80756"
+tracker: https://tracker.ceph.com/issues/80756
+title: "qa/standalone/mon/mon-bind.sh: TEST_mon_client_connect fails from error pinging monitor"
+kind: product
+match:
+  reason: 'mon/mon-bind\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'RADOS object not found \(error calling ping_monitor\)'
+  - file: teuthology.log
+    pattern: 'TEST_mon_client_connect:\s+return 1'
+notes: |
+  "ceph ping mon.a" fails with ENOENT ("RADOS object not found (error calling
+  ping_monitor)") in TEST_mon_client_connect: MonClient::ping_monitor() returns early
+  when the client has no keyring.
+examples:
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631299

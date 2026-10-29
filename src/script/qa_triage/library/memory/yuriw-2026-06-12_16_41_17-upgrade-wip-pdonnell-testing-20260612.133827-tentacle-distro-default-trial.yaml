@@ -1,0 +1,9 @@
+run: yuriw-2026-06-12_16:41:17-upgrade-wip-pdonnell-testing-20260612.133827-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN OSD_HOST_DOWN:
+    '75415': 1
+  'timeout/slow-ops | wait_until_healthy: slow ops':
+    '75695': 1
+titles:
+  '75415': 'upgrade: "Health check failed: 1 host (1 osds) down (OSD_HOST_DOWN)" in cluster log'
+  '75695': 'cluster [WRN] [WRN] OSD_SLOW_PING_TIME_BACK: Slow OSD heartbeats on back (longest 1313.681ms)" in cluster log'

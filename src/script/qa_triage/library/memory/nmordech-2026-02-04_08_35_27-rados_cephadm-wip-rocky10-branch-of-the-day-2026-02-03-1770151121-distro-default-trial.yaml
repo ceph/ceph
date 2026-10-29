@@ -1,0 +1,6 @@
+run: nmordech-2026-02-04_08:35:27-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-03-1770151121-distro-default-trial
+signatures:
+  timeout/unexplained | wait_until_healthy:
+    '74643': 1
+titles:
+  '74643': 'cherrypy.process.wspbus.ChannelFailures: TypeError(''certfile should be a valid filesystem path'')'

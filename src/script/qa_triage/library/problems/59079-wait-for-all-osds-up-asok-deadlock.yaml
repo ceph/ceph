@@ -1,0 +1,28 @@
+id: "59079"
+tracker: https://tracker.ceph.com/issues/59079
+title: "AssertionError: timeout expired in wait_for_all_osds_up"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/72696
+    branch: main
+match:
+  reason: 'timeout expired in wait_for_all_osds_up'
+confirm:
+  - file: teuthology.log
+    pattern: 'ceph daemon osd\.\S+ config set'
+  - file: teuthology.log
+    pattern: 'admin_socket: exception: exception: timed out'
+  - file: remote/*/log/ceph-osd.*.log.gz
+    pattern: 'fbmap_alloc \S+ shutdown'
+notes: |
+  A deadlock in a restarting OSD, mostly seen in rados/singleton/all/recovery-preemption.
+  OSD::init() holds osd_lock during BlueStore::mount(). The test runs
+  "ceph daemon osd.N config set ..." immediately after restarting osd.1 with
+  wait-for-up: false. That command routes through OSD::handle_conf_change(), which
+  also needs osd_lock, so the admin socket thread deadlocks and times out after
+  10 seconds. The OSD never finishes booting; its log stops in the BlueStore mount
+  path (fbmap_alloc ... shutdown). The prior unclean shutdown (from
+  recovery-preemption) causes BlueStore to take the slow NCB restore path,
+  making the mount outlast the socket timeout.
+examples:
+  - skanta-2026-10-12_23:32:34-rados-wip-bharath20-testing-20261012.132505-main-distro-default-trial/631182

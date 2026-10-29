@@ -1,0 +1,58 @@
+run: skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial
+jobs:
+  '165894':
+    problem: '70714'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 4 jobs in 70714, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/165899, skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/165907, skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/165910.'
+    summary: 'cephadm could not pull monitoring images from quay.io (502 Bad Gateway), so mgmt-gateway never started and wait_for_service timed out: tracker 70714 (CEPHADM_DAEMON_PLACE_FAIL, uid/gid extraction failed).'
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/centos_9.stream agent/on mon_election/connectivity task/test_mgmt_gateway}
+    reason: reached maximum tries (300) after waiting for 300 seconds
+  '165952':
+    problem: '68337'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 68337, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: BLUESTORE_SLOW_OP_ALERT in the cluster log is tracker 68337, which had no record, so the job was wrongly called new.
+    status: fail
+    description: rados/verify/{ceph clusters/fixed-4 d-thrash/none mon_election/connectivity msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-2} onode-segment$/{512K-onoff} write$/{random/{compr$/{no$/{no}} random}}}} rados read-affinity/balance rpm_latest tasks/rados_api_tests validater/valgrind}
+    reason: '"2026-04-21T23:12:41.162713+0000 mon.a (mon.0) 328 : cluster [WRN] Health check failed: 1 OSD(s) experiencing slow operations in BlueStore (BLUESTORE_SLOW_OP_ALERT)" in cluster log'
+  '165994':
+    problem: '76470'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 76392, this one among them, and no record names it yet: the tool placed them in 76470. A record for it should place them all; others are .'
+    summary: rados/test_crash.sh failed because ceph-crash failed to post crash reports ([ 0 = 4 ]), matching tracker 76470 (with 76392 filed for post-failure teardown hang).
+    status: fail
+    description: rados/singleton/{all/test-crash mon_election/classic msgr-failures/none msgr/async objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-1} onode-segment$/{1M} write$/{v2/{compr$/{no$/{no}} v2}}}} rados supported-random-distro/{ubuntu_latest}}
+    reason: 'Command failed (workunit test rados/test_crash.sh) on trial102 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=635e827e05e172b415360df6e4fa78e1e8e2acc9 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/test_crash.sh'''
+  '165940':
+    problem: '73278'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 6 jobs in 76281, this one among them, and no record names it yet: the tool placed them in 73278. A record for it should place them all; others are skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/166003, skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/166070, skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/166135, yuriw-2026-05-15_14:18:16-rados-wip-yuri-testing-2026-05-14-1648-distro-default-trial/213459, yuriw-2026-05-15_14:18:16-rados-wip-yuri-testing-2026-05-14-1648-distro-default-trial/213588.'
+    summary: 'Same cause as 73278: the cephtool workunit''s ''mgr module enable foodne --force'' leaves a mgr libcephfs session that the MDS evicts ~300 s later; tracker 76281 is another issue for it, so add it to 73278''s also.'
+    status: fail
+    description: rados/singleton-bluestore/{all/cephtool mon_election/classic msgr-failures/none msgr/async-v2only objectstore/bluestore/{alloc$/{bitmap} base mem$/{normal-2} onode-segment$/{1M} write$/{random/{compr$/{yes$/{zstd}} random}}} rados supported-random-distro/{ubuntu_latest}}
+    reason: '"2026-04-21T23:04:02.231302+0000 mds.a (mds.0) 1 : cluster [WRN] evicting unresponsive client trial072:x (6209), after 303.539 seconds" in cluster log'
+  '165980':
+    problem: '79024'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 74709, this one among them, and no record names it yet: the tool placed them in 79024. A record for it should place them all; others are .'
+    summary: The stall is 79024's (client ops stuck 'queued for pg' under osd-dispatch-delay and morepggrow). Tracker 74709 is the same job family reporting the devicehealth failure that stall produced, so I add 74709 to 79024's `also` and write no new record.
+    status: dead
+    description: rados/thrash/{0-size-min-size-overrides/3-size-2-min-size 1-pg-log-overrides/short_pg_log 2-recovery-overrides/{default} 3-scrub-overrides/{max-simultaneous-scrubs-3} backoff/normal ceph clusters/{fixed-4} crc-failures/default d-balancer/crush-compat mon_election/connectivity msgr-failures/osd-dispatch-delay msgr/async-v1only objectstore/{bluestore/{alloc$/{hybrid} base mem$/{normal-1} onode-segment$/{1M} write$/{random/{compr$/{yes$/{snappy}} random}}}} rados supported-random-distro/{centos_9.stream} thrashers/morepggrow thrashosds-health workloads/pool-snaps-few-objects}
+    reason: hit max job timeout
+  '166131':
+    problem: '75218'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 66415, this one among them, and no record names it yet: the tool placed them in 75218. A record for it should place them all; others are .'
+    summary: Job timed out in ceph_osds waiting for raw OSDs to deploy — same cause as 75218; add 66415 to its also list, fix the node to not override the wait fact, and exclude 77106 from these jobs
+    status: fail
+    description: rados/cephadm/osds/{0-distro/ubuntu_22.04 0-nvme-loop 1-start 2-ops/deploy-raw}
+    reason: reached maximum tries (120) after waiting for 120 seconds
+  '166092':
+    problem: '76295'
+    by: Claude Code for aainscow, as the reviewer
+    why: 'ganesha.nfsd: Cannot register NFS V3 on UDP (no rpcbind, no Enable_UDP = false), nfs.a exited status=2, then nfs is not available; the Port 8443 line is a bystander in the dumped mgr log, as for 107441'
+    summary: duplicate 76295 (explain -> prefilter -> confirm -> fix-check)
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/rocky_10 agent/off mon_election/classic task/test_cephadm}
+    reason: 'Command failed (workunit test cephadm/test_cephadm.sh) on trial169 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=635e827e05e172b415360df6e4fa78e1e8e2acc9 TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_cephadm.sh'''

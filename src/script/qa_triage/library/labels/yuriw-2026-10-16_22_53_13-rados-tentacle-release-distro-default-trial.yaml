@@ -1,0 +1,10 @@
+run: yuriw-2026-10-16_22:53:13-rados-tentacle-release-distro-default-trial
+jobs:
+  '649458':
+    problem: '75763'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 75763, this one among them.
+    summary: rocky_10 rados/encoder job on tentacle-release failed installing reef (no Rocky 10 build on shaman); it is 75763, but 80294's loose branch check also matched, making it ambiguous.
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro/{rocky_10}}
+    reason: Failed to fetch package version from https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=default&distros=rocky%2F10%2Fx86_64&ref=reef

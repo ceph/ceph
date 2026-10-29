@@ -1,0 +1,6 @@
+run: rkachach-2026-06-11_20:45:44-orch:cephadm-wip-rkachach-testing-2026-06-11-1505-distro-default-trial
+signatures:
+  ? 'test/unittest | tasks.mgr.test_orchestrator_cli.TestOrchestratorCli.test_mds_rm: teuthology.exceptions.CommandFailedError: Command failed on <host> with status #: ''sudo adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout # ceph --cluster ceph orch daemon rm mds.fsname'''
+  : '77374': 1
+titles:
+  '77374': 'orchestrator_cli test_mds_rm fails: TestOrchestrator.remove_daemons() missing force_delete_data kwarg'

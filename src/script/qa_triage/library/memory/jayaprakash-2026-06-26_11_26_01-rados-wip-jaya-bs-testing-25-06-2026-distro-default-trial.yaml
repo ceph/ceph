@@ -1,0 +1,9 @@
+run: jayaprakash-2026-06-26_11:26:01-rados-wip-jaya-bs-testing-25-06-2026-distro-default-trial
+signatures:
+  ? crash/client/unnamed/balancer-osd-weight-assert | mgr osd/OSDMap.cc FAILED ceph_assert(osd_weight.count(oid)) in OSDMap::calc_deviations
+  : '77785': 1
+  ? 'workunit/set-e/test-repos-add-repo-metadata-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: Traceback (most recent call last): | test_repos.sh: add-repo repository metadata #'
+  : '77130': 1
+titles:
+  '77130': 'test_repos.sh: 17.2.6 jammy Release'' does not have a Release file'
+  '77785': 'qa/standalone/mon-stretch/mon-stretch-uneven-crush-weights.sh: ceph-mgr crashes with ceph_assert(osd_weight.count(oid))'

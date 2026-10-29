@@ -1,0 +1,12 @@
+run: jayaprakash-2026-06-19_10:43:50-rados-wip-jaya-bs-testing-18-06-2026-distro-default-trial
+signatures:
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 1
+  timeout/unexplained | wait_for_clean:
+    '75216': 1
+  ? 'workunit/set-e/test-repos-add-repo-metadata-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: Traceback (most recent call last): | test_repos.sh: add-repo repository metadata #'
+  : '67555': 1
+titles:
+  '67555': failed to fetch repository task/test_cephadm_repos
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'
+  '77106': nvme list json command failed, retrying...

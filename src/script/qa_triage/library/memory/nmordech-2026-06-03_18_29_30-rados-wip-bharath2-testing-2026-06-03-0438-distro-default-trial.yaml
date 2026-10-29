@@ -1,0 +1,18 @@
+run: nmordech-2026-06-03_18:29:30-rados-wip-bharath2-testing-2026-06-03-0438-distro-default-trial
+signatures:
+  'command/unexplained | rm -rf clone.client.# && git clone https://git.ceph.com/ceph.git clone.client.#: #':
+    '76471': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '76298': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+  workunit/standalone | mon/misc.sh TEST_mon_features:
+    '75358': 1
+  workunit/unexplained | mon/crush_ops.sh:
+    '57900': 1
+titles:
+  '57900': 'mon/crush_ops.sh: mons out of quorum'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76298': rados/thrash-erasure-code failure - not all PGs are active or peered
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '76471': 'Could not resolve host: github.com'

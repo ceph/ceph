@@ -1,0 +1,18 @@
+run: lflores-2026-01-23_19:07:45-rados-wip-rocky10-branch-of-the-day-2026-01-23-1769128778-distro-default-trial
+jobs:
+  '15389':
+    problem: '71506'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 16 jobs that the tool placed in no known problem in 71506, this one among them.
+    summary: 'mgr.y''s dashboard module failed with Timeout(''Port 8765 not free'') when it started cherrypy during the upgrade. This is tracker #71506, which had no record, so the tool called it new.'
+    status: fail
+    description: rados/upgrade/parallel/{0-random-distro$/{centos_9.stream_runc} 0-start 1-tasks mon_election/connectivity overrides/ignorelist_health upgrade-sequence workload/{ec-rados-default rados_api rados_loadgenbig rbd_import_export test_rbd_api test_rbd_python}}
+    reason: '"2026-01-23T20:07:19.240082+0000 mgr.y (mgr.34101) 5 : cluster [ERR] Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8765 not free on 10.20.193.16.'')" in cluster log'
+  '15326':
+    problem: '74518'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 12 jobs that the tool placed in no known problem in 74518, this one among them.
+    summary: A cbt radosbench 60 s write (--no-cleanup) filled the rados-bench-cbt pool to ~87% of the OSDs' space, so mon.a raised POOL_NEARFULL, which this rados/perf job does not ignore. This is tracker 74518; the tool called it new.
+    status: fail
+    description: rados/perf/{ceph mon_election/classic objectstore/bluestore-bitmap scheduler/dmclock_default_shards settings/optimized ubuntu_latest workloads/radosbench_4M_rand_read}
+    reason: '"2026-01-23T19:42:01.196937+0000 mon.a (mon.0) 161 : cluster [WRN] Health check failed: 3 pool(s) nearfull (POOL_NEARFULL)" in cluster log'

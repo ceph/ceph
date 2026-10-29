@@ -1,0 +1,10 @@
+run: nmordech-2026-02-25_11:36:23-rados-wip-rocky10-branch-of-the-day-2026-02-24-1771941190-distro-default-trial
+jobs:
+  '70083':
+    problem: '75406'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 5 jobs in 75217, this one among them, and no record names it yet: the tool placed them in 74004. A record for it should place them all; others are nmordech-2026-03-18_09:51:02-rados-wip-rocky10-branch-of-the-day-2026-03-18-1773820469-distro-default-trial/107372, yaarit-2026-03-05_02:43:32-rados-wip-rocky10-branch-of-the-day-2026-03-04-1772633736-distro-default-trial/86338, yuriw-2026-02-24_16:03:54-rados-wip-yuri8-testing-2026-02-23-2128-distro-default-trial/68493, yuriw-2026-10-16_15:50:03-rados-tentacle-release-distro-default-trial/646827.'
+    summary: The job hung in is_pg_clean's untimed `ceph pg query` after test_pg_scrub killed its only OSD, which is record 75406; 75217 is added to 75406's `also`, and the tree learns the two causes whose record paths no node produced.
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{ubuntu_latest} workloads/misc}
+    reason: 'Command failed (workunit test misc/test-ceph-helpers.sh) on trial056 with status 124: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=506b402a3d3a240d0bfe073b4769eaffdf84497b TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/misc/test-ceph-helpers.sh'''

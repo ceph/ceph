@@ -1,0 +1,41 @@
+# A pull request that changes only data (the records, the settled jobs and the
+# memory) is merged once the check passes. One that changes code (the learned
+# nodes or the scripts, which run on everyone's machine) waits for a person's
+# review. This runs from the library's own branch, and never runs the pull
+# request's code.
+name: automerge
+on:
+  workflow_run:
+    workflows: [check]
+    types: [completed]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  merge:
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+        run: |
+          pr=$(gh api "repos/$REPO/pulls?state=open&head=$HEAD_OWNER:$HEAD_BRANCH" \
+                 --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then echo "No open pull request for $HEAD_OWNER:$HEAD_BRANCH."; exit 0; fi
+          # Merge only the commit that was checked.
+          if [ "$(gh pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)" != "$HEAD_SHA" ]; then
+            echo "Pull request $pr has moved on since the check: its next check decides."; exit 0
+          fi
+          if gh pr view "$pr" -R "$REPO" --json files --jq '.files[].path' |
+               grep -qvE '^(problems|labels|memory)/'; then
+            gh pr edit "$pr" -R "$REPO" --add-label 'needs review' || true
+            echo "Pull request $pr changes code: it waits for a person's review."
+          else
+            gh pr merge "$pr" -R "$REPO" --squash
+          fi

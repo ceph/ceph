@@ -1,0 +1,6 @@
+run: yuriw-2026-06-04_20:38:35-orch-wip-pdonnell-testing-20260602.202031-tentacle-distro-default-trial
+signatures:
+  cluster-log/health | WRN CEPHADM_AGENT_DOWN:
+    '77131': 1
+titles:
+  '77131': Sporadic failures of mgmt-gateway test suite caused by CEPHADM_AGENT_DOWN

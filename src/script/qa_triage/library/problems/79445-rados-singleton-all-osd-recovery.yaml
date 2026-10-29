@@ -1,0 +1,16 @@
+id: "79445"
+tracker: https://tracker.ceph.com/issues/79445
+title: "rados/singleton/{all/osd-recovery-incomplete: PGs unexpectedly recover during induced state of recovery"
+kind: test
+tree: other/osd-recovery-incomplete-assert
+notes: |
+  test_incomplete_pgs injects osd_recovery_delay_start=1000 on all OSDs and marks
+  OSDs 2 and 3 out, then brings OSDs 0 and 1 back in. The test then asserts
+  'assert not manager.is_recovered()' (osd_recovery.py:168), expecting recovery to
+  still be in progress. The assertion fails because the cluster reaches
+  'active+remapped+backfill_wait' before the test checks: is_recovered() counts
+  PGs without 'recover', 'backfilling' or 'stale' in their state as recovered, and
+  'backfill_wait' matches none of those, so those PGs are counted as recovered.
+examples:
+  - skanta-2026-10-17_23:46:38-rados-wip-bharath17-testing-20261016.230103-main-distro-default-trial/650981
+  - yuriw-2026-08-08_14:04:25-rados-wip-yuri3-testing-20260808.022747-main-distro-default-trial/446707

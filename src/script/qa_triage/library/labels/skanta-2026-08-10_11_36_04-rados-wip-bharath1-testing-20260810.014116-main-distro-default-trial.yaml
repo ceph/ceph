@@ -1,0 +1,10 @@
+run: skanta-2026-08-10_11:36:04-rados-wip-bharath1-testing-20260810.014116-main-distro-default-trial
+jobs:
+  '452044':
+    problem: '75962'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 75962, this one among them, and no record names it yet: the tool placed them in 73249. A record for it should place them all; others are .'
+    summary: osd.7 hit the 'unexpected need for missing item' assert because a divergent merge of a partial write left a wrong need version; that is tracker 75962, not 73249.
+    status: fail
+    description: rados/thrash-erasure-code-isa/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{512K} write$/{random/{compr$/{yes$/{snappy}} random}}}} rados recovery-overrides/{more-async-recovery} supported-random-distro/{ubuntu_22.04} thrashers/pggrow_host thrashosds-health workloads/ec-rados-plugin=isa-k=10-m=4}
+    reason: The WatchDog barked due to Daemon ceph.osd.7 has failed

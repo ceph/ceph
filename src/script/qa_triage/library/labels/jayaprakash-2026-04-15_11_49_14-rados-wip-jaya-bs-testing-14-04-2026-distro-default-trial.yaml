@@ -1,0 +1,10 @@
+run: jayaprakash-2026-04-15_11:49:14-rados-wip-jaya-bs-testing-14-04-2026-distro-default-trial
+jobs:
+  '153577':
+    problem: '76213'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 3 jobs in 76213, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are jayaprakash-2026-04-21_16:29:26-rados-main-distro-default-trial/167322, jayaprakash-2026-04-21_16:29:26-rados-main-distro-default-trial/167330.'
+    summary: Scrub reports 'object info version incorrect' on an optimized-EC isa pool because EC rollback_setattrs restores the primary's OI to non-primary shards (tracker 76213, PR 68609); new record 76213 covers it, limited to thrash-erasure-code-isa jobs with ec_optimizations_on.
+    status: fail
+    description: rados/thrash-erasure-code-isa/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/classic msgr-failures/osd-delay objectstore/{bluestore/{alloc$/{btree} base mem$/{normal-1} onode-segment$/{1M} write$/{v2/{compr$/{yes$/{zlib}} v2}}}} rados recovery-overrides/{default} supported-random-distro/{rpm_latest} thrashers/careful thrashosds-health workloads/ec-rados-plugin=isa-k=10-m=4}
+    reason: '"2026-04-15T12:39:25.062805+0000 osd.4 (osd.4) 101 : cluster [ERR] 3.1s0 soid 3:84cd1092:::trial11722595-29:f1 : object info version incorrect auth_oi=3:84cd1092:::trial11722595-29:f1(621''587 client.4658.0:4700 dirty|data_digest s 7700480 uv 486 dd 6d7e5100 alloc_hint [0 0 0] shard_versions={1: 558''517, 2: 558''517, 3: 558''517, 4: 558''517, 5: 558''517, 6: 558''517, 7: 558''517, 8: 558''517, 9: 558''517}) candidate_oi=3:84cd1092:::trial11722595-29:f1(592''553 client.4658.0:4700 dirty|data_digest s 7700480 uv 486 dd 6d7e5100 alloc_hint [0 0 0] shard_versions={1: 558''517, 2: 558''517, 3: 558''517, 4: 558''517, 5: 558''517, 6: 558''517, 7: 558''517, 8: 558''517, 9: 558''517})" in cluster log'

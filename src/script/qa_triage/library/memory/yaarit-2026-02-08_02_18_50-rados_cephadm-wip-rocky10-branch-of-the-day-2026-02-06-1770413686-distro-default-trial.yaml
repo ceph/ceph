@@ -1,0 +1,18 @@
+run: yaarit-2026-02-08_02:18:50-rados:cephadm-wip-rocky10-branch-of-the-day-2026-02-06-1770413686-distro-default-trial
+signatures:
+  cluster-log/health | WRN CEPHADM_APPLY_SPEC_FAIL:
+    '74818': 4
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha>-rockylinux-# shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  infra/packages | packages:
+    '51742': 1
+  timeout/unexplained | MaxWhileTries:
+    '74519': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '51742': 'Error: Failed to download metadata for repo ''appstream'''
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '74519': 'cephadm/osds: Error: statfs /etc/ceph/ceph.client.admin.keyring: no such file or directory'
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74818': 'ceph-volume lvm batch: error: argument --osd-type: invalid choice: ''OSDType.classic'''

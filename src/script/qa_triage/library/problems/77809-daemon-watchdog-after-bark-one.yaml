@@ -1,0 +1,35 @@
+id: "77809"
+tracker: https://tracker.ceph.com/issues/77809
+title: "daemon_watchdog - After BARK - one of the daemon show \"No such daemon running\" and hang for ~6hr"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69896
+    branch: main
+    fixed_in: v21.3.0-3788-g58aed4529d
+tree: hung/command
+facts:
+  command: 'tell mon\.\w+ sync_force'
+confirm:
+  - file: teuthology.log
+    pattern: 'Error ENXIO: problem getting command descriptions from mon\.\w+'
+  - file: teuthology.log
+    pattern: 'line \d+, in thrash_store'
+notes: |
+  qa/tasks/mon_thrash.py (rados/monthrash, thrashers/force-sync-many) kills several
+  monitors in one iteration (thrash many). should_thrash_store() only rolls the store
+  thrash probability and never checks the target mon, so the thrasher can run
+  'ceph tell mon.<x> sync_force' on a mon that has since entered the 'electing' state.
+  The command fails with 'Error ENXIO: problem getting command descriptions from mon.<x>'
+  (status 6, "mon unavailable"), CommandFailedError is raised from thrash_store, the
+  MonitorThrasher fails and the daemon watchdog barks ("BARK! unmounting mounts and
+  killing all daemons"; the already killed mon logs "No such daemon running"). With the
+  cluster gone nothing ends the job, which idles until the max job timeout, about six
+  hours later. The tree sees only the last command (sync_force) and the timeout, which
+  are symptoms; the ENXIO line and the thrash_store frame in the thrasher's traceback
+  show the cause.
+  Fixed by PR 69896 (qa/tasks/mon_thrash: skip store thrash when mon is not in quorum),
+  which makes should_thrash_store() check that the mon is leader or peon first.
+examples:
+  - skanta-2026-06-29_11:58:47-rados-wip-bharath7-testing-2026-06-29-1510-tentacle-distro-default-trial/325067
+  - skanta-2026-06-08_15:58:51-rados-wip-bharath21-testing-2026-06-05-2111-tentacle-distro-default-trial/278289
+  - skanta-2026-08-24_10:34:23-rados-wip-vallari2-testing-20260819.130432-tentacle-distro-default-trial/509299

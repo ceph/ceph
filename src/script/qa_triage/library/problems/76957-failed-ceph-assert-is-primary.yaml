@@ -1,0 +1,29 @@
+id: "76957"
+tracker: https://tracker.ceph.com/issues/76957
+title: "FAILED ceph_assert(is_primary()) in PrimaryLogPG::rep_repair_primary_object() with rados_replica_read_policy = balanced"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/70909
+    branch: main
+    fixed_in: v21.3.0-3436-g5820d71f73
+tree: crash/assert/specific
+facts:
+  source: '^osd/PrimaryLogPG\.cc$'
+  message: 'is_primary\(\)'
+  function: 'PrimaryLogPG::rep_repair_primary_object'
+notes: |
+  A replica OSD crashes with FAILED ceph_assert(is_primary()) in
+  PrimaryLogPG::rep_repair_primary_object() when handling a read error on a
+  replicated pool with balanced or localized reads (rados_replica_read_policy =
+  balance / balance_reads_on). When an ObjectStore read returns -EIO (e.g. from
+  injected EIO or media error), PrimaryLogPG::do_read() calls
+  rep_repair_primary_object(soid, ctx). Because rep_repair_primary_object()
+  asserts ceph_assert(is_primary()), any non-primary replica serving the read
+  aborts.
+  Fixed in PR #70909 (merged in v21.3.0-3436-g5820d71f73) by returning -EAGAIN on
+  replicas so the client retries the read against the primary instead of
+  attempting local repair.
+examples:
+  - yuriw-2026-05-15_14:18:16-rados-wip-yuri-testing-2026-05-14-1648-distro-default-trial/213348
+also:
+  - "81313"

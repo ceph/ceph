@@ -1,0 +1,10 @@
+run: jayaprakash-2026-07-15_18:38:17-rados-wip-jaya-bs-testing2-15-07-2026-distro-default-trial
+jobs:
+  '366546':
+    problem: '78429'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 2 jobs that the tool placed in no known problem in 78429, this one among them.
+    summary: 'test_host_drain hung because osd.5, deployed 21 s before ''ceph orch host drain'', was not yet in cephadm''s daemon cache and was never scheduled for removal: this is tracker 78429, which had no record; added the record and a hung/command node branch.'
+    status: dead
+    description: rados/cephadm/workunits/{0-distro/ubuntu_24.04 agent/on mon_election/connectivity task/test_host_drain}
+    reason: hit max job timeout

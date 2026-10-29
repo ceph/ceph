@@ -1,0 +1,30 @@
+run: yuriw-2026-08-31_17:58:51-rados-wip-yuri9-testing-20260831.150649-tentacle-distro-default-trial
+signatures:
+  ? 'cluster-log/health/dead-ping-not-retried | WRN MON_NETSPLIT | MON_NETSPLIT: mon ping to dead peer not retried after reconnect'
+  : '71344': 1
+  ? cluster-log/message/backfill-reject-injected | WRN mon pg <pg> is active+remapped+backfill_toofull, acting [#,#,#] | PG backfill_toofull from injected backfill reservation rejection
+  : '70716': 1
+  ? 'command/error | rados --no-log-to-stderr --name=client.# --pool=unique_pool_# bench --concurrent-ios=# --object-size=# --block-size=#: failed to fetch mon config (--no-mon-config to skip)'
+  : '79946': 1
+  ? 'command/error/authtool-type2-key | ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.#.keyring: error reading file /etc/ceph/ceph.keyring | ceph-authtool: keyring has a type-# key'
+  : '79948': 1
+  ? 'command/unexplained/not-found | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: # | egrep (defer backfill|defer recovery) /var/log/ceph/ceph-osd.*.log: not found'
+  : '79571': 1
+  ? 'crash/client/unnamed | Command crashed: ''sudo TESTDIR=/home/ubuntu/cephtest bash -c \''mkdir $TESTDIR/archive/ostest && cd $TESTDIR/archive/ostest && ulimit -Sn # && CEPH_ARGS="--no-log-to-stderr --log-file $TESTDIR/archive/ceph_test_objectstore.log --debug-bluestore #" ceph_test_objectstore --gtest_filter=*/#:*Matrix*:-*Matrix*Compression* --gtest_catch_exceptions=# --bluestore_write_v#=true\'''''
+  : '69646': 1
+  'test/unittest | tasks.mgr.test_progress.TestProgress.test_osd_came_back: IndexError: list index out of range':
+    '70320': 1
+  ? 'workunit/standalone/nvmeof-beacon-diff-count | mon/misc.sh TEST_mon_features | TEST_mon_features: persistent feature count wrong, nvmeof_beacon_diff added'
+  : '74827': 1
+  ? 'workunit/unexplained/ceph-pg-query-hung/osd-killed-pg-query-no-timeout | misc/test-ceph-helpers.sh | ceph pg query hung in is_pg_clean | test_pg_scrub: ceph pg query hung after OSD kill'
+  : '74004': 1
+titles:
+  '69646': 'src/test/objectstore/store_test.cc: FAILED ceph_assert(r == 0 || r == -95)'
+  '70320': test_osd_came_back fails when test does not detect that osd.0 is back in
+  '70716': 'rados/thrash-old-clients: "pg backfill_toofull" warning in cluster log'
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '74004': 'qa/standalone/ceph-helpers: ceph pg query hangs indefinitely'
+  '74827': TEST_mon_features fails due to hardcoded feature count - missing nvmeof_beacon_diff
+  '79571': 'qa: increase osd/mon/mgr debugging where appropriate'
+  '79946': After rebuilding the mondb, authentication starts failing
+  '79948': 'rados/thrash-old-clients: error reading file /etc/ceph/ceph.keyring'

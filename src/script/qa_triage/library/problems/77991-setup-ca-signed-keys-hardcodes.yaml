@@ -1,0 +1,32 @@
+id: "77991"
+tracker: https://tracker.ceph.com/issues/77991
+title: "setup_ca_signed_keys hardcodes 'sshd' systemd unit, fails on Ubuntu/Debian"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69998
+    branch: main
+    fixed_in: v21.3.0-847-gd899c9fd7d
+tree: command/error
+facts:
+  task: '^cephadm$'
+  error: 'Unit sshd\.service not found'
+match:
+  reason: 'systemctl restart sshd'
+confirm:
+  - file: teuthology.log
+    pattern: 'Failed to restart sshd\.service: Unit sshd\.service not found'
+  - file: teuthology.log
+    pattern: 'in setup_ca_signed_keys'
+notes: |
+  The cephadm qa task's setup_ca_signed_keys() (qa/tasks/cephadm.py) appends
+  'TrustedUserCAKeys /etc/ssh/ca-key.pub' to /etc/ssh/sshd_config and then runs
+  'sudo systemctl restart sshd' on every host. The SSH server unit is sshd.service on
+  RHEL/CentOS/Rocky but ssh.service on Debian/Ubuntu, so on Ubuntu 24.04 hosts systemd
+  says 'Failed to restart sshd.service: Unit sshd.service not found.' and the command
+  exits with status 5; the cephadm task fails before any cluster is bootstrapped. The
+  config write (tee) succeeds; only the restart fails. Seen in
+  rados/cephadm/workunits/task/test_ca_signed_key on ubuntu_24.04. Fixed in the test by
+  PR 69998 (main, v21.3.0-847-gd899c9fd7d), which restarts 'ssh' first and falls back
+  to 'sshd'; backports to umbrella and tentacle are tracked in #78100 and #78101.
+examples:
+  - pdonnell-2026-09-10_12:59:36-rados-wip-pdonnell-testing-20260910.003149-umbrella-distro-default-trial/548612

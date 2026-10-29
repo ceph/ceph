@@ -1,0 +1,10 @@
+run: skanta-2026-10-03_10:12:06-rados-wip-bharath19-testing-20261002.123021-main-distro-default-trial
+jobs:
+  '604392':
+    problem: '81629'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 81629, but the tool said probable-duplicate 81135 (explain -> prefilter -> explained -> agent -> verify-quotes -> fix-check), sure, after its judge (bob) said duplicate 81135. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 81629 by itself, with no judge.
+    summary: ceph_test_rados got -ETIMEDOUT because osd-dispatch-delay plus compression's 1-shard OSDs starved the op queue (81629), not the generic op-timeout record 81135
+    status: fail
+    description: rados/thrash-erasure-code-isa/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/osd-dispatch-delay objectstore/{bluestore/{alloc$/{bitmap} base mem$/{normal-2} onode-segment$/{512K-onoff} write$/{random/{compr$/{yes$/{snappy}} random}}}} rados recovery-overrides/{more-partial-recovery} supported-random-distro/{centos_9.stream} thrashers/pggrow_host thrashosds-health workloads/ec-rados-plugin=isa-k=10-m=4}
+    reason: 'Command failed on trial187 with status 1: ''CEPH_CLIENT_ID=0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage daemon-helper kill ceph_test_rados --ec-pool --max-ops 4000 --objects 50 --max-in-flight 16 --size 4000000 --min-stride-size 400000 --max-stride-size 800000 --max-seconds 0 --op read 100 --op write 0 --op delete 50 --op snap_create 50 --op snap_remove 50 --op rollback 50 --op setattr 25 --op rmattr 25 --op copy_from 50 --op append 100 --pool unique_pool_0'''

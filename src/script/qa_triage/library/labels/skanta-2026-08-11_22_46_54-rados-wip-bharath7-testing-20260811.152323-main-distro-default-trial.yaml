@@ -1,0 +1,10 @@
+run: skanta-2026-08-11_22:46:54-rados-wip-bharath7-testing-20260811.152323-main-distro-default-trial
+jobs:
+  '458958':
+    problem: '79515'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in no known problem in 79515, this one among them.
+    summary: 'The tool''s "new" was wrong: the Leak_PossiblyLost is the leaked 128 KiB stack of the EC CALL op coroutine that PrimaryLogPG::do_op starts (tracker 79515), on 10 of the 16 OSDs. I added a 79515 record and a node at valgrind/Leak_PossiblyLost.'
+    status: fail
+    description: rados/verify/{ceph clusters/fixed-4 d-thrash/none mon_election/connectivity msgr-failures/few msgr/async-v1only objectstore/{bluestore/{alloc$/{hybrid} base mem$/{normal-2} onode-segment$/{512K-onoff} write$/{v2/{compr$/{no$/{no}} v2}}}} rados read-affinity/balance rpm_latest tasks/rados_api_tests validater/valgrind}
+    reason: 'valgrind error: Leak_PossiblyLost malloc UnknownInlinedFun UnknownInlinedFun'

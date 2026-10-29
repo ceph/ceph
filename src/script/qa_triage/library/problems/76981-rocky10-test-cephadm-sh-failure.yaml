@@ -1,0 +1,36 @@
+id: "76981"
+tracker: https://tracker.ceph.com/issues/76981
+title: "Rocky10 - test_cephadm.sh failure cause by Cannot register NFS V3 on TCP"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69192
+    branch: main
+    fixed_in: v21.3.0-545-gfbdf45a6e3
+tree: workunit/unexplained/ganesha-nfsv3-tcp-register
+facts:
+  script: '^cephadm/test_cephadm\.sh$'
+match:
+  reason: 'workunit test cephadm/test_cephadm\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'ganesha\.nfsd.*__Register_program :DISP :MAJ :Cannot register NFS V3 on TCP'
+  - file: teuthology.log
+    pattern: 'nfs is not available'
+  - file: teuthology.log
+    pattern: 'nfs\.a\.service: Main process exited, code=exited, status=2/INVALIDARGUMENT'
+notes: |
+  The cause: test_cephadm.sh deploys nfs.a and waits for ganesha.nfsd to listen on the nfs
+  port. On Rocky 10 no portmapper (rpcbind) is running, and Ganesha 9.x configured with
+  Protocols = 3, 4 and Enable_UDP = false (after #76295) then logs "Cannot register NFS V3 on
+  TCP" and exits with status 2 (systemd: status=2/INVALIDARGUMENT), so the wait loop ends
+  with "nfs is not available" and the workunit exits 1. The container image installs rpcbind
+  but cephadm only started /usr/bin/ganesha.nfsd. Fixed by PR 69192, which makes cephadm
+  write a ganesha-entrypoint.sh that starts rpcbind when rpcinfo -p fails, then execs
+  ganesha.nfsd. The mgr dashboard "Port 8443 not free" (#75358) that shows in the dumped
+  mgr logs of such jobs is only a bystander in the same dump, not the cause. The umbrella
+  backport is #80071, copied from this issue. Related: #76295 (UDP side), #74307.
+examples:
+  - jayaprakash-2026-07-24_10:10:00-rados-wip-jaya-bs-testing-umbrella-23-07-2026-distro-default-trial/396304
+  - skanta-2026-05-27_06:21:57-rados-wip-bharath4-testing-2026-05-27-1003-distro-default-trial/240019
+also:
+  - "80071"

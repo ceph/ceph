@@ -1,0 +1,10 @@
+run: jenkins-build-2026-10-18_06:04:45-rados-tentacle-distro-default-trial
+jobs:
+  '652091':
+    problem: '81932'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in no known problem in 81932, this one among them.
+    summary: 'mon/availability.sh TEST_availablity_score failed because the mon never recalculated the pool''s availability score after osd.1 died: it is tracker 81932, which names this job but had no record, so I added one.'
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{ubuntu_latest} workloads/mon}
+    reason: 'Command failed (workunit test mon/availability.sh) on trial077 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=9465ad89a4e4139d1c43a86ab98eafb1a4d67554 TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/availability.sh'''

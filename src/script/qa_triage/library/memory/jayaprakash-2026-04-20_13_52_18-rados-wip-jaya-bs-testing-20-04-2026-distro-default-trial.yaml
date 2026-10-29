@@ -1,0 +1,24 @@
+run: jayaprakash-2026-04-20_13:52:18-rados-wip-jaya-bs-testing-20-04-2026-distro-default-trial
+signatures:
+  infra/packages | packages:
+    '74833': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 1
+  timeout/unexplained | MaxWhileTries:
+    '75218': 1
+  ? 'workunit/set-e/test-repos-add-repo-metadata-404 | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --release quincy: Traceback (most recent call last): | test_repos.sh: add-repo repository metadata #'
+  : '67555': 1
+  workunit/unexplained | cephadm/test_iscsi_setup.sh:
+    '76211': 1
+  'workunit/unexplained/ceph-post-file-drop-unreachable | post-file.sh | post-file.sh: ssh to drop.ceph.com failed':
+    '74517': 1
+  ? 'workunit/unexplained/dencoder-decode-failure | dencoder/test-dencoder.sh | readable.sh: ceph-dencoder failed to decode corpus object'
+  : '74074': 1
+titles:
+  '67555': failed to fetch repository task/test_cephadm_repos
+  '74074': ceph-dencoder - failed with 20.3 corpus repo
+  '74517': drop.ceph.com is unreachable (ceph-post-file)
+  '74833': 'Could not resolve host: apt-mirror.sepia.ceph.com'
+  '75218': Orchestrater test fails while waiting for 8 OSDs to deploy
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76211': 'rados/cephadm: lsblk: vg_nvme/lv_4: not a block device'

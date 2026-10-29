@@ -1,0 +1,20 @@
+id: "74577"
+tracker: https://tracker.ceph.com/issues/74577
+title: "test_iscsi_setup.sh - No such path /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/iqn.1994-05.com.redhat:client1"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/69214
+    branch: main
+    fixed_in: v21.0.0-1904-g9ded62f2e1
+tree: workunit/unexplained/iscsi-gwcli-host-not-found
+match:
+  reason: 'workunit test cephadm/test_iscsi_setup\.sh'
+confirm:
+  - file: teuthology.log
+    pattern: 'No such path /iscsi-targets/\S+/hosts/\S+'
+notes: |
+  In cephadm/test_iscsi_setup.sh, gwcli fails when setting authentication on an
+  iSCSI client host with "No such path /iscsi-targets/.../hosts/..." because
+  creating the client host under the target failed or did not complete.
+examples:
+  - skanta-2026-10-18_00:07:27-rados-wip-bharath19-testing-20261016.230223-main-distro-default-trial/651274

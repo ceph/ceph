@@ -1,0 +1,10 @@
+run: pdonnell-2026-10-22_20:04:18-rados-wip-pdonnell-testing-20261022.151229-umbrella-distro-default-trial
+jobs:
+  '668466':
+    problem: '79878'
+    by: qa_triage (bob+files)
+    why: 'No record''s log checks placed this job, but the judge (bob) said duplicate 79878: Duplicate of issue 79878. The test (rados/singleton-nomsgr/all/admin_socket_output) deliberately calls ''ceph fs fail cephfs'' (visible at line 5087-5088 of excerpts.txt), which marks all MDS ranks failed and triggers the MDS_ALL_DOWN health check in the cluster log. Because MDS_ALL_DOWN is not in the cluster-log ignorelist applied at teardown, the job fails when the cluster log scan finds that ERR line. This is the same root cause as 79878: the test intentionally sets the filesystem offline but the teardown log check is not suppressed for this warning.. If the judge is right, change the records so that the checks place it.'
+    summary: The admin_socket_output test sends 'exit' to mds.a's admin socket, the only MDS goes down, and the mon logs the un-ignorelisted MDS_ALL_DOWN [ERR]; this is 79878's cause, but the record only matched cephtool jobs.
+    status: fail
+    description: rados/singleton-nomsgr/{all/admin_socket_output mon_election/classic rados supported-random-distro/{rocky_10}}
+    reason: '"2026-10-22T20:25:56.745951+0000 mon.a (mon.0) 204 : cluster [ERR] Health check failed: 1 filesystem is offline (MDS_ALL_DOWN)" in cluster log'

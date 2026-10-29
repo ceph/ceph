@@ -1,0 +1,18 @@
+run: skanta-2026-08-11_22:46:54-rados-wip-bharath7-testing-20260811.152323-main-distro-default-trial
+signatures:
+  ? 'crash/client/unnamed/ceph-bluestore-tool-avl-assert | ceph-bluestore-tool bluefs-bdev-expand: AvlAllocator assert offset+length'
+  : '79128': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 1
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '75358': 1
+  ? 'valgrind/Leak_PossiblyLost/ec-call-coroutine-stack | valgrind error: Leak_PossiblyLost malloc UnknownInlinedFun UnknownInlinedFun | valgrind leak: EC CALL op coroutine stack from PrimaryLogPG::do_op'
+  : '79515': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+titles:
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '75358': 'Health check failed: Module ''dashboard'' has failed: Port 8443 not free'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '79128': 'osd-bluefs-volume-ops.sh: TEST_bluestore - Assertion FAILED ceph_assert(offset + length <= uint64_t(device_size))'
+  '79515': 'osd: coroutine lifecycle bugs in PrimaryLogPG/ECBackend'

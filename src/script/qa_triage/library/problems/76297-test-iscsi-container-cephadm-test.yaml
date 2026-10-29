@@ -1,0 +1,25 @@
+id: "76297"
+tracker: https://tracker.ceph.com/issues/76297
+title: "test_iscsi_container - cephadm/test_iscsi_setup.sh fails on sudo ls /dev/disk/by-path"
+kind: test
+match:
+  reason: 'workunit test cephadm/test_iscsi_setup\.sh'
+confirm:
+  - file: teuthology.log*
+    pattern: 'tasks\.workunit\.\S+\.stderr:\++ sudo ls /dev/disk/by-path'
+exclude:
+  - file: teuthology.log*
+    pattern: 'No such path /iscsi-targets/\S+/hosts/\S+'
+  - file: teuthology.log*
+    pattern: 'Gateway \S+ not visible in gwcli after create'
+notes: |
+  In cephadm/test_iscsi_setup.sh, after the iSCSI login the script runs
+  'sudo ls /dev/disk/by-path | grep iscsi' to verify the iSCSI block device
+  appeared. The grep returns 1 because no iscsi entry is present under
+  /dev/disk/by-path, so the script exits with status 1. The xtrace line
+  '+ sudo ls /dev/disk/by-path' in the workunit stderr immediately precedes
+  the workunit being stopped, with no iSCSI disk path visible.
+examples:
+  - skanta-2026-06-17_03:50:08-rados-wip-yuri7-testing-2026-06-16-0346-distro-default-trial/296698
+also:
+  - "74577"

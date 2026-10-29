@@ -1,0 +1,49 @@
+id: "75216"
+tracker: https://tracker.ceph.com/issues/75216
+title: "rados/thrash-erasure-code-isa: PGs did not recover in time"
+kind: test
+tree: timeout/slow-ops/no-recovery-progress
+facts:
+  wait: '^wait_for_recovery$'
+match:
+  description: 'pggrow_host'
+  reason: 'wait_for_recovery: failed before timeout expired'
+confirm:
+  - file: teuthology.log
+    pattern: 'thrash_hosts: true'
+  - file: teuthology.log
+    pattern: 'chance_pgnum_grow: \d+'
+notes: |
+  The pggrow_host thrasher grows pg_num/pgp_num of pools and thrashes entire hosts
+  (thrash_hosts: true) with min_in: 2, so most OSDs can be simultaneously out on a
+  fixed-4 cluster. thrashosds also sets mgr_debug_aggressive_pg_num_changes=true by
+  default (qa/tasks/thrashosds.py), so the mgr adjust_pgs() throttling that would defer
+  splits while inactive/degraded/misplaced ratios are high is bypassed. The cluster is
+  overloaded by the PG growth: the pgmap grows from 35 to 200+ PGs, most of them sit in
+  peering, remapped+peering or activating+remapped for minutes, and ops sit 'queued for
+  pg' on many OSDs. On wide EC pools (isa k=10 m=4) this is worst, and msgr-failures/
+  osd-dispatch-delay with bluestore compression (osd op num shards: 1) caps OSD op
+  throughput further (see 81629), but the same failure happens in rados/thrash on
+  replicated pools (pool-snaps-few-objects). The OSDThrasher's wait_for_recovery sees
+  'no progress seen, keeping timeout for now' repeatedly and eventually expires with
+  'failed before timeout expired'; the watchdog then barks. The timeout, slow ops and
+  'no progress seen' are symptoms; the cause is the unthrottled pg_num growth on a
+  host-thrashed cluster, which is the cause tracker 74794 describes for morepggrow and
+  pggrow_host (people place pggrow_host jobs from both rados/thrash and
+  rados/thrash-erasure-code-isa in 74794, hence `also`). The thrash_hosts: true and
+  chance_pgnum_grow config lines (from the pggrow_host thrasher yaml) are what pick
+  these jobs; the 74794 record keeps the morepggrow and MaxWhileTries variants.
+  OSD logs of such jobs may also hold stray 'could not find secret_id' / 'verify_authorizer
+  could not get service secret' lines from OSDs that were killed and revived by the host
+  thrasher (job 265644 has them from 21:07 on, over an hour after the stall began; job
+  568204 has them from 01:58 on, 50 minutes after the stall began at 01:07-01:09, and
+  only osd.7 was ever marked down for lack of a beacon, at 02:27). Such lines are not
+  the cause (80746) unless the monitors also marked several OSDs down for lack of
+  beacons, past what the EC pool tolerates; the tree only calls an auth failure then.
+examples:
+  - skanta-2026-09-19_16:29:13-rados-wip-bharath17-testing-20260919.063401-main-distro-default-trial/569758
+  - jayaprakash-2026-07-24_10:10:00-rados-wip-jaya-bs-testing-umbrella-23-07-2026-distro-default-trial/396316
+  - skanta-2026-06-04_15:14:33-rados-wip-bharath7-testing-2026-06-04-1630-distro-default-trial/265644
+  - skanta-2026-09-18_23:45:18-rados-wip-bharath3-testing-20260918.154843-main-distro-default-trial/568204
+also:
+  - "74794"

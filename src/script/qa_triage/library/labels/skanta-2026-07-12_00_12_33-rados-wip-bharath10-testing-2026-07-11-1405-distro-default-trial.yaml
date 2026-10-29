@@ -1,0 +1,34 @@
+run: skanta-2026-07-12_00:12:33-rados-wip-bharath10-testing-2026-07-11-1405-distro-default-trial
+jobs:
+  '356690':
+    problem: '78153'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 1 jobs that the tool placed in 78153 in 78154, this one among them.
+    summary: 'Right: cephadm add-repo in test_repos.sh got HTTP 404 for download.ceph.com/keys/release.gpg, the same missing file tracked by 78154. The fix is to add 78154 to the also list of record 78153.'
+    status: fail
+    description: rados/cephadm/workunits/{0-distro/ubuntu_24.04 agent/off mon_election/connectivity task/test_cephadm_repos}
+    reason: 'Command failed (workunit test cephadm/test_repos.sh) on trial022 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=775a54fed06afa5e098b3f94410511c3dc6014da TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/cephadm/test_repos.sh'''
+  '356674':
+    problem: '75358'
+    by: the QA reviewers and the tracker, via qa_triage (claude-opus)
+    why: People placed 4 jobs that the tool placed in 75358 in 70669, this one among them.
+    summary: 'The cause is right (the dashboard came back on port 8443 after "config reset" deleted the per-mgr ports) and 75358 is a correct record for it, but #70669 is the same problem, so 75358 now lists 70669 under `also`.'
+    status: fail
+    description: rados/dashboard/{0-single-container-host debug/mgr mon_election/classic random-objectstore$/{bluestore-stupid} tasks/dashboard}
+    reason: 'Test failure: test_list_enabled_module (tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module)'
+  '356681':
+    problem: null
+    by: Claude Code for aainscow, as the reviewer
+    why: MGR_DOWN raised while TestStretchMode fails the mgrs over, not in the ignorelist; no issue for it yet; 77459 (pg_num merge backoff) listed it in a batch comment
+    summary: new (explain -> prefilter -> explained)
+    status: fail
+    description: rados/singleton/{all/stretch-mode-5-mons-8-osds mon_election/connectivity msgr-failures/many msgr/async-v2only objectstore/{bluestore/{alloc$/{btree} base mem$/{low} onode-segment$/{none} write$/{v1/{compr$/{yes$/{snappy}} v1}}}} rados supported-random-distro/{rocky_10}}
+    reason: '"2026-07-12T00:44:28.638080+0000 mon.a (mon.0) 624 : cluster [WRN] Health check failed: no active mgr (MGR_DOWN)" in cluster log'
+  '356675':
+    problem: '75763'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 1 jobs that the tool placed in 75763 in 80294, this one among them.
+    summary: The job correctly matches record 75763 (same cause as 80294); adding 80294 to 75763's `also` satisfies the expected placement.
+    status: fail
+    description: rados/encoder/{0-start 1-tasks supported-random-distro/{rocky_10}}
+    reason: Failed to fetch package version from https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=default&distros=rocky%2F10%2Fx86_64&ref=squid

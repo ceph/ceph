@@ -1,0 +1,38 @@
+id: "71344"
+tracker: https://tracker.ceph.com/issues/71344
+title: "Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection"
+kind: product
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/64122
+    branch: main
+    fixed_in: v20.3.0-3875-g9f54ab39cf
+tree: cluster-log/health/mon-restart-reconnect-delay
+facts:
+  check: '^MON_NETSPLIT$'
+match:
+  reason: 'MON_NETSPLIT'
+notes: |
+  Cause: when a monitor restarts (mon_recovery, monthrash and similar tests restart
+  mons one by one, with ms inject socket failures on), its peers keep the old
+  connection state, including a higher peer_global_seq. The restarted mon connects
+  with a new client_cookie and a low global_seq, and the peer's
+  ProtocolV2::handle_existing_connection rejects it as a stale connection before it
+  looks at the cookie. The session is only rebuilt after a back-off, so for longer
+  than mon_netsplit_grace_period (9s) two mons that are both running ping each other
+  as dead (Elector begin_dead_ping / dead_ping in both logs). The leader's
+  HealthMonitor::check_netsplit then logs '[WRN] Health check failed: 1 network
+  partition detected (MON_NETSPLIT)'. The pair recovers by itself ('dead_pingN is no
+  longer marked for dead pinging'), but the suites do not ignore MON_NETSPLIT, so
+  the teardown cluster-log scan fails the job. In the example (rados/multimon
+  mon_recovery, v1-only), mon.l reports 'Netsplit detected between mon.r and mon.t'
+  after mon.f and mon.i were restarted, and mon.r and mon.t dead-pinged each other
+  from 06:09:33 to 06:09:47. The tree's cluster-log/health node reaches this cause
+  (branch mon-restart-reconnect-delay), so no confirm check.
+  Fix: PR 64122 'msg/async/ProtocolV2: Speed up connection logic when peer restarts &
+  Added Netsplit Grace Period' (merged on main at v20.3.0-3875-g9f54ab39cf; the
+  squid and tentacle backports are open, trackers 73714 and 73715).
+  Not this record: tracker 79814, where the pair stays disconnected and mon.X's log
+  has report_dead_connection for the peer every 2 seconds; the node checks that
+  first and answers dead-ping-not-retried.
+examples:
+  - lflores-2026-04-17_22:03:40-rados-wip-lflores-testing-2-2026-04-08-1424-tentacle-distro-default-trial/159228

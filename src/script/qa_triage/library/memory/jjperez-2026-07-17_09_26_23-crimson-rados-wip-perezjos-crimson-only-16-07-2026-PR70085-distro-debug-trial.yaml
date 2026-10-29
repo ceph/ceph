@@ -1,0 +1,6 @@
+run: jjperez-2026-07-17_09:26:23-crimson-rados-wip-perezjos-crimson-only-16-07-2026-PR70085-distro-debug-trial
+signatures:
+  'infra/other | ansible.cephlab: ["Wanted # disks of ~# GB (rotational=False), but only matched #: [''nvme#n#'']"]':
+    '78379': 1
+titles:
+  '78379': 'trial062: NVMe RMA'

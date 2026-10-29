@@ -1,0 +1,42 @@
+run: skanta-2026-09-24_03:23:39-rados-wip-bharath10-testing-20260924.010810-main-distro-default-trial
+jobs:
+  '577330':
+    problem: '74701'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 74701, but the tool said duplicate 74574 (explain -> prefilter -> confirm -> fix-check), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 74701 by itself, with no judge.
+    summary: Reimaging timed out after 100 tries (600 seconds), matching tracker 74701 rather than 74574 (120 tries / 1800 seconds).
+    status: dead
+    description: rados/thrash-erasure-code-overwrites/{bluestore-bitmap ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_off fast/fast mon_election/classic msgr-failures/osd-delay rados recovery-overrides/{more-async-recovery} supported-random-distro/{ubuntu_24.04} thrashers/fastread thrashosds-health workloads/ec-small-objects-fast-read-overwrites}
+    reason: 'Error reimaging machines: reached maximum tries (100) after waiting for 600 seconds'
+  '577244':
+    problem: '81126'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 81126, but the tool said duplicate 81282 (explain -> prefilter -> confirm -> fix-check), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 81126 by itself, with no judge.
+    summary: Ansible cephlab task failed on trial114 with missing NVMe disk (tracker 81126)
+    status: dead
+    description: rados/thrash-erasure-code-overwrites/{bluestore-bitmap ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_off fast/fast mon_election/classic msgr-failures/fastclose rados recovery-overrides/{more-active-recovery} supported-random-distro/{centos_9.stream} thrashers/careful thrashosds-health workloads/ec-snaps-few-objects-overwrites}
+    reason: '["Wanted 2 disks of ~1700 GB (rotational=False), but only matched 1: [''nvme2n1'']"]'
+  '577422':
+    problem: '79571'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 79571, but the tool said new (explain -> prefilter -> explained), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 79571 by itself, with no judge.
+    summary: rados/singleton/all/recovery-preemption failed because 'grep -E (defer backfill|defer recovery)' found no matches due to reduced default OSD debug level (tracker 79571)
+    status: fail
+    description: rados/singleton/{all/recovery-preemption mon_election/classic msgr-failures/many msgr/async-v2only objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-2} onode-segment$/{1M} write$/{v2/{compr$/{yes$/{lz4}} v2}}}} rados supported-random-distro/{ubuntu_24.04}}
+    reason: 'Command failed on trial118 with status 1: ''sudo TESTDIR=/home/ubuntu/cephtest bash -c \''grep -E \''"\''"\''(defer backfill|defer recovery)\''"\''"\'' /var/log/ceph/ceph-osd.*.log\'''''
+  '577494':
+    problem: '69497'
+    by: qa_triage (bob-analyst)
+    why: The QA reviewers placed this job in 69497, but the tool said new (explain -> prefilter -> explained), sure. Find out whether the reviewers are right. If they are, change the records, or teach the tree, so that the tool places jobs like this one in 69497 by itself, with no judge.
+    summary: 'The tool was wrong: no record for 69497 existed; create it and teach the cluster-log/message node so the tool matches OSD_OUT_OF_ORDER_FULL jobs automatically.'
+    status: fail
+    description: rados/thrash-old-clients/{0-distro$/{centos_9.stream} 0-size-min-size-overrides/3-size-2-min-size 1-install/tentacle backoff/peering ceph clusters/{three-plus-one} d-balancer/on mon_election/classic msgr-failures/fastclose rados thrashers/pggrow thrashosds-health workloads/radosbench}
+    reason: '"2026-09-24T04:40:00.000237+0000 mon.a (mon.0) 1690 : cluster [ERR] [ERR] OSD_OUT_OF_ORDER_FULL: full ratio(s) out of order" in cluster log'
+  '577254':
+    problem: '81126'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: 'People placed 1 jobs in 81300, this one among them, and no record names it yet: the tool placed them in no known problem. A record for it should place them all; others are .'
+    summary: Update record 81126 to cover kernel-version-mismatch on trial195; teach infra/other to detect ansible-disk-check-trial114 and kernel-version-mismatch, both setting a host fact to scope the record.
+    status: fail
+    description: rados/thrash-erasure-code-crush-4-nodes/{arch/x86_64 ceph clusters/{fixed-4} ec_optimizations/ec_optimizations_on mon_election/connectivity msgr-failures/few objectstore/{bluestore/{alloc$/{bitmap} base mem$/{normal-1} onode-segment$/{256K} write$/{v2/{compr$/{yes$/{lz4}} v2}}}} rados recovery-overrides/{more-active-recovery} supported-random-distro/{ubuntu_24.04} thrashers/default thrashosds-health workloads/ec-rados-plugin=jerasure-k=2-m=2-crush}
+    reason: failed to install new kernel version within timeout

@@ -1,0 +1,24 @@
+run: yuriw-2026-06-22_18:46:50-rados-wip-yuri3-testing-20260622.144259-squid-distro-default-trial
+signatures:
+  ? 'cluster-log/message | WRN mon Health detail: HEALTH_WARN Degraded data redundancy: #/# objects degraded (<pg>%), # pgs degraded'
+  : '72312': 1
+  'cluster-log/message | WRN mon [WRN] POOL_FULL: # pool(s) full':
+    '71616': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  'crash/client/ceph_test_rados | ceph_test_rados: ./src/test/osd/RadosModel.h: #: ceph_abort_msg("abort() called")':
+    '68518': 1
+  ? 'crash/client/unnamed/ceph-kvstore-tool-close-db-segfault | ceph-kvstore-tool: SIGSEGV in BlueStore::umount > RocksDBStore::get_wholespace_iterator'
+  : '74332': 1
+  workunit/standalone | mon/mon-cluster-log.sh TEST_journald_cluster_log_level:
+    '71118': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '68518': TierFlushOp::_finish(TestOp::CallbackInfo*) - got unexpected ENOENT
+  '71118': 'qa/standalone/mon/mon-cluster-log.sh: TEST_journald_cluster_log_level fails from insufficient permissions'
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'
+  '71616': 'tentacle: upgrade suite cluster log warnings'
+  '72312': 'rados/thrash-old-clients squid HEALTH_WARN Degraded data redundancy: 3204/90723 objects degraded (3.532%), 2 pgs degraded, 3 pgs undersized" in cluster log'
+  '74332': ceph-kvstore-tool segfault in workunits/cephtool/test_kvstore_tool.sh
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'

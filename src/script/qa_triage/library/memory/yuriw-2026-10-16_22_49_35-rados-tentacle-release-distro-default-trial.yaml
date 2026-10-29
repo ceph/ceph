@@ -1,0 +1,15 @@
+run: yuriw-2026-10-16_22:49:35-rados-tentacle-release-distro-default-trial
+signatures:
+  ? 'cluster-log/health/dead-ping-not-retried | WRN MON_NETSPLIT | MON_NETSPLIT: mon ping to dead peer not retried after reconnect'
+  : '71344': 1
+  ? 'cluster-log/message | ERR osd osd.#(#) found snap mapper error on pg <pg> oid #:<sha>:::<host>-#:# snaps in mapper: {}, oi: {#c} ...repaired'
+  : '75007': 1
+  ? cluster-log/message/backfill-reject-injected | WRN mon pg <pg> is active+remapped+backfill_toofull, acting [#,#,#] | PG backfill_toofull from injected backfill reservation rejection
+  : '70716': 1
+  other | <pg> not in backfilling:
+    '80218': 1
+titles:
+  '70716': 'rados/thrash-old-clients: "pg backfill_toofull" warning in cluster log'
+  '71344': Monitor Reconnection Failure and MON_NETSPLIT due to Stale Global Sequence Check During Incoming Connection
+  '75007': rados/thrash-erasure-code ec_optimizations_off osd.2(0) found snap mapper error on pg 3.36s0 oid 3:6cc032a5:::trial18728466-404:30
+  '80218': 'qa/tasks/backfill_toofull.py: AssertionError: 2.0 not in backfilling'

@@ -1,0 +1,26 @@
+id: "79571"
+tracker: https://tracker.ceph.com/issues/79571
+title: "qa: increase osd/mon/mgr debugging where appropriate"
+kind: test
+fixes:
+  - pr: https://github.com/ceph/ceph/pull/71981
+    branch: main
+    fixed_in: v21.3.0-3867-g3930ebe760
+tree: command
+facts:
+  command: '^e?grep .*\(defer backfill\|defer recovery\)'
+match:
+  description: 'all/recovery-preemption'
+confirm:
+  - file: teuthology.log
+    pattern: "e?grep .*\\(defer backfill\\|defer recovery\\).*ceph-osd"
+notes: |
+  The rados/singleton/all/recovery-preemption test checks that backfill or recovery
+  preemption occurred by grepping OSD logs for '(defer backfill|defer recovery)'.
+  Teuthology PR #2244 removed the default debug osd 20 setting, reducing OSD log
+  verbosity so that these messages were no longer logged. As a result, the grep
+  or egrep command failed with exit status 1. Fixed by PR #71981 (tracker #79571)
+  which restored debug osd 20 for the rados QA suite in qa/config/rados.yaml.
+examples:
+  - skanta-2026-09-24_03:23:39-rados-wip-bharath10-testing-20260924.010810-main-distro-default-trial/577422
+  - pdonnell-2026-08-27_01:45:31-rados-wip-pdonnell-testing-20260826.223123-squid-distro-default-trial/518577

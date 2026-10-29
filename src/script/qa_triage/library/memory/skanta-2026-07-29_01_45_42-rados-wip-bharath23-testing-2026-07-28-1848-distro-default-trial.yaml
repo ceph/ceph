@@ -1,0 +1,30 @@
+run: skanta-2026-07-29_01:45:42-rados-wip-bharath23-testing-2026-07-28-1848-distro-default-trial
+signatures:
+  '- | Error reimaging machines: Expected <host>''s OS to be ubuntu <pg> but found centos #.stream':
+    '74774': 1
+  'hung/command/cephadm-rm-cluster | workunit: cephadm rm-cluster --fsid <uuid> --force --keep-logs | cephadm rm-cluster hung':
+    '68586': 2
+  'hung/test/rados-api-tests-valgrind-slowdown | waiting for api_io | rados_api_tests: api_* test timed out under valgrind':
+    '77739': 1
+  infra/build | build:
+    '59193': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 5
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 2
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '74794': 1
+  'workunit/set-e | rados/test_crash.sh: ceph crash ls; wc -l; [ # = # ]':
+    '76470': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '59193': '"Failed to fetch package version from https://shaman.ceph.com/api/search ..."'
+  '68586': 'cephadm: task/test_iscsi_container test hits max timeout'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '74774': Multiple jobs running same host same time
+  '74794': ' rados/thrash -  The WatchDog barked due to Thrasher ceph.osd.9 threw exception wait_for_recovery: failed before timeout expired - Many PGs stuck not active+clean'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '77106': nvme list json command failed, retrying...
+  '77739': ' rados/verify/ Dead Job - test api_lock/api_snapshots/api_misc_pp etc hung for 1.5 hours and then it starts the next test up. Resulting in 8 hour timeout '

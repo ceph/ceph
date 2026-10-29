@@ -1,0 +1,10 @@
+run: skanta-2026-02-07_00:06:33-rados-wip-bharath3-testing-2026-02-06-1157-distro-default-trial
+jobs:
+  '39157':
+    problem: '74827'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 4 jobs that the tool placed in 74827 in 76472, this one among them.
+    summary: TEST_mon_features failed on the hardcoded 'persistent | length == 12' check because nvmeof_beacon_diff made 13 persistent features; this is 74827 (fix not on the branch), and 76472 is the same issue's follow-up, so it goes in `also`.
+    status: fail
+    description: rados/standalone/{supported-random-distro$/{centos_latest} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial091 with status 1: ''mkdir -p -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=66340f5e996139d13c3fbc1ac0c484d5e563f44e TESTDIR="/home/ubuntu/cephtest" CEPH_ARGS="--cluster ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''

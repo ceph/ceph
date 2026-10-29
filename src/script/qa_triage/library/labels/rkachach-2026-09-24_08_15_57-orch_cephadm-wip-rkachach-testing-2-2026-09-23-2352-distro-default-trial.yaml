@@ -1,0 +1,10 @@
+run: rkachach-2026-09-24_08:15:57-orch:cephadm-wip-rkachach-testing-2-2026-09-23-2352-distro-default-trial
+jobs:
+  '579039':
+    problem: '80986'
+    by: the QA reviewers and the tracker, via qa_triage (bob-analyst)
+    why: People placed 2 jobs that the tool placed in no known problem in 80986, this one among them.
+    summary: The workunit/gtest node's bounced() searched remote/*/log/ceph-osd.*.log.gz but this cephadm job stores OSD logs one level deeper under a UUID subdirectory; the bounce line was there but not found, so the node returned unknown and record 80986 was never a prefilter candidate.
+    status: fail
+    description: orch:cephadm/with-work/{0-distro/centos_9.stream fixed-2 mode/root mon_election/connectivity msgr/async start tasks/rados_api_tests}
+    reason: 'Command failed (workunit test rados/test.sh) on trial072 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=b54e766e7c43e67e7ef69d21b7aff1d71b8ab91d TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/test.sh'''

@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+
+import argparse
+import re
+import sys
+from collections import namedtuple
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# A simple class to hold detailed information about a recovery operation.
+class RecoveryOp:
+    def __init__(self, pg_id, start_time, log_line):
+        self.pg_id = pg_id
+        self.start_time = start_time
+        self.start_line = log_line
+        self.last_known_state = "STARTED"
+        self.last_state_time = start_time
+        self.last_state_line = log_line
+
+    def __repr__(self):
+        return (f"RecoveryOp(pg_id={self.pg_id}, last_state={self.last_known_state}, "
+                f"last_time={self.last_state_time})")
+
+def process_single_log(log_file):
+    """
+    Worker function to process a single log file in a separate process.
+    It extracts all relevant recovery events and returns them with their source
+    file and timestamp for later chronological processing.
+    """
+    # Regex definitions are repeated here to make the function self-contained for parallel execution.
+    timestamp_re = re.compile(r"^(?P<timestamp>\S+)")
+    pg_id_re_part = r"pg\[(?P<pg_id>[^(\]]+)"
+    start_re = re.compile(f".*{pg_id_re_part}.*\\s(recovery|backfill)\\s(starts|started|resuming)")
+    state_re = re.compile(f".*{pg_id_re_part}.*continue_recovery_op.*state=(?P<state>\\w+)")
+    finish_re = re.compile(f".*{pg_id_re_part}.*\\s(recovery|backfill)\\s(complete|finished|done)")
+    
+    events = []
+    
+    print(f"[*] Starting parallel processing of: {log_file}")
+    try:
+        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                ts_match = timestamp_re.search(line)
+                if not ts_match:
+                    continue
+                
+                timestamp = ts_match.group('timestamp')
+                
+                # Each event tuple includes the source log_file for accurate counting later.
+                state_match = state_re.search(line)
+                if state_match:
+                    pg_id = state_match.group('pg_id')
+                    state = state_match.group('state')
+                    events.append((timestamp, log_file, 'state', pg_id, state, line.strip()))
+                    continue
+
+                start_match = start_re.search(line)
+                if start_match:
+                    pg_id = start_match.group('pg_id')
+                    events.append((timestamp, log_file, 'start', pg_id, line.strip()))
+                    continue
+
+                finish_match = finish_re.search(line)
+                if finish_match:
+                    pg_id = finish_match.group('pg_id')
+                    events.append((timestamp, log_file, 'finish', pg_id, line.strip()))
+                    continue
+    except FileNotFoundError:
+        print(f"[!] Error: Log file not found at '{log_file}'. Skipping.", file=sys.stderr)
+        return [] # Return empty list on error
+    except Exception as e:
+        print(f"[!] An unexpected error occurred while reading '{log_file}': {e}", file=sys.stderr)
+        return [] # Return empty list on error
+
+    return events
+
+def analyze_ceph_logs(log_files):
+    """
+    Analyzes Ceph log files in parallel to find potentially hung recovery operations.
+    It orchestrates worker processes and then aggregates the results chronologically.
+    """
+    all_events = []
+    with ProcessPoolExecutor() as executor:
+        # Submit all log files to the executor for processing.
+        future_to_events = {executor.submit(process_single_log, log_file): log_file for log_file in log_files}
+        for future in as_completed(future_to_events):
+            try:
+                # Collect the list of events from the completed future.
+                event_list = future.result()
+                all_events.extend(event_list)
+            except Exception as exc:
+                log_file = future_to_events[future]
+                print(f"[!] Error processing {log_file} in parallel: {exc}", file=sys.stderr)
+
+    # Sort all events from all files chronologically by timestamp.
+    # This is CRITICAL for correct state tracking across all logs.
+    print(f"\n[*] All {len(all_events)} events parsed. Sorting chronologically...")
+    all_events.sort(key=lambda x: x[0])
+    print("[*] Chronological sort complete. Aggregating results...")
+
+    active_ops = {}
+    file_op_counts = {log_file: 0 for log_file in log_files}
+    
+    for event in all_events:
+        event_time, source_file, event_type, pg_id, *rest = event
+
+        if event_type == 'start':
+            # A new operation is only recorded if we are not already tracking it.
+            if pg_id not in active_ops:
+                line = rest[0]
+                op = RecoveryOp(pg_id, event_time, line)
+                active_ops[pg_id] = op
+                # Accurately and efficiently count the op for its source file.
+                if source_file in file_op_counts:
+                    file_op_counts[source_file] += 1
+        
+        elif event_type == 'state':
+            if pg_id in active_ops:
+                state, line = rest
+                if state == 'COMPLETE':
+                    del active_ops[pg_id]
+                else:
+                    op = active_ops[pg_id]
+                    op.last_known_state = state
+                    op.last_state_time = event_time
+                    op.last_state_line = line
+        
+        elif event_type == 'finish':
+            if pg_id in active_ops:
+                del active_ops[pg_id]
+
+    return active_ops, file_op_counts
+
+def main():
+    """Main function to parse arguments and print the report."""
+    parser = argparse.ArgumentParser(
+        description="Analyze Ceph log files for hung recovery ops by tracking their state.",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="""
+Example Usage:
+  # Analyze a single log file
+  python3 ceph_hung_op_analyzer.py /var/log/ceph/ceph.log
+
+  # Analyze all OSD log files in parallel
+  python3 ceph_hung_op_analyzer.py /var/log/ceph/ceph-osd.*.log
+"""
+    )
+    parser.add_argument(
+        'log_files', 
+        nargs='+', 
+        help='One or more paths to Ceph log files. Supports shell wildcards.'
+    )
+    args = parser.parse_args()
+
+    hung_ops, file_counts = analyze_ceph_logs(args.log_files)
+
+    print("\n" + "="*60)
+    print("HUNG OPERATIONS REPORT")
+    print("="*60)
+
+    if not hung_ops:
+        print("\n[+] Success: No potentially hung recovery/backfill operations found.")
+        print("All started operations reached a completion state within the provided logs.")
+    else:
+        print(f"\n[!] Found {len(hung_ops)} potentially hung operation(s):")
+        print("-" * 40)
+        for pg_id, op in hung_ops.items():
+            print(f"  - PG ID:             {op.pg_id}")
+            print(f"    Started At:        {op.start_time}")
+            print(f"    Start Log:         {op.start_line}")
+            print(f"    Last Known State:  '{op.last_known_state}'")
+            print(f"    Last Seen At:      {op.last_state_time}")
+            print(f"    Last State Log:    {op.last_state_line}")
+            print("-" * 40)
+        print("\nNOTE: These operations started but did not reach a 'state=COMPLETE' or other")
+        print("completion message. The 'Last Known State' is the final state seen in the logs.")
+    
+    print("\n" + "="*60)
+    print("PER-FILE OPERATIONS SUMMARY")
+    print("="*60)
+    if not any(file_counts.values()):
+        print("\nNo recovery/backfill operations were initiated in the provided logs.")
+    else:
+        print("\nTotal recovery/backfill operations started per file:")
+        for file_path, count in sorted(file_counts.items()):
+            print(f"  - {file_path}: {count} operation(s) found")
+
+
+if __name__ == '__main__':
+    main()
+

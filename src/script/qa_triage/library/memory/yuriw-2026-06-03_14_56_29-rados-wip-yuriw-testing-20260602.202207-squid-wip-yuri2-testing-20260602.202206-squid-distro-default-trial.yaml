@@ -1,0 +1,18 @@
+run: yuriw-2026-06-03_14:56:29-rados-wip-yuriw-testing-20260602.202207-squid-wip-yuri2-testing-20260602.202206-squid-distro-default-trial
+signatures:
+  ? 'cluster-log/message | WRN mon Health detail: HEALTH_WARN Degraded data redundancy: #/# objects degraded (<pg>%), # pgs degraded, # pg undersized'
+  : '72312': 1
+  ? 'command/unexplained/crush-location-json-mismatch | cephadm --image quay.ceph.io/ceph-ci/ceph:<sha> shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: # | mon dump json: crush_location list compared to a string'
+  : '74523': 1
+  ? 'workunit/set-e/test-repos-add-repo-shaman-http-error | cephadm/test_repos.sh: tmp.*/tmp.* -v add-repo --dev main: Traceback (most recent call last): | test_repos.sh: shaman.ceph.com HTTP error'
+  : '63531': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd-backfill/osd-backfill-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '74524': 1
+  ? 'workunit/unexplained/backfill-prio-not-in-progress | osd/osd-recovery-prio.sh | osd-backfill-prio: primary PG not in-progress item'
+  : '75488': 1
+titles:
+  '63531': 'Error authenticating with smithiXXX.front.sepia.ceph.com: SSHException(''No existing session'') (No SSH private key found!)'
+  '72312': 'rados/thrash-old-clients squid HEALTH_WARN Degraded data redundancy: 3204/90723 objects degraded (3.532%), 2 pgs degraded, 3 pgs undersized" in cluster log'
+  '74523': 'cephadm: task/test_set_mon_crush_locations fails because mon.a''s crush location is not in datacenter a'
+  '74524': 'standalone/osd-backfill-prio.sh/TEST_backfill_pool_priority: "The primary PG X.X didn''t become the in progress item on remote"'
+  '75488': 'qa/standalone/osd/osd-recovery-prio.sh: TEST_recovery_pool_prio: The primary PG for testX didn''t become the in progress item [on remote]'

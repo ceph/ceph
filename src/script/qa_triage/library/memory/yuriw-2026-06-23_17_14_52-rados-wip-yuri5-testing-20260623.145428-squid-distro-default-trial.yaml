@@ -1,0 +1,9 @@
+run: yuriw-2026-06-23_17:14:52-rados-wip-yuri5-testing-20260623.145428-squid-distro-default-trial
+signatures:
+  workunit/standalone | mon/mon-cluster-log.sh TEST_journald_cluster_log_level:
+    '71118': 1
+  'workunit/unexplained/grafana-invalid-ip-address | cephadm/test_cephadm.sh | test_cephadm.sh: grafana invalid IP address':
+    '71506': 1
+titles:
+  '71118': 'qa/standalone/mon/mon-cluster-log.sh: TEST_journald_cluster_log_level fails from insufficient permissions'
+  '71506': 'cephadm/test_cephadm.sh: Unhandled exception from module ''dashboard'' while running on mgr.y: Timeout(''Port 8443 not free on ::.'')'

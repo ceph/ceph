@@ -1,0 +1,29 @@
+id: "76390"
+tracker: https://tracker.ceph.com/issues/76390
+title: "rados/thrash-erasure-code The WatchDog barked due to Thrasher OSDThrasher threw exception list.remove(x): x not in list"
+kind: test
+tree: timeout/unexplained
+facts:
+  thrasher_failure: '^test_pool_min_size$'
+match:
+  reason: 'list\.remove\(x\): x not in list'
+confirm:
+  - file: teuthology.log
+    pattern: 'ValueError: list\.remove\(x\): x not in list'
+  - file: teuthology.log
+    pattern: 'in test_pool_min_size'
+exclude:
+  - file: teuthology.log
+    pattern: "MaxWhileTries: 'check for active or peered' reached maximum tries"
+notes: |
+  The OSDThrasher's test_pool_min_size picks OSDs from a random PG's acting set and kills
+  them one by one. If one of those OSDs was already killed in a previous thrasher iteration,
+  it is absent from live_osds; live_osds.remove(osd) at ceph_manager.py:350, called from
+  test_pool_min_size at ceph_manager.py:1059, raises ValueError: list.remove(x): x not in
+  list. The daemon watchdog detects OSDThrasher failed, barks, kills all daemons, and the
+  job fails with a BarkError. No daemon crashed. The exclude check keeps this record apart
+  from the 'check for active or peered' MaxWhileTries failure (tracker 76298) that also
+  runs through test_pool_min_size.
+examples:
+  - skanta-2026-05-07_14:11:34-rados-wip-bharath15-testing-2026-05-07-0507-distro-default-trial/197901
+  - skanta-2026-04-21_10:56:08-rados-wip-bharath2-testing-2026-04-21-1241-distro-default-trial/166163

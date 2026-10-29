@@ -1,0 +1,9 @@
+run: nmordech-2026-02-21_21:31:01-rados:mgr-wip-rocky10-branch-of-the-day-2026-02-21-1771692874-tentacle-distro-default-trial
+signatures:
+  ? 'test/unittest | tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit#: tasks.ceph_test_case.TestTimeoutError: Timed out after #s and # retries'
+  : '74605': 1
+  'test/unittest | tasks.mgr.test_prometheus.TestPrometheus.test_urls: AssertionError: Lists differ: [''/metrics''] != []':
+    '74980': 1
+titles:
+  '74605': 'Rocky10 - ERROR: test_sql_autocommit1 (tasks.mgr.test_devicehealth.TestDeviceHealth.test_sql_autocommit1)'
+  '74980': Port 7789 still in use, waiting...

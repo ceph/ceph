@@ -1,0 +1,26 @@
+run: pdonnell-2026-10-19_23:53:32-rados-wip-pdonnell-testing-20261019.181708-main-distro-default-trial
+jobs:
+  '658999':
+    problem: '77110'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-77110.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: 'Correctly a duplicate of 77110: wait_until_healthy times out on CEPHADM_STRAY_DAEMON, which is ignorelisted but not honoured by the wait; the tracker has no fix or duplicate link, so no change.'
+    status: fail
+    description: rados/cephadm/smoke/{0-distro/ubuntu_24.04 0-nvme-loop agent/on fixed-2 mon_election/connectivity start}
+    reason: 'timeout 300s expired waiting for healthy cluster with these unhealthy checks: CEPHADM_STRAY_DAEMON'
+  '658865':
+    problem: '79576'
+    by: qa_triage (bob-analyst)
+    why: 'People have written about this record''s tracker issue since it was made: tracker-79576.txt has the issue, its comments and its pull requests. What they wrote is the answer to learn from: what the problem really was, and how it was fixed. Bring the record in line with it: its notes should say the cause they found, and its confirm checks find that cause, not only its symptom; if it was fixed, its fixes should give the pull request and fixed_in, as the tracker does; if the issue duplicates another, the jobs belong to that one. If the tree stops at a symptom of it, teach the tree the cause. If the record says all that already, say that the result is right, and change nothing.'
+    summary: ec-inconsistent-hinfo hit the same injected-socket-failure LAGGY warning as tracker 79576, but the record excluded it, so the tool called the job new.
+    status: fail
+    description: rados/singleton/{all/ec-inconsistent-hinfo mon_election/classic msgr-failures/many msgr/async objectstore/{bluestore/{alloc$/{stupid} base mem$/{normal-1} onode-segment$/{none} write$/{v2/{compr$/{no$/{no}} v2}}}} rados supported-random-distro/{centos_9.stream}}
+    reason: '"2026-10-20T04:03:45.851439+0000 osd.3 (osd.3) 12 : cluster [WRN] PG 2.0s0 marked LAGGY; acting [3,1,2]" in cluster log'
+  '658995':
+    problem: null
+    by: qa_triage (bob-analyst)
+    why: 'The tool placed this job on #79943, but the fix for #79943 (PR 71629) is in the qa suite this job ran. Did the fix not hold, so that this is a recurrence of #79943, or did the job fail for a different reason that only looks like #79943?'
+    summary: 'TEST_mon_features failed because PR #72810 incorrectly checked length == 14 instead of 16 for persistent features, not due to #79943.'
+    status: fail
+    description: rados/standalone/{supported-random-distro/{centos_9.stream} workloads/mon}
+    reason: 'Command failed (workunit test mon/misc.sh) on trial023 with status 1: ''cd -- /home/ubuntu/cephtest/mnt.0/client.0/tmp && CEPH_CLI_TEST_DUP_COMMAND=1 CEPH_REF=b6505717bf73e600afe2e8545ac634718c48d69d TESTDIR="/home/ubuntu/cephtest" CEPH_CLIENT_ID=0 CEPH_ARGS="--cluster=ceph" CEPH_ID="0" PATH=$PATH:/usr/sbin CEPH_BASE=/home/ubuntu/cephtest/clone.client.0 CEPH_ROOT=/home/ubuntu/cephtest/clone.client.0 CEPH_MNT=/home/ubuntu/cephtest/mnt.0 adjust-ulimits ceph-coverage /home/ubuntu/cephtest/archive/coverage timeout 3h /home/ubuntu/cephtest/clone.client.0/qa/standalone/mon/misc.sh'''

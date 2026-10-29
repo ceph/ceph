@@ -1,0 +1,6 @@
+run: skanta-2026-08-28_05:55:36-rados-wip-bharath13-testing-20260826.230447-tentacle-distro-default-trial
+signatures:
+  ? crash/assert/specific | mgr osd/OSDMap.cc FAILED ceph_assert(osd_weight.count(oid)) in float OSDMap::calc_deviations(ceph::common::CephContext*, const std::map<int, std::set<pg_t> >&, const std::map<int, float>&, float, std::map<int, float>&, std::multimap<float, int>&, float&)
+  : '77785': 1
+titles:
+  '77785': 'qa/standalone/mon-stretch/mon-stretch-uneven-crush-weights.sh: ceph-mgr crashes with ceph_assert(osd_weight.count(oid))'

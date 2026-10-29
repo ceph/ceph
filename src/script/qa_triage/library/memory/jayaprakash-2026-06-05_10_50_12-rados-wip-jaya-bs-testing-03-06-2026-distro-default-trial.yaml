@@ -1,0 +1,6 @@
+run: jayaprakash-2026-06-05_10:50:12-rados-wip-jaya-bs-testing-03-06-2026-distro-default-trial
+signatures:
+  ? crash/abort/specific | osd osd/PrimaryLogPG.cc ceph_abort_msg("out of order op") in void PrimaryLogPG::execute_ctx(OpContext*)
+  : '70697': 1
+titles:
+  '70697': PrimaryLogPG::do_recover_adjacent_clones may cause other writes on the same object to reorder ahead of a rollback to a manifest object

@@ -1,0 +1,27 @@
+run: skanta-2026-07-01_13:33:05-rados-wip-bharath1-testing-2026-07-01-0424-distro-default-trial
+signatures:
+  ? 'cluster-log/message/pg-not-ready-to-merge | WRN mon osd.# reported pg <pg> not ready to merge; backing off pg_num decrease for pool ''unique_pool_#'' | mon: osd reported pg not ready to merge; backing off pg_num decrease'
+  : '77459': 4
+  infra/build | build:
+    '76470': 1
+  ? 'infra/other/nvme-list-json-failed | nvme_loop: reached maximum tries (#) after waiting for # seconds | nvme_loop: nvme list -o json command failed'
+  : '77106': 3
+  ? 'test/unittest/dashboard-port-reset | tasks.mgr.dashboard.test_mgr_module.MgrModuleTest.test_list_enabled_module: ConnectionRefusedError: [Errno #] Connection refused | dashboard restarted on default port # after config reset removed ssl_server_port'
+  : '70669': 2
+  ? 'timeout/admin-socket/osd-init-deadlock | wait_for_all_osds_up: admin socket timed out | osd init deadlock: admin socket config set during BlueStore mount'
+  : '59079': 1
+  'timeout/slow-ops/no-recovery-progress | wait_for_recovery: slow ops | wait_for_recovery: no recovery progress':
+    '75216': 2
+  ? workunit/unexplained/cephtool-hang/bad-caps-key-left-behind | cephtool/test.sh | cephtool/test.sh hung with AUTH_BAD_CAPS HEALTH_ERR | cephtool test_mon_caps left client.bug with empty mon caps (AUTH_BAD_CAPS)
+  : '72888': 1
+  ? 'workunit/unexplained/test-repos-release-file-missing | cephadm/test_repos.sh | test_repos.sh: download.ceph.com apt repo has no Release file'
+  : '77248': 1
+titles:
+  '59079': 'AssertionError: timeout expired in wait_for_all_osds_up'
+  '70669': 'ERROR: test_list_enabled_module: cephfs resource temporarily unavailable'
+  '72888': 'rados/singleton-bluestore: cephtool.sh workunit hangs on various tests'
+  '75216': 'rados/thrash-erasure-code-isa: PGs did not recover in time'
+  '76470': 'rados/test_crash.sh: Induced crashes are not properly posted'
+  '77106': nvme list json command failed, retrying...
+  '77248': 'rados/cephadm: The repository ''https://download.ceph.com/debian-quincy noble Release'' does not have a Release file. '
+  '77459': 'rados/thrash-erasure-code: tests failing with not ready to merge warning '

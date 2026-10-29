@@ -1,0 +1,9 @@
+run: lflores-2026-03-10_16:00:35-upgrade-main-distro-default-trial
+signatures:
+  ? 'command/error | cephadm --image quay.ceph.io/ceph-ci/ceph:reef shell -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring: Error EINVAL: invalid command'
+  : '75440': 1
+  crash/signal/no-backtrace | osd Aborted in ? | no backtrace:
+    '71631': 1
+titles:
+  '71631': Commands using Mgr Modules fail if run immediately post a mgr failover/ restart
+  '75440': Upgrade test fails when cephadm tries to add an OSD with "--objectstore bluestore" setting

@@ -1,0 +1,21 @@
+id: "80192"
+tracker: https://tracker.ceph.com/issues/80192
+title: "sudo apt-get update failed due to File with unexpected size. Mirror sync in progress?"
+kind: infra
+match:
+  reason: "'sudo apt-get update'"
+confirm:
+  - file: teuthology.log*
+    pattern: 'Mirror sync in progress\?'
+notes: |
+  The kernel task runs 'sudo apt-get update' on test machines before checking
+  whether a new kernel needs to be installed. The Ubuntu package mirror was
+  mid-sync when the download started: apt fetched a Packages or Components
+  index file whose byte count did not match the size recorded in the InRelease
+  index ("File has unexpected size ... Mirror sync in progress?"), retried
+  against the same and other mirror IPs, still got the wrong size every time,
+  and failed with exit status 100. The job never ran any Ceph code. This is a
+  transient infrastructure problem with the Ubuntu mirror; re-running the job
+  is the usual remedy.
+examples:
+  - skanta-2026-08-25_00:08:14-rados-wip-bharath11-testing-20260824.222329-main-distro-default-trial/510731

@@ -1,0 +1,35 @@
+id: "77110"
+tracker: https://tracker.ceph.com/issues/77110
+title: "rados/cephadm: wait_until_healthy times out due to CEPHADM_STRAY_DAEMON HEALTH_WARN"
+kind: test
+match:
+  reason: 'CEPHADM_STRAY_DAEMON|timeout expired in wait_until_healthy'
+confirm:
+  - file: teuthology.log
+    pattern: '"CEPHADM_STRAY_DAEMON":\{"severity":"HEALTH_WARN"'
+  - file: remote/*/log/*/ceph.log.gz
+    pattern: 'stray daemon \S+ on host \S+ not managed by cephadm'
+notes: |
+  The cephadm task ends with wait_until_healthy, which waits for full HEALTH_OK
+  (or only the expected checks) for up to 300s. The cluster stays in HEALTH_WARN
+  with CEPHADM_STRAY_DAEMON only ("1 stray daemon(s) not managed by cephadm"), so
+  the wait times out. CEPHADM_STRAY_DAEMON is in the job's log-ignorelist, but
+  that only filters the final cluster-log scan; it does not make
+  wait_until_healthy accept the warning. The cluster log names the daemon, in this
+  job "stray daemon osd.7 on host trial059 not managed by cephadm", an OSD that
+  had just been added with "ceph orch daemon add osd". The mgr log shows
+  _check_for_strays ran right after the active mgr restarted
+  (stray_daemon_check_interval = 1800), so the warning was not re-evaluated within
+  the 300s wait.
+  Inferred, not shown by the logs: that the stray check ran before cephadm had
+  registered the new OSD and was not repeated in time. The tracker (status New)
+  gives only the symptom and the ignorelist observation.
+  The confirm checks use the stray-daemon health check and the cluster log line
+  that names the stray daemon; the timeout itself is a symptom.
+examples:
+  - pdonnell-2026-10-19_23:53:32-rados-wip-pdonnell-testing-20261019.181708-main-distro-default-trial/658999
+  - skanta-2026-07-02_01:10:52-rados-wip-bharath2-testing-2026-07-01-2021-distro-default-trial/335063
+  - skanta-2026-07-19_00:55:49-rados-wip-bharath5-testing-2026-07-19-0500-distro-default-trial/376404
+also:
+  - "64872"
+  - "77865"

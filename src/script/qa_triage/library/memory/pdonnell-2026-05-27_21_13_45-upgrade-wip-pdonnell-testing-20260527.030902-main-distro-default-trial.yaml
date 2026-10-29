@@ -1,0 +1,9 @@
+run: pdonnell-2026-05-27_21:13:45-upgrade-wip-pdonnell-testing-20260527.030902-main-distro-default-trial
+signatures:
+  ? 'cluster-log/message | ERR mgr Unhandled exception from module ''dashboard'' while running on mgr.x: No socket could be created -- ((''<ip>'', #): [Errno #] Cannot assign requested address)'
+  : '76970': 1
+  'hung/command | parallel: cephadm --image quay.ceph.io/ceph-ci/ceph:tentacle shell --fsid <uuid> -- ceph':
+    '76968': 1
+titles:
+  '76968': 'pybind/mgr/cephadm: "ceph-volume lvm batch: error: unrecognized arguments: --osd-type classic"'
+  '76970': 'pybind/mgr/dashboard: OSError: No socket could be created -- ((''10.20.193.190'', 8443): [Errno 99] Cannot assign requested '
