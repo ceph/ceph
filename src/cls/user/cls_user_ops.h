@@ -164,7 +164,7 @@ struct cls_user_reset_stats2_op {
   std::optional<std::unordered_map<std::string, cls_user_stats>> storage_class_stats;
 
   cls_user_reset_stats2_op() {}
-''
+
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
     encode(time, bl);
