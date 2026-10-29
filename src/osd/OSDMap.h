@@ -1466,7 +1466,8 @@ bool try_drop_remap_underfull(
     const std::vector<int>& orig,
     const std::vector<int>& out,
     const std::set<int>& existing,
-    const std::map<int,float> osd_deviation
+    const std::map<int,float> osd_deviation,
+    uint32_t seed = 0
   );
 
   candidates_by_osd_t build_candidates_by_osd(
