@@ -112,6 +112,58 @@ static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry
   stats->total_entries -= entry.count;
 }
 
+using sc_stats_t = decltype(cls_user_header::storage_class_stats);
+
+// the per-storage-class stats of a bucket entry are unknown if the entry has
+// objects but no per-storage-class stats, e.g. when an older client wrote it
+static bool entry_sc_stats_unknown(const cls_user_bucket_entry& entry)
+{
+  return !entry.storage_class_stats.has_value() &&
+         (entry.count > 0 || entry.size > 0);
+}
+
+// add the per-storage-class stats of an entry. if they are unknown, the sum
+// becomes unknown too
+static void add_sc_stats(sc_stats_t& sc_stats, const cls_user_bucket_entry& entry)
+{
+  if (!sc_stats.has_value()) {
+    return;
+  }
+  if (entry_sc_stats_unknown(entry)) {
+    sc_stats.reset();
+    return;
+  }
+  if (!entry.storage_class_stats.has_value()) {
+    return; // no objects
+  }
+  for (const auto& [storage_class, stats] : *entry.storage_class_stats) {
+    auto& s = (*sc_stats)[storage_class];
+    s.total_entries += stats.count;
+    s.total_bytes += stats.size;
+    s.total_bytes_rounded += stats.size_rounded;
+  }
+}
+
+static void dec_sc_stats(sc_stats_t& sc_stats, const cls_user_bucket_entry& entry)
+{
+  if (!sc_stats.has_value()) {
+    return;
+  }
+  if (entry_sc_stats_unknown(entry)) {
+    sc_stats.reset();
+    return;
+  }
+  if (!entry.storage_class_stats.has_value()) {
+    return; // no objects
+  }
+  for (const auto& [storage_class, stats] : *entry.storage_class_stats) {
+    auto& s = (*sc_stats)[storage_class];
+    s.total_entries -= stats.count;
+    s.total_bytes -= stats.size;
+    s.total_bytes_rounded -= stats.size_rounded;
+  }
+}
+
 static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry)
 {
   target_entry->size = src_entry.size;
@@ -141,10 +193,6 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
   for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
     cls_user_bucket_entry& update_entry = *iter;
-    auto& storage_class_stats = update_entry.storage_class_stats;
-    if (!storage_class_stats.has_value()) {
-      storage_class_stats.emplace();
-    }
     string key;
 
     get_key_by_bucket_name(update_entry.bucket.name, &key);
@@ -169,13 +217,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
     } else if (ret >= 0 && entry.user_stats_sync) {
-      if (header.storage_class_stats.has_value() && entry.storage_class_stats.has_value()) {
-        for (const auto& [storage_class, stats] : *entry.storage_class_stats) {
-          header.storage_class_stats.value()[storage_class].total_entries -= stats.count;
-          header.storage_class_stats.value()[storage_class].total_bytes -= stats.size;
-          header.storage_class_stats.value()[storage_class].total_bytes_rounded -= stats.size_rounded;
-        }
-      }
+      dec_sc_stats(header.storage_class_stats, entry);
       dec_header_stats(&header.stats, entry);
     }
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
@@ -194,15 +236,8 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
       return ret;
     }
 
-    if (!storage_class_stats.value().empty()){
-      if (header.storage_class_stats.has_value()) {
-        for (const auto& [storage_class, stats] : *storage_class_stats) {
-          header.storage_class_stats.value()[storage_class].total_entries += stats.count;
-          header.storage_class_stats.value()[storage_class].total_bytes += stats.size;
-          header.storage_class_stats.value()[storage_class].total_bytes_rounded += stats.size_rounded;
-        }
-      }
-    }
+    // like the totals, add the stats of the stored entry
+    add_sc_stats(header.storage_class_stats, entry);
     add_header_stats(&header.stats, entry);
   }
   bufferlist bl;
@@ -423,7 +458,6 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
   header.storage_class_stats.emplace();
   bool truncated = false;
   string from_index, prefix;
-  bool storage_classes_present = true;
   do {
     map<string, bufferlist> keys;
     int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES,
@@ -447,16 +481,7 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
 	return -EIO;
       }
       add_header_stats(&header.stats, e);
-      if (storage_classes_present && e.storage_class_stats.has_value()) {
-        for (const auto& [storage_class, stats] : *e.storage_class_stats) {
-          header.storage_class_stats.value()[storage_class].total_entries += stats.count;
-          header.storage_class_stats.value()[storage_class].total_bytes += stats.size;
-          header.storage_class_stats.value()[storage_class].total_bytes_rounded += stats.size_rounded;
-        }
-      } else {
-        storage_classes_present = false;
-        header.storage_class_stats.reset();
-      }
+      add_sc_stats(header.storage_class_stats, e);
     }
     if (!keys.empty()) {
       from_index = keys.rbegin()->first;
@@ -521,18 +546,11 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
       return -EIO;
     }
     add_header_stats(stats_to_update, e);
-    if (storage_classes_present && e.storage_class_stats.has_value()) {
-      for (const auto& [storage_class, stats] : *e.storage_class_stats) {
-        storage_classes_to_update->value()[storage_class].total_entries += stats.count;
-        storage_classes_to_update->value()[storage_class].total_bytes += stats.size;
-        storage_classes_to_update->value()[storage_class].total_bytes_rounded += stats.size_rounded;
-      }
-    } else {
-      storage_classes_present = false;
-      /* a legacy bucket entry disables the per-class accounting from here on:
-       * clear the accumulation target, so the state threaded to the next
-       * page (ret) or written to the header (op) reflects it */
+    if (!storage_classes_present) {
+      /* an older client sent no per-storage-class stats */
       storage_classes_to_update->reset();
+    } else {
+      add_sc_stats(*storage_classes_to_update, e);
     }
   }
 
