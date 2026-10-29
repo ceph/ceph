@@ -746,9 +746,17 @@ class RgwBucket(RgwRESTController):
                                 'bucket', params,
                                 json_response=False)
 
-        uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
+        if uid:
+            uid_tenant = uid[:uid.find('$')] if '$' in uid else None
+            owner = uid
+        else:
+            # The owner is not being changed, so take the tenant and the
+            # owner from the bucket itself (same approach as get()).
+            bucket_info = self.proxy(daemon_name, 'GET', 'bucket', {'bucket': bucket})
+            uid_tenant = bucket_info['tenant'] or None
+            owner = bucket_info['owner']
         bucket_name = RgwBucket.get_s3_bucket_name(bucket, uid_tenant)
-        uid = _get_owner(uid, daemon_name)
+        uid = _get_owner(owner, daemon_name)
 
         locking = self._get_locking(uid, daemon_name, bucket_name)
         if versioning_state:
