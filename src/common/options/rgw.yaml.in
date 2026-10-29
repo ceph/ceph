@@ -5268,6 +5268,17 @@ options:
   - rgw
   see_also:
   - rgw_trust_forwarded_https
+- name: rgw_notification_bucket_arn_region
+  type: bool
+  level: advanced
+  desc: Put the zonegroup in the region field of a notification's bucket ARN
+  long_desc: When true, the bucket ARN a notification record carries names the
+    zonegroup in its region field, as arn:aws:s3:<zonegroup>::<bucket>.  When
+    false, it is the bucket ARN AWS S3 uses, arn:aws:s3:::<bucket>, with no
+    region and no account.
+  default: true
+  services:
+  - rgw
 - name: daos_pool
   type: str
   level: advanced

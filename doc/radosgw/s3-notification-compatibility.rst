@@ -74,6 +74,11 @@ The records sent for bucket notification follows the format described in:
 `Event Message Structure`_.
 However, the ``requestParameters.sourceIPAddress`` field will be sent empty.
 
+The bucket ARN, ``s3.bucket.arn``, names the zonegroup in its region field,
+``arn:aws:s3:<zonegroup>::<bucket>``.  With
+``rgw_notification_bucket_arn_region`` set to ``false`` it is the bucket ARN
+AWS S3 sends, ``arn:aws:s3:::<bucket>``, with no region and no account.
+
 
 Event Types
 -----------

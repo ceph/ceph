@@ -1011,7 +1011,9 @@ static inline void populate_event(reservation_t& res,
   event.bucket_ownerIdentity = to_string(res.bucket->get_owner());
   const auto region = res.store->get_zone()->get_zonegroup().get_api_name();
   rgw::ARN bucket_arn(res.bucket->get_key());
-  bucket_arn.region = region; 
+  if (res.store->ctx()->_conf.get_val<bool>("rgw_notification_bucket_arn_region")) {
+    bucket_arn.region = region;
+  }
   event.bucket_arn = to_string(bucket_arn);
   event.object_key = res.object_name ? *res.object_name : obj->get_name();
   event.object_size = size;
