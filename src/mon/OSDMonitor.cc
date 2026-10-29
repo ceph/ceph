@@ -4458,12 +4458,6 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   if (source_p.lowest_migrated_pg == 0 && source_p.migrating_pgs.empty()) {
     dout(0) << "finished migration of pool " << pgid.pool() << dendl;
     pg_pool_t& target_p = get_pg_pool(source_p.migration_target.value());
-    // If the default flag is not set and its not on crimson then reset the pool
-    // flag for nopgchange
-    if (!(g_conf()->osd_pool_default_flag_nopgchange) && !(target_p.has_flag(pg_pool_t::FLAG_CRIMSON))) {
-      target_p.unset_flag(pg_pool_t::FLAG_NOPGCHANGE);
-    }
-    target_p.pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::ON;
     target_p.migration_src.reset();
     target_p.last_change = pending_inc.epoch;
   } else if (source_p.lowest_migrated_pg == 0) {
@@ -8955,7 +8949,6 @@ int OSDMonitor::prepare_new_pool(string& name,
     spi->migration_root.reset();
 
     spi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
-    pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
     if (pool_type == pg_pool_t::TYPE_ERASURE) {
       // The target pool for pool migration must have overwrites enabled
       // because clients will use the source pool to decide how to align
@@ -8963,7 +8956,6 @@ int OSDMonitor::prepare_new_pool(string& name,
       pi->set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
     }
     spi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
-    pi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
 
     // FLAG_NOPGCHANGE only blocks new admin pg_num commands, not the mgr-driven
     // convergence toward pg_num_target or an in-flight merge (pg_num_pending <
@@ -9205,6 +9197,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   if (!p.is_replicated() &&
       (var == "read_ratio")) {
     return -EACCES;
+  }
+
+  if ((var == "pg_num" || var == "pgp_num" || var == "pgp_num_actual") &&
+      p.is_migrating()) {
+    ss << "pool " << var << " change is disabled while the pool is migrating";
+    return -EPERM;
   }
 
   if (var == "size") {
@@ -9548,12 +9546,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     bool clearing = (val == "false" || (interr.empty() && n == 0));
-    // A migrating pool keeps NOPGCHANGE for its whole lifetime; clearing it
-    // would let pg_num diverge from the value frozen at migration start.
-    if (var == "nopgchange" && clearing && p.is_migrating()) {
-      ss << "nopgchange cannot be cleared while the pool is migrating";
-      return -EPERM;
-    }
     if (val == "true" || (interr.empty() && n == 1)) {
       p.set_flag(flag);
     } else if (clearing) {
