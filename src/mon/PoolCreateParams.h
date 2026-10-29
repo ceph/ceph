@@ -139,6 +139,10 @@ int check_pool_defaults(const PoolCreateParams& p,
 // code profile's, else the default.
 std::string effective_zone_failure_domain(const PoolCreateParams& p);
 
+// An erasure code profile's crush-zone-failure-domain, else dflt.
+std::string profile_zone_failure_domain(
+  const std::map<std::string, std::string>& profile, const std::string& dflt);
+
 // For an error of building or checking the CRUSH rule of a pool over zones:
 // the options that gave the values it was built or checked with, as
 // " (<option>, ...)", or "" when the command line gave them all.

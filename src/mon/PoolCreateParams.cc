@@ -251,12 +251,16 @@ string effective_zone_failure_domain(const PoolCreateParams& p)
 {
   if (!p.is_given("zone_failure_domain") &&
       p.pool_type == pg_pool_t::TYPE_ERASURE && !p.erasure_code_profile.empty()) {
-    if (auto i = p.profile.find("crush-zone-failure-domain");
-        i != p.profile.end()) {
-      return i->second;
-    }
+    return profile_zone_failure_domain(p.profile, p.zone_failure_domain);
   }
   return p.zone_failure_domain;
+}
+
+string profile_zone_failure_domain(const std::map<string, string>& profile,
+                                   const string& dflt)
+{
+  const auto i = profile.find("crush-zone-failure-domain");
+  return i != profile.end() ? i->second : dflt;
 }
 
 string rule_from_defaults(const PoolCreateParams& p)

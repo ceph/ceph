@@ -1549,3 +1549,94 @@ TEST_F(OSDMonitorSizeChangeMappingsTest, DecreaseTruncatesPendingUpmap) {
   EXPECT_EQ((mempool::osdmap::vector<int32_t>{5, 4}),
             pending.new_pg_upmap[pg_t(2, pool)]);
 }
+
+// Test the zone failure domain that ceph osd pool set num_zones gives a pool:
+// an erasure coded pool takes its profile's, as ceph osd pool create does
+TEST(OSDMonitorNumZonesZoneFailureDomainTest, FromCommandProfileOrDefault) {
+  pg_pool_t ec;
+  ec.type = pg_pool_t::TYPE_ERASURE;
+  pg_pool_t rep;
+  rep.type = pg_pool_t::TYPE_REPLICATED;
+  const ErasureCodeProfile profile = {{"crush-zone-failure-domain", "zone"}};
+  const cmdmap_t none;
+  cmdmap_t rack;
+  rack["zone_failure_domain"] = string("rack");
+
+  EXPECT_EQ("zone", OSDMonitor::num_zones_zone_failure_domain(
+                      none, ec, profile, "datacenter"));
+  EXPECT_EQ("rack", OSDMonitor::num_zones_zone_failure_domain(
+                      rack, ec, profile, "datacenter"));
+  EXPECT_EQ("datacenter", OSDMonitor::num_zones_zone_failure_domain(
+                            none, ec, {}, "datacenter"));
+  EXPECT_EQ("datacenter", OSDMonitor::num_zones_zone_failure_domain(
+                            none, rep, profile, "datacenter"));
+  EXPECT_EQ("rack", OSDMonitor::num_zones_zone_failure_domain(
+                      rack, rep, profile, "datacenter"));
+}
+
+// A CRUSH map with the bucket types root, datacenter, host and osd: root
+// default holds dc1 and dc2, each with two hosts of one OSD
+class OSDMonitorStretchReplicatedRuleTest : public ::testing::Test {
+protected:
+  unique_ptr<CephContext> cct;
+  CrushWrapper crush;
+  ostringstream ss;
+
+  void SetUp() override {
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_MON));
+    g_ceph_context = cct.get();
+    common_init_finish(g_ceph_context);
+    crush.create();
+    crush.set_max_devices(4);
+    crush.set_type_name(10, "root");
+    crush.set_type_name(8, "datacenter");
+    crush.set_type_name(1, "host");
+    crush.set_type_name(0, "osd");
+    int root = 0;
+    crush.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1, 10, 0,
+                     nullptr, nullptr, &root);
+    crush.set_item_name(root, "default");
+    for (int osd = 0; osd < 4; ++osd) {
+      crush.insert_item(g_ceph_context, osd, 1.0, "osd." + to_string(osd),
+        map<string, string>{{"host", "host" + to_string(osd)},
+                            {"datacenter", osd < 2 ? "dc1" : "dc2"},
+                            {"root", "default"}});
+    }
+  }
+
+  void TearDown() override {
+    g_ceph_context = nullptr;
+  }
+
+  // The layout of the rule that pool creation generates for a replicated
+  // pool over the two data centers with this OSD failure domain
+  int layout(const string& osd_failure_domain, int *root, int *zone_type,
+             int *osd_type) {
+    int rule = crush.add_simple_stretch_rule(
+      "rule-" + osd_failure_domain, "default", "datacenter",
+      osd_failure_domain, 2, 2, "", "firstn", pg_pool_t::TYPE_REPLICATED,
+      false, &ss);
+    EXPECT_GE(rule, 0) << ss.str();
+    return OSDMonitor::stretch_replicated_rule_layout(
+      crush, rule, 2, root, zone_type, osd_type, &ss);
+  }
+};
+
+// Test the layout of a pool's rule with a host failure domain in each zone
+TEST_F(OSDMonitorStretchReplicatedRuleTest, HostFailureDomain) {
+  int root, zone_type, osd_type;
+  ASSERT_EQ(0, layout("host", &root, &zone_type, &osd_type)) << ss.str();
+  EXPECT_EQ(crush.get_item_id("default"), root);
+  EXPECT_STREQ("datacenter", crush.get_type_name(zone_type));
+  EXPECT_STREQ("host", crush.get_type_name(osd_type));
+}
+
+// Test the layout of a pool's rule with an OSD failure domain in each zone,
+// whose OSDs are chosen with choose rather than chooseleaf
+TEST_F(OSDMonitorStretchReplicatedRuleTest, OsdFailureDomain) {
+  int root, zone_type, osd_type;
+  ASSERT_EQ(0, layout("osd", &root, &zone_type, &osd_type)) << ss.str();
+  EXPECT_EQ(crush.get_item_id("default"), root);
+  EXPECT_STREQ("datacenter", crush.get_type_name(zone_type));
+  EXPECT_STREQ("osd", crush.get_type_name(osd_type));
+}
