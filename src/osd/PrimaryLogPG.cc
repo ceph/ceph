@@ -8636,6 +8636,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		   src_version);
 	if (op_finisher == nullptr) {
 	  // start
+          // A client addresses a migrating pool by its target. Read from the
+          // migration's root, which the Objecter routes to the pool that has
+          // the object now.
+          if (int64_t root = get_osdmap()->get_pool_migration_root_from_target(
+                src_oloc.pool); root >= 0) {
+            src_oloc.pool = root;
+          }
 	  pg_t raw_pg;
 	  get_osdmap()->object_locator_to_pg(src_name, src_oloc, raw_pg);
 	  hobject_t src(src_name, src_oloc.key, src_snapid,
