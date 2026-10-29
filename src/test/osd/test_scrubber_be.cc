@@ -197,7 +197,13 @@ class TestPg : public PgScrubBeListener {
   // technique cannot
   bool ec_crc_encode_decode = true;
 
-  ECUtil::stripe_info_t get_ec_sinfo() const final { return *m_sinfo; }
+  ECUtil::stripe_info_t get_ec_sinfo() const final {
+    // ECSwitch aborts if asked for a legacy pool
+    if (!get_is_ec_optimized()) {
+      ADD_FAILURE() << "get_ec_sinfo() for a pool without EC optimizations";
+    }
+    return *m_sinfo;
+  }
 
   void set_stripe_info(unsigned int k, unsigned int m, uint64_t stripe_width,
                        const pg_pool_t* pool) {
@@ -559,7 +565,9 @@ OSDMapRef TestTScrubberBe::setup_map(int num_osds,
     p->erasure_code_profile =
         pconf.erasure_code_profile->erasure_code_profile_name;
     p->set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
-    p->set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+    if (pconf.ec_optimizations) {
+      p->set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+    }
   }
   for (auto s : pconf.nonprimary_shards) {
     p->nonprimary_shards.insert(s);
@@ -910,6 +918,24 @@ TEST_F(TestTScrubberBeECNoCorruptShards, ec_parity_inconsistency) {
   ASSERT_TRUE(sbe);  // Assert we have a scrubber backend
   logger.set_expected_err_count(
       0);  // Set the number of errors we expect to see
+
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+
+  EXPECT_EQ(incons.size(), 0);
+}
+
+// A deep scrub of a legacy erasure coded pool, without allow_ec_optimizations,
+// must not ask for the stripe info, which the legacy backend does not have
+class TestTScrubberBeECLegacy : public TestTScrubberBeECCorruptShards {
+ public:
+  TestTScrubberBeECLegacy() : TestTScrubberBeECCorruptShards() {
+    pl.ec_optimizations = false;
+  }
+};
+
+TEST_F(TestTScrubberBeECLegacy, deep_scrub_without_stripe_info) {
+  ASSERT_TRUE(sbe);
+  logger.set_expected_err_count(0);
 
   auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
 
