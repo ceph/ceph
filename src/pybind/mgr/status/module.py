@@ -166,10 +166,10 @@ class Module(MgrModule):
                         'name': daemon_info['name'],
                         'state': 'standby-replay',
                         'events': events,
-                        'dns': 5,
-                        'inos': 5,
-                        'dirs': 5,
-                        'caps': 5
+                        'dns': dns,
+                        'inos': inos,
+                        'dirs': dirs,
+                        'caps': caps
                     })
                 else:
                     rank_table.add_row([
