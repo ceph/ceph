@@ -4,7 +4,9 @@ Code that runs **at adopt or convert time**, not on the request path.
 
 The distinction is the one that decides what belongs here.  A file in
 this directory reads a NooBaa deployment, plans an import, or rewrites
-a tree;  nothing here is reached while serving an S3 request.  The
+a tree;  nothing here is reached while serving an S3 request, except
+that a request on a bucket not yet adopted promotes it in
+`adoption_queue` and waits for it.  The
 strategies one level up — `xattr_strategy`, `path_strategy`,
 `mpu_strategy`, `fs_strategy`, `bucket_state_strategy` — are the other
 case:  they are selected per bucket and consulted per request, and
@@ -20,6 +22,7 @@ stay where they are even though they are format-specific.
 | `noobaa_schema` | the fields and object attributes the reviewed NooBaa releases write, and the checks that refuse anything else.  X4 |
 | `noobaa_import` | the store's identities into RGW:  accounts, IAM users, roles and the anonymous identity, with their rows.  I4, I7 to I9 |
 | `noobaa_bucket_import` | one bucket's record into RGW's bucket state and its placement row.  I5, P6 |
+| `adoption_queue` | `automatic`'s background adoption:  the intent queue, its workers, and promotion by a request.  C9 |
 
 The letters are the stages of `docs/NSFS_WORK_PLAN.md`.
 

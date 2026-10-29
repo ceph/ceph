@@ -72,7 +72,8 @@ extern rgw::sal::Driver* newDBStore(CephContext *cct);
 extern rgw::sal::Driver* newPOSIXDriver(CephContext *cct);
 #endif
 #ifdef WITH_RADOSGW_NSFS
-extern rgw::sal::Driver* newNSFSDriver(CephContext *cct);
+extern rgw::sal::Driver* newNSFSDriver(CephContext *cct,
+					 boost::asio::io_context& io_context);
 #endif
 #ifdef WITH_RADOSGW_MOTR
 extern rgw::sal::Driver* newMotrStore(CephContext *cct);
@@ -221,7 +222,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 
 #ifdef WITH_RADOSGW_NSFS
   else if (cfg.store_name.compare("nsfs") == 0) {
-    driver = newNSFSDriver(cct);
+    driver = newNSFSDriver(cct, io_context);
     if (driver == nullptr) {
       ldpp_dout(dpp, 0) << "newNSFSDriver() failed!" << dendl;
       return nullptr;
@@ -346,7 +347,7 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
 #endif
   } else if (cfg.store_name.compare("nsfs") == 0) {
 #ifdef WITH_RADOSGW_NSFS
-    driver = newNSFSDriver(cct);
+    driver = newNSFSDriver(cct, io_context);
 
     if (driver->initialize(cct, dpp) < 0) {
       delete driver;

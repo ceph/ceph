@@ -16903,6 +16903,8 @@ TEST_F(NooBaaModeTest, AStoreALaterNooBaaWroteIsRefusedBeforeAnyWrite)
   EXPECT_LT(driver->get_identity_db()->get_bucket_placement(
 	      env->dpp, testname, "", row), 0)
       << "a skewed store's bucket record was imported";
+  /* the refusal is the store's, not the bucket's:  it stays served as
+   * found (DECISIONS.md 2026-10-29) */
   std::unique_ptr<rgw::sal::Bucket> loaded;
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
 				&loaded, null_yield), 0);
@@ -17024,9 +17026,13 @@ TEST_F(NooBaaModeTest, ABucketIsNotAdoptedBeforeItsOwner)
 				{{"bucket", testname}}, &out), 0);
   EXPECT_EQ(out["adopted"], "false");
 
+  /* its adoption failed, so it is not served (DECISIONS.md 2026-10-29),
+   * and its tree was not converted */
   std::unique_ptr<rgw::sal::Bucket> loaded;
-  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
-				&loaded, null_yield), 0);
+  EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), -ERR_INVALID_BUCKET_STATE);
+  ASSERT_EQ(driver->load_bucket_internal(env->dpp, rgw_bucket{"", testname},
+					 &loaded, null_yield), 0);
   EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
 		 ->profile_name(), "base")
       << "a bucket whose owner does not exist was converted";

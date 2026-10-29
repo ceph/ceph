@@ -477,6 +477,16 @@ target_include_directories(unittest_rgw_nsfs_driver
 target_link_libraries(unittest_rgw_nsfs_driver ${UNITTEST_LIBS}
   ${rgw_libs} ${LMDB_LIBRARIES})
 
+# unittest_rgw_nsfs_adoption_queue
+add_executable(unittest_rgw_nsfs_adoption_queue
+	test_rgw_nsfs_adoption_queue.cc)
+add_ceph_unittest(unittest_rgw_nsfs_adoption_queue)
+target_include_directories(unittest_rgw_nsfs_adoption_queue
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/nsfs")
+target_link_libraries(unittest_rgw_nsfs_adoption_queue ${UNITTEST_LIBS}
+  ${rgw_libs})
+
 # unittest_rgw_gpfs_xattr
 add_executable(unittest_rgw_gpfs_xattr
 	test_rgw_gpfs_xattr.cc)

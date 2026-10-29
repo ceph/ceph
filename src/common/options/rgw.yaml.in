@@ -4713,9 +4713,10 @@ options:
     out of base.
     Nothing on disk changes until then, which is the state for
     inspection and validation.  "automatic" imports the store's
-    identities and adopts every bucket at startup.  Adopting a bucket
-    imports its NooBaa record and rewrites its tree into the nsfs
-    format.
+    identities at startup and adopts every bucket in the background
+    while the gateway serves, a bucket a request reaches ahead of the
+    rest.  Adopting a bucket imports its NooBaa record and rewrites its
+    tree into the nsfs format.
   default: command
   enum_values:
   - command
@@ -4723,6 +4724,30 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_nsfs_adoption_workers
+  type: uint
+  level: advanced
+  desc: How many buckets automatic adoption adopts at once
+  long_desc: Each worker adopts one bucket at a time on a thread of its
+    own, which exists only while it is adopting.  Meaningful only when
+    rgw_nsfs_adoption_mode is automatic.
+  default: 3
+  min: 1
+  services:
+  - rgw
+- name: rgw_nsfs_adoption_wait_ms
+  type: uint
+  level: advanced
+  desc: How long a request waits for its bucket's automatic adoption
+  long_desc: A request on a bucket not yet adopted asks for the bucket
+    to be adopted next and waits up to this long for it.  If the
+    adoption has not finished by then, a read is served from the bucket
+    as found and a write is answered 503, which a client retries.
+    Zero asks without waiting.  Meaningful only when
+    rgw_nsfs_adoption_mode is automatic.
+  default: 1000
+  services:
+  - rgw
 - name: rgw_nsfs_adoption_role_rights
   type: str
   level: advanced

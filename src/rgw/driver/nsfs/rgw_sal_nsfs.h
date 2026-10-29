@@ -40,6 +40,7 @@
 #include "impersonate.h"
 #include "bucket_profile.h"
 #include "sync_fs_set.h"
+#include "adopt/adoption_queue.h"
 
 class RGWLC;
 
@@ -816,6 +817,9 @@ class NSFSDriver : public StoreDriver {
 
 protected:
   CephContext *cct;
+  /* The executor AppMain serves requests on, for work the driver spawns
+   * itself.  Null only in unit tests that construct the driver directly. */
+  boost::asio::io_context* io_context;
   /* The prefix for work that belongs to no request:  an FSIO handle is
    * shared, and its destructor runs wherever the last reference drops,
    * as late as an RGWFileHandle's reclaim.  It reads `cct` at each
@@ -868,7 +872,32 @@ protected:
   /* the two waits;  see the constants they are seeded from */
   std::chrono::milliseconds mutation_gate_wait{5000};
   std::chrono::milliseconds gate_drain_wait{60000};
+  /* Written by an adoption command on its request's thread and by the
+   * queue's drain on its own, and read by every request that resolves a
+   * bucket, so the record is held under a lock and whether there is
+   * one is an atomic. */
+  mutable std::mutex completion_mtx;
   std::optional<nsfs::AdoptionCompletion> completion;
+  std::atomic<bool> completed{false};
+  void set_completion(std::optional<nsfs::AdoptionCompletion> c);
+  /* `automatic` adoption while serving;  null in any other mode, in a
+   * process with no background tasks, and once adoption is complete at
+   * startup.  Published whole, since the `adoption` hint can start it
+   * while requests read it;  the owner keeps it until the driver goes. */
+  std::atomic<nsfs::AdoptionQueue*> adoption_queue{nullptr};
+  std::unique_ptr<nsfs::AdoptionQueue> adoption_queue_owner;
+  std::mutex adoption_queue_start_mtx;
+  /* under adoption_queue_start_mtx:  set by shutdown(), after which
+   * nothing starts the queue */
+  bool adoption_queue_shut{false};
+  /* the quantum, in ms;  set at runtime by the `adoption` hint's
+   * `wait_ms`, while requests read it */
+  std::atomic<uint64_t> adoption_wait_ms{1000};
+  /* Buckets whose adoption failed, with the error, in either mode:  not
+   * served until an operator acts -- adopts by command, abandons, or
+   * restarts the gateway, which forgets them (DECISIONS.md 2026-10-29). */
+  std::mutex adoption_failures_mtx;
+  std::map<std::string, int> adoption_failures;
   /* under the relaxed sync policy only;  see init_sync_policy() */
   std::unique_ptr<nsfs::SyncFsSet> sync_set;
   UserCache user_cache;
@@ -1045,6 +1074,15 @@ protected:
   std::atomic<uint64_t> unadopted_writes_rejected{0};
   ceph::mutex inject_lift_adoption_gate_lock =
       ceph::make_mutex("NSFSDriver::inject_lift_adoption_gate_lock");
+  /* hold these buckets' adoption before it begins, so a test can keep
+   * one not adopted while the queue runs:  a worker that takes a held
+   * bucket waits until it is released or the gateway stops.  `waiting`
+   * is the held buckets a worker has taken. */
+  std::set<std::string> inject_hold_adoption_buckets;
+  std::set<std::string> inject_hold_adoption_waiting;
+  ceph::mutex inject_hold_adoption_lock =
+      ceph::make_mutex("NSFSDriver::inject_hold_adoption_lock");
+  ceph::condition_variable inject_hold_adoption_cond;
 
   /* Which POSIX identity a converted consumer chose for one named
    * object, so a test can assert the uid and not the status --  (n)
@@ -1085,7 +1123,9 @@ protected:
   std::atomic<bool> any_copy_bundle{false};
 
 public:
-  NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
+  NSFSDriver(CephContext *_cct,
+	     boost::asio::io_context* _io_context = nullptr)
+    : StoreDriver(), cct(_cct), io_context(_io_context), zone(this)
   {
     const static std::string tenant = "default_ns";
     const auto& db_path = g_conf().get_val<std::string>("rgw_nsfs_userdb_dir");
@@ -1425,8 +1465,21 @@ public:
 		   std::string* profile);
 
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
+  /* What a client reaches:  a bucket whose adoption failed is refused,
+   * and a request promotes a bucket not yet adopted. */
   virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                           std::unique_ptr<Bucket>* bucket, optional_yield y) override;
+  /* The driver's own work -- adoption, abandonment, the profile
+   * endpoints, the hints -- which must reach a bucket whose adoption
+   * failed, and must not wait on adoption. */
+  int load_bucket_internal(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                           std::unique_ptr<Bucket>* bucket, optional_yield y);
+  /* Whether `bucket`'s adoption failed and no operator has acted since. */
+  bool adoption_failed(const std::string& bucket);
+  /* 0 when NooBaa's store as a whole admits adoption:  it reads, and
+   * its release is one adoption is verified against (X4).  Otherwise
+   * the error, with `why` set. */
+  int store_admits_adoption(const DoutPrefixProvider* dpp, std::string& why);
   virtual int list_buckets(const DoutPrefixProvider* dpp,
 			   const rgw_owner& owner, const std::string& tenant,
 			   const std::string& marker, const std::string& end_marker,
@@ -1589,6 +1642,7 @@ public:
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; }
 
+  virtual void shutdown(void) override;
   virtual void finalize(void) override;
 
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
@@ -1653,8 +1707,11 @@ public:
   /* Adoption's completion record, read once at startup and updated by
    * the pass that writes it.  Once set, NooBaa's store is not read:  no
    * record serves a bucket, lists one, holds a name, or is adopted. */
-  bool adoption_complete() const { return completion.has_value(); }
-  const std::optional<nsfs::AdoptionCompletion>& adoption_completion() const {
+  bool adoption_complete() const {
+    return completed.load(std::memory_order_acquire);
+  }
+  std::optional<nsfs::AdoptionCompletion> adoption_completion() const {
+    std::lock_guard l{completion_mtx};
     return completion;
   }
   /* Read the record from the identity DB.  Called by initialize() and a
@@ -1691,7 +1748,8 @@ public:
   }
 
   /* Adopt the whole store:  its identities, then every bucket.  What
-   * `automatic` runs at startup, until the background sweep exists. */
+   * `automatic` runs at startup in a process with no background tasks;
+   * one that serves adopts through the queue instead. */
   int run_adoption(const DoutPrefixProvider* dpp, optional_yield y,
 		   std::map<std::string, std::string>* report = nullptr);
 
@@ -1707,7 +1765,18 @@ public:
    * record is imported. */
   int adopt_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 		       const std::string& bucket_name,
-		       std::map<std::string, std::string>* report = nullptr);
+		       std::map<std::string, std::string>* report = nullptr,
+		       nsfs::convert_cb_t* cb = nullptr);
+
+  /* `automatic` while serving:  the identities now, every bucket
+   * through the queue.  -EAGAIN when the identities do not import, and
+   * nothing is queued;  0 with nothing done when a queue is running.
+   * `workers` overrides rgw_nsfs_adoption_workers. */
+  int start_adoption_queue(const DoutPrefixProvider* dpp,
+			   std::optional<uint64_t> workers = std::nullopt);
+  /* Whether a request on `b` should promote its adoption:  the queue
+   * runs, and `b` is NooBaa's, not yet imported and not abandoned. */
+  bool awaits_adoption(const DoutPrefixProvider* dpp, NSFSBucket& b);
 
   /* Import one bucket's NooBaa record:  the half of a bucket's adoption
    * that set_profile() runs before it rewrites the tree.  -ENOENT when
