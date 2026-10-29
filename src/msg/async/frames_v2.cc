@@ -312,6 +312,7 @@ Tag FrameAssembler::disassemble_preamble(bufferlist& preamble_bl) {
   }
 
   m_descs.resize(preamble->num_segments);
+  m_rx_crcs.fill(std::nullopt);
   for (size_t i = 0; i < m_descs.size(); i++) {
     m_descs[i].logical_len = preamble->segments[i].length;
     m_descs[i].align = preamble->segments[i].alignment;
@@ -334,10 +335,22 @@ bool FrameAssembler::disasm_all_crc_rev0(bufferlist segment_bls[],
   for (size_t i = 0; i < m_descs.size(); i++) {
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
     if (m_with_data_crc) {
-      check_segment_crc(segment_bls[i], epilogue->crc_values[i]);
+      check_rx_segment_crc(i, segment_bls[i], epilogue->crc_values[i]);
     }
   }
   return !(epilogue->late_flags & FRAME_LATE_FLAG_ABORTED);
+}
+
+void FrameAssembler::check_rx_segment_crc(size_t seg_idx,
+                                          const bufferlist& segment_bl,
+                                          uint32_t expected_crc) const {
+  if (!m_rx_crcs[seg_idx]) {
+    check_segment_crc(segment_bl, expected_crc);
+  } else if (*m_rx_crcs[seg_idx] != expected_crc) {
+    throw FrameError(fmt::format(
+        "bad segment crc calculated={} expected={}", *m_rx_crcs[seg_idx],
+        expected_crc));
+  }
 }
 
 bool FrameAssembler::disasm_all_secure_rev0(bufferlist segment_bls[],
@@ -385,7 +398,7 @@ bool FrameAssembler::disasm_remaining_crc_rev1(bufferlist segment_bls[],
   for (size_t i = 1; i < m_descs.size(); i++) {
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
     if (m_with_data_crc) {
-      check_segment_crc(segment_bls[i], epilogue->crc_values[i - 1]);
+      check_rx_segment_crc(i, segment_bls[i], epilogue->crc_values[i - 1]);
     }
   }
   return check_epilogue_late_status(epilogue->late_status);

@@ -11,6 +11,7 @@
 #include "compression_onwire.h"
 #include "msg/msg_types.h" // for entity_addr_t, entity_addrvec_t
 #include <array>
+#include <optional>
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
@@ -201,8 +202,21 @@ public:
 
   void set_is_rev1(bool is_rev1) {
     m_descs.clear();
+    m_rx_crcs.fill(std::nullopt);
     m_flags = 0;
     m_is_rev1 = is_rev1;
+  }
+
+  // The receiver may compute a segment's crc itself while reading it, in
+  // chunks, instead of leaving the whole segment to the epilogue check
+  // (see ProtocolV2::read_frame_segment()). Only for crc mode and only for
+  // segments whose crc is in the epilogue. Valid for the current frame.
+  bool can_precompute_rx_crc(size_t seg_idx) const {
+    return m_with_data_crc && !m_crypto->rx && seg_idx > 0;
+  }
+  void set_precomputed_rx_crc(size_t seg_idx, uint32_t crc) {
+    ceph_assert(can_precompute_rx_crc(seg_idx));
+    m_rx_crcs[seg_idx] = crc;
   }
 
   bool get_is_rev1() {
@@ -405,7 +419,11 @@ private:
   friend std::ostream& operator<<(std::ostream& os,
                                   const FrameAssembler& frame_asm);
 
+  void check_rx_segment_crc(size_t seg_idx, const bufferlist& segment_bl,
+                            uint32_t expected_crc) const;
+
   boost::container::static_vector<segment_desc_t, MAX_NUM_SEGMENTS> m_descs;
+  std::array<std::optional<uint32_t>, MAX_NUM_SEGMENTS> m_rx_crcs;
   __u8 m_flags;
   const ceph::crypto::onwire::rxtx_t* m_crypto;
   bool m_is_rev1;  // msgr2.1?

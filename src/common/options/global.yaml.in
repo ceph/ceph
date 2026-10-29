@@ -1201,6 +1201,17 @@ options:
   desc: Set and/or verify crc32c checksum on data payload sent over network
   default: true
   with_legacy: true
+- name: ms_crc_data_rx_chunk_size
+  type: size
+  level: dev
+  desc: Verify a received frame segment's data crc in chunks of this size
+    as the segment arrives, rather than in one pass once it has all been read
+  long_desc: msgr2 in crc mode only. A single pass over a large segment
+    keeps the connection's worker from reading the socket for as long as the
+    pass takes; once the socket buffer fills the sender stalls too. Checking
+    each chunk as it lands keeps those pauses short. 0 disables.
+  default: 1_M
+  with_legacy: true
 - name: ms_crc_header
   type: bool
   level: dev

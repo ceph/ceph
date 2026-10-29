@@ -1249,7 +1249,59 @@ CtPtr ProtocolV2::read_frame_segment() {
     return _fault();
   }
 
+  // Checking the crc of a large segment in one pass after reading it keeps
+  // this worker off the socket for the whole pass (~1 ms for 24 MiB), long
+  // enough for the socket buffer to fill and the sender to stall. Read it
+  // in chunks instead and fold each into the crc as it lands, while it's
+  // still in cache; FrameAssembler then checks the result, not the data.
+  const uint32_t chunk = cct->_conf->ms_crc_data_rx_chunk_size;
+  if (chunk > 0 && onwire_len > chunk &&
+      rx_frame_asm.can_precompute_rx_crc(seg_idx)) {
+    rx_chunked_segment = std::move(rx_buffer);
+    rx_chunked_segment_off = 0;
+    rx_chunked_segment_crc = -1;
+    return read_frame_segment_chunk();
+  }
+
   return READ_RXBUF(std::move(rx_buffer), handle_read_frame_segment);
+}
+
+CtPtr ProtocolV2::read_frame_segment_chunk() {
+  const uint32_t len = std::min<uint32_t>(
+      cct->_conf->ms_crc_data_rx_chunk_size,
+      rx_chunked_segment->length() - rx_chunked_segment_off);
+  // a view of the next chunk of the segment's buffer, so the data lands in
+  // place and the segment stays one contiguous, aligned buffer
+  rx_buffer_t view = ceph::buffer::ptr_node::create(
+      ceph::buffer::ptr(*rx_chunked_segment, rx_chunked_segment_off, len));
+  return READ_RXBUF(std::move(view), handle_read_frame_segment_chunk);
+}
+
+CtPtr ProtocolV2::handle_read_frame_segment_chunk(rx_buffer_t &&rx_buffer,
+                                                  int r) {
+  ldout(cct, 20) << __func__ << " r=" << r
+                 << " off=" << rx_chunked_segment_off << dendl;
+
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " read frame segment failed r=" << r << " ("
+                  << cpp_strerror(r) << ")" << dendl;
+    rx_chunked_segment.reset();
+    return _fault();
+  }
+
+  rx_chunked_segment_crc = ceph_crc32c(
+      rx_chunked_segment_crc,
+      reinterpret_cast<const unsigned char*>(rx_buffer->c_str()),
+      rx_buffer->length());
+  rx_chunked_segment_off += rx_buffer->length();
+  if (rx_chunked_segment_off < rx_chunked_segment->length()) {
+    return read_frame_segment_chunk();
+  }
+
+  rx_frame_asm.set_precomputed_rx_crc(rx_segments_data.size() - 1,
+                                      rx_chunked_segment_crc);
+  rx_segments_data.back().push_back(std::move(rx_chunked_segment));
+  return _handle_read_frame_segment();
 }
 
 CtPtr ProtocolV2::handle_read_frame_segment(rx_buffer_t &&rx_buffer, int r) {
