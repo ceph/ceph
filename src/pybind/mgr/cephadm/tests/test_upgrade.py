@@ -1,10 +1,11 @@
 import json
 import logging
+import errno
 from unittest import mock
 
 import pytest
 
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, NvmeofServiceSpec
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import (
     CephadmUpgrade,
@@ -15,7 +16,7 @@ from cephadm.upgrade import (
 )
 from cephadm.ssh import HostConnectionError
 from cephadm.utils import ContainerInspectInfo
-from orchestrator import OrchestratorError, DaemonDescription, HostSpec, daemon_type_to_service
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, HostSpec, daemon_type_to_service
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
 
@@ -1739,3 +1740,171 @@ def test_to_upgrade_rgw_listener_batching(
 
     assert proceed is True
     assert [d.name() for d, _ in to_upgrade] == expected
+
+
+@mock.patch(
+    "cephadm.serve.CephadmServe._run_cephadm",
+    _run_cephadm('{}'),
+)
+def test_upgrade_nvmeof_disables_redeploys_and_reenables(
+    cephadm_module: CephadmOrchestrator,
+):
+    from mgr_module import HandleCommandResult
+
+    daemon = DaemonDescription(
+        daemon_type='nvmeof',
+        daemon_id='testpool.testgroup.host1.abc',
+        hostname='host1',
+        status=DaemonDescriptionStatus.running,
+    )
+
+    spec = NvmeofServiceSpec(
+        service_id='testpool.testgroup',
+        pool='testpool',
+        group='testgroup',
+    )
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        0,
+    )
+
+    nvmeof_service = mock.MagicMock()
+    nvmeof_service.check_and_disable_gateway.return_value = (
+        HandleCommandResult(0, '', ''),
+        True,
+    )
+    nvmeof_service.enable_gateway.return_value = (
+        HandleCommandResult(0, '', '')
+    )
+
+    with with_host(cephadm_module, 'host1'):
+        with mock.patch.dict(
+            cephadm_module.spec_store.all_specs,
+            {
+                spec.service_name(): spec,
+            },
+        ), mock.patch(
+            'cephadm.upgrade.service_registry.get_service',
+            return_value=nvmeof_service,
+        ), mock.patch.object(
+            cephadm_module.upgrade,
+            '_rotate_mgr_mon_auth_keys',
+        ), mock.patch.object(
+            cephadm_module,
+            '_daemon_action',
+        ) as mock_daemon_action, mock.patch(
+            "cephadm.serve.CephadmServe._run_cephadm",
+            _run_cephadm(json.dumps({
+                'repo_digests': [
+                    'target_image@sha256:test',
+                ],
+            })),
+        ):
+            cephadm_module.upgrade._upgrade_daemons(
+                [(daemon, False)],
+                'target_image',
+                ['target_image@sha256:test'],
+            )
+
+    nvmeof_service.check_and_disable_gateway.assert_called_once_with(
+        daemon
+    )
+
+    mock_daemon_action.assert_called_once()
+
+    daemon_spec = mock_daemon_action.call_args.args[0]
+
+    assert daemon_spec.name() == daemon.name()
+    assert mock_daemon_action.call_args.args[1] == 'redeploy'
+    assert (
+        mock_daemon_action.call_args.kwargs['image']
+        == 'target_image'
+    )
+
+    nvmeof_service.enable_gateway.assert_called_once_with(
+        daemon
+    )
+
+    assert (
+        daemon.name()
+        not in cephadm_module.upgrade._nvmeof_disabled_daemons
+    )
+
+
+@mock.patch(
+    "cephadm.serve.CephadmServe._run_cephadm",
+    _run_cephadm('{}'),
+)
+def test_upgrade_nvmeof_not_safe_does_not_redeploy(
+    cephadm_module: CephadmOrchestrator,
+):
+    from mgr_module import HandleCommandResult
+
+    daemon = DaemonDescription(
+        daemon_type='nvmeof',
+        daemon_id='testpool.testgroup.host1.abc',
+        hostname='host1',
+        status=DaemonDescriptionStatus.running,
+    )
+
+    spec = NvmeofServiceSpec(
+        service_id='testpool.testgroup',
+        pool='testpool',
+        group='testgroup',
+    )
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        0,
+    )
+
+    nvmeof_service = mock.MagicMock()
+    nvmeof_service.check_and_disable_gateway.return_value = (
+        HandleCommandResult(
+            -errno.EBUSY,
+            '',
+            'not safe to stop nvmeof gateway',
+        ),
+        False,
+    )
+
+    with with_host(cephadm_module, 'host1'):
+        with mock.patch.dict(
+            cephadm_module.spec_store.all_specs,
+            {
+                spec.service_name(): spec,
+            },
+        ), mock.patch(
+            'cephadm.upgrade.service_registry.get_service',
+            return_value=nvmeof_service,
+        ), mock.patch.object(
+            cephadm_module.upgrade,
+            '_rotate_mgr_mon_auth_keys',
+        ), mock.patch.object(
+            cephadm_module,
+            '_daemon_action',
+        ) as mock_daemon_action, mock.patch(
+            "cephadm.serve.CephadmServe._run_cephadm",
+            _run_cephadm(json.dumps({
+                'repo_digests': [
+                    'target_image@sha256:test',
+                ],
+            })),
+        ):
+            cephadm_module.upgrade._upgrade_daemons(
+                [(daemon, False)],
+                'target_image',
+                ['target_image@sha256:test'],
+            )
+
+    nvmeof_service.check_and_disable_gateway.assert_called_once_with(
+        daemon
+    )
+    mock_daemon_action.assert_not_called()
+    nvmeof_service.enable_gateway.assert_not_called()
+
+    assert (
+        daemon.name()
+        not in cephadm_module.upgrade._nvmeof_disabled_daemons
+    )
