@@ -14589,9 +14589,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     for(auto& [id, name] : pending_inc.new_pool_names) {
       if (name == poolstr) {
-        ss << "pool '" << poolstr << "' already exists";
-        err = 0;
-        goto reply_no_propose;
+        // answered once the pending pool is committed
+        goto wait;
       }
     }
 

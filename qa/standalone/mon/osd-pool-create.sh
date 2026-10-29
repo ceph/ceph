@@ -183,6 +183,23 @@ function TEST_replicated_pool() {
         grep 'cannot change to type erasure' || return 1
 }
 
+# A create resent before the first one is committed replies once the pool
+# exists
+function TEST_replicated_pool_create_resent() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    # an OSDMap change just committed delays the next proposal
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool create resent 4 4 replicated &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd pool create resent 4 4 replicated || return 1
+    ceph osd pool get resent size || return 1
+    wait $pid || return 1
+}
+
 function TEST_no_pool_delete() {
     local dir=$1
     run_mon $dir a || return 1
