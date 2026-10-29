@@ -888,6 +888,41 @@ TEST_P(LibRadosMiscPP, Applications) {
   ASSERT_EQ(expected_meta, meta);
 }
 
+// An object that is created again must not have the xattrs of the
+// removed object.
+static void check_xattrs_after_recreate(IoCtx& ioctx)
+{
+  const std::string oid = "xattr_recreate";
+  bufferlist data, v1, got;
+  data.append("ceph");
+  v1.append("value1");
+
+  ObjectWriteOperation create;
+  create.write_full(data);
+  create.setxattr("key", v1);
+  ASSERT_EQ(0, ioctx.operate(oid, &create));
+  ASSERT_EQ((int)v1.length(), ioctx.getxattr(oid, "key", got));
+
+  ASSERT_EQ(0, ioctx.remove(oid));
+  got.clear();
+  ASSERT_EQ(-ENOENT, ioctx.getxattr(oid, "key", got));
+
+  ASSERT_EQ(0, ioctx.write_full(oid, data));
+  got.clear();
+  ASSERT_EQ(-ENODATA, ioctx.getxattr(oid, "key", got));
+  std::map<std::string, bufferlist> attrs;
+  ASSERT_EQ(0, ioctx.getxattrs(oid, attrs));
+  ASSERT_TRUE(attrs.empty());
+}
+
+TEST_P(LibRadosMiscPP, XattrsAfterRecreate) {
+  check_xattrs_after_recreate(ioctx);
+}
+
+TEST_P(LibRadosMiscECPP, XattrsAfterRecreate) {
+  check_xattrs_after_recreate(ioctx);
+}
+
 TEST_P(LibRadosMiscECPP, CompareExtentRange) {
   SKIP_IF_CRIMSON();
   bufferlist bl1;
