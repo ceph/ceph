@@ -66,6 +66,16 @@ TEST(ScopeGuard, ConstructsInPlace)
   EXPECT_EQ(1, n);
 }
 
+TEST(ScopeGuard, Dismiss)
+{
+  int n = 0;
+  {
+    auto guard = make_scope_guard([&n] { ++n; });
+    guard.dismiss();
+  }
+  EXPECT_EQ(0, n);
+}
+
 TEST(ScopeGuard, NotCopyableOrMovable)
 {
   using guard_t = decltype(make_scope_guard([] {}));

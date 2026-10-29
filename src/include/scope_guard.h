@@ -30,10 +30,18 @@ public:
   scope_guard(const scope_guard&) = delete;
   scope_guard& operator=(const scope_guard&) = delete;
   ~scope_guard() {
-    std::move(f)(); // Support at-most-once functions
+    if (active) {
+      std::move(f)(); // Support at-most-once functions
+    }
+  }
+  // Keep the action from running, e.g. once the operation it would undo
+  // has succeeded.
+  void dismiss() noexcept {
+    active = false;
   }
 private:
-  F f;
+  [[no_unique_address]] F f;
+  bool active = true;
 };
 
 template <typename F>
