@@ -7,7 +7,9 @@ import { ActivatedRoute, convertToParamMap, ParamMap } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { BehaviorSubject, of, throwError } from 'rxjs';
 
+import { HardwareService } from '~/app/shared/api/hardware.service';
 import { HostService } from '~/app/shared/api/host.service';
+import { HardwareHostResponse } from '~/app/shared/enum/hardware.enum';
 import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -36,6 +38,11 @@ describe('HostResourcePageComponent', () => {
       }
     )
   };
+  const hardwareEnabled$ = new BehaviorSubject(false);
+  const hardwareServiceSpy = {
+    isHardwareMonitoringEnabled$: hardwareEnabled$,
+    getHost: jest.fn()
+  };
   const parentParamMap$ = new BehaviorSubject<ParamMap>(convertToParamMap({ hostname: 'node-1' }));
 
   configureTestBed({
@@ -59,6 +66,10 @@ describe('HostResourcePageComponent', () => {
         useValue: hostServiceSpy
       },
       {
+        provide: HardwareService,
+        useValue: hardwareServiceSpy
+      },
+      {
         provide: AuthStorageService,
         useValue: {
           getPermissions: () => new Permissions({ hosts: ['read'], grafana: ['read'] })
@@ -76,6 +87,8 @@ describe('HostResourcePageComponent', () => {
     hostServiceSpy.list.mockClear();
     hostServiceSpy.getTotalMemoryBytes.mockClear();
     hostServiceSpy.getRawCapacityBytes.mockClear();
+    hardwareEnabled$.next(false);
+    hardwareServiceSpy.getHost.mockReset();
   });
 
   const getField = (label: string) => {
@@ -161,6 +174,121 @@ describe('HostResourcePageComponent', () => {
 
       expect(getField('Total Memory')?.value).toEqual('-');
       expect(getField('Raw Capacity')?.value).toEqual('-');
+    });
+  });
+
+  describe('Hardware', () => {
+    const sensor = (name: string, physical_context: string, reading: number) => ({
+      name,
+      physical_context,
+      reading
+    });
+    const drive = (id: string, health: string) => ({ id, chassis_id: '1', health });
+    const report = {
+      status: {
+        storage: { total: 2, components: [drive('nvme0', 'OK'), drive('nvme1', 'Warning')] },
+        temperatures: {
+          components: [
+            sensor('CPU1 Temp', 'CPU', 44),
+            sensor('CPU2 Temp', 'CPU', 47.6),
+            sensor('Inlet Temp', 'Intake', 24),
+            sensor('NVMe 0', 'StorageDevice', 52)
+          ]
+        }
+      },
+      firmware: { BMC: '4.86.00', BIOS: '2.14.1', 'Platform firmware': 'v0.50.d57cfd' },
+      compression: { fcm_drive_count: 2, savings_bytes: 17.1 * 1024 ** 4, compression_ratio: 4.21 }
+    } as unknown as HardwareHostResponse;
+
+    const load = (hardware?: object) => {
+      hostServiceSpy.list.mockReturnValue(of([{ hostname: 'node-1' }]));
+      if (hardware) {
+        hardwareServiceSpy.getHost.mockReturnValue(hardware);
+        hardwareEnabled$.next(true);
+      }
+      fixture.detectChanges();
+    };
+    const hardwareField = (label: string) =>
+      component.hardwareFields().find((field) => field.label === label);
+    const text = () => fixture.nativeElement.textContent;
+
+    it('should not fetch or show hardware when hardware monitoring is disabled', () => {
+      load();
+
+      expect(hardwareServiceSpy.getHost).not.toHaveBeenCalled();
+      expect(text()).not.toContain('Hardware');
+    });
+
+    it('should show the hardware of the host in its own card', () => {
+      load(of(report));
+
+      expect(hardwareServiceSpy.getHost).toHaveBeenCalledWith('node-1');
+      expect(component.hardwareFields().map((f) => [f.label, f.value])).toEqual([
+        ['CPU temperature', '48°C'],
+        ['Drive temperature', '52°C'],
+        ['Drives', 2],
+        ['BMC', '4.86.00'],
+        ['BIOS', '2.14.1'],
+        ['Platform firmware', 'v0.50.d57cfd'],
+        ['Savings', '17.1 TiB'],
+        ['Compression ratio', '4.21:1']
+      ]);
+      expect(getField('BMC')).toBeUndefined();
+      expect(text()).toContain('Hardware');
+    });
+
+    it('should leave out savings when the host has no FCM drives', () => {
+      load(of({ ...report, compression: null }));
+
+      expect(hardwareField('BMC')?.value).toBe('4.86.00');
+      expect(hardwareField('Savings')).toBeUndefined();
+    });
+
+    it('should report errors other than a missing node-proxy report', () => {
+      const error = { status: 500, preventDefault: jest.fn() };
+      load(throwError(error));
+
+      expect(error.preventDefault).not.toHaveBeenCalled();
+      expect(component.hardware()).toBeNull();
+    });
+
+    it('should show no hardware and no error without a node-proxy report', () => {
+      const error = { status: 404, preventDefault: jest.fn() };
+      load(throwError(error));
+
+      expect(error.preventDefault).toHaveBeenCalled();
+      expect(getField('Hostname')?.value).toBe('node-1');
+      expect(text()).not.toContain('Hardware');
+    });
+
+    it('should list the hardware drives below the hardware card', () => {
+      load(of(report));
+
+      const sections = fixture.debugElement.queryAll(By.css('section.host-resource-section'));
+      expect(sections[1].nativeElement.textContent).toContain('Hardware drives');
+      expect(sections[1].nativeElement.textContent).toContain(
+        "Drives as reported by the server's BMC: 2 drives."
+      );
+      expect(component.hardwareDrives().map((d) => d.uid)).toEqual(['1/nvme0', '1/nvme1']);
+      expect(sections[1].query(By.css('cd-table'))).toBeTruthy();
+    });
+
+    it('should hide the hardware drives when the host reports none', () => {
+      load(of({ ...report, status: { ...report.status, storage: { total: 0, components: [] } } }));
+
+      expect(text()).not.toContain('Hardware drives');
+    });
+
+    it('should not fetch hardware on the other tabs', () => {
+      const route = TestBed.inject(ActivatedRoute);
+      route.snapshot.data = { section: 'daemons' };
+      try {
+        load(of(report));
+      } finally {
+        route.snapshot.data = { section: 'overview' };
+      }
+
+      expect(hardwareServiceSpy.getHost).not.toHaveBeenCalled();
     });
   });
 

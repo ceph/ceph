@@ -8,6 +8,48 @@
         [loading]="isOverviewLoading"
       >
       </cd-resource-overview-card>
+
+      @if (hardware()) {
+        <section class="host-resource-section cds-mt-6">
+          <cd-resource-overview-card
+            [title]="hardwareTitle"
+            [columns]="4"
+            [fields]="hardwareFields()"
+          >
+          </cd-resource-overview-card>
+        </section>
+      }
+
+      @if (hardwareDrives().length) {
+        <section class="host-resource-section cds-mt-6">
+          <h2
+            class="host-resource-section__title cds--type-heading-03"
+            i18n
+          >
+            Hardware drives
+          </h2>
+          <p
+            class="host-resource-section__description cds--type-body-compact-01"
+            i18n
+          >
+            Drives as reported by the server's BMC:
+            {hardwareDrives().length, plural,
+              =1 {1 drive}
+              other {{{ hardwareDrives().length }} drives}
+
+            }.
+          </p>
+          <cd-table
+            [data]="hardwareDrives()"
+            [columns]="hardwareDriveColumns()"
+            columnMode="flex"
+            identifier="uid"
+            [toolHeader]="false"
+            [autoReload]="false"
+          >
+          </cd-table>
+        </section>
+      }
     }
     @case ('storage-devices') {
       <section class="host-resource-section cds-mb-6">
@@ -91,3 +133,17 @@
     >No hostname found.</cd-alert-panel
   >
 }
+
+<ng-template
+  #driveHealthTpl
+  let-value="data.value"
+>
+  @let health = driveHealth[value] ?? driveHealth.Unknown;
+  <span
+    cdsStack="horizontal"
+    [gap]="2"
+  >
+    <cd-icon [type]="health.icon"></cd-icon>
+    <span class="cds--type-body-compact-01">{{ health.label }}</span>
+  </span>
+</ng-template>

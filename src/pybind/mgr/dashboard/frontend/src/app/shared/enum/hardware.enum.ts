@@ -31,3 +31,33 @@ export interface CompressionStats {
   compression_ratio: number | null;
   efficiency_percent: number | null;
 }
+
+export type HardwareHealth = 'OK' | 'Warning' | 'Critical' | 'Unknown';
+
+/* A hardware component of GET /api/hardware/hosts/{hostname}. */
+export interface HardwareComponent {
+  id: string;
+  chassis_id: string;
+  health: HardwareHealth;
+  /* Sensors (temperatures, fans) */
+  name?: string;
+  physical_context?: string;
+  reading?: number | 'unknown';
+  /* Drives (storage) */
+  protocol?: string;
+  model?: string;
+  firmware_version?: string;
+}
+
+/* GET /api/hardware/hosts/{hostname}, with the fields the dashboard uses. */
+export interface HardwareHostResponse {
+  hostname: string;
+  status: Record<
+    keyof typeof HardwareNameMapping,
+    { total: number; components: HardwareComponent[] }
+  >;
+  /* Installed firmware: name -> version */
+  firmware: Record<string, string>;
+  /* null when the host has no FCM drives */
+  compression: CompressionStats | null;
+}

@@ -339,6 +339,27 @@ class HardwareHostResponseTest(unittest.TestCase):
             'model': 'SSD', 'slot': None}])
 
 
+class HostCompressionTest(unittest.TestCase):
+    GIB = 1024 ** 3
+
+    def _compression(self, fcm=None):
+        status = {**MOCK_HOST_BLOB['status'], **({'fcm': fcm} if fcm is not None else {})}
+        return HardwareHostResponse.from_raw({**MOCK_HOST_BLOB, 'status': status})\
+            .to_dict()['compression']
+
+    def test_no_fcm_drives_is_none(self):
+        self.assertIsNone(self._compression())
+        self.assertIsNone(self._compression({}))
+
+    def test_stats_of_the_host_drives(self):
+        drive = {'phy_util_bytes': 100 * self.GIB, 'log_util_bytes': 200 * self.GIB,
+                 'phy_size_bytes': 1000 * self.GIB}
+        self.assertEqual(self._compression({'local': {'nvme0': drive, 'nvme1': drive}}), {
+            'fcm_drive_count': 2, 'phy_util_percent': 10.0, 'log_util_percent': 20.0,
+            'savings_bytes': 200 * self.GIB, 'compression_ratio': 2.0,
+            'efficiency_percent': 50.0})
+
+
 class HardwareValidateCategoriesTest(unittest.TestCase):
     def test_none_returns_all(self):
         result = HardwareService.validate_categories(None)
@@ -551,7 +572,8 @@ class HardwareHostsControllerTest(ControllerTestCase):
         host = result[0]
         self.assertEqual(host['hostname'], 'host1')
         self.assertEqual(host['sn'], 'ABC123')
-        self.assertEqual(set(host), {'hostname', 'sn', 'health', 'status', 'firmware'})
+        self.assertEqual(set(host),
+                         {'hostname', 'sn', 'health', 'status', 'firmware', 'compression'})
         self.assertEqual(set(host['status']), {'storage', 'processors', 'memory', 'network',
                                                'power', 'fans', 'temperatures'})
 
@@ -698,7 +720,9 @@ class HardwareHostDetailControllerTest(ControllerTestCase):
         self.assertEqual(detail['hostname'], 'host1')
         self.assertEqual(detail['sn'], 'ABC123')
         self.assertEqual(detail['health'], Health.CRITICAL)
-        self.assertEqual(set(detail), {'hostname', 'sn', 'health', 'status', 'firmware'})
+        self.assertEqual(set(detail),
+                         {'hostname', 'sn', 'health', 'status', 'firmware', 'compression'})
+        self.assertIsNone(detail['compression'])
         self.assertEqual(detail['firmware'], {'BMC': '2.14', 'BIOS': '1.8.3'})
 
     @mock.patch('dashboard.controllers.hardware.OrchClient.instance')
