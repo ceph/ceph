@@ -1,6 +1,7 @@
 import fnmatch
 import asyncio
 import sys
+import threading
 from tempfile import NamedTemporaryFile
 from contextlib import contextmanager
 
@@ -50,6 +51,18 @@ def match_glob(val, pat):
 
 
 class MockEventLoopThread:
+    def __init__(self):
+        self._bg_loop = None
+        self._bg_lock = threading.Lock()
+
+    def _background_loop(self):
+        with self._bg_lock:
+            if self._bg_loop is None:
+                self._bg_loop = asyncio.new_event_loop()
+                t = threading.Thread(target=self._bg_loop.run_forever, daemon=True)
+                t.start()
+            return self._bg_loop
+
     def get_result(self, coro, timeout):
         if sys.version_info >= (3, 7):
             return asyncio.run(coro)
@@ -61,6 +74,11 @@ class MockEventLoopThread:
         finally:
             loop.close()
             asyncio.set_event_loop(None)
+
+    def spawn(self, coro):
+        # mimic EventLoopThread.spawn(): fire-and-forget on a background
+        # loop; the returned future is safe to poll from the test thread
+        return asyncio.run_coroutine_threadsafe(coro, self._background_loop())
 
 
 def receive_agent_metadata(m: CephadmOrchestrator, host: str, ops: List[str] = None) -> None:
