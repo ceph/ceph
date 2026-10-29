@@ -44,6 +44,11 @@ integration with `Barbican`_, `Vault`_, and `KMIP`_ are implemented.
 See `OpenStack Barbican Integration`_, `HashiCorp Vault Integration`_,
 and `KMIP Integration`_.
 
+By default, the Object Gateway trusts any KMS key ID supplied by a client
+without checking that it belongs to that client's tenant. See `Restricting
+Key IDs to Their Owner`_ for an optional, off-by-default setting that
+closes this gap.
+
 SSE-S3
 ======
 
@@ -94,3 +99,4 @@ The configuration expects a base64-encoded 256 bit key. For example::
 .. _OpenStack Barbican Integration: ../barbican
 .. _HashiCorp Vault Integration: ../vault
 .. _KMIP Integration: ../kmip
+.. _Restricting Key IDs to Their Owner: ../vault#restricting-key-ids-to-their-owner
