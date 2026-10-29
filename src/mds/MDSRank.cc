@@ -2601,6 +2601,20 @@ void MDSRankDispatcher::handle_mds_map(
       }
   }
 
+  if (is_resolve() || is_reconnect() || is_rejoin()) {
+    // did anyone leave the recovery set (i.e. finish stopping)?  the
+    // resolve and rejoin gathers must not keep waiting for it.
+    set<mds_rank_t> oldrecovery, recovery;
+    oldmap.get_recovery_mds_set(oldrecovery);
+    mdsmap->get_recovery_mds_set(recovery);
+    for (const auto& r : oldrecovery) {
+      if (recovery.count(r) == 0) {
+	calc_recovery_set();
+	break;
+      }
+    }
+  }
+
   {
     std::map<epoch_t,MDSContext::vec >::iterator p = waiting_for_mdsmap.begin();
     while (p != waiting_for_mdsmap.end() && p->first <= mdsmap->get_epoch()) {
