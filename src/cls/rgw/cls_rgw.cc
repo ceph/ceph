@@ -853,7 +853,13 @@ int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlis
     }
   }
 
-  if (header.storage_class_stats.has_value() && op.storage_class_stats.has_value()) {
+  if (!op.storage_class_stats.has_value()) {
+    // an older client sends the stats without per-storage-class stats, e.g.
+    // when it reshards a bucket. the per-storage-class stats become unknown
+    if (!op.stats.empty() || !op.dec_stats.empty()) {
+      header.storage_class_stats.reset();
+    }
+  } else if (header.storage_class_stats.has_value()) {
     for (auto& s : op.storage_class_stats.value()) {
       auto& dest = header.storage_class_stats.value()[s.first];
       if (op.absolute) {

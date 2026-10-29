@@ -1955,3 +1955,43 @@ TEST_P(TestClsRgw, StorageClassStats_SuggestChangesLegacy) {
   EXPECT_EQ(header.stats[RGWObjCategory::Main].num_entries, 1u);
   EXPECT_EQ(header.stats[RGWObjCategory::Main].total_size, 4096u);
 }
+
+// a reshard by an older client: the new index shard is initialized by the
+// new cls_rgw, then the older client sends its stats without
+// per-storage-class stats
+TEST_P(TestClsRgw, StorageClassStats_UpdateStatsWithoutSc) {
+  string oid = str_int("bucket-sc", 107);
+  const string loc = str_int("loc", 0);
+  ObjectWriteOperation init_op;
+  cls_rgw_bucket_init_index(init_op);
+  ASSERT_EQ(0, ioctx.operate(oid, &init_op));
+
+  rgw_cls_bucket_update_stats_op call;
+  call.absolute = false;
+  call.storage_class_stats = std::nullopt;
+  auto& delta = call.stats[RGWObjCategory::Main];
+  delta.num_entries = 60;
+  delta.total_size = 60 * 1024;
+  bufferlist in;
+  encode(call, in);
+  ObjectWriteOperation op;
+  op.exec(cls::rgw::method::bucket_update_stats, in);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  rgw_bucket_dir_header header;
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  EXPECT_EQ(header.stats[RGWObjCategory::Main].num_entries, 60u);
+  // unknown, not an empty (all zero) map
+  EXPECT_FALSE(header.storage_class_stats.has_value());
+
+  // a later write doesn't make them partial
+  rgw_bucket_dir_entry_meta meta;
+  meta.size = 1024;
+  meta.storage_class = "COLD";
+  meta.category = RGWObjCategory::Main;
+  index_prepare(ioctx, oid, CLS_RGW_OP_ADD, "tag1", cls_rgw_obj_key("obj1"), loc);
+  index_complete(ioctx, oid, CLS_RGW_OP_ADD, "tag1", 1, cls_rgw_obj_key("obj1"), meta);
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  EXPECT_EQ(header.stats[RGWObjCategory::Main].num_entries, 61u);
+  EXPECT_FALSE(header.storage_class_stats.has_value());
+}
