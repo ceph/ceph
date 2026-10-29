@@ -72,6 +72,7 @@ Run from the **build directory**:
 | `--gpfs-root DIR` | `/mnt/rgw/nsfs` | GPFS data directory |
 | `--debug-rgw N` | `20` | RGW debug log level |
 | `--foreground` | off | Print the radosgw command instead of running it |
+| `--restart` | off | Stop the running radosgw and start it again on the same `ceph.conf`, without `vstart.sh` and cleaning nothing;  takes only `--store`, `--adoption-mode`, `--debug-rgw`, `--perf` and `--with-impersonation` |
 
 ### What it does
 
@@ -80,6 +81,10 @@ Run from the **build directory**:
 3. Runs `vstart.sh` to bootstrap users, accounts, and `ceph.conf`
 4. For GPFS: kills the vstart daemon, patches `ceph.conf` to redirect
    the data root to the GPFS mount, and restarts the daemon
+
+With `--restart` it does none of that:  it stops the running radosgw,
+patches `--adoption-mode` into `ceph.conf` if given, and starts radosgw
+again, so the userdb, the LMDB cache and the tree are as they were.
 5. With `--with-impersonation`:  checks the machine (below), creates
    the fixture's users and group, applies the capabilities, and seeds
    the fixture
