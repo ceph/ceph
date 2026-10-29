@@ -24,12 +24,7 @@ def test_mocked_fs_authorizer():
         fsauth.authorize_entity('cephfs', 'client.smb.kaboom')
 
 
-def test_mocked_fs_path_resolver(monkeypatch):
-    # we have to "re-patch" whatever cephfs module gets mocked with because
-    # the ObjectNotFound attribute is not an exception in the test environment
-    monkeypatch.setattr('cephfs.ObjectNotFound', KeyError)
-    monkeypatch.setattr('cephfs.NoData', KeyError)
-
+def test_mocked_fs_path_resolver():
     def mmcmd(cmd):
         if cmd['prefix'] == 'fs subvolume getpath':
             if cmd['vol_name'] == 'cephfs' and cmd['sub_name'] == 'beta':
@@ -149,9 +144,7 @@ class TestTTLCache(unittest.TestCase):
         self.assertIsNone(self.cache.get(('key1', 'key2', 'key3')))
 
 
-def test_caching_fs_path_resolver(monkeypatch):
-    monkeypatch.setattr('cephfs.ObjectNotFound', KeyError)
-
+def test_caching_fs_path_resolver():
     def mmcmd(cmd):
         if cmd['prefix'] == 'fs subvolume getpath':
             if (

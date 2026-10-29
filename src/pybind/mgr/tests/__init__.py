@@ -213,13 +213,29 @@ if 'UNITTEST' in os.environ:
         class MockObjectNotFound(Exception):
             pass
 
+        class MockCephFSError(Exception):
+            pass
+
+        class MockCephFSOSError(MockCephFSError):
+            pass
+
+        class MockCephFSObjectNotFound(MockCephFSOSError):
+            pass
+
+        class MockCephFSNoData(MockCephFSOSError):
+            pass
+
         sys.modules.update({
             'rados': mock.MagicMock(
                 Error=MockRadosError,
                 OSError=MockRadosError,
                 ObjectNotFound=MockObjectNotFound),
             'rbd': mock.Mock(),
-            'cephfs': mock.Mock(),
+            'cephfs': mock.Mock(
+                Error=MockCephFSError,
+                OSError=MockCephFSOSError,
+                ObjectNotFound=MockCephFSObjectNotFound,
+                NoData=MockCephFSNoData),
         })
 
     # Unconditionally mock the rados objects when we're imported
