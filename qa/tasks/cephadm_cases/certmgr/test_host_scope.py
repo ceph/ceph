@@ -4,6 +4,7 @@ certmgr integration tests: grafana (host scope).
 Run by the orch/cephadm/certmgr suite; shared helpers live in base.py.
 """
 
+import json
 from typing import Any, Dict, List
 
 from tasks.cephadm_cases.certmgr.base import CertMgrTestCase, WORKDIR
@@ -118,6 +119,72 @@ class TestCertMgrHostScope(GrafanaTestCase):
                              'the key set with "key set" was not kept')
             self.assertIn('All certificates are valid',
                           '\n'.join(self.ceph_json('orch', 'certmgr', 'cert', 'check')))
+        finally:
+            self.rm_service('grafana')
+            self.rm_cert_key('grafana_ssl_cert', host=host)
+
+
+class TestCertMgrHostScopeMissingCert(GrafanaTestCase):
+    """grafana with certificate_source 'reference' and no certificate,
+    either before the first deployment or removed while grafana runs.
+
+    Run by its own facet (host-scope-missing-cert), which ignores
+    CEPHADM_DAEMON_PLACE_FAIL: the first test raises it on purpose.
+    """
+
+    def test_grafana_reference_without_certificate_is_not_deployed(self) -> None:
+        """Without a certificate for its host, grafana is not deployed and
+        CEPHADM_DAEMON_PLACE_FAIL says why. Once the certificate is provided,
+        grafana is deployed with it and the health check clears."""
+        host = self.host_names[0]
+        leaf = self.leaf(f'grafana-missing-{host}', ips=[self.hosts[host]],
+                         dns=['grafana_servers'])
+        try:
+            self.apply('grafana', self.grafana_spec([host], certificate_source='reference'))
+            self.wait_health('CEPHADM_DAEMON_PLACE_FAIL',
+                             detail='Cannot get the TLS certificate/key needed to deploy Grafana')
+            self.assertFalse(self.daemons('grafana'), 'grafana deployed without a certificate')
+
+            self.set_pair('grafana', leaf, host=host)
+            expected = leaf['fingerprint']
+            self.wait_served(host, self.GRAFANA_PORT, lambda r: r['fingerprint'] == expected,
+                             'grafana reference certificate')
+            self.wait_health('CEPHADM_DAEMON_PLACE_FAIL', present=False)
+        finally:
+            self.rm_service('grafana')
+            self.rm_cert_key('grafana_ssl_cert', host=host)
+
+    def test_grafana_reconfig_without_certificate_keeps_running_daemon(self) -> None:
+        """Once its certificate and key are removed, a reconfig of a running
+        grafana fails and is reported on the daemon, while grafana keeps
+        running and serving the certificate it was deployed with."""
+        host = self.host_names[0]
+        leaf = self.leaf(f'grafana-reconfig-{host}', ips=[self.hosts[host]],
+                         dns=['grafana_servers'])
+        expected = leaf['fingerprint']
+        error = 'Cannot get the TLS certificate/key needed to deploy Grafana'
+
+        def reconfig_failure_reported() -> bool:
+            return any(error in json.dumps(event)
+                       for d in self.daemons('grafana') for event in d.get('events', []))
+
+        def still_serving() -> bool:
+            served = self.served(host, self.GRAFANA_PORT)
+            running = [d for d in self.daemons('grafana') if d.get('status_desc') == 'running']
+            return bool(served.get('ok')) and served.get('fingerprint') == expected \
+                and len(running) == 1
+
+        try:
+            self.set_pair('grafana', leaf, host=host)
+            self.apply('grafana', self.grafana_spec([host], certificate_source='reference'))
+            self.wait_served(host, self.GRAFANA_PORT, lambda r: r['fingerprint'] == expected,
+                             'grafana reference certificate')
+
+            self.rm_cert_key('grafana_ssl_cert', host=host)
+            self.orch('reconfig', 'grafana')
+            self.poll('grafana reconfig failure reported on the daemon',
+                      reconfig_failure_reported, timeout=300, kick=True)
+            self.hold('grafana running with its original certificate', still_serving)
         finally:
             self.rm_service('grafana')
             self.rm_cert_key('grafana_ssl_cert', host=host)
