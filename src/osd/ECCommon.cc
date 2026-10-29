@@ -360,9 +360,10 @@ int ECCommon::ReadPipeline::  get_min_avail_to_read_shards(
   shard_id_set want;
   read_request.shard_want_to_read.populate_shard_id_set(want);
 
-  // Try to get shards from local zone first, fall back to remote zone if needed
+  // Try to get shards from local zone first, fall back to remote zone if
+  // needed: also with one zone, as a pool that had more keeps their strays
   auto result = select_shards_for_read(hoid, want, for_recovery, false, error_shards);
-  if (!result && sinfo.get_num_zones() > 1) {
+  if (!result) {
     result = select_shards_for_read(hoid, want, for_recovery, true, error_shards);
   }
   if (!result) {
@@ -568,10 +569,6 @@ int ECCommon::ReadPipeline::ensure_primary_shard_for_omap(
   // shard with clean omap, retry allowing remote zones.
   const int local_zone = sinfo.get_shard_zone(get_parent()->whoami_shard().shard);
   for (bool allow_remote_zone : {false, true}) {
-    if (allow_remote_zone && sinfo.get_num_zones() <= 1) {
-      // No remote zones to fall back to.
-      break;
-    }
     shard_id_set have;
     shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
     get_all_avail_shards(hoid, have, pg_shards, for_recovery, local_zone,
