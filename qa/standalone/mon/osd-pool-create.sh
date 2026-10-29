@@ -374,23 +374,17 @@ function TEST_osd_pool_create_migrate_from() {
   ceph osd pool unset noautoscale || return 1
 
   #check that changing the pg_num on either pool is blocked
-  ceph osd pool set $SRC_POOL_NAME pg_num 10
-  ceph osd pool set $TGT_POOL_NAME pg_num 10
+  expect_failure $dir "while the pool is migrating" ceph osd pool set $SRC_POOL_NAME pg_num 10 || return 1
+  expect_failure $dir "while the pool is migrating" ceph osd pool set $TGT_POOL_NAME pg_num 10 || return 1
 
-  #Let the message reach the logs
-  sleep 2
-  
-  grep "pool pg_num change is disabled; you must unset nopgchange flag for the pool first" $dir/mon.a.log || return 1
-
-  #check that the daemonServer was blocked from changing the pg_num on the two
-  #pools involved in the migration
+  #check that the daemonServer was blocked from changing the pg_num on the
+  #source pool
   SRC_POOL_ID=$(ceph osd dump | grep " '$SRC_POOL_NAME' " | awk '{print $2}')
   TGT_POOL_ID=$(ceph osd dump | grep " '$TGT_POOL_NAME' " | awk '{print $2}')
   echo "Source pool id: $SRC_POOL_ID"
   echo "Target pool id: $TGT_POOL_ID"
   
   grep "Pool $SRC_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
-  grep "Pool $TGT_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
 
   teardown $dir || return 1
 }

@@ -1043,6 +1043,10 @@ class PgAutoscaler(MgrModule):
             if p['target_bytes'] > 0:
                 total_target_bytes[p['crush_root_id']] += p['target_bytes'] * p['raw_used_rate']
                 target_bytes_pools[p['crush_root_id']].append(p['pool_name'])
+            pool = pools[p['pool_name']]
+            if 'migration_src' in pool or 'migration_target' in pool:
+                # the monitor keeps a migrating pool's PG count
+                continue
             if p['pg_autoscale_mode'] == 'warn':
                 msg = 'Pool %s has %d placement groups, should have %d' % (
                     p['pool_name'],
