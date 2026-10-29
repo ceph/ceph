@@ -210,4 +210,17 @@ describe('RgwUserListComponent', () => {
     const usageBars = fixture.debugElement.nativeElement.querySelectorAll('cd-usage-bar');
     expect(usageBars.length).toBe(0);
   });
+
+  it('should show system user icon only for system users', () => {
+    rgwUserServiceListSpy.and.returnValue(
+      of([
+        { uid: 'sysuser', system: true, user_quota: {}, stats: {} },
+        { uid: 'normaluser', system: false, user_quota: {}, stats: {} }
+      ])
+    );
+    component.getUserList(null);
+    fixture.detectChanges();
+    const icons = fixture.debugElement.nativeElement.querySelectorAll('.system-user-icon');
+    expect(icons.length).toBe(1);
+  });
 });

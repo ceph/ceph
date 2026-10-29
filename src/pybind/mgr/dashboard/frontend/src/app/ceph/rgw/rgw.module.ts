@@ -112,6 +112,7 @@ import ChevronUpIcon from '@carbon/icons/es/chevron--up/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
 import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
+import UserAdmin from '@carbon/icons/es/user--admin/16';
 
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { TimePickerComponent } from '~/app/shared/components/time-picker/time-picker.component';
@@ -289,7 +290,8 @@ export class RgwModule {
       ChevronUpIcon,
       ProgressBarRoundIcon,
       ToolsIcon,
-      UserAccessLocked
+      UserAccessLocked,
+      UserAdmin
     ]);
   }
 }
