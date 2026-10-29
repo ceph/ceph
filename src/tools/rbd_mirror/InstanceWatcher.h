@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <boost/variant.hpp>
 
 #include "common/AsyncOpTracker.h"
 #include "librbd/Watcher.h"

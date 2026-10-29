@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_WATCHER_UTILS_H
 #define CEPH_LIBRBD_WATCHER_UTILS_H
 
+#include <boost/variant.hpp>
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
 #include "include/Context.h"

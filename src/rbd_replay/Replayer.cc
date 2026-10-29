@@ -14,6 +14,7 @@
  */
 
 #include "Replayer.hpp"
+#include "common/cmdparse.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
 #include "include/scope_guard.h"

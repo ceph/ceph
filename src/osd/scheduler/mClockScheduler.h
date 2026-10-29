@@ -21,8 +21,6 @@
 #include <map>
 #include <vector>
 
-#include "boost/variant.hpp"
-
 #include "dmclock/src/dmclock_server.h"
 
 #include "osd/scheduler/OpScheduler.h"

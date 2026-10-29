@@ -7,6 +7,7 @@
 #include <list>
 #include <memory>
 #include <string>
+#include <boost/variant.hpp>
 
 #include "common/AsyncOpTracker.h"
 #include "librbd/ManagedLock.h"
