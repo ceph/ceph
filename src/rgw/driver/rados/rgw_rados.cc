@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <string_view>
 
 #include <boost/container/flat_set.hpp>
@@ -5638,7 +5639,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                uint64_t src_accounted_size,
-               bool log_op)
+               bool log_op,
+               bool *pcanceled)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
@@ -5719,10 +5721,27 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     accounted_size = dp_factory->get_accounted_size(accounted_size);
   }
 
+  // for testing: hold the copy after reading the source and before writing
+  // the head, to reproduce a race with a concurrent overwrite
+  if (cct->_conf->rgw_inject_delay_sec > 0 &&
+      std::string_view(cct->_conf->rgw_inject_delay_pattern) == "delay_copy_obj_data_complete") {
+    ldpp_dout(dpp, 0) << __func__ << ": injecting delay of " << cct->_conf->rgw_inject_delay_sec
+                      << "s for " << dest_obj << dendl;
+    const auto delay = ceph::make_timespan(cct->_conf->rgw_inject_delay_sec);
+    if (y) {
+      auto yield = y.get_yield_context();
+      boost::asio::steady_timer timer{yield.get_executor(), delay};
+      boost::system::error_code ec;
+      timer.async_wait(yield[ec]);
+    } else {
+      std::this_thread::sleep_for(delay);
+    }
+  }
+
   const req_context rctx{dpp, y, nullptr};
   return aoproc.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    rgw::cksum::no_cksum, delete_at,
-                            nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
+                            nullptr, nullptr, nullptr, nullptr, pcanceled, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
@@ -5972,6 +5991,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
         << dendl;
   }
 
+  bool canceled = false;
   ret = copy_obj_data(obj_ctx,
                       owner,
                       bucket_info,
@@ -5989,9 +6009,14 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       dpp,
                       y,
                       0, /* src_accounted_size: unknown here, keep ofs-based size */
-                      log_op);
+                      log_op,
+                      &canceled);
   if (ret < 0) {
     return ret;
+  }
+  if (canceled) {
+    // the object was overwritten or removed while it was transitioning
+    return -ECANCELED;
   }
 
   return 0;

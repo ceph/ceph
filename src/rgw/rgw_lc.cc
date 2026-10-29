@@ -1738,7 +1738,9 @@ public:
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
 			     << oc.bucket << ":" << o.key 
 			     << " -> " << transition.storage_class 
-			     << " " << cpp_strerror(r) << dendl;
+			     << " " << cpp_strerror(r)
+			     << (r == -ECANCELED ? " (object changed concurrently)" : "")
+			     << dendl;
         return r;
       }
     }
@@ -1915,8 +1917,9 @@ int LCOpRule::execute(LCOpAction& action,
 
   int r = action.process(ctx, y);
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj "
+    ldpp_dout(dpp, 0) << "ERROR: lifecycle action failed on "
 		      << env.bucket << ":" << o.key
+		      << " rule_id=" << env.op.id
 		      << " " << cpp_strerror(r) << dendl;
     return r;
   }
