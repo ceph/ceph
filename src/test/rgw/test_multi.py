@@ -196,7 +196,7 @@ def init(parse_args):
 
     try:
         with open(path) as f:
-            cfg.readfp(f)
+            cfg.read_file(f)
     except:
         print('WARNING: error reading test config. Path can be set through the RGW_MULTI_TEST_CONF env variable')
         pass
