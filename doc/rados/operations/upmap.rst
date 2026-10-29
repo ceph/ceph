@@ -54,6 +54,16 @@ Balancer Module
 The `balancer` module for ``ceph-mgr`` will automatically balance the number of
 PGs per OSD. See :ref:`balancer`
 
+Changing a pool's CRUSH rule
+----------------------------
+
+Changing an erasure-coded pool's CRUSH rule to a different failure domain
+normally cancels the pool's existing ``pg-upmap-items`` entries and relocates
+most of its data.
+The monitor can instead stage ``pg-upmap-items`` entries that keep data in
+place wherever the new rule allows it. See
+:ref:`crush-rule-change-preserve-acting`.
+
 Offline Optimization
 ====================
 
