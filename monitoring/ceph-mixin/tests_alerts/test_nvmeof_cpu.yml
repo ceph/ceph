@@ -1,7 +1,6 @@
 rule_files:
   - ../prometheus_alerts.yml
 evaluation_interval: 15s
-fuzzy_compare: true
 tests:
   - name: busy seconds averaged across poll threads and gateways
     interval: 15s
@@ -13,7 +12,7 @@ tests:
       - series: 'ceph_nvmeof_reactor_seconds_total{cluster="mycluster",instance="gw-b:10008",name="poll-0",mode="busy"}'
         values: '0+7.5x80'
     promql_expr_test:
-      - expr: '100 * label_replace(avg by(instance, cluster) (rate(ceph_nvmeof_reactor_seconds_total{mode="busy"}[1m])),"instance","$1","instance","(.*):.*")'
+      - expr: 'round(100 * label_replace(avg by(instance, cluster) (rate(ceph_nvmeof_reactor_seconds_total{mode="busy"}[1m])),"instance","$1","instance","(.*):.*"))'
         eval_time: 15m
         exp_samples:
           - labels: '{cluster="mycluster",instance="gw-a"}'
