@@ -769,6 +769,35 @@ protected:
     EXPECT_EQ(commit_epoch, p.get_last_force_op_resend());
   }
 
+  // tmp after the commit epoch, which convert() has filled
+  void commit() {
+    inc.fsid = tmp.get_fsid();
+    inc.new_flags = tmp.get_flags() | CEPH_OSDMAP_STRETCH_ZONES;
+    ASSERT_EQ(0, tmp.apply_incremental(inc));
+  }
+
+  // the warning lists the pools named, or is not raised
+  void expect_unconverted(const string& summary, const list<string>& names) {
+    health_check_map_t checks;
+    OSDMonitor::check_unconverted_stretch_pools(tmp, &checks);
+    if (names.empty()) {
+      EXPECT_TRUE(checks.checks.empty());
+      return;
+    }
+    ASSERT_TRUE(checks.checks.contains("STRETCH_MODE_POOL_NOT_CONVERTED"));
+    const health_check_t& check =
+      checks.checks.at("STRETCH_MODE_POOL_NOT_CONVERTED");
+    EXPECT_EQ(summary, check.summary);
+    EXPECT_EQ((int64_t)names.size(), check.count);
+    auto detail = check.detail.begin();
+    for (const string& name : names) {
+      ASSERT_NE(check.detail.end(), detail);
+      EXPECT_EQ(0u, detail->find("pool '" + name + "' has size")) << *detail;
+      ++detail;
+    }
+    EXPECT_EQ(check.detail.end(), detail);
+  }
+
   void expect_one_zone(int64_t id, const pg_pool_t& before) {
     SCOPED_TRACE("pool " + std::to_string(id));
     const pg_pool_t& p = converted(id);
@@ -871,6 +900,41 @@ TEST_F(OSDMonitorStretchCommitTest, KeepsPendingPoolChanges) {
   convert();
   expect_zones(1, 1);
   EXPECT_TRUE(converted(1).has_flag(pg_pool_t::FLAG_OMAP));
+}
+
+// Before the commit the pools that it will leave with one zone can still be
+// changed; after it the stretch mode commands do not handle them
+TEST_F(OSDMonitorStretchCommitTest, WarnsOfPoolsLeftWithOneZone) {
+  pg_pool_t plain = legacy_pool(3, 2);
+  plain.peering_crush_bucket_count = 0;
+  plain.peering_crush_bucket_target = 0;
+  plain.peering_crush_bucket_barrier = 0;
+  make_map({{1, legacy_pool(4, 2)}, {2, legacy_pool(3, 2)}, {3, plain},
+            {4, legacy_pool(6, 3)}}, true);
+  expect_unconverted(
+    "2 stretch pool(s) will keep one zone when the upgrade is committed",
+    {"pool2", "pool4"});
+  convert();
+  commit();
+  expect_unconverted(
+    "2 stretch pool(s) kept one zone when the upgrade was committed",
+    {"pool2", "pool4"});
+}
+
+TEST_F(OSDMonitorStretchCommitTest, NoWarningWhenEveryPoolConverts) {
+  make_map({{1, legacy_pool(4, 2)}, {2, legacy_pool(4, 1)}}, true);
+  expect_unconverted("", {});
+  convert();
+  commit();
+  expect_unconverted("", {});
+}
+
+TEST_F(OSDMonitorStretchCommitTest, NoWarningForIndividualStretchPools) {
+  make_map({{1, legacy_pool(3, 2)}}, false);
+  expect_unconverted("", {});
+  convert();
+  commit();
+  expect_unconverted("", {});
 }
 
 class OSDMonitorStretchPlanTest : public ::testing::Test {
