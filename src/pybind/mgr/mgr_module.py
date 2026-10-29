@@ -1410,7 +1410,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self.create_mgr_pool()
         uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph"
         self.log.debug(f"using uri {uri}")
-        db = sqlite3.connect(uri, check_same_thread=False, uri=True, isolation_level=None)  # type: ignore[call-arg]
+        busy_timeout = 60.0
+        lock_renewal_timeout = self.get_ceph_option('cephsqlite_lock_renewal_timeout')
+        if lock_renewal_timeout is not None:
+            busy_timeout = max(10.0, 2 * (float(lock_renewal_timeout) / 1000.0))
+        db = sqlite3.connect(uri, check_same_thread=False, uri=True, isolation_level=None, timeout=busy_timeout)  # type: ignore[call-arg]
         # if libcephsqlite reconnects, update the addrv for blocklist
         with db:
             cur = db.execute('SELECT json_extract(ceph_status(), "$.addr");')
