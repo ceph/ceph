@@ -10326,6 +10326,17 @@ void RGWPutBucketEncryption::execute(optional_yield y)
     return;
   }
 
+  if (bucket_encryption_conf.sse_algorithm() == "aws:kms" &&
+      !bucket_encryption_conf.kms_master_key_id().empty()) {
+    op_ret = rgw_s3_validate_kms_key_scope(
+        s, bucket_encryption_conf.kms_master_key_id(), s->err.message);
+    if (op_ret < 0) {
+      ldpp_dout(this, 5) << "ERROR: " << s->err.message << ": "
+                         << bucket_encryption_conf.kms_master_key_id() << dendl;
+      return;
+    }
+  }
+
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
                                          &data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {

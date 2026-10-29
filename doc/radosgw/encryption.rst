@@ -141,6 +141,11 @@ integration with `Barbican`_, `Vault`_, and `KMIP`_ are implemented.
 See :ref:`radosgw-barbican`, :ref:`radosgw-vault`,
 and :ref:`radosgw-kmip`.
 
+By default, the Object Gateway trusts any KMS key ID supplied by a client
+without checking that it belongs to that client's tenant. See
+:ref:`radosgw-vault-key-scope` for an optional, off-by-default setting
+that closes this gap.
+
 SSE-S3
 ======
 
