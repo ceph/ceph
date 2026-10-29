@@ -106,7 +106,6 @@ class ECOmapHeader {
 class ECOmapJournal {
   using UpdateMapType = std::map<std::string, ECOmapValue>;
   using RangeMapType = std::map<std::string, std::optional<std::string>>;
-  using const_iterator = std::list<ECOmapJournalEntry>::const_iterator;
  private:
   // Unprocessed journal entries 
   std::map<hobject_t, std::list<ECOmapJournalEntry>> entries;
@@ -121,10 +120,6 @@ class ECOmapJournal {
   std::map<hobject_t, std::map<version_t, bool>> object_state_map;
 
   const DoutPrefixProvider& dpp;
-
-  // Function to get specific object's unprocessed entries
-  std::list<ECOmapJournalEntry>& get_entries(const hobject_t &hoid);
-  std::list<ECOmapJournalEntry> snapshot_entries(const hobject_t &hoid) const;
 
   void process_entries(const hobject_t &hoid);
   bool remove_processed_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
@@ -141,6 +136,7 @@ class ECOmapJournal {
   void clear(const hobject_t &hoid);
   void clear_all();
   [[nodiscard]] std::size_t entries_size(const hobject_t &hoid) const;
+  [[nodiscard]] std::list<ECOmapJournalEntry> snapshot_entries(const hobject_t &hoid) const;
   [[nodiscard]] bool has_unprocessed_entries(const hobject_t &hoid) const;
   [[nodiscard]] bool has_omap_updates(const hobject_t &hoid) const;
   std::tuple<UpdateMapType, RangeMapType> get_value_updates(const hobject_t &hoid);
@@ -150,7 +146,4 @@ class ECOmapJournal {
   void append_whiteout(const hobject_t &hoid);
   void trim_delete(const hobject_t &hoid, const version_t version);
   std::pair<gen_t, bool> get_generation(const hobject_t &hoid) const;
-
-  [[nodiscard]] const_iterator begin_entries(const hobject_t &hoid) const;
-  [[nodiscard]] const_iterator end_entries(const hobject_t &hoid) const;
 };
