@@ -1742,6 +1742,30 @@ class TestCertMgr(object):
     #  scope, remaining daemons, and reference cert preservation.         #
     # ------------------------------------------------------------------ #
 
+    def test_cli_cert_and_key_set_survive_reference_reconciliation(self, cephadm_module: CephadmOrchestrator):
+        """Cert and key provisioned through 'certmgr cert set' and 'certmgr key set'
+        are kept as editable user-made objects when a reference service reconciles."""
+        from cephadm.tests.fixtures import wait
+
+        cephadm_module._init_cert_mgr()
+        cm = cephadm_module.cert_mgr
+        host = 'host1'
+
+        with mock.patch.object(cm, 'check_certificate_state') as mock_check:
+            mock_check.return_value = CertInfo('grafana_ssl_cert', host, user_made=True, is_valid=True,
+                                               is_close_to_expiration=False, days_to_expiration=300)
+            wait(cephadm_module, cephadm_module.cert_store_set_cert('grafana_ssl_cert', 'ref-cert', hostname=host))
+        wait(cephadm_module, cephadm_module.cert_store_set_key('ref-key', 'grafana_ssl_key', hostname=host))
+
+        key_obj = cm.key_store.get_tlsobject('grafana_ssl_key', host=host)
+        assert key_obj.user_made and key_obj.editable
+
+        self._run_reconciliation_cleanup(cm, 'reference', 'grafana', host,
+                                         cert_name='grafana_ssl_cert', key_name='grafana_ssl_key')
+
+        assert cm.get_cert('grafana_ssl_cert', host=host) == 'ref-cert'
+        assert cm.get_key('grafana_ssl_key', host=host) == 'ref-key'
+
     def test_post_remove_cleans_cephadm_signed_regardless_of_source(self, cephadm_module: CephadmOrchestrator):
         """post_remove always calls try_rm_self_signed_cert_key_pair, even when
         the current certificate_source is 'inline' or 'reference'."""

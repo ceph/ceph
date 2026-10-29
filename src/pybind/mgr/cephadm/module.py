@@ -4459,7 +4459,7 @@ Then run the following:
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
     ) -> str:
-        self.cert_mgr.save_key(key_name, key, service_name, hostname, True)
+        self.cert_mgr.save_key(key_name, key, service_name, hostname, user_made=True, editable=True)
         return f'Key for {key_name} set correctly'
 
     @handle_orch_error
