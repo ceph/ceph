@@ -25,13 +25,61 @@
  * Based on https://github.com/third774/ng-bootstrap-form-validation
  */
 
-import { NgForm } from '@angular/forms';
+import { ElementRef } from '@angular/core';
+import { NgForm, UntypedFormControl, Validators } from '@angular/forms';
 
 import { CdFormControlDirective } from './cd-form-control.directive';
 
 describe('CdFormControlDirective', () => {
+  let directive: CdFormControlDirective;
+  let mockControl: UntypedFormControl;
+  let mockElementRef: ElementRef;
+
+  beforeEach(() => {
+    mockControl = new UntypedFormControl('', [Validators.required]);
+    mockElementRef = {
+      nativeElement: {
+        validity: {
+          badInput: false
+        }
+      }
+    } as ElementRef;
+    directive = new CdFormControlDirective(new NgForm([], []), mockElementRef);
+    jest.spyOn(directive, 'control', 'get').mockReturnValue(mockControl);
+  });
+
   it('should create an instance', () => {
-    const directive = new CdFormControlDirective(new NgForm([], []));
     expect(directive).toBeTruthy();
+  });
+
+  it('should set pattern error and remove required error when badInput is true', () => {
+    mockControl.setErrors({ required: true });
+    (mockElementRef.nativeElement as any).validity.badInput = true;
+
+    directive.onInput();
+
+    expect(mockControl.hasError('pattern')).toBe(true);
+    expect(mockControl.hasError('required')).toBe(false);
+  });
+
+  it('should preserve other errors like min and remove required when badInput is true', () => {
+    mockControl.setErrors({ required: true, min: true });
+    (mockElementRef.nativeElement as any).validity.badInput = true;
+
+    directive.onInput();
+
+    expect(mockControl.hasError('pattern')).toBe(true);
+    expect(mockControl.hasError('min')).toBe(true);
+    expect(mockControl.hasError('required')).toBe(false);
+  });
+
+  it('should not modify errors when badInput is false', () => {
+    mockControl.setErrors({ required: true });
+    (mockElementRef.nativeElement as any).validity.badInput = false;
+
+    directive.onInput();
+
+    expect(mockControl.hasError('required')).toBe(true);
+    expect(mockControl.hasError('pattern')).toBe(false);
   });
 });
