@@ -837,7 +837,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   target_coid.snap = snapid;
   return obc_loader.with_clone_obc_only<RWState::RWWRITE>(
     head, target_coid,
-    [this, &os, &txn, &delta_stats, &osd_op_params, snapid]
+    [this, &os, &txn, &delta_stats, &osd_op_params, snapid, &attr_cache]
     (auto head_obc, auto resolved_obc) {
     if (resolved_obc->obs.oi.soid.is_head()) {
       // no-op: The resolved oid returned the head object
@@ -865,6 +865,8 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     // 2) Clone correct snapshot into head
     txn.clone(coll->get_cid(), ghobject_t{resolved_obc->obs.oi.soid},
                                ghobject_t{os.oi.soid});
+    //    The head now has the xattrs of the clone
+    attr_cache = resolved_obc->attr_cache;
     //    Copy clone obc.os.oi to os.oi
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     os.oi.copy_user_bits(resolved_obc->obs.oi);
