@@ -3,7 +3,9 @@
 import io
 import logging as log
 import json
+import subprocess
 import sys
+import tempfile
 import time
 import boto3.s3.transfer
 from common import exec_cmd, create_user, boto_connect
@@ -23,6 +25,9 @@ Test plan:
   3. Transition LUKEWARM -> FROZEN (recompress with zlib)
   4. Transition FROZEN -> STANDARD (decompress)
   5. GET object and verify data integrity
+
+Also checks that a transition canceled by a concurrent overwrite is
+not reported as transitioned.
 
 With --encrypt, objects are uploaded with SSE-KMS and the test
 verifies encryption is preserved across each transition. This
@@ -122,7 +127,7 @@ def is_aead_crypt_mode(mode):
     return mode is not None and mode.endswith('-GCM')
 
 
-def put_lifecycle_rule(client, bucket_name, rule_id, target_class):
+def put_lifecycle_rule(client, bucket_name, rule_id, target_class, days=0):
     """
     Set a lifecycle configuration with a single transition rule.
     Uses Days=0 for immediate transition.
@@ -137,7 +142,7 @@ def put_lifecycle_rule(client, bucket_name, rule_id, target_class):
                     'Status': 'Enabled',
                     'Transitions': [
                         {
-                            'Days': 0,
+                            'Days': days,
                             'StorageClass': target_class,
                         }
                     ],
@@ -196,7 +201,7 @@ def verify_transition(stat, expected_class, expected_compression, encrypt=False)
             'Expected object to be encrypted, but crypt mode is missing'
 
 
-def run_test(size_kb, encrypt):
+def run_happy_path_transition_tests(size_kb, encrypt):
     """Run the full transition test with the given object size."""
     size_bytes = size_kb * 1024
     object_key = f'test-object-{size_kb}kb'
@@ -330,6 +335,55 @@ def run_test(size_kb, encrypt):
     log.info(f'{label} test passed')
 
 
+def run_failure_test_canceled_transition():
+    """
+    Overwrite an object while lifecycle is transitioning it.
+    Lifecycle should not report it as transitioned.
+    """
+    log.info('=== Testing transition canceled by a concurrent overwrite ===')
+    object_key = 'test-object-canceled'
+    new_body = b'new data'
+
+    conn = boto_connect(ACCESS_KEY, SECRET_KEY)
+    client = conn.meta.client
+    bucket = conn.create_bucket(Bucket=BUCKET_NAME)
+    bucket.put_object(Key=object_key, Body=b'old data')
+    # due in 5s for radosgw-admin (1s days) but in 50s for rgw's own LC thread (10s days)
+    transition_days = 5
+    put_lifecycle_rule(client, BUCKET_NAME, 'to-lukewarm', 'LUKEWARM', days=transition_days)
+    time.sleep(transition_days + 1)
+
+    # hold the transition after it reads the object and before it rewrites it
+    with tempfile.NamedTemporaryFile(suffix='.log') as lc_log:
+        def read_lc_log():
+            with open(lc_log.name, 'rb') as f:
+                return f.read()
+
+        lc = None
+        deadline = time.time() + LC_TIMEOUT
+        while b'injecting delay' not in read_lc_log():
+            if lc is None or lc.poll() is not None:
+                lc = subprocess.Popen(
+                    f'radosgw-admin lc process --bucket={BUCKET_NAME} --rgw-lc-debug-interval=1'
+                    ' --rgw-inject-delay-sec=5 --rgw-inject-delay-pattern=delay_copy_obj_data_complete'
+                    f' --debug-rgw-lifecycle=2 --log-file={lc_log.name}', shell=True)
+            assert time.time() < deadline, 'timed out waiting for the transition to start'
+            time.sleep(0.5)
+        bucket.put_object(Key=object_key, Body=new_body)
+        assert lc.wait(timeout=LC_TIMEOUT) == 0
+        out = read_lc_log()
+
+    assert b'TRANSITIONED:' not in out, 'canceled transition was reported as transitioned'
+    assert b'object changed concurrently' in out, 'canceled transition was not logged'
+    stat = object_stat(BUCKET_NAME, object_key)
+    assert get_storage_class(stat) == 'STANDARD'
+    assert bucket.Object(object_key).get()['Body'].read() == new_body
+
+    bucket.objects.all().delete()
+    bucket.delete()
+    log.info('Canceled transition test passed')
+
+
 def main():
     encrypt = '--encrypt' in sys.argv
 
@@ -347,7 +401,9 @@ def main():
     create_user(USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY)
 
     for size_kb in sizes_kb:
-        run_test(size_kb, encrypt)
+        run_happy_path_transition_tests(size_kb, encrypt)
+
+    run_failure_test_canceled_transition()
 
     suffix = ' (with encryption)' if encrypt else ''
     log.info(f'All lifecycle recompression tests passed{suffix}')
