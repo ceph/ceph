@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import argparse
+import copy
 import datetime
 import importlib
 import ipaddress
@@ -20,7 +21,7 @@ import tempfile
 import time
 import errno
 import ssl
-from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, TypeVar, cast
+from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, Set, TypeVar, cast
 
 import re
 import uuid
@@ -174,7 +175,12 @@ from cephadmlib.daemon_form import (
     create as daemon_form_create,
     register as register_daemon_form,
 )
-from cephadmlib.deploy import DeploymentType
+from cephadmlib.deploy import (
+    DeploymentType,
+    PREV_SUFFIX,
+    STAGED_SUFFIX,
+    UNIT_FILES,
+)
 from cephadmlib.container_daemon_form import (
     ContainerDaemonForm,
     daemon_to_container,
@@ -398,6 +404,15 @@ def validate_fsid(func: FuncT) -> FuncT:
     return cast(FuncT, _validate_fsid)
 
 
+def _ctx_daemon_name(ctx: CephadmContext) -> Optional[str]:
+    """ctx.name as a single daemon name, or None when absent or when the
+    command named several daemons (switch-staged --name a --name b)."""
+    name = ctx.name if 'name' in ctx else None
+    if isinstance(name, list):
+        return name[0] if len(name) == 1 else None
+    return name or None
+
+
 def infer_fsid(func: FuncT) -> FuncT:
     """
     If we only find a single fsid in /var/lib/ceph/*, use that
@@ -420,10 +435,10 @@ def infer_fsid(func: FuncT) -> FuncT:
             if not is_fsid(daemon['fsid']):
                 # 'unknown' fsid
                 continue
-            elif 'name' not in ctx or not ctx.name:
-                # ctx.name not specified
+            elif not _ctx_daemon_name(ctx):
+                # ctx.name not specified (or several daemons named)
                 fsids.add(daemon['fsid'])
-            elif daemon['name'] == ctx.name:
+            elif daemon['name'] == _ctx_daemon_name(ctx):
                 # ctx.name is a match
                 fsids.add(daemon['fsid'])
         fsids = sorted(fsids)
@@ -477,7 +492,7 @@ def infer_config(func: FuncT) -> FuncT:
             return func(ctx)
 
         if 'fsid' in ctx and ctx.fsid:
-            name = ctx.name if ('name' in ctx and ctx.name) else get_mon_daemon_name(ctx.fsid)
+            name = _ctx_daemon_name(ctx) or get_mon_daemon_name(ctx.fsid)
             if name is not None:
                 # daemon name has been specified (or inferred from mon), let's use its conf
                 ctx.config = config_path(name.split('.', 1)[0], name.split('.', 1)[1])
@@ -1212,6 +1227,13 @@ def deploy_daemon(
     data_dir = ident.data_dir(ctx.data_dir)
     if deployment_type == DeploymentType.RECONFIG and not os.path.exists(data_dir):
         raise Error('cannot reconfig, data path %s does not exist' % data_dir)
+    if deployment_type == DeploymentType.STAGE:
+        if not os.path.exists(data_dir):
+            raise Error('cannot stage, data path %s does not exist' % data_dir)
+        if daemon_type == CephadmAgent.daemon_type or not c:
+            raise Error('staging is only supported for containerized daemons')
+        if sidecars:
+            raise Error('staging a daemon with sidecar containers is not supported')
     if daemon_type == 'mon' and not os.path.exists(data_dir):
         assert config
         assert keyring
@@ -1267,9 +1289,28 @@ def deploy_daemon(
                 except Exception as e:
                     logger.warning(f'[D3N] failed to persist D3N state in {data_dir}: {e}')
 
+    if deployment_type == DeploymentType.STAGE:
+        assert c
+        # Prove the target image actually runs on this host (CPU baseline,
+        # container engine, SELinux, corrupt pull...) *before* anything is
+        # taken down, using the daemon's own entrypoint.
+        verify_staged_image(ctx, c)
+        deploy_daemon_units(
+            ctx,
+            ident,
+            uid,
+            gid,
+            c,
+            enable=daemon_type not in DISABLED_SERVICES,
+            osd_fsid=osd_fsid,
+            endpoints=endpoints,
+            init_containers=init_containers,
+            stop_timeout=getattr(ctx, 'termination_grace_period_seconds', None),
+            stage=True,
+        )
     # only write out unit files and start daemon
     # with systemd if this is not a reconfig
-    if deployment_type != DeploymentType.RECONFIG:
+    elif deployment_type != DeploymentType.RECONFIG:
         if daemon_type == CephadmAgent.daemon_type:
             config_js = fetch_configs(ctx)
             assert isinstance(config_js, dict)
@@ -1325,14 +1366,18 @@ def deploy_daemon(
     with write_new(data_dir + '/unit.configured', owner=(uid, gid)) as f:
         f.write('mtime is time we were last configured\n')
 
-    update_firewalld(ctx, daemon_form_create(ctx, ident))
+    # Staging changes nothing a firewall rule depends on: the daemon is
+    # already deployed - its service and ports already allowed - and
+    # `switch-staged` reuses them. (Each update reloads firewalld.)
+    if deployment_type != DeploymentType.STAGE:
+        update_firewalld(ctx, daemon_form_create(ctx, ident))
 
-    # Open ports explicitly required for the daemon
-    if not ('skip_firewalld' in ctx and ctx.skip_firewalld):
-        if endpoints:
-            fw = Firewalld(ctx)
-            fw.open_ports([e.port for e in endpoints] + fw.external_ports.get(daemon_type, []))
-            fw.apply_rules()
+        # Open ports explicitly required for the daemon
+        if not ('skip_firewalld' in ctx and ctx.skip_firewalld):
+            if endpoints:
+                fw = Firewalld(ctx)
+                fw.open_ports([e.port for e in endpoints] + fw.external_ports.get(daemon_type, []))
+                fw.apply_rules()
 
     # If this was a reconfig and the daemon is not a Ceph daemon, restart it
     # so it can pick up potential changes to its configuration files
@@ -1381,6 +1426,173 @@ def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
             break
 
 
+def verify_staged_image(ctx: CephadmContext, c: 'CephContainer') -> str:
+    """Run the daemon's entrypoint with --version in a throwaway container
+    of the target image. Raises Error if the image cannot be executed on
+    this host. Returns the version string."""
+    entrypoint = c.entrypoint
+    if not entrypoint:
+        raise Error('cannot verify staged image: container has no entrypoint')
+    # `_orch deploy-staged` stages several daemons of the same image(s):
+    # verify each image once per call
+    verified: Optional[Dict[Tuple[str, str], str]] = getattr(ctx, 'verified_staged_images', None)
+    if verified is not None and (c.image, entrypoint) in verified:
+        return verified[(c.image, entrypoint)]
+    try:
+        out = CephContainer(
+            ctx,
+            image=c.image,
+            entrypoint=entrypoint,
+            args=['--version'],
+        ).run(verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+    except RuntimeError as e:
+        raise Error(f'staged image {c.image} failed to run {entrypoint} --version: {e}')
+    version = out.strip()
+    logger.info('Staged image %s runs %s: %s', c.image, entrypoint, version)
+    if verified is not None:
+        verified[(c.image, entrypoint)] = version
+    return version
+
+
+def _staged_switch_plan(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    expected_image: Optional[str] = None,
+    rollback: bool = False,
+) -> Dict[str, Any]:
+    """Everything switch_staged_units() needs to know about one daemon,
+    checked *before* anything is stopped: which unit.* files are pending,
+    whether the staged image is the expected one and still present."""
+    data_dir = ident.data_dir(ctx.data_dir)
+    if not os.path.isdir(data_dir):
+        raise Error(f'{ident.daemon_name}: data dir {data_dir} does not exist')
+    src_suffix, dst_suffix = (PREV_SUFFIX, STAGED_SUFFIX) if rollback else (STAGED_SUFFIX, PREV_SUFFIX)
+
+    def path(name: str, suffix: str = '') -> str:
+        return os.path.join(data_dir, name + suffix)
+
+    def read_image(p: str) -> Optional[str]:
+        try:
+            with open(p) as fh:
+                return fh.read().strip()
+        except OSError:
+            return None
+
+    pending = [n for n in UNIT_FILES if os.path.exists(path(n, src_suffix))]
+    plan: Dict[str, Any] = {
+        'ident': ident,
+        'unit_name': ident.unit_name,
+        'path': path,
+        'read_image': read_image,
+        'pending': pending,
+        'src_suffix': src_suffix,
+        'dst_suffix': dst_suffix,
+        'result': {
+            'name': ident.daemon_name,
+            'rollback': rollback,
+            'switched': [],
+            'image': read_image(path('unit.image')),
+        },
+    }
+    if not pending:
+        # Nothing to swap: either already done (previous call succeeded but
+        # the caller never heard back) or never staged. Distinguish by the
+        # image the live files point at.
+        live_image = read_image(path('unit.image'))
+        if expected_image and live_image != expected_image:
+            raise Error(f'{ident.daemon_name}: nothing staged for '
+                        f'{"rollback" if rollback else "switch"} and live image '
+                        f'{live_image!r} is not the expected {expected_image!r}')
+        return plan
+
+    if 'unit.run' not in pending:
+        raise Error(f'{ident.daemon_name}: unit.run{src_suffix} is missing, '
+                    f'refusing to switch a partial set ({pending})')
+
+    staged_image = read_image(path('unit.image', src_suffix))
+    if expected_image and staged_image != expected_image:
+        raise Error(f'{ident.daemon_name}: staged image {staged_image!r} '
+                    f'is not the expected {expected_image!r}; re-stage first')
+    if staged_image and not rollback:
+        # The image must still be present locally: a pull inside the
+        # downtime window is exactly what staging is meant to avoid.
+        _, _, code = call(ctx, [ctx.container_engine.path, 'image', 'inspect', staged_image],
+                          verbosity=CallVerbosity.QUIET)
+        if code:
+            raise Error(f'{ident.daemon_name}: staged image {staged_image} '
+                        f'is not present on this host')
+    return plan
+
+
+def switch_staged_units(
+    ctx: CephadmContext,
+    idents: List['DaemonIdentity'],
+    expected_image: Optional[str] = None,
+    rollback: bool = False,
+) -> List[Dict[str, Any]]:
+    """Swap the unit.*.staged files written by a staged deploy into place
+    (or, with rollback, put the unit.*.prev files back) for every daemon
+    given and restart them, all together: one ``systemctl stop`` of all
+    the units, the file swaps, one ``systemctl start``. The downtime of a
+    host's daemons is the stop/start of their containers, not a sequence
+    of them - cephadm's per-host lock would otherwise serialize one call
+    per daemon.
+
+    Every check runs before anything is stopped; a daemon that fails one
+    fails the whole call with nothing restarted.
+
+    Idempotent: a daemon already switched (or rolled back) is only made
+    sure to be running.
+    """
+    if not idents:
+        raise Error('no daemon to switch')
+    plans = [_staged_switch_plan(ctx, ident, expected_image, rollback) for ident in idents]
+    to_swap = [p for p in plans if p['pending']]
+    done = [p for p in plans if not p['pending']]
+
+    for p in done:
+        _, state, _ = check_unit(ctx, p['unit_name'])
+        if state != 'running':
+            call(ctx, ['systemctl', 'reset-failed', p['unit_name']], verbosity=CallVerbosity.DEBUG)
+            call_throws(ctx, ['systemctl', 'start', p['unit_name']])
+            p['result']['started'] = True
+        p['result']['already_switched'] = True
+
+    if to_swap:
+        units = [p['unit_name'] for p in to_swap]
+        # --- downtime window starts here
+        call_throws(ctx, ['systemctl', 'stop'] + units)
+        for p in to_swap:
+            path, result = p['path'], p['result']
+            for n in p['pending']:
+                live = path(n)
+                if os.path.exists(live):
+                    os.replace(live, path(n, p['dst_suffix']))
+                os.replace(path(n, p['src_suffix']), live)
+                result['switched'].append(n)
+            result['image'] = p['read_image'](path('unit.image'))
+            clean_cgroup(ctx, p['ident'].fsid, p['unit_name'])
+        call(ctx, ['systemctl', 'reset-failed'] + units, verbosity=CallVerbosity.DEBUG)
+        call_throws(ctx, ['systemctl', 'enable'] + units)
+        call_throws(ctx, ['systemctl', 'start'] + units)
+        # --- downtime window ends here
+        for p in to_swap:
+            logger.info('%s %s: %s -> %s', 'Rolled back' if rollback else 'Switched',
+                        p['ident'].daemon_name, ', '.join(p['result']['switched']),
+                        p['result']['image'])
+    return [p['result'] for p in plans]
+
+
+def switch_staged_unit_files(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    expected_image: Optional[str] = None,
+    rollback: bool = False,
+) -> Dict[str, Any]:
+    """switch_staged_units() for a single daemon."""
+    return switch_staged_units(ctx, [ident], expected_image, rollback)[0]
+
+
 def deploy_daemon_units(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -1394,6 +1606,7 @@ def deploy_daemon_units(
     init_containers: Optional[List[InitContainer]] = None,
     sidecars: Optional[List[SidecarContainer]] = None,
     stop_timeout: Optional[int] = None,
+    stage: bool = False,
 ) -> None:
     data_dir = ident.data_dir(ctx.data_dir)
     pre_start_commands: List[runscripts.Command] = []
@@ -1439,10 +1652,18 @@ def deploy_daemon_units(
         pre_start_commands=pre_start_commands,
         post_stop_commands=post_stop_commands,
         timeout=stop_timeout,
+        # When staging, every unit file is written next to the live one and
+        # systemd is left alone: the running daemon keeps its current unit.*
+        # files (and image) until `switch-staged` runs.
+        suffix=STAGED_SUFFIX if stage else '',
     )
 
-    # sysctl
-    install_sysctl(ctx, ident.fsid, daemon)
+    # sysctl (`_orch deploy-staged`: once per daemon type for the call)
+    sysctl_done: Optional[Set[str]] = getattr(ctx, 'staged_sysctl_done', None)
+    if sysctl_done is None or ident.daemon_type not in sysctl_done:
+        install_sysctl(ctx, ident.fsid, daemon)
+        if sysctl_done is not None:
+            sysctl_done.add(ident.daemon_type)
 
     # systemd
     ic_ids = [
@@ -1458,7 +1679,15 @@ def deploy_daemon_units(
         sidecar_ids=sc_ids,
         success_exit_status=container.success_exit_status,
     )
-    call_throws(ctx, ['systemctl', 'daemon-reload'])
+    if not (stage and getattr(ctx, 'defer_daemon_reload', False)):
+        # `_orch deploy-staged` reloads once, after the last daemon
+        call_throws(ctx, ['systemctl', 'daemon-reload'])
+
+    if stage:
+        # Nothing else: the daemon keeps running on its current image.
+        logger.info('Staged unit files for %s in %s (not restarted)',
+                    ident.daemon_name, data_dir)
+        return
 
     unit_name = get_unit_name(ident.fsid, ident.daemon_type, ident.daemon_id)
     call(ctx, ['systemctl', 'stop', unit_name],
@@ -3469,12 +3698,18 @@ def get_deployment_type(
     deployment_type: DeploymentType = DeploymentType.DEFAULT
     if ctx.reconfig:
         deployment_type = DeploymentType.RECONFIG
-    (_, state, _) = check_unit(ctx, ident.unit_name)
-    if state == 'running' or is_container_running(ctx, CephContainer.for_daemon(ctx, ident, 'bash')):
-        # if reconfig was set, that takes priority over redeploy. If
-        # this is considered a fresh deployment at this stage,
-        # mark it as a redeploy to avoid port checking
-        if deployment_type == DeploymentType.DEFAULT:
+    if getattr(ctx, 'stage', False):
+        if ctx.reconfig:
+            raise Error('--stage and --reconfig are mutually exclusive')
+        if not os.path.exists(os.path.join(ident.data_dir(ctx.data_dir), 'unit.run')):
+            raise Error(f'cannot stage {ctx.name}: it has not been deployed on this host')
+        deployment_type = DeploymentType.STAGE
+    # if reconfig (or stage) was set, that takes priority over redeploy: only
+    # a fresh deployment of a daemon found running is marked as a redeploy
+    # (to avoid port checking), so only then look at the running state
+    if deployment_type == DeploymentType.DEFAULT:
+        (_, state, _) = check_unit(ctx, ident.unit_name)
+        if state == 'running' or is_container_running(ctx, CephContainer.for_daemon(ctx, ident, 'bash')):
             deployment_type = DeploymentType.REDEPLOY
 
     logger.info(f'{deployment_type.value} daemon {ctx.name} ...')
@@ -3540,13 +3775,73 @@ def command_deploy_from(ctx: CephadmContext) -> None:
         sys.exit(DAEMON_FAILED_ERROR)
 
 
-def _common_deploy(ctx: CephadmContext) -> None:
+def command_deploy_staged(ctx: CephadmContext) -> None:
+    """Stage several daemons of this host in one call: `_orch deploy` with
+    params.stage=true for each entry of a JSON list of deploy configurations,
+    under one acquisition of the cluster lock (that `_orch deploy` takes for
+    each daemon, so concurrent calls would only queue), checking each target
+    image runs and looking up the uid/gid of its Ceph daemons once rather
+    than once per daemon, applying the sysctl settings once per daemon type,
+    and reloading systemd once at the end (staging touches no firewall
+    rule). A daemon that cannot be staged does not stop the others.
+    Prints a JSON object: name -> {"ok": true} or {"error": "..."}; exits
+    with an error if any daemon could not be staged.
+    """
+    configs = read_configuration_source(ctx)
+    if not isinstance(configs, list) or not configs:
+        raise Error('expected a non-empty JSON list of deploy configurations')
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
+    verified: Dict[Tuple[str, str], str] = {}
+    uid_gids: Dict[Tuple[str, str], Tuple[int, int]] = {}
+    sysctl_done: Set[str] = set()
+    results: Dict[str, Dict[str, Any]] = {}
+    staged = 0
+    for config_data in configs:
+        name = str(config_data.get('name', ''))
+        try:
+            if not (config_data.get('params') or {}).get('stage'):
+                raise Error(f'{name}: deploy-staged only stages (params.stage must be true)')
+            if config_data.get('fsid', ctx.fsid) != ctx.fsid:
+                raise Error(f'{name}: fsid {config_data.get("fsid")} is not {ctx.fsid}')
+            dctx = _context_of_its_own(ctx)
+            apply_deploy_config_to_ctx(config_data, dctx)
+            dctx.verified_staged_images = verified
+            dctx.staged_uid_gids = uid_gids
+            dctx.staged_sysctl_done = sysctl_done
+            dctx.defer_daemon_reload = True
+            _common_deploy(dctx, lock=False)
+            results[name] = {'ok': True}
+            staged += 1
+        except Exception as e:
+            logger.error('Staging %s failed: %s', name or '?', e)
+            results[name] = {'error': str(e)}
+    if staged:
+        call_throws(ctx, ['systemctl', 'daemon-reload'])
+    print(json.dumps(results))
+    if staged < len(configs):
+        raise Error(f'{len(configs) - staged} of {len(configs)} daemon(s) could not be staged')
+
+
+def _context_of_its_own(ctx: CephadmContext) -> CephadmContext:
+    """A copy of ctx for one of several deployments made in one call, so
+    the settings applied for one daemon do not leak into the next."""
+    c = CephadmContext()
+    for k, v in ctx.__dict__.items():
+        c.__dict__[k] = copy.copy(v) if k in ('_args', '_conf') else v
+    return c
+
+
+def _common_deploy(ctx: CephadmContext, lock: bool = True) -> None:
     ident = DaemonIdentity.from_context(ctx)
     if ident.daemon_type not in get_supported_daemons():
         raise Error('daemon type %s not recognized' % ident.daemon_type)
 
-    lock = FileLock(ctx, ctx.fsid)
-    lock.acquire()
+    # held until we return (not taken when the caller already holds it:
+    # `_orch deploy-staged`)
+    held = FileLock(ctx, ctx.fsid) if lock else None
+    if held:
+        held.acquire()
 
     deployment_type = get_deployment_type(ctx, ident)
 
@@ -3586,12 +3881,22 @@ def _deploy_daemon_container(
 ) -> None:
     daemon = daemon_form_create(ctx, ident)
     assert isinstance(daemon, ContainerDaemonForm)
+    # `_orch deploy-staged`: the uid/gid of a Ceph daemon only depends on
+    # the image (a throwaway container stats /var/lib/ceph in it): look it up
+    # once per daemon type and image for the whole call, by seeding the
+    # form's own memo before anything asks for it
+    uid_gids: Optional[Dict[Tuple[str, str], Tuple[int, int]]] = getattr(ctx, 'staged_uid_gids', None)
+    uid_gid_key = (ident.daemon_type, ctx.image)
+    if uid_gids is not None and isinstance(daemon, Ceph) and uid_gid_key in uid_gids:
+        daemon._uid_gid = uid_gids[uid_gid_key]
     daemon.customize_container_endpoints(daemon_endpoints, deployment_type)
     ctr = daemon.container(ctx)
     ics = daemon.init_containers(ctx)
     sccs = daemon.sidecar_containers(ctx)
     config, keyring = daemon.config_and_keyring(ctx)
     uid, gid = daemon.uid_gid(ctx)
+    if uid_gids is not None and isinstance(daemon, Ceph):
+        uid_gids[uid_gid_key] = (uid, gid)
     deploy_daemon(
         ctx,
         ident,
@@ -3845,6 +4150,35 @@ def command_signal(ctx: CephadmContext) -> int:
 
     return send_signal_to_container_entrypoint(ctx, container_name, ctx.signal_name or ctx.signal_number)
 
+
+##################################
+
+
+@infer_fsid
+def command_switch_staged(ctx: CephadmContext) -> int:
+    """Apply (or roll back) a staged redeploy: swap the unit.*.staged
+    (or unit.*.prev) files into place and restart the daemon."""
+    if not ctx.fsid:
+        raise Error('must pass --fsid to specify cluster')
+    names = ctx.name if isinstance(ctx.name, list) else [ctx.name]
+    idents = []
+    for name in names:
+        ident = DaemonIdentity.from_name(ctx.fsid, name)
+        if ident.daemon_type not in get_supported_daemons():
+            raise Error('daemon type %s not recognized' % ident.daemon_type)
+        idents.append(ident)
+
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
+    results = switch_staged_units(
+        ctx,
+        idents,
+        expected_image=ctx.expected_image or None,
+        rollback=ctx.rollback,
+    )
+    # one --name: the daemon's result; several: the list, in --name order
+    print(json.dumps(results[0] if len(results) == 1 else results, indent=4))
+    return 0
 
 ##################################
 
@@ -4843,6 +5177,19 @@ class CustomValidation(argparse.Action):
             self._check_name(values)
             setattr(namespace, self.dest, values)
 
+
+class CustomValidationAppend(CustomValidation):
+    """CustomValidation for an option that may be repeated: every value is
+    checked and the destination is the list of them, in order."""
+
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Union[str, Sequence[Any], None],
+                 option_string: Optional[str] = None) -> None:
+        assert isinstance(values, str)
+        if self.dest == 'name':
+            self._check_name(values)
+            current = getattr(namespace, self.dest, None) or []
+            setattr(namespace, self.dest, list(current) + [values])
+
 ##################################
 
 
@@ -5343,6 +5690,11 @@ def _add_deploy_parser_args(
         action='store_true',
         help='Reconfigure a previously deployed daemon')
     parser_deploy.add_argument(
+        '--stage',
+        action='store_true',
+        help='Write the new unit files next to the live ones (unit.*.staged) '
+             'without restarting the daemon; apply later with switch-staged')
+    parser_deploy.add_argument(
         '--allow-ptrace',
         action='store_true',
         help='Allow SYS_PTRACE on daemon container')
@@ -5797,6 +6149,28 @@ def _get_parser():
         required=True,
         help='daemon name (type.id)')
 
+    parser_switch_staged = subparsers.add_parser(
+        'switch-staged',
+        help='apply a staged redeploy: swap unit.*.staged into place and restart the daemon')
+    parser_switch_staged.set_defaults(func=command_switch_staged)
+    parser_switch_staged.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_switch_staged.add_argument(
+        '--name', '-n',
+        required=True,
+        action=CustomValidationAppend,
+        help='daemon name (type.id); may be given several times to switch '
+             'these daemons around one stop/start')
+    parser_switch_staged.add_argument(
+        '--expected-image',
+        default='',
+        help='refuse to switch unless the staged unit.image matches this image')
+    parser_switch_staged.add_argument(
+        '--rollback',
+        action='store_true',
+        help='put the unit.*.prev files of the previous switch back and restart')
+
     parser_logs = subparsers.add_parser(
         'logs', help='print journald logs for a daemon container')
     parser_logs.set_defaults(func=command_logs)
@@ -6041,6 +6415,19 @@ def _get_parser():
         default='-',
         nargs='?',
         help='Configuration input source file',
+    )
+
+    parser_deploy_staged = subparsers_orch.add_parser(
+        'deploy-staged', help='stage several daemons (deploy --stage) in one call')
+    parser_deploy_staged.set_defaults(func=command_deploy_staged)
+    parser_deploy_staged.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_deploy_staged.add_argument(
+        'source',
+        default='-',
+        nargs='?',
+        help='JSON list of deploy configurations (as for `_orch deploy`)',
     )
 
     parser_check_online = subparsers_orch.add_parser(

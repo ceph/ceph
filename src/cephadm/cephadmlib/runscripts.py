@@ -45,18 +45,23 @@ def write_service_scripts(
     pre_start_commands: Optional[List[Command]] = None,
     post_stop_commands: Optional[List[Command]] = None,
     timeout: Optional[int] = None,
+    suffix: str = '',
 ) -> None:
     """Write the scripts that systemd services will call in order to
     start/stop/etc components of a cephadm managed daemon. Also writes some
     metadata about the service getting deployed.
+
+    With a non-empty suffix (a staged redeploy) the files are written next
+    to the live ones, e.g. unit.run.staged, and the running service is not
+    affected until cephadm switch-staged moves them into place.
     """
     data_dir = pathlib.Path(ident.data_dir(ctx.data_dir))
-    run_file_path = data_dir / 'unit.run'
-    meta_file_path = data_dir / 'unit.meta'
-    post_stop_file_path = data_dir / 'unit.poststop'
-    stop_file_path = data_dir / 'unit.stop'
-    image_file_path = data_dir / 'unit.image'
-    initctr_file_path = data_dir / 'init_containers.run'
+    run_file_path = data_dir / ('unit.run' + suffix)
+    meta_file_path = data_dir / ('unit.meta' + suffix)
+    post_stop_file_path = data_dir / ('unit.poststop' + suffix)
+    stop_file_path = data_dir / ('unit.stop' + suffix)
+    image_file_path = data_dir / ('unit.image' + suffix)
+    initctr_file_path = data_dir / ('init_containers.run' + suffix)
     # use an ExitStack to make writing the files an all-or-nothing affair. If
     # any file fails to write then the write_new'd file will not get renamed
     # into place
