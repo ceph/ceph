@@ -603,16 +603,17 @@ A Grafana service spec with a user-provided certificate looks like:
      certificate_source: reference
 
 To register a custom certificate and key with certmgr, put the private key and
-the certificate in one PEM file and pass the fully qualified domain name (FQDN)
-of the host with ``--hostname``:
+the certificate in one PEM file and pass the host name, as shown by
+``ceph orch host ls``, with ``--hostname``:
 
 .. prompt:: bash #
 
-   ceph orch certmgr cert-key set grafana --hostname <host-fqdn> -i $PWD/key-and-certificate.pem
+   ceph orch certmgr cert-key set grafana --hostname <host> -i $PWD/key-and-certificate.pem
 
-Cephadm looks up a per-host certificate under the FQDN that the host reports.
-That name can differ from the host name shown by ``ceph orch host ls``. To see
-it, run ``cephadm gather-facts`` on the host and read the ``fqdn`` value.
+Grafana certificates are per host: repeat the command for every host Grafana
+is placed on. Certificates registered under the fully qualified domain name
+(FQDN) that the host reports are also used. If a host has a certificate and key
+registered under both names, the ones registered under the host name are used.
 
 If Grafana is already deployed, run ``reconfig`` on the service to
 apply the updated certificate:

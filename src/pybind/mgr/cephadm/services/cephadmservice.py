@@ -487,7 +487,7 @@ class CephadmService(metaclass=ABCMeta):
         elif cert_source == CertificateSource.INLINE.value:
             return self._get_certificates_from_spec(svc_spec, daemon_spec, cert_attr, key_attr, cert_name, key_name, ca_cert_attr, ca_cert_name)
         elif cert_source == CertificateSource.REFERENCE.value:
-            return self._get_certificates_from_certmgr_store(svc_spec, fqdns, cert_name, key_name, ca_cert_name)
+            return self._get_certificates_from_certmgr_store(svc_spec, daemon_spec, fqdns, cert_name, key_name, ca_cert_name)
         elif cert_source == CertificateSource.CEPHADM_SIGNED.value:
             return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
         else:
@@ -587,23 +587,37 @@ class CephadmService(metaclass=ABCMeta):
     def _get_certificates_from_certmgr_store(
         self,
         svc_spec: ServiceSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
         fqdns: List[str],
         cert_name: str,
         key_name: str,
         ca_cert_name: Optional[str] = None
     ) -> TLSCredentials:
-        host = fqdns[0] if fqdns else None
-        cert = self.mgr.cert_mgr.get_cert(cert_name, svc_spec.service_name(), host)
-        key = self.mgr.cert_mgr.get_key(key_name, svc_spec.service_name(), host)
-        ca_cert = self.mgr.cert_mgr.get_cert(ca_cert_name, svc_spec.service_name(), host) if ca_cert_name else ''
-        if cert and key:
+        # Per-host entries are keyed by the orchestrator host name, the same name
+        # used by 'certmgr ... --hostname' and by the rest of the per-host cert
+        # handling. For host-scoped certificates, the host FQDN is still looked up
+        # for entries provisioned under it; a complete pair under the host name
+        # takes precedence. The host is ignored for service and global scopes.
+        hosts: List[Optional[str]] = [daemon_spec.host]
+        if self.mgr.cert_mgr.get_cert_scope(cert_name) == TLSObjectScope.HOST \
+                and fqdns and fqdns[0] not in hosts:
+            hosts.append(fqdns[0])
+
+        service_name = svc_spec.service_name()
+        for host in hosts:
+            cert = self.mgr.cert_mgr.get_cert(cert_name, service_name, host)
+            key = self.mgr.cert_mgr.get_key(key_name, service_name, host)
+            if not (cert and key):
+                continue
+            ca_cert = self.mgr.cert_mgr.get_cert(ca_cert_name, service_name, host) if ca_cert_name else ''
             if ca_cert_name and not ca_cert:
-                logger.error(f'Failed to get CA cert {ca_cert_name} for service {svc_spec.service_name()} host: {host} from the certmgr store.')
+                logger.error(f'Failed to get CA cert {ca_cert_name} for service {service_name} host: {host} from the certmgr store.')
                 return EMPTY_TLS_CREDENTIALS
             return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
-        else:
-            logger.error(f'Failed to get cert/key {cert_name} for service {svc_spec.service_name()} host: {host} from the certmgr store.')
-            return EMPTY_TLS_CREDENTIALS
+
+        logger.error(f'Failed to get cert/key {cert_name} for service {service_name} '
+                     f'host: {", ".join(str(h) for h in hosts)} from the certmgr store.')
+        return EMPTY_TLS_CREDENTIALS
 
     def _get_cephadm_signed_certificates(
         self,
