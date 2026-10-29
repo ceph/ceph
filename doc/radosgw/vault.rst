@@ -432,6 +432,60 @@ In the transit engine example above, the Object Gateway would encrypt the secret
 
   http://vaultserver:8200/v1/transit/mybucketkey
 
+.. _radosgw-vault-key-scope:
+
+Restricting Key IDs to Their Owner
+===================================
+
+By default, the Object Gateway does not verify that a key ID supplied by a
+client (or configured as a bucket's default SSE-KMS key) actually belongs to
+that client's tenant or to the bucket's owner. Since Vault itself
+authenticates every request with a single, shared token (see `Token
+authentication method`_), any authenticated S3 user who knows another
+tenant's key ID can use it to encrypt their own objects, bypassing whatever
+access control the key's real owner expects.
+
+Setting ``rgw crypt s3 kms key scope`` to ``tenant`` or ``owner`` makes the
+Object Gateway require that key IDs start with an owner prefix, checked
+before any request reaches Vault:
+
+* ``tenant`` requires the key ID to start with the requesting user's tenant
+  (or user ID, for users with no tenant).
+* ``owner`` requires it to start with the destination bucket's owner
+  instead (tenant and user id joined with the same separator, e.g.
+  ``myproject.myuser`` rather than Ceph's internal ``myproject$myuser``
+  notation), which also covers cross-account bucket policies and ACLs.
+
+The prefix must be followed by ``rgw crypt s3 kms key scope separator``
+(``.`` by default) and then the rest of the key ID, e.g. a key ID of
+``myproject.mybucketkey`` is accepted for tenant/owner ``myproject``.
+Choose a separator your KMS backend actually accepts in a key name. Vault's
+transit secrets engine (tested against Vault 1.15.6) only accepts ``.``,
+``-``, and ``_`` -- it rejects ``/``, ``:``, ``$``, ``,``, ``~``, and ``+``
+with "unsupported path" (``/`` is additionally reserved by the transit
+engine's key-versioning syntax, see `Transit Engine Compatibility Support`_
+above, and ``rgw crypt vault secret engine = transit compat=0`` rejects any
+key ID containing it outright). Avoid ``-`` if your key ids are UUIDs: the
+owner prefix is matched against everything before the *last* separator in
+the key id, so a UUID's own internal ``-`` characters would be matched
+instead of the intended boundary.
+
+This check applies to both the per-request
+``x-amz-server-side-encryption-aws-kms-key-id`` header and a bucket's
+default encryption key set via ``PutBucketEncryption``; requests using a key
+ID that doesn't match the expected owner are rejected with ``AccessDenied``.
+It is off (``none``) by default, and does not change how keys are named in
+Vault -- whatever creates/manages keys in Vault is responsible for naming
+them with the expected owner prefix before this option is turned on.
+Already-encrypted objects are unaffected, since the key ID stored on an
+object is never re-validated after it was written.
+
+``rgw crypt s3 kms key scope`` is not specific to Vault: the check runs
+before any KMS backend is contacted. It is only practically usable when
+whatever creates/manages your keys is able to name them with the owner
+prefix, which is normally true for Vault but is **not** true for Barbican
+-- see the note in :ref:`radosgw-barbican`.
+
 .. _Vault: https://www.vaultproject.io/docs/
 .. _Token authentication method: https://www.vaultproject.io/docs/auth/token.html
 .. _Vault agent: https://www.vaultproject.io/docs/agent/index.html
