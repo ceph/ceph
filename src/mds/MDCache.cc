@@ -6300,14 +6300,55 @@ void MDCache::rejoin_send_acks()
         mds->heartbeat_reset();
 
       // dir
-      for (auto &r : dir->get_replicas()) {
-	auto it = acks.find(r.first);
-	if (it == acks.end())
-	  continue;
-	it->second->add_strong_dirfrag(dir->dirfrag(), ++r.second, dir->dir_rep);
-	it->second->add_dirfrag_base(dir);
+      //
+      // A peer cannot hold a replica of a dirfrag without also holding a
+      // replica of the dirfrag's inode: the inode is what anchors the
+      // dirfrag in the peer's cache.  During rejoin we can transiently
+      // record a replica that violates this.  When we invent an undef
+      // dirfrag for a peer's strong rejoin and then learn the real
+      // fragtree, CDir::split() copies the invented dirfrag's replica map
+      // onto every leaf; if that peer then expires the inode (and only some
+      // of the leaves) before we send our ack, we drop it from the inode's
+      // replica map but keep it on the leaves it never actually had.
+      // Acking such a leaf makes the peer build an unconnected dirfrag that
+      // no inode in the ack can reconnect, tripping the isolated_inodes
+      // assert in handle_cache_rejoin_ack().  Drop those stale replicas
+      // instead of acking them.  We only do this for inodes we are
+      // authoritative for (so our replica map is the source of truth) and
+      // not for base inodes, whose replicas are tracked separately.
+      //
+      // Subtree roots are excluded.  Within one subtree's walk, the parent
+      // dir's dentries (and the "peer missed MDentryLink" fix-up below that
+      // can add the inode replica) are always processed before the child
+      // dirfrags, so the inode's replica map is final by the time we get
+      // here.  A subtree root whose inode is auth here but lives in another
+      // of our subtrees may be visited before that fix-up runs, so the check
+      // could drop a legitimate replica.  Subtree roots are known after
+      // replay from ESubtreeMap and are never invented and split, so the
+      // stale-replica case cannot arise for them.
+      {
+	CInode *diri = dir->get_inode();
+	std::vector<mds_rank_t> stale_replicas;
+	for (auto &r : dir->get_replicas()) {
+	  auto it = acks.find(r.first);
+	  if (it == acks.end())
+	    continue;
+	  if (!dir->is_subtree_root() && diri->is_auth() && !diri->is_base() &&
+	      !diri->is_replica(r.first)) {
+	    stale_replicas.push_back(r.first);
+	    continue;
+	  }
+	  it->second->add_strong_dirfrag(dir->dirfrag(), ++r.second, dir->dir_rep);
+	  it->second->add_dirfrag_base(dir);
+	}
+	for (const auto& r : stale_replicas) {
+	  dout(10) << " not acking " << *dir << " to mds." << r
+		   << ", its inode is not replicated there; dropping stale replica"
+		   << dendl;
+	  dir->remove_replica(r);
+	}
       }
-	   
+
       for (auto &p : dir->items) {
 	if (!(++count % mds->heartbeat_reset_grace()))
 	  mds->heartbeat_reset();
