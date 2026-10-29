@@ -17,7 +17,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 11
+LAST_MIGRATION = 12
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,11 @@ class Migrations:
             logger.info('Running migration 10 -> 11')
             if self.migrate_10_11():
                 self.set(11)
+
+        if self.mgr.migration_current == 11:
+            logger.info('Running migration 11 -> 12')
+            if self.migrate_11_12():
+                self.set(12)
 
     def migrate_0_1(self) -> bool:
         """
@@ -660,6 +665,121 @@ class Migrations:
         if nfs_services:
             self.mgr.set_store('nfs_services_with_old_userid', ','.join(nfs_services))
         self.mgr.remove_health_warning('CEPHADM_MIGRATION_FAILURE')
+        return True
+
+    def migrate_11_12(self) -> bool:
+        """
+        Carry user-provided Grafana certificates over from the Tentacle certmgr
+        layout to the current one.
+
+        Tentacle stored per-host Grafana certificates under 'grafana_cert' and
+        'grafana_key'. They are now named 'grafana_ssl_cert' and 'grafana_ssl_key',
+        and which certificate a service uses is selected by the spec's
+        certificate_source. The old entries are no longer loaded by the
+        TLSObjectStore, so without this migration a user-provided certificate is
+        silently replaced by a cephadm-signed one after the upgrade.
+
+        For every host with a legacy entry holding a user-provided certificate,
+        the cert/key pair is copied to the new names as an editable, user-made
+        pair. If every host running Grafana ends up with such a pair, the Grafana
+        spec is switched to certificate_source 'reference' so the daemons keep
+        serving the user's certificate. Cephadm-generated certificates are left
+        behind, as cephadm-signed ones will be generated for them.
+
+        The legacy entries are left untouched in the mgr store.
+        """
+        legacy_cert_name, legacy_key_name = 'grafana_cert', 'grafana_key'
+        cert_name, key_name = 'grafana_ssl_cert', 'grafana_ssl_key'
+
+        def load_legacy_entries(kind: str, name: str) -> Dict[str, Dict[str, Any]]:
+            raw = self.mgr.get_store(f'cert_store.{kind}.{name}')
+            if not raw:
+                return {}
+            try:
+                entries = json.loads(raw)
+            except json.JSONDecodeError as e:
+                logger.warning(f'Cannot parse legacy {kind} entry {name!r}: {e}')
+                return {}
+            if not isinstance(entries, dict):
+                logger.warning(f'Unexpected format for legacy {kind} entry {name!r}, skipping')
+                return {}
+            return {h: v for h, v in entries.items() if isinstance(v, dict)}
+
+        def is_cephadm_generated(cert: str, user_made: bool) -> Optional[bool]:
+            if user_made:
+                return False
+            try:
+                org, cn = get_cert_issuer_info(cert)
+            except Exception as e:
+                logger.warning(f'Cannot read the issuer of a legacy Grafana certificate: {e}')
+                return None
+            # signed by the cephadm root CA (Tentacle and later)
+            if cn and cn.startswith('cephadm-root-'):
+                return True
+            # legacy cephadm self-signed certificates (Squid and earlier)
+            if org == 'Ceph' and cn == 'cephadm':
+                return True
+            return False
+
+        legacy_certs = load_legacy_entries('cert', legacy_cert_name)
+        if not legacy_certs:
+            return True
+        legacy_keys = load_legacy_entries('key', legacy_key_name)
+
+        grafana_specs = self.mgr.spec_store.get_specs_by_type('grafana')
+        if not grafana_specs:
+            logger.info('No Grafana service found, skipping Grafana certificates migration')
+            return True
+
+        hosts_with_user_certs = set()
+        for host, cert_entry in legacy_certs.items():
+            cert = cert_entry.get('cert', '')
+            if not cert:
+                continue
+            if is_cephadm_generated(cert, bool(cert_entry.get('user_made', False))) is not False:
+                continue
+
+            key = legacy_keys.get(host, {}).get('key', '')
+            if not key:
+                logger.warning(f'Legacy Grafana certificate for host {host} has no key, not migrating it')
+                continue
+
+            if self.mgr.cert_mgr.cert_exists(cert_name, host=host):
+                # already provisioned under the new name (e.g. by the user)
+                logger.info(f'{cert_name} already present for host {host}, keeping it')
+                hosts_with_user_certs.add(host)
+                continue
+
+            cert_info = self.mgr.cert_mgr.check_certificate_state(cert_name, host, cert, key)
+            if not cert_info.is_operationally_valid():
+                logger.warning(f'Legacy Grafana certificate for host {host} is not valid, not migrating it: '
+                               f'{cert_info.get_status_description()}')
+                continue
+
+            logger.info(f'Migrating user-provided Grafana certificate for host {host} to {cert_name}/{key_name}')
+            self.mgr.cert_mgr.save_cert(cert_name, cert, host=host, user_made=True, editable=True)
+            self.mgr.cert_mgr.save_key(key_name, key, host=host, user_made=True, editable=True)
+            hosts_with_user_certs.add(host)
+
+        if not hosts_with_user_certs:
+            return True
+
+        for service_name, spec in grafana_specs.items():
+            if not spec.is_using_certificates_source(CertificateSource.CEPHADM_SIGNED):
+                continue
+            grafana_hosts = {dd.hostname for dd in self.mgr.cache.get_daemons_by_service(service_name) if dd.hostname}
+            if not grafana_hosts or not grafana_hosts.issubset(hosts_with_user_certs):
+                logger.warning(
+                    f'Not switching {service_name} to certificate_source '
+                    f'{CertificateSource.REFERENCE.value!r}: user-provided certificates were found for '
+                    f'{sorted(hosts_with_user_certs)} but {service_name} runs on {sorted(grafana_hosts)}. '
+                    f'Provide a certificate for every Grafana host and set certificate_source to '
+                    f'{CertificateSource.REFERENCE.value!r} in the spec.')
+                continue
+            logger.info(f'Setting certificate_source to {CertificateSource.REFERENCE.value!r} for {service_name}')
+            spec.certificate_source = CertificateSource.REFERENCE.value
+            self.mgr.spec_store.save(spec)
+
         return True
 
 
