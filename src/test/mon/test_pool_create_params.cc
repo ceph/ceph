@@ -173,16 +173,9 @@ TEST_F(PoolParamsTest, ErasureTypeLoaded) {
   EXPECT_EQ(ERASURE, defaults().pool_type);
 }
 
-// Test the replica default follows the legacy size while replica is 0
-TEST_F(PoolParamsTest, ReplicaFromLegacySize) {
+// Test the replica default comes from osd_pool_default_size
+TEST_F(PoolParamsTest, ReplicaFromSizeOption) {
   set("osd_pool_default_size", "2");
-  EXPECT_EQ(2, defaults().replica);
-}
-
-// Test the replica default comes from osd_pool_default_replica when set
-TEST_F(PoolParamsTest, ReplicaFromReplicaOption) {
-  set("osd_pool_default_size", "3");
-  set("osd_pool_default_replica", "2");
   EXPECT_EQ(2, defaults().replica);
 }
 
@@ -384,15 +377,20 @@ TEST_F(PoolParamsTest, RuleNoneWithCrushParamSucceeds) {
   EXPECT_EQ(0, check_line(p, PoolCommand::DEFAULT_SET)) << ss.str();
 }
 
-// Test size with replica fails for both commands
+// Test size with replica fails for a pool
 TEST_F(PoolParamsTest, SizeWithReplicaFails) {
-  for (auto command : {PoolCommand::CREATE, PoolCommand::DEFAULT_SET}) {
-    const PoolCreateParams p = with(
-      {{"size", int64_t(3)}, {"replica", int64_t(3)}});
-    EXPECT_EQ(-EINVAL, check_line(p, command));
-    EXPECT_EQ("cannot specify both 'size' and 'replica' parameters; use "
-              "'replica' and 'num_zones' for new pools", ss.str());
-  }
+  const PoolCreateParams p = with(
+    {{"size", int64_t(3)}, {"replica", int64_t(3)}});
+  EXPECT_EQ(-EINVAL, check_line(p, PoolCommand::CREATE));
+  EXPECT_EQ("cannot specify both 'size' and 'replica' parameters; use "
+            "'replica' and 'num_zones' for new pools", ss.str());
+}
+
+// Test size fails for the defaults, which have no size parameter
+TEST_F(PoolParamsTest, SizeForDefaultsFails) {
+  EXPECT_EQ(-EINVAL, check_line(with({{"size", int64_t(3)}}),
+                                PoolCommand::DEFAULT_SET));
+  EXPECT_EQ("the pool defaults take 'replica', not 'size'", ss.str());
 }
 
 // Test k without m fails for a pool, but sets k of the default profile
@@ -547,12 +545,61 @@ TEST_F(PoolParamsTest, SizeWithTwoZonesFails) {
             "instead", ss.str());
 }
 
-// Test failure when the legacy size is given while the default is two zones
+// Test a legacy size over the default two zones gives size / 2 replicas,
+// whatever osd_pool_default_size is, as Rook passes --size 4 in stretch mode
+TEST_F(PoolParamsTest, SizeOverDefaultTwoZonesIsReplica) {
+  set("osd_pool_default_num_zones", "2");
+  for (const char *dflt : {"2", "3"}) {
+    set("osd_pool_default_size", dflt);
+    PoolCreateParams p = with({{"size", int64_t(4)}});
+    size_over_default_zones_as_replica(p);
+    EXPECT_FALSE(p.is_given("size")) << dflt;
+    EXPECT_TRUE(p.is_given("replica")) << dflt;
+    EXPECT_EQ(2, p.copies_per_zone()) << dflt;
+    EXPECT_EQ(0, check(p)) << ss.str();
+  }
+}
+
+// Test failure when a legacy size that is not a multiple of the default two
+// zones is given
 TEST_F(PoolParamsTest, SizeWithDefaultTwoZonesFails) {
   set("osd_pool_default_num_zones", "2");
-  EXPECT_EQ(-EINVAL, check(with({{"size", int64_t(4)}})));
-  EXPECT_EQ("cannot specify 'size' with num_zones > 1; use 'replica' parameter "
-            "instead (osd_pool_default_num_zones)", ss.str());
+  PoolCreateParams p = with({{"size", int64_t(5)}});
+  size_over_default_zones_as_replica(p);
+  EXPECT_EQ(-EINVAL, check(p));
+  EXPECT_EQ("cannot specify 'size' with num_zones > 1 unless it is a multiple "
+            "of num_zones 2 (osd_pool_default_num_zones); use 'replica' "
+            "parameter instead", ss.str());
+}
+
+// Test a legacy size over the default zones keeps its limit of 10
+TEST_F(PoolParamsTest, SizeOverDefaultTwoZonesKeepsItsLimit) {
+  set("osd_pool_default_num_zones", "2");
+  PoolCreateParams p = with({{"size", int64_t(12)}});
+  size_over_default_zones_as_replica(p);
+  EXPECT_EQ(-EINVAL, check(p));
+  EXPECT_EQ("pool size must be between 1 and 10", ss.str());
+}
+
+// Test a legacy size is kept, and fails, with a given num_zones
+TEST_F(PoolParamsTest, SizeWithTwoZonesGivenIsKept) {
+  PoolCreateParams p = with({{"size", int64_t(4)},
+                             {"num_zones", int64_t(2)}});
+  size_over_default_zones_as_replica(p);
+  EXPECT_TRUE(p.is_given("size"));
+  EXPECT_EQ(-EINVAL, check(p));
+}
+
+// Test a legacy size is kept for a single-zone pool and for an erasure coded
+// pool, which ignores it
+TEST_F(PoolParamsTest, SizeKeptOtherwise) {
+  PoolCreateParams p = with({{"size", int64_t(4)}});
+  size_over_default_zones_as_replica(p);
+  EXPECT_TRUE(p.is_given("size"));
+  set("osd_pool_default_num_zones", "2");
+  PoolCreateParams e = with({{"size", int64_t(4)}}, ERASURE);
+  size_over_default_zones_as_replica(e);
+  EXPECT_TRUE(e.is_given("size"));
 }
 
 // Test a pool is created in one zone before the commit over the default two
@@ -630,6 +677,40 @@ TEST_F(PoolParamsTest, ErasureProfileNormalized) {
   normalize_result = -EINVAL;
   EXPECT_EQ(-EINVAL, check(with({}, ERASURE)));
   EXPECT_EQ("plugin refuses the profile", ss.str());
+}
+
+// Test a stripe unit that is not a multiple of 4096 fails, naming the
+// profile, unless --yes-i-really-mean-it is given
+TEST_F(PoolParamsTest, OddStripeUnitNeedsYesIReallyMeanIt) {
+  named_profile["stripe_unit"] = "2K";
+  PoolCreateParams p = with({}, ERASURE);
+  ASSERT_EQ(0, use_profile(p, "myprofile", &named_profile, &ss));
+  EXPECT_EQ(-EINVAL, check(p));
+  EXPECT_EQ("stripe_unit should be a multiple of 4096 bytes for best "
+            "performance, not 2K (erasure code profile 'myprofile'); only "
+            "ceph osd pool create --yes-i-really-mean-it accepts it",
+            ss.str());
+  apply_command_line(p, {{"yes_i_really_mean_it", true}});
+  EXPECT_EQ(0, check(p)) << ss.str();
+}
+
+// Test a pool over zones fails with such a stripe unit even then: it is a
+// FastEC pool
+TEST_F(PoolParamsTest, OddStripeUnitOverZonesFails) {
+  set("osd_pool_default_erasure_code_profile",
+      "plugin=isa k=2 m=1 stripe_unit=2048");
+  EXPECT_EQ(-EINVAL, check(with({{"num_zones", int64_t(2)},
+                                 {"yes_i_really_mean_it", true}}, ERASURE)));
+  EXPECT_EQ("stripe_unit should be a multiple of 4096 bytes, not 2048 "
+            "(erasure code profile 'default'): a pool over zones is a FastEC "
+            "pool, which needs one", ss.str());
+}
+
+// Test a stripe unit that is a multiple of 4096 needs no flag
+TEST_F(PoolParamsTest, AlignedStripeUnitSucceeds) {
+  set("osd_pool_default_erasure_code_profile",
+      "plugin=isa k=2 m=1 stripe_unit=8K");
+  EXPECT_EQ(0, check(with({}, ERASURE))) << ss.str();
 }
 
 // Test a replicated pool does not normalize a profile
@@ -942,7 +1023,7 @@ TEST_F(PoolParamsTest, EffectiveZoneFailureDomain) {
 
 // Test the option named for a value that came from a default
 TEST_F(PoolParamsTest, FromDefault) {
-  EXPECT_EQ(" (osd_pool_default_replica)", with({}).from_default("replica"));
+  EXPECT_EQ(" (osd_pool_default_size)", with({}).from_default("replica"));
   EXPECT_EQ("", with({{"replica", int64_t(2)}}).from_default("replica"));
   EXPECT_EQ(" (erasure code profile 'default')",
             with({}, ERASURE).from_default("k"));
@@ -953,18 +1034,18 @@ TEST(PoolDefaultOptionsTest, EveryParameterHasAnOption) {
   const auto& options = pool_default_options();
   for (const char *param : {"pool_type", "num_zones", "rule",
                             "zone_failure_domain", "osd_failure_domain",
-                            "root", "class", "replica", "size", "min_size",
+                            "root", "class", "replica", "min_size",
                             "pg_num", "pgp_num", "autoscale_mode", "bulk",
                             "crimson"}) {
     EXPECT_TRUE(options.contains(param)) << param;
   }
 }
 
-// Test the legacy size and replica write the same option
-TEST(PoolDefaultOptionsTest, SizeAndReplicaShareOneOption) {
+// Test replica writes osd_pool_default_size and size is not a default
+TEST(PoolDefaultOptionsTest, ReplicaWritesSizeOption) {
   const auto& options = pool_default_options();
-  EXPECT_EQ("osd_pool_default_replica", options.at("replica"));
-  EXPECT_EQ(options.at("replica"), options.at("size"));
+  EXPECT_EQ("osd_pool_default_size", options.at("replica"));
+  EXPECT_FALSE(options.contains("size"));
 }
 
 // Test k and m are kept in the default profile, not in an option

@@ -62,7 +62,7 @@ string PoolCreateParams::from_default(const string& param) const
   if (is_given(param)) {
     return "";
   }
-  if (param == "k" || param == "m") {
+  if (param == "k" || param == "m" || param == "stripe_unit") {
     return " (erasure code profile '" +
       (erasure_code_profile.empty() ? string("default") : erasure_code_profile) +
       "')";
@@ -77,7 +77,7 @@ PoolCreateParams load_pool_defaults(const ConfigProxy& conf)
   p.pool_type = conf.get_val<string>("osd_pool_default_type") == "erasure"
     ? pg_pool_t::TYPE_ERASURE : pg_pool_t::TYPE_REPLICATED;
   p.num_zones = conf.get_val<int64_t>("osd_pool_default_num_zones");
-  p.replica = conf.get_osd_pool_default_replica();
+  p.replica = conf.get_val<uint64_t>("osd_pool_default_size");
   p.min_size = conf.get_val<uint64_t>("osd_pool_default_min_size");
   std::ostringstream err;
   get_json_str_map(conf.get_val<string>("osd_pool_default_erasure_code_profile"),
@@ -181,6 +181,7 @@ void apply_command_line(PoolCreateParams& p, const cmdmap_t& cmdmap)
     p.crimson = b;
     give("crimson");
   }
+  cmd_getval(cmdmap, "yes_i_really_mean_it", p.yes_i_really_mean_it);
 }
 
 int check_command_line(const PoolCreateParams& p, PoolCommand command,
@@ -221,12 +222,29 @@ int check_command_line(const PoolCreateParams& p, PoolCommand command,
         << p.from_default("num_zones");
     return -EINVAL;
   }
+  if (!create && p.is_given("size")) {
+    *ss << "the pool defaults take 'replica', not 'size'";
+    return -EINVAL;
+  }
   if (p.is_given("size") && p.is_given("replica")) {
     *ss << "cannot specify both 'size' and 'replica' parameters; use 'replica' "
            "and 'num_zones' for new pools";
     return -EINVAL;
   }
   return 0;
+}
+
+void size_over_default_zones_as_replica(PoolCreateParams& p)
+{
+  if (p.pool_type == pg_pool_t::TYPE_REPLICATED && p.is_given("size") &&
+      !p.is_given("num_zones") && !p.is_given("replica") &&
+      p.num_zones > 1 && p.size > 0 && p.size <= MAX_POOL_REPLICA_COPIES &&
+      p.size % p.num_zones == 0) {
+    p.replica = p.size / p.num_zones;
+    p.given.insert("replica");
+    p.given.erase("size");
+    p.size = 0;
+  }
 }
 
 string effective_zone_failure_domain(const PoolCreateParams& p)
@@ -308,8 +326,12 @@ int check_pool_params(const PoolCreateParams& p,
       return -EINVAL;
     }
     if (p.is_given("size") && p.num_zones > 1) {
-      *ss << "cannot specify 'size' with num_zones > 1; use 'replica' parameter "
-             "instead" << p.from_default("num_zones");
+      *ss << "cannot specify 'size' with num_zones > 1";
+      if (!p.is_given("num_zones")) {
+        *ss << " unless it is a multiple of num_zones " << p.num_zones
+            << " (osd_pool_default_num_zones)";
+      }
+      *ss << "; use 'replica' parameter instead";
       return -EINVAL;
     }
     if (!p.is_given("size") &&
@@ -328,6 +350,26 @@ int check_pool_params(const PoolCreateParams& p,
     if (cluster.normalize_profile) {
       if (int r = cluster.normalize_profile(profile, ss); r < 0) {
         return r;
+      }
+    }
+    if (auto i = profile.find("stripe_unit"); i != profile.end()) {
+      string err;
+      const int64_t stripe_unit = strict_iecstrtoll(i->second, &err);
+      if (err.empty() && stripe_unit % 4096 != 0) {
+        if (p.num_zones > 1) {
+          *ss << "stripe_unit should be a multiple of 4096 bytes, not "
+              << i->second << p.from_default("stripe_unit")
+              << ": a pool over zones is a FastEC pool, which needs one";
+          return -EINVAL;
+        }
+        if (!p.yes_i_really_mean_it) {
+          *ss << "stripe_unit should be a multiple of 4096 bytes for best "
+              << "performance, not " << i->second
+              << p.from_default("stripe_unit")
+              << "; only ceph osd pool create --yes-i-really-mean-it "
+              << "accepts it";
+          return -EINVAL;
+        }
       }
     }
     // the LRC plugin checks its own k, m and l, and adds local parity chunks
@@ -450,7 +492,7 @@ int check_pool_defaults(const PoolCreateParams& p,
   if (p.ec_params_given() || p.is_given("erasure_code_profile")) {
     types.insert(pg_pool_t::TYPE_ERASURE);
   }
-  if (p.is_given("replica") || p.is_given("size")) {
+  if (p.is_given("replica")) {
     types.insert(pg_pool_t::TYPE_REPLICATED);
   }
   for (int type : types) {
@@ -477,8 +519,7 @@ const std::map<string, string>& pool_default_options()
     {"osd_failure_domain", "osd_pool_default_osd_failure_domain"},
     {"root", "osd_pool_default_root"},
     {"class", "osd_pool_default_class"},
-    {"replica", "osd_pool_default_replica"},
-    {"size", "osd_pool_default_replica"},
+    {"replica", "osd_pool_default_size"},
     {"min_size", "osd_pool_default_min_size"},
     {"pg_num", "osd_pool_default_pg_num"},
     {"pgp_num", "osd_pool_default_pgp_num"},

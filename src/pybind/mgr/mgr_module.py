@@ -1242,12 +1242,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def default_pool_size(self) -> int:
         """
         The size of a new replicated pool: osd_pool_default_num_zones times
-        osd_pool_default_replica, which 0 leaves to its legacy name
-        osd_pool_default_size.
+        osd_pool_default_size, which counts the copies in each zone.
         """
-        replica = cast(int, self.get_ceph_option("osd_pool_default_replica"))
-        if not replica:
-            replica = cast(int, self.get_ceph_option("osd_pool_default_size"))
+        replica = cast(int, self.get_ceph_option("osd_pool_default_size"))
         num_zones = cast(int, self.get_ceph_option("osd_pool_default_num_zones"))
         return num_zones * replica
 

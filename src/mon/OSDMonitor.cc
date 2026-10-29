@@ -8221,7 +8221,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
             : g_conf().get_osd_pool_default_min_size(*size);
     } else { // Use size parameter (legacy)
       if (repl_size == 0) {
-        repl_size = g_conf().get_osd_pool_default_replica();
+        repl_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
       }
       *size = repl_size;
       if (!set_min_size)
@@ -8693,16 +8693,12 @@ int OSDMonitor::prepare_new_pool(string& name,
     }
     return r;
   }
-  // set zone_failure_domain to default value if it is not set for stretch
-  string effective_zone_failure_domain = zone_failure_domain;
-  if (num_zones > 1 && zone_failure_domain.empty())
-    effective_zone_failure_domain = g_conf().get_val<string>("osd_pool_default_zone_failure_domain");
 
   // a new stretch pool must divide the cluster as stretch mode does
   if (stretch_mode_enabled_or_pending() && num_zones > 1) {
     CrushWrapper newcrush = _get_pending_crush();
     r = validate_joining_pool(newcrush, crush_rule,
-                              effective_zone_failure_domain, -1, ss);
+                              zone_failure_domain, -1, ss);
     if (r) {
       dout(10) << "validate_stretch_mode_pool returns " << r << dendl;
       *ss << rule_defaults;
@@ -8782,7 +8778,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   // a pool over zones in its zones, and its share in each
   if (num_zones > 1) {
     r = check_rule_places_pool(crush_rule, pool_type, num_zones,
-                               effective_zone_failure_domain, size, ss);
+                               zone_failure_domain, size, ss);
     if (r) {
       *ss << rule_defaults;
       return r;
@@ -9007,18 +9003,18 @@ int OSDMonitor::prepare_new_pool(string& name,
       // the MonMap and the pool commit together, in one Paxos round
       paxos.plug();
       mon.monmon()->try_enable_stretch_mode(stretch_ss, &okay, &errcode, true, "",
-                                            effective_zone_failure_domain, crush);
+                                            zone_failure_domain, crush);
       ceph_assert(okay);
       request_proposal(mon.monmon());
       paxos.unplug();
       force_immediate_propose();
     }
     try_enable_stretch_mode(stretch_ss, &okay, &errcode, true,
-                            effective_zone_failure_domain, num_zones,
+                            zone_failure_domain, num_zones,
                             set<pg_pool_t*>{pi}, "", crush, false);
     ceph_assert(okay);
     dout(20) << __func__ << " enabled stretch mode for pool " << name
-             << " across " << num_zones << " " << effective_zone_failure_domain
+             << " across " << num_zones << " " << zone_failure_domain
              << " zones" << dendl;
   }
 
@@ -9925,6 +9921,10 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -ENOTSUP;
     }
     if (p.get_num_zones() > 1) {
+      // tools that apply a pool's settings again set the size it has
+      if (!interr.length() && n == p.get_size()) {
+        return 0;
+      }
       ss << "cannot set 'size' for stretch pools (num_zones=" << p.get_num_zones()
          << "); use 'replica' parameter instead";
       return -EINVAL;
@@ -9956,10 +9956,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       }
     }
     p.size = n;
-    // Only adjust min_size if it becomes invalid (exceeds new size)
-    if (p.min_size > n) {
-      p.min_size = g_conf().get_osd_pool_default_min_size(p.size);
-    }
+    p.min_size = g_conf().get_osd_pool_default_min_size(p.size);
     // When setting size directly (legacy) in a single zone, update replica to match size.
     p.replica = n;
   } else if (var == "min_size") {
@@ -15503,6 +15500,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (err) {
       goto reply_no_propose;
     }
+    size_over_default_zones_as_replica(params);
     if (!num_zones_supported() && params.num_zones != 1) {
       ss << "a pool with num_zones " << params.num_zones
          << " cannot be created until " << num_zones_upgrade_hint();
@@ -17906,7 +17904,8 @@ PoolCreateCluster OSDMonitor::pool_create_cluster(CrushWrapper& crush)
           << "'plugin' entry in the erasure_code_profile " << profile;
       return -EINVAL;
     }
-    return normalize_profile("", profile, false, ss);
+    // check_pool_params() checks the stripe unit itself
+    return normalize_profile("", profile, true, ss);
   };
   cluster.validate_stretch = [this, &crush](const string& zone,
                                            int64_t num_zones,

@@ -2865,7 +2865,7 @@ void PGMap::get_health_checks(
   if (warn_too_few_osds && osdmap.get_num_osds() < pool_size) {
     ostringstream ss;
     ss << "OSD count " << osdmap.get_num_osds()
-       << " < osd_pool_default_num_zones * osd_pool_default_replica "
+       << " < osd_pool_default_num_zones * osd_pool_default_size "
        << pool_size;
     checks->add("TOO_FEW_OSDS", HEALTH_WARN, ss.str(),
                 pool_size - osdmap.get_num_osds());

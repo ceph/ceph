@@ -36,10 +36,6 @@ protected:
     ASSERT_EQ(0, cct->_conf.set_val(name, value));
   }
 
-  uint64_t replica() const {
-    return cct->_conf.get_osd_pool_default_replica();
-  }
-
   uint64_t total_size() const {
     return cct->_conf.get_osd_pool_default_total_size();
   }
@@ -54,49 +50,14 @@ protected:
   }
 };
 
-// Test the built-in replica default is 3
-TEST_F(PoolDefaultsTest, ReplicaDefaultIsThree) {
-  EXPECT_EQ(3u, replica());
+// Test the built-in replicas per zone default is 3
+TEST_F(PoolDefaultsTest, SizeDefaultIsThree) {
+  EXPECT_EQ(3u, cct->_conf.get_val<uint64_t>("osd_pool_default_size"));
 }
 
-// Test replica 0 falls back to the legacy osd_pool_default_size
-TEST_F(PoolDefaultsTest, ReplicaZeroUsesLegacySize) {
-  set("osd_pool_default_replica", "0");
-  set("osd_pool_default_size", "2");
-  EXPECT_EQ(2u, replica());
-}
-
-// Test the legacy osd_pool_default_size still sets the default on its own
-TEST_F(PoolDefaultsTest, LegacySizeAloneSetsReplica) {
-  set("osd_pool_default_size", "5");
-  EXPECT_EQ(5u, replica());
-}
-
-// Test osd_pool_default_replica wins over the legacy osd_pool_default_size
-TEST_F(PoolDefaultsTest, ReplicaOverridesLegacySize) {
-  set("osd_pool_default_size", "3");
-  set("osd_pool_default_replica", "2");
-  EXPECT_EQ(2u, replica());
-}
-
-// Test osd_pool_default_replica wins even when it is smaller than size
-TEST_F(PoolDefaultsTest, ReplicaOneOverridesLegacySize) {
-  set("osd_pool_default_size", "3");
-  set("osd_pool_default_replica", "1");
-  EXPECT_EQ(1u, replica());
-}
-
-// Test setting replica back to 0 returns to the legacy value
-TEST_F(PoolDefaultsTest, ReplicaBackToZeroUsesLegacySize) {
-  set("osd_pool_default_size", "4");
-  set("osd_pool_default_replica", "2");
-  set("osd_pool_default_replica", "0");
-  EXPECT_EQ(4u, replica());
-}
-
-// Test failure when osd_pool_default_replica is above the maximum
-TEST_F(PoolDefaultsTest, ReplicaAboveMaximumFails) {
-  EXPECT_NE(0, cct->_conf.set_val("osd_pool_default_replica", "11"));
+// Test failure when osd_pool_default_size is above the maximum
+TEST_F(PoolDefaultsTest, SizeAboveMaximumFails) {
+  EXPECT_NE(0, cct->_conf.set_val("osd_pool_default_size", "11"));
 }
 
 // Test the zone failure domain default keeps its built-in value
@@ -135,8 +96,9 @@ TEST_F(PoolDefaultsTest, PlacementDefaultsCanBeSet) {
   EXPECT_EQ("ssd", cct->_conf.get_val<string>("osd_pool_default_class"));
 }
 
-// Test the stretch-only replica option and the old zone option name are gone
+// Test the replica options and the old zone option name are gone
 TEST_F(PoolDefaultsTest, OldOptionNamesAreGone) {
+  EXPECT_EQ(nullptr, cct->_conf.find_option("osd_pool_default_replica"));
   EXPECT_EQ(nullptr, cct->_conf.find_option("osd_pool_stretch_default_replica"));
   EXPECT_EQ(nullptr, cct->_conf.find_option("default_crush_zone_failure_domain"));
 }
@@ -149,30 +111,15 @@ TEST_F(PoolDefaultsTest, TotalSizeDefaultIsThree) {
 // Test the size of a new pool is num_zones times the replicas per zone
 TEST_F(PoolDefaultsTest, TotalSizeTwoZones) {
   set("osd_pool_default_num_zones", "2");
-  set("osd_pool_default_replica", "2");
-  EXPECT_EQ(4u, total_size());
-}
-
-// Test the legacy size counts as the replicas per zone
-TEST_F(PoolDefaultsTest, TotalSizeTwoZonesLegacySize) {
-  set("osd_pool_default_num_zones", "2");
   set("osd_pool_default_size", "3");
   EXPECT_EQ(6u, total_size());
 }
 
 // Test a simple OSDMap's pool has the default replica count
-TEST_F(PoolDefaultsTest, SimplePoolTakesReplica) {
-  set("osd_pool_default_replica", "2");
+TEST_F(PoolDefaultsTest, SimplePoolTakesSize) {
+  set("osd_pool_default_size", "2");
   const pg_pool_t p = simple_pool();
   EXPECT_EQ(2u, p.size);
   EXPECT_EQ(2u, p.replica);
   EXPECT_EQ(1u, p.num_zones);
-}
-
-// Test a simple OSDMap's pool still follows the legacy size
-TEST_F(PoolDefaultsTest, SimplePoolTakesLegacySize) {
-  set("osd_pool_default_size", "1");
-  const pg_pool_t p = simple_pool();
-  EXPECT_EQ(1u, p.size);
-  EXPECT_EQ(1u, p.replica);
 }

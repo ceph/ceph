@@ -2632,21 +2632,7 @@ options:
   - mon
   min: 0
   max: 10
-  flags:
-  - runtime
-- name: osd_pool_default_replica
-  type: uint
-  level: advanced
-  desc: the number of copies per zone of an object for new replicated pools
-  long_desc: A replicated pool with num_zones zones gets num_zones times this many copies.
-    0 uses osd_pool_default_size, the legacy name of this option; any other value overrides it.
-  default: 0
-  services:
-  - mon
-  min: 0
-  max: 10
   see_also:
-  - osd_pool_default_size
   - osd_pool_default_num_zones
   flags:
   - runtime
