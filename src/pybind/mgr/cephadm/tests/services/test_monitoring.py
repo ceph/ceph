@@ -1852,6 +1852,82 @@ class TestMonitoring:
                                     "      path: '/etc/grafana/provisioning/dashboards'"
                             }}, ['certificate_source: cephadm-signed', 'secure_monitoring_stack:False'])
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.0.2.1')
+    def test_grafana_not_deployed_without_tls_credentials(self, cephadm_module: CephadmOrchestrator):
+        """With ssl enabled and no cert/key available, Grafana is not placed and
+        CEPHADM_DAEMON_PLACE_FAIL reports why."""
+        from orchestrator import OrchestratorError
+        from cephadm.tests.fixtures import wait
+
+        cephadm_module._init_cert_mgr()
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec('mgr')) as _:
+                # applied directly: the reference provisioning warning is part of the apply output
+                wait(cephadm_module, cephadm_module.apply([GrafanaSpec(certificate_source='reference')]))
+                CephadmServe(cephadm_module)._apply_all_services()
+
+                assert cephadm_module.cache.get_daemons_by_service('grafana') == []
+                place_fail = cephadm_module.health_checks.get('CEPHADM_DAEMON_PLACE_FAIL')
+                assert place_fail is not None
+                assert any('Cannot get the TLS certificate/key needed to deploy Grafana on test' in d
+                           for d in place_fail['detail'])
+
+                with pytest.raises(OrchestratorError, match='certificate_source: reference'):
+                    service_registry.get_service('grafana').generate_config(
+                        DaemonDeployContext(CephadmDaemonDeploySpec('test', 'daemon', 'grafana')))
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.0.2.1')
+    def test_grafana_reconfig_without_tls_credentials_keeps_running_daemon(self, cephadm_module: CephadmOrchestrator):
+        """Reconfiguring a running Grafana whose reference cert/key is no longer
+        available fails before anything is sent to the host, so the daemon keeps
+        its current configuration; the scheduled reconfig stays queued."""
+        from orchestrator import OrchestratorError
+        from cephadm.tests.fixtures import wait
+
+        cephadm_module._init_cert_mgr()
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', ceph_generated_cert, host='test',
+                                              user_made=True, editable=True)
+            cephadm_module.cert_mgr.save_key('grafana_ssl_key', ceph_generated_key, host='test',
+                                             user_made=True, editable=True)
+            with with_service(cephadm_module, ServiceSpec('mgr')) as _:
+                wait(cephadm_module, cephadm_module.apply([GrafanaSpec(certificate_source='reference')]))
+                CephadmServe(cephadm_module)._apply_all_services()
+                [dd] = cephadm_module.cache.get_daemons_by_service('grafana')
+
+                cephadm_module.cert_mgr.rm_key('grafana_ssl_key', host='test')
+
+                with patch('cephadm.serve.CephadmServe._create_daemon') as create_daemon:
+                    # direct reconfig
+                    with pytest.raises(OrchestratorError, match='Cannot get the TLS certificate/key'):
+                        cephadm_module._daemon_action(
+                            CephadmDaemonDeploySpec.from_daemon_description(dd), 'reconfig')
+                    # reconfig scheduled by 'orch reconfig' and run by the serve loop
+                    cephadm_module._schedule_daemon_action(dd.name(), 'reconfig')
+                    CephadmServe(cephadm_module)._check_daemons()
+                    create_daemon.assert_not_called()
+
+                assert cephadm_module.cache.get_scheduled_daemon_action('test', dd.name()) == 'reconfig'
+                assert cephadm_module.cache.get_daemons_by_service('grafana') == [dd]
+                # reported on the daemon, as 'orch ps' shows it
+                assert any(e.level == 'ERROR' and 'Cannot get the TLS certificate/key' in e.message
+                           for e in cephadm_module.events.get_for_daemon(dd.name()))
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.0.2.1')
+    def test_grafana_deployed_without_tls_credentials_when_ssl_disabled(self, cephadm_module: CephadmOrchestrator):
+        """With ssl disabled, Grafana is configured without TLS credentials."""
+        cephadm_module._init_cert_mgr()
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec('mgr')) as _, \
+                    with_service(cephadm_module, GrafanaSpec(ssl=False, protocol='http')):
+                config, _ = service_registry.get_service('grafana').generate_config(
+                    DaemonDeployContext(CephadmDaemonDeploySpec('test', 'daemon', 'grafana')))
+                assert 'protocol = http' in config['files']['grafana.ini']
+                assert config['files']['certs/cert_file'] == '# generated by cephadm\n'
+
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_monitoring_ports(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
