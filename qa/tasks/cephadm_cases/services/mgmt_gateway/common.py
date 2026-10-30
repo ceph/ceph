@@ -323,6 +323,53 @@ class GatewayTestCase(ServicesTestCase):
         self.assertEqual(res['status'], 200, f'login did not land on a page: {res}')
 
     # ------------------------------------------------------------------
+    # failure injection
+    # ------------------------------------------------------------------
+    def daemon_state(self, daemon_name: str) -> str:
+        for d in self.ceph_json('orch', 'ps') or []:
+            if d.get('daemon_name') == daemon_name:
+                return str(d.get('status_desc'))
+        return 'absent'
+
+    def stop_daemon(self, daemon_name: str, force: bool = False) -> None:
+        """Stop a daemon. cephadm refuses to stop a service's last daemon
+        unless forced: tests that take a non-redundant service down on
+        purpose pass force=True."""
+        self.orch('daemon', 'stop', daemon_name, *(['--force'] if force else []))
+        self.poll(f'{daemon_name} stopped',
+                  lambda: self.daemon_state(daemon_name) != 'running',
+                  timeout=300, kick=True)
+
+    def start_daemon(self, daemon_name: str) -> None:
+        self.orch('daemon', 'start', daemon_name)
+        self.poll(f'{daemon_name} running',
+                  lambda: self.daemon_state(daemon_name) == 'running',
+                  timeout=600, kick=True)
+
+    @classmethod
+    def fail_closed(cls, res: Dict[str, Any]) -> bool:
+        """The request did not reach a backend: an error, no answer, or a
+        redirect to login."""
+        if 200 <= res['status'] < 300:
+            return False
+        if 300 <= res['status'] < 400:
+            return cls._sent_to_login(res)
+        return True
+
+    def session_checks(self, origin: str, jar: str,
+                       down: Sequence[str] = ()) -> List[Check]:
+        """A logged-in user's view: every route is served, except the
+        routes of the services in 'down', which must report the outage."""
+        r = self.http_many([{'url': f'{origin}{path}', 'jar': jar} for _, path in SSO_ROUTES])
+        out: List[Check] = []
+        for (svc, path), res in zip(SSO_ROUTES, r):
+            if svc in down:
+                out.append((f'{path} reports {svc} is down', res['status'] in (502, 503, 504)))
+            else:
+                out.append((f'{path} served with the session', res['status'] == 200))
+        return out
+
+    # ------------------------------------------------------------------
     # mode checks
     # ------------------------------------------------------------------
     @staticmethod
