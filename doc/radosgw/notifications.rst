@@ -738,7 +738,7 @@ For example:
                "principalId":"tester"
            },
            "requestParameters":{
-               "sourceIPAddress":""
+               "sourceIPAddress":"192.168.1.10"
            },
            "responseElements":{
                "x-amz-request-id":"503a4c37-85eb-47cd-8681-2817e80b4281.5330.903595",
@@ -775,7 +775,10 @@ For example:
 - ``eventName``: For a list of supported events, see: :ref:`radosgw-s3-notification-compatibility`.
   Note that ``eventName`` values do not start with the ``s3:`` prefix.
 - ``userIdentity.principalId``: The user that triggered the change
-- ``requestParameters.sourceIPAddress``: Not supported
+- ``requestParameters.sourceIPAddress``: The client's address, as
+  ``rgw_remote_addr_param`` selects it, or the connection's when that is unset.
+  It is empty for an event no client request caused, such as a lifecycle
+  expiration or the completion of a restore.
 - ``responseElements.x-amz-request-id``: The request ID of the original change
 - ``responseElements.x_amz_id_2``: The RGW on which the change was made
 - ``s3.configurationId``: The notification ID that created the event
