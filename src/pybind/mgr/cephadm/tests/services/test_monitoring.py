@@ -10,6 +10,7 @@ from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext, _get_dashboard_server_addr
 from cephadm.services.monitoring import AlertmanagerService, PrometheusService
+from cephadm.services.service_discovery import SD_USERNAME_KEY, SD_PASSWORD_KEY
 from cephadm.services.smb import SMBSpec
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import (
@@ -790,6 +791,39 @@ class TestMonitoring:
                     error_ok=True,
                 )
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.module.CephadmOrchestrator._get_mgr_ips", lambda _: ['::1'])
+    @patch("cephadm.services.monitoring.prometheus.password_hash", lambda password: 'prometheus_password_hash')
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
+    @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
+           lambda instance, dspec, ips=None, fqdns=None, ca_cert_required=False: TLSCredentials('mycert', 'mykey'))
+    def test_prometheus_sd_credentials_on_security_enabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Security enabled at runtime: prometheus gets the stored service
+        discovery credentials, which the service discovery server accepts,
+        without depending on the server having restarted with auth."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.secure_monitoring_stack = True
+            sd = cephadm_module.http_server.service_discovery
+            with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
+                    with_service(cephadm_module, PrometheusSpec('prometheus')) as _:
+                prom_yml = None
+                for call in _run_cephadm.call_args_list:
+                    stdin = call.kwargs.get('stdin')
+                    if stdin:
+                        files = json.loads(stdin).get('config_blobs', {}).get('files', {})
+                        prom_yml = files.get('prometheus.yml', prom_yml)
+                assert prom_yml is not None, 'prometheus was not deployed'
+                sd_configs = [sd_cfg for job in yaml.safe_load(prom_yml)['scrape_configs']
+                              for sd_cfg in job.get('http_sd_configs', [])]
+                assert sd_configs
+                username = cephadm_module.get_store(SD_USERNAME_KEY)
+                password = cephadm_module.get_store(SD_PASSWORD_KEY)
+                assert username and password
+                for sd_cfg in sd_configs:
+                    assert sd_cfg['basic_auth'] == {'username': username, 'password': password}
+                assert sd.validate_password('localhost', username, password)
+
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator._get_mgr_ips", lambda _: ['::1'])
@@ -811,8 +845,8 @@ class TestMonitoring:
             cephadm_module.set_store(PrometheusService.PASS_CFG_KEY, 'prometheus_plain_password')
             cephadm_module.set_store(AlertmanagerService.USER_CFG_KEY, 'alertmanager_user')
             cephadm_module.set_store(AlertmanagerService.PASS_CFG_KEY, 'alertmanager_plain_password')
-            cephadm_module.http_server.service_discovery.username = 'sd_user'
-            cephadm_module.http_server.service_discovery.password = 'sd_password'
+            cephadm_module.set_store(SD_USERNAME_KEY, 'sd_user')
+            cephadm_module.set_store(SD_PASSWORD_KEY, 'sd_password')
             # host "test" needs to have networks for keepalive to be placed
             cephadm_module.cache.update_host_networks('test', {
                 '1.2.3.0/24': {

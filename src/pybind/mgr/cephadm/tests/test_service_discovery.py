@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 from typing import List
-from cephadm.services.service_discovery import Root
+from cephadm.services.service_discovery import Root, ServiceDiscovery, SD_USERNAME_KEY, SD_PASSWORD_KEY
 from cephadm.services.service_registry import service_registry
 
 
@@ -316,3 +316,46 @@ class TestServiceDiscovery:
         root = Root(mgr)
         cfg = root.get_sd_config('invalid-service')
         assert cfg == []
+
+
+class FakeStoreMgr:
+    def __init__(self, store=None):
+        self.store = dict(store or {})
+
+    def get_store(self, key):
+        return self.store.get(key)
+
+    def set_store(self, key, value):
+        self.store[key] = value
+
+
+class TestServiceDiscoveryCredentials:
+
+    def test_credentials_created_on_init(self):
+        mgr = FakeStoreMgr()
+        sd = ServiceDiscovery(mgr)
+        username = mgr.store[SD_USERNAME_KEY]
+        password = mgr.store[SD_PASSWORD_KEY]
+        assert username and password
+        assert sd.get_credentials() == (username, password)
+        # a later instance (mgr restart or failover) keeps them
+        ServiceDiscovery(mgr)
+        assert mgr.store == {SD_USERNAME_KEY: username, SD_PASSWORD_KEY: password}
+
+    def test_credentials_from_store(self):
+        stored = {SD_USERNAME_KEY: 'user', SD_PASSWORD_KEY: 'secret'}
+        mgr = FakeStoreMgr(stored)
+        sd = ServiceDiscovery(mgr)
+        assert sd.get_credentials() == ('user', 'secret')
+        assert mgr.store == stored
+
+    def test_validate_password_uses_stored_credentials(self):
+        mgr = FakeStoreMgr({SD_USERNAME_KEY: 'user', SD_PASSWORD_KEY: 'secret'})
+        sd = ServiceDiscovery(mgr)
+        assert sd.validate_password('localhost', 'user', 'secret')
+        assert not sd.validate_password('localhost', 'user', 'wrong')
+        assert not sd.validate_password('localhost', 'other', 'secret')
+        # follows the store, with no cached copy to get out of date
+        mgr.set_store(SD_PASSWORD_KEY, 'rotated')
+        assert sd.validate_password('localhost', 'user', 'rotated')
+        assert not sd.validate_password('localhost', 'user', 'secret')
