@@ -1035,3 +1035,13 @@
    fun:*opendal*register_default_operator_registry*
    ...
 }
+{
+   lancedb static init, matched by object since the packaged librgw_lancedb.so is stripped
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   obj:*/librgw_lancedb.so*
+   ...
+   fun:call_init*
+   ...
+}
