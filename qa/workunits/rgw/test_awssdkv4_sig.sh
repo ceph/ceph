@@ -43,7 +43,58 @@ else
   cd $CEPH_ROOT/qa/workunits/rgw/jcksum
 fi
 
-./mvnw clean package
-./mvnw test -Dtest=PutObjects
+# we were getting 429 HTTP responses from:
+# https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.6/apache-maven-3.9.6-bin.zip
+# so the code below allows us to point at a different repo
+
+# default_maven_repo="https://repo.maven.apache.org/maven2"
+
+alt_maven_repo="https://maven-central.storage-download.googleapis.com/maven2"
+
+gradle_settings="~/.gradle/init.gradle"
+maven_settings="/tmp/test_awssdkv4_sig-settings-${$}.xml"
+
+# insures all subdirectories exist for the file path given as $1
+insure_subdir() {
+    dir=$(dirname $1)
+    if [ -d $dir ] ;then
+	:
+    else
+	mkdir -p $dir
+    fi
+}
+
+insure_subdir $gradle_settings
+cat >${gradle_settings} <<EOF
+pluginManagement {
+    repositories {
+        maven {
+            url "$alt_maven_repo"
+        }
+    }
+}
+EOF
+
+insure_subdir $maven_settings
+cat >$maven_settings <<EOF
+<settings>
+  <mirrors>
+    <mirror>
+      <id>alternative-repo</id>
+      <name>Alternative Repository Mirror</name>
+      <!-- Your local proxy, company Nexus/Artifactory, or cloud mirror URL -->
+      <url>${alt_maven_repo}</url>
+      <mirrorOf>*</mirrorOf>
+    </mirror>
+  </mirrors>
+</settings>
+EOF
+
+export MVNW_REPOURL="$alt_maven_repo"
+
+./mvnw clean package -s $maven_settings
+./mvnw test -Dtest=PutObjects -s $maven_settings
+
+rm -f $maven_settings $gradle_savings
 
 exit
