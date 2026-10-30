@@ -236,6 +236,7 @@ class NFSCluster:
             enable_rdma: bool = False,
             rdma_port: Optional[int] = None,
             ingress_placement: Optional[str] = None,
+            clients_per_pool: Optional[int] = None,
     ) -> None:
         if not port:
             port = 2049   # default nfs port
@@ -291,7 +292,8 @@ class NFSCluster:
                                   monitoring_ip_addrs=monitoring_ip_addrs,
                                   monitoring_port=monitoring_port,
                                   enable_rdma=enable_rdma,
-                                  rdma_port=rdma_port)
+                                  rdma_port=rdma_port,
+                                  clients_per_pool=clients_per_pool)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
@@ -329,7 +331,8 @@ class NFSCluster:
                                   monitoring_ip_addrs=monitoring_ip_addrs,
                                   monitoring_port=monitoring_port,
                                   enable_rdma=enable_rdma,
-                                  rdma_port=rdma_port)
+                                  rdma_port=rdma_port,
+                                  clients_per_pool=clients_per_pool)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
         log.debug("Successfully deployed nfs daemons with cluster id %s and placement %s",
@@ -374,6 +377,7 @@ class NFSCluster:
             enable_rdma: bool = False,
             rdma_port: Optional[int] = None,
             ingress_placement: Optional[str] = None,
+            clients_per_pool: Optional[int] = None,
     ) -> None:
         try:
             if virtual_ip:
@@ -423,7 +427,8 @@ class NFSCluster:
                     monitoring_port=monitoring_port,
                     enable_rdma=enable_rdma,
                     rdma_port=rdma_port,
-                    ingress_placement=ingress_placement
+                    ingress_placement=ingress_placement,
+                    clients_per_pool=clients_per_pool
                 )
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
@@ -440,18 +445,33 @@ class NFSCluster:
                 orchestrator.raise_if_exception(completion)
                 completion = self.mgr.remove_service('nfs.' + cluster_id)
                 orchestrator.raise_if_exception(completion)
-                self.delete_config_obj(cluster_id)
-                return
             # The NFS service may have already been removed via 'ceph orch rm'.
             # Check if orphaned RADOS config objects remain and clean them up.
-            if self._rados(cluster_id).has_objects():
+            elif self._rados(cluster_id).has_objects():
                 log.warning(
                     f"NFS cluster '{cluster_id}' not found in orchestrator but RADOS objects "
                     f"still exist. Cleaning up orphaned objects."
                 )
+            else:
+                raise NonFatalError("Cluster does not exist")
+            export_mgr = self.mgr.export_mgr
+            with export_mgr._ceph_users_locked(cluster_id):
+                # A cluster taken down through its exports has already retired
+                # its pool users. One whose service went away under 'ceph orch
+                # rm' never ran that path, so its CephX users are still around
+                # and the CEPH_USERS object naming them is about to go with
+                # the rest of the namespace. Retire them while it can still be
+                # read, or nothing records them again.
+                ceph_users = export_mgr._read_ceph_users(cluster_id)
+                if ceph_users and ceph_users.users:
+                    export_mgr._remove_pool_users(ceph_users.users)
                 self.delete_config_obj(cluster_id)
-                return
-            raise NonFatalError("Cluster does not exist")
+            # The lock _ceph_users_locked() made for this cluster stays in
+            # its registry. Dropping it would race: a caller that resolved
+            # the lock but has not taken it yet would hold one the registry
+            # no longer has, and the next caller would make a second one and
+            # run beside it. Keeping it costs an RLock per cluster id the mgr
+            # has served, and that goes with the mgr.
         except Exception as e:
             log.exception(f"Failed to delete NFS Cluster {cluster_id}")
             raise ErrorResponse.wrap(e)
@@ -575,7 +595,8 @@ class NFSCluster:
                     )
                     if stale:
                         problems.append(
-                            f"exports left with a pre-rotation keyring: {', '.join(stale)}")
+                            "exports or client-pool users left with a "
+                            f"pre-rotation keyring: {', '.join(stale)}")
                 except Exception as e:
                     log.exception("Failed to refresh exports of cluster %s", cluster_id)
                     problems.append(f"failed to refresh export keyrings: {e}")
@@ -708,12 +729,14 @@ class NFSCluster:
         placement = None
         enable_nfsv3 = False
         enable_rdma = False
+        clients_per_pool = None
 
         # Use live describe_service output, not export matching, for the current cluster config.
         nfs_spec = get_nfs_spec_for_cluster(self.mgr, cluster_id)
         if nfs_spec:
             placement = nfs_spec.placement
             enable_rdma = bool(getattr(nfs_spec, 'enable_rdma', False))
+            clients_per_pool = getattr(nfs_spec, 'clients_per_pool', None)
 
         # Read the live NFS service spec from the orchestrator to reflect the current cluster config.
         nfs_sc = self.mgr.describe_service(
@@ -751,6 +774,8 @@ class NFSCluster:
             r['port'] = ingress_port
         if monitor_port is not None:
             r['monitor_port'] = monitor_port
+        if clients_per_pool is not None:
+            r['clients_per_pool'] = clients_per_pool
 
         log.debug("Successfully fetched %s info: %s", cluster_id, r)
         return r
