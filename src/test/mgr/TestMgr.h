@@ -350,6 +350,27 @@ public:
   }
 };
 
+class MgrTestHelper : public TestMgr {
+public:
+  LogChannelRef clog;
+  LogChannelRef audit_clog;
+  std::unique_ptr<PyModuleRegistry> py_registry;
+
+  void SetUp() override {
+    TestMgr::SetUp();
+    clog = std::make_shared<LogChannel>(cct.get(), nullptr, "cluster");
+    audit_clog = std::make_shared<LogChannel>(cct.get(), nullptr, "audit");
+    py_registry = std::make_unique<PyModuleRegistry>(clog);
+  }
+
+  void TearDown() override {
+    py_registry.reset();
+    audit_clog.reset();
+    clog.reset();
+    TestMgr::TearDown();
+  }
+};
+
 class MgrOpRequestTestHelper : public ::testing::Test {
 public:
   static inline boost::intrusive_ptr<CephContext> cct;
