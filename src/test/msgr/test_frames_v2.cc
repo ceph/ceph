@@ -423,8 +423,8 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::ValuesIn(round_trip_instances),
         ::testing::ValuesIn(modes)));
 
-// ProtocolV2 may crc a large segment in chunks while reading it and hand
-// FrameAssembler the result (ms_crc_data_rx_chunk_size). The epilogue check
+// ProtocolV2 may crc a segment while it is still arriving and hand
+// FrameAssembler the result (ms_crc_data_rx_incremental). The epilogue check
 // must then use that value, still catch corruption, and forget it by the
 // next frame.
 class PrecomputedRxCrcTest : public ::testing::TestWithParam<bool> {};
@@ -502,6 +502,51 @@ TEST_P(PrecomputedRxCrcTest, Checks) {
 }
 
 INSTANTIATE_TEST_SUITE_P(PrecomputedRxCrc, PrecomputedRxCrcTest,
+                         ::testing::Bool());
+
+// The sender may hand FrameAssembler a data crc it computed ahead of time
+// (ms_crc_data_tx_incremental). That value must be what goes on the wire,
+// and only for the next frame.
+class PrecomputedTxCrcTest : public ::testing::TestWithParam<bool> {};
+
+TEST_P(PrecomputedTxCrcTest, Checks) {
+  const bool is_rev1 = GetParam();
+  ceph::crypto::onwire::rxtx_t crypto;
+  ceph::compression::onwire::rxtx_t comp;
+  FrameAssembler tx_frame_asm(&crypto, is_rev1, true, &comp);
+  FrameAssembler rx_frame_asm(&crypto, is_rev1, true, &comp);
+  const auto header = make_bufferlist(16, 'H');
+  const auto front = make_bufferlist(64, 'F');
+  const auto middle = make_bufferlist(32, 'M');
+  const auto data = make_bufferlist(3 << 20, 'D');
+  ASSERT_TRUE(tx_frame_asm.can_precompute_tx_crc());
+
+  auto encode = [&] {
+    return TestFrame::Encode(header, front, middle, data).get_buffer(
+        tx_frame_asm);
+  };
+  auto receive = [&](bufferlist frame_bl) {
+    Tag tag;
+    segment_bls_t segment_bls;
+    EXPECT_TRUE(disassemble_frame(rx_frame_asm, frame_bl, tag, segment_bls));
+    EXPECT_TRUE(data.contents_equal(segment_bls[SegmentIndex::Msg::DATA]));
+  };
+
+  // the right value goes out and is accepted
+  tx_frame_asm.set_precomputed_tx_crc(SegmentIndex::Msg::DATA,
+                                      data.crc32c(-1));
+  receive(encode());
+
+  // a wrong one is what goes out, so the receiver rejects the frame
+  tx_frame_asm.set_precomputed_tx_crc(SegmentIndex::Msg::DATA,
+                                      data.crc32c(-1) ^ 1);
+  EXPECT_THROW(receive(encode()), FrameError);
+
+  // and it applied to that frame only
+  receive(encode());
+}
+
+INSTANTIATE_TEST_SUITE_P(PrecomputedTxCrc, PrecomputedTxCrcTest,
                          ::testing::Bool());
 
 class RoundTripPerfTest : public RoundTripTestBase {};

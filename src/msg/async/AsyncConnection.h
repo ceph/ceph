@@ -54,6 +54,13 @@ static const int ASYNC_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
 class AsyncConnection : public Connection {
   ssize_t read(unsigned len, char *buffer,
                std::function<void(char *, ssize_t)> callback);
+  // For the next read(): each time more of a large buffer has been filled
+  // from the socket, call progress(n) with the n bytes filled so far, so
+  // the caller can work through the data as it arrives rather than all at
+  // the end. Cleared when the read ends.
+  void set_read_progress(std::function<void(unsigned)> progress) {
+    readProgress = std::move(progress);
+  }
   ssize_t read_until(unsigned needed, char *p);
   ssize_t read_bulk(char *buf, unsigned len);
 
@@ -232,6 +239,9 @@ private:
   std::function<void(char *, ssize_t)> readCallback;
   std::optional<unsigned> pendingReadLen;
   char *read_buffer;
+  // called with how much of the buffer is filled as a large read
+  // progresses; see set_read_progress()
+  std::function<void(unsigned)> readProgress;
 
  public:
   // used by eventcallback

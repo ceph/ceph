@@ -1201,16 +1201,28 @@ options:
   desc: Set and/or verify crc32c checksum on data payload sent over network
   default: true
   with_legacy: true
-- name: ms_crc_data_rx_chunk_size
-  type: size
+- name: ms_crc_data_rx_incremental
+  type: bool
   level: dev
-  desc: Verify a received frame segment's data crc in chunks of this size
-    as the segment arrives, rather than in one pass once it has all been read
+  desc: Compute a received frame segment's data crc while the segment is
+    still arriving, rather than in one pass once it has all been read
   long_desc: msgr2 in crc mode only. A single pass over a large segment
     keeps the connection's worker from reading the socket for as long as the
-    pass takes; once the socket buffer fills the sender stalls too. Checking
-    each chunk as it lands keeps those pauses short. 0 disables.
-  default: 1_M
+    pass takes; if the socket buffer fills in that time, the sender stalls
+    too. With this on, the worker crcs the data a socket read at a time as
+    it arrives, so no single pass is longer than one read.
+  default: true
+  with_legacy: true
+- name: ms_crc_data_tx_incremental
+  type: bool
+  level: dev
+  desc: Compute the data crc of the next queued message while the socket is
+    full, rather than in one pass when its frame is assembled
+  long_desc: msgr2 in crc mode only. A frame's crcs are computed before any
+    of it can be sent; for a large message that pass leaves the socket to
+    drain and then idle. With this on, the worker crcs the next queued
+    message's data a step at a time whenever it is waiting for the socket.
+  default: true
   with_legacy: true
 - name: ms_crc_header
   type: bool

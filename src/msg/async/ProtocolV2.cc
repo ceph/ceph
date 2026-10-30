@@ -158,6 +158,7 @@ void ProtocolV2::discard_out_queue() {
     }
   }
   out_queue.clear();
+  tx_crc_msg.reset();
   write_in_progress = false;
 }
 
@@ -209,6 +210,7 @@ void ProtocolV2::fault() { _fault(); }
 
 void ProtocolV2::requeue_sent() {
   write_in_progress = false;
+  tx_crc_msg.reset();
   if (sent.empty()) {
     return;
   }
@@ -283,6 +285,7 @@ void ProtocolV2::reset_recv_state() {
 
   // clean read and write callbacks
   connection->pendingReadLen.reset();
+  connection->readProgress = nullptr;
   connection->writeCallback = {};
 
   next_tag = static_cast<Tag>(0);
@@ -532,6 +535,95 @@ ProtocolV2::out_queue_entry_t ProtocolV2::_get_next_outgoing() {
   return out_entry;
 }
 
+// Advance *crc over up to `budget` bytes of data from *off, buffer by buffer,
+// the way list::crc32c() does: a buffer whose crc is cached costs nothing,
+// and one computed in full (from its start, with *base the crc there) is
+// cached in turn. Returns false if *off no longer falls in data.
+static bool crc32c_step(const ceph::bufferlist& data, uint32_t* crc,
+                        uint32_t* off, uint32_t* base, uint32_t budget) {
+  uint32_t start = 0;
+  for (const auto& node : data.buffers()) {
+    const uint32_t end = start + node.length();
+    if (budget == 0) {
+      break;
+    }
+    if (*off < end && node.length() > 0) {
+      if (*off == start) {
+        *base = *crc;
+        if (auto c = node.cached_crc32c(*crc); c) {
+          *crc = *c;
+          *off = end;
+          start = end;
+          continue;
+        }
+      }
+      const uint32_t n = std::min(budget, end - *off);
+      *crc = ceph_crc32c(*crc, reinterpret_cast<const unsigned char*>(
+                                   node.c_str() + (*off - start)), n);
+      *off += n;
+      budget -= n;
+      if (*off == end) {
+        node.set_crc32c_cache(*base, *crc);
+      }
+    }
+    start = end;
+  }
+  return *off <= data.length();
+}
+
+// Assembling a frame crcs each segment before any of it can be sent. For a
+// large data segment that is a long pass (~1 ms for 24 MiB) during which
+// the socket drains and, once it's empty, the connection idles. So while
+// the socket is full, crc the next queued message's data a step at a time,
+// and hand the result to the frame assembler when that message goes out.
+// Must hold write_lock.
+void ProtocolV2::precompute_tx_crc() {
+  static constexpr uint32_t step = 1 << 20;
+  if (!cct->_conf->ms_crc_data_tx_incremental ||
+      !tx_frame_asm.can_precompute_tx_crc() || out_queue.empty()) {
+    return;
+  }
+  auto& next = out_queue.begin()->second.front();
+  if (!next.is_prepared) {
+    // encoding builds some messages' data (e.g. MOSDOp merges its ops' data),
+    // so do now what write_event() would when it reaches this message
+    prepare_send_message(connection->get_features(), next.m);
+    next.is_prepared = true;
+  }
+  const auto& data = next.m->get_data();
+  if (next.m != tx_crc_msg || data.length() != tx_crc_data_len ||
+      data.get_num_buffers() != tx_crc_data_bufs ||
+      (data.length() && data.front().c_str() != tx_crc_data_front)) {
+    tx_crc_msg = next.m;
+    tx_crc = -1;
+    tx_crc_off = 0;
+    tx_crc_data_len = data.length();
+    tx_crc_data_bufs = data.get_num_buffers();
+    tx_crc_data_front = data.length() ? data.front().c_str() : nullptr;
+  }
+  crc32c_step(data, &tx_crc, &tx_crc_off, &tx_crc_base, step);
+}
+
+// Finish the crc precompute_tx_crc() started for m, if it did, and give it
+// to the frame assembler for m's data segment.
+void ProtocolV2::use_precomputed_tx_crc(const MessageRef& m) {
+  if (m != tx_crc_msg) {
+    return;
+  }
+  tx_crc_msg.reset();
+  const auto& data = m->get_data();
+  if (data.length() == 0 || !tx_frame_asm.can_precompute_tx_crc()) {
+    return;
+  }
+  if (data.length() != tx_crc_data_len ||
+      data.get_num_buffers() != tx_crc_data_bufs ||
+      data.front().c_str() != tx_crc_data_front) {
+    return;  // preparing the message replaced its data
+  }
+  crc32c_step(data, &tx_crc, &tx_crc_off, &tx_crc_base, UINT32_MAX);
+  tx_frame_asm.set_precomputed_tx_crc(SegmentIndex::Msg::DATA, tx_crc);
+}
+
 ssize_t ProtocolV2::write_message(const MessageRef& m, bool more) {
   FUNCTRACE(cct);
   ceph_assert(connection->center->in_thread());
@@ -694,6 +786,7 @@ void ProtocolV2::write_event() {
       if (!out_entry.is_prepared) {
         prepare_send_message(connection->get_features(), out_entry.m);
       }
+      use_precomputed_tx_crc(out_entry.m);
 
       if (out_entry.m->queue_start != ceph::mono_time()) {
         connection->logger->tinc(l_msgr_send_messages_queue_lat,
@@ -716,6 +809,11 @@ void ProtocolV2::write_event() {
       }
     } while (can_write);
     write_in_progress = false;
+
+    if (r > 0) {
+      // the socket is full and we'll be woken when it drains: use the wait
+      precompute_tx_crc();
+    }
 
     // if r > 0 mean data still lefted, so no need _try_send.
     if (r == 0) {
@@ -1249,59 +1347,27 @@ CtPtr ProtocolV2::read_frame_segment() {
     return _fault();
   }
 
-  // Checking the crc of a large segment in one pass after reading it keeps
-  // this worker off the socket for the whole pass (~1 ms for 24 MiB), long
-  // enough for the socket buffer to fill and the sender to stall. Read it
-  // in chunks instead and fold each into the crc as it lands, while it's
-  // still in cache; FrameAssembler then checks the result, not the data.
-  const uint32_t chunk = cct->_conf->ms_crc_data_rx_chunk_size;
-  if (chunk > 0 && onwire_len > chunk &&
-      rx_frame_asm.can_precompute_rx_crc(seg_idx)) {
-    rx_chunked_segment = std::move(rx_buffer);
-    rx_chunked_segment_off = 0;
-    rx_chunked_segment_crc = -1;
-    return read_frame_segment_chunk();
+  // Checking a large segment's crc in one pass once all of it has arrived
+  // keeps this worker off the socket for the whole pass (~1 ms for 24 MiB),
+  // long enough for a smaller socket buffer to fill and stall the sender.
+  // Instead, crc the data a socket read at a time as it arrives, and the
+  // last read's worth when it completes; FrameAssembler then checks the
+  // result rather than the data.
+  rx_incremental_crc = cct->_conf->ms_crc_data_rx_incremental &&
+                       rx_frame_asm.can_precompute_rx_crc(seg_idx);
+  if (rx_incremental_crc) {
+    const auto data =
+        reinterpret_cast<const unsigned char*>(rx_buffer->c_str());
+    rx_segment_crc = -1;
+    rx_segment_crc_off = 0;
+    connection->set_read_progress([this, data](unsigned filled) {
+      rx_segment_crc = ceph_crc32c(rx_segment_crc, data + rx_segment_crc_off,
+                                   filled - rx_segment_crc_off);
+      rx_segment_crc_off = filled;
+    });
   }
 
   return READ_RXBUF(std::move(rx_buffer), handle_read_frame_segment);
-}
-
-CtPtr ProtocolV2::read_frame_segment_chunk() {
-  const uint32_t len = std::min<uint32_t>(
-      cct->_conf->ms_crc_data_rx_chunk_size,
-      rx_chunked_segment->length() - rx_chunked_segment_off);
-  // a view of the next chunk of the segment's buffer, so the data lands in
-  // place and the segment stays one contiguous, aligned buffer
-  rx_buffer_t view = ceph::buffer::ptr_node::create(
-      ceph::buffer::ptr(*rx_chunked_segment, rx_chunked_segment_off, len));
-  return READ_RXBUF(std::move(view), handle_read_frame_segment_chunk);
-}
-
-CtPtr ProtocolV2::handle_read_frame_segment_chunk(rx_buffer_t &&rx_buffer,
-                                                  int r) {
-  ldout(cct, 20) << __func__ << " r=" << r
-                 << " off=" << rx_chunked_segment_off << dendl;
-
-  if (r < 0) {
-    ldout(cct, 1) << __func__ << " read frame segment failed r=" << r << " ("
-                  << cpp_strerror(r) << ")" << dendl;
-    rx_chunked_segment.reset();
-    return _fault();
-  }
-
-  rx_chunked_segment_crc = ceph_crc32c(
-      rx_chunked_segment_crc,
-      reinterpret_cast<const unsigned char*>(rx_buffer->c_str()),
-      rx_buffer->length());
-  rx_chunked_segment_off += rx_buffer->length();
-  if (rx_chunked_segment_off < rx_chunked_segment->length()) {
-    return read_frame_segment_chunk();
-  }
-
-  rx_frame_asm.set_precomputed_rx_crc(rx_segments_data.size() - 1,
-                                      rx_chunked_segment_crc);
-  rx_segments_data.back().push_back(std::move(rx_chunked_segment));
-  return _handle_read_frame_segment();
 }
 
 CtPtr ProtocolV2::handle_read_frame_segment(rx_buffer_t &&rx_buffer, int r) {
@@ -1313,6 +1379,19 @@ CtPtr ProtocolV2::handle_read_frame_segment(rx_buffer_t &&rx_buffer, int r) {
     return _fault();
   }
 
+  if (rx_incremental_crc) {
+    rx_segment_crc = ceph_crc32c(
+        rx_segment_crc,
+        reinterpret_cast<const unsigned char*>(rx_buffer->c_str()) +
+            rx_segment_crc_off,
+        rx_buffer->length() - rx_segment_crc_off);
+    rx_frame_asm.set_precomputed_rx_crc(rx_segments_data.size() - 1,
+                                        rx_segment_crc);
+    // and cache it as list::crc32c() would have, for whoever crcs this data
+    // next (e.g. the OSD's object data digest)
+    rx_buffer->set_crc32c_cache(-1, rx_segment_crc);
+    rx_incremental_crc = false;
+  }
   rx_segments_data.back().push_back(std::move(rx_buffer));
   return _handle_read_frame_segment();
 }

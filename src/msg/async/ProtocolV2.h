@@ -116,11 +116,22 @@ private:
   ceph::bufferlist rx_preamble;
   ceph::bufferlist rx_epilogue;
   ceph::msgr::v2::segment_bls_t rx_segments_data;
-  // a segment being read in chunks, crc'd as each lands (see
-  // read_frame_segment()): the whole buffer, how much is in, crc so far
-  rx_buffer_t rx_chunked_segment;
-  uint32_t rx_chunked_segment_off = 0;
-  uint32_t rx_chunked_segment_crc = 0;
+  // the crc of the segment being read, computed while the read waits on
+  // the socket (see read_frame_segment()): whether, so far, and up to where
+  bool rx_incremental_crc = false;
+  uint32_t rx_segment_crc = 0;
+  uint32_t rx_segment_crc_off = 0;
+  // the data crc of the message at the head of out_queue, computed a step
+  // at a time while the socket is full (see precompute_tx_crc())
+  MessageRef tx_crc_msg;
+  uint32_t tx_crc = 0;
+  uint32_t tx_crc_off = 0;
+  uint32_t tx_crc_base = 0;  // the crc at the start of the buffer in progress
+  // what m's data looked like then, to check it's the same data when the
+  // message is sent: preparing it may replace it
+  uint32_t tx_crc_data_len = 0;
+  unsigned tx_crc_data_bufs = 0;
+  const char* tx_crc_data_front = nullptr;
   ceph::msgr::v2::Tag next_tag;
   utime_t backoff;  // backoff time
   utime_t recv_stamp;
@@ -164,6 +175,8 @@ private:
   void reset_session();
   void prepare_send_message(uint64_t features, const MessageRef& m);
   out_queue_entry_t _get_next_outgoing();
+  void precompute_tx_crc();
+  void use_precomputed_tx_crc(const MessageRef& m);
   ssize_t write_message(const MessageRef& m, bool more);
   void handle_message_ack(uint64_t seq);
   void reset_compression();
@@ -182,7 +195,6 @@ private:
   CONTINUATION_DECL(ProtocolV2, finish_auth);
   READ_BPTR_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_preamble_main);
   READ_BPTR_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_segment);
-  READ_BPTR_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_segment_chunk);
   READ_BPTR_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_epilogue_main);
   CONTINUATION_DECL(ProtocolV2, throttle_message);
   CONTINUATION_DECL(ProtocolV2, throttle_bytes);
@@ -196,9 +208,6 @@ private:
   Ct<ProtocolV2> *handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r);
   Ct<ProtocolV2> *read_frame_segment();
   Ct<ProtocolV2> *handle_read_frame_segment(rx_buffer_t &&rx_buffer, int r);
-  Ct<ProtocolV2> *read_frame_segment_chunk();
-  Ct<ProtocolV2> *handle_read_frame_segment_chunk(rx_buffer_t &&rx_buffer,
-                                                  int r);
   Ct<ProtocolV2> *_handle_read_frame_segment();
   Ct<ProtocolV2> *handle_read_frame_epilogue_main(rx_buffer_t &&buffer, int r);
   Ct<ProtocolV2> *_handle_read_frame_epilogue_main();

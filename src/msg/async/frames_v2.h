@@ -203,6 +203,7 @@ public:
   void set_is_rev1(bool is_rev1) {
     m_descs.clear();
     m_rx_crcs.fill(std::nullopt);
+    m_tx_crcs.fill(std::nullopt);
     m_flags = 0;
     m_is_rev1 = is_rev1;
   }
@@ -217,6 +218,18 @@ public:
   void set_precomputed_rx_crc(size_t seg_idx, uint32_t crc) {
     ceph_assert(can_precompute_rx_crc(seg_idx));
     m_rx_crcs[seg_idx] = crc;
+  }
+
+  // Likewise the sender may have computed a segment's crc ahead of time,
+  // while the socket was full (see ProtocolV2::write_event()). It is used
+  // by the next assemble_frame() only, and not if that frame is compressed,
+  // since the crc then covers the compressed bytes.
+  bool can_precompute_tx_crc() const {
+    return m_with_data_crc && !m_crypto->tx;
+  }
+  void set_precomputed_tx_crc(size_t seg_idx, uint32_t crc) {
+    ceph_assert(can_precompute_tx_crc());
+    m_tx_crcs[seg_idx] = crc;
   }
 
   bool get_is_rev1() {
@@ -421,9 +434,11 @@ private:
 
   void check_rx_segment_crc(size_t seg_idx, const bufferlist& segment_bl,
                             uint32_t expected_crc) const;
+  uint32_t tx_segment_crc(size_t seg_idx, bufferlist& segment_bl) const;
 
   boost::container::static_vector<segment_desc_t, MAX_NUM_SEGMENTS> m_descs;
   std::array<std::optional<uint32_t>, MAX_NUM_SEGMENTS> m_rx_crcs;
+  std::array<std::optional<uint32_t>, MAX_NUM_SEGMENTS> m_tx_crcs;
   __u8 m_flags;
   const ceph::crypto::onwire::rxtx_t* m_crypto;
   bool m_is_rev1;  // msgr2.1?
