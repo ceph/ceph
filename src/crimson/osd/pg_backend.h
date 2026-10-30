@@ -427,12 +427,15 @@ public:
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
 
-  /// sets oi and (for head) ss attrs
+  /// sets oi and (for head) ss attrs in the store, and in attr_cache
+  /// on replicated pools
+  /// (on EC pools, ECTransaction updates attr_cache)
   void set_metadata(
     const hobject_t &obj,
     object_info_t &oi,
     const SnapSet *ss /* non-null iff head */,
-    ceph::os::Transaction& trans);
+    ceph::os::Transaction& trans,
+    ObjectContext::attr_cache_t& attr_cache);
 
   /// clone from->to and clear ss attribute on to
   void clone_for_write(

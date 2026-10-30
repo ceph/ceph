@@ -99,7 +99,8 @@ PGBackend::decode_metadata2(
 {
   loaded_object_md_t::ref ret(new loaded_object_md_t());
   if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
-    bufferlist bl = std::move(oiiter->second);
+    // keep the encoded OI in attr_cache too
+    bufferlist bl = oiiter->second;
     try {
       ret->os = ObjectState(object_info_t(bl), true);
       ceph_assert(oid == ret->os.oi.soid);
@@ -122,7 +123,7 @@ PGBackend::decode_metadata2(
     bool object_corrupted = true;
     if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
       object_corrupted = false;
-      bufferlist bl = std::move(ssiter->second);
+      bufferlist bl = ssiter->second;
       if (bl.length()) {
         ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
         try {
@@ -1977,18 +1978,29 @@ void PGBackend::set_metadata(
   const hobject_t &obj,
   object_info_t &oi,
   const SnapSet *ss /* non-null iff head */,
-  ceph::os::Transaction& txn)
+  ceph::os::Transaction& txn,
+  ObjectContext::attr_cache_t& attr_cache)
 {
   ceph_assert((obj.is_head() && ss) || (!obj.is_head() && !ss));
+  // On EC pools, ECTransaction updates attr_cache from the transaction,
+  // as on the classic OSD. It must read the old OI from attr_cache first,
+  // to plan the write and to make the rollback info.
+  const bool update_cache = !is_erasure();
   {
     ceph::bufferlist bv;
     oi.encode(bv, CEPH_FEATURES_ALL);
     txn.setattr(coll->get_cid(), ghobject_t{obj}, OI_ATTR, bv);
+    if (update_cache) {
+      attr_cache[OI_ATTR] = std::move(bv);
+    }
   }
   if (ss) {
     ceph::bufferlist bss;
     encode(*ss, bss);
     txn.setattr(coll->get_cid(), ghobject_t{obj}, SS_ATTR, bss);
+    if (update_cache) {
+      attr_cache[SS_ATTR] = std::move(bss);
+    }
   }
 }
 

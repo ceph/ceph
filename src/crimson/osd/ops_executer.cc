@@ -988,7 +988,8 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
       obc->obs.oi.soid,
       obc->obs.oi,
       obc->obs.oi.soid.is_head() ? &(obc->ssc->snapset) : nullptr,
-      txn);
+      txn,
+      obc->attr_cache);
   } else {
     // reset cached ObjectState without enforcing eviction
     obc->obs.oi = object_info_t(obc->obs.oi.soid);
@@ -1079,7 +1080,8 @@ pg_log_entry_t OpsExecuter::complete_cloning_ctx()
     cloning_ctx->coid,
     cloning_ctx->clone_obc->obs.oi,
     nullptr /* snapset */,
-    txn);
+    txn,
+    cloning_ctx->clone_obc->attr_cache);
 
   pg_log_entry_t ret{
     pg_log_entry_t::CLONE,
