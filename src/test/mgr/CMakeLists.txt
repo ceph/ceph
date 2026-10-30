@@ -278,6 +278,18 @@ target_link_libraries(unittest_mgr_mgrstandby
   $<$<BOOL:${WITH_LIBCEPHSQLITE}>:SQLite3::SQLite3>
 )
 
+# unittest_mgr_daemonperfcounters
+add_executable(unittest_mgr_daemonperfcounters
+  test_daemonperfcounters.cc
+  $<TARGET_OBJECTS:unittest_mgr_base_obj>
+  $<TARGET_OBJECTS:unittest_mgr_daemonstate_obj>
+)
+add_ceph_unittest(unittest_mgr_daemonperfcounters)
+target_link_libraries(unittest_mgr_daemonperfcounters
+  ceph-common
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
