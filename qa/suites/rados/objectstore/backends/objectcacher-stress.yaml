@@ -14,3 +14,4 @@ tasks:
     clients:
       all:
         - osdc/stress_objectcacher.sh
+        - osdc/object_cacher_misc.sh
