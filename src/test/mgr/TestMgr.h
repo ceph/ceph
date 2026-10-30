@@ -214,6 +214,33 @@ public:
 
 using StandbyPyModulesTestHelper = MgrStandbyTestHelper;
 
+class PyModuleRegistryTestHelper : public ::testing::Test {
+public:
+  static inline boost::intrusive_ptr<CephContext> cct;
+  LogChannelRef clog;
+  std::unique_ptr<PyModuleRegistry> registry;
+
+  static void SetUpTestSuite() {
+    if (!cct) {
+      std::vector<const char*> args = {"unittest_pymoduleregistry"};
+      cct = global_init(
+          nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+          CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+      common_init_finish(cct.get());
+    }
+  }
+
+  void SetUp() override {
+    clog = std::make_shared<LogChannel>(cct.get(), nullptr, "cluster");
+    registry = std::make_unique<PyModuleRegistry>(clog);
+  }
+
+  void TearDown() override {
+    registry.reset();
+    clog.reset();
+  }
+};
+
 class MgrOpRequestTestHelper : public ::testing::Test {
 public:
   static inline boost::intrusive_ptr<CephContext> cct;
