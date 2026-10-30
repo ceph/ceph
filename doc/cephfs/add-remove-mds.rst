@@ -147,8 +147,8 @@ the following method.
 	$ sudo rm -rf /var/lib/ceph/mds/ceph-${id}
 
 
-.. note:: When an active MDS either has health warning MDS_TRIM or
-   MDS_CACHE_OVERSIZED, confirmation flag (--yes-i-really-mean-it)
+.. note:: When an active MDS has health warning MDS_TRIM, MDS_CACHE_OVERSIZED
+   or MDS_JOURNAL_HARD_LIMIT, confirmation flag (--yes-i-really-mean-it)
    needs to be passed, else the command will fail. It is not recommended to
    restart an MDS which has these warnings since slow recovery at restart may
    lead to more problems.
