@@ -1208,6 +1208,57 @@ protected:
       std::nullopt, object_stat_collection_t());
   }
 
+  // Helper - let an OSD that is down see the interval in which it is out of
+  // the acting set. A real OSD that comes back from a crash restarts its PGs
+  // in Reset and they become strays; the harness keeps the PeeringState of a
+  // down OSD as it was, still ReplicaActive in the old interval, which the
+  // dispatchers never reach. Without this the returning OSD handles the
+  // primary's activation log in ReplicaActive instead of Stray.
+  void test_osd_sees_interval_while_down(int osd)
+  {
+    dout(0) << "= test_osd_sees_interval_while_down " << osd << " =" << dendl;
+    get_ps(osd)->advance_map(osdmap, osdmap, up, up_primary, acting, acting_primary, *(get_ctx(osd)));
+    get_ps(osd)->activate_map(*(get_ctx(osd)));
+  }
+
+  // Helper - a shard that activate() reset to empty (last_backfill MIN) must
+  // be a backfill target, or nothing will ever backfill it and the PG goes
+  // active+clean with that shard empty (https://tracker.ceph.com/issues/81183)
+  void verify_reset_shards_are_backfill_targets()
+  {
+    auto ps = get_ps(acting_primary);
+    if (!ps->is_primary() || !ps->is_active()) {
+      return;
+    }
+    for (auto shard : ps->get_acting_recovery_backfill()) {
+      if (shard == ps->get_primary()) {
+        continue;
+      }
+      const pg_info_t &pi = ps->get_peer_info(shard);
+      EXPECT_TRUE(pi.last_backfill.is_max() || ps->is_backfill_target(shard))
+        << "osd." << shard << " was reset to last_backfill " << pi.last_backfill
+        << " but is not a backfill target: backfill_targets="
+        << ps->get_backfill_targets() << " async_recovery_targets="
+        << ps->get_async_recovery_targets() << " clean=" << ps->is_clean();
+    }
+  }
+
+  // Helper - run peering cycle like test_peering() and check after every
+  // activation that no shard was reset to empty without a backfill
+  void test_peering_checked()
+  {
+    while (true) {
+      test_event_advance_map();
+      test_event_activate_map();
+      dispatch_all();
+      verify_reset_shards_are_backfill_targets();
+      bool did_work = new_epoch(false); // New epoch if required for upthru or pgtemp
+      if (!did_work) {
+        break;
+      }
+    }
+  }
+
   // ============================================================================
   // GTest - Setup and Teardown
   // ============================================================================
@@ -2460,6 +2511,235 @@ TEST_F(PeeringStateTest, Issue79706_test3) {
   EXPECT_TRUE(get_ps(acting_primary)->is_peered());
 }
 
+
+// ============================================================================
+// Tests for https://tracker.ceph.com/issues/81183: peering leaves an acting
+// shard reset to empty (last_backfill MIN) that is not a backfill target.
+// Nothing backfills it, the PG goes active+clean one shard short, and the
+// first write to that shard asserts in should_send_op().
+// ============================================================================
+
+// Case 1: pwlc changes between choose_acting() and activate().
+//
+// 2+2 pool; shard 1 is the only nonprimary shard, so it is the only shard
+// that partial writes skip and that pwlc covers.
+//  v1      full write
+//  v2, v3  partial writes to shards 0,2,3, each trimming the previous entry:
+//          shard 1 stays at v1, behind the log tail (v2), while pwlc (v1,v3)
+//          still covers it
+//  OSD 1 down, peering
+//  v4      first write of the new interval, a full write to 0,2,3, still in
+//          flight: not completed, so pwlc is not advanced past it
+//  v5      partial write skipping shard 1, in flight on the primary only, so
+//          the primary's log is the longest and a parity shard becomes the
+//          authoritative log shard
+//  OSD 1 up, peering:
+//   GetInfo      apply_pwlc advances shard 1 to v3; choose_acting() keeps it
+//                in the acting set, it is not a backfill target
+//   GetLog       proc_master_log() -> consider_adjusting_pwlc(v4) rolls
+//                shard 1's pwlc forward to (v4,v4), which no longer covers it
+//   GetMissing   shard 1's log arrives: last_update v1, behind the tail
+//   activate()   takes the backfill branch for shard 1 ("starting backfill",
+//                last_backfill MIN) but shard 1 is not a backfill target, so
+//                nothing backfills it: the PG goes active+clean with shard 1
+//                empty
+TEST_F(PeeringStateTest, Issue81183_PwlcRollForward) {
+  dout(0) << "== Issue81183_PwlcRollForward ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+  // v1: full write
+  eversion_t v1 = test_append_log_entry();
+  // v2, v3: partial writes skipping shard 1, each trimming the previous entry
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}), false, true);
+  eversion_t v3 = test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}), false, true);
+  // Shard 1 is behind the log tail but pwlc (v1,v3) covers it
+  EXPECT_LT(get_ps(1)->get_info().last_update, get_ps(0)->get_pg_log().get_tail());
+  {
+    auto pwlc = get_ps(0)->get_info().partial_writes_last_complete;
+    ASSERT_TRUE(pwlc.contains(shard_id_t(1)));
+    EXPECT_EQ(pwlc[shard_id_t(1)], std::pair(v1, v3));
+  }
+  // OSD 1 down, run peering
+  osd_down(1, 1);
+  test_peering();
+  test_osd_sees_interval_while_down(1);
+  // v4: first write of the interval, promoted to a full write, in flight
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}), true);
+  // v5: partial write skipping shard 1, in flight on the primary only
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0}), true);
+  // OSD 1 up, run peering
+  osd_up(1, 1);
+  test_peering_checked();
+  // Shard 1 is in the acting set: it was either recovered from the log or
+  // it is a backfill target. It must not be left empty.
+  verify_active_and_peered(acting_primary);
+  pg_shard_t shard1(1, shard_id_t(1));
+  const pg_info_t &pi = get_ps(acting_primary)->get_peer_info(shard1);
+  EXPECT_TRUE(pi.last_backfill.is_max() ||
+              get_ps(acting_primary)->is_backfill_target(shard1))
+    << "shard 1 left at " << pi;
+  EXPECT_TRUE(get_ps(1)->get_info().last_backfill.is_max() ||
+              get_ps(acting_primary)->is_backfill_target(shard1))
+    << "shard 1 believes it is at " << get_ps(1)->get_info();
+  EXPECT_FALSE(get_ps(acting_primary)->is_clean() &&
+               !pi.last_backfill.is_max())
+    << "PG went clean with shard 1 empty";
+}
+
+// Case 2: contiguity is judged against the wrong log tail.
+//
+// choose_acting() judges whether a shard can be recovered from the log by
+// comparing its last_update with auth_log_shard's log tail, but the primary
+// gets its log from get_log_shard and extends it back only as far as that
+// shard's tail. A shard between the two tails is kept (here as an async
+// recovery target) and then reset by activate() without a backfill.
+//
+// 2+3 pool; shard 1 is the nonprimary shard, 2,3,4 are parity shards.
+//  v1, v2  full writes
+//  OSD 4 down, peering: shard 4 misses everything from here
+//  v3      first write of the interval, a full write to 0,1,2,3
+//  v4      full write carrying the trim of v3, in flight: applied by shards
+//          0 and 1 only, whose log tail is now v3
+//  OSD 3 down, peering: v4 is rolled back as divergent, the trim stays
+//  OSD 3 up, peering
+//  v5      first write of the interval, a full write to 0,1,2,3
+//  v6      partial write to 0,2,3 skipping shard 1, in flight
+//  Shard 2 is complete with the longest log (tail 0'0): auth_log_shard.
+//  Shard 1 has the oldest last_update (v5) and a trimmed log: get_log_shard.
+//  OSD 4 up, peering:
+//   choose_acting  shard 4 (last_update v2) is contiguous with auth_log_shard's
+//                  tail (0'0) and is chosen as an async recovery target, not
+//                  as a backfill target
+//   GetLog         the log comes from shard 1 (tail v3): the primary's log is
+//                  not extended back to v2
+//   GetMissing     shard 4 is "not contiguous, will restart backfill"
+//   activate()     resets shard 4 to last_backfill MIN, but it is not a
+//                  backfill target and nothing backfills it
+TEST_F(PeeringStateTest, Issue81183_ContiguityTail) {
+  dout(0) << "== Issue81183_ContiguityTail ==" << dendl;
+  create_ec_pool(2, 3);
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+  // v1, v2: full writes
+  (void)test_append_log_entry();
+  eversion_t v2 = test_append_log_entry();
+  // OSD 4 down, run peering
+  osd_down(4, 4);
+  test_peering();
+  test_osd_sees_interval_while_down(4);
+  // v3: first write of the interval, a full write to 0,1,2,3
+  eversion_t v3 = test_append_log_entry(ss({0, 1, 2, 3}), ss({0, 1, 2, 3}));
+  // v4: full write trimming v3, in flight on shards 0 and 1 only
+  (void)test_append_log_entry(shard_id_set(), ss({0, 1}), true, true);
+  EXPECT_EQ(get_ps(0)->get_pg_log().get_tail(), v3);
+  EXPECT_EQ(get_ps(1)->get_pg_log().get_tail(), v3);
+  EXPECT_EQ(get_ps(2)->get_pg_log().get_tail(), eversion_t());
+  // OSD 3 down, run peering: v4 is rolled back
+  osd_down(3, 3);
+  test_peering();
+  test_osd_sees_interval_while_down(3);
+  EXPECT_EQ(get_ps(0)->get_info().last_update, v3);
+  EXPECT_EQ(get_ps(0)->get_pg_log().get_tail(), v3);
+  // OSD 3 up, run peering (undersized while OSD 4 is down, so never clean)
+  osd_up(3, 3);
+  test_peering();
+  EXPECT_EQ(get_listener(acting_primary)->last_state_entered,
+            "Started/Primary/Active/Clean");
+  // v5: first write of the interval, a full write to 0,1,2,3
+  eversion_t v5 = test_append_log_entry(ss({0, 1, 2, 3}), ss({0, 1, 2, 3}));
+  // v6: partial write to 0,2,3 skipping shard 1, in flight
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}), true);
+  // Shard 2 is complete with the longest log, shard 1 has the oldest
+  // last_update and a trimmed log, shard 4 is between the two tails
+  EXPECT_EQ(get_ps(2)->get_pg_log().get_tail(), eversion_t());
+  EXPECT_EQ(get_ps(1)->get_info().last_update, v5);
+  EXPECT_EQ(get_ps(1)->get_pg_log().get_tail(), v3);
+  EXPECT_EQ(get_ps(4)->get_info().last_update, v2);
+  // OSD 4 up, run peering
+  osd_up(4, 4);
+  test_peering_checked();
+  verify_active_and_peered(acting_primary);
+  pg_shard_t shard4(4, shard_id_t(4));
+  const pg_info_t &pi = get_ps(acting_primary)->get_peer_info(shard4);
+  EXPECT_TRUE(pi.last_backfill.is_max() ||
+              get_ps(acting_primary)->is_backfill_target(shard4))
+    << "shard 4 left at " << pi;
+}
+
+// Case 3: several shards behind in the same interval.
+//
+// Same mechanism as case 1 with four nonprimary shards at once. They come
+// back as async recovery targets (three in-flight writes ahead of them), so
+// choosing them as backfill targets later does not change the acting set.
+// A fix that re-chooses the acting set once per shard, as each shard's log
+// arrives, has to do it four times in one interval.
+//
+// 5+5 pool; shards 1-4 are the nonprimary shards, 5-9 the parity shards.
+//  v1          full write
+//  v2, v3      partial writes to shards 0,5-9, each trimming the previous
+//              entry: shards 1-4 stay at v1, behind the log tail, covered by
+//              pwlc (v1,v3)
+//  OSDs 1-4 down, peering
+//  v4, v5, v6  writes of the new interval to 0,5-9, all in flight (the first
+//              is promoted to a full write)
+//  v7          partial write in flight on the primary only
+//  OSDs 1-4 up, peering:
+//   choose_acting  apply_pwlc advanced shards 1-4 to v3, three entries behind
+//                  the authoritative shard: async recovery targets
+//   GetLog         consider_adjusting_pwlc(v6) rolls their pwlc to (v6,v6)
+//   GetMissing     their logs arrive: last_update v1, behind the tail
+//   activate()     resets all four to last_backfill MIN without a backfill
+TEST_F(PeeringStateTest, Issue81183_FourShardsBehind) {
+  dout(0) << "== Issue81183_FourShardsBehind ==" << dendl;
+  create_ec_pool(5, 5);
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+  // v1: full write
+  (void)test_append_log_entry();
+  // v2, v3: partial writes skipping shards 1-4, each trimming the previous entry
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0, 5, 6, 7, 8, 9}), false, true);
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0, 5, 6, 7, 8, 9}), false, true);
+  for (int osd : {1, 2, 3, 4}) {
+    EXPECT_LT(get_ps(osd)->get_info().last_update, get_ps(0)->get_pg_log().get_tail());
+  }
+  // OSDs 1-4 down, run peering
+  for (int osd : {1, 2, 3, 4}) {
+    osd_down(osd, osd);
+  }
+  test_peering();
+  for (int osd : {1, 2, 3, 4}) {
+    test_osd_sees_interval_while_down(osd);
+  }
+  // v4, v5, v6: writes of the new interval, in flight
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0, 5, 6, 7, 8, 9}), true);
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0, 5, 6, 7, 8, 9}), true);
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0, 5, 6, 7, 8, 9}), true);
+  // v7: partial write in flight on the primary only
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0}), true);
+  // OSDs 1-4 up, run peering
+  for (int osd : {1, 2, 3, 4}) {
+    osd_up(osd, osd);
+  }
+  test_peering_checked();
+  verify_active_and_peered(acting_primary);
+  int empty = 0;
+  for (int osd : {1, 2, 3, 4}) {
+    pg_shard_t shard(osd, shard_id_t(osd));
+    const pg_info_t &pi = get_ps(acting_primary)->get_peer_info(shard);
+    if (!pi.last_backfill.is_max() &&
+        !get_ps(acting_primary)->is_backfill_target(shard)) {
+      dout(0) << "shard " << shard << " left empty: " << pi << dendl;
+      ++empty;
+    }
+  }
+  EXPECT_EQ(empty, 0);
+}
 
 // ============================================================================
 // PG Vulnerability-Window Perf Counter Tests
