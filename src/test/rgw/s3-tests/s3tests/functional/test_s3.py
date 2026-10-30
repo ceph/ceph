@@ -15674,6 +15674,66 @@ def test_sse_kms_default_upload_1mb():
 def test_sse_kms_default_upload_8mb():
     _test_sse_kms_default_upload(8*1024*1024)
 
+def _test_sse_default_copy(file_size, put_bucket_encryption, sse, kms_keyid=None):
+    """
+    Copy an unencrypted object into a bucket with default encryption and
+    confirm the copy is encrypted with the bucket default.
+    """
+    client = get_client()
+    src_bucket = get_new_bucket()
+    dst_bucket = get_new_bucket()
+    put_bucket_encryption(client, dst_bucket)
+
+    data = 'A'*file_size
+    client.put_object(Bucket=src_bucket, Key='testobj', Body=data)
+
+    response = client.copy_object(Bucket=dst_bucket, Key='testobj',
+                                  CopySource={'Bucket': src_bucket, 'Key': 'testobj'})
+    assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == sse
+    if kms_keyid:
+        assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption-aws-kms-key-id'] == kms_keyid
+
+    response = client.get_object(Bucket=dst_bucket, Key='testobj')
+    assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == sse
+    if kms_keyid:
+        assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption-aws-kms-key-id'] == kms_keyid
+    body = _get_body(response)
+    assert body == data
+
+@pytest.mark.encryption
+@pytest.mark.bucket_encryption
+@pytest.mark.sse_s3
+@pytest.mark.fails_on_dbstore
+def test_sse_s3_default_copy_1kb():
+    _test_sse_default_copy(1024, _put_bucket_encryption_s3, 'AES256')
+
+@pytest.mark.encryption
+@pytest.mark.bucket_encryption
+@pytest.mark.sse_s3
+@pytest.mark.fails_on_dbstore
+def test_sse_s3_default_copy_8mb():
+    _test_sse_default_copy(8*1024*1024, _put_bucket_encryption_s3, 'AES256')
+
+@pytest.mark.encryption
+@pytest.mark.bucket_encryption
+@pytest.mark.sse_s3
+@pytest.mark.fails_on_dbstore
+def test_sse_kms_default_copy_1kb():
+    kms_keyid = get_main_kms_keyid()
+    if kms_keyid is None:
+        pytest.skip('[s3 main] section missing kms_keyid')
+    _test_sse_default_copy(1024, _put_bucket_encryption_kms, 'aws:kms', kms_keyid)
+
+@pytest.mark.encryption
+@pytest.mark.bucket_encryption
+@pytest.mark.sse_s3
+@pytest.mark.fails_on_dbstore
+def test_sse_kms_default_copy_8mb():
+    kms_keyid = get_main_kms_keyid()
+    if kms_keyid is None:
+        pytest.skip('[s3 main] section missing kms_keyid')
+    _test_sse_default_copy(8*1024*1024, _put_bucket_encryption_kms, 'aws:kms', kms_keyid)
+
 
 
 @pytest.mark.encryption
