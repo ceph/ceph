@@ -121,8 +121,14 @@ class to_ceph_volume(object):
                 if self.spec.block_wal_size:
                     cmd += " --block-wal-size {}".format(self.spec.block_wal_size)
 
+                if isinstance(self.spec.wal_slots, int) and self.spec.wal_slots > 1:
+                    cmd += " --block-wal-slots {}".format(self.spec.wal_slots)
+
                 if self.spec.block_db_size:
                     cmd += " --block-db-size {}".format(self.spec.block_db_size)
+
+                if isinstance(self.spec.db_slots, int) and self.spec.db_slots > 1:
+                    cmd += " --block-db-slots {}".format(self.spec.db_slots)
 
                 if d != self.NO_CRUSH:
                     cmd += " --crush-device-class {}".format(d)
