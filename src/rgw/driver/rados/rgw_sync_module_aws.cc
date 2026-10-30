@@ -238,7 +238,7 @@ struct AWSSyncConfig_Connection {
     has_key = config.exists("access_key") || config.exists("secret");
     has_host_style = config.exists("host_style");
 
-    connection_id = config["id"];
+    connection_id = config["connection_id"];
     endpoint = config["endpoint"];
 
     key = RGWAccessKey(config["access_key"], config["secret"]);
@@ -536,7 +536,15 @@ struct AWSSyncConfig {
       std::shared_ptr<AWSSyncConfig_Connection> c{new AWSSyncConfig_Connection};
       c->init(new_conn);
 
-      connections[new_conn["id"]] = c;
+      if (c->connection_id.empty()) {
+        ldpp_dout(dpp, 0) << "ERROR: a connection in the cloud sync config has "
+            << "no connection_id, so no profile can point at it. Set "
+            << "\"connection_id\" on every entry of the \"connections\" array."
+            << dendl;
+        return -EINVAL;
+      }
+
+      connections[c->connection_id] = c;
     }
 
     acl_profiles.init(config["acl_profiles"]);
