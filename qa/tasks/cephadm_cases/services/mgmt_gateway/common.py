@@ -6,6 +6,8 @@ module in this package:
 
   test_gateway.py       TestMgmtGateway: one gateway, no SSO
   test_oauth2.py        TestOAuth2Proxy: gateway + oauth2-proxy + an OIDC IdP
+  test_ha.py            TestMgmtGatewayHA: two gateways behind a VIP
+                        (keepalive-only ingress), two oauth2-proxy instances
 
 What the monitoring stack looks like from a client depends on which of these
 is in place, so the checks are grouped by "mode":
