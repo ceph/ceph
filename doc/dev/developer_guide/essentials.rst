@@ -189,8 +189,29 @@ Building from source
 
 See instructions at :doc:`/install/build-ceph`.
 
-Using ccache to speed up local builds
--------------------------------------
+Speeding up local builds
+------------------------
+
+The following options shorten local builds and can be combined.
+
+Using a faster linker
+~~~~~~~~~~~~~~~~~~~~~
+
+With the default ``ld.bfd``, linking takes a large share of incremental build
+time. ``lld`` and ``mold`` link several times faster, and need no extra disk
+space and less memory than ``ld.bfd``:
+
+.. prompt:: bash $
+
+  cmake -DCMAKE_LINKER_TYPE=LLD ..
+
+``CMAKE_LINKER_TYPE`` accepts ``BFD``, ``LLD`` and ``MOLD``. ``lld`` needs the
+least CPU and memory when many targets are relinked at once; ``mold`` is
+slightly faster for a single binary. ``librados`` always links with ``ld.bfd``,
+the only one of the three that handles its symbol versions.
+
+Using ccache
+~~~~~~~~~~~~
 `ccache`_ can make the process of rebuilding the ceph source tree faster. 
 
 Before you use `ccache`_ to speed up your rebuilds of the ceph source tree,
@@ -204,7 +225,7 @@ build errors when you attempt a local build, follow the procedure below to
 clean your source tree.
 
 Cleaning the Source Tree
-~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. prompt:: bash $
 
@@ -219,7 +240,7 @@ Cleaning the Source Tree
    git clean -fdx; git submodule foreach git clean -fdx
 
 Building Ceph with ccache
-~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``ccache`` is available as a package in most distros. To build ceph with
 ccache, run the following command.
@@ -229,7 +250,7 @@ ccache, run the following command.
   cmake -DWITH_CCACHE=ON ..
 
 Using ccache to Speed Up Build Times
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``ccache`` can be used for speeding up all builds of the system. For more
 details, refer to the `run modes`_ section of the ccache manual. The default

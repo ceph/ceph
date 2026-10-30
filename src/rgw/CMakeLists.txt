@@ -614,15 +614,18 @@ if(WITH_RADOSGW_LANCEDB)
     IMPORTED_LOCATION ${RGW_LANCEDB_STATIC_LIB}
     INTERFACE_LINK_LIBRARIES "${LANCEDB_NATIVE_STATIC_LIBS}"
   )
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64" AND NOT USING_MOLD_LINKER)
+  # ld.bfd can fail with R_AARCH64_CALL26 overflows on librgw_lancedb.a; lld
+  # and mold insert range-extension thunks, so use lld unless one is selected.
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64" AND NOT CEPH_LINKER MATCHES "^(lld|mold)$")
     include(CheckLinkerFlag)
     check_linker_flag(CXX "-fuse-ld=lld" HAVE_FUSE_LD_LLD)
     if(HAVE_FUSE_LD_LLD)
       set(RGW_LANCEDB_LINKER_OPTIONS "-fuse-ld=lld")
     else()
-      message(WARNING "aarch64: lld not usable, linking librgw_lancedb.a with "
-        "the default linker is likely to fail with R_AARCH64_CALL26 relocation "
-        "overflows -- install lld or build with -DWITH_RADOSGW_LANCEDB=OFF")
+      message(WARNING "aarch64: lld not found, linking librgw_lancedb.a with "
+        "ld.bfd is likely to fail with R_AARCH64_CALL26 relocation overflows -- "
+        "install lld, select mold with -DCMAKE_LINKER_TYPE=MOLD, or build with "
+        "-DWITH_RADOSGW_LANCEDB=OFF")
     endif()
   endif()
   # librgw_lancedb.a references the rgw_sal_wrapper_* symbols defined in
