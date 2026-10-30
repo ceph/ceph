@@ -2106,6 +2106,9 @@ exit 0
 %{_bindir}/cephfs-tool
 %{_bindir}/crushdiff
 %{_bindir}/rados
+%ifarch x86_64 aarch64
+%{_bindir}/radostrace
+%endif
 %{_bindir}/radosgw-admin
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
