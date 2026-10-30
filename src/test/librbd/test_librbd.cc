@@ -10193,6 +10193,126 @@ TEST_F(TestLibRBD, MetadataPP)
   ASSERT_EQ(-ENOENT, image1.metadata_get("key4", &value));
 }
 
+TEST_F(TestLibRBD, MetadataViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  uint64_t features;
+  ASSERT_TRUE(get_features(&features));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image1.metadata_set("key1", "value1"));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  if ((features & RBD_FEATURE_JOURNALING) != 0) {
+    ASSERT_TRUE(lock_owner);
+  } else {
+    ASSERT_FALSE(lock_owner);
+  }
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  if ((features & RBD_FEATURE_JOURNALING) != 0) {
+    ASSERT_TRUE(lock_owner);
+  } else {
+    ASSERT_FALSE(lock_owner);
+  }
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.metadata_set("key2", "value2"));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  if ((features & RBD_FEATURE_JOURNALING) != 0) {
+    ASSERT_TRUE(lock_owner);
+  } else {
+    ASSERT_FALSE(lock_owner);
+  }
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  bufferlist bl;
+  ASSERT_EQ(0, image2.write(0, 0, bl));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(0, image2.metadata_set("key3", "value3"));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(0, image1.metadata_set("key4", "value4"));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  std::map<std::string, bufferlist> pairs;
+  ASSERT_EQ(0, image1.metadata_list("key", 0, &pairs));
+  ASSERT_EQ(4U, pairs.size());
+
+  image1.close();
+  image2.close();
+
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image1.metadata_remove("key4"));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  if ((features & RBD_FEATURE_JOURNALING) != 0) {
+    ASSERT_TRUE(lock_owner);
+  } else {
+    ASSERT_FALSE(lock_owner);
+  }
+
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  if ((features & RBD_FEATURE_JOURNALING) != 0) {
+    ASSERT_TRUE(lock_owner);
+  } else {
+    ASSERT_FALSE(lock_owner);
+  }
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.metadata_remove("key3"));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  if ((features & RBD_FEATURE_JOURNALING) != 0) {
+    ASSERT_TRUE(lock_owner);
+  } else {
+    ASSERT_FALSE(lock_owner);
+  }
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.write(0, 0, bl));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(0, image2.metadata_remove("key2"));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(0, image1.metadata_remove("key1"));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  pairs.clear();
+  ASSERT_EQ(0, image2.metadata_list("key", 0, &pairs));
+  ASSERT_EQ(0U, pairs.size());
+}
+
 TEST_F(TestLibRBD, UpdateFeatures)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
