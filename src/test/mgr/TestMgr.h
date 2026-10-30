@@ -17,6 +17,7 @@
 #include "mgr/DaemonState.h"
 #include "mgr/PyModuleRegistry.h"
 #include "mgr/ThreadMonitor.h"
+#include "mgr/Types.h"
 #include "mon/MgrMap.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
@@ -279,6 +280,30 @@ public:
   void TearDown() override {
     perf_counters.reset();
     types.clear();
+  }
+};
+
+class MockMetricListener : public MetricListener {
+public:
+  int update_count = 0;
+
+  void handle_query_updated() override {
+    update_count++;
+  }
+};
+
+class MetricCollectorTestHelper : public ::testing::Test {
+public:
+  static inline boost::intrusive_ptr<CephContext> cct;
+
+  static void SetUpTestSuite() {
+    if (!cct) {
+      std::vector<const char*> args = {"unittest_metriccollector"};
+      cct = global_init(
+          nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+          CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+      common_init_finish(cct.get());
+    }
   }
 };
 
