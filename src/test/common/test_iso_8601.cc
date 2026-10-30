@@ -16,9 +16,15 @@
 #include "common/ceph_time.h"
 #include "common/iso_8601.h"
 
-using std::chrono::minutes;
-using std::chrono::seconds;
-using std::chrono::time_point_cast;
+using namespace std::literals;
+
+namespace chrono = std::chrono;
+
+using chrono::hours;
+using chrono::minutes;
+using chrono::seconds;
+using chrono::nanoseconds;
+using chrono::time_point_cast;
 
 using ceph::from_iso_8601;
 using ceph::iso_8601_format;
@@ -58,4 +64,41 @@ TEST(iso_8601, now) {
   ASSERT_EQ(now,
 	    *from_iso_8601(
 	      to_iso_8601(now, iso_8601_format::YMDhmsn)));
+}
+
+TEST(iso_8601, tz) {
+  const auto ref = ceph::real_clock::from_time_t(326643000);
+  ASSERT_EQ(chrono::floor<hours>(ref), *from_iso_8601("1980-05-08T14Z"sv));
+  ASSERT_EQ(chrono::floor<hours>(ref), *from_iso_8601("1980-05-08T14-00:00"sv));
+  ASSERT_EQ(chrono::floor<hours>(ref), *from_iso_8601("1980-05-08T14+00:00"sv));
+  ASSERT_EQ(chrono::floor<hours>(ref), *from_iso_8601("1980-05-08T16+02:00"sv));
+
+  ASSERT_EQ(ref, *from_iso_8601("1980-05-08T14:10Z"sv));
+  ASSERT_EQ(ref, *from_iso_8601("1980-05-08T14:10-00"sv));
+  ASSERT_EQ(ref, *from_iso_8601("1980-05-08T14:10-00:00"sv));
+  ASSERT_EQ(ref, *from_iso_8601("1980-05-08T14:10+00"sv));
+  ASSERT_EQ(ref, *from_iso_8601("1980-05-08T14:10+00:00"sv));
+  ASSERT_EQ(ref, *from_iso_8601("1980-05-08T16:10+02"sv));
+  ASSERT_EQ(ref, *from_iso_8601("1980-05-08T16:10+02:00"sv));
+
+  ASSERT_EQ(ref + 5s, *from_iso_8601("1980-05-08T14:10:05Z"sv));
+  ASSERT_EQ(ref + 5s , *from_iso_8601("1980-05-08T14:10:05-00:00"sv));
+  ASSERT_EQ(ref + 5s, *from_iso_8601("1980-05-08T14:10:05+00:00"sv));
+  ASSERT_EQ(ref + 5s, *from_iso_8601("1980-05-08T16:10:05+02:00"sv));
+
+  ASSERT_EQ(ref + 5s + 30ns, *from_iso_8601("1980-05-08T14:10:05,000000030Z"sv));
+  ASSERT_EQ(ref + 5s + 30ns, *from_iso_8601("1980-05-08T14:10:05.000000030Z"sv));
+  ASSERT_EQ(ref + 5s + 30ns, *from_iso_8601("1980-05-08T14:10:05,000000030-00:00"sv));
+  ASSERT_EQ(ref + 5s + 30ns, *from_iso_8601("1980-05-08T14:10:05.000000030-00:00"sv));
+  ASSERT_EQ(ref + 5s + 30ns, *from_iso_8601("1980-05-08T14:10:05,000000030+00:00"sv));
+  ASSERT_EQ(ref + 5s + 30ns, *from_iso_8601("1980-05-08T14:10:05.000000030+00:00"sv));
+  ASSERT_EQ(ref + 5s + 30ns, *from_iso_8601("1980-05-08T16:10:05,000000030+02:00"sv));
+  ASSERT_EQ(ref + 5s + 30ns, *from_iso_8601("1980-05-08T16:10:05.000000030+02:00"sv));
+
+  ASSERT_FALSE(from_iso_8601("1980-05-08T16:10+0200"sv, false));
+  ASSERT_FALSE(from_iso_8601("1980-05-08T14"sv, false));
+  ASSERT_FALSE(from_iso_8601("1980-05-08T14:10"sv, false));
+  ASSERT_FALSE(from_iso_8601("1980-05-08T14:10+24:00"sv, false));
+  ASSERT_FALSE(from_iso_8601("1980-05-08T14:10-24:00"sv, false));
+  ASSERT_FALSE(from_iso_8601("1980-05-08+02:00"sv, false));
 }
