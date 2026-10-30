@@ -120,7 +120,8 @@ public:
 
 /* Open every secret in the store, in place.
  *
- * Fills each `NooBaaAccessKey::secret_key`.  Every failure is
+ * Fills each `NooBaaAccessKey::secret_key`, and each encrypted
+ * `NooBaaConnection::auth`.  Every failure is
  * collected into `failures` rather than stopping at the first, for the
  * same reason I1 collects unreadable records:  one run should say
  * everything that is wrong.  Returns 0 only when every secret opened,

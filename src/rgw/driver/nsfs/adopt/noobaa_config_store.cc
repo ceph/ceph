@@ -565,9 +565,84 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
     }
   }
 
+  /* connections/<name>.json, the notification destinations.  NooBaa
+   * writes each through a temp entry in the same directory, which has no
+   * `.json` suffix and is skipped with the lock files. */
+  {
+    const std::string dir = root + "/connections";
+    std::vector<std::string> entries;
+    int ret = list_dir(dpp, dir, entries);
+    if (ret == -ENOENT) {
+      /* a store that never had a connection may predate the directory */
+    } else if (ret < 0) {
+      unreadable(dir, cpp_strerror(-ret));
+    } else {
+      for (const auto& name : entries) {
+	static const std::string suffix = ".json";
+	if ((name.size() <= suffix.size()) ||
+	    (name.compare(name.size() - suffix.size(), suffix.size(),
+			  suffix) != 0)) {
+	  continue;
+	}
+	const std::string path = dir + "/" + name;
+	std::string doc;
+	ret = read_record_file(dpp, path, doc);
+	if (ret < 0) {
+	  unreadable(path, cpp_strerror(-ret));
+	  continue;
+	}
+	JSONParser p;
+	if (!p.parse(doc.data(), doc.size()) || !p.is_object()) {
+	  unreadable(path, "not a JSON object");
+	  continue;
+	}
+	NooBaaConnection c;
+	c.name = name.substr(0, name.size() - suffix.size());
+	try {
+	  JSONDecoder::decode_json("notification_protocol",
+				   c.notification_protocol, &p);
+	  JSONDecoder::decode_json("topic", c.topic, &p);
+	  JSONDecoder::decode_json("master_key_id", c.master_key_id, &p);
+	} catch (const JSONDecoder::err& e) {
+	  unreadable(path, e.what());
+	  continue;
+	}
+	bool objects = true;
+	for (auto [member, text] :
+	       {std::pair{"agent_request_object", &c.agent_request_object},
+		std::pair{"request_options_object", &c.request_options_object},
+		std::pair{"kafka_options_object", &c.kafka_options_object}}) {
+	  JSONObj* o = p.find_obj(member);
+	  if (!o) {
+	    continue;
+	  }
+	  if (!o->is_object()) {
+	    unreadable(path, std::string(member) + " is not an object");
+	    objects = false;
+	    break;
+	  }
+	  *text = o->get_data();
+	  if (JSONObj* auth = (text == &c.request_options_object)
+			      ? o->find_obj("auth") : nullptr) {
+	    c.auth = auth->get_data();
+	  }
+	}
+	if (!objects) {
+	  continue;
+	}
+	if (c.notification_protocol.empty()) {
+	  unreadable(path, "no notification_protocol");
+	  continue;
+	}
+	out.connections.push_back(std::move(c));
+      }
+    }
+  }
+
   ldpp_dout(dpp, 4) << "nsfs: read NooBaa store " << root << ": "
     << out.accounts() << " accounts, " << out.iam_users() << " IAM users, "
     << out.buckets.size() << " buckets, "
+    << out.connections.size() << " connections, "
     << (out.master_keys_present ? "master keys present" : "NO MASTER KEYS")
     << ", " << out.unreadable.size() << " unreadable" << dendl;
 

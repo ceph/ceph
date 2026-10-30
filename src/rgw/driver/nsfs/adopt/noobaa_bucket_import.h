@@ -59,8 +59,8 @@
  * table exists as of P1, but putting a row in it is what P6 is, and
  * resolution is P2.  A bucket whose path is outside the data root is
  * reported here, which is all this stage can honestly do about it.
- * `notifications` needs an RGW topic per destination and the topic
- * tables to go with them;  read and reported, not translated.
+ * `notifications` become topics and the bucket's notification attribute
+ * (I10, `noobaa_notification_import.h`).
  */
 
 #pragma once
@@ -123,12 +123,15 @@ struct BucketImportResult {
   size_t buckets_written{0};
   size_t policies_rewritten{0};
   size_t logging_carried{0};
+  size_t topics_written{0};
+  size_t notifications_carried{0};
 
   /* A policy we would not write, and why.  The bucket's other state
    * was written. */
   std::vector<std::string> policies_refused;
-  /* Read and not translated:  notifications, which need topics. */
-  std::vector<std::string> deferred;
+  /* A notification, or part of one, not carried;  or carried and
+   * needing the operator (`noobaa_notification_import.h`). */
+  std::vector<std::string> notifications_reported;
   std::vector<std::string> failures;
 };
 

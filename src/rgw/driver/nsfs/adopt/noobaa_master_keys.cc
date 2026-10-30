@@ -356,6 +356,24 @@ int decrypt_store_secrets(const DoutPrefixProvider* dpp,
     }
   }
 
+  /* A connection's `request_options_object.auth`, which NooBaa encrypts
+   * when it writes the file and records the key it used
+   * (`encrypt_connect_file()`);  without a `master_key_id` it is
+   * cleartext and stays as read. */
+  for (auto& c : contents.connections) {
+    if (c.auth.empty() || c.master_key_id.empty()) {
+      continue;
+    }
+    std::string auth;
+    int ret = keys.decrypt(dpp, c.master_key_id, c.auth, auth);
+    if (ret < 0) {
+      failures.push_back("connection " + c.name + ": auth: " +
+			 cpp_strerror(-ret));
+      continue;
+    }
+    c.auth = std::move(auth);
+  }
+
   /* Collected, then returned as one error.  Every failure is reported for the same
    * reason I1 reports every unreadable record -- one run should say
    * everything that is wrong -- and the return is still an error, so

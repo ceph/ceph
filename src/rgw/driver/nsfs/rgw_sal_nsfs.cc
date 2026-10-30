@@ -18798,11 +18798,13 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
   }
   /* and its record must read:  one that does not, or that holds a field
    * NooBaa at the store's release does not write (X4's second layer), is
-   * not imported, as adopt_identities() refuses the store for it */
+   * not imported, as adopt_identities() refuses the store for it.  So
+   * must every connection, since its notifications may name any (I10). */
   {
     const std::string path = root + "/buckets/" + bucket_name + ".json";
+    const std::string connections = root + "/connections/";
     for (const auto& u : contents.unreadable) {
-      if (u.path != path) {
+      if ((u.path != path) && !u.path.starts_with(connections)) {
 	continue;
       }
       ldpp_dout(dpp, 0) << "ERROR: not importing bucket " << bucket_name
@@ -18820,6 +18822,31 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  /* a connection's auth is encrypted with the master key, as an access
+   * key's secret is (I10) */
+  if (!contents.connections.empty()) {
+    nsfs::NooBaaMasterKeys keys;
+    ret = keys.load(dpp, contents.settings, root);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: not importing bucket " << bucket_name
+	<< ": no usable master key: " << cpp_strerror(-ret) << dendl;
+      put_report("configured", "false");
+      put_report("error", "master keys");
+      return ret;
+    }
+    std::vector<std::string> failures;
+    ret = nsfs::decrypt_store_secrets(dpp, keys, contents, failures);
+    if (ret < 0) {
+      for (const auto& r : failures) {
+	ldpp_dout(dpp, 0) << "ERROR: not importing bucket " << bucket_name
+	  << ": " << r << dendl;
+      }
+      put_report("configured", "false");
+      put_report("error", "secrets");
+      return ret;
+    }
+  }
+
   nsfs::BucketImportResult br;
   ret = nsfs::import_one_bucket(dpp, y, this, root, bucket_name, contents,
 				mapping, br);
@@ -18828,6 +18855,10 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
   put_report("policies", std::to_string(br.policies_rewritten));
   put_report("policies_refused", std::to_string(br.policies_refused.size()));
   put_report("logging", std::to_string(br.logging_carried));
+  put_report("topics", std::to_string(br.topics_written));
+  put_report("notifications", std::to_string(br.notifications_carried));
+  put_report("notifications_reported",
+	     std::to_string(br.notifications_reported.size()));
   if (ret < 0) {
     put_report("error", cpp_strerror(-ret));
   }

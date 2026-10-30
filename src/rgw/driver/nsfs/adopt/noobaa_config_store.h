@@ -18,12 +18,13 @@
  * nothing has changed yet -- and that reader is
  * `NooBaaBucketStateStrategy`, not this.
  *
- * WHAT IT READS.  Five of the eight entries a NooBaa configuration
- * directory holds (`ACCOUNT_IMPORT.md` §1):
+ * WHAT IT READS.  Six of the entries a NooBaa configuration directory
+ * holds (`ACCOUNT_IMPORT.md` §1, `NOOBAA_ONDISK_FORMAT.md` §7):
  *
  *   identities/<id>/identity.json   every account, IAM user and role;
  *                                   one schema serves all three
  *   buckets/<name>.json             one record per bucket
+ *   connections/<name>.json         notification destinations
  *   master_keys.json                presence only here;  decrypting a
  *                                   secret with it is I2
  *   config.json                     the settings that change how an
@@ -238,6 +239,33 @@ struct NooBaaBucketRecord {
   std::optional<bool> force_md5_etag;
 };
 
+/* One notification destination, `connections/<name>.json`.
+ *
+ * Written by `noobaa-cli connection add`;  a bucket's
+ * `notifications[].topic` names one.  NooBaa hands the three objects to
+ * its HTTP and Kafka clients as they stand (`notifications_util.js`), so
+ * they are kept as JSON text and translated by
+ * `noobaa_notification_import`, which reports any member it cannot
+ * carry.  NooBaa has no schema for these files. */
+struct NooBaaConnection {
+  /* the file's name less `.json`, which is what a notification names */
+  std::string name;
+  /* `http`, `https` or `kafka`, in any case */
+  std::string notification_protocol;
+  /* Kafka:  the topic, unless a notification names one itself */
+  std::string topic;
+  std::string master_key_id;
+  /* JSON objects, or empty when absent */
+  std::string agent_request_object;
+  std::string request_options_object;
+  std::string kafka_options_object;
+
+  /* `request_options_object.auth`, decrypted by I2's
+   * `decrypt_store_secrets()` when `master_key_id` says it is
+   * encrypted, and as it stands otherwise;  empty when absent */
+  std::string auth;
+};
+
 /* A record that is there and could not be read. */
 struct NooBaaUnreadable {
   std::string path;
@@ -251,6 +279,7 @@ struct NooBaaStoreContents {
   std::vector<NooBaaIdentity> identities;
 
   std::vector<NooBaaBucketRecord> buckets;
+  std::vector<NooBaaConnection> connections;
 
   bool master_keys_present{false};
 

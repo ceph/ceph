@@ -28,6 +28,7 @@
 
 #include "../rgw_sal_nsfs.h"
 #include "noobaa_bucket_import.h"
+#include "noobaa_notification_import.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -223,6 +224,7 @@ int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   NooBaaStoreContents one;
   one.settings = contents.settings;
   one.identities = contents.identities;
+  one.connections = contents.connections;
   for (const auto& b : contents.buckets) {
     if (b.name == bucket_name) {
       one.buckets.push_back(b);
@@ -285,6 +287,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     /* The owner.  An id in NooBaa's store, which is why the strategy
      * reads it and does not apply it. */
     std::string owner_account;
+    std::string account;
     try {
       JSONDecoder::decode_json("owner_account", owner_account, &p);
     } catch (const JSONDecoder::err&) {
@@ -299,6 +302,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 	continue;
       }
       info.owner = rgw_owner{rgw_account_id{owner->second}};
+      account = owner->second;
     }
 
     /* The policy, with its principals rewritten.  The strategy stored
@@ -338,13 +342,23 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       ++result.logging_carried;
     }
 
-    /* `notifications` needs an RGW topic per destination, and the
-     * topic tables to go with them.  Read and reported rather than
-     * invented. */
-    if (p.find_obj("notifications")) {
-      result.deferred.push_back(
-	  rec.name + ": notifications are not translated;  each "
-	  "destination needs an RGW topic");
+    /* `notifications`:  each connection a notification names becomes a
+     * topic of the bucket's account, written now, and the notifications
+     * the bucket's attribute, written with the rest below (I10). */
+    NotificationImportResult nr;
+    if (JSONObj* n = p.find_obj("notifications")) {
+      ret = import_bucket_notifications(dpp, y, driver, rec.name,
+					n->get_data(), contents.connections,
+					account, attrs, nr);
+      if (ret < 0) {
+	result.failures.push_back(
+	    rec.name + ": writing its topics: " + cpp_strerror(-ret));
+	continue;
+      }
+      result.topics_written += nr.topics_written;
+      result.notifications_carried += nr.notifications_carried;
+      result.notifications_reported.insert(result.notifications_reported.end(),
+					   nr.reported.begin(), nr.reported.end());
     }
 
     /* BucketOwnerEnforced (DECISIONS.md 2026-10-11).  NooBaa records no
@@ -478,6 +492,20 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 	continue;
       }
     }
+    /* The topics to the bucket, as PutBucketNotificationConfiguration
+     * maps them after its write.  The bucket is adopted by now;  a
+     * mapping that fails is reported, and the notification still
+     * delivers, since delivery reads the bucket's attribute. */
+    for (const auto& t : nr.topics) {
+      ret = driver->update_bucket_topic_mapping(
+	  t, rgw_make_bucket_entry_name(bucket->get_tenant(), bucket->get_name()),
+	  true, y, dpp);
+      if (ret < 0) {
+	result.notifications_reported.push_back(
+	    rec.name + ": mapping topic " + t.name + " to the bucket: " +
+	    cpp_strerror(-ret));
+      }
+    }
     ++result.buckets_written;
   }
 
@@ -485,13 +513,15 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     << " buckets, " << result.policies_rewritten << " policies rewritten, "
     << result.policies_refused.size() << " rejected, "
     << result.logging_carried << " logging configurations, "
-    << result.deferred.size() << " deferred, "
+    << result.topics_written << " topics written, "
+    << result.notifications_carried << " notifications carried, "
+    << result.notifications_reported.size() << " notification reports, "
     << result.failures.size() << " failures" << dendl;
   for (const auto& r : result.policies_refused) {
     ldpp_dout(dpp, 0) << "ERROR: import: " << r << dendl;
   }
-  for (const auto& d : result.deferred) {
-    ldpp_dout(dpp, 1) << "nsfs: import: " << d << dendl;
+  for (const auto& r : result.notifications_reported) {
+    ldpp_dout(dpp, 0) << "WARNING: import: " << r << dendl;
   }
   for (const auto& f : result.failures) {
     ldpp_dout(dpp, 0) << "ERROR: import: " << f << dendl;

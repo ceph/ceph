@@ -12,6 +12,7 @@
  * Foundation.  See file COPYING.
  */
 
+#include "acconfig.h"
 #include "rgw_sal_nsfs.h"
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
@@ -50,6 +51,7 @@
 #include "driver/nsfs/adopt/noobaa_import_plan.h"
 #include "driver/nsfs/adopt/noobaa_import.h"
 #include "driver/nsfs/adopt/noobaa_bucket_import.h"
+#include "driver/nsfs/adopt/noobaa_notification_import.h"
 #include "driver/nsfs/adopt/noobaa_schema.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_pubsub.h"
@@ -13319,6 +13321,43 @@ TEST_F(NooBaaStoreTest, EveryUnreadableRecordIsReportedAndTheRestAreRead)
   }
 }
 
+/* I10:  connections/<name>.json, as `noobaa-cli connection add` writes
+ * them.  The three objects are kept as JSON text and `auth` is lifted
+ * out of the request object;  a lock file and NooBaa's temp entry,
+ * which have no `.json` suffix, are not records;  a file whose object
+ * member is not an object is reported, and the others are read. */
+TEST_F(NooBaaStoreTest, ConnectionsAreReadAndAnUnreadableOneReported)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/connections/hook.json",
+	     R"({"name":"hook","notification_protocol":"http","master_key_id":"k1",
+	       "agent_request_object":{"host":"127.0.0.1","port":9101},
+	       "request_options_object":{"path":"/","auth":"ENCRYPTED"}})");
+  write_file(store + "/connections/broker.json",
+	     R"({"name":"broker","notification_protocol":"kafka","topic":"events",
+	       "kafka_options_object":{"metadata.broker.list":"k:9092"}})");
+  write_file(store + "/connections/hook.json.lock", "");
+  write_file(store + "/connections/.noobaa-config-nsfs_x/tmp", "{");
+  write_file(store + "/connections/broken.json",
+	     R"({"notification_protocol":"http","agent_request_object":"host"})");
+
+  auto c = read_store();
+  ASSERT_EQ(c.connections.size(), 2u);
+  const auto& broker = c.connections[0];
+  const auto& hook = c.connections[1];
+  EXPECT_EQ(broker.name, "broker");
+  EXPECT_EQ(broker.topic, "events");
+  EXPECT_NE(broker.kafka_options_object.find("metadata.broker.list"), std::string::npos);
+  EXPECT_EQ(hook.name, "hook");
+  EXPECT_EQ(hook.notification_protocol, "http");
+  EXPECT_EQ(hook.master_key_id, "k1");
+  EXPECT_EQ(hook.auth, "ENCRYPTED") << "auth is decrypted by I2, not here";
+  EXPECT_NE(hook.agent_request_object.find("9101"), std::string::npos);
+
+  ASSERT_EQ(c.unreadable.size(), 1u);
+  EXPECT_NE(c.unreadable[0].path.find("broken.json"), std::string::npos);
+}
+
 /* An absent supplemental group list is not an empty one.
  *
  * §2.4:  an explicit list overrides the directory entirely, and with
@@ -14271,6 +14310,39 @@ TEST_F(NooBaaKeysTest, EverySecretOpensOrTheImportFails)
 	  << i.name << " was given a secret from the wrong key";
     }
   }
+}
+
+/* I10:  a connection's `request_options_object.auth`, opened with the
+ * key its `master_key_id` names, as NooBaa's `parse_connect_file()`
+ * opens it;  without a `master_key_id` it is cleartext and stays as
+ * read, and a key the store does not hold fails the store. */
+TEST_F(NooBaaKeysTest, AConnectionsAuthOpensWithTheMasterKey)
+{
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  auto keys = load(file_store());
+
+  nsfs::NooBaaStoreContents c;
+  nsfs::NooBaaConnection enc;
+  enc.name = "hook";
+  enc.master_key_id = "6ac7cb2751b72219a4bae375";
+  enc.auth = "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ==";
+  nsfs::NooBaaConnection clear;
+  clear.name = "plain";
+  clear.auth = "user:pass";
+  c.connections = {enc, clear};
+
+  std::vector<std::string> failures;
+  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, failures), 0)
+      << (failures.empty() ? std::string{} : failures[0]);
+  EXPECT_EQ(c.connections[0].auth, NB_PLAIN_SECRET);
+  EXPECT_EQ(c.connections[1].auth, "user:pass");
+
+  c.connections[0].auth = enc.auth;
+  c.connections[0].master_key_id = "6ac7cb2751b72219a4bae999";
+  failures.clear();
+  EXPECT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, failures), -EKEYREJECTED);
+  ASSERT_EQ(failures.size(), 1u);
+  EXPECT_NE(failures[0].find("connection hook"), std::string::npos) << failures[0];
 }
 
 /* A real store on disk, opened with its own key.
@@ -16204,6 +16276,7 @@ class NooBaaBucketImportTest : public NSFSNooBaaStateTest {
 public:
   nsfs::IdentityMapping mapping;
   nsfs::BucketImportResult result;
+  std::vector<nsfs::NooBaaConnection> connections;
 
   void SetUp() override {
     NSFSNooBaaStateTest::SetUp();
@@ -16218,6 +16291,7 @@ public:
     nsfs::NooBaaBucketRecord rec;
     rec.name = testname;
     c.buckets.push_back(rec);
+    c.connections = connections;
     result = nsfs::BucketImportResult{};
     /* The fixture's bucket exists on disk;  release the handle it
      * holds so the import opens its own, which is what the real
@@ -16513,16 +16587,18 @@ TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
   ASSERT_EQ(run(), 0) << why();
   EXPECT_EQ(result.buckets_written, 1u);
 
+  /* the notification names a connection the store does not hold */
   bool notif = false, path = false;
-  for (const auto& d : result.deferred) {
-    if (d.find("notifications") != std::string::npos) {
+  for (const auto& d : result.notifications_reported) {
+    if ((d.find("n1") != std::string::npos) &&
+	(d.find("does not hold") != std::string::npos)) {
       notif = true;
     }
     if (d.find(elsewhere.string()) != std::string::npos) {
       path = true;
     }
   }
-  EXPECT_TRUE(notif) << "notifications were dropped silently";
+  EXPECT_TRUE(notif) << "a notification was dropped silently";
   EXPECT_FALSE(path) << "a recorded path was still reported as waiting";
 
   nsfs::BucketPlacement row;
@@ -16605,6 +16681,314 @@ TEST_F(NooBaaBucketImportTest, ARecordNestedWithAnotherBucketIsRejected)
   EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
 		env->dpp, testname, "", row), -ENOENT);
 }
+
+/* I10:  a NooBaa connection, as an RGW topic's destination.
+ *
+ * NooBaa hands `agent_request_object` and `request_options_object` to
+ * Node's HTTP client, and `kafka_options_object` to librdkafka, so the
+ * translation is checked member by member against what those clients
+ * would do with them. */
+class NooBaaConnectionTest : public ::testing::Test {
+public:
+  CephContext* cct() { return env->dpp->get_cct(); }
+
+  static nsfs::NooBaaConnection http(const std::string& agent,
+				     const std::string& request,
+				     const std::string& auth = {}) {
+    nsfs::NooBaaConnection c;
+    c.name = "hook";
+    c.notification_protocol = "http";
+    c.agent_request_object = agent;
+    c.request_options_object = request;
+    c.auth = auth;
+    return c;
+  }
+  static nsfs::NooBaaConnection kafka(const std::string& options,
+				      const std::string& topic = "events") {
+    nsfs::NooBaaConnection c;
+    c.name = "broker";
+    c.notification_protocol = "kafka";
+    c.kafka_options_object = options;
+    c.topic = topic;
+    return c;
+  }
+  nsfs::TranslatedTopic translate(const nsfs::NooBaaConnection& c,
+				  const std::string& kafka_topic = {}) {
+    nsfs::TranslatedTopic t;
+    std::string why;
+    EXPECT_EQ(nsfs::translate_connection(cct(), c, kafka_topic, t, why), 0) << why;
+    return t;
+  }
+  std::string refused(const nsfs::NooBaaConnection& c,
+		      const std::string& kafka_topic = {}) {
+    nsfs::TranslatedTopic t;
+    std::string why;
+    EXPECT_EQ(nsfs::translate_connection(cct(), c, kafka_topic, t, why), -EINVAL);
+    return why;
+  }
+  static bool has(const std::vector<std::string>& v, const std::string& s) {
+    return std::any_of(v.begin(), v.end(), [&](const std::string& e) {
+      return e.find(s) != std::string::npos;
+    });
+  }
+};
+
+/* Node's Agent merges its options over the request's when it
+ * connects, so the agent's host and port win;  the request's own come
+ * from `hostname`, then `host`, then `localhost`. */
+TEST_F(NooBaaConnectionTest, AnHttpDestinationIsWhereNodeWouldConnect)
+{
+  EXPECT_EQ(translate(http(R"({"host":"a.example","port":9000})",
+			   R"({"host":"b.example","port":80,"path":"/hook"})"))
+		.dest.push_endpoint, "http://a.example:9000/hook");
+  EXPECT_EQ(translate(http("", R"({"hostname":"c.example","host":"d.example","path":"x"})"))
+		.dest.push_endpoint, "http://c.example/x");
+  EXPECT_EQ(translate(http("", "")).dest.push_endpoint, "http://localhost");
+  EXPECT_EQ(translate(http(R"({"host":"::1","port":81})", "")).dest.push_endpoint,
+	    "http://[::1]:81");
+
+  auto https = http("", R"({"host":"e.example"})");
+  https.notification_protocol = "HTTPS";
+  EXPECT_EQ(translate(https).dest.push_endpoint, "https://e.example");
+
+  const auto t = translate(http("", ""));
+  EXPECT_EQ(t.name, "hook");
+  EXPECT_EQ(t.dest.arn_topic, "hook");
+  EXPECT_FALSE(t.dest.persistent);
+  EXPECT_FALSE(t.dest.stored_secret);
+}
+
+/* `auth` goes in the URL, as RGW's HTTP endpoint carries a credential,
+ * each half percent-encoded;  it is a stored secret, and reported when
+ * it goes over http. */
+TEST_F(NooBaaConnectionTest, AnHttpCredentialIsCarriedAndAnInsecureOneReported)
+{
+  auto t = translate(http(R"({"host":"h"})", "", "us er:p@ss:w"));
+  EXPECT_EQ(t.dest.push_endpoint, "http://us%20er:p%40ss%3Aw@h");
+  EXPECT_TRUE(t.dest.stored_secret);
+  EXPECT_TRUE(has(t.warnings, "over http"));
+
+  auto c = http(R"({"host":"h"})", "", "user:pass");
+  c.notification_protocol = "https";
+  t = translate(c);
+  EXPECT_TRUE(t.dest.stored_secret);
+  EXPECT_TRUE(t.warnings.empty());
+
+  EXPECT_NE(refused(http("", "", "user-only")).find("no password"), std::string::npos);
+}
+
+/* `rejectUnauthorized` and the `local_file_*` members, from either
+ * object;  anything else is reported by name. */
+TEST_F(NooBaaConnectionTest, HttpTlsMembersAreCarriedAndTheRestReported)
+{
+  auto c = http(R"({"host":"h","rejectUnauthorized":false,"local_file_ca":"/etc/ca.pem","timeout":100})",
+		R"({"local_file_cert":"/etc/c.pem","local_file_key":"/etc/k&+%.pem","headers":{"x":"y"}})");
+  c.notification_protocol = "https";
+  const auto t = translate(c);
+  const RGWHTTPArgs args(t.dest.push_endpoint_args, env->dpp);
+  EXPECT_EQ(args.get("verify-ssl"), "false");
+  EXPECT_EQ(args.get("ca-location"), "/etc/ca.pem");
+  EXPECT_EQ(args.get("ssl-certificate-location"), "/etc/c.pem");
+  EXPECT_EQ(args.get("ssl-key-location"), "/etc/k&+%.pem")
+      << "a stored value is read back as it was given";
+  EXPECT_TRUE(has(t.not_carried, "agent_request_object.timeout"));
+  EXPECT_TRUE(has(t.not_carried, "request_options_object.headers"));
+  EXPECT_EQ(t.not_carried.size(), 2u);
+
+  EXPECT_TRUE(RGWHTTPArgs(translate(http(R"({"rejectUnauthorized":true})", ""))
+			      .dest.push_endpoint_args, env->dpp)
+		  .get("verify-ssl").empty());
+}
+
+/* A name RGW's topic names cannot hold, and a protocol NooBaa does not
+ * write, are refused with the reason. */
+TEST_F(NooBaaConnectionTest, WhatCannotBeATopicIsRefused)
+{
+  auto c = http("", "");
+  c.name = "has.dot";
+  EXPECT_NE(refused(c).find("has.dot"), std::string::npos);
+  c = http("", "");
+  c.notification_protocol = "amqp";
+  EXPECT_NE(refused(c).find("amqp"), std::string::npos);
+  EXPECT_NE(refused(http("[]", "")).find("agent_request_object"), std::string::npos);
+}
+
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+/* The broker list is the endpoint and kafka-brokers;  every other
+ * setting is librdkafka's, carried as kafka-config with its JSON type;
+ * the topic is the connection's, or the one a notification names. */
+TEST_F(NooBaaConnectionTest, AKafkaConnectionIsItsBrokersAndItsSettings)
+{
+  const auto t = translate(kafka(
+      R"({"metadata.broker.list":"k1:9092,k2:9093","linger.ms":5,"enable.idempotence":true,"client.id":"nb"})"));
+  EXPECT_EQ(t.name, "events");
+  EXPECT_EQ(t.dest.push_endpoint, "kafka://k1:9092");
+  const RGWHTTPArgs args(t.dest.push_endpoint_args, env->dpp);
+  EXPECT_EQ(args.get("kafka-brokers"), "k2:9093");
+  EXPECT_EQ(args.get("kafka-ack-level"), "broker");
+  EXPECT_EQ(args.get("kafka-config"),
+	    R"({"linger.ms":5,"enable.idempotence":true,"client.id":"nb"})");
+  EXPECT_FALSE(t.dest.stored_secret);
+
+  EXPECT_EQ(translate(kafka(R"({"bootstrap.servers":"k3:9092"})")).dest.push_endpoint,
+	    "kafka://k3:9092");
+  EXPECT_TRUE(RGWHTTPArgs(translate(kafka(R"({"bootstrap.servers":"k3:9092"})"))
+			      .dest.push_endpoint_args, env->dpp)
+		  .get("kafka-config").empty());
+  EXPECT_EQ(translate(kafka(R"({"bootstrap.servers":"k"})"), "named").name, "named");
+
+  EXPECT_NE(refused(kafka(R"({"client.id":"nb"})")).find("metadata.broker.list"),
+	    std::string::npos);
+  EXPECT_NE(refused(kafka(R"({"bootstrap.servers":"k"})", "")).find("no Kafka topic"),
+	    std::string::npos);
+  EXPECT_NE(refused(kafka(R"({"bootstrap.servers":"k"})", "a.b")).find("a.b"),
+	    std::string::npos);
+}
+
+/* A key the allowlist does not list is carried and reported, naming the
+ * option (DECISIONS 2026-10-30);  a sensitive one makes a stored
+ * secret, and to a plaintext broker is reported with the cleartext
+ * option. */
+TEST_F(NooBaaConnectionTest, KafkaSettingsNeedingTheOperatorAreReported)
+{
+  const auto saved = cct()->_conf.get_val<std::string>("rgw_kafka_config_allowed_keys");
+  cct()->_conf.set_val_or_die("rgw_kafka_config_allowed_keys", "client.id");
+
+  auto t = translate(kafka(R"({"bootstrap.servers":"k","client.id":"nb","linger.ms":5})"));
+  EXPECT_TRUE(has(t.warnings, "linger.ms is not in rgw_kafka_config_allowed_keys"));
+  EXPECT_FALSE(has(t.warnings, "client.id"));
+  EXPECT_NE(RGWHTTPArgs(t.dest.push_endpoint_args, env->dpp).get("kafka-config")
+		.find("linger.ms"), std::string::npos) << "an unlisted key was not carried";
+
+  t = translate(kafka(R"({"bootstrap.servers":"k","sasl.username":"u","sasl.password":"p"})"));
+  EXPECT_TRUE(t.dest.stored_secret);
+  EXPECT_TRUE(has(t.warnings, "rgw_allow_notification_secrets_in_cleartext"));
+
+  t = translate(kafka(R"({"bootstrap.servers":"k","security.protocol":"SASL_SSL","sasl.password":"p"})"));
+  EXPECT_TRUE(t.dest.stored_secret);
+  EXPECT_FALSE(has(t.warnings, "rgw_allow_notification_secrets_in_cleartext"));
+
+  cct()->_conf.set_val_or_die("rgw_kafka_config_allowed_keys", saved);
+}
+#endif
+
+/* NooBaa matches event names ignoring case, so they map to RGW's
+ * spelling ignoring case;  a name RGW has no event for is set aside. */
+TEST_F(NooBaaConnectionTest, EventsMapToRgwsIgnoringCase)
+{
+  rgw::notify::EventTypeList events;
+  std::vector<std::string> unknown;
+  nsfs::translate_events({"s3:ObjectCreated:*", "s3:objectremoved:delete",
+			  "S3:OBJECTTAGGING:PUT", "s3:ObjectAcl:Put",
+			  "s3:ObjectNothing:Put"}, events, unknown);
+  ASSERT_EQ(events.size(), 4u);
+  EXPECT_EQ(rgw::notify::to_string(events[0]), "s3:ObjectCreated:*");
+  EXPECT_EQ(rgw::notify::to_string(events[1]), "s3:ObjectRemoved:Delete");
+  EXPECT_EQ(rgw::notify::to_string(events[2]), "s3:ObjectTagging:Put");
+  EXPECT_EQ(rgw::notify::to_string(events[3]), "s3:ObjectAcl:Put");
+  ASSERT_EQ(unknown.size(), 1u);
+  EXPECT_EQ(unknown[0], "s3:ObjectNothing:Put");
+}
+
+/* I10 end to end:  the bucket's notification becomes a topic of its
+ * account, the bucket's attribute names it with NooBaa's id and
+ * events, and the topic is mapped to the bucket.  A second import
+ * writes nothing new. */
+TEST_F(NooBaaBucketImportTest, ANotificationBecomesATopicAndTheBucketsAttribute)
+{
+  connections.push_back(NooBaaConnectionTest::http(
+      R"({"host":"127.0.0.1","port":9101})", R"({"path":"/"})"));
+  write_nb_record("DISABLED",
+      R"(,"notifications":[{"id":["n1"],"event":["s3:ObjectCreated:*"],"topic":["hook"]}])");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.topics_written, 1u);
+  EXPECT_EQ(result.notifications_carried, 1u);
+  EXPECT_TRUE(result.notifications_reported.empty());
+
+  rgw_pubsub_topic topic;
+  ASSERT_EQ(driver->read_topic_v2("hook", "RGW11111111111111111", topic,
+				  nullptr, null_yield, env->dpp), 0);
+  EXPECT_EQ(topic.dest.push_endpoint, "http://127.0.0.1:9101/");
+  EXPECT_EQ(to_string(topic.owner), "RGW11111111111111111");
+  EXPECT_EQ(topic.arn.rfind("arn:aws:sns:", 0), 0u) << topic.arn;
+  EXPECT_NE(topic.arn.find(":RGW11111111111111111:hook"), std::string::npos) << topic.arn;
+
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto b = driver->get_bucket(info);
+  ASSERT_EQ(b->load_bucket(env->dpp, null_yield), 0);
+  auto a = b->get_attrs().find(RGW_ATTR_BUCKET_NOTIFICATION);
+  ASSERT_NE(a, b->get_attrs().end());
+  rgw_pubsub_bucket_topics bt;
+  auto it = a->second.cbegin();
+  bt.decode(it);
+  ASSERT_EQ(bt.topics.size(), 1u);
+  const auto& f = bt.topics.begin()->second;
+  EXPECT_EQ(f.s3_id, "n1");
+  EXPECT_EQ(f.topic.name, "hook");
+  ASSERT_EQ(f.events.size(), 1u);
+  EXPECT_EQ(rgw::notify::to_string(f.events[0]), "s3:ObjectCreated:*");
+
+  std::set<std::string> mapped;
+  ASSERT_EQ(driver->get_bucket_topic_mapping(topic, mapped, null_yield, env->dpp), 0);
+  EXPECT_EQ(mapped.count(rgw_make_bucket_entry_name("", testname)), 1u);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.topics_written, 0u) << "a second import wrote the topic again";
+  EXPECT_EQ(result.notifications_carried, 1u);
+}
+
+/* A topic of the same name with another destination is not
+ * overwritten:  the notification is reported and left out, and the
+ * bucket's other state is written. */
+TEST_F(NooBaaBucketImportTest, ATopicWithAnotherDestinationIsNotOverwritten)
+{
+  rgw_pubsub_topic other;
+  other.owner = rgw_owner{rgw_account_id{"RGW11111111111111111"}};
+  other.name = "hook";
+  other.dest.push_endpoint = "http://elsewhere:1/";
+  other.dest.arn_topic = "hook";
+  RGWObjVersionTracker objv;
+  objv.generate_new_write_ver(env->dpp->get_cct());
+  ASSERT_EQ(driver->write_topic_v2(other, false, objv, null_yield, env->dpp), 0);
+
+  connections.push_back(NooBaaConnectionTest::http(R"({"host":"127.0.0.1"})", ""));
+  write_nb_record("DISABLED",
+      R"(,"notifications":[{"id":["n1"],"event":[],"topic":["hook"]}])");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.buckets_written, 1u);
+  EXPECT_EQ(result.notifications_carried, 0u);
+  EXPECT_TRUE(NooBaaConnectionTest::has(result.notifications_reported,
+					"another destination"));
+
+  rgw_pubsub_topic topic;
+  ASSERT_EQ(driver->read_topic_v2("hook", "RGW11111111111111111", topic,
+				  nullptr, null_yield, env->dpp), 0);
+  EXPECT_EQ(topic.dest.push_endpoint, "http://elsewhere:1/");
+}
+
+/* `kafka:::topic/<connection>/<topic>` names the Kafka topic, and the
+ * RGW topic is named after it;  an event RGW does not name is left
+ * out and reported. */
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+TEST_F(NooBaaBucketImportTest, AKafkaTopicNamedByTheNotificationIsTheTopic)
+{
+  connections.push_back(NooBaaConnectionTest::kafka(R"({"bootstrap.servers":"k:9092"})"));
+  write_nb_record("DISABLED",
+      R"(,"notifications":[{"id":["n2"],"event":["s3:ObjectCreated:Put","s3:Nothing:Put"],
+        "topic":["kafka:::topic/broker/audit"]}])");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.notifications_carried, 1u);
+  EXPECT_TRUE(NooBaaConnectionTest::has(result.notifications_reported, "s3:Nothing:Put"));
+  rgw_pubsub_topic topic;
+  ASSERT_EQ(driver->read_topic_v2("audit", "RGW11111111111111111", topic,
+				  nullptr, null_yield, env->dpp), 0);
+  EXPECT_EQ(topic.dest.push_endpoint, "kafka://k:9092");
+}
+#endif
 
 /* An account to own placed buckets, as every bucket in NooBaa's model is
  * owned (DECISIONS.md 2026-10-15). */
