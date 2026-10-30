@@ -5232,6 +5232,15 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
         dout(10) << " got " << *dn << dendl;
       }
     }
+
+    // the auth acks every dentry it has; it dropped the ones left out
+    // because they are in a damaged dirfrag (rejoin_trim_undef_inodes())
+    for (auto it = dir->items.begin(); it != dir->items.end(); ) {
+      CDentry *dn = it->second;
+      ++it;
+      if (dn->state_test(CDentry::STATE_REJOINING))
+	rejoin_drop_unacked_dentry(dn);
+    }
   }
 
   for (const auto& in : refragged_inodes) {
@@ -5394,51 +5403,124 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
 /**
  * rejoin_trim_undef_inodes() -- remove REJOINUNDEF flagged inodes
  *
- * FIXME: wait, can this actually happen?  a survivor should generate cache trim
- * messages that clean these guys up...
+ * The inodes left undefined after open_undef_inodes_dirfrags() sit in
+ * damaged dirfrags and can never be loaded.  Drop them, so that the rejoin
+ * ack does not send their empty inode bases to the ranks that replicate
+ * them; those ranks drop the dentries left out of the ack (see
+ * handle_cache_rejoin_ack()).
+ *
+ * Returns false if an undef inode has a subtree below it, which cannot be
+ * dropped from here.
  */
-void MDCache::rejoin_trim_undef_inodes()
+void MDCache::rejoin_drop_unacked_dentry(CDentry *dn)
 {
-  dout(10) << "rejoin_trim_undef_inodes" << dendl;
+  CDir *dir = dn->get_dir();
+  CDentry::linkage_t *dnl = dn->get_linkage();
+  CInode *in = dnl->is_primary() ? dnl->get_inode() : nullptr;
 
-  while (!rejoin_undef_inodes.empty()) {
-    auto p = rejoin_undef_inodes.begin();
-    CInode *in = *p;
-    rejoin_undef_inodes.erase(p);
-
-    in->clear_replica_map();
-    
-    // close out dirfrags
-    if (in->is_dir()) {
-      const auto&& dfls = in->get_dirfrags();
-      for (const auto& dir : dfls) {
-	dir->clear_replica_map();
-
-	for (auto &p : dir->items) {
-	  CDentry *dn = p.second;
-	  dn->clear_replica_map();
-
-	  dout(10) << " trimming " << *dn << dendl;
-	  dir->remove_dentry(dn);
-	}
-
-	dout(10) << " trimming " << *dir << dendl;
-	in->close_dirfrag(dir->dirfrag().frag);
+  if (in) {
+    auto&& ls = in->get_nested_dirfrags();
+    for (const auto& subdir : ls) {
+      if (subdir->is_subtree_root()) {
+	dout(0) << " keeping unacked " << *dn << ", subtree " << *subdir
+		<< " below it" << dendl;
+	dn->state_clear(CDentry::STATE_REJOINING);
+	return;
       }
-    }
-    
-    CDentry *dn = in->get_parent_dn();
-    if (dn) {
-      dn->clear_replica_map();
-      dout(10) << " trimming " << *dn << dendl;
-      dn->dir->remove_dentry(dn);
-    } else {
-      dout(10) << " trimming " << *in << dendl;
-      remove_inode(in);
     }
   }
 
-  ceph_assert(rejoin_undef_inodes.empty());
+  dout(10) << " dropping unacked " << *dn << dendl;
+  if (in) {
+    for (auto it = in->remote_parents.begin(); it != in->remote_parents.end(); ) {
+      CDentry *remote_dn = *it;
+      ++it;
+      remote_dn->unlink_remote(remote_dn->get_linkage());
+    }
+    dir->unlink_inode(dn, false);
+    remove_inode_recursive(in);
+  } else if (dnl->is_remote()) {
+    dir->unlink_inode(dn, false);
+  }
+  dir->remove_dentry(dn);
+}
+
+bool MDCache::rejoin_trim_undef_inodes()
+{
+  dout(10) << "rejoin_trim_undef_inodes" << dendl;
+
+  for (const auto& in : rejoin_undef_inodes) {
+    auto&& ls = in->get_nested_dirfrags();
+    for (const auto& dir : ls) {
+      if (dir->is_subtree_root()) {
+	dout(0) << " cannot trim undef " << *in << ", subtree " << *dir
+		<< " below it" << dendl;
+	return false;
+      }
+    }
+  }
+
+  while (!rejoin_undef_inodes.empty()) {
+    CInode *in = *rejoin_undef_inodes.begin();
+    // start from the outermost undef inode, the ones below go with it
+    while (CDentry *pdn = in->get_parent_dn()) {
+      CInode *diri = pdn->get_dir()->get_inode();
+      if (!diri->state_test(CInode::STATE_REJOINUNDEF))
+	break;
+      in = diri;
+    }
+    if (CDentry *dn = in->get_parent_dn()) {
+      CDir *dir = dn->get_dir();
+      dout(10) << " trimming " << *dn << dendl;
+      dn->clear_replica_map();
+      dir->unlink_inode(dn, false);
+      dir->remove_dentry(dn);
+    }
+    rejoin_trim_undef_inode(in);
+  }
+
+  for (const auto& dir : rejoin_undef_dirfrags) {
+    dout(10) << " leaving undef " << *dir << dendl;
+    dir->state_clear(CDir::STATE_REJOINUNDEF);
+  }
+  rejoin_undef_dirfrags.clear();
+  return true;
+}
+
+void MDCache::rejoin_trim_undef_inode(CInode *in)
+{
+  dout(10) << " trimming " << *in << dendl;
+  rejoin_undef_inodes.erase(in);
+
+  auto&& dfls = in->get_dirfrags();
+  for (const auto& dir : dfls) {
+    rejoin_undef_dirfrags.erase(dir);
+    dir->clear_replica_map();
+    for (auto it = dir->items.begin(); it != dir->items.end(); ) {
+      CDentry *dn = it->second;
+      ++it;
+      dout(10) << " trimming " << *dn << dendl;
+      dn->clear_replica_map();
+      CDentry::linkage_t *dnl = dn->get_linkage();
+      if (dnl->is_primary()) {
+	CInode *child = dnl->get_inode();
+	dir->unlink_inode(dn, false);
+	rejoin_trim_undef_inode(child);
+      } else if (dnl->is_remote()) {
+	dir->unlink_inode(dn, false);
+      }
+      dir->remove_dentry(dn);
+    }
+    in->close_dirfrag(dir->get_frag());
+  }
+
+  for (auto it = in->remote_parents.begin(); it != in->remote_parents.end(); ) {
+    CDentry *remote_dn = *it;
+    ++it;
+    remote_dn->unlink_remote(remote_dn->get_linkage());
+  }
+  in->clear_replica_map();
+  remove_inode(in);
 }
 
 void MDCache::rejoin_gather_finish() 
@@ -6178,6 +6260,12 @@ bool MDCache::open_undef_inodes_dirfrags()
     CInode *diri = dir->get_inode();
     if (diri->state_test(CInode::STATE_REJOINUNDEF))
       continue;
+    // a complete dirfrag has nothing more to load: it went bad, so
+    // the undef inodes in it can never be opened
+    if (dir->is_complete()) {
+      dout(10) << " skipping complete " << *dir << dendl;
+      continue;
+    }
     if (dir->state_test(CDir::STATE_REJOINUNDEF))
       ceph_assert(diri->dirfragtree.is_leaf(dir->get_frag()));
     if (p.second.first || p.second.second.empty()) {
@@ -6188,7 +6276,23 @@ bool MDCache::open_undef_inodes_dirfrags()
     if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
-  ceph_assert(gather.has_subs());
+
+  if (!gather.has_subs()) {
+    dout(0) << "open_undef_inodes_dirfrags " << rejoin_undef_inodes.size()
+	    << " inodes " << rejoin_undef_dirfrags.size()
+	    << " dirfrags under damaged dirfrags cannot be opened" << dendl;
+    mds->clog->warn() << rejoin_undef_inodes.size() << " inodes and "
+		      << rejoin_undef_dirfrags.size() << " dirfrags replicated"
+		      << " by other ranks are in damaged dirfrags and cannot be"
+		      << " opened, dropping them";
+    if (!rejoin_trim_undef_inodes()) {
+      mds->clog->error() << "cannot drop inodes in damaged dirfrags with"
+			 << " subtrees below them";
+      mds->damaged();
+      ceph_abort();  // unreachable, damaged() respawns us
+    }
+    return false;
+  }
   gather.activate();
   return true;
 }
@@ -9358,6 +9462,11 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
 	dn = dir->get_inode()->get_parent_dn();
 	dir = dn->get_dir();
       }
+      if (dir->is_complete()) {
+	dout(10) << " undef " << *diri << " in bad " << *dir << dendl;
+	err = -EIO;
+	break;
+      }
       _open_ino_fetch_dir(ino, m, i == 0, dir, dn->name);
       return 1;
     }
@@ -9392,6 +9501,11 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
       if (dir->is_auth()) {
 	if (dnl && dnl->is_primary() &&
 	    dnl->get_inode()->state_test(CInode::STATE_REJOINUNDEF)) {
+	  if (dir->is_complete()) {
+	    dout(10) << " undef " << *dnl->get_inode() << " in bad " << *dir << dendl;
+	    err = -EIO;
+	    break;
+	  }
 	  dout(10) << " fetching undef " << *dnl->get_inode() << dendl;
 	  _open_ino_fetch_dir(ino, m, i == 0, dir, name);
 	  return 1;
