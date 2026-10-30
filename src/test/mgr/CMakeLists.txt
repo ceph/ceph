@@ -275,6 +275,18 @@ target_link_libraries(unittest_mgr_mgrclient
   Python3::Python
 )
 
+# unittest_mgr_threadmonitor
+add_executable(unittest_mgr_threadmonitor
+  test_threadmonitor.cc
+  $<TARGET_OBJECTS:unittest_mgr_threadmonitor_obj>
+)
+add_ceph_unittest(unittest_mgr_threadmonitor)
+target_link_libraries(unittest_mgr_threadmonitor
+  ceph-common
+  global
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")

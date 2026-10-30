@@ -15,6 +15,7 @@
 #include "mgr/ClusterState.h"
 #include "mgr/DaemonState.h"
 #include "mgr/PyModuleRegistry.h"
+#include "mgr/ThreadMonitor.h"
 #include "mon/MgrMap.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
@@ -238,6 +239,30 @@ public:
   void TearDown() override {
     registry.reset();
     clog.reset();
+  }
+};
+
+class ThreadMonitorTestHelper : public ::testing::Test {
+public:
+  static inline boost::intrusive_ptr<CephContext> cct;
+  std::unique_ptr<ThreadMonitor> thread_monitor;
+
+  static void SetUpTestSuite() {
+    if (!cct) {
+      std::vector<const char*> args = {"unittest_threadmonitor"};
+      cct = global_init(
+          nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+          CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+      common_init_finish(cct.get());
+    }
+  }
+
+  void SetUp() override {
+    thread_monitor = std::make_unique<ThreadMonitor>(cct.get());
+  }
+
+  void TearDown() override {
+    thread_monitor.reset();
   }
 };
 
