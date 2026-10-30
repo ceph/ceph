@@ -65,6 +65,14 @@ class CephadmTestCase(MgrTestCase):
     POLL_TRANSIENT: Tuple[Type[BaseException], ...] = (
         CommandFailed, KeyError, IndexError, ValueError)
 
+    #: CephTestCase.tearDown() resets the cluster configuration to its epoch
+    #: at job start ('config reset') after every test. That also drops what
+    #: cephadm itself wrote meanwhile (e.g. the dashboard settings it sets
+    #: when deploying monitoring or mgmt-gateway), and cephadm does not write
+    #: it again unless a daemon is redeployed. Suites that check such settings
+    #: turn the reset off and clean up the options they set themselves.
+    RESET_CONFIG_AFTER_TEST = True
+
     # populated by setUpClass
     remote: Any = None
     hosts: Dict[str, str] = {}
@@ -95,6 +103,15 @@ class CephadmTestCase(MgrTestCase):
         cls.hosts = cls._host_addrs()
         cls.host_names = sorted(cls.hosts)
         cls._save_root_ca()
+
+    def tearDown(self) -> None:
+        if self.RESET_CONFIG_AFTER_TEST:
+            super().tearDown()
+            return
+        # CephTestCase.tearDown() without the config reset
+        assert self.ceph_cluster is not None
+        self.ceph_cluster.mon_manager.raw_cluster_cmd(
+            'log', 'Ended test {0}'.format(self.id()))
 
     @classmethod
     def install_file(cls, local_path: str, name: str) -> str:
