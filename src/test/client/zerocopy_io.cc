@@ -89,10 +89,9 @@ TEST_F(TestClient, ZeroCopyAsyncRoundTrip)
   std::string expected(bl.c_str(), len);
 
   C_SaferCond wcond("zc-async-write");
-  ASSERT_EQ(0,
-            zc.async_write(fh, 0, std::move(bl), [&wcond](ceph::IoResult&& r) {
-              wcond.complete(r.result);
-            }));
+  ASSERT_EQ(0, zc.async_write(
+                   fh, 0, std::move(bl), ceph::BufferOwnership::Allocated,
+                   [&wcond](ceph::IoResult&& r) { wcond.complete(r.result); }));
   ASSERT_EQ(static_cast<int64_t>(len), wcond.wait());
 
   C_SaferCond rcond("zc-async-read");
@@ -138,10 +137,9 @@ TEST_F(TestClient, ZeroCopyWrapStaticWrite)
   ASSERT_EQ(sizeof(payload), bl.length());
 
   C_SaferCond wcond("zc-wrap-write");
-  ASSERT_EQ(0,
-            zc.async_write(fh, 0, std::move(bl), [&wcond](ceph::IoResult&& r) {
-              wcond.complete(r.result);
-            }));
+  ASSERT_EQ(0, zc.async_write(
+                   fh, 0, std::move(bl), ceph::BufferOwnership::Borrowed,
+                   [&wcond](ceph::IoResult&& r) { wcond.complete(r.result); }));
   ASSERT_EQ(static_cast<int64_t>(sizeof(payload)), wcond.wait());
 
   ceph::bufferlist out;
@@ -171,7 +169,7 @@ TEST_F(TestClient, ZeroCopyWriteFsync)
 
   C_SaferCond cond("zc-fsync-write");
   ASSERT_EQ(0, zc.async_write(
-                   fh, 0, std::move(bl),
+                   fh, 0, std::move(bl), ceph::BufferOwnership::Allocated,
                    [&cond](ceph::IoResult&& r) { cond.complete(r.result); },
                    true /* fsync */));
   ASSERT_EQ(static_cast<int64_t>(len), cond.wait());

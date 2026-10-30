@@ -30,11 +30,12 @@ namespace ceph {
  * Result of a zero-copy ZeroCopyClient I/O completion.
  *
  * Ownership:
- * - On a successful read, @c data holds Ceph @c bufferlist pages (typically
- *   from Objecter). The caller owns @c data after the callback returns and
- *   must keep it alive for as long as any @c iovec view into it is used
- *   (e.g. until NFS/XDR send completes). Dropping the last @c bufferlist
- *   releases the underlying @c buffer::raw pages.
+ * - On a successful read, @c data holds Ceph @c bufferlist pages (Objecter or
+ *   ObjectCacher shares after optional FSCrypt decrypt). The caller owns @c data
+ *   after the callback returns and must keep it alive for as long as any
+ *   @c iovec view into it is used (e.g. until NFS/XDR send completes).
+ *   Dropping the last @c bufferlist releases the underlying @c buffer::raw
+ *   pages.
  * - On write completion, @c data is empty; write payload ownership was
  *   transferred into ZeroCopyClient at submit (see async_write).
  */
@@ -46,27 +47,39 @@ struct IoResult {
 using IoCallback = std::function<void(IoResult&&)>;
 
 /**
+ * Provenance of a WRITE bufferlist for ObjectCacher routing.
+ *
+ * Unencrypted OC dirty path accepts only @c Allocated (upper-layer pages).
+ * @c Borrowed never enters ObjectCacher. @c Claimed is Filer-only when
+ * unencrypted; when FSCrypt encrypts, the ciphertext list is Ceph-owned and
+ * may use ObjectCacher.
+ */
+enum class BufferOwnership {
+  Allocated, ///< ceph_bufferlist_alloc / alloc_buffers
+  Borrowed, ///< wrap_static / wrap_iov
+  Claimed, ///< claim / claim_iov
+};
+
+/**
  * Zero-copy async CephFS data plane (Ganesha-oriented).
  *
  * This API uses @c ceph::bufferlist as the unit of payload ownership. It does
  * not extend @c ceph_ll_io_info with zerocopy/release fields; callers that need
  * a C ABI should use the opaque @c ceph_bufferlist helpers in ceph_buffer.h.
  *
- * Data path is Filer → Objecter only today (ObjectCacher routing is separate).
- *
- * FSCrypt: the API is always plaintext. On encrypted inodes, @c async_write
- * runs WriteEncMgr RMW + @c encrypt_bl (allocates a ciphertext bufferlist —
- * a copy) before Filer; @c async_read expands to FSCrypt block bounds, reads
- * ciphertext, then @c decrypt_bl (another copy) before the user callback.
- * ObjectCacher, when wired later, caches ciphertext under the same boundary.
+ * Data path: Filer→Objecter, or ObjectCacher when @c client_oc and the
+ * appropriate FILE_CACHE / FILE_BUFFER caps are held. FSCrypt stays above the
+ * sink: API bufferlists are plaintext; ObjectCacher/OSD hold ciphertext on
+ * encrypted inodes.
  *
  * Write ownership rule: @c async_write consumes the caller's @c bufferlist at
- * submit. Prefer @c alloc_buffers (upper-layer / Ceph-owned pages) so the
- * payload can live in ObjectCacher later without claim/donate. @c claim_iov is
- * the fallback when memory was already allocated by the RPC layer. For
- * @c wrap_static buffers, the wrapped memory must remain valid until the write
- * callback runs. For @c claim / @c claim_iov, ownership transfers at claim
- * time; the deleter runs when the last @c buffer::ptr drops the @c raw.
+ * submit. Prefer @c alloc_buffers (upper-layer / Ceph-owned pages) so
+ * unencrypted payloads can dirty ObjectCacher. @c claim_iov is the fallback when
+ * memory was already allocated by the RPC layer (Filer-only unless encrypted).
+ * For @c wrap_static buffers, the wrapped memory must remain valid until the
+ * write callback runs (Filer-only). For @c claim / @c claim_iov, ownership
+ * transfers at claim time; the deleter runs when the last @c buffer::ptr drops
+ * the @c raw.
  */
 class ZeroCopyClient {
 public:
@@ -123,16 +136,22 @@ public:
   /// Async read: on success, callback receives owned @c IoResult::data.
   int async_read(Fh* fh, uint64_t off, uint64_t len, IoCallback cb);
 
-  /// Async write: consumes @p data at submit.
-  int async_write(Fh* fh, uint64_t off, bufferlist data, IoCallback cb,
-                  bool fsync = false, bool syncdataonly = false);
+  /**
+   * Async write: consumes @p data at submit.
+   * @p ownership selects ObjectCacher vs Filer for unencrypted payloads.
+   */
+  int async_write(Fh* fh, uint64_t off, bufferlist data,
+                  BufferOwnership ownership, IoCallback cb, bool fsync = false,
+                  bool syncdataonly = false);
 
   /// Sync wrappers for tests / non-async embeds (not the Ganesha hot path).
   int64_t read(Fh* fh, uint64_t off, uint64_t len, bufferlist* out);
-  int64_t write(Fh* fh, uint64_t off, bufferlist data, bool fsync = false);
+  int64_t write(Fh* fh, uint64_t off, bufferlist data, bool fsync = false,
+                BufferOwnership ownership = BufferOwnership::Allocated);
 
 private:
   friend class C_ZC_Read;
+  friend class C_ZC_Read_OC;
   friend class C_ZC_Write;
   friend class C_ZC_Fsync;
 

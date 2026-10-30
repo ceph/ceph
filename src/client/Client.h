@@ -22,6 +22,7 @@
 namespace ceph {
 class ZeroCopyClient;
 class C_ZC_Read;
+class C_ZC_Read_OC;
 class C_ZC_Write;
 class C_ZC_Fsync;
 } // namespace ceph
@@ -320,8 +321,9 @@ public:
   friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
   friend class C_Client_CacheRelease; // Asserts on client_lock
   friend class SyntheticClient;
-  friend class ceph::ZeroCopyClient; // Filer-only zero-copy data plane
+  friend class ceph::ZeroCopyClient; // zero-copy data plane (Filer / ObjectCacher)
   friend class ceph::C_ZC_Read;
+  friend class ceph::C_ZC_Read_OC;
   friend class ceph::C_ZC_Write;
   friend class ceph::C_ZC_Fsync;
   friend void intrusive_ptr_release(Inode *in);

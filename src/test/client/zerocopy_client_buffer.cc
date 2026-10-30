@@ -179,6 +179,7 @@ TEST(ZeroCopyClientBuffer, AsyncRequiresClient)
   EXPECT_EQ(-EINVAL, zc.async_read(nullptr, 0, 0, [](ceph::IoResult&&) {}));
   EXPECT_EQ(-EINVAL, zc.async_write(
                          nullptr, 0, ceph::bufferlist{},
+                         ceph::BufferOwnership::Allocated,
                          [](ceph::IoResult&&) {}, false, false));
   // empty write payload rejected before client check
   EXPECT_EQ(-EINVAL, zc.write(nullptr, 0, ceph::bufferlist{}, false));

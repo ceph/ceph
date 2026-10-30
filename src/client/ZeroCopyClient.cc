@@ -32,6 +32,7 @@
 #include "include/ceph_assert.h"
 #include "include/ceph_fs.h"
 #include "osdc/Filer.h"
+#include "osdc/ObjectCacher.h"
 #include "osdc/Objecter.h"
 
 #if defined(__linux__)
@@ -250,6 +251,91 @@ public:
     }
     lock.unlock();
     user_cb(IoResult{r, std::move(out)});
+  }
+};
+
+/**
+ * ObjectCacher read completion under client_lock (ObjectCacher uses client_lock).
+ * Decrypts when FSCrypt is enabled, kicks readahead, drops FILE_RD, then user cb.
+ */
+class C_ZC_Read_OC : public Context {
+public:
+  Client* clnt;
+  Fh* fh;
+  InodeRef in;
+  uint64_t off; ///< logical offset
+  uint64_t len; ///< logical length
+  bufferlist* bl;
+  IoCallback cb;
+  uint64_t read_start;
+  uint64_t read_len;
+  utime_t start_time;
+#if defined(__linux__)
+  FSCryptFDataDencRef fscrypt_denc;
+#endif
+
+  C_ZC_Read_OC(Client* clnt, Fh* fh, InodeRef in, uint64_t off, uint64_t len,
+               bufferlist* bl, IoCallback cb, uint64_t read_start,
+               uint64_t read_len
+#if defined(__linux__)
+               ,
+               FSCryptFDataDencRef fscrypt_denc
+#endif
+               ) :
+    clnt(clnt), fh(fh), in(std::move(in)), off(off), len(len), bl(bl),
+    cb(std::move(cb)), read_start(read_start), read_len(read_len),
+    start_time(mono_clock_now())
+#if defined(__linux__)
+    ,
+    fscrypt_denc(std::move(fscrypt_denc))
+#endif
+  {
+    fh->get();
+  }
+
+  ~C_ZC_Read_OC() override
+  {
+    delete bl;
+    ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
+    clnt->_put_fh(fh);
+  }
+
+  void finish(int r) override
+  {
+    ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
+
+#if defined(__linux__)
+    if (fscrypt_denc && r > 0) {
+      std::vector<FSCryptFDataDenc::Segment> holes;
+      auto dec_start = mono_clock_now();
+      int dr = fscrypt_denc->decrypt_bl(off, len, read_start, holes, bl);
+      clnt->logger->tinc(l_c_fscrypt_dec_lat, mono_clock_now() - dec_start);
+      if (dr < 0) {
+        r = dr;
+      } else {
+        r = bl->length();
+        clnt->logger->tinc(l_c_fscrypt_rd_lat, mono_clock_now() - start_time);
+      }
+    }
+#endif
+
+    if (r != 0) {
+      clnt->do_readahead(fh, in.get(), off, len);
+    }
+
+    clnt->put_cap_ref(in.get(), CEPH_CAP_FILE_RD);
+    clnt->logger->inc(l_c_aio_completions);
+    clnt->dec_aio_in_flight();
+
+    IoCallback user_cb = std::move(cb);
+    bufferlist out;
+    if (r >= 0) {
+      out = std::move(*bl);
+    }
+    // Match Filer ZC read: user cb without client_lock.
+    clnt->client_lock.unlock();
+    user_cb(IoResult{r, std::move(out)});
+    clnt->client_lock.lock();
   }
 };
 
@@ -498,8 +584,11 @@ int ZeroCopyClient::async_read(Fh* fh, uint64_t off, uint64_t len, IoCallback cb
 
   Inode* in = fh->inode.get();
   int have = 0;
-  // Prefer CACHE for issue; still always use Filer (no ObjectCacher).
-  int r = client->get_caps(fh, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &have, -1);
+  int want = CEPH_CAP_FILE_CACHE;
+  if (fh->mode & CEPH_FILE_MODE_LAZY) {
+    want |= CEPH_CAP_FILE_LAZYIO;
+  }
+  int r = client->get_caps(fh, CEPH_CAP_FILE_RD, want, &have, -1);
   if (r < 0) {
     lock.unlock();
     queue_user_cb(client, std::move(cb), r, {});
@@ -517,16 +606,55 @@ int ZeroCopyClient::async_read(Fh* fh, uint64_t off, uint64_t len, IoCallback cb
     len = effective_size - off;
   }
 
+  client->logger->inc(l_c_aio_ops);
+  client->inc_aio_in_flight();
+
+  const bool use_oc = client->cct->_conf->client_oc &&
+                      (have & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO));
+
+  if (use_oc) {
+    uint64_t read_start = off;
+    uint64_t read_len = len;
+#if defined(__linux__)
+    FSCryptFDataDencRef fscrypt_denc;
+    client->fscrypt->prepare_data_read(in->fscrypt_ctx,
+                                       &in->fscrypt_key_validator, off, len,
+                                       in->size, &read_start, &read_len,
+                                       &fscrypt_denc);
+#endif
+    auto* bl = new bufferlist();
+    auto* oc_ctx = new C_ZC_Read_OC(client, fh, InodeRef(in), off, len, bl,
+                                    std::move(cb), read_start, read_len
+#if defined(__linux__)
+                                    ,
+                                    fscrypt_denc
+#endif
+    );
+
+    client->get_cap_ref(in, CEPH_CAP_FILE_CACHE);
+    std::vector<ObjectCacher::ObjHole> holes;
+    r = client->objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
+                                           read_start, read_len, bl, 0, &holes,
+                                           oc_ctx);
+    if (r > 0) {
+      client->logger->inc(l_c_osdc_hit);
+    } else if (r == 0) {
+      client->logger->inc(l_c_osdc_miss);
+    }
+    // Match _read_async: drop CACHE once submitted; finisher owns FILE_RD.
+    client->put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+    if (r != 0) {
+      oc_ctx->complete(r);
+    }
+    lock.unlock();
+    return 0;
+  }
+
   auto* bl = new bufferlist();
   auto* read_ctx = new C_ZC_Read(client, fh, InodeRef(in), off, len, bl,
                                  std::move(cb), client->filer.get(), in->layout,
                                  in->snapid, in->truncate_size,
                                  in->truncate_seq);
-
-  // Match _read / C_Read_Finisher: count from Filer submit through final
-  // completion (short-read retries stay a single in-flight op).
-  client->logger->inc(l_c_aio_ops);
-  client->inc_aio_in_flight();
 
   lock.unlock();
   read_ctx->start();
@@ -534,7 +662,8 @@ int ZeroCopyClient::async_read(Fh* fh, uint64_t off, uint64_t len, IoCallback cb
 }
 
 int ZeroCopyClient::async_write(Fh* fh, uint64_t off, bufferlist data,
-                                IoCallback cb, bool fsync, bool syncdataonly)
+                                BufferOwnership ownership, IoCallback cb,
+                                bool fsync, bool syncdataonly)
 {
   if (!client || !cb) {
     return -EINVAL;
@@ -612,8 +741,12 @@ int ZeroCopyClient::async_write(Fh* fh, uint64_t off, bufferlist data,
   utime_t start = mono_clock_now();
 
   int have = 0;
-  int r = client->get_caps(fh, CEPH_CAP_FILE_WR | CEPH_CAP_AUTH_SHARED,
-                           CEPH_CAP_FILE_BUFFER, &have, endoff);
+  int want = CEPH_CAP_FILE_BUFFER;
+  if (fh->mode & CEPH_FILE_MODE_LAZY) {
+    want |= CEPH_CAP_FILE_LAZYIO;
+  }
+  int r = client->get_caps(fh, CEPH_CAP_FILE_WR | CEPH_CAP_AUTH_SHARED, want,
+                           &have, endoff);
   if (r < 0) {
     lock.unlock();
     queue_user_cb(client, std::move(cb), r, {});
@@ -636,11 +769,33 @@ int ZeroCopyClient::async_write(Fh* fh, uint64_t off, bufferlist data,
     return 0;
   }
 
-  // Filer-only sink today (ObjectCacher routing is separate). WriteEncMgr
-  // performs optional FSCrypt RMW+encrypt (copy into ciphertext bl) then
-  // filer->write_trunc. BUFFER cap is taken inside do_write.
-  auto enc_mgr = ceph::make_ref<Client::WriteEncMgr_NotBuffered>(
-      client, fh, offset, size, data, true /* async */);
+  // WriteEncMgr: optional FSCrypt RMW+encrypt, then ObjectCacher or Filer.
+  // BUFFER cap is taken inside do_write.
+  const bool want_oc = client->cct->_conf->client_oc &&
+                       (have & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO));
+  bool will_encrypt = false;
+#if defined(__linux__)
+  {
+    auto denc = client->fscrypt->get_fdata_denc(in->fscrypt_ctx,
+                                                &in->fscrypt_key_validator);
+    will_encrypt = static_cast<bool>(denc);
+  }
+#endif
+  // Borrowed never dirties OC. Unencrypted OC requires Allocated.
+  // Encrypted ciphertext is always Ceph-owned after encrypt_bl.
+  const bool use_buffered = want_oc && ownership != BufferOwnership::Borrowed &&
+                            (will_encrypt ||
+                             ownership == BufferOwnership::Allocated);
+
+  ceph::ref_t<Client::WriteEncMgr> enc_mgr;
+  if (use_buffered) {
+    enc_mgr = ceph::make_ref<Client::WriteEncMgr_Buffered>(client, fh, offset,
+                                                           size, data,
+                                                           true /* async */);
+  } else {
+    enc_mgr = ceph::make_ref<Client::WriteEncMgr_NotBuffered>(
+        client, fh, offset, size, data, true /* async */);
+  }
   r = enc_mgr->init();
   if (r < 0) {
     client->put_cap_ref(in, CEPH_CAP_FILE_WR);
@@ -653,19 +808,20 @@ int ZeroCopyClient::async_write(Fh* fh, uint64_t off, bufferlist data,
                                    size, fpos, fsync, syncdataonly,
                                    std::move(cb), enc_mgr);
 
-  Context* filer_onfinish =
-      new C_OnFinisher(new Client::C_Lock_Client_Finisher(client, write_ctx),
-                       &client->objecter_finisher);
+  // ObjectCacher completions run under client_lock; Filer/Objecter do not.
+  Context* onfinish = write_ctx;
+  if (!use_buffered) {
+    onfinish = new C_OnFinisher(new Client::C_Lock_Client_Finisher(client,
+                                                                   write_ctx),
+                                &client->objecter_finisher);
+  }
 
   // Match _write / C_Write_Finisher (held through optional fsync).
   client->logger->inc(l_c_aio_ops);
   client->inc_aio_in_flight();
 
   // read_modify_write requires client_lock for the encrypted RMW path.
-  // Ownership of filer_onfinish transfers into WriteEncMgr's completion
-  // lambda (and then Objecter). Match Client::_write Filer async: do not
-  // specially unwind on rare early RMW errors.
-  (void)enc_mgr->read_modify_write(filer_onfinish);
+  (void)enc_mgr->read_modify_write(onfinish);
   lock.unlock();
   return 0;
 }
@@ -688,11 +844,12 @@ int64_t ZeroCopyClient::read(Fh* fh, uint64_t off, uint64_t len, bufferlist* out
   return cond.wait();
 }
 
-int64_t ZeroCopyClient::write(Fh* fh, uint64_t off, bufferlist data, bool fsync)
+int64_t ZeroCopyClient::write(Fh* fh, uint64_t off, bufferlist data, bool fsync,
+                              BufferOwnership ownership)
 {
   C_SaferCond cond;
   int r = async_write(
-      fh, off, std::move(data),
+      fh, off, std::move(data), ownership,
       [&cond](IoResult&& res) { cond.complete(res.result); }, fsync, false);
   if (r < 0) {
     return r;

@@ -43,11 +43,12 @@ struct Fh;
  *
  * WRITE buffer sources (prefer in this order for Ganesha ZC):
  * - alloc (primary / upper-layer): Ceph-owned page-aligned pages; fill via
- *   to_iovec then ceph_ll_async_write. No claim/donate.
+ *   to_iovec then ceph_ll_async_write. Required for unencrypted ObjectCacher
+ *   dirty hold when client_oc is on.
  * - claim_iov (fallback): donate ntirpc/RPC memory when recv cannot be
- *   deferred into Ceph pages (compound/GSS/failure/RDMA).
- * - wrap_iov: non-owning borrow until write CB; Objecter-only, unsafe for
- *   ObjectCacher dirty hold.
+ *   deferred into Ceph pages (compound/GSS/failure/RDMA). Filer-only when
+ *   unencrypted; after FSCrypt encrypt, ciphertext may use ObjectCacher.
+ * - wrap_iov: non-owning borrow until write CB; Filer-only, never ObjectCacher.
  *
  * This is the C surface for zero-copy I/O. Do not use ceph_ll_io_info
  * zerocopy/release fields (that approach is discarded).
@@ -117,11 +118,12 @@ enum {
 };
 
 /**
- * Zero-copy async read/write (ceph::ZeroCopyClient, Filer → Objecter).
+ * Zero-copy async read/write (ceph::ZeroCopyClient).
  *
+ * Data plane is Filer→Objecter, or ObjectCacher when client_oc and caps allow.
  * Bufferlists at this API are plaintext. On FSCrypt-enabled inodes the client
- * encrypts/decrypts internally (buffer copies); callers still put/fill
- * plaintext handles as usual.
+ * encrypts/decrypts internally (buffer copies); ObjectCacher/OSD hold
+ * ciphertext. Callers still put/fill plaintext handles as usual.
  *
  * async_read: on success, @c cb receives an owned @p data handle (put after use).
  * async_write: consumes @p data on successful submit. @p flags is a bitwise-OR

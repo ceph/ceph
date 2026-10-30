@@ -1588,8 +1588,9 @@ bench_zerocopy_read_worker(
       ceph_ll_close(cmount, fh);
     }
 
-    // Forget after I/Os on this fh completed. ZC reads do not use ObjectCacher
-    // readahead, so there is no need to defer forget across the whole phase.
+    // Forget after I/Os on this fh completed. With client_oc, ZC reads may
+    // kick ObjectCacher readahead; still safe to forget here because in-flight
+    // ops hold Fh/Inode refs until completion.
     if (inode) {
       ceph_ll_forget(cmount, inode, 1);
     }

@@ -2357,6 +2357,8 @@ extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmoun
 
 struct ceph_bufferlist {
   ceph::bufferlist bl;
+  /// WRITE provenance for ObjectCacher routing (see ceph::BufferOwnership).
+  ceph::BufferOwnership ownership = ceph::BufferOwnership::Borrowed;
 };
 
 extern "C" ceph_bufferlist* ceph_bufferlist_create(void)
@@ -2390,6 +2392,7 @@ extern "C" ceph_bufferlist* ceph_bufferlist_alloc(size_t len)
     return nullptr;
   }
   out->bl = ceph::ZeroCopyClient::alloc_buffers(len);
+  out->ownership = ceph::BufferOwnership::Allocated;
   return out;
 }
 
@@ -2401,6 +2404,7 @@ extern "C" ceph_bufferlist* ceph_bufferlist_wrap_iov(const struct iovec* iov,
     return nullptr;
   }
   out->bl = ceph::ZeroCopyClient::wrap_static(iov, iovcnt);
+  out->ownership = ceph::BufferOwnership::Borrowed;
   return out;
 }
 
@@ -2412,6 +2416,7 @@ extern "C" ceph_bufferlist* ceph_bufferlist_claim_iov(
     return nullptr;
   }
   out->bl = ceph::ZeroCopyClient::claim_iov(iov, iovcnt, del, priv);
+  out->ownership = ceph::BufferOwnership::Claimed;
   return out;
 }
 
@@ -2429,6 +2434,7 @@ extern "C" int ceph_ll_async_read(struct ceph_mount_info* cmount, struct Fh* fh,
       data = new (std::nothrow) ceph_bufferlist();
       if (data) {
         data->bl = std::move(r.data);
+        // Read gift: not a WRITE ingress; leave default Borrowed.
       } else {
         r.result = -ENOMEM;
       }
@@ -2450,10 +2456,11 @@ extern "C" int ceph_ll_async_write(struct ceph_mount_info* cmount,
                             ((flags & CEPH_LL_WRITE_SYNCDATAONLY) != 0);
   ceph::ZeroCopyClient zc(cmount->get_client());
   // Consume handle at submit: move bl out, then delete the opaque wrapper.
+  const ceph::BufferOwnership ownership = data->ownership;
   ceph::bufferlist payload = std::move(data->bl);
   delete data;
   return zc.async_write(
-      fh, off, std::move(payload),
+      fh, off, std::move(payload), ownership,
       [c](ceph::IoResult&& r) { c->cb(r.result, nullptr, c->priv); }, fsync,
       syncdataonly);
 }
