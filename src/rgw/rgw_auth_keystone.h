@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <list>
 #include <string_view>
 #include <utility>
 #include <boost/optional.hpp>
@@ -19,6 +20,16 @@ namespace keystone {
 /* Dedicated namespace for Keystone-related auth engines. We need it because
  * Keystone offers three different authentication mechanisms (token, EC2 and
  * regular user/pass). RadosGW actually does support the first two. */
+
+/* Build the ACL-matching strategy shared by TokenEngine (Swift) and
+ * EC2Engine (S3). Exposed here for unit testing; see rgw_auth_keystone.cc
+ * for the identity/wildcard matching semantics. */
+rgw::auth::RemoteApplier::acl_strategy_t
+make_keystone_acl_strategy(const std::string& tenant_id,
+                           const std::string& tenant_name,
+                           const std::string& user_id,
+                           const std::string& user_name,
+                           std::list<rgw::keystone::TokenEnvelope::Role> roles);
 
 class TokenEngine : public rgw::auth::Engine {
   CephContext* const cct;
