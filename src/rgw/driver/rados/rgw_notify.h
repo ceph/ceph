@@ -3,12 +3,14 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include "common/ceph_time.h"
 #include "include/common_fwd.h"
 #include "rgw_notify_event_type.h"
 #include "common/async/yield_context.h"
 #include "cls/2pc_queue/cls_2pc_queue_types.h"
+#include "rgw_object_lock.h"
 #include "rgw_pubsub.h"
 
 // forward declarations
@@ -81,6 +83,8 @@ struct reservation_t {
   // for a non-request caller
   const std::string source_ip;
   optional_yield yield;
+  // the object's retention, for an s3:ObjectRetention:Put event
+  std::optional<RGWObjectRetention> retention;
 
   /* ctor for rgw_op callers */
   reservation_t(const DoutPrefixProvider* _dpp,

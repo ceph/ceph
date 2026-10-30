@@ -166,6 +166,10 @@ Event Types
 +--------------------------------------------------------+-------------------------------------------+
 | ``s3:ObjectAcl:Put``                                   | Supported                                 |
 +--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectRetention:*``                               | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
+| ``s3:ObjectRetention:Put``                             | Supported                                 |
++--------------------------------------------------------+-------------------------------------------+
 | ``s3:ReducedRedundancyLostObject``                     | Not applicable                            |
 +--------------------------------------------------------+-------------------------------------------+
 
@@ -189,6 +193,15 @@ Event Types
    The ``s3:ObjectAcl:Put`` event is sent when a request sets an object's
    ACL, and only when the ACL it sets differs from the one it replaces.
    A bucket's ACL sends no event.
+
+.. note::
+
+   The ``s3:ObjectRetention:Put`` event is sent when a request sets an
+   object's Object Lock retention (``PutObjectRetention``).  Its record
+   carries ``objectRetentionEventData``, with the ``mode`` and
+   ``retainUntilDate`` the request set.  RGW has no event holds, so the
+   ``eventHold`` and ``eventHoldDuration`` fields AWS defines are never
+   present.
 
 Topic Configuration
 -------------------

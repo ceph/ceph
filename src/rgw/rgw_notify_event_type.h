@@ -49,6 +49,8 @@ namespace rgw::notify {
     ObjectTaggingDelete                    = 0x20000000000,
     ObjectAcl                              = 0xF00000000000,
     ObjectAclPut                           = 0x100000000000,
+    ObjectRetention                        = 0xF000000000000,
+    ObjectRetentionPut                     = 0x1000000000000,
     UnknownEvent                           = 0x1000000000
 };
 

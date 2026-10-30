@@ -36,6 +36,7 @@
 #include "driver/rados/rgw_datalog_notify.h"
 
 struct RGWBucketEnt;
+class RGWObjectRetention;
 class RGWRESTMgr;
 class RGWLC;
 struct rgw_user_bucket;
@@ -2075,6 +2076,9 @@ protected:
     /** Indicate the successful completion of the event associated with this notification */
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
 			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) = 0;
+    /** The object's retention as the event set it, for an
+     * s3:ObjectRetention:Put event's record;  called before publish_commit() */
+    virtual void set_object_retention(const RGWObjectRetention& retention) {}
 };
 
 /**

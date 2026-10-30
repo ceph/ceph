@@ -1166,6 +1166,9 @@ public:
 			     const ceph::real_time& mtime,
 			     const std::string& etag,
 			     const std::string& version) override;
+  virtual void set_object_retention(const RGWObjectRetention& retention) override {
+    next->set_object_retention(retention);
+  }
 };
 
 class FilterWriter : public Writer {

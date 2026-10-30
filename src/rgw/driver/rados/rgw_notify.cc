@@ -1041,6 +1041,10 @@ static inline void populate_event(reservation_t& res,
   } else {
     event.tags = (*res.tagset).get_tags();
   }
+  if (res.retention) {
+    event.object_retention_mode = res.retention->get_mode();
+    event.object_retention_until = res.retention->get_retain_until_date();
+  }
   // opaque data will be filled from topic configuration
 }
 

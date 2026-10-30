@@ -15,10 +15,12 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "rgw_object_lock.h"
 #include "rgw_pubsub.h"
 #include "rgw_sal_store.h"
 
@@ -45,6 +47,8 @@ protected:
   std::vector<std::pair<rgw_pubsub_topic_filter, rgw::notify::EventType>> matched;
   RGWObjTags* obj_tags_ptr = nullptr;
   KeyValueMap x_meta_map;
+  /* the object's retention, for an s3:ObjectRetention:Put event */
+  std::optional<RGWObjectRetention> retention;
 public:
   /* for a request */
   FSNotification(Driver* _driver, Object* _obj, Object* _src_obj,
@@ -66,6 +70,9 @@ public:
   virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
 			     const ceph::real_time& mtime, const std::string& etag,
 			     const std::string& version) override;
+  virtual void set_object_retention(const RGWObjectRetention& r) override {
+    retention = r;
+  }
 };
 
 } } // namespace rgw::sal

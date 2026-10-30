@@ -802,6 +802,9 @@ For example:
 - ``s3.opaqueData``: This means that "opaque data" is set in the topic configuration
   and is added to all notifications triggered by the topic. (This is an
   extension to the S3 notification API.)
+- ``objectRetentionEventData.mode`` and ``objectRetentionEventData.retainUntilDate``:
+  The Object Lock retention mode and retain-until date the request set.  Present
+  only in an ``ObjectRetention:Put`` event.
 
 .. _ARN: https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html
 .. _AWS Create Topic: https://docs.aws.amazon.com/sns/latest/api/API_CreateTopic.html

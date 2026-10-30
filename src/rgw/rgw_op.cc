@@ -10024,11 +10024,31 @@ void RGWPutObjRetention::execute(optional_yield y)
     return;
   }
 
+  // make reservation for notification if needed
+  std::unique_ptr<rgw::sal::Notification> res
+    = driver->get_notification(s->object.get(), nullptr, s,
+			       rgw::notify::ObjectRetentionPut, y);
+  op_ret = res->publish_reserve(this);
+  if (op_ret < 0) {
+    return;
+  }
+
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl,
 				       s->yield, this,
 				       authenticated_user(s));
+  if (op_ret < 0) {
+    return;
+  }
 
-  return;
+  // send request to notification manager, with the retention as set
+  res->set_object_retention(obj_retention);
+  int ret = res->publish_commit(this, s->object->get_size(),
+				ceph::real_clock::now(), etag,
+				s->object->get_instance());
+  if (ret < 0) {
+    ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
+    // too late to rollback operation, hence op_ret is not set here
+  }
 }
 
 int RGWGetObjRetention::verify_permission(optional_yield y)

@@ -84,6 +84,10 @@ namespace rgw::notify {
       return "s3:ObjectAcl:*";
     case ObjectAclPut:
       return "s3:ObjectAcl:Put";
+    case ObjectRetention:
+      return "s3:ObjectRetention:*";
+    case ObjectRetentionPut:
+      return "s3:ObjectRetention:Put";
     case UnknownEvent:
         return "s3:UnknownEvent";
     }
@@ -173,6 +177,10 @@ namespace rgw::notify {
       return ObjectTaggingDelete;
     if (s == "s3:ObjectAcl:Put")
       return ObjectAclPut;
+    if (s == "s3:ObjectRetention:*")
+      return ObjectRetention;
+    if (s == "s3:ObjectRetention:Put")
+      return ObjectRetentionPut;
     return UnknownEvent;
   }
 

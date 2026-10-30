@@ -1057,6 +1057,10 @@ class RadosNotification : public StoreNotification {
   rgw::notify::reservation_t res;
 
   public:
+  virtual void set_object_retention(const RGWObjectRetention& retention) override {
+    res.retention = retention;
+  }
+
   RadosNotification(const DoutPrefixProvider* _dpp,
                     RadosStore* _store,
                     Object* _obj,

@@ -199,6 +199,10 @@ int FSNotification::publish_commit(const DoutPrefixProvider* dpp,
     set_event_id(event.id, etag, ts);
     event.x_meta_map = meta;
     event.tags = tags;
+    if (retention) {
+      event.object_retention_mode = retention->get_mode();
+      event.object_retention_until = retention->get_retain_until_date();
+    }
 
     try {
       RGWHTTPArgs args(dest.push_endpoint_args, dpp);

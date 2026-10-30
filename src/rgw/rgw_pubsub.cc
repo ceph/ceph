@@ -175,6 +175,12 @@ void rgw_pubsub_s3_event::dump(Formatter *f) const {
   }
   encode_json("eventId", id, f);
   encode_json("opaqueData", opaque_data, f);
+  if (!object_retention_mode.empty()) {
+    Formatter::ObjectSection s(*f, "objectRetentionEventData");
+    encode_json("mode", object_retention_mode, f);
+    utime_t until(object_retention_until);
+    encode_json("retainUntilDate", until, f);
+  }
 }
 
 namespace rgw::notify {
