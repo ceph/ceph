@@ -50,6 +50,12 @@ public:
   void stop_monitoring();
   void register_thread(const pid_t thread_id, const pid_t serve_thread_id, const std::string& name, const PyModuleRef py_module);
 
+  // utime/stime are left unmodified when false is returned.
+  static bool parse_thread_stat(const std::string& line, long long& utime, long long& stime);
+
+  // rss_pages is left unmodified when false is returned.
+  static bool parse_process_statm(const std::string& line, long long& rss_pages);
+
 protected:
   std::vector<std::string> get_tracked_keys() const noexcept override {
     return std::vector<std::string>{"mgr_module_monitor_interval"};
