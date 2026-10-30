@@ -37,7 +37,8 @@ bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
 // make sure that if user/password are passed inside URL, it is over secure connection
 // update rgw_pubsub_dest to indicate that a password is stored in the URL
 bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct,
-                                         const req_info& ri, std::string& message)
+                                         const req_info& ri, const RGWHTTPArgs& args,
+                                         std::string& message)
 {
   if (dest.push_endpoint.empty()) {
     return true;
@@ -49,7 +50,6 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
     return false;
   }
 
-  const auto& args=ri.args;
   auto topic_user_name=args.get_optional("user-name");
   auto topic_password=args.get_optional("password");
 
@@ -68,8 +68,11 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
     password = topic_password.get();
   }
 
-  // this should be verified inside parse_url()
-  ceph_assert(user.empty() == password.empty());
+  // the URL holds both or neither, but an attribute can replace either one
+  if (user.empty() != password.empty()) {
+    message = "user-name and password must be provided together";
+    return false;
+  }
   if (!user.empty()) {
     dest.stored_secret = true;
     if (!verify_transport_security(cct, *ri.env)) {
@@ -325,7 +328,8 @@ class RGWPSCreateTopicOp : public RGWOp {
     s->info.args.get_int("max_retries", reinterpret_cast<int *>(&dest.max_retries), rgw::notify::DEFAULT_GLOBAL_VALUE);
     s->info.args.get_int("retry_sleep_duration", reinterpret_cast<int *>(&dest.retry_sleep_duration), rgw::notify::DEFAULT_GLOBAL_VALUE);
 
-    if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
+    if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->info.args,
+                                             s->err.message)) {
       return -EINVAL;
     }
     // Store topic Policy.
@@ -846,7 +850,9 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
                            rgw::notify::DEFAULT_GLOBAL_VALUE);
     } else if (attribute_name == "push-endpoint") {
       dest.push_endpoint = s->info.args.get("AttributeValue");
-      if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
+      if (!validate_and_update_endpoint_secret(
+              dest, s->cct, s->info, RGWHTTPArgs(dest.push_endpoint_args, this),
+              s->err.message)) {
         return -EINVAL;
       }
       if (!validate_endpoint_config(this, dest, s->cct, s->info, s->err.message)) {
@@ -887,6 +893,13 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
           "kafka-config"};
       if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
+        if (((attribute_name == "user-name") || (attribute_name == "password") ||
+             (attribute_name == "ssl-key-password")) &&
+            !validate_and_update_endpoint_secret(
+                dest, s->cct, s->info, RGWHTTPArgs(dest.push_endpoint_args, this),
+                s->err.message)) {
+          return -EINVAL;
+        }
         if (!validate_endpoint_config(this, dest, s->cct, s->info, s->err.message)) {
           return -EINVAL;
         }

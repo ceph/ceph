@@ -798,8 +798,11 @@ public:
       password = topic_password.get();
     }
 
-    // this should be validated by the regex in parse_url()
-    ceph_assert(user.empty() == password.empty());
+    // the URL holds both or neither, but a topic attribute can replace either one
+    if (user.empty() != password.empty()) {
+      ldout(cct, 1) << "Kafka connect: user-name and password must be provided together" << dendl;
+      return false;
+    }
 
     if (!user.empty() && !use_ssl && !g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
       ldout(cct, 1) << "Kafka connect: user/password are only allowed over secure connection" << dendl;
