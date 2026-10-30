@@ -5,9 +5,11 @@ Run by the orch/cephadm/services/mgmt-gateway suite (gateway facet); shared
 helpers live in common.py.
 """
 
+from typing import List
+
 from tasks.cephadm_cases.services.base import ROOT_CA_FILE
 from tasks.cephadm_cases.services.mgmt_gateway.common import (
-    GatewayTestCase, GW, ALERTMANAGER_PORT,
+    Check, GatewayTestCase, GW, ALERTMANAGER_PORT,
 )
 
 
@@ -129,3 +131,52 @@ class TestMgmtGateway(GatewayTestCase):
         # alertmanager is reachable directly again
         res = self.http(self.direct(ALERTMANAGER_PORT, '/api/v2/status', 'http'))
         self.assertEqual(res['status'], 200, res)
+
+    # ------------------------------------------------------------------
+    # one component down (no redundancy in this facet)
+    # ------------------------------------------------------------------
+    def test_backend_down_is_isolated(self) -> None:
+        """Prometheus down: its route reports the outage, every other route
+        is still served. Once it is back, everything works again."""
+        self.wait_mode('gateway')
+        puser, ppass = self.prometheus_creds()
+        auser, apass = self.alertmanager_creds()
+        ca = {'cacert': ROOT_CA_FILE}
+
+        def isolated() -> List[Check]:
+            r = self.http_many([
+                dict(url=self.gw('/'), **ca),
+                dict(url=self.gw('/grafana/api/health'), **ca),
+                dict(url=self.gw('/alertmanager/api/v2/status'), user=auser, password=apass, **ca),
+                dict(url=self.gw('/prometheus/api/v1/status/buildinfo'),
+                     user=puser, password=ppass, **ca),
+            ])
+            return [('dashboard still served', r[0]['status'] == 200),
+                    ('grafana still served', r[1]['status'] == 200),
+                    ('alertmanager still served', r[2]['status'] == 200),
+                    ('/prometheus reports the outage', r[3]['status'] in (502, 503, 504))]
+        victim = self.daemons('prometheus')[0]['daemon_name']
+        self.stop_daemon(victim, force=True)  # the only instance
+        try:
+            self.wait_checks('prometheus down, other routes served', isolated, timeout=300)
+        finally:
+            self.start_daemon(victim)
+        self.wait_mode('gateway')
+
+    def test_gateway_down_and_recovery(self) -> None:
+        """The gateway is the single entry point: when it is down nothing is
+        reachable; once it is back, every route works again."""
+        self.wait_mode('gateway')
+
+        def unreachable() -> List[Check]:
+            r = self.http_many([{'url': self.gw('/health'), 'cacert': ROOT_CA_FILE},
+                                {'url': self.gw('/'), 'cacert': ROOT_CA_FILE}])
+            return [('/health unreachable', r[0]['status'] == 0),
+                    ('/ unreachable', r[1]['status'] == 0)]
+        victim = self.daemons(GW)[0]['daemon_name']
+        self.stop_daemon(victim, force=True)  # the only instance
+        try:
+            self.wait_checks('gateway down', unreachable, timeout=120)
+        finally:
+            self.start_daemon(victim)
+        self.wait_mode('gateway')

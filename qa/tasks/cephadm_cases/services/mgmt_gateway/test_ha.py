@@ -7,12 +7,16 @@ every service behind them: oauth2-proxy, prometheus, alertmanager, grafana,
 and the dashboard in two mgrs. The suite yaml runs the vip task first; the
 VIP comes from ctx.vip.
 
+Each test_*_down test takes one instance of one layer away while a user is
+logged in, checks the user does not notice, then brings it back.
+
 Run by the orch/cephadm/services/mgmt-gateway suite (ha facet); shared
 helpers live in common.py.
 """
 
+import re
 import urllib.parse
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from tasks.cephadm_cases.services.base import ROOT_CA_FILE, WORKDIR
 from tasks.cephadm_cases.services.mgmt_gateway.common import (
@@ -64,6 +68,17 @@ class TestMgmtGatewayHA(GatewayTestCase):
         holders = self.vip_holders()
         self.assertLessEqual(len(holders), 1, f'VIP on several hosts: {holders}')
         return holders[0] if holders else None
+
+    def keepalived_check(self, host: str) -> Tuple[str, int]:
+        """Run on 'host' the backend check keepalived runs there, as found in
+        its deployed configuration. Returns the command and its exit code."""
+        remote = self.remote_for(host)
+        conf = remote.sh(['sudo', 'sh', '-c', 'cat /var/lib/ceph/*/keepalived.*/keepalived.conf'])
+        m = re.search(r'script "([^"]+)"', conf)
+        self.assertIsNotNone(m, f'no check script in keepalived.conf on {host}: {conf}')
+        assert m is not None
+        proc = remote.run(args=['sudo', 'sh', '-c', m.group(1)], check_status=False)
+        return m.group(1), proc.exitstatus
 
     def test_access_through_vip(self) -> None:
         """Both gateways and both oauth2-proxies run; every route works
@@ -133,3 +148,86 @@ class TestMgmtGatewayHA(GatewayTestCase):
         url = f"{res['origin']}/prometheus/api/v1/status/buildinfo"
         r = self.http_many([{'url': url, 'jar': JAR, 'cacert': ROOT_CA_FILE}] * 10)
         self.assertEqual([x['status'] for x in r], [200] * 10, r)
+
+    # ------------------------------------------------------------------
+    # one instance of a layer down
+    # ------------------------------------------------------------------
+    def one_of_two(self, service: str) -> Dict[str, Any]:
+        daemons = self.daemons(service)
+        self.assertEqual(len(daemons), 2, f'{service} must be redundant: {daemons}')
+        return daemons[0]
+
+    def assert_instance_down_unnoticed(self, service: str) -> None:
+        """Stop one instance of a service while a user is logged in: every
+        route keeps working through the VIP, with the session and with a
+        bearer token, and scraping goes on. Then start it again."""
+        self.wait_mode('oauth2')
+        res = self.login('/', JAR)
+        self.assert_logged_in(res)
+        origin = res['origin']
+        victim = self.one_of_two(service)['daemon_name']
+        self.stop_daemon(victim)
+        try:
+            self.wait_checks(f'{victim} down: logged-in user unaffected',
+                             lambda: self.session_checks(origin, JAR), timeout=300)
+            self.wait_mode('oauth2', timeout=600)
+        finally:
+            self.start_daemon(victim)
+        self.wait_mode('oauth2')
+
+    def test_active_gateway_down(self) -> None:
+        """keepalived's check sees each running gateway as healthy; stopping
+        the gateway on the VIP holder fails the check there, moves the VIP to
+        the other gateway host and the logged-in user does not notice. Once
+        it is back, every route still works through the VIP (keepalived may
+        move the VIP back)."""
+        self.wait_mode('oauth2')
+        for host in self.host_names[:2]:
+            self.poll(f'keepalived check passes on {host} (gateway running)',
+                      lambda: self.keepalived_check(host)[1] == 0, timeout=120)
+        res = self.login('/', JAR)
+        self.assert_logged_in(res)
+        holder = self.vip_holder()
+        self.assertIsNotNone(holder)
+        assert holder is not None
+        victim = [d['daemon_name'] for d in self.daemons(GW) if d['hostname'] == holder]
+        self.assertEqual(len(victim), 1, self.daemons(GW))
+        self.stop_daemon(victim[0])
+        try:
+            self.poll('keepalived check fails with the gateway down',
+                      lambda: self.keepalived_check(holder)[1] != 0, timeout=120)
+
+            # while VRRP hands over, both hosts may briefly have the VIP
+            def moved() -> bool:
+                holders = self.vip_holders()
+                return bool(holders) and holder not in holders
+            self.poll('VIP moved away from the stopped gateway', moved, timeout=300)
+            self.wait_checks(f'{victim[0]} down: logged-in user unaffected',
+                             lambda: self.session_checks(res['origin'], JAR), timeout=300)
+        finally:
+            self.start_daemon(victim[0])
+        self.wait_mode('oauth2')
+        self.hold_mode('oauth2', seconds=60)
+
+    def test_oauth2_proxy_instance_down(self) -> None:
+        self.assert_instance_down_unnoticed(OAUTH2)
+
+    def test_prometheus_instance_down(self) -> None:
+        self.assert_instance_down_unnoticed('prometheus')
+
+    def test_alertmanager_instance_down(self) -> None:
+        self.assert_instance_down_unnoticed('alertmanager')
+
+    def test_grafana_instance_down(self) -> None:
+        self.assert_instance_down_unnoticed('grafana')
+
+    def test_active_mgr_down(self) -> None:
+        """The active mgr (dashboard) fails over: the dashboard comes back
+        through the VIP on the new active mgr, with the same session."""
+        self.wait_mode('oauth2')
+        res = self.login('/', JAR)
+        self.assert_logged_in(res)
+        self.fail_mgr_and_wait()
+        self.wait_checks('logged-in user after mgr failover',
+                         lambda: self.session_checks(res['origin'], JAR), timeout=600)
+        self.wait_mode('oauth2')
