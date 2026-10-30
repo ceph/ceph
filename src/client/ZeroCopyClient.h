@@ -53,8 +53,12 @@ using IoCallback = std::function<void(IoResult&&)>;
  * a C ABI should use the opaque @c ceph_bufferlist helpers in ceph_buffer.h.
  *
  * Data path is Filer → Objecter only today (ObjectCacher routing is separate).
- * Buffer helpers and async/sync I/O are implemented; FSCrypt is identity
- * (passthrough) for v1.
+ *
+ * FSCrypt: the API is always plaintext. On encrypted inodes, @c async_write
+ * runs WriteEncMgr RMW + @c encrypt_bl (allocates a ciphertext bufferlist —
+ * a copy) before Filer; @c async_read expands to FSCrypt block bounds, reads
+ * ciphertext, then @c decrypt_bl (another copy) before the user callback.
+ * ObjectCacher, when wired later, caches ciphertext under the same boundary.
  *
  * Write ownership rule: @c async_write consumes the caller's @c bufferlist at
  * submit. Prefer @c alloc_buffers (upper-layer / Ceph-owned pages) so the
