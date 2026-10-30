@@ -3,10 +3,15 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 namespace rgw {
 // parse a URL of the form: http|https|amqp|amqps|kafka://[user:password@]<host>[:port]
 bool parse_url_authority(const std::string& url, std::string& host, std::string& user, std::string& password);
 bool parse_url_userinfo(const std::string& url, std::string& user, std::string& password);
+// parse the host and port of a URL of the form: scheme://[user:password@]<host>[:port][/path]
+// an IPv6 host is returned without the enclosing brackets. port is set to
+// default_port when the URL does not specify one
+bool parse_url_host_port(const std::string& url, std::string& host, uint16_t& port, uint16_t default_port);
 }
 
