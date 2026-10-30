@@ -1610,15 +1610,25 @@ int Operations<I>::metadata_set(const std::string &key,
     return -EROFS;
   }
 
-  uint64_t request_id = util::reserve_async_request_id();
-  r = invoke_async_request(OPERATION_METADATA_UPDATE,
-                           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
-                           false,
-                           boost::bind(&Operations<I>::execute_metadata_set,
-                                       this, key, value, _1),
-                           boost::bind(&ImageWatcher<I>::notify_metadata_set,
-                                       m_image_ctx.image_watcher, request_id,
-                                       key, value, _1));
+  if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+    uint64_t request_id = util::reserve_async_request_id();
+    r = invoke_async_request(OPERATION_METADATA_UPDATE,
+                             exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             false,
+                             boost::bind(&Operations<I>::execute_metadata_set,
+                                         this, key, value, _1),
+                             boost::bind(&ImageWatcher<I>::notify_metadata_set,
+                                         m_image_ctx.image_watcher, request_id,
+                                         key, value, _1));
+  } else {
+    C_SaferCond cond_ctx;
+    {
+      std::shared_lock owner_lock{m_image_ctx.owner_lock};
+      execute_metadata_set(key, value, &cond_ctx);
+    }
+
+    r = cond_ctx.wait();
+  }
 
   if (config_override && r >= 0) {
     // apply new config key immediately
@@ -1634,6 +1644,10 @@ void Operations<I>::execute_metadata_set(const std::string &key,
 					const std::string &value,
 					Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+  if ((m_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
+    ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
+                m_image_ctx.exclusive_lock->is_lock_owner());
+  }
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": key=" << key << ", value="
@@ -1643,6 +1657,14 @@ void Operations<I>::execute_metadata_set(const std::string &key,
     on_finish->complete(-EROFS);
     return;
   }
+
+  m_image_ctx.image_lock.lock_shared();
+  if (m_image_ctx.snap_id != CEPH_NOSNAP) {
+    m_image_ctx.image_lock.unlock_shared();
+    on_finish->complete(-EROFS);
+    return;
+  }
+  m_image_ctx.image_lock.unlock_shared();
 
   operation::MetadataSetRequest<I> *request =
     new operation::MetadataSetRequest<I>(m_image_ctx,
@@ -1670,15 +1692,25 @@ int Operations<I>::metadata_remove(const std::string &key) {
   if(r < 0)
     return r;
 
-  uint64_t request_id = util::reserve_async_request_id();
-  r = invoke_async_request(OPERATION_METADATA_UPDATE,
-                           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
-                           false,
-                           boost::bind(&Operations<I>::execute_metadata_remove,
-                                       this, key, _1),
-                           boost::bind(&ImageWatcher<I>::notify_metadata_remove,
-                                       m_image_ctx.image_watcher, request_id,
-                                       key, _1));
+  if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+    uint64_t request_id = util::reserve_async_request_id();
+    r = invoke_async_request(OPERATION_METADATA_UPDATE,
+                             exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             false,
+                             boost::bind(&Operations<I>::execute_metadata_remove,
+                                         this, key, _1),
+                             boost::bind(&ImageWatcher<I>::notify_metadata_remove,
+                                         m_image_ctx.image_watcher, request_id,
+                                         key, _1));
+  } else {
+    C_SaferCond cond_ctx;
+    {
+      std::shared_lock owner_lock{m_image_ctx.owner_lock};
+      execute_metadata_remove(key, &cond_ctx);
+    }
+
+    r = cond_ctx.wait();
+  }
 
   std::string config_key;
   if (util::is_metadata_config_override(key, &config_key) && r >= 0) {
@@ -1694,6 +1726,10 @@ template <typename I>
 void Operations<I>::execute_metadata_remove(const std::string &key,
                                            Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+  if ((m_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
+    ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
+                m_image_ctx.exclusive_lock->is_lock_owner());
+  }
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": key=" << key << dendl;
@@ -1702,6 +1738,14 @@ void Operations<I>::execute_metadata_remove(const std::string &key,
     on_finish->complete(-EROFS);
     return;
   }
+
+  m_image_ctx.image_lock.lock_shared();
+  if (m_image_ctx.snap_id != CEPH_NOSNAP) {
+    m_image_ctx.image_lock.unlock_shared();
+    on_finish->complete(-EROFS);
+    return;
+  }
+  m_image_ctx.image_lock.unlock_shared();
 
   operation::MetadataRemoveRequest<I> *request =
     new operation::MetadataRemoveRequest<I>(
