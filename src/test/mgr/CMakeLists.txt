@@ -290,6 +290,19 @@ target_link_libraries(unittest_mgr_daemonperfcounters
   Python3::Python
 )
 
+# unittest_mgr_osdperfmetriccollector
+add_executable(unittest_mgr_osdperfmetriccollector
+  test_osdperfmetriccollector.cc
+  $<TARGET_OBJECTS:unittest_mgr_base_obj>
+  $<TARGET_OBJECTS:unittest_mgr_metriccollector_obj>
+)
+add_ceph_unittest(unittest_mgr_osdperfmetriccollector)
+target_link_libraries(unittest_mgr_osdperfmetriccollector
+  ceph-common
+  global
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
