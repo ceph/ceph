@@ -93,6 +93,10 @@ struct rebuild_event_t {
   int max_concurrent = 0;
   int duration_ms = 0;
   Result result = Result::NONE;  // meaningful only for FINISH
+  // Coalescing counter: when the same event (type+bucket+index) fires
+  // repeatedly, record_event increments this instead of appending a new entry.
+  // Only LOCK_REFRESH / LOCK_REFRESH_FAIL are typically coalesced.
+  uint32_t repeat_count = 1;
 };
 
 static const char* event_type_to_str(rebuild_event_t::Type t) {
@@ -342,6 +346,18 @@ private:
     const size_t max_events = std::max<uint64_t>(
         1, cct->_conf.get_val<uint64_t>("rgw_s3vector_event_log_size"));
     std::lock_guard lg(event_log_mutex_);
+    // Coalesce repeated events of the same type on the same (bucket, index):
+    // instead of appending a new ring entry (which would evict older SPAWN/FINISH
+    // events), bump the repeat_count of the most recent matching entry and update
+    // its timestamp. This keeps LOCK_REFRESH noise from flooding the ring.
+    if (!event_log_.empty()) {
+      auto& last = event_log_.back();
+      if (last.type == type && last.bucket == bucket && last.index == index) {
+        ++last.repeat_count;
+        last.timestamp = ev.timestamp;
+        return;
+      }
+    }
     event_log_.push_back(std::move(ev));
     while (event_log_.size() > max_events) {
       event_log_.pop_front();
@@ -1817,12 +1833,17 @@ public:
   }
 
   // Return recorded events, optionally filtered by timestamp and bucket.
-  std::vector<rebuild_event_info_t> get_rebuild_events(uint64_t since_epoch,
-                                                       const std::string& tenant_filter,
-                                                       const std::string& bucket_filter) {
-    std::vector<rebuild_event_info_t> out;
+  // Hard-caps the result at rgw_s3vector_event_log_size entries (same value as
+  // the ring buffer); sets result.truncated + result.total_matched when the
+  // filtered set exceeds that cap so the caller can surface it to operators.
+  rebuild_events_result_t get_rebuild_events(uint64_t since_epoch,
+                                             const std::string& tenant_filter,
+                                             const std::string& bucket_filter) {
+    const size_t hard_cap = std::max<uint64_t>(
+        1, cct->_conf.get_val<uint64_t>("rgw_s3vector_event_log_size"));
+    rebuild_events_result_t result;
     std::lock_guard lg(event_log_mutex_);
-    out.reserve(event_log_.size());
+    result.events.reserve(std::min(event_log_.size(), hard_cap));
     for (const auto& e : event_log_) {
       if (since_epoch > 0) {
         const auto ev_epoch = static_cast<uint64_t>(
@@ -1831,19 +1852,24 @@ public:
       }
       if (!tenant_filter.empty() && e.tenant != tenant_filter) continue;
       if (!bucket_filter.empty() && e.bucket != bucket_filter) continue;
-      rebuild_event_info_t info;
-      info.type = event_type_to_str(e.type);
-      info.timestamp = e.timestamp;
-      info.tenant = e.tenant;
-      info.bucket = e.bucket;
-      info.index = e.index;
-      info.active_rebuilds = e.active_rebuilds;
-      info.max_concurrent = e.max_concurrent;
-      info.duration_ms = e.duration_ms;
-      info.result = event_result_to_str(e.result);
-      out.push_back(std::move(info));
+      ++result.total_matched;
+      if (result.events.size() < hard_cap) {
+        rebuild_event_info_t info;
+        info.type = event_type_to_str(e.type);
+        info.timestamp = e.timestamp;
+        info.tenant = e.tenant;
+        info.bucket = e.bucket;
+        info.index = e.index;
+        info.active_rebuilds = e.active_rebuilds;
+        info.max_concurrent = e.max_concurrent;
+        info.duration_ms = e.duration_ms;
+        info.result = event_result_to_str(e.result);
+        info.repeat_count = e.repeat_count;
+        result.events.push_back(std::move(info));
+      }
     }
-    return out;
+    result.truncated = (result.total_matched > result.events.size());
+    return result;
   }
 
   Manager(CephContext* _cct, rgw::sal::Driver* _driver) :
@@ -1963,9 +1989,9 @@ background_status_t get_background_status() {
   return s_manager->get_background_status();
 }
 
-std::vector<rebuild_event_info_t> get_rebuild_events(uint64_t since_epoch,
-                                                     const std::string& tenant_filter,
-                                                     const std::string& bucket_filter) {
+rebuild_events_result_t get_rebuild_events(uint64_t since_epoch,
+                                           const std::string& tenant_filter,
+                                           const std::string& bucket_filter) {
   if (!s_manager) {
     return {};
   }

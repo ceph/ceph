@@ -1576,7 +1576,7 @@ void RGWOp_VectorBucket_Rebuild_Status::execute(optional_yield y) {
   }
 
   const auto status = rgw::s3vector::get_background_status();
-  const auto events = rgw::s3vector::get_rebuild_events(since, tenant_filter, bucket_filter);
+  const auto evresult = rgw::s3vector::get_rebuild_events(since, tenant_filter, bucket_filter);
 
   Formatter* f = flusher.get_formatter();
   flusher.start(0);
@@ -1623,8 +1623,17 @@ void RGWOp_VectorBucket_Rebuild_Status::execute(optional_yield y) {
   }
   f->close_section();
 
+  // Emit truncation metadata before the array so consumers can detect a cropped
+  // response without scanning to the end.
+  f->dump_unsigned("total_matched_events", evresult.total_matched);
+  if (evresult.truncated) {
+    f->dump_bool("truncated", true);
+    f->dump_string("truncated_note",
+        "response capped at rgw_s3vector_event_log_size; use ?since= to narrow");
+  }
+
   f->open_array_section("rebuild_events");
-  for (const auto& e : events) {
+  for (const auto& e : evresult.events) {
     f->open_object_section("event");
     f->dump_string("type", e.type);
     f->dump_string("timestamp", s3v_iso8601(e.timestamp));
@@ -1644,6 +1653,9 @@ void RGWOp_VectorBucket_Rebuild_Status::execute(optional_yield y) {
     }
     if (!e.result.empty()) {
       f->dump_string("result", e.result);
+    }
+    if (e.repeat_count > 1) {
+      f->dump_unsigned("repeat_count", e.repeat_count);
     }
     f->close_section();
   }

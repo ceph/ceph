@@ -85,11 +85,25 @@ namespace rgw::s3vector {
     int max_concurrent = 0;
     int duration_ms = 0;
     std::string result;
+    // How many consecutive occurrences of this event were coalesced into one
+    // ring entry. Always >= 1; > 1 means repeated (e.g. LOCK_REFRESH).
+    uint32_t repeat_count = 1;
+  };
+
+  // Result wrapper for get_rebuild_events: the event list plus pagination metadata.
+  struct rebuild_events_result_t {
+    std::vector<rebuild_event_info_t> events;
+    // Total number of events that matched the filters before the hard cap was applied.
+    size_t total_matched = 0;
+    // True when total_matched > events.size() (response was capped).
+    bool truncated = false;
   };
 
   // Returns recorded events, optionally filtered by timestamp (epoch seconds,
   // only events with timestamp >= since_epoch), by tenant, and by bucket name.
-  std::vector<rebuild_event_info_t> get_rebuild_events(
+  // The result is capped at a hard limit; check result.truncated and
+  // result.total_matched to detect and communicate truncation to the caller.
+  rebuild_events_result_t get_rebuild_events(
     uint64_t since_epoch = 0,
     const std::string& tenant_filter = "",
     const std::string& bucket_filter = "");
