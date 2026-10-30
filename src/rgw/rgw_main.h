@@ -37,6 +37,7 @@
 #endif
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_ratelimit.h"
+#include "rgw_zone.h"
 
 
 class RGWPauser : public RGWRealmReloader::Pauser {

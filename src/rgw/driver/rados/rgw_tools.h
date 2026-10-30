@@ -45,8 +45,6 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
                    bool mostly_omap = false,
                    bool bulk = false);
 
-#define RGW_NO_SHARD -1
-
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
 

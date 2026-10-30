@@ -20,6 +20,7 @@
 #include "cls/user/cls_user_client.h"
 #include "rgw_pubsub.h"
 #include "rgw_sal.h"
+#include "rgw_tools.h"
 
 namespace rgwrados::topics {
 

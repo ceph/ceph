@@ -15,6 +15,7 @@
 #include <fmt/format.h>
 #include "common/async/yield_waiter.h"
 #include <future>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include "rgw_sal.h"
