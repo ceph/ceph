@@ -29,13 +29,9 @@ def rgwadmin_rest(endpoint, creds, cmd, params=None, raw=False):
     """
     log.info('radosgw-admin-rest: %s %s' % (cmd, params))
     put_cmds = ['create', 'link', 'add', 'set']
-    post_cmds = ['unlink', 'modify']
+    post_cmds = ['unlink', 'modify', 'post']
     delete_cmds = ['trim', 'rm', 'process']
     get_cmds = ['check', 'info', 'show', 'list', 'get', '']
-
-    bucket_sub_resources = ['object', 'policy', 'index']
-    user_sub_resources = ['subuser', 'key', 'caps', 'quota']
-    zone_sub_resources = ['pool', 'log', 'garbage']
 
     def get_cmd_method_and_handler(cmd):
         """
@@ -53,29 +49,21 @@ def rgwadmin_rest(endpoint, creds, cmd, params=None, raw=False):
 
     def get_resource(cmd):
         """
-        Get the name of the resource from information in cmd.
+        Always return (resource, subresource) as a 2-tuple.
+        Accepts:
+        ['user','info']                  -> ('user','')
+        [('user','key'),'create']        -> ('user','key')
+        ['info','']                      -> ('info','')
         """
-        if cmd[0] == 'bucket' or cmd[0] in bucket_sub_resources:
-            if cmd[0] == 'bucket':
-                return 'bucket', ''
+        r = cmd[0]
+        if isinstance(r, (list, tuple)):
+            if len(r) == 1:
+                return r[0], ''
             else:
-                return 'bucket', cmd[0]
-        elif cmd[0] == 'user' or cmd[0] in user_sub_resources:
-            if cmd[0] == 'user':
-                return 'user', ''
-            else:
-                return 'user', cmd[0]
-        elif cmd[0] == 'usage':
-            return 'usage', ''
-        elif cmd[0] == 'info':
-            return 'info', ''
-        elif cmd[0] == 'ratelimit':
-            return 'ratelimit', ''
-        elif cmd[0] == 'zone' or cmd[0] in zone_sub_resources:
-            if cmd[0] == 'zone':
-                return 'zone', ''
-            else:
-                return 'zone', cmd[0]
+                return r
+        if isinstance(r, str):
+            return r, ''
+        raise TypeError(f'Unsupported resource type for {str(r)}')
 
     def build_admin_request(endpoint, method, resource, query_args, other_params):
         url = f'{endpoint.url()}admin/{resource}'
@@ -283,7 +271,7 @@ def task(ctx, config):
     admin_display_name = 'Ms. Admin User'
     admin_access_key = 'MH1WC2XQ1S8UISFDZC8W'
     admin_secret_key = 'dQyrTPA0s248YeN5bBv4ukvKU0kh54LWWywkrpoG'
-    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write; info=read;ratelimit=read, write'
+    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write; info=read; ratelimit=read, write; accounts=read, write'
 
     user1 = 'foo'
     user2 = 'fud'
@@ -301,6 +289,7 @@ def task(ctx, config):
     swift_secret2 = 'ri2VJQcKSYATOY6uaDUX7pxgkWOW1YmC6OCxPHwy'
 
     bucket_name = 'myfoo'
+    account_id = 'RGW00000000000000001'
 
     # legend (test cases can be easily grep-ed out)
     # TESTCASE 'testname','object','method','operation','assertion'
@@ -450,7 +439,7 @@ def task(ctx, config):
 
     # TESTCASE 'add-keys','key','create','w/valid info','succeeds'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds,
-            ['key', 'create'],
+            [('user', 'key'), 'create'],
             {'uid' : user1,
              'access-key' : access_key2,
              'secret-key' : secret_key2
@@ -468,7 +457,7 @@ def task(ctx, config):
 
     # TESTCASE 'rm-key','key','rm','newly added key','succeeds, key is removed'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds,
-            ['key', 'rm'],
+            [('user', 'key'), 'rm'],
             {'uid' : user1,
              'access-key' : access_key2
             })
@@ -483,7 +472,7 @@ def task(ctx, config):
 
     # TESTCASE 'add-swift-key','key','create','swift key','succeeds'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds,
-            ['subuser', 'create'],
+            [('user', 'subuser'), 'create'],
             {'subuser' : subuser1,
              'secret-key' : swift_secret1,
              'key-type' : 'swift'
@@ -500,7 +489,7 @@ def task(ctx, config):
 
     # TESTCASE 'add-swift-subuser','key','create','swift sub-user key','succeeds'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds,
-            ['subuser', 'create'],
+            [('user', 'subuser'), 'create'],
             {'subuser' : subuser2,
              'secret-key' : swift_secret2,
              'key-type' : 'swift'
@@ -517,7 +506,7 @@ def task(ctx, config):
 
     # TESTCASE 'rm-swift-key1','key','rm','subuser','succeeds, one key is removed'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds,
-            ['key', 'rm'],
+            [('user', 'key'), 'rm'],
             {'subuser' : subuser1,
              'key-type' :'swift'
             })
@@ -529,7 +518,7 @@ def task(ctx, config):
 
     # TESTCASE 'rm-subuser','subuser','rm','subuser','success, subuser is removed'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds,
-            ['subuser', 'rm'],
+            [('user', 'subuser'), 'rm'],
             {'subuser' : subuser1
             })
 
@@ -540,7 +529,7 @@ def task(ctx, config):
 
     # TESTCASE 'rm-subuser-with-keys','subuser','rm','subuser','succeeds, second subser and key is removed'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds,
-            ['subuser', 'rm'],
+            [('user', 'subuser'), 'rm'],
             {'subuser' : subuser2,
              'key-type' : 'swift',
              '{purge-keys' :True
@@ -678,7 +667,7 @@ def task(ctx, config):
     connection.put_object(Bucket=bucket_name, Key=key, Body=key)
 
     # now delete it
-    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['object', 'rm'], {'bucket' : bucket_name, 'object' : key})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, [('bucket', 'object'), 'rm'], {'bucket' : bucket_name, 'object' : object_name})
     assert ret == 200
 
     # TESTCASE 'bucket-stats6','bucket','stats','after deleting key','succeeds, lists one no objects'
@@ -796,14 +785,14 @@ def task(ctx, config):
     key = 'seven'
     connection.put_object(Bucket=bucket_name, Key=key, Body=key, ACL='private')
 
-    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['policy', 'show'], {'bucket' : bucket_name, 'object' : key})
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('bucket', 'policy'), 'show'], {'bucket' : bucket_name, 'object' : key})
     assert ret == 200
     assert len(out['acl']['grant_map']) == 1
 
     # add another grantee by making the object public read
     connection.put_object_acl(Bucket=bucket_name, Key=key, ACL='public-read')
 
-    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['policy', 'show'], {'bucket' : bucket_name, 'object' : key})
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('bucket', 'policy'), 'show'], {'bucket' : bucket_name, 'object' : key})
     assert ret == 200
     assert len(out['acl']['grant_map']) == 2
 
@@ -822,12 +811,12 @@ def task(ctx, config):
 
     # TESTCASE 'caps-add', 'caps', 'add', 'add user cap', 'succeeds'
     caps = 'usage=read'
-    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['caps', 'add'], {'uid' :  user1, 'user-caps' : caps})
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('user', 'caps'), 'add'], {'uid' :  user1, 'user-caps' : caps})
     assert ret == 200
     assert out[0]['perm'] == 'read'
 
     # TESTCASE 'caps-rm', 'caps', 'rm', 'remove existing cap from user', 'succeeds'
-    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['caps', 'rm'], {'uid' :  user1, 'user-caps' : caps})
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('user', 'caps'), 'rm'], {'uid' :  user1, 'user-caps' : caps})
     assert ret == 200
     assert not out
 
@@ -936,4 +925,150 @@ def task(ctx, config):
 
     # TESTCASE 'ratelimit' 'global' 'modify' 'anonymous' 'enabled' 'succeeds'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'global': 'true', 'enabled' : 'true'})
+    assert ret == 200
+
+    # TESTCASE 'create account' 'account' 'post' 'creating a new account' 'succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'post'], {'id' : account_id, 'name': account_id})
+    assert ret == 200
+
+    # TESTCASE 'account-info' 'account' 'info' 'getting the account info, including its quota, and checking for default values' 'succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'info'], {'id' : account_id})
+    assert ret == 200
+    account_quota = out['quota']
+    assert not account_quota["enabled"]
+    assert account_quota["max_size"] == -1
+    assert account_quota["max_objects"] == -1
+    bucket_quota = out['bucket_quota']
+    assert not bucket_quota["enabled"]
+    assert bucket_quota["max_size"] == -1
+    assert bucket_quota["max_objects"] == -1
+    assert out["max_users"] == 1000
+    assert out["max_roles"] == 1000
+    assert out["max_groups"] == 1000
+    assert out["max_buckets"] == 1000
+    assert out["max_access_keys"] == 4
+
+    # TESTCASE 'bucket-level-account-quota-set' 'account-quota-set' 'setting account quota at the bucket level. Other values should remain the same' 'succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'quota'), 'set'], {'id': account_id, 'quota-type' : 'bucket', 'max-size': 12345, 'max-objects' : 54321, 'enabled': True})
+    assert ret == 200
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'info'], {'id' : account_id})
+    assert ret == 200
+    # verifying bucket-level quota has been changed
+    bucket_quota = out['bucket_quota']
+    assert bucket_quota["enabled"]
+    assert bucket_quota["max_size"] == 12345
+    assert bucket_quota["max_objects"] == 54321
+    # verifying the rest of the values remain the same
+    account_quota = out['quota']
+    assert not account_quota["enabled"]
+    assert account_quota["max_size"] == -1
+    assert account_quota["max_objects"] == -1
+    assert out["max_users"] == 1000
+    assert out["max_roles"] == 1000
+    assert out["max_groups"] == 1000
+    assert out["max_buckets"] == 1000
+    assert out["max_access_keys"] == 4
+    # cleanup the account
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'rm'], {'id' : account_id})
+    assert ret == 200
+
+
+    # TESTCASE 'account-level-quota-set' 'account-quota-set' 'setting account quota at the account level. Other values should remain the same' 'succeeds'
+    # re-create the account
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'post'], {'id' : account_id, 'name': account_id})
+    assert ret == 200
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'quota'), 'set'], {'id': account_id, 'quota-type' : 'account', 'max-size': 12345, 'max-objects' : 54321, 'enabled': True})
+    assert ret == 200
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'info'], {'id' : account_id})
+    assert ret == 200
+    # verifying account-level quota has been changed
+    account_quota = out['quota']
+    assert account_quota["enabled"]
+    assert account_quota["max_size"] == 12345
+    assert account_quota["max_objects"] == 54321
+    # verifying the rest of the values remain the same
+    bucket_quota = out['bucket_quota']
+    assert not bucket_quota["enabled"]
+    assert bucket_quota["max_size"] == -1
+    assert bucket_quota["max_objects"] == -1
+    assert out["max_users"] == 1000
+    assert out["max_roles"] == 1000
+    assert out["max_groups"] == 1000
+    assert out["max_buckets"] == 1000
+    assert out["max_access_keys"] == 4
+    # cleanup the account
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'rm'], {'id' : account_id})
+    assert ret == 200
+
+    # TESTCASE 'account-quota-set-invalid-args' 'account-quota-set' 'verify set quota requests with invalid args fail' 'fails'
+    # re-create the account
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'post'], {'id' : account_id, 'name': account_id})
+    assert ret == 200
+
+    # verify invalid quota-type fails
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'quota'), 'set'], {'id': account_id, 'quota-type' : 'invalid', 'max-size': 12345, 'max-objects' : 54321, 'enabled': True})
+    assert ret == 400
+
+    # verify empty quota-type fails
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'quota'), 'set'], {'id': account_id, 'max-size': 12345, 'max-objects' : 54321, 'enabled': True})
+    assert ret == 400
+
+    # verify request with no account id fails
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'quota'), 'set'], {'quota-type' : 'bucket', 'max-size': 12345, 'max-objects' : 54321, 'enabled': True})
+    assert ret == 400
+
+    # cleanup the account
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'rm'], {'id' : account_id})
+    assert ret == 200
+
+    # TESTCASE 'rm account caps' 'user-caps-rm' 'verify access after removing user caps for account read and write' 'fails'
+    (err, out) = rgwadmin(ctx, client, [
+            'caps', 'rm',
+            '--uid', admin_user,
+            '--caps', 'accounts=read, write'
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    # checking failed access to create account
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'post'], {'id' : account_id, 'name': account_id})
+    assert ret == 403
+
+    # checking failed access to set quota
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'quota'), 'set'], {'id': account_id, 'quota-type' : 'account', 'max-size': -1, 'max-objects' : -1, 'enabled': True})
+    assert ret == 403
+
+    # checking failed access to get account info
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'info'], {'id' : account_id})
+    assert ret == 403
+
+    # checking failed access to remove account
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'rm'], {'id' : account_id})
+    assert ret == 403
+
+    # TESTCASE 'add back account caps' 'user-caps-add' 'verify access after adding back user caps for account read and write' 'succeeds'
+    (err, out) = rgwadmin(ctx, client, [
+            'caps', 'add',
+            '--uid', admin_user,
+            '--caps', 'accounts=read, write'
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    # checking create account access
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'post'], {'id' : account_id, 'name': account_id})
+    assert ret == 200
+
+    # checking set quota access
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'quota'), 'set'], {'id': account_id, 'quota-type' : 'account', 'max-size': -1, 'max-objects' : -1, 'enabled': True})
+    assert ret == 200
+
+    # checking get account info access
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'info'], {'id' : account_id})
+    assert ret == 200
+
+    # checking remove account access
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'rm'], {'id' : account_id})
     assert ret == 200
