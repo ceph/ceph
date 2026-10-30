@@ -239,6 +239,7 @@ and must be between 1 and 256 characters long. To relax these requirements, use:
    [&Attributes.entry.19.key=ssl-certificate-location&Attributes.entry.19.value=<file path>]
    [&Attributes.entry.20.key=ssl-key-location&Attributes.entry.20.value=<file path>]
    [&Attributes.entry.21.key=ssl-key-password&Attributes.entry.21.value=<password-string>]
+   [&Attributes.entry.22.key=kafka-config&Attributes.entry.22.value=<JSON object>]
 
 Request parameters:
 
@@ -289,6 +290,16 @@ Request parameters:
  - ``cloudevents``: This indicates whether the HTTP header should contain
    attributes according to the `S3 CloudEvents Spec`_. (This is "false" by
    default.)
+ - ``ca-location``: If this is provided and the server certificate is
+   validated, the specified CA file is used instead of the default CA to
+   authenticate the server.
+ - ``ssl-certificate-location``: The path to a PEM-encoded client certificate
+   file to present to the server for mutual TLS (mTLS) authentication. It must
+   be provided together with ``ssl-key-location``, or topic creation is
+   rejected.
+ - ``ssl-key-location``: The path to a PEM-encoded private key file
+   corresponding to the client certificate specified in
+   ``ssl-certificate-location``.
 
 - AMQP0.9.1 endpoint
 
@@ -381,6 +392,32 @@ Request parameters:
    The same security considerations in place for this parameter as
    for ``user``/``password``: it should be provided over HTTPS or
    ``rgw_allow_notification_secrets_in_cleartext`` must be set to "true".
+ - ``kafka-config``: A JSON object of `librdkafka configuration`_ properties
+   and their values, for settings the parameters above do not cover, e.g.
+   Kerberos::
+
+     {"security.protocol": "SASL_SSL", "sasl.mechanism": "GSSAPI",
+      "sasl.kerberos.service.name": "kafka",
+      "sasl.kerberos.keytab": "/etc/ceph/rgw.keytab",
+      "sasl.kerberos.principal": "rgw@EXAMPLE.COM"}
+
+   Values are strings, numbers or booleans. The properties are applied after
+   the ones RGW derives from the parameters above, so they take precedence.
+   Only the properties listed in ``rgw_kafka_config_allowed_keys`` are
+   accepted, and the list is checked again whenever a connection is made.
+   It is empty by default, which refuses ``kafka-config``. Topics are
+   created by tenants, and some properties act on the gateway host:
+   ``plugin.library.paths`` loads shared libraries into radosgw,
+   ``sasl.kerberos.kinit.cmd`` runs a shell command, and properties ending in
+   ``.location`` or ``.file`` read files radosgw can read. Properties
+   librdkafka marks as sensitive (for example ``sasl.password`` and
+   ``ssl.keystore.password``) have the same security considerations as
+   ``user``/``password``, and are refused when the connection to the
+   broker is not secure (``security.protocol`` is ``PLAINTEXT`` or
+   ``SASL_PLAINTEXT``, or ``use-ssl`` is "false" and ``security.protocol``
+   is not given) unless ``rgw_allow_notification_secrets_in_cleartext`` is
+   "true". A property or value librdkafka rejects causes topic creation to
+   be rejected.
 
 .. note::
 
@@ -664,6 +701,12 @@ Valid ``AttributeName`` that can be passed:
 - ``ssl-key-location``: Path to a PEM-encoded private key corresponding to the
   client certificate. Must be provided together with ``ssl-certificate-location``.
 - ``ssl-key-password``: Password for an encrypted private key (optional).
+- ``kafka-config``: A JSON object of librdkafka configuration properties,
+  replacing the topic's whole set. An empty value or ``{}`` removes them.
+  The same checks apply as at topic creation.
+
+The ``ca-location``, ``ssl-certificate-location`` and ``ssl-key-location``
+attributes apply to HTTP endpoints as well as Kafka endpoints.
 
 Notifications
 ~~~~~~~~~~~~~
@@ -763,3 +806,4 @@ For example:
 .. _ARN: https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html
 .. _AWS Create Topic: https://docs.aws.amazon.com/sns/latest/api/API_CreateTopic.html
 .. _S3 CloudEvents Spec: https://github.com/cloudevents/spec/blob/main/cloudevents/adapters/aws-s3.md
+.. _librdkafka configuration: https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md

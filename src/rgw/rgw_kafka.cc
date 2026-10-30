@@ -19,6 +19,7 @@
 #include <boost/lockfree/queue.hpp>
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
+#include "common/split.h"
 #include "include/utime.h"
 
 #define dout_subsys ceph_subsys_rgw_notification
@@ -80,10 +81,11 @@ connection_id_t::connection_id_t(
     bool _verify_ssl,
     const boost::optional<const std::string&>& _ssl_certificate,
     const boost::optional<const std::string&>& _ssl_key,
-    const boost::optional<const std::string&>& _ssl_key_password
+    const boost::optional<const std::string&>& _ssl_key_password,
+    const config_t& _config
   )
     : broker(_broker), user(_user), password(_password), ssl(_ssl),
-      verify_ssl(_verify_ssl) {
+      verify_ssl(_verify_ssl), config(_config) {
 
   if (_ca_location.has_value()) {
     ca_location = _ca_location.get();
@@ -111,7 +113,8 @@ bool operator==(const connection_id_t& lhs, const connection_id_t& rhs) {
          lhs.verify_ssl == rhs.verify_ssl &&
          lhs.ssl_certificate == rhs.ssl_certificate &&
          lhs.ssl_key == rhs.ssl_key &&
-         lhs.ssl_key_password == rhs.ssl_key_password;
+         lhs.ssl_key_password == rhs.ssl_key_password &&
+         lhs.config == rhs.config;
 }
 
 struct connection_id_hasher {
@@ -127,6 +130,10 @@ struct connection_id_hasher {
     boost::hash_combine(h, k.ssl_certificate);
     boost::hash_combine(h, k.ssl_key);
     boost::hash_combine(h, k.ssl_key_password);
+    for (const auto& [key, value] : k.config) {
+      boost::hash_combine(h, key);
+      boost::hash_combine(h, value);
+    }
     return h;
   }
 };
@@ -191,6 +198,7 @@ struct connection_t {
   const boost::optional<std::string> ssl_certificate;
   const boost::optional<std::string> ssl_key;
   const boost::optional<std::string> ssl_key_password;
+  const config_t config;
   utime_t timestamp = ceph_clock_now();
 
   // cleanup of all internal connection resource
@@ -226,9 +234,10 @@ struct connection_t {
           const std::string& _user, const std::string& _password, const boost::optional<const std::string&>& _mechanism,
           const boost::optional<const std::string&>& _ssl_certificate,
           const boost::optional<const std::string&>& _ssl_key,
-          const boost::optional<const std::string&>& _ssl_key_password) :
+          const boost::optional<const std::string&>& _ssl_key_password,
+          const config_t& _config) :
       cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism),
-      ssl_certificate(_ssl_certificate), ssl_key(_ssl_key), ssl_key_password(_ssl_key_password) {}                                                                                                                                                        
+      ssl_certificate(_ssl_certificate), ssl_key(_ssl_key), ssl_key_password(_ssl_key_password), config(_config) {}                                                                                                                                                        
 
   // dtor also destroys the internals
   ~connection_t() {
@@ -400,6 +409,12 @@ bool new_producer(connection_t* conn) {
       }
   }
 
+  // the topic's own settings override the ones above
+  for (const auto& [key, value] : conn->config) {
+    if (rd_kafka_conf_set(conf.get(), key.c_str(), value.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+    ldout(conn->cct, 20) << "Kafka connect: successfully configured " << key << dendl;
+  }
+
   // set the global callback for delivery success/fail
   rd_kafka_conf_set_dr_msg_cb(conf.get(), message_callback);
   // set the global opaque pointer to be the connection itself
@@ -435,6 +450,94 @@ conf_error:
   conn->status = rd_kafka_last_error();
   ldout(conn->cct, 1) << "Kafka connect: configuration failed: " << errstr << dendl;
   return false;
+}
+
+// the settable keys librdkafka marks _RK_SENSITIVE (rdkafka_conf.c, v2.14.1).
+// librdkafka has no interface for the flag, so this list follows its releases
+static const std::initializer_list<std::string_view> sensitive_keys = {
+  "ssl.key.location",
+  "ssl.key.password",
+  "ssl.key.pem",
+  "ssl.ca.pem",
+  "ssl.keystore.password",
+  "sasl.username",
+  "sasl.password",
+  "sasl.oauthbearer.config",
+  "sasl.oauthbearer.client.secret",
+  "sasl.oauthbearer.assertion.private.key.file",
+  "sasl.oauthbearer.assertion.private.key.passphrase",
+  "sasl.oauthbearer.assertion.private.key.pem",
+};
+
+// the checks that hold whenever a connection is made:  every key is listed
+// in rgw_kafka_config_allowed_keys, and a secret goes to the broker over
+// cleartext only when rgw_allow_notification_secrets_in_cleartext is set
+static bool check_config(CephContext* cct,
+                         const config_t& config,
+                         bool use_ssl,
+                         bool& has_secret,
+                         std::string& error) {
+  has_secret = false;
+  if (config.empty()) {
+    return true;
+  }
+  const auto allowed = cct->_conf.get_val<std::string>("rgw_kafka_config_allowed_keys");
+  for (const auto& [key, value] : config) {
+    bool listed = false;
+    for (const auto allowed_key : ceph::split(allowed, ", ")) {
+      if (allowed_key == key) {
+        listed = true;
+        break;
+      }
+    }
+    if (!listed) {
+      error = "kafka-config key '" + key + "' is not in rgw_kafka_config_allowed_keys";
+      return false;
+    }
+    if (std::find(sensitive_keys.begin(), sensitive_keys.end(), key) != sensitive_keys.end()) {
+      has_secret = true;
+    }
+  }
+  if (!has_secret) {
+    return true;
+  }
+  bool plaintext = !use_ssl;
+  if (const auto it = config.find("security.protocol"); it != config.end()) {
+    plaintext = boost::iequals(it->second, "plaintext") ||
+                boost::iequals(it->second, "sasl_plaintext");
+  }
+  if (plaintext && !cct->_conf.get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
+    error = "kafka-config secrets are only allowed over a secure connection";
+    return false;
+  }
+  return true;
+}
+
+bool validate_config(CephContext* cct,
+                     const config_t& config,
+                     bool use_ssl,
+                     bool& has_secret,
+                     std::string& error) {
+  if (!check_config(cct, config, use_ssl, has_secret, error)) {
+    return false;
+  }
+  if (config.empty()) {
+    return true;
+  }
+  auto kafka_conf_deleter = [](rd_kafka_conf_t* conf) {rd_kafka_conf_destroy(conf);};
+  std::unique_ptr<rd_kafka_conf_t, decltype(kafka_conf_deleter)> conf(rd_kafka_conf_new(), kafka_conf_deleter);
+  if (!conf) {
+    error = status_to_string(STATUS_CONF_ALLOC_FAILED);
+    return false;
+  }
+  char errstr[512] = {0};
+  for (const auto& [key, value] : config) {
+    if (rd_kafka_conf_set(conf.get(), key.c_str(), value.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+      error = "kafka-config key '" + key + "': " + errstr;
+      return false;
+    }
+  }
+  return true;
 }
 
 // struct used for holding messages in the message queue
@@ -664,7 +767,8 @@ public:
                boost::optional<const std::string&> brokers,
                boost::optional<const std::string&> ssl_certificate,
                boost::optional<const std::string&> ssl_key,
-               boost::optional<const std::string&> ssl_key_password) {
+               boost::optional<const std::string&> ssl_key_password,
+               const config_t& config) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
@@ -702,6 +806,13 @@ public:
       return false;
     }
 
+    bool has_secret;
+    std::string error;
+    if (!check_config(cct, config, use_ssl, has_secret, error)) {
+      ldout(cct, 1) << "Kafka connect: " << error << dendl;
+      return false;
+    }
+
     // ssl_certificate and ssl_key must both be provided for mTLS
     if (ssl_certificate.has_value() != ssl_key.has_value()) {
       ldout(cct, 1) << "Kafka connect: both ssl_certificate and ssl_key must be provided for mTLS (got only "
@@ -715,7 +826,8 @@ public:
     }
 
     connection_id_t tmp_id(broker_list, user, password, ca_location, mechanism,
-                           use_ssl, verify_ssl, ssl_certificate, ssl_key, ssl_key_password);
+                           use_ssl, verify_ssl, ssl_certificate, ssl_key, ssl_key_password,
+                           config);
     std::lock_guard lock(connections_lock);
     const auto it = connections.find(tmp_id);
     // note that ssl vs. non-ssl connection to the same host are two separate connections
@@ -734,7 +846,7 @@ public:
       return false;
     }
 
-    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password, mechanism, ssl_certificate, ssl_key, ssl_key_password);
+    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password, mechanism, ssl_certificate, ssl_key, ssl_key_password, config);
     if (!new_producer(conn.get())) {
       ldout(cct, 10) << "Kafka connect: producer creation failed in new connection" << dendl;
       return false;
@@ -856,12 +968,13 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> brokers,
              boost::optional<const std::string&> ssl_certificate,
              boost::optional<const std::string&> ssl_key,
-             boost::optional<const std::string&> ssl_key_password) {
+             boost::optional<const std::string&> ssl_key_password,
+             const config_t& config) {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
   return s_manager->connect(conn_id, url, use_ssl, verify_ssl, ca_location,
                             mechanism, user_name, password, brokers,
-                            ssl_certificate, ssl_key, ssl_key_password);
+                            ssl_certificate, ssl_key, ssl_key_password, config);
 }
 
 int publish(const connection_id_t& conn_id,

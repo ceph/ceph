@@ -10,6 +10,7 @@
 #include "rgw_iam_policy.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_pubsub.h"
+#include "rgw_pubsub_push.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -88,6 +89,50 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
   }
 
   return true;
+}
+
+// check the endpoint arguments only the endpoint type knows, and mark the
+// topic as holding a secret when they do
+static bool validate_endpoint_config(const DoutPrefixProvider* dpp,
+                                     rgw_pubsub_dest& dest, CephContext* cct,
+                                     const req_info& ri, std::string& message)
+{
+  if (dest.push_endpoint.empty()) {
+    return true;
+  }
+  bool has_secret;
+  try {
+    has_secret = RGWPubSubEndpoint::validate_config(
+        dest.push_endpoint, RGWHTTPArgs(dest.push_endpoint_args, dpp), cct);
+  } catch (const RGWPubSubEndpoint::configuration_error& e) {
+    message = e.what();
+    return false;
+  }
+  if (has_secret) {
+    dest.stored_secret = true;
+    if (!verify_transport_security(cct, *ri.env)) {
+      message = "Topic contains secrets that must be transmitted over a secure transport";
+      return false;
+    }
+  }
+  return true;
+}
+
+// RGWHTTPArgs::parse() splits stored endpoint arguments on '&' and then
+// url-decodes them, so a value keeps '%', '&' and '+' only when they are escaped
+static std::string escape_endpoint_arg(std::string_view value)
+{
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char c : value) {
+    switch (c) {
+    case '%': escaped.append("%25"); break;
+    case '&': escaped.append("%26"); break;
+    case '+': escaped.append("%2B"); break;
+    default: escaped.push_back(c);
+    }
+  }
+  return escaped;
 }
 
 bool validate_topic_name(const std::string& name, std::string& message)
@@ -305,12 +350,16 @@ class RGWPSCreateTopicOp : public RGWOp {
       if (param.first == "Action" || param.first == "Name" || param.first == "PayloadHash") {
         continue;
       }
-      dest.push_endpoint_args.append(param.first+"="+param.second+"&");
+      dest.push_endpoint_args.append(param.first+"="+escape_endpoint_arg(param.second)+"&");
     }
 
     if (!dest.push_endpoint_args.empty()) {
       // remove last separator
       dest.push_endpoint_args.pop_back();
+    }
+
+    if (!validate_endpoint_config(this, dest, s->cct, s->info, s->err.message)) {
+      return -EINVAL;
     }
 
     // dest object only stores endpoint info
@@ -800,6 +849,9 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
         return -EINVAL;
       }
+      if (!validate_endpoint_config(this, dest, s->cct, s->info, s->err.message)) {
+        return -EINVAL;
+      }
     } else if (attribute_name == "Policy") {
       policy_text = s->info.args.get("AttributeValue");
       if (!policy_text.empty() && !get_policy_from_text(s, policy_text)) {
@@ -810,24 +862,34 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       const auto replace_str = [&](const std::string& param,
                                    const std::string& val) {
         auto& push_endpoint_args = dest.push_endpoint_args;
-        const std::string replaced_str = param + "=" + val;
-        const auto pos = push_endpoint_args.find(param);
-        if (pos == std::string::npos) {
-          dest.push_endpoint_args.append("&" + replaced_str);
-          return;
+        const std::string name = param + "=";
+        const std::string replaced_str = name + escape_endpoint_arg(val);
+        for (size_t pos = 0; pos < push_endpoint_args.length();) {
+          auto end_pos = push_endpoint_args.find('&', pos);
+          end_pos = end_pos == std::string::npos ? push_endpoint_args.length()
+                                                 : end_pos;
+          if (push_endpoint_args.compare(pos, name.length(), name) == 0) {
+            push_endpoint_args.replace(pos, end_pos - pos, replaced_str);
+            return;
+          }
+          pos = end_pos + 1;
         }
-        auto end_pos = dest.push_endpoint_args.find("&", pos);
-        end_pos = end_pos == std::string::npos ? push_endpoint_args.length()
-                                               : end_pos;
-        push_endpoint_args.replace(pos, end_pos - pos, replaced_str);
+        if (!push_endpoint_args.empty()) {
+          push_endpoint_args.append("&");
+        }
+        push_endpoint_args.append(replaced_str);
       };
       static constexpr std::initializer_list<const char*> args = {
           "verify-ssl",    "use-ssl",         "ca-location", "amqp-ack-level",
           "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
           "user-name",     "password",
-          "ssl-certificate-location", "ssl-key-location", "ssl-key-password"};
+          "ssl-certificate-location", "ssl-key-location", "ssl-key-password",
+          "kafka-config"};
       if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
+        if (!validate_endpoint_config(this, dest, s->cct, s->info, s->err.message)) {
+          return -EINVAL;
+        }
         return 0;
       }
       s->err.message = fmt::format("Invalid value for AttributeName '{}'",

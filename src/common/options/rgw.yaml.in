@@ -5490,6 +5490,22 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_kafka_config_allowed_keys
+  type: str
+  level: advanced
+  desc: Comma separated list of librdkafka configuration keys a topic may set in its kafka-config attribute
+  long_desc: A Kafka topic's kafka-config attribute is a JSON object of librdkafka
+    configuration keys and values, applied to the topic's producer after the settings
+    radosgw derives from the topic's other attributes. Only the keys listed here are
+    accepted, and the list is checked again whenever a connection is made. When empty,
+    kafka-config is refused. Topics are created by tenants, and some keys act on the
+    gateway host. "plugin.library.paths" loads shared libraries into radosgw,
+    "sasl.kerberos.kinit.cmd" runs a shell command, and keys ending in ".location"
+    or ".file" read files radosgw can read. List only keys every tenant may be trusted with.
+  services:
+  - rgw
+  see_also:
+  - rgw_allow_notification_secrets_in_cleartext
 - name: rgw_http_notif_message_timeout
   type: uint
   level: advanced

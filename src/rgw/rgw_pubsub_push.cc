@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <curl/curl.h>
 #include "common/Formatter.h"
+#include "common/ceph_json.h"
 #include "common/iso_8601.h"
 #include "common/JSONFormatter.h"
 #include "common/async/completion.h"
@@ -72,13 +73,20 @@ private:
   ack_level_t ack_level; // TODO: not used for now
   const bool verify_ssl;
   const bool cloudevents;
+  const boost::optional<std::string> ca_location;
+  const boost::optional<std::string> ssl_certificate;
+  const boost::optional<std::string> ssl_key;
   static const ack_level_t ACK_LEVEL_ANY = 0;
   static const ack_level_t ACK_LEVEL_NON_ERROR = 1;
 
 public:
   RGWPubSubHTTPEndpoint(const std::string& _endpoint, const RGWHTTPArgs& args, CephContext* _cct) : 
-    cct(_cct), endpoint(_endpoint), verify_ssl(get_bool(args, "verify-ssl", true)), cloudevents(get_bool(args, "cloudevents", false)) 
+    cct(_cct), endpoint(_endpoint), verify_ssl(get_bool(args, "verify-ssl", true)), cloudevents(get_bool(args, "cloudevents", false)),
+    ca_location(args.get_optional("ca-location")),
+    ssl_certificate(args.get_optional("ssl-certificate-location")),
+    ssl_key(args.get_optional("ssl-key-location"))
   {
+    check_client_certificate(args);
     bool exists;
     const auto& str_ack_level = args.get("http-ack-level", &exists);
     if (!exists || str_ack_level == "any") {
@@ -91,6 +99,17 @@ public:
       if (ack_level < 100 || ack_level >= 600) {
         throw configuration_error("HTTP/S: invalid http-ack-level: " + str_ack_level);
       }
+    }
+  }
+
+  // ssl-certificate-location and ssl-key-location must both be provided for mTLS
+  static void check_client_certificate(const RGWHTTPArgs& args) {
+    bool has_certificate;
+    bool has_key;
+    args.get("ssl-certificate-location", &has_certificate);
+    args.get("ssl-key-location", &has_key);
+    if (has_certificate != has_key) {
+      throw configuration_error("HTTP/S: both ssl-certificate-location and ssl-key-location must be provided for mTLS");
     }
   }
 
@@ -110,6 +129,13 @@ public:
     }
     bufferlist read_bl;
     RGWPostHTTPData request(cct, "POST", endpoint, &read_bl, verify_ssl);
+    if (ca_location) {
+      request.set_ca_path(*ca_location);
+    }
+    if (ssl_certificate) {
+      request.set_client_cert(*ssl_certificate);
+      request.set_client_key(*ssl_key);
+    }
     request.set_req_connect_timeout(cct->_conf->rgw_http_notif_connection_timeout);
     request.set_req_timeout(cct->_conf->rgw_http_notif_message_timeout);
     const auto post_data = json_format_pubsub_event(event);
@@ -143,6 +169,12 @@ public:
     std::string str("HTTP/S Endpoint");
     str += "\nURI: " + endpoint;
     str += (verify_ssl ? "\nverify SSL" : "\ndon't verify SSL");
+    if (ca_location) {
+      str += "\nCA location: " + *ca_location;
+    }
+    if (ssl_certificate) {
+      str += "\nclient certificate: " + *ssl_certificate;
+    }
     return str;
   }
 };
@@ -275,6 +307,33 @@ static const std::string AMQP_SCHEMA("amqp");
 #endif	// ifdef WITH_RADOSGW_AMQP_ENDPOINT
 
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+// the librdkafka settings in a topic's "kafka-config", a JSON object whose
+// values are strings, numbers or booleans
+static kafka::config_t get_kafka_config(const RGWHTTPArgs& args) {
+  kafka::config_t config;
+  bool exists;
+  const auto& str_config = args.get("kafka-config", &exists);
+  if (!exists || str_config.empty()) {
+    return config;
+  }
+  JSONParser parser;
+  if (!parser.parse(str_config.c_str(), str_config.length()) || !parser.is_object()) {
+    throw RGWPubSubEndpoint::configuration_error("Kafka: kafka-config must be a JSON object");
+  }
+  for (auto it = parser.find_first(); !it.end(); ++it) {
+    JSONObj* const obj = *it;
+    if (obj->is_object() || obj->is_array() || (!obj->get_data_val().quoted && obj->get_data() == "null")) {
+      throw RGWPubSubEndpoint::configuration_error("Kafka: kafka-config value of '" +
+          obj->get_name() + "' must be a string, number or boolean");
+    }
+    if (!config.emplace(obj->get_name(), obj->get_data()).second) {
+      throw RGWPubSubEndpoint::configuration_error("Kafka: kafka-config key '" +
+          obj->get_name() + "' appears more than once");
+    }
+  }
+  return config;
+}
+
 class RGWPubSubKafkaEndpoint : public RGWPubSubEndpoint {
 private:
   enum class ack_level_t {
@@ -311,7 +370,8 @@ public:
            args.get_optional("password"), args.get_optional("kafka-brokers"),
            args.get_optional("ssl-certificate-location"),
            args.get_optional("ssl-key-location"),
-           args.get_optional("ssl-key-password"))) {
+           args.get_optional("ssl-key-password"),
+           get_kafka_config(args))) {
      throw configuration_error("Kafka: failed to create connection to: " +
                                _endpoint);
    }
@@ -431,6 +491,26 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
 
   throw configuration_error("unknown schema in: " + endpoint);
   return nullptr;
+}
+
+bool RGWPubSubEndpoint::validate_config(const std::string& endpoint,
+    const RGWHTTPArgs& args,
+    CephContext* cct) {
+  const auto& schema = get_schema(endpoint);
+  if (schema == WEBHOOK_SCHEMA) {
+    RGWPubSubHTTPEndpoint::check_client_certificate(args);
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  } else if (schema == KAFKA_SCHEMA) {
+    bool has_secret = false;
+    std::string error;
+    if (!kafka::validate_config(cct, get_kafka_config(args),
+                                get_bool(args, "use-ssl", false), has_secret, error)) {
+      throw configuration_error("Kafka: " + error);
+    }
+    return has_secret;
+#endif
+  }
+  return false;
 }
 
 bool init_http_manager(CephContext* cct) {

@@ -5,6 +5,7 @@
 
 #include <string>
 #include <functional>
+#include <map>
 #include <boost/optional.hpp>
 
 #include "include/common_fwd.h"
@@ -21,6 +22,19 @@ bool init(CephContext* cct);
 // shutdown the kafka manager
 void shutdown();
 
+// librdkafka settings by librdkafka key, from a topic's "kafka-config"
+typedef std::map<std::string, std::string> config_t;
+
+// check "config" against rgw_kafka_config_allowed_keys, the cleartext rule
+// and librdkafka itself, without connecting. returns false and sets "error"
+// when it is refused. sets "has_secret" when "config" holds a key librdkafka
+// marks sensitive
+bool validate_config(CephContext* cct,
+                     const config_t& config,
+                     bool use_ssl,
+                     bool& has_secret,
+                     std::string& error);
+
 // key class for the connection list
 struct connection_id_t {
   std::string broker;
@@ -33,6 +47,7 @@ struct connection_id_t {
   std::string ssl_key_password;
   bool ssl = false;
   bool verify_ssl = true;
+  config_t config;
   connection_id_t() = default;
   connection_id_t(const std::string& _broker,
                   const std::string& _user,
@@ -43,7 +58,8 @@ struct connection_id_t {
                   bool _verify_ssl,
                   const boost::optional<const std::string&>& _ssl_certificate,
                   const boost::optional<const std::string&>& _ssl_key,
-                  const boost::optional<const std::string&>& _ssl_key_password);
+                  const boost::optional<const std::string&>& _ssl_key_password,
+                  const config_t& _config);
 };
 
 std::string to_string(const connection_id_t& id);
@@ -60,7 +76,8 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> brokers,
              boost::optional<const std::string&> ssl_certificate,
              boost::optional<const std::string&> ssl_key,
-             boost::optional<const std::string&> ssl_key_password);
+             boost::optional<const std::string&> ssl_key_password,
+             const config_t& config);
 
 // publish a message over a connection that was already created
 int publish(const connection_id_t& conn_id,

@@ -27,6 +27,11 @@ public:
   // derived class specific arguments are passed in http args format
   // may throw a configuration_error if creation fails
   static Ptr create(const std::string& endpoint, const std::string& topic, const RGWHTTPArgs& args, CephContext* cct=nullptr);
+
+  // check the endpoint arguments that can be checked without connecting.
+  // returns true when they hold a secret only the endpoint type recognizes.
+  // throws a configuration_error if they are refused
+  static bool validate_config(const std::string& endpoint, const RGWHTTPArgs& args, CephContext* cct);
  
   // this method is used in order to send notification and wait for completion 
   // in async manner via a coroutine when invoked in the frontend environment
