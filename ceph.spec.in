@@ -235,6 +235,10 @@ BuildRequires:	selinux-policy-devel
 %endif
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
+%ifarch x86_64 aarch64
+BuildRequires:  clang
+BuildRequires:  elfutils-devel
+%endif
 BuildRequires:	pkgconfig(fuse3)
 BuildRequires:	git
 BuildRequires:	pkgconfig(grpc++)
