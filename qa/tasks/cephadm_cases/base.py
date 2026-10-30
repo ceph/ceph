@@ -24,7 +24,7 @@ import logging
 import os
 import time
 from io import StringIO
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
 
 from tasks.cephadm import _shell
 from tasks.mgr.mgr_test_case import MgrTestCase
@@ -200,6 +200,40 @@ class CephadmTestCase(MgrTestCase):
         raise KeyError(f'no remote for host {host}')
 
     @classmethod
+    def host_names_for(cls, host: str) -> List[str]:
+        """Every name a client may use for this host (short, FQDN, address)."""
+        remote = cls.remote_for(host)
+        names = {host, cls.hosts[host]}
+        for flag in ('--short', '--fqdn'):
+            out = remote.sh(['hostname', flag], check_status=False).strip()
+            if out:
+                names.add(out)
+        return sorted(names)
+
+    def label_hosts(self, label: str, hosts: Sequence[str]) -> None:
+        for host in hosts:
+            self.orch('host', 'label', 'add', host, label)
+
+    def unlabel_hosts(self, label: str) -> None:
+        for host in self.host_names:
+            self.orch('host', 'label', 'rm', host, label, check=False)
+
+    @classmethod
+    def enable_mgr_module(cls, module: str, timeout: int = 300) -> None:
+        """Enable a mgr module and wait until it publishes its service URL.
+
+        MgrTestCase.setup_mgrs() disables every module but cephadm, so a
+        suite that needs e.g. the dashboard turns it back on here."""
+        cls._ceph_cls('mgr', 'module', 'enable', module)
+        cls.wait_until_true(
+            lambda: module in (cls._ceph_json_cls('mgr', 'services') or {}),
+            timeout=timeout, period=10)
+
+    @classmethod
+    def mgr_option(cls, module: str, option: str) -> str:
+        return cls._ceph_cls('config', 'get', 'mgr', f'mgr/{module}/{option}').out.strip()
+
+    @classmethod
     def set_opt(cls, name: str, value: Any) -> None:
         """Set a cephadm module option."""
         cls._ceph_cls('config', 'set', 'mgr', f'mgr/cephadm/{name}', str(value).lower())
@@ -247,6 +281,31 @@ class CephadmTestCase(MgrTestCase):
                 self.kick()
             self.assertTrue(fn(), f'{what} stopped holding')
             time.sleep(period)
+
+    def wait_checks(self, what: str, checks: Callable[[], List[Tuple[str, bool]]],
+                    timeout: int = 900, period: int = 20) -> None:
+        """Poll a set of named checks until all pass; on timeout, say which failed."""
+        failed: List[str] = []
+
+        def ok() -> bool:
+            failed[:] = [name for name, passed in checks() if not passed]
+            if failed:
+                log.info('%s: still failing: %s', what, ', '.join(failed))
+            return not failed
+        try:
+            self.poll(what, ok, timeout=timeout, period=period, kick=True)
+        except AssertionError:
+            raise AssertionError(f'timed out after {timeout}s waiting for {what}; '
+                                 f'failing checks: {", ".join(failed) or "unknown"}')
+
+    def hold_checks(self, what: str, checks: Callable[[], List[Tuple[str, bool]]],
+                    seconds: int = 120, period: int = 20) -> None:
+        def ok() -> bool:
+            failed = [name for name, passed in checks() if not passed]
+            if failed:
+                log.error('%s: failing: %s', what, ', '.join(failed))
+            return not failed
+        self.hold(what, ok, seconds=seconds, period=period)
 
     # ------------------------------------------------------------------
     # health
@@ -298,6 +357,10 @@ class CephadmTestCase(MgrTestCase):
     @classmethod
     def daemons(cls, service_name: str) -> List[Dict[str, Any]]:
         return cls._ceph_json_cls('orch', 'ps', '--service_name', service_name) or []
+
+    @classmethod
+    def daemons_of_type(cls, daemon_type: str) -> List[Dict[str, Any]]:
+        return cls._ceph_json_cls('orch', 'ps', '--daemon_type', daemon_type) or []
 
     @classmethod
     def rm_service(cls, service_name: str, timeout: int = 600) -> None:
