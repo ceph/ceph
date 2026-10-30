@@ -30,30 +30,51 @@ tasks:
       - ceph -s
       - ceph orch ls
       # doing staggered upgrade requires mgr daemons being on a version that contains the staggered upgrade code
-      # until there is a stable version that contains it, we can test by manually upgrading a mgr daemon
-      - ceph orch daemon redeploy "mgr.$(ceph mgr dump -f json | jq .standbys | jq .[] | jq -r .name)" --image quay.ceph.io/ceph-ci/ceph:$sha1
-      - ceph orch ps --refresh
-      - sleep 180
-      # gather more possible debugging info
+      # until there is a stable version that contains it, we can test by manually upgrading a mgr daemon.
+      # Poll for the redeployed daemon instead of a fixed sleep: orch daemon redeploy is asynchronous and
+      # may take longer than a constant wait after mgr failover.
+      # NB: orch ps "version" is the short-hash git-describe form (e.g. 19.0.0-7044-g93be2376) and never
+      # contains the full sha1, so match on container_image_name, which ends with the full-sha1 image tag.
+      - &redeploy_standby_mgr |
+        set -ex
+        [ "$(ceph mgr dump -f json | jq '.standbys | length')" = 1 ]
+        standby=$(ceph mgr dump -f json | jq -r '.standbys[0].name')
+        ceph orch daemon redeploy "mgr.${standby}" --image quay.ceph.io/ceph-ci/ceph:$sha1
+        ceph orch ps --refresh
+        ready() {
+          ceph orch ps --daemon-type mgr --daemon-id "$standby" -f json \
+            | jq -e --arg s "$sha1" \
+                 '.[0] | (.container_image_name // "" | endswith($s)) and .status_desc == "running"' >/dev/null \
+            && ceph versions | jq -e --arg s "$sha1" '.mgr | keys | any(contains($s))' >/dev/null
+        }
+        for i in $(seq 60); do ready && break; ceph orch ps --daemon-type mgr || true; sleep 10; done
+        ready
       - ceph orch ps
       - ceph versions
       - ceph -s
       - ceph health detail
       # check that there are two different versions found for mgr daemon (which implies we upgraded one)
       - ceph versions | jq -e '.mgr | length == 2'
-      - ceph mgr fail
-      - sleep 180
+      # wait for the upgraded mgr to become active and the former active to reappear as a standby
+      # before the next step reads standbys[0] for redeploy
+      - &fail_mgr_and_wait |
+        set -ex
+        old=$(ceph mgr dump -f json | jq -r '.active_name')
+        ceph mgr fail
+        ready() {
+          ceph mgr dump -f json | jq -e --arg o "$old" \
+            '.available and .active_name != $o and (.standbys | map(.name) | index($o)) != null' >/dev/null
+        }
+        for i in $(seq 120); do ready && break; ceph -s || true; sleep 5; done
+        ready
       # now try upgrading the other mgr
-      - ceph orch daemon redeploy "mgr.$(ceph mgr dump -f json | jq .standbys | jq .[] | jq -r .name)" --image quay.ceph.io/ceph-ci/ceph:$sha1
-      - ceph orch ps --refresh
-      - sleep 180
-      # gather more possible debugging info
+      - *redeploy_standby_mgr
       - ceph orch ps
       - ceph versions
       - ceph health detail
       - ceph -s
-      - ceph mgr fail
-      - sleep 180
+      # fail over so the second upgraded mgr takes over as active too
+      - *fail_mgr_and_wait
       # gather more debugging info
       - ceph orch ps
       - ceph versions
@@ -61,8 +82,8 @@ tasks:
       - ceph health detail
       # now that both mgrs should have been redeployed with the new version, we should be back on only 1 version for the mgrs
       - ceph versions | jq -e '.mgr | length == 1'
-      - ceph mgr fail
-      - sleep 180
+      - ceph versions | jq -e '.mgr | keys' | grep $sha1
+      - *fail_mgr_and_wait
       # debugging info
       - ceph orch ps
       - ceph orch ls
