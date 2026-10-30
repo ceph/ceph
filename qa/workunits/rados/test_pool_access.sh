@@ -103,6 +103,11 @@ expect_false rados --id poolaccess2 --key $key -p rbd ls
 key=`ceph auth get-or-create-key client.poolaccess3 mon 'allow r' osd 'allow rw pool=nopool'`
 expect_false rados --id poolaccess3 --key $key -p rbd ls
 
+# with no osd caps at all, ops must fail with EPERM instead of hanging
+key=`ceph auth get-or-create-key client.poolaccess4 mon 'allow r'`
+out=$(timeout 120 rados --id poolaccess4 --key $key -p rbd ls 2>&1) && exit 1
+echo "$out" | grep 'Operation not permitted'
+
 test_pool_op
 
 echo OK

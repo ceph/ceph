@@ -7865,7 +7865,12 @@ bool OSD::ms_handle_fast_authentication(Connection *con)
       return false;
     }
   } else {
-    return false;
+    // No osd caps: keep the session with no grants so that each op fails
+    // with EPERM. Rejecting it would leave the client reconnecting forever.
+    s->caps = OSDCap();
+    dout(10) << __func__ << " session " << s << " " << s->entity_name
+             << " has no osd caps" << dendl;
+    return true;
   }
 }
 
