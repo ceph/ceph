@@ -67,6 +67,18 @@ are now in use. In simple cases, this will result in an entirely valid backing
 store state.
 
 .. warning::
+   
+    Large journal sizes can cause the tool's Resident Set Size (RSS) to spike
+    significantly. Use the ``--max-rss <bytes>`` flag to limit memory usage, keeping the following
+    in mind:
+
+    * **Performance Impact:** Do not set this value too low. Restricting memory excessively will
+        severely degrade runtime performance and prolong the recovery process.
+    * **30% Buffer Rule:** Maintain a safety buffer of at least 30% relative to the tool's total
+        memory budget. For example, if 100 GiB can be allotted to the tool, cap its RSS limit at
+        70 GiB: ``--max-rss 75161927680``.
+
+.. warning::
 
     The resulting state of the backing store is not guaranteed to be
     self-consistent, and an online MDS scrub will be required afterwards. The
