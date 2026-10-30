@@ -165,7 +165,7 @@ tcp:
 #. Generate a key for radosgw to use for authentication with the cluster. ::
 
 	ceph-authtool -C -n client.radosgw.gateway --gen-key /etc/ceph/keyring.radosgw.gateway
-	ceph-authtool -n client.radosgw.gateway --cap mon 'allow rw' --cap osd 'allow rwx' /etc/ceph/keyring.radosgw.gateway
+	ceph-authtool -n client.radosgw.gateway --cap mon 'profile rgw' --cap osd 'profile rgw' /etc/ceph/keyring.radosgw.gateway
 
 #. Add the key to the auth entries. ::
 

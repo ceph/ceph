@@ -114,6 +114,9 @@
   opaque IDs are always logged so operators can correlate with Keystone
   without exposing names. Role names can be omitted via
   ``rgw_keystone_scope_include_roles`` (default true).
+* RGW: New CephX profile ``profile rgw`` grants a Ceph Object Gateway the
+  permissions it needs. Create keys with
+  ``mon 'profile rgw' osd 'profile rgw'``.
 
 
 * DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary

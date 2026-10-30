@@ -367,6 +367,14 @@ void OSDCapGrant::expand_profile()
                                             "rbd_header."),
                                 OSDCapSpec("rbd", "child_detach"));
   }
+  if (profile.name == "rgw") {
+    // rwx on pools tagged with the rgw application, like 'allow rwx tag rgw *=*'
+    profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace,
+                                            OSDCapPoolTag("rgw", "*", "*")),
+                                OSDCapSpec(osd_rwxa_t(OSD_CAP_R |
+                                                      OSD_CAP_W |
+                                                      OSD_CAP_X)));
+  }
 }
 
 bool OSDCap::allow_all() const
