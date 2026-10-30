@@ -2371,7 +2371,9 @@ int main(int argc, char **argv) {
     ("progress-interval", po::value<int>(&config.progress_interval)->default_value(10), "Progress update interval in percent (1-100)")
     ("async-io", po::bool_switch(&config.async_io), "Use asynchronous I/O with ceph_ll_nonblocking_readv_writev")
     ("zero-copy", po::bool_switch(&config.zero_copy),
-     "Use zero-copy async I/O (ceph_ll_async_read/write + bufferlist; exclusive with --async-io)")
+     "Use zero-copy async I/O (ceph_ll_async_read/write + bufferlist; "
+     "exclusive with --async-io). Pair with --client-oc 0|1 to compare "
+     "Filer-only vs ObjectCacher ZC paths")
     ("async-write-fsync", po::bool_switch(&config.async_write_fsync),
      "With async-io/zero-copy, fsync each write (Ganesha-style)")
     ("shared-file", po::bool_switch(&config.shared_file),

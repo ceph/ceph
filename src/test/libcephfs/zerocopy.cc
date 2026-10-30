@@ -338,3 +338,231 @@ TEST(LibCephFS, ZeroCopyClaimIov)
   EXPECT_EQ(1, st.calls.load());
   EXPECT_EQ(len, st.bytes.load());
 }
+
+namespace {
+
+int mount_with_client_oc(struct ceph_mount_info** cmount, bool client_oc)
+{
+  int r = ceph_create(cmount, NULL);
+  if (r < 0) {
+    return r;
+  }
+  r = ceph_conf_read_file(*cmount, NULL);
+  if (r < 0) {
+    return r;
+  }
+  r = ceph_conf_parse_env(*cmount, NULL);
+  if (r < 0) {
+    return r;
+  }
+  r = ceph_conf_set(*cmount, "client_oc", client_oc ? "true" : "false");
+  if (r < 0) {
+    return r;
+  }
+  return ceph_mount(*cmount, "/");
+}
+
+void zc_expect_payload(ceph_bufferlist* rbl, const std::string& expected)
+{
+  ASSERT_NE(nullptr, rbl);
+  ASSERT_EQ(expected.size(), ceph_bufferlist_length(rbl));
+  struct iovec riov[16];
+  int niov = ceph_bufferlist_to_iovec(rbl, riov, 16);
+  ASSERT_GT(niov, 0);
+  size_t pos = 0;
+  for (int i = 0; i < niov; ++i) {
+    ASSERT_LE(pos + riov[i].iov_len, expected.size());
+    EXPECT_EQ(0, std::memcmp(expected.data() + pos, riov[i].iov_base,
+                             riov[i].iov_len));
+    pos += riov[i].iov_len;
+  }
+  EXPECT_EQ(expected.size(), pos);
+}
+
+} // namespace
+
+TEST(LibCephFS, ZeroCopyObjectCacherRoundTrip)
+{
+  // alloc → async_write → async_read with ObjectCacher enabled.
+  struct ceph_mount_info* cmount = nullptr;
+  ASSERT_EQ(0, mount_with_client_oc(&cmount, true));
+
+  UserPerm* perms = ceph_mount_perms(cmount);
+  Inode* root = nullptr;
+  ASSERT_EQ(0, ceph_ll_lookup_root(cmount, &root));
+
+  char filename[256];
+  sprintf(filename, "test_libcephfs_zc_oc_%u", getpid());
+
+  Inode* file = nullptr;
+  Fh* fh = nullptr;
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_ll_create(cmount, root, filename, 0666,
+                              O_RDWR | O_CREAT | O_TRUNC, &file, &fh, &stx, 0,
+                              0, perms));
+
+  constexpr size_t len = 8192;
+  ceph_bufferlist* wbl = ceph_bufferlist_alloc(len);
+  ASSERT_NE(nullptr, wbl);
+  struct iovec wiov[1];
+  ASSERT_EQ(1, ceph_bufferlist_to_iovec(wbl, wiov, 1));
+  std::memset(wiov[0].iov_base, 0xc3, len);
+  std::string expected(static_cast<char*>(wiov[0].iov_base), len);
+
+  ZcWait wwait;
+  struct ceph_io_completion wcomp{zc_io_cb, &wwait};
+  ASSERT_EQ(0, ceph_ll_async_write(cmount, fh, 0, wbl, 0, &wcomp));
+  ASSERT_EQ(static_cast<int64_t>(len), wwait.wait());
+
+  ZcWait rwait;
+  struct ceph_io_completion rcomp{zc_io_cb, &rwait};
+  ASSERT_EQ(0, ceph_ll_async_read(cmount, fh, 0, len, &rcomp));
+  ASSERT_EQ(static_cast<int64_t>(len), rwait.wait());
+  zc_expect_payload(rwait.data, expected);
+  ceph_bufferlist_put(rwait.data);
+
+  // Classic path must see the same bytes (ZC updated OC, not Filer-only).
+  char verify[len];
+  ASSERT_EQ(static_cast<int>(len), ceph_ll_read(cmount, fh, 0, len, verify));
+  EXPECT_EQ(0, std::memcmp(expected.data(), verify, len));
+
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, filename, perms));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, ZeroCopyObjectCacherHitPath)
+{
+  // Write once, read twice: second read should be served from ObjectCacher.
+  struct ceph_mount_info* cmount = nullptr;
+  ASSERT_EQ(0, mount_with_client_oc(&cmount, true));
+
+  UserPerm* perms = ceph_mount_perms(cmount);
+  Inode* root = nullptr;
+  ASSERT_EQ(0, ceph_ll_lookup_root(cmount, &root));
+
+  char filename[256];
+  sprintf(filename, "test_libcephfs_zc_oc_hit_%u", getpid());
+
+  Inode* file = nullptr;
+  Fh* fh = nullptr;
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_ll_create(cmount, root, filename, 0666,
+                              O_RDWR | O_CREAT | O_TRUNC, &file, &fh, &stx, 0,
+                              0, perms));
+
+  constexpr size_t len = 4096;
+  ceph_bufferlist* wbl = ceph_bufferlist_alloc(len);
+  ASSERT_NE(nullptr, wbl);
+  struct iovec wiov[1];
+  ASSERT_EQ(1, ceph_bufferlist_to_iovec(wbl, wiov, 1));
+  std::memset(wiov[0].iov_base, 0x4d, len);
+  std::string expected(static_cast<char*>(wiov[0].iov_base), len);
+
+  ZcWait wwait;
+  struct ceph_io_completion wcomp{zc_io_cb, &wwait};
+  ASSERT_EQ(0, ceph_ll_async_write(cmount, fh, 0, wbl, 0, &wcomp));
+  ASSERT_EQ(static_cast<int64_t>(len), wwait.wait());
+
+  for (int pass = 0; pass < 2; ++pass) {
+    ZcWait rwait;
+    struct ceph_io_completion rcomp{zc_io_cb, &rwait};
+    ASSERT_EQ(0, ceph_ll_async_read(cmount, fh, 0, len, &rcomp));
+    ASSERT_EQ(static_cast<int64_t>(len), rwait.wait());
+    zc_expect_payload(rwait.data, expected);
+    ceph_bufferlist_put(rwait.data);
+  }
+
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, filename, perms));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, ZeroCopyObjectCacherWrapStaysFiler)
+{
+  // wrap_iov is Borrowed: with client_oc still Filer-only, must not UAF.
+  struct ceph_mount_info* cmount = nullptr;
+  ASSERT_EQ(0, mount_with_client_oc(&cmount, true));
+
+  UserPerm* perms = ceph_mount_perms(cmount);
+  Inode* root = nullptr;
+  ASSERT_EQ(0, ceph_ll_lookup_root(cmount, &root));
+
+  char filename[256];
+  sprintf(filename, "test_libcephfs_zc_oc_wrap_%u", getpid());
+
+  Inode* file = nullptr;
+  Fh* fh = nullptr;
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_ll_create(cmount, root, filename, 0666,
+                              O_RDWR | O_CREAT | O_TRUNC, &file, &fh, &stx, 0,
+                              0, perms));
+
+  char payload[128];
+  std::memset(payload, 'W', sizeof(payload));
+  struct iovec iov = {payload, sizeof(payload)};
+  ceph_bufferlist* wbl = ceph_bufferlist_wrap_iov(&iov, 1);
+  ASSERT_NE(nullptr, wbl);
+
+  ZcWait wwait;
+  struct ceph_io_completion wcomp{zc_io_cb, &wwait};
+  ASSERT_EQ(0, ceph_ll_async_write(cmount, fh, 0, wbl, 0, &wcomp));
+  ASSERT_EQ(static_cast<int64_t>(sizeof(payload)), wwait.wait());
+
+  ZcWait rwait;
+  struct ceph_io_completion rcomp{zc_io_cb, &rwait};
+  ASSERT_EQ(0, ceph_ll_async_read(cmount, fh, 0, sizeof(payload), &rcomp));
+  ASSERT_EQ(static_cast<int64_t>(sizeof(payload)), rwait.wait());
+  zc_expect_payload(rwait.data, std::string(payload, sizeof(payload)));
+  ceph_bufferlist_put(rwait.data);
+
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, filename, perms));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, ZeroCopyObjectCacherUnmountAfterInFlight)
+{
+  // Several OC ZC writes must complete (Fh refs dropped) before unmount.
+  // Submit/wait sequentially so this covers lifetime without stressing
+  // concurrent ObjectCacher finisher completions.
+  struct ceph_mount_info* cmount = nullptr;
+  ASSERT_EQ(0, mount_with_client_oc(&cmount, true));
+
+  UserPerm* perms = ceph_mount_perms(cmount);
+  Inode* root = nullptr;
+  ASSERT_EQ(0, ceph_ll_lookup_root(cmount, &root));
+
+  char filename[256];
+  sprintf(filename, "test_libcephfs_zc_oc_inflight_%u", getpid());
+
+  Inode* file = nullptr;
+  Fh* fh = nullptr;
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_ll_create(cmount, root, filename, 0666,
+                              O_RDWR | O_CREAT | O_TRUNC, &file, &fh, &stx, 0,
+                              0, perms));
+
+  constexpr int nops = 8;
+  constexpr size_t len = 1024;
+  for (int i = 0; i < nops; ++i) {
+    ceph_bufferlist* wbl = ceph_bufferlist_alloc(len);
+    ASSERT_NE(nullptr, wbl);
+    struct iovec wiov[1];
+    ASSERT_EQ(1, ceph_bufferlist_to_iovec(wbl, wiov, 1));
+    std::memset(wiov[0].iov_base, static_cast<char>(0x10 + i), len);
+    ZcWait wwait;
+    struct ceph_io_completion wcomp{zc_io_cb, &wwait};
+    ASSERT_EQ(0, ceph_ll_async_write(cmount, fh, static_cast<uint64_t>(i) * len,
+                                     wbl, 0, &wcomp));
+    ASSERT_EQ(static_cast<int64_t>(len), wwait.wait());
+  }
+
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, filename, perms));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}

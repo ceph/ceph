@@ -1289,13 +1289,13 @@ TEST(FSCrypt, ZeroCopyAsyncAlignedRoundTrip)
 {
   // Plaintext alloc → async_write → async_read on an FSCrypt inode (4 KiB
   // aligned; crypto still copies into ciphertext/plaintext lists).
-  // client_oc=false: ZC still bypasses ObjectCacher, so an OC-enabled mount
-  // would leave stale BH data for classic ll_read after a ZC write.
+  // client_oc=true: ZC routes ciphertext through ObjectCacher so classic
+  // ll_read sees the same cached data.
   struct ceph_mount_info* cmount = nullptr;
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
-  ASSERT_EQ(0, ceph_conf_set(cmount, "client_oc", "false"));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_oc", "true"));
   ASSERT_EQ(0, ceph_mount(cmount, NULL));
   UserPerm* perms = ceph_mount_perms(cmount);
   string dir_path = setup_fscrypt_dir(cmount, perms);
@@ -1347,11 +1347,12 @@ TEST(FSCrypt, ZeroCopyAsyncAlignedRoundTrip)
 TEST(FSCrypt, ZeroCopyAsyncUnalignedRoundTrip)
 {
   // Unaligned WRITE forces FSCrypt RMW; READ decrypts a block-aligned span.
+  // With client_oc, RMW/encrypt dirties ObjectCacher; ll_read must agree.
   struct ceph_mount_info* cmount = nullptr;
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
-  ASSERT_EQ(0, ceph_conf_set(cmount, "client_oc", "false"));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_oc", "true"));
   ASSERT_EQ(0, ceph_mount(cmount, NULL));
   UserPerm* perms = ceph_mount_perms(cmount);
   string dir_path = setup_fscrypt_dir(cmount, perms);
