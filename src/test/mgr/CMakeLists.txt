@@ -202,6 +202,26 @@ target_link_libraries(unittest_mgr_standbypymodules
   $<$<BOOL:${WITH_LIBCEPHSQLITE}>:SQLite3::SQLite3>
 )
 
+# unittest_mgr_pymoduleregistry
+add_executable(unittest_mgr_pymoduleregistry
+  test_pymoduleregistry.cc
+  ${unittest_mgr_common_objs}
+)
+add_ceph_unittest(unittest_mgr_pymoduleregistry)
+target_include_directories(unittest_mgr_pymoduleregistry PRIVATE
+  $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(unittest_mgr_pymoduleregistry
+  ceph-common
+  osdc
+  mon
+  global
+  Boost::python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR}
+  Python3::Python
+  ${CMAKE_DL_LIBS}
+  $<$<BOOL:${WITH_LIBCEPHSQLITE}>:cephsqlite>
+  $<$<BOOL:${WITH_LIBCEPHSQLITE}>:SQLite3::SQLite3>
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
