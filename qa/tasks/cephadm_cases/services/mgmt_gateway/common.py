@@ -10,6 +10,8 @@ module in this package:
                         (keepalive-only ingress), two oauth2-proxy instances
   test_transitions.py   TestSecurityTransitions: moving between plain,
                         secure_monitoring_stack, gateway and gateway + SSO
+  test_open_issues.py   TestMgmtGatewayOpenIssues: reproducers for bugs
+                        not fixed yet, marked as expected failures
 
 What the monitoring stack looks like from a client depends on which of these
 is in place, so the checks are grouped by "mode":
