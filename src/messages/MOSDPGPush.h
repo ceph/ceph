@@ -17,11 +17,21 @@
 #define MOSDPGPUSH_H
 
 #include "MOSDFastDispatchOp.h"
+#include "include/intarith.h"
+#include "include/scope_guard.h"
 
 class MOSDPGPush : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 4;
+  static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 2;
+  // the last version with the pushes' data in the payload; from v5 it is in
+  // the data segment, which msgr2 receives page aligned
+  static constexpr int INLINE_DATA_VERSION = 4;
+  // a push of at least DATA_ALIGN_MIN_LEN starts at a multiple of DATA_ALIGN
+  // in the data segment, so that the store can write it without copying it
+  // into aligned buffers; smaller ones are not padded
+  static constexpr unsigned DATA_ALIGN = 4096;
+  static constexpr unsigned DATA_ALIGN_MIN_LEN = 64 * 1024;
 
 public:
   pg_shard_t from;
@@ -82,18 +92,69 @@ public:
     } else {
       is_repair = false;
     }
+    if (header.version > INLINE_DATA_VERSION) {
+      // offset and length of each push's data in the data segment
+      std::vector<std::pair<uint32_t, uint32_t>> data_extents;
+      decode(data_extents, p);
+      if (data_extents.size() != pushes.size()) {
+        throw ceph::buffer::malformed_input(
+          "MOSDPGPush: wrong number of data extents");
+      }
+      for (size_t i = 0; i < pushes.size(); ++i) {
+        auto [off, len] = data_extents[i];
+        if ((uint64_t)off + len > data.length()) {
+          throw ceph::buffer::malformed_input(
+            "MOSDPGPush: data extent past the data segment");
+        }
+        pushes[i].data.substr_of(data, off, len);
+      }
+    }
   }
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;
+    // the messenger encodes a message again after a reconnect or a change of
+    // features: start from an empty data segment and set both versions.
+    // Not clear_data(): it also calls clear_buffers(), which may drop the
+    // pushes' data.
+    data.clear();
+    const bool data_segment = HAVE_FEATURE(features, SERVER_VAMPIRE);
+    header.version = data_segment ? HEAD_VERSION : INLINE_DATA_VERSION;
+    // older decoders would take the pushes without their data
+    header.compat_version = data_segment ? HEAD_VERSION : COMPAT_VERSION;
     encode(pgid.pgid, payload);
     encode(map_epoch, payload);
-    encode(pushes, payload, features);
+    if (data_segment) {
+      // the pushes go in the payload without their data
+      std::vector<ceph::buffer::list> push_data(pushes.size());
+      for (size_t i = 0; i < pushes.size(); ++i) {
+        push_data[i].swap(pushes[i].data);
+      }
+      auto restore = make_scope_guard([&] {
+        for (size_t i = 0; i < pushes.size(); ++i) {
+          pushes[i].data.swap(push_data[i]);
+        }
+      });
+      encode(pushes, payload, features);
+    } else {
+      encode(pushes, payload, features);
+    }
     encode(cost, payload);
     encode(pgid.shard, payload);
     encode(from, payload);
     encode(min_epoch, payload);
     encode(is_repair, payload);
+    if (data_segment) {
+      std::vector<std::pair<uint32_t, uint32_t>> data_extents;
+      for (const auto &push : pushes) {
+        if (push.data.length() >= DATA_ALIGN_MIN_LEN) {
+          data.append_zero(p2nphase<uint64_t>(data.length(), DATA_ALIGN));
+        }
+        data_extents.emplace_back(data.length(), push.data.length());
+        data.append(push.data);
+      }
+      encode(data_extents, payload);
+    }
   }
 
   std::string_view get_type_name() const override { return "MOSDPGPush"; }
