@@ -337,6 +337,7 @@ public:
 
   int init_dest_policy() override;
   int get_params(optional_yield y) override;
+  int verify_params() override;
   int check_storage_class(const rgw_placement_rule& src_placement) override;
   void send_partial_response(off_t ofs) override;
   void send_response() override;

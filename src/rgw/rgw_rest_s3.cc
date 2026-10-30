@@ -3484,6 +3484,32 @@ int RGWCopyObj_ObjStore_S3::init_dest_policy()
   return 0;
 }
 
+/*
+ * The copy path doesn't encrypt the destination object: it ignores both
+ * the request's SSE headers and the destination bucket's default
+ * encryption, so the copy would silently be stored as plaintext. Refuse
+ * instead, the same way copying from an encrypted source already is
+ * (see RGWRados::copy_obj()). Done here rather than in get_params() so
+ * that it runs after verify_permission() and can't be used to probe a
+ * bucket's encryption configuration.
+ */
+int RGWCopyObj_ObjStore_S3::verify_params()
+{
+  if (!s->info.crypt_attribute_map.empty()) {
+    s->err.message = "CopyObject with server-side encryption is not "
+                     "supported, use GetObject and PutObject instead";
+    ldpp_dout(this, 5) << s->err.message << dendl;
+    return -ERR_NOT_IMPLEMENTED;
+  }
+  if (s->bucket_attrs.count(RGW_ATTR_BUCKET_ENCRYPTION_POLICY)) {
+    s->err.message = "CopyObject into a bucket with default encryption is "
+                     "not supported, use GetObject and PutObject instead";
+    ldpp_dout(this, 5) << s->err.message << dendl;
+    return -ERR_NOT_IMPLEMENTED;
+  }
+  return 0;
+}
+
 int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
 {
   //handle object lock
