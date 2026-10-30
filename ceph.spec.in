@@ -239,6 +239,10 @@ BuildRequires:  cmake > 3.5
 %if %{with radosgw_fdb}
 BuildRequires:  foundationdb-clients >= 7.3
 %endif
+%ifarch x86_64 aarch64
+BuildRequires:  clang
+BuildRequires:  elfutils-devel
+%endif
 BuildRequires:	pkgconfig(fuse3)
 BuildRequires:	git
 BuildRequires:	pkgconfig(grpc++)
