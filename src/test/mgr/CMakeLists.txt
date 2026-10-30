@@ -81,6 +81,29 @@ add_ceph_unittest(unittest_mgr_map_cache)
 target_link_libraries(unittest_mgr_map_cache ceph-common
   Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
 
+# unittest_mgr_threadmonitor
+# NOTE: unittest_mgr_base_obj and the unittest_mgr_threadmonitor target are
+# cherry-picked from https://github.com/ceph/ceph/pull/71237 pending its merge,
+# and should be reconciled when that PR lands (it adds the same scaffolding).
+set(unittest_mgr_base_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/ClusterState.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonKey.cc
+)
+add_library(unittest_mgr_base_obj OBJECT ${unittest_mgr_base_srcs})
+target_link_libraries(unittest_mgr_base_obj legacy-option-headers)
+
+add_executable(unittest_mgr_threadmonitor
+  test_threadmonitor.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/ThreadMonitor.cc
+  $<TARGET_OBJECTS:unittest_mgr_base_obj>
+)
+add_ceph_unittest(unittest_mgr_threadmonitor)
+target_link_libraries(unittest_mgr_threadmonitor
+  ceph-common
+  global
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
