@@ -544,10 +544,9 @@ if(WITH_RADOSGW_LANCEDB)
 
   # lancedb-c (upstream LanceDB C FFI bindings, git submodule) and
   # lancedb-rgw-store (the SAL backend for LanceDB) are combined by the
-  # rgw-lancedb umbrella crate into a single Rust librgw_lancedb.a,
-  # which is linked statically into the executables.
-  # A single static library is required because two independent static libraries
-  # cannot be linked into one binary (duplicate Rust runtime symbols).
+  # rgw-lancedb umbrella crate into a single Rust shared library,
+  # librgw_lancedb.so, so the binaries that link rgw_common load the Rust
+  # code at run time instead of each linking it in.
   # All three crates share a Cargo workspace (src/rgw/Cargo.toml) with a
   # single Cargo.lock, guaranteeing identical dependency versions.
   set(LANCEDB_C_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c")
@@ -561,7 +560,8 @@ if(WITH_RADOSGW_LANCEDB)
     set(RGW_LANCEDB_TARGET_DIR "${RGW_LANCEDB_BUILD_DIR}/target/release")
     set(RGW_LANCEDB_CARGO_FLAG "--release")
   endif()
-  set(RGW_LANCEDB_STATIC_LIB "${RGW_LANCEDB_TARGET_DIR}/librgw_lancedb.a")
+  set(RGW_LANCEDB_SONAME "librgw_lancedb.so.1")
+  set(RGW_LANCEDB_SHARED_LIB "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${RGW_LANCEDB_SONAME}")
 
   ExternalProject_Add(rgw-lancedb
     SOURCE_DIR ${RGW_LANCEDB_SOURCE_DIR}
@@ -569,10 +569,14 @@ if(WITH_RADOSGW_LANCEDB)
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ${CMAKE_COMMAND} -E env
           CARGO_TARGET_DIR=${RGW_LANCEDB_BUILD_DIR}/target
+          RGW_LANCEDB_SONAME=${RGW_LANCEDB_SONAME}
           ${CARGO_EXECUTABLE} build ${RGW_LANCEDB_CARGO_FLAG}
           --manifest-path ${RGW_LANCEDB_SOURCE_DIR}/Cargo.toml
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${RGW_LANCEDB_TARGET_DIR}/librgw_lancedb.so
+          ${RGW_LANCEDB_SHARED_LIB}
     BUILD_ALWAYS OFF
-    BUILD_BYPRODUCTS ${RGW_LANCEDB_STATIC_LIB}
+    BUILD_BYPRODUCTS ${RGW_LANCEDB_SHARED_LIB}
     INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     ${LANCEDB_C_SOURCE_DIR}/include/lancedb.h
                     ${CMAKE_BINARY_DIR}/src/include/lancedb.h
@@ -591,57 +595,30 @@ if(WITH_RADOSGW_LANCEDB)
   ExternalProject_Add_StepDependencies(rgw-lancedb build
     ${RGW_LANCEDB_RUST_SOURCES}
     ${LANCEDB_RGW_STORE_SOURCE_DIR}/build.rs
+    ${RGW_LANCEDB_SOURCE_DIR}/build.rs
     ${LANCEDB_C_SOURCE_DIR}/Cargo.toml
     ${LANCEDB_RGW_STORE_SOURCE_DIR}/Cargo.toml
     ${RGW_LANCEDB_SOURCE_DIR}/Cargo.toml
     ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
     ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.lock)
 
-  # Native system libraries required when linking a Rust staticlib,
-  # probed with lancedb-c's own cmake module -- the same source of truth
-  # used to fill Libs.private in the lancedb.pc that standalone lancedb-c
-  # builds install.  The probe only runs when BUILD_SHARED_LIBS is false,
-  # so force it off for the duration of the include.
-  set(_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
-  set(BUILD_SHARED_LIBS OFF)
-  include(${LANCEDB_C_SOURCE_DIR}/cmake/ProbeRustNativeLibs.cmake)
-  set(BUILD_SHARED_LIBS "${_saved_build_shared_libs}")
-  unset(_saved_build_shared_libs)
-
-  # Create imported library target for librgw_lancedb.a
-  add_library(rgw_lancedb STATIC IMPORTED)
+  # Create imported library target for librgw_lancedb.so
+  add_library(rgw_lancedb SHARED IMPORTED)
   set_target_properties(rgw_lancedb PROPERTIES
-    IMPORTED_LOCATION ${RGW_LANCEDB_STATIC_LIB}
-    INTERFACE_LINK_LIBRARIES "${LANCEDB_NATIVE_STATIC_LIBS}"
+    IMPORTED_LOCATION ${RGW_LANCEDB_SHARED_LIB}
+    IMPORTED_SONAME ${RGW_LANCEDB_SONAME}
   )
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64" AND NOT USING_MOLD_LINKER)
-    include(CheckLinkerFlag)
-    check_linker_flag(CXX "-fuse-ld=lld" HAVE_FUSE_LD_LLD)
-    if(HAVE_FUSE_LD_LLD)
-      set(RGW_LANCEDB_LINKER_OPTIONS "-fuse-ld=lld")
-    else()
-      message(WARNING "aarch64: lld not usable, linking librgw_lancedb.a with "
-        "the default linker is likely to fail with R_AARCH64_CALL26 relocation "
-        "overflows -- install lld or build with -DWITH_RADOSGW_LANCEDB=OFF")
-    endif()
-  endif()
-  # librgw_lancedb.a references the rgw_sal_wrapper_* symbols defined in
+  install(IMPORTED_RUNTIME_ARTIFACTS rgw_lancedb
+    LIBRARY DESTINATION ${CEPH_INSTALL_PKGLIBDIR})
+  # librgw_lancedb.so references the rgw_sal_wrapper_* symbols defined in
   # rgw_common (rgw_sal_wrapper.cc) while rgw_common calls the C API
-  # exported by the archive.  Nothing in the C++ code references the
+  # exported by the library.  Nothing in the C++ code references the
   # wrapper symbols directly, so force the linker to pull in the wrapper
-  # object before the archive is scanned, letting both directions of the
-  # cycle resolve in a single pass.
+  # object, which the executables and shared libraries that load
+  # librgw_lancedb.so then export to it.
   target_link_options(rgw_common PUBLIC
     "LINKER:--undefined=rgw_sal_wrapper_version"
   )
-  # Keep the archive's Rust runtime symbols (std, tokio, ...) out of the
-  # dynamic symbol table of the linked executables and shared libraries.
-  target_link_options(rgw_common PUBLIC
-    "LINKER:--exclude-libs,librgw_lancedb.a"
-  )
-  if(RGW_LANCEDB_LINKER_OPTIONS)
-    target_link_options(rgw_common PUBLIC ${RGW_LANCEDB_LINKER_OPTIONS})
-  endif()
   target_link_libraries(rgw_common PUBLIC rgw_lancedb)
   target_include_directories(rgw_common PRIVATE
     ${CMAKE_SOURCE_DIR}/src/rgw
@@ -651,17 +628,11 @@ if(WITH_RADOSGW_LANCEDB)
 
   if(WITH_RADOSGW_STANDALONE)
     # rgw_s3vector.cc and rgw_sal_wrapper.cc are part of librgw_common_srcs,
-    # so rgw_common_standalone needs the same archive, link options and
+    # so rgw_common_standalone needs the same library, link option and
     # include paths as rgw_common.
     target_link_options(rgw_common_standalone PUBLIC
       "LINKER:--undefined=rgw_sal_wrapper_version"
     )
-    target_link_options(rgw_common_standalone PUBLIC
-      "LINKER:--exclude-libs,librgw_lancedb.a"
-    )
-    if(RGW_LANCEDB_LINKER_OPTIONS)
-      target_link_options(rgw_common_standalone PUBLIC ${RGW_LANCEDB_LINKER_OPTIONS})
-    endif()
     target_link_libraries(rgw_common_standalone PUBLIC rgw_lancedb)
     target_include_directories(rgw_common_standalone PRIVATE
       ${CMAKE_SOURCE_DIR}/src/rgw

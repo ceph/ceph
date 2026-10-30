@@ -2614,6 +2614,9 @@ fi
 %doc %{_docdir}/ceph/sample.ceph.conf
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/libceph-common.so.*
+%if 0%{with lancedb}
+%{_libdir}/ceph/librgw_lancedb.so.*
+%endif
 %{_bindir}/rgw-standalone
 %{_bindir}/rgw-standalone-admin
 %dir %{_localstatedir}/lib/ceph/radosgw
@@ -2841,6 +2844,10 @@ fi
 
 %files -n librgw2
 %{_libdir}/librgw.so.*
+%if 0%{with lancedb}
+%dir %{_libdir}/ceph
+%{_libdir}/ceph/librgw_lancedb.so.*
+%endif
 %if %{with lttng}
 %{_libdir}/librgw_op_tp.so.*
 %{_libdir}/librgw_rados_tp.so.*
