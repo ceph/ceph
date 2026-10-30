@@ -25,6 +25,7 @@ from datetime import datetime
 import os
 import time
 import stat
+from uuid import UUID
 from typing import Any, Dict, Optional
 from logging import getLogger
 
@@ -465,8 +466,80 @@ cdef class SnapDiffHandle2(object):
             raise make_ex(ret, "closesnapdiff2 failed")
 
 
+DEFAULT_ENCODING='utf-8'
 
-def cstr(val, name, encoding="utf-8", opt=False) -> bytes:
+
+class Utf8BytesWrapper:
+    '''
+    Allows auto-conversion to and operating on mix of utf-8 encoded bytes and
+    str/int/float/bool
+    '''
+
+    def __init__(self, val, bytes_encoding=DEFAULT_ENCODING):
+        self._data = self.to_utf8b(val, bytes_encoding)
+
+    @property
+    def data(self):
+        assert type(self._data) is bytes
+
+        return self._data
+
+    def to_utf8b(self, val, bytes_encoding=DEFAULT_ENCODING):
+        '''
+        Convert val to UTF-8 encoded bytes.
+        '''
+        val_type = type(val)
+
+        if val_type is str:
+            return val.encode(DEFAULT_ENCODING)
+        elif val_type in (int, float, bool, UUID):
+            return str(val).encode(DEFAULT_ENCODING)
+        elif val_type is bytes:
+            if bytes_encoding != DEFAULT_ENCODING:
+                val = val.decode(bytes_encoding).encode(DEFAULT_ENCODING)
+            return val
+        elif val_type is self.__class__:
+            return val.data
+        elif hasattr(val, 'encode'):
+            return val.encode('utf-8')
+        else:
+            raise TypeError(f'invalid type. val_type = {val_type} val = {val}')
+
+    def __bytes__(self):
+        return self.data
+
+    def __str__(self):
+        return self.data.decode('utf-8')
+
+    def __format__(self, spec):
+        return format(self.data.decode('utf-8'), spec)
+
+    def __repr__(self):
+        return f'class {self.__class__.__name__}(data={self.data})'
+
+    def __add__(self, val):
+        return self.__class__(self.data + self.to_utf8b(val))
+
+    def __radd__(self, val):
+        return self.__class__(self.to_utf8b(val) + self.data)
+
+    def __eq__(self, val):
+        return (self.data == self.to_utf8b(val))
+
+    def __ne__(self, val):
+        return (self.data != self.to_utf8b(val))
+
+    def __contains__(self, val):
+        return (self.to_utf8b(val) in self.data)
+
+    def encode(self, encoding=DEFAULT_ENCODING):
+        if encoding == DEFAULT_ENCODING:
+            return self.data
+        else:
+            return self.data.decode(DEFAULT_ENCODING).encode(encoding)
+
+
+def cstr(val, name, encoding=DEFAULT_ENCODING, opt=False) -> bytes:
     """
     Create a byte string from a Python string
 
@@ -478,15 +551,23 @@ def cstr(val, name, encoding="utf-8", opt=False) -> bytes:
     """
     if opt and val is None:
         return None
-    if isinstance(val, bytes):
+
+    val_type = type(val)
+
+    if val_type is bytes:
         return val
+    elif val_type is str:
+        return val.encode(encoding)
+    elif val_type in (int, float, bool):
+        return str(val).encode(encoding)
+    elif val_type is Utf8BytesWrapper:
+        return val.data
+    elif hasattr(val, 'encode'):
+        return val.encode(encoding)
     else:
-        try:
-            v = val.encode(encoding)
-        except:
-            raise TypeError('%s must be encodeable as a bytearray' % name)
-        assert isinstance(v, bytes)
-        return v
+        raise TypeError(f'Received invalid type for varible name = "{name}", '
+                        f'its value = {val}, val_type = {val_type}')
+
 
 def cstr_list(list_str, name, encoding="utf-8"):
     return [cstr(s, name) for s in list_str]
