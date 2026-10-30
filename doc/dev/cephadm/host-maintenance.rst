@@ -10,21 +10,20 @@ the maintenance strategy that could be implemented in cephadm and mgr/cephadm.
 
 High Level Design
 =================
-Placing a host into maintenance, adopts the following workflow;
+Placing a host into maintenance follows this workflow:
 
-#. confirm that the removal of the host does not impact data availability (the following
-   steps will assume it is safe to proceed)
+#. Confirm that the removal of the host does not impact data availability. The following
+   steps assume that it is safe to proceed.
 
-   * ``orch host ok-to-stop <host>`` would be used here
+   * ``orch host ok-to-stop <host>`` would be used here.
 
-#. if the host has osd daemons, apply noout to the host subtree to prevent data migration
-   from triggering during the planned maintenance slot.
-#. Stop the ceph target (all daemons stop)
-#. Disable the ceph target on that host, to prevent a reboot from automatically starting
-   ceph services again)
+#. If the host has OSD daemons, apply ``noout`` to the host subtree to prevent data
+   migration from being triggered during the planned maintenance slot.
+#. Stop the Ceph target, which stops all of the host's daemons.
+#. Disable the Ceph target on that host to prevent a reboot from automatically starting
+   Ceph services again.
 
-
-Exiting Maintenance, is basically the reverse of the above sequence
+Exiting maintenance is the reverse of this sequence.
 
 Admin Interaction
 =================
