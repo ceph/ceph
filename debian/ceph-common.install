@@ -10,6 +10,7 @@ usr/bin/ceph
 usr/bin/ceph-authtool
 usr/bin/ceph-conf
 usr/bin/ceph-dencoder
+usr/bin/ceph-diff-sorted
 usr/bin/ceph-rbdnamer
 usr/bin/ceph-syn
 usr/bin/cephfs-data-scan
@@ -33,6 +34,7 @@ usr/lib/ceph/crypto/* [amd64]
 usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-conf.8
 usr/share/man/man8/ceph-dencoder.8
+usr/share/man/man8/ceph-diff-sorted.8
 usr/share/man/man8/ceph-rbdnamer.8
 usr/share/man/man8/ceph-syn.8
 usr/share/man/man8/ceph-post-file.8
@@ -42,6 +44,8 @@ usr/share/man/man8/mount.ceph.8
 usr/share/man/man8/rados.8
 usr/share/man/man8/radosgw-admin.8
 usr/share/man/man8/rgw-policy-check.8
+usr/share/man/man8/rgw-orphan-list.8
+usr/share/man/man8/rgw-restore-bucket-index.8
 usr/share/man/man8/rbd.8
 usr/share/man/man8/rbdmap.8
 usr/share/man/man8/rbd-replay*.8
