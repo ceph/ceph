@@ -6,6 +6,7 @@ import time
 
 from tasks.ceph_test_case import TestTimeoutError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.fuse_mount import FuseMount
 
 log = getLogger(__name__)
 
@@ -28,12 +29,14 @@ class TestReaddirCachePressure(CephFSTestCase):
                'mds_cache_reservation',
                'mds_readdir_keep_complete_interval',
                'mds_readdir_withhold_caps_over_limit',
+               'mds_readdir_withhold_caps_churn_ratio',
                'mds_max_caps_per_client',
                'mds_session_cap_acquisition_throttle')
 
     def tearDown(self):
         for key in self.CONFIGS:
             self.config_rm('mds', key)
+        self.config_rm('client', 'client_cache_size')
         super().tearDown()
 
     def _mds_perf(self, section, key):
@@ -186,6 +189,107 @@ seq 1 {count} | sed 's/^/f/' | xargs -r touch
 
         self.config_set('mds', 'mds_readdir_withhold_caps_over_limit', 'false')
         self.assertGreaterEqual(self._list_caps_added("d"), files)
+
+    def _relist_caps_added(self, path, times):
+        """
+        The number of caps added by the last of several listings of path
+        from a fresh mount.  The client releases the caps it cannot keep
+        between the listings.
+        """
+        self.mount_a.umount_wait()
+        self.mount_a.mount_wait()
+        tick = float(self.fs.get_config('mds_tick_interval', service_type='mds'))
+        for _ in range(times - 1):
+            self.mount_a.run_shell(["find", path, "-maxdepth", "1"],
+                                   stdout=StringIO())
+            time.sleep(tick)
+        time.sleep(tick * 2)
+        before = self._caps_added()
+        self.mount_a.run_shell(["find", path, "-maxdepth", "1"],
+                               stdout=StringIO())
+        time.sleep(tick * 2)
+        return self._caps_added() - before
+
+    def test_withhold_caps_churn(self):
+        """
+        That readdir stops giving new caps to a client that releases them as
+        fast as it gets them, because its cache is smaller than the
+        directory, and goes on giving them to a client that keeps them.
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Needs a client with a configurable cache size")
+
+        files = self.WALK_FILES
+        self._populate("big", files)
+        # Low enough for a couple of listings of big to cross it.
+        self.config_set('mds', 'mds_session_cap_acquisition_throttle',
+                        str(files // 2))
+
+        def withheld():
+            return self._mds_perf('mds_server', 'readdir_churn_withhold')
+
+        # The default client cache holds all of big: caps keep coming.
+        before = withheld()
+        self.assertGreaterEqual(self._list_caps_added("big"), files)
+        self.assertEqual(withheld(), before)
+
+        # The client keeps the caps of the inodes left in its cache.
+        self.config_set('client', 'client_cache_size', str(files // 20))
+        self.config_set('mds', 'mds_readdir_withhold_caps_churn_ratio', '0')
+        self.assertGreaterEqual(self._relist_caps_added("big", 3),
+                                files * 9 // 10)
+        self.assertEqual(withheld(), before)
+
+        self.config_rm('mds', 'mds_readdir_withhold_caps_churn_ratio')
+        self.assertLess(self._relist_caps_added("big", 3), files // 10)
+        self.assertGreater(withheld(), before)
+
+    def _session_caps(self, mount):
+        gid = mount.get_global_id()
+        sessions = self.fs.rank_tell(['session', 'ls'])
+        return [s['num_caps'] for s in sessions if s['id'] == gid][0]
+
+    def test_withhold_caps_churn_recalled(self):
+        """
+        That readdir goes on giving new caps to a client that keeps them but
+        gave them back because the MDS recalled them.
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Needs a client that keeps the caps of inodes the "
+                          "kernel has dropped")
+
+        files = self.WALK_FILES
+        self._populate("big", files)
+        self.config_set('mds', 'mds_session_cap_acquisition_throttle',
+                        str(files // 2))
+
+        def withheld():
+            return self._mds_perf('mds_server', 'readdir_churn_withhold')
+
+        before = withheld()
+        self.mount_a.umount_wait()
+        self.mount_a.mount_wait()
+        for _ in range(2):
+            self.mount_a.run_shell(["find", "big", "-maxdepth", "1"],
+                                   stdout=StringIO())
+            # The kernel lets go of the inodes; ceph-fuse keeps them, and
+            # their caps, in its cache until the MDS recalls them.
+            self.mount_a.run_shell(["sudo", "sh", "-c",
+                                    "echo 2 > /proc/sys/vm/drop_caches"])
+            # Recalls all but mds_min_caps_per_client of the client's caps.
+            self.fs.rank_tell(['cache', 'drop', '30'])
+            self.wait_until_true(
+                lambda: self._session_caps(self.mount_a) < files // 10,
+                timeout=60)
+
+        tick = float(self.fs.get_config('mds_tick_interval', service_type='mds'))
+        time.sleep(tick * 2)
+        added = self._caps_added()
+        self.mount_a.run_shell(["find", "big", "-maxdepth", "1"],
+                               stdout=StringIO())
+        time.sleep(tick * 2)
+        self.assertGreaterEqual(self._caps_added() - added, files * 9 // 10)
+        self.assertEqual(withheld(), before)
 
     def test_throttled_readdir_holds_no_locks(self):
         """
