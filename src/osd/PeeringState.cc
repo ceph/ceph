@@ -8348,6 +8348,23 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
   DECLARE_LOCALS;
   ps->log_weirdness();
   ceph_assert(!ps->acting_recovery_backfill.empty());
+
+  // Optimized EC: activate() resets a shard that is behind the log tail
+  // to empty, and only a backfill target is backfilled afterwards. An
+  // acting or async recovery shard that choose_acting() judged contiguous
+  // may be behind the log the primary has now (see note_behind_log_tail).
+  // Choose the acting set again before requesting any log, so that no
+  // reply is left in flight when GetLog runs again.
+  for (const auto &s : ps->acting_recovery_backfill) {
+    if (s != ps->get_primary()) {
+      note_behind_log_tail(s, "before requesting logs");
+    }
+  }
+  if (!behind_log_tail.empty()) {
+    rechoose_acting();
+    return;
+  }
+
   eversion_t since;
   for (auto i = ps->acting_recovery_backfill.begin();
        i != ps->acting_recovery_backfill.end();
@@ -8437,8 +8454,18 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
 		       std::move(logevt.msg->missing),
 		       logevt.from);
 
+  // Optimized EC: proc_replica_log() applied the current pwlc to the
+  // shard's own info. The pwlc known when choose_acting() ran may have
+  // advanced this shard past the log tail; the pwlc adopted with the
+  // authoritative log since may no longer cover it.
+  note_behind_log_tail(logevt.from, "under the current pwlc");
+
   if (peer_missing_requested.empty()) {
-    if (ps->need_up_thru) {
+    if (!behind_log_tail.empty()) {
+      // Every requested log has arrived: nothing is left in flight that
+      // GetLog could take for the authoritative log.
+      rechoose_acting();
+    } else if (ps->need_up_thru) {
       psdout(10) << " still need up_thru update before going active"
 			 << dendl;
       post_event(NeedUpThru());
@@ -8449,6 +8476,58 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
     }
   }
   return discard_event();
+}
+
+bool PeeringState::GetMissing::note_behind_log_tail(const pg_shard_t &shard,
+						    const char *why)
+{
+  DECLARE_LOCALS;
+  const pg_info_t &pi = ps->peer_info[shard];
+  if (!ps->pool.info.allows_ecoptimizations() ||
+      ps->is_backfill_target(shard) ||
+      pi.is_empty() ||
+      pi.last_update >= ps->pg_log.get_tail()) {
+    return false;
+  }
+  // activate() would reset this shard to empty without backfilling it: the
+  // PG would go clean with the shard empty, and the first write to it would
+  // assert in should_send_op().
+  psdout(1) << "osd." << shard << " last_update " << pi.last_update
+	    << " is behind the log tail " << ps->pg_log.get_tail()
+	    << " " << why << " and is not a backfill target" << dendl;
+  behind_log_tail.insert(shard);
+  return true;
+}
+
+void PeeringState::GetMissing::rechoose_acting()
+{
+  DECLARE_LOCALS;
+  auto &rechosen = context< Peering >().rechosen_behind_log_tail;
+  for (const auto &shard : behind_log_tail) {
+    if (rechosen.contains(shard)) {
+      // choose_acting() already ran again for this shard this interval
+      // and still did not make it a backfill target. Do not activate with
+      // a shard that would be reset without a backfill.
+      pl->get_clog_error() << ps->info.pgid << " osd." << shard
+			   << " is behind the log tail " << ps->pg_log.get_tail()
+			   << " after the acting set was chosen again for it;"
+			   << " not activating";
+      post_event(IsIncomplete());
+      return;
+    }
+  }
+  rechosen.insert(behind_log_tail.begin(), behind_log_tail.end());
+  psdout(1) << "choosing the acting set again for " << behind_log_tail
+	    << ", behind the log tail " << ps->pg_log.get_tail() << dendl;
+  // choose_acting() in GetLog sees these shards as not contiguous and
+  // makes them backfill targets; let it set backfill_targets anew.
+  ps->clear_recovery_state();
+  post_event(RechooseActing());
+}
+
+boost::statechart::result PeeringState::GetMissing::react(const RechooseActing&)
+{
+  return transit< GetLog >();
 }
 
 boost::statechart::result PeeringState::GetMissing::react(const QueryState& q)
