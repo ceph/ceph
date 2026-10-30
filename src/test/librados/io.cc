@@ -579,5 +579,139 @@ TEST_P(LibRadosIoEC, CmpXattr) {
   check_cmpxattr(ioctx);
 }
 
+static int pool_get_int(rados_t cluster, const std::string& pool_name,
+                        const std::string& var, int *val)
+{
+  std::string cmd = "{\"prefix\": \"osd pool get\", \"pool\": \"" +
+                    pool_name + "\", \"var\": \"" + var + "\"}";
+  const char *cmds[] = {cmd.c_str()};
+  char *out = nullptr;
+  size_t out_len = 0;
+  int r = rados_mon_command(cluster, cmds, 1, "", 0, &out, &out_len,
+                            nullptr, nullptr);
+  if (r < 0) {
+    return r;
+  }
+  // the plain output is "<var>: <value>"
+  std::string s(out, out_len);
+  rados_buffer_free(out);
+  auto colon = s.find(':');
+  if (colon == std::string::npos) {
+    return -EINVAL;
+  }
+  *val = std::stoi(s.substr(colon + 1));
+  return 0;
+}
+
+static int pool_set_int(rados_t cluster, const std::string& pool_name,
+                        const std::string& var, int val)
+{
+  std::string cmd = "{\"prefix\": \"osd pool set\", \"pool\": \"" +
+                    pool_name + "\", \"var\": \"" + var + "\", \"val\": \"" +
+                    std::to_string(val) + "\"}";
+  const char *cmds[] = {cmd.c_str()};
+  return rados_mon_command(cluster, cmds, 1, "", 0, nullptr, nullptr,
+                           nullptr, nullptr);
+}
+
+// Change min_size and set it back. Each change starts a new interval for
+// the PGs of this pool only, so their primaries drop all obcs and load
+// them again from the store on the next op.
+static void force_new_interval(rados_t cluster, const std::string& pool_name)
+{
+  int size, min_size;
+  ASSERT_EQ(0, pool_get_int(cluster, pool_name, "size", &size));
+  ASSERT_EQ(0, pool_get_int(cluster, pool_name, "min_size", &min_size));
+  if (size < 2) {
+    GTEST_SKIP() << "min_size of a pool with size " << size
+                 << " cannot change";
+  }
+  int other = min_size < size ? min_size + 1 : min_size - 1;
+  ASSERT_EQ(0, pool_set_int(cluster, pool_name, "min_size", other));
+  ASSERT_EQ(0, pool_set_int(cluster, pool_name, "min_size", min_size));
+  // ops sent from now on wait until the OSDs have the new map
+  ASSERT_EQ(0, rados_wait_for_latest_osdmap(cluster));
+}
+
+static bool same_value(const char *a, int a_len, const char *b, int b_len)
+{
+  return a_len == b_len && memcmp(a, b, a_len) == 0;
+}
+
+// An xattr with an empty name is the object info (OI). Each write changes
+// it, so a read must return the current value, not an empty or old one.
+// This must also be true after the primary loads the obc again from the
+// store. On EC pools the first write after such a load decodes the OI
+// from attr_cache.
+static void check_object_info_xattr(const std::string& pool_name,
+                                    const std::string& nspace)
+{
+  // Use an op timeout, so that a lost request fails the test and does
+  // not hang it.
+  rados_t cluster;
+  ASSERT_EQ(0, rados_create(&cluster, nullptr));
+  auto shutdown = make_scope_guard([&] { rados_shutdown(cluster); });
+  ASSERT_EQ(0, rados_conf_read_file(cluster, nullptr));
+  rados_conf_parse_env(cluster, nullptr);
+  ASSERT_EQ(0, rados_conf_set(cluster, "rados_osd_op_timeout", "120"));
+  ASSERT_EQ(0, rados_connect(cluster));
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
+  auto destroy = make_scope_guard([&] { rados_ioctx_destroy(ioctx); });
+  rados_ioctx_set_namespace(ioctx, nspace.c_str());
+
+  const char *oid = "object_info_xattr";
+  char data[] = "ceph";
+  char v1[] = "value1";
+  char v2[] = "value2";
+
+  ASSERT_EQ(0, rados_write_full(ioctx, oid, data, sizeof(data)));
+  char oi1[4096];
+  int len1 = rados_getxattr(ioctx, oid, "", oi1, sizeof(oi1));
+  ASSERT_LT(0, len1);
+  ASSERT_EQ(1, cmp_xattr(ioctx, oid, "", LIBRADOS_CMPXATTR_OP_EQ,
+                         oi1, len1));
+
+  ASSERT_EQ(0, rados_setxattr(ioctx, oid, "key", v1, sizeof(v1)));
+  char oi2[4096];
+  int len2 = rados_getxattr(ioctx, oid, "", oi2, sizeof(oi2));
+  ASSERT_LT(0, len2);
+  ASSERT_FALSE(same_value(oi1, len1, oi2, len2));
+  ASSERT_EQ(-ECANCELED, cmp_xattr(ioctx, oid, "", LIBRADOS_CMPXATTR_OP_EQ,
+                                  oi1, len1));
+  ASSERT_EQ(1, cmp_xattr(ioctx, oid, "", LIBRADOS_CMPXATTR_OP_EQ,
+                         oi2, len2));
+
+  // write after the obc is loaded again
+  force_new_interval(cluster, pool_name);
+  if (::testing::Test::HasFatalFailure() || ::testing::Test::IsSkipped()) {
+    return;
+  }
+  ASSERT_EQ(0, rados_setxattr(ioctx, oid, "key", v2, sizeof(v2)));
+  char oi3[4096];
+  int len3 = rados_getxattr(ioctx, oid, "", oi3, sizeof(oi3));
+  ASSERT_LT(0, len3);
+  ASSERT_FALSE(same_value(oi2, len2, oi3, len3));
+
+  // read after the obc is loaded again
+  force_new_interval(cluster, pool_name);
+  if (::testing::Test::HasFatalFailure()) {
+    return;
+  }
+  char oi4[4096];
+  int len4 = rados_getxattr(ioctx, oid, "", oi4, sizeof(oi4));
+  ASSERT_TRUE(same_value(oi3, len3, oi4, len4));
+  ASSERT_EQ(1, cmp_xattr(ioctx, oid, "", LIBRADOS_CMPXATTR_OP_EQ,
+                         oi3, len3));
+}
+
+TEST_P(LibRadosIo, ObjectInfoXattr) {
+  check_object_info_xattr(pool_name, nspace);
+}
+
+TEST_P(LibRadosIoEC, ObjectInfoXattr) {
+  check_object_info_xattr(pool_name, nspace);
+}
+
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosIo);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosIoEC);

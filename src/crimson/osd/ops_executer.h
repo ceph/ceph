@@ -212,6 +212,10 @@ private:
   };
   std::unique_ptr<CloningContext> cloning_ctx;
 
+  /// the clone that a ROLLBACK op copies to the head, populated in
+  /// PGBackend::rollback()
+  ObjectContextRef rollback_to;
+
   /**
    * prepare_cloning_ctx
    *

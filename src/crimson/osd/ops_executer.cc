@@ -698,7 +698,8 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       ceph_assert(obc->ssc);
       return backend.rollback(os, obc->ssc->snapset,
 			      osd_op, txn, *osd_op_params, delta_stats,
-                              head, pg->obc_loader, snapc, attr_cache);
+                              head, pg->obc_loader, snapc, attr_cache,
+                              rollback_to);
     });
   case CEPH_OSD_OP_APPEND:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
@@ -911,6 +912,7 @@ OpsExecuter::flush_changes_and_submit(
     auto [_submitted, _all_completed] = co_await pg->submit_transaction(
       std::move(obc),
       cloning_ctx ? std::move(cloning_ctx->clone_obc) : nullptr,
+      std::move(rollback_to),
       std::move(txn),
       std::move(*osd_op_params),
       std::move(log_entries)
@@ -988,7 +990,8 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
       obc->obs.oi.soid,
       obc->obs.oi,
       obc->obs.oi.soid.is_head() ? &(obc->ssc->snapset) : nullptr,
-      txn);
+      txn,
+      obc->attr_cache);
   } else {
     // reset cached ObjectState without enforcing eviction
     obc->obs.oi = object_info_t(obc->obs.oi.soid);
@@ -1079,7 +1082,8 @@ pg_log_entry_t OpsExecuter::complete_cloning_ctx()
     cloning_ctx->coid,
     cloning_ctx->clone_obc->obs.oi,
     nullptr /* snapset */,
-    txn);
+    txn,
+    cloning_ctx->clone_obc->attr_cache);
 
   pg_log_entry_t ret{
     pg_log_entry_t::CLONE,

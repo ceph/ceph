@@ -98,6 +98,7 @@ ReplicatedBackend::submit_transaction(
   const std::set<pg_shard_t> &pg_shards,
   crimson::osd::ObjectContextRef &&obc,
   crimson::osd::ObjectContextRef &&new_clone,
+  crimson::osd::ObjectContextRef &&rollback_to,
   ceph::os::Transaction&& t,
   osd_op_params_t&& opp,
   epoch_t min_epoch, epoch_t map_epoch,

@@ -466,6 +466,7 @@ SnapTrimObjSubEvent::start()
     std::tie(submitted, all_completed) = co_await pg->submit_transaction(
       ObjectContextRef(obc_manager.get_obc()),
       nullptr,
+      nullptr,
       std::move(txn),
       std::move(osd_op_p),
       std::move(log_entries)

@@ -1022,6 +1022,7 @@ PG::interruptible_future<PG::rep_op_fut_t>
 PG::submit_transaction(
   ObjectContextRef&& obc,
   ObjectContextRef&& new_clone,
+  ObjectContextRef&& rollback_to,
   ceph::os::Transaction&& txn,
   osd_op_params_t&& osd_op_p,
   std::vector<pg_log_entry_t>&& log_entries)
@@ -1054,6 +1055,7 @@ PG::submit_transaction(
       peering_state.get_acting_recovery_backfill(),
       std::move(obc),
       std::move(new_clone),
+      std::move(rollback_to),
       std::move(txn),
       std::move(osd_op_p),
       peering_state.get_last_peering_reset(),
