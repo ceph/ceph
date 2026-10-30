@@ -150,7 +150,9 @@ struct ECCommon {
 
     read_request_t(const ECUtil::shard_extent_set_t &shard_want_to_read,
                    WantAttrs want_attrs, WantOmapHeader want_omap_header, WantOmapKeys want_omap_keys,
-                   std::string omap_read_from, uint64_t omap_max_bytes, uint64_t object_size) :
+                   std::string omap_read_from, uint64_t omap_max_bytes,
+                   uint64_t object_size, uint32_t flags = 0) :
+      flags(flags),
       shard_want_to_read(shard_want_to_read),
       zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
