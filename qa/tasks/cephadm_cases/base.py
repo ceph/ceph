@@ -1,7 +1,7 @@
 """
 Base class for the cephadm integration tests under tasks/cephadm_cases.
 
-Suites built on it (certmgr for now) run against a real cluster
+The suites built on it (certmgr, services/*) run against a real cluster
 and drive it through ``ceph`` commands executed in ``cephadm shell``. This
 module holds what they all need: command execution, waiting for the
 orchestrator and for services, applying specs and confirming they were
