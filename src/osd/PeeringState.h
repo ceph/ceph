@@ -1727,8 +1727,12 @@ private:
     bool exclude_nonprimary_shards,
     bool *history_les_bound = nullptr) const;
 
+  /// the tail the primary's log will have once GetLog has merged the log
+  /// of the shard with info get_log_info
+  eversion_t log_tail_after_getlog(const pg_info_t &get_log_info) const;
+
   static void calc_ec_acting(
-    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    const eversion_t &log_tail,
     unsigned size,
     const std::vector<int> &acting,
     const std::vector<int> &up,

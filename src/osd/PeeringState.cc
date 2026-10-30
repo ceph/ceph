@@ -1794,8 +1794,25 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
   return best;
 }
 
+/**
+ * log_tail_after_getlog
+ *
+ * The tail the primary's log will have once GetLog has merged the log of
+ * get_log_shard. GetLog requests that log from no further back than
+ * get_log_shard's own tail, so the merged log reaches back to the older
+ * of the two tails and no further. choose_acting() uses this to decide
+ * which shards can be recovered from the log, and GetLog to decide how
+ * far back to request the log: a shard choose_acting() accepts because
+ * it lies between get_log_shard's tail and the primary's is a shard
+ * GetLog requests the log back to. The two must agree.
+ */
+eversion_t PeeringState::log_tail_after_getlog(const pg_info_t &get_log_info) const
+{
+  return std::min(info.log_tail, get_log_info.log_tail);
+}
+
 void PeeringState::calc_ec_acting(
-  map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+  const eversion_t &log_tail,
   unsigned size,
   const vector<int> &acting,
   const vector<int> &up,
@@ -1818,7 +1835,7 @@ void PeeringState::calc_ec_acting(
     if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE &&
 	!all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.is_incomplete() &&
 	all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.last_update >=
-	auth_log_shard->second.log_tail) {
+	log_tail) {
       ss << " selecting up[i]: " << pg_shard_t(up[i], shard_id_t(i)) << std::endl;
       want[i] = up[i];
       continue;
@@ -1832,7 +1849,7 @@ void PeeringState::calc_ec_acting(
     if (acting.size() > (unsigned)i && acting[i] != CRUSH_ITEM_NONE &&
 	!all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.is_incomplete() &&
 	all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.last_update >=
-	auth_log_shard->second.log_tail) {
+	log_tail) {
       ss << " selecting acting[i]: " << pg_shard_t(acting[i], shard_id_t(i)) << std::endl;
       want[i] = acting[i];
     } else if (!restrict_to_up_acting) {
@@ -1842,7 +1859,7 @@ void PeeringState::calc_ec_acting(
 	ceph_assert(static_cast<int>(j->shard) == i);
 	if (!all_info.find(*j)->second.is_incomplete() &&
 	    all_info.find(*j)->second.last_update >=
-	    auth_log_shard->second.log_tail) {
+	    log_tail) {
 	  ss << " selecting stray: " << *j << std::endl;
 	  want[i] = j->osd;
 	  break;
@@ -2634,8 +2651,27 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 	ss);
     }
   } else {
+    // A shard can only be recovered from the log if it is not behind the
+    // tail of the log the primary will have after GetLog. With optimized
+    // EC that log comes from get_log_shard, which need not be
+    // auth_log_shard, and GetLog extends the primary's log back only as
+    // far as get_log_shard's tail. So a longer log on auth_log_shard (a
+    // parity shard, say) must not make a shard look contiguous.
+    eversion_t ec_log_tail = auth_log_shard->second.log_tail;
+    if (pool.info.allows_ecoptimizations()) {
+      const eversion_t built_tail =
+	log_tail_after_getlog(get_log_shard->second);
+      if (built_tail > ec_log_tail) {
+	psdout(10) << "judging contiguity against log tail " << built_tail
+		   << " (primary " << info.log_tail << ", osd."
+		   << get_log_shard->first << " "
+		   << get_log_shard->second.log_tail << ") instead of osd."
+		   << auth_log_shard->first << " " << ec_log_tail << dendl;
+	ec_log_tail = built_tail;
+      }
+    }
     calc_ec_acting(
-      auth_log_shard,
+      ec_log_tail,
       get_osdmap()->get_pg_size(info.pgid.pgid),
       acting,
       up,
@@ -7983,7 +8019,10 @@ PeeringState::GetLog::GetLog(my_context ctx)
        ++p) {
     if (*p == ps->pg_whoami) continue;
     pg_info_t& ri = ps->peer_info[*p];
-    if (ri.last_update < ps->info.log_tail && ri.last_update >= best.log_tail &&
+    // a peer behind our tail that the log we can get reaches back to
+    // (the same bound choose_acting() judged its contiguity by)
+    if (ri.last_update < ps->info.log_tail &&
+        ri.last_update >= ps->log_tail_after_getlog(best) &&
         ri.last_update < request_log_from)
       request_log_from = ri.last_update;
   }
