@@ -396,7 +396,7 @@ status. Commands of this kind take the form ``filesystem-name@filesystem-id peer
             "id": 120,
             "name": "snap1",
             "sync_duration": 0.079997898999999997,
-            "sync_time_stamp": "274900.558797s"
+            "sync_time_stamp": "2026-07-15T12:00:00.558797+0530"
         },
         "snaps_synced": 2,
         "snaps_deleted": 0,
@@ -441,7 +441,7 @@ status:
             "id": 120,
             "name": "snap1",
             "sync_duration": 0.079997898999999997,
-            "sync_time_stamp": "274900.558797s"
+            "sync_time_stamp": "2026-07-15T12:00:00.558797+0530"
         },
         "snaps_synced": 2,
         "snaps_deleted": 0,
