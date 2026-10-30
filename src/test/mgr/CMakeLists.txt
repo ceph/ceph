@@ -43,6 +43,10 @@ set(unittest_mgr_daemonhealthmetric_srcs
   ${CMAKE_SOURCE_DIR}/src/mgr/DaemonHealthMetric.cc
 )
 
+set(unittest_mgr_mgroprequest_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/MgrOpRequest.cc
+)
+
 add_library(unittest_mgr_base_obj OBJECT ${unittest_mgr_base_srcs})
 target_link_libraries(unittest_mgr_base_obj legacy-option-headers)
 
@@ -72,6 +76,15 @@ target_link_libraries(unittest_mgr_threadmonitor_obj legacy-option-headers)
 
 add_library(unittest_mgr_daemonhealthmetric_obj OBJECT ${unittest_mgr_daemonhealthmetric_srcs})
 target_link_libraries(unittest_mgr_daemonhealthmetric_obj legacy-option-headers)
+
+# MgrOpRequest.cc pulls in the generated lttng tracepoint header, so this is
+# the single place that needs to depend on mgr_op_tp. Every test links this
+# object library, so none of them need their own add_dependencies(mgr_op_tp).
+add_library(unittest_mgr_mgroprequest_obj OBJECT ${unittest_mgr_mgroprequest_srcs})
+target_link_libraries(unittest_mgr_mgroprequest_obj legacy-option-headers)
+if(WITH_LTTNG)
+  add_dependencies(unittest_mgr_mgroprequest_obj mgr_op_tp)
+endif()
 
 # unittest_mgr_clusterstate
 add_executable(unittest_mgr_clusterstate
@@ -167,7 +180,6 @@ set(unittest_mgr_common_srcs
   ${CMAKE_SOURCE_DIR}/src/mgr/DaemonServer.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/Gil.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/Mgr.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/MgrOpRequest.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/PyModule.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/PyModuleRegistry.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/PyModuleRunner.cc
@@ -182,9 +194,6 @@ target_include_directories(unittest_mgr_common_obj PRIVATE
   $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>
   $<TARGET_PROPERTY:Python3::Python,INTERFACE_INCLUDE_DIRECTORIES>)
 target_link_libraries(unittest_mgr_common_obj legacy-option-headers)
-if(WITH_LTTNG)
-  add_dependencies(unittest_mgr_common_obj mgr_op_tp)
-endif()
 
 set(unittest_mgr_common_objs
   $<TARGET_OBJECTS:unittest_mgr_base_obj>
@@ -195,6 +204,7 @@ set(unittest_mgr_common_objs
   $<TARGET_OBJECTS:unittest_mgr_metriccollector_obj>
   $<TARGET_OBJECTS:unittest_mgr_threadmonitor_obj>
   $<TARGET_OBJECTS:unittest_mgr_daemonhealthmetric_obj>
+  $<TARGET_OBJECTS:unittest_mgr_mgroprequest_obj>
   $<TARGET_OBJECTS:unittest_mgr_common_obj>
   $<TARGET_OBJECTS:mgr_cap_obj>)
 
@@ -387,6 +397,19 @@ target_link_libraries(unittest_mgr_pyosdmap
   ${CMAKE_DL_LIBS}
   $<$<BOOL:${WITH_LIBCEPHSQLITE}>:cephsqlite>
   $<$<BOOL:${WITH_LIBCEPHSQLITE}>:SQLite3::SQLite3>
+)
+
+# unittest_mgr_mgroprequest
+add_executable(unittest_mgr_mgroprequest
+  test_mgroprequest.cc
+  $<TARGET_OBJECTS:unittest_mgr_mgroprequest_obj>
+  $<TARGET_OBJECTS:unittest_mgr_base_obj>
+)
+add_ceph_unittest(unittest_mgr_mgroprequest)
+target_link_libraries(unittest_mgr_mgroprequest
+  ceph-common
+  global
+  Python3::Python
 )
 
 #scripts
