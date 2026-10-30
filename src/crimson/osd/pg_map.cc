@@ -39,6 +39,15 @@ seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
       f->close_section();
     }
   }
+  f->open_array_section("pg_mappings");
+  for (const auto &[pgid, placement] : pg_to_core) {
+    f->open_object_section("pg_mapping");
+    f->dump_stream("pgid") << pgid;
+    f->dump_int("core", placement.first);
+    f->dump_int("store_index", placement.second);
+    f->close_section();
+  }
+  f->close_section();
   if(seastar::this_smp_shard_count() > store_shard_nums) {
     for (auto i = core_alien_to_num_pgs.begin();
          i != core_alien_to_num_pgs.end(); ++i) {
