@@ -17,6 +17,7 @@ import {
   IconModule,
   IconService,
   InputModule,
+  LinkModule,
   RadioModule,
   SelectModule,
   TabsModule,
@@ -26,6 +27,10 @@ import {
 import Close from '@carbon/icons/es/close/32';
 import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
 import { ClusterModule } from '../cluster/cluster.module';
+import { NfsClusterFormComponent } from './nfs-cluster-form/nfs-cluster-form.component';
+import { NfsRateLimitComponent } from './nfs-rate-limit/nfs-rate-limit.component';
+import { NfsClusterResourcePageComponent } from './nfs-cluster-resource-page/nfs-cluster-resource-page.component';
+import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sidebar/nfs-cluster-resource-sidebar.component';
 
 @NgModule({
   imports: [
@@ -40,20 +45,35 @@ import { ClusterModule } from '../cluster/cluster.module';
     TagModule,
     SelectModule,
     InputModule,
+    LinkModule,
     RadioModule,
     CheckboxModule,
     ButtonModule,
     IconModule,
     TabsModule,
-    ClusterModule
+    ClusterModule,
+    NfsClusterFormComponent,
+    NfsRateLimitComponent
   ],
-  exports: [NfsListComponent, NfsFormComponent, NfsDetailsComponent, NfsClusterComponent],
+  exports: [
+    NfsListComponent,
+    NfsFormComponent,
+    NfsDetailsComponent,
+    NfsClusterComponent,
+    NfsFormClientComponent,
+    NfsClusterFormComponent,
+    NfsRateLimitComponent,
+    NfsClusterResourcePageComponent,
+    NfsClusterResourceSidebarComponent
+  ],
   declarations: [
     NfsListComponent,
     NfsDetailsComponent,
     NfsFormComponent,
     NfsFormClientComponent,
-    NfsClusterComponent
+    NfsClusterComponent,
+    NfsClusterResourcePageComponent,
+    NfsClusterResourceSidebarComponent
   ]
 })
 export class NfsModule {
