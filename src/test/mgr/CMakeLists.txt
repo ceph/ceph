@@ -356,6 +356,19 @@ target_link_libraries(unittest_mgr_daemonserver
   $<$<BOOL:${WITH_LIBCEPHSQLITE}>:SQLite3::SQLite3>
 )
 
+# unittest_mgr_mdsperfmetriccollector
+add_executable(unittest_mgr_mdsperfmetriccollector
+  test_mdsperfmetriccollector.cc
+  $<TARGET_OBJECTS:unittest_mgr_base_obj>
+  $<TARGET_OBJECTS:unittest_mgr_metriccollector_obj>
+)
+add_ceph_unittest(unittest_mgr_mdsperfmetriccollector)
+target_link_libraries(unittest_mgr_mdsperfmetriccollector
+  ceph-common
+  global
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
