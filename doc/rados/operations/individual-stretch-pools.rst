@@ -17,8 +17,8 @@ distributed across two or more zones. This is done by running
 
 Use stretch mode when there are exactly two zones. Use an individual stretch
 pool only when a particular replicated pool must span more than two zones.
-For an erasure-coded pool over three or more zones, spread its shards with a
-CRUSH MSR rule instead: see `Erasure-Coded Pools Spread Across Zones`_.
+An erasure-coded pool can be spread over three or more zones only by hand:
+see `Erasure-Coded Pools Spread Across Zones`_.
 
 The intent is to support three zones in stretch mode (``num_zones`` 3) in a
 future release, then to deprecate individual stretch pools, with an upgrade
@@ -83,8 +83,7 @@ spread across zones, after it is configured. The operator is responsible for:
 
 * **CRUSH rules.** An individual stretch pool needs a hand-written rule that
   places the required number of copies in each zone. An erasure-coded pool
-  spread across zones gets an MSR rule from its erasure code profile, or a
-  hand-written one.
+  spread across zones needs a rule that places its shards in each zone.
 * **Monitor placement.** The Monitors need CRUSH locations and the
   ``connectivity`` election strategy.
 * **Failure handling.** When a zone fails or returns, Ceph does not change the
@@ -230,27 +229,14 @@ Erasure-Coded Pools Spread Across Zones
 =======================================
 
 An erasure-coded pool with a large ``m`` can survive the loss of a zone on its
-own, without stretch mode or an individual stretch pool. Spread its shards
-over three or more zones, with ``m`` large enough that the shards left after
-one zone is lost still reach ``min_size``. CRUSH MSR rules suit this
-configuration: an MSR rule places a fixed number of shards in each zone (see
-:ref:`rados-crush-msr-rules`). The pool is an ordinary erasure-coded pool, so
-Ceph does not handle zone failures for it: as for an individual stretch pool,
-see `Operator Responsibilities`_ and `Limitations`_.
-
-For example, ``k=4 m=5`` over three data centers puts 3 shards in each. After
-one data center is lost, 6 shards remain, above the ``min_size`` of 5
-(``k+1``), so the pool keeps serving I/O and tolerates one more OSD failure.
-It uses 2.25 times the raw space of the data:
-
-.. prompt:: bash #
-
-   ceph osd erasure-code-profile set spread3 k=4 m=5 crush-failure-domain=datacenter crush-num-failure-domains=3 crush-osds-per-failure-domain=3
-   ceph osd pool create ecspread erasure spread3
-
-``m`` must be at least the number of shards in each zone plus one. With less,
-the PGs stop serving I/O when a zone is lost: ``k=6 m=3`` over three zones
-keeps 6 shards, below its ``min_size`` of 7.
+own, without stretch mode or an individual stretch pool. Its shards are spread
+over three or more zones, usually with a CRUSH MSR rule that places a fixed
+number of shards in each zone (see :ref:`rados-crush-msr-rules`), possibly
+combined with the LRC plugin, and ``m`` is large enough that the shards left
+after one zone is lost still reach ``min_size``. Such a pool is set up entirely
+by hand, and this documentation does not describe how. It is an ordinary
+erasure-coded pool, so Ceph does not handle zone failures for it: as for an
+individual stretch pool, see `Operator Responsibilities`_ and `Limitations`_.
 
 Compared with stretch mode:
 
@@ -260,9 +246,6 @@ Compared with stretch mode:
   many overwrites perform poorly. Object workloads can still perform well.
 * Every write sends shards to every zone, and recovery after a zone returns
   crosses the links between the zones.
-* The rule that the profile generates picks each zone's shards by OSD, so
-  several can land on one host. To separate them by host, write the rule by
-  hand.
 * MSR rules are new in Squid, so clients must be Squid or later.
 * The Monitors must still keep a quorum when one zone fails, for example with
   Monitors in each of the three zones.

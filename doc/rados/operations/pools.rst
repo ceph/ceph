@@ -1143,8 +1143,8 @@ needs this command.
 
    This command is only supported for replicated pools. For EC (erasure-coded)
    pools, use ``ceph osd pool set {pool-name} num_zones 2`` instead, which
-   works for both replicated and EC pools. To spread an EC pool over three or
-   more zones, use a CRUSH MSR rule: see :ref:`ec_pools_spread_across_zones`.
+   works for both replicated and EC pools. For EC pools spread over three or
+   more zones by hand, see :ref:`ec_pools_spread_across_zones`.
 
 Here are the breakdowns of the arguments:
 

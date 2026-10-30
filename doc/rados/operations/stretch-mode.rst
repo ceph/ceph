@@ -1244,9 +1244,8 @@ objects that a replicated pool's primary pulls during recovery:
 More Than Two Zones
 ===================
 
-Stretch mode is limited to two zones. Over three or more zones, use one of the
-two advanced types of stretch cluster: an erasure-coded pool spread across the
-zones with a CRUSH MSR rule, or an individual stretch pool for a replicated
-pool. :ref:`individual_stretch_pools` describes both. The Monitors do not
-handle zone failures for them, so interventions may be necessary after a zone
-failure.
+Stretch mode is limited to two zones. Over three or more zones, there are two
+advanced types of stretch cluster: an individual stretch pool for a replicated
+pool, or an erasure-coded pool spread across the zones by hand. See
+:ref:`individual_stretch_pools`. The Monitors do not handle zone failures for
+them, so interventions may be necessary after a zone failure.
