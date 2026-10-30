@@ -5,6 +5,7 @@
 #include "fscrypt_uapi.h"
 
 #include "common/ceph_mutex.h"
+#include "include/encoding.h"
 
 #include <map>
 

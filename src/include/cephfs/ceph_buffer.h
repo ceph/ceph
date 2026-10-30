@@ -119,6 +119,10 @@ enum {
 /**
  * Zero-copy async read/write (ceph::ZeroCopyClient, Filer → Objecter).
  *
+ * Bufferlists at this API are plaintext. On FSCrypt-enabled inodes the client
+ * encrypts/decrypts internally (buffer copies); callers still put/fill
+ * plaintext handles as usual.
+ *
  * async_read: on success, @c cb receives an owned @p data handle (put after use).
  * async_write: consumes @p data on successful submit. @p flags is a bitwise-OR
  * of @c CEPH_LL_WRITE_* (0 = no post-write fsync).
