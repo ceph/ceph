@@ -121,23 +121,6 @@ static bool validate_endpoint_config(const DoutPrefixProvider* dpp,
   return true;
 }
 
-// RGWHTTPArgs::parse() splits stored endpoint arguments on '&' and then
-// url-decodes them, so a value keeps '%', '&' and '+' only when they are escaped
-static std::string escape_endpoint_arg(std::string_view value)
-{
-  std::string escaped;
-  escaped.reserve(value.size());
-  for (const char c : value) {
-    switch (c) {
-    case '%': escaped.append("%25"); break;
-    case '&': escaped.append("%26"); break;
-    case '+': escaped.append("%2B"); break;
-    default: escaped.push_back(c);
-    }
-  }
-  return escaped;
-}
-
 bool validate_topic_name(const std::string& name, std::string& message)
 {
   constexpr size_t max_topic_name_length = 256;

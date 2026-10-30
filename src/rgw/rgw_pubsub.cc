@@ -583,6 +583,21 @@ int get_bucket_notifications(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+std::string escape_endpoint_arg(std::string_view value)
+{
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char c : value) {
+    switch (c) {
+    case '%': escaped.append("%25"); break;
+    case '&': escaped.append("%26"); break;
+    case '+': escaped.append("%2B"); break;
+    default: escaped.push_back(c);
+    }
+  }
+  return escaped;
+}
+
 std::string topic_to_unique(const std::string& topic,
                             const std::string& notification) {
   return notification + "_" + topic;

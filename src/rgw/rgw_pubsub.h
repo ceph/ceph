@@ -666,6 +666,11 @@ namespace rgw::notify {
 std::string topic_to_unique(const std::string& topic,
                             const std::string& notification);
 
+// a value as stored in rgw_pubsub_dest::push_endpoint_args.
+// RGWHTTPArgs::parse() splits the stored arguments on '&' and then
+// url-decodes them, so a value keeps '%', '&' and '+' only when they are escaped
+std::string escape_endpoint_arg(std::string_view value);
+
 std::optional<rgw_pubsub_topic_filter> find_unique_topic(
     const rgw_pubsub_bucket_topics& bucket_topics,
     const std::string& notif_name);

@@ -472,6 +472,20 @@ static const std::initializer_list<std::string_view> sensitive_keys = {
 // the checks that hold whenever a connection is made:  every key is listed
 // in rgw_kafka_config_allowed_keys, and a secret goes to the broker over
 // cleartext only when rgw_allow_notification_secrets_in_cleartext is set
+bool sensitive_key(std::string_view key) {
+  return std::find(sensitive_keys.begin(), sensitive_keys.end(), key) != sensitive_keys.end();
+}
+
+bool allowed_key(CephContext* cct, std::string_view key) {
+  const auto allowed = cct->_conf.get_val<std::string>("rgw_kafka_config_allowed_keys");
+  for (const auto listed : ceph::split(allowed, ", ")) {
+    if (listed == key) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool check_config(CephContext* cct,
                          const config_t& config,
                          bool use_ssl,
@@ -481,20 +495,12 @@ static bool check_config(CephContext* cct,
   if (config.empty()) {
     return true;
   }
-  const auto allowed = cct->_conf.get_val<std::string>("rgw_kafka_config_allowed_keys");
   for (const auto& [key, value] : config) {
-    bool listed = false;
-    for (const auto allowed_key : ceph::split(allowed, ", ")) {
-      if (allowed_key == key) {
-        listed = true;
-        break;
-      }
-    }
-    if (!listed) {
+    if (!allowed_key(cct, key)) {
       error = "kafka-config key '" + key + "' is not in rgw_kafka_config_allowed_keys";
       return false;
     }
-    if (std::find(sensitive_keys.begin(), sensitive_keys.end(), key) != sensitive_keys.end()) {
+    if (sensitive_key(key)) {
       has_secret = true;
     }
   }

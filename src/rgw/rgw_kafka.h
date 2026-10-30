@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <functional>
 #include <map>
 #include <boost/optional.hpp>
@@ -24,6 +25,12 @@ void shutdown();
 
 // librdkafka settings by librdkafka key, from a topic's "kafka-config"
 typedef std::map<std::string, std::string> config_t;
+
+// whether librdkafka marks "key" sensitive (a password or a private key)
+bool sensitive_key(std::string_view key);
+
+// whether rgw_kafka_config_allowed_keys lists "key"
+bool allowed_key(CephContext* cct, std::string_view key);
 
 // check "config" against rgw_kafka_config_allowed_keys, the cleartext rule
 // and librdkafka itself, without connecting. returns false and sets "error"
