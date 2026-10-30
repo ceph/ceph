@@ -6,6 +6,7 @@
 #include <cassert>
 
 #include "common/async/context_pool.h"
+#include "common/Finisher.h"
 #include "common/LogClient.h"
 #include "common/TrackedOp.h"
 #include "global/global_context.h"
@@ -14,6 +15,7 @@
 #include "messages/MMgrReport.h"
 #include "messages/MPGStats.h"
 #include "mgr/ClusterState.h"
+#include "mgr/DaemonServer.h"
 #include "mgr/DaemonState.h"
 #include "mgr/PyModuleRegistry.h"
 #include "mgr/ThreadMonitor.h"
@@ -304,6 +306,47 @@ public:
           CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
       common_init_finish(cct.get());
     }
+  }
+};
+
+class DaemonServerTestHelper : public TestMgr {
+public:
+  LogChannelRef clog;
+  LogChannelRef audit_clog;
+  std::unique_ptr<PyModuleRegistry> py_registry;
+  std::unique_ptr<DaemonStateIndex> daemon_state_index;
+  std::unique_ptr<Finisher> finisher;
+  std::unique_ptr<DaemonServer> daemon_server;
+
+  void SetUp() override {
+    TestMgr::SetUp();
+    clog = std::make_shared<LogChannel>(cct.get(), nullptr, "cluster");
+    audit_clog = std::make_shared<LogChannel>(cct.get(), nullptr, "audit");
+    daemon_state_index = std::make_unique<DaemonStateIndex>();
+    py_registry = std::make_unique<PyModuleRegistry>(clog);
+    finisher = std::make_unique<Finisher>(cct.get(), "test_finisher", "test_fin");
+    finisher->start();
+    daemon_server = std::make_unique<DaemonServer>(
+        mc.get(),
+        *finisher,
+        *daemon_state_index,
+        *cs,
+        *py_registry,
+        clog,
+        audit_clog);
+  }
+
+  void TearDown() override {
+    daemon_server.reset();
+    py_registry.reset();
+    if (finisher) {
+      finisher->stop();
+      finisher.reset();
+    }
+    daemon_state_index.reset();
+    audit_clog.reset();
+    clog.reset();
+    TestMgr::TearDown();
   }
 };
 
