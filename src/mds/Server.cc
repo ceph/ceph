@@ -207,6 +207,9 @@ void Server::create_logger()
   plb.add_u64_counter(l_mdss_cap_acquisition_throttle,
                       "cap_acquisition_throttle", "Cap acquisition throttle counter", "cat",
                       PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_readdir_churn_withhold, "readdir_churn_withhold",
+                      "Readdir replies that gave a session that does not keep its caps no new caps",
+                      "rcw", PerfCountersBuilder::PRIO_INTERESTING);
 
   // fop latencies are useful
   plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
@@ -5259,11 +5262,32 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
    * pins an inode it could otherwise expire. Optionally stop a walker from
    * making it worse: its client still gets the entries and their leases, but
    * no caps on inodes it does not already hold. */
-  const bool new_caps =
+  bool new_caps =
     !(g_conf().get_val<bool>("mds_readdir_withhold_caps_over_limit") &&
       mdcache->cache_size() > mdcache->cache_limit_memory());
   if (!new_caps)
     dout(10) << " cache over its limit, issuing no new caps" << dendl;
+  /* A client whose cache is much smaller than the directory it walks drops
+   * the caps of one page while it reads the next and releases them one by
+   * one, so every entry costs the rank a cap add, a cap release and an inode
+   * lookup on top of its encoding. Once readdir has handed a session many
+   * times more entries than it still holds caps on, send it the entries and
+   * their leases but no new caps. Caps the rank recalled count as held: a
+   * client that gave them back on request is not one that cannot keep them. */
+  if (const double churn_ratio =
+        g_conf().get_val<double>("mds_readdir_withhold_caps_churn_ratio");
+      new_caps && churn_ratio > 0) {
+    const double acquired = session->get_cap_acquisition();
+    const double kept = session->get_num_caps() + session->get_cap_recall();
+    if (acquired >= cap_acquisition_throttle && acquired > churn_ratio * kept) {
+      dout(10) << " session took " << acquired << " entries from readdir but holds "
+               << session->get_num_caps() << " caps (" << session->get_cap_recall()
+               << " recalled), issuing no new caps" << dendl;
+      new_caps = false;
+      if (logger)
+        logger->inc(l_mdss_readdir_churn_withhold);
+    }
+  }
   bool end = (it == dir->end());
   for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;

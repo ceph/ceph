@@ -130,6 +130,7 @@ enum {
   l_mdss_cap_acquisition_throttle,
   l_mdss_req_getvxattr_latency,
   l_mdss_req_file_blockdiff_latency,
+  l_mdss_readdir_churn_withhold,
   l_mdss_last,
 };
 

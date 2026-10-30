@@ -56,6 +56,7 @@ Session::Session(ConnectionRef con) :
   recall_caps_throttle2o(0.5),
   session_cache_liveness(g_conf().get_val<double>("mds_session_cache_liveness_decay_rate")),
   cap_acquisition(g_conf().get_val<double>("mds_session_cap_acquisition_decay_rate")),
+  cap_recall(g_conf().get_val<double>("mds_session_cap_acquisition_decay_rate")),
   birth_time(clock::now())
 {
   set_connection(std::move(con));
@@ -674,6 +675,7 @@ void Session::dump(Formatter *f, bool cap_dump) const
   f->dump_object("recall_caps_throttle2o", recall_caps_throttle2o);
   f->dump_object("session_cache_liveness", session_cache_liveness);
   f->dump_object("cap_acquisition", cap_acquisition);
+  f->dump_object("cap_recall", cap_recall);
 
   f->dump_unsigned("last_trim_completed_requests_tid", last_trim_completed_requests_tid);
   f->dump_unsigned("last_trim_completed_flushes_tid", last_trim_completed_flushes_tid);
@@ -1062,6 +1064,7 @@ uint64_t Session::notify_recall_sent(size_t new_limit)
   recall_caps_throttle.hit(count);
   recall_caps_throttle2o.hit(count);
   recall_caps.hit(count);
+  cap_recall.hit(count);
   return new_change;
 }
 
@@ -1241,6 +1244,7 @@ void SessionMap::handle_conf_change(const std::set<std::string>& changed)
     auto d = g_conf().get_val<double>("mds_session_cap_acquisition_decay_rate");
     auto mut = [d](auto s) {
       s->cap_acquisition = DecayCounter(d);
+      s->cap_recall = DecayCounter(d);
     };
     apply_to_open_sessions(mut);
   }

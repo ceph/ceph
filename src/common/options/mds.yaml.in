@@ -1463,6 +1463,28 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_readdir_withhold_caps_churn_ratio
+  type: float
+  level: advanced
+  desc: Issue no new caps in readdir replies to a session that does not keep them
+  long_desc: A client whose cache is smaller than the directory it reads releases
+    the caps a readdir reply gave it while it reads the next page, and the rank
+    spends more time adding and releasing those caps than encoding the entries.
+    Once a session has been sent at least mds_session_cap_acquisition_throttle
+    entries by readdir in the mds_session_cap_acquisition_decay_rate window, and
+    more than this many times the number of caps it holds, its readdir replies
+    still carry the entries and their dentry leases, but no cap on an inode the
+    client does not already hold. Caps the MDS recalled from the session in
+    that window count as held. 0 disables this.
+  default: 4
+  services:
+  - mds
+  see_also:
+  - mds_session_cap_acquisition_throttle
+  - mds_session_cap_acquisition_decay_rate
+  - mds_readdir_withhold_caps_over_limit
+  flags:
+  - runtime
 - name: mds_verify_backtrace
   type: uint
   level: dev
