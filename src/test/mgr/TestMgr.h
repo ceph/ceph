@@ -196,8 +196,6 @@ struct PythonEnv : public ::testing::Environment {
   }
 };
 
-// Mgr itself requires full daemon init (monc, objecter, etc.) before it is
-// usable; this helper only scaffolds construction/teardown.
 class MgrTestHelper : public TestMgr {
 public:
   LogChannelRef clog;
@@ -369,7 +367,6 @@ public:
   }
 };
 
-// StandbyPyModules tests share the same fixture as MgrStandby.
 using StandbyPyModulesTestHelper = MgrStandbyTestHelper;
 
 class MgrOpRequestTestHelper : public ::testing::Test {
@@ -424,6 +421,3 @@ public:
     return mod;
   }
 };
-using PyModuleRunnerTest = PyModuleRunnerTestHelper;
-
-

@@ -182,6 +182,26 @@ set(unittest_mgr_common_objs
   $<TARGET_OBJECTS:unittest_mgr_common_obj>
   $<TARGET_OBJECTS:mgr_cap_obj>)
 
+# unittest_mgr_standbypymodules
+add_executable(unittest_mgr_standbypymodules
+  test_standbypymodules.cc
+  ${unittest_mgr_common_objs}
+)
+add_ceph_unittest(unittest_mgr_standbypymodules)
+target_include_directories(unittest_mgr_standbypymodules PRIVATE
+  $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(unittest_mgr_standbypymodules
+  ceph-common
+  osdc
+  mon
+  global
+  Boost::python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR}
+  Python3::Python
+  ${CMAKE_DL_LIBS}
+  $<$<BOOL:${WITH_LIBCEPHSQLITE}>:cephsqlite>
+  $<$<BOOL:${WITH_LIBCEPHSQLITE}>:SQLite3::SQLite3>
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
