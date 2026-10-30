@@ -1248,6 +1248,74 @@ TEST(LibCephFS, LoopSyms) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, CreateOverSymlink) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir[256];
+  sprintf(dir, "/create_over_symlink_%d", getpid());
+  ASSERT_EQ(ceph_mkdir(cmount, dir, 0755), 0);
+
+  char file[300], realdir[300];
+  sprintf(file, "%s/file", dir);
+  sprintf(realdir, "%s/realdir", dir);
+  int fd = ceph_open(cmount, file, O_CREAT|O_RDWR, 0644);
+  ASSERT_GT(fd, 0);
+  ceph_close(cmount, fd);
+  ASSERT_EQ(ceph_mkdir(cmount, realdir, 0755), 0);
+
+  // the name being created is a symlink whose target: exists, is missing
+  // (with its parent present), or has a missing parent
+  const char *targets[] = {"file", "missing", "nodir/missing"};
+  for (const char *target : targets) {
+    char link[300], path[300];
+    sprintf(link, "%s/link", dir);
+    ASSERT_EQ(ceph_symlink(cmount, target, link), 0);
+
+    ASSERT_EQ(ceph_symlink(cmount, "x", link), -EEXIST) << target;
+    ASSERT_EQ(ceph_mkdir(cmount, link, 0755), -EEXIST) << target;
+    ASSERT_EQ(ceph_mknod(cmount, link, S_IFREG|0644, 0), -EEXIST) << target;
+    ASSERT_EQ(ceph_link(cmount, file, link), -EEXIST) << target;
+
+    // the symlink is untouched and nothing was created at its target
+    struct ceph_statx stx;
+    ASSERT_EQ(ceph_statx(cmount, link, &stx, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW), 0);
+    ASSERT_TRUE(S_ISLNK(stx.stx_mode));
+    sprintf(path, "%s/missing", dir);
+    ASSERT_EQ(ceph_statx(cmount, path, &stx, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW), -ENOENT);
+
+    ASSERT_EQ(ceph_unlink(cmount, link), 0);
+  }
+
+  // same through the ll_ interface (as used by nfs-ganesha)
+  Inode *diri, *out;
+  struct ceph_statx stx;
+  UserPerm *perms = ceph_mount_perms(cmount);
+  char link[300];
+  sprintf(link, "%s/link", dir);
+  ASSERT_EQ(ceph_symlink(cmount, "missing", link), 0);
+  ASSERT_EQ(ceph_ll_walk(cmount, dir, &diri, &stx, 0, 0, perms), 0);
+  ASSERT_EQ(ceph_ll_symlink(cmount, diri, "link", "x", &out, &stx, 0, 0, perms), -EEXIST);
+  ASSERT_EQ(ceph_ll_mkdir(cmount, diri, "link", 0755, &out, &stx, 0, 0, perms), -EEXIST);
+  ASSERT_EQ(ceph_ll_lookup(cmount, diri, "missing", &out, &stx, 0, 0, perms), -ENOENT);
+  ceph_ll_put(cmount, diri);
+
+  // a symlink in an intermediate component is still followed
+  char dirlink[300], newdir[320];
+  sprintf(dirlink, "%s/dirlink", dir);
+  sprintf(newdir, "%s/new", dirlink);
+  ASSERT_EQ(ceph_symlink(cmount, "realdir", dirlink), 0);
+  ASSERT_EQ(ceph_mkdir(cmount, newdir, 0755), 0);
+  sprintf(newdir, "%s/new", realdir);
+  ASSERT_EQ(ceph_statx(cmount, newdir, &stx, CEPH_STATX_MODE, 0), 0);
+  ASSERT_TRUE(S_ISDIR(stx.stx_mode));
+
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, HardlinkNoOriginal) {
 
   int mypid = getpid();
