@@ -37,6 +37,7 @@
 #include "test/osd/MockECRecPred.h"
 #include "test/osd/MockECReadPred.h"
 #include "test/osd/MockPeeringListener.h"
+#include "common/JSONFormatter.h"
 #include "crush/CrushWrapper.h"
 #include "global/global_init.h"
 #include "log/Log.h"
@@ -2957,6 +2958,181 @@ TEST_F(PeeringStateTest, Issue81183_FourShardsBehind) {
     }
   }
   EXPECT_EQ(empty, 0);
+}
+
+// The guard in GetMissing for a shard that is still behind the log tail, and
+// still not a backfill target, after the acting set was chosen again for it.
+//
+// No sequence of honest messages gets there: choose_acting() and the check in
+// GetMissing read the same peer_info and judge by the same log tail, so the
+// second choose_acting() makes the shard a backfill target. The test forces
+// it with notifies from a parity shard that claim an older head and a longer
+// log than the shard then sends. choose_acting() takes that shard for the
+// authoritative log and judges shards 1-3 contiguous with it; GetLog asks it
+// for the log back to them and gets no more than the primary has.
+//
+// 5+5 pool; shards 1-4 are the nonprimary shards, 5-9 the parity shards.
+//  OSD 4 down, peering: shard 4 stays empty
+//  v1          full write (the first write of the interval)
+//  v2, v3      partial writes to shards 0,5-9, each trimming the previous
+//              entry: shards 1-3 stay at v1, behind the log tail, covered by
+//              pwlc (v1,v3)
+//  OSDs 1-3 down, peering
+//  v4, v5, v6  writes of the new interval to 0,5-9, all in flight
+//  v7          partial write in flight on the primary only
+//  OSDs 1-4 up, peering: shards 1-3 are async recovery targets, shard 4 is a
+//  backfill target
+//   GetMissing  requests the logs of shards 1-3; before they arrive OSD 5
+//               notifies with a log back to v1
+//   GetMissing  shards 1-3 are behind the log tail: the acting set is chosen
+//               again, with OSD 5's notify, and nothing changes
+//   GetMissing  they are behind the tail again: one cluster log error, and
+//               the PG goes Incomplete with its recovery targets cleared
+//  A new map changes nothing: the strays notify with the infos the primary
+//  has.
+//  OSD 5 notifies with a log back to 0'0: through GetLog and GetMissing back
+//  to Incomplete. This time choose_acting() does not want shard 4 as a
+//  backfill target; it asserts that the targets it finds set are the ones it
+//  wants, so they must have been cleared. No second cluster log error.
+//  OSD 9 down: in the new interval the PG peers, with shards 1-4 as backfill
+//  targets.
+TEST_F(PeeringStateTest, Issue81183_StillBehindGoesIncomplete) {
+  dout(0) << "== Issue81183_StillBehindGoesIncomplete ==" << dendl;
+  create_ec_pool(5, 5);
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+  // OSD 4 down, run peering
+  osd_down(4, 4);
+  test_peering();
+  // v1: the first write of the interval, promoted to a full write
+  eversion_t v1 = test_append_log_entry(ss({0, 5, 6, 7, 8, 9}));
+  // v2, v3: partial writes skipping shards 1-3, each trimming the previous entry
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0, 5, 6, 7, 8, 9}), false, true);
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0, 5, 6, 7, 8, 9}), false, true);
+  // OSDs 1-3 down, run peering
+  for (int osd : {1, 2, 3}) {
+    osd_down(osd, osd);
+  }
+  test_peering();
+  // v4, v5, v6: writes of the new interval, in flight
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0, 5, 6, 7, 8, 9}), true);
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0, 5, 6, 7, 8, 9}), true);
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0, 5, 6, 7, 8, 9}), true);
+  // v7: partial write in flight on the primary only
+  (void)test_append_log_entry(ss({0, 5, 6, 7, 8, 9}), ss({0}), true);
+  // OSDs 1-4 up
+  for (int osd : {1, 2, 3, 4}) {
+    osd_up(osd, osd);
+  }
+  // The interval in which shards 1-4 are in the acting set: the primary asks
+  // for a pg_temp without them
+  test_event_advance_map();
+  test_event_activate_map();
+  dispatch_all();
+  ASSERT_TRUE(new_epoch(false));
+  // The interval with the pg_temp. Deliver messages one at a time until the
+  // primary waits in GetMissing for the logs of shards 1-3.
+  test_event_advance_map();
+  test_event_activate_map();
+  PeeringState *primary = get_ps(acting_primary);
+  MockPeeringListener *listener = get_listener(acting_primary);
+  while (listener->last_state_entered != "Started/Primary/Peering/GetMissing") {
+    bool did_work = false;
+    for (auto osd : up_acting) {
+      if (dispatch_peering_messages(osd, -1, 1) ||
+          dispatch_cluster_messages(osd, -1, 1) ||
+          dispatch_events(osd, false, 1)) {
+        did_work = true;
+        break;
+      }
+    }
+    ASSERT_TRUE(did_work) << "primary stopped in "
+                          << listener->last_state_entered;
+  }
+  const pg_shard_t shard4(4, shard_id_t(4));
+  const set<pg_shard_t> shards123 = {pg_shard_t(1, shard_id_t(1)),
+                                     pg_shard_t(2, shard_id_t(2)),
+                                     pg_shard_t(3, shard_id_t(3))};
+  ASSERT_EQ(primary->get_async_recovery_targets(), shards123);
+  ASSERT_EQ(primary->get_backfill_targets(), set<pg_shard_t>{shard4});
+  ASSERT_LT(v1, primary->get_pg_log().get_tail());
+  for (int osd : {1, 2, 3}) {
+    ASSERT_EQ(get_ps(osd)->get_info().last_update, v1);
+  }
+
+  // OSD 5's notify: its info with an older head and a log back to log_tail
+  auto notify_from_osd5 = [&](eversion_t log_tail) {
+    pg_info_t info = get_ps(5)->get_info();
+    ASSERT_GT(info.log_tail, log_tail);
+    info.last_update.version--;
+    info.last_complete = info.last_update;
+    info.log_tail = log_tail;
+    auto evt = std::make_shared<PGPeeringEvent>(
+      osdmap->get_epoch(),
+      osdmap->get_epoch(),
+      MNotifyRec(
+        spg_t(pg_t(0, pool_id), shard_id_t(0)),
+        pg_shard_t(5, shard_id_t(5)),
+        pg_notify_t(shard_id_t(0), shard_id_t(5), osdmap->get_epoch(),
+                    osdmap->get_epoch(), info, PastIntervals(),
+                    PG_FEATURE_CLASSIC_ALL),
+        CEPH_FEATURES_ALL));
+    primary->handle_event(evt, get_ctx(acting_primary));
+  };
+  auto verify_incomplete = [&]() {
+    EXPECT_EQ(listener->last_state_entered,
+              "Started/Primary/Peering/Incomplete");
+    EXPECT_TRUE(primary->state_test(PG_STATE_INCOMPLETE));
+    EXPECT_FALSE(primary->is_active());
+    EXPECT_TRUE(primary->get_backfill_targets().empty());
+    EXPECT_TRUE(primary->get_async_recovery_targets().empty());
+    // pg query says why, and that no data is missing
+    JSONFormatter f;
+    f.open_object_section("query");
+    primary->handle_event(
+      std::make_shared<PGPeeringEvent>(
+        osdmap->get_epoch(), osdmap->get_epoch(),
+        PeeringState::QueryState(&f)),
+      get_ctx(acting_primary));
+    f.close_section();
+    std::ostringstream query;
+    f.flush(query);
+    EXPECT_NE(query.str().find("no data is missing"), std::string::npos)
+      << query.str();
+  };
+
+  const int errors = listener->clog_error_count;
+  notify_from_osd5(v1);
+  dispatch_all();
+  verify_incomplete();
+  EXPECT_EQ(listener->clog_error_count, errors + 1);
+
+  // A new map: the strays notify the primary again with the infos it has
+  ASSERT_TRUE(new_epoch(true));
+  test_event_advance_map();
+  test_event_activate_map();
+  dispatch_all();
+  verify_incomplete();
+  EXPECT_EQ(listener->clog_error_count, errors + 1);
+
+  // A notify with new information: through GetLog, where choose_acting()
+  // now wants no backfill target, and GetMissing again
+  notify_from_osd5(eversion_t());
+  dispatch_all();
+  verify_incomplete();
+  EXPECT_EQ(listener->clog_error_count, errors + 1);
+
+  // A new interval: the PG peers and backfills shards 1-4
+  osd_down(9, 9);
+  test_peering();
+  verify_active_and_peered(acting_primary);
+  set<pg_shard_t> shards1234 = shards123;
+  shards1234.insert(shard4);
+  EXPECT_EQ(primary->get_backfill_targets(), shards1234);
+  EXPECT_TRUE(primary->get_async_recovery_targets().empty());
+  EXPECT_EQ(listener->clog_error_count, errors + 1);
 }
 
 // ============================================================================

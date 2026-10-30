@@ -9303,7 +9303,15 @@ boost::statechart::result PeeringState::Incomplete::react(
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
-  q.f->dump_string("comment", "not enough complete instances of this PG");
+  const auto &peering = context< Peering >();
+  if (peering.incomplete_behind_log_tail) {
+    q.f->dump_stream("comment")
+      << "osd." << peering.behind_log_tail_reported
+      << " behind the log tail and not chosen for backfill; no data is"
+      << " missing, the PG peers again when peering restarts";
+  } else {
+    q.f->dump_string("comment", "not enough complete instances of this PG");
+  }
   q.f->close_section();
   return forward_event();
 }
@@ -9322,6 +9330,7 @@ void PeeringState::Incomplete::exit()
   DECLARE_LOCALS;
 
   ps->state_clear(PG_STATE_INCOMPLETE);
+  context< Peering >().incomplete_behind_log_tail = false;
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_incomplete_latency, dur);
 
@@ -9403,6 +9412,9 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
   }
 
   if (peer_missing_requested.empty()) {
+    if (rechoose_acting_if_behind_log_tail()) {
+      return;
+    }
     if (ps->need_up_thru) {
       psdout(10) << " still need up_thru update before going active"
 			 << dendl;
@@ -9428,7 +9440,9 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
 		       logevt.from);
 
   if (peer_missing_requested.empty()) {
-    if (ps->need_up_thru) {
+    if (rechoose_acting_if_behind_log_tail()) {
+      // going back to GetLog, or not activating
+    } else if (ps->need_up_thru) {
       psdout(10) << " still need up_thru update before going active"
 			 << dendl;
       post_event(NeedUpThru());
@@ -9439,6 +9453,101 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
     }
   }
   return discard_event();
+}
+
+/*
+ * Optimized EC. Called once every requested log has arrived, or when none
+ * had to be requested: peer_info and the log tail are then what activate()
+ * will see, and no reply is in flight that GetLog could take for the
+ * authoritative log.
+ *
+ * activate() resets a shard that is behind the log tail to empty
+ * (last_backfill MIN), and only a backfill target is backfilled afterwards.
+ * An acting or async recovery shard can be behind the tail here although
+ * choose_acting() judged it contiguous: the pwlc known at that point
+ * advanced it past the tail, and the pwlc adopted with the authoritative
+ * log since no longer covers it. Go back to GetLog, where choose_acting()
+ * makes such shards backfill targets.
+ *
+ * A shard that is still behind the tail and still not a backfill target
+ * after that means choose_acting() and activate() disagree. Activating
+ * would leave the shard empty with nothing to backfill it, so the PG goes
+ * Incomplete instead and peers again when an interval change or a notify
+ * with new information restarts peering.
+ *
+ * Returns true if it posted an event (RechooseActing or IsIncomplete).
+ */
+bool PeeringState::GetMissing::rechoose_acting_if_behind_log_tail()
+{
+  DECLARE_LOCALS;
+  if (!ps->pool.info.allows_ecoptimizations()) {
+    return false;
+  }
+  const eversion_t tail = ps->pg_log.get_tail();
+  std::set<pg_shard_t> behind;
+  for (const auto &shard : ps->acting_recovery_backfill) {
+    if (shard == ps->get_primary() || ps->is_backfill_target(shard)) {
+      continue;
+    }
+    // the test activate() makes before it resets a peer for backfill
+    if (tail > ps->peer_info[shard].last_update) {
+      behind.insert(shard);
+    }
+  }
+  if (behind.empty()) {
+    return false;
+  }
+
+  auto &peering = context< Peering >();
+  std::set<pg_shard_t> again;
+  for (const auto &shard : behind) {
+    if (peering.rechosen_behind_log_tail.contains(shard)) {
+      again.insert(shard);
+    }
+  }
+  if (!again.empty()) {
+    // choose_acting() already ran again for these shards in this interval
+    // and did not make them backfill targets. Strays notify on every new
+    // map and each notify with new information brings the PG back here,
+    // so write the cluster log error once per shard and interval.
+    bool report = false;
+    for (const auto &shard : again) {
+      report |= peering.behind_log_tail_reported.insert(shard).second;
+    }
+    if (report) {
+      pl->get_clog_error() << ps->info.pgid << " not activating: osd."
+			   << again << " behind the log tail " << tail
+			   << " and not chosen for backfill after the acting"
+			   << " set was chosen again. No data is missing or"
+			   << " lost: the PG is incomplete until peering"
+			   << " restarts, do not mark it complete";
+    } else {
+      psdout(10) << "not activating: osd." << again
+		 << " still behind the log tail " << tail
+		 << " and not backfill targets" << dendl;
+    }
+    // From Incomplete a notify takes the PG back to GetLog, where
+    // choose_acting() expects to set the recovery targets anew.
+    ps->clear_recovery_state();
+    peering.incomplete_behind_log_tail = true;
+    post_event(IsIncomplete());
+    return true;
+  }
+
+  peering.rechosen_behind_log_tail.insert(behind.begin(), behind.end());
+  psdout(1) << "choosing the acting set again for " << behind
+	    << ", behind the log tail " << tail
+	    << " and not backfill targets" << dendl;
+  // choose_acting() in GetLog sees these shards as not contiguous and
+  // makes them backfill targets; let it set the recovery targets anew.
+  ps->clear_recovery_state();
+  post_event(RechooseActing());
+  return true;
+}
+
+boost::statechart::result PeeringState::GetMissing::react(const RechooseActing&)
+{
+  return transit< GetLog >();
 }
 
 boost::statechart::result PeeringState::GetMissing::react(const QueryState& q)
