@@ -827,7 +827,8 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   crimson::osd::ObjectContextRef head,
   crimson::osd::ObjectContextLoader& obc_loader,
   const SnapContext &snapc,
-  ObjectContext::attr_cache_t& attr_cache)
+  ObjectContext::attr_cache_t& attr_cache,
+  crimson::osd::ObjectContextRef& rollback_to)
 {
   const ceph_osd_op& op = osd_op.op;
   snapid_t snapid = (uint64_t)op.snap.snapid;
@@ -838,7 +839,8 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   target_coid.snap = snapid;
   return obc_loader.with_clone_obc_only<RWState::RWWRITE>(
     head, target_coid,
-    [this, &os, &txn, &delta_stats, &osd_op_params, snapid, &attr_cache]
+    [this, &os, &txn, &delta_stats, &osd_op_params, snapid, &attr_cache,
+     &rollback_to]
     (auto head_obc, auto resolved_obc) {
     if (resolved_obc->obs.oi.soid.is_head()) {
       // no-op: The resolved oid returned the head object
@@ -866,8 +868,15 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     // 2) Clone correct snapshot into head
     txn.clone(coll->get_cid(), ghobject_t{resolved_obc->obs.oi.soid},
                                ghobject_t{os.oi.soid});
-    //    The head now has the xattrs of the clone
-    attr_cache = resolved_obc->attr_cache;
+    //    The backend needs the clone obc, as PrimaryLogPG::_rollback_to()
+    //    adds it to the PGTransaction
+    rollback_to = resolved_obc;
+    //    The head now has the xattrs of the clone. On EC pools,
+    //    ECTransaction copies them from the clone obc, as on the
+    //    classic OSD.
+    if (!is_erasure()) {
+      attr_cache = resolved_obc->attr_cache;
+    }
     //    Copy clone obc.os.oi to os.oi
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     os.oi.copy_user_bits(resolved_obc->obs.oi);

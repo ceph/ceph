@@ -1010,6 +1010,7 @@ public:
   submit_transaction(
     ObjectContextRef&& obc,
     ObjectContextRef&& new_clone,
+    ObjectContextRef&& rollback_to,
     ceph::os::Transaction&& txn,
     osd_op_params_t&& oop,
     std::vector<pg_log_entry_t>&& log_entries);

@@ -216,7 +216,8 @@ public:
     crimson::osd::ObjectContextRef head,
     crimson::osd::ObjectContextLoader& obc_loader,
     const SnapContext &snapc,
-    ObjectContext::attr_cache_t& attr_cache);
+    ObjectContext::attr_cache_t& attr_cache,
+    crimson::osd::ObjectContextRef& rollback_to);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -447,6 +448,7 @@ public:
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
        crimson::osd::ObjectContextRef&& obc,
        crimson::osd::ObjectContextRef&& new_clone,
+       crimson::osd::ObjectContextRef&& rollback_to,
        ceph::os::Transaction&& txn,
        osd_op_params_t&& osd_op_p,
        epoch_t min_epoch, epoch_t max_epoch,

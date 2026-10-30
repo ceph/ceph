@@ -69,6 +69,7 @@ private:
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
        crimson::osd::ObjectContextRef&& obc,
        crimson::osd::ObjectContextRef&& new_clone,
+       crimson::osd::ObjectContextRef&& rollback_to,
        ceph::os::Transaction&& txn,
        osd_op_params_t&& req,
        epoch_t min_epoch, epoch_t max_epoch,
