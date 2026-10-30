@@ -22741,6 +22741,9 @@ paths:
               schema:
                 items:
                   properties:
+                    http_port:
+                      description: HTTP Port
+                      type: integer
                     id:
                       description: Daemon ID
                       type: string
@@ -22767,11 +22770,15 @@ paths:
                 - zonegroup_name
                 - zone_name
                 - port
+                - http_port
                 type: array
             application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
+                    http_port:
+                      description: HTTP Port
+                      type: integer
                     id:
                       description: Daemon ID
                       type: string

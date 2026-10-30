@@ -355,6 +355,112 @@ describe('ServiceFormComponent', () => {
         formHelper.expectError('rgw_frontend_port', 'pattern');
       });
 
+      it('should submit rgw with port, secondary port and ssl enabled', () => {
+        formHelper.setValue('rgw_frontend_port', 1234);
+        formHelper.setValue('rgw_frontend_http_port', 1235);
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          rgw_frontend_port: 1234,
+          rgw_frontend_http_port: 1235,
+          certificate_source: 'cephadm-signed',
+          ssl: true
+        });
+      });
+
+      it('should submit valid rgw http port (1)', () => {
+        formHelper.setValue('rgw_frontend_http_port', 1);
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        formHelper.expectValid('rgw_frontend_http_port');
+      });
+
+      it('should submit valid rgw http port (2)', () => {
+        formHelper.setValue('rgw_frontend_http_port', 65535);
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        formHelper.expectValid('rgw_frontend_http_port');
+      });
+
+      it('should submit invalid rgw http port (1)', () => {
+        formHelper.setValue('rgw_frontend_http_port', 0);
+        formHelper.setValue('ssl', true);
+        fixture.detectChanges();
+        formHelper.expectError('rgw_frontend_http_port', 'min');
+      });
+
+      it('should submit invalid rgw http port (2)', () => {
+        formHelper.setValue('rgw_frontend_http_port', 65536);
+        formHelper.setValue('ssl', true);
+        fixture.detectChanges();
+        formHelper.expectError('rgw_frontend_http_port', 'max');
+      });
+
+      it('should submit invalid rgw http port (3)', () => {
+        formHelper.setValue('rgw_frontend_http_port', 'abc');
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        formHelper.expectError('rgw_frontend_http_port', 'pattern');
+      });
+
+      it('should submit invalid rgw secondary port 443 when ssl is enabled and rgw_frontend_port defaults to 443', () => {
+        formHelper.setValue('rgw_frontend_http_port', 443);
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        formHelper.expectError('rgw_frontend_http_port', 'doNotMatch');
+      });
+
+      it('should not submit invalid rgw secondary port when ssl is enabled and frontend_port and http_port are the same', () => {
+        formHelper.setValue('rgw_frontend_port', 1234);
+        formHelper.setValue('rgw_frontend_http_port', 1234);
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        formHelper.expectError('rgw_frontend_http_port', 'doNotMatch');
+      });
+
+      it('should clear rgw http port when ssl is disabled', () => {
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('rgw_frontend_http_port', 8080);
+        expect(form.get('rgw_frontend_http_port').value).toBe(8080);
+
+        formHelper.setValue('ssl', false);
+        expect(form.get('rgw_frontend_http_port').value).toBeNull();
+      });
+
+      it('should not submit rgw http port when ssl is disabled', () => {
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('rgw_frontend_http_port', 8080);
+        formHelper.setValue('ssl', false);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: false
+        });
+      });
+
+      it('should keep rgw http port when ssl is disabled and enabled again with a new value', () => {
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('rgw_frontend_http_port', 8080);
+        formHelper.setValue('ssl', false);
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('rgw_frontend_http_port', 8081);
+        formHelper.expectValid('rgw_frontend_http_port');
+        expect(form.get('rgw_frontend_http_port').value).toBe(8081);
+      });
+
       it('should submit rgw w/o port', () => {
         formHelper.setValue('ssl', false);
         component.onSubmit();

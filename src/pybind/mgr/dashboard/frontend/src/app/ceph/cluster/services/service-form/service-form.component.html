@@ -495,7 +495,7 @@
             id="rgw_frontend_port"
             min="1"
             max="65535"
-            helperText="Port on which the service listens for client requests."
+            helperText="Port on which the service listens for HTTP or HTTPS client requests."
             i18n-helperText
             [invalid]="
               serviceForm.controls.rgw_frontend_port.invalid &&
@@ -521,6 +521,51 @@
             }
           </ng-template>
         </div>
+
+        @if (serviceForm.controls.ssl.value) {
+          <!-- rgw_frontend_http_port -->
+          <div class="form-item">
+            <cds-number
+              label="HTTP Port"
+              formControlName="rgw_frontend_http_port"
+              id="rgw_frontend_http_port"
+              min="1"
+              max="65535"
+              helperText="Port on which the service listens for HTTP client requests."
+              i18n-helperText
+              [invalid]="
+                serviceForm.controls.rgw_frontend_http_port.invalid &&
+                serviceForm.controls.rgw_frontend_http_port.dirty
+              "
+              [invalidText]="invalidRgwFrontendHTTPPortError"
+            >
+            </cds-number>
+            <ng-template #invalidRgwFrontendHTTPPortError>
+              @if (serviceForm.showError('rgw_frontend_http_port', frm, 'min')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >The value must be at least 1.</span
+                >
+              }
+              @if (serviceForm.showError('rgw_frontend_http_port', frm, 'max')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >The value cannot exceed 65535.</span
+                >
+              }
+              @if (serviceForm.showError('rgw_frontend_http_port', frm, 'doNotMatch')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >HTTP Port cannot be the same as the Port (443 by default when SSL is
+                  enabled).</span
+                >
+              }
+            </ng-template>
+          </div>
+        }
 
         @if (!rgwModuleEnabled) {
           <cd-alert-panel

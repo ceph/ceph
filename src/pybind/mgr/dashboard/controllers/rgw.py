@@ -44,6 +44,7 @@ RGW_DAEMON_SCHEMA = {
     "zonegroup_name": (str, "Zone Group"),
     "zone_name": (str, "Zone"),
     "port": (int, "Port"),
+    "http_port": (int, "HTTP Port")
 }
 
 RGW_USER_SCHEMA = {
@@ -325,14 +326,21 @@ class RgwDaemon(RESTController):
                 metadata = service['metadata']
 
                 frontend_config = metadata['frontend_config#0']
-                port_match = re.search(r"port=(\d+)", frontend_config)
+
+                # The first port option wins: cephadm writes the ports it
+                # manages (ssl_port/ssl_endpoint, then port/endpoint) before
+                # any rgw_frontend_extra_args. A secondary (plain HTTP) port is
+                # only reported when the first option is an SSL one. Values may
+                # carry an address ("port=1.2.3.4:80"); only the port is kept.
+                port_options = re.findall(
+                    r"(?<!\S)(ssl_)?(?:port=(?:\S*:)?|endpoint=\S+:)(\d+)", frontend_config)
                 port = None
-                if port_match:
-                    port = port_match.group(1)
-                else:
-                    match_from_endpoint = re.search(r"endpoint=\S+:(\d+)", frontend_config)
-                    if match_from_endpoint:
-                        port = match_from_endpoint.group(1)
+                http_port = None
+                if port_options:
+                    is_ssl, port = port_options[0]
+                    if is_ssl:
+                        http_port = next(
+                            (p for ssl, p in port_options[1:] if not ssl), None)
 
                 # extract per-daemon service data and health
                 daemon = {
@@ -345,7 +353,8 @@ class RgwDaemon(RESTController):
                     'zonegroup_id': metadata['zonegroup_id'],
                     'zone_name': metadata['zone_name'],
                     'default': instance.daemon.name == metadata['id'],
-                    'port': int(port) if port else None
+                    'port': int(port) if port else None,
+                    'http_port': int(http_port) if http_port else None,
                 }
 
                 daemons.append(daemon)

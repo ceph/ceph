@@ -102,6 +102,58 @@ example spec file:
 	  ``rgw_frontend_extra_args`` into a single space-separated arguments list
 	  which is used to set the value of the ``rgw_frontends`` configuration parameter.
 
+Adding a second port to accept HTTP traffic
+-------------------------------------------
+
+When SSL is enabled, the ``rgw_frontend_http_port`` parameter configures
+an additional port on the frontend that accepts plain HTTP traffic, while
+``rgw_frontend_port`` keeps serving HTTPS. The value is an integer, it must
+differ from ``rgw_frontend_port`` and it requires ``ssl: true``. Specs that set it
+without SSL are rejected by validation.
+
+Example spec file:
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: foo
+    placement:
+      label: rgw
+      count_per_host: 2
+    spec:
+      rgw_realm: myrealm
+      rgw_zone: myzone
+      rgw_frontend_type: "beast"
+      rgw_frontend_port: 443
+      rgw_frontend_http_port: 8080
+      ssl: true
+      generate_cert: true
+
+With ``count_per_host`` greater than one, each daemon on a host uses the
+next consecutive port for both ports, so the range starting at
+``rgw_frontend_port`` and the range starting at ``rgw_frontend_http_port``
+must not overlap. For the same reason ``port``, ``ssl_port``, ``endpoint``
+and ``ssl_endpoint`` cannot be set in ``rgw_frontend_extra_args`` when
+``rgw_frontend_http_port`` is used with ``count_per_host`` greater than
+one: every daemon on the host would bind the same fixed port.
+A port given in ``rgw_frontend_extra_args`` must also differ from
+``rgw_frontend_port``, from ``rgw_frontend_http_port`` and from the other
+ports in ``rgw_frontend_extra_args``.
+
+
+.. note::
+   ``cephadm`` combines the arguments from the ``spec`` section with those from
+   ``rgw_frontend_extra_args`` into a single space-separated argument list
+   which is used to set the value of the ``rgw_frontends`` configuration
+   parameter. Ports given in ``rgw_frontend_extra_args`` are passed on
+   unchanged and are independent of ``rgw_frontend_http_port``.
+
+.. note::
+   Adding ``rgw_frontend_http_port`` to an existing service redeploys
+   its RGW daemons so that the new port is opened.
+
+
+
 Multisite zones
 ---------------
 
@@ -363,7 +415,7 @@ balancing on a floating virtual IP.
 
 If the RGW service is configured with SSL enabled, then the ingress service
 will use the `ssl` and `verify none` options in the backend configuration.
-Trust verification is disabled because the backends are accessed by IP 
+Trust verification is disabled because the backends are accessed by IP
 address instead of FQDN.
 
 .. image:: ../../images/HAProxy_for_RGW.svg

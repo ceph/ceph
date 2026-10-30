@@ -1832,9 +1832,9 @@ def test_extra_args_handling(y, ec_args, ee_args, ec_final_args, ee_final_args):
         for args in spec_obj.extra_entrypoint_args:
             ee_res.extend(args.to_args())
         assert ee_res == ee_final_args
-  
+
 def test_osd_has_default_termination_grace_when_missing():
-    
+
     spec_data = """
 service_type: osd
 service_id: osd_spec_default
@@ -2031,3 +2031,171 @@ def test_mgmt_gateway_virtual_ip_validation(virtual_ip, valid):
             match=r"Invalid virtual_ip: .*\. Must be a valid IP address\.",
         ):
             spec.validate()
+
+
+@pytest.mark.parametrize("extra_args, ssl", [
+    (['port=8080+8443s'], True),
+    (['port=10.0.0.1:8080'], False),
+    (['port=8080', 'ssl_port=8443'], True),
+])
+def test_rgw_spec_does_not_parse_extra_args(extra_args, ssl):
+    # loading a spec must never fail on / rewrite rgw_frontend_extra_args
+    spec = RGWSpec(service_id='foo', ssl=ssl, rgw_frontend_extra_args=list(extra_args))
+    assert spec.rgw_frontend_extra_args == extra_args
+    assert spec.rgw_frontend_port is None
+    assert 'rgw_frontend_port' not in spec.to_json().get('spec', {})
+    assert 'rgw_frontend_http_port' not in spec.to_json().get('spec', {})
+    spec.validate()
+
+
+def test_rgw_http_port_only_with_ssl():
+    assert RGWSpec(service_id='foo', ssl=True, rgw_frontend_http_port=8080
+                   ).get_port() == [443, 8080]
+    assert RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=8443,
+                   rgw_frontend_http_port=8080).get_port() == [8443, 8080]
+    assert RGWSpec(service_id='foo', rgw_frontend_port=8080).get_port() == [8080]
+
+
+@pytest.mark.parametrize("kwargs, extra_args, expected", [
+    # the default HTTPS port stays the primary one, ssl_port is added to it
+    (dict(ssl=True), ['tcp_nodelay=1', 'max_header_size=65536', 'ssl_port=8443'], [443, 8443]),
+    (dict(ssl=True), ['ssl_port=192.168.104.100:8443'], [443, 8443]),
+    (dict(ssl=True, rgw_frontend_http_port=8080), ['ssl_port=8443'], [443, 8080, 8443]),
+    (dict(ssl=True, rgw_frontend_port=8443), ['ssl_port=9443'], [8443, 9443]),
+    (dict(ssl=True), ['ssl_port=443'], [443]),                  # no duplicates
+    (dict(ssl=True), ['ssl_port=garbage'], [443]),
+    (dict(ssl=False), ['ssl_port=8443'], [80]),                 # ignored without SSL
+])
+def test_rgw_extra_ssl_port_keeps_default_primary_port(kwargs, extra_args, expected):
+    spec = RGWSpec(service_id='foo', rgw_frontend_extra_args=extra_args, **kwargs)
+    assert spec.get_port() == expected
+    assert spec.get_port_start() == expected
+
+
+def test_rgw_extra_ssl_port_is_not_the_http_port():
+    spec = RGWSpec(service_id='foo', ssl=True, rgw_frontend_extra_args=['ssl_port=8443'])
+    assert spec.get_http_port() is None
+    spec.validate()
+
+
+@pytest.mark.parametrize("kwargs, msg", [
+    (dict(ssl=False, rgw_frontend_http_port=8080), 'Only can be enabled with SSL'),
+    (dict(ssl=True, rgw_frontend_http_port=443),
+     'rgw_frontend_http_port: 443 is the same port as rgw_frontend_port, '
+     'which defaults to 443'),
+    (dict(ssl=True, rgw_frontend_port=8443, rgw_frontend_http_port=8443),
+     'same port as rgw_frontend_port'),
+    (dict(ssl=True, rgw_frontend_http_port=70000), 'range'),
+    (dict(ssl=True, rgw_frontend_port=8080, rgw_frontend_http_port=8081,
+          placement=PlacementSpec(label='rgw', count_per_host=2)), 'overlap'),
+])
+def test_rgw_http_port_invalid(kwargs, msg):
+    spec = RGWSpec(service_id='foo', **kwargs)
+    with pytest.raises(SpecValidationError, match=msg):
+        spec.validate()
+
+
+@pytest.mark.parametrize("extra_args", [
+    ['port=8081'],
+    ['ssl_port=444'],
+    ['tcp_nodelay=1', 'port=8081', 'ssl_port=444'],
+    ['endpoint=10.0.0.1:8081'],
+    ['ssl_endpoint=10.0.0.1:444'],
+    ['port=192.168.104.100:8081', 'ssl_port=192.168.104.100:444'],  # IP values
+])
+def test_rgw_http_port_fixed_extra_args_with_count_per_host(extra_args):
+    spec = RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=443,
+                   rgw_frontend_http_port=8080,
+                   rgw_frontend_extra_args=extra_args,
+                   placement=PlacementSpec(label='rgw', count_per_host=2))
+    with pytest.raises(SpecValidationError, match='rgw_frontend_extra_args'):
+        spec.validate()
+
+
+@pytest.mark.parametrize("count_per_host, extra_args", [
+    (1, ['tcp_nodelay=1', 'port=8081', 'ssl_port=444']),  # one daemon per host: fine
+    (2, ['tcp_nodelay=1', 'max_header_size=65536']),      # no fixed ports: fine
+    (2, None),                                            # no extra args at all
+])
+def test_rgw_http_port_extra_args_allowed(count_per_host, extra_args):
+    RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=443,
+            rgw_frontend_http_port=8080,
+            rgw_frontend_extra_args=extra_args,
+            placement=PlacementSpec(label='rgw', count_per_host=count_per_host)).validate()
+
+
+def test_rgw_fixed_extra_args_with_count_per_host_unchanged_without_http_port():
+    # specs that do not use rgw_frontend_http_port keep validating as before
+    RGWSpec(service_id='foo', rgw_frontend_extra_args=['port=8081', 'so_reuseport=1'],
+            placement=PlacementSpec(label='rgw', count_per_host=2)).validate()
+
+
+@pytest.mark.parametrize("arg, expected", [
+    ('ssl_port=444', [443, 8080, 444]),
+    ('ssl_port=192.168.104.100:444', [443, 8080, 444]),
+    ('ssl_port=[fd00::1]:444', [443, 8080, 444]),
+    ('ssl_port=garbage', [443, 8080]),
+])
+def test_rgw_get_port_never_raises_on_extra_ssl_port(arg, expected):
+    spec = RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=443,
+                   rgw_frontend_http_port=8080, rgw_frontend_extra_args=[arg])
+    assert spec.get_port() == expected
+    assert spec.get_port_start() == expected
+
+
+@pytest.mark.parametrize("extra_args, offender", [
+    (['port=8080'], 'port=8080'),                              # == secondary
+    (['endpoint=10.0.0.1:8080'], 'endpoint=10.0.0.1:8080'),    # == secondary
+    (['ssl_port=443'], 'ssl_port=443'),                        # == primary
+    (['ssl_endpoint=[fd00::1]:443'], 'ssl_endpoint=[fd00::1]:443'),
+    (['port=8080+8443s'], 'port=8080+8443s'),                  # civetweb style
+    (['port=8081', 'port=8081'], 'port=8081'),                 # repeated extra
+    (['port=444', 'ssl_port=444'], 'ssl_port=444'),            # http + https
+    (['tcp_nodelay=1', 'max_header_size=65536', 'port=8080', 'ssl_port=444', 'port=8081'],
+     'port=8080'),
+])
+def test_rgw_extra_args_port_already_used(extra_args, offender):
+    spec = RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=443,
+                   rgw_frontend_http_port=8080,
+                   rgw_frontend_extra_args=extra_args,
+                   placement=PlacementSpec(label='rgw', count_per_host=1))
+    with pytest.raises(SpecValidationError, match=r'already used by') as e:
+        spec.validate()
+    assert offender in str(e.value)
+
+
+@pytest.mark.parametrize("arg, expected", [
+    ('port=8080', [8080]),
+    ('ssl_port=192.168.104.100:444', [444]),
+    ('endpoint=[fd00::1]:8081', [8081]),
+    ('port=8080+8443s', [8080, 8443]),
+    ('port=192.168.0.1', []),
+    ('tcp_nodelay=1', []),
+    ('ssl_port=garbage', []),
+])
+def test_rgw_ports_in_extra_arg(arg, expected):
+    assert RGWSpec._ports_in_extra_arg(arg) == expected
+
+
+def test_rgw_extra_args_same_port_unchanged_without_http_port():
+    # specs that do not use rgw_frontend_http_port keep validating as before
+    RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=443,
+            rgw_frontend_extra_args=['ssl_port=443']).validate()
+
+
+@pytest.mark.parametrize("extra_args", [
+    ['ssl_port=8443'],
+    ['tcp_nodelay=1', 'ssl_port=10.0.0.1:8443'],
+    ['ssl_endpoint=10.0.0.1:8443'],
+    ['port=8443s'],                                            # civetweb style
+    ['port=8080+8443s'],
+    ['port=8081', 'tcp_nodelay=1'],
+])
+def test_rgw_ssl_related_extra_args_without_ssl_still_validate(extra_args):
+    # Specs that carry SSL options in rgw_frontend_extra_args while ssl is
+    # false are valid today. Rejecting them would make SpecStore.load() drop
+    # existing services on upgrade, so they must keep loading.
+    spec = RGWSpec(service_id='foo', ssl=False, rgw_frontend_extra_args=extra_args)
+    spec.validate()
+    loaded = ServiceSpec.from_json(spec.to_json())
+    assert loaded.rgw_frontend_extra_args == extra_args
