@@ -344,6 +344,20 @@ target_link_libraries(unittest_mgr_perfcounterinstance
   Python3::Python
 )
 
+# unittest_mgr_daemonhealthmetriccollector
+add_executable(unittest_mgr_daemonhealthmetriccollector
+  test_daemonhealthmetriccollector.cc
+  $<TARGET_OBJECTS:unittest_mgr_metriccollector_obj>
+  $<TARGET_OBJECTS:unittest_mgr_daemonhealthmetric_obj>
+  $<TARGET_OBJECTS:unittest_mgr_daemonkey_obj>
+)
+add_ceph_unittest(unittest_mgr_daemonhealthmetriccollector)
+target_link_libraries(unittest_mgr_daemonhealthmetriccollector
+  ceph-common
+  global
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
