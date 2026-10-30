@@ -470,6 +470,19 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_SETATTR_KILL_SGID		(1 << 14)
 #endif
 
+// attr mask bits in an int
+#ifndef CEPH_SNAPDIFF_MODE
+#define CEPH_SNAPDIFF_MODE		(1 << 0)
+#define CEPH_SNAPDIFF_UID		(1 << 1)
+#define CEPH_SNAPDIFF_GID		(1 << 2)
+#define CEPH_SNAPDIFF_SIZE		(1 << 3)
+#define CEPH_SNAPDIFF_NLINK		(1 << 4)
+#define CEPH_SNAPDIFF_MTIME		(1 << 5)
+#define CEPH_SNAPDIFF_ATIME		(1 << 6)
+#define CEPH_SNAPDIFF_CTIME		(1 << 7)
+#define CEPH_SNAPDIFF_BTIME		(1 << 8)
+#endif
+
 /*
  * open request flags
  */
@@ -650,6 +663,7 @@ union ceph_mds_request_args {
 		__le16 flags;
                 __le32 offset_hash;
 		__le64 snap_other;
+		__le32 mask;                 /*CEPH_SNAPDIFF_*/
 	} __attribute__ ((packed)) snapdiff;
         struct {
                 // latest scan "pointer"
