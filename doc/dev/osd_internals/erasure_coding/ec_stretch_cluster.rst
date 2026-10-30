@@ -1274,9 +1274,10 @@ Going to one zone (only a stretched pool):
 
 * An erasure coded pool needs ``--yes-i-really-mean-it``, checked before anything is changed or
   created: "num_zones 1 takes erasure coded pool '<pool>' out of stretch mode and can leave PGs
-  unavailable; see "Reducing the Number of Zones" in the Stretch Clusters documentation. Pool
-  migration can move the data to a pool in one zone instead. Pass --yes-i-really-mean-it to
-  proceed anyway." (EPERM). A replicated pool keeps any copy, so it needs no confirmation.
+  unavailable; see "Unstretching an Erasure-Coded Pool Without Migration" in the Stretch Clusters
+  documentation. Pool migration can move the data to a pool in one zone instead. Pass
+  --yes-i-really-mean-it to proceed anyway." (EPERM). A replicated pool keeps any copy, so it
+  needs no confirmation.
 * A replicated PG keeps any of its copies, so a replicated pool behaves as before. An erasure coded
   PG keeps the first ``k+m`` positions, the shards of its first zone, whichever zone that is. The
   Monitor makes no check of where those are: a PG with fewer than the new ``min_size`` of them on
