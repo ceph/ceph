@@ -1180,6 +1180,101 @@ def _avail_bytes(ctx: CephadmContext, path: str) -> int:
     return int(lines[1])
 
 
+def _deploy_metrics_push_timer(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    metrics_push: Dict[str, Any],
+) -> None:
+    """Set up a systemd timer that periodically pushes RGW bucket usage
+    metrics to pushgateway via rgw-export-bucket-usage."""
+    pushgateway_url = metrics_push.get('pushgateway_url', '')
+    zone_name = metrics_push.get('zone_name', '')
+    interval = int(metrics_push.get('interval', 3600))
+    timeout = int(metrics_push.get('timeout', 300))
+
+    if not pushgateway_url:
+        logger.warning('metrics_push enabled but no pushgateway_url provided, skipping timer')
+        return
+
+    # The endpoint URL expected by rgw-export-bucket-usage includes the job path
+    endpoint = f'{pushgateway_url}/metrics/job/rgw-bucket-usage'
+
+    data_dir = ident.data_dir(ctx.data_dir)
+    container_name = ident.container_name
+    legacy_container_name = ident.legacy_container_name
+    unit_id = f'metrics-push@{ident.daemon_type}.{ident.daemon_id}'
+    script_path = os.path.join(data_dir, 'metrics-push.run')
+    status_file = os.path.join(data_dir, 'metrics-push.status')
+
+    # The RGW container only has the daemon keyring, not the admin keyring.
+    # CEPH_ARGS lets radosgw-admin authenticate with the daemon keyring.
+    daemon_name = f'client.rgw.{ident.daemon_id}'
+    keyring_path = f'/var/lib/ceph/radosgw/ceph-rgw.{ident.daemon_id}/keyring'
+    ceph_args = f'-n {daemon_name} -k {keyring_path}'
+
+    # Build the zone-id resolution command.  If a zone name was provided in
+    # the spec, query that specific zone, otherwise query the default zone.
+    if zone_name:
+        zone_get_cmd = f'radosgw-admin zone get --rgw-zone {shlex.quote(zone_name)}'
+    else:
+        zone_get_cmd = 'radosgw-admin zone get'
+
+    # When secure_monitoring_stack is enabled, write TLS certs to the data
+    # directory (which is mounted into the RGW container) so curl can
+    # authenticate with pushgateway.
+    pushgateway_args = ''
+    root_cert = metrics_push.get('root_cert', '')
+    client_cert = metrics_push.get('client_cert', '')
+    client_key = metrics_push.get('client_key', '')
+    if root_cert and client_cert and client_key:
+        for fname, content in [('metrics-push-ca.pem', root_cert),
+                               ('metrics-push.crt', client_cert),
+                               ('metrics-push.key', client_key)]:
+            fpath = os.path.join(data_dir, fname)
+            with write_new(fpath, owner=None, perms=0o600) as f:
+                f.write(content)
+        # cert paths inside the container
+        cdata_dir = f'/var/lib/ceph/radosgw/ceph-rgw.{ident.daemon_id}'
+        pushgateway_args = (
+            f'--cacert {cdata_dir}/metrics-push-ca.pem '
+            f'--cert {cdata_dir}/metrics-push.crt '
+            f'--key {cdata_dir}/metrics-push.key'
+        )
+
+    # generate the bash script that exec's into the RGW container
+    engine = ctx.container_engine.path
+    script = templating.render(
+        ctx,
+        templating.Templates.metrics_push_run,
+        status_file=status_file,
+        engine=engine,
+        container_name=container_name,
+        legacy_container_name=legacy_container_name,
+        ceph_args=ceph_args,
+        zone_get_cmd=zone_get_cmd,
+        endpoint=endpoint,
+        pushgateway_args=pushgateway_args,
+    )
+    with write_new(script_path, owner=None, perms=0o755) as f:
+        f.write(script)
+
+    logger.info(
+        f'Installing metrics push timer for {ident.daemon_name} '
+        f'(interval={interval}s, pushgateway={pushgateway_url})'
+    )
+    # install a systemd timer to run the script periodically
+    systemd_unit.install_timer_unit(
+        ctx,
+        fsid=ident.fsid,
+        unit_id=unit_id,
+        job_description=f'RGW metrics push for {ident.daemon_name}',
+        script_path=script_path,
+        interval_sec=interval,
+        timeout_sec=timeout,
+        randomized_delay_sec=min(60, interval // 10),
+    )
+
+
 def deploy_daemon(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -1266,6 +1361,14 @@ def deploy_daemon(
                     d3n_state(ctx, data_dir, D3NStateAction.WRITE, d3n, uid, gid)
                 except Exception as e:
                     logger.warning(f'[D3N] failed to persist D3N state in {data_dir}: {e}')
+
+            metrics_push = config_json.get('metrics_push')
+            if metrics_push:
+                assert isinstance(metrics_push, dict)
+                _deploy_metrics_push_timer(ctx, ident, metrics_push)
+            else:
+                timer_unit_id = f'metrics-push@{ident.daemon_type}.{ident.daemon_id}'
+                systemd_unit.remove_timer_unit(ctx, ident.fsid, timer_unit_id)
 
     # only write out unit files and start daemon
     # with systemd if this is not a reconfig
@@ -4472,6 +4575,8 @@ def command_rm_daemon(ctx):
 
     if ident.daemon_type == 'rgw':
         d3n_state(ctx, data_dir, action=D3NStateAction.CLEANUP)
+        timer_unit_id = f'metrics-push@{ident.daemon_type}.{ident.daemon_id}'
+        systemd_unit.remove_timer_unit(ctx, ctx.fsid, timer_unit_id)
 
     if ident.daemon_type in ['mon', 'osd', 'prometheus'] and \
        not ctx.force_delete_data:
@@ -4646,6 +4751,8 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
     unlink_file(unit_dir / f'ceph-{ctx.fsid}@.service', missing_ok=True)
     unlink_file(unit_dir / f'ceph-{ctx.fsid}.target', missing_ok=True)
     shutil.rmtree(unit_dir / f'ceph-{ctx.fsid}.target.wants', ignore_errors=True)
+    for p in unit_dir.glob(f'ceph-{ctx.fsid}-metrics-push@*'):
+        unlink_file(p, missing_ok=True)
 
     # rm data
     shutil.rmtree(Path(ctx.data_dir) / ctx.fsid, ignore_errors=True)
