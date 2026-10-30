@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <algorithm>
+#include <ostream>
+
 #include "aio.h"
 
 std::ostream& operator<<(std::ostream& os, const aio_t& aio)
