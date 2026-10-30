@@ -43,7 +43,7 @@ Create the first gateway
 ========================
   $ HOST=$(python3 -c "import socket; print(socket.getfqdn())")
   > IP=`hostname -i | awk '{print $1}'`
-  > sudo $CENGINE exec $ISCSI_CONTAINER gwcli iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/gateways create ip_addresses=$IP gateway_name=$HOST
+  > sudo $CENGINE exec $ISCSI_CONTAINER gwcli iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/gateways create ip_addresses=$IP gateway_name=$HOST skipchecks=true
   $ sudo $CENGINE exec $ISCSI_CONTAINER gwcli ls iscsi-targets/ | grep 'o- gateways' | awk -F'[' '{print $2}'
   Up: 1/1, Portals: 1]
 
@@ -52,12 +52,12 @@ Create the second gateway
   $ IP=`cat /etc/ceph/iscsi-gateway.cfg |grep 'trusted_ip_list' | awk -F'[, ]' '{print $3}'`
   > if [ "$IP" != `hostname -i | awk '{print $1}'` ]; then
   >   HOST=$(python3 -c "import socket; print(socket.getfqdn('$IP'))")
-  >   sudo $CENGINE exec $ISCSI_CONTAINER gwcli iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/gateways create ip_addresses=$IP gateway_name=$HOST
+  >   sudo $CENGINE exec $ISCSI_CONTAINER gwcli iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/gateways create ip_addresses=$IP gateway_name=$HOST skipchecks=true
   > fi
   $ IP=`cat /etc/ceph/iscsi-gateway.cfg |grep 'trusted_ip_list' | awk -F'[, ]' '{print $4}'`
   > if [ "$IP" != `hostname -i | awk '{print $1}'` ]; then
   >   HOST=$(python3 -c "import socket; print(socket.getfqdn('$IP'))")
-  >   sudo $CENGINE exec $ISCSI_CONTAINER gwcli iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/gateways create ip_addresses=$IP gateway_name=$HOST
+  >   sudo $CENGINE exec $ISCSI_CONTAINER gwcli iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/gateways create ip_addresses=$IP gateway_name=$HOST skipchecks=true
   > fi
   $ sudo $CENGINE exec $ISCSI_CONTAINER gwcli ls iscsi-targets/ | grep 'o- gateways' | awk -F'[' '{print $2}'
   Up: 2/2, Portals: 2]
