@@ -143,6 +143,23 @@ The default build type is ``RelWithDebInfo`` once `.git` does not exist.
 The `-D` flag can be used with `cmake` to speed up the process of building Ceph
 and to customize the build.
 
+#### Building with Google's TCMalloc
+
+Pass `-DGOOGLE_TCMALLOC=ON` to build the official `google/tcmalloc` allocator
+instead of gperftools. This requires a native Linux x86_64 or aarch64 build
+without ASAN, LeakSanitizer, TSAN, or Crimson. The default is `OFF`.
+CMake uses Bazel 8.5.1 or Bazelisk from `PATH`, or downloads a pinned Bazel
+binary with SHA256 verification. Set `GOOGLE_TCMALLOC_BAZEL` to override its
+path. Bazel downloads pinned TCMalloc sources and their build dependencies.
+OSD memory autotuning and heap stats/release commands support both allocators;
+gperftools profiler commands, release rates, and property writes remain legacy-only.
+
+Pass `-DGOOGLE_TCMALLOC=ON -DGOOGLE_TCMALLOC_THP=ON` to allow transparent
+huge pages (THP). `GOOGLE_TCMALLOC_THP` defaults to `OFF` and requires
+`GOOGLE_TCMALLOC=ON`. When enabled, Ceph skips `PR_SET_THP_DISABLE` at
+startup regardless of the runtime `thp` setting. The kernel's THP policy
+still controls whether huge pages can be used.
+
 #### Building without RADOS Gateway
 
 The RADOS Gateway is built by default. To build Ceph without the RADOS Gateway,
