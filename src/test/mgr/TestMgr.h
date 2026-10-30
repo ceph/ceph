@@ -6,6 +6,7 @@
 #include <cassert>
 
 #include "common/async/context_pool.h"
+#include "common/LogClient.h"
 #include "common/TrackedOp.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -13,6 +14,7 @@
 #include "messages/MPGStats.h"
 #include "mgr/ClusterState.h"
 #include "mgr/DaemonState.h"
+#include "mgr/PyModuleRegistry.h"
 #include "mon/MgrMap.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
@@ -191,6 +193,26 @@ struct PythonEnv : public ::testing::Environment {
     Py_Finalize();
   }
 };
+
+class MgrStandbyTestHelper : public TestMgr {
+public:
+  LogChannelRef clog;
+  std::unique_ptr<PyModuleRegistry> py_registry;
+
+  void SetUp() override {
+    TestMgr::SetUp();
+    clog = std::make_shared<LogChannel>(cct.get(), nullptr, "cluster");
+    py_registry = std::make_unique<PyModuleRegistry>(clog);
+  }
+
+  void TearDown() override {
+    py_registry.reset();
+    clog.reset();
+    TestMgr::TearDown();
+  }
+};
+
+using StandbyPyModulesTestHelper = MgrStandbyTestHelper;
 
 class MgrOpRequestTestHelper : public ::testing::Test {
 public:

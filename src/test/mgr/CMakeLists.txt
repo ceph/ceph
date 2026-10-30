@@ -32,6 +32,22 @@ set(unittest_mgr_mgroprequest_srcs
   ${CMAKE_SOURCE_DIR}/src/mgr/MgrOpRequest.cc
 )
 
+set(unittest_mgr_metriccollector_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/MetricCollector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricCollector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricCollector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc
+)
+
+set(unittest_mgr_threadmonitor_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/ThreadMonitor.cc
+)
+
+set(unittest_mgr_daemonhealthmetric_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonHealthMetricCollector.cc
+)
+
 add_library(unittest_mgr_clusterstate_obj OBJECT ${unittest_mgr_clusterstate_srcs})
 target_link_libraries(unittest_mgr_clusterstate_obj legacy-option-headers)
 
@@ -64,6 +80,17 @@ target_link_libraries(unittest_mgr_mgroprequest_obj legacy-option-headers)
 if(WITH_LTTNG)
   add_dependencies(unittest_mgr_mgroprequest_obj mgr_op_tp)
 endif()
+
+add_library(unittest_mgr_metriccollector_obj OBJECT ${unittest_mgr_metriccollector_srcs})
+target_link_libraries(unittest_mgr_metriccollector_obj legacy-option-headers)
+
+add_library(unittest_mgr_threadmonitor_obj OBJECT ${unittest_mgr_threadmonitor_srcs})
+target_include_directories(unittest_mgr_threadmonitor_obj PRIVATE
+  $<TARGET_PROPERTY:Python3::Python,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(unittest_mgr_threadmonitor_obj legacy-option-headers)
+
+add_library(unittest_mgr_daemonhealthmetric_obj OBJECT ${unittest_mgr_daemonhealthmetric_srcs})
+target_link_libraries(unittest_mgr_daemonhealthmetric_obj legacy-option-headers)
 
 # unittest_mgr_clusterstate
 add_executable(unittest_mgr_clusterstate
@@ -156,6 +183,64 @@ target_link_libraries(unittest_mgr_mgroprequest
   ceph-common
   global
   Python3::Python
+)
+
+set(unittest_mgr_common_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/ActivePyModule.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/ActivePyModules.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/BaseMgrModule.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/BaseMgrStandbyModule.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonServer.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/Gil.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/Mgr.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyModule.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyModuleRegistry.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyModuleRunner.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyOSDMap.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/StandbyPyModules.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/mgr_commands.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/mgr_perf_counters.cc
+)
+
+add_library(unittest_mgr_common_obj OBJECT ${unittest_mgr_common_srcs})
+target_include_directories(unittest_mgr_common_obj PRIVATE
+  $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>
+  $<TARGET_PROPERTY:Python3::Python,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(unittest_mgr_common_obj legacy-option-headers)
+
+set(unittest_mgr_common_objs
+  $<TARGET_OBJECTS:unittest_mgr_clusterstate_obj>
+  $<TARGET_OBJECTS:unittest_mgr_daemonkey_obj>
+  $<TARGET_OBJECTS:unittest_mgr_daemonstate_obj>
+  $<TARGET_OBJECTS:unittest_mgr_pyformatter_obj>
+  $<TARGET_OBJECTS:unittest_mgr_pyutil_obj>
+  $<TARGET_OBJECTS:unittest_mgr_servicemap_obj>
+  $<TARGET_OBJECTS:unittest_mgr_map_cache_obj>
+  $<TARGET_OBJECTS:unittest_mgr_metriccollector_obj>
+  $<TARGET_OBJECTS:unittest_mgr_threadmonitor_obj>
+  $<TARGET_OBJECTS:unittest_mgr_daemonhealthmetric_obj>
+  $<TARGET_OBJECTS:unittest_mgr_mgroprequest_obj>
+  $<TARGET_OBJECTS:unittest_mgr_common_obj>
+  $<TARGET_OBJECTS:mgr_cap_obj>)
+
+# unittest_mgr_standbypymodules
+add_executable(unittest_mgr_standbypymodules
+  test_standbypymodules.cc
+  ${unittest_mgr_common_objs}
+)
+add_ceph_unittest(unittest_mgr_standbypymodules)
+target_include_directories(unittest_mgr_standbypymodules PRIVATE
+  $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(unittest_mgr_standbypymodules
+  ceph-common
+  osdc
+  mon
+  global
+  Boost::python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR}
+  Python3::Python
+  ${CMAKE_DL_LIBS}
+  $<$<BOOL:${WITH_LIBCEPHSQLITE}>:cephsqlite>
+  $<$<BOOL:${WITH_LIBCEPHSQLITE}>:SQLite3::SQLite3>
 )
 
 #scripts
