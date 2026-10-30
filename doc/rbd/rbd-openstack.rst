@@ -115,16 +115,37 @@ The nodes running ``glance-api``, ``cinder-volume``, ``nova-compute`` and
 Install Ceph client packages
 ----------------------------
 
-On the ``glance-api`` node, you will need the Python bindings for ``librbd``::
+The client packages come from a Ceph repository. To add one, see
+:ref:`packages`.
 
-  sudo apt-get install python3-rbd
-  sudo yum install python3-rbd
+On the ``glance-api`` node, install the Python bindings for ``librbd``.
+On Debian or Ubuntu:
 
-On the ``nova-compute``, ``cinder-backup`` and on the ``cinder-volume`` node,
-use both the Python bindings and the client command line tools::
+.. prompt:: bash $
 
-  sudo apt-get install ceph-common
-  sudo yum install ceph-common
+   sudo apt-get install python3-rbd
+
+On Fedora, or on RHEL, CentOS Stream, Rocky Linux, or another Enterprise
+Linux (EL) distribution:
+
+.. prompt:: bash $
+
+   sudo dnf install python3-rbd
+
+On the ``nova-compute``, ``cinder-backup``, and ``cinder-volume`` nodes,
+install ``ceph-common``, which provides the client command-line tools
+and requires the Python bindings. On Debian or Ubuntu:
+
+.. prompt:: bash $
+
+   sudo apt-get install ceph-common
+
+On Fedora, or on RHEL, CentOS Stream, Rocky Linux, or another Enterprise
+Linux (EL) distribution:
+
+.. prompt:: bash $
+
+   sudo dnf install ceph-common
 
 
 Setup Ceph Client Authentication
