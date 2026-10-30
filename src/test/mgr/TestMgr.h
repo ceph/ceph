@@ -11,6 +11,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "gtest/gtest.h"
+#include "messages/MMgrReport.h"
 #include "messages/MPGStats.h"
 #include "mgr/ClusterState.h"
 #include "mgr/DaemonState.h"
@@ -263,6 +264,21 @@ public:
 
   void TearDown() override {
     thread_monitor.reset();
+  }
+};
+
+class DaemonPerfCountersTestHelper : public ::testing::Test {
+public:
+  PerfCounterTypes types;
+  std::unique_ptr<DaemonPerfCounters> perf_counters;
+
+  void SetUp() override {
+    perf_counters = std::make_unique<DaemonPerfCounters>(types);
+  }
+
+  void TearDown() override {
+    perf_counters.reset();
+    types.clear();
   }
 };
 
