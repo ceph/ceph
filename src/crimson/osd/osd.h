@@ -261,10 +261,11 @@ private:
 
   ceph_release_t last_require_osd_release{ceph_release_t::unknown};
 
-  seastar::promise<> stop_acked;
-  void got_stop_ack() {
-    stop_acked.set_value();
-  }
+  // shared_promise so got_stop_ack() can check available() and stay
+  // idempotent: both handle_mark_me_down and committed_osd_maps may
+  // fire in the PRESTOP window.
+  seastar::shared_promise<> stop_acked;
+  void got_stop_ack(const char* from);
   seastar::future<> prepare_to_stop();
   bool should_restart() const;
   seastar::future<> restart();
