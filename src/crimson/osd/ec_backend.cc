@@ -108,10 +108,16 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
 
   static PGTransactionUPtr translate_transaction(
     ceph::os::Transaction&& t,
-    crimson::osd::ObjectContextRef &&obc)
+    crimson::osd::ObjectContextRef &&obc,
+    crimson::osd::ObjectContextRef &&new_clone)
   {
     auto t_pg = std::make_unique<PGTransaction>();
     t_pg->add_obc(std::move(obc));
+    // as PrimaryLogPG::issue_repop() does, so that ECTransaction
+    // updates the attr_cache of the clone too
+    if (new_clone) {
+      t_pg->add_obc(std::move(new_clone));
+    }
     auto i = std::begin(t);
     while (i.have_op()) {
       auto* op = i.decode_op();
@@ -244,10 +250,12 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
 
   ECCrimsonOp(ceph::os::Transaction&& t,
               crimson::osd::ObjectContextRef &&obc,
+              crimson::osd::ObjectContextRef &&new_clone,
               const PGLog &pg_log,
        ECCommon::RMWPipeline& rmw_pipeline)
     : Op(rmw_pipeline),
-      t(translate_transaction(std::move(t), std::move(obc))),
+      t(translate_transaction(std::move(t), std::move(obc),
+                              std::move(new_clone))),
       pg_log(pg_log) {
   }
 
@@ -323,7 +331,8 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
   DEBUGDPP("hoid={} attr_cache={}", dpp, hoid, obc->attr_cache);
   auto op =
     std::make_unique<ECCrimsonOp>(
-      std::move(txn), std::move(obc), pg_log, rmw_pipeline);
+      std::move(txn), std::move(obc), std::move(new_clone), pg_log,
+      rmw_pipeline);
   op->hoid = hoid;
   //op->delta_stats = delta_stats;
   op->version = osd_op_p.at_version;
