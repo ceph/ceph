@@ -44,6 +44,7 @@ from ceph.deployment.drive_group import DriveGroupSpec, OSDType
 from ceph.deployment.hostspec import normalize_hostname
 from ceph.deployment.service_spec import (
     ServiceSpec,
+    TracingSpec,
     PlacementSpec,
     HostPlacementSpec,
     IngressSpec,
@@ -691,9 +692,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.container_image_oauth2_proxy = ''
             self.container_image_pushgateway = ''
             self.container_image_elasticsearch = ''
-            self.container_image_jaeger_agent = ''
-            self.container_image_jaeger_collector = ''
-            self.container_image_jaeger_query = ''
+            self.container_image_jaeger = ''
             self.container_image_samba = ''
             self.container_image_samba_metrics = ''
             self.warn_on_stray_hosts = True
@@ -1139,7 +1138,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'mon', 'crash', 'ceph-exporter', 'node-proxy',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'agent', 'snmp-gateway', 'loki', 'promtail', 'alloy',
-            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query', 'mgmt-gateway', 'oauth2-proxy'
+            'elasticsearch', 'jaeger', 'mgmt-gateway', 'oauth2-proxy'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -2216,9 +2215,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'elasticsearch': self.container_image_elasticsearch,
                 'grafana': self.container_image_grafana,
                 'haproxy': self.container_image_haproxy,
-                'jaeger-agent': self.container_image_jaeger_agent,
-                'jaeger-collector': self.container_image_jaeger_collector,
-                'jaeger-query': self.container_image_jaeger_query,
+                'jaeger': self.container_image_jaeger,
                 'keepalived': self.container_image_keepalived,
                 'loki': self.container_image_loki,
                 'node-exporter': self.container_image_node_exporter,
@@ -4867,6 +4864,22 @@ Then run the following:
         spec.certificate_source = CertificateSource.INLINE.value
         spec.rgw_frontend_ssl_certificate = None
 
+    def _validate_jaeger_spec(self, spec: TracingSpec) -> None:
+        """Jaeger needs an Elasticsearch backend: either es_nodes pointing at
+        an external one, or a cephadm-managed elasticsearch service."""
+        if (
+            spec.es_nodes
+            or any(s.service_type == 'elasticsearch'
+                   for s in self.spec_store.active_specs.values())
+            or any(s.service_type == 'elasticsearch'
+                   for s in self.spec_store.spec_preview.values())
+        ):
+            return
+        raise OrchestratorError(
+            'A jaeger service requires an Elasticsearch backend: either set '
+            '`es_nodes` in the jaeger spec to use an external Elasticsearch, or '
+            'apply an `elasticsearch` service first.')
+
     def _apply_service_spec(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():
             # fill in default placement
@@ -4896,9 +4909,7 @@ Then run the following:
                 'mgmt-gateway': PlacementSpec(count=1),
                 'oauth2-proxy': PlacementSpec(count=1),
                 'elasticsearch': PlacementSpec(count=1),
-                'jaeger-agent': PlacementSpec(host_pattern='*'),
-                'jaeger-collector': PlacementSpec(count=1),
-                'jaeger-query': PlacementSpec(count=1),
+                'jaeger': PlacementSpec(count=1),
                 'node-proxy': PlacementSpec(host_pattern='*'),
                 SMBService.TYPE: PlacementSpec(count=1),
             }
@@ -4911,6 +4922,9 @@ Then run the following:
 
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
+
+        if spec.service_type == 'jaeger':
+            self._validate_jaeger_spec(cast(TracingSpec, spec))
 
         self._check_and_migrate_legacy_rgw_frontend_ssl_field(spec)
         cert_warning = self._check_cert_source(spec)

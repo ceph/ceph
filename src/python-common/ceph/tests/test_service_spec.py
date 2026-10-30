@@ -25,6 +25,7 @@ from ceph.deployment.service_spec import (
     YamlLiteralString,
     TunedProfileSpec,
     MgmtGatewaySpec,
+    TracingSpec,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
@@ -2010,3 +2011,47 @@ def test_mgmt_gateway_virtual_ip_validation(virtual_ip, valid):
             match=r"Invalid virtual_ip: .*\. Must be a valid IP address\.",
         ):
             spec.validate()
+
+
+@pytest.mark.parametrize(
+    "yaml_str, expected_types, es_nodes",
+    [
+        (
+            """
+service_type: jaeger-tracing
+service_id: tracing
+placement:
+  count: 1
+""",
+            ['elasticsearch', 'jaeger'],
+            None,
+        ),
+        (
+            """
+service_type: jaeger-tracing
+service_id: tracing
+placement:
+  count: 1
+spec:
+  es_nodes: 10.0.0.1:9200
+""",
+            ['jaeger'],
+            '10.0.0.1:9200',
+        ),
+    ],
+)
+def test_jaeger_tracing_yaml_expands_to_tracing_specs(yaml_str, expected_types, es_nodes):
+    spec = ServiceSpec.from_json(yaml.safe_load(yaml_str))
+
+    assert isinstance(spec, TracingSpec)
+    assert spec.service_type == 'jaeger-tracing'
+    assert spec.es_nodes == es_nodes
+
+    specs = spec.get_tracing_specs()
+    assert [s.service_type for s in specs] == expected_types
+    assert all(isinstance(s, TracingSpec) for s in specs)
+    # placement from the parent must be propagated to every sub-service so
+    # that it survives serialisation between the orchestrator and cephadm
+    # modules (in-place mutations done inside cephadm are not visible to the
+    # orchestrator caller).
+    assert all(s.placement == spec.placement for s in specs)

@@ -200,9 +200,7 @@ class ServiceType(enum.Enum):
     nvmeof = 'nvmeof'
     snmp_gateway = 'snmp-gateway'
     elasticsearch = 'elasticsearch'
-    jaeger_agent = 'jaeger-agent'
-    jaeger_collector = 'jaeger-collector'
-    jaeger_query = 'jaeger-query'
+    jaeger = 'jaeger'
 
 
 class ServiceAction(enum.Enum):
@@ -2328,7 +2326,6 @@ Usage:
     @OrchestratorCLICommand.Write('orch apply jaeger')
     def _apply_jaeger(self,
                       es_nodes: Optional[str] = None,
-                      without_query: bool = False,
                       placement: Optional[str] = None,
                       unmanaged: bool = False,
                       dry_run: bool = False,
@@ -2341,9 +2338,9 @@ Usage:
 
         spec = TracingSpec(service_type='jaeger-tracing',
                            es_nodes=es_nodes,
-                           without_query=without_query,
                            placement=PlacementSpec.from_string(placement),
-                           unmanaged=unmanaged)
+                           unmanaged=unmanaged,
+                           otlp_port=int(self.get_ceph_option('jaeger_agent_port')))
         specs: List[ServiceSpec] = spec.get_tracing_specs()
         return self._apply_misc(specs, dry_run, format, no_overwrite)
 
