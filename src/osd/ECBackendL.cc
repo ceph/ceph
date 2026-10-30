@@ -197,10 +197,15 @@ struct RecoveryMessages {
     const hobject_t &hoid, uint64_t off, uint64_t len,
     set<int> &&_want_to_read,
     const map<pg_shard_t, vector<pair<int, int>>> &need,
-    bool attrs)
+    bool attrs,
+    bool cache_dont_need)
   {
     list<ec_align_t> to_read;
-    to_read.emplace_back(ec_align_t{off, len, 0});
+    // the shards read for a reconstruction are sent once: keep them out of
+    // the sources' buffer cache, unless a client waits for the object
+    to_read.emplace_back(
+      ec_align_t{off, len,
+                 cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED : 0u});
     ceph_assert(!recovery_reads.count(hoid));
     want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
     recovery_reads.insert(
@@ -627,7 +632,8 @@ void ECBackendL::RecoveryBackend::continue_recovery_op(
 	amount,
 	std::move(want),
 	to_read,
-	op.recovery_progress.first && !op.obc);
+	op.recovery_progress.first && !op.obc,
+	op.cache_dont_need);
       op.extent_requested = make_pair(
 	from,
 	amount);
@@ -758,6 +764,7 @@ void ECBackendL::RecoveryBackend::run_recovery_op(
     dout(10) << __func__ << ": starting " << *i << dendl;
     ceph_assert(!recovery_ops.count(i->hoid));
     RecoveryOp &op = recovery_ops.insert(make_pair(i->hoid, *i)).first->second;
+    op.cache_dont_need = h.cache_dont_need;
     continue_recovery_op(op, &m);
   }
   dispatch_recovery_messages(m, priority);

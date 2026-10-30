@@ -232,6 +232,7 @@ void ECBackend::ECRecoveryBackend::run_recovery_op(
     dout(10) << __func__ << ": starting " << *i << dendl;
     ceph_assert(!recovery_ops.count(i->hoid));
     RecoveryOp &op = recovery_ops.insert(make_pair(i->hoid, *i)).first->second;
+    op.cache_dont_need = h.cache_dont_need;
     continue_recovery_op(op, &m);
   }
   dispatch_recovery_messages(m, priority);
