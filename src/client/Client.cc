@@ -15173,21 +15173,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     // call pointer-to-member function
     char buf[256];
     if (vxattr->flags & VXATTR_ALTNAME) {
-      // Path lookup names one link. Inode-only callers have no path, so
-      // they fall back to whichever parent is first in the cache.
-      if (!dn && in->dentries.size() > 1) {
-        // bail if inode only caller as we cannot determine which dn is
-        // the correct for a link.
-        return -ENOTSUP;
-      }
-
-      Dentry *adn = dn ? dn : in->get_first_parent();
-      if (!alternate_name_visible || fscrypt_as || adn->alternate_name.empty()) {
-	r = -ENODATA;
-      } else {
-	r = adn->alternate_name.length();
-	memcpy(buf, adn->alternate_name.c_str(), r);
-      }
+      r = _get_alternate_name(in, dn, buf, sizeof(buf));
     } else if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in))) {
       r = (this->*(vxattr->getxattr_cb))(in, buf, sizeof(buf));
     } else {
@@ -15806,15 +15792,6 @@ size_t Client::_vxattrcb_caps(Inode *in, char *val, size_t size)
   return snprintf(val, size, "%s/0x%x", ccap_string(issued).c_str(), issued);
 }
 
-size_t Client::_vxattrcb_alternate_name(Inode *in, char *val, size_t size)
-{
-  auto altn = in->get_first_parent()->alternate_name;
-  auto length = altn.length();
-
-  memcpy(val, altn.c_str(), length);
-  return length;
-}
-
 int Client::_set_alternate_name(Inode *in, const void *val, size_t size,
 			       const UserPerm& perms, Dentry *dn)
 {
@@ -15824,16 +15801,28 @@ int Client::_set_alternate_name(Inode *in, const void *val, size_t size,
   return _do_setxattr(in, "ceph.alternate_name", val, size, VXATTR_ALTNAME, perms, dn);
 }
 
-int Client::_vxattrcb_alternate_name_set(Inode *in, const void *val, size_t size,
-				       const UserPerm& perms)
+int Client::_get_alternate_name(Inode *in, Dentry *dn, char *buf, int buflen)
 {
-  return _set_alternate_name(in, val, size, perms, nullptr);
-}
+  int r = 0;
+  // Path lookup names one link. Inode-only callers have no path, so
+  // they fall back to whichever parent is first in the cache.
+  if (!dn && in->dentries.size() > 1) {
+    // bail if inode only caller as we cannot determine which dn is
+    // the correct for a link.
+    return -ENOTSUP;
+  }
 
-bool Client::_vxattrcb_alternate_name_exists(Inode *in)
-{
-  bool exists = !in->get_first_parent()->alternate_name.empty();
-  return alternate_name_visible && !fscrypt_as && exists;
+  Dentry *adn = dn ? dn : in->get_first_parent();
+  if (!alternate_name_visible || fscrypt_as || adn->alternate_name.empty()) {
+    r = -ENODATA;
+  } else {
+    r = adn->alternate_name.length();
+    if (r >= buflen) {
+       return -ERANGE;
+    }
+    memcpy(buf, adn->alternate_name.c_str(), r);
+  }
+  return r;
 }
 
 bool Client::_vxattrcb_mirror_info_exists(Inode *in)
@@ -16019,10 +16008,7 @@ const Client::VXattr Client::_common_vxattrs[] = {
   },
   {
     name: "ceph.alternate_name",
-    getxattr_cb: &Client::_vxattrcb_alternate_name,
-    setxattr_cb: &Client::_vxattrcb_alternate_name_set,
     readonly: false,
-    exists_cb: &Client::_vxattrcb_alternate_name_exists,
     flags: VXATTR_ALTNAME,
   },
   { name: "" }     /* Required table terminator */

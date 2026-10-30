@@ -2252,11 +2252,9 @@ private:
   bool _vxattrcb_mirror_info_exists(Inode *in);
   size_t _vxattrcb_mirror_info(Inode *in, char *val, size_t size);
 
-  size_t _vxattrcb_alternate_name(Inode *in, char *val, size_t size);
-  int _vxattrcb_alternate_name_set(Inode *in, const void *val, size_t size, const UserPerm& perms);
   int _set_alternate_name(Inode *in, const void *val, size_t size,
 			  const UserPerm& perms, Dentry *dn);
-  bool _vxattrcb_alternate_name_exists(Inode *in);
+  int _get_alternate_name(Inode *in, Dentry *dn, char *buf, int buflen);
 
   size_t _vxattrcb_cluster_fsid(Inode *in, char *val, size_t size);
   size_t _vxattrcb_client_id(Inode *in, char *val, size_t size);
