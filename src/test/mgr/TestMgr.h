@@ -17,6 +17,7 @@
 #include "mgr/ClusterState.h"
 #include "mgr/DaemonServer.h"
 #include "mgr/DaemonState.h"
+#include "mgr/PyModule.h"
 #include "mgr/PyModuleRegistry.h"
 #include "mgr/ThreadMonitor.h"
 #include "mgr/Types.h"
@@ -392,5 +393,36 @@ public:
 
   void TearDown() override {
     tracker.reset();
+  }
+};
+
+class PyModuleRunnerTestHelper : public TestMgr {
+public:
+  PyThreadState *save_ts = nullptr;
+  static inline PyThreadState *main_ts = nullptr;
+
+  void SetUp() override {
+    TestMgr::SetUp();
+    if (!main_ts) {
+      main_ts = PyThreadState_Get();
+    }
+    save_ts = PyEval_SaveThread();
+  }
+
+  void TearDown() override {
+    if (save_ts) {
+      PyEval_RestoreThread(save_ts);
+      save_ts = nullptr;
+    }
+    TestMgr::TearDown();
+  }
+
+  std::shared_ptr<PyModule> make_test_module(const std::string& name) {
+    auto mod = std::make_shared<PyModule>(name);
+    // ~PyModule() calls Py_EndInterpreter() when use_main_interpreter is true
+   // (see PyModule.cc). main_ts is the main interpreter, so that would abort.
+    mod->use_main_interpreter = false;
+    mod->pMyThreadState.set(main_ts);
+    return mod;
   }
 };
