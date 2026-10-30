@@ -849,7 +849,7 @@ public:
   // dflt.
   static std::string num_zones_zone_failure_domain(
     const cmdmap_t& cmdmap, const pg_pool_t& p,
-    const ErasureCodeProfile& profile, const std::string& dflt);
+    const ceph::ErasureCodeProfile& profile, const std::string& dflt);
   // The rule enable_stretch_mode generates, without a rule of its own, for a
   // replicated pool that already has two zones and another replica count:
   // <pool>-replica-2 over zone_failure_domain, from the pool defaults
