@@ -38,6 +38,11 @@ set(unittest_mgr_threadmonitor_srcs
   ${CMAKE_SOURCE_DIR}/src/mgr/ThreadMonitor.cc
 )
 
+set(unittest_mgr_daemonhealthmetric_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonHealthMetricCollector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonHealthMetric.cc
+)
+
 add_library(unittest_mgr_base_obj OBJECT ${unittest_mgr_base_srcs})
 target_link_libraries(unittest_mgr_base_obj legacy-option-headers)
 
@@ -64,6 +69,9 @@ add_library(unittest_mgr_threadmonitor_obj OBJECT ${unittest_mgr_threadmonitor_s
 target_include_directories(unittest_mgr_threadmonitor_obj PRIVATE
   $<TARGET_PROPERTY:Python3::Python,INTERFACE_INCLUDE_DIRECTORIES>)
 target_link_libraries(unittest_mgr_threadmonitor_obj legacy-option-headers)
+
+add_library(unittest_mgr_daemonhealthmetric_obj OBJECT ${unittest_mgr_daemonhealthmetric_srcs})
+target_link_libraries(unittest_mgr_daemonhealthmetric_obj legacy-option-headers)
 
 # unittest_mgr_clusterstate
 add_executable(unittest_mgr_clusterstate
@@ -156,8 +164,6 @@ set(unittest_mgr_common_srcs
   ${CMAKE_SOURCE_DIR}/src/mgr/ActivePyModules.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/BaseMgrModule.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/BaseMgrStandbyModule.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonHealthMetricCollector.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonHealthMetric.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/DaemonServer.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/Gil.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/Mgr.cc
@@ -188,6 +194,7 @@ set(unittest_mgr_common_objs
   $<TARGET_OBJECTS:unittest_mgr_map_cache_obj>
   $<TARGET_OBJECTS:unittest_mgr_metriccollector_obj>
   $<TARGET_OBJECTS:unittest_mgr_threadmonitor_obj>
+  $<TARGET_OBJECTS:unittest_mgr_daemonhealthmetric_obj>
   $<TARGET_OBJECTS:unittest_mgr_common_obj>
   $<TARGET_OBJECTS:mgr_cap_obj>)
 
@@ -312,6 +319,20 @@ add_executable(unittest_mgr_perfcounterinstance
 add_ceph_unittest(unittest_mgr_perfcounterinstance)
 target_link_libraries(unittest_mgr_perfcounterinstance
   ceph-common
+  Python3::Python
+)
+
+# unittest_mgr_daemonhealthmetriccollector
+add_executable(unittest_mgr_daemonhealthmetriccollector
+  test_daemonhealthmetriccollector.cc
+  $<TARGET_OBJECTS:unittest_mgr_base_obj>
+  $<TARGET_OBJECTS:unittest_mgr_metriccollector_obj>
+  $<TARGET_OBJECTS:unittest_mgr_daemonhealthmetric_obj>
+)
+add_ceph_unittest(unittest_mgr_daemonhealthmetriccollector)
+target_link_libraries(unittest_mgr_daemonhealthmetriccollector
+  ceph-common
+  global
   Python3::Python
 )
 
