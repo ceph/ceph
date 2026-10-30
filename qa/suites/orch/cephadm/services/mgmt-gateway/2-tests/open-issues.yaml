@@ -1,0 +1,10 @@
+# Reproducers for mgmt-gateway bugs not fixed yet (see test_open_issues.py).
+# They are marked expectedFailure and do not fail the job; one passing
+# unexpectedly does (reported as "unexpected success" in the log), so the
+# marker is dropped and the test moved to its facet when its fix lands.
+tasks:
+- cephfs_test_runner:
+    # the reproducers are independent: report every one, not just the first
+    failfast: false
+    modules:
+      - tasks.cephadm_cases.services.mgmt_gateway.test_open_issues.TestMgmtGatewayOpenIssues
