@@ -253,7 +253,15 @@ seastar::future<> OperationThrottler::background_task() {
         }  
         auto wait_duration = std::chrono::duration_cast<std::chrono::milliseconds>(future_time - now);
         DEBUG("No items ready. Retrying in {} ms", wait_duration.count());
-        co_await seastar::sleep(wait_duration);
+        // Wait on cv rather than sleep: an op enqueued meanwhile (an
+        // immediate one goes to the high-priority queue, which dequeue()
+        // serves first), a released slot or stop() must not wait out the
+        // head mClock item's tag.
+        try {
+          co_await cv.wait(wait_duration);
+        } catch (const seastar::condition_variable_timed_out&) {
+          // the head item's tag is due
+        }
         continue;
       }
       if (auto *item = std::get_if<crimson::osd::scheduler::item_t>(&work_item)) {
