@@ -94,6 +94,9 @@ export interface CephServiceAdditionalSpec {
   custom_sans?: string[];
   zonegroup_hostnames?: string[];
   wildcard_enabled?: boolean;
+  metrics_push_enabled?: boolean;
+  metrics_push_interval?: number;
+  metrics_push_timeout?: number;
   port: number;
   initial_admin_password: string;
   rgw_realm: string;
