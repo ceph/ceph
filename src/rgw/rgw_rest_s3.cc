@@ -3499,6 +3499,15 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
     md_directive = tmp_md_d;
   }
 
+  if (source_zone.empty()) {
+    // apply the destination bucket's default encryption like PutObject
+    int r = get_encryption_defaults(s);
+    if (r < 0) {
+      ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << r << dendl;
+      return r;
+    }
+  }
+
   if (source_zone.empty() &&
       (s->bucket->get_tenant() == s->src_tenant_name) &&
       (s->bucket->get_name() == s->src_bucket_name) &&
