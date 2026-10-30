@@ -6,6 +6,7 @@ from typing import (
     List,
     Optional,
     Set,
+    Tuple,
     Type,
     cast,
 )
@@ -17,13 +18,14 @@ import operator
 
 from ceph.fs.earmarking import EarmarkTopScope
 
-from . import config_store, resources, rgw, utils
+from . import config_store, external, resources, rgw, utils
 from .enums import (
     AuthMode,
     CaseInsensitiveCheckPolicy,
     ConfigNS,
     Intent,
     JoinSourceType,
+    PersistentHandlesDurability,
     SMBClustering,
     SourceReferenceType,
     State,
@@ -144,6 +146,156 @@ class Staging:
         return RGWCredentialEntry.from_store(
             self.destination_store, rgw_credential_id
         ).get_rgw_credential()
+
+    def check_availability_transitions(
+        self, public_store: ConfigStore
+    ) -> List[ErrorResult]:
+        """Validate transitions against the full batch after resource checks.
+        Return an error for every resource that is rejected.
+        """
+        affected: Dict[str, List[SMBResource]] = {}
+        for resource in self.incoming.values():
+            if isinstance(resource, (resources.Cluster, resources.Share)):
+                affected.setdefault(resource.cluster_id, []).append(resource)
+        errors: List[ErrorResult] = []
+        for cluster_id, batch in affected.items():
+            errors.extend(
+                self._check_cluster_availability(
+                    cluster_id, batch, public_store
+                )
+            )
+        return errors
+
+    def _check_cluster_availability(
+        self,
+        cluster_id: str,
+        batch: List[SMBResource],
+        public_store: ConfigStore,
+    ) -> List[ErrorResult]:
+        previous = self._previous_orchestrated_cluster(
+            cluster_id, public_store
+        )
+        if previous is None:
+            return []
+        cluster = self.get_cluster(cluster_id)
+        # Database backup behavior is fixed when smbd opens its databases.
+        durability = (
+            cluster.persistent_handles_durability
+            or PersistentHandlesDurability.FULL_OUTAGE
+        )
+        prev_durability = (
+            previous.persistent_handles_durability
+            or PersistentHandlesDurability.FULL_OUTAGE
+        )
+        if durability != prev_durability:
+            return [
+                ErrorResult(
+                    cluster,
+                    'persistent_handles_durability value may not be changed '
+                    'after orchestration has started or when its history is unknown',
+                    status={
+                        'existing_values': [
+                            {'persistent_handles_durability': prev_durability}
+                        ]
+                    },
+                )
+            ]
+        before, after = self._persistent_handles_transition(previous, cluster)
+        if before or not after:
+            return []
+        # Only the batch can introduce the requirement.
+        enablers = [
+            resource
+            for resource in batch
+            if (
+                isinstance(resource, resources.Cluster)
+                and resource.default_persistent_handles
+            )
+            or (
+                isinstance(resource, resources.Share)
+                and resource.persistent_handles_override
+            )
+        ]
+        return [
+            ErrorResult(
+                resource,
+                'persistent handles cannot be enabled after orchestration '
+                'has started or when its history is unknown',
+                status={
+                    'cluster_id': cluster_id,
+                    'hint': {
+                        'note': 'To enable persistent handles, remove and '
+                        'recreate the SMB cluster with them enabled before '
+                        'first orchestration. This interrupts SMB service.',
+                    },
+                },
+            )
+            for resource in enablers or batch[:1]
+        ]
+
+    def _previous_orchestrated_cluster(
+        self, cluster_id: str, public_store: ConfigStore
+    ) -> Optional[resources.Cluster]:
+        """Return the stored cluster if startup-sensitive checks apply."""
+        ckey = (str(ClusterEntry.namespace), cluster_id)
+        if ckey in self.deleted or ckey not in self._store_keys():
+            return None
+        if not external.cluster_orchestration_submitted(
+            public_store, cluster_id
+        ):
+            return None
+        return ClusterEntry.from_store(
+            self.destination_store, cluster_id
+        ).get_cluster()
+
+    def _persistent_handles_transition(
+        self, previous: resources.Cluster, cluster: resources.Cluster
+    ) -> Tuple[bool, bool]:
+        """Return global support requirements before and after the full batch."""
+        shares = ShareEntry.get_cluster_shares(
+            self.destination_store, cluster.cluster_id
+        )
+        before = resources.requires_persistent_handles(
+            previous, shares.values()
+        )
+        for key in self.deleted:
+            shares.pop(key, None)
+        for key, resource in self.incoming.items():
+            if (
+                isinstance(resource, resources.Share)
+                and resource.cluster_id == cluster.cluster_id
+            ):
+                shares[key] = resource
+        after = resources.requires_persistent_handles(
+            cluster, shares.values()
+        )
+        return before, after
+
+    def warn_availability_transitions(
+        self, public_store: ConfigStore, results: ResultGroup
+    ) -> None:
+        """Warn once per cluster when disabling support becomes irreversible."""
+        affected: Dict[str, ResourceResult] = {}
+        for result in results.resources():
+            if isinstance(
+                result.src,
+                (resources.Cluster, resources.Share, resources.RemovedShare),
+            ):
+                affected.setdefault(result.src.cluster_id, result)
+        for cluster_id, recorder in affected.items():
+            previous = self._previous_orchestrated_cluster(
+                cluster_id, public_store
+            )
+            if previous is None:
+                continue
+            before, after = self._persistent_handles_transition(
+                previous, self.get_cluster(cluster_id)
+            )
+            if before and not after:
+                recorder.record_warning(
+                    f'Persistent handles disabled for cluster "{cluster_id}"; '
+                    'cannot be re-enabled.'
+                )
 
     def save(self) -> ResultGroup:
         results = ResultGroup()
@@ -526,6 +678,42 @@ def _check_share_resource(
         _check_share_cephfs(share, staging, toolbox)
         return
     raise ValueError(f"invalid share: missing rgw and cephfs config: {share}")
+
+
+def warn_availability(
+    resource: SMBResource,
+    staging: Staging,
+    recorder: WarningRecorder,
+) -> None:
+    """Warn about enabled handles once the whole batch passes checks."""
+    if isinstance(resource, resources.Cluster):
+        if not resource.default_persistent_handles:
+            return
+        message = (
+            'Persistent handles are enabled by default for CephFS shares in '
+            f'cluster "{resource.cluster_id}"; shares can opt out with '
+            'availability.persistent_handles: false.'
+        )
+    elif isinstance(resource, resources.Share):
+        cluster = staging.get_cluster(resource.cluster_id)
+        if not resource.persistent_handles_enabled(cluster):
+            return
+        name = f'{resource.cluster_id}.{resource.share_id}'
+        if resource.persistent_handles_override:
+            message = (
+                f'Persistent handles are enabled for CephFS share "{name}".'
+            )
+        else:
+            message = (
+                f'CephFS share "{name}" inherits persistent handles from '
+                f'cluster "{cluster.cluster_id}".'
+            )
+    else:
+        return  # not a cluster or share
+    recorder.record_warning(
+        f'{message} Persistent-handle state management can significantly '
+        'impact performance.'
+    )
 
 
 def _check_share_rgw(share: resources.Share, staging: Staging) -> None:

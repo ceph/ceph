@@ -1133,3 +1133,35 @@ def test_result_group_merge(cs2):
     assert rr3.success
     assert rr3.warnings == ['Glim', 'Glam', 'Glom']
     assert rr3.status == {'state': smb.enums.State.UPDATED}
+
+
+def test_result_group_replace(cs2):
+    cluster, share, share2 = cs2
+    checked = smb.results.ResourceResult.checked(cluster)
+    checked.record_warning('obsolete enabled-state warning')
+    other = smb.results.ResourceResult.checked(share)
+    other.record_warning('unrelated warning')
+    group = smb.results.ResultGroup([checked, other])
+    error = smb.results.ErrorResult(
+        cluster,
+        msg='transition rejected',
+        status={
+            'cluster_id': cluster.cluster_id,
+            'hint': {'note': 'create first'},
+        },
+    )
+    group.replace(error)
+    assert list(group) == [error, other]
+    data = group.to_simplified()
+    assert data['success'] is False
+    assert data['results'][0]['msg'] == 'transition rejected'
+    assert data['results'][0]['hint'] == {'note': 'create first'}
+    assert 'checked' not in data['results'][0]
+    assert 'warnings' not in data['results'][0]
+    assert data['warnings_summary']['recap'] == ['unrelated warning']
+    # Results without a matching resource are appended.
+    unmatched = smb.results.ErrorResult(share2, msg='share rejected')
+    invalid = smb.results.InvalidResourceResult({}, msg='invalid input')
+    group.replace(unmatched)
+    group.replace(invalid)
+    assert list(group) == [error, other, unmatched, invalid]

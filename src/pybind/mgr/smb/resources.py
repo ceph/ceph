@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Dict, Iterable, List, Optional, Tuple, Union, cast
 
 import base64
 import dataclasses
@@ -41,6 +41,7 @@ from .enums import (
     LoginAccess,
     LoginCategory,
     PasswordFilter,
+    PersistentHandlesDurability,
     SMBClustering,
     SourceReferenceType,
     TLSCredentialType,
@@ -482,6 +483,32 @@ class RemovedShare(_RBase):
         return rc
 
 
+class _AvailabilityResource(resourcelib.Resource):
+    """Strict boolean parsing for availability's opt-in fields."""
+
+    def object_from_simplified(self, data: Simplified) -> object:
+        # bool("false") is True; reject strings for an irreversible opt-in.
+        if not isinstance(data, dict):
+            raise ValueError('availability must be an object/mapping')
+        value = data.get('persistent_handles')
+        if value is not None and not isinstance(value, bool):
+            raise ValueError(
+                'availability.persistent_handles must be a boolean'
+            )
+        return super().object_from_simplified(data)
+
+
+@resourcelib.component()
+class ShareAvailability(_RBase):
+    """Share-scoped availability overrides; unset fields inherit."""
+
+    persistent_handles: Optional[bool] = None
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        return _AvailabilityResource(rc.resource_cls)
+
+
 @resourcelib.component()
 class ShareDefaults(_RBase):
     # IMPORTANT: You have to copy paste these fields between Share and
@@ -490,6 +517,7 @@ class ShareDefaults(_RBase):
     # checker is worth it _for now_.
 
     acl_support: Optional[ACLSupportPolicy] = None
+    availability: Optional[ShareAvailability] = None
 
 
 @resourcelib.resource('ceph.smb.share')
@@ -513,6 +541,7 @@ class Share(_RBase):
     hosts_access: Optional[List[HostAccessEntry]] = None
     # common share defaults
     acl_support: Optional[ACLSupportPolicy] = None
+    availability: Optional[ShareAvailability] = None
 
     def __post_init__(self) -> None:
         # if name is not given explicitly, take it from the share_id
@@ -544,6 +573,8 @@ class Share(_RBase):
         if self.comment is not None and '\n' in self.comment:
             raise ValueError('Comment cannot contain newlines')
         validation.check_custom_options(self.custom_smb_share_options)
+        if self.availability is not None and self.rgw is not None:
+            raise ValueError('availability is not supported for RGW shares')
         if self.restrict_access and not self.login_control:
             raise ValueError(
                 'a share with restricted access must define at least one login_control entry'
@@ -553,6 +584,21 @@ class Share(_RBase):
     def checked_cephfs(self) -> CephFSStorage:
         """Return the .cephfs storage object or raise ValueError if None."""
         return checked(self.cephfs)
+
+    @property
+    def persistent_handles_override(self) -> Optional[bool]:
+        """Return the explicit value or None if inherited (or RGW)."""
+        if self.cephfs is None or self.availability is None:
+            return None
+        return self.availability.persistent_handles
+
+    def persistent_handles_enabled(self, cluster: 'Cluster') -> bool:
+        if self.cephfs is None:
+            return False
+        override = self.persistent_handles_override
+        if override is None:
+            return cluster.default_persistent_handles
+        return override
 
     def convert(self, operation: ConversionOp) -> Self:
         """Convert password fields in nested storage components."""
@@ -967,6 +1013,10 @@ class Cluster(_RBase):
     keybridge: Optional[KeyBridge] = None
     # client support mode for client-specific optimizations (macOS, etc.)
     client_compat: Optional[ClientSupportMode] = None
+    # cluster-wide persistent handles durability
+    persistent_handles_durability: Optional[
+        PersistentHandlesDurability
+    ] = None
     # share defaults
     share_defaults: Optional[ShareDefaults] = None
 
@@ -1036,6 +1086,15 @@ class Cluster(_RBase):
         return self.effective_client_compat == ClientSupportMode.MACOS
 
     @property
+    def default_persistent_handles(self) -> bool:
+        defaults = self.share_defaults
+        return bool(
+            defaults
+            and defaults.availability
+            and defaults.availability.persistent_handles
+        )
+
+    @property
     def remote_control_is_enabled(self) -> bool:
         """Return true if a remote control service should be enabled for this
         cluster.
@@ -1086,6 +1145,16 @@ class Cluster(_RBase):
         if self.bind_addrs is None:
             return None
         return [b.to_spec() for b in self.bind_addrs]
+
+
+def requires_persistent_handles(
+    cluster: Cluster, shares: Iterable[Share]
+) -> bool:
+    """Resolve managed global support, excluding RGW and custom options."""
+    # An enabled default reserves support even without shares.
+    return cluster.default_persistent_handles or any(
+        share.persistent_handles_override for share in shares
+    )
 
 
 @resourcelib.resource('ceph.smb.join.auth')
