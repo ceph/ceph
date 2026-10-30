@@ -705,7 +705,8 @@ stretched pool to one zone, as ``ceph osd pool set <pool> num_zones 1`` does.
 Stretched replicated pools get three replicas and <crush_rule>, or the default
 CRUSH rule if <crush_rule> is not supplied. Erasure-coded pools get single-zone
 CRUSH rules of their own; this can make some of their PGs unavailable (see
-"Reducing the Number of Zones" in the Ceph documentation). The command also
+"Unstretching an Erasure-Coded Pool Without Migration" in the Ceph
+documentation). The command also
 sets ``osd_pool_default_num_zones`` to 1 and ``osd_pool_default_size``, the
 replicas in each zone, to 3, replacing any earlier value, as
 ``enable_stretch_mode`` does. Until an upgrade is committed with

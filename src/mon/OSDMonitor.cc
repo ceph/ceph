@@ -138,10 +138,12 @@ static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
 static const string OSD_METADATA_PREFIX("osd_metadata");
 static const string OSD_SNAP_PREFIX("osd_snap");
 
-// where the documentation says when going to fewer zones makes PGs
-// unavailable
-static constexpr std::string_view reducing_num_zones_doc =
-  "\"Reducing the Number of Zones\" in the Stretch Clusters documentation";
+// where the documentation says when going to one zone makes PGs unavailable
+static constexpr std::string_view unstretch_ec_pool_doc =
+  "\"Unstretching an Erasure-Coded Pool Without Migration\" in the Stretch "
+  "Clusters documentation";
+static constexpr std::string_view disable_stretch_mode_doc =
+  "\"Disabling Stretch Mode\" in the Stretch Clusters documentation";
 
 /*
 
@@ -9465,7 +9467,7 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
           !cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false)) {
         ss << "num_zones 1 takes erasure coded pool '" << poolstr
            << "' out of stretch mode and can leave PGs unavailable; see "
-           << reducing_num_zones_doc << ". Pool migration can move the data "
+           << unstretch_ec_pool_doc << ". Pool migration can move the data "
            << "to a pool in one zone instead. Pass --yes-i-really-mean-it to "
            << "proceed anyway.";
         return -EPERM;
@@ -16610,7 +16612,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (!cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false)) {
         ss << "This command will set every stretched pool to num_zones 1 "
               "and every stretched replicated pool to "
-           << LOCAL_REPLICA << " replicas; see " << reducing_num_zones_doc
+           << LOCAL_REPLICA << " replicas; see " << disable_stretch_mode_doc
            << ". Pass --yes-i-really-mean-it to proceed anyway.";
         err = -EPERM;
         goto reply_no_propose;
