@@ -412,6 +412,19 @@ target_link_libraries(unittest_mgr_mgroprequest
   Python3::Python
 )
 
+# unittest_mgr_metriccollector
+add_executable(unittest_mgr_metriccollector
+  test_metriccollector.cc
+  $<TARGET_OBJECTS:unittest_mgr_base_obj>
+  $<TARGET_OBJECTS:unittest_mgr_metriccollector_obj>
+)
+add_ceph_unittest(unittest_mgr_metriccollector)
+target_link_libraries(unittest_mgr_metriccollector
+  ceph-common
+  global
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
