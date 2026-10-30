@@ -425,6 +425,26 @@ target_link_libraries(unittest_mgr_metriccollector
   Python3::Python
 )
 
+# unittest_mgr_mgr
+add_executable(unittest_mgr_mgr
+  test_mgr.cc
+  ${unittest_mgr_common_objs}
+)
+add_ceph_unittest(unittest_mgr_mgr)
+target_include_directories(unittest_mgr_mgr PRIVATE
+  $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(unittest_mgr_mgr
+  ceph-common
+  osdc
+  mon
+  global
+  Boost::python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR}
+  Python3::Python
+  ${CMAKE_DL_LIBS}
+  $<$<BOOL:${WITH_LIBCEPHSQLITE}>:cephsqlite>
+  $<$<BOOL:${WITH_LIBCEPHSQLITE}>:SQLite3::SQLite3>
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
