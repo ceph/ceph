@@ -91,6 +91,7 @@ import { VerticalNavigationComponent } from './vertical-navigation/vertical-navi
 import { CardGroupComponent } from './card-group/card-group.component';
 import { HelpTextComponent } from './help-text/help-text.component';
 import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-advanced-fieldset.component';
+import { FormSectionToggleComponent } from './form-section-toggle/form-section-toggle.component';
 import { ProgressComponent } from './progress/progress.component';
 import { SidePanelComponent } from './side-panel/side-panel.component';
 import { ChartsModule } from '@carbon/charts-angular';
@@ -135,6 +136,8 @@ import Launch16 from '@carbon/icons/es/launch/16';
 import Cube16 from '@carbon/icons/es/cube/16';
 import ChevronLeft16 from '@carbon/icons/es/chevron--left/16';
 import ChevronRight16 from '@carbon/icons/es/chevron--right/16';
+import ChevronDown16 from '@carbon/icons/es/chevron--down/16';
+import ChevronUp16 from '@carbon/icons/es/chevron--up/16';
 import CaretLeft16 from '@carbon/icons/es/caret--left/16';
 import CaretRight16 from '@carbon/icons/es/caret--right/16';
 import Locked16 from '@carbon/icons/es/locked/16';
@@ -241,6 +244,7 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     CardGroupComponent,
     HelpTextComponent,
     FormAdvancedFieldsetComponent,
+    FormSectionToggleComponent,
     ProgressComponent,
     SidePanelComponent,
     IconComponent,
@@ -290,6 +294,7 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     CardGroupComponent,
     HelpTextComponent,
     FormAdvancedFieldsetComponent,
+    FormSectionToggleComponent,
     ProgressComponent,
     SidePanelComponent,
     IconComponent,
@@ -345,6 +350,8 @@ export class ComponentsModule {
       Cube16,
       ChevronLeft16,
       ChevronRight16,
+      ChevronDown16,
+      ChevronUp16,
       CaretLeft16,
       CaretRight16,
       Locked16,

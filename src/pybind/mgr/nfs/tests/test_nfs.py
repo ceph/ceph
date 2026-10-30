@@ -1612,6 +1612,7 @@ EXPORT {
             "placement": {},
             "enable_nfsv3": False,
             "enable_rdma": False,
+            "enable_nfs_metrics": False,
         }}
 
     def test_cluster_info(self):
@@ -1641,6 +1642,7 @@ EXPORT {
             "placement": {},
             "enable_nfsv3": False,
             "enable_rdma": True,
+            "enable_nfs_metrics": False,
         }}
 
     def test_cluster_info_enable_rdma(self):
@@ -1670,10 +1672,41 @@ EXPORT {
             "placement": {},
             "enable_nfsv3": True,
             "enable_rdma": False,
+            "enable_nfs_metrics": False,
         }}
 
     def test_cluster_info_enable_nfsv3(self):
         self._do_mock_test(self._do_test_cluster_info_enable_nfsv3)
+
+    def _do_test_cluster_info_enable_nfs_metrics(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+        nfs_services = [
+            ServiceDescription(
+                spec=NFSServiceSpec(service_id=self.cluster_id, enable_nfs_metrics=True)
+            )
+        ]
+
+        def mock_describe_service(cls, *args, **kwargs):
+            if kwargs['service_type'] == 'nfs':
+                return OrchResult(nfs_services)
+            return OrchResult([])
+
+        with mock.patch('nfs.module.Module.describe_service', mock_describe_service):
+            out = cluster.show_nfs_cluster_info(self.cluster_id)
+
+        assert out == {"foo": {
+            "deployment_type": "standalone",
+            "virtual_ip": None,
+            "backend": [],
+            "placement": {},
+            "enable_nfsv3": False,
+            "enable_rdma": False,
+            "enable_nfs_metrics": True,
+        }}
+
+    def test_cluster_info_enable_nfs_metrics(self):
+        self._do_mock_test(self._do_test_cluster_info_enable_nfs_metrics)
 
     def _do_test_cluster_config(self):
         nfs_mod = Module('nfs', '', '')
@@ -1716,7 +1749,6 @@ EXPORT {
         # recognised as LOG-only.  This is the safe fallback (restart).
         assert not _is_log_only_config(
             "# Enable debug\nLOG { Default_log_level = FULL_DEBUG; }")
-
 
     def _do_test_cluster_config_log_only_no_restart(self):
         nfs_mod = Module('nfs', '', '')
@@ -1880,7 +1912,6 @@ EXPORT {
         out = export_mgr.get_export_qos(self.cluster_id, '/cephfs_a/')
         clust_qos_conf.update({"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False})
         assert out == clust_qos_conf
-
 
     @pytest.mark.parametrize("qos_type, clust_combined_bw_ctrl, clust_params", [
         (QOSType['PerShare'], False, {'export_writebw': '100MB', 'export_readbw': '200MB'}),
@@ -2246,6 +2277,63 @@ class TestNFSClusterIngressPlacement:
     nfs_placement = '2 host1 host2'
     ingress_placement = '3 host3 host4 host5'
 
+    def test_create_nfs_cluster_networks_with_keepalive_only_raises(self):
+        """networks must not be used with keepalive-only ingress mode."""
+        from object_format import ErrorResponse
+        from orchestrator.module import IngressType
+        mgr = MagicMock()
+        cluster = NFSCluster(mgr)
+        with mock.patch('nfs.cluster.create_ganesha_pool'), \
+                mock.patch.object(cluster, 'create_empty_rados_obj'), \
+                mock.patch('nfs.cluster.available_clusters', return_value=[]):
+            with pytest.raises(ErrorResponse, match='networks and bind addresses'):
+                cluster.create_nfs_cluster(
+                    cluster_id=self.cluster_id,
+                    placement='host1',
+                    virtual_ip=self.virtual_ip,
+                    ingress=True,
+                    ingress_mode=IngressType.keepalive_only,
+                    networks=['10.0.0.0/24'],
+                )
+
+    def test_create_nfs_cluster_ip_addrs_with_keepalive_only_raises(self):
+        """ip_addrs must not be used with keepalive-only ingress mode."""
+        from object_format import ErrorResponse
+        from orchestrator.module import IngressType
+        mgr = MagicMock()
+        cluster = NFSCluster(mgr)
+        with mock.patch('nfs.cluster.create_ganesha_pool'), \
+                mock.patch.object(cluster, 'create_empty_rados_obj'), \
+                mock.patch('nfs.cluster.available_clusters', return_value=[]):
+            with pytest.raises(ErrorResponse, match='networks and bind addresses'):
+                cluster.create_nfs_cluster(
+                    cluster_id=self.cluster_id,
+                    placement='host1',
+                    virtual_ip=self.virtual_ip,
+                    ingress=True,
+                    ingress_mode=IngressType.keepalive_only,
+                    ip_addrs={'host1': '10.0.0.1'},
+                )
+
+    def test_create_nfs_cluster_networks_with_haproxy_standard_allowed(self):
+        """networks are permitted when ingress_mode is haproxy-standard."""
+        from orchestrator.module import IngressType
+        mgr = MagicMock()
+        cluster = NFSCluster(mgr)
+        with mock.patch('nfs.cluster.create_ganesha_pool'), \
+                mock.patch.object(cluster, 'create_empty_rados_obj'), \
+                mock.patch('nfs.cluster.available_clusters', return_value=[]), \
+                mock.patch.object(cluster, '_call_orch_apply_nfs') as mock_apply:
+            cluster.create_nfs_cluster(
+                cluster_id=self.cluster_id,
+                placement='host1',
+                virtual_ip=self.virtual_ip,
+                ingress=True,
+                ingress_mode=IngressType.haproxy_standard,
+                networks=['10.0.0.0/24'],
+            )
+            mock_apply.assert_called_once()
+
     def test_create_nfs_cluster_passes_ingress_placement(self):
         mgr = MagicMock()
         cluster = NFSCluster(mgr)
@@ -2262,6 +2350,66 @@ class TestNFSClusterIngressPlacement:
             )
             mock_apply.assert_called_once()
             assert mock_apply.call_args.kwargs['ingress_placement'] == self.ingress_placement
+
+    def test_create_nfs_cluster_passes_enable_nfs_metrics(self):
+        """enable_nfs_metrics=True must be forwarded to _call_orch_apply_nfs."""
+        mgr = MagicMock()
+        cluster = NFSCluster(mgr)
+        with mock.patch('nfs.cluster.create_ganesha_pool'), \
+                mock.patch.object(cluster, 'create_empty_rados_obj'), \
+                mock.patch('nfs.cluster.available_clusters', return_value=[]), \
+                mock.patch.object(cluster, '_call_orch_apply_nfs') as mock_apply:
+            cluster.create_nfs_cluster(
+                cluster_id=self.cluster_id,
+                placement='host1',
+                virtual_ip=None,
+                ingress=False,
+                enable_nfs_metrics=True,
+            )
+            mock_apply.assert_called_once()
+            assert mock_apply.call_args.kwargs['enable_nfs_metrics'] is True
+
+    def test_create_nfs_cluster_networks_with_haproxy_protocol_allowed(self):
+        """networks are permitted when ingress_mode is haproxy-protocol."""
+        from orchestrator.module import IngressType
+        mgr = MagicMock()
+        cluster = NFSCluster(mgr)
+        with mock.patch('nfs.cluster.create_ganesha_pool'), \
+                mock.patch.object(cluster, 'create_empty_rados_obj'), \
+                mock.patch('nfs.cluster.available_clusters', return_value=[]), \
+                mock.patch.object(cluster, '_call_orch_apply_nfs') as mock_apply:
+            cluster.create_nfs_cluster(
+                cluster_id=self.cluster_id,
+                placement='host1',
+                virtual_ip=self.virtual_ip,
+                ingress=True,
+                ingress_mode=IngressType.haproxy_protocol,
+                networks=['10.0.0.0/24'],
+            )
+            mock_apply.assert_called_once()
+
+    def test_call_orch_apply_nfs_haproxy_protocol_with_networks_allowed(self):
+        """_call_orch_apply_nfs allows networks in haproxy-protocol mode."""
+        from orchestrator.module import IngressType
+        mgr = MagicMock()
+        mock_completion = MagicMock()
+        mock_completion.serialized_exception = None
+        mgr.apply_nfs.return_value = mock_completion
+        mgr.apply_ingress.return_value = mock_completion
+        cluster = NFSCluster(mgr)
+        cluster._call_orch_apply_nfs(
+            cluster_id=self.cluster_id,
+            placement='host1',
+            virtual_ip=self.virtual_ip,
+            ingress_mode=IngressType.haproxy_protocol,
+            networks=['10.0.0.0/24'],
+        )
+        assert mgr.apply_nfs.called
+        nfs_spec = mgr.apply_nfs.call_args[0][0]
+        assert nfs_spec.virtual_ip is None
+        assert nfs_spec.networks == ['10.0.0.0/24']
+        assert nfs_spec.enable_haproxy_protocol is True
+        assert mgr.apply_ingress.called
 
 
 @pytest.mark.parametrize(
@@ -2326,3 +2474,63 @@ class TestCephfsClientForMgr:
             r2 = mgr_util.CephFSEarmarkResolver(mgr=mgr, client=cephfs_client_for_mgr(mgr))
             assert r1._cephfs_client is r2._cephfs_client
             mock_cephfs_cls.assert_called_once_with(mgr)
+
+
+class TestClusterCreateNormalizers:
+    """Input normalisation shared by the CLI and dashboard (JSON) paths."""
+
+    def test_placement_passthrough(self):
+        from nfs.module import _normalize_placement
+        assert _normalize_placement(None) is None
+        assert _normalize_placement('2 host1 host2') == '2 host1 host2'
+
+    @pytest.mark.parametrize('placement,count,label,hosts,pattern', [
+        ({'hosts': ['host1', 'host2'], 'count': 2}, 2, None, ['host1', 'host2'], None),
+        ({'label': 'nfs', 'count': 3}, 3, 'nfs', [], None),
+        ({'count': 4}, 4, None, [], None),
+        ({'host_pattern': 'host[1-3]', 'count': 2}, 2, None, [], 'host[1-3]'),
+    ])
+    def test_placement_dict_round_trips(self, placement, count, label, hosts, pattern):
+        from nfs.module import _normalize_placement
+        spec = PlacementSpec.from_string(_normalize_placement(placement))
+        assert spec.count == count
+        assert spec.label == label
+        assert [h.hostname for h in spec.hosts] == hosts
+        if pattern:
+            assert spec.host_pattern.pattern == pattern
+
+    def test_placement_invalid(self):
+        from nfs.exception import NFSInvalidOperation
+        from nfs.module import _normalize_placement
+        with pytest.raises(NFSInvalidOperation):
+            _normalize_placement(['host1'])  # type: ignore
+
+    def test_bind_addrs(self):
+        from nfs.module import _normalize_bind_addrs
+        assert _normalize_bind_addrs(None) is None
+        assert _normalize_bind_addrs([]) is None
+        assert _normalize_bind_addrs('h1:10.0.0.1') == 'h1:10.0.0.1'
+        assert _normalize_bind_addrs([{'hostname': 'h1', 'ip': '10.0.0.1'},
+                                      {'host': 'h2', 'address': '10.0.0.2'}]) \
+            == 'h1:10.0.0.1,h2:10.0.0.2'
+        assert _normalize_bind_addrs([{'hostname': 'h1', 'ip': ''}]) is None
+
+    def test_networks(self):
+        from nfs.module import _normalize_networks
+        assert _normalize_networks(None) is None
+        assert _normalize_networks([]) is None
+        assert _normalize_networks('10.0.0.0/24') == ['10.0.0.0/24']
+        assert _normalize_networks(['10.0.0.0/24', ' 192.168.0.0/24 ', '  ', '']) \
+            == ['10.0.0.0/24', '192.168.0.0/24']
+
+    def test_ingress_mode(self):
+        from nfs.exception import NFSInvalidOperation
+        from nfs.module import _normalize_ingress_mode
+        from orchestrator.module import IngressType
+        assert _normalize_ingress_mode(None) is None
+        assert _normalize_ingress_mode('default') == IngressType.default
+        assert _normalize_ingress_mode('keepalive-only') == IngressType.keepalive_only
+        assert _normalize_ingress_mode('haproxy-standard') == IngressType.haproxy_standard
+        assert _normalize_ingress_mode('haproxy-protocol') == IngressType.haproxy_protocol
+        with pytest.raises(NFSInvalidOperation):
+            _normalize_ingress_mode('not-a-valid-mode')

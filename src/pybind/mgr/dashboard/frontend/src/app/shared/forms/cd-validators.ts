@@ -62,6 +62,18 @@ export class CdValidators {
     }
   }
 
+  static ipv4Cidr(): ValidatorFn {
+    // prettier-ignore
+    const cidrRgx =
+      /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(([0-9]|[12][0-9]|3[0-2]))$/;
+    return (control: AbstractControl): ValidationErrors | null => {
+      if (!control.value) {
+        return null;
+      }
+      return cidrRgx.test(control.value) ? null : { pattern: true };
+    };
+  }
+
   /**
    * Validator function in order to validate numbers.
    * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`

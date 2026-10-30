@@ -1,8 +1,9 @@
-@if (orchStatus?.available && clusters$ | async; as clusters) {
+@if (orchStatus?.available) {
   <cd-table
     headerTitle="Service clusters"
-    [autoReload]="true"
-    [data]="clusters"
+    [autoReload]="5000"
+    [data]="clusters$ | async"
+    identifier="name"
     columnMode="flex"
     [columns]="columns"
     selectionType="single"
@@ -13,5 +14,26 @@
     (fetchData)="loadData()"
     (updateSelection)="updateSelection($event)"
   >
+    <cd-table-actions
+      class="table-actions"
+      [selection]="selection"
+      [permission]="permission"
+      [tableActions]="tableActions"
+    ></cd-table-actions>
   </cd-table>
 }
+
+<ng-template
+  #statusTpl
+  let-row="data.row"
+  let-column="data.column"
+  let-value="data.value"
+>
+  @if (value === '-') {
+    <a [routerLink]="row.eventsLink">-</a>
+  } @else {
+    <cds-tag [class]="'table-tag ' + column.customTemplateConfig.map[value].class">
+      {{ value }}
+    </cds-tag>
+  }
+</ng-template>

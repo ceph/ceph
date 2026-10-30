@@ -1,0 +1,20 @@
+<div class="form-item">
+  <a
+    cdsLink
+    href="#"
+    (click)="toggle($event)"
+  >
+    {{ expanded ? hideText : showText }}
+    @if (!expanded) {
+      <svg
+        cdsIcon="chevron--down"
+        size="16"
+      ></svg>
+    } @else {
+      <svg
+        cdsIcon="chevron--up"
+        size="16"
+      ></svg>
+    }
+  </a>
+</div>
