@@ -107,6 +107,8 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
 };
 
 TEST_F(TestMockCacheReplicatedWriteLog, init_state_write) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -129,6 +131,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_state_write) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, init_state_json_write) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -155,6 +159,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_state_json_write) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, init_shutdown) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -179,6 +185,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_shutdown) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, write) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -212,6 +220,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, write) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, flush) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -253,6 +263,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, flush_source_shutdown) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -292,6 +304,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush_source_shutdown) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, flush_source_internal) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -331,6 +345,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush_source_internal) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, flush_source_user) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -370,6 +386,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush_source_user) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, read_hit_rwl_cache) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -413,6 +431,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, read_hit_rwl_cache) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, read_hit_part_rwl_cache) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -460,6 +480,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, read_hit_part_rwl_cache) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, read_miss_rwl_cache) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -502,6 +524,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, read_miss_rwl_cache) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, discard) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -550,6 +574,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, discard) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, writesame) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -592,6 +618,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, writesame) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, invalidate) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -632,6 +660,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, invalidate) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, compare_and_write_compare_matched) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -686,6 +716,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, compare_and_write_compare_matched) {
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, compare_and_write_compare_failed) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
