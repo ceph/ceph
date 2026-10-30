@@ -1663,6 +1663,17 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
       }
     }
 
+    // Snapdiff's inode stat (and its fragtree) is applied to the other
+    // snapshot. Record the leaf we actually read on the inode whose
+    // fragtree selects the next request, or a stale parent frag is resent.
+    if (snapdiff_req && !diri->dirfragtree.is_leaf(dst.frag)) {
+      ldout(cct, 10) << __func__ << " snapdiff force " << dst.frag
+		     << " to leaf on " << *diri
+		     << " tree " << diri->dirfragtree << dendl;
+      diri->dirfragtree.force_to_leaf(cct, dst.frag);
+      _fragmap_remove_non_leaves(diri);
+    }
+
     ldout(cct, 10) << __func__ << " " << numdn << " readdir items, end=" << end
 		   << ", hash_order=" << hash_order
 		   << ", readdir_start " << readdir_start
@@ -1960,6 +1971,18 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       // hack: return parent inode instead
       in = diri;
     } else if (op == CEPH_MDS_OP_READDIR_SNAPDIFF) {
+      // The trace inode is the other snapshot, so its inode stat is where
+      // the directory fragtree lands. The snapshot being read keeps its own
+      // copy and will resend a finished parent frag until that copy is updated.
+      Inode *snap_diri = request->inode();
+      if (snap_diri && snap_diri != in && in->is_dir() &&
+	  snap_diri->dirfragtree != in->dirfragtree) {
+	ldout(cct, 10) << __func__ << " snapdiff fragtree "
+		       << snap_diri->dirfragtree << " -> " << in->dirfragtree
+		       << " on " << *snap_diri << dendl;
+	snap_diri->dirfragtree = in->dirfragtree;
+	_fragmap_remove_non_leaves(snap_diri);
+      }
       // provide both request's inode (aka snapA) and traced one (snapB)
       // to properly match snapdiff results
       insert_readdir_results(request,
