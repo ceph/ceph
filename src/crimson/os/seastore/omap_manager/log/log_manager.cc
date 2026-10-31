@@ -58,6 +58,129 @@ LogManager::initialize_omap(
 }
 
 LogManager::omap_set_keys_ret
+LogManager::merge_deltas(
+  omap_root_t &log_root,
+  Transaction &t,
+  lognode_deltas_t &deltas)
+{
+  LOG_PREFIX(LogManager::merge_deltas);
+  // Preserve the original operation order when INSERT and
+  // DELETE operations are mixed, as merging them may change
+  // the final values of overlapping keys.
+  const auto first_op = deltas.front().op;
+  const bool mixed_ops = std::any_of(
+    deltas.begin(), deltas.end(),
+    [first_op](const auto& d) {
+      return d.op != first_op;
+    });
+
+  if (mixed_ops) {
+    for (auto& delta : deltas) {
+      auto iter = delta.buffer.cbegin();
+      if (delta.op == lognode_delta_t::op_t::INSERT) {
+        std::map<std::string, ceph::bufferlist> kvs;
+        decode(kvs, iter);
+        co_await _omap_set_keys(
+          log_root, t, std::move(kvs));
+      } else {
+        ceph_assert(
+          delta.op == lognode_delta_t::op_t::DELETE);
+        std::vector<std::pair<std::string, std::string>> ranges;
+        decode(ranges, iter);
+        for (auto& [first, last] : ranges) {
+          co_await _omap_rm_key_range(
+            log_root, t, first, last);
+        }
+      }
+    }
+    co_return;
+  }
+
+  std::map<std::string, ceph::bufferlist> merged_kvs;
+  std::vector<std::pair<std::string, std::string>> merged_ranges;
+  for (auto &delta : deltas) {
+    if (delta.op == lognode_delta_t::op_t::INSERT) {
+      std::map<std::string, ceph::bufferlist> __kvs;
+      auto iter = delta.buffer.cbegin();
+      decode(__kvs, iter);
+      for (auto &[k, v] : __kvs) {
+	merged_kvs.insert_or_assign(k, std::move(v));
+      }
+    } else {
+      assert(delta.op == lognode_delta_t::op_t::DELETE);
+      std::vector<std::pair<std::string, std::string>> range;
+      auto iter = delta.buffer.cbegin();
+      decode(range, iter);
+      for (auto &p : range) {
+	if (merged_ranges.empty()) {
+	  merged_ranges.emplace_back(std::move(p));
+	  continue;
+	}
+	auto& last = merged_ranges.back();
+	std::set<std::string> can_merge{
+	  last.second,
+	  p.first
+	};
+	if (is_continuous_fixed_width(can_merge)) {
+	  last.second = std::move(p.second);
+	} else {
+	  merged_ranges.emplace_back(std::move(p));
+	}
+      }
+    }
+  }
+  ceph_assert(merged_kvs.size() || merged_ranges.size());
+  if (merged_kvs.size()) {
+    DEBUGT("oid:{} insert op kv size:{} ", t, *log_root.associated_oid, merged_kvs.size());
+    co_await _omap_set_keys(log_root, t, std::move(merged_kvs));
+  }
+  if (merged_ranges.size()) {
+    for (auto &p : merged_ranges) {
+      DEBUGT("oid:{} delete op:{} ~ {}", t, *log_root.associated_oid, p.first, p.second);
+      co_await _omap_rm_key_range(log_root, t, p.first, p.second);
+    }
+  }
+  co_return;
+}
+
+
+// Apply pending LogNode changes to the LogNode list.
+// Add a FLUSH delta with the number of processed operations,
+// so Cache can remove them from the pending queues.
+LogManager::omap_set_keys_ret
+LogManager::flush_logs(
+  omap_root_t &log_root,
+  Transaction &t) 
+{
+  auto pending = tm.get_pending_lognode_delta_by_oid(*log_root.associated_oid, t.get_trans_id(), true);
+  journal_seq_t flushed_through = JOURNAL_SEQ_NULL;
+  transaction_id_t flushed_through_trans_id = TRANS_ID_NULL;
+  size_t last_idx_to_delete = 0;
+  if (!pending) {
+    co_return;
+  }
+  auto& deltas = pending->first;
+  last_idx_to_delete = pending->second;
+  // Last journal sequence actually applied to the LogNode.
+  flushed_through = deltas.back().committed_seq;
+  flushed_through_trans_id = deltas.back().trans_id;
+  co_await merge_deltas(log_root, t, deltas);
+
+  lognode_delta_t delta;
+  assert(log_root.associated_oid);
+  delta.oid = *log_root.associated_oid;
+  delta.op = lognode_delta_t::op_t::FLUSH;
+  if (last_idx_to_delete > 0) {
+    delta.last_idx_to_delete = last_idx_to_delete;
+  }
+  delta.trans_id = t.get_trans_id();
+  delta.flushed_through = flushed_through;
+  delta.flushed_through_trans_id = flushed_through_trans_id;
+  t.add_lognode_delta(std::move(delta));
+  co_return;
+}
+
+LogManager::omap_set_keys_ret
 LogManager::omap_set_keys(
   omap_root_t &log_root,
   Transaction &t, std::map<std::string, ceph::bufferlist> kvs)
@@ -65,7 +188,45 @@ LogManager::omap_set_keys(
   LOG_PREFIX(LogManager::omap_set_keys);
   DEBUGT("enter kv size {}", t, kvs.size());
   assert(log_root.get_type() == omap_type_t::LOG);
+  // for test
+  if (!log_root.associated_oid) {
+    co_await _omap_set_keys(log_root, t, std::move(kvs));
+    co_return;
+  }
+  auto pending = tm.get_pending_lognode_delta_by_oid(*log_root.associated_oid, t.get_trans_id());
+  size_t last_idx_to_delete = 0;
+  // When pending deltas are flushed during omap_set_keys(),
+  // record the last applied sequence to skip them during replay.
+  journal_seq_t flushed_through = JOURNAL_SEQ_NULL;
+  transaction_id_t flushed_through_trans_id = TRANS_ID_NULL;
+  if (pending) {
+    auto& deltas = pending->first;
+    last_idx_to_delete = pending->second;
+    flushed_through = deltas.back().committed_seq;
+    flushed_through_trans_id = deltas.back().trans_id;
+    co_await merge_deltas(log_root, t, deltas);
+  }
+  lognode_delta_t delta;
+  assert(log_root.associated_oid);
+  delta.oid = *log_root.associated_oid;
+  delta.op = lognode_delta_t::op_t::INSERT;
+  if (last_idx_to_delete > 0) {
+    delta.last_idx_to_delete = last_idx_to_delete;
+  }
+  delta.trans_id = t.get_trans_id();
+  delta.flushed_through = flushed_through;
+  delta.flushed_through_trans_id = flushed_through_trans_id;
+  encode(kvs, delta.buffer);
+  t.add_lognode_delta(std::move(delta));
+  co_return;
+}
 
+LogManager::omap_set_keys_ret
+LogManager::_omap_set_keys(
+  omap_root_t &log_root,
+  Transaction &t, std::map<std::string, ceph::bufferlist>&& _kvs) 
+{
+  auto kvs = std::move(_kvs);
   auto ext = co_await log_load_extent<LogNode>(
     t, log_root.addr, BEGIN_KEY, END_KEY);
   ceph_assert(ext);
@@ -151,7 +312,7 @@ LogManager::omap_set_keys(
       }
     }
     LogNodeRef cur = ext;
-    if (has_ow_key) {
+    if (has_ow_key && kvs_for_ow.size() == kvs.size()) {
       if (!cur->can_ow()) {
 	co_await remove_kv(t, log_root.addr, get_ow_key(), nullptr);
 	CachedExtentRef node = co_await resync_log_node(cur);
@@ -898,23 +1059,52 @@ LogManager::omap_rm_keys(
       co_return;
 
     bool continuous = is_continuous_fixed_width(key_set);
-    if (continuous) {
-      // fast path
-      co_await remove_kvs(
-	t, addr,
-	*key_set.begin(),
-	*key_set.rbegin(),
-	nullptr);
-    } else {
-      // Not a range, but still only one traversal: remove_kv_set() matches
-      // the whole set as it walks the chain.
-      pending_keys_t pending(
-	std::vector<std::string_view>(key_set.begin(), key_set.end()));
-      std::vector<std::string> multi_block_keys;
-      co_await remove_kv_set(t, addr, pending, multi_block_keys, nullptr);
-      for (auto& p : multi_block_keys) {
-	co_await remove_kv(t, addr, p, nullptr);
+    // for test
+    if (!log_root.associated_oid) {
+      if (continuous) {
+	co_await remove_kvs(
+	  t, addr, *key_set.begin(), *key_set.rbegin(), nullptr);
+      } else {
+	pending_keys_t pending(
+	  std::vector<std::string_view>(key_set.begin(), key_set.end()));
+	std::vector<std::string> multi_block_keys;
+
+	co_await remove_kv_set(
+	  t, addr, pending, multi_block_keys, nullptr);
+
+	for (auto& key : multi_block_keys) {
+	  co_await remove_kv(t, addr, key, nullptr);
+	}
       }
+      co_return;
+    }
+
+    if (continuous) {
+      lognode_delta_t delta;
+      assert(log_root.associated_oid);
+      delta.oid = *log_root.associated_oid;
+      delta.op = lognode_delta_t::op_t::DELETE;
+      delta.trans_id = t.get_trans_id();
+      std::vector<std::pair<std::string, std::string>> keys;
+      auto pair = std::make_pair(*key_set.begin(), *key_set.rbegin());
+      keys.emplace_back(pair);
+      encode(keys, delta.buffer);
+      t.add_lognode_delta(std::move(delta));
+      co_return;
+    } else {
+      lognode_delta_t delta;
+      assert(log_root.associated_oid);
+      delta.oid = *log_root.associated_oid;
+      delta.op = lognode_delta_t::op_t::DELETE;
+      delta.trans_id = t.get_trans_id();
+      std::vector<std::pair<std::string, std::string>> keys;
+      for (auto& p : key_set) {
+	auto pair = std::make_pair(p, p);
+	keys.emplace_back(pair);
+      }
+      encode(keys, delta.buffer);
+      t.add_lognode_delta(std::move(delta));
+      co_return;
     }
   };
   co_await remove_key_set(keys, log_root.addr);
@@ -932,7 +1122,37 @@ LogManager::omap_rm_key_range(
 {
   LOG_PREFIX(LogManager::omap_rm_key_range);
   DEBUGT("first={}, last={}", t, first, last);
+  // for test
+  if (!log_root.associated_oid) {
+    co_await _omap_rm_key_range(log_root, t, first, last);
+    co_return;
+  }
   assert(log_root.get_type() == omap_type_t::LOG);
+
+  lognode_delta_t delta;
+  assert(log_root.associated_oid);
+  delta.oid = *log_root.associated_oid;
+  delta.op = lognode_delta_t::op_t::DELETE;
+  delta.trans_id = t.get_trans_id();
+  auto p = std::make_pair(first, last);
+  std::vector<std::pair<std::string, std::string>> keys;
+  keys.emplace_back(p);
+  encode(keys, delta.buffer);
+  t.add_lognode_delta(std::move(delta));
+  co_return;
+}
+
+LogManager::omap_rm_key_range_ret 
+LogManager::_omap_rm_key_range(
+  omap_root_t &log_root,
+  Transaction &t,
+  const std::string &first,
+  const std::string &last)
+{
+  LOG_PREFIX(LogManager::omap_rm_key_range);
+  DEBUGT("first={}, last={}", t, first, last);
+  assert(log_root.get_type() == omap_type_t::LOG);
+
   co_await remove_kvs(t, log_root.addr, first, last, nullptr);
   // for dup list
   co_await remove_kvs(t, 

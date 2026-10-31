@@ -112,7 +112,8 @@ SegmentedJournal::prep_replay_segments(
   ).safe_then([this, FNAME, segments=std::move(segments)] {
     INFO("dirty_tail={}, alloc_tail={}",
          get_dirty_tail(),
-         get_alloc_tail());
+         get_alloc_tail(),
+	 get_log_tail());
     auto journal_tail = trimmer.get_journal_tail();
     auto journal_tail_paddr = journal_tail.offset;
     ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
@@ -158,7 +159,7 @@ SegmentedJournal::scan_last_segment(
   LOG_PREFIX(SegmentedJournal::scan_last_segment);
   assert(segment_id == segment_header.physical_segment_id);
   trimmer.update_journal_tails(
-      segment_header.dirty_tail, segment_header.alloc_tail);
+      segment_header.dirty_tail, segment_header.alloc_tail, segment_header.log_tail);
   auto seq = journal_seq_t{
     segment_header.segment_seq,
     paddr_t::make_seg_paddr(segment_id, 0)
@@ -208,8 +209,9 @@ SegmentedJournal::scan_last_segment(
               DEBUG("got {}, at {}", tail_delta, start_seq);
               ceph_assert(tail_delta.dirty_tail != JOURNAL_SEQ_NULL);
               ceph_assert(tail_delta.alloc_tail != JOURNAL_SEQ_NULL);
+              ceph_assert(tail_delta.log_tail != JOURNAL_SEQ_NULL);
               trimmer.update_journal_tails(
-                  tail_delta.dirty_tail, tail_delta.alloc_tail);
+                  tail_delta.dirty_tail, tail_delta.alloc_tail, tail_delta.log_tail);
             }
           }
         }
@@ -342,6 +344,7 @@ SegmentedJournal::replay_ret SegmentedJournal::replay(
       delta,
       get_dirty_tail(),
       get_alloc_tail(),
+      get_log_tail(),
       modify_time);
     auto [is_applied, ext] = ret;
     if (is_applied) {

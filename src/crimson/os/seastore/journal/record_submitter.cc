@@ -500,9 +500,15 @@ void RecordSubmitter::decrement_io_with_flush()
       DEBUG("{} flush, resolve wait_unfull_flush_promise", get_name());
       assert(!p_current_batch->is_empty());
       assert(wait_available_promise.has_value());
-      flush_current_batch();
-      wait_unfull_flush_promise->set_value();
+
+      // Reset the pending flush promise before flushing, because
+      // flush_current_batch() can re-enter decrement_io_with_flush().
+      // Keep the original promise alive to notify the waiter.
+      auto promise = std::move(*wait_unfull_flush_promise);
       wait_unfull_flush_promise.reset();
+
+      flush_current_batch();
+      promise.set_value();
       return;
     }
   } else {
