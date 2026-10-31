@@ -1,0 +1,42 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      # mon_thrash routinely takes a mon down; same entry rados/monthrash
+      # itself carries in every thrasher/workload that runs it.
+      - \(MON_DOWN\)
+# mgr_thrash listed first so its one-time setup (loading modules,
+# capturing the baseline module list) runs before mon_thrash starts
+# killing mons, rather than racing it.
+tasks:
+- mgr_thrash:
+    revive_delay: 20
+    thrash_delay: 1
+    selftest_modules: [crash, devicehealth, prometheus]
+    test_remote_dispatch: true
+    module_load_delay_ms: 500
+    # Some headroom on top of the default (mon_mgr_beacon_grace * 2,
+    # ~60s), which assumes an otherwise undisturbed mon cluster. The
+    # real fix for the interaction with mon_thrash is its thrash_delay
+    # below; this is just a safety margin.
+    failover_timeout: 240
+- mon_thrash:
+    revive_delay: 20
+    # MgrMonitor::tick() resets every mgr's missing-beacon timer to now
+    # on any gap since its last tick (e.g. from an election), and
+    # on_restart() (called on every mon election) unconditionally
+    # clears it outright. mon_thrash's own kill/revive cycle causes an
+    # election, so if thrash_delay is too short, elections land closer
+    # together than mon_mgr_beacon_grace (default 30s) and the mon can
+    # never accumulate enough continuous silence to ever notice a dead
+    # active mgr: observed in a real run, mgr.y sent no beacon for 5+
+    # minutes and the mon never promoted a standby. Not a timeout to
+    # tune around -- give real quiet time between mon disruptions.
+    thrash_delay: 60
+    # freeze_mon_probability picks its target independent of
+    # maintain_quorum's kill-count limit, so kill+freeze can overlap
+    # and drop quorum entirely (observed in a real run: mon.a killed
+    # and mon.b frozen at the same time, leaving only mon.c reachable,
+    # which burned through mgr_thrash's failover wait and mon_thrash's
+    # own quorum wait). Not part of what this composition is meant to
+    # test, so disable it.
+    freeze_mon_probability: 0

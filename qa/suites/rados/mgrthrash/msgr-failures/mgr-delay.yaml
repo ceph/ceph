@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms inject delay type: mgr
+        ms inject delay probability: .005
+        ms inject delay max: 1
+    log-ignorelist:
+      - \(SLOW_OPS\)
