@@ -129,20 +129,32 @@ This process uses the ceph ``osd ok-to-upgrade`` command.
 
 Requirements:
 
-* For OSD-only upgrades, pass both ``--crush_bucket_type`` and ``--crush_bucket_name``
-  and ``--daemon-types osd`` only. Supported types today are ``host``, ``rack``,
-  and ``chassis``.
+* For OSD-only upgrades, pass ``--crush_bucket_type`` and ``--daemon-types osd``.
+  Supported bucket types today are ``host``, ``rack``, and ``chassis``.
+* ``--crush_bucket_name`` is **optional**:
+
+  * **Type and name both given:** cephadm upgrades OSDs in that one named
+    bucket only.
+  * **Type given, name omitted:** cephadm discovers every CRUSH bucket of
+    that type (via ``osd crush tree``), then upgrades them one at a time, in
+    CRUSH tree order, automatically advancing to the next bucket once the
+    current one finishes. No further operator action is needed between
+    buckets; see `Auto-iterating across all buckets of a type`_ below.
+
 * The Monitor's ``osd ok-to-upgrade`` expects the target **short** Ceph version
   (same shape as ``ceph_version_short`` in ``ceph osd metadata``).
-* If the Monitors indicate to cephadm that no OSDs in the selected CRUSH bucket
-  are okay to upgrade, cephadm will log details and then retry the operation.
+* If the Monitors indicate to cephadm that no OSDs in the current CRUSH bucket
+  are okay to upgrade, cephadm will log details and then retry the operation
+  on that same bucket; it does not skip ahead to the next bucket.
 * If the bucket parameters for a ceph ``osd ok-to-upgrade`` upgrade are not provided,
   cephadm will fall back to the default ceph osd ok-to-stop gate for OSD upgrades.
 * Bucket-scope upgrades apply only to OSDs. CRUSH buckets do not influence upgrades
   of other daemon types, for example Monitors, Managers, and MDSes.
+* The set of buckets (and their membership) is fixed when the upgrade starts.
+  Do not add, remove, or rename CRUSH buckets of the type being upgraded while
+  an upgrade is in progress.
 
-Example
--------
+Single-bucket example (type and name):
 
 .. prompt:: bash #
 
@@ -153,6 +165,43 @@ Example
 When performing OSD upgrades within this failure domain, cephadm calls
 ceph ``osd ok-to-upgrade`` with the specified bucket name and type, and max set to
 :confval:`mgr/cephadm/max_parallel_osd_upgrades`
+
+.. _Auto-iterating across all buckets of a type:
+
+Auto-iterating across all buckets of a type
+--------------------------------------------
+
+If an operator provides ``--crush_bucket_type`` without
+``--crush_bucket_name``, cephadm looks up every bucket of that type
+(for example every ``rack``, or every ``host``) from the current CRUSH map
+and upgrades them one at a time instead of requiring a separate
+``ceph orch upgrade start`` invocation per bucket:
+
+.. prompt:: bash #
+
+  ceph orch upgrade start --image quay.io/ceph/ceph:v21.2.1 \
+    --daemon-types osd \
+    --crush_bucket_type rack
+
+For each bucket in turn, cephadm:
+
+#. Calls ``osd ok-to-upgrade`` for the current bucket and upgrades the OSDs
+   that the Monitors report as safe to move, the same way as the
+   single-bucket case above.
+#. Once every OSD in the current bucket is on the target image, advances to
+   the next bucket in the (frozen) list and repeats.
+#. After the last bucket finishes, completes the upgrade the same way a
+   normal OSD upgrade does (for example setting ``require_osd_release`` once
+   every OSD in the cluster is on the target version).
+
+The list of buckets is captured once, when the upgrade starts, so later
+changes to the CRUSH map are not picked up mid-upgrade. This also means 
+the upgrade resumes against the same bucket list after a Manager failover, 
+continuing from the bucket that was in progress rather than restarting.
+
+``ceph orch upgrade status`` reports which bucket is currently being
+upgraded along with how many buckets in the list are already complete and
+how many remain, for example:
 
 .. warning:: Do not change the cluster's topology during an OSD upgrade phase.
    This includes the name or type of any CRUSH bucket.
