@@ -10,6 +10,7 @@
 #include "include/utime.h"
 #include "include/rbd/librbd.hpp"
 
+#include "include/rbd/asio/ContextWQ.hpp"
 #include "librbd/ImageCtx.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ReadResult.h"
@@ -65,6 +66,12 @@ struct AioCompletion {
   bool external_callback = false;
 
   Context* image_dispatcher_ctx = nullptr;
+
+  /**
+   * ContextWQ channel of the thread that started this I/O.
+   * Retained so later stages that run off that thread
+   */
+  asio::ContextWQ::Channel completion_channel = nullptr;
 
   template <typename T, void (T::*MF)(int)>
   static void callback_adapter(completion_t cb, void *arg) {
@@ -169,6 +176,10 @@ struct AioCompletion {
     return complete_arg;
   }
 
+  asio::ContextWQ::Channel get_completion_channel() const {
+    return completion_channel;
+  }
+
 private:
   void queue_complete();
   void complete_external_callback();
@@ -183,6 +194,12 @@ public:
   ~C_AioRequest() override {}
   void finish(int r) override {
     m_completion->complete_request(r);
+  }
+  AioCompletion *get_aio_completion() const {
+    return m_completion;
+  }
+  asio::ContextWQ::Channel get_completion_channel() const {
+    return m_completion->get_completion_channel();
   }
 protected:
   AioCompletion *m_completion;
