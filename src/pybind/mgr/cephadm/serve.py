@@ -1212,6 +1212,19 @@ class CephadmServe:
     def _check_daemons(self) -> None:
         self.log.debug('_check_daemons')
         daemons = self.mgr.cache.get_daemons()
+
+        def _has_scheduled_action(dd: orchestrator.DaemonDescription) -> bool:
+            if dd.hostname is None or dd.daemon_type is None:
+                return False
+            return self.mgr.cache.get_scheduled_daemon_action(
+                dd.hostname, dd.name()) is not None
+
+        # Process user-scheduled actions (e.g. `ceph orch daemon redeploy`)
+        # before dependency-driven reconfigurations: explicit user requests
+        # must not be starved by reconfig work on other daemons -- e.g. a
+        # broken daemon whose reconfig keeps failing, or the reconfiguration
+        # storm that typically follows an mgr failover.
+        daemons.sort(key=lambda dd: not _has_scheduled_action(dd))
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
         for dd in daemons:
             # orphan?
