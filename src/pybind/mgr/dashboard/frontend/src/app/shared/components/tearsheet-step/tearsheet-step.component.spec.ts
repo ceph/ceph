@@ -21,4 +21,27 @@ describe('WizardComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('should keep canProceed true by default when an inline form is projected', () => {
+    component.formGroupDirective = {
+      form: { valid: false }
+    } as any;
+
+    expect(component.autoDetectFormGroup).toBe(false);
+    expect(component.canProceed).toBe(true);
+  });
+
+  it('should use inline form validity when autoDetectFormGroup is enabled', () => {
+    component.autoDetectFormGroup = true;
+    component.formGroupDirective = {
+      form: { valid: false }
+    } as any;
+
+    expect(component.canProceed).toBe(false);
+
+    component.formGroupDirective = {
+      form: { valid: true }
+    } as any;
+    expect(component.canProceed).toBe(true);
+  });
 });
