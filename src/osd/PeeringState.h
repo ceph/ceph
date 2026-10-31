@@ -1818,7 +1818,8 @@ private:
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
   void consider_adjusting_pwlc(eversion_t last_complete);
-  void consider_rollback_pwlc(eversion_t last_complete);
+  bool consider_rollback_pwlc(eversion_t last_complete);
+  void pwlc_rolled_back();
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo,
 		       pg_log_t&& olog, pg_missing_t&& omissing,
 		       pg_shard_t from);
