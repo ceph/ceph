@@ -17,13 +17,16 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <chrono>
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <thread>
 #include <pthread.h>
 #include <errno.h>
 
 #include "common/ceph_context.h"
+#include "common/ceph_time.h"
 #include "common/config.h"
 #include "common/common_init.h"
 #include "common/ceph_json.h"
@@ -230,11 +233,63 @@ int librados::RadosClient::connect()
     cct->_log->start();
   }
 
-  {
+  // Connecting can fail transiently while the monitors are (re)forming quorum,
+  // e.g. a cephx EPERM returned by a monitor that is mid-election. Both the
+  // initial monmap/config bootstrap and authentication can hit this. Optionally
+  // retry those steps a bounded number of times with a linear backoff, within
+  // client_mount_timeout per step, before giving up, so a caller started during
+  // an election window (a mgr module opening its librados handle right after a
+  // failover is the motivating case) does not fail permanently. This is opt-in:
+  // rados_connect_retries defaults to 0, which preserves the historical
+  // fail-immediately behaviour. Each step is safe to reattempt:
+  // get_monmap_and_config() runs on a throwaway MonClient, and authenticate()
+  // drops whatever a failed attempt left behind and hunts the monitors again.
+  const uint64_t connect_retries =
+    conf.get_val<uint64_t>("rados_connect_retries");
+  const double connect_retry_interval =
+    conf.get_val<double>("rados_connect_retry_interval");
+  const auto mount_timeout =
+    conf.get_val<std::chrono::seconds>("client_mount_timeout");
+  auto with_retries = [&](const char *what, auto step) {
+    // The retries are also bounded by client_mount_timeout of wall-clock time
+    // per step. An attempt that has already spent that long hunting for
+    // unreachable monitors is not repeated, so connect() gives up after about
+    // the same time it always has and the retries only add time while the
+    // monitors are reachable but rejecting the client, where every attempt
+    // fails quickly. A zero client_mount_timeout means no deadline, as it does
+    // for authenticate().
+    const auto deadline = ceph::coarse_mono_clock::now() + mount_timeout;
+    int r;
+    for (uint64_t attempt = 0; ; ++attempt) {
+      r = step();
+      if (r >= 0 || attempt >= connect_retries)
+        return r;
+      const std::chrono::duration<double> backoff(
+        connect_retry_interval * (attempt + 1));
+      if (mount_timeout.count() > 0 &&
+          ceph::coarse_mono_clock::now() + backoff >= deadline) {
+        ldout(cct, 1) << conf->name << " " << what << " attempt "
+                      << (attempt + 1) << " failed (" << cpp_strerror(-r)
+                      << "), not retrying: client_mount_timeout spent" << dendl;
+        return r;
+      }
+      ldout(cct, 1) << conf->name << " " << what << " attempt " << (attempt + 1)
+                    << " failed (" << cpp_strerror(-r) << "), retrying in "
+                    << backoff.count() << "s" << dendl;
+      std::this_thread::sleep_for(backoff);
+    }
+  };
+
+  err = with_retries("monmap/config bootstrap", [&] {
     MonClient mc_bootstrap(cct, poolctx);
-    err = mc_bootstrap.get_monmap_and_config();
-    if (err < 0)
-      return err;
+    return mc_bootstrap.get_monmap_and_config();
+  });
+  if (err < 0) {
+    // nothing has been set up yet, so this early return cannot go through the
+    // out: label, but the handle still has to leave CONNECTING behind or every
+    // later connect() on it returns -EINPROGRESS
+    state = DISCONNECTED;
+    return err;
   }
 
   common_init_finish(cct);
@@ -287,9 +342,13 @@ int librados::RadosClient::connect()
     goto out;
   }
 
-  err = monclient.authenticate(std::chrono::duration<double>(conf.get_val<std::chrono::seconds>("client_mount_timeout")).count());
+  err = with_retries("authentication", [&] {
+    return monclient.authenticate(
+      std::chrono::duration<double>(mount_timeout).count());
+  });
   if (err) {
-    ldout(cct, 0) << conf->name << " authentication error " << cpp_strerror(-err) << dendl;
+    ldout(cct, 0) << conf->name << " authentication error "
+                  << cpp_strerror(-err) << dendl;
     shutdown();
     goto out;
   }
