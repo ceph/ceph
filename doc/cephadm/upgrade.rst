@@ -15,12 +15,15 @@ The automated upgrade process follows Ceph best practices.  For example:
 .. note::
 
    The Ceph cluster health status is likely to switch to
-   ``HEALTH_WARNING`` during the upgrade.
+   ``HEALTH_WARN`` during the upgrade.
 
 .. note::
 
-   If a cluster host is or becomes unavailable the upgrade will be paused
-   until it is restored.
+   If a host is offline or in maintenance mode, ``ceph orch upgrade start``
+   refuses to start the upgrade. If a host goes offline during the upgrade,
+   cephadm pauses the upgrade and raises the ``UPGRADE_OFFLINE_HOST`` health
+   alert. The upgrade stays paused after the host returns. To continue, run
+   ``ceph orch upgrade resume``.
 
 .. note::
 
@@ -56,9 +59,9 @@ The automated upgrade process follows Ceph best practices.  For example:
 
      ceph config get mgr mgr/cephadm/pg_autoscale_during_upgrade
 
-   If autoscaling was already off before the upgrade, cephadm does not change
-   it unless you have set ``pg_autoscale_during_upgrade`` to ``true`` (opt-in
-   to turn autoscaling on for the duration of the upgrade).
+   If autoscaling was already off before the upgrade, it is still off after
+   the upgrade. Setting ``pg_autoscale_during_upgrade`` to ``true`` tells
+   cephadm to leave the autoscaler as it is. It does not turn autoscaling on.
 
 
 Starting the Upgrade
@@ -151,7 +154,7 @@ Example
     --crush_bucket_type rack --crush_bucket_name rack-a
 
 When performing OSD upgrades within this failure domain, cephadm calls
-ceph ``osd ok-to-upgrade`` with the specified bucket name and type, and max set to
+ceph ``osd ok-to-upgrade`` with the specified bucket name, and max set to
 :confval:`mgr/cephadm/max_parallel_osd_upgrades`
 
 .. warning:: Do not change the cluster's topology during an OSD upgrade phase.
@@ -192,8 +195,8 @@ behavior of upgrading all daemons of the type in one pass.
 Monitoring the Upgrade
 ======================
 
-Determine (1) whether an upgrade is in progress and (2) which version the
-cluster is upgrading to by running the following command:
+Determine (1) whether an upgrade is in progress and (2) which container image
+the cluster is upgrading to by running the following command:
 
 .. prompt:: bash #
 
@@ -212,8 +215,8 @@ looks like this:
 
   [...]
     progress:
-      Upgrade to quay.io/ceph/ceph:v20.2.3 (00h 20m 12s)
-        [=======.....................] (time remaining: 01h 43m 31s)
+      Upgrade to 20.2.3 (20m)
+        [=======.....................] (remaining: 60m)
 
 
 Watching the Cephadm Log During an Upgrade
@@ -248,8 +251,8 @@ Potential Problems
 ==================
 
 
-Error: ENOENT: Module not found
--------------------------------
+Error ENOENT: Module not found
+------------------------------
 
 The message ``Error ENOENT: Module not found`` appears in response to the
 command ``ceph orch upgrade status`` if the orchestrator has crashed:
@@ -306,8 +309,9 @@ following command:
 
 This alert (``UPGRADE_FAILED_PULL``) means that Ceph was unable to pull the
 container image for the target version. This can happen if you specify a
-version or container image that does not exist (e.g. "1.2.3"), or if the
-container registry cannot be reached by one or more hosts in the cluster.
+version or container image that does not exist (e.g.
+``quay.io/ceph/ceph:v20.2.99``), or if the container registry cannot be
+reached by one or more hosts in the cluster.
 
 To cancel the existing upgrade and to specify a different target version, run
 the following commands:
@@ -351,7 +355,7 @@ Using Customized Container Images
 For most users, upgrading requires nothing more complicated than specifying the
 Ceph version to which to upgrade. In such cases, cephadm locates the specific
 Ceph container image to use by combining the :confval:`container_image_base`
-configuration option (default: ``docker.io/ceph/ceph``) with a tag of
+configuration option (default: ``quay.io/ceph/ceph``) with a tag of
 ``vX.Y.Z``.
 
 But it is possible to upgrade to an arbitrary container image, if that's what
@@ -432,10 +436,14 @@ Example: specifying services and using limit:
    * ``grafana``
    * ``loki``
    * ``promtail``
+   * ``alloy``
+   * ``pushgateway``
+   * ``mgmt-gateway``
+   * ``oauth2-proxy``
 
    If you specify parameters that would upgrade daemons out of order, the
-   upgrade command will block and note which daemons will be missed if
-   you proceed.
+   upgrade command fails with ``Cannot start upgrade.`` and names the daemons
+   that you must upgrade first.
 
 .. note::
 
@@ -519,4 +527,4 @@ For example:
 
 .. prompt:: bash #
 
-  ceph orch update service prometheus quay.io/prometheus/prometheus:v2.55.1
+  ceph orch update service prometheus quay.io/prometheus/prometheus:v3.6.0
