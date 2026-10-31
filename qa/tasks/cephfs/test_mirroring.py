@@ -398,6 +398,11 @@ class TestMirroring(CephFSTestCase):
             raise AssertionError(
                 f'expected add_directory={expected}, got {actual}')
 
+    @retry_assert(timeout=300, interval=2)
+    def wait_peer_sync_failures(self, previous):
+        counters = self.get_peer_perf_counters()
+        self.assertGreater(counters['sync_failures'], previous)
+
     def assert_directory_perf_labels(self, labels, dir_path, peer_uuid):
         self.assertEqual(labels['source_fscid'], str(self.primary_fs_id))
         self.assertEqual(labels['source_filesystem'], self.primary_fs_name)
@@ -2927,6 +2932,44 @@ class TestMirroring(CephFSTestCase):
         self.assertEqual(replacement_contents,
                          self.mount_b.read_file(
                              f'{remote_replacement}/{replacement_file}'))
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_sync_failure_with_replaced_directory(self):
+        """A failed sync with a fully traversed directory on the stack does not crash."""
+        self.setup_mount_b(mds_perm='rwp')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+
+        dir_name = 'replaced_dir_failure'
+        self.mount_a.run_shell(['mkdir', '-p', f'{dir_name}/rep'])
+        self.mount_a.write_file(f'{dir_name}/rep/f', data='old')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap0'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap0', 1)
+
+        # a new directory under the same name is traversed in full, not diffed
+        self.mount_a.run_shell(['rm', '-rf', f'{dir_name}/rep'])
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/rep'])
+        self.mount_a.write_file(f'{dir_name}/rep/g', data='new')
+
+        # fail the remote mkdir of that directory
+        self.mount_b.setfattr(dir_name, 'ceph.quota.max_files', '1', sudo=True)
+        pid = self.get_mirror_daemon_pid()
+        failures = self.get_peer_perf_counters()['sync_failures']
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap1'])
+        self.wait_peer_sync_failures(failures)
+        self.assertEqual(pid, self.get_mirror_daemon_pid())
+        self.mount_a.run_shell(['kill', '-0', pid])
+
+        self.mount_b.setfattr(dir_name, 'ceph.quota.max_files', '0', sudo=True)
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap1', 2)
+        self.verify_snapshot(dir_name, 'snap1')
 
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
