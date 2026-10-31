@@ -128,11 +128,15 @@ int CephxClientHandler::build_request(bufferlist& bl) const
 
 bool CephxClientHandler::_need_tickets() const
 {
-  // do not bother (re)requesting tickets if we *only* need the MGR
-  // ticket; that can happen during an upgrade and we want to avoid a
-  // loop.  we'll end up re-requesting it later when the secrets
-  // rotating.
-  return need && need != CEPH_ENTITY_TYPE_MGR;
+  if (need != CEPH_ENTITY_TYPE_MGR) {
+    return need != 0;
+  }
+  // only the MGR ticket is due.  if the mons never issued us one, or
+  // issued one without an expiry, don't loop re-requesting it.  if we
+  // hold one that expires, renew it: left alone it outlives its rotating
+  // secret and the mgr rejects it on the next new connection.
+  auto p = tickets.tickets_map.find(CEPH_ENTITY_TYPE_MGR);
+  return p != tickets.tickets_map.end() && !p->second.expires.is_zero();
 }
 
 int CephxClientHandler::handle_response(
