@@ -53,6 +53,8 @@ std::unique_ptr<IoSequence> EcIoSequence::generate_sequence(
                                                   sequence, km, mappinglayers, check_consistency);
     case Sequence::SEQUENCE_SEQ10:
       return std::make_unique<Seq10>(obj_size_range, seed, km, mappinglayers, check_consistency);
+    case Sequence::SEQUENCE_SEQ21:
+      return std::make_unique<Seq21>(obj_size_range, seed, check_consistency);
     default:
       ceph_abort_msg("Unrecognised sequence");
   }
@@ -62,7 +64,11 @@ EcIoSequence::EcIoSequence(std::pair<int, int> obj_size_range, int seed, bool ch
     : IoSequence(obj_size_range, seed, check_consistency),
       setup_inject(false),
       clear_inject(false),
-      shard_to_inject(std::nullopt) {}
+      shard_to_inject(std::nullopt) {
+  // EC sequences issue reads (or FailedWrite+read pairs) against a pre-existing
+  // object, so an explicit CreateOp must always be emitted first.
+  create = true;
+}
 
 void EcIoSequence::select_random_data_shard_to_inject_read_error(
     std::optional<std::pair<int, int>> km,

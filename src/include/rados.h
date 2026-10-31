@@ -491,6 +491,7 @@ enum {
 	CEPH_OSD_FLAG_EC_DIRECT_READ = 0x10000000,  /* Erasure code doing a partial read direct to OSD. */
 	CEPH_OSD_FLAG_FAIL_ON_EAGAIN = 0x20000000,  /* -EAGAIN will not retry, but fail IO. */
 	CEPH_OSD_FLAG_FORCE_OSD = 0x40000000,  /* osd field contains a forced target. */
+	CEPH_OSD_FLAG_PRESERVE_ALLOCATION = 0x80000000,  /* per-request preserve allocation (zero-block tracking) for EC pools */
 };
 
 // Indicates an IO which is direct-to-OSD and may not be on the primary.
@@ -511,6 +512,13 @@ enum {
 									 * and handle them separately from normal ops,
 									 * apply scrub-specific behavior (e.g. bypassing clean cache)
 									 */
+	CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA = 0x200, /* SPARSE_READ only: client can
+								 * decode a reply with the extent map in
+								 * outmetadata and only the data in outdata.
+								 * Set by the client; an OSD that does not
+								 * understand it ignores it and replies in the
+								 * legacy combined format.
+								 */
 };
 
 #define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/

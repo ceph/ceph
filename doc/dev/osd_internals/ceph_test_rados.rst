@@ -17,7 +17,7 @@ How It Works
 ------------
 
 1. **Initialization**: Creates ``--objects`` initial objects via write
-   (or append for EC pools).
+   (or append for EC pools without overwrites).
 2. **Stress loop**: Generates a randomized stream of up to ``--max-ops``
    operations, each selected by weighted probability from the
    ``--op`` arguments.
@@ -47,11 +47,12 @@ Synopsis
 ::
 
     ceph_test_rados
-        --op <read|write|write_excl|writesame|delete|snap_create|snap_remove|
+        --op <read|write|write_excl|writesame|zero|write_zeros|delete|
+              snap_create|snap_remove|
               rollback|setattr|rmattr|watch|copy_from|hit_set_list|is_dirty|
               undirty|cache_flush|cache_try_flush|cache_evict|append|append_excl|
               set_redirect|unset_redirect|chunk_read|tier_promote|tier_flush|
-              set_chunk|tier_evict> <weight>
+              set_chunk|tier_evict|mapext> <weight>
         [--op <operation_type> <weight> ...]
         [--pool <pool_name>]
         [--max-ops <op_count>]
@@ -61,7 +62,7 @@ Synopsis
         [--min-stride-size <bytes>]
         [--max-stride-size <bytes>]
         [--max-seconds <seconds>]
-        [--ec-pool]
+        [--ec-pool]   (deprecated, ignored)
         [--no-omap]
         [--no-sparse]
         [--pool-snaps]
@@ -119,33 +120,46 @@ Object Geometry
 Pool Type and Behavior
 ----------------------
 
+Pool Support Detection
+~~~~~~~~~~~~~~~~~~~~~~
+
+At startup the tool queries the target pool (``ceph osd pool get``) to
+find out whether it is replicated or erasure coded and which features it
+supports. Operations and features the pool cannot support are removed
+with a ``Warning:`` message and the test continues with the rest; the
+tool does not exit because of an unsupported operation. Replicated pools
+are never restricted.
+
+For erasure-coded pools:
+
+- ``write``, ``write_excl``, ``writesame``, ``zero`` and ``write_zeros``
+  require ``allow_ec_overwrites``.
+- ``mapext`` requires ``allow_ec_optimizations`` and
+  ``preserve_allocation``.
+- Sparse reads (part of ``read``) require ``allow_ec_optimizations`` and
+  ``preserve_allocation``. Without them sparse reads are disabled as if
+  ``--no-sparse`` had been given, and normal reads continue.
+- Omap is disabled when the pool does not report ``supports_omap``.
+
+``preserve_allocation`` can be read with
+``ceph osd pool get <pool> preserve_allocation``. It can only be set with
+``ceph osd pool set <pool> set_pool_flags <n> --yes-i-really-mean-it``.
+
+If no operations remain after filtering, the tool prints an error and
+exits with status 1.
+
 ``--ec-pool``
-    Indicates that the target is an erasure-coded pool **that does not support overwrites**.
-    **Must appear before any** ``--op`` **arguments.**
-    
-    .. note::
-
-       This is largely a legacy parameter. When Ceph originally introduced
-       EC pools, they did not support partial overwrites or sparse reads. Today,
-       if an EC pool supports overwrites (e.g., via BlueStore), you should *not*
-       use this flag, so that ``ceph_test_rados`` can test partial overwrites.
-       In the Teuthology QA suite, setting ``erasure_code_use_overwrites: true``
-       prevents the test runner from passing this flag.
-
-    Using this flag has the following effects:
-    
-    1. Implicitly sets ``--no-sparse``.
-    2. Initial object creation writes use ``append`` mode instead of ``write``.
-    3. Overwrite operations (``write``, ``write_excl``, ``writesame``) are
-       disallowed and will cause startup validation to fail.
+    Deprecated and ignored. The pool type is detected automatically, so
+    the flag is no longer needed. Passing it prints a warning.
 
 ``--no-omap``
-    Disable omap operations. Automatically set if the pool does not
+    Disable omap operations. Set automatically if the pool does not
     support omap (auto-detected at startup).
 
 ``--no-sparse``
-    Disable sparse reads (use full reads only). Automatically set when
-    ``--ec-pool`` is used.
+    Disable sparse reads (use full reads only). Set automatically if an
+    erasure-coded pool lacks ``allow_ec_optimizations`` or
+    ``preserve_allocation``.
 
 ``--pool-snaps``
     Use pool-level snapshots instead of self-managed snapshots.
@@ -218,93 +232,105 @@ weight 50.
 
 .. list-table::
    :header-rows: 1
-   :widths: 20 10 70
+   :widths: 20 25 55
 
    * - Name
-     - Valid with --ec-pool
+     - Requirement on EC pools
      - Description
    * - ``read``
-     - Yes
+     - none
      - Read and verify object data, xattrs, and omap against the model.
    * - ``write``
-     - No
+     - ``allow_ec_overwrites``
      - Random-offset partial write.
    * - ``write_excl``
-     - No
+     - ``allow_ec_overwrites``
      - Random-offset partial write that asserts the object already exists
        (``assert_exists()``) as part of the transaction.
    * - ``writesame``
-     - No
+     - ``allow_ec_overwrites``
      - Write same data pattern across an extent.
+   * - ``zero``
+     - ``allow_ec_overwrites``
+     - Zero a random extent of an object.
+   * - ``write_zeros``
+     - ``allow_ec_overwrites``
+     - Write an extent of explicit zero data.
+   * - ``mapext``
+     - ``allow_ec_optimizations`` and ``preserve_allocation``
+     - Query the allocated extents of an object and verify them against
+       the model.
    * - ``delete``
-     - Yes
+     - none
      - Delete an object.
    * - ``snap_create``
-     - Yes
+     - none
      - Create a snapshot (quiesces in-flight ops first).
    * - ``snap_remove``
-     - Yes
+     - none
      - Remove a snapshot.
    * - ``rollback``
-     - Yes
+     - none
      - Roll back an object to a previous snapshot.
    * - ``setattr``
-     - Yes
+     - none
      - Set random xattrs (and omap if supported).
    * - ``rmattr``
-     - Yes
+     - none
      - Remove random xattrs (and omap if supported).
    * - ``watch``
-     - Yes
+     - none
      - Establish a watch, self-notify, wait for callback.
    * - ``copy_from``
-     - Yes
+     - none
      - Server-side copy between objects in the pool.
    * - ``hit_set_list``
-     - Yes
+     - none
      - List HitSet entries.
    * - ``is_dirty``
-     - Yes
+     - none
      - Check object dirty state (cache tier).
    * - ``undirty``
-     - Yes
+     - none
      - Mark object clean (cache tier).
    * - ``cache_flush``
-     - Yes
+     - none
      - Flush object from cache tier (blocking).
    * - ``cache_try_flush``
-     - Yes
+     - none
      - Try to flush object from cache tier (non-blocking).
    * - ``cache_evict``
-     - Yes
+     - none
      - Evict object from cache tier.
    * - ``append``
-     - Yes
+     - none
      - Append data to an object.
    * - ``append_excl``
-     - Yes
+     - none
      - Append data that asserts the object already exists.
    * - ``set_redirect``
-     - Yes
+     - none
      - Set redirect manifest to low-tier pool.
    * - ``unset_redirect``
-     - Yes
+     - none
      - Remove redirect manifest.
    * - ``chunk_read``
-     - Yes
+     - none
      - Read and verify a chunk from a manifest object.
    * - ``tier_promote``
-     - Yes
+     - none
      - Promote object from lower tier.
    * - ``tier_flush``
-     - Yes
+     - none
      - Flush object to backing tier.
    * - ``set_chunk``
-     - Yes
+     - none
      - Set chunk manifest (requires ``--enable_dedup``).
    * - ``tier_evict``
-     - Yes
+     - none
      - Evict object to backing tier.
+
+Operations are never restricted on replicated pools.
 
 Environment Variables
 ---------------------
@@ -364,10 +390,11 @@ Basic replicated pool test::
       --op write 100 \
       --op delete 10
 
-EC pool (without allow_ec_overwrites) with snapshots::
+EC pool with snapshots (the pool type is detected automatically; ops the
+pool cannot support, such as ``write`` without ``allow_ec_overwrites``,
+are skipped with a warning)::
 
     ceph_test_rados \
-      --ec-pool \
       --pool my-ec-pool \
       --max-ops 4000 \
       --objects 50 \
@@ -405,13 +432,35 @@ corrupt metadata) are detected during reads.
 If no bugs are hit and the execution time/op count is exhausted, the
 tool will exit cleanly with status **0**.
 
-Exit status **1** indicates a startup validation failure (such as
-incompatible arguments).
+Operations or features that the pool does not support produce a
+``Warning:`` message and are skipped; they do not cause a non-zero exit.
+
+Exit status **1** indicates a startup failure, such as invalid arguments
+or no operations remaining to run once unsupported ones have been removed.
+
+Adding a New Operation
+----------------------
+
+1. Add an enumerator to ``TestOpType`` in ``RadosModel.h``, before
+   ``NUM_TEST_OP_TYPES``.
+2. Add a row to ``op_types[]`` in ``TestRados.cc`` with the pool support
+   the operation requires on erasure-coded pools (``SUPPORT_NONE`` if
+   none). The build fails if a ``TestOpType`` has no row.
+3. Add a ``case`` to ``WeightedTestGenerator::gen_op``. There is no
+   ``default:`` label, so the compiler warns about a missing case.
+4. Update ``usage()`` and the operation table in this document.
+
+To add a new kind of pool support, add a value to ``PoolSupport`` and a
+row to ``pool_support_infos[]`` in ``RadosPoolSupport.h``. Features that
+are not operations (sparse reads, omap) are listed in ``pool_features[]``
+in ``TestRados.cc`` and are handled with the same check.
 
 Source Files
 ------------
 
 - ``src/test/osd/TestRados.cc`` — CLI parsing and main loop
+- ``src/test/osd/RadosPoolSupport.h`` — Pool support detection and
+  op/feature gating
 - ``src/test/osd/RadosModel.h`` — Test context and operation classes
 - ``src/test/osd/Object.h`` — Content generation and verification model
 - ``src/test/osd/TestOpStat.h`` — Operation statistics

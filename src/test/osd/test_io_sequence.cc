@@ -93,12 +93,14 @@ TEST(IoSequence, NoReadWhileWholeObjectWriteInFlight) {
           case OpType::TruncateWrite:
           case OpType::TruncateWrite2:
           case OpType::TruncateWrite3:
+          case OpType::ZeroAndTruncate:
             in_flight[primary] = true;
             break;
           case OpType::Read:
           case OpType::Read2:
           case OpType::Read3:
           case OpType::SparseRead:
+          case OpType::Mapext:
           case OpType::Consistency:
             EXPECT_FALSE(in_flight[primary])
                 << seq << " seed " << seed << " step " << step;
@@ -108,6 +110,10 @@ TEST(IoSequence, NoReadWhileWholeObjectWriteInFlight) {
           case OpType::Write2:
           case OpType::Write3:
           case OpType::Append:
+          case OpType::Zero:
+          case OpType::Zero2:
+          case OpType::WriteAndZero:
+          case OpType::WriteZeroData:
           case OpType::FailedWrite:
           case OpType::FailedWrite2:
           case OpType::FailedWrite3:

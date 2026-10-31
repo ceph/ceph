@@ -136,6 +136,8 @@ enum librados_operation {
   LIBRADOS_OPERATION_ORDERSNAP          = 512,
   /* enable/allow >0 return values and payloads on write/update */
   LIBRADOS_OPERATION_RETURNVEC          = 1024,
+  /* enable per-request preserve allocation (zero-block tracking) for EC pools (force_allocated_extents) */
+  LIBRADOS_OPERATION_PRESERVE_ALLOCATION  = 2048,
 };
 /** @} */
 
