@@ -422,6 +422,18 @@ target_include_directories(ceph_test_rgw_gc_log
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} rgw radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# ceph_test_rgw_gc
+add_executable(ceph_test_rgw_gc test_rgw_gc.cc)
+target_link_libraries(ceph_test_rgw_gc
+  rgw_common
+  ${rgw_libs}
+  cls_lock_client
+  cls_rgw_client
+  cls_rgw_gc_client
+  librados
+  ${UNITTEST_LIBS})
+install(TARGETS ceph_test_rgw_gc DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 add_executable(unittest_rgw_shard_io test_rgw_shard_io.cc)

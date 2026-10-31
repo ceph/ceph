@@ -9682,7 +9682,7 @@ next:
     RGWRados* store = rados_store->getRados();
 
     std::optional<int> gc_shard_id = specified_shard_id ? std::optional<int>(shard_id) : std::nullopt;
-    int ret = store->process_gc(!include_all, null_yield, gc_shard_id);
+    int ret = store->process_gc(!include_all, gc_shard_id);
     if (ret < 0) {
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;

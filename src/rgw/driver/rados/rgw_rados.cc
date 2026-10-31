@@ -1377,11 +1377,6 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
 
   obj_expirer = new RGWObjectExpirer(this->driver);
 
-  if (use_gc_thread && use_gc) {
-    gc->start_processor();
-    obj_expirer->start_processor();
-  }
-
   auto& current_period = svc.zone->get_current_period();
   auto& zonegroup = svc.zone->get_zonegroup();
   auto& zone_params = svc.zone->get_zone_params();
@@ -1504,6 +1499,11 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   if (cct->_conf->rgw_data_notify_interval_msec) {
     data_notifier = new RGWDataNotifier(this);
     data_notifier->start();
+  }
+
+  if (use_gc_thread && use_gc) {
+    gc->start_processor(driver->get_io_context());
+    obj_expirer->start_processor();
   }
 
   if (use_lc_thread)
@@ -11324,12 +11324,6 @@ int RGWRados::gc_operate(const DoutPrefixProvider *dpp, string& oid, librados::O
   return rgw_rados_operate(dpp, gc_pool_ctx, oid, std::move(op), y);
 }
 
-int RGWRados::gc_aio_operate(const string& oid, librados::AioCompletion *c,
-                             librados::ObjectWriteOperation *op)
-{
-  return gc_pool_ctx.aio_operate(oid, c, op);
-}
-
 int RGWRados::gc_operate(const DoutPrefixProvider *dpp, string& oid, librados::ObjectReadOperation&& op, bufferlist *pbl, optional_yield y)
 {
   return rgw_rados_operate(dpp, gc_pool_ctx, oid, std::move(op), pbl, y);
@@ -11340,9 +11334,9 @@ int RGWRados::list_gc_objs(int& index, string& marker, uint32_t max, bool expire
   return gc->list(index, marker, max, expired_only, result, truncated, processing_queue, shard_id);
 }
 
-int RGWRados::process_gc(bool expired_only, optional_yield y, std::optional<int> shard_id)
+int RGWRados::process_gc(bool expired_only, std::optional<int> shard_id)
 {
-  return gc->process(expired_only, y, shard_id);
+  return gc->process(expired_only, shard_id);
 }
 
 int RGWRados::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket)
