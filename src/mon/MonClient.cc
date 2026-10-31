@@ -818,6 +818,10 @@ void MonClient::_send_mon_message(MessageRef m)
 void MonClient::_reopen_session(int rank)
 {
   ceph_assert(ceph_mutex_is_locked(monc_lock));
+  if (stopping) {
+    ldout(cct, 5) << __func__ << " dropping because stopping" << dendl;
+    return;
+  }
   ldout(cct, 10) << __func__ << " rank " << rank << dendl;
 
   active_con.reset();
