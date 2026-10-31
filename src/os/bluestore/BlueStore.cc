@@ -14254,7 +14254,7 @@ int BlueStore::_do_gc(
     }
   }
   if (dirty_range_updated) {
-    o->extent_map.fault_range(db, *dirty_start, *dirty_end);
+    o->extent_map.fault_range(db, *dirty_start, *dirty_end - *dirty_start);
   }
 
   dout(30) << __func__ << " alloc write" << dendl;
