@@ -20,6 +20,7 @@
 
 #include "ECTransaction.h"
 #include "ECUtil.h"
+#include "ECWriteJournal.h"
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
 #include "PGLog.h"
@@ -844,7 +845,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     }
   }
 
-  if (size_change || clear_whiteout || first_write_in_interval) {
+  if (size_change || clear_whiteout || first_write_in_interval ||
+      plan.write_all_shards) {
     all_shards_written();
     first_write_in_interval = false;
   } else {
@@ -1316,6 +1318,27 @@ void ECTransaction::generate_transactions(
       ceph_assert(!plans.plans.empty());
       ECTransaction::WritePlanObj &plan = plans.plans.front();
       ceph_assert(plan.hoid == oid);
+
+      if (t.ec_journal_flush || t.ec_journal_marker_delta) {
+        // A flush, or a direct write beside other stripes' records, carries
+        // only its own stripes: merge them into the attr in write order.
+        const std::string attr(ECWriteJournal::materialized_attr);
+        auto& update = op.attr_updates.at(attr);
+        ceph_assert(update);
+        ECWriteJournal::Materialized materialized;
+        auto cursor = update->cbegin();
+        decode(materialized, cursor);
+        const auto& attrs = t.obc_map.at(oid)->attr_cache;
+        ECWriteJournal::Materialized prior;
+        if (auto previous = attrs.find(attr); previous != attrs.end()) {
+          cursor = previous->second.cbegin();
+          decode(prior, cursor);
+        }
+        materialized.merge(prior); // and drops the entries base covers
+        bufferlist encoded;
+        encode(materialized, encoded);
+        update = std::move(encoded);
+      }
 
       Generate generate(t, ec_impl, pgid, sinfo, partial_extents, written_map,
         *transactions, osdmap, oid, op, plan, dpp, entry,

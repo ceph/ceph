@@ -176,6 +176,126 @@ public:
     return legacy.check_recovery_sources(osdmap);
   }
 
+  void drain_ec_journal_for_shutdown(std::function<void(int)> done) override
+  {
+    optimized.drain_journal_for_shutdown(std::move(done));
+  }
+
+  ec_journal_admission_t ec_journal_admit(
+      const hobject_t& oid, const ObjectState& obs, const SnapSet& snapset,
+      snapid_t snap_seq, const std::vector<OSDOp>& ops, bool may_write) override
+  {
+    if (!is_optimized()) {
+      return ec_journal_admission_t::none;
+    }
+    return optimized.journal_admit(oid, obs, snapset, snap_seq, ops, may_write);
+  }
+
+  void ec_journal_write(OpRequestRef op, ObjectContextRef obc) override
+  {
+    ceph_assert(is_optimized());
+    optimized.journal_write(std::move(op), std::move(obc));
+  }
+
+  eversion_t ec_journal_version_now() const override
+  {
+    return is_optimized() ? optimized.journal_version_now() : eversion_t();
+  }
+
+  bool ec_journal_enrolled() const override
+  {
+    return is_optimized() && optimized.journal_enrolled();
+  }
+
+  bool ec_journal_object_dirty(const hobject_t& oid) const override
+  {
+    return is_optimized() && optimized.journal_object_dirty(oid);
+  }
+
+  std::optional<eversion_t> ec_journal_oldest_live(const hobject_t& oid,
+      std::optional<uint64_t> skip_stripe) const override
+  {
+    if (!is_optimized()) {
+      return std::nullopt;
+    }
+    return optimized.journal_oldest_live(oid, skip_stripe);
+  }
+
+  ec_journal_take_t ec_journal_take_for_write(
+      const hobject_t& oid, const interval_set<uint64_t>& written) override
+  {
+    if (!is_optimized()) {
+      return {};
+    }
+    return optimized.journal_take_for_write(oid, written);
+  }
+
+  bool ec_journal_ready(const hobject_t& oid) const override
+  {
+    return !is_optimized() || optimized.journal_ready(oid);
+  }
+
+  std::optional<ec_journal_request_t> ec_journal_find_request(
+      const osd_reqid_t& reqid) const override
+  {
+    if (!is_optimized()) {
+      return std::nullopt;
+    }
+    return optimized.journal_find_request(reqid);
+  }
+
+  void ec_journal_hold_resend(const osd_reqid_t& reqid, OpRequestRef op) override
+  {
+    ceph_assert(is_optimized());
+    optimized.journal_hold_resend(reqid, std::move(op));
+  }
+
+  std::optional<ec_journal_object_meta_t> ec_journal_object_meta(
+      const hobject_t& oid) const override
+  {
+    if (!is_optimized()) {
+      return std::nullopt;
+    }
+    return optimized.journal_object_meta(oid);
+  }
+
+  version_t ec_journal_newest_user_version() const override
+  {
+    return is_optimized() ? optimized.journal_newest_user_version() : 0;
+  }
+
+  bool ec_journal_read_ready(const hobject_t& oid, uint64_t offset,
+                             uint64_t length) override
+  {
+    return !is_optimized() || optimized.journal_read_ready(oid, offset, length);
+  }
+
+  bool ec_journal_flush_in_flight(const hobject_t& oid) const override
+  {
+    return is_optimized() && optimized.journal_flush_in_flight(oid);
+  }
+
+  void ec_journal_on_activate() override
+  {
+    if (is_optimized()) {
+      optimized.journal_on_activate();
+    }
+  }
+
+  void ec_journal_split(spg_t child, ObjectStore::Transaction& t) override
+  {
+    if (is_optimized()) {
+      optimized.journal_split(child, t);
+    }
+  }
+
+  void ec_journal_object_recovered(const hobject_t& oid) override
+  {
+    if (is_optimized()) {
+      optimized.journal_object_recovered(oid);
+    }
+  }
+
   void on_change() override
   {
     if (is_optimized_unchecked()) {
