@@ -76,7 +76,8 @@ int write(const DoutPrefixProvider* dpp,
           const std::map<std::string, ceph::buffer::list>& attrs,
           ceph::real_time mtime,
           bool exclusive,
-          RGWObjVersionTracker& objv);
+          RGWObjVersionTracker& objv,
+          bool from_remote_zone = false);
 
 /// Remove group info and name index
 int remove(const DoutPrefixProvider* dpp,
