@@ -4394,8 +4394,11 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     return;
   }
 
-  if (result == -EAGAIN) {
-    // clean up after the ctx
+  if (result == -EAGAIN || ctx->sent_reply) {
+    // clean up after the ctx. sent_reply: the op was answered while its
+    // ops ran (rep_repair_primary_object), maybe by a nested read (a
+    // cls_cxx_read in a CALL) whose caller swallowed the -EAGAIN;
+    // whatever the result, don't reply again or deliver its data.
     close_op_ctx(ctx);
     return;
   }
@@ -9183,6 +9186,18 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
 
   // prepare the actual mutation
   int result = do_osd_ops(ctx, *ctx->ops);
+  if (ctx->parked_for_repair && result != -EAGAIN &&
+      result != -EINPROGRESS) {
+    // a read parked the op until its object is repaired, and a CALL
+    // around it went on without the -EAGAIN: the op runs again then,
+    // so this run neither replies nor writes. An op after it that went
+    // async (a COPY_FROM, a cls gather, a manifest op) holds the ctx,
+    // and runs it again when it completes; that run, which finds the
+    // op parked already, drops it then
+    dout(10) << __func__ << " parked for repair, dropping result "
+	     << result << dendl;
+    result = -EAGAIN;
+  }
   if (result < 0) {
     if (ctx->op->may_write() &&
 	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
@@ -16008,12 +16023,27 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
     // failed with EAGAIN to the client which will then retry the
     // request to the primary
     dout(10) << __func__ << " not primary or EC direct, failing op with EAGAIN" << dendl;
-    osd->reply_op_error(op, -EAGAIN);
+    // answered once: a read nested in a CALL may not carry the -EAGAIN
+    // back up to execute_ctx
+    if (!ctx->sent_reply) {
+      osd->reply_op_error(op, -EAGAIN);
+      ctx->sent_reply = true;
+    }
     return -EAGAIN;
   }
 
   dout(10) << __func__ << " " << soid
 	   << " peers osd.{" << get_acting_recovery_backfill() << "}" << dendl;
+
+  // The op waits in a list from here on, and runs again once the object
+  // is repaired. A read nested in a CALL may not carry the -EAGAIN back
+  // up to execute_ctx: prepare_transaction() checks the mark instead.
+  // A later read of this run, after a CALL that went on, finds the op
+  // parked already, and does not park it in a second list
+  if (ctx->parked_for_repair) {
+    return -EAGAIN;
+  }
+  ctx->parked_for_repair = true;
 
   if (!is_clean()) {
     block_for_clean(soid, op);
