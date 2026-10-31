@@ -29,7 +29,11 @@ def choose_crypto_caller(name: str = '') -> None:
     if name == _CC_REMOTE:
         import ceph.cryptotools.remote
 
-        _CACHE[_CC_KEY] = ceph.cryptotools.remote.ProcessCryptoCaller()
+        manager = ceph.cryptotools.remote.CryptoProxyManager()
+        manager.start()
+        # Type checking here will likely never check out.
+        # https://github.com/python/typeshed/issues/2356#issuecomment-409970465
+        _CACHE[_CC_KEY] = manager.CryptoCaller()  # type: ignore
         return
     if name == _CC_INTERNAL:
         import ceph.cryptotools.internal
