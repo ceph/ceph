@@ -20,8 +20,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'snap-upgrade task only accepts a dict for configuration'
 
-    fs = Filesystem(ctx)
-    fs.getinfo() # load name
+    fs = Filesystem(ctx, discover=True)
     fs.set_allow_standby_replay(False)
     fs.set_max_mds(1)
     fs.reach_max_mds()
