@@ -2054,6 +2054,9 @@ void MDSRank::reconnect_done()
 void MDSRank::rejoin_joint_start()
 {
   dout(1) << "rejoin_joint_start" << dendl;
+  // Refresh recovery_set so a creating->active rank picks up peers already
+  // in recovery, and a recovering rank picks up newly active survivors.
+  calc_recovery_set();
   mdcache->rejoin_send_rejoins();
 }
 void MDSRank::rejoin_start()
@@ -2176,6 +2179,9 @@ void MDSRank::active_start()
   mdcache->reissue_all_caps();
 
   finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
+
+  if (mdsmap->is_degraded())
+    calc_recovery_set();
 
   quiesce_agent_setup();
 }
