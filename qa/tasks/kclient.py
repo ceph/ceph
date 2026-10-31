@@ -156,7 +156,9 @@ def task(ctx, config):
 
         return forced
 
-    ctx.mounts = mounts
+    # merge with (rather than replace) the mounts of any other mount task
+    # (e.g., ceph-fuse) running before this one
+    ctx.mounts = {**getattr(ctx, 'mounts', {}), **mounts}
     try:
         yield mounts
     except:

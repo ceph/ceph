@@ -1,0 +1,7 @@
+tasks:
+- cephadm.shell:
+    mon.a:
+      - ceph fs dump
+      - ceph osd require-osd-release umbrella # after the upgrade, this should be bumped up
+- volumes_upgrade.post_upgrade:
+- print: "**** done verifying subvolume auto-upgrade, clones and purges"
