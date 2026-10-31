@@ -200,7 +200,9 @@ struct RecoveryMessages {
     bool attrs)
   {
     list<ec_align_t> to_read;
-    to_read.emplace_back(ec_align_t{off, len, 0});
+    // shard data is sent once; keep it out of the sources' buffer cache
+    to_read.emplace_back(
+      ec_align_t{off, len, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED});
     ceph_assert(!recovery_reads.count(hoid));
     want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
     recovery_reads.insert(

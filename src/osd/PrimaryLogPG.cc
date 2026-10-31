@@ -632,6 +632,7 @@ void PrimaryLogPG::maybe_kick_recovery(
   } else {
     dout(7) << "object " << soid << " v " << v << ", recovering." << dendl;
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
+    h->cache_dont_need = false;  // a client op is waiting to read this object
     if (is_missing_object(soid)) {
       recover_missing(soid, v, CEPH_MSG_PRIO_HIGH, h);
     } else if (recovery_state.get_missing_loc().is_deleted(soid)) {

@@ -122,6 +122,26 @@ struct BinnedLRUHandle : public rocksdb::Cache::Handle {
 
   void SetHit() { flags |= 8; }
 
+  // On probation: not yet used in two later age bins, kept at the tail of the LRU list.
+  bool InProbation() { return flags & 16; }
+  void SetInProbation(bool in_probation) {
+    if (in_probation) {
+      flags |= 16;
+    } else {
+      flags &= ~16;
+    }
+  }
+  // While on probation: already used once in a bin later than the one it came in.
+  // (A block that merely straddles two scan chunks gets exactly one such use.)
+  bool HasLaterHit() { return flags & 32; }
+  void SetLaterHit(bool later_hit) {
+    if (later_hit) {
+      flags |= 32;
+    } else {
+      flags &= ~32;
+    }
+  }
+
   void Free() {
     ceph_assert((refs == 1 && InCache()) || (refs == 0 && !InCache()));
     if (helper && helper->del_cb) {
@@ -183,6 +203,7 @@ enum stat_e : int {
   l_lookups,      // increased when trying to find element in shard
   l_hits,         // increased when lookup successful
   l_misses,       // calculated from lookups - hits
+  l_probation,    // bytes of entries used only once so far
   stat_cnt
 };
 
@@ -201,6 +222,7 @@ struct ShardStats {
     "lookups",
     "hits",
     "misses",
+    "probation",
   };
   static constexpr char const* stat_descr[stat_cnt] = {
     "capacity assigned",
@@ -211,6 +233,7 @@ struct ShardStats {
     "lookups for an element",
     "lookup successful",
     "lookup failure",
+    "bytes of entries used only once so far",
   };
   void add(const ShardStats& other) {
     for (int j = 0; j < stat_cnt; j++) {
@@ -330,6 +353,12 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // holding the mutex_
   void EvictFromLRU(size_t charge, BinnedLRUHandle*& deleted);
 
+  // Evict one unreferenced entry from the list onto the deleted chain.
+  void EvictEntry(BinnedLRUHandle* old, BinnedLRUHandle*& deleted);
+
+  // Trim probation to its share, oldest first.
+  void MaintainProbationSize(BinnedLRUHandle*& deleted);
+
   int FreeDeleted(BinnedLRUHandle* deleted);
 
   // Initialized before use.
@@ -355,6 +384,14 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
   // Pointer to head of low-pri pool in LRU list.
   BinnedLRUHandle* lru_low_pri_;
+
+  // Newest entry on probation. Entries used once so far sit at the tail of
+  // the list, below every other low-pri entry, and their total is bounded by
+  // probation_capacity_ (rocksdb_cache_probation_ratio of the capacity).
+  BinnedLRUHandle* lru_probation_;
+  size_t probation_usage_;
+  double probation_ratio_;
+  size_t probation_capacity_;
 
   // Info about the shard
   ShardStats stats;

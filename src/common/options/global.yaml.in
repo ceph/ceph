@@ -3674,6 +3674,21 @@ options:
     https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters for more
     information.'
   default: 20
+- name: rocksdb_cache_probation_ratio
+  type: float
+  level: advanced
+  desc: Share of a binned_lru RocksDB block cache that holds blocks used only once.
+    A new block sits in this probation part and moves to the main part only
+    when it is used again in a later cache age bin; the memory tuner does not
+    grow the cache for blocks still on probation. One pass over many keys (a
+    collection listing, an omap scan) then recycles the probation part instead
+    of filling the cache. 0 disables it. Read when the daemon starts.
+  default: 0.1
+  min: 0
+  max: 1
+  see_also:
+  - rocksdb_cache_type
+  - bluestore_cache_age_bin_interval
 - name: rocksdb_cache_index_and_filter_blocks
   type: bool
   level: dev
@@ -5262,6 +5277,22 @@ options:
   see_also:
   - bluestore_cache_meta_ratio
   with_legacy: true
+- name: bluestore_onode_cache_probation_ratio
+  type: float
+  level: advanced
+  desc: Share of each onode cache shard that holds onodes not yet used again.
+    An onode enters this probation segment on its first use and moves to the
+    main LRU only after it is used in two cache age bins later than the one it
+    came in (see bluestore_cache_age_bin_interval). One pass over many objects
+    (scrub, backfill, writes that are not read back) then recycles the
+    probation segment instead of filling the whole cache. 0 disables it,
+    admitting every onode at once.
+  default: 0.1
+  min: 0
+  max: 1
+  see_also:
+  - bluestore_cache_meta_evict_limit
+  - bluestore_cache_age_bin_interval
 - name: bluestore_cache_autotune
   type: bool
   level: dev

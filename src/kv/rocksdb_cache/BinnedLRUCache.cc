@@ -122,6 +122,11 @@ BinnedLRUCacheShard::BinnedLRUCacheShard(CephContext *c, size_t capacity, bool s
   lru_.next = &lru_;
   lru_.prev = &lru_;
   lru_low_pri_ = &lru_;
+  lru_probation_ = &lru_;
+  probation_usage_ = 0;
+  probation_ratio_ =
+    c ? c->_conf.get_val<double>("rocksdb_cache_probation_ratio") : 0.0;
+  probation_capacity_ = 0;
   SetCapacity(capacity);
 }
 
@@ -208,6 +213,9 @@ void BinnedLRUCacheShard::LRU_Remove(BinnedLRUHandle* e) {
   if (lru_low_pri_ == e) {
     lru_low_pri_ = e->prev;
   }
+  if (lru_probation_ == e) {
+    lru_probation_ = e->prev;
+  }
   e->next->prev = e->prev;
   e->prev->next = e->next;
   e->prev = e->next = nullptr;
@@ -215,6 +223,9 @@ void BinnedLRUCacheShard::LRU_Remove(BinnedLRUHandle* e) {
   if (e->InHighPriPool()) {
     ceph_assert(high_pri_pool_usage_ >= e->charge);
     high_pri_pool_usage_ -= e->charge;
+  } else if (e->InProbation()) {
+    ceph_assert(probation_usage_ >= e->charge);
+    probation_usage_ -= e->charge;
   } else {
     ceph_assert(*(e->age_bin) >= e->charge);
     *(e->age_bin) -= e->charge;
@@ -224,25 +235,56 @@ void BinnedLRUCacheShard::LRU_Remove(BinnedLRUHandle* e) {
 void BinnedLRUCacheShard::LRU_Insert(BinnedLRUHandle* e) {
   ceph_assert(e->next == nullptr);
   ceph_assert(e->prev == nullptr);
-  e->age_bin = age_bins.front();
 
   if (high_pri_pool_ratio_ > 0 && e->IsHighPri()) {
     // Inset "e" to head of LRU list.
+    e->age_bin = age_bins.front();
     e->next = &lru_;
     e->prev = lru_.prev;
     e->prev->next = e;
     e->next->prev = e;
     e->SetInHighPriPool(true);
+    e->SetInProbation(false);
     high_pri_pool_usage_ += e->charge;
     MaintainPoolSize();
+  } else if (probation_ratio_ > 0 &&
+             (!e->HasHit() ||
+              (e->InProbation() &&
+               (e->age_bin == age_bins.front() || !e->HasLaterHit())))) {
+    // (Still) on probation, at the tail of the list: not used since it came
+    // in, used again within its stamp's age bin (one op touching the same
+    // block repeatedly), or used in a later bin for the first time. A block
+    // that straddles two scan chunks sees exactly one later use, so only the
+    // second one, in yet another bin, promotes. Probation bytes are not
+    // binned, so the tuner sees them at the lowest priority.
+    if (!e->InProbation()) {
+      e->age_bin = age_bins.front();
+      e->SetInProbation(true);
+      e->SetLaterHit(false);
+    } else if (e->HasHit() && e->age_bin != age_bins.front()) {
+      e->SetLaterHit(true);
+      e->age_bin = age_bins.front();  // the next use must be later than this
+    }
+    e->next = lru_probation_->next;
+    e->prev = lru_probation_;
+    e->prev->next = e;
+    e->next->prev = e;
+    e->SetInHighPriPool(false);
+    if (lru_low_pri_ == lru_probation_) {
+      lru_low_pri_ = e;  // nothing above probation: e is the newest low-pri entry
+    }
+    lru_probation_ = e;
+    probation_usage_ += e->charge;
   } else {
     // Insert "e" to the head of low-pri pool. Note that when
     // high_pri_pool_ratio is 0, head of low-pri pool is also head of LRU list.
+    e->age_bin = age_bins.front();
     e->next = lru_low_pri_->next;
     e->prev = lru_low_pri_;
     e->prev->next = e;
     e->next->prev = e;
     e->SetInHighPriPool(false);
+    e->SetInProbation(false);
     lru_low_pri_ = e;
     *(e->age_bin) += e->charge;
   }
@@ -274,22 +316,44 @@ void BinnedLRUCacheShard::MaintainPoolSize() {
   }
 }
 
+void BinnedLRUCacheShard::EvictEntry(BinnedLRUHandle* old,
+                                     BinnedLRUHandle*& deleted) {
+  ceph_assert(old->InCache());
+  ceph_assert(old->refs == 1);  // LRU list contains elements which may be evicted
+  stats[l_elems]--;
+  LRU_Remove(old);
+  table_.Remove(old->key(), old->hash);
+  old->SetInCache(false);
+  Unref(old);
+  usage_ -= old->charge;
+  ceph_assert(!old->next);
+  old->next = deleted;
+  deleted = old;
+}
+
 void BinnedLRUCacheShard::EvictFromLRU(size_t charge,
                                  BinnedLRUHandle*& deleted) {
 
   while (usage_ + charge > capacity_ && lru_.next != &lru_) {
-    BinnedLRUHandle* old = lru_.next;
-    ceph_assert(old->InCache());
-    ceph_assert(old->refs == 1);  // LRU list contains elements which may be evicted
-    stats[l_elems]--;
-    LRU_Remove(old);
-    table_.Remove(old->key(), old->hash);
-    old->SetInCache(false);
-    Unref(old);
-    usage_ -= old->charge;
-    ceph_assert(!old->next);
-    old->next = deleted;
-    deleted = old;
+    BinnedLRUHandle* victim = lru_.next;
+    if (victim->InProbation() && probation_usage_ < probation_capacity_ / 2) {
+      // keep room for new blocks to prove themselves: while probation is
+      // below half its share, take the main pool's oldest entry instead
+      BinnedLRUHandle* oldest_main = lru_probation_->next;
+      if (oldest_main != &lru_ && !oldest_main->InHighPriPool()) {
+        victim = oldest_main;
+      }
+    }
+    EvictEntry(victim, deleted);
+  }
+}
+
+// Probation beyond its share goes, oldest first, even while the shard as a
+// whole fits: one pass over many blocks must not grow the cache.
+void BinnedLRUCacheShard::MaintainProbationSize(BinnedLRUHandle*& deleted) {
+  while (probation_usage_ > probation_capacity_ && lru_.next != &lru_ &&
+         lru_.next->InProbation()) {
+    EvictEntry(lru_.next, deleted);
   }
 }
 
@@ -310,7 +374,9 @@ void BinnedLRUCacheShard::SetCapacity(size_t capacity) {
     std::lock_guard<std::mutex> l(mutex_);
     capacity_ = capacity;
     high_pri_pool_capacity_ = capacity_ * high_pri_pool_ratio_;
+    probation_capacity_ = capacity_ * probation_ratio_;
     EvictFromLRU(0, deleted);
+    MaintainProbationSize(deleted);
   }
   // we free the entries here outside of mutex for
   // performance reasons
@@ -322,6 +388,7 @@ ShardStats BinnedLRUCacheShard::GetStats() {
   stats[l_capacity] = capacity_;
   stats[l_usage] = usage_;
   stats[l_pinned] = usage_ - lru_usage_;
+  stats[l_probation] = probation_usage_;
   stats[l_misses] = stats[l_lookups] - stats[l_hits];
   return stats;
 }
@@ -385,6 +452,7 @@ bool BinnedLRUCacheShard::Release(rocksdb::Cache::Handle* handle, bool force_era
   }
   BinnedLRUHandle* e = static_cast<BinnedLRUHandle*>(handle);
   bool last_reference = false;
+  BinnedLRUHandle* deleted = nullptr;
   {
     std::lock_guard<std::mutex> l(mutex_);
     last_reference = Unref(e);
@@ -408,11 +476,15 @@ bool BinnedLRUCacheShard::Release(rocksdb::Cache::Handle* handle, bool force_era
       } else {
         // put the item on the list to be potentially freed
         LRU_Insert(e);
+        // blocks read through a handle enter the list here: keep probation
+        // within its share
+        MaintainProbationSize(deleted);
       }
     }
   }
 
   // free outside of mutex
+  FreeDeleted(deleted);
   if (last_reference) {
     e->Free();
   }
@@ -484,6 +556,7 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
       }
       if (handle == nullptr) {
         LRU_Insert(e);
+        MaintainProbationSize(deleted);
       } else {
         *handle = e;
       }
@@ -730,7 +803,7 @@ void BinnedLRUCache::SetupPerfCounters()
   int l_first = 0;
   int l_last = l_first + 1 + stat_cnt;
   PerfCountersBuilder b(cct, std::string("rocksdb-cache-") + name, l_first, l_last);
-  for (uint32_t j = l_capacity; j <= l_misses; j++) {
+  for (uint32_t j = l_capacity; j < stat_cnt; j++) {
     b.add_u64(1 + j, ShardStats::stat_name[j], ShardStats::stat_descr[j],
       nullptr, PerfCountersBuilder::PRIO_USEFUL);
   }
@@ -901,6 +974,7 @@ void BinnedLRUCache::UpdatePerfCounters() {
   for (int j = l_capacity ; j <= l_elems; j++) {
     perfstats->set(1 + j, stats[j]);
   }
+  perfstats->set(1 + l_probation, stats[l_probation]);
   //increment these, so one can reset perf counters
   ShardStats tmp = stats;
   tmp.sub(prev_stats);
