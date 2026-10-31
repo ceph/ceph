@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include "global/global_context.h"
 
+#include "osd/osd_types.h"
 #include "osdc/Striper.h"
 
 #include <iostream> // for std::cout

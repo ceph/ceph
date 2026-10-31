@@ -15,6 +15,7 @@
 #include "rgw_sync_error_repo.h"
 #include "rgw_coroutine.h"
 #include "rgw_sal.h"
+#include "rgw_tools.h"
 #include "cls/cmpomap/client.h"
 
 namespace rgw::error_repo {

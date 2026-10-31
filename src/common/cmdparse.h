@@ -11,18 +11,10 @@
 #include <optional>
 #include <iosfwd>
 #include <boost/variant.hpp>
+#include "common/cmdparse_fwd.h"
 #include "include/common_fwd.h"
 
 namespace ceph { class Formatter; }
-
-typedef boost::variant<std::string,
-		       bool,
-		       int64_t,
-		       double,
-		       std::vector<std::string>,
-		       std::vector<int64_t>,
-		       std::vector<double>>  cmd_vartype;
-typedef std::map<std::string, cmd_vartype, std::less<>> cmdmap_t;
 
 namespace ceph::common {
 std::string cmddesc_get_prefix(const std::string_view &cmddesc);
