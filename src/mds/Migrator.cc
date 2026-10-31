@@ -2027,7 +2027,10 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
     }
 
     mdcache->touch_dentry_bottom(dn); // move dentry to tail of LRU
-    ++(*num_dentries);
+    // a null dentry has moved to the bottom LRU, which trim() empties
+    // whatever its count: count only what it must take from the main LRU
+    if (!dn->state_test(CDentry::STATE_BOTTOMLRU))
+      ++(*num_dentries);
   }
 
   // subdirs
@@ -3066,7 +3069,8 @@ void Migrator::import_reverse(CDir *dir)
       }
 
       mdcache->touch_dentry_bottom(dn); // move dentry to tail of LRU
-      ++num_dentries;
+      if (!dn->state_test(CDentry::STATE_BOTTOMLRU))
+        ++num_dentries;
     }
   }
 
