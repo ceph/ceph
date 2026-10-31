@@ -2,10 +2,46 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "rgw_url.h"
+#include "rgw_common.h"
 #include <string>
+#include <string_view>
 #include <gtest/gtest.h>
 
 using namespace rgw;
+
+// The lenient string-returning url_decode() keeps its historical behaviour,
+// which RGWPutObj::init_processing's copy-source empty-check (PR #63521) relies
+// on: a bad hex digit empties the whole result, and a trailing '%' is dropped.
+TEST(TestURLDecode, LenientLegacyBehaviour)
+{
+  EXPECT_EQ(url_decode("repro/%zz"), "");         // bad hex digit -> empty
+  EXPECT_EQ(url_decode("repro/k%"), "repro/k");   // trailing '%' -> dropped
+  EXPECT_EQ(url_decode("repro/k%25"), "repro/k%");
+  EXPECT_EQ(url_decode("repro/%7A%7A"), "repro/zz");
+}
+
+// The strict url_decode() overload reports a malformed percent-escape so that
+// request-routing callers can reject it instead of routing on a silently
+// altered path that names a different resource.
+TEST(TestURLDecode, StrictRejectsMalformed)
+{
+  std::string dest;
+  EXPECT_FALSE(url_decode("repro/%zz", dest));  // bad hex digit
+  EXPECT_FALSE(url_decode("repro/k%", dest));   // trailing '%'
+  EXPECT_FALSE(url_decode("repro/%2", dest));   // short escape (one hex digit)
+  EXPECT_FALSE(url_decode("%", dest));          // lone '%'
+}
+
+TEST(TestURLDecode, StrictAcceptsWellFormed)
+{
+  std::string dest;
+  ASSERT_TRUE(url_decode("repro/k", dest));
+  EXPECT_EQ(dest, "repro/k");
+  ASSERT_TRUE(url_decode("repro/k%25", dest));   // '%25' -> '%'
+  EXPECT_EQ(dest, "repro/k%");
+  ASSERT_TRUE(url_decode("repro/%7A%7A", dest)); // '%7A%7A' -> 'zz'
+  EXPECT_EQ(dest, "repro/zz");
+}
 
 TEST(TestURL, SimpleAuthority)
 {
