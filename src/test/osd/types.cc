@@ -30,6 +30,7 @@
 #include <iostream> // for std::cout
 #include <iterator>
 #include <initializer_list>
+#include <type_traits>
 
 using namespace std;
 
@@ -131,6 +132,9 @@ TEST(osd_types_wire, watch_response_preserves_legacy_list_encoding)
 
 TEST(osd_types_wire, hit_set_history_preserves_legacy_list_encoding)
 {
+  static_assert(std::is_nothrow_move_constructible_v<pg_hit_set_history_t>);
+  static_assert(std::is_nothrow_move_constructible_v<pg_info_t>);
+
   pg_hit_set_info_t oldest(false);
   oldest.begin = utime_t(1, 2);
   oldest.end = utime_t(3, 4);
