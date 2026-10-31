@@ -4,6 +4,7 @@
 #include "ConfigMap.h"
 #include "crush/CrushWrapper.h"
 #include "common/entity_name.h"
+#include "common/Formatter.h"
 
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
