@@ -6004,6 +6004,65 @@ def test_object_copy_versioned_bucket():
 
 @pytest.mark.fails_on_dbstore
 @pytest.mark.versioning
+def test_object_copy_versioned_bucket_returns_version_id():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+    size = 3
+    data = bytearray(size)
+    data_str = data.decode()
+    response = client.put_object(Bucket=bucket_name, Key='src', Body=data)
+    src_version_id = response['VersionId']
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'src', 'VersionId': src_version_id}
+    response = client.copy_object(Bucket=bucket_name, CopySource=copy_source, Key='dst')
+    version_id1 = response.get('VersionId')
+    assert version_id1
+    assert version_id1 != src_version_id
+    assert client.head_object(Bucket=bucket_name, Key='dst')['VersionId'] == version_id1
+
+    # copying onto the same key again creates and returns another version
+    response = client.copy_object(Bucket=bucket_name, CopySource=copy_source, Key='dst')
+    version_id2 = response.get('VersionId')
+    assert version_id2
+    assert version_id2 != version_id1
+    assert client.head_object(Bucket=bucket_name, Key='dst')['VersionId'] == version_id2
+
+    response = client.list_object_versions(Bucket=bucket_name, Prefix='dst')
+    assert sorted(v['VersionId'] for v in response['Versions']) == sorted([version_id1, version_id2])
+
+    response = client.get_object(Bucket=bucket_name, Key='dst', VersionId=version_id1)
+    body = _get_body(response)
+    assert data_str == body
+    assert size == response['ContentLength']
+
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+def test_object_copy_versioned_to_other_bucket_returns_version_id():
+    src_bucket_name = get_new_bucket()
+    dst_bucket_name = get_new_bucket()
+    client = get_client()
+    check_configure_versioning_retry(dst_bucket_name, "Enabled", "Enabled")
+    client.put_object(Bucket=src_bucket_name, Key='src', Body='foo')
+
+    # unversioned source, versioned destination
+    copy_source = {'Bucket': src_bucket_name, 'Key': 'src'}
+    response = client.copy_object(Bucket=dst_bucket_name, CopySource=copy_source, Key='dst')
+    version_id = response.get('VersionId')
+    assert version_id
+    assert client.head_object(Bucket=dst_bucket_name, Key='dst')['VersionId'] == version_id
+
+def test_object_copy_unversioned_bucket_no_version_id():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='src', Body='foo')
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'src'}
+    response = client.copy_object(Bucket=bucket_name, CopySource=copy_source, Key='dst')
+    assert 'VersionId' not in response
+
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_object_copy_versioned_url_encoding():
     bucket = get_new_bucket_resource()
     check_configure_versioning_retry(bucket.name, "Enabled", "Enabled")
