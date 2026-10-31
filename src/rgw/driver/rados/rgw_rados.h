@@ -18,6 +18,7 @@
 #include "common/async/context_pool.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
+#include "rgw/datum/adapters/cls/olh_types.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
 #include "cls/timeindex/cls_timeindex_types.h"
@@ -1491,12 +1492,12 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   int bucket_index_read_olh_log(const DoutPrefixProvider *dpp,
                                 RGWBucketInfo& bucket_info, RGWObjState& state,
                                 const rgw_obj& obj_instance, uint64_t ver_marker,
-                                std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated, optional_yield y);
+                                ::cls::rgw::olh::reply& page, optional_yield y);
   int bucket_index_trim_olh_log(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver, optional_yield y);
   int bucket_index_clear_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const std::string& olh_tag, const rgw_obj& obj_instance, optional_yield y);
   int apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState& obj_state,
 		    RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                    bufferlist& obj_tag, std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
+                    bufferlist& obj_tag, const ::cls::rgw::olh::reply& page,
                     uint64_t *plast_ver, optional_yield y, bool null_verid,
 		    rgw_zone_set *zones_trace = nullptr,
 		    bool log_op = true,

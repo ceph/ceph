@@ -14,6 +14,8 @@
 #include "cls/rgw_gc/cls_rgw_gc_const.h"
 #include "cls/queue/cls_queue_src.h"
 
+#include "rgw/datum/adapters/cls/queued_gc.h"
+
 #define GC_LIST_DEFAULT_MAX 128
 
 using std::string;
@@ -27,11 +29,34 @@ using ceph::real_time;
 CLS_VER(1,0)
 CLS_NAME(rgw_gc)
 
+static int read_urgent_data_xattr(cls_method_context_t hctx,
+                                  std::unordered_map<string, real_time>& entries)
+{
+  bufferlist bytes;
+  const int result = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bytes);
+  if (result == -ENOENT || result == -ENODATA) {
+    entries.clear();
+    return 0;
+  }
+  if (result < 0) {
+    CLS_LOG(0, "ERROR: reading urgent data xattr returned %d", result);
+    return result;
+  }
+  try {
+    auto cursor = bytes.cbegin();
+    decode(entries, cursor);
+  } catch (const ceph::buffer::error&) {
+    CLS_LOG(1, "ERROR: failed to decode urgent data xattr");
+    return -EINVAL;
+  }
+  return 0;
+}
+
 static int cls_rgw_gc_queue_init(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
 
-  cls_rgw_gc_queue_init_op op;
+  ::cls::rgw::queued_gc_datum::init_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -56,7 +81,7 @@ static int cls_rgw_gc_queue_init(cls_method_context_t hctx, bufferlist *in, buff
 static int cls_rgw_gc_queue_enqueue(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
-  cls_rgw_gc_set_entry_op op;
+  ::cls::rgw::gc_datum::set_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -93,7 +118,7 @@ static int cls_rgw_gc_queue_enqueue(cls_method_context_t hctx, bufferlist *in, b
 static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
-  cls_rgw_gc_list_op op;
+  ::cls::rgw::gc_datum::list_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -126,7 +151,7 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
   list_op.max = op.max;
   list_op.start_marker = op.marker;
 
-  cls_rgw_gc_list_ret list_ret;
+  ::cls::rgw::gc_datum::reply list_ret;
   uint32_t num_entries = 0; //Entries excluding the deferred ones
   bool is_truncated = true;
   string next_marker;
@@ -141,7 +166,7 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
     next_marker = op_ret.next_marker;
   
     if (op_ret.entries.size()) {
-      for (auto it : op_ret.entries) {
+      for (const auto& it : op_ret.entries) {
         cls_rgw_gc_obj_info info;
         try {
           decode(info, it.data);
@@ -161,38 +186,21 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
         }
         //Search in xattrs
         if (! found && urgent_data.num_xattr_urgent_entries > 0) {
-          bufferlist bl_xattrs;
-          int ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl_xattrs);
-          if (ret < 0 && (ret != -ENOENT && ret != -ENODATA)) {
-            CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
+          std::unordered_map<string, real_time> xattr_urgent_data_map;
+          const int ret = read_urgent_data_xattr(hctx, xattr_urgent_data_map);
+          if (ret < 0) {
             return ret;
           }
-          if (ret != -ENOENT && ret != -ENODATA) {
-            std::unordered_map<string,ceph::real_time> xattr_urgent_data_map;
-            auto iter = bl_xattrs.cbegin();
-            try {
-              decode(xattr_urgent_data_map, iter);
-            } catch (ceph::buffer::error& err) {
-              CLS_LOG(1, "ERROR: cls_rgw_gc_queue_list_entries(): failed to decode xattrs urgent data map\n");
-              return -EINVAL;
-            } //end - catch
-            auto xattr_iter = xattr_urgent_data_map.find(info.tag);
-            if (xattr_iter != xattr_urgent_data_map.end()) {
-              if (xattr_iter->second > info.time) {
-                CLS_LOG(1, "INFO: cls_rgw_gc_queue_list_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
-                continue;
-              }
+          auto xattr_iter = xattr_urgent_data_map.find(info.tag);
+          if (xattr_iter != xattr_urgent_data_map.end()) {
+            if (xattr_iter->second > info.time) {
+              CLS_LOG(1, "INFO: cls_rgw_gc_queue_list_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
+              continue;
             }
-          } // end - ret != ENOENT && ENODATA
-        } // end - if not found
-        if (op.expired_only) {
-          real_time now = ceph::real_clock::now();
-          if (info.time <= now) {
-            list_ret.entries.emplace_back(info);
           }
-          //Can break out here if info.time > now, since all subsequent entries won't have expired
-        } else {
-          list_ret.entries.emplace_back(info);
+        } // end - if not found
+        if (!op.expired_only || info.time <= ceph::real_clock::now()) {
+          list_ret.entries.emplace_back(std::move(info));
         }
         num_entries++;
       }
@@ -224,7 +232,7 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
 {
   auto in_iter = in->cbegin();
 
-  cls_rgw_gc_queue_remove_entries_op op;
+  ::cls::rgw::queued_gc_datum::remove_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -270,7 +278,7 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
     unsigned int index = 0;
     // If data is not empty
     if (op_ret.entries.size()) {
-      for (auto it : op_ret.entries) {
+      for (const auto& it : op_ret.entries) {
         cls_rgw_gc_obj_info info;
         try {
           decode(info, it.data);
@@ -297,33 +305,22 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
         }//end-if map end
         if (! found && urgent_data.num_xattr_urgent_entries > 0) {
           //Search in xattrs
-          bufferlist bl_xattrs;
-          int ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl_xattrs);
-          if (ret < 0 && (ret != -ENOENT && ret != -ENODATA)) {
-            CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
+          std::unordered_map<string, real_time> xattr_urgent_data_map;
+          const int ret = read_urgent_data_xattr(hctx, xattr_urgent_data_map);
+          if (ret < 0) {
             return ret;
           }
-          if (ret != -ENOENT && ret != -ENODATA) {
-            std::unordered_map<string,ceph::real_time> xattr_urgent_data_map;
-            auto iter = bl_xattrs.cbegin();
-            try {
-              decode(xattr_urgent_data_map, iter);
-            } catch (ceph::buffer::error& err) {
-              CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode xattrs urgent data map\n");
-              return -EINVAL;
-            } //end - catch
-            auto xattr_iter = xattr_urgent_data_map.find(info.tag);
-            if (xattr_iter != xattr_urgent_data_map.end()) {
-              if (xattr_iter->second > info.time) {
-                CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
-                continue;
-              } else if (xattr_iter->second == info.time) {
-                CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
-                xattr_urgent_data_map.erase(info.tag); //erase entry from map, as it will be removed later
-                urgent_data.num_xattr_urgent_entries -= 1;
-              }
+          auto xattr_iter = xattr_urgent_data_map.find(info.tag);
+          if (xattr_iter != xattr_urgent_data_map.end()) {
+            if (xattr_iter->second > info.time) {
+              CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
+              continue;
+            } else if (xattr_iter->second == info.time) {
+              CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
+              xattr_urgent_data_map.erase(info.tag); //erase entry from map, as it will be removed later
+              urgent_data.num_xattr_urgent_entries -= 1;
             }
-          } // end - ret != ENOENT && ENODATA
+          }
         }// search in xattrs
         num_entries++;
       }//end-for
@@ -375,7 +372,7 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
   int ret = 0;
   auto in_iter = in->cbegin();
 
-  cls_rgw_gc_queue_defer_entry_op op;
+  ::cls::rgw::gc_datum::set_request op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -411,36 +408,25 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
     tag_found = true;
     has_urgent_data = true;
   } else { //search in xattrs
-    bufferlist bl_xattrs;
-    int ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl_xattrs);
-    if (ret < 0 && (ret != -ENOENT && ret != -ENODATA)) {
-      CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
+    std::unordered_map<string, real_time> xattr_urgent_data_map;
+    const int ret = read_urgent_data_xattr(hctx, xattr_urgent_data_map);
+    if (ret < 0) {
       return ret;
     }
-    if (ret != -ENOENT && ret != -ENODATA) {
-      std::unordered_map<string,ceph::real_time> xattr_urgent_data_map;
-      auto iter = bl_xattrs.cbegin();
-      try {
-        decode(xattr_urgent_data_map, iter);
-      } catch (ceph::buffer::error& err) {
-        CLS_LOG(1, "ERROR: cls_rgw_gc_queue_update_entry(): failed to decode xattrs urgent data map\n");
-        return -EINVAL;
-      } //end - catch
-      auto xattr_iter = xattr_urgent_data_map.find(op.info.tag);
-      if (xattr_iter != xattr_urgent_data_map.end()) {
-        xattr_iter->second = op.info.time;
-        tag_found = true;
-        //write the updated map back
-        bufferlist bl_map;
-        encode(xattr_urgent_data_map, bl_map);
-        ret = cls_cxx_setxattr(hctx, "cls_queue_urgent_data", &bl_map);
-        CLS_LOG(20, "%s(): setting attr: %s", __func__, "cls_queue_urgent_data");
-        if (ret < 0) {
-          CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, "cls_queue_urgent_data", ret);
-          return ret;
-        }
+    auto xattr_iter = xattr_urgent_data_map.find(op.info.tag);
+    if (xattr_iter != xattr_urgent_data_map.end()) {
+      xattr_iter->second = op.info.time;
+      tag_found = true;
+      //write the updated map back
+      bufferlist bl_map;
+      encode(xattr_urgent_data_map, bl_map);
+      const int ret = cls_cxx_setxattr(hctx, "cls_queue_urgent_data", &bl_map);
+      CLS_LOG(20, "%s(): setting attr: %s", __func__, "cls_queue_urgent_data");
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, "cls_queue_urgent_data", ret);
+        return ret;
       }
-    }// end ret != ENOENT ...
+    }
   }
 
   if (! tag_found) {
@@ -458,21 +444,10 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
       urgent_data.num_head_urgent_entries -= 1;
       has_urgent_data = false;
 
-      bufferlist bl_xattrs;
-      int ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl_xattrs);
-      if (ret < 0 && (ret != -ENOENT && ret != -ENODATA)) {
-        CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
+      std::unordered_map<string, real_time> xattr_urgent_data_map;
+      int ret = read_urgent_data_xattr(hctx, xattr_urgent_data_map);
+      if (ret < 0) {
         return ret;
-      }
-      std::unordered_map<string,ceph::real_time> xattr_urgent_data_map;
-      if (ret != -ENOENT && ret != -ENODATA) {
-        auto iter = bl_xattrs.cbegin();
-        try {
-          decode(xattr_urgent_data_map, iter);
-        } catch (ceph::buffer::error& err) {
-          CLS_LOG(1, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode xattrs urgent data map\n");
-          return -EINVAL;
-        } //end - catch
       }
       xattr_urgent_data_map.insert({op.info.tag, op.info.time});
       urgent_data.num_xattr_urgent_entries += 1;

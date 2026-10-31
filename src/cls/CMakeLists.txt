@@ -233,6 +233,19 @@ if (WITH_RADOSGW)
       $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
   endif()
 
+  if(NOT TARGET datum::zpp)
+    message(FATAL_ERROR "RGW CLS requires Datum's zpp adapter (DATUM_ENABLE_ZPP=ON)")
+  endif()
+  add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../rgw/datum/adapters" datum-adapters)
+  foreach(target cls_user cls_user_client)
+    target_sources(${target} PRIVATE $<TARGET_OBJECTS:cls_user_datum>)
+  endforeach()
+  target_link_libraries(cls_user PRIVATE ${FMT_LIB})
+  foreach(target cls_rgw cls_rgw_client)
+    target_sources(${target} PRIVATE
+      $<TARGET_OBJECTS:cls_rgw_datum> $<TARGET_OBJECTS:cls_rgw_datum_gc>)
+  endforeach()
+
 endif (WITH_RADOSGW)
 
 # cls_cephfs
@@ -339,6 +352,10 @@ if (WITH_RADOSGW)
     rgw_gc/cls_rgw_gc_client.cc
     rgw/cls_rgw_types.cc)
   add_library(cls_rgw_gc_client STATIC ${cls_rgw_gc_client_srcs})
+  target_link_libraries(cls_rgw_gc PRIVATE ${FMT_LIB})
+  foreach(target cls_rgw_gc cls_rgw_gc_client)
+    target_sources(${target} PRIVATE $<TARGET_OBJECTS:cls_rgw_datum_gc>)
+  endforeach()
   target_include_directories(cls_rgw_gc_client
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")

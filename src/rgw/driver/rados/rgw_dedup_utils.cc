@@ -14,6 +14,7 @@
 
 #include "rgw_dedup_utils.h"
 #include "common/ceph_crypto.h"
+#include "rgw/datum/adapters/ceph/buffer_cursor.h"
 #include "include/container_ios.h"
 
 namespace rgw::dedup {
@@ -319,28 +320,11 @@ namespace rgw::dedup {
                                 size_t len,
                                 const DoutPrefixProvider* dpp)
   {
-    const char *p = nullptr;
-    size_t n = bl_itr.get_ptr_and_advance(len, &p);
-    if (n == len) {
-      // we got a zero-copy raw pointer to contiguous data on the buffer-list
-      return p;
+    const auto bytes = ::ceph::buffer::read_contiguous(bl_itr, {data_buff, len});
+    if (bytes.data() == data_buff) {
+      ldpp_dout(dpp, 20) << __func__ << "::copied=" << bytes.size() << dendl;
     }
-
-    std::vector<int> vec;
-    // otherwise - copy the data to the @data_buff
-    char *p_buff = data_buff;
-    do {
-      vec.push_back(n);
-      std::memcpy(p_buff, p, n);
-      p_buff += n;
-      len -= n;
-      if (len > 0) {
-        n = bl_itr.get_ptr_and_advance(len, &p);
-      }
-    } while (len > 0);
-
-    ldpp_dout(dpp, 20) << __func__ << "::vec=" << vec << dendl;
-    return data_buff;
+    return bytes.data();
   }
 
   static const char* s_urgent_msg_names[] = {

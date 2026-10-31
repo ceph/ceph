@@ -53,6 +53,7 @@ extern "C" {
 
 #ifdef WITH_RADOSGW_RADOS
 #include "radosgw-admin/orphan.h"
+#include "radosgw-admin/olh.h"
 #include "radosgw-admin/sync_checkpoint.h"
 #endif
 #include "radosgw-admin/radosgw-admin.h"
@@ -8410,8 +8411,7 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    map<uint64_t, vector<rgw_bucket_olh_log_entry> > log;
-    bool is_truncated;
+    ::cls::rgw::olh::reply page;
 
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(object);
 
@@ -8422,15 +8422,13 @@ next:
 
     RGWObjState& state = static_cast<rgw::sal::RadosObject*>(obj.get())->get_state();
 
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bucket_index_read_olh_log(dpp(), bucket->get_info(), state, obj->get_obj(), 0, &log, &is_truncated, null_yield);
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bucket_index_read_olh_log(
+        dpp(), bucket->get_info(), state, obj->get_obj(), 0, page, null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    formatter->open_object_section("result");
-    encode_json("is_truncated", is_truncated, formatter.get());
-    encode_json("log", log, formatter.get());
-    formatter->close_section();
+    ::rgw::admin::dump_olh_log(page, *formatter);
     formatter->flush(cout);
   }
 
