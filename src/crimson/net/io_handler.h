@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <vector>
 
 #include <seastar/core/lowres_clock.hh>
@@ -126,7 +127,7 @@ public:
  */
 public:
   seastar::shard_id get_shard_id() const final {
-    return shard_states->get_shard_id();
+    return current_sid;
   }
 
   bool is_connected() const final {
@@ -508,6 +509,9 @@ public:
 
 private:
   shard_states_ref_t shard_states;
+
+  // the shard of shard_states, which can be read from any core
+  std::atomic<seastar::shard_id> current_sid;
 
   proto_crosscore_ordering_t proto_crosscore;
 
