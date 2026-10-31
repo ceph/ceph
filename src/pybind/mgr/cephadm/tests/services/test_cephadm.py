@@ -170,6 +170,9 @@ class TestCephadmService:
 
         assert "client.crash.host" == \
             service_registry.get_service('crash').get_auth_entity("id1", "host")
+        assert "client.crash.node1.example.org" == \
+            service_registry.get_service('crash').get_auth_entity(
+                "node1", "node1.example.org")
         with pytest.raises(OrchestratorError):
             service_registry.get_service('crash').get_auth_entity("id1", "")
             service_registry.get_service('crash').get_auth_entity("id1")
