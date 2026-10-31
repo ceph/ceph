@@ -143,6 +143,7 @@ public:
 
     stats->pool_stat[1] = store_statfs_t{};
     stats->set_src(entity_name_t::OSD(0));
+    stats->epoch = 1;  // the OSD is at the osdmap epoch set up above
     stats->osd_stat.seq = 1;
     pgstat.state = PG_STATE_ACTIVE;
     pgstat.reported_epoch = 1;
