@@ -80,6 +80,84 @@ PGShardManager::get_pg_stats() const
     });
 }
 
+seastar::future<> PGShardManager::prime_merges(epoch_t first, epoch_t last)
+{
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  const int whoami = get_local_state().whoami;
+
+  // Collect every merge participant (target + sources) this OSD is in the
+  // acting set for, keyed to the epoch the merge occurs at.  Derived purely
+  // from the OSDMap (pg_num shrink + CRUSH acting set) so participants are
+  // found even when none are live locally yet -- e.g. a target CRUSH has just
+  // remapped onto this OSD because pgp_num dropped alongside pg_num.
+  std::set<std::pair<spg_t, epoch_t>> merge_pgs;
+
+  // If first-1 was trimmed away, we have no local pre-merge map to compare;
+  // start one epoch later (first itself is in the just-stored range).
+  if (!get_osd_singleton_state().superblock.get_maps().contains(first - 1)) {
+    ++first;
+  }
+  for (epoch_t e = first; e <= last; ++e) {
+    cached_map_t prev = co_await get_shard_services().get_map(e - 1);
+    cached_map_t cur  = co_await get_shard_services().get_map(e);
+
+    for (const auto& [poolid, pool] : cur->get_pools()) {
+      if (!prev->have_pg_pool(poolid)) {
+        continue;
+      }
+      const unsigned old_pg_num = prev->get_pg_num(poolid);
+      const unsigned new_pg_num = pool.get_pg_num();
+      if (!new_pg_num || new_pg_num >= old_pg_num) {
+        continue;  // not a merge step
+      }
+
+      // Each ps in [new_pg_num, old_pg_num) is a merge source; from any one we
+      // derive the surviving target (is_merge_source climbs ancestors until
+      // the seed drops below new_pg_num) and the full sibling source set.
+      //
+      // Replicated pools only (NO_SHARD) for now.  spg_t::is_split() and
+      // is_merge_source() preserve the shard, so classic does not need a
+      // separate EC path: OSDShard::identify_splits_and_merges() seeds
+      // discovery from each live pg_slot, which already carries the real
+      // shard id (e.g. 2.7s2).  We derive participants from the OSDMap alone
+      // (no live-PG walk), so we must synthesize spg_t from pg_t seeds; for
+      // EC that means enumerating each acting shard explicitly (future work).
+      for (unsigned ps = new_pg_num; ps < old_pg_num; ++ps) {
+        spg_t src(pg_t(ps, poolid), shard_id_t::NO_SHARD);
+        spg_t target;
+        if (!src.is_merge_source(old_pg_num, new_pg_num, &target)) {
+          continue;
+        }
+        std::set<spg_t> participants;  // the sibling sources...
+        target.is_split(new_pg_num, old_pg_num, &participants);
+        participants.insert(target);   // ...plus the target
+        for (const auto& p : participants) {
+          if (cur->is_up_acting_osd_shard(p, whoami)) {
+            merge_pgs.emplace(p, e);
+          }
+        }
+      }
+    }
+  }
+
+  logger().debug("PGShardManager::prime_merges: {} participants in e{}..{}",
+                 merge_pgs.size(), first, last);
+
+  // Create an empty placeholder for each participant on the shard its mapping
+  // resolves to.  prime_merge_participant() is a no-op for any already live or
+  // not actually owned here, and registers the rest at (merge_epoch - 1)
+  // WITHOUT advancing; broadcast_map_to_pgs() advances all PGs together
+  // through the merge epoch.
+  for (const auto& [pgid, merge_epoch] : merge_pgs) {
+    auto [core, store_index] = co_await get_pg_to_shard_mapping().get_or_create_pg_mapping(pgid);
+    co_await shard_services.invoke_on(
+      core,
+      [pgid, store_index, merge_epoch](ShardServices& tss) {
+        return tss.prime_merge_participant(pgid, store_index, merge_epoch);
+      });
+  }
+}
+
 seastar::future<> PGShardManager::broadcast_map_to_pgs(epoch_t epoch)
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
