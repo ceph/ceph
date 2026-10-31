@@ -3582,6 +3582,18 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
+  // once the upgrade to a release is committed, OSDs of earlier releases
+  // must not join
+  if (uint64_t need = ceph_release_server_feature(osdmap.require_osd_release);
+      (m->osd_features & need) != need) {
+    mon.clog->info() << "disallowing boot of OSD "
+                     << m->get_orig_source_inst()
+                     << " because require_osd_release is "
+                     << osdmap.require_osd_release
+                     << " and the osd is of an earlier release";
+    goto ignore;
+  }
+
   // See crimson/osd/osd.cc: OSD::_send_boot
   if (auto type_iter = m->metadata.find("osd_type");
       type_iter != m->metadata.end()) {
