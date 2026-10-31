@@ -1380,6 +1380,18 @@ options:
   desc: Inject a network congestions that stuck with N times operations
   default: 0
   with_legacy: true
+- name: ms_inject_stall_server_ident
+  type: bool
+  level: dev
+  desc: Do not reply to the client identification of non-monitor peers
+  long_desc: When accepting a msgr2 connection from a peer that is not a
+    monitor, stop the handshake after authentication instead of replying
+    with the server identification, so that the peer's session never
+    becomes ready.
+  fmt_desc: Debug option; do not configure.
+  default: false
+  flags:
+  - runtime
 - name: ms_time_events_min_wait_interval
   type: uint
   level: dev
