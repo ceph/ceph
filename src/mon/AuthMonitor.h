@@ -16,7 +16,9 @@
 #ifndef CEPH_AUTHMONITOR_H
 #define CEPH_AUTHMONITOR_H
 
+#include <list>
 #include <map>
+#include <optional>
 #include <set>
 
 #include "auth/cephx/CephxKeyServer.h"
@@ -106,6 +108,16 @@ public:
 
 private:
   std::vector<Incremental> pending_auth;
+
+  // Health verdicts of the committed entities, only those with something to
+  // report: check_health() runs on every proposal and must not walk them all.
+  struct entity_health_t {
+    std::list<std::string> bad_caps;
+    std::string insecure_key;
+  };
+  std::map<EntityName, entity_health_t> entity_health;
+  std::optional<version_t> entity_health_ver;  ///< key server version entity_health reflects
+  bool entity_health_validate_all_caps = false;  ///< mon_auth_validate_all_caps it was built with
   uint64_t max_global_id = 0;
   uint64_t last_allocated_id = 0;
   boost::intrusive_ptr<CephContext> cct;
@@ -168,6 +180,9 @@ public:
 private:
   bool prepare_used_pending_keys(MonOpRequestRef op);
 
+  std::optional<entity_health_t> get_entity_health(const EntityName& entity,
+                                                   const EntityAuth& auth);
+  void refresh_entity_health(const std::set<EntityName>& changed);
   bool check_health();
 
   // propose pending update to peers
