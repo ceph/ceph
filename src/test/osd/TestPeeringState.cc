@@ -3017,6 +3017,7 @@ TEST_F(PeeringStateTest, VulnerabilityWindowNewReplicaInheritsOpenWindow) {
   call_prepare_stats(acting_primary);        // window opens
   const utime_t onset = get_ps(0)->get_info().stats.last_degraded;
   ASSERT_GT(onset, get_ps(0)->get_info().stats.last_clean);
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
   // --- A brand-new, empty replica (OSD 8) joins WHILE the window is still
   // open. Its very first log+info exchange goes through
