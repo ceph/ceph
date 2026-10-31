@@ -880,7 +880,9 @@ protected:
   mutable std::mutex completion_mtx;
   std::optional<nsfs::AdoptionCompletion> completion;
   std::atomic<bool> completed{false};
-  void set_completion(std::optional<nsfs::AdoptionCompletion> c);
+  /* One-way, since nothing removes the record.  The first record seen
+   * ends adoption's in-memory state. */
+  void set_completion(nsfs::AdoptionCompletion c);
   /* `automatic` adoption while serving;  null in any other mode, in a
    * process with no background tasks, and once adoption is complete at
    * startup.  Published whole, since the `adoption` hint can start it
@@ -1718,6 +1720,10 @@ public:
    * test driver, and by each adoption command before it acts, which is
    * how a record another gateway wrote is seen. */
   int load_adoption_completion(const DoutPrefixProvider* dpp);
+  /* adoption_complete(), re-reading the record first when this gateway
+   * has not seen it:  a read of NooBaa's store is the reason to look,
+   * since another gateway may have written it. */
+  bool reread_adoption_complete(const DoutPrefixProvider* dpp);
   /* An operator's decision that one NooBaa record goes no further,
    * with the reason.  -EINVAL with no reason;  -ENOENT for an `_id` the
    * store does not hold, or no store;  -EEXIST for a record fully
@@ -1785,6 +1791,9 @@ public:
 			   const std::string& bucket_name,
 			   std::map<std::string, std::string>* report = nullptr);
 
+  /* Leave out the identities an operator abandoned.  Returns how many. */
+  size_t drop_abandoned_identities(const DoutPrefixProvider* dpp,
+				   nsfs::NooBaaStoreContents& contents);
   /* NooBaa's principals as RGW names them, for the identities the import
    * has written:  what adoption rewrites a bucket policy through. */
   int imported_identity_mapping(const DoutPrefixProvider* dpp,

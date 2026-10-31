@@ -308,3 +308,28 @@ TEST_F(AdoptionQueueTest, ShutdownStopsAWalkAndTheWorkers)
   EXPECT_EQ(-ECANCELED, result.load());
   EXPECT_EQ(-ESHUTDOWN, q.promote("c", 0ms, null_yield));
 }
+
+/* Completion stops the queue from its drain, where shutdown() cannot
+ * run:  the workers leave without being waited for. */
+TEST_F(AdoptionQueueTest, StopFromTheDrainEndsTheWorkers)
+{
+  AdoptionQueue* self = nullptr;
+  AdoptionQueue q(ioc, 2,
+    [this] (const std::string& b, const std::atomic<bool>&) {
+      adopted(b);
+      return 0;
+    },
+    [this, &self] {
+      self->stop();
+      drained();
+    });
+  self = &q;
+  q.enqueue("b");
+  q.start();
+  ASSERT_TRUE(wait_for([this] { return drains == 1; }));
+  for (int i = 0; i < 10000 && q.stats().workers != 0; ++i) {
+    std::this_thread::sleep_for(1ms);
+  }
+  EXPECT_EQ(0u, q.stats().workers);
+  EXPECT_EQ(-ESHUTDOWN, q.promote("c", 0ms, null_yield));
+}

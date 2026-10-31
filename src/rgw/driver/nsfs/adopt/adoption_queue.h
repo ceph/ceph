@@ -65,6 +65,9 @@ public:
   AdoptionQueue& operator=(const AdoptionQueue&) = delete;
 
   void start();
+  /* Stops the workers without waiting for them:  each leaves at its
+   * next turn.  From any thread, the drain's included. */
+  void stop();
   /* Stops the workers and waits for them.  Not from an executor thread:
    * it waits for hops that complete through the executor. */
   void shutdown();
@@ -92,6 +95,8 @@ public:
     uint64_t failed{0};
     uint64_t promotions{0};
     uint64_t waits_timed_out{0};
+    /* workers not yet exited */
+    uint64_t workers{0};
   };
   Stats stats() const;
 

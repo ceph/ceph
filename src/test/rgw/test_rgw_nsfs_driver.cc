@@ -617,6 +617,10 @@ public:
 
   TestDriver(std::string _base_path) : NSFSDriver(nullptr), driver_base(_base_path)
   { }
+  /* with an io_context, for `automatic` adoption's queue */
+  TestDriver(std::string _base_path, boost::asio::io_context* io)
+    : NSFSDriver(nullptr, io), driver_base(_base_path)
+  { }
   virtual ~TestDriver() = default;
 
   int init(const DoutPrefixProvider* dpp,
@@ -695,6 +699,25 @@ public:
   }
 
   virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
+
+  /* adoption's in-memory state, which completion ends */
+  void fail_adoption_for_test(const std::string& bucket, int r) {
+    std::lock_guard l{adoption_failures_mtx};
+    adoption_failures[bucket] = r;
+  }
+  void hold_unadopted_mapping_for_test() {
+    std::lock_guard l{unadopted_mapping_mtx};
+    unadopted_mapping = std::make_shared<const nsfs::IdentityMapping>();
+  }
+  bool holds_unadopted_mapping_for_test() {
+    std::lock_guard l{unadopted_mapping_mtx};
+    return bool(unadopted_mapping);
+  }
+  /* the queue's workers not yet exited, if there is a queue */
+  std::optional<uint64_t> adoption_queue_workers_for_test() {
+    auto* q = adoption_queue.load(std::memory_order_acquire);
+    return q ? std::optional<uint64_t>{q->stats().workers} : std::nullopt;
+  }
 };
 
 class TestUser : public StoreUser {
@@ -17086,6 +17109,35 @@ TEST_F(NSFSPlaceOverNooBaaTest, CreationInsideANooBaaBucketsDirectoryIsRejected)
   EXPECT_TRUE(sf::is_directory(nb_dir / "inner"));
 }
 
+/* A completion record another gateway wrote is seen at the first read
+ * of NooBaa's store, which it stops, and it ends adoption's in-memory
+ * state as a record written here does (DECISIONS.md 2026-10-31). */
+TEST_F(NSFSPlaceOverNooBaaTest, AnotherGatewaysCompletionIsSeenWhereTheStoreIsRead)
+{
+  const sf::path nb_dir = bp / "noobaa-data" / "theirs";
+  sf::create_directories(nb_dir);
+  write_nb_record("DISABLED", "", "2026-01-02T03:04:05.000Z",
+		     nb_dir.string());
+  EXPECT_EQ(place("another-name", nb_dir), -EEXIST)
+      << "the control:  the record holds its directory";
+
+  driver->fail_adoption_for_test(testname, -EIO);
+  driver->hold_unadopted_mapping_for_test();
+  nsfs::AdoptionCompletion c;
+  c.completed_at = "2026-10-31T00:00:00Z";
+  c.config_root = conf_root().string();
+  ASSERT_EQ(driver->get_identity_db()->put_adoption_completion(env->dpp, c),
+	    0);
+  EXPECT_FALSE(driver->adoption_complete())
+      << "seen before anything read the store";
+
+  EXPECT_EQ(place("another-name", nb_dir), 0)
+      << "the store was read after completion";
+  EXPECT_TRUE(driver->adoption_complete());
+  EXPECT_FALSE(driver->adoption_failed(testname));
+  EXPECT_FALSE(driver->holds_unadopted_mapping_for_test());
+}
+
 /* ------------------------------------------------------------------ *
  * I6 -- the mode, and what it does.
  *
@@ -17862,6 +17914,74 @@ TEST_F(NooBaaAbandonTest, AnAbandonedIdentityIsNotImported)
   std::string owner;
   EXPECT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
 		env->dpp, NB_OWNER_ID, owner), -ENOENT);
+}
+
+/* An abandoned identity does not stop the buckets either:  each bucket's
+ * import plans its owners as the identity import did, without it. */
+TEST_F(NooBaaAbandonTest, AnAbandonedIdentityDoesNotStopTheBuckets)
+{
+  static constexpr const char* ORPHAN_ID = "6560e1f1c0ffee00000000aa";
+  add_nb_identity(ORPHAN_ID, std::string(R"({"_id":")") + ORPHAN_ID +
+		  R"(","name":"orphan","email":"orphan",)"
+		  R"("owner":"6560e1f1c0ffee00000000ee"})");
+  EXPECT_LT(run(), 0) << "the control:  the orphan stops the import";
+
+  ASSERT_EQ(abandon(ORPHAN_ID, "its owner was deleted in NooBaa"), 0);
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+}
+
+/* Under `automatic`, an identity import that fails leaves no queue,
+ * and abandoning the identity that failed it starts one;  the queue
+ * adopts, observes completion, and completion stops it
+ * (DECISIONS.md 2026-10-31). */
+TEST_F(NooBaaAbandonTest, AbandoningWhatStoppedTheIdentitiesStartsTheQueue)
+{
+  static constexpr const char* ORPHAN_ID = "6560e1f1c0ffee00000000aa";
+  add_nb_identity(ORPHAN_ID, std::string(R"({"_id":")") + ORPHAN_ID +
+		  R"(","name":"orphan","email":"orphan",)"
+		  R"("owner":"6560e1f1c0ffee00000000ee"})");
+
+  boost::asio::io_context io;
+  auto guard = boost::asio::make_work_guard(io);
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+    threads.emplace_back([&io] { io.run(); });
+  }
+  bucket.reset();
+  driver.reset();
+  driver = std::make_unique<TestDriver>(bp, &io);
+  driver->set_background_tasks(true);
+  ASSERT_EQ(driver->init(env->dpp), 0);
+
+  /* the control:  the import fails on the orphan, so nothing adopts */
+  std::map<std::string, std::string> out;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"mode", "automatic"}}, &out), -EAGAIN);
+  EXPECT_EQ(driver->adoption_queue_workers_for_test(), std::nullopt)
+      << "a queue started with the identities not imported";
+
+  ASSERT_EQ(abandon(ORPHAN_ID, "its owner was deleted in NooBaa"), 0);
+  EXPECT_NE(driver->adoption_queue_workers_for_test(), std::nullopt)
+      << "the abandonment did not start the queue";
+
+  for (int i = 0; i < 1000 && !driver->adoption_complete(); ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_TRUE(driver->adoption_complete());
+  for (int i = 0; i < 1000 && driver->adoption_queue_workers_for_test() !=
+	 std::optional<uint64_t>{0}; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_EQ(driver->adoption_queue_workers_for_test(),
+	    std::optional<uint64_t>{0})
+      << "completion did not stop the queue";
+
+  driver->shutdown();
+  guard.reset();
+  for (auto& t : threads) {
+    t.join();
+  }
 }
 
 /* import_noobaa_bucket(), adoption's first step, imports a bucket's

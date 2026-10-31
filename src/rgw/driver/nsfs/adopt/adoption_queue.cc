@@ -75,7 +75,7 @@ void AdoptionQueue::start()
   }
 }
 
-void AdoptionQueue::shutdown()
+void AdoptionQueue::stop()
 {
   std::vector<std::shared_ptr<boost::asio::steady_timer>> timers;
   {
@@ -90,6 +90,11 @@ void AdoptionQueue::shutdown()
   for (auto& t : timers) {
     cancel_on(t);
   }
+}
+
+void AdoptionQueue::shutdown()
+{
+  stop();
   std::unique_lock l{mtx};
   exited.wait(l, [this] { return live == 0; });
 }
@@ -307,6 +312,7 @@ AdoptionQueue::Stats AdoptionQueue::stats() const
   s.failed = failed;
   s.promotions = promotions;
   s.waits_timed_out = waits_timed_out;
+  s.workers = live;
   return s;
 }
 

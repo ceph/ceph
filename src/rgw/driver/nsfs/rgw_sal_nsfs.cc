@@ -5845,7 +5845,7 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
      * **It never adopts.**  Resolving where a bucket lives is
      * read-only;  adoption happens because the mode says so, or by
      * explicit command. */
-    if (!nb_bucket_state_strategy || adoption_complete()) {
+    if (!nb_bucket_state_strategy || reread_adoption_complete(dpp)) {
       return nullptr;
     }
     auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
@@ -5969,7 +5969,8 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
   }
   /* NooBaa has no tenants, so only an untenanted name can be one of
    * its buckets. */
-  if (b.tenant.empty() && nb_bucket_state_strategy && !adoption_complete()) {
+  if (b.tenant.empty() && nb_bucket_state_strategy &&
+      !reread_adoption_complete(dpp)) {
     auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
       nb_bucket_state_strategy.get());
     std::string recorded;
@@ -6172,7 +6173,7 @@ int NSFSDriver::check_clear_of_noobaa_paths(const DoutPrefixProvider* dpp,
 					    const std::string& name,
 					    const std::string& path)
 {
-  if (!nb_bucket_state_strategy || adoption_complete()) {
+  if (!nb_bucket_state_strategy || reread_adoption_complete(dpp)) {
     return 0;
   }
   auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
@@ -6274,7 +6275,7 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   /* The name is taken by a row, or by a NooBaa record until adoption
    * is complete -- the same rejection creation makes.  Nesting with
    * another bucket's directory is the row insert's. */
-  if (nb_bucket_state_strategy && !adoption_complete()) {
+  if (nb_bucket_state_strategy && !reread_adoption_complete(dpp)) {
     auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
       nb_bucket_state_strategy.get());
     std::string recorded;
@@ -7484,7 +7485,7 @@ int NSFSDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
 	untenanted.insert(r.bucket_name);
       }
     }
-    if (nb_bucket_state_strategy && !adoption_complete()) {
+    if (nb_bucket_state_strategy && !reread_adoption_complete(dpp)) {
       std::vector<std::string> records;
       ret = static_cast<nsfs::NooBaaBucketStateStrategy*>(
 	nb_bucket_state_strategy.get())->list_records(dpp, records);
@@ -18336,18 +18337,8 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
     put_report("version_skew", std::to_string(skew.size()));
     return -ENOTSUP;
   }
-  /* an identity an operator abandoned is not imported, and does not
-   * stop the others -- a collision is the usual reason to abandon one */
-  {
-    const size_t before = contents.identities.size();
-    std::erase_if(contents.identities, [this, dpp](const auto& id) {
-      nsfs::AbandonedRecord r;
-      return userDB->get_abandoned(dpp, id.id, r) == 0;
-    });
-    if (contents.identities.size() != before) {
-      put_report("identities_abandoned",
-	  std::to_string(before - contents.identities.size()));
-    }
+  if (const size_t n = drop_abandoned_identities(dpp, contents); n) {
+    put_report("identities_abandoned", std::to_string(n));
   }
 
   nsfs::NooBaaMasterKeys keys;
@@ -18588,6 +18579,14 @@ int NSFSDriver::abandon_noobaa_record(const DoutPrefixProvider* dpp,
    * under `automatic` nothing else would look again */
   if (auto* q = adoption_queue.load(std::memory_order_acquire); q) {
     q->recheck();
+  } else if ((adoption_mode == AdoptionMode::Automatic) && io_context &&
+	     background_tasks) {
+    /* no queue:  the identity import failed at startup, and this
+     * record may be what stopped it */
+    if (int r2 = start_adoption_queue(dpp); r2 < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: adoption did not start: "
+	<< cpp_strerror(-r2) << dendl;
+    }
   }
   out = std::move(r);
   return 0;
@@ -18633,7 +18632,6 @@ int NSFSDriver::load_adoption_completion(const DoutPrefixProvider* dpp)
   nsfs::AdoptionCompletion c;
   const int ret = userDB->get_adoption_completion(dpp, c);
   if (ret == -ENOENT) {
-    set_completion(std::nullopt);
     return 0;
   }
   if (ret < 0) {
@@ -18643,11 +18641,38 @@ int NSFSDriver::load_adoption_completion(const DoutPrefixProvider* dpp)
   return 0;
 }
 
-void NSFSDriver::set_completion(std::optional<nsfs::AdoptionCompletion> c)
+void NSFSDriver::set_completion(nsfs::AdoptionCompletion c)
 {
-  std::lock_guard l{completion_mtx};
-  completion = std::move(c);
-  completed.store(completion.has_value(), std::memory_order_release);
+  {
+    std::lock_guard l{completion_mtx};
+    if (completion) {
+      return;
+    }
+    completion = std::move(c);
+    completed.store(true, std::memory_order_release);
+  }
+  /* every bucket is adopted or abandoned, and no policy is served
+   * through NooBaa's identities */
+  {
+    std::lock_guard l{adoption_failures_mtx};
+    adoption_failures.clear();
+  }
+  invalidate_unadopted_mapping();
+  if (auto* q = adoption_queue.load(std::memory_order_acquire); q) {
+    q->stop();
+  }
+}
+
+bool NSFSDriver::reread_adoption_complete(const DoutPrefixProvider* dpp)
+{
+  if (adoption_complete()) {
+    return true;
+  }
+  if (int r = load_adoption_completion(dpp); r < 0) {
+    ldpp_dout(dpp, 1) << "nsfs: the completion record did not read: "
+      << cpp_strerror(-r) << ";  NooBaa's store is read" << dendl;
+  }
+  return adoption_complete();
 }
 
 /* Whether this pass has consumed NooBaa's store, and if it has, the
@@ -18865,12 +18890,30 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
   return ret;
 }
 
+/* An identity an operator abandoned is not imported, and does not stop
+ * the others -- a collision is the usual reason to abandon one.
+ * Returns how many were left out. */
+size_t NSFSDriver::drop_abandoned_identities(
+  const DoutPrefixProvider* dpp, nsfs::NooBaaStoreContents& contents)
+{
+  const size_t before = contents.identities.size();
+  std::erase_if(contents.identities, [this, dpp](const auto& id) {
+    nsfs::AbandonedRecord r;
+    return userDB->get_abandoned(dpp, id.id, r) == 0;
+  });
+  return before - contents.identities.size();
+}
+
 int NSFSDriver::imported_identity_mapping(const DoutPrefixProvider* dpp,
 					  const nsfs::NooBaaStoreContents& contents,
 					  nsfs::IdentityMapping& out)
 {
+  /* planned as the identity import was, or an abandoned identity's
+   * collision fails every bucket's mapping */
+  nsfs::NooBaaStoreContents planned = contents;
+  drop_abandoned_identities(dpp, planned);
   nsfs::ImportPlan plan;
-  const int ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
+  const int ret = nsfs::build_import_plan(dpp, ctx(), planned, plan,
 					  get_identity_db());
   if (ret < 0) {
     return ret;
@@ -19044,7 +19087,7 @@ int NSFSDriver::start_adoption_queue(const DoutPrefixProvider* dpp,
   if (adoption_queue_shut) {
     return -ESHUTDOWN;
   }
-  if (adoption_queue_owner) {
+  if (adoption_queue_owner || adoption_complete()) {
     return 0;
   }
   if (adopt_identities(dpp, null_yield) < 0) {
@@ -19096,6 +19139,9 @@ int NSFSDriver::start_adoption_queue(const DoutPrefixProvider* dpp,
     return 0;
   };
   auto drained = [this, root] {
+    if (adoption_complete()) {
+      return;
+    }
     nsfs::NooBaaConfigStore store(root);
     nsfs::NooBaaStoreContents contents;
     if (store.read(&driver_prefix, contents) < 0) {
