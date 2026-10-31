@@ -4,9 +4,11 @@
 #pragma once
 
 #include <iostream>
+#include <unordered_map>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/set.hpp>
+#include <boost/intrusive/unordered_set.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
@@ -1483,6 +1485,25 @@ class LogicalCachedExtent : public CachedExtent {
 public:
   using CachedExtent::CachedExtent;
 
+  // Hook for Cache's laddr index (laddr -> cached metadata extent).
+  // auto_unlink: the extent removes itself from the index upon destruction,
+  // and any unlink is O(1) with no laddr re-hash. The index holds no ref, so
+  // it never keeps an evicted extent alive.
+  using laddr_index_hook_t = boost::intrusive::unordered_set_member_hook<
+    boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
+
+  // Key extractor for the laddr index: the entry's key is always get_laddr().
+  struct laddr_index_key_of {
+    using type = laddr_t;
+    laddr_t operator()(const LogicalCachedExtent &extent) const {
+      return extent.get_laddr();
+    }
+  };
+
+  // Links this extent into Cache's laddr index (managed by Cache).
+  // Unlinked when not indexed; while linked, the key is get_laddr().
+  laddr_index_hook_t laddr_index_hook;
+
   LogicalCachedExtent(const LogicalCachedExtent& other)
     : CachedExtent(other),
      seen_by_users(other.seen_by_users) {}
@@ -1552,7 +1573,9 @@ public:
     ceph_abort_msg("Unsupported");
   }
 
-  virtual ~LogicalCachedExtent() {}
+  // laddr_index_hook is auto_unlink: if this extent is still indexed,
+  // its destructor removes it from Cache's laddr index automatically.
+  virtual ~LogicalCachedExtent() = default;
 
 protected:
 
@@ -1577,6 +1600,8 @@ protected:
   virtual void do_on_state_commit() {}
 
 private:
+  friend class Cache;
+
   // the logical address of the extent, and if shared,
   // it is the intermediate_base, see BtreeLBAMapping comments.
   laddr_t laddr = L_ADDR_NULL;
@@ -1587,6 +1612,20 @@ private:
   // user must initialize the logical extent upon the first access.
   bool seen_by_users = false;
 };
+
+// Cache's laddr index: laddr -> cached metadata extent, keyed by get_laddr().
+// Intrusive and non-owning (holds no ref); extents self-unlink on destruction.
+// Note: a fixed bucket array is supplied at construction (see Cache); the set
+// does not rehash, so lookups degrade gracefully if it grows beyond capacity.
+using laddr_extent_index_t = boost::intrusive::unordered_set<
+  LogicalCachedExtent,
+  boost::intrusive::member_hook<
+    LogicalCachedExtent,
+    LogicalCachedExtent::laddr_index_hook_t,
+    &LogicalCachedExtent::laddr_index_hook>,
+  boost::intrusive::key_of_value<LogicalCachedExtent::laddr_index_key_of>,
+  boost::intrusive::constant_time_size<false>,
+  boost::intrusive::power_2_buckets<true>>;
 
 using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;
 struct ref_laddr_cmp {
