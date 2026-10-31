@@ -1569,6 +1569,28 @@ def _osd_unit_poststop_commands(
 ##################################
 
 
+def bind_listen_socket(port: int) -> socket.socket:
+    try:
+        s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    except OSError as e:
+        logger.debug(f'Unable to create IPv6 socket, falling back to IPv4: {e}')
+    else:
+        try:
+            # Allow rebinding after restart while the prior socket is in TIME_WAIT.
+            # Does not allow stealing a port from a live LISTEN socket.
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+            s.bind(('::', port))
+            return s
+        except OSError as e:
+            s.close()
+            logger.debug(f'Unable to bind dual-stack socket on port {port}, falling back to IPv4: {e}')
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(('0.0.0.0', port))
+    return s
+
+
 class MgrListener(Thread):
     def __init__(self, agent: 'CephadmAgent') -> None:
         self.agent = agent
@@ -1577,11 +1599,7 @@ class MgrListener(Thread):
         super(MgrListener, self).__init__(target=self.run)
 
     def run(self) -> None:
-        listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # Allow rebinding after restart while the prior socket is in TIME_WAIT.
-        # Does not allow stealing a port from a live LISTEN socket.
-        listenSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listenSocket.bind(('0.0.0.0', int(self.agent.listener_port)))
+        listenSocket = bind_listen_socket(int(self.agent.listener_port))
         listenSocket.settimeout(60)
         listenSocket.listen(1)
         ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -2439,26 +2457,24 @@ def infer_mon_network(ctx: CephadmContext, mon_eps: List[EndPoint]) -> Optional[
 
 def prepare_mon_addresses(ctx: CephadmContext) -> Tuple[str, bool, Optional[str]]:
     """Get mon public network configuration."""
-    ipv6 = False
     addrv_args: List[EndPoint] = []
     mon_addrv: str = ''  # i.e: [v2:192.168.100.1:3300,v1:192.168.100.1:6789]
 
     if ctx.mon_ip:
-        ipv6 = is_ipv6(ctx.mon_ip)
-        if ipv6:
+        if is_ipv6(ctx.mon_ip):
             ctx.mon_ip = wrap_ipv6(ctx.mon_ip)
         addrv_args = parse_mon_ip(ctx.mon_ip)
         mon_addrv = build_addrv_params(addrv_args)
     elif ctx.mon_addrv:
-        ipv6 = ctx.mon_addrv.count('[') > 1
         addrv_args = parse_mon_addrv(ctx.mon_addrv)
         mon_addrv = ctx.mon_addrv
     elif ctx.mon_net:
         selected_ip = select_ip_from_network(ctx, ctx.mon_net)
         ctx.mon_ip = selected_ip
-        ipv6 = is_ipv6(selected_ip)
         addrv_args = parse_mon_ip(selected_ip)
         mon_addrv = build_addrv_params(addrv_args)
+
+    ipv6 = any(not ep.is_ipv4 for ep in addrv_args)
 
     if addrv_args:
         for end_point in addrv_args:
@@ -2708,6 +2724,15 @@ def create_mgr(
     is_available(ctx, 'mgr', is_mgr_available)
 
 
+def bootstrap_host_addr(ctx: CephadmContext) -> Optional[str]:
+    if ctx.mon_ip:
+        mon_ip = wrap_ipv6(ctx.mon_ip) if is_ipv6(ctx.mon_ip) else ctx.mon_ip
+        return parse_mon_ip(mon_ip)[0].ip
+    if ctx.mon_addrv:
+        return parse_mon_addrv(ctx.mon_addrv)[0].ip
+    return None
+
+
 def prepare_ssh(
     ctx: CephadmContext,
     cli: Callable, wait_for_mgr_restart: Callable
@@ -2754,11 +2779,9 @@ def prepare_ssh(
     logger.info('Adding host %s...' % host)
     try:
         args = ['orch', 'host', 'add', host]
-        if ctx.mon_ip:
-            args.append(unwrap_ipv6(ctx.mon_ip))
-        elif ctx.mon_addrv:
-            addrv_args = parse_mon_addrv(ctx.mon_addrv)
-            args.append(unwrap_ipv6(addrv_args[0].ip))
+        host_addr = bootstrap_host_addr(ctx)
+        if host_addr:
+            args.append(host_addr)
         cli(args)
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))

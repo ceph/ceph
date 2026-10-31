@@ -862,9 +862,8 @@ class AgentMessageThread(threading.Thread):
             return
         for retry_wait in [3, 5]:
             try:
-                agent_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                agent_socket = socket.create_connection((self.addr, self.port))
                 secure_agent_socket = ssl_ctx.wrap_socket(agent_socket, server_hostname=self.addr)
-                secure_agent_socket.connect((self.addr, self.port))
                 msg = (bytes_len + self.data)
                 secure_agent_socket.sendall(msg.encode('utf-8'))
                 self.agent_response = secure_agent_socket.recv(1024).decode()
