@@ -1839,6 +1839,9 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
                              period, cerr, force, *site);
     if (ret < 0) {
       cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
+      // the commit didn't complete and the period may still carry the
+      // staging id, don't let the period pusher distribute it
+      return ret;
     }
     (void) cfgstore->realm_notify_new_period(dpp(), null_yield, period);
     return ret;
