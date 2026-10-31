@@ -139,11 +139,11 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
     assert _run_cephadm.mock_calls == [
         mock.call(host, 'osd', 'ceph-volume',
                   ['--', '--log-level', 'info', 'lvm', 'list', '--format', 'json'],
-                  no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False),
+                  no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False, timeout=None),
         mock.call(host, f'osd.{osd_id}', ['_orch', 'deploy'], [], stdin=mock.ANY, error_ok=True, use_current_daemon_image=False),
         mock.call(host, 'osd', 'ceph-volume',
                   ['--', '--log-level', 'info', 'raw', 'list', '--format', 'json'],
-                  no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False),
+                  no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False, timeout=None),
     ]
     dd = cephadm_module.cache.get_daemon(f'osd.{osd_id}', host=host)
     assert dd.name() == f'osd.{osd_id}'
@@ -1440,11 +1440,11 @@ class TestCephadm(object):
                 stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume', ['--', '--log-level', 'info', 'lvm', 'list', '--format', 'json'],
-                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
+                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False, timeout=None
             )
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume', ['--', '--log-level', 'info', 'raw', 'list', '--format', 'json'],
-                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
+                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False, timeout=None
             )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1488,11 +1488,11 @@ class TestCephadm(object):
             )
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume', ['--', '--log-level', 'info', 'lvm', 'list', '--format', 'json'],
-                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
+                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False, timeout=None
             )
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume', ['--', '--log-level', 'info', 'raw', 'list', '--format', 'json'],
-                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
+                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False, timeout=None
             )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -3039,10 +3039,10 @@ Traceback (most recent call last):
             assert _run_cephadm.mock_calls == [
                 mock.call('test', 'osd', 'ceph-volume',
                           ['--', '--log-level', 'info', 'inventory', '--format=json-pretty', '--filter-for-batch'], image='',
-                          no_fsid=False, error_ok=False, log_output=False, use_current_daemon_image=False),
+                          no_fsid=False, error_ok=False, log_output=False, use_current_daemon_image=False, timeout=None),
                 mock.call('test', 'osd', 'ceph-volume',
                           ['--', '--log-level', 'info', 'inventory', '--format=json-pretty'], image='',
-                          no_fsid=False, error_ok=False, log_output=False, use_current_daemon_image=False),
+                          no_fsid=False, error_ok=False, log_output=False, use_current_daemon_image=False, timeout=None),
             ]
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
