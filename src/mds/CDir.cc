@@ -2070,7 +2070,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     clog->error() << "dir " << dirfrag() << " object missing on disk; some "
                      "files may be lost (" << get_trimmed_path() << ")";
 
-    go_bad(complete);
+    go_bad();
     return;
   }
 
@@ -2084,14 +2084,14 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	   << ": " << err.what() << dendl;
       clog->warn() << "Corrupt fnode header in " << dirfrag() << ": "
 		   << err.what() << " (" << get_trimmed_path() << ")";
-      go_bad(complete);
+      go_bad();
       return;
     }
     if (!p.end()) {
       clog->warn() << "header buffer of dir " << dirfrag() << " has "
 		  << hdrbl.length() - p.get_off() << " extra bytes ("
                   << get_trimmed_path() << ")";
-      go_bad(complete);
+      go_bad();
       return;
     }
   }
@@ -2320,7 +2320,7 @@ void CDir::go_bad_dentry(snapid_t last, std::string_view dname)
   }
 }
 
-void CDir::go_bad(bool complete)
+void CDir::go_bad()
 {
   dout(10) << __func__ << " " << frag << dendl;
   const bool fatal = mdcache->mds->damage_table.notify_dirfrag(
@@ -2330,16 +2330,20 @@ void CDir::go_bad(bool complete)
     ceph_abort();  // unreachable, damaged() respawns us
   }
 
-  if (complete) {
-    if (get_version() == 0) {
-      auto _fnode = allocate_fnode();
-      _fnode->version = 1;
-      set_fresh_fnode(std::move(_fnode));
-    }
-    
-    state_set(STATE_BADFRAG);
-    mark_complete();
+  /*
+   * A missing object or a bad header spoils the whole dirfrag, even
+   * when only some keys were asked for.  Mark it complete in either
+   * case, so that the waiters woken below find nothing left to fetch
+   * instead of reading the same object again.
+   */
+  if (get_version() == 0) {
+    auto _fnode = allocate_fnode();
+    _fnode->version = 1;
+    set_fresh_fnode(std::move(_fnode));
   }
+
+  state_set(STATE_BADFRAG);
+  mark_complete();
 
   state_clear(STATE_FETCHING);
   auth_unpin(this);

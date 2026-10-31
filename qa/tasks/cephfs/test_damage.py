@@ -740,3 +740,105 @@ class TestDamageExport(CephFSTestCase):
         # Migrator.cc: FAILED ceph_assert(dir->get_projected_version() == dir->get_version())
         self.assertEqual(rank0['gid'], self.fs.get_rank(rank=0)['gid'],
                          "rank 0 restarted while exporting")
+
+
+class TestDamageRejoin(CephFSTestCase):
+    MDSS_REQUIRED = 2
+    CLIENTS_REQUIRED = 1
+
+    def _assert_dirfrag_damaged(self, ino, rank=0):
+        damage = self.fs.rank_tell(["damage", "ls"], rank=rank)
+        self.assertTrue(any(d['damage_type'] == "dir_frag" and d['ino'] == ino
+                            for d in damage), f"no dir_frag damage entry: {damage}")
+
+    def _rejoin_undef_inode_missing_dirfrag(self, prefetch):
+        """
+        That a rank whose dirfrag object is missing can still rejoin when a
+        surviving rank holds replicas of inodes in that dirfrag, so that
+        they are rejoined as undefined inodes that cannot be loaded.
+        """
+
+        self.config_set('mds', 'mds_dir_prefetch', prefetch)
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+
+        # an empty directory is never exported, so give d1 an entry first
+        self.mount_a.run_shell_payload("mkdir d0 d1 && touch d1/keep")
+        self.mount_a.setfattr("d1", "ceph.dir.pin", "1")
+        self._wait_subtrees([('/d1', 1)], status=status, rank=1)
+
+        # the hard link makes rank 1 replicate d0/f from rank 0
+        self.mount_a.run_shell_payload("touch d0/f && ln d0/f d1/link && stat d1/link")
+        d0_ino = self.mount_a.path_to_ino("d0")
+        f_ino = self.mount_a.path_to_ino("d0/f")
+        self.fs.rank_tell(["dump", "inode", str(f_ino)], rank=1)
+        self.mount_a.umount_wait()
+
+        self.fs.rank_tell(["flush", "journal"], rank=0)
+        time.sleep(5)
+        self.fs.rank_tell(["flush", "journal"], rank=0)
+
+        self.fs.set_joinable(False)
+        self.fs.rank_fail(rank=0)
+        self.wait_until_true(lambda: 0 in self.fs.get_mds_map()['failed'],
+                             timeout=30)
+        self.fs.radosm(["rm", "{0:x}.00000000".format(d0_ino)])
+        self.fs.set_joinable(True)
+
+        # rank 0 crashed on ceph_assert(!is_complete()) in CDir::fetch(), or
+        # kept fetching the missing object, and never got out of up:rejoin
+        self.fs.wait_for_state('up:active', rank=0, timeout=120)
+        # and rank 1 must not take the empty inode of d0/f from the rejoin
+        # ack of rank 0
+        self.fs.wait_for_daemons(timeout=60)
+        self._assert_dirfrag_damaged(d0_ino)
+
+        # d0/f is lost with its dirfrag: the hard link to it is dangling
+        self.mount_a.mount_wait()
+        self.mount_a.run_shell_payload("ls d1")
+        p = self.mount_a.run_shell_payload("stat d1/link", timeout=60,
+                                           check_status=False)
+        self.assertNotEqual(p.exitstatus, 0)
+        self.fs.wait_for_daemons(timeout=60)
+
+    def test_rejoin_undef_inode_missing_dirfrag(self):
+        self._rejoin_undef_inode_missing_dirfrag("true")
+
+    def test_rejoin_undef_inode_missing_dirfrag_no_prefetch(self):
+        self._rejoin_undef_inode_missing_dirfrag("false")
+
+    def _open_file_missing_dirfrag(self, prefetch):
+        """
+        That a rank recovers when a client holds a file open whose parent
+        dirfrag object is missing.
+        """
+
+        self.config_set('mds', 'mds_dir_prefetch', prefetch)
+        self.fs.set_max_mds(1)
+        self.fs.wait_for_daemons()
+
+        self.mount_a.run_shell_payload("mkdir d")
+        d_ino = self.mount_a.path_to_ino("d")
+        p = self.mount_a.open_background("d/f")
+
+        self.fs.rank_tell(["flush", "journal"], rank=0)
+        time.sleep(5)
+        self.fs.rank_tell(["flush", "journal"], rank=0)
+
+        self.fs.fail()
+        self.fs.radosm(["rm", "{0:x}.00000000".format(d_ino)])
+        self.fs.set_joinable()
+
+        # the open-file prefetch and the client's cap reconnect both open
+        # the file's inode by traversing the missing dirfrag
+        self.fs.wait_for_state('up:active', rank=0, timeout=120)
+        self.fs.wait_for_daemons(timeout=60)
+        self._assert_dirfrag_damaged(d_ino)
+
+        self.mount_a.kill_background(p)
+
+    def test_open_file_missing_dirfrag(self):
+        self._open_file_missing_dirfrag("true")
+
+    def test_open_file_missing_dirfrag_no_prefetch(self):
+        self._open_file_missing_dirfrag("false")
