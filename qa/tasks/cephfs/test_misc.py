@@ -312,6 +312,71 @@ class TestMisc(CephFSTestCase):
         dir_path = "file_sync_do_not_wait_mdlog_testdir"
         self._test_sync_stuck_for_around_5s(dir_path, True)
 
+    def test_publish_import_stuck_for_around_5s(self):
+        """
+        That clients that publish files by renaming them onto shared names,
+        and read the files that the others publish, are not stuck waiting
+        for the MDS tick to flush the mdlog.  This is what Python does with
+        __pycache__/*.pyc in a shared environment.  A reader that opened a
+        file wants Fr back after a writer's file update has taken the
+        filelock, and the update keeps it until it is journaled.
+
+        https://tracker.ceph.com/issues/82218
+        """
+        dir_path = "publish_import_testdir"
+        duration = 30
+        tick = float(self.fs.get_config("mds_tick_interval", service_type="mds"))
+
+        pyscript = dedent("""
+                import os
+                import random
+                import time
+
+                path = "{path}"
+                os.makedirs(path, exist_ok=True)
+                payload = b"x" * 4096
+                worst = 0
+                ops = 0
+                seq = 0
+                end = time.time() + {duration}
+                while time.time() < end:
+                    name = os.path.join(path, "m-%d.pyc" % random.randrange(8))
+                    start = time.time()
+                    if random.random() < 0.3:
+                        seq += 1
+                        tmp = os.path.join(path, "t-{who}-%d" % seq)
+                        fd = os.open(tmp, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o644)
+                        os.write(fd, payload)
+                        os.close(fd)
+                        os.rename(tmp, name)
+                    else:
+                        try:
+                            fd = os.open(name, os.O_RDONLY)
+                        except FileNotFoundError:
+                            continue
+                        os.read(fd, 16)
+                        os.close(fd)
+                    worst = max(worst, time.time() - start)
+                    ops += 1
+                print("%d %f" % (ops, worst))
+            """)
+
+        procs = []
+        for who, mount in enumerate((self.mount_a, self.mount_b)):
+            path = os.path.join(mount.hostfs_mntpt, dir_path)
+            procs.append(mount._run_python(pyscript.format(path=path, who=who,
+                                                           duration=duration),
+                                           timeout=duration * 10))
+        worsts = []
+        for p in procs:
+            p.wait()
+            ops, worst = p.stdout.getvalue().split()
+            log.info(f"publish/import: {ops} ops, worst {worst} s")
+            worsts.append(float(worst))
+        self.assertLess(max(worsts), tick * 0.8)
+
+        self.mount_a.run_shell(["rm", "-rf", dir_path])
+
     def test_file_filesystem_sync_crash(self):
         """
         To check whether the kernel crashes when doing the file/filesystem sync.
@@ -375,6 +440,59 @@ class TestMisc(CephFSTestCase):
         td1.join()
         td2.join()
         td3.join()
+        self.mount_a.run_shell(["rm", "-rf", dir_path])
+
+    def test_flock_herd_stuck_for_around_5s(self):
+        """
+        That clients taking turns to open, flock, unlock and close a few
+        shared files are not stuck waiting for the MDS tick to flush the
+        mdlog.  Closing a file opened for write makes the MDS journal a cap
+        update that shrinks the client's max_size, and the other client's
+        request may be waiting for the filelock that this update holds.
+
+        https://tracker.ceph.com/issues/82218
+        """
+        dir_path = "flock_herd_testdir"
+        duration = 30
+        tick = float(self.fs.get_config("mds_tick_interval", service_type="mds"))
+
+        pyscript = dedent("""
+                import fcntl
+                import os
+                import random
+                import time
+
+                path = "{path}"
+                os.makedirs(path, exist_ok=True)
+                worst = 0
+                ops = 0
+                end = time.time() + {duration}
+                while time.time() < end:
+                    name = os.path.join(path, "lock-%d" % random.randrange(4))
+                    start = time.time()
+                    fd = os.open(name, os.O_CREAT | os.O_RDWR, 0o644)
+                    fcntl.flock(fd, fcntl.LOCK_EX)
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                    os.close(fd)
+                    worst = max(worst, time.time() - start)
+                    ops += 1
+                print("%d %f" % (ops, worst))
+            """)
+
+        procs = []
+        for mount in (self.mount_a, self.mount_b):
+            path = os.path.join(mount.hostfs_mntpt, dir_path)
+            procs.append(mount._run_python(pyscript.format(path=path,
+                                                           duration=duration),
+                                           timeout=duration * 10))
+        worsts = []
+        for p in procs:
+            p.wait()
+            ops, worst = p.stdout.getvalue().split()
+            log.info(f"flock herd: {ops} ops, worst {worst} s")
+            worsts.append(float(worst))
+        self.assertLess(max(worsts), tick * 0.8)
+
         self.mount_a.run_shell(["rm", "-rf", dir_path])
 
     def test_dump_inmemory_log_on_client_eviction(self):
