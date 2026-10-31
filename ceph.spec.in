@@ -22,6 +22,11 @@
 #################################################################################
 %bcond_with make_check
 %bcond_with cmake_verbose_logging
+# Experimental cuObject S3 RDMA support (enabled by default). The default
+# ABI shim loads libcuobjserver at runtime without an SDK build dependency.
+%bcond_without cuobj
+# Use --without cuobj_shim to build against the NVIDIA SDK and link directly.
+%bcond_without cuobj_shim
 %bcond_without ceph_test_package
 %ifarch s390
 %bcond_with tcmalloc
@@ -278,6 +283,9 @@ BuildRequires:	pkgconfig(openssl)
 BuildRequires:	pkgconfig(ldap)
 BuildRequires:	pkgconfig(libibverbs)
 BuildRequires:	pkgconfig(librdmacm)
+%if %{with cuobj} && %{without cuobj_shim}
+BuildRequires:  libcuobjserver-devel >= 2.0.0
+%endif
 BuildRequires:	pkgconfig(liblz4) >= 1.7
 BuildRequires:	pkgconfig(libnl-3.0)
 BuildRequires:	pkgconfig(liboath)
@@ -1804,6 +1812,16 @@ cmake .. \
     -DWITH_RADOSGW_LANCEDB:BOOL=ON \
 %else
     -DWITH_RADOSGW_LANCEDB:BOOL=OFF \
+%endif
+%if %{with cuobj}
+    -DWITH_RADOSGW_CUOBJ:BOOL=ON \
+%else
+    -DWITH_RADOSGW_CUOBJ:BOOL=OFF \
+%endif
+%if %{with cuobj_shim}
+    -DWITH_RADOSGW_CUOBJ_SHIM:BOOL=ON \
+%else
+    -DWITH_RADOSGW_CUOBJ_SHIM:BOOL=OFF \
 %endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
