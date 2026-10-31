@@ -485,28 +485,22 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                         admin_keyring = f'/etc/ceph/{cluster}.client.admin.keyring'
                         #tmp_keyring = f'{scratch_tmp}/workunit.client.{id_}.keyring'
                         tmp_keyring = cluster_keyring
-                        remote.run(
-                            args=[
-                                'sudo',
-                                'ceph-authtool',
-                                tmp_keyring,
-                                '--import-keyring',
-                                client_keyring,
-                            ],
-                        )
-                        # admin_keyring may be a key type not understood
-                        try:
-                            remote.run(
-                                args=[
-                                    'sudo',
-                                    'ceph-authtool',
-                                    tmp_keyring,
-                                    '--import-keyring',
-                                    admin_keyring,
-                                ],
-                            )
-                        except:
-                            log.info("admin key type not understood")
+                        # an older release's ceph-authtool cannot read
+                        # a keyring that holds a key type it doesn't know
+                        for src in (client_keyring, admin_keyring):
+                            try:
+                                remote.run(
+                                    args=[
+                                        'sudo',
+                                        'ceph-authtool',
+                                        tmp_keyring,
+                                        '--import-keyring',
+                                        src,
+                                    ],
+                                )
+                            except CommandFailedError:
+                                log.info("could not import %s into %s",
+                                         src, tmp_keyring)
 
                 args = [
                     'cd', '--', scratch_tmp,
