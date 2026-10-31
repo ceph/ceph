@@ -978,6 +978,19 @@ void ECTransaction::Generate::truncate() {
           start_align_next);
       }
     }
+
+    // Shards of objects written before EC optimizations are padded to the
+    // stripe. Trim that padding too. It is zeros past the end, so it needs no
+    // rollback.
+    for (auto &&[shard, t] : transactions) {
+      if (truncate_eset.contains(shard)) {
+        continue;
+      }
+      t.truncate(
+        coll_t(spg_t(pgid, shard)),
+        ghobject_t(oid, ghobject_t::NO_GEN, shard),
+        sinfo.object_size_to_shard_size(op.truncate->first, shard));
+    }
     rollback_extents.emplace_back(make_pair(clone_start, clone_end - clone_start));
     rollback_shards.emplace_back(clone_shards);
   }
