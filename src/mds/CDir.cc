@@ -3884,6 +3884,13 @@ bool CDir::should_split_fast() const
   auto fragment_fast_factor = balancer->get_bal_fragment_fast_factor();
   int64_t fast_limit = split_size * fragment_fast_factor;
 
+  // A split or merge of this dirfrag is under way, and can_fragment()
+  // refuses another one until it is done.  Its freeze waits for every
+  // auth pin to drop, and each request that drops one comes here.
+  if (state_test(STATE_FRAGMENTING)) {
+    return false;
+  }
+
   // Fast path: the sum of accounted size and null dentries does not
   // exceed threshold: we definitely are not over it.
   if (get_frag_size() + get_num_head_null() <= fast_limit) {
@@ -3893,6 +3900,20 @@ bool CDir::should_split_fast() const
   // Fast path: the accounted size of the frag exceeds threshold: we
   // definitely are over it
   if (get_frag_size() > fast_limit) {
+    return true;
+  }
+
+  // A dentry whose projected linkage differs from its current one is
+  // xlocked, so auth pinned, by the request changing it, and that pin
+  // counts in dir_auth_pins: the effective size is within that many of
+  // the linked dentries.  Only scan when the limit lies in that range.
+  // An emptied dirfrag can hold millions of null dentries, and this
+  // runs on every hit_dir() while a split is pending.
+  int64_t linked = get_num_head_items() + get_num_snap_items();
+  if (linked + get_dir_auth_pins() <= fast_limit) {
+    return false;
+  }
+  if (linked - get_dir_auth_pins() > fast_limit) {
     return true;
   }
 
