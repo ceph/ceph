@@ -30,19 +30,9 @@ Option Names
 
 Each Ceph configuration option has a unique name that consists of words
 formed with lowercase characters and connected with underscore characters
-(``_``).
-
-When option names are specified on the command line or in persisted
-configuration, underscore (``_``) and
-dash (``-``) characters can be used interchangeably (for example,
-``--mon-host`` is equivalent to ``--mon_host``).
-
-When option names appear in configuration files, spaces can also be used in
-place of underscores or dashes.
-
-For the sake of clarity and
-convenience, we suggest that you consistently use underscores, as we do
-throughout this documentation.
+(``_``). Always write option names with underscores, as this documentation
+does. In a configuration file, a name written with dashes, such as
+``mon-host``, is ignored without a warning.
 
 Config Sources
 ==============
@@ -81,7 +71,7 @@ include the following:
 .. confval:: mon_host_override
 
 - :confval:`mon_dns_srv_name`
-- :confval:`mon_data`, :confval:`osd_data`, :confval:`mds_data`,
+- :confval:`mon_data`, :confval:`osd_data`, ``mds_data``,
   :confval:`mgr_data`, and similar options that define the local directory
   in which the daemon stores data.
 - :confval:`keyring`, :confval:`keyfile`, and/or :confval:`key`, which can be
@@ -99,11 +89,16 @@ configuration file can be avoided entirely.
 Skipping Monitor Config
 -----------------------
 
-The option ``--no-mon-config`` can be passed to any command in order to skip
-the step that retrieves configuration information from the cluster's Monitors.
+Daemons such as ``ceph-osd`` and ``ceph-mds`` accept the ``--no-mon-config``
+option, which skips the step that retrieves configuration information from
+the cluster's Monitors at startup.
 Skipping this config option source can be useful in cases where configuration is
 managed entirely via configuration files, or when maintenance is necessary
-but the Monitor quorum is down.
+but the Monitor quorum is down. Once it connects to the Monitors, a daemon
+started with the option still applies the central values of options that can
+change at runtime. Programs that connect through librados, such as the
+``ceph`` command and ``radosgw``, accept the option but still retrieve and
+apply the central configuration when they connect.
 
 .. _ceph-conf-file:
 
@@ -113,7 +108,7 @@ Configuration Sections
 Each configuration option associated with a single process or daemon
 has a single value. The value for a configuration option may be
 set for all daemon types or for only daemons of a given type.
-Ceph options that stored in the Monitor configuration database or in
+Ceph options that are stored in the Monitor configuration database or in
 local configuration files are grouped into *configuration
 sections* in order to indicate to which daemons or clients they apply.
 
@@ -182,9 +177,9 @@ expected values remain in force.
 
 Any given daemon will draw settings from the global section, the daemon- or
 client-type section, and the section sharing its name. Settings in the
-most-specific section take precedence so precedence: for example, if the same
+most-specific section take precedence: for example, if the same
 option is specified in both :confsec:`global`, :confsec:`mon`, and ``mon.foo``
-on the same source (i.e. that is, in the same configuration file), the
+on the same source (that is, in the same configuration file), the
 ``mon.foo`` setting will be used.
 
 If multiple values of the same configuration option are specified in the same
@@ -234,7 +229,18 @@ Ceph supports the following metavariables:
 
 .. describe:: $host
 
-   Expands to the hostname where the process is running.
+   Expands to the short host name (the output of ``hostname -s``) of the host
+   where the process is running.
+
+.. describe:: $num
+
+   Expands to the same value as ``$id``.
+
+.. describe:: $<option>
+
+   The name of any configuration option, preceded by ``$``, expands to the
+   value of that option. Default values use this: for example, a daemon's
+   ``admin_socket`` defaults to ``$run_dir/$cluster-$name.asok``.
 
 .. describe:: $name
 
@@ -252,16 +258,22 @@ Ceph supports the following metavariables:
 Ceph Configuration File
 =======================
 
-On startup, Ceph processes search for a configuration file in the
-following locations:
+On startup, a Ceph process reads one configuration file, chosen as follows:
 
-#. ``$CEPH_CONF`` (that is, the value of the ``$CEPH_CONF``
-   environment variable if set)
-#. ``-c path/path``  (that is, the ``-c`` command line argument if supplied)
-#. ``/etc/ceph/$cluster.conf``
-#. ``~/.ceph/$cluster.conf``
-#. ``./$cluster.conf`` (that is, in the current working directory)
-#. On FreeBSD systems only, ``/usr/local/etc/ceph/$cluster.conf``
+#. If ``-c`` (``--conf``) is given, the files that it names, and no others.
+#. Otherwise, if the ``CEPH_CONF`` environment variable is set, the files
+   that it names, and no others.
+#. Otherwise, the first of these that exists:
+
+   #. ``/etc/ceph/$cluster.conf``
+   #. ``~/.ceph/$cluster.conf``
+   #. ``./$cluster.conf`` (that is, in the current working directory)
+   #. On FreeBSD systems only, ``/usr/local/etc/ceph/$cluster.conf``
+   #. On MS Windows systems only, ``$programdata/ceph/$cluster.conf``
+
+``-c`` and ``CEPH_CONF`` take a list of paths separated by commas or
+semicolons, and the first file in the list that can be read is used. If no
+file named with ``-c`` can be opened, the process exits with an error.
 
 Here ``$cluster`` is the cluster's name (default: ``ceph``).
 
@@ -270,7 +282,7 @@ text after a pound sign (#) or a semicolon (;). For example:
 
 .. code-block:: ini
 
-    # <--A number (#) sign number sign (#) precedes a comment.
+    # A number sign (#) or a semicolon (;) starts a comment.
     ; A comment may be anything.
     # Comments always follow a semicolon (;) or a pound sign (#) on each line.
     # The end of the line terminates a comment.
@@ -305,19 +317,20 @@ Config File Option Values
 
 The value of a configuration option is a string. If the string is too long to
 fit on a single line, you may place a backslash (``\``) at the end of the line
-and the backslash will act as a line continuation marker. In such a case, the
-value of the option will be the string after ``=`` in the current line,
-combined with the string in the next line. Here is an example:
+and the backslash will act as a line continuation marker. The text of the next
+line is joined to the current line exactly as written, with no space added.
+Here is an example:
 
 .. code-block:: ini
 
     [global]
-    foo = long long ago\
+    foo = long long ago \
     long ago
 
 In this example, the value of the "``foo``" option is "``long long ago long
-ago``".  Be careful to not place a backslash at the end of the final line
-of the multi-line string.
+ago``", because there is a space before the backslash. Without that space, the
+value would be "``long long agolong ago``". Be careful to not place a
+backslash at the end of the final line of the multi-line string.
 
 An option value setting in a local config file ends with a newline.
 A comment prefixed with ``#`` may be added before the newline.
@@ -330,50 +343,60 @@ Examples:
     obscure_one = difficult to explain # I will try harder in next release
     simpler_one = nothing to explain
 
-In this example, the value of the "``obscure one``" option is "``difficult to
-explain``" and the value of the "``simpler one`` options is "``nothing to
+In this example, the value of the "``obscure_one``" option is "``difficult to
+explain``" and the value of the "``simpler_one``" option is "``nothing to
 explain``".
 
-When an option value contains spaces, it can be enclosed within single quotes
-or double quotes in order to make its scope clear and in order to make sure
-that the first space in the value is not interpreted as the end of the value.
-For example:
+Quotes are optional, and an unquoted value keeps the spaces inside it. A value
+may be enclosed in single or double quotes; inside quotes, write the quote
+character as ``\"`` or ``\'``. For example:
 
 .. code-block:: ini
 
     [global]
     line = "to be, or not to be"
 
-There are four metacharacters that must be escaped with a backslash (``\``)
-if they are meant to be part of the option's value: ``=``, ``#``, ``;`` and ``[``.
+The characters ``#`` and ``;`` start a comment. To use either of them in a
+value, inside quotes or not, escape it with a backslash (``\#`` or ``\;``).
+Inside quotes, an unescaped ``#`` or ``;`` makes the whole file invalid. A
+backslash followed by any other character stands for that character, so write
+a literal backslash as ``\\``. Other characters, including ``=`` and ``[``,
+can be used in a value without escaping.
 
 Example:
 
 .. code-block:: ini
 
     [global]
-    secret = "I l0ve \# and \["
+    secret = "I l0ve \# and ["
 
 Each configuration option specifies one of the following types for its value:
 
 .. describe:: int
 
-   A 64-bit signed integer. Some SI suffixes are supported, including ``K``, ``M``,
-   ``G``, ``T``, ``P``, and ``E``.  These represent, respectively, 10\ :sup:`3`, 10\ :sup:`6`,
-   10\ :sup:`9`, etc.). ``B`` (bytes) is the only supported unit string. Thus ``1K``, ``1M``,
-   ``128B`` and ``-1`` are all valid option values. When a negative value is
+   A 64-bit signed integer. The suffixes ``K``, ``M``, ``G``, ``T``, ``P``, and
+   ``E`` multiply the value by 10\ :sup:`3`, 10\ :sup:`6`, 10\ :sup:`9`,
+   10\ :sup:`12`, 10\ :sup:`15`, and 10\ :sup:`18`. No other suffix is
+   accepted, not even ``B``: ``1K``, ``1M``, and ``-1`` are valid values, and
+   ``128B`` is not. When a negative value is
    assigned to an option that defines a threshold or limit, this often indicates that the value is
-   "unlimited" -- that is, no threshold or limit will be enforced. Options that
+   "unlimited": no threshold or limit is enforced. Options that
    allow such a value will usually indicate so in their individual description text.
 
    :example: ``42``, ``-1``
 
 .. describe:: uint
 
-   An unsigned integer, which differs from ``integer`` only in that negative values are not
+   An unsigned integer, which differs from ``int`` only in that negative values are not
    permitted.
 
    :example: ``256``, ``0``
+
+.. describe:: float
+
+   A decimal number.
+
+   :example: ``0.95``, ``1e-3``
 
 .. describe:: str
 
@@ -382,7 +405,7 @@ Each configuration option specifies one of the following types for its value:
 
    :example: ``"hello world"``, ``"i love \#"``, ``yet-another-name``
 
-.. describe:: boolean
+.. describe:: bool
 
    Typically either ``true`` or ``false``. However, any
    integer is permitted: "0" implies ``false``, and any non-zero value implies
@@ -394,30 +417,35 @@ Each configuration option specifies one of the following types for its value:
 
    A single address, optionally prefixed with ``v1``, ``v2`` or ``any`` for the
    messenger protocol. If no prefix is specified, the ``v2`` protocol is used.
+   An IPv6 address followed by a port must be enclosed in brackets.
    For more details, see :ref:`address_formats`.
 
-   :example: ``v1:1.2.3.4:567``, ``v2:1.2.3.4:567``, ``1.2.3.4:567``, ``2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::567``, ``[::1]:6789``
+   :example: ``v1:1.2.3.4:567``, ``v2:1.2.3.4:567``, ``1.2.3.4:567``, ``[2001:db8::1]:3300``, ``[::1]:6789``
 
 .. describe:: addrvec
 
-   A set of IPv4 or IPv6 addresses separated by commas (``,``). The set of addresses can be optionally delimited
-   with ``[`` and ``]``.
+   A list of addresses separated by commas (``,``) with no spaces, and
+   enclosed in ``[`` and ``]``. Without the brackets, only the first address
+   is used.
 
-   :example: ``[v1:1.2.3.4:567,v2:1.2.3.4:568]``, ``v1:1.2.3.4:567,v1:1.2.3.14:567``, ``[2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::567], [2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::568]``
+   :example: ``[v1:1.2.3.4:567,v2:1.2.3.4:568]``, ``[v1:1.2.3.4:567,v1:1.2.3.14:567]``, ``[v2:[2001:db8::1]:3300,v1:[2001:db8::1]:6789]``
 
 .. describe:: uuid
 
-   A UUID string in the format defined by `RFC4122
-   <https://www.ietf.org/rfc/rfc4122.txt>`_. Certain variants are also
-   supported. For more details, see this `Boost document
+   A UUID string in the format defined by `RFC 9562
+   <https://www.rfc-editor.org/rfc/rfc9562.html>`_ (which obsoletes RFC 4122).
+   Certain variants are also supported. For more details, see this `Boost document
    <https://www.boost.org/doc/libs/1_74_0/libs/uuid/doc/uuid.html#String%20Generator>`_.
 
    :example: ``f81d4fae-7dec-11d0-a765-00a0c91e6bf6``
 
 .. describe:: size
 
-   A 64-bit unsigned integer. Both SI prefixes and IEC prefixes are supported.
-   ``B`` is the only supported unit string. Negative values are not permitted.
+   A 64-bit unsigned integer, usually a number of bytes. The suffixes ``K``,
+   ``M``, ``G``, ``T``, ``P``, and ``E`` multiply the value by powers of 1024,
+   with or without ``i`` and with or without a trailing ``B``: ``1K``,
+   ``1Ki``, ``1KB``, and ``1KiB`` all mean 1024. ``B`` alone means bytes.
+   Negative values are not permitted.
 
    :example: ``1Ki``, ``1K``, ``1KiB`` and ``1B``.
 
@@ -428,13 +456,21 @@ Each configuration option specifies one of the following types for its value:
 
               * second: ``s``, ``sec``, ``second``, ``seconds``
               * minute: ``m``, ``min``, ``minute``, ``minutes``
-              * hour: ``hs``, ``hr``, ``hour``, ``hours``
+              * hour: ``h``, ``hr``, ``hour``, ``hours``
               * day: ``d``, ``day``, ``days``
               * week: ``w``, ``wk``, ``week``, ``weeks``
               * month: ``mo``, ``month``, ``months``
               * year: ``y``, ``yr``, ``year``, ``years``
 
+   Several values can be combined, for example ``1h 30m``.
+
    :example: ``1 m``, ``1m`` and ``1 week``
+
+.. describe:: millisecs
+
+   A duration in milliseconds, given as a whole number with no unit.
+
+   :example: ``500``
 
 .. _ceph-conf-database:
 
@@ -466,10 +502,10 @@ source precedence.
 In addition, options may have a *mask* associated with them to further restrict to
 which daemons or clients the option's value applies. Masks take two forms:
 
-#. ``type:location`` where ``type`` is a CRUSH bucket type, for example ``rack`` or
-   ``host``, and ``location`` is a value for that property. For example,
-   ``host:foo`` would limit the option only to daemons or clients
-   running on a host named ``foo``. Recent Ceph releases provide functionality
+#. ``type:location`` where ``type`` is a CRUSH bucket type, for example
+   ``rack`` or ``host``, and ``location`` is the name of a bucket of that type.
+   A ``host:foo`` mask applies the option to the OSDs under the CRUSH host
+   ``foo``. Recent Ceph releases provide functionality
    that obviates most situations that formerly required host-specific configuration
    values. Examples include OSD device classes, the ``osd_memory_target`` autotuner,
    and options with values that are specific to certain media. Examples
@@ -552,18 +588,23 @@ The following CLI commands are used to configure the cluster:
   .. note:: Some configs only affect startup behavior for clients or daemons. In that case, modifying the local ``ceph.conf`` is required.
 
 * ``ceph config assimilate-conf -i <input_file> -o <output_file>`` ingests a
-  configuration file from *input_file* and sets any valid options found into the
-  Monitor configuration database. Any settings that are unrecognized, are
-  invalid, or cannot be managed by the Monitors will be returned in an
-  abbreviated configuration file stored in *output_file*. This command is
+  configuration file from *input_file* and stores its options in the Monitor
+  configuration database. Options that are unrecognized, that cannot be
+  parsed, that the Monitors cannot store, or that already have a different
+  value in the same section of the database are not imported; they are
+  written to *output_file* as an abbreviated configuration file. Options
+  already stored with the same value are left as they are. This command is
   useful when transitioning from legacy configuration files to centralized
   Monitor-based configuration.
 
 * ``ceph-conf --show-config`` is a legacy command.
 
 Note that ``ceph config get <who> [<option>]`` and ``ceph config show
-<who>`` will not necessarily return the same values. The former
-command shows only compiled-in default values. In order to determine whether a
+<who>`` will not necessarily return the same values. The former shows what the
+Monitor configuration database holds for that daemon or client and, when one
+option is requested that the database does not hold, its compiled-in default.
+The latter shows the values that the running daemon reports, whatever their
+source. In order to determine whether a
 configuration option is present in the Monitor configuration database, run
 ``ceph config dump``.
 
@@ -585,11 +626,11 @@ For example:
 ::
 
    log_file - path to log file
-    (std::string, basic)
-    Default (non-daemon):
-    Default (daemon): /var/log/ceph/$cluster-$name.log
-    Can update at runtime: false
-    See also: [log_to_stderr,err_to_stderr,log_to_syslog,err_to_syslog]
+     (str, basic)
+     Default (non-daemon):
+     Default (daemon): /var/log/ceph/$cluster-$name.log
+     Can update at runtime: false
+     See also: [log_to_file,log_to_stderr,err_to_stderr,log_to_syslog,err_to_syslog]
 
 or:
 
@@ -601,7 +642,7 @@ or:
 
   {
       "name": "log_file",
-      "type": "std::string",
+      "type": "str",
       "level": "basic",
       "desc": "path to log file",
       "long_desc": "",
@@ -610,6 +651,7 @@ or:
       "tags": [],
       "services": [],
       "see_also": [
+          "log_to_file",
           "log_to_stderr",
           "err_to_stderr",
           "log_to_syslog",
@@ -618,7 +660,8 @@ or:
       "enum_values": [],
       "min": "",
       "max": "",
-      "can_update_at_runtime": false
+      "can_update_at_runtime": false,
+      "flags": []
   }
 
 The ``level`` property of each option is ``basic``, ``advanced``, or ``dev``. Options
@@ -631,9 +674,9 @@ or advice from expert support professionals.
    during an upgrade), you might want to query the option schema from
    a specific running daemon by running a command of the following form:
 
-.. prompt:: bash $
+   .. prompt:: bash $
 
-   ceph daemon <name> config help [option]
+      ceph daemon <name> config help [option]
 
 .. note:: The Ceph release versions of *running* daemons may be reported by
    running the ``ceph versions`` commands.  If your cluster is not in the
@@ -651,7 +694,7 @@ increasing or decreasing the amount of logging output, for temporarily
 raising or lowering log subsystem debug levels, or for runtime optimization.
 
 Use the ``ceph config set`` command to update configuration options. For
-example, to enable the most verbose debug log level on a specific OSD, run a
+example, to raise the messenger debug level of a specific OSD to 20, run a
 command of the following form:
 
 .. prompt:: bash #
@@ -664,7 +707,9 @@ command of the following form:
    setting will be ignored because it has a lower precedence than the local
    configuration file.
 
-.. note:: Log subsystem levels range from 0 to 20.
+.. note:: Debug levels take the form ``N`` or ``N/M``, where ``N`` and ``M``
+   are integers from 0 to 99. Most messages are logged at levels up to 20;
+   some messenger, OSD and BlueStore messages use levels 25, 30 and 40.
 
 Override Values
 ---------------
@@ -698,10 +743,14 @@ Override values can be set in two ways:
 
    .. prompt:: bash #
 
-      ceph tell osd.* config set debug_osd 20
+      ceph tell 'osd.*' config set debug_osd 20
 
-#. On the host where a specific daemon is running, connect to the daemon via a socket
-   in ``/var/run/ceph`` by running a command of the following form:
+#. On the host where a specific daemon is running, connect to the daemon
+   through its admin socket. On hosts deployed from packages the socket is in
+   ``/var/run/ceph``. On hosts managed by cephadm it is in
+   ``/var/run/ceph/<fsid>``, which cephadm mounts at ``/var/run/ceph`` inside
+   its containers, so run the command from ``cephadm shell`` on that host. Run
+   a command of the following form:
 
    .. prompt:: bash #
 
@@ -788,11 +837,11 @@ These changes are as follows:
   In Octopus and later releases, an empty line following a backslash is allowed.
 - In the configuration file, each line specifies an individual configuration
   option. The option's name and its value are separated with ``=``, and the
-  value may be enclosed within single or double quotes. If an invalid
-  configuration is specified, we will treat it as an invalid configuration
-  file and log a message of the following form::
+  value may be enclosed within single or double quotes. A line that cannot be
+  parsed makes the whole file invalid, and the error names the line and the
+  position, for example::
 
-    bad option ==== bad value
+    global_init: error reading config file. parse error: expected '<eoi>' in line 2 at position 1
 - Prior to Octopus, if no section name was specified in the configuration file,
   all options would be set as though they were within the :confsec:`global`
   section. This approach is discouraged. Since Octopus, any configuration
