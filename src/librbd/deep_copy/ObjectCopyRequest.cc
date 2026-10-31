@@ -633,6 +633,10 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
                       m_src_image_ctx->parent != nullptr);
   m_src_image_ctx->image_lock.unlock_shared();
 
+  // while migrating, the destination's parent is the migration source at
+  // HEAD, which may have shrunk below a snapshot's overlap
+  bool migration = ((m_flags & OBJECT_COPY_REQUEST_FLAG_MIGRATION) != 0);
+
   // ensure we have a zeroed interval for each snapshot
   for (auto& [src_snap_seq, _] : m_snap_map) {
     if (m_src_snap_id_start < src_snap_seq) {
@@ -680,7 +684,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
       } else if (raw_overlap > 0) {
         auto parent_extents = m_image_extents;
         object_overlap = m_dst_image_ctx->prune_parent_extents(
-            parent_extents, m_image_area, raw_overlap, false);
+            parent_extents, m_image_area, raw_overlap, migration);
       }
       if (object_overlap == 0) {
         ldout(m_cct, 20) << "no parent overlap" << dendl;
