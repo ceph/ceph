@@ -47,7 +47,7 @@ TEST(BeastFrontendShutdown, CloseShutdownsButDoesNotCloseSocket)
       [&](asio::yield_context yield) -> void {
         ConnectionList connections;
 
-        tcp::acceptor acceptor(ioctx, tcp::endpoint(tcp::v4(), 0));
+        tcp::acceptor acceptor(ioctx, tcp::endpoint(asio::ip::address_v4::loopback(), 0));
         acceptor.listen(3);
 
         tcp::socket c0(ioctx), c1(ioctx), c2(ioctx);
