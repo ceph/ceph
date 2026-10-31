@@ -10,8 +10,6 @@ Currently the only way to send statistics to Telegraf from this module is to
 use the socket listener. The module can send statistics over UDP, TCP or
 a UNIX socket.
 
-The Telegraf module was introduced in the 13.x *Mimic* release.
-
 --------
 Enabling 
 --------
@@ -49,7 +47,7 @@ For example, a typical configuration might look like this:
 
 .. prompt:: bash #
 
-   ceph telegraf config-set address udp://:8094
+   ceph telegraf config-set address udp://telegraf.example.com:8094
    ceph telegraf config-set interval 10
     
 The default values for these configuration keys are:
@@ -80,12 +78,14 @@ A typical Telegraf configuration might be
     # service_address = "unixgram:///tmp/telegraf.sock"
     data_format = "influx"
 
-In this case the `address` configuration option for the module would need to be set
-to:
+In this case, set the ``address`` option of the module to the host and port
+where Telegraf listens, for example ``udp://telegraf.example.com:8094``. A UDP
+or TCP address must include a host name or an IP address.
+``ceph telegraf config-set`` accepts ``udp://:8094``, but the module then
+fails the next time it sends data, and the cluster reports
+``MGR_MODULE_ERROR``.
 
-::
 
-  udp://:8094
-
-
-Refer to the Telegraf documentation for more configuration options.
+See the `Telegraf socket_listener input plugin
+<https://github.com/influxdata/telegraf/blob/master/plugins/inputs/socket_listener/README.md>`_
+for more configuration options.
