@@ -58,6 +58,12 @@ namespace {
   string key1{"black"};
   string val1{"metallic"};
 
+  /* xattr-persistence test state */
+  string persist_obj_name{"xattr-persist-obj"};
+  string persist_attr_key{"user.TEST_ATTR"};
+  string persist_attr_val{"test-value-42"};
+  struct rgw_file_handle *persist_object_fh = nullptr;
+
   struct rgw_file_handle *bucket_fh = nullptr;
   struct rgw_file_handle *object_fh = nullptr;
 
@@ -345,8 +351,140 @@ TEST(LibRGW, LSXATTR2) {
   ASSERT_TRUE(out_attrmap.find(key1) == out_attrmap.end());
 }
 
+/* Verify that xattrs survive an object data overwrite.
+ *
+ * Flow:
+ *  1. create object via rgw_create, write 10 bytes, close
+ *  2. set user.TEST_ATTR on the object
+ *  3. list xattrs – assert user.TEST_ATTR is present
+ *  4. overwrite object with 20 bytes, close
+ *  5. list xattrs – PASS if user.TEST_ATTR still present, FAIL if lost
+ *  6. release handle, unlink object
+ */
+TEST(LibRGW, PERSIST_XATTR) {
+
+  if (!bucket_fh)
+    return;
+
+  /* --- step 1: create object and write 10 bytes --- */
+  struct stat st;
+  st.st_uid  = owner_uid;
+  st.st_gid  = owner_gid;
+  st.st_mode = 644;
+
+  int ret = rgw_create(fs, bucket_fh, persist_obj_name.c_str(), &st,
+		       create_mask, &persist_object_fh, 0 /* posix flags */,
+		       RGW_CREATE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_NE(persist_object_fh, nullptr);
+
+  ret = rgw_open(fs, persist_object_fh, 0 /* posix flags */,
+		 RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  const char *data10 = "aaaaaaaaaa";
+  size_t nbytes = 0;
+  ret = rgw_write(fs, persist_object_fh, 0 /* offset */, strlen(data10),
+		  &nbytes, const_cast<char*>(data10), RGW_WRITE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(nbytes, strlen(data10));
+
+  ret = rgw_close(fs, persist_object_fh, RGW_CLOSE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  if (verbose)
+    std::cout << "PERSIST_XATTR: wrote 10 bytes to "
+	      << persist_obj_name << std::endl;
+
+  /* --- step 2: set user.TEST_ATTR --- */
+  rgw_xattrstr xattr_k = { const_cast<char*>(persist_attr_key.c_str()),
+			    uint32_t(persist_attr_key.length()) };
+  rgw_xattrstr xattr_v = { const_cast<char*>(persist_attr_val.c_str()),
+			    uint32_t(persist_attr_val.length()) };
+  rgw_xattr xattr         = { xattr_k, xattr_v };
+  rgw_xattrlist xattrlist = { &xattr, 1 };
+
+  ret = rgw_setxattrs(fs, persist_object_fh, &xattrlist,
+		      RGW_SETXATTR_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  if (verbose)
+    std::cout << "PERSIST_XATTR: set " << persist_attr_key
+	      << "=" << persist_attr_val << std::endl;
+
+  /* --- step 3: list xattrs, verify user.TEST_ATTR is present --- */
+  {
+    rgw_xattrstr filter_prefix = { nullptr, 0 }; // XXX ignored, for now
+    std::map<std::string, std::string> out_attrmap;
+
+    ret = rgw_lsxattrs(fs, persist_object_fh, &filter_prefix, getattr_cb,
+		       &out_attrmap, RGW_LSXATTR_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+    ASSERT_TRUE(out_attrmap.find(persist_attr_key) != out_attrmap.end())
+      << persist_attr_key << " not found after set";
+
+    if (verbose)
+      std::cout << "PERSIST_XATTR: " << persist_attr_key
+		<< " present after set" << std::endl;
+  }
+
+  /* --- step 4: overwrite object with 20 bytes --- */
+  ret = rgw_open(fs, persist_object_fh, 0 /* posix flags */,
+		 RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  const char *data20 = "bbbbbbbbbbbbbbbbbbbb";
+  nbytes = 0;
+  ret = rgw_write(fs, persist_object_fh, 0 /* offset */, strlen(data20),
+		  &nbytes, const_cast<char*>(data20), RGW_WRITE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(nbytes, strlen(data20));
+
+  ret = rgw_close(fs, persist_object_fh, RGW_CLOSE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  if (verbose)
+    std::cout << "PERSIST_XATTR: overwrote object with 20 bytes" << std::endl;
+
+  /* --- step 5: list xattrs again – PASS if present, FAIL if lost --- */
+  {
+    rgw_xattrstr filter_prefix = { nullptr, 0 }; // XXX ignored, for now
+    std::map<std::string, std::string> out_attrmap;
+
+    ret = rgw_lsxattrs(fs, persist_object_fh, &filter_prefix, getattr_cb,
+		       &out_attrmap, RGW_LSXATTR_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+
+    if (out_attrmap.find(persist_attr_key) != out_attrmap.end()) {
+      if (verbose)
+	std::cout << "PERSIST_XATTR: " << persist_attr_key
+		  << " present after overwrite – PASS" << std::endl;
+      SUCCEED();
+    } else {
+      ADD_FAILURE() << persist_attr_key
+		    << " lost after object overwrite – FAIL";
+    }
+  }
+
+  /* --- step 6: release handle and unlink object --- */
+  ret = rgw_fh_rele(fs, persist_object_fh, 0 /* flags */);
+  ASSERT_EQ(ret, 0);
+  persist_object_fh = nullptr;
+
+  ret = rgw_unlink(fs, bucket_fh, persist_obj_name.c_str(),
+		   RGW_UNLINK_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  if (verbose)
+    std::cout << "PERSIST_XATTR: removed " << persist_obj_name << std::endl;
+}
+
 TEST(LibRGW, CLEANUP) {
   int ret = 0;
+  if (persist_object_fh) {
+    ret = rgw_fh_rele(fs, persist_object_fh, 0 /* flags */);
+    ASSERT_EQ(ret, 0);
+  }
   if (object_fh) {
     ret = rgw_fh_rele(fs, object_fh, 0 /* flags */);
     ASSERT_EQ(ret, 0);
