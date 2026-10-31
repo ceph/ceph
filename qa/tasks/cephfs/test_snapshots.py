@@ -3,6 +3,7 @@ import logging
 import signal
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError
 
@@ -576,6 +577,81 @@ class TestSnapshots(CephFSTestCase):
             # after reducing limit we expect the new snapshot creation to fail
             pass
         self.delete_dir_and_snaps("accounts", new_limit + 1)
+
+
+class TestSnapUpdateSessionOpenRace(CephFSTestCase):
+    MDSS_REQUIRED = 2
+    CLIENTS_REQUIRED = 2
+
+    def _client_session_state(self, mount, rank):
+        sessions = mount.admin_socket(['mds_sessions'])['sessions']
+        for s in sessions:
+            if s['mds'] == rank:
+                return s['state']
+        return None
+
+    def _mds_session_state(self, client_id, rank, status=None):
+        sessions = self.fs.rank_asok(['session', 'ls'], rank=rank, status=status)
+        for s in sessions:
+            if s['id'] == client_id:
+                return s['state']
+        return None
+
+    def test_snap_update_before_session_open(self):
+        """
+        Check that the client handles a snap trace pushed on a session that
+        is open on the MDS but which the client has not seen open yet.
+        See https://tracker.ceph.com/issues/81585
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Requires the userspace client")
+
+        self.fs.set_allow_new_snaps(True)
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+
+        # an empty directory is not exported, so give d1 an entry
+        self.mount_b.run_shell(["mkdir", "-p", "d0", "d1/d2"])
+        self.mount_b.setfattr("d1", "ceph.dir.pin", "1")
+        self._wait_subtrees([("/d1", 1)], rank=1, path="/d1")
+
+        # mount_a was mounted while max_mds was 1 and has not touched d1
+        # since, so it has no session with rank 1 yet. (remounting with the
+        # delay set is no good: the mount's first request goes to a random
+        # rank and stalls if that is rank 1.)
+        client_id = self.mount_a.get_global_id()
+        self.assertIsNone(self._client_session_state(self.mount_a, 1))
+
+        # rank 1 opens client sessions but sits on the open reply
+        delay = 60
+        self.fs.rank_asok(['config', 'set', 'mds_inject_session_open_reply_delay',
+                           str(delay)], rank=1, status=status)
+
+        # make mount_a open a session with rank 1
+        proc = self.mount_a.run_shell(["ls", "d1"], wait=False)
+        self.wait_until_true(
+            lambda: self._mds_session_state(client_id, 1, status=status) == "open",
+            timeout=delay // 2)
+        self.assertEqual(self._client_session_state(self.mount_a, 1), "opening")
+
+        # a new snapshot makes rank 1 push the global snaprealm update to
+        # every session it has open, including mount_a's. rank 1 does so
+        # right after its snapclient learns of the commit.
+        def last_created(rank):
+            return int(self.fs.rank_asok(["dump", "snaps"], rank=rank,
+                                         status=status)["last_created"])
+        snapid = last_created(1)
+        self.mount_b.run_shell(["mkdir", "d0/.snap/s0"])
+        self.wait_until_true(lambda: last_created(1) > snapid, timeout=30)
+        self.assertEqual(self._client_session_state(self.mount_a, 1), "opening")
+
+        proc.wait()
+        self.assertEqual(self._client_session_state(self.mount_a, 1), "open")
+        self.assertIn("s0", self.mount_a.ls("d0/.snap"))
+
+        self.fs.rank_asok(['config', 'set', 'mds_inject_session_open_reply_delay',
+                           '0'], rank=1, status=status)
+        self.mount_b.run_shell(["rmdir", "d0/.snap/s0"])
 
 
 class TestMonSnapsAndFsPools(CephFSTestCase):
