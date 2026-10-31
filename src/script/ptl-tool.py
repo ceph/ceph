@@ -33,6 +33,7 @@
 #  - PTL_TOOL_PR_NUMBER (the PR number to audit/merge when running in CI mode)
 
 import argparse
+from collections import Counter
 from dataclasses import dataclass, field
 import datetime
 from typing import List, Tuple
@@ -97,6 +98,9 @@ try:
 except FileNotFoundError:
     pass
 GITHUB_TOKEN = os.getenv("PTL_TOOL_GITHUB_TOKEN", GITHUB_TOKEN)
+KERNEL_REPO = os.getenv("PTL_TOOL_KERNEL_REPO", f"{BASE_PROJECT}/ceph-client")
+KERNEL_TESTING_BRANCH = os.getenv("PTL_TOOL_KERNEL_TESTING_BRANCH", "testing")
+KERNEL_FOR_LINUS_BRANCH = os.getenv("PTL_TOOL_KERNEL_FOR_LINUS_BRANCH", "for-linus")
 INDICATIONS = [
     re.compile(r"(Reviewed-by: .+ <[\w@.-]+>)", re.IGNORECASE),
     re.compile(r"(Acked-by: .+ <[\w@.-]+>)", re.IGNORECASE),
@@ -508,6 +512,53 @@ def resolve_ref(G, ref, remote_url, always_fetch=False):
     except git.exc.GitCommandError as e:
         log.error(f"Could not fetch {ref} from {remote_url}: {e}")
         sys.exit(1)
+
+def get_kernel_testing_description(session):
+    """
+    Returns QA tracker description lines (textile) summarizing the commits in
+    the kernel testing branch which have not yet been sent to Linus, i.e.
+    for-linus..testing in the ceph-client repo: a compare link plus a count
+    of commits per subject prefix.
+    """
+    api = f"https://api.github.com/repos/{KERNEL_REPO}"
+    web = f"https://github.com/{KERNEL_REPO}"
+
+    # Pin both branches so the listing matches the testing sha1 we report.
+    testing = next(get(session, f"{api}/branches/{KERNEL_TESTING_BRANCH}", paging=False))['commit']['sha']
+    for_linus = next(get(session, f"{api}/branches/{KERNEL_FOR_LINUS_BRANCH}", paging=False))['commit']['sha']
+    log.info(f"Kernel {KERNEL_TESTING_BRANCH} is {testing[:12]}; {KERNEL_FOR_LINUS_BRANCH} is {for_linus[:12]}")
+
+    commits = []
+    behind_by = 0
+    for page in get(session, f"{api}/compare/{for_linus}...{testing}"):
+        behind_by = page['behind_by']
+        commits.extend(c for c in page['commits'] if len(c['parents']) == 1)
+    if behind_by:
+        log.warning(f"Kernel {KERNEL_TESTING_BRANCH} is not based on the tip of {KERNEL_FOR_LINUS_BRANCH} ({behind_by} commit(s) behind)")
+    log.info(f"Found {len(commits)} commit(s) in kernel {KERNEL_TESTING_BRANCH} not yet sent to Linus")
+
+    prefixes = Counter()
+    for c in commits:
+        summary = c['commit']['message'].splitlines()[0]
+        # Drop tags like "[DO NOT MERGE]"; fold path-style prefixes
+        # ("fs/ceph/super: ...") into their subsystem.
+        summary = re.sub(r'^(\[[^\]]*\]\s*)+', '', summary)
+        prefix = summary.split(':', 1)[0].strip() if ':' in summary else "other"
+        prefix = re.sub(r'^fs/ceph\b.*', 'ceph', prefix)
+        prefix = re.sub(r'^net/ceph\b.*', 'libceph', prefix)
+        prefixes[prefix] += 1
+
+    compare = f'"compare with {KERNEL_FOR_LINUS_BRANCH}":{web}/compare/{for_linus}...{testing}'
+    lines = [
+        "h3. Kernel",
+        "",
+        f'"{KERNEL_TESTING_BRANCH} @ {testing[:12]}":{web}/commits/{testing}: {len(commits)} commit(s) not yet sent to Linus ({compare})',
+    ]
+    if prefixes:
+        lines.append("")
+        lines.append("|_. Prefix |_. Commits |")
+        lines.extend(f"| {p} | {n} |" for p, n in prefixes.most_common())
+    return lines
 
 def get_credits(session, pr, pr_req):
     comments = [pr_req]
@@ -1948,6 +1999,9 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
     if args.qa_private:
         issue_kwargs['is_private'] = True
 
+    if args.dry_run:
+        log.info("[DRY RUN] QA tracker description:\n%s", issue_kwargs['description'])
+
     pr_tags = set()
     for pr in prs:
         pr_info = get_pr_info(session, pr)
@@ -2360,6 +2414,11 @@ def build_branch(args):
         # So we know that we're not on an old test branch, detach HEAD onto ref:
         assert G.head.is_detached
 
+    # Gather this before merging anything so a failed lookup bails out early.
+    kernel_description = []
+    if args.kernel_commits and (args.create_qa or args.update_qa):
+        kernel_description = get_kernel_testing_description(session)
+
     qa_tracker_description = ["|_. PR |_. Author |_. Labels |_. Title |"] if prs else []
     all_audits_passed = True
 
@@ -2515,6 +2574,11 @@ def build_branch(args):
             for commit in G.iter_commits(rev=rev):
                 qa_tracker_description.append(f'* "commit {commit}":{CI_REMOTE_URL}/commit/{commit} -- {commit.summary}')
 
+    if kernel_description:
+        if qa_tracker_description:
+            qa_tracker_description.append("")
+        qa_tracker_description.extend(kernel_description)
+
     # If the branch is 'HEAD', leave HEAD detached (but use "main" for commit message)
     created_branch = False
     if branch == 'HEAD':
@@ -2641,6 +2705,7 @@ def main():
     group.add_argument('--qa-release', dest='qa_release', action='store', help='QA release for tracker (defaults to PR base when --integration)')
     group.add_argument('--qa-tags', dest='qa_tags', action='store', help='QA tags for tracker')
     group.add_argument('--update-qa', dest='update_qa', action='store', help='update QA run ticket')
+    group.add_argument('--kernel-commits', dest='kernel_commits', action='store_true', help=f'summarize the commits in the {KERNEL_REPO} {KERNEL_TESTING_BRANCH} branch not yet in {KERNEL_FOR_LINUS_BRANCH} in the QA tracker description')
 
     group = parser.add_argument_group('CI Repository Options')
     group.add_argument('--no-push-ci', dest='no_push_ci', action='store_true', help='don\'t push branch to ceph-ci repo (when making QA tickets)')
