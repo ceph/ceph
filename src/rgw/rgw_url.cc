@@ -45,4 +45,20 @@ bool parse_url_userinfo(const std::string& url,
   password = std::string(v.password());
   return true;
 }
+bool parse_url_host_port(const std::string& url,
+                         std::string& host,
+                         uint16_t& port,
+                         uint16_t default_port) {
+  auto r = boost::urls::parse_uri(url);
+  if (!r) {
+    return false;
+  }
+  const auto& v = r.value();
+  if (v.host().empty()) {
+    return false;
+  }
+  host = std::string(v.host_address());
+  port = v.has_port() ? v.port_number() : default_port;
+  return true;
+}
 } // namespace rgw
