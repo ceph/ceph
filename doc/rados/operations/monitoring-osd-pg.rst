@@ -6,10 +6,11 @@
 
 High availability and high reliability require a fault-tolerant approach to
 managing hardware and software issues. Ceph has no single point of failure and
-it can service requests for data even when in a "degraded" mode. Ceph's `data
-placement`_ introduces a layer of indirection to ensure that data doesn't bind
-directly to specific OSDs. For this reason, tracking system faults
-requires finding the `placement group`_ (PG) and the underlying OSDs at the
+it can service requests for data even when in a "degraded" mode. Ceph's
+:doc:`data placement <data-placement>` introduces a layer of indirection to
+ensure that data doesn't bind directly to specific OSDs. For this reason,
+tracking system faults requires finding the
+:ref:`placement group <placement groups>` (PG) and the underlying OSDs at the
 root of the problem.
 
 .. tip:: A fault in one part of the cluster might prevent you from accessing a
@@ -33,7 +34,10 @@ If an OSD is ``up``, it may be either ``in`` service (clients can read and
 write data) or it is ``out`` of service. If the OSD was ``in`` but then due to a failure or a manual action was set to the ``out`` state, Ceph will migrate placement groups to the other OSDs to maintain the configured redundancy.  
 
 If an OSD is ``out`` of service, CRUSH will not assign placement groups to it.
-If an OSD is ``down``, it will also be ``out``.
+An OSD that is ``down`` stays ``in`` until the Monitors mark it ``out``.
+Unless the ``noout`` flag is set, they normally do so after it has been
+``down`` for :confval:`mon_osd_down_out_interval` seconds (``600`` by
+default).
 
 .. note:: If an OSD is ``down`` and ``in``, there is a problem and this
    indicates that the cluster is not in a healthy state.
@@ -56,9 +60,9 @@ If an OSD is ``down``, it will also be ``out``.
            +----------------+        +----------------+
 
 If you run the commands ``ceph health``, ``ceph -s``, or ``ceph -w``,
-you might notice that the cluster does not always show ``HEALTH OK``. Don't
+you might notice that the cluster does not always show ``HEALTH_OK``. Don't
 panic. There are certain circumstances in which it is expected and normal that
-the cluster will **NOT** show ``HEALTH OK``:
+the cluster will **NOT** show ``HEALTH_OK``:
 
 #. You haven't started the cluster yet.
 #. You have just started or restarted the cluster and it's not ready to show
@@ -76,10 +80,10 @@ command:
 
     ceph osd stat
 
-The output provides the following information: the total number of OSDs (x),
-how many OSDs are ``up`` (y), how many OSDs are ``in`` (z), and the map epoch (eNNNN). ::
+The output shows the total number of OSDs (x), how many are ``up`` (y) and
+``in`` (z) and for how long, and the map epoch (eNNNN)::
 
-    x osds: y up, z in; epoch: eNNNN
+    x osds: y up (since <time>), z in (since <time>); epoch: eNNNN
 
 If the number of OSDs that are ``in`` the cluster is greater than the number of
 OSDs that are ``up``, run the following command to identify the ``ceph-osd``
@@ -89,44 +93,51 @@ daemons that are not running:
 
     ceph osd tree
 
-:: 
+::
 
-    #ID CLASS WEIGHT  TYPE NAME             STATUS REWEIGHT PRI-AFF
-     -1       2.00000 pool openstack
-     -3       2.00000 rack dell-2950-rack-A
-     -2       2.00000 host dell-2950-A1
-      0   ssd 1.00000      osd.0                up  1.00000 1.00000
-      1   ssd 1.00000      osd.1              down  1.00000 1.00000
+    ID  CLASS  WEIGHT   TYPE NAME       STATUS  REWEIGHT  PRI-AFF
+    -1         2.00000  root default
+    -3         2.00000      host node1
+     0    ssd  1.00000          osd.0       up   1.00000  1.00000
+     1    ssd  1.00000          osd.1     down   1.00000  1.00000
 
 .. tip:: Searching through a well-designed CRUSH hierarchy to identify the physical
    locations of particular OSDs might help you troubleshoot your cluster.
 
-If an OSD is ``down``, start it by running the following command:
+If an OSD is ``down``, start it. On a cluster deployed with cephadm, run the
+following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    sudo systemctl start ceph-osd@1
+   ceph orch daemon start osd.1
 
-For problems associated with OSDs that have stopped or won't restart, see `OSD Not Running`_.
+On a cluster installed from packages without cephadm, run the following command
+on the OSD host:
+
+.. prompt:: bash #
+
+   systemctl start ceph-osd@1
+
+For problems associated with OSDs that have stopped or won't restart, see :ref:`osd-not-running`.
 
 
 PG Sets
 =======
 
-When CRUSH assigns a PG to OSDs, it takes note of how many replicas of the PG
-are required by the pool and then assigns each replica to a different OSD.
+When CRUSH assigns a PG to OSDs, it takes note of how many object replicas or
+shards of the PG the pool requires and then assigns each of them to a different
+OSD.
 For example, if the pool requires three replicas of a PG, CRUSH might assign
 them individually to ``osd.1``, ``osd.2`` and ``osd.3``. CRUSH seeks a
 pseudo-random placement that takes into account the failure domains that you
-have set in your `CRUSH map`_; for this reason, PGs are rarely assigned to
-immediately adjacent OSDs in a large cluster.
+have set in your :ref:`CRUSH map <rados-crush-map>`; for this reason, PGs are
+rarely assigned to immediately adjacent OSDs in a large cluster.
 
-Ceph processes client requests with the **Acting Set** of OSDs: this is the set
-of OSDs that currently have a full and working version of a PG shard and that
-are therefore responsible for handling requests. By contrast, the **Up Set** is
-the set of OSDs that contain a shard of a specific PG. Data is moved or copied
-to the **Up Set**, or planned to be moved or copied, to the **Up Set**. See
-:ref:`Placement Group Concepts <rados_operations_pg_concepts>`.
+Ceph processes client requests with the **Acting Set** of OSDs: the OSDs that
+are currently responsible for the PG. By contrast, the **Up Set** is the set of
+OSDs to which CRUSH (with any ``pg-upmap`` exceptions) maps the PG: the OSDs
+that should hold it. When the two differ, Ceph moves or copies data to the Up
+Set. See :ref:`Placement Group Concepts <rados_operations_pg_concepts>`.
 
 Sometimes an OSD in the Acting Set is ``down`` or otherwise unable to
 service requests for objects in the PG. When this kind of situation
@@ -141,9 +152,8 @@ arises, don't panic. Common examples of such a situation include:
 
 Typically, the Up Set and the Acting Set are identical. When they are not, it
 might indicate that Ceph is migrating the PG (in other words, that the PG has
-been remapped), that an OSD is recovering, or that there is a problem with the
-cluster (in such scenarios, Ceph usually shows a "HEALTH WARN" state with a
-"stuck stale" message).
+been ``remapped``), that an OSD is recovering, or that there is a problem with
+the cluster.
 
 To retrieve a list of PGs, run the following command:
 
@@ -196,28 +206,31 @@ the following diagram, we assume a pool with three replicas of the PG:
                 |<-----------------------------|
                 |          Peering             |
 
-The OSDs also report their status to the monitor. For details, see `Configuring Monitor/OSD
-Interaction`_. To troubleshoot peering issues, see :ref:`failures-osd-peering`.
+The OSDs also report their status to the monitor. For details, see
+:doc:`Configuring Monitor/OSD Interaction </rados/configuration/mon-osd-interaction>`.
+To troubleshoot peering issues, see :ref:`failures-osd-peering`.
 
 
 Monitoring PG States
 ====================
 
 If you run the commands ``ceph health``, ``ceph -s``, or ``ceph -w``,
-you might notice that the cluster does not always show ``HEALTH OK``. After
+you might notice that the cluster does not always show ``HEALTH_OK``. After
 first checking to see if the OSDs are running, you should also check PG
 states. There are certain PG-peering-related circumstances in which it is expected
-and normal that the cluster will **NOT** show ``HEALTH OK``:
+and normal that the cluster will **NOT** show ``HEALTH_OK``:
 
 #. You have just created a pool and the PGs haven't peered yet.
 #. The PGs are recovering.
 #. You have just added an OSD to or removed an OSD from the cluster.
 #. You have just modified your CRUSH map and your PGs are migrating.
-#. There is inconsistent data in different replicas of a PG.
-#. Ceph is scrubbing a PG's replicas.
 #. Ceph doesn't have enough storage capacity to complete backfilling operations.
 
-If one of these circumstances causes Ceph to show ``HEALTH WARN``, don't
+Inconsistent data in different replicas of a PG is not normal: it raises
+``PG_DAMAGED`` and ``OSD_SCRUB_ERRORS`` at ``HEALTH_ERR`` and needs a repair
+(see :doc:`/rados/troubleshooting/troubleshooting-pg`).
+
+If one of these circumstances causes Ceph to show ``HEALTH_WARN``, don't
 panic. In many cases, the cluster will recover on its own. In some cases, however, you
 might need to take action. An important aspect of monitoring PGs is to check their
 status as ``active`` and ``clean``: that is, it is important to ensure that, when the
@@ -232,16 +245,17 @@ The output provides the following information: the total number of PGs (x), how 
 PGs are in a particular state such as ``active+clean`` (y), and the
 amount of data stored (z). ::
 
-    x pgs: y active+clean; z bytes data, aa MB used, bb GB / cc GB avail
+    x pgs: y active+clean; z GiB data, aa GiB used, bb TiB / cc TiB avail
 
 .. note:: It is common for Ceph to report multiple states for PGs (for example,
-   ``active+clean``, ``active+clean+remapped``, ``active+clean+scrubbing``.
+   ``active+clean``, ``active+clean+remapped``, or ``active+clean+scrubbing``).
 
-Here Ceph shows not only the PG states, but also storage capacity used (aa),
-the amount of storage capacity remaining (bb), and the total storage capacity
-of the PG. These values can be important in a few cases:
+Here Ceph shows not only the PG states, but also the raw storage capacity used
+(aa), the raw capacity remaining (bb), and the total raw capacity of all OSDs
+(cc). Ceph scales each figure to a suitable unit. These values can be important
+in a few cases:
 
-- The cluster is reaching its ``near full ratio`` or ``full ratio``.
+- The cluster is reaching its ``nearfull_ratio`` or ``full_ratio``.
 - Data is not being distributed across the cluster due to an error in the
   CRUSH configuration.
 
@@ -249,16 +263,16 @@ of the PG. These values can be important in a few cases:
 .. topic:: Placement Group IDs
 
    PG IDs consist of the pool number (not the pool name) followed by a period
-   (.) and a hexadecimal number. You can view pool numbers and their names from
-   in the output of ``ceph osd lspools``. For example, the first pool that was
-   created corresponds to pool number ``1``. A fully qualified PG ID has the
-   following form::
+   (.) and a hexadecimal number. You can view pool numbers and their names in
+   the output of ``ceph osd pool ls detail``. For example, the first pool that
+   was created corresponds to pool number ``1``. A fully qualified PG ID has
+   the following form::
 
        {pool-num}.{pg-id}
 
    It typically resembles the following:: 
 
-    1.1701b
+    1.1a
 
 
 To retrieve a list of PGs, run the following command:
@@ -287,12 +301,12 @@ The following subsections describe the most common PG states in detail.
 Creating
 --------
 
-PGs are created when you create a pool: the command that creates a pool
-specifies the total number of PGs for that pool, and when the pool is created
-all of those PGs are created as well. Ceph will echo ``creating`` while it is
-creating PGs. After the PG(s) are created, the OSDs that are part of a PG's
-Acting Set will peer. Once peering is complete, the PG status should be
-``active+clean``. This status means that Ceph clients begin writing to the
+PGs are created when you create a pool: the pool gets the number of PGs given
+to ``ceph osd pool create``, or a default number if the command gives none, and
+the PG autoscaler may change that number later. Ceph will echo ``creating``
+while it is creating PGs. After the PG(s) are created, the OSDs that are part
+of a PG's Acting Set will peer. Once peering is complete, the PG status should
+be ``active+clean``. This status means that Ceph clients begin writing to the
 PG.
 
 .. ditaa::
@@ -317,9 +331,9 @@ process does **NOT** mean that each replica has the latest contents.
    acknowledged write operation since the last successful peering operation.
    
    Given an accurate record of each acknowledged write operation, Ceph can
-   construct a new authoritative history of the PG--that is, a complete and
-   fully ordered set of operations that, if performed, would bring an OSD’s
-   copy of the PG up to date.
+   construct a new authoritative history of the PG: a complete and fully
+   ordered set of operations that, if performed, would bring an OSD's copy of
+   the PG up to date.
 
 
 Active
@@ -342,10 +356,11 @@ Degraded
 --------
 
 When a client writes an object to the primary OSD, the primary OSD is
-responsible for writing the replicas to the replica OSDs. After the primary OSD
-writes the object to storage, the PG will remain in a ``degraded``
-state until the primary OSD has received an acknowledgement from the replica
-OSDs that Ceph created the replica objects successfully. 
+responsible for writing the replicas to the replica OSDs, and Ceph does not
+acknowledge the write to the client until they have stored it. A PG is
+``degraded`` when Ceph has not yet stored some of its objects the number of
+times that the pool requires, for example because an OSD that holds the PG is
+``down``.
 
 The reason that a PG can be ``active+degraded`` is that an OSD can be
 ``active`` even if it doesn't yet hold all of the PG's objects. If an OSD goes
@@ -372,24 +387,22 @@ Ceph was designed for fault-tolerance, because hardware and other server
 problems are expected or even routine. When an OSD goes ``down``, its contents
 might fall behind the current state of other replicas in the PGs. When the OSD
 has returned to the ``up`` state, the contents of the PGs must be updated to
-reflect that current state. During that time period, the OSD might be in a
-``recovering`` state.
+reflect that current state. During that time period, the PGs on that OSD
+might be in the ``recovering`` state.
 
 Recovery is not always trivial, because a hardware failure might cause a
 cascading failure of multiple OSDs. For example, a network switch for a rack or
 cabinet might fail, which can cause the OSDs of a number of host machines to
 fall behind the current state of the cluster. In such a scenario, general
 recovery is possible only if each of the OSDs recovers after the fault has been
-resolved.]
+resolved.
 
 Ceph provides a number of settings that determine how the cluster balances the
 resource contention between the need to process new service requests and the
 need to recover data objects and restore the PGs to the current state. The
 ``osd_recovery_delay_start`` setting allows an OSD to restart, re-peer, and
 even process some replay requests before starting the recovery process. The
-``osd_recovery_thread_timeout`` setting determines the duration of a thread
-timeout, because multiple OSDs might fail, restart, and re-peer at staggered
-rates.  The ``osd_recovery_max_active`` setting limits the number of recovery
+``osd_recovery_max_active`` setting limits the number of recovery
 requests an OSD can entertain simultaneously, in order to prevent the OSD from
 failing to serve.  The ``osd_recovery_max_chunk`` setting limits the size of
 the recovered data chunks, in order to prevent network congestion.
@@ -409,8 +422,9 @@ During the backfill operations, you might see one of several states:
 ``backfill_wait`` indicates that a backfill operation is pending, but is not
 yet underway; ``backfilling`` indicates that a backfill operation is currently
 underway; and ``backfill_toofull`` indicates that a backfill operation was
-requested but couldn't be completed due to insufficient storage capacity. When
-a PG cannot be backfilled, it might be considered ``incomplete``.
+requested but couldn't be completed due to insufficient storage capacity. If
+backfill stops on unfound objects, the PG is ``backfill_unfound`` (see
+:doc:`pg-states`).
 
 The ``backfill_toofull`` state might be transient. It might happen that, as PGs
 are moved around, space becomes available. The ``backfill_toofull`` state is
@@ -420,47 +434,46 @@ conditions change.
 Ceph provides a number of settings to manage the load spike associated with the
 reassignment of PGs to an OSD (especially a new OSD). The ``osd_max_backfills``
 setting specifies the maximum number of concurrent backfills to and from an OSD
-(default: 1; note you cannot change this if the `mClock`_ scheduler is active,
+(default: 1; note you cannot change this if the
+:doc:`mClock </rados/configuration/mclock-config-ref>` scheduler is active,
 unless you set ``osd_mclock_override_recovery_settings = true``, see
 `mClock backfill`_).
-The ``backfill_full_ratio`` setting allows an OSD to refuse a
+The ``backfillfull_ratio`` setting allows an OSD to refuse a
 backfill request if the OSD is approaching its full ratio (default: 90%). This
 setting can be changed with the ``ceph osd set-backfillfull-ratio`` command. If
 an OSD refuses a backfill request, the ``osd_backfill_retry_interval`` setting
 allows an OSD to retry the request after a certain interval (default: 30
 seconds). OSDs can also set ``osd_backfill_scan_min`` and
-``osd_backfill_scan_max`` in order to manage scan intervals (default: 64 and
-512, respectively).
+``osd_backfill_scan_max``, the minimum and maximum number of objects per
+backfill scan (default: 64 and 512, respectively).
 
 
 Remapped
 --------
 
-When the Acting Set that services a PG changes, the data migrates from the old
-Acting Set to the new Acting Set. Because it might take time for the new
-primary OSD to begin servicing requests, the old primary OSD might be required
-to continue servicing requests until the PG data migration is complete. After
-data migration has completed, the mapping uses the primary OSD of the new
-Acting Set.
+When CRUSH maps a PG to a new set of OSDs (the Up Set), Ceph can keep a
+temporary Acting Set of the old OSDs serving requests while the data migrates.
+The PG is ``remapped`` while the two sets differ. After the data migration has
+completed, the Acting Set is the Up Set again, and its primary OSD serves the
+PG.
 
 
 Stale
 -----
 
 Although Ceph uses heartbeats in order to ensure that hosts and daemons are
-running, the ``ceph-osd`` daemons might enter a ``stuck`` state where they are
-not reporting statistics in a timely manner (for example, there might be a
-temporary network fault). By default, OSD daemons report their PG, up through,
-boot, and failure statistics every half second (that is, in accordance with a
-value of ``0.5``), which is more frequent than the reports defined by the
-heartbeat thresholds. If the primary OSD of a PG's Acting Set fails to report
-to the monitor or if other OSDs have reported the primary OSD ``down``, the
-monitors will mark the PG ``stale``.
+running, the ``ceph-osd`` daemons might stop reporting statistics in a timely
+manner (for example, there might be a temporary network fault). OSDs send
+their PG statistics to the Manager, by default every 5 seconds
+(:confval:`mgr_stats_period`). If the primary OSD of a PG's Acting Set is
+marked ``down`` (because other OSDs reported it, or because it sent no beacon
+to the Monitors for :confval:`mon_osd_report_timeout` seconds), the Manager
+marks the PG ``stale``.
 
 When you start your cluster, it is common to see the ``stale`` state until the
 peering process completes. After your cluster has been running for a while,
 however, seeing PGs in the ``stale`` state indicates that the primary OSD for
-those PGs is ``down`` or not reporting PG statistics to the monitor.
+those PGs is ``down``.
 
 
 .. _rados_operations_monitoring_pg_vulnerability_rebuild_duration:
@@ -469,8 +482,8 @@ Monitoring PG Vulnerability and Rebuild Duration
 ================================================
 
 The PG states above describe a cluster's condition at a single point in
-time. To understand a cluster's durability posture over time -- how long,
-how often, and how severely PGs have run at reduced redundancy -- Ceph
+time. To understand a cluster's durability posture over time (how long,
+how often, and how severely PGs have run at reduced redundancy), Ceph
 tracks two per-OSD performance counters:
 
 - ``pg_vulnerability_duration``: the total wall-clock time a PG spent at
@@ -480,7 +493,7 @@ tracks two per-OSD performance counters:
 - ``pg_rebuild_duration``: the subset of that time actually spent in
   active data movement (``Recovering`` or ``Backfilling``). The
   difference between the two is time spent *waiting* rather than
-  *repairing* -- for example, waiting for a downed OSD with no spare
+  *repairing*, for example waiting for a downed OSD with no spare
   capacity to take its place.
 
 Both counters are recorded once per PG episode, on whichever OSD is
@@ -489,6 +502,10 @@ in ``pg_history_t`` (``pg_vulnerability_duration`` in
 ``last_degraded``/``last_clean``, ``pg_rebuild_duration`` in
 ``last_rebuild_active_start``), so both survive OSD restarts and primary
 handovers mid-episode or mid-rebuild.
+
+.. note:: These counters are available in Umbrella and later releases. Some
+   Tentacle releases have an earlier counter under one of these names that
+   works differently.
 
 Finding the counters
 --------------------
@@ -533,7 +550,7 @@ The examples below assume ``ceph-exporter`` is being scraped by
 Prometheus, which exposes these as
 ``ceph_recoverystate_perf_pg_vulnerability_duration_*`` and
 ``ceph_recoverystate_perf_pg_rebuild_duration_*``. They are meant as a
-starting point, not an exhaustive list -- adjust the range and grouping
+starting point, not an exhaustive list. Adjust the range and grouping
 to your own reporting needs.
 
 .. note:: These PromQL queries are suggestions to help you get started,
@@ -542,8 +559,8 @@ to your own reporting needs.
    (for example, to scope by pool or host) to fit your environment
    before relying on them.
 
-* Weekly exposure report -- how long, cluster-wide, did data run at
-  reduced redundancy this week:
+* Weekly exposure report, showing how long data ran at reduced
+  redundancy across the cluster this week:
 
   .. code-block:: promql
 
@@ -556,8 +573,8 @@ to your own reporting needs.
       rate(ceph_recoverystate_perf_pg_vulnerability_duration_sum[1h])
       / rate(ceph_recoverystate_perf_pg_vulnerability_duration_count[1h])
 
-* Repair vs. waiting -- of the exposure time, how much was spent
-  actually moving data versus waiting for something else (a downed OSD
+* Repair versus waiting: of the exposure time, how much was spent
+  moving data, and how much waiting for something else (a downed OSD
   with no spare, an empty or async-recovery-target PG). A high
   "waiting" fraction points at topology or spare-capacity problems
   rather than slow recovery:
@@ -567,20 +584,13 @@ to your own reporting needs.
       rate(ceph_recoverystate_perf_pg_vulnerability_duration_sum[1h])
       - rate(ceph_recoverystate_perf_pg_rebuild_duration_sum[1h])
 
-* Reliability hot-spot triage -- which OSDs are rebuilding most often.
+* Reliability hot-spot triage, showing which OSDs are rebuilding most often.
   Treat this as a triage flag to investigate further, not a verdict on
   its own:
 
   .. code-block:: promql
 
       topk(5, rate(ceph_recoverystate_perf_pg_vulnerability_duration_count[24h]))
-
-* Alerting on a single long episode -- page when one episode exceeds a
-  threshold, independent of the cluster's current ``HEALTH`` status:
-
-  .. code-block:: promql
-
-      ceph_recoverystate_perf_pg_vulnerability_duration_max_inc > 600
 
 Spot-checking a single PG
 -------------------------
@@ -596,21 +606,21 @@ specific PG:
 Known limitations
 -----------------
 
-- The counters are **per OSD, not per PG** -- they answer "how much did
+- The counters are **per OSD, not per PG**: they answer "how much did
   this OSD's PGs collectively spend degraded," not "how many times has
   this specific PG been rebuilt."
-- A benign, automated rebalance -- the **balancer** or
+- A benign, automated rebalance, such as the **balancer** or
   **pg_autoscaler** moving already-redundant data, a manual reweight,
-  or added capacity -- is currently counted the same as a genuine
+  or added capacity, is currently counted the same as a genuine
   failure; cause attribution is not yet implemented. Both are enabled
   by default (the balancer in ``upmap`` mode, autoscaling ``on`` for
   new pools) and each evaluates for a possible change roughly every 60
-  seconds -- this is continuous background activity, not an occasional
-  event, so on an actively-managed cluster the *cumulative* totals of
+  seconds. This is continuous background activity, not an occasional
+  event, so on an actively managed cluster the *cumulative* totals of
   these counters can end up dominated by benign rebalancing rather
   than genuine incidents. ``ceph pg dump``'s ``num_objects_degraded``/
   ``num_objects_misplaced`` split does **not** reliably distinguish
-  the two cases -- backfill's own accounting can attribute a purely
+  the two cases: backfill's own accounting can attribute a purely
   cosmetic rebalance to ``num_objects_degraded`` whenever a backfill
   target's deficit can't be paired against a matching source-side
   entry, with no actual data at risk. To check whether one was active
@@ -622,17 +632,17 @@ Known limitations
   from OSDMap/interval history) is tracked as a separate,
   not-yet-implemented effort.
 - A PG that is *inactive* (stuck below the ``Activating`` state) is
-  **not** counted -- these counters measure redundancy loss, not
+  **not** counted: these counters measure redundancy loss, not
   availability loss.
 - These are ordinary perf counters: in-memory only, reset to zero on
   that OSD's own restart. An episode's onset/duration bookkeeping in
   ``pg_history_t`` survives restarts and primary handovers correctly,
   but the one-time *record* of an already-closed episode is lost if
   the OSD that recorded it restarts before anything scrapes it. This
-  risk doesn't compound with handovers -- it's bounded to whichever
-  episode(s) that specific OSD closed just before going down, not the
-  counter's whole history -- and Prometheus/``ceph-exporter`` scraping
-  only mitigates it probabilistically, bounded by the scrape interval.
+  risk does not compound with handovers. It is bounded to the episodes
+  that this OSD closed just before going down, not the counter's whole
+  history, and scraping by Prometheus or ``ceph-exporter`` only
+  mitigates it probabilistically, bounded by the scrape interval.
 
 
 Identifying Troubled PGs
@@ -647,9 +657,8 @@ Ceph cannot perform self-repairs. The stuck states include:
   are recovering.
 - **Inactive**: PGs cannot process reads or writes because they are waiting for
   an OSD that has the most up-to-date data to come back ``up``.
-- **Stale**: PG are in an unknown state, because the OSDs that host them have
-  not reported to the monitor cluster for a certain period of time (determined
-  by ``mon_osd_report_timeout``).
+- **Stale**: The primary OSD of the PG is ``down``, so the Manager has no
+  current statistics for the PG.
 
 To identify stuck PGs, run the following command:
 
@@ -667,11 +676,11 @@ Finding an Object Location
 To store object data in the Ceph Object Store, a Ceph client must: 
 
 #. Set an object name
-#. Specify a `pool`_
+#. Specify a :ref:`pool <rados_pools>`
 
-The Ceph client retrieves the latest cluster map, the CRUSH algorithm
-calculates how to map the object to a PG, and then the algorithm calculates how
-to dynamically assign the PG to an OSD. To find the object location given only
+The Ceph client retrieves the latest cluster map, hashes the object name to
+find the PG that holds the object, and then uses the CRUSH algorithm to map
+that PG to OSDs. To find the object location given only
 the object name and the pool name, run a command of the following form:
 
 .. prompt:: bash $
@@ -679,6 +688,14 @@ the object name and the pool name, run a command of the following form:
     ceph osd map {poolname} {object-name} [namespace]
 
 .. topic:: Exercise: Locate an Object
+
+        No pool named ``data`` exists by default. Create a pool for the
+        exercise and use its name in place of ``data``:
+
+        .. prompt:: bash $
+
+           ceph osd pool create testpool
+           ceph osd pool application enable testpool rados
 
         As an exercise, let's create an object. We can specify an object name, a path
         to a test file that contains some object data, and a pool name by using the
@@ -716,15 +733,7 @@ the object name and the pool name, run a command of the following form:
 
 As the cluster evolves, the object location may change dynamically. One benefit
 of Ceph's dynamic rebalancing is that Ceph spares you the burden of manually
-performing the migration. For details, see the `Architecture`_ section.
+performing the migration. For details, see the :ref:`architecture` section.
 
-.. _data placement: ../data-placement
-.. _pool: ../pools
-.. _placement group: ../placement-groups
-.. _mClock: ../../configuration/mclock-config-ref
-.. _mClock backfill: ../../configuration/mclock-config-ref#recovery-backfill-options
-.. _Architecture: ../../../architecture/
-.. _OSD Not Running: ../../troubleshooting/troubleshooting-osd#osd-not-running
-.. _CRUSH map: ../crush-map
-.. _Configuring Monitor/OSD Interaction: ../../configuration/mon-osd-interaction/
-.. _Placement Group Subsystem: ../control#placement-group-subsystem
+.. _mClock backfill: ../../configuration/mclock-config-ref/#recovery-backfill-options
+.. _Placement Group Subsystem: ../control/#placement-group-subsystem
