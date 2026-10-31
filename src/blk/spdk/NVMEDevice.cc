@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <deque>
 #include <fstream>
 #include <functional>
 #include <map>
@@ -457,7 +458,7 @@ class NVMEManager {
   std::thread dpdk_thread;
   ceph::mutex probe_queue_lock = ceph::make_mutex("NVMEManager::probe_queue_lock");
   ceph::condition_variable probe_queue_cond;
-  std::list<ProbeContext*> probe_queue;
+  std::deque<ProbeContext *> probe_queue;
 
  public:
   NVMEManager() {}

@@ -16,6 +16,7 @@
 #ifndef CEPH_MDS_ESESSION_H
 #define CEPH_MDS_ESESSION_H
 
+#include <deque>
 #include "common/config.h"
 #include "include/types.h"
 
@@ -55,7 +56,7 @@ class ESession : public LogEvent {
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static std::list<ESession> generate_test_instances();
+  static std::deque<ESession> generate_test_instances();
 
   void print(std::ostream& out) const override {
     if (open)

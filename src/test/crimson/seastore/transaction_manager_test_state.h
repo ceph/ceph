@@ -4,6 +4,8 @@
 #pragma once
 
 #include <random>
+#include <vector>
+#include <vector>
 #include <boost/iterator/counting_iterator.hpp>
 
 #include "crimson/os/seastore/cache.h"
@@ -51,8 +53,8 @@ using EphemeralDevicesRef = std::unique_ptr<EphemeralDevices>;
 
 class EphemeralSegmentedDevices : public EphemeralDevices {
   segment_manager::EphemeralSegmentManager* segment_manager;
-  std::list<segment_manager::EphemeralSegmentManagerRef> cache_segment_managers;
-  std::list<segment_manager::EphemeralSegmentManagerRef> data_segment_managers;
+  std::vector<segment_manager::EphemeralSegmentManagerRef> cache_segment_managers;
+  std::vector<segment_manager::EphemeralSegmentManagerRef> data_segment_managers;
   std::size_t num_cache_device_managers;
   std::size_t num_data_device_managers;
 
@@ -209,8 +211,8 @@ public:
 
 class EphemeralRandomBlockDevices : public EphemeralDevices {
   random_block_device::RBMDevice* rb_device;
-  std::list<random_block_device::RBMDeviceRef> cache_rb_devices;
-  std::list<random_block_device::RBMDeviceRef> data_rb_devices;
+  std::vector<random_block_device::RBMDeviceRef> cache_rb_devices;
+  std::vector<random_block_device::RBMDeviceRef> data_rb_devices;
 
 public:
   EphemeralRandomBlockDevices(

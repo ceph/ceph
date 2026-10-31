@@ -24,6 +24,7 @@
 
 #include <map>
 #include <set>
+#include <deque>
 #include <utility>
 #include <sstream>
 
@@ -96,10 +97,10 @@ struct failure_info_t {
     }
   }
 
-  void take_report_messages(std::list<MonOpRequestRef>& ls) {
+  void take_report_messages(std::deque<MonOpRequestRef>& messages) {
     for (auto p = reporters.begin(); p != reporters.end(); ++p) {
       if (p->second.op) {
-	ls.push_back(p->second.op);
+        messages.push_back(p->second.op);
         p->second.op.reset();
       }
     }
@@ -453,7 +454,7 @@ private:
   bool prepare_failure(MonOpRequestRef op);
   bool prepare_mark_me_down(MonOpRequestRef op);
   void process_failures();
-  void take_all_failures(std::list<MonOpRequestRef>& ls);
+  void take_all_failures(std::deque<MonOpRequestRef>& messages);
 
   bool preprocess_mark_me_dead(MonOpRequestRef op);
   bool prepare_mark_me_dead(MonOpRequestRef op);
@@ -658,7 +659,7 @@ private:
   void reencode_full_map(ceph::buffer::list& bl, uint64_t features);
 public:
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
-  void get_versions(std::map<std::string, std::list<std::string>> &versions);
+  void get_versions(std::map<std::string, std::vector<std::string>>& versions);
 protected:
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,

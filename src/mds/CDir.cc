@@ -2104,7 +2104,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     set_fresh_fnode(allocate_fnode(got_fnode));
   }
 
-  list<CInode*> undef_inodes;
+  vector<CInode *> undef_inodes;
 
   // purge stale snaps?
   bool force_dirty = false;
@@ -2285,10 +2285,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   }
 
   // open & force frags
-  while (!undef_inodes.empty()) {
-    CInode *in = undef_inodes.front();
-
-    undef_inodes.pop_front();
+  for (auto *in : undef_inodes) {
     in->state_clear(CInode::STATE_REJOINUNDEF);
     mdcache->opened_undef_inode(in);
 

@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <iostream>
 #include <fmt/format.h>
 
 #include <boost/intrusive_ptr.hpp>
@@ -40,9 +39,6 @@ struct fmt::formatter<ObjectStore::omap_iter_seek_t> {
 };
 
 namespace crimson::os::seastore {
-
-std::ostream &operator<<(std::ostream &out, const std::list<std::string> &rhs);
-std::ostream &operator<<(std::ostream &out, const std::map<std::string, std::string> &rhs);
 
 class OMapManager {
  /* all OMapManager API use reference to transfer input string parameters,
