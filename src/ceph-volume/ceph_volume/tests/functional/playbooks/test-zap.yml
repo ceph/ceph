@@ -1,0 +1,15 @@
+---
+- name: Remove OSDs
+  ansible.builtin.import_playbook: remove-osds.yml
+
+- hosts: osd0
+  become: true
+  tasks:
+    - name: Zap OSDs by id
+      ansible.builtin.command: "cephadm ceph-volume lvm zap --osd-id {{ item }} --destroy"
+      with_items: "{{ osd_ids }}"
+      environment:
+        CEPH_VOLUME_DEBUG: '1'
+
+- name: Redeploy OSDs
+  ansible.builtin.import_playbook: deploy-osds.yml
