@@ -11035,6 +11035,107 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairSharedBlobTest) {
   bstore->mount();
 }
 
+// Repair of a broken shared blob must rebuild references for every pextent
+// of the blobs sharing it, not only the first one, and the repaired record
+// must allow the extents to be released again.
+TEST_P(StoreTestSpecificAUSize, BluestoreRepairSharedBlobMultiPextent) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+  SetVal(g_conf(), "bluestore_allocator", "avl");
+
+  const size_t block_size = 0x1000;
+  StartDeferred(block_size);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  const uint64_t pool = 555;
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+  auto ch = store->create_new_collection(cid);
+
+  ghobject_t hoid = make_object("Object 1", pool);
+  ghobject_t hoid_cloned = hoid;
+  hoid_cloned.hobj.snap = 1;
+  ghobject_t hoid2 = make_object("Object 2", pool);
+
+  bufferlist bl;
+  bl.append(string(block_size, 'x'));
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // the write to hoid2 in between leaves hoid's blob with two pextents
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, bl.length(), bl);
+    t.write(cid, hoid2, 0, bl.length(), bl);
+    t.write(cid, hoid, block_size * 2, bl.length(), bl);
+    t.clone(cid, hoid, hoid_cloned);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ch.reset(nullptr);
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 0);
+  bstore->mount();
+
+  string key;
+  _key_encode_u64(1, &key);
+  bluestore_extent_ref_map_t original;
+  {
+    bufferlist bl;
+    bluestore_shared_blob_t sb(1);
+    ASSERT_EQ(bstore->get_shared_blob(key, bl), 0);
+    decode(sb, bl);
+    ASSERT_EQ(sb.ref_map.ref_map.size(), 2u);
+    original = sb.ref_map;
+    // break it: an extra reference on the second pextent
+    auto it = std::next(sb.ref_map.ref_map.begin());
+    sb.ref_map.get(it->first, block_size);
+    bl.clear();
+    encode(sb, bl);
+    bstore->inject_broken_shared_blob_key(key, bl);
+  }
+  bstore->umount();
+  ASSERT_GT(bstore->fsck(false), 0);
+  ASSERT_EQ(bstore->repair(false), 0);
+  bstore->mount();
+  {
+    bufferlist bl;
+    bluestore_shared_blob_t sb(1);
+    ASSERT_EQ(bstore->get_shared_blob(key, bl), 0);
+    decode(sb, bl);
+    EXPECT_EQ(original, sb.ref_map);
+  }
+  bstore->umount();
+  EXPECT_EQ(bstore->fsck(false), 0);
+  bstore->mount();
+
+  // releasing the shared extents must work with the repaired record
+  ch = store->open_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid_cloned);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ch.reset(nullptr);
+  bstore->umount();
+  EXPECT_EQ(bstore->fsck(false), 0);
+  bstore->mount();
+}
+
 TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
   if (string(GetParam()) != "bluestore")
     return;

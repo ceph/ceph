@@ -6313,10 +6313,10 @@ void BlueStore::_fsck_repair_shared_blobs(
     if(it == refs_map.end()) {
       return true;
     }
+    // every valid pextent holds a reference
     for (auto& p : b.get_extents()) {
       if (p.is_valid()) {
 	it->second.get(p.offset, p.length);
-	break;
       }
     }
     return true;
