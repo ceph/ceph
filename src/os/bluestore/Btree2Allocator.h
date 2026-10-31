@@ -214,10 +214,11 @@ protected:
   }
   double _get_fragmentation() const {
     auto free_blocks = p2align(num_free.load(), (uint64_t)block_size) / block_size;
-    if (free_blocks <= 1) {
+    const auto num_ranges = range_tree.size();
+    if (free_blocks <= 1 || num_ranges <= 1) {
       return .0;
     }
-    return (static_cast<double>(range_tree.size() - 1) / (free_blocks - 1));
+    return (static_cast<double>(num_ranges - 1) / (free_blocks - 1));
   }
 
   void _shutdown();
