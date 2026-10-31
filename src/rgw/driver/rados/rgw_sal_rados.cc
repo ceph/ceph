@@ -4455,6 +4455,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     upload_info.dest_placement = dest_placement;
     upload_info.cksum_type = cksum_type;
     upload_info.cksum_flags = cksum_flags;
+    upload_info.compression_type = compression_type;
 
     if (obj_legal_hold) {
       upload_info.obj_legal_hold_exist = true;
@@ -4910,6 +4911,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
   }
   cksum_type = upload_info.cksum_type;
   cksum_flags = upload_info.cksum_flags;
+  compression_type = upload_info.compression_type;
   placement = upload_info.dest_placement;
   upload_information = upload_info;
   *rule = &placement;
