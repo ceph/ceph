@@ -47,6 +47,18 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "-- op tracker -- ";
 }
 
+/*
+ * `now` is sampled once before the in-flight lists are walked, so an op
+ * registered after that sample has an initiation time later than `now`.
+ * utime_t keeps seconds in a __u32, so subtracting in that order wraps to
+ * ~4.29e9 instead of yielding a negative age. Clamp to zero rather than
+ * reporting a nonsense age.
+ */
+static utime_t op_age(const utime_t& now, const utime_t& initiated)
+{
+  return now > initiated ? now - initiated : utime_t();
+}
+
 void OpHistoryServiceThread::break_thread() {
   queue_spinlock.lock();
   _external_queue.clear();
@@ -299,7 +311,8 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
     ceph_assert(NULL != sdata); 
     std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
     for (auto& op : sdata->ops_in_flight_sharded) {
-      if (print_only_blocked && (now - op.get_initiated() <= complaint_time))
+      if (print_only_blocked &&
+          (op_age(now, op.get_initiated()) <= complaint_time))
         break;
       if (!op.filter_out(filters))
         continue;
@@ -501,7 +514,7 @@ bool OpTracker::check_ops_in_flight(std::string* summary,
   utime_t oldest_secs;
   auto warn_on_slow_op = [&](TrackedOp& op) {
     stringstream ss;
-    utime_t age = now - op.get_initiated();
+    utime_t age = op_age(now, op.get_initiated());
     ss << "slow request " << age << " seconds old, received at "
        << op.get_initiated() << ": " << op.get_desc()
        << " currently "
@@ -538,7 +551,7 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
     std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
 
     for (auto& i : sdata->ops_in_flight_sharded) {
-      utime_t age = now - i.get_initiated();
+      utime_t age = op_age(now, i.get_initiated());
       uint32_t ms = (long)(age * 1000.0);
       h->add(ms);
     }
@@ -634,7 +647,7 @@ void TrackedOp::dump(utime_t now, Formatter *f, OpTracker::dumper lambda) const
     return;
   f->dump_string("description", get_desc());
   f->dump_stream("initiated_at") << get_initiated();
-  f->dump_float("age", now - get_initiated());
+  f->dump_float("age", op_age(now, get_initiated()));
   f->dump_float("duration", get_duration());
   f->dump_bool("continuous", is_continuous());
   {
