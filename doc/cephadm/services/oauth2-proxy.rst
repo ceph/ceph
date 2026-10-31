@@ -20,7 +20,7 @@ To deploy the ``oauth2-proxy`` service, use the following command:
     ceph orch apply oauth2-proxy [--placement ...] ...
 
 Once applied, ``cephadm`` will re-configure the necessary components to use ``oauth2-proxy`` for authentication,
-thereby securing access to all Ceph applications. The service will handle login flows, redirect users
+thereby securing access to Ceph applications through the ``mgmt-gateway``. The service will handle login flows, redirect users
 to the appropriate IDP for authentication, and manage session tokens to facilitate seamless user access.
 
 
@@ -34,10 +34,14 @@ Benefits of the oauth2-proxy service
 Security enhancements
 =====================
 
-The ``oauth2-proxy`` service ensures that all access to Ceph applications is authenticated, preventing unauthorized users from
-accessing sensitive information. Since it makes use of the ``oauth2-proxy`` open source project, this service integrates
-easily with a variety of `external IDPs <https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/>`_ to provide
-a secure and flexible authentication mechanism.
+With the ``oauth2-proxy`` service, the ``mgmt-gateway`` requires a login with
+the identity provider before it passes requests to the Ceph Dashboard,
+Prometheus, Alertmanager or Grafana. This covers access through the gateway
+only. Grafana can still be reached directly on its own port, and it allows
+anonymous read-only access there unless ``anonymous_access`` is ``false`` in
+the Grafana specification. Because it uses the ``oauth2-proxy`` open source
+project, this service integrates easily with a variety of
+`external IDPs <https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/>`_.
 
 
 High availability
@@ -51,7 +55,7 @@ and not the responsibility of this service.
 Accessing services with oauth2-proxy
 ====================================
 
-After deploying ``oauth2-proxy``, access to Ceph applications will require authentication through the configured IDP. Users will
+After deploying ``oauth2-proxy``, access to Ceph applications through the ``mgmt-gateway`` requires a login with the configured IDP. Users will
 be redirected to the IDP for login and then returned to the requested application. This setup ensures secure access and integrates
 seamlessly with the Ceph management stack.
 
@@ -60,11 +64,16 @@ Service Specification
 =====================
 
 The ``oauth2-proxy`` service works together with the ``mgmt-gateway`` service.
-Deploy ``mgmt-gateway`` first:
+If ``mgmt-gateway`` is not deployed yet, deploy it first (see
+:ref:`deploy-cephadm-mgmt-gateway`):
 
 .. prompt:: bash #
 
    ceph orch apply mgmt-gateway
+
+If ``mgmt-gateway`` is already deployed, skip this step. The command replaces
+the existing ``mgmt-gateway`` specification, including its placement, port,
+virtual IP and certificate settings, with the defaults.
 
 Cephadm adds the single sign-on checks to the gateway configuration when an
 ``oauth2-proxy`` daemon exists.
@@ -108,8 +117,7 @@ project documentation.
 .. autoclass:: OAuth2ProxySpec
    :members:
 
-The specification can then be applied by running the below command. Once becomes available, cephadm will automatically redeploy
-the ``mgmt-gateway`` service while adapting its configuration to redirect the authentication to the newly deployed ``oauth2-proxy`` service.
+Apply the specification with the following command:
 
 .. prompt:: bash #
 
@@ -125,8 +133,10 @@ A non-exhaustive list of important limitations for the ``oauth2-proxy`` service 
 * IDP must include the jti claim in the issued JWT token because the Ceph Dashboard relies on this value to verify the token's validity.
 * When cephadm removes an ``oauth2-proxy`` daemon, or fails to deploy one, and
   no other ``oauth2-proxy`` daemon is running, cephadm disables OAuth2 SSO in
-  the Ceph Dashboard. To turn it on again, run
-  ``ceph dashboard sso enable oauth2``.
+  the Ceph Dashboard. Cephadm does not turn it on again. When an
+  ``oauth2-proxy`` daemon is running again, run
+  ``ceph dashboard sso enable oauth2``. The command is refused while no
+  ``oauth2-proxy`` daemon is running. See :ref:`dashboard-oauth2-sso-support`.
 
 Container images
 ================
