@@ -1,0 +1,194 @@
+{
+  "refs": {
+    "native_before": "dc7b747c37c466b46bfd90bd7b940b8cdf3c8478",
+    "native_after": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+    "listing": "8858813c2e7340e65583aba184d24e82f401e010",
+    "listing_migration": "2b60487e2f3",
+    "foundation": "c22d6be23c73cb113a3d13fea6ba5cd5dfae9cc8"
+  },
+  "sources": [
+    {
+      "sha256": "fa66bd982f29105eb17fa3f26fd6b220bcc64a4047461377368e09ff3a6bf50a",
+      "ref": "dc7b747c37c466b46bfd90bd7b940b8cdf3c8478",
+      "path": "src/cls/rgw/cls_rgw_types.h"
+    },
+    {
+      "sha256": "0a0cb832b2fd466ee984c0c6849f4b1849e439ade13eb4344e608685f526ef2c",
+      "ref": "dc7b747c37c466b46bfd90bd7b940b8cdf3c8478",
+      "path": "src/cls/rgw/cls_rgw_ops.h"
+    },
+    {
+      "sha256": "5f96055e51398813bd5ea6869bc4755fc3cbfd5006c3a0a3b720dd6ac9060c2e",
+      "ref": "dc7b747c37c466b46bfd90bd7b940b8cdf3c8478",
+      "path": "src/cls/rgw/cls_rgw_client.cc"
+    },
+    {
+      "sha256": "0be16a93c8c172901c00fe554f411d758da5381abd320411032c921fe21a1ad1",
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/rgw/datum/adapters/cls/bi.h"
+    },
+    {
+      "sha256": "f47cbd056f9d706005e0e5e030e8bbd208a3cd2865f2db92fb1f46d1e1fd0df5",
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/rgw/datum/adapters/cls/rgw.cc"
+    },
+    {
+      "sha256": "a98d972aadfc4754afd6ccd6c373412a812e0de65d80cb124c642864cb95c032",
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/rgw/datum/adapters/cls/bi_wire.h"
+    },
+    {
+      "sha256": "5fda16f6143bb6e756b8f243c91c3ea05fd4465fe0a718bd4986b192cd792a1e",
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/cls/rgw/cls_rgw_client.cc"
+    },
+    {
+      "sha256": "b54d47216d4ad93bf5ab6502b2ec9a714030925d35d267cbe577eab9c913e2d2",
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/test/cls_rgw/bi_wire.cc"
+    },
+    {
+      "sha256": "2de059cc85f6bf95e5c61c2e9faefd3f485535bfae7c2bf8e73fd41693b81ff9",
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/test/cls_rgw/bi_client.cc"
+    },
+    {
+      "sha256": "4d7e477c18f81ab096e77fed7f5266ca1076fc498240558c09743102961bc81e",
+      "ref": "8858813c2e7340e65583aba184d24e82f401e010",
+      "path": "src/rgw/salad/include/operation/listing_plan.h"
+    },
+    {
+      "sha256": "ff6e07b842157c6117f346f54ce20d4bb9e8fe7adf5285e4bb7becfadd51863f",
+      "ref": "8858813c2e7340e65583aba184d24e82f401e010",
+      "path": "src/rgw/salad/integration/libfdb_listing.h"
+    },
+    {
+      "sha256": "0637d1581b759e9591626bbee8fd228ce16d6e1d4fa1a038ee6bd48b2d2b0f69",
+      "ref": "8858813c2e7340e65583aba184d24e82f401e010",
+      "path": "src/test/rgw/salad/test_rgw_salad_listing.cc"
+    },
+    {
+      "path": "src/rgw/datum/include/datum/bytes.h",
+      "ref": "c22d6be23c73cb113a3d13fea6ba5cd5dfae9cc8",
+      "sha256": "9edfb3bb028df0b160daa33fc0e78fd3cb65da7b91ee24568a9282c6718c276d"
+    },
+    {
+      "path": "src/rgw/datum/tutorials/examples/01_hello_fragments.cpp",
+      "ref": "9e56ddf6c3ab0d41d9326304eef4f9031bc1e58c",
+      "sha256": "1f3c5996ce766d7835e29d8447d781e227a9650bae506377974326941a99d7e8"
+    }
+  ],
+  "performance_scope": "Recorded October23 compact BI encoding versus pinned main;1000entries/no payloads; no new timing claim.",
+  "listing_comparison": "Expanded equivalent endpoint logic versus named operations; not a historical algorithm rewrite.",
+  "split_buffer_comparison": "Standalone illustrative staging-string and borrowed-slice comparison, using byte_cursor and write_fragments from the first tutorial. No historical consumer replacement is claimed.",
+  "recorded_integration_excerpts": {
+    "planner": {
+      "asset": "integration-listing.cpp.txt",
+      "start": 8,
+      "end": 63,
+      "ref": "8858813c2e7340e65583aba184d24e82f401e010",
+      "path": "src/rgw/salad/include/operation/listing_plan.h",
+      "original_start": 272,
+      "original_end": 327,
+      "original_sha256": "4d7e477c18f81ab096e77fed7f5266ca1076fc498240558c09743102961bc81e"
+    },
+    "backend": {
+      "asset": "integration-listing.cpp.txt",
+      "start": 69,
+      "end": 100,
+      "ref": "8858813c2e7340e65583aba184d24e82f401e010",
+      "path": "src/rgw/salad/integration/libfdb_listing.h",
+      "original_start": 45,
+      "original_end": 76,
+      "original_sha256": "ff6e07b842157c6117f346f54ce20d4bb9e8fe7adf5285e4bb7becfadd51863f"
+    },
+    "entry": {
+      "asset": "integration-bi.cpp.txt",
+      "start": 8,
+      "end": 21,
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/rgw/datum/adapters/cls/bi.h",
+      "original_start": 37,
+      "original_end": 50,
+      "original_sha256": "0be16a93c8c172901c00fe554f411d758da5381abd320411032c921fe21a1ad1"
+    },
+    "fields": {
+      "asset": "integration-bi.cpp.txt",
+      "start": 27,
+      "end": 36,
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/rgw/datum/adapters/cls/rgw.cc",
+      "original_start": 22,
+      "original_end": 31,
+      "original_sha256": "f47cbd056f9d706005e0e5e030e8bbd208a3cd2865f2db92fb1f46d1e1fd0df5"
+    },
+    "reply_encoder": {
+      "asset": "integration-bi.cpp.txt",
+      "start": 42,
+      "end": 75,
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/rgw/datum/adapters/cls/rgw.cc",
+      "original_start": 122,
+      "original_end": 155,
+      "original_sha256": "f47cbd056f9d706005e0e5e030e8bbd208a3cd2865f2db92fb1f46d1e1fd0df5"
+    },
+    "wire": {
+      "asset": "integration-bi.cpp.txt",
+      "start": 81,
+      "end": 346,
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/rgw/datum/adapters/cls/bi_wire.h",
+      "original_start": 1,
+      "original_end": 266,
+      "original_sha256": "a98d972aadfc4754afd6ccd6c373412a812e0de65d80cb124c642864cb95c032"
+    },
+    "alternate_row": {
+      "asset": "integration-bi.cpp.txt",
+      "start": 352,
+      "end": 360,
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/test/cls_rgw/bi_wire.cc",
+      "original_start": 91,
+      "original_end": 99,
+      "original_sha256": "b54d47216d4ad93bf5ab6502b2ec9a714030925d35d267cbe577eab9c913e2d2"
+    },
+    "client": {
+      "asset": "integration-bi.cpp.txt",
+      "start": 366,
+      "end": 404,
+      "ref": "bf356195f0bd1983eeb0d6730f03e24d983bf189",
+      "path": "src/cls/rgw/cls_rgw_client.cc",
+      "original_start": 254,
+      "original_end": 292,
+      "original_sha256": "5fda16f6143bb6e756b8f243c91c3ea05fd4465fe0a718bd4986b192cd792a1e"
+    }
+  },
+  "worked_cache_example": {
+    "origin": "Ceph write-log read path splits reads into cache hits and missing extents. The example isolates one requested range and one nonempty cached range; it is not a consumer migration.",
+    "reference": "dc7b747c37c466b46bfd90bd7b940b8cdf3c8478:src/librbd/cache/pwl/AbstractWriteLog.cc:740-775",
+    "program": "cache-gap-example.cc",
+    "expected_stdout": "read 0..15 (16 bytes)\nread 48..63 (16 bytes)\n"
+  },
+  "runnable_key_range": {
+    "program": "key-range-example.cc",
+    "inputs": [
+      "notes/01",
+      "photos/10",
+      "photos/30",
+      "photos/70",
+      "photos/90",
+      "videos/01"
+    ],
+    "scope": "Standalone byte-key illustration of the same logical names, prefix, and markers shown in the page.",
+    "expected_stdout": "photos/30\nphotos/70\n"
+  },
+  "field_explanation": {
+    "source": "src/rgw/datum/include/datum/codec/zpp.h",
+    "ref": "c22d6be23c73cb113a3d13fea6ba5cd5dfae9cc8",
+    "lines": [
+      92,
+      97
+    ],
+    "presentation": "Closed native details element; literalinclude quotes the actual normal field-serialization loop."
+  }
+}

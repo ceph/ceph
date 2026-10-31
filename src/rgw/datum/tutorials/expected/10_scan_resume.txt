@@ -1,0 +1,7 @@
+offered: felt mouse
+offered: ball
+offered: ribbon
+offered: 3, consumed: 2
+resume index: 2
+remaining: 1
+resumed: ribbon

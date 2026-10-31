@@ -1,0 +1,1 @@
+login_record{name="Juniper", password=<redacted:6 bytes>}

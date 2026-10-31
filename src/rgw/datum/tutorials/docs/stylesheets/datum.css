@@ -1,0 +1,105 @@
+:root {
+  --datum-ink: #263735;
+  --datum-muted: #5e706b;
+  --datum-teal: #18625b;
+  --datum-line: #dce4df;
+  --datum-paper: #fdfdf9;
+}
+
+body, .wy-body-for-nav { background: var(--datum-paper); color: var(--datum-ink); }
+a { color: var(--datum-teal); }
+a:visited { color: #3d6762; }
+a:hover { color: #104941; }
+a:focus-visible, button:focus-visible { outline: 3px solid #b56c32; outline-offset: 3px; }
+
+.wy-nav-side { background: #183d38; width: 280px; }
+.wy-side-scroll { width: 300px; }
+.wy-side-nav-search { width: 280px; box-sizing: border-box; background: #183d38; padding: 32px 24px 22px; text-align: left; }
+.wy-side-nav-search .datum-brand { display: block; font: 36px/1.2 Georgia, serif; padding: 0; color: #fff; }
+.datum-brand-note { color: #bfd4c8; font-size: 13px; margin: 7px 0 24px; }
+.wy-side-nav-search input[type=text] { border: 1px solid #63837a; border-radius: 4px; box-shadow: none; }
+.wy-menu-vertical a { color: #e0ebe4; padding: 10px 24px; }
+.wy-menu-vertical a:hover { background: #255249; }
+.wy-menu-vertical li.current > a { color: var(--datum-ink); }
+.wy-menu-vertical li.toctree-l2 > a { font-size: 13px; line-height: 1.5; }
+.wy-menu-vertical li.toctree-l3 > a { font-size: 12px; line-height: 1.5; }
+.wy-nav-content-wrap { margin-left: 280px; background: var(--datum-paper); }
+.wy-nav-content { max-width: 1120px; padding: 32px 64px 28px; background: var(--datum-paper); }
+.wy-breadcrumbs { font-size: 12px; color: var(--datum-muted); }
+.wy-breadcrumbs + hr { margin: 18px 0 24px; border-color: var(--datum-line); }
+.datum-status { color: var(--datum-muted); font-size: 12px; letter-spacing: .015em; margin-bottom: 32px; }
+.datum-status span { margin: 0 7px; }
+
+.rst-content h1, .rst-content h2, .rst-content h3 { color: var(--datum-ink); font-family: Georgia, "Times New Roman", serif; font-weight: 500; }
+.rst-content h1 { font-size: 38px; line-height: 1.2; margin: 0 0 28px; }
+.rst-content h2 { font-size: 28px; margin-top: 48px; line-height: 1.3; scroll-margin-top: 28px; }
+.rst-content h3 { font-size: 22px; margin-top: 32px; }
+.rst-content p, .rst-content li { line-height: 1.75; }
+.rst-content p { margin-bottom: 22px; }
+.rst-content .headerlink { font-size: .6em; }
+.rst-content code { border: 0; background: #edf2ee; color: #334e47; padding: 2px 5px; border-radius: 3px; }
+.rst-content .codehilite { border: 1px solid var(--datum-line); border-radius: 5px; margin: 24px 0; background: #f5f7f3; }
+.rst-content .codehilite pre { margin: 0; padding: 20px; overflow-x: auto; background: transparent; }
+.rst-content .codehilite code { display: block; background: transparent; padding: 0; font-size: 14px; line-height: 1.65; white-space: pre; }
+.rst-content table { display: block; overflow-x: auto; max-width: 100%; margin: 24px 0; border-collapse: collapse; }
+.rst-content th, .rst-content td { padding: 10px 14px; border: 1px solid var(--datum-line); text-align: left; }
+.rst-content th { background: #eef2ec; }
+.rst-content img { max-width: 100%; height: auto; }
+.rst-content img[src$=".svg"] { width: 680px; background: white; }
+
+.datum-home .datum-eyebrow { color: var(--datum-teal); font: 11px/1.5 sans-serif; letter-spacing: .16em; text-transform: uppercase; margin: 8px 0 18px; }
+.datum-home h1 { font-size: 82px; letter-spacing: -.045em; margin-bottom: 22px; }
+.datum-intro > p:last-child { max-width: 660px; color: var(--datum-muted); font-size: 19px; line-height: 1.7; }
+.datum-paths { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 36px 0 48px; }
+.datum-card { display: flex; flex-direction: column; gap: 11px; padding: 24px; border: 1px solid var(--datum-line); border-radius: 6px; background: #fff; color: var(--datum-ink); }
+.datum-card:visited { color: var(--datum-ink); }
+.datum-card:hover { background: #f0f5ed; border-color: #70978a; color: var(--datum-ink); }
+.datum-card-kicker { color: var(--datum-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.datum-card strong { font: 25px/1.2 Georgia, serif; font-weight: 500; }
+.datum-card strong span { float: right; font-size: 20px; color: var(--datum-teal); }
+.datum-card > span:last-child { color: var(--datum-muted); font-size: 14px; line-height: 1.65; }
+.datum-chapters h2 { font-size: 25px; border-top: 1px solid var(--datum-line); padding-top: 28px; }
+.datum-chapters p { color: var(--datum-muted); font-size: 14px; }
+.datum-chapters ul { columns: 2; column-gap: 36px; padding-left: 0; }
+.rst-content .datum-chapters ul > li { break-inside: avoid; list-style: none; margin-left: 0; padding: 5px 0; font-size: 14px; }
+.datum-footer { display: flex; flex-wrap: wrap; gap: 22px; border-top: 1px solid var(--datum-line); margin-top: 52px; padding-top: 22px; font-size: 12px; }
+.wy-nav-top { background: #183d38; }
+.datum-menu-button { float: left; border: 0; padding: 0 10px; color: white; background: transparent; font-size: 23px; line-height: 44px; cursor: pointer; }
+
+@media (max-width: 1100px) {
+  .wy-nav-content { padding: 28px 36px; }
+}
+
+@media (max-width: 768px) {
+  .wy-nav-side { width: 280px; }
+  .wy-nav-content-wrap { margin-left: 0; }
+  .wy-nav-content { padding: 24px; }
+  .wy-nav-top { display: block; }
+  .rst-content h1 { font-size: 32px; }
+  .datum-home h1 { font-size: 60px; }
+  .datum-intro > p:last-child { font-size: 17px; }
+  .datum-paths { grid-template-columns: 1fr; margin-top: 28px; }
+  .datum-card { padding: 20px; }
+  .datum-chapters ul { columns: 1; }
+  .datum-status { margin-bottom: 24px; }
+  .rst-content .codehilite pre { padding: 14px; }
+}
+
+.datum-primary-nav { position: sticky; top: 0; z-index: 2; background: #183d38; }
+.wy-menu-vertical .datum-primary-nav { margin-bottom: 20px; }
+.wy-menu-vertical .caption { color: #bdd0c6; padding-left: 24px; }
+.wy-menu-vertical .datum-outline { background: #edf0ec; }
+.wy-menu-vertical .datum-outline a { color: #344a44; }
+.wy-menu-vertical .datum-outline a:hover { background: #dce5dd; }
+
+.datum-lesson-nav { display: flex; justify-content: space-between; gap: 24px; border-top: 1px solid var(--datum-line); margin-top: 48px; padding-top: 24px; }
+.datum-lesson-nav a { max-width: 48%; line-height: 1.6; }
+.datum-lesson-nav small { display: block; color: var(--datum-muted); font-size: 11px; margin-bottom: 4px; }
+.datum-lesson-nav .datum-next { margin-left: auto; text-align: right; }
+.datum-index h3 { font-size: 22px; margin-top: 32px; }
+.datum-index p { margin-bottom: 16px; }
+
+@media (max-width: 768px) {
+  .datum-lesson-nav { flex-direction: column; gap: 20px; }
+  .datum-lesson-nav a { max-width: 100%; }
+}
