@@ -60,6 +60,7 @@ from . import (
     get_main_aws_secret_key,
     get_main_display_name,
     get_main_user_id,
+    get_main_account_id,
     get_main_email,
     get_main_api_name,
     get_alt_aws_access_key,
@@ -2102,6 +2103,48 @@ def test_post_object_authenticated_request():
     response = client.get_object(Bucket=bucket_name, Key='foo.txt')
     body = _get_body(response)
     assert body == 'bar'
+
+
+def _get_main_principal_type():
+    # QA creates main users with --account-root when an account is configured.
+    # ConfigObj serializes an unset account_id as the string 'None'.
+    return 'User' if get_main_account_id() in (None, '', 'None') else 'Account'
+
+
+@pytest.mark.bucket_policy
+@pytest.mark.parametrize('signature_version', ['s3', 's3v4'])
+@pytest.mark.parametrize('condition_type', ['Anonymous', 'User', 'Account'])
+def test_post_object_authenticated_principal_type(signature_version, condition_type):
+    client = get_v2_client() if signature_version == 's3' else get_client()
+    expected_status = 403 if condition_type == _get_main_principal_type() else 204
+    bucket_name = get_new_bucket(client)
+    key = 'test.txt'
+    post = client.generate_presigned_post(Bucket=bucket_name, Key=key, ExpiresIn=60)
+    original_body = b'before conditional deny'
+
+    # Establish that the form authenticates before adding the conditional Deny.
+    response = requests.post(
+        post['url'], data=post['fields'], files={'file': (key, original_body)},
+        verify=get_config_ssl_verify())
+    assert response.status_code == 204
+
+    client.put_bucket_policy(Bucket=bucket_name, Policy=make_json_policy(
+        's3:PutObject', f'arn:aws:s3:::{bucket_name}/*', effect='Deny',
+        conditions={'StringEquals': {'aws:PrincipalType': condition_type}}))
+
+    body = b'after conditional deny'
+    response = requests.post(
+        post['url'], data=post['fields'], files={'file': (key, body)},
+        verify=get_config_ssl_verify())
+    assert response.status_code == expected_status
+    if expected_status == 403:
+        assert ET.fromstring(response.content).findtext('Code') == 'AccessDenied'
+        expected_body = original_body
+    else:
+        expected_body = body
+    response = client.get_object(Bucket=bucket_name, Key=key)
+    assert response['Body'].read() == expected_body
+
 
 def test_post_object_authenticated_no_content_type():
     bucket_name = get_new_bucket_name()
@@ -12373,6 +12416,159 @@ def test_bucketv2_policy():
     alt_client = get_alt_client()
     response = alt_client.list_objects_v2(Bucket=bucket_name)
     assert len(response['Contents']) == 1
+
+
+@pytest.mark.bucket_policy
+@pytest.mark.parametrize('effect, anonymous_status', [('Allow', 200), ('Deny', 403)])
+def test_bucket_policy_anonymous_principal_type(effect, anonymous_status):
+    # An anonymous-only statement must not match requests signed with the
+    # owner's credentials, including presigned URLs:
+    # https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html
+    client = get_client()
+    bucket_name = get_new_bucket(client)
+    key = 'deleted/test.txt'
+    body = b'principal type regression'
+    client.put_object(Bucket=bucket_name, Key=key, Body=body)
+    policy = Policy()
+    if effect == 'Deny':
+        policy.add_statement(Statement('s3:GetObject', f'arn:aws:s3:::{bucket_name}/*'))
+    policy.add_statement(Statement(
+        's3:GetObject', f'arn:aws:s3:::{bucket_name}/deleted/*', effect=effect,
+        condition={'StringEquals': {'aws:PrincipalType': 'Anonymous'}}))
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy.to_json())
+
+    anonymous = get_unauthenticated_client()
+    if anonymous_status == 403:
+        error = assert_raises(ClientError, anonymous.get_object, Bucket=bucket_name, Key=key)
+        assert _get_status_and_error_code(error.response) == (403, 'AccessDenied')
+    else:
+        response = anonymous.get_object(Bucket=bucket_name, Key=key)
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert response['Body'].read() == body
+
+    response = client.get_object(Bucket=bucket_name, Key=key)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert response['Body'].read() == body
+
+    url = client.generate_presigned_url(
+        'get_object', Params={'Bucket': bucket_name, 'Key': key}, ExpiresIn=60)
+    response = requests.get(url, verify=get_config_ssl_verify())
+    assert response.status_code == 200
+    assert response.content == body
+
+
+@pytest.mark.bucket_policy
+@pytest.mark.parametrize('condition_op', [
+    'StringEquals', 'StringNotEquals',
+    'StringEqualsIfExists', 'StringNotEqualsIfExists',
+])
+@pytest.mark.parametrize('condition_type', ['Anonymous', 'User', 'Account'])
+@pytest.mark.parametrize('authenticated', [False, True])
+def test_bucket_policy_principal_type_conditions(condition_op, condition_type, authenticated):
+    owner = get_client()
+    bucket_name = get_new_bucket(owner)
+    restricted_key = 'deleted/test.txt'
+    public_key = 'public/test.txt'
+    body = b'principal type condition matrix'
+    for key in (restricted_key, public_key):
+        owner.put_object(Bucket=bucket_name, Key=key, Body=body)
+
+    policy = Policy().add_statement(Statement(
+        's3:GetObject', f'arn:aws:s3:::{bucket_name}/*'))
+    owner.put_bucket_policy(Bucket=bucket_name, Policy=policy.to_json())
+    requester = owner if authenticated else get_unauthenticated_client()
+
+    # Establish public access before adding the conditional Deny.
+    response = requester.get_object(Bucket=bucket_name, Key=restricted_key)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert response['Body'].read() == body
+
+    policy.add_statement(Statement(
+        's3:GetObject', f'arn:aws:s3:::{bucket_name}/deleted/*', effect='Deny',
+        condition={condition_op: {'aws:PrincipalType': condition_type}}))
+    owner.put_bucket_policy(Bucket=bucket_name, Policy=policy.to_json())
+
+    requester_type = _get_main_principal_type() if authenticated else 'Anonymous'
+    denied = requester_type == condition_type
+    if condition_op in ('StringNotEquals', 'StringNotEqualsIfExists'):
+        denied = not denied
+    if denied:
+        error = assert_raises(ClientError, requester.get_object,
+                             Bucket=bucket_name, Key=restricted_key)
+        assert _get_status_and_error_code(error.response) == (403, 'AccessDenied')
+    else:
+        response = requester.get_object(Bucket=bucket_name, Key=restricted_key)
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert response['Body'].read() == body
+
+    # A matching identity condition must not extend the denied resource prefix.
+    response = requester.get_object(Bucket=bucket_name, Key=public_key)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert response['Body'].read() == body
+
+
+@pytest.mark.bucket_policy
+@pytest.mark.parametrize('known_access_key', [False, True])
+def test_bucket_policy_anonymous_principal_type_invalid_signature(known_access_key):
+    client = get_client()
+    bucket_name = get_new_bucket(client)
+    key = 'test.txt'
+    client.put_object(Bucket=bucket_name, Key=key, Body=b'test')
+    client.put_bucket_policy(Bucket=bucket_name, Policy=make_json_policy(
+        's3:GetObject', f'arn:aws:s3:::{bucket_name}/*',
+        conditions={'StringEquals': {'aws:PrincipalType': 'Anonymous'}}))
+
+    response = get_unauthenticated_client().get_object(Bucket=bucket_name, Key=key)
+    assert response['Body'].read() == b'test'
+
+    if known_access_key:
+        bad_auth = get_bad_auth_client(aws_access_key_id=get_main_aws_access_key())
+        expected_error = 'SignatureDoesNotMatch'
+    else:
+        bad_auth = get_bad_auth_client()
+        expected_error = 'InvalidAccessKeyId'
+    error = assert_raises(ClientError, bad_auth.get_object, Bucket=bucket_name, Key=key)
+    assert _get_status_and_error_code(error.response) == (403, expected_error)
+
+
+def _exercise_bucket_policy_principal_type(client, principal_type):
+    # Expected values are defined by AWS, independently of RGW identity enums:
+    # https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html#policy-vars-infotouse
+    bucket_name = get_new_bucket(client)
+    key = 'test.txt'
+    try:
+        client.put_object(Bucket=bucket_name, Key=key, Body=b'test')
+        response = client.get_object(Bucket=bucket_name, Key=key)
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert response['Body'].read() == b'test'
+        # Explicit Deny applies even when the requester owns the bucket or
+        # otherwise has s3:GetObject permission.
+        for condition_op in ('StringEquals', 'StringNotEquals',
+                             'StringEqualsIfExists', 'StringNotEqualsIfExists'):
+            for condition_type in ('Anonymous', 'User', 'Account', 'AssumedRole'):
+                client.put_bucket_policy(Bucket=bucket_name, Policy=make_json_policy(
+                    's3:GetObject', f'arn:aws:s3:::{bucket_name}/*', effect='Deny',
+                    conditions={condition_op: {'aws:PrincipalType': condition_type}}))
+                denied = condition_type == principal_type
+                if condition_op in ('StringNotEquals', 'StringNotEqualsIfExists'):
+                    denied = not denied
+                if denied:
+                    error = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key)
+                    assert _get_status_and_error_code(error.response) == (403, 'AccessDenied')
+                else:
+                    response = client.get_object(Bucket=bucket_name, Key=key)
+                    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+                    assert response['Body'].read() == b'test'
+    finally:
+        client.delete_bucket_policy(Bucket=bucket_name)
+        client.delete_object(Bucket=bucket_name, Key=key)
+        client.delete_bucket(Bucket=bucket_name)
+
+
+@pytest.mark.bucket_policy
+def test_bucket_policy_main_principal_type():
+    _exercise_bucket_policy_principal_type(get_client(), _get_main_principal_type())
+
 
 @pytest.mark.bucket_policy
 @pytest.mark.iam_account

@@ -15,7 +15,9 @@
 
 #include "rgw_iam_policy.h"
 
+#include <limits>
 #include <string>
+#include <unordered_map>
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/optional.hpp>
@@ -27,6 +29,7 @@
 #include "include/stringify.h"
 #include "common/ceph_context.h"
 #include "rgw_auth.h"
+#include "rgw_auth_filters.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_op.h"
 #include "rgw_process_env.h"
@@ -1104,6 +1107,305 @@ class DumbUser : public rgw::sal::StoreUser {
     return -ENOTSUP;
   }
 };
+
+class PrincipalTypeTest : public ::testing::Test {
+protected:
+  intrusive_ptr<CephContext> cct;
+  rgw::auth::ImplicitTenants implicit_tenants;
+  RGWProcessEnv penv;
+  RGWEnv rgw_env;
+  req_state state;
+
+  PrincipalTypeTest()
+    : cct(new CephContext(CEPH_ENTITY_TYPE_CLIENT), false),
+      implicit_tenants(cct->_conf),
+      state(cct.get(), penv, &rgw_env, 0) {}
+
+  auto local_identity(const rgw_user& id = rgw_user("test-user"),
+                      uint32_t type = TYPE_RGW,
+                      std::optional<RGWAccountInfo> account = std::nullopt) {
+    auto user = std::make_unique<DumbUser>(id);
+    user->get_info().type = type;
+    if (account) {
+      user->get_info().account_id = account->id;
+    }
+    return std::make_unique<rgw::auth::LocalApplier>(
+        cct.get(), std::move(user), std::move(account),
+        std::vector<Policy>{}, rgw::auth::LocalApplier::NO_SUBUSER,
+        std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+  }
+
+  auto role_identity() {
+    rgw::auth::RoleApplier::Role role;
+    role.name = "test-role";
+    rgw::auth::RoleApplier::TokenAttrs attrs;
+    attrs.user_id = rgw_user("test-user");
+    attrs.role_session_name = "test-session";
+    return std::make_unique<rgw::auth::RoleApplier>(
+        cct.get(), nullptr, role, attrs);
+  }
+
+  auto remote_identity(uint32_t type) {
+    using Applier = rgw::auth::RemoteApplier;
+    const Applier::AuthInfo info{
+        rgw_user("test-user"), "test-user", RGW_PERM_FULL_CONTROL,
+        Applier::AuthInfo::acct_privilege_t::IS_PLAIN_ACCT,
+        Applier::AuthInfo::NO_ACCESS_KEY, Applier::AuthInfo::NO_SUBUSER,
+        Applier::AuthInfo::NO_KEYSTONE_USER, type};
+    return std::make_unique<Applier>(
+        cct.get(), nullptr, nullptr, info, implicit_tenants,
+        rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3);
+  }
+
+  void build_environment(std::unique_ptr<Identity> identity) {
+    state.auth.identity = std::move(identity);
+    rgw_build_iam_environment(&state);
+  }
+
+  void expect_type(const char* expected) {
+    ASSERT_EQ(state.env.count("aws:PrincipalType"), 1u);
+    EXPECT_EQ(state.env.find("aws:PrincipalType")->second, expected);
+  }
+
+  Effect evaluate(const Policy& policy) {
+    const ARN resource(Partition::aws, Service::s3, "", "",
+                       "test-bucket/deleted/object");
+    boost::optional<Principal> principal;
+    return policy.eval(state.env, *state.auth.identity, s3GetObject,
+                       resource, principal);
+  }
+};
+
+TEST_F(PrincipalTypeTest, Anonymous) {
+  build_environment(local_identity(rgw_user(RGW_USER_ANON_ID)));
+  expect_type("Anonymous");
+}
+
+TEST_F(PrincipalTypeTest, UserTypes) {
+  for (auto type : {TYPE_NONE, TYPE_RGW, TYPE_WEB}) {
+    SCOPED_TRACE(type);
+    build_environment(local_identity(rgw_user("test-user"), type));
+    expect_type("User");
+  }
+}
+
+TEST_F(PrincipalTypeTest, RemoteUsers) {
+  for (auto type : {TYPE_KEYSTONE, TYPE_LDAP}) {
+    SCOPED_TRACE(type);
+    build_environment(remote_identity(type));
+    expect_type("User");
+  }
+}
+
+TEST_F(PrincipalTypeTest, WebIdentityCaller) {
+  const std::unordered_multimap<std::string, std::string> claims{
+      {"sub", "test-sub"}, {"iss", "https://idp.example.com"},
+      {"aud", "test-audience"}};
+  build_environment(std::make_unique<rgw::auth::WebIdentityApplier>(
+      cct.get(), nullptr, "test-role", "test-session", "test-tenant", claims,
+      boost::none, boost::none, std::nullopt));
+  expect_type("User");
+}
+
+TEST_F(PrincipalTypeTest, UnclassifiedAuthenticatedUser) {
+  build_environment(local_identity(
+      rgw_user("test-user"), std::numeric_limits<uint32_t>::max()));
+  expect_type("User");
+}
+
+TEST_F(PrincipalTypeTest, AnonymousTakesPrecedenceOverType) {
+  build_environment(local_identity(
+      rgw_user(RGW_USER_ANON_ID), std::numeric_limits<uint32_t>::max()));
+  expect_type("Anonymous");
+}
+
+TEST_F(PrincipalTypeTest, LegacyFullControlUser) {
+  auto identity = local_identity();
+  ASSERT_TRUE(identity->is_root());
+  build_environment(std::move(identity));
+  expect_type("User");
+}
+
+TEST_F(PrincipalTypeTest, AccountRoot) {
+  RGWAccountInfo account;
+  account.id = "RGW12345678901234567";
+  build_environment(local_identity(rgw_user("test-root"), TYPE_ROOT, account));
+  expect_type("Account");
+}
+
+TEST_F(PrincipalTypeTest, AccountUser) {
+  RGWAccountInfo account;
+  account.id = "RGW12345678901234567";
+  build_environment(local_identity(rgw_user("test-user"), TYPE_RGW, account));
+  expect_type("User");
+}
+
+TEST_F(PrincipalTypeTest, AssumedRole) {
+  build_environment(role_identity());
+  expect_type("AssumedRole");
+}
+
+TEST_F(PrincipalTypeTest, WrappedAnonymous) {
+  auto identity = local_identity(rgw_user(RGW_USER_ANON_ID));
+  auto wrapped = rgw::auth::add_sysreq(
+      cct.get(), nullptr, &state, std::move(*identity));
+  build_environment(std::make_unique<decltype(wrapped)>(std::move(wrapped)));
+  expect_type("Anonymous");
+}
+
+TEST_F(PrincipalTypeTest, WrappedRole) {
+  auto identity = role_identity();
+  auto wrapped = rgw::auth::add_sysreq(
+      cct.get(), nullptr, &state, std::move(*identity));
+  build_environment(std::make_unique<decltype(wrapped)>(std::move(wrapped)));
+  expect_type("AssumedRole");
+}
+
+TEST_F(PrincipalTypeTest, EffectiveUserDoesNotChangePrincipalType) {
+  state.user = std::make_unique<DumbUser>(rgw_user("effective-root"));
+  state.user->get_info().type = TYPE_ROOT;
+  build_environment(local_identity());
+  expect_type("User");
+  build_environment(role_identity());
+  expect_type("AssumedRole");
+}
+
+TEST_F(PrincipalTypeTest, NoIdentity) {
+  rgw_build_iam_environment(&state);
+  EXPECT_EQ(state.env.count("aws:PrincipalType"), 0u);
+}
+
+TEST_F(PrincipalTypeTest, RebuildReplacesPrincipalType) {
+  state.env.emplace("aws:PrincipalType", "Account");
+  state.env.emplace("aws:PrincipalType", "User");
+  state.env.emplace("aws:PrincipalTag/project", "test-project");
+  build_environment(local_identity(rgw_user(RGW_USER_ANON_ID)));
+  expect_type("Anonymous");
+  rgw_build_iam_environment(&state);
+  expect_type("Anonymous");
+  build_environment(role_identity());
+  expect_type("AssumedRole");
+  build_environment(nullptr);
+  EXPECT_EQ(state.env.count("aws:PrincipalType"), 0u);
+  ASSERT_EQ(state.env.count("aws:PrincipalTag/project"), 1u);
+  EXPECT_EQ(state.env.find("aws:PrincipalTag/project")->second, "test-project");
+}
+
+TEST_F(PrincipalTypeTest, AnonymousConditionAllow) {
+  const Policy policy(cct.get(), nullptr, R"({
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow", "Principal": "*", "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::test-bucket/*",
+      "Condition": {"StringEquals": {"aws:PrincipalType": "Anonymous"}}
+    }]
+  })", true);
+
+  build_environment(local_identity(rgw_user(RGW_USER_ANON_ID)));
+  EXPECT_EQ(evaluate(policy), Effect::Allow);
+  build_environment(local_identity());
+  EXPECT_EQ(evaluate(policy), Effect::Pass);
+}
+
+TEST_F(PrincipalTypeTest, AnonymousConditionDenyOverridesPublicAllow) {
+  const Policy policy(cct.get(), nullptr, R"({
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow", "Principal": "*", "Action": "s3:GetObject",
+        "Resource": "arn:aws:s3:::test-bucket/*"
+      },
+      {
+        "Effect": "Deny", "Principal": "*", "Action": "s3:GetObject",
+        "Resource": "arn:aws:s3:::test-bucket/deleted/*",
+        "Condition": {"StringEquals": {"aws:PrincipalType": "Anonymous"}}
+      }
+    ]
+  })", true);
+
+  build_environment(local_identity(rgw_user(RGW_USER_ANON_ID)));
+  EXPECT_EQ(evaluate(policy), Effect::Deny);
+  build_environment(local_identity());
+  EXPECT_EQ(evaluate(policy), Effect::Allow);
+}
+
+TEST_F(PrincipalTypeTest, DenyUserDoesNotMatchAnonymous) {
+  const Policy policy(cct.get(), nullptr, R"({
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow", "Principal": "*", "Action": "s3:GetObject",
+        "Resource": "arn:aws:s3:::test-bucket/*"
+      },
+      {
+        "Effect": "Deny", "Principal": "*", "Action": "s3:GetObject",
+        "Resource": "arn:aws:s3:::test-bucket/*",
+        "Condition": {"StringEquals": {"aws:PrincipalType": "User"}}
+      }
+    ]
+  })", true);
+
+  build_environment(local_identity(rgw_user(RGW_USER_ANON_ID)));
+  EXPECT_EQ(evaluate(policy), Effect::Allow);
+  build_environment(local_identity());
+  EXPECT_EQ(evaluate(policy), Effect::Deny);
+  build_environment(role_identity());
+  EXPECT_EQ(evaluate(policy), Effect::Allow);
+}
+
+TEST_F(PrincipalTypeTest, DenyNotUser) {
+  const Policy policy(cct.get(), nullptr, R"({
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Deny", "Principal": "*", "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::test-bucket/*",
+      "Condition": {"StringNotEquals": {"aws:PrincipalType": "User"}}
+    }]
+  })", true);
+
+  build_environment(local_identity(rgw_user(RGW_USER_ANON_ID)));
+  EXPECT_EQ(evaluate(policy), Effect::Deny);
+  build_environment(local_identity());
+  EXPECT_EQ(evaluate(policy), Effect::Pass);
+  build_environment(role_identity());
+  EXPECT_EQ(evaluate(policy), Effect::Deny);
+}
+
+TEST_F(PrincipalTypeTest, PrincipalTypeIfExists) {
+  const Policy policy(cct.get(), nullptr, R"({
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Deny", "Principal": "*", "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::test-bucket/*",
+      "Condition": {"StringEqualsIfExists": {"aws:PrincipalType": "Anonymous"}}
+    }]
+  })", true);
+
+  build_environment(local_identity(rgw_user(RGW_USER_ANON_ID)));
+  EXPECT_EQ(evaluate(policy), Effect::Deny);
+  build_environment(local_identity());
+  EXPECT_EQ(evaluate(policy), Effect::Pass);
+  state.env.erase("aws:PrincipalType");
+  EXPECT_EQ(evaluate(policy), Effect::Deny);
+}
+
+TEST_F(PrincipalTypeTest, PrincipalTypeNotEqualsIfExists) {
+  const Policy policy(cct.get(), nullptr, R"({
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Deny", "Principal": "*", "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::test-bucket/*",
+      "Condition": {"StringNotEqualsIfExists": {"aws:PrincipalType": "User"}}
+    }]
+  })", true);
+
+  build_environment(local_identity(rgw_user(RGW_USER_ANON_ID)));
+  EXPECT_EQ(evaluate(policy), Effect::Deny);
+  build_environment(local_identity());
+  EXPECT_EQ(evaluate(policy), Effect::Pass);
+  state.env.erase("aws:PrincipalType");
+  EXPECT_EQ(evaluate(policy), Effect::Deny);
+}
 
 TEST_F(IPPolicyTest, IPEnvironment) {
   RGWProcessEnv penv;
