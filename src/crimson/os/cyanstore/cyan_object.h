@@ -19,7 +19,11 @@ struct Object : public boost::intrusive_ref_counter<
 {
   using bufferlist = ceph::bufferlist;
 
-  bufferlist data;
+  // object data in fixed-size pages, overwritten in place; a missing page
+  // reads as zeros, and bytes past size are always zero
+  static constexpr uint64_t DATA_PAGE_SIZE = 64 << 10;
+  std::map<uint64_t, ceph::bufferptr> pages; // page index -> page
+  uint64_t size = 0;
   // use transparent comparator for better performance, see
   // https://en.cppreference.com/w/cpp/utility/functional/less_void
   std::map<std::string,bufferlist,std::less<>> xattr;
@@ -32,7 +36,7 @@ struct Object : public boost::intrusive_ref_counter<
 
   // interface for object data
   size_t get_size() const;
-  ceph::bufferlist read(uint64_t offset, uint64_t len);
+  ceph::bufferlist read(uint64_t offset, uint64_t len) const;
   int write(uint64_t offset, const bufferlist &bl);
   int clone(Object *src, uint64_t srcoff, uint64_t len,
 	     uint64_t dstoff);
@@ -40,6 +44,10 @@ struct Object : public boost::intrusive_ref_counter<
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
+
+private:
+  ceph::bufferptr& get_writable_page(uint64_t idx);
+  void zero_tail(uint64_t from);
 };
 using ObjectRef = boost::intrusive_ptr<Object>;
 

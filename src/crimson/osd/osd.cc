@@ -662,14 +662,13 @@ seastar::future<> OSD::start()
     return _add_me_to_crush();
   });
   co_await _add_device_class();
-  if (is_rotational.has_value()) {
-    co_await shard_services.invoke_on_all([this](auto &local_service) {
-      local_service.local_state.initialize_scheduler(local_service.get_cct(), *is_rotational);
-    });
-  } else {
+  if (!is_rotational.has_value()) {
     WARN("no device class set, defaulting is_rotational to false");
     is_rotational = false;
   }
+  co_await shard_services.invoke_on_all([this](auto &local_service) {
+    local_service.local_state.initialize_scheduler(local_service.get_cct(), *is_rotational);
+  });
   monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
   monc->sub_want("mgrmap", 0, 0);
   monc->sub_want("osdmap", 0, 0);
