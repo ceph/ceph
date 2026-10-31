@@ -183,7 +183,7 @@ describe('HostsComponent', () => {
     fixture.detectChanges();
 
     const spans = fixture.debugElement.nativeElement.querySelectorAll('[cdstabledata] span');
-    expect(spans[7].textContent).toBe('-');
+    expect(spans[8].textContent).toBe('-');
   });
 
   it('should test if host facts are unavailable if get_facts orch feature is not available', () => {
@@ -208,7 +208,7 @@ describe('HostsComponent', () => {
     fixture.detectChanges();
 
     const spans = fixture.debugElement.nativeElement.querySelectorAll('[cdstabledata] span');
-    expect(spans[7].textContent).toBe('-');
+    expect(spans[8].textContent).toBe('-');
   });
 
   it('should test if memory/raw capacity columns shows N/A if facts are available but in fetching state', () => {
@@ -288,6 +288,46 @@ describe('HostsComponent', () => {
 
     expect(showSpy).toHaveBeenCalled();
     expect(showSpy.calls.mostRecent().args[1].submitButtonText).toBe('Save changes');
+  });
+
+  describe('service instances column', () => {
+    beforeEach(() => {
+      OrchestratorHelper.mockStatus(false);
+      fixture.detectChanges();
+      hostListSpy.and.callFake(() => of([]));
+    });
+
+    it('should be hidden by default', () => {
+      const col = component.columns.find((c: any) => c.prop === 'service_instances');
+      expect(col).toBeDefined();
+      expect(col.isHidden).toBe(true);
+    });
+
+    it('should not request service instances while the column is hidden', () => {
+      const context = new CdTableFetchDataContext(() => undefined);
+      context.visibleColumns = ['hostname', 'labels'];
+      component.getHosts(context);
+      expect(hostListSpy).toHaveBeenCalledWith(jasmine.anything(), jasmine.any(String), false);
+    });
+
+    it('should request service instances once the column is visible', () => {
+      const context = new CdTableFetchDataContext(() => undefined);
+      context.visibleColumns = ['hostname', 'service_instances', 'labels'];
+      component.getHosts(context);
+      expect(hostListSpy).toHaveBeenCalledWith(jasmine.anything(), jasmine.any(String), true);
+    });
+
+    it('should refresh the table when the service instances column is toggled', () => {
+      const refreshSpy = spyOn(component.table, 'refreshBtn');
+      component.onColumnVisibilityChange({ prop: 'service_instances' });
+      expect(refreshSpy).toHaveBeenCalled();
+    });
+
+    it('should not refresh the table when another column is toggled', () => {
+      const refreshSpy = spyOn(component.table, 'refreshBtn');
+      component.onColumnVisibilityChange({ prop: 'labels' });
+      expect(refreshSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('table actions', () => {

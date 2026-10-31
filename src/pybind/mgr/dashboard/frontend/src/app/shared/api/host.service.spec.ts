@@ -41,7 +41,7 @@ describe('HostService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call list', fakeAsync(() => {
+  it('should call list with include_service_instances=false by default', fakeAsync(() => {
     let result: any[] = [{}, {}];
     const hostContext = new CdTableFetchDataContext(() => undefined);
     service.list(hostContext.toParams(), 'true').subscribe((resp) => (result = resp));
@@ -53,6 +53,17 @@ describe('HostService', () => {
     tick();
     expect(result[0].foo).toEqual(1);
     expect(result[1].bar).toEqual(2);
+  }));
+
+  it('should call list with include_service_instances=true when requested', fakeAsync(() => {
+    const hostContext = new CdTableFetchDataContext(() => undefined);
+    service.list(hostContext.toParams(), 'true', true).subscribe();
+    const req = httpTesting.expectOne(
+      'api/host?offset=0&limit=10&search=&sort=%2Bname&facts=true&include_service_instances=true'
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush([]);
+    tick();
   }));
 
   it('should make a GET request on the devices endpoint when requesting devices', () => {
