@@ -1,10 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include "iso_8601.h"
+
 #include <iomanip>
 #include <sstream>
 
-#include "iso_8601.h"
 #include "include/timegm.h"
 #include "include/ceph_assert.h"
 
@@ -18,8 +19,6 @@ using std::stringstream;
 using std::string;
 using std::uint16_t;
 
-using boost::none;
-using boost::optional;
 using std::string_view;
 
 using ceph::real_clock;
@@ -36,19 +35,18 @@ uint16_t digit(char c) {
   return static_cast<uint16_t>(c - '0');
 }
 
-optional<real_time> calculate(const tm& t, uint32_t n = 0) {
-  ceph_assert(n < 1000000000);
+std::optional<real_time> calculate(const tm& t, uint32_t n = 0) {
+  ceph_assert(n < 1'000'000'000);
+  std::optional<real_time> ret;
   time_t tt = internal_timegm(&t);
-  if (tt == static_cast<time_t>(-1)) {
-    return none;
+  if (tt != static_cast<time_t>(-1)) {
+    ret = real_clock::from_time_t(tt) + nanoseconds(n);
   }
-
-  return boost::make_optional<real_time>(real_clock::from_time_t(tt)
-                                         + nanoseconds(n));
+  return ret;
 }
 }
 
-optional<real_time> from_iso_8601(const string_view s,
+std::optional<real_time> from_iso_8601(const string_view s,
 				  const bool ws_terminates) {
   auto end = s.cend();
   auto read_digit = [end](sriter& c) mutable {
@@ -99,7 +97,7 @@ optional<real_time> from_iso_8601(const string_view s,
     {
       auto y = read_digits(c, 4);
       if (y < 1970) {
-	return none;
+	return std::nullopt;
       }
       t.tm_year = y - 1900;
     }
@@ -147,7 +145,7 @@ optional<real_time> from_iso_8601(const string_view s,
   } catch (std::invalid_argument& e) {
     // fallthrough
   }
-  return none;
+  return std::nullopt;
 }
 
 string to_iso_8601(const real_time t,

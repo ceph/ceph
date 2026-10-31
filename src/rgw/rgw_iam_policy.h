@@ -506,7 +506,7 @@ struct Condition {
     }
   }
 
-  static boost::optional<ceph::real_time> as_date(const std::string& s) {
+  static std::optional<ceph::real_time> as_date(const std::string& s) {
     std::size_t p = 0;
 
     try {
@@ -521,7 +521,7 @@ struct Condition {
 
       return from_iso_8601(std::string_view(s), false);
     } catch (const std::logic_error& e) {
-      return boost::none;
+      return std::nullopt;
     }
   }
 
