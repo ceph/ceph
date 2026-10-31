@@ -1,0 +1,60 @@
+overrides:
+  # exercise the DELEG tests: cephadm's ganesha config disables delegations
+  ganesha-reconf:
+    delegations: RW
+  install:
+    ceph:
+      extra_system_packages:
+        deb:
+        - python3-ply
+        - python3-setuptools
+        rpm:
+        - python3-ply
+        - python3-setuptools
+tasks:
+- pynfs:
+    client.0:
+      cluster_id: nfs-ganesha-test
+      pseudo_path: /nfsganesha
+      repo: git://git.linux-nfs.org/projects/cdmackay/pynfs.git
+      sha1: cd4701827a8261fedbfb4c6e39029fb9671321a6
+      known_failures:
+        '4.0':
+        # ganesha does not reject invalid UTF-8 names (NFS4ERR_INVAL)
+        - COMP3
+        - LINK8
+        - LOOK7
+        - OPEN13
+        - RM5
+        - RNM8
+        - RNM9
+        - SEC6
+        # pynfs bug: float division under python3 (st_write.py)
+        - WRT16
+        - WRT17
+        # filehandle of a removed file stays usable; allowed by the test
+        - PUTFH3
+        '4.1':
+        # ganesha does not reject invalid UTF-8 names (NFS4ERR_INVAL)
+        - COMP3
+        - RNM8
+        - RNM9
+        # ganesha ignores BACKCHANNEL_CTL callback security parameters
+        - DELEG7
+        # ganesha does not support FATTR4_OPEN_ARGUMENTS
+        - DELEG24
+        - DELEG25
+        '4.2':
+        # ganesha does not reject invalid UTF-8 names (NFS4ERR_INVAL)
+        - COMP3
+        - RNM8
+        - RNM9
+        # ganesha ignores BACKCHANNEL_CTL callback security parameters
+        - DELEG7
+        # ganesha does not support FATTR4_OPEN_ARGUMENTS
+        - DELEG24
+        - DELEG25
+        # libcephfs does not support fallocate mode 0 (NFS4ERR_NOTSUPP)
+        - ALLOC1
+        - ALLOC2
+        - ALLOC3

@@ -1,0 +1,4 @@
+overrides:
+  pynfs:
+    client.0:
+      versions: ['4.2']

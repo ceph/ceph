@@ -1,0 +1,33 @@
+overrides:
+  install:
+    ceph:
+      extra_system_packages:
+        deb:
+        - libtirpc-dev
+        - pkg-config
+        # general tests run time(1), tbl and nroff
+        - time
+        - groff-base
+        rpm:
+        - libtirpc-devel
+        - pkgconf-pkg-config
+        - time
+        - groff-base
+tasks:
+- exec:
+    client.0:
+      # Connectathon test suite: basic, general, special and lock tests. Built
+      # on local disk and run against a directory on the NFS mount.
+      - |
+        set -ex
+        MNT=$(findmnt -n -t nfs,nfs4 -o TARGET | head -n 1)
+        test -n "$MNT"
+        SRC=$(mktemp -d /tmp/cthon04.XXXXXX)
+        trap 'rm -rf "$SRC"' EXIT
+        git clone git://git.linux-nfs.org/projects/steved/cthon04.git "$SRC/cthon04"
+        cd "$SRC/cthon04"
+        git checkout -q 86a4501a6e1e415844dc632894a85a5253cc1505
+        make
+        for t in -b -g -s -l; do
+            ./runtests $t -t "$MNT/cthon04"
+        done
