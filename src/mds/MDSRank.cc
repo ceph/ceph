@@ -1399,6 +1399,17 @@ bool MDSRank::is_stale_message(const cref_t<Message> &m) const
     bool bad = false;
     if (mdsmap->is_down(from)) {
       bad = true;
+    } else if (mdsmap->is_bootstrapping(from)) {
+      // Do not connect_to() a bootstrapping rank here: the new daemon may
+      // not have taken its rank name yet, and the connection would keep
+      // the standby's name, so every later message from that rank would
+      // be dropped as coming from an imposter.
+      if (m->get_source_addrs() != mdsmap->get_addrs(from)) {
+	bad = true;
+	dout(5) << " mds." << from << " is bootstrapping at "
+		<< mdsmap->get_addrs(from) << " but this message is from "
+		<< m->get_source_addrs() << dendl;
+      }
     } else {
       // FIXME: this is a convoluted check.  we should be maintaining a nice
       // clean map of current ConnectionRefs for current mdses!!!
