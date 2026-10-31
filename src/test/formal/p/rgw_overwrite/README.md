@@ -1,0 +1,950 @@
+# RGW overwrites, deletes, copies and multipart uploads: a P model
+
+A model of writes to the keys of a non-versioned bucket that already hold
+objects, and of how S3 requests to them are answered. A key is overwritten by PutObject, CopyObject or a multipart
+completion, or removed by DeleteObject. Those operations race each other,
+part re-uploads, aborts, lifecycle, dedup, bucket listings, a reshard and
+GC. A copy within one pool, and dedup, share a tail through
+`cls_refcount`. PutObject, a completion and DeleteObject may carry a
+condition on the key's current object: `If-Match` or `If-None-Match: *`.
+
+The model follows the code on main as of `44d50f6abb9`, which includes
+the completion-lock renewal of PR 67696 (tracker #75375). Line numbers
+below refer to that commit. Tentacle has the same code in every place the
+findings below point to; it lacks only PR 67696. It carries the
+DeleteObject change behind finding 5 as `f28f0d9147d`.
+
+## The properties
+
+**HeadIntact.** No data object is deleted while a key's head references
+it, and no head is written over an object already deleted. What each key
+holds stays readable. Under `cls_refcount`, an object sent to GC under one
+tag can rightly survive through another reference, so only deletion
+counts.
+
+**IndexMatchesHead.** At the end, after a listing has repaired the entries
+with pending ops, each key's bucket index entry lists the object the head
+holds, or nothing if there is no head.
+
+**BucketStats.** At the end, the index header's stats count every listed
+entry, in both namespaces, with its size.
+
+**NoOrphans.** At the end, after GC has run every queued chain, every data
+object is referenced by a head or by a live upload. Every entry in the
+multipart namespace of the index belongs to a live upload.
+
+**CompletionEtag.** A successful completion answers its object's ETag,
+never an empty one.
+
+**AllAnswered** (liveness). Every request is answered, unless its RGW
+dies.
+
+**CondSemantics.** A conditional request is answered as some order of the
+requests on its key would answer it:
+- a request that wrote or removed the head found a head that met its
+  condition;
+- a request answered success without changing the head met its condition
+  at some point while it ran, and can be ordered just before the write
+  that replaced that head, whose own condition still holds after it. A
+  conditional delete also meets its condition where there is no head, as
+  RGW answers it 204 with nothing to delete. S3 answers it 404, which
+  S3Answers checks;
+- a request answered PreconditionFailed found, while it ran, a head that
+  failed its condition, and one answered NoSuchKey found no head. Neither
+  changed anything: no head, and no bucket index entry.
+
+Another error, such as a 500, promises nothing, so the spec only checks
+that such a request did not write over a head that failed its condition.
+Unconditional requests are checked only as the writes that replace a
+head.
+
+**S3Answers.** Each request is answered as the S3 API answers its
+operation. The contract has two sources. The first is AWS's Smithy
+model of S3 ([`aws/api-models-aws`](https://github.com/aws/api-models-aws),
+`models/s3/service/2006-03-01/s3-2006-03-01.json` at `f9dcea01`,
+2026-09-11). It gives each operation's success status (the `http`
+trait's `code`), the errors the operation's model and documentation
+name, and their statuses (the `httpError` trait). The second is the S3
+User Guide's pages on conditional writes and deletes, which say how S3
+answers a conditional request that loses a race.
+- A success carries its operation's status: 204 for DeleteObject and
+  AbortMultipartUpload, 200 for the others.
+- An error is one its operation's contract names, with S3's status for
+  it:
+  - PutObject: 412 `PreconditionFailed` and 409
+    `ConditionalRequestConflict` under `If-Match` or `If-None-Match`,
+    and 404 `NoSuchKey` under `If-Match`.
+  - DeleteObject: the same three, under `If-Match`.
+  - CopyObject: 404 `NoSuchKey` for a missing source. S3's list of
+    error codes gives it; the Smithy model names none.
+  - UploadPart: 404 `NoSuchUpload`.
+  - CompleteMultipartUpload: 400 `InvalidPart` and 404 `NoSuchUpload`,
+    and PutObject's under a condition. Also 500 `InternalError`, which
+    its documentation tells clients to retry.
+  - AbortMultipartUpload: 404 `NoSuchUpload`.
+
+  Any operation may answer 503 `ServiceUnavailable`, which clients
+  retry, and a request that met an injected fault may answer any 5xx.
+  RGW answers an errno it has no S3 error for with 500 `UnknownError`,
+  which S3 does not define.
+- A conditional DeleteObject answered 204 removed an object. S3 answers
+  one that finds no object 404, and one that loses a race 409 or 404.
+
+Lifecycle's abort, dedup and resharding are not S3 requests, and are not
+checked.
+
+## What is modelled
+
+- **The keys.** Key 1 starts with an object from an earlier PutObject, and
+  so does key 2 in the copy scenarios. Uploads 1 and 2 complete to key 1;
+  each has parts 1 and 2 uploaded at its base prefix. A part is one RADOS
+  object: its head, which also names its index entry.
+- **`Store`**: the RADOS state. Each handler is one atomic op.
+  - Each key's head object. A write is guarded by `cmpxattr` on the ID
+    tag that was read, or is an exclusive create. A removal
+    (`cls_rgw_remove_obj`) may be guarded or not. Every head write or
+    removal takes the PG's next version. A removal that finds no head
+    answers the PG's last version, which is the floor the OSD sets on
+    `-ENOENT`.
+  - Each key's bucket index entry, as `rgw_bucket_prepare_op` and
+    `rgw_bucket_complete_op` keep it: pending tags, the version check
+    against the head's epoch, and `remove_objs`.
+  - The multipart namespace of the index.
+  - The data objects, with their `cls_refcount` references. None recorded
+    means the implicit one; retired tags are kept, as `cls_rc_refcount_put`
+    keeps them.
+  - GC. A chain is queued under a tag. Later, GC drops that tag's
+    reference from each object, falling back to the implicit one, and
+    deletes an object once it has no references left. GC may run any
+    queued chain before any op, and runs them all at the end.
+  - The index header's stats, adjusted as `cls_rgw` adjusts them.
+  - A listing's repair (`rgw_dir_suggest_changes`): it drops pending ops
+    whose tag timeout has expired, and applies a suggestion only when none
+    are left and no op has completed on the entry since the listing read
+    it. At the end, a listing repairs every entry with pending ops.
+  - Resharding with logrecord. In logrecord, index ops apply to the source
+    and log the entries they touch. The inventory copies each source
+    entry to the target. In progress, index ops answer
+    `-ERR_BUSY_RESHARDING`. The incremental pass copies the logged entries
+    again, taking a re-copied entry's old stats out first
+    (`check_existing`). After the commit, the old shards still answer
+    `-ERR_BUSY_RESHARDING`.
+  - Each upload's meta object: its parts
+    (`cls_rgw_mp_upload_part_info_update`, which carries past prefixes
+    forward and bumps the `cls_version`), and the completion lock.
+- **`Rgw`**: one S3 request, one RADOS op at a time.
+  - `PutObject` (`AtomicObjectProcessor`, `write_meta`, `_do_write_meta`):
+    - writes the tail first;
+    - writes the head, first as an exclusive create, then as a guarded
+      replace;
+    - sends the replaced head's manifest to GC under its tail tag
+      (`complete_atomic_modification`), then completes or cancels the
+      index entry;
+    - if it loses a race, deletes its own tail and still answers success.
+  - `DeleteObject` on a non-versioned bucket (`Delete::delete_obj`):
+    - reads the head and prepares the index;
+    - removes the head, with no ID-tag guard since `55f5b762c67`;
+    - completes the index `DEL`, then sends the manifest it read to GC.
+    - A removal that fails with `-ECANCELED` is answered 204
+      (`RGWDeleteObj::execute`, `rgw_op.cc:6101-6103`).
+  - Every write goes through `write_meta`. If its index completion fails
+    after the head write, as the FIFO bilog flush can make it, it cancels
+    the index op (which may fail too) and returns the error. PutObject
+    then deletes its tail, a copy drops its references, and a completion
+    returns before deleting the meta object.
+  - Every index op names the layout generation its request read, and on
+    `-ERR_BUSY_RESHARDING` waits for the commit and retries.
+  - `CopyObject` within one pool (`copy_obj`):
+    - reads the source;
+    - takes a reference on each tail object under the new head's tag, and
+      drops them if one fails;
+    - writes the destination head, whose tail tag is that tag.
+    - A copy onto itself instead rewrites the head with the manifest it
+      read, `keep_tail`, and the tail tag kept.
+  - `UploadPart` (`MultipartObjectProcessor`):
+    - creates the part head exclusively, under a random prefix if the part
+      was uploaded before;
+    - records the part in the meta object
+      (`cls_rgw_mp_upload_part_info_update`), which refuses a prefix
+      that is one of the part's past prefixes with `-EEXIST`
+      (`cls_rgw.cc:5119`), or removes what it wrote if that fails.
+  - `CompleteMultipartUpload` (`RGWCompleteMultipart::execute`,
+    `RadosMultipartUpload::complete`):
+    - takes the lock, with `check_previously_completed` when the meta
+      object is gone;
+    - checks each part against the client's list, then sends its past
+      prefixes to GC under the upload id (`cleanup_part_history`), part
+      by part. A part refused later leaves the history of those before
+      it collected (`rgw_sal_rados.cc:4546-4645`);
+    - writes the head;
+    - deletes the meta object under its `cls_version`, cleaning up parts
+      that raced (`cleanup_orphaned_parts`) and retrying.
+  - `AbortMultipartUpload` (`RGWAbortMultipart`) and lifecycle's
+    AbortIncompleteMultipartUpload (`RGWLC::handle_multipart_expiration`).
+    Both go through `RadosMultipartUpload::abort`; only the first takes
+    the lock.
+  - A bucket listing (`cls_bucket_list_ordered`, `check_disk_state`). An
+    entry with pending ops, or not marked as existing, gets a suggestion
+    from its head. For a multipart head, the listing also drops the
+    parts' index entries.
+  - Dedup (`rgw::dedup::Background::dedup_object`) of one key's object
+    onto another's with the same bytes:
+    - takes references on the source's tail under the target's ref tag;
+    - rewrites the source head, then the target head, each under
+      `cmpxattr` on its ETag and ref tag, leaving the ID tag alone;
+    - frees the target's old tail at once, not through GC.
+  - A reshard (`RGWBucketReshard::do_reshard`), step by step.
+  - Conditions (`If-Match` with an ETag, `If-Match: *`,
+    `If-None-Match: *`) on PutObject and a completion, which both pass
+    them to `write_meta`, and `If-Match` with an ETag on DeleteObject.
+    Each write carries its own ETag, and the ETag named is that of key 1's
+    object.
+    - A conditional write does not try an exclusive create first: it reads
+      the head, and `check_preconditions` checks the condition against it
+      before the index op is prepared (`rgw_rados.cc:3465`, `3783`).
+      `If-Match` without a head is answered 404 (`rgw_rados.cc:7860`,
+      `7873`); another ETag, or a head under `If-None-Match: *`, 412.
+    - The head write is then guarded as any other: `cmpxattr` on the ID
+      tag read under `If-Match`, and an exclusive create under
+      `If-None-Match: *`, which adds no `cmpxattr` (`rgw_rados.cc:3470`,
+      `7925`).
+    - A lost race goes through `done_cancel`, which cancels the index op
+      with its `remove_objs` (`rgw_rados.cc:3725`) and maps the error
+      (`rgw_rados.cc:3739-3768`): under `If-Match: *`, `-ENOENT` is 412
+      and `-ECANCELED` success; under `If-None-Match: *`, `-EEXIST` is 412;
+      under `If-Match` with an ETag the error stands. `-ENOENT` is then
+      404, and `-ECANCELED`, which has no S3 code, is answered 500
+      UnknownError (`rgw_common.cc:364-368`), not 412.
+    - A refused PutObject deletes its tail. A refused completion returns
+      the error from `RadosMultipartUpload::complete`
+      (`rgw_sal_rados.cc:4736-4738`); `RGWCompleteMultipart::execute`
+      returns before it deletes the meta object (`rgw_op.cc:7855-7861`),
+      so the upload stays.
+    - DeleteObject: `RGWDeleteObj::execute` reads the head, and
+      `delete_obj` answers 204 if there is none, before any condition
+      (`rgw_rados.cc:7203-7206`), then checks the condition against the
+      head read (`rgw_rados.cc:7214`). The removal does not check it again
+      on main.
+  - The answer. Each request ends with its `op_ret`, which the op's
+    `send_response` answers through `rgw_http_s3_errors`
+    (`rgw_common.cc`).
+    - DeleteObject answers `-ENOENT` and success as 204
+      (`rgw_rest_s3.cc:3897-3900`), and so does `delete_obj` when the
+      removal finds no head, because `complete_del`'s return replaces
+      the `-ENOENT` (`rgw_rados.cc:7266`).
+    - AbortMultipartUpload answers success as 204.
+    - An errno the table lacks, such as `-ECANCELED` or `-EIO`, is 500
+      `UnknownError` (`rgw_common.cc:364-368`), and `-EEXIST` is 409
+      `BucketAlreadyExists` (`rgw_common.cc:110`).
+    - CompleteMultipartUpload answers:
+      - an upload that is gone, `NoSuchUpload`;
+      - a completion already in progress, 500 `InternalError`
+        (`rgw_op.cc:7728-7735`);
+      - a meta object gone after the lock was taken, 404 `NoSuchKey`,
+        because `get_obj_attrs`'s `-ENOENT` stands (`rgw_op.cc:7738`);
+      - a list that does not match the parts, `InvalidPart`.
+    - UploadPart answers `-ENOENT` from the meta object as `NoSuchUpload`,
+      and passes any other error on (`rgw_putobj_processor.cc:648`).
+    - AbortMultipartUpload answers a lock held by a completion with 503
+      `ServiceUnavailable` (`-EBUSY`), and an upload that is gone with
+      `NoSuchUpload`.
+- **`Driver`** (`../common/Common.p`): runs a script of phases. The
+  requests of a phase run concurrently.
+
+| Scenario | Script |
+|---|---|
+| `SC_PUTS` | three PutObjects |
+| `SC_PUT_VS_COMPLETE` | a PutObject and a completion of upload 1 |
+| `SC_COMPLETES` | completions of uploads 1 and 2 |
+| `SC_SAME_COMPLETES` | three concurrent completions of upload 1 |
+| `SC_REUPLOAD` | a completion, and a re-upload of part 1 with the same bytes (an SDK retry) or other bytes |
+| `SC_ABORT`, `SC_LC_ABORT` | a completion, and an AbortMultipartUpload or lifecycle's abort |
+| `SC_RETRY` | a completion, then a retry of it |
+| `SC_THEN_ABORT` | a completion, then an abort |
+| `SC_PUT_THEN_RETRY` | a completion, then a PutObject, then a retry of the completion |
+| `SC_DEL_VS_PUT` | a DeleteObject and a PutObject |
+| `SC_DELS_AND_PUT` | two DeleteObjects and a PutObject |
+| `SC_DEL_VS_COMPLETE` | a DeleteObject and a completion |
+| `SC_COPY_VS_PUT_SRC`, `SC_COPY_VS_DEL_SRC` | a copy of key 1 to key 2, and a PutObject over, or DeleteObject of, key 1 |
+| `SC_COPY_VS_PUT_DST` | a copy of key 1 to key 2 and a PutObject over key 2; then key 1 deleted |
+| `SC_COPY_THEN_DELETES` | a copy of key 1 to key 2; then both keys deleted at once |
+| `SC_COPY_SELF_VS_PUT` | a copy of key 1 onto itself, and a PutObject over key 1 |
+| `SC_COPY_MPU` | a completion; a copy to key 2 and a PutObject over key 1; then key 2 deleted |
+| `SC_CRASH_COPY_RETRY` | a completion; a copy to key 2; a retry of the completion; then key 2 deleted |
+| `SC_PUT_ONE`, `SC_COPY_ONE` | one PutObject; or a copy to key 2, then key 1 deleted |
+| `SC_LIST_VS_PUT`, `SC_LIST_VS_DEL`, `SC_LIST_VS_COMPLETE` | a listing, and a PutObject, DeleteObject or completion |
+| `SC_DEDUP_*` | keys 1 and 2 hold the same bytes: dedup of key 2 onto key 1, alone or racing a PutObject over, DeleteObject of, or copy onto itself of either key |
+| `SC_RESHARD_VS_PUTS`, `SC_RESHARD_VS_DEL`, `SC_RESHARD_VS_MPU` | a reshard, and two PutObjects; a DeleteObject and a PutObject; or a completion and a part re-upload |
+| `SC_CREATES` | key 1 empty: two PutObjects with `If-None-Match: *` |
+| `SC_CREATE_VS_COMPLETE` | key 1 empty: a PutObject and a completion, both with `If-None-Match: *` |
+| `SC_IF_MATCH_VS_PUT` | a PutObject with `If-Match`, and a PutObject |
+| `SC_MATCH_ANY_VS_MATCH` | a PutObject with `If-Match: *`, and one with `If-Match` |
+| `SC_COND_DEL_VS_PUT` | a DeleteObject with `If-Match`, and a PutObject |
+| `SC_COND_DEL_VS_MATCH` | a DeleteObject and a PutObject, both with `If-Match` |
+| `SC_COND_COMPLETE_VS_PUT` | a completion with `If-Match`, and a PutObject |
+| `SC_COND_DELS` | two DeleteObjects with `If-Match` on the same ETag |
+| `SC_INVALID_THEN_REUPLOAD` | part 1 uploaded again, as an SDK retry does; then a completion whose list has the wrong ETag for part 2; then part 1 uploaded again |
+
+## Environment and assumptions
+
+- **A completion may leave its meta object behind** (`completeMayCrash`,
+  `metaDeleteMayFail`). RGW may die after the head write and before
+  deleting the meta object; the lock then expires. Or the delete may fail
+  with an error other than `-ECANCELED`, which is only logged.
+- **An index completion may fail before it reaches the OSD**
+  (`ixCompleteMayFail`). On main, the FIFO bilog flush in `with_bilog`
+  (`a67a233ccbd`, not in tentacle) runs first and can fail. The cancel
+  that follows goes through the same path and may fail too.
+- **A request completes its index op before its pending op expires**
+  (`writersPrompt`). That is `rgw_pending_bucket_index_op_expiration`,
+  120 s by default. *`tcAssumeWritersPrompt` breaks it.*
+- **A listing repairs an entry right after it reads the head.** Its
+  repair drops a pending op as expired only if the op's request had
+  answered, or died, before the listing read the head, since the op has at
+  least that long to run. An op left pending by a failed completion stays
+  pending for the whole expiry, and a listing that read the head before
+  that write cannot drop it.
+- **A live holder keeps the completion lock** (`lockHeld`). The lock is
+  renewed while its holder lives, and a failed renewal stops the
+  completion only if it happens before the `is_locked()` check.
+  *`tcAssumeLockHeld` breaks it.*
+- **GC timing.** GC may run a queued chain at any point. On a cluster it
+  waits `rgw_gc_obj_min_wait` (2 h). That delays the violations below but
+  prevents none of them: each one references or deletes data that is never
+  recovered.
+
+## Configurations and results
+
+`../run.sh rgw_overwrite [schedules]` checks each case against
+`expect.txt`. Flags not named are as on main. Keep the default of 20,000
+schedules: some counterexamples, such as `tcDelsAndPutIndex`'s, need a
+rare order of three index completions, and 2,000 schedules can miss
+them. Each of the 37 cases that
+holds on main or with one proposed fix was also run for 100,000 schedules
+under each of random, PCT and POS scheduling (`../deep.sh`), with no bug
+found. The cases of conditional requests were run with the default
+20,000 schedules only.
+
+| Test case | Scenario | Changes | Result |
+|---|---|---|---|
+| `tcPutsSafe` | `SC_PUTS` | none | holds |
+| `tcPutsIndex` | `SC_PUTS` | none | **violated**: IndexMatchesHead (finding 1) |
+| `tcPutsCancelKeepsVer` | `SC_PUTS` | a skipped op leaves `entry.ver` alone (proposed) | holds |
+| `tcBugNoIdTagGuard` | `SC_PUTS` | no `cmpxattr` on the ID tag | violated: a replaced write's tail leaks |
+| `tcPutVsCompleteSafe` | `SC_PUT_VS_COMPLETE` | none | holds |
+| `tcPutVsCompleteLeak` | `SC_PUT_VS_COMPLETE` | none | **violated**: NoOrphans (finding 4) |
+| `tcPutVsCompleteLoserGc` | `SC_PUT_VS_COMPLETE` | a losing completion sends its parts to GC (proposed) | holds |
+| `tcBugCancelSkipsRemoveObjs` | `SC_PUT_VS_COMPLETE` | that, and a cancel ignores `remove_objs` (before `8b27472bbd8a`) | violated: the parts' index entries are orphaned |
+| `tcCompletesSafe` | `SC_COMPLETES` | none | holds |
+| `tcCompletesLeak` | `SC_COMPLETES` | none | **violated**: NoOrphans (finding 4) |
+| `tcCompletesLoserGc` | `SC_COMPLETES` | a losing completion sends its parts to GC (proposed) | holds |
+| `tcSameCompletes` | `SC_SAME_COMPLETES` | none | holds |
+| `tcBugNoLockRenewal` | `SC_SAME_COMPLETES` | the lock may lapse under a live holder (before PR 67696) | violated: a second completion GCs the parts the first one's head references (#75375) |
+| `tcBugReplayNoEtag` | `SC_SAME_COMPLETES` | a replay answers no ETag (before `565077e2f1c`) | violated: CompletionEtag (#75999) |
+| `tcReupload` | `SC_REUPLOAD` | none | holds |
+| `tcBugNoMetaVersionCheck` | `SC_REUPLOAD` | the meta object deleted without `cls_version_check` (before `451b70dedb9`) | violated: the re-uploaded part leaks |
+| `tcBugHistoryNoSkip` | `SC_REUPLOAD` | the orphan cleanup ignores `processed_prefixes` (part of `451b70dedb9`) | violated: the prefix the head uses is deleted |
+| `tcAbortVsComplete` | `SC_ABORT` | none | holds |
+| `tcBugAbortNoLock` | `SC_ABORT` | abort without the lock (before `bae9ed83edf`) | violated: HeadIntact |
+| `tcAssumeLockHeld` | `SC_ABORT` | the assumption broken | violated: HeadIntact |
+| `tcLcAbortVsComplete` | `SC_LC_ABORT` | none | **violated**: HeadIntact (finding 2) |
+| `tcLcAbortTakesLock` | `SC_LC_ABORT` | lifecycle takes the lock (proposed) | holds |
+| `tcCrashThenRetry` | `SC_RETRY` | RGW may die before the meta delete | **violated**: HeadIntact (finding 3) |
+| `tcCrashThenAbort` | `SC_THEN_ABORT` | RGW may die before the meta delete | **violated**: HeadIntact (finding 3) |
+| `tcMetaDeleteFailsThenRetry` | `SC_RETRY` | the meta delete may fail | **violated**: HeadIntact (finding 3) |
+| `tcMetaDeleteFailsThenAbort` | `SC_THEN_ABORT` | the meta delete may fail | **violated**: HeadIntact (finding 3) |
+| `tcSparesHeadCrashRetry` | `SC_RETRY` | GC spares what the head references (proposed) | holds |
+| `tcSparesHeadCrashAbort` | `SC_THEN_ABORT` | the same | holds |
+| `tcSparesHeadCrashPutRetry` | `SC_PUT_THEN_RETRY` | the same | violated: not a sufficient fix for finding 3 |
+| `tcDelVsPutSafe` | `SC_DEL_VS_PUT` | none | holds |
+| `tcDelVsPutLeak` | `SC_DEL_VS_PUT` | none | **violated**: NoOrphans (finding 5) |
+| `tcDelVsPutGuard` | `SC_DEL_VS_PUT` | the removal guarded on the ID tag (as before `55f5b762c67`) | holds |
+| `tcDelsAndPutSafe` | `SC_DELS_AND_PUT` | none | holds |
+| `tcDelsAndPutIndex` | `SC_DELS_AND_PUT` | none | **violated**: IndexMatchesHead (finding 1) |
+| `tcDelsCancelKeepsVer` | `SC_DELS_AND_PUT` | a skipped op leaves `entry.ver` alone (proposed) | holds |
+| `tcDelVsCompleteSafe` | `SC_DEL_VS_COMPLETE` | none | holds |
+| `tcDelVsCompleteLeak` | `SC_DEL_VS_COMPLETE` | none | **violated**: NoOrphans (finding 5) |
+| `tcDelVsCompleteGuard` | `SC_DEL_VS_COMPLETE` | the guarded removal, and a losing completion GCs its parts | holds |
+| `tcCopyVsPutSrc` | `SC_COPY_VS_PUT_SRC` | none | holds |
+| `tcBugCopyNoRefs` | `SC_COPY_VS_PUT_SRC` | the copy shares the tail without references | violated: HeadIntact |
+| `tcCopyVsDelSrc` | `SC_COPY_VS_DEL_SRC` | none | holds |
+| `tcCopyVsPutDstSafe` | `SC_COPY_VS_PUT_DST` | none | holds |
+| `tcCopyVsPutDstLeak` | `SC_COPY_VS_PUT_DST` | none | **violated**: NoOrphans (finding 6) |
+| `tcCopyVsPutDstDropRefs` | `SC_COPY_VS_PUT_DST` | a losing copy drops its references (proposed) | holds |
+| `tcCopyThenDeletes` | `SC_COPY_THEN_DELETES` | none | holds |
+| `tcCopySelfVsPutLoss` | `SC_COPY_SELF_VS_PUT` | none | **violated**: HeadIntact (finding 7) |
+| `tcCopySelfGuarded` | `SC_COPY_SELF_VS_PUT` | a copy onto itself writes only over the head it copied (proposed) | holds |
+| `tcCopyMpu` | `SC_COPY_MPU` | none | holds |
+| `tcCrashCopyRetry` | `SC_CRASH_COPY_RETRY` | RGW may die before the meta delete | **violated**: HeadIntact; a copy only delays finding 3 |
+| `tcIxFailPutLoss` | `SC_PUT_ONE` | the index completion may fail | **violated**: HeadIntact (finding 8) |
+| `tcIxFailPutIndex` | `SC_PUT_ONE` | the same | **violated**: IndexMatchesHead (finding 8) |
+| `tcIxFailCopyLoss` | `SC_COPY_ONE` | the same | **violated**: HeadIntact (finding 8) |
+| `tcIxFailRetryLoss` | `SC_RETRY` | the same | **violated**: HeadIntact (findings 8 and 3) |
+| `tcIxKeepsWritePut`, `tcIxKeepsWriteCopy`, `tcIxKeepsWriteRetry` | `SC_PUT_ONE`, `SC_COPY_ONE`, `SC_RETRY` | the same, and a failed completion after the head write leaves the pending op, keeps the write and removes the entries it replaces (proposed) | holds |
+| `tcListVsPut`, `tcListVsDel`, `tcListVsComplete` | `SC_LIST_VS_*` | none | holds |
+| `tcAssumeWritersPrompt` | `SC_LIST_VS_PUT` | a request may stall past the pending-op expiry | violated: IndexMatchesHead (finding 11) |
+| `tcDedupThenDeletes` | `SC_DEDUP_THEN_DELETES` | none | holds |
+| `tcDedupVsPutTgtSafe` | `SC_DEDUP_VS_PUT_TGT` | none | holds |
+| `tcDedupVsPutTgtLeak` | `SC_DEDUP_VS_PUT_TGT` | none | **violated**: NoOrphans (finding 9) |
+| `tcDedupVsDelTgtLeak` | `SC_DEDUP_VS_DEL_TGT` | none | **violated**: NoOrphans (finding 9) |
+| `tcDedupVsDelTgtGuarded` | `SC_DEDUP_VS_DEL_TGT` | the delete's guard restored (M5) | violated: M5 does not cover finding 9 |
+| `tcDedupVsPutSrc` | `SC_DEDUP_VS_PUT_SRC` | none | holds |
+| `tcDedupVsCopySelfLoss` | `SC_DEDUP_VS_COPY_SELF` | none | **violated**: HeadIntact (finding 10) |
+| `tcDedupVsCopySelfGuarded` | `SC_DEDUP_VS_COPY_SELF` | a copy onto itself guarded on the tag it read (M7) | violated: M7 does not cover finding 10 |
+| `tcReshardVsPuts`, `tcReshardVsDel`, `tcReshardVsMpu` | `SC_RESHARD_*` | none | holds |
+| `tcBugReshardNoLog` | `SC_RESHARD_VS_PUTS` | no reshard log (before `55b404afeb6`) | violated: IndexMatchesHead |
+| `tcBugReshardNoCheckExisting` | `SC_RESHARD_VS_PUTS` | the incremental pass adds re-copied entries' stats again | violated: BucketStats |
+| `tcBugOldShardsOpen` | `SC_RESHARD_VS_PUTS` | the old shards accept ops after the commit | violated: IndexMatchesHead |
+| `tcCreates` | `SC_CREATES` | none | holds |
+| `tcCreateVsCompleteSafe` | `SC_CREATE_VS_COMPLETE` | none | holds |
+| `tcCreateVsCompleteCond` | `SC_CREATE_VS_COMPLETE` | none | **violated**: CondSemantics (finding 14) |
+| `tcCreateVsCompleteKeepsParts` | `SC_CREATE_VS_COMPLETE` | a write refused after a lost race cancels without `remove_objs` (proposed) | holds |
+| `tcIfMatchVsPut` | `SC_IF_MATCH_VS_PUT` | none | holds |
+| `tcBugCondNoIdTagGuard` | `SC_IF_MATCH_VS_PUT` | no `cmpxattr` on the ID tag | violated: CondSemantics |
+| `tcMatchAnyVsMatchSafe` | `SC_MATCH_ANY_VS_MATCH` | none | holds |
+| `tcMatchAnyVsMatchCond` | `SC_MATCH_ANY_VS_MATCH` | none | **violated**: CondSemantics (finding 13) |
+| `tcMatchAnyVsMatchLossFails` | `SC_MATCH_ANY_VS_MATCH` | a conditional request that loses the race is answered an error (proposed) | holds |
+| `tcCondDelVsPutSafe` | `SC_COND_DEL_VS_PUT` | none | holds |
+| `tcCondDelVsPutLeak` | `SC_COND_DEL_VS_PUT` | none | **violated**: NoOrphans (finding 5) |
+| `tcCondDelVsPutCond` | `SC_COND_DEL_VS_PUT` | none | **violated**: CondSemantics (finding 12) |
+| `tcCondDelVsPutGuard` | `SC_COND_DEL_VS_PUT` | the removal guarded on the ID tag (M5) | holds |
+| `tcCondDelVsMatchSafe` | `SC_COND_DEL_VS_MATCH` | none | holds |
+| `tcCondDelVsMatchCond` | `SC_COND_DEL_VS_MATCH` | none | **violated**: CondSemantics (finding 12) |
+| `tcCondDelVsMatchGuard` | `SC_COND_DEL_VS_MATCH` | the guarded removal (M5) | violated: CondSemantics (finding 13) |
+| `tcCondDelVsMatchLossFails` | `SC_COND_DEL_VS_MATCH` | the guarded removal, and a losing conditional request answered an error | holds |
+| `tcCondCompleteVsPut` | `SC_COND_COMPLETE_VS_PUT` | none | holds |
+| `tcFixed<Scenario>` | each scenario | the seven proposed fixes together (`Fixed()`) | holds, except the dedup scenarios of findings 9 and 10, and `SC_CREATE_VS_COMPLETE`, `SC_MATCH_ANY_VS_MATCH` and `SC_COND_DEL_VS_MATCH` (CondSemantics, findings 13 and 14) |
+| `tcFixedIx<Scenario>` | each scenario | the same, and the index completion may fail | holds, except the same scenarios |
+| `tcCondFixed<Scenario>`, `tcCondFixedIx<Scenario>` | each conditional scenario | the seven, and the two for conditional requests (`FixedCond()`); then with index completions that may fail | holds |
+| `tcStall<Scenario>` | `SC_LIST_*` | `Fixed()`, and a request may stall past the pending-op expiry | violated (finding 11) |
+| `tcRelink<Scenario>` | `SC_LIST_*` | the same, and a writer whose pending op is gone re-links its entry (proposed) | holds |
+| `tcMarkCrash<Scenario>` | `SC_RETRY`, `SC_THEN_ABORT`, `SC_PUT_THEN_RETRY`, `SC_CRASH_COPY_RETRY`, `SC_SAME_COMPLETES`, `SC_ABORT`, `SC_LC_ABORT` | `Fixed()`, a completion records its tag before the head write (proposed), and RGW may die | holds |
+| `tcMarkMetaDel<Scenario>` | the same | the same, and the meta delete may fail instead | holds |
+| `tcMarkLapse<Scenario>` | `SC_ABORT`, `SC_LC_ABORT`, `SC_SAME_COMPLETES` | the same, and the completion lock may lapse under a live holder | violated: a record cannot fence a holder whose lock lapsed before its head write |
+
+The S3Answers cases check only S3Answers on main and with one fix. With
+every fix, they check every property.
+
+| Test case | Scenario | Changes | Result |
+|---|---|---|---|
+| `tcAns<Scenario>` | the write, delete, copy, multipart, listing and conditional scenarios | none | holds, except the six below |
+| `tcAnsIfMatchVsPut`, `tcAnsMatchAnyVsMatch` | `SC_IF_MATCH_VS_PUT`, `SC_MATCH_ANY_VS_MATCH` | none | **violated**: a PutObject under `If-Match` answered 500 `UnknownError` (finding 13) |
+| `tcAnsCondCompleteVsPut` | `SC_COND_COMPLETE_VS_PUT` | none | **violated**: a completion under `If-Match` answered 500 `UnknownError` (finding 13) |
+| `tcAnsLcAbort` | `SC_LC_ABORT` | none | **violated**: a completion answered 404 `NoSuchKey` (finding 2) |
+| `tcAnsCondDels` | `SC_COND_DELS` | none | **violated**: a conditional DeleteObject that removed nothing answered 204 (finding 15) |
+| `tcAnsInvalidThenReupload` | `SC_INVALID_THEN_REUPLOAD` | none | **violated**: UploadPart answered 409 `BucketAlreadyExists` (finding 16) |
+| `tcAnsIxFailPut`, `tcAnsIxFailRetry` | `SC_PUT_ONE`, `SC_RETRY` | the index completion may fail | holds: a fault may be answered 5xx |
+| `tcAnsGuardCondDelVsMatch` | `SC_COND_DEL_VS_MATCH` | the guarded removal (M5) | **violated**: a conditional DeleteObject that lost the race answered 204 (finding 13) |
+| `tcAnsLossFailsIfMatchVsPut`, `tcAnsLossFailsCondCompleteVsPut` | `SC_IF_MATCH_VS_PUT`, `SC_COND_COMPLETE_VS_PUT` | a lost race is answered 409 (proposed) | holds |
+| `tcAnsTakesLockLcAbort` | `SC_LC_ABORT` | lifecycle takes the lock (proposed) | holds |
+| `tcAnsNoKeyCondDels` | `SC_COND_DELS` | a conditional DeleteObject that finds no object is answered 404 (proposed) | holds, CondSemantics too |
+| `tcAnsHistoryInvalidThenReupload` | `SC_INVALID_THEN_REUPLOAD` | a completion sends its parts' history to GC only once its head is written (proposed) | holds, with HeadIntact, NoOrphans, IndexMatchesHead, AllAnswered and BucketStats |
+| `tcAnsFixed<Scenario>`, `tcAnsFixedIx<Scenario>` | the S3Answers scenarios, and resharding with multipart | `FixedCond()` and the two above (`AnsFixed()`); then with index completions that may fail | holds, every property |
+| `tcAnsFixedMarkCrash<Scenario>` | `SC_RETRY`, `SC_THEN_ABORT`, `SC_INVALID_THEN_REUPLOAD` | the same, the completion record, and RGW may die | holds, every property |
+
+## What the model finds on main
+
+These are counterexamples the checker produced, traced by hand to the code
+on main at `44d50f6abb9`; the line numbers below are from that commit. All
+but finding 8 reproduce on a vstart cluster, with injection points that
+hold one request while another runs (`rgw_inject.h`, in
+[#72096](https://github.com/ceph/ceph/pull/72096)): finding 1 in `ceph_test_cls_rgw` ([#72097](https://github.com/ceph/ceph/pull/72097));
+findings 4, 5, 6, 9 and 10 in `qa/workunits/rgw/test_rgw_overwrite_races.py`
+([#72096](https://github.com/ceph/ceph/pull/72096)); findings 2, 3, 7 and 11 in s3-tests (`rgw_inject`
+marker, [wip-rgw-overwrite-races](https://github.com/mmgaggle/s3-tests/tree/wip-rgw-overwrite-races)).
+Finding 8 needs a FIFO bilog flush to fail. Findings 12, 13 and 14
+reproduce with the workunit's conditional-request cases. Findings 15 and
+16 come from S3Answers, and are traced to the code but not yet reproduced
+on a cluster.
+
+| Finding | Tracker | Fix |
+|---|---|---|
+| 1 | [80894](https://tracker.ceph.com/issues/80894) | [#72097](https://github.com/ceph/ceph/pull/72097) |
+| 2 | [80895](https://tracker.ceph.com/issues/80895) | [#72099](https://github.com/ceph/ceph/pull/72099) |
+| 3 | [80896](https://tracker.ceph.com/issues/80896) | [#72103](https://github.com/ceph/ceph/pull/72103) |
+| 4 | [80897](https://tracker.ceph.com/issues/80897) | [#72098](https://github.com/ceph/ceph/pull/72098) |
+| 5 | [80898](https://tracker.ceph.com/issues/80898) | [#72100](https://github.com/ceph/ceph/pull/72100) |
+| 6 | [80899](https://tracker.ceph.com/issues/80899) | [#72098](https://github.com/ceph/ceph/pull/72098) |
+| 7 | [80900](https://tracker.ceph.com/issues/80900) | [#72101](https://github.com/ceph/ceph/pull/72101) |
+| 8 | [80902](https://tracker.ceph.com/issues/80902) | [#72098](https://github.com/ceph/ceph/pull/72098) |
+| 9, 10 | [80901](https://tracker.ceph.com/issues/80901) | open |
+| 11 | [80903](https://tracker.ceph.com/issues/80903) | [#72102](https://github.com/ceph/ceph/pull/72102) |
+| 12 | [80898](https://tracker.ceph.com/issues/80898) | [#72100](https://github.com/ceph/ceph/pull/72100) |
+| 13 | [80906](https://tracker.ceph.com/issues/80906) | [#72109](https://github.com/ceph/ceph/pull/72109), and [#72100](https://github.com/ceph/ceph/pull/72100) for deletes |
+| 14 | [80907](https://tracker.ceph.com/issues/80907) | [#72109](https://github.com/ceph/ceph/pull/72109) |
+| 15, 16 | not filed | — |
+
+
+1. **The bucket index can keep a stale entry for good.**
+   `rgw_bucket_complete_op` skips a completion whose epoch is not newer
+   than the entry's. It still sets `entry.ver = op.ver`
+   (`cls_rgw.cc:1240`), lowering the entry's epoch, and a genuine cancel
+   resets it the same way, to `{-1, 0}`. A later, older completion then
+   passes the check and is applied. No pending op remains, so no listing
+   checks the entry against the head again. `8b27472bbd8a` (2021) moved
+   the assignment above the cancel branch; before it, a cancel returned
+   first.
+   - Three PutObjects whose head writes land in order A, B, C, with
+     completions arriving C, A, B: the entry lists B while the head holds
+     C (`tcPutsIndex`).
+   - A DeleteObject, a PutObject and another DeleteObject, in turn, with
+     completions arriving out of order: the entry lists the deleted PUT,
+     so ListObjects shows a key that answers 404 (`tcDelsAndPutIndex`).
+
+   Assigning the version only when the op is applied restores the
+   property (`tcPutsCancelKeepsVer`, `tcDelsCancelKeepsVer`).
+2. **Lifecycle's abort can delete a completing upload's data.**
+   `handle_multipart_expiration` calls `RadosMultipartUpload::abort`
+   without the completion lock (`rgw_lc.cc:1005`); `bae9ed83edf` gave the
+   lock to AbortMultipartUpload only. Take an upload past its
+   AbortIncompleteMultipartUpload age that is completed while lifecycle
+   processes the bucket. Lifecycle sends the parts to GC, and the
+   completion writes the head over them, or the other way round. Abort's
+   `cls_version` check does not catch it, because a completion does not
+   bump the meta object's version.
+3. **A completion that leaves its meta object behind can lose the object's
+   data later.** Once the head is written, a failure to delete the meta
+   object is only logged (`rgw_op.cc:7879-7885`) and the completion
+   answers success. RGW dying between the two steps has the same result.
+   The meta object survives with its part list, and then:
+   - an AbortMultipartUpload, or lifecycle's abort after the rule's age,
+     sends the object's parts to GC;
+   - a retried completion lists the same parts and writes the head again.
+     `complete_atomic_modification` then sends the replaced head's
+     manifest, which is the same parts, to GC (`rgw_rados.cc:6695`).
+     `check_previously_completed` runs only when the meta object is gone.
+
+   A copy of the object made in between only delays the loss: its
+   reference keeps the parts until the copy is deleted
+   (`tcCrashCopyRetry`). Keeping GC away from what the head references
+   closes the abort and the plain retry, but not a retry after an
+   overwrite (`tcSparesHeadCrashPutRetry`). A fix needs a durable record
+   that the completion took effect.
+4. **A completion that loses the head race leaks its parts.**
+   `_do_write_meta` answers a lost race as success (`rgw_rados.cc:3733`),
+   and `RadosMultipartUpload::complete` ignores `meta.canceled`. The
+   completion then deletes the meta object, and nothing sends the parts to
+   GC.
+5. **DeleteObject no longer checks that it removes the head it read.**
+   `55f5b762c67` (2025, "fix conditional Delete and MultiDelete")
+   replaced the delete's `prepare_atomic_modification` call, which added
+   `cmpxattr` on the ID tag, with `check_preconditions`, which adds
+   nothing to the op (`rgw_rados.cc:7241`). A delete that races an
+   overwrite removes the new head but sends the manifest it read to GC
+   (`rgw_rados.cc:7268`). The new object's tail, or a completion's parts,
+   is never collected.
+6. **A copy that loses the head race leaks the source's tail.**
+   `copy_obj` takes a reference on each tail object (`rgw_rados.cc:5488`)
+   and rolls them back only when `write_meta` returns an error
+   (`rgw_rados.cc:5549`). A lost race returns 0, so the references stay.
+   Once the source is deleted or overwritten, its tail survives, held by a
+   tag no head carries.
+7. **A copy onto itself can resurrect a deleted tail.** A metadata-only
+   copy (`copy_itself`) reads the manifest, then writes it back with
+   `keep_tail` and the old tail tag (`rgw_rados.cc:5547`). The destination
+   has its own `RGWObjectCtx`, so `write_meta` reads the head afresh and
+   guards on whatever tag it finds then. An overwrite between the two
+   steps replaces the head and sends the old tail to GC; the copy then
+   writes that tail back into the head. The overwrite's tail leaks, and
+   GC deletes the tail the head now names. Guarding the rewrite on the
+   tag the copy read closes it (`tcCopySelfGuarded`).
+
+8. **A failed index completion undoes a write that already happened.**
+   `_do_write_meta` treats any error from `index_op->complete` like a lost
+   race: it cancels the index op and returns the error
+   (`rgw_rados.cc:3670-3678`; the flush at `rgw_rados.cc:11296`). On main since `a67a233ccbd` (March 2026), a
+   FIFO-bilog bucket flushes its bilog batch before the index op, so a
+   flush error surfaces there, after the head is written. PutObject's
+   writer then deletes the tail its new head names. A copy drops its
+   references, and the source's deletion takes the tail. A completion
+   returns before deleting the meta object, which leads into finding 3. If
+   the cancel succeeds, the index also keeps the old object for good.
+   Leaving the pending op for a listing to repair, and keeping the write,
+   holds (`tcIxKeepsWrite*`).
+9. **A writer that read a head before dedup rewrote it leaks the source's
+   tail.** Dedup changes the target's manifest but not its ID tag, which
+   every writer guards on. A PutObject, DeleteObject or completion that
+   read the target before dedup still passes its guard. It then sends the
+   stale manifest to GC, which dedup had already freed. The references
+   dedup took on the source's tail, under the target's tag, are never
+   dropped.
+10. **Dedup and a copy onto itself can delete the object's data.** Dedup
+    frees the target's old tail at once, not through GC. A copy onto
+    itself that read the head before dedup writes that tail back into the
+    head. Guarding the copy on the tag it read (M7) does not help,
+    because dedup leaves the ID tag alone.
+11. **A write that stalls past the pending-op expiry is lost from the
+    index.** A listing that finds the write's op pending for more than
+    `rgw_pending_bucket_index_op_expiration` (120 s) drops the pending op,
+    and rewrites the entry from the head it reads, which may still be the
+    old one. The write's completion then fails with `-EINVAL`, and that
+    error is ignored because the completion is asynchronous. It needs a
+    request to stall for two minutes between its index prepare and
+    complete.
+12. **A conditional DeleteObject can delete an object that fails its
+    condition.** `delete_obj` checks `If-Match` against the head it read
+    (`rgw_rados.cc:7214`), then removes whatever head is there, since the
+    removal has no ID-tag guard (finding 5; `rgw_rados.cc:7241`, `7250`).
+    A PutObject that lands between the two is deleted, although its ETag
+    does not match, and the delete is answered 204. With S3 used as a lock,
+    an owner releasing its lease (`DELETE If-Match`) can delete the lease
+    another client just took over (`PUT If-Match`) on the same ETag, which
+    leaves no lease at all (`tcCondDelVsMatchCond`). The new object's tail
+    also leaks (`tcCondDelVsPutLeak`). The guarded removal (M5) closes it
+    (`tcCondDelVsPutGuard`). `x-amz-if-match-size` is checked the same
+    way. `x-amz-if-match-last-modified-time` is also put in the removal op
+    (`cls_obj_check_mtime`, `rgw_rados.cc:7216-7218`), so the OSD checks
+    it, to the second unless the request is a system request; it is not
+    modelled.
+13. **A conditional request that loses the race is answered success, even
+    when the write that beat it needed the head it read.** Under
+    `If-Match: *`, `done_cancel` answers `-ECANCELED` as success
+    (`rgw_rados.cc:3752-3753`). `RGWDeleteObj::execute` answers any
+    `-ECANCELED` from the removal as 204 (`rgw_op.cc:6101-6103`); on main
+    only `cls_obj_check_mtime` returns it, and with the guarded removal
+    (M5) every lost race does. If the write that won carried `If-Match` on
+    the ETag both requests read, both are answered success, and no order
+    of the two gives both answers: had the loser's write, or delete, come
+    first, the winner's `If-Match` would fail; had it come second, its
+    result would be what remains. With M5, a lease release and a takeover
+    of the same lease are both answered success (`tcCondDelVsMatchGuard`),
+    and `If-Match: *` loses the same way to `If-Match` with the ETag on
+    main (`tcMatchAnyVsMatchCond`). Answering the lost race with an error
+    instead holds (`tcCondDelVsMatchLossFails`,
+    `tcMatchAnyVsMatchLossFails`); RGW has no S3 error code for that yet.
+    The same holds for an unconditional PutObject that loses to an
+    `If-Match` write, which is answered success as every lost race is
+    (`rgw_rados.cc:3739-3745`); CondSemantics does not check unconditional
+    requests, so the model does not report it.
+14. **A completion refused after it lost the race drops its parts from the
+    bucket index.** `done_cancel` cancels the index op with its
+    `remove_objs` (`rgw_rados.cc:3725`), which a cancel applies too
+    (`cls_rgw.cc:1357`, since `8b27472bbd8a`); for a completion they are
+    the parts' entries (`rgw_sal_rados.cc:4643`, `4723`). When the lost race
+    is answered as an error, such as 412 for `If-None-Match: *`
+    (`rgw_rados.cc:3762`), the completion returns before it deletes the
+    meta object (`rgw_op.cc:7855-7861`). The upload stays, and can be
+    completed again or aborted, but the bucket stats, and so quota, stop
+    counting its parts until then (`tcCreateVsCompleteCond`). No data is
+    lost. Cancelling without `remove_objs` when the lost race is refused
+    holds (`tcCreateVsCompleteKeepsParts`).
+15. **A conditional DeleteObject that removes nothing is answered 204.**
+    Two paths get there:
+    - `delete_obj` answers a key with no object `-ENOENT` before it
+      checks any condition (`rgw_rados.cc:7203-7206`);
+    - a removal that finds the head already gone ends in `complete_del`,
+      whose return replaces the `-ENOENT` (`rgw_rados.cc:7266`).
+
+    `RGWDeleteObj_ObjStore_S3::send_response` answers both 204
+    (`rgw_rest_s3.cc:3897-3900`). S3 answers a conditional delete that
+    finds no object 404, including one that a concurrent delete beat (S3
+    User Guide, "How to perform conditional deletes"). Take two clients
+    that release the same lease with `DELETE If-Match` on its ETag: both
+    are told they released it (`tcAnsCondDels`). No order of the two
+    explains that under S3's rules, since the second would find nothing
+    and be answered 404. Answering a conditional delete's `-ENOENT` as 404
+    `NoSuchKey` holds (`tcAnsNoKeyCondDels`).
+16. **A completion refused after it checks a part leaves that part
+    impossible to upload again.** `RadosMultipartUpload::complete` works
+    through the parts in order. For each one it sends the part's past
+    prefixes to GC (`cleanup_part_history`, `rgw_sal_rados.cc:4645`)
+    before it checks the next part and before the head write. The
+    completion may still be refused after that: InvalidPart or
+    EntityTooSmall on a later part (`rgw_sal_rados.cc:4546-4613`), or a
+    precondition or lost race in `write_meta`. The upload then stays, and
+    its meta object still lists those prefixes as the part's history.
+    - Once GC has deleted them, the part's base prefix is free.
+      `process_first_chunk` falls back to a random prefix only when the
+      exclusive create fails, so the next upload of that part number
+      writes its head at the base prefix.
+    - `cls_rgw_mp_upload_part_info_update` then refuses it with `-EEXIST`,
+      because that prefix is in the part's history (`cls_rgw.cc:5119`).
+      `rgw_http_s3_errors` answers that 409 `BucketAlreadyExists`, an
+      error S3 does not give UploadPart.
+    - Every retry takes the same prefix, so the part number cannot be
+      uploaded again for the life of the upload
+      (`tcAnsInvalidThenReupload`).
+
+    It takes a part uploaded twice, as an SDK retry does, then a refused
+    completion, then GC (`rgw_gc_obj_min_wait`, 2 h). Sending the history
+    to GC only once the head is written holds
+    (`tcAnsHistoryInvalidThenReupload`), with every fix too
+    (`tcAnsFixedInvalidThenReupload`).
+
+S3Answers also shows how findings 2 and 13 look to a client:
+- **Finding 13.** Under `If-Match` with an ETag, a PutObject or a
+  completion that loses the race is answered 500 `UnknownError`, because
+  `-ECANCELED` has no entry in `rgw_http_s3_errors`. S3 answers 409
+  `ConditionalRequestConflict`, which RGW lacks (`tcAnsIfMatchVsPut`,
+  `tcAnsMatchAnyVsMatch`, `tcAnsCondCompleteVsPut`). With the guarded
+  removal (M5), a conditional delete that loses the race is answered 204
+  (`tcAnsGuardCondDelVsMatch`). Answering each of these 409 holds.
+- **Finding 2.** When lifecycle's abort deletes the meta object under a
+  completion that holds the lock, the completion is answered 404
+  `NoSuchKey`. `get_obj_attrs`'s `-ENOENT` is passed through, not mapped
+  to `NoSuchUpload` (`rgw_op.cc:7738`, `tcAnsLcAbort`). Lifecycle taking
+  the lock closes it.
+
+The seven proposed fixes hold together (`tcFixed*`), with index
+completions that may fail too (`tcFixedIx*`), apart from dedup and
+findings 13 and 14. With the two proposed for conditional requests as
+well, every conditional scenario holds (`tcCondFixed*`,
+`tcCondFixedIx*`). Checking the seven together showed that keeping a
+write whose index completion failed must still remove the entries it
+replaces, such as a completion's parts: the listing that repairs the
+entry reads the head it finds, and a later completion may have replaced
+this one by then.
+
+Proposed fixes for findings 3 and 11, checked with the seven fixes on:
+
+- **Finding 3: a completion record** (`completionMark`). Before its head
+  write, a completion records its tag, which is the ID tag its head will
+  carry, in the meta object. A later completion or abort of the upload
+  that finds a record reads the head. If the head carries the tag, the
+  completion took effect: a retry answers success and deletes the meta
+  object, and an abort deletes the meta object without touching the
+  parts. If it does not, the head was never written or was replaced: a
+  retry refuses, and an abort proceeds as before. This holds with a crash
+  or a failed meta delete in every multipart scenario (`tcMarkCrash*`,
+  `tcMarkMetaDel*`). It does not help a holder whose lock lapses before
+  its head write (`tcMarkLapse*`); that still rests on the lock being
+  renewed while its holder lives. The cost: a retry after a crash between
+  the record and the head write is refused, and the upload has to be
+  aborted and uploaded again.
+- **Finding 11: a re-link** (`lateCompleteRelinks`). A writer whose
+  index completion finds its pending op gone runs a fresh index
+  transaction for its key: it prepares a new pending op, reads the head,
+  and completes from it, with the head's epoch if there is a head, its
+  own delete's epoch if it deleted it, or a cancel. It passes its
+  `remove_objs` along. A racing delete either sees the new pending op or
+  is ordered by epoch, as for any write. The re-link is assumed prompt:
+  its own op does not expire. It holds in every listing scenario with
+  writers that stall (`tcRelink*`); without it they all fail
+  (`tcStall*`). Applying a late completion in `cls_rgw` whenever its
+  epoch is newer does not work: an entry that a delete has removed keeps
+  no epoch, so the late completion would bring the deleted object back.
+
+With both on, together with the seven fixes, every scenario holds except
+dedup, with and without failing index completions (checked; not in
+`expect.txt`).
+
+Resharding holds under concurrent PutObject, DeleteObject and multipart
+traffic. Each of its mechanisms is needed: without the reshard log, the
+index keeps the pre-reshard object; without `check_existing`, the stats
+count re-copied entries twice; if the old shards accepted ops after the
+commit, a write would land in an index nobody reads.
+
+## Versioned buckets and the completion record
+
+The first version of PR 72103, for finding 3, recorded the completion only when
+`bucket->versioned()` was false. That call is true when versioning is
+enabled and also when it is suspended. The model checks the record in
+versioned buckets, with `versioning` set to `VER_ENABLED()` or
+`VER_SUSPENDED()`.
+
+The model represents versions as follows:
+
+- A version instance of a key is a head slot of its own, with its own
+  bucket index entry. Key 1 itself is the null instance, which holds the
+  object written before versioning was turned on.
+- In a version-enabled bucket, PutObject and a completion write a new
+  instance, `VKEY(key, rid)`. This write is an exclusive create, and it
+  replaces nothing.
+- In a suspended bucket, they write the null instance. This write
+  replaces the null version and sends its manifest to GC, as in a
+  non-versioned bucket.
+- A read without a version id finds the current version: the present
+  instance written last. This stands in for the OLH (object logical
+  head).
+- In the versioned scenarios, DeleteObject names the instance that it
+  deletes, as a DeleteObject with a version id does. It removes that
+  instance and sends the instance's manifest to GC.
+
+`markVersioned` selects how a versioned bucket treats the record:
+
+- `MV_SKIP()` does not record the completion, as in the PR. The code on
+  main behaves the same in a versioned bucket.
+- `MV_CURRENT()` records the tag and checks it against the current
+  version.
+- `MV_INSTANCE()` records the tag and the instance that the completion
+  writes, and checks the tag against that instance.
+
+Two scenarios are new. In `SC_DEL_AFTER_RETRY`, a completion runs, a
+retry of it runs, and then request 2's version is deleted. In
+`SC_PUT_THEN_ABORT`, a completion runs, then a PutObject, then an abort.
+Both hold in a non-versioned bucket with the record
+(`tcMark*DelAfterRetry`, `tcMark*PutThenAbort`). Versioning without a
+crash or a failed meta delete also holds (`tcVE*`, `tcVS*` without a
+record mode in the name).
+
+The test cases are `tcV<E|S><Pr|Cur|Inst><Crash|MetaDel><Scenario>`.
+The Crash cases let RGW die before the meta delete. The MetaDel cases let
+the meta delete fail. Both environments give the same results:
+
+| Bucket | Record | Violated scenarios (HeadIntact) |
+|---|---|---|
+| enabled | `Pr` (the PR, and main) | ThenAbort, Abort, LcAbort, PutThenAbort, DelAfterRetry |
+| enabled | `Cur` | PutThenAbort |
+| enabled | `Inst` | none |
+| suspended | `Pr` (the PR, and main) | Retry, ThenAbort, Abort, LcAbort, SameCompletes, PutThenRetry, DelAfterRetry |
+| suspended | `Cur` | none |
+| suspended | `Inst` | none |
+
+The results show three things:
+
+- In a suspended bucket, the PR leaves finding 3 open as it is on main.
+  A retry replaces the null version and sends its parts to GC. The
+  record works there without a change, so a gate on
+  `versioning_enabled()` in place of `versioned()` is sufficient.
+- In a version-enabled bucket, a retry does not replace the first
+  version. It writes a second version that shares the same parts. The
+  data is lost when either version is deleted (DelAfterRetry). An abort,
+  or lifecycle's abort, sends the parts to GC while the completed
+  version references them.
+- In a version-enabled bucket, a check against the current version is
+  not sufficient. After a later PutObject, the completed version is no
+  longer current. The abort then finds no match and sends the parts of
+  that older version to GC (PutThenAbort). The record must name the
+  version instance that the completion writes, and the check must read
+  that instance.
+
+The instance is known before the head write, because
+`RGWCompleteMultipart` generates it before it calls `complete()`. The
+`Inst` cases hold at 20,000 schedules and at 100,000 schedules, and so do
+the suspended `Cur` cases.
+
+The versioned model does not include delete markers, a DeleteObject
+without a version id, the OLH log and its epochs, a bucket whose
+versioning changes during a scenario, or copy, dedup, listing and
+reshard in a versioned bucket.
+
+## Sharded bucket indexes
+
+An index may have several shards. A hashed layout (`BucketHashType::Mod`,
+on main) places an entry by the rjenkins hash of a name modulo the shard
+count. An ordered layout (PR 70053, experimental) splits the name space
+into lexical ranges, one per shard. Every index op places an entry by its
+object's name: the key's name, or the hash source that multipart entries
+carry (`set_hash_source`). So a key's entry, its versions, and its
+uploads' meta object and parts share one shard in both layouts, and an
+op's `remove_objs` reach every entry they name.
+
+The model has two keys and at most two shards. The layout before a
+reshard (`srcShards`, `srcOrdered`) and after it (`dstShards`,
+`dstOrdered`) are configured. The checker picks each name's hash, and
+an ordered layout's split point: between the multipart names
+(`_multipart_obj1...`) and `obj1`, or between `obj1` and `obj2`. Each
+multipart entry records the shard it is on. An op removes it only on its
+object's shard under the current layout. An entry left on another shard
+counts as orphaned at the end, even while its upload lives. A reshard to
+an ordered layout cannot keep a reshard log: it blocks index ops from
+the start. Ordered to ordered is not allowed, and is not modelled.
+
+A reshard copies each entry to a target shard. Main's
+`calc_target_shard` places an entry by its object's name (`Obj`). PR
+70053 places it by its full index key name, `get_index_key_name()`
+(`rgw_reshard.cc:1398` there; `Idx`). For a multipart entry that name is
+`_multipart_<obj>.<upload>...`, which hashes, or sorts, apart from the
+object's name.
+
+The test cases are `tcSh<layouts><Obj|Idx>[VE|VS]<Scenario>`, from one
+hashed shard to two (H1H2), two hashed to two hashed (H2H2), two hashed
+to two ordered (H2O2), two ordered to two hashed (O2H2), and one hashed
+to two ordered (H1O2). `SC_RESHARD_THEN_COMPLETE` and
+`SC_RESHARD_THEN_ABORT` reshard, then complete or abort upload 1.
+
+| Routing | Scenarios | Result |
+|---|---|---|
+| `Obj` | every layout change, each scenario, versioned or not | holds, apart from VsDel |
+| `Idx` | ThenComplete, ThenAbort, VsMpu, in every layout change, versioned or not | **violated**: NoOrphans |
+| `Idx` | VsPuts, versioned or not | holds |
+| either | VsDel, on main | violated: NoOrphans, finding 5 |
+
+- **PR 70053's reshard orphans multipart entries.** It copies an
+  upload's meta and part entries to the shard of their own index names.
+  The completion and the abort then remove them from the shard of the
+  object's name, where they are not: the entries stay listed, and a
+  ListMultipartUploads shows an upload that is gone. This happens for
+  hashed to hashed as well as to and from ordered layouts. Entries of an
+  object whose name starts with `_` would move the same way; the model's
+  object names do not.
+- VsDel is finding 5. The reshard holds the DeleteObject's index prepare
+  until its commit, which widens the window between its head read and
+  its unguarded head removal. With the removal guarded on the ID tag
+  (`deleteGuard`, PR 72100) it holds (`tcShGuardH1H2ObjVsDel`).
+
+Not modelled here: PR 70053 writes a hashed-to-ordered reshard's split
+points after the bucket instance, in a second op, and ignores an error
+from the split-point lookup. An index op between the two could go to an
+unset shard object. That is not checked.
+
+## Attribute updates and a copy onto itself
+
+PutObjectTagging, PutObjectAcl and the other `set_attrs` callers change a
+head's attributes and keep its object. `set_attrs` guards the update on
+the ID tag it read (`append_atomic_test`), and gives the head a new ID
+tag. The model has one such request, a tagging update (`R_SET_TAGS`); an
+ACL update takes the same path. A head records the request whose user
+metadata it carries, and the request whose tag set it carries. A copy
+onto itself replaces the metadata and copies the tag set
+(`x-amz-tagging-directive` COPY).
+
+**AttrsKept.** A copy onto itself and a tagging update of one key, each
+answered success, are both in the object at the end, whichever came
+first. It is checked for a key that no other request wrote.
+
+| Test case | Scenario | Copy onto itself | Result |
+|---|---|---|---|
+| `tcAttrMainVsTag` | `SC_COPY_SELF_VS_TAG` | on main | **violated**: AttrsKept, the tagging update's tag set lost |
+| `tcAttrGuardVsTag` | `SC_COPY_SELF_VS_TAG` | guarded on the head it read (PR 72101) | **violated**: AttrsKept, the copy's metadata lost |
+| `tcAttrRetryVsTag` | `SC_COPY_SELF_VS_TAG` | guarded, retried (proposed) | holds |
+| `tcAttr*TagVsPut`, `tcAttr*TagThenCopy` | a tagging update and a PutObject; a tagging update, then a copy | each | holds |
+| `tcAttr<Guard\|Retry>VsPut` | `SC_COPY_SELF_VS_PUT` | guarded, or guarded and retried | holds (finding 7 closed) |
+
+- **On main**, a copy onto itself writes the tag set it read. A tagging
+  update between the copy's read and its write is overwritten, though it
+  was answered success. The copy can also lose the write's own guard to
+  the update, and be answered success without writing.
+- **PR 72101** guards the copy on the ID tag it read. A tagging or ACL
+  update changes that tag, so the copy fails its guard, and is answered
+  success without writing: its metadata is lost. mheler reported this on
+  the PR. A vstart run reproduces it for tagging and for ACLs
+  (`test_copy_to_itself_racing_tagging`, `_acl` in the workunit).
+- **Proposed:** a copy onto itself that loses its guard reads the head
+  again and copies it as it is then, up to twice more, and is answered an
+  error if it still loses (`copySelfRetries`). This holds, at 100,000
+  schedules too, and passes the vstart cases.
+
+## Not modelled
+
+- Versioned buckets beyond the multipart scenarios above: delete
+  markers, the OLH log, and conditional writes of a version.
+- Some conditions: `If-None-Match` with an ETag; on DeleteObject,
+  `x-amz-if-match-size`, which is checked against the head read as the
+  ETag is, and `x-amz-if-match-last-modified-time` and
+  `x-amz-delete-if-unmodified-since`, which the removal op also checks
+  (`cls_obj_check_mtime`); CopyObject's `x-amz-copy-source-if-*`, which
+  apply to the source as `copy_obj` reads it; a retried conditional
+  completion, which `check_previously_completed` answers without its
+  condition.
+- S3Answers checks the error codes S3 gives each operation, not every
+  code RGW could give it: a request here fails only in the ways the model
+  makes it fail. Other operations, request parsing and response bodies
+  are left to the audit of RGW's S3 front end against the Smithy model.
+- CompleteMultipartUpload's early 200 with an error in the body, which S3
+  may send and RGW never does.
+- CondSemantics does not check unconditional requests, and it checks
+  answers other than success, 412 and 404 only for what they wrote.
+- Multi-object delete, which runs the same `delete_obj` for each key,
+  with the same conditions, and a copy across pools or placements
+  (`copy_obj_data`, which writes a fresh tail like a PutObject).
+- GET. HeadIntact stands in for "a GET of the current object succeeds".
+- Tail stripes, and a head that carries data. A PutObject is one tail
+  object and a part is one object.
+- Multisite sync and the bilog's contents. The bilog appears only as a
+  source of index completion failures.
+- `-ETIMEDOUT` handling.
+- Dedup's split-head mode, and its table and scan beyond the two
+  records it acts on.
+- More than two shards, and a split point inside the multipart names.
+- More than 3 retries of the meta object's delete (15 on main).
