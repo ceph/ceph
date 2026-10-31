@@ -110,6 +110,9 @@ public:
   static bool check_ios_in_flight(ceph::coarse_mono_time cutoff,
 				  std::string& slow_count,
 				  ceph::coarse_mono_time& oldest);
+protected:
+  // complete() for a caller that already holds mds_lock
+  void complete_locked(int r);
 private:
   ceph::coarse_mono_time created_at;
   elist<MDSIOContextBase*>::item list_item;
@@ -129,7 +132,13 @@ protected:
 public:
   MDSLogContextBase() = default;
   void complete(int r) final;
+  // Complete a context whose event the journal has already made safe, for
+  // a caller that holds mds_lock across a batch of them.  Unlike
+  // complete(), this leaves pre_finish() and advancing the log's safe_pos
+  // to the caller.
+  void complete_safe_locked();
   void set_write_pos(uint64_t wp) { write_pos = wp; }
+  uint64_t get_write_pos() const { return write_pos; }
   virtual void pre_finish(int r) {}
   void print(std::ostream& out) const override {
     out << "log_event(" << write_pos << ")";
