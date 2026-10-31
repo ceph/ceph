@@ -50,6 +50,72 @@ class TestExports(CephFSTestCase):
         new_rank1 = self.fs.get_rank(rank=1)
         self.assertEqual(rank1['gid'], new_rank1['gid'])
 
+class TestRenameWitnessDiscover(CephFSTestCase):
+    MDSS_REQUIRED = 3
+    CLIENTS_REQUIRED = 1
+
+    def test_discover_projected_xlocked_dentry(self):
+        """
+        A rename witness must not get a replica of a dentry whose linkage
+        another rename has already projected.
+
+        Renaming over the primary link of a hard linked inode gets an
+        early reply. Renaming over another link of that inode right after
+        makes rank 0, the auth of the source inode, a witness, and its
+        rename_prep opens the old inode by discovering its primary dentry,
+        which the first rename still holds xlocked. If that discover
+        returns the pre-rename linkage, the first rename's MDentryLink
+        later fails ceph_assert(dnl->is_null()) on rank 0.
+
+        See: https://tracker.ceph.com/issues/81730
+        """
+
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+        rank0 = self.fs.get_rank(rank=0, status=status)
+
+        self.mount_a.run_shell(["mkdir", "-p", "d/A", "d/B", "d/C"])
+        # an export pin only takes effect once the directory has been
+        # loaded, so give the empty /d/C an entry first
+        self.mount_a.run_shell(["touch", "d/C/.touch"])
+        self.mount_a.setfattr("d", "ceph.dir.pin", "1")
+        self.mount_a.setfattr("d/C", "ceph.dir.pin", "0")
+        self._wait_subtrees([('/d', 1), ('/d/C', 0)], status=status, rank=1,
+                            timeout=60)
+
+        # O is d/A/f with a remote link d/B/f1, created on rank 1 so that
+        # rank 0 never has it in cache; U is d/C/u on rank 0 with a remote
+        # link d/B/.stg1
+        self.mount_a.write_n_mb("d/A/f", 1)
+        self.mount_a.run_shell(["ln", "d/A/f", "d/B/f1"])
+        self.mount_a.write_n_mb("d/C/u", 1)
+        self.mount_a.run_shell(["ln", "d/C/u", "d/B/.stg1"])
+        self.mount_a.write_n_mb("d/A/T", 1)
+        ino_t = self.mount_a.path_to_ino("d/A/T")
+        ino_u = self.mount_a.path_to_ino("d/C/u")
+
+        # keep the first rename's journal entry from committing
+        self.fs.rank_asok(["config", "set", "mds_log_pause", "true"], rank=1,
+                          status=status)
+        self.mount_a.run_shell(["mv", "d/A/T", "d/A/f"])
+        p = self.mount_a.run_shell(["mv", "d/B/.stg1", "d/B/f1"], wait=False)
+        time.sleep(5)
+        # the second rename needs rank 0 as a witness and the first
+        # rename's journal entry, so it cannot have finished yet
+        self.assertFalse(p.finished)
+        self.fs.rank_asok(["config", "set", "mds_log_pause", "false"], rank=1,
+                          status=status)
+        p.wait()
+
+        # give rank 0 time to handle the first rename's MDentryLink
+        time.sleep(5)
+        self.assertTrue(self.fs.mds_is_running(rank0['name']))
+        self.assertEqual(rank0['gid'], self.fs.get_rank(rank=0)['gid'])
+
+        self.assertEqual(self.mount_a.path_to_ino("d/A/f"), ino_t)
+        self.assertEqual(self.mount_a.path_to_ino("d/B/f1"), ino_u)
+        self.assertEqual(self.mount_a.path_to_nlink("d/B/f1"), 2)
+
 class TestExportPin(CephFSTestCase):
     MDSS_REQUIRED = 3
     CLIENTS_REQUIRED = 1

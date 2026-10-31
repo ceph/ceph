@@ -10963,15 +10963,21 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
     CDentry::linkage_t *dnl = dn->get_linkage();
 
     // xlocked dentry?
-    //  ...always block on non-tail items (they are unrelated)
-    //  ...allow xlocked tail disocvery _only_ if explicitly requested
+    //  ...allow discovery of an xlocked dentry _only_ if explicitly requested
+    //     (path_locked), and only before the xlocker projects a new linkage.
+    //     The xlocker's witnesses all traverse before it projects. A replica
+    //     added after that gets the old linkage without being a witness, so
+    //     it is never corrected: rename sends it MDentryLink expecting a null
+    //     dentry, and a renamed-away srcdn is never unlinked on it.
     if (dn->lock.is_xlocked()) {
-      // is this the last (tail) item in the discover traversal?
-      if (dis->is_path_locked()) {
+      if (dis->is_path_locked() && !dn->is_projected()) {
 	dout(7) << "handle_discover allowing discovery of xlocked " << *dn << dendl;
       } else if (reply->is_empty()) {
 	dout(7) << "handle_discover blocking on xlocked " << *dn << dendl;
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, dis));
+	// an early-replied xlocker defers its journal flush; don't make the
+	// discover (and any peer request behind it) wait for the next tick.
+	mds->locker->nudge_log(&dn->lock);
 	return;
       } else {
 	dout(7) << "handle_discover non-empty reply, xlocked tail " << *dn << dendl;
