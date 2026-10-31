@@ -193,9 +193,13 @@ To configure a directory for mirroring, run a command of the following form:
 
 .. prompt:: bash $
 
-   ceph fs snapshot mirror add <fs_name> <path>
+   ceph fs snapshot mirror add <fs_name> <path> [<priority_mode>]
 
-To list the configured directories, run a command of the following form:
+``priority_mode`` is optional and defaults to ``thread-shared``. See the
+:ref:`Directory Priority Mode<cephfs_mirroring_directory_priority>` section.
+
+To list the configured directories along with their priority mode, run a
+command of the following form:
 
 .. prompt:: bash $
 
@@ -232,6 +236,68 @@ subdirectories or ancestor directories is disallowed::
 The :ref:`Mirroring Status<cephfs_mirroring_mirroring_status>` section contains
 information about checking directory synchronization metrics, directory mapping
 (to mirror daemons), and directory distribution.
+
+.. _cephfs_mirroring_directory_priority:
+
+Directory Priority Mode
+-----------------------
+
+Each mirrored directory runs in one of two priority modes, which decide how the
+mirror daemon's threads are allocated to it:
+
+``thread-shared``
+  The default. The directory is crawled by the daemon's shared pool of crawler
+  threads (sized by ``cephfs_mirror_max_concurrent_directory_syncs``), and the
+  files it discovers are transferred by the shared pool of data synchronization
+  threads (sized by ``cephfs_mirror_max_datasync_threads``). Every
+  ``thread-shared`` directory competes with the others for those threads.
+
+``per-thread``
+  The directory gets a crawler thread of its own plus a private pool of data
+  synchronization threads (sized by
+  ``cephfs_mirror_max_datasync_threads_per_directory``). It is never scheduled
+  on the shared pools, so its synchronization progress does not depend on how
+  many other directories are being mirrored. Use this for directories whose
+  replication lag matters more than that of the rest.
+
+.. note:: A ``per-thread`` directory adds
+          ``1 + cephfs_mirror_max_datasync_threads_per_directory`` threads to
+          the mirror daemon for as long as it stays in that mode. Prefer using
+          it for a small number of directories rather than for all of them.
+
+A directory can be given a priority mode when it is added for mirroring:
+
+.. prompt:: bash $
+
+   ceph fs snapshot mirror add <fs_name> <path> per-thread
+
+The mode of an already mirrored directory can be changed at any time:
+
+.. prompt:: bash $
+
+   ceph fs snapshot mirror priority set <fs_name> <path> <thread-shared|per-thread>
+
+and queried with:
+
+.. prompt:: bash $
+
+   ceph fs snapshot mirror priority get <fs_name> <path>
+
+For example::
+
+  $ ceph fs snapshot mirror priority set cephfs /d0/d1/d2 per-thread
+  {}
+  $ ceph fs snapshot mirror priority get cephfs /d0/d1/d2
+  {
+      "path": "/d0/d1/d2",
+      "priority_mode": "per-thread"
+  }
+
+A priority change never interrupts a snapshot synchronization that is already
+in progress. The mirror daemon applies the new mode the next time the directory
+is idle, so the effective mode reported by ``fs snapshot mirror daemon status``
+can lag the configured mode reported by ``fs snapshot mirror priority get`` by
+one synchronization cycle.
 
 .. _cephfs_mirroring_bootstrap_peers:
 
