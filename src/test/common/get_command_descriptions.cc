@@ -22,6 +22,7 @@
 
 #include <stdio.h>
 #include <signal.h>
+#include <regex>
 #include "mon/Monitor.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -38,6 +39,7 @@ static void usage(ostream &out)
   out << "\n";
   out << "  --all               all of mon/MonCommands.h \n";
   out << "  --pull585           reproduce the bug fixed by #585\n";
+  out << "  --req-fasle         a command of an earlier release with req=fasle\n";
   out << "\n";
   out << "Examples:\n";
   out << "  get_command_descriptions --all\n";
@@ -52,6 +54,23 @@ static void json_print(const std::vector<MonCommand> &mon_commands)
                                        CEPH_FEATURES_ALL, &rdata);
   string data(rdata.c_str(), rdata.length());
   cout << data << std::endl;
+}
+
+// the monitor reads any value but "true" as false, as it must for the
+// commands of a leader from an earlier release, so catch typos here
+static void check_bool_args(const std::vector<MonCommand> &mon_commands)
+{
+  static const std::regex bool_arg{"[ ,](req|positional)=([^ ,]*)"};
+  for (const auto& cmd : mon_commands) {
+    for (std::sregex_iterator m{cmd.cmdstring.begin(), cmd.cmdstring.end(),
+                                bool_arg}, end; m != end; ++m) {
+      if ((*m)[2] != "true" && (*m)[2] != "false") {
+        cerr << (*m)[1] << " must be true or false in \"" << cmd.cmdstring
+             << "\"" << std::endl;
+        exit(1);
+      }
+    }
+  }
 }
 
 static void all()
@@ -78,6 +97,7 @@ static void all()
 #undef COMMAND_WITH_FLAG
  };
 
+  check_bool_args(mon_commands);
   json_print(mon_commands);
 }
 
@@ -91,6 +111,21 @@ static void pull585()
       "name=pgp_num,type=CephInt,range=0,req=false" // !!! missing trailing space
       "name=properties,type=CephString,n=N,req=false,goodchars=[A-Za-z0-9-_.=]", 
       "create pool", "osd", "rw" }
+  };
+
+  json_print(mon_commands);
+}
+
+// a leader from a release before Vampire sends this typo
+static void req_fasle()
+{
+  std::vector<MonCommand> mon_commands = {
+    { "osd pool application get "
+      "name=pool,type=CephPoolname,req=fasle "
+      "name=app,type=CephString,req=false "
+      "name=key,type=CephString,req=false",
+      "get value of key <key> of application <app> on pool <poolname>",
+      "osd", "r" }
   };
 
   json_print(mon_commands);
@@ -118,6 +153,8 @@ int main(int argc, char **argv) {
       all();
     } else if (*i == string("--pull585")) {
       pull585();
+    } else if (*i == string("--req-fasle")) {
+      req_fasle();
     }
   }  
 }
