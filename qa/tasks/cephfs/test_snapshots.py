@@ -402,6 +402,29 @@ class TestSnapshots(CephFSTestCase):
         self.mount_a.run_shell_payload("stat .snap/one/dir2/file")
 
 
+    def test_snap_rstat_purged_stray_old_inode(self):
+        """
+        check that the rstat propagation of a stray dir whose cowed old inode
+        has been purged does not crash the MDS when mds_snap_rstat is enabled
+        """
+        self.config_set('mds', 'mds_snap_rstat', 'true')
+        self.fs.set_allow_new_snaps(True);
+        status = self.fs.status()
+        gid = self.fs.get_rank(rank=0, status=status)['gid']
+
+        for i in range(5):
+            d = f"d{i}"
+            self.mount_a.run_shell(["mkdir", d])
+            # bump the snap seq, so that the stray dirs get an old inode cowed
+            self.mount_a.run_shell(["mkdir", f"{d}/.snap/s1"])
+            self.mount_a.run_shell(["rmdir", f"{d}/.snap/s1"])
+            self.mount_a.run_shell_payload(f"for j in $(seq 10); do echo data > {d}/f$j; done; sync")
+            self.mount_a.run_shell_payload(f"rm -f {d}/f*; sync")
+            self.fs.rank_asok(["flush", "journal"], rank=0, status=status)
+            self.assertEqual(self.fs.get_rank(rank=0)['gid'], gid)
+
+        self.mount_a.run_shell(["rm", "-rf"] + [f"d{i}" for i in range(5)])
+
     def test_multimds_mksnap(self):
         """
         check if snapshot takes effect across authority subtrees
