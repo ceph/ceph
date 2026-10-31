@@ -1821,27 +1821,44 @@ For more information, see :ref:`choosing-number-of-placement-groups` and
 POOL_MIN_SIZE_TOO_LOW
 _____________________
 
-One or more pools have a ``min_size`` value that is too low, which means
-the minimum number of OSD daemons per Placement Group required by that pool
-is too low. 
-For replica pools, ``min_size`` should be greater than 1, and for erasure
-pools, ``min_size`` should be greater than or equal to k + 1.
+One or more pools have a ``min_size`` that allows the cluster to acknowledge
+writes when no redundancy is left in the affected placement groups. If another
+OSD fails before recovery completes, the most recent writes can be lost and
+placement groups can become ``incomplete`` or objects ``unfound``.
 
-This warning alerts about the increased risk of data loss when using values
-this low.
+The warning is raised for:
 
-For detailed information about which pools are affected,
-run the following command:
+- replicated pools with ``size`` of 2 or more and ``min_size`` of 1
+- erasure-coded pools with ``min_size`` of ``k`` or lower. The recommended value
+  is ``k+1``. For profiles with ``m=1``, ``k+1`` equals ``size``, so I/O would
+  stop when any OSD fails. Use a profile with ``m`` of 2 or more instead.
+
+Pools with ``size`` of 1 are reported by ``POOL_NO_REDUNDANCY``
+instead. Stretch pools are not reported
+while the cluster is in degraded stretch mode, because Ceph lowers their
+``min_size`` on purpose.
+
+To list the affected pools, run the following command:
 
 .. prompt:: bash $
 
    ceph health detail
 
-To manually set the min_size of a pool, run a command of the following form:
+To raise the ``min_size`` of a pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> min_size <min-size>
+
+If the current ``min_size`` is intentional, mute the warning by running the
+following command:
+
+.. prompt:: bash $
+
+   ceph health mute POOL_MIN_SIZE_TOO_LOW
+
+To disable the warning, set :confval:`mon_warn_on_pool_min_size_too_low` to
+``false``.
 
 POOL_TARGET_SIZE_BYTES_OVERCOMMITTED
 ____________________________________
