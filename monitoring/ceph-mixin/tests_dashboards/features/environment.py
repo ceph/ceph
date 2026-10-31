@@ -15,6 +15,7 @@ class GlobalContext:
         self.promql_expr_test = None
         self.data = get_dashboards_data()
         self.query_map = self.data['queries']
+        self.dashboard = None
 
     def reset_promql_test(self):
         self.promql_expr_test = PromqlTest()
@@ -53,6 +54,7 @@ global_context = GlobalContext()
 
 def before_scenario(context, scenario):
     global_context.reset_promql_test()
+    global_context.dashboard = None
 
 
 def after_scenario(context, scenario):
@@ -61,6 +63,14 @@ def after_scenario(context, scenario):
 
 def after_all(context):
     global_context.print_query_stats()
+
+
+@given('the dashboard is `{dashboard}`')
+def step_impl(context, dashboard):
+    if dashboard not in global_context.query_map:
+        raise KeyError(f'Unknown dashboard "{dashboard}". Known: '
+                       f'{sorted(global_context.query_map)}')
+    global_context.dashboard = dashboard
 
 
 @given("the following series")
@@ -111,19 +121,23 @@ def step_impl(context, panel_name, legend):
     """
     if legend == "EMPTY":
         legend = ''
+    if global_context.dashboard is None:
+        raise KeyError('No dashboard selected; add "Given the dashboard is '
+                       '`<name>`" to the feature Background')
     query_id = panel_name + '-' + legend
-    if query_id not in global_context.query_map:
-        print(f"QueryMap: {global_context.query_map}")
-        raise KeyError((f'Query with legend {legend} in panel "{panel_name}"'
-                           'couldn\'t be found'))
+    dashboard_queries = global_context.query_map[global_context.dashboard]
+    if query_id not in dashboard_queries:
+        raise KeyError(f'Query with legend {legend} in panel "{panel_name}" '
+                       f'couldn\'t be found in dashboard '
+                       f'"{global_context.dashboard}"')
 
-    expr = global_context.query_map[query_id]['query']
+    expr = dashboard_queries[query_id]['query']
     global_context.promql_expr_test.set_expression(expr)
     for row in context.table:
         metric = row['metrics']
         value = row['values']
         global_context.promql_expr_test.add_exp_samples(metric, float(value))
-    path = global_context.query_map[query_id]['path']
+    path = dashboard_queries[query_id]['path']
     global_context.data['stats'][path]['tested'] += 1
 
 
