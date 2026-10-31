@@ -713,7 +713,10 @@ replicas in each zone, to 3, replacing any earlier value, as
 ``ceph osd require-osd-release``, it behaves as in earlier releases. After
 that, stretch mode is also disabled when the last pool with more than one zone
 is deleted or set to one zone; this does not change the pool creation
-defaults.
+defaults. The command is refused while a stretched pool kept one zone when the
+upgrade was committed (``STRETCH_MODE_POOL_NOT_CONVERTED``); first give such a
+pool two zones with ``ceph osd pool set <pool> num_zones 2``, or one with
+``ceph osd pool set <pool> num_zones 1``.
 
 Usage::
 

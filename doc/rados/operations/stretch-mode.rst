@@ -517,9 +517,12 @@ The upgrade has three stages:
    Only a replicated pool whose CRUSH rule places half of an even number of
    copies in each zone can be split this way. Any other pool, for example one
    whose ``size`` was set to 3, keeps one zone and the rules of earlier
-   releases, and ``ceph mon disable_stretch_mode`` leaves it stretched.
-   ``STRETCH_MODE_POOL_NOT_CONVERTED`` names such pools before the commit,
-   while they can still be changed, and after it.
+   releases. ``STRETCH_MODE_POOL_NOT_CONVERTED`` names such pools before the
+   commit, while they can still be changed, and after it. After the commit,
+   ``ceph mon disable_stretch_mode`` is refused until each of them is given
+   two zones with ``ceph osd pool set {pool-name} num_zones 2``, or made an
+   ordinary pool in one zone with ``ceph osd pool set {pool-name} num_zones
+   1``.
 
 #. **After the commit,** everything on this page applies. OSDs of the earlier
    release can no longer start, on any cluster, stretched or not: upgrade any
@@ -551,7 +554,8 @@ Required actions by deployment type:
      - Nothing, unless ``STRETCH_MODE_POOL_NOT_CONVERTED`` names a pool:
        change it before the commit, for example with
        ``ceph osd pool set {pool-name} size 4`` if its rule places two copies
-       in each zone. If a Monitor's ``ceph.conf`` or a ``mon`` section sets
+       in each zone, or after it as ``STRETCH_MODE_POOL_NOT_CONVERTED``
+       describes. If a Monitor's ``ceph.conf`` or a ``mon`` section sets
        :confval:`osd_pool_default_size`, remove it after the commit:
        ``POOL_DEFAULT_CONFIG_OVERRIDE`` says so.
      - Mix stretched and one-zone pools; stretch erasure-coded pools
@@ -650,6 +654,11 @@ pool at once:
 * Erasure-coded pools are taken offline during the transition. To keep them
   available, migrate them first (see `For a Single Pool`_).
 * The pool creation defaults are reset to 1 zone with 3 replicas.
+
+The command is refused while ``STRETCH_MODE_POOL_NOT_CONVERTED`` names a pool
+that kept one zone when the upgrade was committed, because it would leave that
+pool stretched. First give the pool two zones, or make it an ordinary pool in
+one zone, as the health check describes.
 
 Afterwards, remove any OSDs that are no longer required.
 

@@ -2305,7 +2305,22 @@ leave with one zone. Change them so that it can split them, for example with
 each zone.
 
 After the commit, this warning names the stretch pools that kept one zone. They
-still serve I/O, but ``ceph mon disable_stretch_mode`` leaves them stretched.
+still serve I/O, but ``ceph mon disable_stretch_mode`` is refused while any of
+them remains, because it would leave them stretched. ``ceph osd pool set
+{pool-name} crush_rule`` is refused for them too. Fix each pool in one of two
+ways:
+
+* To keep the pool in both zones, run ``ceph osd pool set {pool-name}
+  num_zones 2 --replica 2``. The pool gets two replicas in each zone, on a
+  generated CRUSH rule. A pool of size 3 gains a replica, so make sure that the
+  cluster has space for it first. To keep the pool on one device class, add
+  ``--class {class}``. To keep a CRUSH rule of your own that places two
+  replicas in each zone, add ``--crush_rule {rule-name}``.
+* To make it an ordinary pool in one zone, run ``ceph osd pool set
+  {pool-name} num_zones 1``. The pool gets three replicas, or ``--replica
+  {n}``, on the default CRUSH rule, or ``--crush_rule {rule-name}``. Stretch
+  mode then no longer handles the pool when a zone fails.
+
 For more information, see :ref:`stretch_mode`.
 
 NVMeoF Gateway

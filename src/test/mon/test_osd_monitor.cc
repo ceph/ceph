@@ -903,7 +903,7 @@ TEST_F(OSDMonitorStretchCommitTest, KeepsPendingPoolChanges) {
 }
 
 // Before the commit the pools that it will leave with one zone can still be
-// changed; after it the stretch mode commands do not handle them
+// changed; after it they are warned of until they are given two zones
 TEST_F(OSDMonitorStretchCommitTest, WarnsOfPoolsLeftWithOneZone) {
   pg_pool_t plain = legacy_pool(3, 2);
   plain.peering_crush_bucket_count = 0;
@@ -935,6 +935,59 @@ TEST_F(OSDMonitorStretchCommitTest, NoWarningForIndividualStretchPools) {
   convert();
   commit();
   expect_unconverted("", {});
+}
+
+// The pools that keep one zone, before and after the commit, are the ones
+// that osd pool set num_zones 2 may give two zones although stretched
+TEST_F(OSDMonitorStretchCommitTest, KeepsOneZone) {
+  make_map({{1, legacy_pool(4, 2)}, {2, legacy_pool(3, 2)}}, true);
+  EXPECT_FALSE(OSDMonitor::keeps_one_zone(tmp, *tmp.get_pg_pool(1)));
+  EXPECT_TRUE(OSDMonitor::keeps_one_zone(tmp, *tmp.get_pg_pool(2)));
+  convert();
+  commit();
+  EXPECT_FALSE(OSDMonitor::keeps_one_zone(tmp, *tmp.get_pg_pool(1)));
+  EXPECT_TRUE(OSDMonitor::keeps_one_zone(tmp, *tmp.get_pg_pool(2)));
+}
+
+TEST_F(OSDMonitorStretchCommitTest, IndividualStretchPoolDoesNotKeepOneZone) {
+  make_map({{1, legacy_pool(3, 2)}}, false);
+  convert();
+  commit();
+  EXPECT_FALSE(OSDMonitor::keeps_one_zone(tmp, *tmp.get_pg_pool(1)));
+}
+
+// disable_stretch_mode would leave a pool that kept one zone stretched
+TEST_F(OSDMonitorStretchCommitTest, DisableRefusedWhilePoolsKeepOneZone) {
+  make_map({{1, legacy_pool(4, 2)}, {2, legacy_pool(3, 2)},
+            {3, legacy_pool(3, 2)}}, true);
+  convert();
+  commit();
+  ostringstream ss;
+  EXPECT_EQ(-EBUSY,
+            OSDMonitor::check_disable_leaves_no_stretch_pool(tmp, &ss));
+  EXPECT_EQ(0u, ss.str().find("pool(s) 'pool2', 'pool3' kept one zone when "
+                              "the upgrade was committed")) << ss.str();
+  EXPECT_NE(string::npos,
+            ss.str().find("'ceph osd pool set <pool> num_zones 2'"))
+    << ss.str();
+}
+
+TEST_F(OSDMonitorStretchCommitTest, DisableAllowedWhenEveryPoolConverted) {
+  make_map({{1, legacy_pool(4, 2)}, {2, legacy_pool(4, 1)}}, true);
+  convert();
+  commit();
+  ostringstream ss;
+  EXPECT_EQ(0, OSDMonitor::check_disable_leaves_no_stretch_pool(tmp, &ss))
+    << ss.str();
+}
+
+TEST_F(OSDMonitorStretchCommitTest, DisableAllowedWithIndividualStretchPools) {
+  make_map({{1, legacy_pool(3, 2)}}, false);
+  convert();
+  commit();
+  ostringstream ss;
+  EXPECT_EQ(0, OSDMonitor::check_disable_leaves_no_stretch_pool(tmp, &ss))
+    << ss.str();
 }
 
 class OSDMonitorStretchPlanTest : public ::testing::Test {

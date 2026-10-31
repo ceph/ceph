@@ -144,6 +144,8 @@ static constexpr std::string_view unstretch_ec_pool_doc =
   "Clusters documentation";
 static constexpr std::string_view disable_stretch_mode_doc =
   "\"Disabling Stretch Mode\" in the Stretch Clusters documentation";
+static constexpr std::string_view pool_not_converted_doc =
+  "STRETCH_MODE_POOL_NOT_CONVERTED in the Health Checks documentation";
 
 /*
 
@@ -9445,7 +9447,9 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
   const int64_t old_num_zones = p.get_num_zones();
   const int old_crush_rule = p.crush_rule;
   const unsigned old_size = p.size;
-  if (n == old_num_zones) {
+  // a pool that kept one zone at the commit is still stretched
+  const bool kept_one_zone = keeps_one_zone(osdmap, p);
+  if (n == old_num_zones && !kept_one_zone) {
     return 0;
   }
   if (n > 2) {
@@ -9460,7 +9464,7 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
     return r;
   }
 
-  if (old_num_zones > 1 && n == 1) {
+  if ((old_num_zones > 1 || kept_one_zone) && n == 1) {
     if (p.is_stretch_pool()) {
       // an erasure coded PG keeps only the shards of its first zone
       if (p.is_erasure() &&
@@ -9497,8 +9501,10 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       p.peering_crush_bucket_barrier = 0;
       p.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
       if (p.type == pg_pool_t::TYPE_REPLICATED) {
+        // 3, as disable_stretch_mode gives a pool over zones
         const auto size = cmd_getval_or<int64_t>(
-          cmdmap, "replica", load_pool_defaults(g_conf()).replica);
+          cmdmap, "replica",
+          kept_one_zone ? LOCAL_REPLICA : load_pool_defaults(g_conf()).replica);
         if (size < 1 || size > std::numeric_limits<decltype(p.size)>::max()) {
           ss << "default pool size exceeds the supported range";
           return -ERANGE;
@@ -9562,7 +9568,8 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       return -EINVAL;
     }
   } else if (old_num_zones == 1 && n > 1) {
-    if (p.is_stretch_pool()) {
+    // a pool that kept one zone at the commit gets its zones here
+    if (p.is_stretch_pool() && !kept_one_zone) {
       ss << "Error: num_zones == 1 but pool is already stretched";
       return -EINVAL;
     }
@@ -10304,6 +10311,15 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
     if (!osdmap.crush->rule_valid_for_pool_type(id, p.get_type())) {
       ss << "crush rule " << id << " type does not match pool";
+      return -EINVAL;
+    }
+    if (keeps_one_zone(osdmap, p)) {
+      ss << "pool '" << poolstr << "' kept one zone when the upgrade was "
+         << "committed and is still stretched, so a new rule alone does not "
+         << "change how it peers; give it two zones with 'ceph osd pool set "
+         << poolstr << " num_zones 2', or one with 'ceph osd pool set "
+         << poolstr << " num_zones 1 --crush_rule " << val << "', see "
+         << pool_not_converted_doc;
       return -EINVAL;
     }
     if (p.num_zones > 1 && p.peering_crush_bucket_barrier) {
@@ -18535,6 +18551,10 @@ int OSDMonitor::disable_stretch_mode(ostream& ss, const string& crush_rule)
   if (r < 0) {
     return r;
   }
+  r = check_disable_leaves_no_stretch_pool(osdmap, &ss);
+  if (r < 0) {
+    return r;
+  }
   const map<string,string> defaults =
     stretch_pool_defaults(1, LOCAL_REPLICA, "");
   {
@@ -18857,17 +18877,41 @@ bool OSDMonitor::converts_at_commit(const OSDMap& osdmap, const pg_pool_t& p)
                         p.size) == p.size / 2;
 }
 
+bool OSDMonitor::keeps_one_zone(const OSDMap& osdmap, const pg_pool_t& p)
+{
+  // individual stretch pools and global stretch mode cannot be combined
+  return osdmap.stretch_mode_enabled && p.is_stretch_pool() &&
+    p.get_num_zones() == 1 &&
+    (osdmap.stretch_zones() || !converts_at_commit(osdmap, p));
+}
+
+int OSDMonitor::check_disable_leaves_no_stretch_pool(const OSDMap& osdmap,
+                                                     ostream *ss)
+{
+  string names;
+  for (const auto& [id, p] : osdmap.get_pools()) {
+    if (keeps_one_zone(osdmap, p)) {
+      names += (names.empty() ? "'" : ", '") + osdmap.get_pool_name(id) + "'";
+    }
+  }
+  if (names.empty()) {
+    return 0;
+  }
+  *ss << "pool(s) " << names << " kept one zone when the upgrade was "
+      << "committed, and disabling stretch mode would leave them stretched; "
+      << "first give each two zones with 'ceph osd pool set <pool> num_zones "
+      << "2', or one with 'ceph osd pool set <pool> num_zones 1', see "
+      << pool_not_converted_doc;
+  return -EBUSY;
+}
+
 void OSDMonitor::check_unconverted_stretch_pools(const OSDMap& osdmap,
                                                  health_check_map_t* checks)
 {
-  if (!osdmap.stretch_mode_enabled) {
-    return;
-  }
   const bool committed = osdmap.stretch_zones();
   list<string> detail;
   for (const auto& [id, p] : osdmap.get_pools()) {
-    if (p.is_stretch_pool() && p.get_num_zones() == 1 &&
-        (committed || !converts_at_commit(osdmap, p))) {
+    if (keeps_one_zone(osdmap, p)) {
       detail.push_back("pool '" + osdmap.get_pool_name(id) + "' has size " +
                        std::to_string(p.size) + " and crush rule '" +
                        osdmap.crush->get_rule_name(p.crush_rule) + "'");
