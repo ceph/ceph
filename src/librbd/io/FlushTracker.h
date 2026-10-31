@@ -6,10 +6,10 @@
 
 #include "include/int_types.h"
 #include "common/ceph_mutex.h"
-#include <atomic>
-#include <list>
 #include <map>
 #include <set>
+#include <atomic>
+#include <vector>
 #include <unordered_map>
 
 struct Context;
@@ -36,7 +36,7 @@ public:
   void flush(Context* on_finish);
 
 private:
-  typedef std::list<Context*> Contexts;
+  typedef std::vector<Context*> Contexts;
   typedef std::map<uint64_t, Contexts> FlushContexts;
   typedef std::set<uint64_t> Tids;
   typedef std::unordered_map<uint64_t, uint64_t> TidToFlushTid;

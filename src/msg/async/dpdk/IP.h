@@ -29,7 +29,7 @@
 #include <cstdint>
 #include <array>
 #include <map>
-#include <list>
+#include <deque>
 #include <chrono>
 
 #include "msg/async/Event.h"
@@ -239,7 +239,7 @@ class ipv4 {
     bool is_complete();
   };
   std::unordered_map<ipv4_frag_id, frag, ipv4_frag_id::hash> _frags;
-  std::list<ipv4_frag_id> _frags_age;
+  std::deque<ipv4_frag_id> _frags_age;
   static utime_t _frag_timeout;
   static constexpr uint32_t _frag_low_thresh{3 * 1024 * 1024};
   static constexpr uint32_t _frag_high_thresh{4 * 1024 * 1024};

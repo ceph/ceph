@@ -6,7 +6,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Types.h"
-#include <list>
+#include <deque>
 #include <string>
 #include <boost/optional.hpp>
 
@@ -43,7 +43,7 @@ struct SyncPoint {
   }
 };
 
-typedef std::list<SyncPoint> SyncPoints;
+using SyncPoints = std::deque<SyncPoint>;
 
 struct SyncPointHandler {
 public:

@@ -39,7 +39,7 @@ public:
     return check_caps(s->user->get_caps());
   }
   void send_response() override;
-  virtual void send_response(std::list<rgw_bi_log_entry>& entries, std::string& marker);
+  virtual void send_response(const std::vector<rgw_bi_log_entry>& entries, std::string& marker);
   virtual void send_response_end();
   void execute(optional_yield y) override;
   const char* name() const override {

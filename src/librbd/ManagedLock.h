@@ -11,8 +11,9 @@
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/watcher/Types.h"
 #include "librbd/managed_lock/Types.h"
-#include <list>
+#include <deque>
 #include <string>
+#include <vector>
 #include <utility>
 
 namespace librbd {
@@ -195,9 +196,9 @@ private:
     ACTION_SHUT_DOWN
   };
 
-  typedef std::list<Context *> Contexts;
-  typedef std::pair<Action, Contexts> ActionContexts;
-  typedef std::list<ActionContexts> ActionsContexts;
+  using Contexts = std::vector<Context *>;
+  using ActionContexts = std::pair<Action, Contexts>;
+  using ActionsContexts = std::deque<ActionContexts>;
 
   struct C_ShutDownRelease : public Context {
     ManagedLock *lock;

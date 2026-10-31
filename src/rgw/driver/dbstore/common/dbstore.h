@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string>
+#include <vector>
 #include <stdio.h>
 #include <iostream>
 #include <mutex>
@@ -37,7 +38,7 @@ struct DBOpUserInfo {
   RGWUserInfo uinfo = {};
   obj_version user_version;
   rgw::sal::Attrs user_attrs;
-  std::list<RGWUserInfo> list_entries;
+  std::vector<RGWUserInfo> list_entries;
 };
 
 struct DBOpBucketInfo {
@@ -50,7 +51,7 @@ struct DBOpBucketInfo {
   // used for list query
   std::string min_marker;
   std::string max_marker;
-  std::list<RGWBucketEnt> list_entries;
+  std::vector<RGWBucketEnt> list_entries;
 };
 
 struct DBOpObjectInfo {
@@ -87,14 +88,13 @@ struct DBOpObjectInfo {
 
   /* Extra fields */
   bool is_multipart;
-  std::list<RGWUploadPartInfo> mp_parts;
+  std::vector<RGWUploadPartInfo> mp_parts;
 
   bufferlist head_data;
   std::string min_marker;
   std::string max_marker;
   std::string prefix;
-  std::list<rgw_bucket_dir_entry> list_entries;
-  /* XXX: Maybe use std::vector instead of std::list */
+  std::vector<rgw_bucket_dir_entry> list_entries;
 
   /* for versioned objects */
   bool is_versioned;
@@ -120,7 +120,7 @@ struct DBOpLCEntryInfo {
   rgw::sal::LCEntry entry;
   // used for list query
   std::string min_marker;
-  std::list<rgw::sal::LCEntry> list_entries;
+  std::vector<rgw::sal::LCEntry> list_entries;
 };
 
 struct DBOpInfo {
@@ -1749,7 +1749,7 @@ class DB {
     int list_users(const DoutPrefixProvider *dpp,
         const std::string& marker,
         uint64_t max,
-        std::list<std::string>& keys,
+        std::vector<std::string>& keys,
         bool *is_truncated);
     int get_account(const DoutPrefixProvider *dpp,
         const std::string& query_str, const std::string& query_str_val,
@@ -2038,7 +2038,7 @@ class DB {
           const bufferlist *data;
           RGWObjManifest *manifest;
           const std::string *ptag;
-          std::list<rgw_obj_index_key> *remove_objs;
+          std::vector<rgw_obj_index_key> *remove_objs;
           ceph::real_time set_mtime;
           rgw_user owner;
           RGWObjCategory category;
@@ -2083,7 +2083,7 @@ class DB {
           uint64_t olh_epoch;
           std::string marker_version_id;
           uint32_t bilog_flags;
-          std::list<rgw_obj_index_key> *remove_objs;
+          std::vector<rgw_obj_index_key> *remove_objs;
           ceph::real_time expiration_time;
           ceph::real_time unmod_since;
           ceph::real_time last_mod_time_match;
@@ -2121,7 +2121,7 @@ class DB {
                         bool follow_olh, RGWObjState **state);
       int get_state(const DoutPrefixProvider *dpp, RGWObjState **pstate, bool follow_olh);
       int list_versioned_objects(const DoutPrefixProvider *dpp,
-                                 std::list<rgw_bucket_dir_entry>& list_entries);
+                                 std::vector<rgw_bucket_dir_entry>& list_entries);
 
       DB *get_store() { return store; }
       rgw_obj& get_obj() { return obj; }
@@ -2143,7 +2143,7 @@ class DB {
       using iterate_obj_cb = int (*)(const DoutPrefixProvider*, const raw_obj&, off_t, off_t,
           bool, RGWObjState*, void*);
       int add_mp_part(const DoutPrefixProvider *dpp, RGWUploadPartInfo info);
-      int get_mp_parts_list(const DoutPrefixProvider *dpp, std::list<RGWUploadPartInfo>& info);
+      int get_mp_parts_list(const DoutPrefixProvider *dpp, std::vector<RGWUploadPartInfo>& info);
 
       int iterate_obj(const DoutPrefixProvider *dpp,
           const RGWBucketInfo& bucket_info, const rgw_obj& obj,

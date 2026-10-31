@@ -5,6 +5,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 #include <string_view>
 #include <variant>
 #include <include/types.h>
@@ -176,7 +177,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<ACLGrant> generate_test_instances();
+  static std::vector<ACLGrant> generate_test_instances();
 
   static ACLGroupTypeEnum uri_to_group(std::string_view uri);
 
@@ -286,7 +287,7 @@ protected:
    * in data structures. */
   std::map<std::string, int> acl_user_map;
   std::map<uint32_t, int> acl_group_map;
-  std::list<ACLReferer> referer_list;
+  std::vector<ACLReferer> referer_list;
   ACLGrantMap grant_map;
   // register a grant in the correspoding acl_user/group_map
   void register_grant(const ACLGrant& grant);
@@ -328,7 +329,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<RGWAccessControlList> generate_test_instances();
+  static std::vector<RGWAccessControlList> generate_test_instances();
 
   bool empty() const { return grant_map.empty(); }
 
@@ -374,7 +375,7 @@ struct ACLOwner {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<ACLOwner> generate_test_instances();
+  static std::vector<ACLOwner> generate_test_instances();
 
   bool empty() const;
 
@@ -414,7 +415,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<RGWAccessControlPolicy> generate_test_instances();
+  static std::vector<RGWAccessControlPolicy> generate_test_instances();
   void decode_owner(bufferlist::const_iterator& bl) { // sometimes we only need that, should be faster
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     decode(owner, bl);

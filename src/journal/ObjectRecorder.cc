@@ -11,6 +11,10 @@
 #include "common/errno.h"
 #include "cls/journal/cls_journal_client.h"
 
+#include <ranges>
+#include <iterator>
+#include <algorithm>
+
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
 #define dout_prefix *_dout << "ObjectRecorder: " << this << " " \
@@ -20,6 +24,24 @@ using namespace cls::journal;
 using std::shared_ptr;
 
 namespace journal {
+
+namespace {
+
+void move_append_buffers(AppendBuffers& destination, AppendBuffers& source)
+{
+  if (source.empty()) {
+    return;
+  }
+  if (destination.capacity() == 0) {
+    destination.swap(source);
+    return;
+  }
+  // Keep geometric growth when small batches accumulate.
+  std::ranges::move(source, std::back_inserter(destination));
+  source.clear();
+}
+
+} // namespace
 
 ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, std::string_view oid,
                                uint64_t object_number, ceph::mutex* lock,
@@ -82,9 +104,10 @@ bool ObjectRecorder::append(AppendBuffers &&append_buffers) {
       last_flushed_future = append_buffer.first;
     }
 
-    m_pending_buffers.push_back(append_buffer);
     m_pending_bytes += append_buffer.second.length();
   }
+
+  move_append_buffers(m_pending_buffers, append_buffers);
 
   return send_appends(!!last_flushed_future, last_flushed_future);
 }
@@ -157,8 +180,7 @@ void ObjectRecorder::claim_append_buffers(AppendBuffers *append_buffers) {
     ldout(m_cct, 20) << "detached " << *append_buffer.first << dendl;
     append_buffer.first->detach();
   }
-  append_buffers->splice(append_buffers->end(), m_pending_buffers,
-                         m_pending_buffers.begin(), m_pending_buffers.end());
+  move_append_buffers(*append_buffers, m_pending_buffers);
 }
 
 bool ObjectRecorder::close() {
@@ -253,16 +275,12 @@ void ObjectRecorder::append_overflowed() {
   in_flight_appends.swap(m_in_flight_appends);
 
   AppendBuffers restart_append_buffers;
-  for (InFlightAppends::iterator it = in_flight_appends.begin();
-       it != in_flight_appends.end(); ++it) {
-    restart_append_buffers.insert(restart_append_buffers.end(),
-                                  it->second.begin(), it->second.end());
+
+  for (auto& append_buffers : in_flight_appends | std::views::values) {
+    move_append_buffers(restart_append_buffers, append_buffers);
   }
 
-  restart_append_buffers.splice(restart_append_buffers.end(),
-                                m_pending_buffers,
-                                m_pending_buffers.begin(),
-                                m_pending_buffers.end());
+  move_append_buffers(restart_append_buffers, m_pending_buffers);
   restart_append_buffers.swap(m_pending_buffers);
 }
 
@@ -318,9 +336,11 @@ bool ObjectRecorder::send_appends(bool force, ceph::ref_t<FutureImpl> flush_futu
   size_t append_bytes = 0;
   AppendBuffers append_buffers;
   bufferlist append_bl;
-  for (auto it = m_pending_buffers.begin(); it != m_pending_buffers.end(); ) {
-    auto& future = it->first;
-    auto& bl = it->second;
+  auto stop = std::begin(m_pending_buffers);
+
+  for (; stop != std::end(m_pending_buffers); ++stop) {
+    auto& future = stop->first;
+    auto& bl = stop->second;
     auto size = m_object_bytes + m_in_flight_bytes + append_bytes + bl.length();
     if (size == m_soft_max_size) {
       ldout(m_cct, 10) << "object at capacity (" << size << ") " << *future << dendl;
@@ -331,6 +351,9 @@ bool ObjectRecorder::send_appends(bool force, ceph::ref_t<FutureImpl> flush_futu
       break;
     }
 
+    if (append_buffers.empty()) {
+      append_buffers.reserve(std::size(m_pending_buffers));
+    }
     bool flush_break = (force && flush_future && flush_future == future);
     ldout(m_cct, 20) << "flushing " << *future << dendl;
     future->set_flush_in_progress();
@@ -343,14 +366,19 @@ bool ObjectRecorder::send_appends(bool force, ceph::ref_t<FutureImpl> flush_futu
     }
 
     append_bytes += bl.length();
-    append_buffers.push_back(*it);
-    it = m_pending_buffers.erase(it);
+    append_buffers.push_back(std::move(*stop));
 
     if (flush_break) {
       ldout(m_cct, 20) << "stopping at requested flush future" << dendl;
+      ++stop;
       break;
     }
   }
+
+  // Partial flushes shift the retained suffix; repeated short drains of large
+  // backlogs were faster with list/deque. Whole-batch vector flushes shift none.
+  // Revisit prefix compaction if this pattern proves common in production.
+  m_pending_buffers.erase(std::begin(m_pending_buffers), stop);
 
   if (append_bytes > 0) {
     m_last_flush_time = ceph_clock_now();

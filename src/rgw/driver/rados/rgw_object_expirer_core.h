@@ -6,6 +6,7 @@
 #include <atomic>
 #include <string>
 #include <cerrno>
+#include <vector>
 #include <sstream>
 #include <iostream>
 
@@ -54,7 +55,7 @@ public:
                        const ceph::real_time& end_time,
                        const int max_entries,
                        const std::string& marker,
-                       std::list<cls_timeindex_entry>& entries, /* out */
+                       std::vector<cls_timeindex_entry>& entries, /* out */
                        std::string *out_marker,                 /* out */
                        bool *truncated);                   /* out */
 
@@ -118,7 +119,7 @@ public:
   int garbage_single_object(const DoutPrefixProvider *dpp, objexp_hint_entry& hint);
 
   void garbage_chunk(const DoutPrefixProvider *dpp, 
-                     std::list<cls_timeindex_entry>& entries, /* in  */
+                     const std::vector<cls_timeindex_entry>& entries, /* in  */
                      bool& need_trim);                        /* out */
 
   void trim_chunk(const DoutPrefixProvider *dpp, 

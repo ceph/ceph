@@ -67,9 +67,8 @@ void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
     f.dump_unsigned("MaxAgeSeconds", max_age);
   }
   /*ExposeHeader*/
-  for(list<string>::iterator it = exposable_hdrs.begin(); 
-      it != exposable_hdrs.end(); ++it) {
-    f.dump_string("ExposeHeader", *it);
+  for (const auto& exposed_header : exposable_hdrs) {
+    f.dump_string("ExposeHeader", exposed_header);
   }
   f.close_section();
 }
@@ -167,9 +166,8 @@ bool RGWCORSRule_S3::xml_end(const char *el) {
 void RGWCORSConfiguration_S3::to_xml(ostream& out) {
   XMLFormatter f;
   f.open_object_section_in_ns("CORSConfiguration", XMLNS_AWS_S3);
-  for(list<RGWCORSRule>::iterator it = rules.begin();
-      it != rules.end(); ++it) {
-    (static_cast<RGWCORSRule_S3 &>(*it)).to_xml(f);
+  for (auto& rule : rules) {
+    static_cast<RGWCORSRule_S3&>(rule).to_xml(f);
   }
   f.close_section();
   f.flush(out);

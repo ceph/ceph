@@ -605,7 +605,7 @@ int FilterDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
 }
 
 int FilterDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
-				     int max, std::list<std::string>& keys,
+				     int max, std::vector<std::string>& keys,
 				     bool* truncated)
 {
   return next->meta_list_keys_next(dpp, handle, max, keys, truncated);
@@ -948,7 +948,7 @@ int FilterBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch
 }
 
 int FilterBucket::remove_objs_from_index(const DoutPrefixProvider *dpp,
-					 std::list<rgw_obj_index_key>& objs_to_unlink)
+					 const std::vector<rgw_obj_index_key>& objs_to_unlink)
 {
   return next->remove_objs_from_index(dpp, objs_to_unlink);
 }
@@ -1018,7 +1018,7 @@ int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* c
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
 				uint32_t flags,
-				std::list<rgw_obj_index_key>* remove_objs,
+				std::vector<rgw_obj_index_key>* remove_objs,
 				RGWObjVersionTracker* objv)
 {
   return next->delete_object(dpp, y, flags, remove_objs, objv);
@@ -1343,7 +1343,7 @@ int FilterMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct
 int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    optional_yield y, CephContext* cct,
 				    std::map<int, std::string>& part_etags,
-				    std::list<rgw_obj_index_key>& remove_objs,
+				    std::vector<rgw_obj_index_key>& remove_objs,
 				    uint64_t& accounted_size, bool& compressed,
 				    RGWCompressionInfo& cs_info, off_t& ofs,
 				    std::string& tag, ACLOwner& owner,
@@ -1361,7 +1361,7 @@ int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 int FilterMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
                                                   CephContext *cct, optional_yield y,
                                                   const rgw_obj& obj,
-                                                  std::list<rgw_obj_index_key>& remove_objs,
+                                                  std::vector<rgw_obj_index_key>& remove_objs,
                                                   prefix_map_t& processed_prefixes)
 {
   return next->cleanup_orphaned_parts(dpp, cct, y, obj, remove_objs, processed_prefixes);

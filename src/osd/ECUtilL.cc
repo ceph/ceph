@@ -240,9 +240,9 @@ END_IGNORE_DEPRECATED
   }
   }
 
-  auto ECUtilL::HashInfo::generate_test_instances() -> list<HashInfo>
+  auto ECUtilL::HashInfo::generate_test_instances() -> vector<HashInfo>
   {
-    list<HashInfo> o;
+    vector<HashInfo> o;
     o.push_back(HashInfo(3));
     {
       bufferlist bl;

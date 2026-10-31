@@ -14,7 +14,7 @@
 #include "librbd/exclusive_lock/PreReleaseRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include <list>
+#include <deque>
 #include <shared_mutex> // for std::shared_lock
 #include <boost/scope_exit.hpp>
 
@@ -90,7 +90,7 @@ using librbd::ImageWatcher;
 
 template<typename T>
 struct BaseRequest {
-  static std::list<T *> s_requests;
+  static std::deque<T *> s_requests;
   Context *on_lock_unlock = nullptr;
   Context *on_finish = nullptr;
 
@@ -110,7 +110,7 @@ struct BaseRequest {
 };
 
 template<typename T>
-std::list<T *> BaseRequest<T>::s_requests;
+std::deque<T *> BaseRequest<T>::s_requests;
 
 template<>
 struct ImageDispatch<MockExclusiveLockImageCtx>
@@ -167,6 +167,7 @@ struct PreReleaseRequest<MockExclusiveLockImageCtx> : public BaseRequest<PreRele
 
 } // namespace exclusive_lock
 } // namespace librbd
+
 
 // template definitions
 #include "librbd/ExclusiveLock.cc"
@@ -841,4 +842,3 @@ TEST_F(TestMockExclusiveLock, BlockRequests) {
 }
 
 } // namespace librbd
-

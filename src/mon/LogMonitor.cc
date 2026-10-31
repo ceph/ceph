@@ -76,7 +76,6 @@ using std::cerr;
 using std::cout;
 using std::dec;
 using std::hex;
-using std::list;
 using std::map;
 using std::make_pair;
 using std::multimap;
@@ -839,8 +838,8 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       // pre-quincy compat
       // Decrement operation that sets to container end when hitting rbegin
       if (channel == "*") {
-	list<LogEntry> full_tail;
-	summary.build_ordered_tail_legacy(&full_tail);
+	vector<LogEntry> full_tail;
+	summary.build_ordered_tail_legacy(full_tail);
 	auto rp = full_tail.rbegin();
 	for (; num > 0 && rp != full_tail.rend(); ++rp) {
 	  if (match(*rp)) {

@@ -17,6 +17,7 @@
 
 #include <map>
 #include <set>
+#include <deque>
 
 #include "include/Context.h"
 #include "MgrMap.h"
@@ -34,7 +35,8 @@ class MgrMonitor: public PaxosService, public CommandHandler
   std::set<std::string> pending_metadata_rm;
 
   std::map<std::string,Option> mgr_module_options;
-  std::list<std::string> misc_option_strings;
+  // Options retain c_str() pointers into this storage:
+  std::deque<std::string> misc_option_strings;
 
   utime_t first_seen_inactive;
 
@@ -137,7 +139,7 @@ public:
   void print_nodes(ceph::Formatter *f) const;
   void count_metadata(const std::string& field, ceph::Formatter *f);
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
-  void get_versions(std::map<std::string, std::list<std::string>> &versions);
+  void get_versions(std::map<std::string, std::vector<std::string>>& versions);
 
   // When did the mon last call into our tick() method?  Used for detecting
   // when the mon was not updating us for some period (e.g. during slow

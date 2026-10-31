@@ -43,6 +43,7 @@
 #include <boost/scope_exit.hpp>
 
 #include <shared_mutex> // for std::shared_lock
+#include <vector>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -433,7 +434,7 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
     src_image_ctx->state->close();
   } BOOST_SCOPE_EXIT_END;
 
-  std::list<obj_watch_t> watchers;
+  std::vector<obj_watch_t> watchers;
   int flags = librbd::image::LIST_WATCHERS_FILTER_OUT_MY_INSTANCE |
               librbd::image::LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES;
   C_SaferCond on_list_watchers;
@@ -1015,7 +1016,7 @@ int Migration<I>::abort() {
       }
     } BOOST_SCOPE_EXIT_END;
 
-    std::list<obj_watch_t> watchers;
+    std::vector<obj_watch_t> watchers;
     int flags = librbd::image::LIST_WATCHERS_FILTER_OUT_MY_INSTANCE |
                 librbd::image::LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES;
     C_SaferCond on_list_watchers;

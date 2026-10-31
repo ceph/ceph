@@ -12,9 +12,9 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "journal/FutureImpl.h"
-#include <list>
 #include <map>
 #include <set>
+#include <vector>
 #include <boost/noncopyable.hpp>
 #include "include/ceph_assert.h"
 
@@ -25,7 +25,7 @@ void intrusive_ptr_add_ref(ObjectRecorder*);
 void intrusive_ptr_release(ObjectRecorder*);
 
 typedef std::pair<ceph::ref_t<FutureImpl>, bufferlist> AppendBuffer;
-typedef std::list<AppendBuffer> AppendBuffers;
+typedef std::vector<AppendBuffer> AppendBuffers;
 
 class ObjectRecorder : public RefCountedObject, boost::noncopyable {
 public:

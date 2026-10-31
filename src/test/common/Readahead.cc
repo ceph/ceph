@@ -14,6 +14,7 @@
  */
 
 #include "common/Readahead.h"
+#include "common/Cond.h"
 #include "gtest/gtest.h"
 #include <stdint.h>
 #include <boost/foreach.hpp>
@@ -30,6 +31,29 @@
   } while(0)
 
 using namespace std;
+
+TEST(Readahead, pending_waiters) {
+  Readahead r;
+  C_SaferCond first;
+  C_SaferCond second;
+
+  r.inc_pending(2);
+  r.wait_for_pending(&first);
+  r.wait_for_pending(&second);
+  r.dec_pending();
+
+  EXPECT_EQ(ETIMEDOUT, first.wait_for(0));
+  EXPECT_EQ(ETIMEDOUT, second.wait_for(0));
+
+  r.dec_pending();
+
+  EXPECT_EQ(0, first.wait());
+  EXPECT_EQ(0, second.wait());
+
+  C_SaferCond immediate;
+  r.wait_for_pending(&immediate);
+  EXPECT_EQ(0, immediate.wait());
+}
 
 TEST(Readahead, random_access) {
   Readahead r;

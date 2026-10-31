@@ -7,7 +7,6 @@
 #include "include/int_types.h"
 #include "librbd/mirror/Types.h"
 #include "tools/rbd_mirror/BaseRequest.h"
-#include <list>
 #include <string>
 
 struct Context;
