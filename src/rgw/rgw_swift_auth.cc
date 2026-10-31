@@ -178,6 +178,7 @@ bool TempURLEngine::is_disallowed_header_present(const req_info& info) const
 {
   static const auto headers = {
     "HTTP_X_OBJECT_MANIFEST",
+    "HTTP_X_COPY_FROM",
   };
 
   return std::any_of(std::begin(headers), std::end(headers),
