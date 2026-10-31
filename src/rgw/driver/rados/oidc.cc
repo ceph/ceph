@@ -103,14 +103,16 @@ read(
     std::string_view url,
     RGWOIDCProviderInfo& info,
     ceph::real_time* pmtime,
-    RGWObjVersionTracker* pobjv)
+    RGWObjVersionTracker* pobjv,
+    boost::optional<obj_version> expected_version)
 {
   const rgw_raw_obj& obj = get_oidc_obj(zone, tenant, url);
 
   bufferlist bl;
   int r = rgw_get_system_obj(
       &sysobj, obj.pool, obj.oid, bl, pobjv,
-      pmtime, y, dpp);
+      pmtime, y, dpp, nullptr, nullptr, boost::none, false,
+      expected_version);
   if (r < 0) {
     return r;
   }
@@ -432,7 +434,8 @@ public:
       std::string& entry,
       RGWMetadataObject** obj,
       optional_yield y,
-      const DoutPrefixProvider* dpp) override
+      const DoutPrefixProvider* dpp,
+      boost::optional<obj_version> expected_version = boost::none) override
   {
     std::string tenant;
     std::string url;
@@ -441,7 +444,8 @@ public:
     RGWOIDCProviderInfo info;
     ceph::real_time mtime;
     RGWObjVersionTracker objv;
-    int ret = read(dpp, y, sysobj, zone, tenant, url, info, &mtime, &objv);
+    int ret = read(dpp, y, sysobj, zone, tenant, url, info, &mtime, &objv,
+                   expected_version);
     if (ret < 0) {
       return ret;
     }

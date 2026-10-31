@@ -101,7 +101,8 @@ public:
                      rgw_cache_entry_info * const cache_info,
                      std::map<std::string, bufferlist> * const pattrs,
                      optional_yield y,
-                     const DoutPrefixProvider *dpp) override;
+                     const DoutPrefixProvider *dpp,
+                     boost::optional<obj_version> expected_version = boost::none) override;
 
   int store_user_info(const RGWUserInfo& info,
                       RGWUserInfo *old_info,
