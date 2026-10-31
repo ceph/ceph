@@ -476,7 +476,9 @@ int process_request(const RGWProcessEnv& penv,
   ldpp_dout(s, 2) << "getting op " << s->op << dendl;
   op = handler->get_op();
   if (!op) {
-    abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler, yield);
+    const int err = (s->op == OP_UNKNOWN) ? -ERR_NOT_IMPLEMENTED
+                                          : -ERR_METHOD_NOT_ALLOWED;
+    abort_early(s, NULL, err, handler, yield);
     goto done;
   }
   std::tie(ret,c) = schedule_request(scheduler, s, op);
