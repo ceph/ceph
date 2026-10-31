@@ -21,7 +21,6 @@
 
 #include <atomic>
 #include <cstdint>
-#include <deque>
 #include <list>
 #include <vector>
 #include <map>
@@ -2796,7 +2795,8 @@ WRITE_CLASS_ENCODER(pg_hit_set_info_t)
  */
 struct pg_hit_set_history_t {
   eversion_t current_last_update;  ///< last version inserted into current set
-  std::deque<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
+  // pg_info_t is a Seastar future value and must remain nothrow-movable.
+  std::list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
 
   friend bool operator==(const pg_hit_set_history_t& l,
 			 const pg_hit_set_history_t& r) {
