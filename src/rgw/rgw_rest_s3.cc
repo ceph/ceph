@@ -107,7 +107,8 @@ void dump_bucket(req_state *s, const RGWBucketEnt& ent)
 
 void rgw_get_errno_s3(rgw_http_error *e , int err_no)
 {
-  rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(err_no);
+  const int map_key = rgw_http_error_map_key(err_no);
+  rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(map_key);
 
   if (r != rgw_http_s3_errors.end()) {
     e->http_ret = r->second.first;
@@ -6431,7 +6432,8 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
 					     string* error_content,
 					     optional_yield y) {
   int new_err_no = -1;
-  rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(err_no > 0 ? err_no : -err_no);
+  const int map_key = rgw_http_error_map_key(err_no);
+  rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(map_key);
   int http_error_code = -1;
 
   if (r != rgw_http_s3_errors.end()) {
