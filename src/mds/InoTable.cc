@@ -114,7 +114,7 @@ void InoTable::replay_alloc_id(inodeno_t id)
   }
   projected_version = ++version;
 }
-void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids) 
+void InoTable::replay_alloc_ids(const interval_set<inodeno_t>& ids)
 {
   ceph_assert(mds);  // Only usable in online mode
 
