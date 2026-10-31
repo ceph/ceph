@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <ctime>
+#include <iomanip> // for std:setw
 #include <sstream>
 #include <string>
 #include <vector>

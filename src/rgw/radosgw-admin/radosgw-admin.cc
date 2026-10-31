@@ -10,6 +10,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <utility> // for std::to_underlying()
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -9516,7 +9517,7 @@ next:
     if (opt_cmd == OPT::DEDUP_THROTTLE) {
       bufferlist urgent_msg_bl;
       urgent_msg_t urgent_msg = URGENT_MSG_THROTTLE;
-      ceph::encode(urgent_msg, urgent_msg_bl);
+      ceph::encode(std::to_underlying(urgent_msg), urgent_msg_bl);
       throttle_msg_t throttle_msg;
 
       if (!throttle_stat) {

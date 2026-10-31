@@ -7,6 +7,8 @@
 #include "gtest/gtest.h"
 
 #include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
 #include "include/rados/librados.hpp"
 #include "include/rados/rados_types.h"
 #include "test/librados/test_cxx.h"

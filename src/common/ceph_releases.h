@@ -86,7 +86,7 @@ ceph_release_t ceph_release_from_name(std::string_view sv);
 ceph_release_t ceph_release();
 
 inline std::string_view to_string(ceph_release_t r) {
-  return ceph_release_name(static_cast<int>(r));
+  return ceph_release_name(static_cast<int8_t>(r));
 }
 template<typename IntType> IntType to_integer(ceph_release_t r) {
   return static_cast<IntType>(r);

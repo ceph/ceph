@@ -6,6 +6,7 @@
 #include "BlueFS.h"
 #include "common/Formatter.h"
 #include "include/byteorder.h"
+#include "include/encoding_optional.h"
 #include "include/denc.h"
 #include "include/encoding.h"
 #include "include/uuid.h"

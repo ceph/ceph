@@ -14,6 +14,7 @@
 
 #include "buffer.h"
 #include "encoding.h"
+#include "encoding_map.h"
 
 #include <map>
 #include <memory>

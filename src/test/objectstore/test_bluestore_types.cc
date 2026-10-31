@@ -18,6 +18,7 @@
 #include "os/bluestore/Writer.h"
 #include "common/pretty_binary.h"
 #include <bitset>
+#include <iomanip>  // for std::setfill, std::setw
 #include <sstream>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
