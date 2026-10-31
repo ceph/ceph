@@ -206,6 +206,11 @@ void AvlAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
 
   ceph_assert(size != 0);
 
+  // range_tree is ordered by an overlap comparator (lhs.end <= rhs.start), so
+  // every free run overlapping [start, end) compares equal to the key.
+  // boost::intrusive's find() is implemented as lower_bound() followed by an
+  // equality check, so it returns the leftmost overlapping run, which is where
+  // the forward walk below must begin.
   auto rs = range_tree.find(range_t{ start, end },
     range_tree.key_comp());
 
