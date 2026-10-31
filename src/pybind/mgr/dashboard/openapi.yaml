@@ -14402,7 +14402,7 @@ paths:
       parameters:
       - default: false
         description: If true, return detailed cluster info including backends, placement,
-          and enable_rdma
+          enable_nfsv3, and enable_rdma
         in: query
         name: info
         schema:
@@ -14439,6 +14439,9 @@ paths:
                       description: Deployment type (standalone, active-active, or
                         active-passive)
                       type: string
+                    enable_nfsv3:
+                      description: Whether NFSv3 is enabled for the cluster
+                      type: boolean
                     enable_rdma:
                       description: Whether RDMA transport is enabled for the cluster
                       type: boolean
@@ -14478,9 +14481,10 @@ paths:
                 - deployment_type
                 - backend
                 - placement
+                - enable_nfsv3
                 - enable_rdma
                 type: array
-            application/vnd.ceph.api.v0.1+json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -14507,6 +14511,9 @@ paths:
                       description: Deployment type (standalone, active-active, or
                         active-passive)
                       type: string
+                    enable_nfsv3:
+                      description: Whether NFSv3 is enabled for the cluster
+                      type: boolean
                     enable_rdma:
                       description: Whether RDMA transport is enabled for the cluster
                       type: boolean
@@ -14556,6 +14563,167 @@ paths:
       security:
       - jwt: []
       summary: List NFS-Ganesha clusters
+      tags:
+      - NFS-Ganesha
+  /api/nfs-ganesha/cluster/{cluster_id}:
+    get:
+      parameters:
+      - description: Cluster identifier
+        in: path
+        name: cluster_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  backend:
+                    description: List of NFS backend daemons
+                    items:
+                      properties:
+                        hostname:
+                          description: Backend hostname
+                          type: string
+                        ip:
+                          description: Backend IP address
+                          type: string
+                        port:
+                          description: Backend port
+                          type: integer
+                        status:
+                          description: Backend daemon status
+                          type: string
+                      required: &id145
+                      - hostname
+                      - ip
+                      type: object
+                    type: array
+                  deployment_type:
+                    description: Deployment type (standalone, active-active, or active-passive)
+                    type: string
+                  enable_nfsv3:
+                    description: Whether NFSv3 is enabled for the cluster
+                    type: boolean
+                  enable_rdma:
+                    description: Whether RDMA transport is enabled for the cluster
+                    type: boolean
+                  ingress_mode:
+                    description: Ingress mode
+                    type: string
+                  monitor_port:
+                    description: Monitor port
+                    type: integer
+                  name:
+                    description: Cluster identifier
+                    type: string
+                  placement:
+                    description: Orchestrator placement specification
+                    properties:
+                      count:
+                        description: Number of daemons
+                        type: integer
+                      hosts:
+                        description: List of hosts
+                        items:
+                          type: string
+                        type: array
+                      label:
+                        description: Host label
+                        type: string
+                    type: object
+                  port:
+                    description: Ingress port
+                    type: integer
+                  virtual_ip:
+                    description: Virtual IP address
+                    type: string
+                required: &id146
+                - name
+                - deployment_type
+                - backend
+                - placement
+                - enable_nfsv3
+                - enable_rdma
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties:
+                  backend:
+                    description: List of NFS backend daemons
+                    items:
+                      properties:
+                        hostname:
+                          description: Backend hostname
+                          type: string
+                        ip:
+                          description: Backend IP address
+                          type: string
+                        port:
+                          description: Backend port
+                          type: integer
+                        status:
+                          description: Backend daemon status
+                          type: string
+                      required: *id145
+                      type: object
+                    type: array
+                  deployment_type:
+                    description: Deployment type (standalone, active-active, or active-passive)
+                    type: string
+                  enable_nfsv3:
+                    description: Whether NFSv3 is enabled for the cluster
+                    type: boolean
+                  enable_rdma:
+                    description: Whether RDMA transport is enabled for the cluster
+                    type: boolean
+                  ingress_mode:
+                    description: Ingress mode
+                    type: string
+                  monitor_port:
+                    description: Monitor port
+                    type: integer
+                  name:
+                    description: Cluster identifier
+                    type: string
+                  placement:
+                    description: Orchestrator placement specification
+                    properties:
+                      count:
+                        description: Number of daemons
+                        type: integer
+                      hosts:
+                        description: List of hosts
+                        items:
+                          type: string
+                        type: array
+                      label:
+                        description: Host label
+                        type: string
+                    type: object
+                  port:
+                    description: Ingress port
+                    type: integer
+                  virtual_ip:
+                    description: Virtual IP address
+                    type: string
+                required: *id146
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get a single NFS-Ganesha cluster
       tags:
       - NFS-Ganesha
   /api/nfs-ganesha/export:

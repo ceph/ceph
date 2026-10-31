@@ -89,8 +89,14 @@ export class NfsService extends ApiClient {
 
   listClusters(info = true): Observable<NFSCluster[]> {
     return this.http.get<NFSCluster[]>(`${this.apiPath}/cluster`, {
-      headers: { Accept: this.getVersionHeaderValue(0, 1) },
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
       params: { info: String(info) }
+    });
+  }
+
+  getCluster(clusterId: string): Observable<NFSCluster> {
+    return this.http.get<NFSCluster>(`${this.apiPath}/cluster/${encodeURIComponent(clusterId)}`, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) }
     });
   }
 
