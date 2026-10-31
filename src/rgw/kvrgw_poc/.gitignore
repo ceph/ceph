@@ -1,0 +1,38 @@
+# Build artifacts
+build/
+backend/build/
+
+# Local benchmark dumps
+perf-results/
+
+# Runtime data
+data/
+.logs/
+.run/
+.fdb/data/
+
+# Third-party binaries (too large for git, install separately)
+third_party/
+
+# Temp/test files
+/tmp/
+*.sock
+
+# Generated protobuf (can regenerate from proto/)
+frontend/pb/*.pb.go
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+
+# Go
+frontend/kv-rgw-frontend
+
+# Cursor IDE
+.cursor/

@@ -6230,6 +6230,26 @@ def test_multipart_upload_small():
     response = client.complete_multipart_upload(Bucket=bucket_name, Key=key1, UploadId=upload_id, MultipartUpload={'Parts': parts})
     response = client.get_object(Bucket=bucket_name, Key=key1)
     assert response['ContentLength'] == objlen
+
+@pytest.mark.tagging
+@pytest.mark.RGW_unique_complete_idempotency
+def test_multipart_upload_complete_twice_is_idempotent():
+    # Not part of AWS's documented CompleteMultipartUpload contract --
+    # NoSuchUpload is explicitly listed as correct for "the multipart
+    # upload might have been aborted or completed"
+    # (docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html).
+    # This checks a Ceph-RGW-specific behavior some backends happen to
+    # exhibit (re-completing with the same part list succeeds instead of
+    # NoSuchUpload) -- only run explicitly via `-m RGW_unique_complete_idempotency`.
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    key1 = "mymultipart"
+    objlen = 1
+    (upload_id, data, parts) = _multipart_upload(bucket_name=bucket_name, key=key1, size=objlen)
+    response = client.complete_multipart_upload(Bucket=bucket_name, Key=key1, UploadId=upload_id, MultipartUpload={'Parts': parts})
+    response = client.get_object(Bucket=bucket_name, Key=key1)
+    assert response['ContentLength'] == objlen
     # check extra client.complete_multipart_upload
     response = client.complete_multipart_upload(Bucket=bucket_name, Key=key1, UploadId=upload_id, MultipartUpload={'Parts': parts})
 
