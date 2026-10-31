@@ -35,6 +35,11 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
     @Inject('bodyContext')
     public bodyContext?: DeleteConfirmationBodyContext,
     @Optional() @Inject('infoMessage') public infoMessage?: string,
+    @Optional() @Inject('showInfoTitle') public showInfoTitle = false,
+    @Optional() @Inject('extraCheckboxText') public extraCheckboxText?: string,
+    @Optional() @Inject('buttonText') public buttonText?: string,
+    @Optional() @Inject('cancelButtonText') public cancelButtonText?: string,
+    @Optional() @Inject('hideConfirmationCheckbox') public hideConfirmationCheckbox = false,
     @Optional()
     @Inject('submitActionObservable')
     public submitActionObservable?: () => Observable<any>,
@@ -54,15 +59,17 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
   ngOnInit() {
     const controls: Record<string, AbstractControl> = {
       impact: new UntypedFormControl(this.impact),
-      confirmation: new UntypedFormControl(false, {
-        validators: [
-          CdValidators.composeIf(
-            {
-              impact: DeletionImpact.medium
-            },
-            [Validators.requiredTrue]
-          )
-        ]
+      confirmation: new UntypedFormControl(this.hideConfirmationCheckbox ? true : false, {
+        validators: this.hideConfirmationCheckbox
+          ? []
+          : [
+              CdValidators.composeIf(
+                {
+                  impact: DeletionImpact.medium
+                },
+                [Validators.requiredTrue]
+              )
+            ]
       }),
       confirmInput: new UntypedFormControl('', {
         validators: [
@@ -73,6 +80,10 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
         ]
       })
     };
+
+    if (this.extraCheckboxText) {
+      controls['extraCheckbox'] = new UntypedFormControl(false);
+    }
 
     if (
       this.impact === this.impactEnum.high &&
@@ -128,7 +139,7 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
         complete: this.hideModal.bind(this)
       });
     } else {
-      this.submitAction();
+      this.submitAction(this.deletionForm?.value?.extraCheckbox);
     }
   }
 
