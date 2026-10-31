@@ -36,6 +36,7 @@ export class RgwZoneService {
       secret_key: zone.system_key.secret_key,
       tier_type: zone.tier_type,
       sync_from: zone.sync_from,
+      sync_from_rm: zone.sync_from_rm,
       sync_from_all: zone.sync_from_all
     });
     return this.http.post(`${this.url}`, null, { params: params });
@@ -104,6 +105,7 @@ export class RgwZoneService {
       compression: compression,
       tier_type: zone.tier_type,
       sync_from: zone.sync_from,
+      sync_from_rm: zone.sync_from_rm,
       sync_from_all: zone.sync_from_all
     };
     return this.http.put(`${this.url}/${zone.name}`, requestBody);
