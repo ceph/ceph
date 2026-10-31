@@ -780,6 +780,8 @@ namespace rgw::sal {
       bool high_precision_time,
       const char* if_match,
       const char* if_nomatch,
+      const char* dest_if_match,
+      const char* dest_if_nomatch,
       AttrsMod attrs_mod,
       bool copy_if_newer,
       Attrs& attrs,
@@ -795,6 +797,9 @@ namespace rgw::sal {
       const DoutPrefixProvider* dpp,
       optional_yield y)
   {
+    if (dest_if_match || dest_if_nomatch) {
+      return -ERR_NOT_IMPLEMENTED;
+    }
         return 0;
   }
 
