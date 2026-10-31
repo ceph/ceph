@@ -1920,7 +1920,7 @@ int RocksDBStore::get(
 			    &value);
       if (status.ok()) {
 	(*out)[key].append(value.data(), value.size());
-      } else if (status.IsIOError()) {
+      } else if (!status.IsNotFound()) {
 	ceph_abort_msg(status.getState());
       }
       value.Reset();
@@ -1934,7 +1934,7 @@ int RocksDBStore::get(
 			    &value);
       if (status.ok()) {
 	(*out)[key].append(value.data(), value.size());
-      } else if (status.IsIOError()) {
+      } else if (!status.IsNotFound()) {
 	ceph_abort_msg(status.getState());
       }
       value.Reset();
@@ -2513,6 +2513,19 @@ void RocksDBStore::compact_range(const string& start, const string& end)
   }
 }
 
+static int iterator_status(const rocksdb::Iterator* it,
+                           KeyValueDB::IteratorOpts opts)
+{
+  const rocksdb::Status s = it->status();
+  if (s.ok()) {
+    return 0;
+  }
+  if (!(opts & KeyValueDB::ITERATOR_NOABORT)) {
+    ceph_abort_msg(s.ToString());
+  }
+  return -1;
+}
+
 RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 {
   delete dbiter;
@@ -2520,21 +2533,18 @@ RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_first()
 {
   dbiter->SeekToFirst();
-  ceph_assert(!dbiter->status().IsIOError());
-  return dbiter->status().ok() ? 0 : -1;
+  return iterator_status(dbiter, opts);
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_first(const string &prefix)
 {
   rocksdb::Slice slice_prefix(prefix);
   dbiter->Seek(slice_prefix);
-  ceph_assert(!dbiter->status().IsIOError());
-  return dbiter->status().ok() ? 0 : -1;
+  return iterator_status(dbiter, opts);
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last()
 {
   dbiter->SeekToLast();
-  ceph_assert(!dbiter->status().IsIOError());
-  return dbiter->status().ok() ? 0 : -1;
+  return iterator_status(dbiter, opts);
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last(const string &prefix)
 {
@@ -2543,11 +2553,14 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last(const string &pref
   dbiter->Seek(slice_limit);
 
   if (!dbiter->Valid()) {
+    if (int r = iterator_status(dbiter, opts); r < 0) {
+      return r;
+    }
     dbiter->SeekToLast();
   } else {
     dbiter->Prev();
   }
-  return dbiter->status().ok() ? 0 : -1;
+  return iterator_status(dbiter, opts);
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::upper_bound(const string &prefix, const string &after)
 {
@@ -2564,7 +2577,7 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::lower_bound(const string &prefi
   string bound = combine_strings(prefix, to);
   rocksdb::Slice slice_bound(bound);
   dbiter->Seek(slice_bound);
-  return dbiter->status().ok() ? 0 : -1;
+  return iterator_status(dbiter, opts);
 }
 bool RocksDBStore::RocksDBWholeSpaceIteratorImpl::valid()
 {
@@ -2575,16 +2588,14 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::next()
   if (valid()) {
     dbiter->Next();
   }
-  ceph_assert(!dbiter->status().IsIOError());
-  return dbiter->status().ok() ? 0 : -1;
+  return iterator_status(dbiter, opts);
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
 {
   if (valid()) {
     dbiter->Prev();
   }
-  ceph_assert(!dbiter->status().IsIOError());
-  return dbiter->status().ok() ? 0 : -1;
+  return iterator_status(dbiter, opts);
 }
 string RocksDBStore::RocksDBWholeSpaceIteratorImpl::key()
 {
@@ -2664,6 +2675,7 @@ class CFIteratorImpl : public KeyValueDB::IteratorImpl {
 protected:
   string prefix;
   rocksdb::Iterator *dbiter;
+  const KeyValueDB::IteratorOpts opts;
   const KeyValueDB::IteratorBounds bounds;
   const rocksdb::Slice iterate_lower_bound;
   const rocksdb::Slice iterate_upper_bound;
@@ -2671,8 +2683,9 @@ public:
   explicit CFIteratorImpl(const RocksDBStore* db,
                           const std::string& p,
                           rocksdb::ColumnFamilyHandle* cf,
+                          KeyValueDB::IteratorOpts opts,
                           KeyValueDB::IteratorBounds bounds_)
-    : prefix(p), bounds(std::move(bounds_)),
+    : prefix(p), opts(opts), bounds(std::move(bounds_)),
       iterate_lower_bound(make_slice(bounds.lower_bound)),
       iterate_upper_bound(make_slice(bounds.upper_bound))
       {
@@ -2693,11 +2706,11 @@ public:
 
   int seek_to_first() override {
     dbiter->SeekToFirst();
-    return dbiter->status().ok() ? 0 : -1;
+    return iterator_status(dbiter, opts);
   }
   int seek_to_last() override {
     dbiter->SeekToLast();
-    return dbiter->status().ok() ? 0 : -1;
+    return iterator_status(dbiter, opts);
   }
   int upper_bound(const string &after) override {
     lower_bound(after);
@@ -2709,19 +2722,19 @@ public:
   int lower_bound(const string &to) override {
     rocksdb::Slice slice_bound(to);
     dbiter->Seek(slice_bound);
-    return dbiter->status().ok() ? 0 : -1;
+    return iterator_status(dbiter, opts);
   }
   int next() override {
     if (valid()) {
       dbiter->Next();
     }
-    return dbiter->status().ok() ? 0 : -1;
+    return iterator_status(dbiter, opts);
   }
   int prev() override {
     if (valid()) {
       dbiter->Prev();
     }
-    return dbiter->status().ok() ? 0 : -1;
+    return iterator_status(dbiter, opts);
   }
   bool valid() override {
     return dbiter->Valid();
@@ -2765,12 +2778,12 @@ private:
   enum {on_main, on_shard} smaller;
 
 public:
-  WholeMergeIteratorImpl(RocksDBStore* db)
+  WholeMergeIteratorImpl(RocksDBStore* db, KeyValueDB::IteratorOpts opts)
     : db(db)
-    , main(db->get_default_cf_iterator())
+    , main(db->get_default_cf_iterator(opts))
   {
     for (auto& e : db->cf_handles) {
-      shards.emplace(e.first, db->get_iterator(e.first));
+      shards.emplace(e.first, db->get_iterator(e.first, opts));
     }
   }
 
@@ -2778,9 +2791,8 @@ public:
   // invalid is larger then actual value
   bool is_main_smaller() {
     if (main->valid()) {
-      if (current_shard != shards.end()) {
+      if (current_shard != shards.end() && current_shard->second->valid()) {
 	auto main_rk = main->raw_key();
-	ceph_assert(current_shard->second->valid());
 	auto shards_rk = current_shard->second->raw_key();
 	if (main_rk.first < shards_rk.first)
 	  return true;
@@ -3115,7 +3127,14 @@ public:
 
   int status() override
   {
-    //because we already had to inspect key, it must be ok
+    if (main->status() != 0) {
+      return -1;
+    }
+    for (auto& [prefix, it] : shards) {
+      if (it->status() != 0) {
+        return -1;
+      }
+    }
     return 0;
   }
 
@@ -3255,6 +3274,7 @@ private:
   const RocksDBStore* db;
   KeyLess keyless;
   string prefix;
+  const KeyValueDB::IteratorOpts opts;
   const KeyValueDB::IteratorBounds bounds;
   const rocksdb::Slice iterate_lower_bound;
   const rocksdb::Slice iterate_upper_bound;
@@ -3263,8 +3283,9 @@ public:
   explicit ShardMergeIteratorImpl(const RocksDBStore* db,
 				  const std::string& prefix,
 				  const std::vector<rocksdb::ColumnFamilyHandle*>& shards,
+                  KeyValueDB::IteratorOpts opts,
                   KeyValueDB::IteratorBounds bounds_)
-    : db(db), keyless(db->comparator), prefix(prefix), bounds(std::move(bounds_)),
+    : db(db), keyless(db->comparator), prefix(prefix), opts(opts), bounds(std::move(bounds_)),
       iterate_lower_bound(make_slice(bounds.lower_bound)),
       iterate_upper_bound(make_slice(bounds.upper_bound))
   {
@@ -3287,23 +3308,27 @@ public:
       delete it;
     }
   }
+  // a failed shard is moved to iters[0], so that valid() is false
+  int check_shards() {
+    for (auto& it : iters) {
+      if (!it->status().ok()) {
+        std::swap(iters[0], it);
+        return iterator_status(iters[0], opts);
+      }
+    }
+    return 0;
+  }
   int seek_to_first() override {
     for (auto& it : iters) {
       it->SeekToFirst();
-      if (!it->status().ok()) {
-	return -1;
-      }
     }
     //all iterators seeked, sort
     std::sort(iters.begin(), iters.end(), keyless);
-    return 0;
+    return check_shards();
   }
   int seek_to_last() override {
     for (auto& it : iters) {
       it->SeekToLast();
-      if (!it->status().ok()) {
-	return -1;
-      }
     }
     for (size_t i = 1; i < iters.size(); i++) {
       if (iters[0]->Valid()) {
@@ -3325,7 +3350,7 @@ public:
       }
     }
     //no need to sort, as at most 1 iterator is valid now
-    return 0;
+    return check_shards();
   }
   int upper_bound(const string &after) override {
     rocksdb::Slice slice_bound(after);
@@ -3334,30 +3359,24 @@ public:
       if (it->Valid() && it->key() == after) {
 	it->Next();
       }
-      if (!it->status().ok()) {
-	return -1;
-      }
     }
     std::sort(iters.begin(), iters.end(), keyless);
-    return 0;
+    return check_shards();
   }
   int lower_bound(const string &to) override {
     rocksdb::Slice slice_bound(to);
     for (auto& it : iters) {
       it->Seek(slice_bound);
-      if (!it->status().ok()) {
-	return -1;
-      }
     }
     std::sort(iters.begin(), iters.end(), keyless);
-    return 0;
+    return check_shards();
   }
   int next() override {
     int r = -1;
     if (iters[0]->Valid()) {
       iters[0]->Next();
-      if (iters[0]->status().ok()) {
-	r = 0;
+      r = iterator_status(iters[0], opts);
+      if (r == 0) {
 	//bubble up
 	for (size_t i = 0; i < iters.size() - 1; i++) {
 	  if (keyless(iters[i], iters[i + 1])) {
@@ -3390,7 +3409,7 @@ public:
 	it->Prev();
 	if (it->Valid()) {
 	  prev_done.push_back(it);
-	} else {
+        } else if (it->status().ok()) {
 	  it->SeekToFirst();
 	}
       } else {
@@ -3406,7 +3425,7 @@ public:
 	iters[0]->Prev();
 	ceph_assert(!iters[0]->Valid());
       }
-      return 0;
+      return check_shards();
     }
     //2,3
     rocksdb::Iterator* highest = prev_done[0];
@@ -3427,7 +3446,7 @@ public:
       if (hold == highest) break;
     }
     ceph_assert(hold == highest);
-    return 0;
+    return check_shards();
   }
   bool valid() override {
     return iters[0]->Valid();
@@ -3456,7 +3475,12 @@ public:
     return std::string_view{val.data(), val.size()};
   }
   int status() override {
-    return iters[0]->status().ok() ? 0 : -1;
+    for (auto& it : iters) {
+      if (!it->status().ok()) {
+        return -1;
+      }
+    }
+    return 0;
   }
 };
 
@@ -3475,12 +3499,14 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, Itera
               this,
               prefix,
               cf,
+              opts,
               std::move(bounds));
     } else {
       return std::make_shared<ShardMergeIteratorImpl>(
         this,
         prefix,
         cf_it->second.handles,
+        opts,
         std::move(bounds));
     }
   } else {
@@ -3489,7 +3515,7 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, Itera
     // matching cf for the specified prefix.
     auto w_it = cf_handles.size() == 0 || prefix.empty() ?
       get_wholespace_iterator(opts) :
-      get_default_cf_iterator();
+      get_default_cf_iterator(opts);
     return KeyValueDB::make_iterator(prefix, w_it);
   }
 }
@@ -3510,6 +3536,7 @@ KeyValueDB::Iterator RocksDBStore::new_shard_iterator(rocksdb::ColumnFamilyHandl
     this,
     prefix,
     cf,
+    0,
     std::move(bounds));
 }
 
@@ -3519,13 +3546,13 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorO
     return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
       this, default_cf, opts);
   } else {
-    return std::make_shared<WholeMergeIteratorImpl>(this);
+    return std::make_shared<WholeMergeIteratorImpl>(this, opts);
   }
 }
 
-RocksDBStore::WholeSpaceIterator RocksDBStore::get_default_cf_iterator()
+RocksDBStore::WholeSpaceIterator RocksDBStore::get_default_cf_iterator(IteratorOpts opts)
 {
-  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(this, default_cf, 0);
+  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(this, default_cf, opts);
 }
 
 int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
@@ -3763,6 +3790,11 @@ int RocksDBStore::reshard_cleanup(const RocksDBStore::columns_t& current_columns
       db->NewIterator(rocksdb::ReadOptions(), handle.get())};
     ceph_assert(it);
     it->SeekToFirst();
+    if (!it->status().ok()) {
+      derr << __func__ << " cannot read column " << name << ": "
+           << it->status().ToString() << dendl;
+      return -EIO;
+    }
     ceph_assert(!it->Valid());
 
     if (rocksdb::Status status = db->DropColumnFamily(handle.get()); !status.ok()) {
@@ -3818,6 +3850,9 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
 	it.reset(db->NewIterator(rocksdb::ReadOptions(), handle));
 	ceph_assert(it);
 	it->Seek(raw_key_str);
+        if (!it->status().ok()) {
+          break;
+        }
 	ceph_assert(it->Valid());
 	raw_key = it->key();
       }
@@ -3865,6 +3900,10 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
 	  return -1000;
 	}
       }
+    }
+    if (!it->status().ok()) {
+      derr << "reshard read error: " << it->status().ToString() << dendl;
+      return -EIO;
     }
     if (bat.Count() > 0) {
       flush_batch(&bat);
