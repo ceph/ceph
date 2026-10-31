@@ -53,4 +53,19 @@ describe('OSDs page', () => {
       });
     });
   });
+
+  describe('Create OSDs button', () => {
+    // Dashboard e2e uses test_orchestrator (available) with dummy inventory.
+    // Force an empty inventory so Create is disabled for the no-devices case.
+    it('should be disabled when no eligible devices are available', () => {
+      cy.intercept('GET', /\/ui-api\/host\/inventory/, { body: [] }).as('hostInventory');
+      // Leave /osd first so returning remounts the component and re-fetches inventory
+      // under the intercept (same-route visit alone may not re-run ngOnInit).
+      cy.visit('#/overview');
+      cy.get('cd-overview').should('exist');
+      osds.navigateTo();
+      cy.wait('@hostInventory');
+      osds.getCreateButton().should('be.disabled');
+    });
+  });
 });
