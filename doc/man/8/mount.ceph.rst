@@ -144,6 +144,27 @@ Advanced
 :command:`ip`
     my ip
 
+:command:`lazyio`
+    Enable LazyIO for every regular file opened on this mount. The client
+    then requests ``CEPH_CAP_FILE_LAZYIO`` from the MDS, which lets it cache
+    reads and buffer writes in the page cache even while clients on other
+    hosts have the file open for writing, at the cost of cache coherency.
+    This is the kernel client's equivalent of the ``client_force_lazyio``
+    option of ceph-fuse and libcephfs. A remount can change it, and the
+    change applies to files opened afterward.
+
+    **WARNING:** Use this option only if you understand its consequences
+    and your application manages its own data consistency. Applications
+    might read stale data, and overlapping writes from different clients
+    can produce undefined results, including silent data corruption. This
+    option is intended only for HPC and similar specialized workloads that
+    tolerate relaxed consistency and coordinate their I/O themselves.
+
+    Default: off. Available since Linux 7.4.
+
+:command:`nolazyio`
+    Disable LazyIO. This is the default.
+
 :command:`noasyncreaddir`
     no dcache readdir
 
@@ -303,6 +324,7 @@ Feature Availability
 
 The ``recover_session=`` option was added to mainline Linux kernels in v5.4.
 ``wsync`` and ``nowsync`` were added in v5.7.
+``lazyio`` and ``nolazyio`` were added in v7.4.
 
 See also
 ========
