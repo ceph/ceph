@@ -14723,6 +14723,20 @@ void MDCache::dump_dir(Formatter *f, CDir *dir, bool dentry_dump) {
 void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   const mds_rank_t max_mds = mdsmap.get_max_mds();
 
+  // update the ephemeral distributed pin split floor before (re)queueing any
+  // export pins below, since queue_export_pin() consults it to decide whether
+  // a directory needs to be split further
+  if (max_mds <= 1) {
+    export_ephemeral_dist_frag_bits = 0;
+  } else {
+    double want = g_conf().get_val<double>("mds_export_ephemeral_distributed_factor");
+    want *= max_mds;
+    unsigned n = 0;
+    while ((1U << n) < (unsigned)want)
+      ++n;
+    export_ephemeral_dist_frag_bits = n;
+  }
+
   // process export_pin_delayed_queue whenever a new MDSMap received
   auto &q = export_pin_delayed_queue;
   for (auto it = q.begin(); it != q.end(); ) {
@@ -14748,17 +14762,6 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
     for (auto& in : migrate) {
       in->maybe_export_pin();
     }
-  }
-
-  if (max_mds <= 1) {
-    export_ephemeral_dist_frag_bits = 0;
-  } else {
-    double want = g_conf().get_val<double>("mds_export_ephemeral_distributed_factor");
-    want *= max_mds;
-    unsigned n = 0;
-    while ((1U << n) < (unsigned)want)
-      ++n;
-    export_ephemeral_dist_frag_bits = n;
   }
 }
 
