@@ -1393,6 +1393,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         db.execute('PRAGMA PAGE_SIZE = 65536')
         db.execute('PRAGMA CACHE_SIZE = 64')
         db.execute('PRAGMA TEMP_STORE = memory')
+        db.execute('PRAGMA busy_timeout = 60000') # 60s, longer than lock_keeper_timeout
         db.row_factory = sqlite3.Row
         self.load_schema(db)
 
