@@ -7279,6 +7279,14 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     return r;
   }
 
+  // remove only the head that was read. a write that replaced it meanwhile
+  // sent the old manifest to GC; removing the new head and sending the old
+  // manifest again would leak the new tail
+  r = store->append_atomic_test(dpp, state, op);
+  if (r < 0) {
+    return r;
+  }
+
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   RGWRados::Bucket bop(store, bucket_info);
@@ -10062,7 +10070,8 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
 			    bool null_verid,
 			    rgw_zone_set* zones_trace,
 			    bool log_op,
-			    const bool force)
+			    const bool force,
+			    std::set<cls_rgw_obj_key>* pending_removals)
 {
   if (log.empty()) {
     return 0;
@@ -10091,7 +10100,8 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   cls_rgw_obj_key key;
   bool delete_marker = false;
   std::string link_op_tag;  // op_tag of the LINK_OLH entry
-  set<cls_rgw_obj_key> remove_instances;
+  set<cls_rgw_obj_key> local_remove_instances;
+  set<cls_rgw_obj_key>& remove_instances = pending_removals ? *pending_removals : local_remove_instances;
   bool need_to_remove = false;
 
   // decode current epoch and instance
@@ -10130,6 +10140,21 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
         remove_instances.insert(entry.key);
         break;
       case CLS_RGW_OLH_OP_LINK_OLH:
+        if (!entry.delete_marker) {
+          // a version linked after its removal was logged is in the index
+          // again, whether or not it becomes current: keep its head. a null
+          // version written after a DeleteObject of the null version logged
+          // its removal shares the key's head object, and would lose it to
+          // that removal. a null delete marker linked after it does not
+          // bring the removed null version back. a DeleteObject names the
+          // null version "null", a write of it an empty instance
+          remove_instances.erase(entry.key);
+          if (entry.key.instance.empty()) {
+            remove_instances.erase(cls_rgw_obj_key(entry.key.name, "null"));
+          } else if (entry.key.instance == "null") {
+            remove_instances.erase(cls_rgw_obj_key(entry.key.name, ""));
+          }
+        }
         // only overwrite a link of the same epoch if its key sorts before
         // or there is a CLS_RGW_OLH_OP_UNLINK_OLH before this op in this batch
         if (need_to_remove || link_epoch < entry.epoch || key.instance.empty() ||
@@ -10186,17 +10211,19 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
     op.setxattr(RGW_ATTR_OLH_INFO, bl);
   }
 
-  /* first remove object instances */
-  for (set<cls_rgw_obj_key>::iterator liter = remove_instances.begin();
-       liter != remove_instances.end(); ++liter) {
-    const cls_rgw_obj_key& key = *liter;
-    rgw_obj obj_instance(bucket, key);
-    int ret = delete_obj(dpp, obj_ctx, bucket_info, obj_instance, 0, y,
-			 null_verid, RGW_BILOG_FLAG_VERSIONED_OP,
-			 ceph::real_time(), zones_trace, log_op, force, true /* skip_olh_obj_update */);
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 0) << "ERROR: delete_obj() returned " << ret << " obj_instance=" << obj_instance << dendl;
-      return ret;
+  /* remove object instances now if not deferring, otherwise the accumulator will delete them at the end */
+  if (!pending_removals) {
+    for (set<cls_rgw_obj_key>::iterator liter = remove_instances.begin();
+         liter != remove_instances.end(); ++liter) {
+      const cls_rgw_obj_key& key = *liter;
+      rgw_obj obj_instance(bucket, key);
+      int ret = delete_obj(dpp, obj_ctx, bucket_info, obj_instance, 0, y,
+			   null_verid, RGW_BILOG_FLAG_VERSIONED_OP,
+			   ceph::real_time(), zones_trace, log_op, force, true /* skip_olh_obj_update */);
+      if (ret < 0 && ret != -ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: delete_obj() returned " << ret << " obj_instance=" << obj_instance << dendl;
+        return ret;
+      }
     }
   }
 
@@ -10325,6 +10352,7 @@ int RGWRados::update_olh(const DoutPrefixProvider* dpp,
   map<uint64_t, vector<rgw_bucket_olh_log_entry> > log;
   bool is_truncated;
   uint64_t ver_marker = 0;
+  set<cls_rgw_obj_key> deferred_removals;// to accumulate removals across all batches
 
   do {
     int ret = bucket_index_read_olh_log(dpp, bucket_info, *state, obj, ver_marker, &log, &is_truncated, y);
@@ -10333,11 +10361,24 @@ int RGWRados::update_olh(const DoutPrefixProvider* dpp,
     }
     ret = apply_olh_log(dpp, obj_ctx, *state, bucket_info, obj,
 			state->olh_tag, log, &ver_marker, y,
-			null_verid, zones_trace, log_op, force);
+			null_verid, zones_trace, log_op, force, &deferred_removals);
     if (ret < 0) {
       return ret;
     }
   } while (is_truncated);
+
+  // now delete all instances that weren't cancelled by subsequent links
+  const rgw_bucket& bucket = obj.bucket;
+  for (const auto& key : deferred_removals) {
+    rgw_obj obj_instance(bucket, key);
+    int ret = delete_obj(dpp, obj_ctx, bucket_info, obj_instance, 0, y,
+			 null_verid, RGW_BILOG_FLAG_VERSIONED_OP,
+			 ceph::real_time(), zones_trace, log_op, force, true /* skip_olh_obj_update */);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: delete_obj() returned " << ret << " obj_instance=" << obj_instance << dendl;
+      return ret;
+    }
+  }
 
   return 0;
 }

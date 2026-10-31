@@ -1500,7 +1500,8 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                     uint64_t *plast_ver, optional_yield y, bool null_verid,
 		    rgw_zone_set *zones_trace = nullptr,
 		    bool log_op = true,
-		    const bool force = false);
+		    const bool force = false,
+		    std::set<cls_rgw_obj_key>* pending_removals = nullptr);
   int update_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState *state,
 		 RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y,
 		 rgw_zone_set *zones_trace = nullptr, bool null_verid = false,
