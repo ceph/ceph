@@ -1792,6 +1792,7 @@ mon_data_avail_warn = 2
 mon_data_avail_crit = 1
 mon_allow_pool_delete = true
 mon_allow_pool_size_one = true
+mon_warn_on_pool_min_size_too_low = false
 
 [osd]
 osd_scrub_load_threshold = 2000
