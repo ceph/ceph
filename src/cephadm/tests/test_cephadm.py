@@ -3058,6 +3058,32 @@ class TestValidateRepo:
                 pkg.validate()
 
 
+class TestAddRepo:
+
+    @pytest.mark.parametrize('os_id, version_id, shaman_distro',
+        [
+            ('centos', '9', 'centos/9'),
+            ('rocky', '9.6', 'centos/9'),
+            ('centos', '10', 'rocky/10'),
+            ('rocky', '10.1', 'rocky/10'),
+        ])
+    @mock.patch('cephadm.logger')
+    def test_dev_repo_shaman_distro(self, _logger, os_id, version_id, shaman_distro, cephadm_fs):
+        from urllib.error import HTTPError
+
+        cephadm_fs.create_file('/etc/os-release', contents=dedent(f"""
+            ID="{os_id}"
+            VERSION_ID="{version_id}"
+            """))
+        ctx = _cephadm.CephadmContext()
+        pkg = _cephadm.create_packager(ctx, branch='main')
+
+        with mock.patch('cephadmlib.packagers.urlopen') as _urlopen:
+            _urlopen.side_effect = HTTPError('', 504, 'Gateway Timeout', None, fp=None)
+            with pytest.raises(_cephadm.Error, match=f'/ceph/main/latest/{shaman_distro}/repo/'):
+                pkg.add_repo()
+
+
 class TestPull:
     def test_error(self, funkypatch):
         funkypatch.patch('time.sleep')
