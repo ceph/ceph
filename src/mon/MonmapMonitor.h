@@ -100,13 +100,14 @@ private:
    * Note: CRUSH bucket type and subtree count validation is performed by
    * OSDMonitor::try_enable_stretch_mode() to avoid redundancy.
    */
+
+public:
   void try_enable_stretch_mode(std::stringstream& ss, bool *okay,
 			       int *errcode, bool commit,
 			       std::string tiebreaker_mon,
 			       const std::string& dividing_bucket,
 			       const CrushWrapper& crush);
 
-public:
   /**
    * Static helper for validating and enabling stretch mode on a MonMap.
    * Extracted for testability - can be called from unit tests.
@@ -134,6 +135,12 @@ public:
    * down list to allow any non-tiebreaker mon to be the leader again.
    */
   void trigger_healthy_stretch_mode();
+  /**
+   * Clear per-pool stretch mode state from monmap.
+   * Called by OSDMonitor when the last per-pool stretch mode pool is removed.
+   * Only clears monmap state; OSDMonitor handles its own state cleanup.
+   */
+  void clear_stretch_mode_state();
 };
 
 

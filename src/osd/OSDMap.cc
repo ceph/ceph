@@ -533,6 +533,71 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
   }
 }
 
+void OSDMap::get_stretch_zones(const pg_pool_t& pool,
+                               map<int, set<int>>* zone_osds) const
+{
+  set<int> rule_roots;
+  crush->find_takes_by_rule(pool.crush_rule, &rule_roots);
+  for (int root : rule_roots) {
+    vector<int> zones;
+    // A device-class rule takes a shadow root, whose zones are shadow buckets
+    crush->get_children_of_type(root, pool.peering_crush_bucket_barrier, &zones,
+                                false);
+    for (int zone : zones) {
+      vector<int> osds;
+      crush->get_children_of_type(zone, 0, &osds);
+      // A zone with no OSDs the rule can use cannot hold any of the pool.
+      // A rule can take a zone with several device classes.
+      if (!osds.empty()) {
+        (*zone_osds)[crush->get_non_shadow_id(zone)].insert(osds.begin(),
+                                                            osds.end());
+      }
+    }
+  }
+}
+
+unsigned OSDMap::stretch_num_acting_below_min_size(const pg_pool_t& pool,
+                                                   const vector<int>& acting) const
+{
+  if (!pool.is_stretch_pool()) {
+    return 0;
+  }
+  // Special case for 3-zone clusters with 2 peering crush buckets, and pools
+  // of one zone (stretch values from an older 'osd pool stretch set')
+  if (pool.num_zones < 2 ||
+      (pool.num_zones == 3 && pool.peering_crush_bucket_count == 2)) {
+    const auto cluster_min_size = pool.min_size * pool.num_zones;
+    const auto cluster_acting = std::count_if(
+      acting.begin(), acting.end(), [](int osd) {
+        return osd != CRUSH_ITEM_NONE;
+      });
+    return cluster_acting < cluster_min_size
+      ? cluster_min_size - cluster_acting
+      : 0;
+  } else {
+    // General case for stretch pools with num_zones < 3
+    map<int, set<int>> zones;
+    get_stretch_zones(pool, &zones);
+    int deficit = 0;
+    for (const auto& [zone, zone_osd_set] : zones) {
+      if (pool.peering_crush_mandatory_member != CRUSH_ITEM_NONE &&
+          zone != (int)pool.peering_crush_mandatory_member) {
+        continue;
+      }
+      unsigned zone_acting = 0;
+      for (int osd : acting) {
+        if (osd != CRUSH_ITEM_NONE && zone_osd_set.find(osd) != zone_osd_set.end()) {
+          ++zone_acting;
+        }
+      }
+      if (zone_acting < pool.min_size) {
+        deficit += (pool.min_size - zone_acting);
+      }
+    }
+    return deficit;
+  }
+}
+
 bool OSDMap::subtree_type_is_down(
   CephContext *cct,
   int id,
@@ -2005,6 +2070,11 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
       features |= CEPH_FEATUREMASK_STRETCH_MODE;
       mask |= CEPH_FEATUREMASK_STRETCH_MODE;
     }
+    // an OSD of an earlier release would judge stretch pools by its rules
+    if (stretch_zones()) {
+      features |= CEPH_FEATUREMASK_OSD_STRETCH_ZONES;
+    }
+    mask |= CEPH_FEATUREMASK_OSD_STRETCH_ZONES;
   }
 
   if (require_min_compat_client >= ceph_release_t::nautilus) {
@@ -3191,46 +3261,76 @@ const std::vector<int> OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
   return acting;
 }
 
-const shard_id_t OSDMap::pgtemp_primaryfirst(const pg_pool_t& pool,
-	const pg_t pg, const shard_id_t shard) const
+shard_id_t OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+                                            const pg_t pg, const shard_id_t primary_first_pos) const
 {
-  if ((shard == shard_id_t::NO_SHARD) ||
-      (shard == shard_id_t(0))) {
-    return shard;
+  if ((primary_first_pos == shard_id_t::NO_SHARD) ||
+      (primary_first_pos == shard_id_t(0)) ||
+      !pool.allows_ecoptimizations() ||
+      !has_pgtemp(pool.raw_pg_to_pg(pg))) {
+    return primary_first_pos;
   }
-  shard_id_t result = shard;
-  if (pool.allows_ecoptimizations()) {
-    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
-      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
-      if (shard >= pool.size - num_parity_shards) {
-	result = shard_id_t(result + num_parity_shards + 1 - pool.size);
-      } else {
-	result = shard_id_t(result + num_parity_shards);
+  shard_id_t i(0);
+  shard_id_t j(pool.size - pool.nonprimary_shards.size());
+  for (shard_id_t shard(0); shard < pool.size; ++shard) {
+    if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+      if (j == primary_first_pos) {
+        return shard;
       }
+      ++j;
+    } else {
+      if (i == primary_first_pos) {
+        return shard;
+      }
+      ++i;
     }
   }
-  return result;
+  ceph_abort("Shard out of range!");
 }
 
-shard_id_t OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
-	const pg_t pg, const shard_id_t shard) const
+bool OSDMap::undo_pre_stretch_zones_primaryfirst(spg_t *pgid) const
 {
-  if ((shard == shard_id_t::NO_SHARD) ||
-      (shard == shard_id_t(0))) {
-    return shard;
+  const pg_pool_t *pool = get_pg_pool(pgid->pool());
+  if (!pool || pgid->shard >= pool->size) {
+    return false;
   }
-  shard_id_t result = shard;
-  if (pool.allows_ecoptimizations()) {
-    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
-      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
-      if (shard > num_parity_shards) {
-	result = shard_id_t(result - num_parity_shards);
-      } else {
-	result = shard_id_t(result + pool.size - num_parity_shards - 1);
-      }
-    }
+  if (pool->get_num_zones() < 2 ||
+      pgid->shard == shard_id_t::NO_SHARD ||
+      pgid->shard == shard_id_t(0) ||
+      !pool->allows_ecoptimizations() ||
+      !has_pgtemp(pool->raw_pg_to_pg(pgid->pgid))) {
+    return true;
   }
-  return result;
+  // the client gave position p, after the primary, the shard p - parity, and
+  // a parity position the shard p + size - parity - 1
+  const int size = pool->size;
+  const int parity = size - pool->nonprimary_shards.size() - 1;
+  const int shard = pgid->shard.id;
+  const int pos = shard >= size - parity ? shard - size + parity + 1
+                                         : shard + parity;
+  pgid->reset_shard(pgtemp_undo_primaryfirst(*pool, pgid->pgid, shard_id_t(pos)));
+  return true;
+}
+
+bool OSDMap::undo_pre_tentacle_primaryfirst(spg_t *pgid) const
+{
+  const pg_pool_t *pool = get_pg_pool(pgid->pool());
+  if (!pool || pgid->shard >= pool->size) {
+    return false;
+  }
+  pgid->reset_shard(pgtemp_undo_primaryfirst(*pool, pgid->pgid, pgid->shard));
+  return true;
+}
+
+bool OSDMap::async_recovery_can_shrink(const pg_pool_t& pool,
+                                       const std::vector<int>& candidate_want) const
+{
+  if (pool.is_stretch_pool()) {
+    return stretch_num_acting_below_min_size(pool, candidate_want) == 0 &&
+      pool.stretch_set_can_peer(candidate_want, *this, NULL);
+  }
+  return std::count_if(candidate_want.begin(), candidate_want.end(),
+                       [](int osd) { return osd != CRUSH_ITEM_NONE; }) >= pool.min_size;
 }
 
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
@@ -3476,6 +3576,9 @@ bool OSDMap::primary_changed_broken(
 uint64_t OSDMap::get_encoding_features() const
 {
   uint64_t f = SIGNIFICANT_FEATURES;
+  if (!stretch_zones()) {
+    f &= ~CEPH_FEATURE_OSD_STRETCH_ZONES;
+  }
   if (require_osd_release < ceph_release_t::vampire) {
     f &= ~CEPH_FEATURE_SERVER_VAMPIRE;
   }
@@ -4658,6 +4761,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",pglog_hardlimit";
   if (f & CEPH_OSDMAP_NOAUTOSCALE)
     s += ",noautoscale";
+  if (f & CEPH_OSDMAP_STRETCH_ZONES)
+    s += ",stretch_zones";
   if (s.length())
     s.erase(0, 1);
   return s;
@@ -5063,6 +5168,8 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
 		 << " osds" << dendl;
   epoch = e;
   set_fsid(fsid);
+  // a cluster of this release, unless the monitor creates it for an upgrade
+  set_flag(CEPH_OSDMAP_STRETCH_ZONES);
   created = modified = ceph_clock_now();
 
   if (nosd >=  0) {
@@ -5132,6 +5239,7 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
       if (cct->_conf->osd_pool_default_flag_bulk)
         pools[pool].set_flag(pg_pool_t::FLAG_BULK);
       pools[pool].size = cct->_conf.get_val<uint64_t>("osd_pool_default_size");
+      pools[pool].replica = pools[pool].size;
       pools[pool].min_size = cct->_conf.get_osd_pool_default_min_size(
                                  pools[pool].size);
       pools[pool].crush_rule = default_replicated_rule;
@@ -8487,7 +8595,7 @@ float OSDMap::pool_raw_used_rate(int64_t poolid) const
       int mk = m + k;
       ceph_assert(mk != 0);
       ceph_assert(k != 0);
-      return (float)mk / k;
+      return (float)mk * pool->get_num_zones() / k;
     } else {
       return 0.0;
     }

@@ -579,7 +579,7 @@ COMMAND("mon set " \
 	"mon", "rw")
 COMMAND("mon enable_stretch_mode " \
 	"name=tiebreaker_mon,type=CephString,req=false, "
-	"name=new_crush_rule,type=CephString, "
+	"name=new_crush_rule,type=CephString,req=false, "
 	"name=dividing_bucket,type=CephString, ",
 	"enable stretch mode, changing the peering rules and "
 	"failure handling on all pools with <tiebreaker_mon> "
@@ -807,10 +807,11 @@ COMMAND("osd crush rule create-replicated "
 	"create crush rule <name> for replicated pool to start from <root>, replicate across buckets of type <type>, use devices of type <class> (ssd or hdd)",
 	"osd", "rw")
 COMMAND("osd crush rule create-erasure "
-	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
-	"name=profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=]",
-	"create crush rule <name> for erasure coded pool created with <profile> (default default)",
-	"osd", "rw")
+        "name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
+        "name=profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=] "
+        "name=num_zones,type=CephInt,range=1,req=false",
+        "create crush rule <name> for erasure coded pool created with <profile> (default default)",
+        "osd", "rw")
 COMMAND("osd crush rule rm "
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",
 	"remove crush rule <name>", "osd", "rw")
@@ -898,7 +899,7 @@ COMMAND("osd erasure-code-profile set "
 	"name=profile,type=CephString,n=N,req=false "
 	"name=force,type=CephBool,req=false "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
-	"create erasure code profile <name> with [<key[=value]> ...] pairs. Add a --force at the end to override an existing profile (VERY DANGEROUS)",
+	"create erasure code profile <name> with [<key[=value]> ...] pairs. Add --force to allow a stripe_unit that is not a multiple of 4096. Changing a profile that a pool uses needs --yes-i-really-mean-it (VERY DANGEROUS)",
 	"osd", "rw")
 COMMAND("osd erasure-code-profile get "
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.]",
@@ -1162,24 +1163,34 @@ COMMAND("osd pool ls "
 	"CRUSH rule by name in the text output, and add a "
 	"`crush_rule_name` field to the JSON output)", "osd", "r")
 COMMAND("osd pool create "
-	"name=pool,type=CephPoolname "
-	"name=pg_num,type=CephInt,range=0,req=false "
-	"name=pgp_num,type=CephInt,range=0,req=false "
+        "name=pool,type=CephPoolname "
+        "name=pg_num,type=CephInt,range=0,req=false "
+        "name=pgp_num,type=CephInt,range=0,req=false "
         "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false "
-	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
-	"name=rule,type=CephString,req=false "
+        "name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=rule,type=CephString,req=false "
         "name=expected_num_objects,type=CephInt,range=0,req=false "
         "name=size,type=CephInt,range=0,req=false "
-	"name=pg_num_min,type=CephInt,range=0,req=false "
-	"name=pg_num_max,type=CephInt,range=0,req=false "
-	"name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
-	"name=bulk,type=CephBool,req=false "
-	"name=target_size_bytes,type=CephInt,range=0,req=false "
-	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "
-	"name=force_pg_limit,type=CephBool,req=false "
-	"name=yes_i_really_mean_it,type=CephBool,req=false "
-	"name=crimson,type=CephBool,req=false",
-	"create pool", "osd", "rw")
+        "name=pg_num_min,type=CephInt,range=0,req=false "
+        "name=pg_num_max,type=CephInt,range=0,req=false "
+        "name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
+        "name=bulk,type=CephBool,req=false "
+        "name=target_size_bytes,type=CephInt,range=0,req=false "
+        "name=target_size_ratio,type=CephFloat,range=0.0,req=false "
+        "name=force_pg_limit,type=CephBool,req=false "
+        "name=yes_i_really_mean_it,type=CephBool,req=false "
+        "name=crimson,type=CephBool,req=false "
+        "-- "
+        "name=k,type=CephInt,range=2,req=false "
+        "name=m,type=CephInt,range=1,req=false "
+        "name=num_zones,type=CephInt,range=1,req=false "
+        "name=root,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=zone_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=osd_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=replica,type=CephInt,range=1,req=false "
+        "name=class,type=CephString,goodchars=" CLASS_GOODCHARS ",req=false "
+        "name=min_size,type=CephInt,range=1,req=false",
+        "create pool", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete "
 	"name=pool,type=CephPoolname "
 	"name=pool2,type=CephPoolname,req=false "
@@ -1246,6 +1257,7 @@ COMMAND("osd pool get "
           "|nopgchange"
           "|noscrub"
           "|nosizechange"
+          "|num_zones"
           "|pct_update_delay"
           "|pg_autoscale_bias"
           "|pg_autoscale_mode"
@@ -1256,6 +1268,7 @@ COMMAND("osd pool get "
           "|read_ratio"
           "|recovery_op_priority"
           "|recovery_priority"
+          "|replica"
           "|scrub_max_interval"
           "|scrub_min_interval"
           "|scrub_priority"
@@ -1310,6 +1323,7 @@ COMMAND("osd pool set "
           "|nopgchange"
           "|noscrub"
           "|nosizechange"
+          "|num_zones"
           "|pct_update_delay"
           "|pg_autoscale_bias"
           "|pg_autoscale_mode"
@@ -1321,6 +1335,7 @@ COMMAND("osd pool set "
           "|read_ratio"
           "|recovery_op_priority"
           "|recovery_priority"
+          "|replica"
           "|scrub_max_interval"
           "|scrub_min_interval"
           "|scrub_priority"
@@ -1334,7 +1349,14 @@ COMMAND("osd pool set "
           "|use_gmt_hitset"
           "|write_fadvise_dontneed "
 	"name=val,type=CephString "
-	"name=yes_i_really_mean_it,type=CephBool,req=false",
+        "name=yes_i_really_mean_it,type=CephBool,req=false "
+        "-- "
+        "name=replica,type=CephInt,range=1,req=false "
+        "name=zone_failure_domain,type=CephString,req=false "
+        "name=osd_failure_domain,type=CephString,req=false "
+        "name=crush_rule,type=CephString,req=false "
+        "name=root,type=CephString,req=false "
+        "name=class,type=CephString,req=false",
 	"set pool parameter <var> to <val>", "osd", "rw")
 // 'val' is a CephString because it can include a unit.  Perhaps
 // there should be a Python type for validation/conversion of strings
@@ -1385,22 +1407,24 @@ COMMAND("osd pool stretch show "
         "osd", "r")
 COMMAND("osd pool stretch set "
         "name=pool,type=CephPoolname "
-		"name=peering_crush_bucket_count,type=CephInt,range=0 "
-		"name=peering_crush_bucket_target,type=CephInt,range=0 "
-		"name=peering_crush_bucket_barrier,type=CephString "
-		"name=crush_rule,type=CephString "
-		"name=size,type=CephInt,range=0 "
-		"name=min_size,type=CephInt,range=0 "
-		"name=yes_i_really_mean_it,type=CephBool,req=false",
+                "name=peering_crush_bucket_count,type=CephInt,range=0 "
+                "name=peering_crush_bucket_target,type=CephInt,range=0 "
+                "name=peering_crush_bucket_barrier,type=CephString "
+                "name=crush_rule,type=CephString "
+                "name=size,type=CephInt,range=0,req=false "
+                "name=min_size,type=CephInt,range=0 "
+                "name=replica,type=CephInt,range=1,req=false "
+                "name=yes_i_really_mean_it,type=CephBool,req=false",
         "make the pool stretched across the specified number of CRUSH buckets",
         "osd", "rw")
 COMMAND("osd pool stretch unset "
-		"name=pool,type=CephPoolname "
-		"name=crush_rule,type=CephString "
-		"name=size,type=CephInt,range=0 "
-		"name=min_size,type=CephInt,range=0 ",
-		"unset the stretch mode for the pool",
-		"osd", "rw")
+                "name=pool,type=CephPoolname "
+                "name=crush_rule,type=CephString "
+                "name=size,type=CephInt,range=0,req=false "
+                "name=min_size,type=CephInt,range=0 "
+                "name=replica,type=CephInt,range=1,req=false",
+                "unset the stretch mode for the pool",
+                "osd", "rw")
 COMMAND("osd pool availability-status", \
         "obtain availability stats from all pools", \
         "osd", "r")
@@ -1589,6 +1613,30 @@ COMMAND("config reset "
 COMMAND("config generate-minimal-conf",
 	"Generate a minimal ceph.conf file",
 	"config", "r")
+COMMAND("osd pool default set "
+        "-- "
+        "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false "
+        "name=num_zones,type=CephInt,range=1,req=false "
+        "name=rule,type=CephString,req=false "
+        "name=zone_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=osd_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=root,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=class,type=CephString,goodchars=" CLASS_GOODCHARS ",req=false "
+        "name=replica,type=CephInt,range=1,req=false "
+        "name=min_size,type=CephInt,range=0,req=false "
+        "name=k,type=CephInt,range=2,req=false "
+        "name=m,type=CephInt,range=1,req=false "
+        "name=pg_num,type=CephInt,range=1,req=false "
+        "name=pgp_num,type=CephInt,range=0,req=false "
+        "name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
+        "name=bulk,type=CephBool,req=false "
+        "name=crimson,type=CephBool,req=false "
+        "name=yes_i_really_mean_it,type=CephBool,req=false",
+        "set the defaults that ceph osd pool create uses",
+        "config", "rw")
+COMMAND("osd pool default get",
+        "show the defaults that ceph osd pool create uses",
+        "config", "r")
 
 /* NVMeofGwMon*/
 COMMAND("nvme-gw create"

@@ -96,6 +96,12 @@ add_executable(unittest_monmap_monitor
   )
 add_ceph_unittest(unittest_monmap_monitor)
 target_link_libraries(unittest_monmap_monitor mon global)
+# unittest_osd_monitor
+add_executable(unittest_osd_monitor
+  test_osd_monitor.cc
+  )
+add_ceph_unittest(unittest_osd_monitor)
+target_link_libraries(unittest_osd_monitor mon global)
 
 # unittest_mon_health_monitor
 add_executable(unittest_mon_health_monitor
@@ -103,3 +109,19 @@ add_executable(unittest_mon_health_monitor
   )
 add_ceph_unittest(unittest_mon_health_monitor)
 target_link_libraries(unittest_mon_health_monitor mon global)
+
+# unittest_pool_defaults
+add_executable(unittest_pool_defaults
+  test_pool_defaults.cc
+  )
+add_ceph_unittest(unittest_pool_defaults)
+target_link_libraries(unittest_pool_defaults global)
+
+# unittest_pool_create_params
+add_executable(unittest_pool_create_params
+  test_pool_create_params.cc
+  ${CMAKE_SOURCE_DIR}/src/mon/ConfigMap.cc
+  ${CMAKE_SOURCE_DIR}/src/mon/PoolCreateParams.cc
+  )
+add_ceph_unittest(unittest_pool_create_params)
+target_link_libraries(unittest_pool_create_params global)

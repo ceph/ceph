@@ -191,7 +191,7 @@ ConfigMap::generate_entity_map(
       }
       out[i.first] = o.raw_value;
       if (src) {
-	(*src).emplace(i.first, ConfigMap::ValueSource(s.first, &o));
+        (*src).insert_or_assign(i.first, ConfigMap::ValueSource(s.first, &o));
       }
       prev = &o;
     }
