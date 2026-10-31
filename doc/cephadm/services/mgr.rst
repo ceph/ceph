@@ -21,7 +21,7 @@ example spec file (leveraging a default placement):
 
     service_type: mgr
     networks:
-    - 192.169.142.0/24
+    - 192.168.142.0/24
 
 .. _cephadm_mgr_co_location:
 
