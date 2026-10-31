@@ -937,6 +937,8 @@ ID, as in the following example command:
    radosgw-admin usage show --show-log-entries=false
 
 
+.. _rgw-trim-usage:
+
 Trim Usage
 ----------
 
