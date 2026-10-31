@@ -62,6 +62,10 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
     l_osd_op_delayed_degraded, "op_delayed_degraded",
     "Count of ops delayed due to target object being degraded");
+  osd_plb.add_u64_counter(
+    l_osd_ec_read_repair, "ec_read_repair",
+    "Count of erasure-coded shards marked missing for recovery after a "
+    "client read decoded around their media error");
 
   osd_plb.add_u64_counter(
     l_osd_op_r, "op_r", "Client read operations");

@@ -16051,6 +16051,128 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
   return -EAGAIN;
 }
 
+void PrimaryLogPG::ec_repair_on_read(
+  const hobject_t& soid,
+  const std::set<pg_shard_t>& shards)
+{
+  dout(10) << __func__ << " " << soid << " media errors on shards "
+	   << shards << dendl;
+  // The client read is served from the decode whatever happens here.
+  // A shard left alone is found again by the next read of the object,
+  // or by a deep scrub with repair.
+  if (!cct->_conf->osd_ec_repair_on_read) {
+    dout(10) << __func__ << " osd_ec_repair_on_read is off" << dendl;
+    return;
+  }
+  if (!is_primary() || !is_active()) {
+    dout(10) << __func__ << " not an active primary" << dendl;
+    return;
+  }
+  if (!is_clean()) {
+    // only from a clean PG, as rep_repair_primary_object. A recovery or
+    // backfill that has just finished may have queued the event that
+    // takes the PG to Recovered, which asserts nothing is missing; and
+    // marking our own copy rewinds last_complete, which Clean requires
+    // to be current
+    dout(10) << __func__ << " not clean, leaving " << soid << dendl;
+    return;
+  }
+  if (is_scrub_active()) {
+    // a scrub compares what the shards hold: leave them alone under it
+    dout(10) << __func__ << " scrub active, leaving " << soid << dendl;
+    return;
+  }
+  if (is_missing_object(soid) || recovering.count(soid)) {
+    // a recovery of the object that completes drops it from missing_loc
+    // whatever else is missing: a shard marked now would be left missing
+    // with nothing to recover it
+    dout(10) << __func__ << " " << soid << " is already being recovered"
+	     << dendl;
+    return;
+  }
+  ObjectContextRef obc = get_object_context(soid, false);
+  if (!obc || !obc->obs.exists) {
+    dout(10) << __func__ << " no object context for " << soid << dendl;
+    return;
+  }
+  if (obc->rwstate.state == RWState::RWWRITE ||
+      obc->rwstate.state == RWState::RWEXCL) {
+    // a write holds the object (this may be its read-modify-write read)
+    // and will move it past the version known here
+    dout(10) << __func__ << " " << soid << " has a write in flight" << dendl;
+    return;
+  }
+  const eversion_t v = obc->obs.oi.version;
+
+  // Recovery rebuilds a shard from a read of the whole object on the
+  // others, where this read may have covered only part of it, and a
+  // recovery read that fails marks its sources missing as well
+  // (on_failed_pull). Repair only while, without every shard this read
+  // found damaged, one shard more than a decode needs holds the object,
+  // so that a latent error the recovery runs into costs a retry rather
+  // than leaving the object unfound. A pool with m=1 never repairs here.
+  const unsigned need = pgbackend->get_ec_data_chunk_count() + 1;
+  unsigned left = 0;
+  for (auto &&shard : get_actingset()) {
+    if (auto m = maybe_get_shard_missing(shard);
+	!shards.contains(shard) && m && !m->is_missing(soid)) {
+      ++left;
+    }
+  }
+  if (left < need) {
+    dout(10) << __func__ << " " << left << " other shards hold " << soid
+	     << ", a repair needs " << need << ": leaving it" << dendl;
+    return;
+  }
+
+  std::set<pg_shard_t> bad;
+  for (auto &&shard : shards) {
+    if (!get_acting_recovery_backfill().contains(shard)) {
+      dout(10) << __func__ << " shard " << shard << " left the acting set"
+	       << dendl;
+      continue;
+    }
+    if (auto m = maybe_get_shard_missing(shard);
+	!m || m->is_missing(soid)) {
+      continue;
+    }
+    if (shard == pg_whoami && obc->rwstate.waiters > 0) {
+      // recovering our own copy takes a read lock on the object, and
+      // asserts it gets it (on_local_recover), which an op queued on the
+      // object denies. Once the object is unreadable new ops wait for it
+      // elsewhere, so only the ops queued now are in the way.
+      dout(10) << __func__ << " ops wait on " << soid
+	       << ", leaving our own shard" << dendl;
+      continue;
+    }
+    bad.insert(shard);
+  }
+  if (bad.empty()) {
+    return;
+  }
+  for (auto &&shard : bad) {
+    osd->clog->warn() << info.pgid << " shard " << shard << " failed to read "
+		      << soid << " v " << v << " with a media error; marking"
+		      << " it missing to repair it from the other shards";
+  }
+  osd->logger->inc(l_osd_ec_read_repair, bad.size());
+  // as a replicated read repair: the pushes count as repairs on the
+  // shards that take them (num_shards_repaired, OSD_TOO_MANY_REPAIRS)
+  state_set(PG_STATE_REPAIR);
+  state_clear(PG_STATE_CLEAN);
+  recovery_state.force_object_missing(bad, soid, v);
+  // recover it now, at high priority and without a reservation, as a
+  // write to the degraded object would; the recovery DoRecovery starts
+  // retries what the kick could not finish and returns the PG to clean
+  maybe_kick_recovery(soid);
+  queue_peering_event(
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
+	get_osdmap_epoch(),
+	get_osdmap_epoch(),
+	PeeringState::DoRecovery())));
+}
+
 /*---SnapTrimmer Logging---*/
 #undef dout_prefix
 #define dout_prefix pg->gen_prefix(*_dout)

@@ -39,6 +39,7 @@ enum osd_counter_idx_t {
 
   l_osd_op_delayed_unreadable,
   l_osd_op_delayed_degraded,
+  l_osd_ec_read_repair,
 
   l_osd_op_before_queue_op_lat,
   l_osd_op_before_dequeue_op_lat,
