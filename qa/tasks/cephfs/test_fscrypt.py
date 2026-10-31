@@ -369,7 +369,7 @@ class TestFSCryptRMW(FSCryptTestCase):
 
         self.strided_tests(fscrypt_block_size, write_size, num_writes, shared_file, fill)
 
-class TestFSCryptVolumes(CephFSTestCase):
+class _FSCryptVolumeTestCase(CephFSTestCase):
     MDSS_REQUIRED = 2
 
     def setUp(self):
@@ -432,6 +432,7 @@ class TestFSCryptVolumes(CephFSTestCase):
     def _wait_for_clone_to_complete(self, volname, clone, clone_group=None, timo=120):
         self.__check_clone_state("complete", volname, clone, clone_group, timo)
 
+class TestFSCryptVolumes(_FSCryptVolumeTestCase):
     def test_fscrypt_snap(self):
         """ Test that snapshot names are not encrypted """
 
@@ -552,8 +553,12 @@ class TestFSCryptVolumes(CephFSTestCase):
         self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {src_path}")
         self.mount_a.compare_trees(src_path, dst_path)
 
+class TestFSCryptBackup(_FSCryptVolumeTestCase):
     def test_fscrypt_backup(self):
         """ Test that an fscrypt tree can be backed up """
+        # ceph-fuse getxattr/setxattr are inode-based. One parent is the
+        # dentry whose alternate_name is copied, so this tree has no hardlinks.
+
         v = "cephfs"
         sv = "sv1"
         sv2= "sv2"

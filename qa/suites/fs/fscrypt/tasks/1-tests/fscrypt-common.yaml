@@ -12,5 +12,9 @@ tasks:
   - cephfs_test_runner:
       fail_on_skip: false
       modules:
-        - tasks.cephfs.test_fscrypt
+        - tasks.cephfs.test_fscrypt.TestFSCrypt
+        - tasks.cephfs.test_fscrypt.TestFSCryptRecovery
+        - tasks.cephfs.test_fscrypt.TestFSCryptRMW
+        - tasks.cephfs.test_fscrypt.TestFSCryptVolumes
+        - tasks.cephfs.test_fscrypt.TestFSCryptXFS
  
