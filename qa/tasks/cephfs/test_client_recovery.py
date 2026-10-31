@@ -16,7 +16,7 @@ import unittest
 
 from teuthology import contextutil
 from teuthology.orchestra import run
-from teuthology.exceptions import CommandFailedError
+from teuthology.exceptions import CommandFailedError, CommandCrashedError
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.packaging import get_package_version
@@ -436,6 +436,177 @@ class TestClientRecovery(CephFSTestCase):
 
         # Bring the client back
         self.mount_a.mount_wait()
+
+    def _test_lock_intr_after_grant(self, do_flock):
+        """
+        A blocked lock request is interrupted after the MDS has granted it
+        but before the client has seen the grant. The MDS keeps the lock
+        (an interrupt only cancels a waiting lock), so the client must
+        honour the grant. Otherwise the lock is orphaned on the MDS: the
+        process that asked for it is gone and nothing ever unlocks it.
+
+        The holder and the waiter run on the same mount so that the
+        holder's unlock and the waiter's interrupt travel on one MDS
+        session. With the MDS stopped, both queue up in order. When it
+        resumes, the unlock grants the lock to the waiter before the
+        interrupt is processed.
+        """
+        if do_flock and not self._is_flockable():
+            self.skipTest("flock is not available")
+
+        name = "intr_after_grant"
+        path = os.path.join(self.mount_a.hostfs_mntpt, name)
+        self.mount_a.write_n_mb(name, 1)
+        self.mount_b.wait_for_visible(name)
+
+        # trigger files live on mount_a's host, outside of cephfs, so that
+        # they work while the MDS is stopped
+        tmpdir = self.mount_a.run_shell(['mktemp', '-d'], cwd='/').stdout.getvalue().strip()
+        ready = os.path.join(tmpdir, "holder_ready")
+        unlock = os.path.join(tmpdir, "holder_unlock")
+        done = os.path.join(tmpdir, "holder_done")
+        pidfile = os.path.join(tmpdir, "waiter_pid")
+
+        if do_flock:
+            lock_nb = "fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)"
+            lock_wait = "fcntl.flock(fd, fcntl.LOCK_EX)"
+            unlock_op = "fcntl.flock(fd, fcntl.LOCK_UN)"
+        else:
+            # taken from mount.py
+            lock_nb = "fcntl.fcntl(fd, fcntl.F_SETLK, struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 0, 0, 0))"
+            lock_wait = "fcntl.fcntl(fd, fcntl.F_SETLKW, struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 0, 0, 0))"
+            unlock_op = "fcntl.fcntl(fd, fcntl.F_SETLK, struct.pack('hhllhh', fcntl.F_UNLCK, 0, 0, 0, 0, 0))"
+
+        # holder: take the lock, release it on trigger, then keep the file
+        # open so that the client keeps its caps on the inode (releasing
+        # the last cap drops all of the client's locks and hides the bug)
+        holder_script = dedent("""
+            import fcntl, os, struct, sys, time
+            fd = os.open("{path}", os.O_RDWR)
+            {lock_nb}
+            open("{ready}", 'w').close()
+            while not os.path.exists("{unlock}"):
+                time.sleep(0.1)
+            {unlock_op}
+            print("holder: unlocked", file=sys.stderr)
+            while not os.path.exists("{done}"):
+                time.sleep(0.5)
+            os.close(fd)
+            """).format(path=path, lock_nb=lock_nb, unlock_op=unlock_op,
+                        ready=ready, unlock=unlock, done=done)
+
+        # waiter: block on the lock until killed
+        waiter_script = dedent("""
+            import fcntl, os, struct, sys
+            fd = os.open("{path}", os.O_RDWR)
+            with open("{pidfile}", 'w') as f:
+                f.write(str(os.getpid()))
+            {lock_wait}
+            print("waiter: got lock", file=sys.stderr)
+            """).format(path=path, lock_wait=lock_wait, pidfile=pidfile)
+
+        # checker (on mount_b): is anybody still holding a lock?
+        check_path = os.path.join(self.mount_b.hostfs_mntpt, name)
+        check_script = dedent("""
+            import errno, fcntl, os, struct
+            fd = os.open("{path}", os.O_RDWR)
+            try:
+                {lock_nb}
+            except OSError as e:
+                if e.errno in (errno.EAGAIN, errno.EACCES):
+                    print("locked")
+                else:
+                    raise
+            else:
+                {unlock_op}
+                print("unlocked")
+            """).format(path=check_path, lock_nb=lock_nb, unlock_op=unlock_op)
+
+        def file_exists(p):
+            return self.mount_a.run_shell(['test', '-e', p], cwd='/',
+                                          check_status=False).exitstatus == 0
+
+        def waiter_blocked():
+            ops = self.fs.rank_asok(['dump_ops_in_flight'])['ops']
+            for op in ops:
+                if 'setfilelock' not in op['description']:
+                    continue
+                events = op['type_data']['events']
+                if any(e['event'] == "failed to add lock, waiting" for e in events):
+                    return True
+            return False
+
+        mds_id = self.fs.get_rank(rank=0)['name']
+        mds_frozen = False
+        mds_stopped = False
+        holder = self.mount_a._run_python(holder_script)
+        self.mount_a.background_procs.append(holder)
+        waiter = None
+        try:
+            self.wait_until_true(lambda: file_exists(ready), timeout=30)
+
+            # not added to background_procs: the waiter is killed on
+            # purpose and is reaped below
+            waiter = self.mount_a._run_python(waiter_script)
+            self.wait_until_true(waiter_blocked, timeout=30)
+            waiter_pid = self.mount_a.run_shell(['cat', pidfile], cwd='/').stdout.getvalue().strip()
+
+            # stop the MDS so that the unlock and the interrupt queue up
+            # behind each other on mount_a's session. Freeze the rank first
+            # so that the monitor does not replace the stopped MDS.
+            self.fs.rank_freeze(True, rank=0)
+            mds_frozen = True
+            self.fs.mds_signal(mds_id, signal.SIGSTOP)
+            mds_stopped = True
+
+            # holder sends the unlock; it blocks until the MDS resumes
+            self.mount_a.run_shell(['touch', unlock], cwd='/')
+            time.sleep(1)
+
+            # kill the waiter: the client sends the interrupt request,
+            # queued behind the unlock
+            self.mount_a.run_shell(['kill', '-KILL', waiter_pid], cwd='/')
+            time.sleep(2)
+
+            self.fs.mds_signal(mds_id, signal.SIGCONT)
+            mds_stopped = False
+
+            self.wait_until_true(lambda: waiter.finished, timeout=30)
+            # the holder has unlocked and the waiter is dead, so nobody
+            # holds the lock
+            result = self.mount_b.run_python(check_script)
+            self.assertEqual(result, "unlocked",
+                             "lock orphaned on the MDS after the waiter was "
+                             "interrupted (the client dropped the grant)")
+        finally:
+            if mds_stopped:
+                self.fs.mds_signal(mds_id, signal.SIGCONT)
+            if mds_frozen:
+                self.fs.rank_freeze(False, rank=0)
+            self.mount_a.run_shell(['touch', done], cwd='/')
+            self.wait_until_true(lambda: holder.finished, timeout=30)
+            if waiter is not None:
+                if not waiter.finished:
+                    waiter.stdin.close()
+                try:
+                    waiter.wait()
+                except (CommandFailedError, CommandCrashedError):
+                    pass
+            self.mount_a.run_shell(['rm', '-rf', tmpdir], cwd='/')
+
+    def test_filelock_intr_after_grant(self):
+        """
+        fcntl lock: interrupting a blocked request whose grant is in
+        flight must not orphan the lock on the MDS.
+        """
+        self._test_lock_intr_after_grant(do_flock=False)
+
+    def test_flock_intr_after_grant(self):
+        """
+        flock lock: interrupting a blocked request whose grant is in
+        flight must not orphan the lock on the MDS.
+        """
+        self._test_lock_intr_after_grant(do_flock=True)
 
     def test_dir_fsync(self):
         self._test_fsync(True);
