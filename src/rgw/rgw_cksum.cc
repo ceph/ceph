@@ -147,9 +147,16 @@ namespace rgw::cksum {
   std::unique_ptr<Combiner> CombinerFactory(cksum::Type t, uint16_t flags)
   {
     switch(t) {
+    case cksum::Type::crc64nvme:
+      /* full-object only */
+      return std::unique_ptr<Combiner>(new CRCCombiner(t));
     case cksum::Type::crc32:
     case cksum::Type::crc32c:
-    case cksum::Type::crc64nvme:
+      /* Honor multipart checksum-type: COMPOSITE digests part checksums;
+       * FULL_OBJECT (or legacy callers with no type flag) CRC-combines. */
+      if (flags & Cksum::FLAG_COMPOSITE) {
+	return std::unique_ptr<Combiner>(new DigestCombiner(t));
+      }
       return std::unique_ptr<Combiner>(new CRCCombiner(t));
     default:
       return std::unique_ptr<Combiner>(new DigestCombiner(t));
