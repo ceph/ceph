@@ -1987,3 +1987,125 @@ INSTANTIATE_TEST_SUITE_P(
   }
 );
 
+
+// ---------------------------------------------------------------------------
+// Omap updates on EC pools across shard failure and recovery
+// ---------------------------------------------------------------------------
+
+class TestECOmapRecovery : public TestECFailoverWithPeering {
+public:
+  // Writes advance pg_committed_to, so later writes roll earlier ones forward
+  TestECOmapRecovery() { enable_log_trimming = true; }
+
+  const std::string data = std::string(4096, 'o');
+
+  // Primary-capable shards, the only ones that store omap
+  std::vector<int> omap_shards()
+  {
+    std::vector<int> shards;
+    for (int shard = 0; shard < k + m; shard++) {
+      if (!get_pool().is_nonprimary_shard(shard_id_t(shard))) {
+        shards.push_back(shard);
+      }
+    }
+    return shards;
+  }
+
+  void setup_object(const std::string& obj)
+  {
+    ASSERT_EQ(0, create_and_write(obj, data));
+    ASSERT_EQ(0, write_omap(obj, {{"a", "1"}, {"b", "2"}, {"c", "3"}, {"d", "4"}}, {}));
+    ASSERT_EQ(0, write_omap(obj, {{"e", "5"}}, {}));
+  }
+
+  // After later writes roll the removal forward, every omap shard must have
+  // lost a and b and kept c.
+  void check_removed(const std::string& obj)
+  {
+    ASSERT_EQ(0, write_omap(obj, {{"f", "6"}}, {}));
+    ASSERT_EQ(0, write_omap(obj, {{"g", "7"}}, {}));
+    for (int shard : omap_shards()) {
+      auto keys = get_shard_omap_keys(obj, shard);
+      EXPECT_FALSE(keys.contains("a") || keys.contains("b"))
+        << "shard " << shard << " still has removed keys: " << keys;
+      EXPECT_TRUE(keys.contains("c"))
+        << "shard " << shard << " lost key c: " << keys;
+    }
+  }
+};
+
+namespace {
+
+std::vector<BackendConfig> ec_omap_configs()
+{
+  std::vector<BackendConfig> configs;
+  for (auto config : kECPeeringConfigs) {
+    config.pool_flags |= pg_pool_t::FLAG_OMAP;
+    configs.push_back(config);
+  }
+  return configs;
+}
+
+}  // namespace
+
+// Keys are removed while a parity shard is down; it returns and is recovered.
+TEST_P(TestECOmapRecovery, RemoveKeysWhileShardDownThenRecover) {
+  const std::string obj = "omap_recover";
+  setup_object(obj);
+  mark_osd_down(k);
+  ASSERT_EQ(0, write_omap(obj, {}, {"a", "b"}));
+  mark_osd_up(k);
+  run_recovery(obj, false, data);
+  check_removed(obj);
+}
+
+// Keys are removed while the primary is down; it returns and is recovered.
+TEST_P(TestECOmapRecovery, RemoveKeysWhilePrimaryDownThenRecover) {
+  const std::string obj = "omap_primary";
+  setup_object(obj);
+  mark_osd_down(0);
+  ASSERT_EQ(0, write_omap(obj, {}, {"a", "b"}));
+  mark_osd_up(0);
+  ASSERT_EQ(0, get_primary_shard_from_osdmap());
+  run_recovery(obj, true, data);
+  check_removed(obj);
+}
+
+// Keys are set and removed while the primary is down. The primary returns to
+// a PG that can only peer (too few shards for min_size), recovers itself
+// there, and the PG later goes active.
+TEST_P(TestECOmapRecovery, SetKeysWhilePrimaryDownThenRecoverWhilePeered) {
+  if (m < 2) {
+    GTEST_SKIP() << "needs m >= 2";
+  }
+  const std::string obj = "omap_peered";
+  const unsigned min_size = get_min_size();
+  setup_object(obj);
+  mark_osd_down(0);
+  ASSERT_EQ(0, write_omap(obj, {{"x", "1"}, {"y", "2"}}, {"a", "b"}));
+  set_pool_min_size(k + m);
+  mark_osd_down(k);
+  mark_osd_up(0);
+  ASSERT_EQ(0, get_primary_shard_from_osdmap());
+  run_recovery(obj, true, data);
+  set_pool_min_size(min_size);
+  ASSERT_EQ(0, write_omap(obj, {{"z", "3"}}, {}));
+  ASSERT_EQ(0, write_omap(obj, {{"z", "4"}}, {}));
+  for (int shard : omap_shards()) {
+    if (shard == k) {
+      continue;
+    }
+    auto keys = get_shard_omap_keys(obj, shard);
+    keys.erase("z");
+    EXPECT_EQ((std::set<std::string>{"c", "d", "e", "x", "y"}), keys) << "shard " << shard;
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  ECConfigs,
+  TestECOmapRecovery,
+  ::testing::ValuesIn(ec_omap_configs()),
+  [](const ::testing::TestParamInfo<BackendConfig>& info) {
+    return info.param.label;
+  }
+);
