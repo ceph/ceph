@@ -13,7 +13,7 @@ from ..services.exception import handle_send_command_error
 from ..services.rbd import RbdConfiguration, RbdMirroringService
 from ..tools import TaskManager, str_to_bool
 from . import APIDoc, APIRouter, Endpoint, EndpointDoc, ReadPermission, \
-    RESTController, Task, UIRouter
+    RESTController, Task, UIRouter, UpdatePermission, allow_empty_body
 from .rbd_mirroring import RbdMirroringPoolMode
 
 POOL_SCHEMA = ([{
@@ -217,6 +217,88 @@ class Pool(RESTController):
             self._set_mirroring_mode(rbd_mirroring, pool)
         self._wait_for_pgs(pool)
 
+    @RESTController.Resource(method='POST', path='/migrate', status=201)
+    @EndpointDoc("Migrate a pool",
+                 parameters={
+                     'pool_name': (str, 'Pool name'),
+                     'pg_num': (int, 'Number of PGs'),
+                     'pgp_num': (int, 'Number of PGs for placement'),
+                     'pool_type': (str, 'Pool type (replicated or erasure)'),
+                     'erasure_code_profile': (str, 'Erasure code profile name'),
+                     'rule': (str, 'CRUSH rule name'),
+                     'expected_num_objects': (int, 'Expected number of objects'),
+                     'size': (int, 'Replica count'),
+                     'pg_num_min': (int, 'Minimum number of PGs'),
+                     'pg_num_max': (int, 'Maximum number of PGs'),
+                     'autoscale_mode': (str, 'PG autoscale mode'),
+                     'bulk': (bool, 'Bulk pool flag'),
+                     'target_size_bytes': (int, 'Target size in bytes'),
+                     'target_size_ratio': (float, 'Target size ratio'),
+                     'force_pg_limit': (bool, 'Force PG limit'),
+                     'yes_i_really_mean_it': (bool, 'Confirmation flag'),
+                     'crimson': (bool, 'Crimson OSD flag'),
+                     'enable_ec_optimizations': (bool, 'Enable EC optimizations'),
+                     'application_metadata': ([str], 'Application metadata'),
+                     'flags': ([str], 'Pool flags'),
+                 })
+    @pool_task('migrate', ['{pool_name}'])
+    @handle_send_command_error('pool')
+    @allow_empty_body
+    def migrate(self, pool_name, pg_num=None, pgp_num=None, pool_type=None,
+                erasure_code_profile=None, rule=None, expected_num_objects=None,
+                size=None, pg_num_min=None, pg_num_max=None, autoscale_mode=None,
+                bulk=None, target_size_bytes=None, target_size_ratio=None,
+                force_pg_limit=None, yes_i_really_mean_it=None, crimson=None,
+                enable_ec_optimizations=None,
+                application_metadata=None, flags=None, **kwargs):
+        """
+        Migrate a pool to a new pool with the given parameters while keeping the
+        same name. Accepts the same parameters as pool creation; any parameter
+        left unset keeps its default. See the 'osd pool migrate' mon command.
+
+        After issuing the migrate command, pool metadata (applications,
+        compression, quotas) is applied to the target pool via _set_pool_values,
+        matching the behaviour of the create endpoint.
+        """
+        params = {
+            'pg_num': pg_num,
+            'pgp_num': pgp_num,
+            'pool_type': pool_type,
+            'erasure_code_profile': erasure_code_profile,
+            'rule': rule,
+            'expected_num_objects': expected_num_objects,
+            'size': size,
+            'pg_num_min': pg_num_min,
+            'pg_num_max': pg_num_max,
+            'autoscale_mode': autoscale_mode,
+            'bulk': bulk,
+            'target_size_bytes': target_size_bytes,
+            'target_size_ratio': target_size_ratio,
+            'force_pg_limit': force_pg_limit,
+            'yes_i_really_mean_it': yes_i_really_mean_it,
+            'crimson': crimson,
+            'enable_ec_optimizations': enable_ec_optimizations,
+        }
+        int_params = ['pg_num', 'pgp_num', 'expected_num_objects', 'size',
+                      'pg_num_min', 'pg_num_max', 'target_size_bytes']
+        bool_params = ['bulk', 'force_pg_limit', 'yes_i_really_mean_it',
+                       'crimson', 'enable_ec_optimizations']
+        cmd_args = {}
+        for key, value in params.items():
+            if value is None:
+                continue
+            if key in int_params:
+                cmd_args[key] = int(value)
+            elif key in bool_params:
+                cmd_args[key] = str_to_bool(value)
+            elif key == 'target_size_ratio':
+                cmd_args[key] = float(value)
+            else:
+                cmd_args[key] = value
+        CephService.send_command('mon', 'osd pool migrate', pool=pool_name,
+                                 **cmd_args)
+        self._set_pool_values(pool_name, application_metadata, flags, False, kwargs)
+
     def _set_mirroring_mode(self, mirroring_enabled, pool):
         rbd_mirroring = RbdMirroringPoolMode()
         if str_to_bool(mirroring_enabled):
@@ -375,12 +457,14 @@ class PoolUi(Pool):
                 used_profiles[profile] = [name]
 
         mgr_config = mgr.get('config')
+        osd_map = mgr.get('osd_map')
+        osd_map_dump = mgr.get_osdmap().dump()
         return {
             "pool_names": pool_names,
             "crush_rules_replicated": rules(1),
             "crush_rules_erasure": rules(3),
             "is_all_bluestore": all_bluestore(),
-            "osd_count": len(mgr.get('osd_map')['osds']),
+            "osd_count": len(osd_map['osds']),
             "bluestore_compression_algorithm": mgr_config['bluestore_compression_algorithm'],
             "compression_algorithms": get_config_option_enum('bluestore_compression_algorithm'),
             "compression_modes": get_config_option_enum('bluestore_compression_mode'),
@@ -389,8 +473,24 @@ class PoolUi(Pool):
             "erasure_code_profiles": profiles,
             "used_rules": used_rules,
             "used_profiles": used_profiles,
-            'nodes': mgr.get('osd_map_tree')['nodes']
+            'nodes': mgr.get('osd_map_tree')['nodes'],
+            'require_min_compat_client': osd_map_dump.get('require_min_compat_client', ''),
+            'require_osd_release': osd_map_dump.get('require_osd_release', ''),
         }
+
+    @Endpoint(method='POST')
+    @UpdatePermission
+    @handle_send_command_error('pool')
+    def set_min_compat_client(self, release: str,
+                              yes_i_really_mean_it: bool = False):
+        """Set require_min_compat_client to the given release.
+
+        This is an irreversible cluster-wide change that will reject
+        connections from clients older than *release*.
+        """
+        CephService.send_command('mon', 'osd set-require-min-compat-client',
+                                 version=release,
+                                 yes_i_really_mean_it=yes_i_really_mean_it)
 
 
 class RBDPool(Pool):

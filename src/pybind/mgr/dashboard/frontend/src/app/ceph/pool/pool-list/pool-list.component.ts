@@ -1,7 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, forkJoin } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
@@ -29,10 +29,13 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { mapPoolApplications, Pool, PoolType, transformPgStatus } from '../pool';
+import { isReleaseAtLeast, mapPoolApplications, Pool, PoolType, transformPgStatus } from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { Router } from '@angular/router';
+
+const EXPERIMENTAL_CONFIG = 'enable_experimental_unrecoverable_data_corrupting_features';
 
 const BASE_URL = 'pool';
 const POOL_CONFIG = 'mon_allow_pool_delete';
@@ -77,6 +80,11 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   monAllowPoolDelete$ = new BehaviorSubject<boolean>(false);
   ecProfileList: ErasureCodeProfile[] = [];
   viewUrl = '/pool/view';
+  migrationPreconditions = {
+    experimentalFlag: false,
+    minCompatClient: false,
+    osdRelease: false
+  };
 
   constructor(
     private poolService: PoolService,
@@ -88,7 +96,8 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     private pgCategoryService: PgCategoryService,
     private urlBuilder: URLBuilderService,
     private configurationService: ConfigurationService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private router: Router
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -104,13 +113,22 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         icon: Icons.edit,
         routerLink: () =>
           this.urlBuilder.getEdit(encodeURIComponent(this.selection.first().pool_name)),
-        name: this.actionLabels.EDIT
+        name: this.actionLabels.EDIT,
+        disable: (s: CdTableSelection) => this.getDisabledExecutingReason(s)
+      },
+      {
+        permission: 'create',
+        icon: Icons.exchange,
+        click: () => this.migratePool(),
+        name: this.actionLabels.MIGRATE,
+        disable: (s: CdTableSelection) => this.getDisabledMigrateReason(s)
       },
       {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deletePoolModal(),
-        name: this.actionLabels.DELETE
+        name: this.actionLabels.DELETE,
+        disable: (s: CdTableSelection) => this.getDisabledExecutingReason(s)
       }
     ];
 
@@ -129,6 +147,8 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   }
 
   ngOnInit() {
+    this.checkMigrationPreconditions();
+
     this.columns = [
       {
         prop: 'pool_name',
@@ -223,6 +243,11 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     });
   }
 
+  migratePool() {
+    const poolName = this.selection.first().pool_name;
+    this.router.navigate([`/pool/${URLVerbs.MIGRATE}`, encodeURIComponent(poolName)]);
+  }
+
   enablePoolDeletion() {
     this.configurationService
       .create({
@@ -275,12 +300,18 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       pool['stats'] = stats;
       pool['usage'] = stats.percent_used?.latest ?? 0;
 
-      if (
-        !pool.cdExecuting &&
-        pool.pg_num + pool.pg_placement_num !== pool.pg_num_target + pool.pg_placement_num_target
-      ) {
-        pool['cdExecuting'] = 'Updating';
+      if (!pool.cdExecuting) {
+        if (pool.migration_src != null || pool.migration_target != null) {
+          pool['cdExecuting'] = 'Migrating';
+        } else if (
+          pool.pg_num + pool.pg_placement_num !==
+          pool.pg_num_target + pool.pg_placement_num_target
+        ) {
+          pool['cdExecuting'] = 'Updating';
+        }
       }
+
+      pool['migrationTag'] = this.getMigrationTag(pool);
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
         const statData = pool.stats?.[stat] || emptyStat;
@@ -314,5 +345,93 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   setExpandedRow(expandedRow: any) {
     super.setExpandedRow(expandedRow);
     this.getSelectionTiers();
+  }
+
+  private getDisabledExecutingReason(selection: CdTableSelection): boolean | string {
+    if (!selection.hasSingleSelection) {
+      return true;
+    }
+    const pool = selection.first();
+    if (pool.cdExecuting === 'Migrating') {
+      return $localize`Actions are disabled while pool migration is in progress`;
+    }
+    return pool.cdExecuting ? true : false;
+  }
+
+  private getDisabledMigrateReason(selection: CdTableSelection): boolean | string {
+    const executingReason = this.getDisabledExecutingReason(selection);
+    if (executingReason) {
+      return executingReason;
+    }
+
+    const pool = selection.first();
+    const reasons: string[] = [];
+
+    if (!this.migrationPreconditions.experimentalFlag) {
+      reasons.push($localize`Pool migration experimental flag is not enabled`);
+    }
+    if (!this.migrationPreconditions.minCompatClient) {
+      reasons.push($localize`Minimum compatible client must be umbrella or later`);
+    }
+    if (!this.migrationPreconditions.osdRelease) {
+      reasons.push($localize`OSD release must be umbrella or later`);
+    }
+
+    const pgStable =
+      pool.pg_num === pool.pg_num_target && pool.pg_placement_num === pool.pg_placement_num_target;
+    if (!pgStable) {
+      reasons.push($localize`PG autoscaling is still in progress`);
+    }
+
+    if (reasons.length > 0) {
+      return reasons.join('\n');
+    }
+
+    return false;
+  }
+
+  private checkMigrationPreconditions(): void {
+    forkJoin([
+      this.configurationService.get(EXPERIMENTAL_CONFIG),
+      this.poolService.getInfo()
+    ]).subscribe(([expConfig, info]: [any, any]) => {
+      const globalVal = this.configurationService.getValue(expConfig, 'global');
+      if (globalVal && typeof globalVal === 'string') {
+        this.migrationPreconditions.experimentalFlag =
+          globalVal === '*' ||
+          globalVal
+            .split(',')
+            .map((s: string) => s.trim())
+            .includes('poolmigration');
+      }
+
+      const requireMinCompatClient = info?.require_min_compat_client || '';
+      this.migrationPreconditions.minCompatClient = isReleaseAtLeast(
+        requireMinCompatClient,
+        'umbrella'
+      );
+
+      const requireOsdRelease = info?.require_osd_release || '';
+      this.migrationPreconditions.osdRelease = isReleaseAtLeast(requireOsdRelease, 'umbrella');
+    });
+  }
+
+  private getMigrationTag(pool: Pool): { label: string; cssClass: string } | null {
+    const hasMigrationError = pool['pg_status']
+      ?.toString()
+      .match(/migration_(toofull|unfound|error)/);
+
+    if (pool.migration_src != null || pool.migration_target != null) {
+      if (hasMigrationError) {
+        return { label: $localize`Migration Error`, cssClass: 'tag-danger' };
+      }
+      return { label: $localize`Migrating`, cssClass: 'tag-info' };
+    }
+
+    if (pool.pool_name?.startsWith('.migrate-')) {
+      return { label: $localize`Migration Stub`, cssClass: 'tag-background-gray' };
+    }
+
+    return null;
   }
 }

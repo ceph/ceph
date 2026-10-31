@@ -1,0 +1,4 @@
+// Migration progress card reuses the shared pool overview card layout.
+@use '../pool-resource-overview-card' as pool-resource-overview-card;
+
+@include pool-resource-overview-card.base();
