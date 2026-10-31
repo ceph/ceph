@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <list>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -47,7 +46,7 @@ struct RGWOIDCProviderInfo
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWOIDCProviderInfo> generate_test_instances();
+  static std::vector<RGWOIDCProviderInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWOIDCProviderInfo)
 

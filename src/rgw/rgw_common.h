@@ -830,7 +830,7 @@ struct RGWUserInfo
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<RGWUserInfo> generate_test_instances();
+  static std::vector<RGWUserInfo> generate_test_instances();
 
   void decode_json(JSONObj *obj);
 };
@@ -896,7 +896,7 @@ struct RGWAccountInfo {
 
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
-  static std::list<RGWAccountInfo> generate_test_instances();
+  static std::vector<RGWAccountInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWAccountInfo)
 
@@ -930,7 +930,7 @@ struct RGWGroupInfo {
 
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
-  static std::list<RGWGroupInfo> generate_test_instances();
+  static std::vector<RGWGroupInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWGroupInfo)
 
@@ -1141,7 +1141,7 @@ struct RGWBucketInfo {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static std::list<RGWBucketInfo> generate_test_instances();
+  static std::vector<RGWBucketInfo> generate_test_instances();
 
   void decode_json(JSONObj *obj);
 
@@ -1240,7 +1240,7 @@ struct RGWBucketEntryPoint
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWBucketEntryPoint> generate_test_instances();
+  static std::vector<RGWBucketEntryPoint> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 
@@ -1574,7 +1574,7 @@ struct RGWBucketEnt {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<RGWBucketEnt> generate_test_instances();
+  static std::vector<RGWBucketEnt> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWBucketEnt)
 
@@ -1640,8 +1640,8 @@ struct multipart_upload_info
     dest_placement.dump(f);
   }
 
-  static std::list<multipart_upload_info> generate_test_instances() {
-    std::list<multipart_upload_info> o;
+  static std::vector<multipart_upload_info> generate_test_instances() {
+    std::vector<multipart_upload_info> o;
     o.emplace_back();
     o.emplace_back();
     o.back().dest_placement.name = "dest_placement";

@@ -32,7 +32,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
-using std::list;
+using std::deque;
 using std::make_pair;
 using std::ostream;
 using std::pair;
@@ -56,7 +56,7 @@ void OpHistoryServiceThread::break_thread() {
 
 void* OpHistoryServiceThread::entry() {
   int sleep_time = 1000;
-  list<pair<utime_t, TrackedOpRef>> internal_queue;
+  deque<pair<utime_t, TrackedOpRef>> internal_queue;
   while (1) {
     queue_spinlock.lock();
     if (_break_thread) {

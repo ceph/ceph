@@ -118,8 +118,8 @@ void MirrorInfo::dump(ceph::Formatter *f) const {
   f->close_section(); // peers
 }
 
-std::list<MirrorInfo> MirrorInfo::generate_test_instances() {
-  std::list<MirrorInfo> ls;
+std::vector<MirrorInfo> MirrorInfo::generate_test_instances() {
+  std::vector<MirrorInfo> ls;
   ls.push_back(MirrorInfo());
   ls.push_back(MirrorInfo());
   ls.back().mirrored = true;
@@ -199,9 +199,9 @@ FSMap &FSMap::operator=(const FSMap &rhs)
   return *this;
 }
 
-std::list<FSMap> FSMap::generate_test_instances()
+std::vector<FSMap> FSMap::generate_test_instances()
 {
-  std::list<FSMap> ls;
+  std::vector<FSMap> ls;
 
   FSMap fsmap;
 
