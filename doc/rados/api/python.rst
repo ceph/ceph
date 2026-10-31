@@ -75,7 +75,7 @@ you may add something like the following line to your Ceph configuration file::
 
 	keyring = /path/to/ceph.client.admin.keyring
 
-For additional details on modifying your configuration via Python, see `Configuration`_.
+For additional details on modifying your configuration via Python, see `Cluster Handle API`_.
 
 
 Connect to the Cluster
@@ -265,42 +265,23 @@ the I/O context provide additional functionality and asynchronous capabilities.
 Cluster Handle API
 ==================
 
-The ``Rados`` class provides an interface into the Ceph Storage Daemon.
+The ``Rados`` class provides an interface into the Ceph Storage Cluster.
 
-
-Configuration
--------------
-
-The ``Rados`` class provides methods for getting and setting configuration
-values, reading the Ceph configuration file, and parsing arguments. You
-do not need to be connected to the Ceph Storage Cluster to invoke the following
-methods. See `Storage Cluster Configuration`_ for details on settings.
+You do not need to be connected to the Ceph Storage Cluster to get and set
+configuration values, read the Ceph configuration file, or parse arguments.
+See `Storage Cluster Configuration`_ for details on settings. Pool operations,
+cluster statistics, and the ``mon_command()``, ``osd_command()``,
+``mgr_command()``, and ``pg_command()`` methods require a connection. The Ceph
+CLI sends its commands through these command methods.
 
 .. currentmodule:: rados
-.. automethod:: Rados.conf_get(option)
-.. automethod:: Rados.conf_set(option, val)
-.. automethod:: Rados.conf_read_file(path=None)
-.. automethod:: Rados.conf_parse_argv(args)
-.. automethod:: Rados.version()
 
+.. autoclass:: Rados
+   :members:
+   :exclude-members: require_state
 
-Connection Management
----------------------
-
-Once you configure your cluster handle, you may connect to the cluster, check
-the cluster ``fsid``, retrieve cluster statistics, and disconnect (shutdown)
-from the cluster. You may also assert that the cluster handle is in a particular
-state (e.g., "configuring", "connecting", etc.).
-
-.. automethod:: Rados.connect(timeout=0)
-.. automethod:: Rados.shutdown()
-.. automethod:: Rados.get_fsid()
-.. automethod:: Rados.get_cluster_stats()
-
-.. documented manually because it raises warnings because of *args usage in the
-.. signature
-
-.. py:class:: Rados
+   .. documented manually because it raises warnings because of *args usage in
+   .. the signature
 
    .. py:method:: require_state(*args)
 
@@ -308,32 +289,6 @@ state (e.g., "configuring", "connecting", etc.).
 
       :param args: Any number of states to check as separate arguments
       :raises: :class:`RadosStateError`
-
-
-Pool Operations
----------------
-
-To use pool operation methods, you must connect to the Ceph Storage Cluster
-first.  You may list the available pools, create a pool, check to see if a pool
-exists,  and delete a pool.
-
-.. automethod:: Rados.list_pools()
-.. automethod:: Rados.create_pool(pool_name, crush_rule=None)
-.. automethod:: Rados.pool_exists()
-.. automethod:: Rados.delete_pool(pool_name)
-
-
-CLI Commands
-------------
-
-The Ceph CLI command is internally using the following librados Python binding methods.
-
-In order to send a command, choose the correct method and choose the correct target.
-
-.. automethod:: Rados.mon_command
-.. automethod:: Rados.osd_command
-.. automethod:: Rados.mgr_command
-.. automethod:: Rados.pg_command
 
 
 Input/Output Context API
@@ -344,83 +299,63 @@ an Input/Output context (ioctx). The `Rados` class provides `open_ioctx()`
 and `open_ioctx2()` methods. The remaining ``ioctx`` operations involve
 invoking methods of the `Ioctx` and other classes.
 
-.. automethod:: Rados.open_ioctx(ioctx_name)
-.. automethod:: Ioctx.require_ioctx_open()
-.. automethod:: Ioctx.get_stats()
-.. automethod:: Ioctx.get_last_version()
-.. automethod:: Ioctx.close()
-
-
-.. Pool Snapshots
-.. --------------
-
-.. The Ceph Storage Cluster allows you to make a snapshot of a pool's state.
-.. Although basic pool operations require only a connection to the cluster,
-.. snapshots require an I/O context.
-
-.. Ioctx.create_snap(self, snap_name)
-.. Ioctx.list_snaps(self)
-.. SnapIterator.next(self)
-.. Snap.get_timestamp(self)
-.. Ioctx.lookup_snap(self, snap_name)
-.. Ioctx.remove_snap(self, snap_name)
-
-.. not published. This doesn't seem ready yet.
-
-Object Operations
------------------
-
 The Ceph Storage Cluster stores data as objects. You can read and write objects
-synchronously or asynchronously. You can read and write from offsets. An object
-has a name (or key) and data.
-
-
-.. automethod:: Ioctx.aio_write(object_name, to_write, offset=0, oncomplete=None, onsafe=None)
-.. automethod:: Ioctx.aio_write_full(object_name, to_write, oncomplete=None, onsafe=None)
-.. automethod:: Ioctx.aio_append(object_name, to_append, oncomplete=None, onsafe=None)
-.. automethod:: Ioctx.write(key, data, offset=0)
-.. automethod:: Ioctx.write_full(key, data)
-.. automethod:: Ioctx.aio_flush()
-.. automethod:: Ioctx.set_locator_key(loc_key)
-.. automethod:: Ioctx.aio_read(object_name, length, offset, oncomplete)
-.. automethod:: Ioctx.read(key, length=8192, offset=0)
-.. automethod:: Ioctx.stat(key)
-.. automethod:: Ioctx.trunc(key, size)
-.. automethod:: Ioctx.remove_object(key)
-
-
-Object Extended Attributes
---------------------------
-
-You may set extended attributes (XATTRs) on an object. You can retrieve a list
+synchronously or asynchronously, and you can read and write from offsets. You
+may set extended attributes (XATTRs) on an object, and you can retrieve a list
 of objects or XATTRs and iterate over them.
 
-.. automethod:: Ioctx.set_xattr(key, xattr_name, xattr_value)
-.. automethod:: Ioctx.get_xattrs(oid)
-.. automethod:: XattrIterator.__next__()
-.. automethod:: Ioctx.get_xattr(key, xattr_name)
-.. automethod:: Ioctx.rm_xattr(key, xattr_name)
-
+.. autoclass:: Ioctx
+   :members:
 
 
 Object Interface
 ================
 
 From an I/O context, you can retrieve a list of objects from a pool and iterate
-over them. The object interface provide makes each object look like a file, and
-you may perform synchronous operations on the  objects. For asynchronous
-operations, you should use the I/O context methods.
+over them. The object interface makes each object look like a file, and you may
+perform synchronous operations on the objects. For asynchronous operations, use
+the I/O context methods.
 
-.. automethod:: Ioctx.list_objects()
-.. automethod:: ObjectIterator.__next__()
-.. automethod:: Object.read(length = 1024*1024)
-.. automethod:: Object.write(string_to_write)
-.. automethod:: Object.get_xattrs()
-.. automethod:: Object.get_xattr(xattr_name)
-.. automethod:: Object.set_xattr(xattr_name, xattr_value)
-.. automethod:: Object.rm_xattr(xattr_name)
-.. automethod:: Object.stat()
-.. automethod:: Object.remove()
+.. autoclass:: Object
+   :members:
+
+
+Other Classes
+=============
+
+``Ioctx`` methods return these classes for asynchronous completions, batched
+read and write operations, watches, snapshots, and iteration.
+
+.. autoclass:: Completion
+   :members:
+
+.. autoclass:: WriteOp
+   :members:
+
+.. autoclass:: ReadOp
+   :members:
+
+.. autoclass:: Watch
+   :members:
+
+.. autoclass:: Snap
+   :members:
+
+.. autoclass:: ObjectIterator
+   :members:
+   :special-members: __next__
+
+.. autoclass:: XattrIterator
+   :members:
+   :special-members: __next__
+
+.. autoclass:: OmapIterator
+   :members:
+   :special-members: __next__
+
+.. autoclass:: SnapIterator
+   :members:
+   :special-members: __next__
 
 
 
