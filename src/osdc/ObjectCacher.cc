@@ -1101,6 +1101,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
   io_vec.reserve(blist.size());
 
   uint64_t total_len = 0;
+  uint64_t change_attr = 0;
   for (list<BufferHead*>::iterator p = blist.begin(); p != blist.end(); ++p) {
     BufferHead *bh = *p;
     ldout(cct, 7) << "bh_write_scattered " << *bh << dendl;
@@ -1118,6 +1119,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
       snapc = bh->snapc;
     if (bh->last_write > last_write)
       last_write = bh->last_write;
+    change_attr = std::max(change_attr, bh->change_attr);
   }
 
   C_WriteCommit *oncommit = new C_WriteCommit(this, ob->oloc.pool, ob->get_soid(), ranges);
@@ -1125,7 +1127,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
   ceph_tid_t tid = writeback_handler.write(ob->get_oid(), ob->get_oloc(),
 					   io_vec, snapc, last_write,
 					   ob->truncate_size, ob->truncate_seq,
-					   oncommit);
+					   oncommit, change_attr);
   oncommit->tid = tid;
   ob->last_write_tid = tid;
   for (list<BufferHead*>::iterator p = blist.begin(); p != blist.end(); ++p) {
@@ -1163,7 +1165,8 @@ void ObjectCacher::bh_write(BufferHead *bh, const ZTracer::Trace &parent_trace)
 					   bh->snapc, bh->bl, bh->last_write,
 					   bh->ob->truncate_size,
 					   bh->ob->truncate_seq,
-					   bh->journal_tid, trace, oncommit);
+					   bh->journal_tid, trace, oncommit,
+                                           bh->change_attr);
   ldout(cct, 20) << " tid " << tid << " on " << bh->ob->get_oid() << dendl;
 
   // set bh last_write_tid
@@ -1827,6 +1830,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
       touch_bh(bh);
 
     bh->last_write = now;
+    bh->change_attr = wr->change_attr;
 
     o->try_merge_bh(bh);
   }
