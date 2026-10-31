@@ -7368,7 +7368,9 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair, bluestore_stats_t 
   // enable in repair or deep mode modes only
   if (!read_only) {
     _kv_start();
-    r = _deferred_replay();
+    // undecodable records are left to _fsck_on_open() to report and repair;
+    // a shallow fsck doesn't check deferred records, so it must keep failing
+    r = _deferred_replay(depth != FSCK_SHALLOW);
     _kv_stop();
   }
 
@@ -8107,10 +8109,12 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair, bluestore_
         } catch (ceph::buffer::error& e) {
 	  derr << "fsck error: failed to decode deferred txn "
 	       << pretty_binary_string(it->key()) << dendl;
+	  ++errors;
 	  if (repair) {
-            dout(20) << __func__ << " undecodable deferred TXN record, key: '"
-		     << pretty_binary_string(it->key())
-		     << "', removing" << dendl;
+            derr << __func__ << " removing undecodable deferred txn record "
+                 << pretty_binary_string(it->key())
+                 << "; the deferred write it held is lost, the object data "
+                 << "it covered may be stale, consider a deep fsck" << dendl;
 	    repairer.remove_key(db, PREFIX_DEFERRED, it->key());
 	  }
 	  continue;
@@ -12301,7 +12305,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   }
 }
 
-int BlueStore::_deferred_replay()
+int BlueStore::_deferred_replay(bool skip_undecodable)
 {
   dout(10) << __func__ << " start" << dendl;
   int count = 0;
@@ -12337,6 +12341,10 @@ int BlueStore::_deferred_replay()
       derr << __func__ << " failed to decode deferred txn "
 	   << pretty_binary_string(it->key()) << dendl;
       delete deferred_txn;
+      if (skip_undecodable) {
+        // fsck reports it and repair removes it
+        continue;
+      }
       r = -EIO;
       goto out;
     }
