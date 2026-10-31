@@ -230,6 +230,8 @@ struct librados::IoCtxImpl {
 		  const char *name);
   int aio_cancel(AioCompletionImpl *c);
 
+  int hit_set_vector(uint32_t hash, AioCompletionImpl *c,
+                     std::vector<std::pair<time_t, time_t>>& intervals);
   int hit_set_list(uint32_t hash, AioCompletionImpl *c,
 		   std::list< std::pair<time_t, time_t> > *pls);
   int hit_set_get(uint32_t hash, AioCompletionImpl *c, time_t stamp,

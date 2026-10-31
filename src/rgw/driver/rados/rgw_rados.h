@@ -92,7 +92,7 @@ struct RGWOLHInfo {
      decode(removed, bl);
      DECODE_FINISH(bl);
   }
-  static std::list<RGWOLHInfo> generate_test_instances();
+  static std::vector<RGWOLHInfo> generate_test_instances();
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(RGWOLHInfo)
@@ -115,7 +115,7 @@ struct RGWOLHPendingInfo {
   }
 
   void dump(Formatter *f) const;
-  static std::list<RGWOLHPendingInfo> generate_test_instances();
+  static std::vector<RGWOLHPendingInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWOLHPendingInfo)
 
@@ -282,7 +282,7 @@ struct objexp_hint_entry {
   }
 
   void dump(Formatter *f) const;
-  static std::list<objexp_hint_entry> generate_test_instances();
+  static std::vector<objexp_hint_entry> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(objexp_hint_entry)
 

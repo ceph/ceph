@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <vector>
 #include <optional>
 #include "rgw_zone_types.h"
 #include "rgw_bucket_types.h"
@@ -111,7 +112,7 @@ struct RGWObjManifestPart {
   }
 
   void dump(Formatter *f) const;
-  static std::list<RGWObjManifestPart> generate_test_instances();
+  static std::vector<RGWObjManifestPart> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWObjManifestPart)
 
@@ -163,7 +164,7 @@ struct RGWObjManifestRule {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<RGWObjManifestRule> generate_test_instances();
+  static std::vector<RGWObjManifestRule> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
@@ -190,7 +191,7 @@ struct RGWObjTier {
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const;
-    static std::list<RGWObjTier> generate_test_instances();
+    static std::vector<RGWObjTier> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWObjTier)
 
@@ -382,7 +383,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-  static std::list<RGWObjManifest> generate_test_instances();
+  static std::vector<RGWObjManifest> generate_test_instances();
 
   int append(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup,
              const RGWZoneParams& zone_params);
