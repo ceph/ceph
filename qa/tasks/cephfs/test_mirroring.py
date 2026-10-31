@@ -1929,8 +1929,13 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(second["counters"]["snaps_synced"], first["counters"]["snaps_synced"])
         self.assertGreater(second["counters"]["last_synced_start"], first["counters"]["last_synced_start"])
         self.assertGreaterEqual(second["counters"]["last_synced_end"], second["counters"]["last_synced_start"])
-        self.assertGreater(second["counters"]["last_synced_duration"], 0)
-        self.assertEqual(second["counters"]["last_synced_bytes"], 1048576000) # last_synced_bytes = 10 files of 1024MB size each
+        # last_synced_* use whole-second timestamps; a sync finishing in the
+        # same second reports duration 0. Check consistency, not > 0.
+        self.assertEqual(
+            second["counters"]["last_synced_duration"],
+            second["counters"]["last_synced_end"] -
+            second["counters"]["last_synced_start"])
+        self.assertEqual(second["counters"]["last_synced_bytes"], 1048576000)  # 10 x 100 MiB
         peer_uuid = self.get_peer_uuid("client.mirror_remote@ceph")
         dir_second = self.get_directory_perf_counters('/d0', peer_uuid)
         self.assertEqual(dir_second['snaps_synced'], second["counters"]["snaps_synced"])
@@ -1952,8 +1957,11 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(third["counters"]["snaps_synced"], second["counters"]["snaps_synced"])
         self.assertGreater(third["counters"]["last_synced_start"], second["counters"]["last_synced_end"])
         self.assertGreaterEqual(third["counters"]["last_synced_end"], third["counters"]["last_synced_start"])
-        self.assertGreater(third["counters"]["last_synced_duration"], 0)
-        self.assertEqual(third["counters"]["last_synced_bytes"], 1572864000) # last_synced_bytes = 10 files of 1024MB size each
+        self.assertEqual(
+            third["counters"]["last_synced_duration"],
+            third["counters"]["last_synced_end"] -
+            third["counters"]["last_synced_start"])
+        self.assertEqual(third["counters"]["last_synced_bytes"], 1572864000)  # 15 x 100 MiB
 
         # delete a snapshot
         self.mount_a.run_shell(["rmdir", "d0/.snap/snap0"])
