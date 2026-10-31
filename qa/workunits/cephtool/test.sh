@@ -1045,7 +1045,7 @@ function test_mon_mds()
   ceph fs set cephfs allow_new_snaps no
   expect_false ceph fs set cephfs allow_new_snaps taco
 
-  # we should never be able to add EC pools as data or metadata pools
+  # we should never be able to add EC pools as data or metadata pools without overwrite support
   # create an ec-pool...
   ceph osd pool create mds-ec-pool 16 16 erasure
   set +e
