@@ -44,3 +44,39 @@ TEST_F(TestClient, CheckNegativeReclaimFlagUnmasked) {
 TEST_F(TestClient, CheckNegativeReclaimFlag) {
   ASSERT_EQ(client->check_unknown_reclaim_flag(-1), true);
 }
+
+TEST_F(TestClient, SyncFsReportsErrorAfterClose) {
+  // A writeback error that comes back after close() has no open Fh to
+  // land on; sync_fs() must still report it, once.
+  char filename[256];
+  sprintf(filename, "test_syncfs_err_after_close%u", getpid());
+
+  int fd = client->open(filename, O_CREAT | O_WRONLY | O_TRUNC, myperm, 0644);
+  ASSERT_LE(0, fd);
+  ASSERT_EQ(5, client->write(fd, "hello", 5, 0));
+  ASSERT_EQ(0, client->close(fd));
+
+  ASSERT_EQ(0, client->inject_async_err(filename, -EIO, myperm));
+  ASSERT_EQ(-EIO, client->sync_fs());
+  ASSERT_EQ(0, client->sync_fs());
+
+  ASSERT_EQ(0, client->unlink(filename, myperm));
+}
+
+TEST_F(TestClient, SyncFsReportsErrorWhileOpen) {
+  // An error that an open Fh will see on close() is reported by sync_fs()
+  // as well, and close() still gets its copy.
+  char filename[256];
+  sprintf(filename, "test_syncfs_err_while_open%u", getpid());
+
+  int fd = client->open(filename, O_CREAT | O_WRONLY | O_TRUNC, myperm, 0644);
+  ASSERT_LE(0, fd);
+  ASSERT_EQ(5, client->write(fd, "hello", 5, 0));
+
+  ASSERT_EQ(0, client->inject_async_err(filename, -ENOSPC, myperm));
+  ASSERT_EQ(-ENOSPC, client->sync_fs());
+  ASSERT_EQ(0, client->sync_fs());
+  ASSERT_EQ(-ENOSPC, client->close(fd));
+
+  ASSERT_EQ(0, client->unlink(filename, myperm));
+}
