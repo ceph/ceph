@@ -195,6 +195,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
 
   export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
   export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
+  export_ephemeral_dist_tree_min_entries = g_conf().get_val<uint64_t>("mds_export_ephemeral_distributed_tree_min_entries");
+  replica_discover_reads = g_conf().get_val<uint64_t>("mds_bal_replica_discover_reads");
   export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
 
   symlink_recovery = g_conf().get_val<bool>("mds_symlink_recovery");
@@ -234,6 +236,15 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     export_ephemeral_distributed_config = g_conf().get_val<bool>("mds_export_ephemeral_distributed");
     dout(10) << "Migrating any ephemeral distributed pinned inodes" << dendl;
     /* copy to vector to avoid removals during iteration */
+    ephemeral_pin_config_changed = true;
+  }
+  if (changed.count("mds_bal_replica_discover_reads")) {
+    replica_discover_reads = g_conf().get_val<uint64_t>("mds_bal_replica_discover_reads");
+    replica_read_misses[0].clear();
+    replica_read_misses[1].clear();
+  }
+  if (changed.count("mds_export_ephemeral_distributed_tree_min_entries")) {
+    export_ephemeral_dist_tree_min_entries = g_conf().get_val<uint64_t>("mds_export_ephemeral_distributed_tree_min_entries");
     ephemeral_pin_config_changed = true;
   }
   if (changed.count("mds_export_ephemeral_random")) {
@@ -385,6 +396,7 @@ void MDCache::remove_inode(CInode *o)
     export_pin_delayed_queue.erase(o);
 
   o->clear_ephemeral_pin(true, true);
+  fragmented_dirs.erase(o);
 
   // remove from inode map
   if (o->last == CEPH_NOSNAP) {
@@ -964,6 +976,80 @@ mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino, frag_t fg)
   auto result = mds_rank_t(b);
   ceph_assert(result >= 0 && result < max_mds);
   return result;
+}
+
+
+/*
+ * Rank for dirfrag @fg of a directory whose fragments are distributed by a
+ * ceph.dir.pin.distributed.tree policy above it.  Fragments are mapped by
+ * their ancestor at the minimum distribution depth, so that later splits
+ * of a large directory leave every fragment where it is, and those
+ * ancestors are dealt out to the ranks in turn, so that each rank gets an
+ * equal share of the name space.
+ */
+mds_rank_t MDCache::dist_tree_rank(inodeno_t ino, frag_t fg)
+{
+  const mds_rank_t max_mds = mds->mdsmap->get_max_mds();
+  if (max_mds == 0)
+    return MDS_RANK_NONE;
+  const unsigned bits = export_ephemeral_dist_frag_bits;
+  uint64_t n = rjhash64(ino);
+  if (bits > 0)
+    n += frag_t(fg.value(), bits).value() >> (24 - bits);
+  return mds_rank_t(n % max_mds);
+}
+
+bool MDCache::replica_read_missed_before(CDir *dir, std::string_view dname)
+{
+  /* A replica discovers a dentry for the reads clients send it only once
+   * that dentry has been read here mds_bal_replica_discover_reads times:
+   * one that is read once, like a file a client stats and then removes,
+   * is cheaper to forward, and is then not left replicated here for its
+   * unlink to gather.  0 never discovers.  The misses are counted by hash
+   * of the dirfrag and the name in two generations, the current one and
+   * the one before it, each of up to 64k entries and rotated every 30
+   * seconds, so the reads have to come within 30 to 60 seconds.  A hash
+   * collision only discovers a dentry early.
+   */
+  const uint64_t want = replica_discover_reads;
+  if (want == 0)
+    return false;
+  if (want == 1)
+    return true;
+  constexpr size_t max_misses = 65536;
+  constexpr auto window = std::chrono::seconds(30);
+  auto now = clock::now();
+  if (replica_read_misses[0].size() >= max_misses ||
+      now - replica_read_misses_rotated > window) {
+    replica_read_misses[1].swap(replica_read_misses[0]);
+    replica_read_misses[0].clear();
+    replica_read_misses_rotated = now;
+  }
+  uint64_t h = std::hash<std::string_view>{}(dname);
+  h ^= (uint64_t)dir->ino() * 0x9e3779b97f4a7c15ull + dir->get_frag().value();
+  uint64_t seen = 0;
+  for (auto& gen : replica_read_misses) {
+    if (auto p = gen.find(h); p != gen.end()) {
+      seen += p->second;
+      gen.erase(p);
+    }
+  }
+  if (seen + 1 >= want)
+    return true;
+  replica_read_misses[0][h] = seen + 1;
+  return false;
+}
+
+bool MDCache::is_in_auth_parent_subtree(CDir *dir)
+{
+  if (!dir->is_auth() || dir->is_ambiguous_auth())
+    return false;
+  if (!dir->is_subtree_root())
+    return true;
+  CDir *pdir = dir->get_parent_dir();
+  if (!pdir)
+    return false;
+  return get_subtree_root(pdir)->is_full_dir_auth();
 }
 
 
@@ -8900,6 +8986,28 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	discover = true;
       }
 
+      /* The auth replicated this dirfrag for read load, and the client
+       * sent a read here, as the replies told it to.  A replica only
+       * holds the dentries this rank discovered for itself, such as those
+       * on the way to its own subtrees, so forwarding every other lookup
+       * to the auth would only add a hop to the reads the replication was
+       * meant to take off it.  Once a dentry has been read here
+       * mds_bal_replica_discover_reads times, get it from the auth
+       * instead, and answer this read and the next ones of it here (see
+       * replica_read_missed_before()).  Only on the first try.  For a
+       * dentry that does not exist, the auth (after fetching the dirfrag
+       * if needed) replies with a null dentry, which this replica keeps
+       * and answers ENOENT from on the retry; a dentry being purged comes
+       * back as an error, and the retry is forwarded.
+       */
+      if (forward && !want_auth && curdir->is_rep() &&
+	  mdr && mdr->client_request && mdr->retry == 0 &&
+	  replica_read_missed_before(curdir, path[depth])) {
+	dout(7) << "traverse: replicated " << *curdir
+		<< ", discovering instead of forwarding" << dendl;
+	discover = true;
+      }
+
       if (discover) {
         if (forimport && cur->is_quiesced()) {
           /* block discover for import */
@@ -11218,6 +11326,11 @@ void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
   in->_encode_locks_state_for_replica(bl, mds->get_state() < MDSMap::STATE_ACTIVE);
 
   __u32 state = in->state;
+  // the decision of the auth on the size, see STATE_DISTTREELARGE
+  if (in->is_dist_tree_fragmented())
+    state |= CInode::STATE_DISTTREELARGE;
+  else
+    state &= ~CInode::STATE_DISTTREELARGE;
   encode(state, bl);
 
   ENCODE_FINISH(bl);
@@ -11324,6 +11437,7 @@ void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p,
 
 void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, CDentry *dn, MDSContext::vec& finished)
 {
+  bool dist_tree_updated = false;
   DECODE_START(2, p);
   inodeno_t ino;
   snapid_t last;
@@ -11332,6 +11446,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
   decode(last, p);
   decode(nonce, p);
   in = get_inode(ino, last);
+  const bool added = !in;
   if (!in) {
     in = new CInode(this, false, 2, last);
     in->set_replica_nonce(nonce);
@@ -11362,6 +11477,12 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
   if (struct_v >= 2) {
     __u32 s;
     decode(s, p);
+    if (!in->is_auth()) {
+      bool large = s & CInode::STATE_DISTTREELARGE;
+      dist_tree_updated = !added &&
+	large != in->state_test(CInode::STATE_DISTTREELARGE);
+      in->set_dist_tree_large(large);
+    }
     s &= CInode::MASK_STATE_REPLICATED;
     if (s & CInode::STATE_RANDEPHEMERALPIN) {
       dout(10) << "replica inode is random ephemeral pinned" << dendl;
@@ -11370,6 +11491,9 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
   }
 
   DECODE_FINISH(p); 
+
+  if (dist_tree_updated)
+    in->maybe_export_pin(true);
 }
 
  
@@ -11423,17 +11547,9 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
 
   set<mds_rank_t> who;
   if (bcast) {
-    set<mds_rank_t> mds_set;
-    mds->get_mds_map()->get_active_mds_set(mds_set);
-
-    set<mds_rank_t> replica_set;
-    for (const auto &p : dir->get_replicas()) {
-      replica_set.insert(p.first);
-    }
-
-    std::set_difference(mds_set.begin(), mds_set.end(),
-                        replica_set.begin(), replica_set.end(),
-                        std::inserter(who, who.end()));
+    // every active rank: the ones without a replica discover one, and the
+    // ones that have one learn that it is now replicated for read load
+    mds->get_mds_map()->get_active_mds_set(who);
   } else {
     for (const auto &p : dir->get_replicas()) {
       who.insert(p.first);
@@ -14723,6 +14839,18 @@ void MDCache::dump_dir(Formatter *f, CDir *dir, bool dentry_dump) {
 void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   const mds_rank_t max_mds = mdsmap.get_max_mds();
 
+  // before anything below computes a distributed pin target with it
+  if (max_mds <= 1) {
+    export_ephemeral_dist_frag_bits = 0;
+  } else {
+    double want = g_conf().get_val<double>("mds_export_ephemeral_distributed_factor");
+    want *= max_mds;
+    unsigned n = 0;
+    while ((1U << n) < (unsigned)want)
+      ++n;
+    export_ephemeral_dist_frag_bits = n;
+  }
+
   // process export_pin_delayed_queue whenever a new MDSMap received
   auto &q = export_pin_delayed_queue;
   for (auto it = q.begin(); it != q.end(); ) {
@@ -14748,17 +14876,6 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
     for (auto& in : migrate) {
       in->maybe_export_pin();
     }
-  }
-
-  if (max_mds <= 1) {
-    export_ephemeral_dist_frag_bits = 0;
-  } else {
-    double want = g_conf().get_val<double>("mds_export_ephemeral_distributed_factor");
-    want *= max_mds;
-    unsigned n = 0;
-    while ((1U << n) < (unsigned)want)
-      ++n;
-    export_ephemeral_dist_frag_bits = n;
   }
 }
 

@@ -1072,6 +1072,10 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
     CDir *f = new CDir(inode, fg, mdcache, is_auth());
     f->state_set(state & (MASK_STATE_FRAGMENT_KEPT | STATE_COMPLETE));
     f->get_replicas() = get_replicas();
+    // a fragment of a dirfrag replicated for read load stays replicated,
+    // on the auth and on the replicas alike
+    f->dir_rep = dir_rep;
+    f->dir_rep_by = dir_rep_by;
     f->pop_me = pop_me;
     f->pop_me.scale(fac);
 
@@ -1184,6 +1188,12 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
     while (!dir->items.empty()) 
       steal_dentry(dir->items.begin()->second);
     
+    // replicated for read load if any of them was
+    if (dir->is_rep() && !is_rep()) {
+      dir_rep = dir->dir_rep;
+      dir_rep_by = dir->dir_rep_by;
+    }
+
     // merge replica map
     for (const auto &p : dir->get_replicas()) {
       unsigned cur = get_replicas()[p.first];
@@ -2937,7 +2947,7 @@ mds_rank_t CDir::get_export_pin(bool inherit) const
 {
   mds_rank_t export_pin = inode->get_export_pin(inherit);
   if (export_pin == MDS_RANK_EPHEMERAL_DIST)
-    export_pin = mdcache->hash_into_rank_bucket(ino(), get_frag());
+    export_pin = inode->get_ephemeral_dist_rank(get_frag());
   else if (export_pin == MDS_RANK_EPHEMERAL_RAND)
     export_pin = mdcache->hash_into_rank_bucket(ino());
   return export_pin;
@@ -2955,7 +2965,7 @@ bool CDir::is_exportable(mds_rank_t dest) const
 
 void CDir::encode_export(bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ceph_assert(!is_projected());
   encode(first, bl);
   encode(*fnode, bl);
@@ -2970,6 +2980,11 @@ void CDir::encode_export(bufferlist& bl)
 
   encode(dir_rep_by, bl);  
   encode(get_replicas(), bl);
+
+  // the decision of the auth of the directory on its size, which the
+  // importer follows when the directory inode is not its own, see
+  // CInode::STATE_DISTTREELARGE
+  encode(inode->is_dist_tree_fragmented(), bl);
 
   get(PIN_TEMPEXPORTING);
   ENCODE_FINISH(bl);
@@ -2988,7 +3003,7 @@ void CDir::finish_export()
 
 void CDir::decode_import(bufferlist::const_iterator& blp, LogSegmentRef const& ls)
 {
-  DECODE_START(1, blp);
+  DECODE_START(2, blp);
   decode(first, blp);
   {
     auto _fnode = allocate_fnode();
@@ -3021,6 +3036,13 @@ void CDir::decode_import(bufferlist::const_iterator& blp, LogSegmentRef const& l
   decode(dir_rep_by, blp);
   decode(get_replicas(), blp);
   if (is_replicated()) get(PIN_REPLICATED);
+
+  if (struct_v >= 2) {
+    bool large;
+    decode(large, blp);
+    if (!inode->is_auth())
+      inode->set_dist_tree_large(large);
+  }
 
   replica_nonce = 0;  // no longer defined
 

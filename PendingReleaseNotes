@@ -20,6 +20,20 @@
   ``cpu_isa_level`` host fact (e.g. ``x86-64-v2``). The check can be disabled
   with ``ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false``, e.g.
   when running custom-built images targeting an older CPU generation.
+* CephFS: A new directory policy ``ceph.dir.pin.distributed.tree`` spreads the
+  fragments of every fragmented directory below the directory it is set on
+  across the active MDS ranks;
+  ``mds_export_ephemeral_distributed_tree_min_entries`` limits it to
+  directories of at least that many entries. The MDS also no longer lists
+  dirfrag replicas that were not replicated for read load in its replies, no
+  longer read-replicates the dirfrags of ephemerally distributed directories,
+  and lets the replicas of a dirfrag replicated for read load answer the reads
+  that clients send to them instead of forwarding them to the auth rank
+  (``mds_bal_replica_discover_reads``);
+  ``mds_bal_skip_replicate_ephemeral_random`` keeps randomly pinned
+  directories from being replicated. ``ceph-fuse`` and ``libcephfs`` clients
+  need the fix for https://tracker.ceph.com/issues/81952 to work well in
+  directories spread this way. See doc/cephfs/multimds.rst.
 
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients

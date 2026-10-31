@@ -1,4 +1,5 @@
 import logging
+import os
 import random
 import signal
 import time
@@ -451,6 +452,358 @@ done
         self.assertGreaterEqual(len(rank1)/nsubtrees, 0.15)
         self.assertGreaterEqual(len(rank2)/nsubtrees, 0.15)
 
+    def _setup_big_dir(self, path="tree/a/big", count=1000, tree=None):
+        """
+        Create @path with @count files, small split sizes so that it gets
+        fragmented, and optionally set ceph.dir.pin.distributed.tree on
+        @tree first.
+        """
+        self.config_set('mds', 'mds_bal_split_size', 100)
+        self.config_set('mds', 'mds_bal_merge_size', 1)
+        self.config_set('mds', 'mds_bal_fragment_interval', 1)
+        self.mount_a.run_shell_payload(f"""
+set -ex
+mkdir -p {path}
+{f"setfattr -n ceph.dir.pin.distributed.tree -v 1 {tree}" if tree else ""}
+for ((i = 0; i < {count}; i++)); do
+    touch "{path}/f$i"
+done
+""")
+
+    def _dirfrag_auth(self, path):
+        """
+        The auth rank of each dirfrag of @path that some rank has in cache,
+        as {dirfrag: rank}.
+        """
+        auth = {}
+        for info in self.fs.get_ranks(status=self.status):
+            try:
+                dirs = self.fs.rank_asok(["dump", "dir", path], rank=info['rank'], status=self.status)
+            except CommandFailedError:
+                continue
+            for d in dirs or []:
+                if d.get('is_auth'):
+                    auth[d['dirfrag']] = info['rank']
+        return auth
+
+    def _wait_dist_tree(self, path, nranks, timeout=150):
+        """
+        Wait until the dirfrags of @path are distributed over @nranks ranks:
+        those away from the rank of the parent directory as subtrees on
+        their target ranks, the rest in the subtree of the parent.  Returns
+        the auth rank of each dirfrag.
+        """
+        parent = os.path.dirname(path)
+        try:
+            with safe_while(sleep=5, tries=timeout//5) as proceed:
+                while proceed():
+                    prank = set(self._dirfrag_auth(parent).values())
+                    auth = self._dirfrag_auth(path)
+                    subtrees = self._get_subtrees(status=self.status, rank="all", path=path)
+                    subtrees = [s for s in subtrees if s['dir']['path'] == path and s['is_auth']]
+                    dist = [s for s in subtrees if s['distributed_ephemeral_pin'] and
+                                                   s['auth_first'] == s['export_pin_target']]
+                    away = [f for f, r in auth.items() if r not in prank]
+                    ranks = set(auth.values())
+                    log.info(f"{path}: parent on {prank}, {len(auth)} dirfrags on ranks {ranks}, "
+                             f"{len(subtrees)} subtrees, {len(dist)} distributed")
+                    if (len(prank) == 1 and len(ranks) >= nranks and
+                            len(dist) == len(subtrees) and
+                            sorted(s['dir']['dirfrag'] for s in dist) == sorted(away)):
+                        return auth
+        except MaxWhileTries as e:
+            raise RuntimeError(f"{path} was not distributed over {nranks} ranks") from e
+
+    @staticmethod
+    def _dist_map(auth):
+        return sorted(auth.items())
+
+    def _wait_dist_stable(self, path, nranks, timeout=150):
+        """
+        Like _wait_dist_tree, but also wait until the dirfrags stop
+        splitting and moving: the same map twice in a row, 10s apart.
+        """
+        prev = None
+        try:
+            with safe_while(sleep=10, tries=timeout//10) as proceed:
+                while proceed():
+                    dist = self._wait_dist_tree(path, nranks, timeout=timeout)
+                    cur = self._dist_map(dist)
+                    if cur == prev:
+                        return dist
+                    prev = cur
+        except MaxWhileTries as e:
+            raise RuntimeError(f"{path} distribution did not settle") from e
+
+    def _wait_no_dist_tree(self, path, timeout=150):
+        """
+        Wait until no dirfrag of @path is an ephemerally distributed subtree.
+        """
+        try:
+            with safe_while(sleep=5, tries=timeout//5) as proceed:
+                while proceed():
+                    subtrees = self._get_subtrees(status=self.status, rank="all", path=path)
+                    dist = [s for s in subtrees if s['dir']['path'] == path and
+                                                   s['distributed_ephemeral_pin']]
+                    log.info(f"{path}: {len(dist)} distributed subtrees left")
+                    if not dist:
+                        return
+        except MaxWhileTries as e:
+            raise RuntimeError(f"{path} is still distributed") from e
+
+    def test_ephemeral_pin_dist_tree(self):
+        """
+        That ceph.dir.pin.distributed.tree distributes the dirfrags of a
+        fragmented directory two levels below it over all the ranks.
+        """
+
+        self._setup_big_dir(tree="tree")
+        self.mount_a.run_shell_payload("mkdir -p tree/small && touch tree/small/f")
+        self._wait_dist_tree("/tree/a/big", 3)
+        # a directory that is not fragmented is not distributed
+        for s in self._get_subtrees(status=self.status, rank="all", path="/tree/small"):
+            self.assertFalse(s['distributed_ephemeral_pin'])
+
+    def test_ephemeral_pin_dist_tree_getfattr(self):
+        """
+        That ceph.dir.pin.distributed.tree can be read back, rejects bad
+        values and is only accepted on directories.
+        """
+
+        self.mount_a.run_shell_payload("mkdir -p tree && touch tree/file")
+        self.assertEqual(self.mount_a.getfattr("tree", "ceph.dir.pin.distributed.tree"), "0")
+        self.mount_a.setfattr("tree", "ceph.dir.pin.distributed.tree", "1")
+        self.assertEqual(self.mount_a.getfattr("tree", "ceph.dir.pin.distributed.tree"), "1")
+        self.mount_a.setfattr("tree", "ceph.dir.pin.distributed.tree", "0")
+        self.assertEqual(self.mount_a.getfattr("tree", "ceph.dir.pin.distributed.tree"), "0")
+        with self.assertRaises(CommandFailedError):
+            self.mount_a.setfattr("tree", "ceph.dir.pin.distributed.tree", "foo")
+        with self.assertRaises(CommandFailedError):
+            self.mount_a.setfattr("tree/file", "ceph.dir.pin.distributed.tree", "1")
+
+    def test_ephemeral_pin_dist_tree_set_after(self):
+        """
+        That setting ceph.dir.pin.distributed.tree above a directory that is
+        already fragmented distributes it.
+        """
+
+        self._setup_big_dir()
+        self.mount_a.setfattr("tree", "ceph.dir.pin.distributed.tree", "1")
+        self._wait_dist_tree("/tree/a/big", 3)
+
+    def test_ephemeral_pin_dist_tree_off(self):
+        """
+        That clearing ceph.dir.pin.distributed.tree stops distributing the
+        fragmented directories below it.
+        """
+
+        self._setup_big_dir(tree="tree")
+        self._wait_dist_tree("/tree/a/big", 3)
+        self.mount_a.setfattr("tree", "ceph.dir.pin.distributed.tree", "0")
+        self._wait_no_dist_tree("/tree/a/big")
+
+    def test_ephemeral_pin_dist_tree_override_pin(self):
+        """
+        That an export pin between the tree policy and a fragmented
+        directory takes precedence.
+        """
+
+        self._setup_big_dir(tree="tree")
+        self._wait_dist_tree("/tree/a/big", 3)
+        self.mount_a.setfattr("tree/a", "ceph.dir.pin", "1")
+        self._wait_subtrees([("/tree/a", 1)], timeout=120, status=self.status, rank="all", path="/tree/a")
+
+    def test_ephemeral_pin_dist_tree_failover(self):
+        """
+        That after an MDS failover the distributed dirfrags end up on the
+        same ranks as before.  (The restarted rank hands the imports it has
+        not loaded yet back to the inode's auth, like any empty import, and
+        the policy then moves them back.)
+        """
+
+        self._setup_big_dir(tree="tree")
+        before = self._dist_map(self._wait_dist_stable("/tree/a/big", 3))
+        self.fs.rank_fail(rank=1)
+        self.status = self.fs.wait_for_daemons()
+        self.mount_a.run_shell_payload("ls -l tree/a/big > /dev/null")
+        try:
+            with safe_while(sleep=5, tries=30) as proceed:
+                while proceed():
+                    after = self._dist_map(self._wait_dist_tree("/tree/a/big", 3))
+                    log.info(f"before={before}\nafter={after}")
+                    if after == before:
+                        break
+        except MaxWhileTries as e:
+            raise RuntimeError("distribution not restored after failover") from e
+
+    def test_ephemeral_pin_dist_tree_shrink_mds(self):
+        """
+        That shrinking max_mds moves the distributed dirfrags off the
+        stopped rank and keeps them distributed over the rest.
+        """
+
+        self._setup_big_dir(tree="tree")
+        self._wait_dist_tree("/tree/a/big", 3)
+        self.fs.set_max_mds(2)
+        self.status = self.fs.wait_for_daemons()
+        auth = self._wait_dist_tree("/tree/a/big", 2)
+        self.assertTrue(all(r < 2 for r in auth.values()))
+
+    def test_ephemeral_pin_dist_tree_min_entries(self):
+        """
+        That a fragmented directory smaller than
+        mds_export_ephemeral_distributed_tree_min_entries stays in the
+        subtree of its parent, and is distributed once it grows past it.
+        """
+
+        self.config_set('mds', 'mds_export_ephemeral_distributed_tree_min_entries', 1500)
+        self._setup_big_dir(tree="tree", count=1000)
+        # fragmented, all on the rank of the parent, and no subtree of its own
+        for i in range(4):
+            time.sleep(5)
+            auth = self._dirfrag_auth("/tree/a/big")
+            prank = set(self._dirfrag_auth("/tree/a").values())
+            subtrees = [s for s in self._get_subtrees(status=self.status, rank="all", path="/tree/a/big")
+                        if s['dir']['path'] == "/tree/a/big"]
+            log.info(f"dirfrags on {auth}, parent on {prank}, {len(subtrees)} subtrees")
+            self.assertGreater(len(auth), 1)
+            self.assertEqual(set(auth.values()), prank)
+            self.assertEqual(subtrees, [])
+        self.mount_a.run_shell_payload("""
+set -ex
+for ((i = 1000; i < 2000; i++)); do
+    touch "tree/a/big/f$i"
+done
+""")
+        self._wait_dist_tree("/tree/a/big", 3)
+
+    def test_ephemeral_pin_dist_tree_min_entries_importer(self):
+        """
+        That only the auth of a directory decides from its size whether a
+        ceph.dir.pin.distributed.tree policy distributes it.  The directory
+        is shrunk to between half of
+        mds_export_ephemeral_distributed_tree_min_entries and the threshold,
+        where it stays distributed, and max_mds is grown: the new rank
+        imports dirfrags of a directory it has never seen distributed, and
+        has to keep them.  On its own it would find the directory too small,
+        and the export pin above the policy would send them back to rank 0.
+        Once the directory shrinks below half of the threshold, every
+        dirfrag goes back to rank 0.
+        """
+
+        path = "/top/tree/a/big"
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+        self.status = self.fs.status()
+        self.config_set('mds', 'mds_export_ephemeral_distributed_tree_min_entries', 1500)
+        self.mount_a.run_shell_payload("""
+set -ex
+mkdir -p top/tree
+setfattr -n ceph.dir.pin -v 0 top
+""")
+        self._setup_big_dir(path="top/tree/a/big", count=2000, tree="top/tree")
+        self._wait_dist_stable(path, 2)
+        self.mount_a.run_shell_payload("""
+set -ex
+for ((i = 1000; i < 2000; i++)); do
+    rm "top/tree/a/big/f$i"
+done
+""")
+        self._wait_dist_stable(path, 2)
+
+        self.fs.set_max_mds(3)
+        self.fs.wait_for_daemons()
+        self.status = self.fs.status()
+        auth = self._wait_dist_stable(path, 3)
+        for i in range(6):
+            time.sleep(5)
+            self.assertEqual(self._dist_map(self._dirfrag_auth(path)), self._dist_map(auth))
+        ino = self.mount_a.path_to_ino("top/tree/a/big")
+        for rank in set(auth.values()) - {0}:
+            inode = self.fs.rank_asok(['dump', 'inode', str(ino)], rank=rank, status=self.status)
+            log.info(f"rank {rank}: {inode['states']}")
+            self.assertIn('disttreelarge', inode['states'])
+
+        self.mount_a.run_shell_payload("""
+set -ex
+for ((i = 500; i < 1000; i++)); do
+    rm "top/tree/a/big/f$i"
+done
+""")
+        try:
+            with safe_while(sleep=5, tries=30) as proceed:
+                while proceed():
+                    auth = self._dirfrag_auth(path)
+                    subtrees = [s for s in self._get_subtrees(status=self.status, rank="all", path=path)
+                                if s['dir']['path'] == path]
+                    log.info(f"dirfrags on {auth}, {len(subtrees)} subtrees")
+                    if set(auth.values()) == {0} and not subtrees:
+                        break
+        except MaxWhileTries as e:
+            raise RuntimeError(f"{path} did not go back to rank 0") from e
+
+    def test_ephemeral_pin_dist_tree_random_between(self):
+        """
+        That a directory randomly pinned by a ceph.dir.pin.random policy
+        between ceph.dir.pin.distributed.tree and a fragmented directory
+        takes precedence: a fragmented directory below it that was not
+        randomly pinned itself stays with it, on one rank, and is not
+        distributed.
+        """
+
+        n = 24
+        self.config_set('mds', 'mds_bal_split_size', 100)
+        self.config_set('mds', 'mds_bal_merge_size', 1)
+        self.config_set('mds', 'mds_bal_fragment_interval', 1)
+        self.mount_a.run_shell_payload(f"""
+set -ex
+mkdir -p tree/r
+setfattr -n ceph.dir.pin.distributed.tree -v 1 tree
+setfattr -n ceph.dir.pin.random -v 0.5 tree/r
+for ((c = 0; c < {n}; c++)); do
+    mkdir -p tree/r/c$c/big
+    for ((i = 0; i < 400; i++)); do
+        touch "tree/r/c$c/big/f$i"
+    done
+done
+""")
+        def random_pinned():
+            subtrees = self._get_subtrees(status=self.status, rank="all", path="/tree/r")
+            return set(s['dir']['path'] for s in subtrees if s['random_ephemeral_pin'])
+        # wait until the random pins have all become subtrees
+        prev = None
+        with safe_while(sleep=10, tries=12) as proceed:
+            while proceed():
+                pinned = random_pinned()
+                if pinned == prev:
+                    break
+                prev = pinned
+        # the directories whose parent was randomly pinned but which were not
+        cases = [c for c in range(n)
+                 if f"/tree/r/c{c}" in pinned and f"/tree/r/c{c}/big" not in pinned]
+        log.info(f"randomly pinned: {sorted(pinned)}; checking {cases}")
+        self.assertTrue(cases)
+
+        def settled():
+            pinned = random_pinned()
+            for c in cases:
+                big = f"/tree/r/c{c}/big"
+                self.assertNotIn(big, pinned)
+                auth = self._dirfrag_auth(big)
+                crank = set(self._dirfrag_auth(f"/tree/r/c{c}").values())
+                dist = [s for s in self._get_subtrees(status=self.status, rank="all", path=big)
+                        if s['dir']['path'] == big and s['distributed_ephemeral_pin']]
+                log.info(f"{big}: {len(auth)} dirfrags on {set(auth.values())}, parent on {crank}, {len(dist)} distributed")
+                if len(auth) < 2 or len(crank) != 1 or set(auth.values()) != crank or dist:
+                    return False
+            return True
+        # and so for 20s in a row
+        ok = 0
+        with safe_while(sleep=5, tries=40) as proceed:
+            while proceed():
+                ok = ok + 1 if settled() else 0
+                if ok >= 4:
+                    break
 
     def test_ephemeral_random(self):
         """
@@ -632,6 +985,60 @@ done
         log.info("{0} migrations have occured due to the cluster resizing".format(count))
         # rebalancing from 3 -> 2 may cause half of rank 0/1 to move and all of rank 2
         self.assertLessEqual((count/len(subtrees_old)), (1.0/3.0/2.0 + 1.0/3.0/2.0 + 1.0/3.0)*1.25) # aka .66 with 25% overbudget
+
+class TestDistTreeClients(CephFSTestCase):
+    MDSS_REQUIRED = 3
+    CLIENTS_REQUIRED = 2
+
+    def test_dist_tree_shared_dir_unlink(self):
+        """
+        That clients unlinking the files of one directory spread over two
+        ranks by ceph.dir.pin.distributed.tree, while they also look it up,
+        do not stall: a scatterlock gather on the directory inode, with the
+        replica holding the wrlocks of unlinks that early replied, used to
+        wait for the next MDS tick for every few unlinks.
+        """
+
+        self.config_set('mds', 'mds_bal_split_size', 100)
+        self.config_set('mds', 'mds_bal_merge_size', 1)
+        self.config_set('mds', 'mds_bal_fragment_interval', 1)
+        self.fs.set_max_mds(2)
+        self.status = self.fs.wait_for_daemons()
+        n = 2000
+        self.mount_a.run_shell_payload("mkdir -p tree/a/shared && setfattr -n ceph.dir.pin.distributed.tree -v 1 tree")
+        procs = [m.run_shell_payload(f"""
+set -e
+for ((i = 0; i < {n}; i++)); do touch "tree/a/shared/{m.client_id}.$i"; done
+""", wait=False) for m in (self.mount_a, self.mount_b)]
+        for p in procs:
+            p.wait()
+
+        def ranks():
+            subtrees = self._get_subtrees(status=self.status, rank="all", path="/tree/a/shared")
+            return set(s['auth_first'] for s in subtrees
+                       if s['dir']['path'] == "/tree/a/shared" and s['distributed_ephemeral_pin'])
+        with safe_while(sleep=5, tries=30) as proceed:
+            while proceed():
+                r = ranks()
+                log.info(f"distributed subtrees on ranks {r}")
+                if r:
+                    break
+
+        start = time.time()
+        procs = [m.run_shell_payload(f"""
+set -e
+( while :; do stat tree/a/shared > /dev/null; ls tree/a > /dev/null; sleep 0.01; done ) &
+looker=$!
+for ((i = 0; i < {n}; i++)); do rm "tree/a/shared/{m.client_id}.$i"; done
+kill $looker
+""", wait=False) for m in (self.mount_a, self.mount_b)]
+        for p in procs:
+            p.wait()
+        elapsed = time.time() - start
+        log.info(f"{2 * n} unlinks took {elapsed:.1f}s")
+        self.assertLess(elapsed, 300)
+        self.mount_a.run_shell_payload("rmdir tree/a/shared")
+
 
 class TestDumpExportStates(CephFSTestCase):
     MDSS_REQUIRED = 2
@@ -956,3 +1363,229 @@ class TestExportToStoppingRank(CephFSTestCase):
         self.wait_until_true(lambda: rank2['name'] in self.mds_cluster.get_standby_daemons(),
                              timeout=60)
         self.status = self.fs.wait_for_daemons()
+
+
+class TestReadReplication(CephFSTestCase):
+    """
+    Read replication of a hot dirfrag: its replicas keep knowing that they
+    are replicated for read load when it splits, and they answer the reads
+    clients send them instead of forwarding them to the auth.
+    """
+
+    MDSS_REQUIRED = 2
+    CLIENTS_REQUIRED = 1
+    NFILES = 300
+
+    def setUp(self):
+        CephFSTestCase.setUp(self)
+        self.fs.set_max_mds(2)
+        self.status = self.fs.wait_for_daemons()
+        # replicate a dirfrag at its first reads, and do not split it for
+        # read load: the test splits it itself
+        self.config_set('mds', 'mds_bal_replicate_threshold', 1)
+        self.config_set('mds', 'mds_bal_split_rd', 1000000000)
+        self.config_set('mds', 'mds_bal_split_size', 100000)
+        self.mount_a.run_shell_payload(f"""
+set -ex
+mkdir hot
+setfattr -n ceph.dir.pin -v 0 hot
+for ((i = 0; i < {self.NFILES}; i++)); do
+    touch hot/f$i
+done
+""")
+        self._wait_subtrees([('/hot', 0)], status=self.status, rank=0)
+
+    def _dirfrags(self, rank):
+        dirs = self.fs.rank_asok(['dump', 'dir', '/hot'], rank=rank, status=self.status)
+        return [d for d in dirs or [] if 'is_auth' in d]
+
+    def _read_all(self, passes=1, prefix="f"):
+        """Stat every file from a new client each pass, so that the
+        lookups go to the MDS."""
+        for _ in range(passes):
+            self.mount_a.umount_wait()
+            self.mount_a.mount_wait()
+            self.mount_a.run_shell_payload(f"""
+for ((i = 0; i < {self.NFILES}; i++)); do
+    stat hot/{prefix}$i > /dev/null
+done
+""")
+
+    def _rank1_counters(self):
+        c = self.fs.rank_asok(['perf', 'dump', 'mds'], rank=1, status=self.status)['mds']
+        return {k: c[k] for k in ('request', 'forward', 'traverse_discover')}
+
+    @staticmethod
+    def _delta(a, b):
+        return {k: b[k] - a[k] for k in a}
+
+    def _wait_replicated(self):
+        """Read /hot until rank 0 replicated it for read load and rank 1
+        knows its replica is one."""
+        try:
+            with safe_while(sleep=1, tries=20) as proceed:
+                while proceed():
+                    self._read_all()
+                    auth = self._dirfrags(0)
+                    rep = self._dirfrags(1)
+                    log.info(f"rank 0: {[(d['dirfrag'], d['is_auth'], d['is_rep']) for d in auth]}, "
+                             f"rank 1: {[(d['dirfrag'], d['is_auth'], d['is_rep']) for d in rep]}")
+                    if (auth and all(d['is_auth'] and d['is_rep'] for d in auth) and
+                            rep and all(not d['is_auth'] and d['is_rep'] for d in rep)):
+                        return
+        except MaxWhileTries as e:
+            raise RuntimeError("/hot was not read-replicated to rank 1") from e
+
+    def test_read_replication_survives_split(self):
+        """
+        That the dirfrags a read-replicated dirfrag splits into are
+        replicated too, on the auth and on the replica.
+        """
+
+        self._wait_replicated()
+        self.fs.rank_asok(['dirfrag', 'split', '/hot', '0/0', '2'], rank=0, status=self.status)
+        try:
+            with safe_while(sleep=2, tries=30) as proceed:
+                while proceed():
+                    auth = self._dirfrags(0)
+                    rep = self._dirfrags(1)
+                    log.info(f"rank 0: {[(d['dirfrag'], d['is_rep']) for d in auth]}, "
+                             f"rank 1: {[(d['dirfrag'], d['is_rep']) for d in rep]}")
+                    if len(auth) == 4 and len(rep) == 4:
+                        break
+        except MaxWhileTries as e:
+            raise RuntimeError("/hot did not split on both ranks") from e
+        self.assertTrue(all(d['is_rep'] for d in auth))
+        self.assertTrue(all(d['is_rep'] for d in rep))
+
+    def test_replica_answers_reads(self):
+        """
+        That a replica of a read-replicated dirfrag answers the lookups
+        clients send it, fetching the dentries it does not hold from the
+        auth, rather than forwarding them.
+        """
+
+        # discover at the first read, so that every lookup rank 1 gets is
+        # answered there
+        self.config_set('mds', 'mds_bal_replica_discover_reads', 1)
+        # rank 1 gets no client requests for /hot until it is replicated,
+        # and may discover its dentries as soon as it is
+        before = self.fs.rank_asok(['perf', 'dump', 'mds'], rank=1, status=self.status)['mds']
+        self._wait_replicated()
+        self._read_all(passes=3)
+        after = self.fs.rank_asok(['perf', 'dump', 'mds'], rank=1, status=self.status)['mds']
+        requests = after['request'] - before['request']
+        forwards = after['forward'] - before['forward']
+        discovers = after['traverse_discover'] - before['traverse_discover']
+        log.info(f"rank 1: {requests} requests, {forwards} forwarded, {discovers} discovers")
+        self.assertGreater(requests, self.NFILES // 2)
+        self.assertGreater(discovers, 0)
+        self.assertLess(forwards, requests // 10)
+
+    def test_replica_discover_reads_off(self):
+        """
+        That a replica forwards every read of a dentry it does not hold
+        when mds_bal_replica_discover_reads is 0.
+        """
+
+        self.config_set('mds', 'mds_bal_replica_discover_reads', 0)
+        self._wait_replicated()
+        before = self._rank1_counters()
+        self._read_all(passes=2)
+        d = self._delta(before, self._rank1_counters())
+        log.info(f"rank 1: {d}")
+        self.assertGreater(d['request'], self.NFILES // 2)
+        self.assertEqual(d['traverse_discover'], 0)
+        self.assertGreater(d['forward'], d['request'] * 9 // 10)
+
+    def test_replica_discover_reads_twice(self):
+        """
+        That with mds_bal_replica_discover_reads at 2 a replica forwards
+        the first read of a dentry, discovers it at the second, and answers
+        the next ones.
+        """
+
+        self.config_set('mds', 'mds_bal_replica_discover_reads', 0)
+        self._wait_replicated()
+        # dentries created now are not sent to the replica
+        self.mount_a.run_shell_payload(f"""
+set -e
+for ((i = 0; i < {self.NFILES}; i++)); do
+    touch hot/g$i
+done
+""")
+        # the lookups before the creates may have gone to the replica too;
+        # changing the option forgets them
+        self.config_set('mds', 'mds_bal_replica_discover_reads', 2)
+        c0 = self._rank1_counters()
+        self._read_all(prefix="g")
+        c1 = self._rank1_counters()
+        self._read_all(prefix="g")
+        c2 = self._rank1_counters()
+        self._read_all(prefix="g")
+        c3 = self._rank1_counters()
+        first, second, third = self._delta(c0, c1), self._delta(c1, c2), self._delta(c2, c3)
+        log.info(f"rank 1: first {first}, second {second}, third {third}")
+        self.assertGreater(first['request'], self.NFILES // 4)
+        self.assertLess(first['traverse_discover'], first['request'] // 10)
+        self.assertGreater(first['forward'], first['request'] * 9 // 10)
+        self.assertGreater(second['traverse_discover'], 0)
+        # clients pick the rank of each read at random, so a dentry is only
+        # discovered once two of its reads came here
+        self.assertLess(third['forward'], first['forward'] * 3 // 4)
+
+    def _rand_dirfrags(self):
+        """The dirfrags of /rand/d on the rank that is auth for them."""
+        for info in self.fs.get_ranks(status=self.status):
+            dirs = self.fs.rank_asok(['dump', 'dir', '/rand/d'], rank=info['rank'], status=self.status)
+            auth = [d for d in dirs or [] if d.get('is_auth')]
+            if auth:
+                return info['rank'], auth
+        return None, []
+
+    def _read_rand(self, passes=1):
+        for _ in range(passes):
+            self.mount_a.umount_wait()
+            self.mount_a.mount_wait()
+            self.mount_a.run_shell_payload(f"""
+for ((i = 0; i < {self.NFILES}; i++)); do
+    stat rand/d/f$i > /dev/null
+done
+""")
+
+    def test_skip_replicate_ephemeral_random(self):
+        """
+        That with mds_bal_skip_replicate_ephemeral_random a randomly pinned
+        directory is not replicated for read load, and that it is once the
+        option is unset.
+        """
+
+        self.config_set('mds', 'mds_export_ephemeral_random', True)
+        self.config_set('mds', 'mds_export_ephemeral_random_max', 1.0)
+        self.config_set('mds', 'mds_bal_skip_replicate_ephemeral_random', True)
+        self.mount_a.run_shell_payload(f"""
+set -ex
+mkdir rand
+setfattr -n ceph.dir.pin.random -v 1.0 rand
+mkdir rand/d
+for ((i = 0; i < {self.NFILES}; i++)); do
+    touch rand/d/f$i
+done
+""")
+        self._read_rand(passes=3)
+        rank, dirs = self._rand_dirfrags()
+        log.info(f"rank {rank}: {[(d['dirfrag'], d['is_rep']) for d in dirs]}")
+        self.assertTrue(dirs)
+        self.assertFalse(any(d['is_rep'] for d in dirs))
+
+        self.config_set('mds', 'mds_bal_skip_replicate_ephemeral_random', False)
+        try:
+            with safe_while(sleep=1, tries=20) as proceed:
+                while proceed():
+                    self._read_rand()
+                    rank, dirs = self._rand_dirfrags()
+                    log.info(f"rank {rank}: {[(d['dirfrag'], d['is_rep']) for d in dirs]}")
+                    if dirs and all(d['is_rep'] for d in dirs):
+                        break
+        except MaxWhileTries as e:
+            raise RuntimeError("/rand/d was not read-replicated") from e
