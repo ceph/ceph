@@ -99,6 +99,31 @@ function map_enxio_to_eagain()
     return $status
 }
 
+#
+# tell_with_timeout args ...
+#
+# run "ceph tell args ..." and retry it if it hangs: a tell to an MDS can
+# wait forever for a reply lost to a connection reset, see
+# https://tracker.ceph.com/issues/72888. Exit if every attempt hangs, so
+# that expect_false cannot take the hang for the failure it expects.
+#
+function tell_with_timeout()
+{
+    local attempt
+    local status
+    for attempt in 1 2 3 ; do
+        status=0
+        timeout -k 10 120 ceph tell "$@" || status=$?
+        if test $status != 124 && test $status != 137 ; then
+            return $status
+        fi
+        echo "ceph tell $*: attempt $attempt timed out" >&2
+        sleep 10
+    done
+    echo "ceph tell $*: hung (tracker 72888)" >&2
+    exit 1
+}
+
 function check_response()
 {
 	expected_string=$1
@@ -827,6 +852,18 @@ function get_mds_gids()
     ceph fs get $fs_name --format=json | python3 -c "import json; import sys; print(' '.join([m['gid'].__str__() for m in json.load(sys.stdin)['mdsmap']['info'].values()]))"
 }
 
+function wait_mds_gids_change()
+{
+  local fs_name=$1
+  local old_gids=$2
+  local gids=$old_gids
+  while [ -z "$gids" ] || [ "$gids" = "$old_gids" ] ; do
+    sleep 5
+    gids=$(get_mds_gids $fs_name)
+  done
+  echo $gids
+}
+
 function fail_all_mds()
 {
   fs_name=$1
@@ -871,7 +908,7 @@ function without_test_dup_command()
     local saved=${CEPH_CLI_TEST_DUP_COMMAND}
     unset CEPH_CLI_TEST_DUP_COMMAND
     $@
-    CEPH_CLI_TEST_DUP_COMMAND=saved
+    export CEPH_CLI_TEST_DUP_COMMAND="$saved"
   fi
 }
 
@@ -882,7 +919,7 @@ function test_tell_output_file()
 
   # Test --daemon-output-file
   # N.B.: note this only works if $name is on the same node as this script!
-  J=$(ceph tell --format=json --daemon-output-file=/tmp/foo "$name" version)
+  J=$(tell_with_timeout --format=json --daemon-output-file=/tmp/foo "$name" version)
   expect_true jq -e '.path == "/tmp/foo"' <<<"$J"
   expect_true test -e /tmp/foo
   # only one line of json
@@ -890,7 +927,7 @@ function test_tell_output_file()
   expect_true jq -e '.version | length > 0' < /tmp/foo
   sudo rm -f /tmp/foo
 
-  J=$(ceph tell --format=json-pretty --daemon-output-file=/tmp/foo "$name" version)
+  J=$(tell_with_timeout --format=json-pretty --daemon-output-file=/tmp/foo "$name" version)
   expect_true jq -e '.path == "/tmp/foo"' <<<"$J"
   expect_true test -e /tmp/foo
   # more than one line of json
@@ -899,7 +936,7 @@ function test_tell_output_file()
   sudo rm -f /tmp/foo
 
   # Test --daemon-output-file=:tmp:
-  J=$(ceph tell --format=json --daemon-output-file=":tmp:" "$name" version)
+  J=$(tell_with_timeout --format=json --daemon-output-file=":tmp:" "$name" version)
   path=$(jq -r .path <<<"$J")
   expect_true test -e "$path"
   # only one line of json
@@ -907,7 +944,7 @@ function test_tell_output_file()
   expect_true sudo sudo sh -c "jq -e '.version | length > 0' < \"$path\""
   sudo rm -f "$path"
 
-  J=$(ceph tell --format=json-pretty --daemon-output-file=":tmp:" "$name" version)
+  J=$(tell_with_timeout --format=json-pretty --daemon-output-file=":tmp:" "$name" version)
   path=$(jq -r .path <<<"$J")
   expect_true test -e "$path"
   # only one line of json
@@ -935,26 +972,19 @@ function test_mds_tell()
   echo Old GIDs: $old_mds_gids
 
   for mds_gid in $old_mds_gids ; do
-      ceph tell mds.$mds_gid injectargs "--debug-mds 20"
+      tell_with_timeout mds.$mds_gid injectargs "--debug-mds 20"
   done
-  expect_false ceph tell mds.a injectargs mds_max_file_recover -1
+  expect_false tell_with_timeout mds.a injectargs mds_max_file_recover -1
 
   # Test respawn by rank
-  without_test_dup_command ceph tell mds.0 respawn
-  new_mds_gids=$old_mds_gids
-  while [ $new_mds_gids -eq $old_mds_gids ] ; do
-      sleep 5
-      new_mds_gids=$(get_mds_gids $FS_NAME)
-  done
+  without_test_dup_command tell_with_timeout mds.0 respawn
+  new_mds_gids=$(wait_mds_gids_change $FS_NAME "$old_mds_gids")
   echo New GIDs: $new_mds_gids
 
   # Test respawn by ID
-  without_test_dup_command ceph tell mds.a respawn
-  new_mds_gids=$old_mds_gids
-  while [ $new_mds_gids -eq $old_mds_gids ] ; do
-      sleep 5
-      new_mds_gids=$(get_mds_gids $FS_NAME)
-  done
+  old_mds_gids=$new_mds_gids
+  without_test_dup_command tell_with_timeout mds.a respawn
+  new_mds_gids=$(wait_mds_gids_change $FS_NAME "$old_mds_gids")
   echo New GIDs: $new_mds_gids
 
   test_tell_output_file mds."$FS_NAME":0
@@ -2844,8 +2874,8 @@ function test_mds_tell_help_command()
   wait_mds_active $FS_NAME
 
 
-  ceph tell mds.a help
-  expect_false ceph tell mds.z help
+  tell_with_timeout mds.a help
+  expect_false tell_with_timeout mds.z help
 
   remove_all_fs
   ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
