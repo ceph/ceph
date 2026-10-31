@@ -571,3 +571,133 @@ TEST(LibCephFS, RmsnapSubvolumeSnapshotVisibility) {
   ASSERT_EQ(0, ceph_rmdir(cmount, subvol_path));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, AlternateName) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_xattr_file[NAME_MAX];
+  sprintf(test_xattr_file, "test_fscrypt_%d", getpid());
+  int fd = ceph_open(cmount, test_xattr_file, O_RDWR|O_CREAT, 0666);
+  ASSERT_GT(fd, 0);
+
+  // check to ensure this fails as we do not have proper configs set to enter this mode
+  ASSERT_EQ(-EPERM, ceph_fsetxattr(cmount, fd, "ceph.alternate_name", "foo", 3, XATTR_CREATE));
+
+  // set proper confs
+  ASSERT_EQ(ceph_conf_set(cmount, "client_fscrypt_as", "false"), 0);
+  ASSERT_EQ(ceph_conf_set(cmount, "client_alternate_name_visible", "true"), 0);
+  char buf[64];
+  ASSERT_EQ(-ENODATA, ceph_fgetxattr(cmount, fd, "ceph.alternate_name", buf, sizeof(buf)));
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "ceph.alternate_name", "foo", 3, XATTR_CREATE));
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  // Respawn rank 0 to verify replay state of empty to not empty.
+  const char *cmd[1] = {"{\"prefix\": \"respawn\"}"};
+  char *outbuf = nullptr, *outs = nullptr;
+  size_t outbuf_len = 0, outs_len = 0;
+  int ret = ceph_mds_command(cmount, "0", cmd, 1, nullptr, 0,
+                            &outbuf, &outbuf_len, &outs, &outs_len);
+
+  bool exiting = (ret == 0 && outbuf && outbuf_len > 0 &&
+                  std::string(outbuf, outbuf_len).find("Respawning") != std::string::npos &&
+                  outs_len == 0);
+  ASSERT_EQ(exiting, true);
+
+  if (outbuf) ceph_buffer_free(outbuf);
+  if (outs) ceph_buffer_free(outs);
+
+  // sleep some time to wait for mds to respawn
+  std::this_thread::sleep_for(10s);
+
+  fd = ceph_open(cmount, test_xattr_file, O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.alternate_name", buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp("foo", buf, 3));
+
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "ceph.alternate_name", "foo", 3, XATTR_REPLACE));
+  ASSERT_EQ(-EPERM, ceph_fsetxattr(cmount, fd, "ceph.alternate_name", "bar", 3, XATTR_REPLACE));
+
+  ASSERT_EQ(-EINVAL, ceph_fremovexattr(cmount, fd, "ceph.alternate_name"));
+  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.alternate_name", buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp("foo", buf, 3));
+
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_unlink(cmount, test_xattr_file));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
+// alternate_name is per dentry. Setting it through one hardlink must
+// leave the other link unchanged.
+TEST(LibCephFS, AlternateNameHardlink) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  ASSERT_EQ(ceph_conf_set(cmount, "client_fscrypt_as", "false"), 0);
+  ASSERT_EQ(ceph_conf_set(cmount, "client_alternate_name_visible", "true"), 0);
+
+  char dir_a[NAME_MAX];
+  char dir_b[NAME_MAX];
+  char file_path[NAME_MAX];
+  char link_path[NAME_MAX];
+  char snap_link_path[NAME_MAX];
+  snprintf(dir_a, sizeof(dir_a), "altname_a_%d", getpid());
+  snprintf(dir_b, sizeof(dir_b), "altname_b_%d", getpid());
+  snprintf(file_path, sizeof(file_path), "%s/file", dir_a);
+  snprintf(link_path, sizeof(link_path), "%s/link", dir_b);
+  snprintf(snap_link_path, sizeof(snap_link_path), "%s/.snap/snap1/link", dir_b);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_a, 0777));
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_b, 0777));
+
+  int fd = ceph_open(cmount, file_path, O_RDWR|O_CREAT, 0666);
+  ASSERT_GE(fd, 0);
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_link(cmount, file_path, link_path));
+  // Snapshot the hardlink while its alternate_name is still empty.
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_b, "snap1", 0755, nullptr, 0));
+
+  const char *xattr = "ceph.alternate_name";
+  const char *link_value = "from-link";
+  const char *file_value = "from-file";
+  char buf[64];
+
+  ASSERT_EQ(0, ceph_setxattr(cmount, link_path, xattr, link_value, strlen(link_value), 0));
+
+  memset(buf, 0, sizeof(buf));
+  ASSERT_EQ((int)strlen(link_value), ceph_getxattr(cmount, link_path, xattr, buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(buf, link_value, strlen(link_value)));
+
+  // The cow clone keeps the pre-update name.
+  ASSERT_EQ(-ENODATA, ceph_getxattr(cmount, snap_link_path, xattr, buf, sizeof(buf)));
+
+  ASSERT_EQ(-ENODATA, ceph_getxattr(cmount, file_path, xattr, buf, sizeof(buf)));
+
+  ASSERT_EQ(0, ceph_setxattr(cmount, file_path, xattr, file_value, strlen(file_value), 0));
+
+  memset(buf, 0, sizeof(buf));
+  ASSERT_EQ((int)strlen(file_value), ceph_getxattr(cmount, file_path, xattr, buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(buf, file_value, strlen(file_value)));
+
+  memset(buf, 0, sizeof(buf));
+  ASSERT_EQ((int)strlen(link_value), ceph_getxattr(cmount, link_path, xattr, buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(buf, link_value, strlen(link_value)));
+
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_b, "snap1"));
+  ASSERT_EQ(0, ceph_unlink(cmount, link_path));
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_b));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_a));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
