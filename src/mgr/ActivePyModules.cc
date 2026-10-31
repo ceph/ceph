@@ -582,8 +582,8 @@ void ActivePyModules::start_one(PyModuleRef py_module)
     } else {
       auto em = modules.emplace(name, active_module);
       ceph_assert(em.second); // actually inserted
-      active_module->thread.create(active_module->get_thread_name());
       py_module->perf_counter_build(g_ceph_context);
+      active_module->thread.create(active_module->get_thread_name());
       active_module->finisher.start();
       active_module->finisher.on_started().wait();
       active_module->set_native_tid(active_module->finisher.get_tid());

@@ -44,9 +44,6 @@ int PyModuleRunner::serve()
   // This method is called from a separate OS thread (i.e. a thread not
   // created by Python), so tell Gil to wrap this in a new thread state.
   Gil gil(py_module->pMyThreadState, true);
-  if (py_module->perfcounter) {
-    py_module->perfcounter->set(py_module->l_pym_alive, 1);
-  }
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("serve"), nullptr);
 
@@ -71,10 +68,6 @@ int PyModuleRunner::serve()
     py_module->fail(exc_msg);
 
     return -EINVAL;
-  }
-
-  if (py_module->perfcounter) {
-    py_module->perfcounter->set(py_module->l_pym_alive, 0);
   }
 
   return r;
