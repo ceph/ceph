@@ -79,3 +79,50 @@ feature and a worked example.
 .. confval:: mds_dmclock_reservation
 .. confval:: mds_dmclock_weight
 .. confval:: mds_dmclock_limit
+
+Delegated inode numbers
+-----------------------
+
+Each client session holds a pool of preallocated inode numbers, up to
+``mds_client_prealloc_inos``, so that creating a file does not need a new
+allocation from the inode table. Part of that pool is handed to the client
+itself: ``mds_client_delegate_inos_pct`` percent of it, topped up whenever fewer
+than half remain. A kernel client mounted with async dirops (``nowsync``) uses
+these delegated numbers to create a file locally and send the create to the MDS
+without waiting for the reply; it may start writing file data under the new
+inode number before the MDS has seen the create. The percentage is converted to
+a fraction with integer division, so any value from 51 to 100 delegates the
+whole pool, 34 to 50 delegates half of it, and so on.
+
+Because of that early write, an inode number that is still delegated when the
+session goes away may already back data objects the MDS knows nothing about. By
+default the MDS deletes the first data object of each such number, one delete
+per number. A session that is evicted, times out, is killed or is reclaimed
+always gets this treatment.
+
+A client that asks to close its session cleanly, with no request in flight, can
+only have written under numbers it named in a create request. The MDS records
+every delegated number a client names, before the request can be deferred,
+forwarded to another rank or fail, and on such a clean close returns the numbers
+the client never named to the inode table instead of deleting objects for them.
+libcephfs and ceph-fuse never use delegated numbers, so their sessions now close
+without any of these deletes. Set
+``mds_session_close_free_unused_delegated_inos`` to false to purge every
+delegated number, as before.
+
+.. confval:: mds_session_close_free_unused_delegated_inos
+
+The deletes that remain are issued in batches, at most
+``mds_purge_inodes_max_ops`` in flight across all closing sessions. Sent all at
+once, as they were before, the deletes of many sessions closing together fill
+the OSD queues, and the journal writes of the rank wait behind them: on a single
+rank with bluestore OSDs, 128 sessions closing at once delayed journal writes by
+up to 30 seconds, long enough for a new client to time out mounting. With the
+default of 512 the same burst kept journal writes under 80ms and took about as
+long to drain. A value of 0 removes the limit.
+
+.. confval:: mds_purge_inodes_max_ops
+
+These deletes are separate from the purge queue, which removes the objects of
+unlinked files and is throttled by ``mds_max_purge_ops`` and
+``mds_max_purge_ops_per_pg`` (see :doc:`/cephfs/purge-queue`).
