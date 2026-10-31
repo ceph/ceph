@@ -198,7 +198,7 @@ class ECExtentCache {
     }
 
     void write_done(ECUtil::shard_extent_map_t const &update) const {
-      object.write_done(update, projected_size);
+      object.write_done(update, projected_size, did_invalidate_cache);
       for (auto &cb: on_write) {
         cb();
       }
@@ -227,6 +227,7 @@ private:
     uint64_t line_size = 0;
     bool reading = false;
     bool cache_invalidate_expected = false;
+    bool invalidate_write_pending = false;
 
     void request(OpRef &op);
     void send_reads();
@@ -249,7 +250,8 @@ private:
     }
 
     void insert(ECUtil::shard_extent_map_t const &buffers) const;
-    void write_done(ECUtil::shard_extent_map_t const &buffers, uint64_t new_size);
+    void write_done(ECUtil::shard_extent_map_t const &buffers, uint64_t new_size,
+                    bool did_invalidate);
     void read_done(ECUtil::shard_extent_map_t const &result);
     [[nodiscard]] uint64_t get_projected_size() const { return projected_size; }
     ECUtil::shard_extent_map_t get_cache(
