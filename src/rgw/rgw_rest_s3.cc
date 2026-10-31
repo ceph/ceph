@@ -429,8 +429,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     dump_errno(s);
   }
 
-  if (op_ret)
+  if (op_ret) {
+    if (op_ret == -ERANGE && range_parsed)
+      dump_unsatisfied_range(s, s->obj_size);
     goto done;
+  }
 
   if (range_str)
     dump_range(s, start, end, s->obj_size);
