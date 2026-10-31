@@ -5,6 +5,7 @@
 #include "common/snap_types.h"
 #include "common/Clock.h"
 #include "common/bit_vector.hpp"
+#include "common/ceph_json.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/object_map_types.h"
 #include "include/rbd_types.h"
@@ -1267,6 +1268,74 @@ TEST_P(TestClsRbd, object_map_update)
   ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
   ASSERT_EQ(ref_bit_vector, osd_bit_vector);
 
+}
+
+static int num_up_osds(librados::Rados& rados)
+{
+  bufferlist out;
+  if (rados.mon_command(R"({"prefix": "osd stat", "format": "json"})", {},
+                        &out, nullptr) < 0) {
+    return -1;
+  }
+  JSONParser parser;
+  int up = -1;
+  if (parser.parse(out.c_str(), out.length())) {
+    JSONDecoder::decode_json("num_up_osds", up, &parser);
+  }
+  return up;
+}
+
+TEST_P(TestClsRbd, object_map_update_while_a_write_reads)
+{
+  // One locator puts both objects in the same PG. In a FastEC pool the
+  // write waits for its cmpext read; the update, a CALL, takes its PG log
+  // version and yields on its own read; the write's read finishes first,
+  // so the write takes a version while the update waits.
+  const int up_before = num_up_osds(rados);
+  ASSERT_LT(0, up_before);
+  ioctx.locator_set_key("same_pg");
+  string map_oid = get_temp_image_name();
+  string data_oid = get_temp_image_name();
+
+  // 256 KiB, so every read spans all the data shards
+  const uint64_t object_count = 1 << 20;
+  librados::ObjectWriteOperation resize;
+  object_map_resize(&resize, object_count, OBJECT_NONEXISTENT);
+  ASSERT_EQ(0, ioctx.operate(map_oid, &resize));
+  const std::string content(object_count / 4, 'x');
+  bufferlist data;
+  data.append(content);
+  ASSERT_EQ(0, ioctx.write_full(data_oid, data));
+
+  bufferlist cmp_data;
+  cmp_data.append(content);
+  bufferlist write_data;
+  write_data.append(content);
+  librados::ObjectWriteOperation cmp_and_write;
+  cmp_and_write.cmpext(0, cmp_data, nullptr);
+  cmp_and_write.write_full(write_data);
+  librados::ObjectWriteOperation update;
+  object_map_update(&update, 0, object_count, OBJECT_EXISTS,
+                    boost::optional<uint8_t>());
+
+  std::unique_ptr<librados::AioCompletion> write_done{
+    librados::Rados::aio_create_completion()};
+  std::unique_ptr<librados::AioCompletion> update_done{
+    librados::Rados::aio_create_completion()};
+  ASSERT_EQ(0, ioctx.aio_operate(data_oid, write_done.get(), &cmp_and_write));
+  ASSERT_EQ(0, ioctx.aio_operate(map_oid, update_done.get(), &update));
+  write_done->wait_for_complete();
+  update_done->wait_for_complete();
+  ASSERT_EQ(0, write_done->get_return_value());
+  ASSERT_EQ(0, update_done->get_return_value());
+
+  BitVector<2> osd_bit_vector;
+  ASSERT_EQ(0, object_map_load(&ioctx, map_oid, &osd_bit_vector));
+  ASSERT_EQ(OBJECT_EXISTS, osd_bit_vector[object_count - 1]);
+
+  // a primary that aborts is marked down before the ops are resent and
+  // succeed, so the ops' results alone do not show it
+  ASSERT_EQ(up_before, num_up_osds(rados));
 }
 
 TEST_P(TestClsRbd, object_map_load_enoent)
