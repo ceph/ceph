@@ -117,6 +117,14 @@ as follows:
 :command:`bucket check`
   Check bucket index.
 
+:command:`bucket check olh-list`
+  Check the version list entries of the objects in a versioned bucket
+  against their instance entries and OLH: list entries that belong to no
+  instance entry, CURRENT flags on versions other than the one the OLH points
+  to, and missing or overwritten version markers. With ``--fix``, repair
+  them; objects with operations in progress are skipped and reported. After
+  a fix, run ``bucket check --fix`` to recalculate the bucket stats.
+
 :command:`bucket rewrite`
   Rewrite all objects in the specified bucket.
 

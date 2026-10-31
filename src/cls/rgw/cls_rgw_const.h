@@ -27,6 +27,8 @@ constexpr int RGWBIAdvanceAndRetryError = -EFBIG;
 #define RGW_BUCKET_TRIM_OLH_LOG "bucket_trim_olh_log"
 #define RGW_BUCKET_CLEAR_OLH "bucket_clear_olh"
 #define RGW_BUCKET_REFRESH_INSTANCE "bucket_refresh_instance"
+#define RGW_BUCKET_CHECK_OLH_LIST "bucket_check_olh_list"
+#define RGW_BUCKET_FIX_OLH_LIST "bucket_fix_olh_list"
 
 #define RGW_OBJ_REMOVE "obj_remove"
 #define RGW_OBJ_STORE_PG_VER "obj_store_pg_ver"
