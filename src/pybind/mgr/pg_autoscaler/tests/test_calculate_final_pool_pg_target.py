@@ -1417,3 +1417,52 @@ class TestPgAutoscaler(object):
         bias = 1
         overlapped_roots = set()
         self.helper_test(pools, root_map, bias, overlapped_roots)
+
+    def test_third_pass_zero_pg_left_divide_by_zero(self):
+        """
+        In the third pass, used_ratio = group.pg_target_total / group.size() / pg_left
+        raises ZeroDivisionError when pg_left == 0.
+
+        This can happen when earlier passes (first/second) have consumed the
+        entire PG budget, leaving pg_left == 0 by the time the third pass runs
+        against the remaining bulk pools.
+
+        pool_count must be > pool_used to pass the assert on line 678 and
+        reach the division.  We get there with:
+          pool_count=2, pool_used=1 (one non-bulk pool consumed in second pass),
+          one bulk pool still in pool_group, pg_left=0.
+        """
+        root_map = {
+            0: RootMapItem(pool_count=2, pg_target=100, pg_left=0),
+        }
+        # pool_used=1 simulates the second pass having already consumed
+        # the one non-bulk pool from the budget.
+        root_map[0].pool_used = 1
+
+        pools = {
+            "bulk_0": {
+                "pool": 0,
+                "pool_name": "bulk_0",
+                "pg_num_target": 32,
+                "capacity_ratio": 0.5,
+                "root_id": 0,
+                "size": 1,
+                "bulk": True,
+                "autoscale": True,
+                "pg_autoscale_mode": "warn",
+                "options": {},
+                "expected_final_pg_target": 32,
+                "expected_final_ratio": 0.0,
+                "expected_bulk_pool": True,
+                "even_pools": False,
+                "no_scale": False,
+            },
+        }
+
+        pg = self.create_group(pools, root_map, bias=1)
+        # Must not raise ZeroDivisionError.
+        final_ratios, _, final_pg_targets, _ = \
+            self.autoscaler._calculate_final_pool_pg_target(
+                root_map, 0, 'third', pg[0])
+        assert isinstance(final_ratios, list)
+        assert isinstance(final_pg_targets, list)

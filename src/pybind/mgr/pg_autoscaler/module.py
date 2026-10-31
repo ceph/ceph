@@ -538,7 +538,7 @@ class PgAutoscaler(MgrModule):
                 self.log.info("{} final_pool_pg_target_per_replica {}".format(p['pool_name'], final_pool_pg_target_per_replica))
 
                 assert pg_total is not None
-                final_ratio = final_pool_pg_target / pg_total
+                final_ratio = final_pool_pg_target / pg_total if pg_total else 0.0
                 final_ratios.append(final_ratio)
                 pool_pg_targets.append(pool_pg_target)
                 final_pool_pg_targets.append(final_pool_pg_target_per_replica)
@@ -673,9 +673,11 @@ class PgAutoscaler(MgrModule):
             # third pass we calculate the final_pool_pg_target
             # for pools that have used_ratio > even_ratio
             # and we keep track of even pools to be used in third pass
+            if pg_left == 0:
+                return final_ratios, pool_pg_targets, final_pool_pg_targets, pools
             pool_count = root_map[root_id].pool_count
             assert pool_count is not None
-            assert pool_count != root_map[root_id].pool_used
+            assert pool_count > root_map[root_id].pool_used
             even_ratio = 1 / (pool_count - root_map[root_id].pool_used)
             non_even_groups = []
             assert pg_left is not None
@@ -694,6 +696,7 @@ class PgAutoscaler(MgrModule):
             # fourth pass all pools are even and are assigned the same final_pool_pg_target
             pool_count = root_map[root_id].pool_count
             assert pool_count is not None
+            assert pool_count > root_map[root_id].pool_used
             final_ratio = 1 / (pool_count - root_map[root_id].pool_used)
             for (pg_target, size, bias, bulk, autoscale), group in pool_group.items():
                 pg_target = int(final_ratio * root_map[root_id].pg_left)
