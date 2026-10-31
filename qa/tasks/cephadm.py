@@ -54,6 +54,26 @@ def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
     )
 
 
+def _dump_cluster_state(ctx, cluster_name):
+    """
+    Best-effort dump of cluster/orchestrator state to the teuthology log on
+    failure, before teardown disables cephadm and stops daemons. Never raises.
+    """
+    remote = getattr(ctx.ceph[cluster_name], 'bootstrap_remote', None)
+    if remote is None:
+        return
+    log.info('Dumping cluster state for debugging...')
+    for cmd in (['ceph', 'health', 'detail'],
+                ['ceph', '-s'],
+                ['ceph', 'orch', 'ls'],
+                ['ceph', 'orch', 'ps']):
+        try:
+            _shell(ctx, cluster_name, remote, ['timeout', '60'] + cmd,
+                   check_status=False)
+        except Exception:
+            log.exception(f'failed to run {" ".join(cmd)}')
+
+
 def _cephadm_remotes(ctx, log_excluded=False):
     out = []
     for remote, roles in ctx.cluster.remotes.items():
@@ -2197,6 +2217,10 @@ def task(ctx, config):
 
             log.info('Setup complete, yielding')
             yield
+
+        except Exception:
+            _dump_cluster_state(ctx, cluster_name)
+            raise
 
         finally:
             log.info('Teardown begin')
