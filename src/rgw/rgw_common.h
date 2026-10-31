@@ -70,6 +70,7 @@ namespace rgw::lua {
 struct RGWProcessEnv;
 
 using ceph::crypto::MD5;
+using ceph::crypto::MD5NonCrypto;
 
 #define RGW_ATTR_PREFIX  "user.rgw."
 #define RGW_ATTR_S3VECTOR_STORAGE RGW_ATTR_PREFIX "s3vector-storage"
