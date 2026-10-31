@@ -4,6 +4,7 @@ from ceph_volume import terminal
 from . import list
 from . import prepare
 from . import activate
+from . import rotate_dmcrypt
 
 class Raw(object):
 
@@ -20,6 +21,7 @@ class Raw(object):
         'list': list.List,
         'prepare': prepare.Prepare,
         'activate': activate.Activate,
+        'rotate-dmcrypt-key': rotate_dmcrypt.RotateDmcryptKey,
     }
 
     def __init__(self, argv):
