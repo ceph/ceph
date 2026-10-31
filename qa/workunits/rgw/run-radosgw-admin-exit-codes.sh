@@ -27,7 +27,7 @@ aws --version
 
 # run every suite even when an earlier one fails, so the log has all of them
 failed=0
-for suite in test-bucket-exit-codes.sh test-script-exit-codes.sh test-globals.sh; do
+for suite in test-bucket-exit-codes.sh test-zone-sync-exit-codes.sh test-script-exit-codes.sh test-globals.sh; do
   bash "$suitedir/$suite" || failed=1
 done
 

@@ -2224,6 +2224,40 @@ static void get_md_sync_status(list<string>& status)
   flush_ss(ss, status);
 }
 
+static bool data_sync_source_is_local_zone(const rgw_zone_id& source_zone_id)
+{
+  const std::string& local_id =
+    static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->zone_id().id;
+  return !source_zone_id.empty() && source_zone_id.id == local_id;
+}
+
+static int validate_data_sync_source_zone_opt(const rgw_zone_id& source_zone_id)
+{
+  if (source_zone_id.empty()) {
+    cerr << "ERROR: source zone not specified" << std::endl;
+    return EINVAL;
+  }
+  if (data_sync_source_is_local_zone(source_zone_id)) {
+    cerr << "ERROR: source zone is the local zone; data sync applies to "
+            "remote source zones only" << std::endl;
+    return EINVAL;
+  }
+  return 0;
+}
+
+static int validate_metadata_sync_source_zone_opt(
+  const string& source_zone_name,
+  const rgw_zone_id& source_zone_id,
+  const std::optional<rgw_zone_id>& opt_source_zone_id)
+{
+  if (!source_zone_name.empty() || !source_zone_id.empty() ||
+      opt_source_zone_id.has_value()) {
+    cerr << "ERROR: metadata sync does not support --source-zone" << std::endl;
+    return EINVAL;
+  }
+  return 0;
+}
+
 static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& status, int tab)
 {
   stringstream ss;
@@ -6713,6 +6747,10 @@ int main(int argc, const char **argv)
   resolve_zone_ids_opt(opt_source_zone_names, opt_source_zone_ids);
   resolve_zone_ids_opt(opt_dest_zone_names, opt_dest_zone_ids);
 
+  if (source_zone.empty() && opt_source_zone_id) {
+    source_zone = *opt_source_zone_id;
+  }
+
   bool non_master_cmd = (!driver->is_meta_master() && !yes_i_really_mean_it);
   std::set<OPT> non_master_ops_list = {OPT::ACCOUNT_CREATE,
                                         OPT::ACCOUNT_MODIFY, OPT::ACCOUNT_RM,
@@ -10412,6 +10450,17 @@ next:
       cerr << "ERROR: 'metadata sync status' command does not support --bucket option." << std::endl;
       return EINVAL;
     }
+    if (int ret = validate_metadata_sync_source_zone_opt(
+          source_zone_name, source_zone, opt_source_zone_id); ret != 0) {
+      return ret;
+    }
+    if (driver->is_meta_master()) {
+      cerr << "ERROR: zone is the metadata master; metadata sync status is only "
+              "meaningful on secondary zones" << std::endl;
+      cerr << "Use 'radosgw-admin mdlog status' on the master zone instead."
+           << std::endl;
+      return EINVAL;
+    }
     RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp());
@@ -10456,6 +10505,10 @@ next:
   }
 
   if (opt_cmd == OPT::METADATA_SYNC_INIT) {
+    if (int ret = validate_metadata_sync_source_zone_opt(
+          source_zone_name, source_zone, opt_source_zone_id); ret != 0) {
+      return ret;
+    }
     RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp());
@@ -10472,6 +10525,10 @@ next:
 
 
   if (opt_cmd == OPT::METADATA_SYNC_RUN) {
+    if (int ret = validate_metadata_sync_source_zone_opt(
+          source_zone_name, source_zone, opt_source_zone_id); ret != 0) {
+      return ret;
+    }
     RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp());
@@ -10488,9 +10545,8 @@ next:
   }
 
   if (opt_cmd == OPT::DATA_SYNC_STATUS) {
-    if (source_zone.empty()) {
-      cerr << "ERROR: source zone not specified" << std::endl;
-      return EINVAL;
+    if (int ret = validate_data_sync_source_zone_opt(source_zone); ret != 0) {
+      return ret;
     }
     RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, source_zone, nullptr);
 
@@ -10557,9 +10613,8 @@ next:
   }
 
   if (opt_cmd == OPT::DATA_SYNC_INIT) {
-    if (source_zone.empty()) {
-      cerr << "ERROR: source zone not specified" << std::endl;
-      return EINVAL;
+    if (int ret = validate_data_sync_source_zone_opt(source_zone); ret != 0) {
+      return ret;
     }
 
     RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, source_zone, nullptr);
@@ -10578,9 +10633,8 @@ next:
   }
 
   if (opt_cmd == OPT::DATA_SYNC_RUN) {
-    if (source_zone.empty()) {
-      cerr << "ERROR: source zone not specified" << std::endl;
-      return EINVAL;
+    if (int ret = validate_data_sync_source_zone_opt(source_zone); ret != 0) {
+      return ret;
     }
 
     RGWSyncModuleInstanceRef sync_module;

@@ -626,6 +626,12 @@ Information about the replication status of a zone can be queried with:
                           incremental sync: 128/128 shards
                           data is caught up with source
 
+On the metadata master zone, ``sync status`` reports ``no sync (zone is master)``
+for metadata. For JSON output, run ``metadata sync status`` on a secondary zone,
+or ``mdlog status`` on the master. For data sync JSON, run ``data sync status
+--source-zone=<remote>`` on the zone that syncs from that remote source (not on
+the source zone itself).
+
 The output might be different, depending on the sync status. During sync, the
 shards are of two types:
 
