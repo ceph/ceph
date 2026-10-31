@@ -1574,7 +1574,13 @@ int RGWGetObj_ObjStore_SWIFT::verify_permission(optional_yield y)
 int RGWGetObj_ObjStore_SWIFT::get_params(optional_yield y)
 {
   const string& mm = s->info.args.get("multipart-manifest");
-  skip_manifest = (mm.compare("get") == 0);
+  manifest_get = (mm.compare("get") == 0);
+  /* keep skip_manifest set as well, so that the user manifest handling in
+   * RGWGetObj::execute() falls through to reading the raw object. note that
+   * multisite sync requests set skip_manifest on their own
+   * (rgwx-sync-manifest), which must keep reading the raw manifest object,
+   * so skip_manifest alone cannot drive the manifest-get response */
+  skip_manifest = manifest_get;
 
   return RGWGetObj_ObjStore::get_params(y);
 }
