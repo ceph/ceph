@@ -143,7 +143,7 @@ static void drain_callbacks(auto& callbacks)
   ceph_assert(found != std::end(operations));
   operations.erase(found);
 
-  return std::ranges::contains(operations, completed);
+  return std::ranges::find(operations, completed) != std::end(operations);
 }
 
 /**
