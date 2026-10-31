@@ -230,6 +230,7 @@ private:
   void send_v2_block_writes();
   Context *handle_v2_block_writes(int *result);
 
+  bool has_live_snapshot_parent();
   void send_v2_open_object_map();
   Context *handle_v2_open_object_map(int *result);
 
