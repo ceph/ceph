@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <bit>
+#include <thread>
 #include <chrono>
 #include <ratio>
 #include <mutex>
@@ -50,6 +51,7 @@
 #include "common/bloom_filter.hpp"
 #include "common/Finisher.h"
 #include "common/ceph_mutex.h"
+#include "common/WakeupFd.h"
 #include "common/Throttle.h"
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
@@ -1011,15 +1013,20 @@ private:
 
   KVSyncThread kv_sync_thread;
   ceph::mutex kv_lock = ceph::make_mutex("BlueStore::kv_lock");
-  ceph::condition_variable kv_cond;
+  /// wakes _kv_sync_thread: submitters (and, in direct-completion
+  /// mode, the kernel via IOCB_FLAG_RESFD) notify this fd
+  WakeupFd kv_wake;
+  // data bdev accepted kv_wake's eventfd (backend supports it and
+  // bluestore_kv_sync_reap_write_completions is on): no write-side
+  // completion thread, this thread reaps the write ring
+  bool bdev_direct_completions = false;
+
   bool _kv_only = false;
-  bool kv_sync_started = false;
   bool kv_stop = false;
   bool kv_finalize_started = false;
   bool kv_finalize_stop = false;
   std::deque<TransContext*> kv_queue;             ///< ready, already submitted
   std::deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
-  std::deque<TransContext*> kv_committing;        ///< currently syncing
   std::deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
   bool kv_sync_in_progress = false;
 
@@ -1508,6 +1515,7 @@ private:
   void _kv_start();
   void _kv_stop();
   void _kv_sync_thread();
+  void _kv_reap_bdev_completions();
   void _kv_finalize_thread();
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, uint64_t len);
