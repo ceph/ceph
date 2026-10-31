@@ -2151,19 +2151,37 @@ static void get_md_sync_status(list<string>& status)
   push_ss(ss, status) << "incremental sync: " << num_inc << "/" << total_shards << " shards";
 
   map<int, RGWMetadataLogInfo> master_shards_info;
-  string master_period = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_current_period_id();
+  auto zone_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone;
+  const RGWPeriod& local_period = zone_svc->get_current_period();
 
-  ret = sync.read_master_log_shards_info(dpp(), master_period, &master_shards_info);
+  ret = sync.read_master_log_shards_info(dpp(), local_period.get_id(), &master_shards_info);
   if (ret < 0) {
     status.push_back(string("failed to fetch master sync status: ") + cpp_strerror(-ret));
     return;
   }
 
+  // the local period is stale if this zone missed the period push, so ask
+  // the master which period the realm is on and fall back to the local one
+  // only if that fails
+  string master_period = local_period.get_id();
+  epoch_t master_epoch = local_period.get_realm_epoch();
+  {
+    RGWRealm master_realm;
+    param_vec_t params = {{"id", zone_svc->get_realm().get_id()}};
+    ret = zone_svc->get_master_conn()->get_json_resource(dpp(), "/admin/realm", &params,
+                                                         null_yield, master_realm);
+    if (ret < 0) {
+      push_ss(ss, status) << "failed to fetch master realm: " << cpp_strerror(-ret);
+    } else {
+      master_period = master_realm.get_current_period();
+      master_epoch = master_realm.get_epoch();
+    }
+  }
+
   map<int, string> shards_behind;
-  if (sync_status.sync_info.period != master_period) {
-    status.push_back(string("master is on a different period: master_period=" +
-                            master_period + " local_period=" + sync_status.sync_info.period));
-  } else {
+  // master_shards_info is for the local period, so the shard markers are only
+  // comparable when sync is on that period too
+  if (sync_status.sync_info.period == local_period.get_id()) {
     for (auto local_iter : sync_status.sync_markers) {
       int shard_id = local_iter.first;
       auto iter = master_shards_info.find(shard_id);
@@ -2210,9 +2228,27 @@ static void get_md_sync_status(list<string>& status)
   }
 
   int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
-  if (total_behind == 0) {
+  const bool period_behind = (sync_status.sync_info.period != master_period);
+  if (period_behind) {
+    push_ss(ss, status) << "metadata sync is on period " << sync_status.sync_info.period
+        << " (realm epoch " << sync_status.sync_info.realm_epoch << ")";
+    if (local_period.get_id() != master_period) {
+      push_ss(ss, status) << "local period " << local_period.get_id() << " (realm epoch "
+          << local_period.get_realm_epoch() << ") is not the master's current period";
+    }
+    push_ss(ss, status) << "master is on period " << master_period
+        << " (realm epoch " << master_epoch << ")";
+    if (master_epoch > sync_status.sync_info.realm_epoch) {
+      const epoch_t behind = master_epoch - sync_status.sync_info.realm_epoch;
+      push_ss(ss, status) << "metadata is " << behind
+          << (behind == 1 ? " period" : " periods") << " behind the master";
+    } else {
+      push_ss(ss, status) << "metadata sync is on a different period than the master";
+    }
+  }
+  if (total_behind == 0 && !period_behind) {
     push_ss(ss, status) << "metadata is caught up with master";
-  } else {
+  } else if (total_behind > 0) {
     push_ss(ss, status) << "metadata is behind on " << total_behind << " shards";
     push_ss(ss, status) << "behind shards: " << "[" << shards_behind_set << "]";
     if (oldest) {
