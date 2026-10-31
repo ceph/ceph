@@ -53,6 +53,12 @@ int connect(std::string_view client_name, std::string_view cluster_name,
   }
   cct->_conf.parse_env(cct->get_module_type());
 
+  // faked inos cannot identify a directory across snapshots; startup-only option
+  if (cct->_conf.get_val<bool>("client_use_faked_inos")) {
+    r = cct->_conf.set_val("client_use_faked_inos", "false");
+    dout(0) << ": turning off client_use_faked_inos, r=" << r << dendl;
+  }
+
   if (!mon_host.empty()) {
     r = cct->_conf.set_val("mon_host", std::string(mon_host));
     if (r < 0) {
