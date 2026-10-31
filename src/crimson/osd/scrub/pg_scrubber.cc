@@ -293,35 +293,14 @@ void PGScrubber::emit_scrub_result(
   DEBUGDPP("", pg);
   pg.peering_state.update_stats(
     [this, FNAME, deep, &in_stats](auto &history, auto &pg_stats) {
-      // Handle invalid stats, in case of split/merge
-      if (pg_stats.stats_invalid) {
-        pg_stats.stats.sum = in_stats;
-        pg_stats.stats_invalid = false;
-        DEBUGDPP(" repaired invalid stats! ", pg);
+      const auto result = update_stats_from_scrub(
+	deep, in_stats, pg.peering_state.get_info().last_update,
+	ceph_clock_now(), history, pg_stats);
+      if (result.repaired_invalid_stats) {
+	DEBUGDPP(" repaired invalid stats! ", pg);
       }
-      foreach_scrub_maintained_stat(
-	[deep, &pg_stats, &in_stats](
-	  const auto &name, auto statptr, bool skip_for_shallow) {
-	  if (deep && !skip_for_shallow) {
-	    pg_stats.stats.sum.*statptr = in_stats.*statptr;
-	  }
-	});
-      foreach_scrub_checked_stat(
-	[this, FNAME, &pg_stats, &in_stats](
-	  const auto &name, auto statptr, const auto &invalid_predicate) {
-	  if (!invalid_predicate(pg_stats) &&
-	      (in_stats.*statptr != pg_stats.stats.sum.*statptr)) {
-	    LOG_SCRUB_ERROR(
-	      "stat mismatch for {}: scrubbed value: {}, stored pg value: {}",
-	      name, in_stats.*statptr, pg_stats.stats.sum.*statptr);
-	    ++pg_stats.stats.sum.num_shallow_scrub_errors;
-	  }
-	});
-      history.last_scrub = pg.peering_state.get_info().last_update;
-      auto now = ceph_clock_now();
-      history.last_scrub_stamp = now;
-      if (deep) {
-	history.last_deep_scrub_stamp = now;
+      for (const auto &mismatch : result.stat_mismatches) {
+	LOG_SCRUB_ERROR("{}", mismatch);
       }
       return false; // notify_scrub_end will flush stats to osd
     });

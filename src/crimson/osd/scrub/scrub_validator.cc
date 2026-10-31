@@ -196,9 +196,10 @@ librados::obj_err_t compare_candidate_to_authoritative(
     auto citer = cand_si.attrs.find(OI_ATTR);
     if (citer == cand_si.attrs.end() ||
 	!aiter->second.contents_equal(citer->second)) {
-      object_info_t auth_oi(aiter->second);
-      object_info_t cand_oi(citer->second);
-      DEBUG("inconsistent oi, auth: {}, cand: {}", auth_oi, cand_oi);
+      // the candidate's OI may be missing or corrupted
+      DEBUG("inconsistent oi, auth: {}, cand: {}",
+	    *auth.object_info,
+	    cand.object_info ? fmt::format("{}", *cand.object_info) : "(none)");
       ret.errors |= obj_err_t::OBJECT_INFO_INCONSISTENCY;
     }
   }
@@ -408,7 +409,9 @@ void add_object_to_stats(
     out->num_objects_manifest++;
   }
 
-  if (eval.omap_keys > 0) {
+  /* As maintained by the write path. Note that eval.omap_keys is only
+   * measured by deep scrubs. */
+  if (oi.is_omap()) {
     out->num_objects_omap++;
   }
   out->num_omap_keys += eval.omap_keys;
@@ -496,6 +499,64 @@ chunk_result_t validate_chunk(
   ret.stats.num_shallow_scrub_errors += ret.snapset_errors.size();
   ret.stats.num_scrub_errors = ret.stats.num_shallow_scrub_errors +
     ret.stats.num_deep_scrub_errors;
+
+  return ret;
+}
+
+scrub_stats_update_t update_stats_from_scrub(
+  bool deep,
+  const object_stat_sum_t &scrubbed,
+  eversion_t last_update,
+  utime_t now,
+  pg_history_t &history,
+  pg_stat_t &pg_stats)
+{
+  scrub_stats_update_t ret;
+
+  // Handle invalid stats, in case of split/merge
+  if (pg_stats.stats_invalid) {
+    pg_stats.stats.sum = scrubbed;
+    pg_stats.stats_invalid = false;
+    ret.repaired_invalid_stats = true;
+  }
+
+  auto &sum = pg_stats.stats.sum;
+  foreach_scrub_maintained_stat(
+    [deep, &sum, &scrubbed](
+      const auto &name, auto statptr, bool skip_for_shallow) {
+      if (deep || !skip_for_shallow) {
+	sum.*statptr = scrubbed.*statptr;
+      }
+    });
+
+  foreach_scrub_checked_stat(
+    [&ret, &pg_stats, &sum, &scrubbed](
+      const auto &name, auto statptr, const auto &invalid_predicate) {
+      if (!invalid_predicate(pg_stats) &&
+	  (scrubbed.*statptr != sum.*statptr)) {
+	ret.stat_mismatches.push_back(fmt::format(
+	  "stat mismatch for {}: scrubbed value: {}, stored pg value: {}",
+	  name, scrubbed.*statptr, sum.*statptr));
+	++sum.num_shallow_scrub_errors;
+      }
+    });
+
+  // must follow the stat mismatch accounting above
+  sum.num_scrub_errors =
+    sum.num_shallow_scrub_errors + sum.num_deep_scrub_errors;
+
+  history.last_scrub = last_update;
+  history.last_scrub_stamp = now;
+  if (deep) {
+    history.last_deep_scrub = last_update;
+    history.last_deep_scrub_stamp = now;
+  }
+  // as in classic, a clean shallow scrub does not imply the absence of
+  // (previously found) deep errors
+  if (sum.num_shallow_scrub_errors == 0 &&
+      (!deep || sum.num_deep_scrub_errors == 0)) {
+    history.last_clean_scrub_stamp = now;
+  }
 
   return ret;
 }
