@@ -648,7 +648,16 @@ public:
     merge_notify_gate.dispatch_in_background(
       "set_ready_to_merge_target", *this,
       [this, lu, les, lec] {
-        return shard_services.set_ready_to_merge_target(pgid.pgid, lu, les, lec);
+        const auto &pool = get_pool();
+        return shard_services.seastore_pending_merge_shards_ok(
+          pgid, pool.get_pg_num(), pool.get_pg_num_pending()
+        ).then([this, lu, les, lec](bool ok) {
+          if (!ok) {
+            return seastar::now();
+          }
+          return shard_services.set_ready_to_merge_target(
+            pgid.pgid, lu, les, lec);
+        });
       });
   }
   void set_ready_to_merge_source(eversion_t lu) final {
@@ -657,7 +666,15 @@ public:
     merge_notify_gate.dispatch_in_background(
       "set_ready_to_merge_source", *this,
       [this, lu] {
-        return shard_services.set_ready_to_merge_source(pgid.pgid, lu);
+        const auto &pool = get_pool();
+        return shard_services.seastore_pending_merge_shards_ok(
+          pgid, pool.get_pg_num(), pool.get_pg_num_pending()
+        ).then([this, lu](bool ok) {
+          if (!ok) {
+            return seastar::now();
+          }
+          return shard_services.set_ready_to_merge_source(pgid.pgid, lu);
+        });
       });
   }
 
