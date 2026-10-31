@@ -85,6 +85,60 @@ In other words, when it comes to POSIX, ::
   HDFS < NFS < CephFS < {XFS, ext4}
 
 
+Visibility to other clients
+---------------------------
+
+CephFS uses :doc:`capabilities <capabilities>` to keep every client's view
+of the file system coherent. This section describes when a change that a
+process makes on one host becomes visible to processes on other hosts.
+
+Namespace changes, such as creating, unlinking, or renaming a file or a
+directory, are made by the MDS. Before the MDS makes such a change, it
+revokes the cached copies of the affected directory entries that other
+clients hold. Other clients do not see the change until the MDS has recorded
+it in its journal: a lookup or a directory listing that arrives earlier waits
+for that.
+
+ceph-fuse, libcephfs, and kernel clients mounted with ``wsync`` do not return
+from a namespace operation until the MDS has made the change. After the call
+returns, a process on any other host sees the change, and it sees the changes
+of one process in the order in which that process made them.
+
+Kernel clients mount with ``nowsync`` by default since kernel version 5.16.
+With ``nowsync``, a client can create or unlink a file in a directory
+without waiting for the MDS while it is the only client using that directory.
+This needs no configuration: the MDS gives the client exclusive capabilities
+on the directory after its first create or unlink there, and revokes them
+when another client looks up or lists the directory. The client sends the
+request to the MDS at once, but the call can return before the MDS has made
+the change. Until then, a process on another host might not see the change,
+and it might see a later change in another directory first. Other namespace
+operations, such as mkdir(2), rmdir(2), and rename(2), always wait for the
+MDS. Before you tell a process on another host that such a change has been
+made, call fsync(2) on the directory, which waits until the MDS has journaled
+the pending changes in it, or mount with ``wsync``.
+
+File data follows the same model. While only one client has a file open, that
+client can cache the file's data and buffer its writes. When a client on
+another host opens the file or reads its attributes with stat(2), the MDS has
+the first client write back its buffered data before letting the second
+client proceed. On kernel clients, access(2) does not wait for this, because
+it needs only the file's mode and ownership. Neither does statx(2) when its
+mask leaves out the size, the block count, and the access, modification, and
+change times. ceph-fuse fetches all of a file's attributes when it looks up a
+file that it has not cached, so with ceph-fuse access(2) can wait as long as
+stat(2). While clients on more than one host have the file open and any of
+them has it open for writing, no client caches or buffers its data, and
+every read and write goes to the OSDs. As a result, a read on any host returns
+the data of a write(2) that has returned on another host, whether or not the
+writer called fsync(2). fsync(2) protects the data against a failure of the
+writing client, but other clients do not need it to see the data.
+
+The exceptions are shared writable mmap(2), described above, and
+:doc:`/cephfs/lazyio`, which lets applications that manage coherency
+themselves keep caching and buffering data.
+
+
 fsync() and error reporting
 ---------------------------
 
