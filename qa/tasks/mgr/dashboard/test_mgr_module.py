@@ -30,22 +30,43 @@ class MgrModuleTestCase(DashboardTestCase):
                 if self._resp.status_code == 200:
                     return True
             except (MaxRetryError, requests.ConnectionError):
-                pass
+                return False
             return False
 
-        self.wait_until_true(_check_connection, timeout=30)
+        self.wait_until_true(_check_connection, timeout=30, period=2)
+
+    def wait_until_mgr_module_state(self, module_name, enabled, timeout=60):
+        """
+        Wait until the mgr CLI reports the requested module state.
+        """
+
+        def _check():
+            try:
+                data = self._ceph_cmd(['mgr', 'module', 'ls'])
+                logger.info("mgr module ls returned: %s", data)
+
+                enabled_modules = data.get('enabled_modules', [])
+                disabled_modules = data.get('disabled_modules', [])
+
+                if enabled:
+                    return module_name in enabled_modules
+
+                return module_name in disabled_modules or module_name not in enabled_modules
+            except Exception as ex:  # pylint: disable=broad-except
+                logger.warning("Error checking mgr module state for %s: %s",
+                               module_name, ex)
+                return False
+
+        self.wait_until_true(_check, timeout=timeout, period=2)
 
 
 class MgrModuleTest(MgrModuleTestCase):
 
     def test_list_disabled_module(self):
         self._ceph_cmd(['mgr', 'module', 'disable', 'iostat'], wait=3)
-        data = self._get(
-            '/api/mgr/module',
-            retries=1,
-            wait_func=lambda:  # pylint: disable=unnecessary-lambda
-            self.wait_until_rest_api_accessible()
-        )
+        self.wait_until_mgr_module_state('iostat', False, timeout=90)
+        self.wait_until_rest_api_accessible()
+        data = self._get('/api/mgr/module', retries=3)
         self.assertStatus(200)
         self.assertSchema(
             data,
@@ -62,12 +83,9 @@ class MgrModuleTest(MgrModuleTestCase):
 
     def test_list_enabled_module(self):
         self._ceph_cmd(['mgr', 'module', 'enable', 'iostat'], wait=3)
-        data = self._get(
-            '/api/mgr/module',
-            retries=1,
-            wait_func=lambda:  # pylint: disable=unnecessary-lambda
-            self.wait_until_rest_api_accessible()
-        )
+        self.wait_until_mgr_module_state('iostat', True, timeout=90)
+        self.wait_until_rest_api_accessible()
+        data = self._get('/api/mgr/module', retries=3)
         self.assertStatus(200)
         self.assertSchema(
             data,
