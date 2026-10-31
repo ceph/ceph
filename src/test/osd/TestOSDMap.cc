@@ -3504,13 +3504,15 @@ TEST_F(OSDMapTest, rb_osdsize_opt_score) {
     ASSERT_TRUE(prim_pgs_by_osd.contains(rbi.max_osd));
     ASSERT_EQ(rbi.max_osd_prims, prim_pgs_by_osd.at(rbi.max_osd).size());
     ASSERT_GE(rbi.acting_adj_score, 1.0);
-    if (rr <= 85) {
-      // with high read ratios, scores can be equal
-      ASSERT_NE(rbi.acting_adj_score, fair_score);
-    }
     ASSERT_FLOAT_EQ(rbi.acting_adj_score, rbi.adjusted_score);
-    auto total_load = rbi.avg_osd_load * weights.size();
     const pg_pool_t *p = osdmap.get_pg_pool(my_rep_pool);
+    // the score is the busiest OSD's load relative to the average load. It
+    // can round to the fair score, which is computed from primaries alone.
+    float load_per_osd = float((100 + (p->get_size() - 1) * (100 - rr)) *
+                               p->get_pg_num()) / weights.size();
+    ASSERT_NEAR(rbi.acting_adj_score,
+                rbi.max_acting_osd_load / load_per_osd, 0.01);
+    auto total_load = rbi.avg_osd_load * weights.size();
     auto pg_load = total_load / p->get_pg_num();
     ASSERT_GE(rbi.max_osd_load, pg_load);
     if (p->get_size() > 1) {
