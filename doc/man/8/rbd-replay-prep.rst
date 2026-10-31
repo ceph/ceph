@@ -15,7 +15,7 @@ Synopsis
 Description
 ===========
 
-**rbd-replay-prep** processes raw rados block device (RBD) traces to prepare them for **rbd-replay**.
+**rbd-replay-prep** processes raw RADOS block device (RBD) traces to prepare them for **rbd-replay**.
 
 
 Options
@@ -31,7 +31,7 @@ Options
 
 .. option:: --verbose
 
-   Print all processed events to console
+   Prints all processed events to the console.
 
 Examples
 ========

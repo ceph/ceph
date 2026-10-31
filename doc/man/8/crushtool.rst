@@ -16,7 +16,7 @@ Synopsis
 Description
 ===========
 
-**crushtool** is a utility that lets you create, compile, decompile
+**crushtool** is a utility that lets you create, compile, decompile,
 and test CRUSH map files.
 
 CRUSH is a pseudo-random data distribution algorithm that efficiently
@@ -61,11 +61,11 @@ silence all output from the CRUSH subsystem::
 Running tests with --test
 =========================
 
-The test mode will use the input crush map ( as specified with **-i
-map** ) and perform a dry run of CRUSH mapping or random placement
-(if **--simulate** is set ). On completion, two kinds of reports can be
+The test mode will use the input crush map (as specified with **-i
+map**\) and perform a dry run of CRUSH mapping or random placement
+(if **--simulate** is set). On completion, two kinds of reports can be
 created. 
-1) The **--show-...** option outputs human readable information
+1) The **--show-...** option outputs human-readable information
 on stderr. 
 2) The **--output-csv** option creates CSV files that are
 documented by the **--help-output** option.
@@ -157,7 +157,7 @@ pools; it only runs simulations by mapping values in the range
       ..
 
    shows that **95224** mappings succeeded without retries, **3745**
-   mappings succeeded with one attempts, etc. There are as many rows
+   mappings succeeded with one retry attempt, etc. There are as many rows
    as the value of the **--set-choose-total-tries** option.
 
 .. option:: --show-retry-exhaustion
@@ -250,7 +250,7 @@ Example
 
 Suppose we have two rows with two racks each and 20 nodes per rack. Suppose
 each node contains 4 storage devices for Ceph OSD Daemons. This configuration
-allows us to deploy 320 Ceph OSD Daemons. Lets assume a 42U rack with 2U nodes,
+allows us to deploy 320 Ceph OSD Daemons. Let's assume a 42U rack with 2U nodes,
 leaving an extra 2U for a rack switch.
 
 To reflect our hierarchy of devices, nodes, racks and rows, we would execute
@@ -314,7 +314,7 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`osdmaptool <osdmaptool>`\(8),
+:doc:`osdmaptool <osdmaptool>`\(8)
 
 Authors
 =======
