@@ -108,7 +108,17 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c,
 
 NetworkStack::NetworkStack(CephContext *c)
   : cct(c)
-{}
+{
+  // Create SMC counters if ms_type == async+smc
+  if (cct->_conf.get_val<std::string>("ms_type").find("smc") != std::string::npos) {
+    PerfCountersBuilder plb(cct, "msgr_smc", l_msgr_smc_first, l_msgr_smc_last);
+    plb.add_u64_counter(l_msgr_smc_connections, "msgr_smc_connections", "Active SMC connection number");
+    plb.add_u64_counter(l_msgr_smc_connection_fallbacks, "msgr_smc_connection_fallbacks", "Fallbacked SMC connection number");
+
+    smc_perf_counters = plb.create_perf_counters();
+    cct->get_perfcounters_collection()->add(smc_perf_counters);
+  }
+}
 
 void NetworkStack::start()
 {
