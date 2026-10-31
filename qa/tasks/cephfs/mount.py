@@ -1674,6 +1674,72 @@ class CephFSMountBase(object):
             """).format(src=src, dst=dst)
         proc = self._run_python(pyscript)
         proc.wait()
+    def copy_tree(self, src_path, dst_path):
+        """
+        Copy tree from src to dst. It will copy contents and certain xattrs
+
+        :param src_path
+        :param dst_path
+        :return:
+        """
+
+        pyscript = dedent("""
+            import os
+            import shutil
+            src_path = {src_path!r}
+            dst_path = {dst_path!r}
+            xattrs = ['ceph.fscrypt.auth', 'ceph.fscrypt.file', 'ceph.alternate_name']
+            for dirpath, dirnames, filenames in os.walk(src_path):
+                rel_path = os.path.relpath(dirpath, src_path)
+                cur_dst_path = os.path.join(dst_path, rel_path)
+                os.makedirs(cur_dst_path, exist_ok=True)
+
+                for xattr in xattrs:
+                    try:
+                        value = os.getxattr(dirpath, xattr)
+                        if value is None:
+                            continue
+                        os.setxattr(cur_dst_path, xattr, value)
+                    except OSError:
+                        pass
+
+                for file in filenames:
+                    src_file = os.path.join(dirpath, file)
+                    dst_file = os.path.join(cur_dst_path, file)
+
+                    shutil.copy2(src_file, dst_file)
+                    for xattr in xattrs:
+                        try:
+                            value = os.getxattr(src_file, xattr)
+                            if value is None:
+                                continue
+                            os.setxattr(dst_file, xattr, value)
+                        except OSError:
+                            pass
+        """).format(src_path=src_path, dst_path=dst_path)
+        proc = self._run_python(pyscript, timeout=90)
+        proc.wait()
+
+    def rename(self, src, dst):
+        """
+        Rename an inode from src path to dst path
+
+        :param src:
+        :param dst:
+        :return:
+        """
+        pyscript = dedent("""
+            import os
+            import sys
+            import errno
+
+            try:
+                os.rename("{src}", "{dst}")
+            except OSError as e:
+                sys.exit(errno.EIO)
+            """).format(src=src, dst=dst)
+        proc = self._run_python(pyscript)
+        proc.wait()
 
     def touch_os(self, fs_path):
         """
