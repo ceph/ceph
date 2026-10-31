@@ -198,6 +198,8 @@ public:
     l_pym_mem_rss_change,
     l_pym_mem_rss_current,
     l_pym_serve_cpu_usage,
+    l_pym_cmd_in_flight,
+    l_pym_cmd_eagain,
     l_pym_last
   };
 

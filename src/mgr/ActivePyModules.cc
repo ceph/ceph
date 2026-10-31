@@ -580,10 +580,12 @@ void ActivePyModules::start_one(PyModuleRef py_module)
       derr << "Failed to run module in active mode ('" << name << "')"
            << dendl;
     } else {
+      // before emplace: DaemonServer starts counting commands
+      // (cmd_in_flight) once the module is in `modules`
+      py_module->perf_counter_build(g_ceph_context);
       auto em = modules.emplace(name, active_module);
       ceph_assert(em.second); // actually inserted
       active_module->thread.create(active_module->get_thread_name());
-      py_module->perf_counter_build(g_ceph_context);
       active_module->finisher.start();
       active_module->finisher.on_started().wait();
       active_module->set_native_tid(active_module->finisher.get_tid());
