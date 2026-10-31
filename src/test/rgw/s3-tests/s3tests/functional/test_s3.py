@@ -14843,8 +14843,6 @@ def test_copy_object_ifmatch_good():
     body = _get_body(response)
     assert body == 'bar'
 
-# TODO: remove fails_on_rgw when https://tracker.ceph.com/issues/40808 is resolved
-@pytest.mark.fails_on_rgw
 def test_copy_object_ifmatch_failed():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -14855,8 +14853,6 @@ def test_copy_object_ifmatch_failed():
     assert status == 412
     assert error_code == 'PreconditionFailed'
 
-# TODO: remove fails_on_rgw when https://tracker.ceph.com/issues/40808 is resolved
-@pytest.mark.fails_on_rgw
 def test_copy_object_ifnonematch_good():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -14866,6 +14862,39 @@ def test_copy_object_ifnonematch_good():
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 412
     assert error_code == 'PreconditionFailed'
+
+def test_copy_object_ifnonematch_star():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo', Body='bar')
+
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket_name, CopySource=bucket_name+'/foo', CopySourceIfNoneMatch='*', Key='bar')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 412
+    assert error_code == 'PreconditionFailed'
+
+def test_copy_object_ifmodifiedsince_failed():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo', Body='bar')
+
+    future = datetime.datetime(2100, 1, 1, tzinfo=pytz.UTC)
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket_name, CopySource=bucket_name+'/foo', CopySourceIfModifiedSince=future, Key='bar')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 412
+    assert error_code == 'PreconditionFailed'
+
+@pytest.mark.fails_on_dbstore
+def test_copy_object_ifmodifiedsince_good():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo', Body='bar')
+
+    past = datetime.datetime(2000, 1, 1, tzinfo=pytz.UTC)
+    client.copy_object(Bucket=bucket_name, CopySource=bucket_name+'/foo', CopySourceIfModifiedSince=past, Key='bar')
+    response = client.get_object(Bucket=bucket_name, Key='bar')
+    body = _get_body(response)
+    assert body == 'bar'
 
 @pytest.mark.fails_on_dbstore
 def test_copy_object_ifnonematch_failed():
