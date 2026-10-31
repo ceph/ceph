@@ -69,6 +69,8 @@ You can also do the same for all daemons for a service with:
 A service name is the name that ``ceph orch ls`` shows, for example
 ``mds.myfs``.
 
+Cephadm refuses to stop the whole ``mgr``, ``mon`` or ``osd`` service.
+
 .. note::
     It is usually not safe to run ``ceph orch restart osd.myosdservice`` on a
     running cluster, as attention is not paid to CRUSH failure domains, and
@@ -163,9 +165,10 @@ You can preview what would happen without making changes:
 The startup process performs the following steps:
 
 1. Loads the saved cluster state from the shutdown state file
-2. Starts all hosts in parallel (configurable)
+2. Starts the admin host first, then the other hosts in parallel (configurable)
 3. Waits for the cluster to become accessible
-4. Waits for all placement groups to become ``active+clean``
+4. Waits up to five minutes for all placement groups to become ``active+clean``,
+   then continues even if they are not
 5. Unsets the OSD ``noout`` flag
 6. Sets CephFS filesystems back to joinable
 7. Resumes the cephadm orchestrator
@@ -247,10 +250,12 @@ Rotating a Daemon's Authentication Key
 --------------------------------------
 
 All Ceph and gateway daemons in the cluster have a secret key that is used to connect
-to and authenticate with the cluster.  The ``ceph orch daemon rotate-key``
-command is disabled in releases beginning with Squid 19.2.6 and
-Tentacle 20.2.4. It did not work for some daemon types that have client keys
-(for example NFS and NVMe-oF) and could take those daemons down.
+to and authenticate with the cluster. The
+``ceph orch daemon rotate-key <daemon-name>`` and
+``ceph orch rotate-key <service-name>`` commands are disabled in releases
+beginning with Squid 19.2.6 and Tentacle 20.2.4. In earlier releases, these
+commands do not work for some daemon types that have client keys (for
+example, NFS and NVMe-oF) and can take those daemons down.
 
 
 .. _cephadm-logs:
@@ -265,9 +270,9 @@ Ceph daemons traditionally write logs to ``/var/log/ceph``. Ceph daemons log to
 journald by default and Ceph logs are captured by the container runtime
 environment. They are accessible via ``journalctl``.
 
-.. note:: When the container engine is Docker, or a Podman version without
-   split cgroups support, Ceph daemons log to stderr and the container
-   runtime captures the output.
+.. note:: When the container engine is Docker, or a Podman version older
+   than 2.1.0, Ceph daemons log to stderr and the container runtime
+   captures the output.
 
 
 Example of Logging to Journald
@@ -312,7 +317,7 @@ Disabling Logging to Journald
 
 If you choose to log to files, we recommend disabling logging to journald or else
 everything will be logged twice. Run the following commands to disable logging
-to stderr:
+to stderr and to journald:
 
 .. prompt:: bash #
 
@@ -827,10 +832,11 @@ When a client keyring is placed under management, cephadm will:
   - store a copy of the ``/etc/ceph/ceph.conf`` file on the specified host(s)
   - store a copy of the ``ceph.conf`` file at ``/var/lib/ceph/<fsid>/config/ceph.conf``
     on the specified host(s)
+  - store a copy of the keyring file at ``/etc/ceph/ceph.<entity>.keyring``
+    on the specified host(s)
   - store a copy of the keyring file at
     ``/var/lib/ceph/<fsid>/config/ceph.<entity>.keyring`` on the specified
     host(s)
-  - store a copy of the keyring file on the specified host(s)
   - update the ``ceph.conf`` file as needed (e.g., due to a change in the cluster Monitors)
   - update the keyring file if the entity's key is changed (e.g., via ``ceph
     auth ...`` commands)
@@ -843,7 +849,7 @@ When a client keyring is placed under management, cephadm will:
 Listing Client Keyrings
 -----------------------
 
-To see the list of client keyrings are currently under management, run the following command:
+To see the list of client keyrings that are currently under management, run the following command:
 
 .. prompt:: bash #
 
@@ -985,6 +991,8 @@ Commands requiring passwordless sudo support:
    ``sudo /var/lib/ceph/<fsid>/cephadm.<sha256 of the binary>``, and uses
    ``ls``, ``mkdir``, ``touch``, ``chown``, ``chmod`` and ``mv`` to install
    that binary. The example ``sudoers`` line below does not allow that path.
+   To restrict ``sudo`` in those releases, use sudo hardening instead (see
+   :ref:`cephadm-sudo-hardening`).
 
 
 Configuring the ``sudoers`` file can be performed using a tool like ``visudo``
@@ -1025,10 +1033,9 @@ command on each host:
 Replacing a Device
 ==================
 
-The ``ceph orch device replace`` command automates the process of replacing the underlying device of an OSD.
-Previously, this process required manual intervention at various stages.
-With this new command, all necessary operations are performed automatically, streamlining the replacement process
-and improving the overall user experience.
+The ``ceph orch device replace`` command automates the process of replacing the
+underlying device of an OSD. It performs all the necessary operations, which
+would otherwise need manual intervention at several stages.
 
 .. note:: This supports only LVM-based deployed OSD(s).
 
@@ -1093,8 +1100,8 @@ For example:
 
 .. prompt:: bash # auto
 
-  # ceph orch device replace devel-1 /dev/vdk --clear
-  Replacement header cleared on /dev/vdk
+  # ceph orch device replace osd-1 /dev/vdd --clear
+  Replacement header cleared on /dev/vdd
 
 Cephadm will then redeploy the OSD service spec within a few minutes
 (unless the service is set to ``unmanaged``).
