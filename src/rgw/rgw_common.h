@@ -106,6 +106,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
 #define RGW_ATTR_SHARE_MANIFEST RGW_ATTR_PREFIX "shared_manifest"
+#define RGW_ATTR_MULTIPART_UPLOAD_ID RGW_ATTR_PREFIX "mpu_id"
 #define RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION	RGW_ATTR_PREFIX RGW_AMZ_WEBSITE_REDIRECT_LOCATION
 #define RGW_ATTR_SLO_MANIFEST   RGW_ATTR_PREFIX "slo_manifest"
 /* Information whether an object is SLO or not must be exposed to
