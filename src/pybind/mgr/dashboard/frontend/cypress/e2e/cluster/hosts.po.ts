@@ -9,10 +9,19 @@ export class HostsPageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    hostname: 2,
-    labels: 3,
-    status: 4
+    hostname: 1,
+    labels: 2,
+    status: 3
   };
+
+  // Navigate to a host's resource page section via the sidebar sidenav link.
+  // tabLabel must match the visible link text, e.g. 'Service instances' for the daemons route.
+  clickHostTab(hostname: string, tabLabel: string) {
+    this.getResourcePage(hostname).click();
+    cy.get('cd-host-sidebar').should('exist');
+    cy.contains('cds-sidenav-item a', tabLabel).click();
+    cy.get('cd-host-resource-page').should('exist');
+  }
 
   check_for_host() {
     this.getTableCount('total').should('not.be.eq', 0);
@@ -164,8 +173,8 @@ export class HostsPageHelper extends PageHelper {
     cy.wait(1000);
     this.checkLabelExists(hostname, ['_no_schedule'], true);
 
-    this.clickTab('cd-host-details', hostname, 'Daemons');
-    cy.get('cd-host-details').within(() => {
+    this.clickHostTab(hostname, 'Service instances');
+    cy.get('cd-host-resource-page').within(() => {
       cy.wait(20000);
       this.expectTableCount('total', 0);
     });
