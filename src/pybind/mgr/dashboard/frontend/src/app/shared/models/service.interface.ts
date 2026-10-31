@@ -113,6 +113,7 @@ export interface CephServiceAdditionalSpec {
   oidc_issuer_url: string;
   enable_auth: boolean;
   encryption_key?: string;
+  listener_network_masks?: string[];
   qat: QatSepcs;
 }
 

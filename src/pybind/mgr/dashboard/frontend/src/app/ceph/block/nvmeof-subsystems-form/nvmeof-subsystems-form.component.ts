@@ -31,6 +31,8 @@ export type SubsystemPayload = {
   hostDchapKeyList: Array<{ dhchap_key: string; host_nqn: string }>;
   listenerMode?: string;
   subnetMask?: string;
+  useGroupNetworkMask?: boolean;
+  groupNetworkMasks?: string[];
 };
 
 type StepResult = { step: string; success: boolean; error?: string };
@@ -40,6 +42,7 @@ type CreateSubsystemRequest = {
   gw_group: string;
   dhchap_key: string;
   network_mask?: string[];
+  use_conf_listener_network_masks?: boolean;
 };
 
 type SequentialStep = { step: string; call: () => Observable<unknown> };
@@ -189,8 +192,16 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       dhchap_key: payload.subsystemDchapKey
     };
 
-    if (payload.listenerMode === LISTENER_MODE.AUTO_FETCH && payload.subnetMask) {
-      createSubsystemRequest.network_mask = [payload.subnetMask];
+    if (payload.listenerMode === LISTENER_MODE.AUTO_FETCH) {
+      if (payload.useGroupNetworkMask) {
+        if (payload.groupNetworkMasks && payload.groupNetworkMasks.length > 0) {
+          createSubsystemRequest.network_mask = payload.groupNetworkMasks;
+        } else {
+          createSubsystemRequest.use_conf_listener_network_masks = true;
+        }
+      } else if (payload.subnetMask) {
+        createSubsystemRequest.network_mask = [payload.subnetMask];
+      }
     }
 
     this.nvmeofService.createSubsystem(createSubsystemRequest).subscribe({
