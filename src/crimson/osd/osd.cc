@@ -1668,7 +1668,11 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
     auto threshold = local_conf().get_val<int64_t>("high_debug_level_threshold");
     auto [count, max_level] = DebugLevelGuard::count_elevated(
       local_conf()->subsys, threshold);
-    metrics.emplace_back(daemon_metric::HIGH_DEBUG_LEVEL, count, max_level);
+    // only while elevated: a mgr that predates this metric logs every
+    // unknown metric it receives
+    if (count > 0) {
+      metrics.emplace_back(daemon_metric::HIGH_DEBUG_LEVEL, count, max_level);
+    }
   }
 
   return metrics;
