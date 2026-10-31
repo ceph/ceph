@@ -124,18 +124,102 @@ function TEST_scrub_test() {
     perf_counters $dir $OSDS
 }
 
-# Grab year-month-day
-DATESED="s/\([0-9]*-[0-9]*-[0-9]*\).*/\1/"
-DATEFORMAT="%Y-%m-%d"
+NSEC_PER_SEC=1000000000
 
+# Format a nanoseconds-since-the-epoch value as a seconds.fraction string.
+function nsec_to_sec_str() {
+    printf '%d.%09d' $(($1 / NSEC_PER_SEC)) $(($1 % NSEC_PER_SEC))
+}
+
+# Format a nanoseconds-since-the-epoch value as an ISO 8601 date and time.
+function nsec_to_iso() {
+    date -d @$(nsec_to_sec_str $1) -Is
+}
+
+# Report the PG's last-scrub stamp as nanoseconds since the epoch.
+#
+# The stamp is taken from the PG's history, as reported by the primary OSD:
+# the same anchor the OSD schedules scrubs from. It is retried briefly, in
+# case the PG is not yet known to its primary, or the stamp is still unset.
+# Note that comparing two epoch values - rather than two formatted dates - is
+# immune to the times compared falling on opposite sides of midnight.
+#
+# $1: the PG id
+# $2: max number of attempts (1s apart)
+function get_scrub_stamp_nsec() {
+    local pgid=$1
+    local retries=${2:-10}
+    local i stamp stamp_nsec
+
+    for i in $(seq 1 $retries); do
+        stamp=$(get_last_scrub_stamp $pgid last_scrub_stamp query)
+        # note: 'date -d' fails an unset ("0.000000") stamp
+        if [ -n "$stamp" ] && \
+           stamp_nsec=$(date -d "$stamp" +%s%N 2>/dev/null); then
+            echo $stamp_nsec
+            return 0
+        fi
+        sleep 1
+    done
+    echo "$pgid: no last_scrub_stamp (last seen: '$stamp')" >&2
+    return 1
+}
+
+# Verify the scrub time scheduled for the PG.
+#
+# The expected time is derived from the PG's last-scrub stamp - the same anchor
+# the OSD uses - and not from the wall-clock time at the moment of the check.
+# The interval randomization is disabled by the caller, so that the scheduled
+# time is expected to match to the microsecond. Still, a small tolerance is
+# allowed, as the exactness of the match is not what this test is about.
+#
+# Configuration changes take effect asynchronously. The schedule is thus
+# polled until it matches, and only the last mismatch is reported.
+#
+# $1: the primary OSD id
+# $2: the PG's last-scrub stamp, in nsecs since the epoch
+# $3: the expected interval (in seconds) between the stamp and the scrub
+# $4: max number of attempts (1s apart; default: 1)
 function check_dump_scrubs() {
     local primary=$1
-    local sched_time_check="$2"
+    local stamp_nsec=$2
+    local expected_interval=$3
+    local retries=${4:-1}
+    local tolerance_nsec=$((5 * NSEC_PER_SEC))
+    local expected_nsec=$((stamp_nsec + expected_interval * NSEC_PER_SEC))
+    local i dump sched_time sched_nsec delta err
 
-    DS="$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) dump_scrubs)"
-    # use eval to drop double-quotes
-    eval SCHED_TIME=$(echo $DS | jq '.[0].sched_time')
-    test $(echo $SCHED_TIME | sed $DATESED) = $(date +${DATEFORMAT} -d "now + $sched_time_check") || return 1
+    for i in $(seq 1 $retries); do
+        if [ $i -gt 1 ]; then
+            sleep 1
+        fi
+        if ! dump=$(CEPH_ARGS='' ceph --admin-daemon \
+                $(get_asok_path osd.${primary}) dump_scrubs); then
+            err="osd.$primary: dump_scrubs failed"
+            continue
+        fi
+        if ! sched_time=$(echo "$dump" | jq -r '.[0].sched_time // empty') || \
+           [ -z "$sched_time" ]; then
+            err="osd.$primary: no scheduled scrub in dump_scrubs: $dump"
+            continue
+        fi
+        if ! sched_nsec=$(date -d "$sched_time" +%s%N 2>/dev/null); then
+            err="osd.$primary: bad scheduled scrub time '$sched_time'"
+            continue
+        fi
+
+        delta=$((sched_nsec - expected_nsec))
+        if [ $delta -lt 0 ]; then
+            delta=$((-delta))
+        fi
+        if [ $delta -le $tolerance_nsec ]; then
+            return 0
+        fi
+        err="scheduled scrub time $sched_time is $(nsec_to_sec_str $delta)s"
+        err+=" off the expected $(nsec_to_iso $expected_nsec)"
+    done
+    echo "$err" >&2
+    return 1
 }
 
 function TEST_interval_changes() {
@@ -173,28 +257,34 @@ function TEST_interval_changes() {
 
     local primary=$(get_primary $poolname obj1)
 
+    # the anchor all the scheduled times below are computed from. The stamp is
+    # the PG's creation time, and is fetched just once: no scrub is performed
+    # by this test (the intervals are set to a day and up), so it never changes.
+    local stamp_nsec
+    stamp_nsec=$(get_scrub_stamp_nsec ${poolid}.0) || return 1
+
     # Check initial settings from above (min 1 day, min 1 week)
-    check_dump_scrubs $primary "1 day" || return 1
+    check_dump_scrubs $primary $stamp_nsec $day || return 1
 
     # Change global osd_scrub_min_interval to 2 days
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) config set osd_scrub_min_interval $(expr $day \* 2)
-    sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "2 days" || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) config set osd_scrub_min_interval $((day * 2))
+    check_dump_scrubs $primary $stamp_nsec $((day * 2)) $WAIT_FOR_UPDATE || return 1
 
-    # Change global osd_scrub_max_interval to 2 weeks
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) config set osd_scrub_max_interval $(expr $week \* 2)
+    # Change global osd_scrub_max_interval to 2 weeks. The max interval is not
+    # reflected in dump_scrubs, and the expected schedule is unchanged: polling
+    # would succeed at once. Wait instead, then verify the schedule held.
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) config set osd_scrub_max_interval $((week * 2))
     sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "2 days" || return 1
+    check_dump_scrubs $primary $stamp_nsec $((day * 2)) || return 1
 
     # Change pool osd_scrub_min_interval to 3 days
-    ceph osd pool set $poolname scrub_min_interval $(expr $day \* 3)
-    sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "3 days" || return 1
+    ceph osd pool set $poolname scrub_min_interval $((day * 3))
+    check_dump_scrubs $primary $stamp_nsec $((day * 3)) $WAIT_FOR_UPDATE || return 1
 
-    # Change pool osd_scrub_max_interval to 3 weeks
-    ceph osd pool set $poolname scrub_max_interval $(expr $week \* 3)
+    # Change pool osd_scrub_max_interval to 3 weeks (see above re waiting)
+    ceph osd pool set $poolname scrub_max_interval $((week * 3))
     sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "3 days" || return 1
+    check_dump_scrubs $primary $stamp_nsec $((day * 3)) || return 1
     perf_counters $dir $OSDS
 }
 
