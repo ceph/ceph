@@ -122,6 +122,14 @@ else()
   )
 endif()
 
+# skip -Wconditional-uninitialized for vendored isa-l sources
+foreach(src IN LISTS zlib_sources)
+  if(src MATCHES "/isa-l/.*\\.c$")
+    set_property(SOURCE ${src} APPEND PROPERTY COMPILE_OPTIONS
+      $<$<C_COMPILER_ID:AppleClang,Clang>:-Wno-conditional-uninitialized>)
+  endif()
+endforeach()
+
 add_library(ceph_zlib SHARED ${zlib_sources})
 if(have_isal)
   # Only the branches above compile the ISA-L sources, so this is what
