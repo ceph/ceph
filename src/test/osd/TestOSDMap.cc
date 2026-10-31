@@ -846,6 +846,37 @@ TEST_F(OSDMapTest, parse_osd_id_list) {
   ASSERT_EQ(-EINVAL, osdmap.parse_osd_id_list({"-12"}, &out, &cout));
 }
 
+TEST_F(OSDMapTest, get_out_of_subnet_osd_counts) {
+  set_up_map(5, true);
+
+  entity_addr_t in_v2, in_v1, out_v2, out_v1;
+  ASSERT_TRUE(in_v2.parse("v2:10.1.1.10"));
+  ASSERT_TRUE(in_v1.parse("v1:10.1.1.10"));
+  ASSERT_TRUE(out_v2.parse("v2:192.168.0.10"));
+  ASSERT_TRUE(out_v1.parse("v1:192.168.0.10"));
+
+  std::vector<entity_addrvec_t> published(5);
+  published[0].v = {in_v2}; // one msgr2 inside the subnet
+  published[1].v = {out_v2}; // one msgr2 outside the subnet
+  published[2].v = {in_v2, in_v1}; // one msgr1 and one msgr2, both inside the subnet
+  published[3].v = {in_v2, out_v1}; // one msgr1 and one msgr2, msgr1 outside the subnet
+  // osd.4 publishes nothing
+
+  OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+  for (int osd = 0; osd < 5; ++osd) {
+    inc.new_up_client[osd] = published[osd];
+    inc.new_hb_back_up[osd] = published[osd];
+    inc.new_hb_front_up[osd] = published[osd];
+  }
+
+  osdmap.apply_incremental(inc);
+  set<int> unreachable;
+  osdmap.get_out_of_subnet_osd_counts(g_ceph_context, "10.1.1.0/24", &unreachable);
+
+  set<int> expected = {1, 3};
+  ASSERT_EQ(expected, unreachable);
+}
+
 TEST_F(OSDMapTest, CleanPGUpmaps) {
   set_up_map();
 
