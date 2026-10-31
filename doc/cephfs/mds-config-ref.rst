@@ -79,3 +79,26 @@ feature and a worked example.
 .. confval:: mds_dmclock_reservation
 .. confval:: mds_dmclock_weight
 .. confval:: mds_dmclock_limit
+
+The following options control the CephFS change notification producer,
+which reports namespace changes to a Kafka endpoint (or to a local file,
+for testing). See :ref:`cephfs-change-notification` for an explanation of
+the feature and its delivery guarantees.
+
+.. confval:: mds_notify_enable
+.. confval:: mds_notify_root
+.. confval:: mds_notify_queue_size
+.. confval:: mds_notify_file
+.. confval:: mds_notify_kafka_brokers
+.. confval:: mds_notify_kafka_topic
+.. confval:: mds_notify_kafka_message_timeout
+.. confval:: mds_notify_kafka_max_queue
+.. confval:: mds_notify_kafka_security_protocol
+.. confval:: mds_notify_kafka_ssl_ca_location
+.. confval:: mds_notify_kafka_ssl_certificate_location
+.. confval:: mds_notify_kafka_ssl_key_location
+.. confval:: mds_notify_kafka_ssl_key_password_file
+.. confval:: mds_notify_kafka_ssl_verify
+.. confval:: mds_notify_kafka_sasl_mechanism
+.. confval:: mds_notify_kafka_sasl_username
+.. confval:: mds_notify_kafka_sasl_password_file
