@@ -1,0 +1,26 @@
+# Network faults between the two hosts: each drops, duplicates, reorders
+# and corrupts a share of the packets it sends the other, on the interface
+# of the route to it, as long as the job runs.
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(OSD_SLOW_PING_TIME
+tasks:
+- netem:
+    clients: [client.0]
+    iface: auto
+    dst_client: client.1
+    delay: 1ms
+    loss: 0.5%
+    duplicate: 0.5%
+    reorder: 1%
+    corrupt: 0.05%
+- netem:
+    clients: [client.1]
+    iface: auto
+    dst_client: client.0
+    delay: 1ms
+    loss: 0.5%
+    duplicate: 0.5%
+    reorder: 1%
+    corrupt: 0.05%

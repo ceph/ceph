@@ -61,6 +61,96 @@ add_executable(unittest_osd_types
 add_ceph_unittest(unittest_osd_types)
 target_link_libraries(unittest_osd_types global)
 
+# unittest_ec_coroutines
+add_executable(unittest_ec_coroutines
+  test_ec_coroutines.cc
+  )
+add_ceph_unittest(unittest_ec_coroutines)
+target_link_libraries(unittest_ec_coroutines Boost::context)
+
+# unittest_oob_placement
+add_executable(unittest_oob_placement
+  test_oob_placement.cc
+  )
+add_ceph_unittest(unittest_oob_placement)
+target_link_libraries(unittest_oob_placement osd global)
+
+# unittest_oob_abandoned
+add_executable(unittest_oob_abandoned
+  test_oob_abandoned.cc
+  )
+add_ceph_unittest(unittest_oob_abandoned)
+
+# unittest_oob_xfer
+add_executable(unittest_oob_xfer
+  test_oob_xfer.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_oob_xfer)
+target_link_libraries(unittest_oob_xfer osd global)
+
+# unittest_oob_read_delivery
+add_executable(unittest_oob_read_delivery
+  test_oob_read_delivery.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_oob_read_delivery)
+target_link_libraries(unittest_oob_read_delivery osd global)
+
+# unittest_ec_gather
+add_executable(unittest_ec_gather
+  test_ec_gather.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_ec_gather)
+target_link_libraries(unittest_ec_gather osd global)
+
+if(WITH_OOB_OFI OR WITH_RADOSGW_CUOBJ)
+  # unittest_oob_pull: the pulled write, through a fake executor, and
+  # what it charges to the client message throttle
+  add_executable(unittest_oob_pull
+    test_oob_pull.cc
+    )
+  add_ceph_unittest(unittest_oob_pull)
+  target_link_libraries(unittest_oob_pull osd global)
+endif()
+
+if(WITH_OOB_OFI)
+  # unittest_osd_ofi: the libfabric executor over the tcp provider, which
+  # needs no special hardware
+  add_executable(unittest_osd_ofi
+    test_osd_ofi.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_osd_ofi)
+  target_link_libraries(unittest_osd_ofi osd global)
+  # ceph_test_osd_oob_read: reads and pulled writes with out-of-band
+  # delivery over the tcp provider, for qa/standalone/osd/osd-oob-async.sh
+  add_executable(ceph_test_osd_oob_read
+    ceph_test_osd_oob_read.cc
+    )
+  target_link_libraries(ceph_test_osd_oob_read librados ceph-common ofi_rma)
+  install(TARGETS
+    ceph_test_osd_oob_read
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+  # built by make check too, so that a change that breaks it fails there
+  add_dependencies(tests ceph_test_osd_oob_read)
+endif()
+
+if(LINUX)
+  # libceph_test_copycount: an LD_PRELOAD library that counts the bytes a
+  # process copies, for qa/standalone/osd/osd-oob-copies.sh. Its copy
+  # loops must stay loops, not calls to memcpy. The ceph-test package
+  # ships it, for qa.
+  add_library(ceph_test_copycount SHARED copycount.c)
+  target_compile_options(ceph_test_copycount PRIVATE
+    -fno-builtin -fno-tree-loop-distribute-patterns)
+  target_link_libraries(ceph_test_copycount ${CMAKE_DL_LIBS} Threads::Threads)
+  install(TARGETS ceph_test_copycount
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/ceph)
+  add_dependencies(tests ceph_test_copycount)
+endif()
+
 # unittest_ecbackend_l (legacy EC)
 add_executable(unittest_ecbackend_l
   TestECBackendL.cc
@@ -123,6 +213,9 @@ target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLK
 add_library(pg_backend_test_fixture OBJECT
   PGBackendTestFixture.cc
   MockPGBackendListener.cc
+  # OsdTestFixture owns a MockPeeringListener, so its vtable is needed
+  # wherever the fixture is
+  MockPeeringListener.cc
   MockStore.cc
   ObjectTracker.cc
 )
@@ -131,7 +224,6 @@ target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
 # ec_peering_test_fixture: object library for ECPeeringTestFixture implementation
 add_library(ec_peering_test_fixture OBJECT
   ECPeeringTestFixture.cc
-  MockPeeringListener.cc
 )
 target_link_libraries(ec_peering_test_fixture osd os global GTest::GTest)
 
@@ -262,6 +354,7 @@ target_link_libraries(unittest_ec_omap_journal osd global ${BLKID_LIBRARIES})
 # Not including unittest_osdmap, as it is slow. It is tested elsewhere.
 set(OSD_UNITTESTS
   unittest_backend_basics
+  unittest_ec_coroutines
   unittest_ec_omap_journal
   unittest_ec_transaction
   unittest_ec_transaction_l

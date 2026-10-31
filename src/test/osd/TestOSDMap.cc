@@ -501,6 +501,40 @@ TEST_F(OSDMapTest, Features) {
   // FIXME: test tiering feature bits
 }
 
+// A mon of this release rejects a delivery lease or drain out of its
+// bounds, but a development or downstream build may have stored one. The
+// OSDs and clients of this release read it as the nearest bound, and a
+// build that does not clamp it as stored. The health check names each,
+// so that an operator sets it within its range.
+TEST_F(OSDMapTest, RdmaDeliveryOutOfRange) {
+  set_up_map();
+  auto check = [&](double lease, double drain) {
+    pg_pool_t pool = *osdmap.get_pg_pool(my_rep_pool);
+    pool.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE, lease);
+    pool.opts.set(pool_opts_t::RDMA_DELIVERY_DRAIN, drain);
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    inc.new_pools[my_rep_pool] = pool;
+    osdmap.apply_incremental(inc);
+    health_check_map_t checks;
+    osdmap.check_health(g_ceph_context, &checks);
+    auto p = checks.checks.find("POOL_RDMA_DELIVERY_OUT_OF_RANGE");
+    return p == checks.checks.end() ? std::list<std::string>{} :
+      p->second.detail;
+  };
+  // within the range, and 0, which restores the default
+  EXPECT_TRUE(check(0.1, 4.0).empty());
+  EXPECT_TRUE(check(0.0, 0.0).empty());
+  auto detail = check(0.05, 0.2);
+  ASSERT_EQ(2u, detail.size());
+  EXPECT_NE(std::string::npos, detail.front().find("'reppool'"));
+  EXPECT_NE(std::string::npos, detail.front().find("rdma_delivery_lease"));
+  EXPECT_NE(std::string::npos, detail.back().find("rdma_delivery_drain"));
+  EXPECT_NE(std::string::npos, detail.back().find("use 0.5,"));
+  EXPECT_EQ(1u, check(2.0, 9.0).size());
+  EXPECT_TRUE(check(2.0, 1.0).empty());
+}
+
 TEST_F(OSDMapTest, MapPG) {
   set_up_map();
 

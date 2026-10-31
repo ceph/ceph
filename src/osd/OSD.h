@@ -54,6 +54,9 @@
 #include "messages/MOSDOp.h"
 #include "common/EventTrace.h"
 #include "osd/osd_perf_counters.h"
+#ifdef HAVE_OSD_OOB_DELIVERY
+#include "osd/oob_direct_read_cacher.h"
+#endif
 #include "common/Finisher.h"
 #include "scrubber/osd_scrub.h"
 
@@ -74,6 +77,15 @@ class Message;
 class MonClient;
 class ObjectStore;
 class FuseStore;
+class OSDCuObj;
+class OSDOobExecutor;
+namespace ceph::oob {
+class Arena;
+}
+namespace ceph::osd::oob {
+class Transfers;
+class pulls_out;
+}
 class OSDMap;
 class MLog;
 class Objecter;
@@ -117,6 +129,96 @@ public:
 
   md_config_cacher_t<Option::size_t> osd_max_object_size;
   md_config_cacher_t<bool> osd_skip_data_digest;
+#ifdef HAVE_OSD_OOB_DELIVERY
+  /// osd_oob_direct_read, without the config's lock
+  ceph::osd::oob::direct_read_cacher_t oob_direct_read;
+#endif
+
+#ifdef WITH_RADOSGW_CUOBJ
+  /// the cuObject executor, one of oob_executors, for oob_runs_inline();
+  /// null unless an out-of-band transport option names "cuobj" and the
+  /// RDMA session came up
+  OSDCuObj* cuobj = nullptr;
+#endif
+#ifdef HAVE_OSD_OOB_DELIVERY
+  /// the memory every executor registers and takes its staging buffers
+  /// and gather windows from (oob_memory); null when none runs
+  std::shared_ptr<ceph::oob::Arena> oob_arena;
+  /// the executors that started
+  std::vector<std::unique_ptr<OSDOobExecutor>> oob_executors;
+  /// the one of them that lends windows for EC gathers, and the only one
+  /// that registered any: the executor of oob_cluster_transport; null
+  /// when none does
+  OSDOobExecutor* oob_lender = nullptr;
+  /// OSD::init adds the executors while the tick and the op threads
+  /// already run; those see none of them until it publishes them all
+  std::atomic<bool> oob_published = false;
+  /// an executor that started; lends when its transport is the cluster
+  /// transport. Only before publish_oob_executors().
+  void add_oob_executor(std::unique_ptr<OSDOobExecutor> e, bool lends);
+  /// let the other threads use the executors added; none is added after
+  void publish_oob_executors();
+  /// oob_executors once published, else none
+  const std::vector<std::unique_ptr<OSDOobExecutor>>&
+  published_oob_executors() const;
+  /// the executor that serves a delivery token's transport, or null
+  OSDOobExecutor* oob_executor_for(const std::string& token) const;
+  /// the executor that can pull a write's payload out of a token's
+  /// window (delivery_t::FLAG_PULL), or null
+  OSDOobExecutor* oob_puller_for(const std::string& token) const;
+  /// true when any out-of-band transport is up
+  bool has_oob_executor() const;
+  /// the executor lending windows for EC gathers (oob_cluster_transport),
+  /// or null
+  OSDOobExecutor* oob_gather_executor() const;
+  /// the pulled writes whose pulls run on a transfer thread, by request,
+  /// for every PG: an attempt of a request that a PG dropped may still
+  /// pull, and a later one waits for it. Before oob_xfer, whose jobs
+  /// leave it as they settle
+  std::unique_ptr<ceph::osd::oob::pulls_out> oob_pulls_out;
+  /// the threads that run the executors' transfers instead of the op
+  /// threads (osd_oob_transfer_threads), built with the executors; null
+  /// when none started
+  std::unique_ptr<ceph::osd::oob::Transfers> oob_xfer;
+  /// cuObject transfers run on the transfer threads too
+  /// (osd_oob_cuobj_transfer_threads)
+  bool oob_cuobj_transfer_threads = false;
+  /// oob_xfer once published, else null
+  ceph::osd::oob::Transfers* oob_transfers() const;
+  /// true when e's transfers stay on the thread that submits them even
+  /// with transfer threads: cuObject's, unless
+  /// osd_oob_cuobj_transfer_threads, since only the op threads have its
+  /// DC initiators then
+  bool oob_runs_inline(const OSDOobExecutor* e) const;
+  /// once the op threads stopped: shed the queued transfers, wait for the
+  /// running ones, and stop the transfer threads, before the executors
+  /// go
+  void stop_oob_transfers();
+  /// once the transfer threads stopped (stop_oob_transfers()): quiesce
+  /// the executors, then delete them, then free the arena they
+  /// registered. shutdown() ends them here; fast_shutdown() does not,
+  /// since the process exits right after
+  void shutdown_oob();
+  /// the pulls of reqid, a pulled write, settled, and a hold of head in
+  /// PG pgid waits for them (the request's, or a later attempt's of it):
+  /// queue the kick that runs the hold's ops again (PGOobPullKick), from
+  /// the transfer thread that settled them, at the request's scheduler
+  /// cost, for owner, its client. The kick holds no reference to the
+  /// request, so that a request the OSD drops goes away meanwhile, and
+  /// abandons its pulls (OpRequest::_unregistered()). Nothing once
+  /// stopping, since the PGs drop their holds then
+  void queue_oob_pull_kick(spg_t pgid, epoch_t epoch,
+			   const osd_reqid_t& reqid, int cost, uint64_t owner,
+			   const hobject_t& head);
+  /// the reply of a read of head in PG pgid, whose pushes a transfer
+  /// thread ran, left, and the PG fenced head with it: queue the kick that
+  /// runs the ops that wait in the fence again (PGOobReadKick), from the
+  /// thread that sent the reply, at the read's scheduler cost, for owner,
+  /// its client. Nothing once stopping, since the PGs drop their fences
+  /// then
+  void queue_oob_read_kick(spg_t pgid, epoch_t epoch, int cost,
+			   uint64_t owner, const hobject_t& head);
+#endif
 
   void enqueue_back(OpSchedulerItem&& qi);
   void enqueue_front(OpSchedulerItem&& qi);
@@ -249,8 +351,11 @@ public:
 public:
 
   void reply_op_error(OpRequestRef op, int err);
+  /// dup: op is a resend of a write that the PG log has, and err, v, uv
+  /// and op_returns are what the log kept of it
   void reply_op_error(OpRequestRef op, int err, eversion_t v, version_t uv,
-		      std::vector<pg_log_op_return_item_t> op_returns);
+		      std::vector<pg_log_op_return_item_t> op_returns,
+		      bool dup);
   void handle_misdirected_op(PG *pg, OpRequestRef op);
 
  private:

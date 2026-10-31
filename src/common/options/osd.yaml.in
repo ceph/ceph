@@ -1559,6 +1559,30 @@ options:
   level: advanced
   default: true
   with_legacy: true
+- name: osd_ec_repair_on_read
+  type: bool
+  level: advanced
+  desc: Repair an erasure-coded shard whose read failed with a media error
+  long_desc: When a client read of an object in an erasure-coded pool with
+    allow_ec_optimizations decodes its data around a shard whose own object
+    store failed the read with EIO, the primary marks the object missing on
+    that shard and recovers it straight away, instead of leaving the damaged
+    copy, and the parity decode every read of it costs, to a deep scrub with
+    repair. The PG goes through recovery, and the repair counts toward the
+    damaged OSD's repair total, as a read repair in a replicated pool does.
+    Only an active+clean PG repairs this way, and only while k+1 shards that
+    the read did not find damaged hold the object, so that the recovery
+    survives one more error elsewhere in it; a pool with m=1 never does. A
+    shard push lost in transport to an RDMA gather window is not a media
+    error and is not repaired.
+  default: true
+  services:
+  - osd
+  see_also:
+  - osd_scrub_auto_repair
+  flags:
+  - runtime
+  with_legacy: true
 - name: osd_recovery_delay_start
   type: float
   level: advanced
@@ -1757,3 +1781,242 @@ options:
   level: dev
   default: true
   with_legacy: true
+# out-of-band delivery options: cuObject (DC), libfabric, EC gather windows
+- name: osd_oob_cutoff_late_tolerance
+  type: millisecs
+  level: advanced
+  desc: How late a libfabric write's cut-off can end, past the budget it
+    protects, and raise only a health warning
+  long_desc: A write still in flight when its budget, the pool's
+    rdma_delivery_lease plus rdma_delivery_drain from receipt, runs out is
+    cut off. A cut-off that ends after the budget by no more than this, and
+    that itself took no longer, is counted and raises the OOB_CUTOFF_LATE
+    health warning. It is usually a scheduling delay on a loaded host.
+    Clients that receive a response, and the gateway's fallback, wait for
+    the OSD's reply, which follows the cut-off, so they are not affected. A
+    client that gives a request up must allow this much beyond the lease and
+    the drain. A quick cut-off that ends later than this started late,
+    because the OSD's threads did not run. osd_oob_cutoff_policy says what
+    happens then. A cut-off that itself takes longer than this fails. The
+    cuObject executor does not use this option. The gateway's fence counts
+    the largest value, 2000 ms, whatever the OSDs set.
+  default: 1000
+  min: 0
+  max: 2000
+  services:
+  - osd
+  see_also:
+  - osd_oob_cutoff_policy
+  flags:
+  - startup
+- name: osd_oob_cutoff_policy
+  type: str
+  level: advanced
+  desc: What an OSD does when its libfabric executor cannot cut off writes
+    in time
+  long_desc: A cut-off fails when the provider cannot close the endpoint, or
+    when the close or cancel itself takes longer than
+    osd_oob_cutoff_late_tolerance. With "warn", such a failure stops the
+    libfabric executor and raises OOB_DELIVERY_UNSAFE, and a quick cut-off
+    that ends later than the tolerance raises OOB_CUTOFF_PAST_TOLERANCE while
+    delivery goes on. With "disable", a late cut-off also stops the executor.
+    With "abort", the OSD exits in both cases. A change takes effect when the
+    OSD restarts.
+  default: warn
+  enum_values:
+  - warn
+  - disable
+  - abort
+  services:
+  - osd
+  see_also:
+  - osd_oob_cutoff_late_tolerance
+  flags:
+  - startup
+- name: osd_ofi_inject_cutoff_failure
+  type: bool
+  level: dev
+  desc: Make the libfabric executor's cut-offs fail as if the provider could
+    not close its endpoint, to test osd_oob_cutoff_policy
+  default: false
+  services:
+  - osd
+  flags:
+  - runtime
+- name: osd_ofi_inject_cutoff_delay
+  type: millisecs
+  level: dev
+  desc: Make the libfabric executor take this much longer to close its
+    endpoint in a cut-off, as a provider that drains its writes on close
+    does, to test osd_oob_cutoff_late_tolerance
+  default: 0
+  services:
+  - osd
+  see_also:
+  - osd_oob_cutoff_late_tolerance
+  flags:
+  - runtime
+- name: osd_oob_transfer_threads
+  type: uint
+  level: advanced
+  desc: Threads that run an OSD's out-of-band transfers, so that its op
+    threads do not wait on the fabric
+  long_desc: With 0, each out-of-band transfer (a read pushed into a
+    client's memory, a shard read pushed into a gather window, the payload
+    of a write pulled out of a client's memory) runs on the op thread that
+    served the request, while that thread holds the PG lock. With more, the
+    op thread hands the transfer to one of these threads and goes on with
+    other requests. The reply still leaves only once the transfer completed
+    or was cut off. A pulled write waits for its pull, and the later client
+    ops on its object wait behind it. Until the reply of a read leaves, a
+    client op that can change the object waits, and so do the ops on the
+    object behind it. So the replies leave in the order of the ops.
+    cuObject transfers stay on the op threads unless
+    osd_oob_cuobj_transfer_threads is set. An OSD that runs no transport
+    whose transfers go to these threads (only cuObject, without
+    osd_oob_cuobj_transfer_threads) starts none of them.
+  default: 0
+  services:
+  - osd
+  see_also:
+  - osd_oob_transfer_queue_max
+  - osd_oob_transfer_queue_bytes
+  - osd_oob_transfer_thread_timeout
+  - osd_oob_cuobj_transfer_threads
+  flags:
+  - startup
+- name: osd_oob_direct_read
+  type: str
+  level: advanced
+  desc: Read the data of a read that goes out of band straight from disk
+    into the memory the transport writes it from
+  long_desc: A read that a client asked to have placed in its memory
+    (OSD-direct) is usually read into the object store's buffers, and the
+    transport then copies it into the memory it registered (oob_memory)
+    before it writes it to the client. With cached or nocache, the OSD
+    reads such a read straight into a buffer of that memory, when the
+    transport can write from there (libfabric delivery), and nothing
+    copies the data on the way out. The OSD reads the whole blocks of the
+    object store that hold the data, so that a range read that starts or
+    ends inside a block is read straight into the buffer too, unless those
+    blocks would need a buffer twice as big as the data does. BlueStore
+    reads what the device holds straight into the buffer, and copies only
+    what it has in its cache and what is compressed. With cached,
+    BlueStore keeps a copy of what it read in its cache, as it does for
+    any read. With nocache, it does not, so that a cold read is not copied
+    at all. Replicated pools, and the shard reads of erasure-coded pools
+    that clients read directly. With oob_cluster_transport, an
+    erasure-coded primary also reads its own shard into such a buffer,
+    and copies what its peers push into its gather windows into it once.
+    An erasure-coded PG reads this way only with the optimized EC code. A
+    PG of a pool that gets allow_ec_optimizations after its creation keeps
+    the legacy code, and copies, until its next interval change.
+  default: 'off'
+  enum_values:
+  - 'off'
+  - cached
+  - nocache
+  services:
+  - osd
+  see_also:
+  - oob_memory
+  flags:
+  - runtime
+- name: osd_oob_transfer_queue_max
+  type: uint
+  level: advanced
+  desc: Out-of-band transfers that may wait for or run on the transfer
+    threads
+  long_desc: Past this many, a transfer is refused, and the request is
+    served without it, as when a transfer fails before it starts. A read
+    or a shard read is then delivered inline, and a pulled write fails with
+    EOPNOTSUPP, so that the client sends the payload inline. A queued push
+    or pull that cannot start before its pool's delivery lease runs out,
+    counted from receipt of the request, is served the same way. Used only
+    when the OSD starts transfer threads (see osd_oob_transfer_threads).
+    The transfers that stay on the op threads do not count.
+  default: 64
+  services:
+  - osd
+  see_also:
+  - osd_oob_transfer_threads
+  - osd_oob_transfer_queue_bytes
+  flags:
+  - startup
+- name: osd_oob_transfer_queue_bytes
+  type: size
+  level: advanced
+  desc: Payload bytes that the out-of-band transfers waiting for or running
+    on the transfer threads may hold
+  long_desc: A transfer that would pass this is refused, as past
+    osd_oob_transfer_queue_max. Used only when the OSD starts transfer
+    threads (see osd_oob_transfer_threads). The transfers that stay on the
+    op threads do not count.
+  default: 512_M
+  services:
+  - osd
+  see_also:
+  - osd_oob_transfer_threads
+  - osd_oob_transfer_queue_max
+  flags:
+  - startup
+- name: osd_oob_transfer_thread_timeout
+  type: secs
+  level: advanced
+  desc: Heartbeat grace of an out-of-band transfer thread
+  long_desc: A transfer thread that runs one transfer for longer than this
+    marks the OSD unhealthy. It is never killed. A transfer ends within its
+    pool's rdma_delivery_lease plus rdma_delivery_drain from receipt of the
+    request, 10 seconds at most, plus osd_oob_cutoff_late_tolerance for a
+    late cut-off. A value that does not cover that is raised to one second
+    past it, with a warning.
+  default: 30
+  services:
+  - osd
+  see_also:
+  - osd_oob_transfer_threads
+  - osd_oob_cutoff_late_tolerance
+  flags:
+  - startup
+- name: osd_oob_cuobj_transfer_threads
+  type: bool
+  level: advanced
+  desc: Run cuObject transfers on the out-of-band transfer threads
+  long_desc: cuObject gives each thread that runs transfers a DC initiator
+    of its own. When false, cuObject transfers stay on the op threads,
+    and the executor takes an initiator for each op thread. When true and
+    osd_oob_transfer_threads is above 0, they run on the transfer threads,
+    and the executor takes an initiator for each op thread and each
+    transfer thread.
+  default: false
+  services:
+  - osd
+  see_also:
+  - osd_oob_transfer_threads
+  flags:
+  - startup
+- name: osd_debug_oob_delay_post_ms
+  type: millisecs
+  level: dev
+  desc: Sleep this long before an out-of-band transfer starts
+  long_desc: The time counts against the pool's delivery lease, so a long
+    delay makes transfers expire and their requests go inline. A transfer
+    that sleeps reads the option again every 100 ms, so lowering it ends
+    the sleep early. For tests.
+  default: 0
+  services:
+  - osd
+  flags:
+  - runtime
+- name: osd_debug_oob_delay_done_ms
+  type: millisecs
+  level: dev
+  desc: Sleep this long after an out-of-band transfer, before its reply
+    leaves
+  long_desc: A transfer that sleeps reads the option again every 100 ms, so
+    lowering it ends the sleep early. For tests.
+  default: 0
+  services:
+  - osd
+  flags:
+  - runtime

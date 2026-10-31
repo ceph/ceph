@@ -119,6 +119,83 @@ add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)
 target_link_libraries(unittest_rgw_bencode ${rgw_libs})
 
+if(WITH_OOB_OFI)
+  # client for OSD-direct delivery over libfabric
+  add_executable(ceph_test_rgw_ofi_get ofi/ofi_s3_get.cc)
+  target_link_libraries(ceph_test_rgw_ofi_get ofi_rma ${CURL_LIBRARIES}
+    ${CRYPTO_LIBS})
+  # client for OSD-direct PUTs over libfabric
+  add_executable(ceph_test_rgw_ofi_put ofi/ofi_s3_put.cc)
+  target_link_libraries(ceph_test_rgw_ofi_put ofi_rma ${CURL_LIBRARIES}
+    ${CRYPTO_LIBS})
+  # the ceph-test package ships the clients, so that tests against a
+  # cluster can run them; make check builds them too, so that a change
+  # that breaks them fails there
+  install(TARGETS ceph_test_rgw_ofi_get ceph_test_rgw_ofi_put
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+  add_dependencies(tests ceph_test_rgw_ofi_get ceph_test_rgw_ofi_put)
+  # soak client: out-of-band GETs for a set time, each window checked for
+  # stray and late writes
+  add_executable(ceph_test_rgw_ofi_soak ofi/ofi_s3_soak.cc)
+  target_link_libraries(ceph_test_rgw_ofi_soak ofi_rma ${CURL_LIBRARIES}
+    ${CRYPTO_LIBS})
+  install(TARGETS ceph_test_rgw_ofi_soak DESTINATION ${CMAKE_INSTALL_BINDIR})
+  add_dependencies(tests ceph_test_rgw_ofi_soak)
+  # unittest_rgw_ofi_sigv4: the clients' SigV4 signing
+  add_executable(unittest_rgw_ofi_sigv4 ofi/test_ofi_s3_sigv4.cc)
+  add_ceph_unittest(unittest_rgw_ofi_sigv4)
+  target_link_libraries(unittest_rgw_ofi_sigv4 ${CRYPTO_LIBS})
+endif()
+
+# unittest_rgw_rdma_rc_wire
+add_executable(unittest_rgw_rdma_rc_wire test_rgw_rdma_rc_wire.cc)
+add_ceph_unittest(unittest_rgw_rdma_rc_wire)
+target_link_libraries(unittest_rgw_rdma_rc_wire ${rgw_libs})
+
+if(WITH_RDMA_RC)
+  # unittest_rgw_rdma_rc_session: the RC session service on the host's
+  # first verbs device; each test skips on a host without one
+  add_executable(unittest_rgw_rdma_rc_session test_rgw_rdma_rc_session.cc)
+  add_ceph_unittest(unittest_rgw_rdma_rc_session)
+  target_link_libraries(unittest_rgw_rdma_rc_session ${rgw_libs}
+    IBVerbs::verbs)
+endif()
+
+# unittest_rgw_rdma_fence
+add_executable(unittest_rgw_rdma_fence test_rgw_rdma_fence.cc)
+add_ceph_unittest(unittest_rgw_rdma_fence)
+target_include_directories(unittest_rgw_rdma_fence
+  PRIVATE ${CMAKE_SOURCE_DIR}/src/rgw)
+# the fence's view of a stripe read's result, through the Objecter
+target_link_libraries(unittest_rgw_rdma_fence osdc global ceph-common)
+
+# unittest_rgw_rdma_get
+add_executable(unittest_rgw_rdma_get test_rgw_rdma_get.cc)
+add_ceph_unittest(unittest_rgw_rdma_get)
+target_include_directories(unittest_rgw_rdma_get
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_rdma_get unit-main ${rgw_libs})
+
+# unittest_rgw_sal_filter_rdma
+add_executable(unittest_rgw_sal_filter_rdma test_rgw_sal_filter_rdma.cc)
+add_ceph_unittest(unittest_rgw_sal_filter_rdma)
+target_include_directories(unittest_rgw_sal_filter_rdma
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+if(WITH_RADOSGW_D4N)
+  target_include_directories(unittest_rgw_sal_filter_rdma
+    SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n")
+endif()
+target_link_libraries(unittest_rgw_sal_filter_rdma unit-main ${rgw_libs})
+
+if(WITH_RADOSGW_RADOS)
+# unittest_rgw_etag_verifier
+add_executable(unittest_rgw_etag_verifier test_rgw_etag_verifier.cc)
+add_ceph_unittest(unittest_rgw_etag_verifier)
+target_include_directories(unittest_rgw_etag_verifier
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_etag_verifier unit-main ${rgw_libs})
+endif()
+
 # unittest_rgw_cors
 add_executable(unittest_rgw_cors
   test_rgw_cors.cc
@@ -374,7 +451,10 @@ target_link_libraries(unittest_rgw_lc
   rgw_common ${rgw_libs} ${EXPAT_LIBRARIES})
 
 # unittest_rgw_cksum
-add_executable(unittest_rgw_cksum test_rgw_cksum.cc)
+# spdk's table routine is the CRC-64/NVME reference that the test checks
+# rgw's digests against, and ceph-common does not ship it
+add_executable(unittest_rgw_cksum test_rgw_cksum.cc
+  ${CMAKE_SOURCE_DIR}/src/common/spdk/crc64.c)
 add_ceph_unittest(unittest_rgw_cksum)
 target_include_directories(unittest_rgw_cksum
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
@@ -622,4 +702,25 @@ add_rgw_cargo_test_binary(
   PACKAGE   lancedb-rgw-store
   UNIT_TEST
   DEPENDS   ceph_rgw_sal_test_env)
+endif()
+
+# cuObject tests require the SDK at build time, but no RDMA hardware or cluster.
+if(WITH_RADOSGW_CUOBJ)
+  add_executable(unittest_rgw_cuobj
+    test_rgw_cuobj.cc
+    $<TARGET_OBJECTS:unit-main>)
+  add_ceph_unittest(unittest_rgw_cuobj --no-config-file)
+  target_link_libraries(unittest_rgw_cuobj rgw_common ${rgw_libs} global)
+
+  if(WITH_RADOSGW_RADOS)
+    # S3 operations use link-time fake transports and in-memory storage writers.
+    foreach(test_name IN ITEMS get put log)
+      add_executable(unittest_rgw_cuobj_${test_name}
+        test_rgw_cuobj_${test_name}.cc
+        $<TARGET_OBJECTS:unit-main>)
+      add_ceph_unittest(unittest_rgw_cuobj_${test_name} --no-config-file)
+      target_link_libraries(unittest_rgw_cuobj_${test_name}
+        rgw_common ${rgw_libs} global)
+    endforeach()
+  endif()
 endif()

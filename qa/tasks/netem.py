@@ -7,12 +7,26 @@ Reference:https://wiki.linuxfoundation.org/networking/netem.
 import logging
 import contextlib
 from paramiko import SSHException
+import re
 import socket
 import time
 import gevent
+import gevent.event
 import argparse
 
 log = logging.getLogger(__name__)
+
+# netem faults besides delay, each the share of packets it hits: off unless
+# a config names it
+FAULTS = ('loss', 'duplicate', 'reorder', 'corrupt')
+
+# netem reorders only packets that it delays
+REORDER_DELAY = '1ms'
+
+# the prio qdisc of the faults: the default priomap over bands 1-3, so
+# that only the traffic the filter sends to band 4 meets netem
+FAULT_PRIOMAP = ['1', '2', '2', '2', '1', '2', '0', '0',
+                 '1', '1', '1', '1', '1', '1', '1', '1']
 
 
 def set_priority(interface):
@@ -113,6 +127,93 @@ def variable_delay(remote, host, interface, delay_range=[]):
         log.info('Setting varying delay')
         change_delay.extend(['%s' % delay1, '%s' % delay2])
         remote.run(args=change_delay)
+
+
+def percent(value):
+
+    """ A share of packets as netem takes it: 1, 0.5 or '1%' give '1%', '0.5%' or '1%' """
+
+    text = str(value).strip()
+    number = text[:-1] if text.endswith('%') else text
+    if float(number) < 0 or float(number) > 100:
+        raise ValueError('%s is not a share of packets from 0 to 100%%' % value)
+    return number + '%'
+
+
+def fault_args(config):
+
+    """
+    The netem parameters of the faults that a config asks for: loss,
+    duplicate, reorder and corrupt, with delay when the config sets it. A
+    config that asks for reorder without delay gets REORDER_DELAY. Empty
+    when the config asks for no fault.
+    """
+
+    faults = [f for f in FAULTS if config.get(f) is not None]
+    if not faults:
+        return []
+    args = []
+    delay = config.get('delay')
+    if delay is None and 'reorder' in faults:
+        delay = REORDER_DELAY
+    if delay is not None:
+        args.extend(['delay', str(delay)])
+    for fault in faults:
+        args.extend([fault, percent(config[fault])])
+    return args
+
+
+def fault_cmds(interface, ip, args):
+
+    """
+    The tc commands that send the traffic to ip, and nothing else, through
+    a netem qdisc with these parameters
+    """
+
+    return [
+        ['sudo', 'tc', 'qdisc', 'replace', 'dev', interface, 'root',
+         'handle', '1:', 'prio', 'bands', '4', 'priomap'] + FAULT_PRIOMAP,
+        ['sudo', 'tc', 'qdisc', 'add', 'dev', interface, 'parent', '1:4',
+         'handle', '40:', 'netem'] + args,
+        ['sudo', 'tc', 'filter', 'add', 'dev', interface, 'parent', '1:0',
+         'protocol', 'ip', 'prio', '4', 'u32', 'match', 'ip', 'dst',
+         '%s/32' % ip, 'flowid', '1:4'],
+    ]
+
+
+def static_faults(remote, host, interface, args):
+
+    """ Apply netem faults to the packets that remote sends host """
+
+    ip = socket.gethostbyname(host.hostname)
+    log.info('netem %s on %s for packets to %s (%s)',
+             ' '.join(args), interface, host, ip)
+    for cmd in fault_cmds(interface, ip, args):
+        remote.run(args=cmd)
+
+
+def route_dev(output):
+
+    """ The device of a route, from the output of 'ip -o route get' """
+
+    m = re.search(r'\bdev\s+(\S+)', output)
+    return m.group(1) if m else None
+
+
+def resolve_iface(remote, host, iface):
+
+    """
+    The interface that remote sends host's packets on, for iface 'auto';
+    else iface itself
+    """
+
+    if iface != 'auto':
+        return iface
+    ip = socket.gethostbyname(host.hostname)
+    dev = route_dev(remote.sh(['ip', '-o', 'route', 'get', ip]))
+    assert dev, 'no route from %s to %s' % (remote, ip)
+    log.info('%s reaches %s on %s', remote, ip, dev)
+    return dev
 
 
 def delete_dev(remote, interface):
@@ -221,6 +322,22 @@ def task(ctx, config):
           iface: eno1
           link_recover: [t1, t2]
 
+    Faults besides delay, each off unless named, each the share of the
+    packets to dst_client it hits: loss, duplicate, reorder (with delay,
+    1ms when the config gives none) and corrupt. They have a qdisc of
+    their own, which only the traffic to dst_client meets, and they last
+    until the task ends. One such config per interface of a host.
+    'iface: auto', with any of the settings above, takes the interface
+    that carries the route to dst_client:
+
+    - netem:
+          clients: [client.0]
+          iface: auto
+          dst_client: [client.1]
+          loss: 0.5%
+          duplicate: 0.5%
+          reorder: 1%
+          corrupt: 0.1%
 
     """
 
@@ -234,19 +351,34 @@ def task(ctx, config):
 
     if config.get('dst_client') is not None:
         dst = config.get('dst_client')
+        if isinstance(dst, list):
+            # one role, as in the examples above
+            (dst,) = dst
         (host,) = ctx.cluster.only(dst).remotes.keys()
 
+    faults = fault_args(config)
+    # each role's interface, with 'auto' resolved, for every path below
+    ifaces = {}
     for role in config.get('clients', None):
         (remote,) = ctx.cluster.only(role).remotes.keys()
         ctx.netem.remote = remote
-        if config.get('delay', False):
-            static_delay(remote, host, config.get('iface'), config.get('delay'))
+        if config.get('iface') == 'auto':
+            assert config.get('dst_client') is not None, \
+                'iface: auto needs dst_client'
+            ifaces[role] = resolve_iface(remote, host, 'auto')
+        else:
+            ifaces[role] = config.get('iface')
+        iface = ifaces[role]
+        if faults:
+            static_faults(remote, host, iface, faults)
+        elif config.get('delay', False):
+            static_delay(remote, host, iface, config.get('delay'))
         if config.get('delay_range', False):
-            variable_delay(remote, host, config.get('iface'), config.get('delay_range'))
+            variable_delay(remote, host, iface, config.get('delay_range'))
         if config.get('link_toggle_interval', False):
             log.info('Toggling link for %s' % config.get('link_toggle_interval'))
             global toggle
-            toggle = Toggle(ctx, remote, host, config.get('iface'), config.get('link_toggle_interval'))
+            toggle = Toggle(ctx, remote, host, iface, config.get('link_toggle_interval'))
             toggle.begin(config.get('gname'))
         if config.get('link_recover', False):
             log.info('Recovering link')
@@ -254,7 +386,7 @@ def task(ctx, config):
                 toggle.end(gname)
                 log.info('sleeping')
                 time.sleep(config.get('link_toggle_interval'))
-                delete_dev(ctx.netem.remote, config.get('iface'))
+                delete_dev(ctx.netem.remote, iface)
                 del ctx.netem.names[gname]
 
     try:
@@ -264,5 +396,5 @@ def task(ctx, config):
             toggle.cleanup()
         for role in config.get('clients'):
             (remote,) = ctx.cluster.only(role).remotes.keys()
-            delete_dev(remote, config.get('iface'))
+            delete_dev(remote, ifaces[role])
 

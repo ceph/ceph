@@ -45,9 +45,11 @@ protected:
   bool checksum_mode{false};
   std::map<std::string, std::string> crypt_http_responses;
   int override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y);
+  bool rdma_eligible() override;
 public:
   RGWGetObj_ObjStore_S3() {}
-  ~RGWGetObj_ObjStore_S3() override {}
+  ~RGWGetObj_ObjStore_S3() override;
+
 
   int verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) override;
   int get_params(optional_yield y) override;
@@ -260,6 +262,11 @@ public:
 class RGWPutObj_ObjStore_S3 : public RGWPutObj_ObjStore {
 private:
   std::map<std::string, std::string> crypt_http_responses;
+
+protected:
+  /// the headers of a successful PUT that describe the stored object:
+  /// its encryption, version, expiration and checksum
+  void dump_stored_headers();
 
 public:
   RGWPutObj_ObjStore_S3() {}

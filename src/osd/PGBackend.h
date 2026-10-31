@@ -451,6 +451,12 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual shard_id_map<bufferlist> ec_decode_acting_set(
        const shard_id_map<bufferlist> &shard_map, int chunk_size) const = 0;
    virtual ECUtil::stripe_info_t ec_get_sinfo() const = 0;
+   /// whether the EC code serves a read of one shard's part with no
+   /// decode (ECUtil::stripe_info_t::supports_direct_reads()), asked
+   /// without a copy of the stripe info; false for a replicated pool
+   virtual bool ec_supports_direct_reads() const {
+     return false;
+   }
    virtual bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
      return false; // Only EC uses ec_omap_journal
    };
@@ -658,6 +664,21 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
       uint32_t op_flags,
       ceph::buffer::list *bl) = 0;
 
+   /// objects_read_local(), into the caller's memory (see
+   /// ObjectStore::read_into()), of off~len as the store holds it: for
+   /// EC, a range of this shard's object (extent_to_shard_extent()), so
+   /// that the caller can read whole blocks of it; -EOPNOTSUPP where
+   /// the backend cannot
+   virtual int objects_read_local_into(
+      const hobject_t &hoid,
+      uint64_t off,
+      uint64_t len,
+      uint32_t op_flags,
+      const struct iovec *iov,
+      int iovcnt) {
+     return -EOPNOTSUPP;
+   }
+
    virtual int objects_readv_sync(
      const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
@@ -676,7 +697,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      uint64_t object_size,
      const std::list<std::pair<ec_align_t,
 		std::pair<ceph::buffer::list*, Context*>>> &to_read,
-     Context *on_complete, bool fast_read = false) = 0;
+     Context *on_complete, bool fast_read = false,
+     bool into_arena = false) = 0;
 
    virtual bool auto_repair_supported() const = 0;
 

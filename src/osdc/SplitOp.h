@@ -276,6 +276,12 @@ class SplitOp {
     mini_flat_map<int, Details> details;
     int rc = -EIO;
     std::optional<InternalVersion> internal_version;
+    /// parent op index behind each op of rd, in rd op order (-1 for
+    /// ops the split adds itself, e.g. the internal version read)
+    std::vector<int> parent_ops;
+    /// per-op out-of-band delivery results for this sub-read's ops
+    /// (rdma delivery fan-out); stable addresses handed to the sub op
+    std::vector<ceph::rdma::oob_result_t> oob;
 
     SubRead(int count) : details(count) {}
   };
@@ -351,6 +357,11 @@ class SplitOp {
   int flags = 0;
   int reference_sub_read = -1;
   std::map<int, std::vector<int>> op_offset_map;
+  /// rdma delivery fan-out state: the parent op indexes whose
+  /// descriptor was fanned out to the sub-reads (plain READ ops
+  /// carrying a descriptor - the only shape with well-defined per-sub
+  /// placement)
+  std::vector<unsigned> oob_ops;
 
 private:
   bool version_mismatch() const;
@@ -420,6 +431,31 @@ private:
   */
  static bool create(Objecter::Op *op, Objecter &objecter,
    shunique_lock<ceph::shared_mutex>& sul, CephContext *cct);
+
+ /**
+  * @brief The out-of-band result a split read reports for a parent op.
+  *
+  * parts are the results of the sub-read ops that read a share of the
+  * op, and bytes the sum of their bytes, 0 for a split that failed.
+  * sent says whether the split fanned the op's descriptor out to its
+  * sub-reads, which it does for plain READs only (oob_ops). The
+  * sub-reads of any other op carried no descriptor, so no transfer of
+  * it started, and its result reads declined, as does one of an op
+  * that no sub-read reads.
+  */
+ static ceph::rdma::oob_result_t fold_rdma_result(
+   bool sent, uint64_t bytes,
+   const std::vector<const ceph::rdma::oob_result_t*>& parts);
+
+ /**
+  * @brief Whether a split read that ends in EAGAIN settled.
+  *
+  * parts are the result flags of the sub-read ops that carried a
+  * descriptor. The split settled when none did, or when each was
+  * declined or landed: no write of it can land after its replies, and
+  * the retry goes out as the first attempt it is.
+  */
+ static bool rdma_split_settled(const std::vector<uint32_t>& parts);
 };
 
 /**

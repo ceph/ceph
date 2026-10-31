@@ -1579,6 +1579,460 @@ TEST_P(StoreTest, CompressionTest) {
   doCompressionTest();
 }
 
+// read_into() lands exactly what read() returns in the caller's memory,
+// and touches none of it past the bytes read: aligned and unaligned
+// ranges, a destination of several segments, holes, a short read at the
+// end, cache hits and, on BlueStore, compressed blobs. BlueStore reads
+// what is not cached straight into the caller's memory.
+TEST_P(StoreTest, ReadIntoCallerMemory) {
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("read_into", CEPH_NOSNAP)));
+  ghobject_t sparse(hobject_t(sobject_t("read_into_sparse", CEPH_NOSNAP)));
+  ghobject_t packed(hobject_t(sobject_t("read_into_compressed", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  const size_t size = (1 << 20) + 12345;
+  const uint32_t nocache = CEPH_OSD_OP_FLAG_FADVISE_NOCACHE;
+  {
+    std::string s(size, 0);
+    for (size_t i = 0; i < size; i++) {
+      s[i] = static_cast<char>(i * 31 + i / 4096);
+    }
+    bufferlist data, a, b;
+    data.append(s);
+    a.append(std::string(65536, 'a'));
+    b.append(std::string(65536, 'b'));
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, size, data, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    // data, a hole, data
+    t.write(cid, sparse, 0, 65536, a, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    t.write(cid, sparse, 524288, 65536, b, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  // until the write is finished its buffers stay in the cache, and the
+  // reads below would copy from there; on a loaded host it can finish
+  // after all of them
+  ch->flush();
+  // aligned memory, filled with a guard pattern before each read
+  const size_t cap = 2 << 20;
+  void* raw = nullptr;
+  ASSERT_EQ(0, posix_memalign(&raw, 4096, cap));
+  std::unique_ptr<char, decltype(&::free)> mem(static_cast<char*>(raw), ::free);
+  auto check = [&](const ghobject_t& oid, uint64_t off, size_t len,
+                   std::vector<size_t> segs, uint32_t flags) {
+    memset(mem.get(), 0x5a, cap);
+    std::vector<iovec> iov;
+    size_t room = 0;
+    for (auto n : segs) {
+      iov.push_back({mem.get() + room, n});
+      room += n;
+    }
+    // read_into() first: read() can fill the cache
+    int ri = store->read_into(ch, oid, off, len, iov.data(), iov.size(), flags);
+    bufferlist want;
+    int rw = store->read(ch, oid, off, len, want, flags);
+    ASSERT_EQ(rw, ri) << oid << " " << off << "~" << len;
+    if (ri > 0) {
+      ASSERT_EQ(0, memcmp(mem.get(), want.c_str(), ri))
+        << oid << " " << off << "~" << len;
+    }
+    for (size_t i = ri > 0 ? ri : 0; i < room; i++) {
+      ASSERT_EQ(char(0x5a), mem.get()[i]) << "byte " << i << " was written";
+    }
+  };
+  check(hoid, 0, size, {cap}, nocache);         // the whole object
+  check(hoid, 4096, 65536, {cap}, nocache);     // aligned
+  check(hoid, 1000, 300000, {cap}, nocache);    // unaligned ends
+  check(hoid, 0, size, {4096 * 3 + 7, 65536, cap - 65536 - 4096 * 3 - 7},
+        nocache);                               // across segments
+  check(hoid, size - 100, 1000, {cap}, nocache);  // short at the end
+  check(sparse, 0, 640 * 1024, {cap}, nocache);   // the hole reads as zeros
+  check(hoid, 0, 0, {cap}, nocache);  // offset 0, length 0: the whole object
+  {
+    // past the end: nothing; too little room: refused
+    iovec all{mem.get(), cap};
+    EXPECT_EQ(0, store->read_into(ch, hoid, size + 4096, 100, &all, 1));
+    iovec small{mem.get(), 10};
+    EXPECT_EQ(-EINVAL, store->read_into(ch, hoid, 0, 100, &small, 1));
+    // the whole object does not fit in 4 KiB: refused, and nothing is
+    // written, on every store
+    memset(mem.get(), 0x5a, cap);
+    iovec page{mem.get(), 4096};
+    EXPECT_EQ(-EINVAL, store->read_into(ch, hoid, 0, 0, &page, 1));
+    for (size_t i = 0; i < cap; i++) {
+      ASSERT_EQ(char(0x5a), mem.get()[i]) << "byte " << i << " was written";
+    }
+  }
+  // cache hits: the cache holds the object, read_into() copies from it
+  {
+    bufferlist warm;
+    ASSERT_EQ(int(size), store->read(ch, hoid, 0, size, warm,
+                                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED));
+    check(hoid, 0, size, {cap}, 0);
+    check(hoid, 1000, 300000, {cap}, 0);
+  }
+  // the block size that a caller aligns its reads to: none for a store
+  // that copies every read
+  if (string(GetParam()) == "bluestore") {
+    const uint64_t bs = store->get_read_into_block_size();
+    EXPECT_EQ(g_conf()->bdev_block_size, bs);
+  } else {
+    EXPECT_EQ(0u, store->get_read_into_block_size());
+  }
+  if (string(GetParam()) == "bluestore") {
+    const PerfCounters* logger = store->get_perf_counters();
+    EXPECT_GT(logger->get(l_bluestore_read_into_direct_bytes), 0u);
+    EXPECT_GT(logger->get(l_bluestore_read_into_copied_bytes), 0u);
+    // a compressed blob is decompressed into the caller's memory
+    SetVal(g_conf(), "bluestore_compression_algorithm", "snappy");
+    SetVal(g_conf(), "bluestore_compression_mode", "force");
+    g_ceph_context->_conf.apply_changes(nullptr);
+    {
+      bufferlist data;
+      for (int i = 0; i < 64; i++) {
+        data.append(std::string(4096, char('A' + i % 26)));
+      }
+      const uint64_t before = logger->get(l_bluestore_compress_success_count);
+      ObjectStore::Transaction t;
+      t.write(cid, packed, 0, data.length(), data,
+              CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+      // the blob really is compressed (needs the compressor plugins)
+      ASSERT_GT(logger->get(l_bluestore_compress_success_count), before);
+    }
+    check(packed, 0, 64 * 4096, {cap}, nocache);
+    check(packed, 5000, 100000, {cap}, nocache);
+    SetVal(g_conf(), "bluestore_compression_mode", "none");
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, sparse);
+    t.remove(cid, packed);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+// BlueStore's read_into() does around the device's read what read()
+// does: it counts the latencies, takes the fragmentation sample, retries
+// checksum failures and raises BLUESTORE_SPURIOUS_READ_ERRORS for them,
+// and fails with EIO where the debug options inject it
+TEST_P(StoreTest, ReadIntoAsRead) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  int r;
+  coll_t cid;
+  // in a pool: bluestore_debug_random_read_err spares the meta objects
+  ghobject_t hoid(hobject_t(sobject_t("read_into_as_read", CEPH_NOSNAP),
+                            "", 0, 1, ""));
+  auto ch = store->create_new_collection(cid);
+  const size_t len = 256 * 1024;
+  bufferlist data;
+  for (size_t i = 0; i < len / 4096; i++) {
+    data.append(std::string(4096, char('a' + i % 26)));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.write(cid, hoid, 0, len, data, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    // nothing of it in the cache
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+  }
+  ch = store->open_collection(cid);
+  void* raw = nullptr;
+  ASSERT_EQ(0, posix_memalign(&raw, 4096, len));
+  std::unique_ptr<char, decltype(&::free)> mem(static_cast<char*>(raw), ::free);
+  const uint32_t nocache = CEPH_OSD_OP_FLAG_FADVISE_NOCACHE;
+  auto read_into = [&](size_t n) {
+    memset(mem.get(), 0, len);
+    iovec iov{mem.get(), n};
+    return store->read_into(ch, hoid, 0, n, &iov, 1, nocache);
+  };
+  const PerfCounters* logger = store->get_perf_counters();
+  auto cnt = [logger](int idx) { return logger->get_tavg_ns(idx).second; };
+
+  // a cold read, straight into the caller's memory
+  SetVal(g_conf(), "bluestore_frag_runtime", "true");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  {
+    const uint64_t meta = cnt(l_bluestore_read_onode_meta_lat);
+    const uint64_t miss = cnt(l_bluestore_buffer_miss_lat);
+    const uint64_t frag = cnt(l_bluestore_runtime_frag_lat);
+    const uint64_t lat = cnt(l_bluestore_read_lat);
+    const uint64_t direct = logger->get(l_bluestore_read_into_direct_bytes);
+    ASSERT_EQ(int(len), read_into(len));
+    ASSERT_EQ(0, memcmp(mem.get(), data.c_str(), len));
+    EXPECT_EQ(direct + len, logger->get(l_bluestore_read_into_direct_bytes));
+    // the onode, then its extents
+    EXPECT_EQ(meta + 2, cnt(l_bluestore_read_onode_meta_lat));
+    EXPECT_EQ(miss + 1, cnt(l_bluestore_buffer_miss_lat));
+    EXPECT_EQ(frag + 1, cnt(l_bluestore_runtime_frag_lat));
+    EXPECT_EQ(lat + 1, cnt(l_bluestore_read_lat));
+  }
+  SetVal(g_conf(), "bluestore_frag_runtime", "false");
+
+  // checksum failures, retried: the data lands in the caller's memory,
+  // and the store reports the retries. 25 reads of one blob, each fails
+  // a check with a chance of 80% and is retried up to 255 times (as in
+  // SpuriousReadErrorTest): at least one is retried, and none fails
+  SetVal(g_conf(), "bluestore_retry_disk_reads", "255");
+  SetVal(g_conf(), "bluestore_debug_inject_csum_err_probability", "0.8");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  {
+    const uint64_t retried = logger->get(l_bluestore_reads_with_retries);
+    const uint64_t direct = logger->get(l_bluestore_read_into_direct_bytes);
+    for (int i = 0; i < 25; ++i) {
+      ASSERT_EQ(8192, read_into(8192));
+      ASSERT_EQ(0, memcmp(mem.get(), data.c_str(), 8192));
+    }
+    EXPECT_GT(logger->get(l_bluestore_reads_with_retries), retried);
+    EXPECT_EQ(direct + 25 * 8192,
+              logger->get(l_bluestore_read_into_direct_bytes));
+    struct store_statfs_t statfs;
+    osd_alert_list_t alerts;
+    ASSERT_EQ(0, store->statfs(&statfs, &alerts));
+    EXPECT_EQ(1u, alerts.count("BLUESTORE_SPURIOUS_READ_ERRORS"));
+  }
+  // with no retries: EIO
+  SetVal(g_conf(), "bluestore_retry_disk_reads", "0");
+  SetVal(g_conf(), "bluestore_debug_inject_csum_err_probability", "1");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  {
+    const uint64_t eio = logger->get(l_bluestore_read_eio);
+    EXPECT_EQ(-EIO, read_into(8192));
+    EXPECT_EQ(eio + 1, logger->get(l_bluestore_read_eio));
+  }
+  SetVal(g_conf(), "bluestore_debug_inject_csum_err_probability", "0");
+  // random EIO, on every read (rand() % 1 == 0)
+  SetVal(g_conf(), "bluestore_debug_random_read_err", "0.01");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  {
+    bufferlist bl;
+    EXPECT_EQ(-EIO, store->read(ch, hoid, 0, len, bl, nocache));
+    EXPECT_EQ(-EIO, read_into(len));
+  }
+  SetVal(g_conf(), "bluestore_debug_random_read_err", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  ASSERT_EQ(int(len), read_into(len));
+  // a media error on the object, injected as for read()
+  SetVal(g_conf(), "bluestore_debug_inject_read_err", "true");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  store->inject_data_error(hoid);
+  {
+    bufferlist bl;
+    EXPECT_EQ(-EIO, store->read(ch, hoid, 0, len, bl, nocache));
+    EXPECT_EQ(-EIO, read_into(len));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+// BlueStore's readv() does around the device's read what read() does:
+// it counts the latencies, retries checksum failures and raises
+// BLUESTORE_SPURIOUS_READ_ERRORS for them, and fails with EIO where the
+// debug options inject it
+TEST_P(StoreTest, ReadvAsRead) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  int r;
+  coll_t cid;
+  // in a pool: bluestore_debug_random_read_err spares the meta objects
+  ghobject_t hoid(hobject_t(sobject_t("readv_as_read", CEPH_NOSNAP),
+                            "", 0, 1, ""));
+  auto ch = store->create_new_collection(cid);
+  const size_t len = 256 * 1024;
+  bufferlist data;
+  for (size_t i = 0; i < len / 4096; i++) {
+    data.append(std::string(4096, char('a' + i % 26)));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.write(cid, hoid, 0, len, data, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    // nothing of it in the cache
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+  }
+  ch = store->open_collection(cid);
+  const uint32_t nocache = CEPH_OSD_OP_FLAG_FADVISE_NOCACHE;
+  // two pieces, in two blocks
+  auto readv = [&]() {
+    interval_set<uint64_t> m;
+    m.insert(4096, 4096);
+    m.insert(65536 + 100, 1000);
+    bufferlist bl;
+    int r = store->readv(ch, hoid, m, bl, nocache);
+    if (r >= 0) {
+      bufferlist want, b;
+      want.substr_of(data, 4096, 4096);
+      b.substr_of(data, 65536 + 100, 1000);
+      want.claim_append(b);
+      EXPECT_TRUE(bl_eq(want, bl));
+    }
+    return r;
+  };
+  const PerfCounters* logger = store->get_perf_counters();
+  auto cnt = [logger](int idx) { return logger->get_tavg_ns(idx).second; };
+
+  // a cold read
+  {
+    const uint64_t meta = cnt(l_bluestore_read_onode_meta_lat);
+    const uint64_t miss = cnt(l_bluestore_buffer_miss_lat);
+    const uint64_t lat = cnt(l_bluestore_read_lat);
+    ASSERT_EQ(5096, readv());
+    // the onode, then its extents
+    EXPECT_EQ(meta + 2, cnt(l_bluestore_read_onode_meta_lat));
+    EXPECT_EQ(miss + 1, cnt(l_bluestore_buffer_miss_lat));
+    EXPECT_EQ(lat + 1, cnt(l_bluestore_read_lat));
+  }
+  // checksum failures, retried. Each try checks a blob or two, and each
+  // check fails with a chance of 50%, up to 255 times: at least one of
+  // 25 reads is retried, and none fails
+  {
+    struct store_statfs_t statfs;
+    osd_alert_list_t alerts;
+    ASSERT_EQ(0, store->statfs(&statfs, &alerts));
+    EXPECT_EQ(0u, alerts.count("BLUESTORE_SPURIOUS_READ_ERRORS"));
+  }
+  SetVal(g_conf(), "bluestore_retry_disk_reads", "255");
+  SetVal(g_conf(), "bluestore_debug_inject_csum_err_probability", "0.5");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  {
+    const uint64_t retried = logger->get(l_bluestore_reads_with_retries);
+    for (int i = 0; i < 25; ++i) {
+      ASSERT_EQ(5096, readv());
+    }
+    EXPECT_GT(logger->get(l_bluestore_reads_with_retries), retried);
+    struct store_statfs_t statfs;
+    osd_alert_list_t alerts;
+    ASSERT_EQ(0, store->statfs(&statfs, &alerts));
+    EXPECT_EQ(1u, alerts.count("BLUESTORE_SPURIOUS_READ_ERRORS"));
+  }
+  // with no retries: EIO
+  SetVal(g_conf(), "bluestore_retry_disk_reads", "0");
+  SetVal(g_conf(), "bluestore_debug_inject_csum_err_probability", "1");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  {
+    const uint64_t eio = logger->get(l_bluestore_read_eio);
+    EXPECT_EQ(-EIO, readv());
+    EXPECT_EQ(eio + 1, logger->get(l_bluestore_read_eio));
+  }
+  SetVal(g_conf(), "bluestore_debug_inject_csum_err_probability", "0");
+  // random EIO, on every read (rand() % 1 == 0)
+  SetVal(g_conf(), "bluestore_debug_random_read_err", "0.01");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  EXPECT_EQ(-EIO, readv());
+  SetVal(g_conf(), "bluestore_debug_random_read_err", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  ASSERT_EQ(5096, readv());
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+// read_into() of data whose deferred write is still pending: the device
+// does not hold the data yet, and read_into() takes it from the cache,
+// which holds it until the deferred write is done
+TEST_P(StoreTest, ReadIntoPendingDeferredWrite) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("read_into_deferred", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  const size_t len = 256 * 1024;
+  std::string want(len, 0);
+  for (size_t i = 0; i < len; i++) {
+    want[i] = static_cast<char>(i * 7 + i / 4096);
+  }
+  {
+    bufferlist data;
+    data.append(want);
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.write(cid, hoid, 0, len, data, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    // the object is on the device, and in no cache
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+  }
+  ch = store->open_collection(cid);
+  // small overwrites go deferred, and stay queued for a while
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+  SetVal(g_conf(), "bluestore_max_defer_interval", "300");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  const PerfCounters* logger = store->get_perf_counters();
+  const uint64_t issued = logger->get(l_bluestore_issued_deferred_writes);
+  const uint64_t submitted =
+    logger->get(l_bluestore_submitted_deferred_writes);
+  {
+    // a whole block, and a piece across two blocks
+    bufferlist a, b;
+    a.append(std::string(4096, 'A'));
+    b.append(std::string(3000, 'B'));
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 8192, a.length(), a, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    t.write(cid, hoid, 100000, b.length(), b,
+            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    memset(&want[8192], 'A', a.length());
+    memset(&want[100000], 'B', b.length());
+  }
+  // read at once, cold everywhere else
+  void* raw = nullptr;
+  ASSERT_EQ(0, posix_memalign(&raw, 4096, len));
+  std::unique_ptr<char, decltype(&::free)> mem(static_cast<char*>(raw), ::free);
+  memset(mem.get(), 0x5a, len);
+  iovec iov{mem.get(), len};
+  const uint64_t direct = logger->get(l_bluestore_read_into_direct_bytes);
+  ASSERT_EQ(int(len), store->read_into(ch, hoid, 0, len, &iov, 1,
+                                       CEPH_OSD_OP_FLAG_FADVISE_NOCACHE));
+  // the overwrites went deferred, and none went to the device before the
+  // read was done
+  EXPECT_GT(logger->get(l_bluestore_issued_deferred_writes), issued);
+  EXPECT_EQ(submitted, logger->get(l_bluestore_submitted_deferred_writes));
+  // the rest came straight from the device
+  EXPECT_GT(logger->get(l_bluestore_read_into_direct_bytes), direct);
+  ASSERT_EQ(0, memcmp(mem.get(), want.data(), len));
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SimpleObjectTest) {
   int r;
   coll_t cid;

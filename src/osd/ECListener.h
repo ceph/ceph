@@ -22,12 +22,56 @@
 #include "common/WorkQueue.h"
 #include "PGLog.h"
 #include "messages/MOSDPGPush.h"
+#include "osd/oob_direct_read.h"
 
 // ECListener -- an interface decoupling the pipelines from
 // particular implementation of ECBackendL (crimson vs cassical).
 // https://stackoverflow.com/q/7872958
+class OSDOobExecutor;
+namespace ceph::osd::oob {
+struct xfer_job;
+}
+namespace ceph::oob {
+class Arena;
+}
+
 struct ECListener {
   virtual ~ECListener() = default;
+
+  /// the out-of-band executor that serves a delivery token; a shard
+  /// uses it to push its part of a gather into the primary's window
+  virtual OSDOobExecutor* oob_executor_for(const std::string& token) {
+    return nullptr;
+  }
+  /// hand j, a shard's push into a gather window, to the OSD's
+  /// out-of-band transfer service (oob::Transfers::submit()): 0 when it
+  /// took the job, which then runs, or expires, exactly once, before
+  /// this returns when the OSD has no transfer threads; a negative
+  /// errno, with j untouched and nothing started, when the service
+  /// refuses it or there is none. Called with the PG lock held.
+  virtual int oob_submit(std::unique_ptr<ceph::osd::oob::xfer_job>& j) {
+    return -EOPNOTSUPP;
+  }
+  /// whether e's transfers run on the thread that submits them even
+  /// when the OSD has transfer threads (OSDService::oob_runs_inline())
+  virtual bool oob_runs_inline(const OSDOobExecutor* e) const {
+    return true;
+  }
+  /// the executor that lends receive windows for gathers, when the
+  /// primary gathers shard reads out of band; null otherwise
+  virtual OSDOobExecutor* oob_gather_executor() {
+    return nullptr;
+  }
+  /// the memory that the OSD's transports write from without a copy
+  /// (osd_oob_direct_read); null when the OSD has none
+  virtual ceph::oob::Arena* oob_arena() {
+    return nullptr;
+  }
+  /// osd_oob_direct_read, as the OSD has it now
+  virtual ceph::osd::oob::direct_read_t oob_direct_read() const {
+    return ceph::osd::oob::direct_read_t::off;
+  }
+
   virtual const OSDMapRef& pgb_get_osdmap() const = 0;
   virtual epoch_t pgb_get_osdmap_epoch() const = 0;
   virtual const pg_info_t &get_info() const = 0;
@@ -43,6 +87,17 @@ struct ECListener {
   // XXX
   virtual pg_shard_t primary_shard() const = 0;
   virtual bool pgb_is_primary() const = 0;
+
+  /**
+   * Called when a client read of hoid decoded its data without shards
+   * whose own object store failed the read with a media error (-EIO).
+   * The read completes with the decoded data whatever this does; a
+   * clean PG may mark the object missing on those shards and recover it
+   * (osd_ec_repair_on_read). Called with the PG lock held.
+   */
+  virtual void ec_repair_on_read(
+    const hobject_t &hoid,
+    const std::set<pg_shard_t> &shards) = 0;
 
   /**
    * Called when a read from a std::set of replicas/primary fails

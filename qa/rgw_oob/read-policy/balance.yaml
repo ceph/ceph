@@ -1,0 +1,7 @@
+# the gateway reads each object from any OSD of its PG: a replica of a
+# replicated pool, the shards of an erasure-coded pool
+overrides:
+  ceph:
+    conf:
+      client:
+        rados replica read policy: balance

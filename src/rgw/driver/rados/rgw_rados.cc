@@ -27,6 +27,8 @@
 
 #include "rgw_asio_thread.h"
 #include "rgw_cksum.h"
+#include "rgw_rdma_cksum.h"
+#include "rgw_rdma_fence.h"
 #include "rgw_sal.h"
 #include "rgw_zone.h"
 #include "rgw_cache.h"
@@ -3966,9 +3968,13 @@ public:
     }
 
     if (try_etag_verify) {
+      std::string_view src_etag;
+      if (auto i = src_attrs.find(RGW_ATTR_ETAG); i != src_attrs.end()) {
+        src_etag = std::string_view(i->second.c_str(), i->second.length());
+      }
       ret = rgw::putobj::create_etag_verifier(dpp, cct, filter, manifest_bl,
                                               compression_info,
-                                              etag_verifier);
+                                              etag_verifier, src_etag);
       if (ret < 0) {
         ldpp_dout(dpp, 4) << "failed to initial etag verifier, "
             "disabling etag verification" << dendl;
@@ -8931,7 +8937,80 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end,
   return bl.length();
 }
 
+int get_obj_data::flush_rdma(rgw::AioResultList&& results) {
+  // OSDs that pushed wrote straight into client memory (byte counts
+  // arrive through the per-stripe delivery out-params). A stripe read
+  // that failed fails the GET; an inline reply means that OSD did not
+  // push - no RDMA support, expired lease, resent op, a push it cut off
+  // - and the whole GET must restart in a fallback mode. Either way the
+  // client callback never sees data here.
+  CephContext* cct = rgwrados->ctx();
+  int r = 0;
+  for (const auto& e : results) {
+    // the stripe's delivery result, for the log
+    std::string res = "none";
+    if (auto it = rdma_slot_by_ofs.find(e.id); it != rdma_slot_by_ofs.end()) {
+      const auto& slot = rdma_slots[it->second];
+      std::ostringstream o;
+      o << slot.bytes << " bytes, flags 0x" << std::hex << slot.flags;
+      res = o.str();
+    }
+    switch (rgw::rdma::classify_stripe(e.result, e.data.length())) {
+    case rgw::rdma::stripe_reply::failed:
+      ldout(cct, 1) << "rdma passthrough: the read of " << e.obj.oid
+                    << " (range offset " << e.id - rdma_range_start
+                    << ") failed: " << cpp_strerror(e.result)
+                    << "; delivery result: "
+                    << res
+                    << dendl;
+      if (r == 0 || r == -EOPNOTSUPP) {
+        r = e.result;  // a failure fails the GET; no fallback would help
+      }
+      break;
+    case rgw::rdma::stripe_reply::inline_data:
+      ldout(cct, 4) << "rdma passthrough: the read of " << e.obj.oid
+                    << " (range offset " << e.id - rdma_range_start
+                    << ") came back inline (" << e.data.length()
+                    << " bytes); delivery result: "
+                    << res
+                    << "; falling back" << dendl;
+      if (r == 0) {
+        r = -EOPNOTSUPP;
+      }
+      break;
+    case rgw::rdma::stripe_reply::placed:
+      break;
+    }
+  }
+  if (r < 0) {
+    return r;
+  }
+  while (!results.empty()) {
+    auto& e = results.front();
+    // the reply filled this stripe's slot: tell the callback where the
+    // bytes went, relative to the requested range, and whether the OSD
+    // says they were in the window before it replied
+    if (auto it = rdma_slot_by_ofs.find(e.id); it != rdma_slot_by_ofs.end()) {
+      const auto& slot = rdma_slots[it->second];
+      if (slot.bytes > 0) {
+        using result_t = librados::ObjectReadOperation::rdma_delivery_result;
+        const bool landed = slot.flags & result_t::LANDED;
+        int r = client_cb->handle_oob(e.id - rdma_range_start, slot.bytes,
+                                      landed);
+        if (r < 0) {
+          return r;
+        }
+      }
+    }
+    results.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
+  }
+  return 0;
+}
+
 int get_obj_data::flush(rgw::AioResultList&& results) {
+  if (rdma) {
+    return flush_rdma(std::move(results));
+  }
   int r = rgw::check_for_errors(results);
   if (r < 0) {
     return r;
@@ -8996,6 +9075,14 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
     // coverity[check_after_deref:SUPPRESS]
     if (astate &&
         obj_ofs < astate->data.length()) {
+      if (d->rdma) {
+        // inline head data would have to be served from RGW memory,
+        // breaking the passthrough contract; the caller disables
+        // prefetch when a token is present, so fall back instead
+        ldpp_dout(dpp, 4) << "rdma passthrough: unexpected inline head data, "
+                          << "falling back" << dendl;
+        return -EOPNOTSUPP;
+      }
       unsigned chunk_len = std::min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
 
       r = d->client_cb->handle_data(astate->data, obj_ofs, chunk_len);
@@ -9020,7 +9107,22 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
   }
 
   ldpp_dout(dpp, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
-  op.read(read_ofs, len, nullptr, nullptr);
+  if (d->rdma) {
+    // a plain read carrying an advisory delivery descriptor: an OSD
+    // that can push RDMA-writes the stripe into the client window at
+    // the stripe's logical offset within the requested range and
+    // reports the byte count through the slot; any other OSD returns
+    // the data inline, which flush_rdma treats as the fallback signal
+    op.read(read_ofs, len, nullptr, nullptr);
+    d->rdma_slots.emplace_back();
+    d->rdma_slot_by_ofs[obj_ofs] = d->rdma_slots.size() - 1;
+    op.set_rdma_delivery(d->rdma_token,
+                         uint64_t(obj_ofs) - d->rdma_range_start,
+                         d->rdma_flags, &d->rdma_slots.back());
+    d->rdma_ops_sent = true;
+  } else {
+    op.read(read_ofs, len, nullptr, nullptr);
+  }
 
   const uint64_t cost = len;
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
@@ -9041,19 +9143,86 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
   auto aio = rgw::make_throttle(window_size, y);
   get_obj_data data(store, cb, &*aio, ofs, y);
 
+  // the CRCs the caller has room for: it decides which it wants
+  const rgw::rdma::cksum_want crcs_wanted{
+    .crc64nvme = params.rdma_crc64 != nullptr,
+    .crc32c = params.rdma_crc32c != nullptr};
+  if (!params.rdma_token.empty()) {
+    if (store->get_use_datacache()) {
+      // d3n substitutes cached stripe sources, which is incompatible
+      // with OSD-direct delivery; make the caller fall back
+      ldpp_dout(dpp, 4) << "rdma passthrough unsupported with d3n datacache"
+                        << dendl;
+      return -EOPNOTSUPP;
+    }
+    data.rdma = true;
+    data.rdma_token = params.rdma_token;
+    data.rdma_range_start = ofs;
+    data.rdma_flags |= rgw::rdma::delivery_want_flags(crcs_wanted);
+  }
+
   if (state.obj.empty()) {
     state.obj = source->get_obj();
   }
+
+  // every descriptor-bearing read has completed when this runs - drained
+  // after a failure as after success - so its result is final
+  auto note_rdma = [&](int r) {
+    params.rdma_submitted = data.rdma_ops_sent;
+    params.rdma_fence_needed = rgw::rdma::fence_needed(data.rdma_slots);
+    const auto sum = rgw::rdma::summarize(data.rdma_slots);
+    if (data.rdma && params.rdma_bytes) {
+      // what the OSDs moved, also for reads that failed or fell back,
+      // which the request is charged for
+      *params.rdma_bytes = sum.bytes;
+    }
+    if (!data.rdma_ops_sent || r >= 0) {
+      return;
+    }
+    if (r == -EOPNOTSUPP) {
+      ldpp_dout(dpp, 4) << "rdma passthrough: falling back after " << sum
+                        << "; fence "
+                        << (params.rdma_fence_needed ? "needed" : "not needed")
+                        << dendl;
+    } else {
+      ldpp_dout(dpp, 1) << "rdma passthrough: failed (" << cpp_strerror(r)
+                        << ") after " << sum << "; fence "
+                        << (params.rdma_fence_needed ? "needed" : "not needed")
+                        << dendl;
+    }
+  };
 
   int r = store->iterate_obj(dpp, source->get_ctx(), source->get_bucket_info(), state.obj,
                              ofs, end, chunk_size, _get_obj_iterate_cb, &data, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "iterate_obj() failed with " << r << dendl;
     data.cancel(); // drain completions without writing back to client
+    note_rdma(r);
     return r;
   }
 
-  return data.drain();
+  r = data.drain();
+  note_rdma(r);
+  if (r < 0) {
+    return r;
+  }
+  if (data.rdma && crcs_wanted.any()) {
+    // slots were pushed in logical stripe order, so folding them with
+    // the concatenation combine yields the checksum of the whole
+    // delivered range. A slot without a usable value of a CRC ends
+    // that CRC (see rgw::rdma::delivered_crcs())
+    rgw::rdma::crc_fold fold(crcs_wanted);
+    for (const auto& r : data.rdma_slots) {
+      fold.append(rgw::rdma::delivered_crcs(r), r.bytes);
+    }
+    if (params.rdma_crc64) {
+      *params.rdma_crc64 = fold.result().crc64;
+    }
+    if (params.rdma_crc32c) {
+      *params.rdma_crc32c = fold.result().crc32c;
+    }
+  }
+  return 0;
 }
 
 int RGWRados::iterate_obj(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,

@@ -28,6 +28,10 @@
  *                    data integrity.
  *   PartialWrite   – create an object, perform a partial write at a non-zero
  *                    offset, read back and verify all three regions.
+ *   GatherWindowsOnlyForClientReads
+ *                  – the primary lends its peer shards gather windows for
+ *                    a client read, not for the read of a partial write,
+ *                    a fast read, or a sub-read of few bytes.
  *
  * TestECFailover
  *   Parameterized over BackendConfig (EC configs only, 12 instances).
@@ -36,6 +40,13 @@
  *   BasicOSDMapUpdate – write, update OSDMap epoch, verify read still works.
  *   PrimaryFailover   – write, fail OSD 0, verify new primary and degraded
  *                       read with EC reconstruction.
+ *   MediaError*, OtherReadErrors*, FastReadLateMediaError*
+ *                     – a read decoded around a shard's -EIO names that
+ *                       shard to the PG for repair (optimized EC only).
+ *   TransportFault*, FastReadTransportFaults*
+ *                     – a shard whose data is lost on its way to the
+ *                       primary is read again once, inline, and never
+ *                       repaired (optimized EC only).
  */
 
 #include <gtest/gtest.h>
@@ -43,6 +54,9 @@
 #include "test/osd/TestCommon.h"
 #include "crush/CrushWrapper.h"
 #include "messages/MOSDECSubOpWrite.h"
+#include "messages/MOSDECSubOpRead.h"
+#include "messages/MOSDECSubOpReadReply.h"
+#include "osd/oob_executor.h"
 
 using namespace std;
 
@@ -275,6 +289,160 @@ TEST_P(TestBackendBasics, PartialWrite) {
     ASSERT_EQ(buf[i], param.fill)
       << param.label << " data after partial write region should be unchanged at position " << i;
   }
+}
+
+// ---------------------------------------------------------------------------
+// TestBackendBasics: GatherWindowsOnlyForClientReads
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// a cluster transport's executor that counts the reads that asked it for
+/// a gather window. It has none to lend unless lend is set; then each
+/// window is a zeroed buffer of its own, which no shard can push into
+struct CountingGatherExecutor : public OSDOobExecutor {
+  int asked = 0;
+  bool lend = false;
+  /// the windows lent and not returned, by id
+  std::map<uint64_t, std::vector<char>> lent;
+  uint64_t last_id = 0;
+  int quarantined = 0;
+
+  bool is_available() const override { return true; }
+  bool handles(const std::string& token) const override { return false; }
+  ssize_t execute_plan(const std::string& key, const std::string& token,
+                       const ceph::buffer::list& data,
+                       const ceph::osd::oob::placement_plan& plan,
+                       std::chrono::milliseconds budget,
+                       bool* started) override {
+    if (started) {
+      *started = false;
+    }
+    return -EOPNOTSUPP;
+  }
+  void dump_stats(ceph::Formatter* f) const override {}
+  std::optional<window_t> acquire_window(size_t size) override {
+    ++asked;
+    if (!lend) {
+      return std::nullopt;
+    }
+    window_t w;
+    w.id = ++last_id;
+    auto& buf = lent[w.id];
+    buf.resize(size);
+    w.ptr = buf.data();
+    w.size = size;
+    w.token = "test-window-" + std::to_string(w.id);
+    return w;
+  }
+  void release_window(uint64_t id, uint64_t quarantine_ms) override {
+    lent.erase(id);
+    if (quarantine_ms > 0) {
+      ++quarantined;
+    }
+  }
+};
+
+} // anonymous namespace
+
+/**
+ * GatherWindowsOnlyForClientReads - a primary whose cluster transport
+ * lends gather windows lends them to a client read, which reads a shard
+ * whose push fails its checksum again, or decodes from the other shards,
+ * but not to the read of a partial write, which needs the very shards it
+ * reads. Nor does it lend them to a fast read, which completes before
+ * every shard is done with its window, or for a sub-read of fewer than
+ * gather_windows_t::min_bytes.
+ */
+TEST_P(TestBackendBasics, GatherWindowsOnlyForClientReads) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+
+  // only the optimized EC read pipeline gathers out of band
+  if (backend_config.pool_type != EC ||
+      !(backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "gather windows need optimized EC";
+  }
+
+  std::string obj_name = "test_gather_" + backend_config.label + "_" + param.label;
+
+  // enough stripes that a whole-object read reads a window's worth
+  // from every data shard, the primary's and the others
+  const size_t size = std::max(
+    param.size, size_t(k) * ECCommon::gather_windows_t::min_bytes);
+  ASSERT_EQ(0, create_and_write(obj_name, std::string(size, param.fill)));
+
+  // a new map drops the extent cache, so that the partial write below
+  // reads what it overwrites from the shards
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  new_osdmap->inc_epoch();
+  update_osdmap(new_osdmap);
+
+  CountingGatherExecutor exec;
+  MockPGBackendListener* primary = get_primary_listener();
+  ASSERT_NE(nullptr, primary);
+  auto* ec_switch = dynamic_cast<ECSwitch*>(get_primary_backend());
+  ASSERT_TRUE(ec_switch != nullptr);
+  primary->gather_executor = &exec;
+  primary->gather_executor_asked = 0;
+  primary->sent_messages.clear();
+
+  // part of a chunk: the primary reads the old data first. That read
+  // is less than a window's worth, which the size floor alone would
+  // keep inline: it must not ask for the executor at all
+  EXPECT_EQ(0, write(obj_name, stripe_unit + 512, std::string(512, 'x'), size));
+  EXPECT_TRUE(std::any_of(
+    primary->sent_messages.begin(), primary->sent_messages.end(),
+    [](const MessageRef& m) { return m->get_type() == MSG_OSD_EC_READ; }))
+    << param.label << " the partial write read nothing from the shards";
+  EXPECT_EQ(0, primary->gather_executor_asked) << param.label
+    << " the read of a partial write lends gather windows";
+  EXPECT_EQ(0, exec.asked) << param.label
+    << " the read of a partial write asked for gather windows";
+
+  bufferlist read_data;
+  EXPECT_GE(read_object(obj_name, 0, size, read_data, size), 0);
+  EXPECT_GT(primary->gather_executor_asked, 0) << param.label
+    << " a client read lends no gather window";
+  EXPECT_GT(exec.asked, 0) << param.label
+    << " a client read asked for no gather window";
+  const int asked = exec.asked;
+  const int lending = primary->gather_executor_asked;
+
+  bufferlist fast_data;
+  bool completed = false;
+  int result = -1;
+  std::list<std::pair<ec_align_t, std::pair<bufferlist*, Context*>>> to_read;
+  to_read.push_back(std::make_pair(
+    ec_align_t(0, size, 0),
+    std::make_pair(&fast_data, (Context*)new LambdaContext(
+      [&completed, &result](int r) {
+        completed = true;
+        result = r;
+      }))));
+  ec_switch->objects_read_async(
+    make_test_object(obj_name), size, to_read, new LambdaContext([](int) {}),
+    true /* fast_read */);
+  event_loop->run_until_idle();
+  EXPECT_TRUE(completed);
+  EXPECT_GE(result, 0);
+  EXPECT_EQ(lending, primary->gather_executor_asked) << param.label
+    << " a fast read lends gather windows";
+  EXPECT_EQ(asked, exec.asked) << param.label
+    << " a fast read asked for gather windows";
+
+  // one chunk of shard 1, far less than a window's worth: the read
+  // lends windows, but not for this sub-read
+  read_data.clear();
+  EXPECT_GE(read_object(obj_name, stripe_unit, stripe_unit, read_data, size),
+            0);
+  EXPECT_GT(primary->gather_executor_asked, lending) << param.label
+    << " a client read lends no gather window";
+  EXPECT_EQ(asked, exec.asked) << param.label
+    << " a small sub-read asked for a gather window";
+
+  primary->gather_executor = nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -1045,6 +1213,453 @@ TEST_P(TestECFailover, PrimaryFailover) {
   EXPECT_TRUE(new_primary_listener != nullptr) << "Primary listener should exist after failover";
   EXPECT_GT(new_primary_listener->osdmap->get_epoch(), 1)
     << "OSDMap epoch should have incremented after failover";
+}
+
+// ---------------------------------------------------------------------------
+// TestECFailover: repair on read
+// ---------------------------------------------------------------------------
+
+/**
+ * A read that decodes around a shard whose store failed with a media error
+ * (-EIO) still returns the object, and names that shard, and only that
+ * shard, to the PG for repair.
+ */
+TEST_P(TestECFailover, MediaErrorIsReportedForRepair) {
+  if (!get_pool().has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "repair on read is optimized EC only";
+  }
+  const std::string obj_name = "test_media_error_repair";
+  const std::string test_data(get_stripe_width(), 'M');
+  auto* primary = get_primary_listener();
+  create_and_write_verify(obj_name, test_data);
+  primary->ec_read_repairs.clear();
+
+  // shard 1 holds data a full stripe read needs
+  const int bad = 1;
+  const hobject_t hoid = make_test_object(obj_name);
+  get_osd_fixture(bad)->store->inject_read_error(
+    ghobject_t(hoid, ghobject_t::NO_GEN, shard_id_t(bad)), -EIO);
+
+  verify_object(obj_name, test_data, 0, test_data.size());
+
+  ASSERT_EQ(1u, primary->ec_read_repairs.size());
+  EXPECT_EQ(hoid, primary->ec_read_repairs[0].first);
+  EXPECT_EQ(std::set<pg_shard_t>{pg_shard_t(bad, shard_id_t(bad))},
+	    primary->ec_read_repairs[0].second);
+
+  // the injection was one-shot: a clean read names nothing
+  verify_object(obj_name, test_data, 0, test_data.size());
+  EXPECT_EQ(1u, primary->ec_read_repairs.size());
+}
+
+/**
+ * The primary's own shard is read like any other, and a media error on it
+ * is reported the same way.
+ */
+TEST_P(TestECFailover, MediaErrorOnThePrimaryShardIsReported) {
+  if (!get_pool().has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "repair on read is optimized EC only";
+  }
+  const std::string obj_name = "test_media_error_primary";
+  const std::string test_data(get_stripe_width(), 'P');
+  auto* primary = get_primary_listener();
+  create_and_write_verify(obj_name, test_data);
+  primary->ec_read_repairs.clear();
+
+  const pg_shard_t me = primary->pg_whoami;
+  const hobject_t hoid = make_test_object(obj_name);
+  get_osd_fixture(me.osd)->store->inject_read_error(
+    ghobject_t(hoid, ghobject_t::NO_GEN, me.shard), -EIO);
+
+  verify_object(obj_name, test_data, 0, test_data.size());
+
+  ASSERT_EQ(1u, primary->ec_read_repairs.size());
+  EXPECT_EQ(hoid, primary->ec_read_repairs[0].first);
+  EXPECT_EQ(std::set<pg_shard_t>{me}, primary->ec_read_repairs[0].second);
+}
+
+/**
+ * An error that is not a media error (here a shard that has no copy of
+ * the object) is decoded around but not reported for repair.
+ */
+TEST_P(TestECFailover, OtherReadErrorsAreNotReportedForRepair) {
+  if (!get_pool().has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "repair on read is optimized EC only";
+  }
+  const std::string obj_name = "test_enoent_no_repair";
+  const std::string test_data(get_stripe_width(), 'N');
+  auto* primary = get_primary_listener();
+  create_and_write_verify(obj_name, test_data);
+  primary->ec_read_repairs.clear();
+
+  const hobject_t hoid = make_test_object(obj_name);
+  get_osd_fixture(1)->store->inject_read_error(
+    ghobject_t(hoid, ghobject_t::NO_GEN, shard_id_t(1)), -ENOENT);
+
+  verify_object(obj_name, test_data, 0, test_data.size());
+
+  EXPECT_TRUE(primary->ec_read_repairs.empty());
+}
+
+namespace {
+
+/**
+ * A messenger hook that loses shard data on its way to the primary: the
+ * first `times` replies to a read of hoid from each shard that `lose`
+ * picks carry the extents of a push, and its crc32c, in place of the
+ * data, as if the shard had pushed it into a gather window: one the
+ * primary never lent, or one the push did not reach. lost counts the
+ * replies it changed, by shard; reads, if given, counts the sub-reads
+ * the primary sends, by shard. With keep_rest, a changed reply keeps
+ * the data inline too, and carries an attribute of the object: the
+ * primary must take none of it.
+ */
+std::function<void(int, int, Message*)> lose_shard_data(
+  const hobject_t& hoid,
+  std::function<bool(shard_id_t)> lose,
+  int times,
+  std::map<shard_id_t, int>& lost,
+  std::map<shard_id_t, int>* reads = nullptr,
+  bool keep_rest = false)
+{
+  return [hoid, lose, times, &lost, reads, keep_rest](int, int,
+						      Message *msg) {
+    if (reads && msg->get_type() == MSG_OSD_EC_READ) {
+      ++(*reads)[static_cast<MOSDECSubOpRead*>(msg)->pgid.shard];
+      return;
+    }
+    if (msg->get_type() != MSG_OSD_EC_READ_REPLY) {
+      return;
+    }
+    auto *reply = static_cast<MOSDECSubOpReadReply*>(msg);
+    const shard_id_t shard = reply->op.from.shard;
+    if (auto n = lost.find(shard);
+        !lose(shard) || (n != lost.end() && n->second >= times)) {
+      return;
+    }
+    auto i = reply->op.buffers_read.find(hoid);
+    if (i == reply->op.buffers_read.end()) {
+      return;
+    }
+    auto &pushed = reply->op.pushed[hoid];
+    uint32_t crc = static_cast<uint32_t>(-1);
+    for (auto &&[offset, bl] : i->second) {
+      pushed.emplace_back(offset, bl.length());
+      crc = bl.crc32c(crc);
+    }
+    reply->op.pushed_crc = crc;
+    reply->op.push_declined = false;
+    if (keep_rest) {
+      bufferlist attr;
+      attr.append("lost");
+      reply->op.attrs_read[hoid]["_lost"] = attr;
+    } else {
+      reply->op.buffers_read.erase(i);
+    }
+    ++lost[shard];
+  };
+}
+
+} // anonymous namespace
+
+/**
+ * A shard whose data is lost on its way to the primary (here a reply that
+ * says the data was pushed into a gather window the primary never lent)
+ * is read again, once, and when that fails too is read around like a
+ * failed shard. Its media is healthy, so nothing is reported for repair.
+ */
+TEST_P(TestECFailover, TransportFaultIsNotReportedForRepair) {
+  if (!get_pool().has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "repair on read is optimized EC only";
+  }
+  const std::string obj_name = "test_transport_fault_no_repair";
+  const std::string test_data(get_stripe_width(), 'T');
+  auto* primary = get_primary_listener();
+  create_and_write_verify(obj_name, test_data);
+  primary->ec_read_repairs.clear();
+
+  // shard 1 holds data a full stripe read needs: every reply of it
+  // carries the extents of a push instead of the data
+  const shard_id_t bad(1);
+  const hobject_t hoid = make_test_object(obj_name);
+  std::map<shard_id_t, int> lost;
+  messenger->on_send = lose_shard_data(
+    hoid, [bad](shard_id_t shard) { return shard == bad; },
+    std::numeric_limits<int>::max(), lost);
+
+  verify_object(obj_name, test_data, 0, test_data.size());
+  messenger->on_send = nullptr;
+
+  // the read and the read again, and no more: the parity shards serve
+  // the rest
+  EXPECT_EQ(2, lost[bad]);
+  EXPECT_TRUE(primary->ec_read_repairs.empty());
+}
+
+/**
+ * Data lost once on its way to the primary costs one more read of the
+ * same shard, inline, and no read of the other shards to decode around
+ * it.
+ */
+TEST_P(TestECFailover, TransportFaultIsReadAgain) {
+  if (!get_pool().has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "gather faults are optimized EC only";
+  }
+  const std::string obj_name = "test_transport_fault_read_again";
+  const std::string test_data(get_stripe_width(), 'R');
+  auto* primary = get_primary_listener();
+  create_and_write_verify(obj_name, test_data);
+  primary->ec_read_repairs.clear();
+
+  const shard_id_t bad(1);
+  const hobject_t hoid = make_test_object(obj_name);
+  std::map<shard_id_t, int> lost;
+  std::map<shard_id_t, int> reads;
+  messenger->on_send = lose_shard_data(
+    hoid, [bad](shard_id_t shard) { return shard == bad; }, 1, lost, &reads);
+
+  verify_object(obj_name, test_data, 0, test_data.size());
+  messenger->on_send = nullptr;
+
+  EXPECT_EQ(1, lost[bad]);
+  EXPECT_EQ(2, reads[bad]);
+  for (int parity = k; parity < k + m; ++parity) {
+    EXPECT_EQ(0, reads[shard_id_t(parity)])
+      << "parity shard " << parity << " was read";
+  }
+  EXPECT_TRUE(primary->ec_read_repairs.empty());
+}
+
+/**
+ * On a primary that lends gather windows, a shard whose data is lost on
+ * its way is read again without one, whether the push it reports did
+ * not match its checksum in the window the shard was lent, or came with
+ * no window to find it in: a window could lose the data again.
+ */
+TEST_P(TestECFailover, TransportFaultIsReadAgainWithoutWindow) {
+  if (!get_pool().has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "gather windows need optimized EC";
+  }
+  // a window's worth from every data shard
+  const std::string test_data(
+    k * ECCommon::gather_windows_t::min_bytes, 'W');
+  auto* primary = get_primary_listener();
+  const shard_id_t bad(1);
+  ASSERT_NE(bad, primary->pg_whoami.shard);
+
+  for (const bool lend : {true, false}) {
+    SCOPED_TRACE(lend ? "window lent" : "no window");
+    const std::string obj_name =
+      std::string("test_gather_fault_") + (lend ? "window" : "no_window");
+    create_and_write_verify(obj_name, test_data);
+    primary->ec_read_repairs.clear();
+
+    CountingGatherExecutor exec;
+    exec.lend = lend;
+    primary->gather_executor = &exec;
+    const hobject_t hoid = make_test_object(obj_name);
+    std::map<shard_id_t, int> lost;
+    auto lose = lose_shard_data(
+      hoid, [bad](shard_id_t shard) { return shard == bad; }, 1, lost);
+    // for each read of the bad shard: the windows asked for by then, and
+    // whether the read carried a window's token
+    std::vector<std::pair<int, bool>> bad_reads;
+    messenger->on_send = [&, lose](int from, int to, Message *msg) {
+      if (msg->get_type() == MSG_OSD_EC_READ) {
+        auto *read = static_cast<MOSDECSubOpRead*>(msg);
+        if (read->pgid.shard == bad) {
+          bad_reads.emplace_back(exec.asked, !read->op.push_token.empty());
+        }
+      }
+      lose(from, to, msg);
+    };
+
+    verify_object(obj_name, test_data, 0, test_data.size());
+    messenger->on_send = nullptr;
+    primary->gather_executor = nullptr;
+
+    EXPECT_EQ(1, lost[bad]);
+    ASSERT_EQ(2u, bad_reads.size());
+    EXPECT_EQ(lend, bad_reads[0].second);
+    EXPECT_FALSE(bad_reads[1].second);
+    EXPECT_EQ(bad_reads[0].first, exec.asked)
+      << "the read again asked for a gather window";
+    EXPECT_EQ(lend ? 1u : 0u, exec.get_gather_crc_mismatch());
+    // the window the push missed may still take writes; the others
+    // went back clean
+    EXPECT_EQ(lend ? 1 : 0, exec.quarantined);
+    EXPECT_TRUE(exec.lent.empty());
+    EXPECT_TRUE(primary->ec_read_repairs.empty());
+  }
+}
+
+/**
+ * A reply that says its data was pushed, and carries other results for
+ * the object too - the data inline, an attribute - loses all of them
+ * with the push: whether the push did not match its checksum in the
+ * window the shard was lent, or came with no window to find it in, the
+ * primary takes nothing of the reply for the object, and reads the
+ * shard again.
+ */
+TEST_P(TestECFailover, TransportFaultDropsTheShardsOtherResults) {
+  if (!get_pool().has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "gather windows need optimized EC";
+  }
+  const std::string test_data(
+    k * ECCommon::gather_windows_t::min_bytes, 'D');
+  auto* primary = get_primary_listener();
+  const shard_id_t bad(1);
+  ASSERT_NE(bad, primary->pg_whoami.shard);
+
+  for (const bool lend : {true, false}) {
+    SCOPED_TRACE(lend ? "window lent" : "no window");
+    const std::string obj_name =
+      std::string("test_gather_fault_rest_") + (lend ? "window" : "no_window");
+    create_and_write_verify(obj_name, test_data);
+    primary->ec_read_repairs.clear();
+
+    CountingGatherExecutor exec;
+    exec.lend = lend;
+    primary->gather_executor = &exec;
+    const hobject_t hoid = make_test_object(obj_name);
+    std::map<shard_id_t, int> lost;
+    std::map<shard_id_t, int> reads;
+    messenger->on_send = lose_shard_data(
+      hoid, [bad](shard_id_t shard) { return shard == bad; }, 1, lost,
+      &reads, true);
+
+    verify_object(obj_name, test_data, 0, test_data.size());
+    messenger->on_send = nullptr;
+    primary->gather_executor = nullptr;
+
+    EXPECT_EQ(1, lost[bad]);
+    EXPECT_EQ(2, reads[bad]);
+    EXPECT_EQ(lend ? 1u : 0u, exec.get_gather_crc_mismatch());
+    EXPECT_TRUE(primary->ec_read_repairs.empty());
+  }
+}
+
+/**
+ * Data lost on its way to the primary from more shards than the pool has
+ * parity shards - here from every shard a full stripe read reads - still
+ * reads the object: each shard is read again, inline.
+ */
+TEST_P(TestECFailover, TransportFaultOnEveryShardIsReadAgain) {
+  if (!get_pool().has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "gather faults are optimized EC only";
+  }
+  const std::string obj_name = "test_transport_fault_every_shard";
+  const std::string test_data(get_stripe_width(), 'E');
+  auto* primary = get_primary_listener();
+  create_and_write_verify(obj_name, test_data);
+  primary->ec_read_repairs.clear();
+
+  const hobject_t hoid = make_test_object(obj_name);
+  std::map<shard_id_t, int> lost;
+  messenger->on_send = lose_shard_data(
+    hoid, [](shard_id_t) { return true; }, 1, lost);
+
+  verify_object(obj_name, test_data, 0, test_data.size());
+  messenger->on_send = nullptr;
+
+  EXPECT_GT(lost.size(), size_t(m))
+    << "no more shards lost their data than the pool has parity shards";
+  EXPECT_TRUE(primary->ec_read_repairs.empty());
+}
+
+/**
+ * A fast read reads every shard. When the data of all of them is lost on
+ * its way to the primary, it reads again, inline, the shards it needs.
+ */
+TEST_P(TestECFailover, FastReadTransportFaultsAreReadAgain) {
+  if (!get_pool().has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "gather faults are optimized EC only";
+  }
+  const std::string obj_name = "test_fast_read_transport_faults";
+  const std::string test_data(get_stripe_width(), 'Q');
+  auto* primary = get_primary_listener();
+  create_and_write_verify(obj_name, test_data);
+  primary->ec_read_repairs.clear();
+
+  const hobject_t hoid = make_test_object(obj_name);
+  std::map<shard_id_t, int> lost;
+  messenger->on_send = lose_shard_data(
+    hoid, [](shard_id_t) { return true; }, 1, lost);
+
+  bufferlist out;
+  bool completed = false;
+  int result = -1;
+  std::list<std::pair<ec_align_t, std::pair<bufferlist*, Context*>>> to_read;
+  to_read.push_back(std::make_pair(
+    ec_align_t(0, test_data.size(), 0),
+    std::make_pair(&out, (Context*)new LambdaContext(
+      [&completed, &result](int r) {
+        completed = true;
+        result = r;
+      }))));
+  auto* ec_switch = dynamic_cast<ECSwitch*>(get_primary_backend());
+  ASSERT_TRUE(ec_switch != nullptr);
+  ec_switch->objects_read_async(
+    hoid, test_data.size(), to_read, new LambdaContext([](int) {}),
+    true /* fast_read */);
+  event_loop->run_until_idle();
+  messenger->on_send = nullptr;
+
+  ASSERT_TRUE(completed);
+  EXPECT_GE(result, 0);
+  ASSERT_EQ(test_data.size(), out.length());
+  EXPECT_EQ(test_data, out.to_str());
+  EXPECT_EQ(size_t(k + m), lost.size());
+  EXPECT_TRUE(primary->ec_read_repairs.empty());
+}
+
+/**
+ * A fast read reads every shard and completes as soon as enough of them
+ * have replied, so a media error on the last parity shard typically
+ * arrives after the read is done. It is reported all the same, once.
+ */
+TEST_P(TestECFailover, FastReadLateMediaErrorIsReported) {
+  if (!get_pool().has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "repair on read is optimized EC only";
+  }
+  const std::string obj_name = "test_fast_read_late_eio";
+  const std::string test_data(get_stripe_width(), 'F');
+  auto* primary = get_primary_listener();
+  create_and_write_verify(obj_name, test_data);
+  primary->ec_read_repairs.clear();
+
+  const int bad = k + m - 1;
+  const hobject_t hoid = make_test_object(obj_name);
+  get_osd_fixture(bad)->store->inject_read_error(
+    ghobject_t(hoid, ghobject_t::NO_GEN, shard_id_t(bad)), -EIO);
+
+  bufferlist out;
+  bool completed = false;
+  int result = -1;
+  std::list<std::pair<ec_align_t, std::pair<bufferlist*, Context*>>> to_read;
+  to_read.push_back(std::make_pair(
+    ec_align_t(0, test_data.size(), 0),
+    std::make_pair(&out, (Context*)new LambdaContext(
+      [&completed, &result](int r) {
+	completed = true;
+	result = r;
+      }))));
+  auto* ec_switch = dynamic_cast<ECSwitch*>(get_primary_backend());
+  ASSERT_TRUE(ec_switch != nullptr);
+  ec_switch->objects_read_async(
+    hoid, test_data.size(), to_read, new LambdaContext([](int) {}),
+    true /* fast_read */);
+  event_loop->run_until_idle();
+
+  ASSERT_TRUE(completed);
+  EXPECT_GE(result, 0);
+  ASSERT_EQ(test_data.size(), out.length());
+  EXPECT_EQ(test_data, out.to_str());
+
+  ASSERT_EQ(1u, primary->ec_read_repairs.size());
+  EXPECT_EQ(hoid, primary->ec_read_repairs[0].first);
+  EXPECT_EQ(std::set<pg_shard_t>{pg_shard_t(bad, shard_id_t(bad))},
+	    primary->ec_read_repairs[0].second);
 }
 
 // ---------------------------------------------------------------------------

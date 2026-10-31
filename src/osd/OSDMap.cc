@@ -8347,6 +8347,29 @@ void OSDMap::check_health(CephContext *cct,
     }
   }
 
+  // POOL_RDMA_DELIVERY_OUT_OF_RANGE
+  {
+    list<string> detail;
+    for (const auto& [id, pool] : get_pools()) {
+      for (const auto& o : pool.rdma_delivery_out_of_range()) {
+	ostringstream ss;
+	ss << "pool '" << get_pool_name(id) << "' " << o.name << " is "
+	   << o.stored << ", out of its range: daemons and clients of this "
+	   << "release use " << o.used << ", builds that do not clamp it "
+	   << o.stored;
+	detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size()
+	 << " pool rdma delivery option(s) out of range";
+      auto& d = checks->add("POOL_RDMA_DELIVERY_OUT_OF_RANGE", HEALTH_WARN,
+			    ss.str(), detail.size());
+      d.detail.swap(detail);
+    }
+  }
+
   // DEGRADED STRETCH MODE
   if (cct->_conf.get_val<bool>("mon_warn_on_degraded_stretch_mode")) {
     if (recovering_stretch_mode) {

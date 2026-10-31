@@ -131,6 +131,16 @@ def task(ctx, config):
     chance_thrash_pg_upmap: 1.0
     chance_thrash_pg_upmap_items: 1.0
 
+    chance_sigstop: (0) chance to stop a live osd with SIGSTOP, and to let
+       it go on with SIGCONT, for longer than its
+       osd_oob_cutoff_late_tolerance (from the ceph task's conf, 1000 ms
+       if it sets none), so that its out-of-band writes miss their
+       deadlines
+    sigstop_min: (2) the shortest stop, in seconds; at least a second
+       longer than the tolerance all the same
+    sigstop_max: (10) the longest stop, in seconds. Keep it below
+       osd_heartbeat_grace, or the osd is marked down while it is stopped
+
     aggressive_pg_num_changes: (true)  whether we should bypass the careful throttling of pg_num and pgp_num changes in mgr's adjust_pgs() controller
 
     example:

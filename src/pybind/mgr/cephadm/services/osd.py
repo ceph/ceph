@@ -8,6 +8,7 @@ from ceph.deployment import translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import DriveSelection
 from ceph.deployment.inventory import Device
+from ceph.deployment.service_spec import ServiceSpec
 from ceph.utils import datetime_to_str, str_to_datetime
 
 from datetime import datetime
@@ -18,7 +19,9 @@ from ceph.utils import datetime_now
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from mgr_module import MonCommandFailed
 
+from cephadm import utils
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
+from cephadm.services.oob import oob_changed, oob_container_config, oob_dependencies
 from .service_registry import register_cephadm_service
 from cephadm.utils import build_ceph_volume_cmd
 
@@ -527,7 +530,38 @@ class OSDService(CephService):
                 config['objectstore'] = svc_spec.objectstore
             if hasattr(svc_spec, 'osd_type') and svc_spec.osd_type:
                 config['osd_type'] = svc_spec.osd_type
+            oob = oob_container_config(
+                self.mgr, svc_spec, utils.name_to_config_section(daemon_spec.name()))
+            if oob:
+                config['oob'] = oob
         return config, parent_deps
+
+    @classmethod
+    def _get_service_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
+        return oob_dependencies(mgr, spec, 'osd')
+
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
+        step = super().choose_next_action(
+            scheduled_action, daemon_type, spec, curr_deps, last_deps
+        )
+        # the oob config sets container arguments, which only a redeploy
+        # applies; serve checks ok-to-stop before it redeploys an OSD
+        if step.action is utils.Action.RECONFIG and oob_changed(curr_deps, last_deps):
+            return utils.NextDaemonStep(utils.Action.REDEPLOY)
+        return step
 
 
 class OsdIdClaims(object):

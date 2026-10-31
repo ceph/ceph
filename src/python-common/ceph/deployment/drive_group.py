@@ -9,6 +9,7 @@ from ceph.deployment.service_spec import (  # noqa: F401 (type comments)
     ServiceSpec,
 )
 from ceph.deployment.hostspec import SpecValidationError
+from ceph.cephadm.oob_types import OOBSpec, OOBError
 
 try:
     from typing import Optional, List, Dict, Any, Union  # noqa: F401
@@ -185,7 +186,7 @@ class DriveGroupSpec(ServiceSpec):
         "journal_size", "unmanaged", "filter_logic", "preview_only", "extra_container_args",
         "extra_entrypoint_args", "data_allocate_fraction", "method",
         "termination_grace_period_seconds", "crush_device_class", "config",
-        "osd_type",
+        "osd_type", "oob",
     ]
 
     def __init__(self,
@@ -219,6 +220,7 @@ class DriveGroupSpec(ServiceSpec):
                  crush_device_class=None,  # type: Optional[str]
                  osd_type=None,  # type: Optional[OSDType]
                  termination_grace_period_seconds: Optional[int] = 30,
+                 oob=None,  # type: Optional[Dict[str, Any]]
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
@@ -297,6 +299,10 @@ class DriveGroupSpec(ServiceSpec):
 
         #: OSD type to install, defaults to classic OSDs if not specified
         self.osd_type = osd_type if osd_type is not None else "classic"
+
+        #: What the containers need for out-of-band (S3 over RDMA) transfers,
+        #: see :class:`ceph.cephadm.oob_types.OOBSpec`
+        self.oob = oob or {}
 
     @classmethod
     def _from_json_impl(cls, json_drive_group):
@@ -416,6 +422,11 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'objectstore seastore only supports osd type crimson')
+        if self.oob:
+            try:
+                OOBSpec.from_json(self.oob)
+            except OOBError as e:
+                raise DriveGroupValidationError(self.service_id, str(e))
 
 
 yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)

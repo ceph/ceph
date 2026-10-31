@@ -154,6 +154,23 @@
 /*define if D4N filter enabled */
 #cmakedefine WITH_RADOSGW_D4N 
 
+/* define if cuObject RDMA is built, in the gateway and in the OSD */
+#cmakedefine WITH_RADOSGW_CUOBJ
+
+/* Define if out-of-band delivery over libfabric is built */
+#cmakedefine WITH_OOB_OFI
+
+/* out-of-band read delivery is compiled in when any transport is */
+#if defined(WITH_RADOSGW_CUOBJ) || defined(WITH_OOB_OFI)
+#define HAVE_OSD_OOB_DELIVERY 1
+#endif
+
+/* Define if the hipobj-rc-v2 RDMA server is built into radosgw */
+#cmakedefine WITH_RDMA_RC
+
+/* Define if mlx5 direct verbs are available (DC target for OSD-direct delivery) */
+#cmakedefine HAVE_MLX5DV
+
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
 

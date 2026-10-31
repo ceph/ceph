@@ -1,0 +1,10 @@
+# libfabric's tcp provider between the clients and the OSDs, and between
+# the OSDs: an erasure-coded primary lends gather windows to its shards.
+overrides:
+  ceph:
+    conf:
+      global:
+        oob client transports: tcp
+        oob cluster transport: tcp
+  oob_check:
+    transport: provider tcp
