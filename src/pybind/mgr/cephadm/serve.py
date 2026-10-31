@@ -2056,8 +2056,10 @@ class CephadmServe:
 
     async def _get_container_image_info(
             self, image_name: str,
+            host: Optional[str] = None,
             timeout: Optional[int] = None) -> ContainerInspectInfo:
-        host = self.mgr._any_inventory_host()
+        if host is None:
+            host = self.mgr._any_inventory_host()
         if not host:
             raise OrchestratorError('no hosts defined')
         if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
