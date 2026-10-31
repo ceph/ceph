@@ -50,7 +50,7 @@ void cls_timeindex_add_prepare_entry(
   cls_timeindex_entry& entry,
   const utime_t& key_timestamp,
   const std::string& key_ext,
-  ceph::buffer::list& bl);
+  const ceph::buffer::list& bl);
 
 void cls_timeindex_add(
   librados::ObjectWriteOperation& op,

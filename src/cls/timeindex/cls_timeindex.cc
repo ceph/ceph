@@ -21,6 +21,7 @@ static const size_t MAX_LIST_ENTRIES = 1000;
 static const size_t MAX_TRIM_ENTRIES = 1000;
 
 static const string TIMEINDEX_PREFIX = "1_";
+static const string EXTINDEX_PREFIX  = "2_";
 
 static void get_index_time_prefix(const utime_t& ts,
                                   string& index)
@@ -48,13 +49,144 @@ static int parse_index(const string& index,
                        string& key_ext)
 {
   int sec, usec;
-  char keyext[256];
 
-  int ret = sscanf(index.c_str(), "1_%d.%d_%255s", &sec, &usec, keyext);
+  int ret = sscanf(index.c_str(), "1_%d.%d_", &sec, &usec);
+  if (ret != 2) {
+    return -EINVAL;
+  }
+
+  /* key_ext may be arbitrary long and contain any characters, so take
+   * everything after the time prefix as is */
+  auto pos = index.find('_', TIMEINDEX_PREFIX.size());
+  if (pos == string::npos) {
+    return -EINVAL;
+  }
 
   key_ts  = utime_t(sec, usec);
-  key_ext = string(keyext);
-  return ret;
+  key_ext = index.substr(pos + 1);
+  return 0;
+}
+
+static void get_ext_index_key(const string& key_ext,
+                              string *ext_index)
+{
+  *ext_index = EXTINDEX_PREFIX;
+  ext_index->append(key_ext);
+}
+
+static int get_ext_index(cls_method_context_t hctx,
+                         const string& ext_index,
+                         string *index)
+{
+  bufferlist bl;
+  int ret = cls_cxx_map_get_val(hctx, ext_index, &bl);
+  if (ret < 0) {
+    if (ret != -ENOENT) {
+      CLS_LOG(1, "ERROR: cls_cxx_map_get_val failed ret=%d", ret);
+    }
+    return ret;
+  }
+
+  try {
+    auto bl_iter = bl.cbegin();
+    decode(*index, bl_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: failed to decode ext index %s", ext_index.c_str());
+    return -EIO;
+  }
+
+  return 0;
+}
+
+/* Point the ext index for key_ext to the new index. If the ext index
+ * was pointing to another (old) index, return it in old_index.
+ * The omap updates are not visible to reads within the same op, so
+ * the ext indexes already updated by this op are tracked in
+ * added_ext_indexes. */
+static int add_ext_index(cls_method_context_t hctx,
+                         const string& key_ext,
+                         const string& index,
+                         map<string, string> *added_ext_indexes,
+                         string *old_index)
+{
+  old_index->clear();
+
+  if (key_ext.empty()) {
+    return 0;
+  }
+
+  string ext_index;
+  get_ext_index_key(key_ext, &ext_index);
+
+  auto it = added_ext_indexes->find(ext_index);
+  if (it != added_ext_indexes->end()) {
+    *old_index = it->second;
+  } else {
+    int ret = get_ext_index(hctx, ext_index, old_index);
+    if (ret == -EIO) {
+      /* overwrite the corrupted ext index */
+      old_index->clear();
+    } else if (ret < 0 && ret != -ENOENT) {
+      return ret;
+    }
+  }
+  (*added_ext_indexes)[ext_index] = index;
+
+  bufferlist bl;
+  encode(index, bl);
+  int ret = cls_cxx_map_set_val(hctx, ext_index, &bl);
+  if (ret < 0) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_set_val failed ret=%d", ret);
+    return ret;
+  }
+
+  return 0;
+}
+
+/* Remove the ext index for the index being trimmed, but only if it
+ * points to this index. It may point to a newer index if the trimmed
+ * entry was added before the ext index was introduced (e.g. before
+ * upgrade), and so was not replaced by the newer one. */
+static int remove_ext_index(cls_method_context_t hctx,
+                            const string& index)
+{
+  utime_t key_ts;
+  string key_ext;
+
+  int ret = parse_index(index, key_ts, key_ext);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: could not parse index=%s", index.c_str());
+    return 0;
+  }
+  if (key_ext.empty()) {
+    return 0;
+  }
+
+  string ext_index;
+  get_ext_index_key(key_ext, &ext_index);
+
+  string cur_index;
+  ret = get_ext_index(hctx, ext_index, &cur_index);
+  if (ret == -ENOENT) {
+    return 0;
+  }
+  if (ret < 0 && ret != -EIO) {
+    return ret;
+  }
+  if (ret == 0 && cur_index != index) {
+    CLS_LOG(20, "not removing ext index %s pointing to %s",
+            ext_index.c_str(), cur_index.c_str());
+    return 0;
+  }
+
+  /* remove also if the ext index is corrupted */
+  ret = cls_cxx_map_remove_key(hctx, ext_index);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_remove_key failed ret=%d", ret);
+    return ret;
+  }
+
+  return 0;
 }
 
 static int cls_timeindex_add(cls_method_context_t hctx,
@@ -71,6 +203,8 @@ static int cls_timeindex_add(cls_method_context_t hctx,
     return -EINVAL;
   }
 
+  map<string, string> added_ext_indexes;
+
   for (auto iter = op.entries.begin();
        iter != op.entries.end();
        ++iter) {
@@ -79,9 +213,27 @@ static int cls_timeindex_add(cls_method_context_t hctx,
     string index;
     get_index(hctx, entry.key_ts, entry.key_ext, index);
 
+    string old_index;
+    int ret = add_ext_index(hctx, entry.key_ext, index, &added_ext_indexes,
+                            &old_index);
+    if (ret < 0) {
+      CLS_LOG(1, "ERROR: cls_timeindex_add_op(): failed to add ext index");
+      return ret;
+    }
+
+    if (!old_index.empty() && old_index != index) {
+      CLS_LOG(20, "removing old entry at %s", old_index.c_str());
+
+      ret = cls_cxx_map_remove_key(hctx, old_index);
+      if (ret < 0 && ret != -ENOENT) {
+        CLS_LOG(1, "ERROR: cls_cxx_map_remove_key failed ret=%d", ret);
+        return ret;
+      }
+    }
+
     CLS_LOG(20, "storing entry at %s", index.c_str());
 
-    int ret = cls_cxx_map_set_val(hctx, index, &entry.value);
+    ret = cls_cxx_map_set_val(hctx, index, &entry.value);
     if (ret < 0) {
       return ret;
     }
@@ -229,6 +381,12 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
     int rc = cls_cxx_map_remove_key(hctx, index);
     if (rc < 0) {
       CLS_LOG(1, "ERROR: cls_cxx_map_remove_key failed rc=%d", rc);
+      return rc;
+    }
+
+    rc = remove_ext_index(hctx, index);
+    if (rc < 0) {
+      CLS_LOG(1, "ERROR: cls_timeindex_trim: failed to remove ext index");
       return rc;
     }
 
