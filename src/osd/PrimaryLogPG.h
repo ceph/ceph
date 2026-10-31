@@ -790,6 +790,13 @@ public:
     ObcLockManager lock_manager;
 
     std::map<int, std::unique_ptr<OpFinisher>> op_finishers;
+    /// the finishers of nested do_osd_ops() calls, such as the reads of a
+    /// CALL's method, by the depth of the call and the number of the op
+    /// that made it: a nested call numbers its own ops from 0 too
+    std::map<std::pair<int, int>,
+	     std::map<int, std::unique_ptr<OpFinisher>>> nested_op_finishers;
+    /// how many do_osd_ops() calls for this op run now
+    int osd_ops_depth = 0;
 
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
@@ -944,6 +951,9 @@ protected:
   bool coro_op_in_flight = false;
   std::list<OpRequestRef> waiting_for_coro_op;
   OpContext* active_coro_ctx = nullptr;
+  /// the coroutine waits for active_coro_ctx's async reads, to run the op
+  /// again itself (OpContext::finish_read() resumes it)
+  bool coro_awaits_reads = false;
 
   /**
    * Grabs locks for OpContext, should be cleaned up in close_op_ctx
@@ -1571,6 +1581,8 @@ public:
     OpRequestRef& op,
     ThreadPool::TPHandle &handle) override;
   bool should_use_coroutine(MOSDOp* m);
+  /// unwind a suspended coroutine op, free its stack and its OpContext
+  void stop_coroutine();
   void do_op_impl(OpRequestRef op);
   void do_op(OpRequestRef& op);
   void on_coroutine_complete();
