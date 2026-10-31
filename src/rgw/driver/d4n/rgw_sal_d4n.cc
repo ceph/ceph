@@ -3194,6 +3194,7 @@ int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
             const char *if_nomatch)
 {
   //call next->complete to complete writing the object to the backend store
+  next->set_mtime = set_mtime;
   auto ret = next->complete(dpp, y, cct, part_etags, remove_objs, accounted_size,
 			compressed, cs_info, ofs, tag, owner, olh_epoch,
 			nextObject(target_obj), processed_prefixes);

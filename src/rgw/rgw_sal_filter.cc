@@ -1353,6 +1353,7 @@ int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
             const char *if_match,
             const char *if_nomatch)
 {
+  next->set_mtime = set_mtime;
   return next->complete(dpp, y, cct, part_etags, remove_objs, accounted_size,
 			compressed, cs_info, ofs, tag, owner, olh_epoch,
 			nextObject(target_obj), processed_prefixes);
