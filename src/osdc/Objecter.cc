@@ -235,6 +235,7 @@ std::vector<std::string> Objecter::get_tracked_keys() const noexcept
     "rados_osd_op_timeout"s,
     "osd_min_split_replica_read_size"s,
     "rados_replica_read_policy"s,
+    "crimson_objecter_shard_routing"s,
   };
 }
 
@@ -250,6 +251,9 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("rados_osd_op_timeout")) {
     osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  }
+  if (changed.count("crimson_objecter_shard_routing")) {
+    shard_routing = conf.get_val<bool>("crimson_objecter_shard_routing");
   }
   if (changed.count("osd_min_split_replica_read_size")) {
     min_split_replica_read_size
@@ -2086,6 +2090,10 @@ void Objecter::_reopen_session(OSDSession *s)
     s->con->mark_down();
     logger->inc(l_osdc_osd_session_close);
   }
+  // reactor connections share the session's fate: the caller's
+  // _kick_requests() resends every op on the new s->con. What was learned
+  // goes too: after an OSD restart its reactor ports may differ.
+  _drop_reactor_conns(s);
   s->con = messenger->connect_to_osd(addrs);
   s->con->set_priv(RefCountedPtr{s});
   s->incarnation++;
@@ -2103,6 +2111,7 @@ void Objecter::close_session(OSDSession *s)
     logger->inc(l_osdc_osd_session_close);
   }
   unique_lock sl(s->lock);
+  _drop_reactor_conns(s);
 
   std::list<LingerOp*> homeless_lingers;
   std::list<CommandOp*> homeless_commands;
@@ -2338,11 +2347,23 @@ void Objecter::tick()
   }
 
   set<OSDSession*> toping;
-
+  // crimson reactor routing: main connections to keep alive, reactor
+  // connections to ping, and reactor connections to give up on
+  set<OSDSession*> tokeep;
+  set<ConnectionRef> toping_reactor;
+  std::vector<std::pair<int, ConnectionRef>> stale_reactor;
 
   // look for laggy requests
-  auto cutoff = ceph::coarse_mono_clock::now();
+  const auto tick_now = ceph::coarse_mono_clock::now();
+  auto cutoff = tick_now;
   cutoff -= ceph::make_timespan(cct->_conf->objecter_timeout);  // timeout
+  // a reactor connection with ops on it and no reply for this long is
+  // given up on, and its ops resent (it may be dead without a reset)
+  const ceph::coarse_mono_clock::time_point reactor_stale_cutoff =
+    tick_now - std::chrono::duration_cast<ceph::coarse_mono_clock::duration>(
+      6 * ceph::make_timespan(cct->_conf->objecter_timeout));
+  // well under ms_connection_idle_timeout (900s by default)
+  constexpr auto keepalive_interval = std::chrono::seconds(60);
 
   unsigned laggy_ops = 0;
 
@@ -2359,6 +2380,20 @@ void Objecter::tick()
 		      << " is laggy" << dendl;
 	found = true;
 	++laggy_ops;
+	if (op->con && op->con != s->con) {
+	  toping_reactor.insert(op->con);   // probe the connection it is on
+	}
+      }
+    }
+    if (s->router.has_conns()) {
+      if (tick_now - s->last_keepalive >= keepalive_interval) {
+        // its PGs may all be routed: keep s->con from idling out, whose
+        // reset would reopen the whole session
+        s->last_keepalive = tick_now;
+        tokeep.insert(s);
+      }
+      for (int idx : s->router.stale(reactor_stale_cutoff)) {
+        stale_reactor.emplace_back(s->osd, s->router.conn_at(idx));
       }
     }
     for (auto p = s->linger_ops.begin();
@@ -2424,6 +2459,19 @@ void Objecter::tick()
     for (auto i = toping.begin(); i != toping.end(); ++i) {
       (*i)->con->send_message(new MPing);
     }
+  }
+  for (auto s : tokeep) {
+    if (!toping.count(s)) {
+      s->con->send_message(new MPing);
+    }
+  }
+  for (auto& c : toping_reactor) {
+    c->send_message(new MPing);
+  }
+  if (!stale_reactor.empty()) {
+    rl.unlock();
+    unique_lock wl(rwlock);
+    _retire_stale_reactor_conns(stale_reactor, wl);
   }
 
   // Make sure we don't reschedule if we wake up after shutdown
@@ -3442,6 +3490,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->peering_crush_bucket_barrier = pi->peering_crush_bucket_barrier;
     t->peering_crush_mandatory_member = pi->peering_crush_mandatory_member;
     t->allows_ecoptimizations = pi->allows_ecoptimizations();
+    t->crimson_pool = pi->is_crimson();
     ldout(cct, 10) << __func__ << " "
 		   << " raw pgid " << pgid << " -> actual " << t->actual_pgid
 		   << " acting " << t->acting
@@ -3528,6 +3577,8 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
 {
   ceph_assert(op->session == from);
   // from->lock is locked
+
+  _unroute_op(from, op);
 
   if (from->is_homeless()) {
     num_homeless_ops--;
@@ -3808,7 +3859,7 @@ void Objecter::_send_op(Op *op)
 		 << op->target.actual_pgid << " on osd." << op->session->osd
 		 << dendl;
 
-  ConnectionRef con = op->session->con;
+  ConnectionRef con = _route_op(op);
   ceph_assert(con);
 
 #if 0
@@ -3834,7 +3885,245 @@ void Objecter::_send_op(Op *op)
   if (op->trace.valid()) {
     m->trace.init("op msg", nullptr, &op->trace);
   }
-  op->session->con->send_message(m);
+  con->send_message(m);
+}
+
+// --- crimson reactor routing ----------------------------------------------
+//
+// A crimson OSD names, in each reply, the reactor that runs the op's PG and
+// that reactor's client port. OSDSession::router learns those and sends the
+// PG's later ops on a connection to that port, so they arrive on the PG's
+// reactor instead of being forwarded from the one that accepted the main
+// connection. Anything it does not know uses s->con, as before. A reactor
+// connection's reset retires only that connection and resends only its
+// ops; a reset of the main connection takes the usual reopen + kick path
+// for everything.
+//
+// Only ops on crimson pools (FLAG_CRIMSON) go through the router. Ops on
+// other pools take exactly the old path: s->con, nothing tracked.
+
+ConnectionRef Objecter::_route_op(Op *op)
+{
+  // rwlock is locked; op->session->lock is locked unique
+  OSDSession *s = op->session;
+  if (s->is_homeless() || !s->con) {
+    return s->con;
+  }
+  _unroute_op(s, op);  // a resend releases its previous pin first
+  if (!op->target.crimson_pool) {
+    // not a crimson pool: no routing, no tracking; op->con stays unset
+    return s->con;
+  }
+  if (auto until = _reactor_ports_blocked(s, ceph::coarse_mono_clock::now())) {
+    // another session found this host's reactor ports unreachable
+    s->router.pause_until(*until);
+  }
+  auto connect = [this, s, op](uint16_t port) -> ConnectionRef {
+    // crimson speaks msgr2 only: its msgr2 address at the reactor's port.
+    // An anonymous connection: it neither replaces nor is returned for the
+    // session's main connection.
+    auto reactor_addr = osdmap->get_addrs(s->osd).msgr2_addr();
+    if (reactor_addr.is_blank_ip()) {
+      return nullptr;
+    }
+    reactor_addr.set_port(port);
+    auto c = messenger->connect_to_osd(entity_addrvec_t(reactor_addr),
+                                       true /* anon */);
+    if (c) {
+      c->set_priv(RefCountedPtr{s});
+      ldout(cct, 10) << "_route_op osd." << s->osd << " opened " << c
+                     << " to " << reactor_addr << " for "
+                     << op->target.actual_pgid << dendl;
+    }
+    return c;
+  };
+  ConnectionRef con = s->router.route(op->target.actual_pgid, s->con, connect,
+                                      ceph::coarse_mono_clock::now(),
+                                      shard_routing);
+  op->con = con;
+  op->route_pgid = op->target.actual_pgid;
+  return con;
+}
+
+void Objecter::_unroute_op(OSDSession *s, Op *op)
+{
+  // s->lock is locked unique
+  if (!op->con) {
+    return;
+  }
+  s->router.unroute(op->route_pgid, op->con);
+  op->con.reset();
+}
+
+void Objecter::_drop_reactor_conns(OSDSession *s)
+{
+  // s->lock is locked unique
+  for (auto& c : s->router.reset()) {
+    c->set_priv(NULL);  // its reset, if any, is ignored
+    c->mark_down();
+  }
+  for (auto& [tid, op] : s->ops) {
+    op->con.reset();
+  }
+}
+
+void Objecter::_retire_reactor_conn(OSDSession *s, int index,
+                                    map<uint64_t, LingerOp *>& lresend)
+{
+  // rwlock is locked unique; s->lock is locked unique
+  const ConnectionRef dead = s->router.conn_at(index);
+  const auto retired = s->router.retire(index, ceph::coarse_mono_clock::now());
+  const auto& pgs = retired.pgs;
+  if (!retired.was_proven) {
+    // never got a reply through: its host's reactor ports are likely
+    // unreachable from here (firewall, container), for every session
+    _block_reactor_ports(s);
+  }
+  ldout(cct, 5) << __func__ << " osd." << s->osd << " reactor " << index
+                << ", " << pgs.size() << " pgs pinned to it"
+                << (retired.was_proven ? "" : ", never proven")
+                << (s->router.is_paused(ceph::coarse_mono_clock::now()) ?
+                    ", routing paused" : "") << dendl;
+
+  // the backoffs that arrived on it went away with it on the OSD; the ops
+  // they held must be resent too (below), or nothing would wake them
+  std::set<spg_t> pgset(pgs.begin(), pgs.end());
+  for (auto p = s->backoffs.begin(); dead && p != s->backoffs.end();) {
+    for (auto q = p->second.begin(); q != p->second.end();) {
+      if (q->second.con == dead) {
+        pgset.insert(p->first);
+        s->backoffs_by_id.erase(q->second.id);
+        q = p->second.erase(q);
+      } else {
+        ++q;
+      }
+    }
+    p = p->second.empty() ? s->backoffs.erase(p) : std::next(p);
+  }
+
+  // resend, in tid order (s->ops is tid-ordered), the ops that were on it,
+  // and those its backoffs held back: _send_op() returned before routing
+  // them, so they have no con. Collect first, as cancelling may remove ops
+  // from s->ops.
+  std::vector<Op*> affected;
+  for (auto& [tid, op] : s->ops) {
+    if (op->con && !s->owns_connection(op->con)) {
+      op->con.reset();   // it was on the retired connection
+      affected.push_back(op);
+    } else if (!op->con && pgset.count(op->target.actual_pgid)) {
+      affected.push_back(op);   // held by a backoff erased above
+    }
+  }
+  for (Op *op : affected) {
+    if (op->should_resend) {
+      if (!op->target.paused) {
+        logger->inc(l_osdc_op_resend);
+        _send_op(op);
+      }
+    } else {
+      _op_cancel_map_check(op);
+      _cancel_linger_op(op);
+    }
+  }
+
+  // watches registered through it lost their OSD-side session. A watch on
+  // a PG of that reactor may also have been registered on s->con before the
+  // reactor was known; re-registering it is harmless.
+  for (auto& [id, lop] : s->linger_ops) {
+    if (auto core = s->router.core_of(lop->target.actual_pgid);
+        core && *core == index && !lresend.count(id)) {
+      lop->get();
+      lresend[id] = lop;
+    }
+  }
+}
+
+void Objecter::_retire_stale_reactor_conns(
+  const std::vector<std::pair<int, ConnectionRef>>& stale,
+  std::unique_lock<ceph::shared_mutex>& wl)
+{
+  // rwlock is locked unique
+  map<uint64_t, LingerOp *> lresend;
+  for (const auto& [osd, con] : stale) {
+    auto it = osd_sessions.find(osd);
+    if (it == osd_sessions.end() || !con) {
+      continue;
+    }
+    OSDSession *s = it->second;
+    unique_lock sl(s->lock);
+    const int idx = s->router.index_of(con.get());
+    if (idx < 0) {
+      continue;   // already retired (it reset meanwhile)
+    }
+    ldout(cct, 1) << __func__ << " osd." << osd << " reactor " << idx
+                  << " " << con << ": no reply for "
+                  << 6 * cct->_conf->objecter_timeout
+                  << "s with ops on it, giving up on it" << dendl;
+    _retire_reactor_conn(s, idx, lresend);
+    con->set_priv(NULL);   // its reset, if any, is ignored
+    con->mark_down();
+  }
+  _linger_ops_resend(lresend, wl);
+}
+
+entity_addr_t Objecter::_reactor_host(const OSDSession *s) const
+{
+  auto host = osdmap->get_addrs(s->osd).msgr2_addr();
+  host.set_port(0);
+  host.set_nonce(0);
+  return host;
+}
+
+void Objecter::_block_reactor_ports(OSDSession *s)
+{
+  const auto host = _reactor_host(s);
+  if (host.is_blank_ip()) {
+    return;
+  }
+  const auto now = ceph::coarse_mono_clock::now();
+  std::lock_guard l{reactor_block_lock};
+  auto [it, added] = reactor_blocks.try_emplace(
+    host, reactor_block_t{now, reactor_block_initial});
+  auto& b = it->second;
+  if (!added) {
+    b.backoff = std::min(b.backoff * 2, reactor_block_max);
+  }
+  b.until = std::max(b.until, now + b.backoff);
+  any_reactor_blocks = true;
+  ldout(cct, 1) << __func__ << " reactor ports of " << host
+                << " unreachable, not routing to them for "
+                << std::chrono::duration_cast<std::chrono::seconds>(b.backoff).count()
+                << "s" << dendl;
+}
+
+void Objecter::_unblock_reactor_ports(OSDSession *s)
+{
+  if (!any_reactor_blocks) {
+    return;
+  }
+  const auto host = _reactor_host(s);
+  std::lock_guard l{reactor_block_lock};
+  if (reactor_blocks.erase(host)) {
+    ldout(cct, 5) << __func__ << " reactor ports of " << host
+                  << " reachable" << dendl;
+  }
+  any_reactor_blocks = !reactor_blocks.empty();
+}
+
+std::optional<ceph::coarse_mono_clock::time_point>
+Objecter::_reactor_ports_blocked(OSDSession *s,
+                                 ceph::coarse_mono_clock::time_point now)
+{
+  if (!any_reactor_blocks) {
+    return std::nullopt;   // the common case: no lock, no lookup
+  }
+  const auto host = _reactor_host(s);
+  std::lock_guard l{reactor_block_lock};
+  auto it = reactor_blocks.find(host);
+  if (it == reactor_blocks.end() || it->second.until <= now) {
+    return std::nullopt;   // expired entries keep their backoff for next time
+  }
+  return it->second.until;
 }
 
 int Objecter::calc_op_budget(const bc::small_vector_base<OSDOp>& ops)
@@ -3977,7 +4266,7 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
   ConnectionRef con = m->get_connection();
   auto priv = con->get_priv();
   auto s = static_cast<OSDSession*>(priv.get());
-  if (!s || s->con != con) {
+  if (!s || !s->owns_connection(con)) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
     return;
   }
@@ -4031,6 +4320,17 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
     // we don't know the request attempt because the server is old, so
     // just accept this one.  we may do ACK callbacks we shouldn't
     // have, but that is better than doing callbacks out of order.
+  }
+
+  // only a current reply, and only for the PG it is about: a delayed reply
+  // from an earlier attempt (e.g. before a split or remap) must not record
+  // a reactor for the op's new PG, nor prove a connection
+  if (m->get_pg_core_port() &&
+      m->get_pg() == op->target.actual_pgid.pgid &&
+      s->router.learn(op->target.actual_pgid, m->get_pg_core(),
+                      m->get_pg_core_port(), con,
+                      ceph::coarse_mono_clock::now())) {
+    _unblock_reactor_ports(s);   // a reactor port of this host got through
   }
 
   int rc = m->get_result();
@@ -4185,7 +4485,7 @@ void Objecter::handle_osd_backoff(cref_t<MOSDBackoff> m)
   ConnectionRef con = m->get_connection();
   auto priv = con->get_priv();
   auto s = static_cast<OSDSession*>(priv.get());
-  if (!s || s->con != con) {
+  if (!s || !s->owns_connection(con)) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
     return;
   }
@@ -4204,6 +4504,7 @@ void Objecter::handle_osd_backoff(cref_t<MOSDBackoff> m)
       b.id = m->id;
       b.begin = m->begin;
       b.end = m->end;
+      b.con = con;
 
       // ack with original backoff's epoch so that the osd can discard this if
       // there was a pg split.
@@ -5067,6 +5368,13 @@ bool Objecter::ms_handle_reset(Connection *con)
       }
       map<uint64_t, LingerOp *> lresend;
       unique_lock sl(session->lock);
+      if (int idx = session->router.index_of(con); idx >= 0) {
+        // a reactor connection failed or idled out: the session stays up
+        _retire_reactor_conn(session, idx, lresend);
+        sl.unlock();
+        _linger_ops_resend(lresend, wl);
+        return true;
+      }
       _reopen_session(session);
       _kick_requests(session, lresend);
       sl.unlock();
@@ -5636,6 +5944,7 @@ Objecter::Objecter(CephContext *cct,
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
   dispatch_to_session_strand = cct->_conf.get_val<bool>("objecter_dispatch_to_session_strand");
+  shard_routing = cct->_conf.get_val<bool>("crimson_objecter_shard_routing");
   min_split_replica_read_size
     = cct->_conf.get_val<uint64_t>("osd_min_split_replica_read_size");
   ceph_assert(min_split_replica_read_size >= SplitOp::REPLICA_MIN_SPLIT_SIZE ||

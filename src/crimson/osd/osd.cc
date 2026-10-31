@@ -637,6 +637,11 @@ seastar::future<> OSD::start()
   cluster_msgr->set_policy(entity_name_t::TYPE_CLIENT,
                            SocketPolicy::stateless_server(0));
 
+  // one extra port per reactor for shard-aware clients; a reactor that
+  // gets no port is served through the main port as before
+  public_msgr->set_client_shard_ports(
+    local_conf().get_val<bool>("crimson_osd_client_shard_ports"));
+
   crimson::net::dispatchers_t dispatchers{this, monc.get(), mgrc.get()};
   co_await seastar::when_all_succeed(
     cluster_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER))
@@ -661,6 +666,14 @@ seastar::future<> OSD::start()
     DEBUG("adding to crush");
     return _add_me_to_crush();
   });
+  // replies name the PG's reactor port, so every reactor needs the ports
+  // bound above; this precedes boot, so no client sees a reply without them
+  if (auto ports = public_msgr->get_client_shard_ports(); !ports.empty()) {
+    INFO("{} client shard ports", ports.size());
+    co_await pg_to_shard_mappings.invoke_on_all([ports](auto &mapping) {
+      mapping.set_client_shard_ports(ports);
+    });
+  }
   co_await _add_device_class();
   if (is_rotational.has_value()) {
     co_await shard_services.invoke_on_all([this](auto &local_service) {

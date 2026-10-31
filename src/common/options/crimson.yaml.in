@@ -145,6 +145,40 @@ options:
   desc: The maximum number of concurrent I/O operations, 0 for unlimited
   default: 0
 
+- name: crimson_osd_client_shard_ports
+  type: bool
+  level: advanced
+  desc: Listen on one extra public port per reactor for shard-aware clients
+  long_desc: The public messenger also listens on one port per reactor, taken from
+    the ms_bind_port range, and client replies name the reactor that runs the op's
+    PG and that reactor's port. Clients (crimson_objecter_shard_routing) then send a PG's
+    ops straight to its reactor instead of having them forwarded between reactors.
+    When off, no extra port is bound, replies are encoded as before and clients
+    use the main port only.
+  default: true
+  flags:
+  - startup
+  see_also:
+  - crimson_objecter_shard_routing
+- name: crimson_objecter_shard_routing
+  type: bool
+  level: advanced
+  desc: Send ops to the crimson OSD reactor that runs their PG
+  long_desc: Client side. When a crimson OSD's reply names the reactor that runs a
+    PG and that reactor's port (crimson_osd_client_shard_ports), open a connection
+    to that port and send the PG's later ops on it, so they are not forwarded
+    between reactors on the OSD. Only ops on crimson pools are affected; ops on
+    any other pool always use the main connection. Off by default, as it pays
+    off once primaries are balanced across each OSD's reactors (otherwise a
+    busy reactor takes all of its PGs' work, including the message handling
+    other reactors would do), and it needs the reactor ports to be reachable
+    from clients. Turning it off takes effect for each PG once it has no ops in
+    flight; its ops then use the main connection.
+  default: false
+  services:
+  - client
+  see_also:
+  - crimson_osd_client_shard_ports
 - name: crimson_osd_stat_interval
   type: int
   level: advanced
