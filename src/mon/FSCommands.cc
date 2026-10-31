@@ -28,7 +28,6 @@
 
 using TOPNSPC::common::cmd_getval;
 
-using std::list;
 using std::make_pair;
 using std::pair;
 using std::set;
@@ -1889,10 +1888,11 @@ public:
   }
 };
 
-list<std::shared_ptr<FileSystemCommandHandler> >
-FileSystemCommandHandler::load(Paxos *paxos)
+vector<std::shared_ptr<FileSystemCommandHandler>> FileSystemCommandHandler::load(Paxos *paxos)
 {
-  list<std::shared_ptr<FileSystemCommandHandler> > handlers;
+  vector<std::shared_ptr<FileSystemCommandHandler>> handlers;
+  // Reserve the complete fixed registry:
+  handlers.reserve(18);
 
   handlers.push_back(std::make_shared<SetHandler>());
   handlers.push_back(std::make_shared<FailHandler>());

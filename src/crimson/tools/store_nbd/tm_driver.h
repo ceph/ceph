@@ -50,7 +50,7 @@ private:
 
   using read_extents_iertr = TransactionManager::read_extent_iertr;
   using read_extents_ret = read_extents_iertr::future<
-    crimson::os::seastore::lextent_list_t<crimson::os::seastore::TestBlock>
+    crimson::os::seastore::lextents_t<crimson::os::seastore::TestBlock>
     >;
   read_extents_ret read_extents(
     crimson::os::seastore::Transaction &t,

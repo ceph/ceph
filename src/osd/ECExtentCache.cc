@@ -6,11 +6,12 @@
 
 #include <mutex>
 #include <ranges>
+#include <iterator>
 
 using namespace std;
 using namespace ECUtil;
 
-void ECExtentCache::Object::request(OpRef &op) {
+void ECExtentCache::Object::request(const OpRef &op) {
   /* Record that this object is invalidating cache, to avoid any further
    * read attempts (which will be discarded).
    */
@@ -329,11 +330,11 @@ void ECExtentCache::on_change2() const {
   ceph_assert(idle());
 }
 
-void ECExtentCache::execute(list<OpRef> &op_list) {
-  for (auto &op : op_list) {
+void ECExtentCache::execute(std::span<const OpRef> operations) {
+  for (const auto &op : operations) {
     op->object.request(op);
   }
-  waiting_ops.insert(waiting_ops.end(), op_list.begin(), op_list.end());
+  waiting_ops.insert(std::end(waiting_ops), std::begin(operations), std::end(operations));
   cache_maybe_ready();
 }
 

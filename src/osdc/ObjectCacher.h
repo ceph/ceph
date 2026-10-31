@@ -19,6 +19,8 @@
 
 #include "Striper.h"
 
+#include <deque>
+#include <vector>
 #include <unordered_map>
 
 class WritebackHandler;
@@ -136,7 +138,7 @@ class ObjectCacher {
     ceph_tid_t journal_tid;
     int error; // holds return value for failed reads
 
-    std::map<loff_t, std::list<Context*> > waitfor_read;
+    std::map<loff_t, std::vector<Context *>> waitfor_read;
 
     // cons
     explicit BufferHead(Object *o) :
@@ -264,7 +266,7 @@ class ObjectCacher {
 
     int dirty_or_tx;
 
-    std::map< ceph_tid_t, std::list<Context*> > waitfor_commit;
+    std::map<ceph_tid_t, std::vector<Context *>> waitfor_commit;
     xlist<C_ReadFinish*> reads;
 
     Object(const Object&) = delete;
@@ -427,7 +429,7 @@ class ObjectCacher {
   // indexed by pool_id
   std::vector<std::unordered_map<sobject_t, Object*>> objects;
 
-  std::list<Context*> waitfor_read;
+  std::deque<Context *> waitfor_read;
 
   ceph_tid_t last_read_tid;
 
@@ -543,7 +545,7 @@ class ObjectCacher {
   void bh_read(BufferHead *bh, int op_flags,
                const ZTracer::Trace &parent_trace);
   void bh_write(BufferHead *bh, const ZTracer::Trace &parent_trace);
-  void bh_write_scattered(std::list<BufferHead*>& blist);
+  void bh_write_scattered(const std::deque<BufferHead *>& buffer_heads);
   void bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
 			    int64_t *amount, int *max_count);
 

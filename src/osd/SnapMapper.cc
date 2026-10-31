@@ -356,9 +356,9 @@ void SnapMapper::object_snaps::dump(ceph::Formatter *f) const
   f->dump_stream("snaps") << snaps;
 }
 
-auto SnapMapper::object_snaps::generate_test_instances() -> std::list<object_snaps>
+auto SnapMapper::object_snaps::generate_test_instances() -> std::vector<object_snaps>
 {
-  std::list<object_snaps> o;
+  std::vector<object_snaps> o;
   o.emplace_back();
   o.emplace_back();
   o.back().oid = hobject_t(sobject_t("name", CEPH_NOSNAP));

@@ -33,7 +33,6 @@
 #include "common/Clock.h"
 #include "mon/health_check.h"
 
-using std::list;
 using std::map;
 using std::ostream;
 using std::ostringstream;
@@ -134,9 +133,9 @@ void mon_info_t::dump(ceph::Formatter *f) const
   encode_json("crush_location", crush_loc, f);
 }
 
-list<mon_info_t> mon_info_t::generate_test_instances()
+vector<mon_info_t> mon_info_t::generate_test_instances()
 {
-  list<mon_info_t> ls;
+  vector<mon_info_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().name = "noname";
@@ -370,9 +369,9 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-list<MonMap> MonMap::generate_test_instances()
+vector<MonMap> MonMap::generate_test_instances()
 {
-  list<MonMap> o;
+  vector<MonMap> o;
 
   o.emplace_back(); /* empty */
 
@@ -726,10 +725,10 @@ int MonMap::init_with_hosts(const std::string& hostlist,
 }
 
 void MonMap::set_initial_members(CephContext *cct,
-				 list<std::string>& initial_members,
+				 std::span<const std::string> initial_members,
 				 string my_name,
 				 const entity_addrvec_t& my_addrs,
-				 set<entity_addrvec_t> *removed)
+				 set<entity_addrvec_t>& removed)
 {
   // remove non-initial members
   unsigned i = 0;
@@ -744,9 +743,7 @@ void MonMap::set_initial_members(CephContext *cct,
 
     lgeneric_dout(cct, 1) << " removing " << get_name(i) << " " << get_addrs(i)
 			  << dendl;
-    if (removed) {
-      removed->insert(get_addrs(i));
-    }
+    removed.insert(get_addrs(i));
     remove(n);
     ceph_assert(!contains(n));
   }
@@ -857,7 +854,7 @@ int MonMap::init_with_config_file(const ConfigProxy& conf,
 void MonMap::check_health(health_check_map_t *checks) const
 {
   if (stretch_mode_enabled) {
-    list<string> detail;
+    vector<string> detail;
     for (auto& p : mon_info) {
       if (p.second.crush_loc.empty()) {
 	ostringstream ss;

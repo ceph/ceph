@@ -23,12 +23,12 @@
 #include <stdio.h>
 #include <signal.h>
 
-#include <chrono>
-#include <iostream> // for std::cout
-#include <list>
+#include <deque>
 #include <mutex>
+#include <chrono>
 #include <random>
 #include <thread>
+#include <iostream> // for std::cout
 
 #include "gtest/gtest.h"
 #include "common/Thread.h"
@@ -229,7 +229,7 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
   std::mutex l;
   std::condition_variable c;
   uint64_t total = 0;
-  std::list<uint64_t> in_queue;
+  std::deque<uint64_t> in_queue;
   bool stop_getters = false;
   bool stop_putters = false;
 

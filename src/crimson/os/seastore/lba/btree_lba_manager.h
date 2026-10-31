@@ -118,7 +118,7 @@ public:
   /**
    * Find all mappings that overlap the range [offset, offset+length).
    * Uses upper_bound_right to find the first overlapping entry, then
-   * iterates forward.  Returns a list of cursors.
+   * iterates forward.  Returns the cursors in traversal order.
    */
   get_cursors_ret get_cursors(
     Transaction &t,
@@ -325,7 +325,7 @@ public:
 	  extent->get_last_committed_crc(),
 	  *extent));
     }
-    std::list<LBACursorRef> cursors;
+    std::vector<LBACursorRef> cursors;
     if (has_laddr) {
       assert(hint.condition == laddr_conflict_condition_t::all_at_never);
       cursors = co_await alloc_sparse_mappings(
@@ -342,7 +342,7 @@ public:
     } else {
       cursors = co_await alloc_contiguous_mappings(t, hint, alloc_infos);
     }
-    co_return std::vector<LBACursorRef>(cursors.begin(), cursors.end());
+    co_return cursors;
   }
 
    // ---------------------------------------------------------------------------
@@ -448,7 +448,7 @@ public:
    */
   update_mappings_ret update_mappings(
     Transaction& t,
-    const std::list<LogicalChildNodeRef>& extents);
+    const std::vector<LogicalChildNodeRef>& extents);
 
   /**
    * GC helper: check if a tree node at (type, paddr, laddr) is still
@@ -675,7 +675,7 @@ private:
 
   using alloc_mappings_iertr = base_iertr;
   using alloc_mappings_ret =
-      alloc_mappings_iertr::future<std::list<LBACursorRef>>;
+      alloc_mappings_iertr::future<std::vector<LBACursorRef>>;
 
   /**
    * alloc_contiguous_mappings

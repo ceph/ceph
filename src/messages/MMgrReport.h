@@ -85,9 +85,9 @@ public:
     f->dump_int("priority", priority);
     f->dump_int("unit", unit);
   }
-  static std::list<PerfCounterType> generate_test_instances()
+  static std::vector<PerfCounterType> generate_test_instances()
   {
-    std::list<PerfCounterType> ls;
+    std::vector<PerfCounterType> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().path = "mycounter";

@@ -937,7 +937,7 @@ void RGWHTTPManager::unlink_request(rgw_http_req_data *req_data)
 
 void RGWHTTPManager::manage_pending_requests()
 {
-  std::list<set_state> changes;
+  std::vector<set_state> changes;
   {
     std::lock_guard l{reqs_change_state_lock};
     changes.swap(reqs_change_state);
@@ -969,7 +969,7 @@ void RGWHTTPManager::manage_pending_requests()
 
   map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.find(max_threaded_req);
 
-  list<std::pair<rgw_http_req_data *, int> > remove_reqs;
+  std::vector<std::pair<rgw_http_req_data *, int>> remove_reqs;
 
   for (; iter != reqs.end(); ++iter) {
     rgw_http_req_data *req_data = iter->second;
@@ -1292,4 +1292,3 @@ int RGWHTTP::process(const DoutPrefixProvider* dpp, RGWHTTPClient *req, optional
 
   return req->wait(dpp, y);
 }
-
