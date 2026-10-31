@@ -15,6 +15,8 @@
 
 #include "MDSMonitor.h"
 
+#include <fmt/chrono.h>
+
 #include <regex>
 #include <sstream>
 #include <queue>
