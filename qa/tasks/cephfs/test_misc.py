@@ -595,6 +595,74 @@ class TestMisc(CephFSTestCase):
             "The client stripped CEPH_SETATTR_ATIME from the mask, "
             "causing the MDS to skip advancing ctime during value-equality matches.")
 
+    def test_write_updates_futuristic_mtime(self):
+        """
+        Ensure a data write operation overwrites a user-set futuristic mtime/ctime
+        with the current system clock when the timestamp exceeds acceptable clock skew,
+        even in multi-client environments where CEPH_CAP_FILE_EXCL is revoked.
+        """
+        test_file = "test_futuristic_mtime.bin"
+
+        # Use Client 1 (mount_a) to create the file
+        self.mount_a.touch(test_file)
+
+        # Explicitly push the file's mtime 25 hours into the future
+        log.info("Setting file mtime 25 hours into the future")
+        self.mount_a.run_shell(["touch", "-m", "-d", "+25 hours", test_file])
+
+        # Verify the file is actually set in the future before continuing
+        future_mtime = int(self.mount_a.run_shell(["stat", "-c", "%Y",
+                                                   test_file]).stdout.getvalue().strip())
+        current_time = int(self.mount_a.run_shell(["date", "+%s"]).stdout.getvalue().strip())
+        self.assertTrue(future_mtime > current_time,
+                        "Setup error: File mtime is not in the future.")
+
+        # Keep file open on mount_b to ensure EXCL caps stay revoked on mount_a
+        log.info("Opening file on client_b to force cap downgrade (revoking EXCL) on client_a")
+        proc_b = self.mount_b.open_background(test_file, write=False)
+
+        # Wait briefly for cap transitions to settle across MDS/clients
+        time.sleep(2)
+
+        # Perform a data write operation via Client 1 (mount_a)
+        log.info("Executing write on client_a while working under shared capabilities")
+        self.mount_a.run_shell(["sh", "-c", f"echo 'payload' >> {test_file}"])
+
+        # Force mount_a to flush dirty caps (including updated mtime) to the MDS
+        self.mount_a.run_shell(["sync"])
+
+        # Release background handle on mount_b
+        self.mount_b.kill_background(proc_b)
+
+        # Remount client_b to clear its cache and force an MDS query
+        log.info("Remounting client_b to verify master MDS inode state")
+        self.mount_b.remount()
+
+        # Gather post-write metadata metrics from client_b (fresh from MDS)
+        log.info("Gathering post-write metadata metrics from client_b")
+        post_mtime = int(self.mount_b.run_shell(["stat", "-c", "%Y",
+                                                 test_file]).stdout.getvalue().strip())
+
+        # Refresh current time gauge
+        final_current_time = int(self.mount_a.run_shell(["date", "+%s"
+                                                         ]).stdout.getvalue().strip())
+
+        # Clean up test file while mount_a is still mounted
+        self.mount_a.run_shell(["rm", "-f", test_file])
+
+        # Final Assertion Checklist
+        log.info(f"Future mtime: {future_mtime} | Post-write mtime: {post_mtime}"
+                 f" | Current system time: {final_current_time}")
+
+        # The post-write mtime should no longer be stuck in the future
+        self.assertLessEqual(
+            post_mtime,
+            final_current_time + 10,
+            "REGRESSION DETECTED: The futuristic mtime remained stuck after a "
+            "write operation because metadata caps were not dirtied or accepted "
+            "by the MDS."
+        )
+
 @classhook('_add_session_client_evictions')
 class TestSessionClientEvict(CephFSTestCase):
     CLIENTS_REQUIRED = 3
