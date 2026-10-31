@@ -409,6 +409,48 @@ verify_authorizer(
 
 } // anonymous namespace
 
+TEST(KeyRing, pending_key_round_trip)
+{
+  CephContext* cct = g_ceph_context;
+  EntityName name;
+  ASSERT_TRUE(name.from_str("client.foo"));
+  CryptoKey key, pending_key;
+  ASSERT_EQ(0, key.create(cct, CEPH_CRYPTO_AES));
+  ASSERT_EQ(0, pending_key.create(cct, CEPH_CRYPTO_AES));
+
+  KeyRing written;
+  written.add(name, key, pending_key);
+  ceph::bufferlist bl;
+  written.encode_plaintext(bl);
+  ASSERT_NE(std::string::npos, bl.to_str().find("pending key = "));
+
+  KeyRing read;
+  auto p = bl.cbegin();
+  ASSERT_NO_THROW(read.decode(p));
+  EntityAuth auth;
+  ASSERT_TRUE(read.get_auth(name, auth));
+  EXPECT_EQ(key.encode_base64(), auth.key.encode_base64());
+  EXPECT_EQ(pending_key.encode_base64(), auth.pending_key.encode_base64());
+}
+
+TEST(KeyRing, reject_bad_pending_key)
+{
+  CryptoKey key;
+  ASSERT_EQ(0, key.create(g_ceph_context, CEPH_CRYPTO_AES));
+  const std::string head = "[client.foo]\n\tkey = " + key.encode_base64() + "\n";
+
+  ceph::bufferlist good;
+  good.append(head);
+  KeyRing read;
+  auto p = good.cbegin();
+  ASSERT_NO_THROW(read.decode(p));
+
+  ceph::bufferlist bad;
+  bad.append(head + "\tpending key = not-base64\n");
+  auto q = bad.cbegin();
+  EXPECT_THROW(read.decode(q), ceph::buffer::malformed_input);
+}
+
 class CephxServiceTicket : public ::testing::Test {
 protected:
   CephContext* cct = g_ceph_context;
