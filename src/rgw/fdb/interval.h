@@ -442,18 +442,32 @@ class query final : public detail::expression_tag
  }
 };
 
-template <ordered_domain DomainT, std::size_t Capacity>
+// Adapters may retain their interval representation, including execution metadata.
+template <ordered_domain DomainT, std::size_t Capacity, typename IntervalT = query<DomainT>>
+requires std::same_as<typename IntervalT::domain_type, DomainT>
 class static_interval_set final
 {
  public:
- using value_type = query<DomainT>;
+ using value_type = IntervalT;
  using const_iterator = typename std::array<value_type, Capacity>::const_iterator;
 
  private:
  std::array<value_type, Capacity> intervals {};
  std::size_t interval_count = 0;
 
+ template <std::size_t ...Indices>
+ constexpr static_interval_set(const value_type& initial, std::index_sequence<Indices...>)
+  : intervals {((void)Indices, initial)...}
+ {}
+
  public:
+ constexpr static_interval_set() = default;
+
+ // Initialize unused slots without requiring an adapter's default interval.
+ explicit constexpr static_interval_set(const value_type& initial)
+  : static_interval_set(initial, std::make_index_sequence<Capacity> {})
+ {}
+
  constexpr void push_back(value_type value)
  {
   if (Capacity == interval_count) {
@@ -701,12 +715,11 @@ constexpr void emit_bounds(SinkT&& sink, const LowerT& lower, const UpperT& uppe
   return;
  }
 
- // The "else" branch here is a case where it's truly needed and as far as I can
- // grok, significantly simpler than alternatives:
+ // Keep the else to discard the unsupported call during template instantiation;
+ // an early return cannot do that, and separate guards repeat the condition:
  if constexpr (requires(SinkT&& s) { std::forward<SinkT>(s).emit_interval(lower, upper); }) {
   std::forward<SinkT>(sink).emit_interval(lower, upper);
- } 
- else {
+ } else {
   std::invoke(std::forward<SinkT>(sink), query<domain_type>::between(lower, upper));
  }
 }

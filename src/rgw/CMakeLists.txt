@@ -888,6 +888,8 @@ if(WITH_RADOSGW_FDB)
 
  target_link_libraries(rgw_fdb INTERFACE zpp_bits)
 
+ add_subdirectory(fdb/experimental)
+
 endif(WITH_RADOSGW_FDB)
 
 install(TARGETS radosgw DESTINATION bin)
