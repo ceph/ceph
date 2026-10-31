@@ -10,19 +10,22 @@
 <cds-panel
   [expanded]="expanded"
   [attr.panel-size]="size"
+  [attr.panel-padding]="contentPadding ? null : 'none'"
   [cdsLayer]="layer"
   [cdsTheme]="theme"
 >
   <div>
-    <cds-icon-button
-      kind="ghost"
-      class="float-end"
-      title="Close"
-      i18n-title
-      (click)="close()"
-    >
-      <svg cdsIcon="close"></svg>
-    </cds-icon-button>
+    @if (showCloseButton) {
+      <cds-icon-button
+        kind="ghost"
+        class="float-end"
+        title="Close"
+        i18n-title
+        (click)="close()"
+      >
+        <svg cdsIcon="close"></svg>
+      </cds-icon-button>
+    }
     @if (headerText) {
       <div class="panel-header">
         <p class="cds--type-heading-03">{{ headerText }}</p>
