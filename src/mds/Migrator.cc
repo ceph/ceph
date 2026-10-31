@@ -228,6 +228,123 @@ void Migrator::dispatch(const cref_t<Message> &m)
   }
 }
 
+/*
+ * Drop the clean null dentries of a dirfrag that nothing pins, as
+ * trim_dentry() would.  An export would otherwise ship them along, and
+ * they would only take up the importer's cache until its LRU trim gets
+ * to them.  A replicated one stays: its replicas have to expire it
+ * first.  Called for each dirfrag of a frozen subtree just before it is
+ * encoded, which is no less work under mds_lock than dropping them.
+ *
+ * With max, look at no more than max dentries, starting at *pos, and
+ * save in *pos where to go on.  Returns true once the end is reached.
+ */
+bool Migrator::drop_null_dentries(CDir *dir, unsigned max,
+				  null_drop_pos_t *pos)
+{
+  ceph_assert(!max || pos);
+  if (dir->get_num_head_null() + dir->get_num_snap_null() == 0)
+    return true;
+
+  auto it = dir->begin();
+  if (pos && !pos->name.empty())
+    it = dir->lower_bound(dentry_key_t(pos->last, pos->name, pos->hash));
+
+  bool done = true;
+  unsigned seen = 0, dropped = 0;
+  while (it != dir->end()) {
+    CDentry *dn = it->second;
+    if (max && seen == max) {
+      pos->name = dn->get_name();
+      pos->last = dn->last;
+      pos->hash = dn->hash;
+      done = false;
+      break;
+    }
+    ++it;
+    ++seen;
+    if (dn->get_linkage()->is_null() && dn->is_clean() &&
+	dn->get_num_ref() == 0) {
+      dir->remove_dentry(dn);
+      ++dropped;
+    }
+  }
+  if (dropped > 0) {
+    dout(7) << " dropped " << dropped << " null dentries, "
+	    << dir->get_num_any() << " left in " << *dir << dendl;
+    if (mds->logger)
+      mds->logger->inc(l_mds_inodes_expired, dropped);
+  }
+  return done;
+}
+
+class C_M_DropNullDentries : public MigratorContext {
+  dirfrag_t df;
+  Migrator::null_drop_pos_t pos;
+public:
+  C_M_DropNullDentries(Migrator *m, dirfrag_t df,
+		       Migrator::null_drop_pos_t pos) :
+    MigratorContext(m), df(df), pos(std::move(pos)) {}
+  void finish(int r) override {
+    mig->continue_null_drop(df, std::move(pos));
+  }
+};
+
+/*
+ * A dirfrag can cache far more null dentries than it has items: the
+ * LRU only trims them when the cache is full, and they don't count
+ * towards a split.  Dropping a million of them at once would hold
+ * mds_lock for seconds.  Before such a dirfrag is exported, drop them
+ * in batches of mds_null_dentry_drop_batch dentries looked at instead,
+ * letting go of mds_lock in between, and hold the export back until
+ * that is done.  Whoever asked for the export asks
+ * again: the export pins on each balancer tick, an empty import on
+ * each trim, a stopping MDS on each shutdown pass.
+ *
+ * Returns true if the export can go ahead.
+ */
+bool Migrator::drop_null_dentries_first(CDir *dir)
+{
+  auto p = null_drops.find(dir->dirfrag());
+  if (p != null_drops.end()) {
+    if (!p->second) {
+      dout(7) << " still dropping null dentries of " << *dir << dendl;
+      return false;
+    }
+    null_drops.erase(p);
+    return true;
+  }
+  if (!null_drop_batch ||
+      dir->get_num_head_null() + dir->get_num_snap_null() <= null_drop_batch)
+    return true;
+
+  dout(7) << " dropping null dentries of " << *dir << " first" << dendl;
+  null_drops[dir->dirfrag()] = false;
+  mds->queue_waiter(new C_M_DropNullDentries(this, dir->dirfrag(), {}));
+  return false;
+}
+
+void Migrator::continue_null_drop(dirfrag_t df, null_drop_pos_t pos)
+{
+  auto p = null_drops.find(df);
+  ceph_assert(p != null_drops.end() && !p->second);
+
+  CDir *dir = mdcache->get_dirfrag(df);
+  if (!dir || !dir->is_auth() || dir->is_freezing() || dir->is_frozen() ||
+      dir->state_test(CDir::STATE_EXPORTING) ||
+      !(mds->is_active() || mds->is_stopping())) {
+    dout(7) << " stopped dropping null dentries of " << df << dendl;
+    null_drops.erase(p);
+    return;
+  }
+  if (null_drop_batch && !drop_null_dentries(dir, null_drop_batch, &pos)) {
+    mds->queue_waiter(new C_M_DropNullDentries(this, df, std::move(pos)));
+    return;
+  }
+  dout(7) << " done dropping null dentries of " << *dir << dendl;
+  p->second = true;
+}
+
 void Migrator::export_empty_import(CDir *dir)
 {
   dout(7) << *dir << dendl;
@@ -253,7 +370,26 @@ void Migrator::export_empty_import(CDir *dir)
     dout(7) << " root" << dendl;
     return;
   }
-  
+  /*
+   * A dirfrag just emptied by unlinks still caches a null dentry for
+   * every removed name.  Exporting it now would ship all of them to the
+   * parent's rank, where they would only wait to be committed and
+   * trimmed.  Keep it while any of them is dirty: if the directory is
+   * removed next, as it usually is, the rmdir makes us a witness and
+   * _commit_peer_rmdir() drops them without a commit; otherwise the log
+   * commits them in time.  Committing here instead would write out
+   * every removed name although the purge of the directory is about to
+   * remove its objects anyway.  The export then drops the clean ones
+   * instead of shipping them: the LRU trim is throttled and can't keep
+   * up when many dirfrags empty at once.  If the directory stays, so
+   * does the subtree, until the log gets to it.  A read-only MDS never
+   * cleans them, so it exports them as before.
+   */
+  if (dir->is_dirty() && !mdcache->is_readonly()) {
+    dout(7) << " dirty, waiting for an rmdir or the log" << dendl;
+    return;
+  }
+
   mds_rank_t dest = dir->inode->authority().first;
   //if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
   
@@ -958,6 +1094,9 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
     dout(7) << "Cannot export to mds." << dest << " " << *dir << ": is under quarantine" << dendl;
     return;
   }
+
+  if (!drop_null_dentries_first(dir))
+    return;
 
   if (unlikely(g_conf()->mds_thrash_exports)) {
     // create random subtree bound (which will not be exported)
@@ -1904,7 +2043,9 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
 {
   // This has to be declared before ENCODE_STARTED as it will need to be referenced after ENCODE_FINISH.
   std::vector<CDir*> subdirs;
-  
+
+  drop_null_dentries(dir);
+
   ENCODE_START(1, 1, exportbl);
   dout(7) << *dir << " " << dir->get_num_head_items() << " head items" << dendl;
   
@@ -3946,6 +4087,7 @@ void Migrator::logged_import_caps(CInode *in,
 
 Migrator::Migrator(MDSRank *m, MDCache *c) : mds(m), mdcache(c) {
   max_export_size = g_conf().get_val<Option::size_t>("mds_max_export_size");
+  null_drop_batch = g_conf().get_val<uint64_t>("mds_null_dentry_drop_batch");
   inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
 }
 
@@ -3955,6 +4097,8 @@ void Migrator::handle_conf_change(const std::set<std::string>& changed, const MD
 {
   if (changed.count("mds_max_export_size"))
     max_export_size = g_conf().get_val<Option::size_t>("mds_max_export_size");
+  if (changed.count("mds_null_dentry_drop_batch"))
+    null_drop_batch = g_conf().get_val<uint64_t>("mds_null_dentry_drop_batch");
   if (changed.count("mds_inject_migrator_session_race")) {
     inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
     dout(0) << "mds_inject_migrator_session_race is " << inject_session_race << dendl;

@@ -207,6 +207,44 @@ done
         # drop cache multiple times to clear replica pins
         self._wait_subtrees([], status=self.status, action=_drop)
 
+    def _export_pin_null_dentries(self, batch=None):
+        n = 2000
+        if batch is not None:
+            self.config_set('mds', 'mds_null_dentry_drop_batch', batch)
+        # keep one file, an empty pinned directory is handed back to rank 0
+        self.mount_a.run_shell_payload(
+            f"mkdir nulls && cd nulls && touch keep && "
+            f"seq {n} | sed 's/^/f/' | xargs touch && rm -f f*")
+        self.mount_a.setfattr("nulls", "ceph.dir.pin", "0")
+        self._wait_subtrees([('/nulls', 0)], status=self.status)
+        # commit the dirfrag, so that its null dentries are clean, and drop
+        # the client's leases on them
+        self.fs.rank_tell(["flush", "journal"], rank=0)
+        self.mount_a.remount()
+
+        def imported():
+            perf = self.fs.rank_asok(['perf', 'dump', 'mds'], rank=1,
+                                     status=self.status)
+            return perf['mds']['imported_inodes']
+        before = imported()
+        self.mount_a.setfattr("nulls", "ceph.dir.pin", "1")
+        self._wait_subtrees([('/nulls', 1)], status=self.status, timeout=60)
+        self.assertLess(imported() - before, 10)
+        self.assertEqual(self.mount_a.ls("nulls"), ["keep"])
+
+    def test_export_pin_null_dentries(self):
+        """
+        That an export does not ship the clean null dentries of a dirfrag.
+        """
+        self._export_pin_null_dentries()
+
+    def test_export_pin_null_dentries_batch(self):
+        """
+        That an export first drops many clean null dentries in batches, and
+        then goes ahead.
+        """
+        self._export_pin_null_dentries(batch=100)
+
     def test_open_file(self):
         """
         Test opening a file via a hard link that is not in the same mds as the inode.

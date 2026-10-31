@@ -4230,6 +4230,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
     "mds_max_snaps_per_dir",
+    "mds_null_dentry_drop_batch",
     "mds_op_complaint_time",
     "mds_op_history_duration",
     "mds_op_history_size",
