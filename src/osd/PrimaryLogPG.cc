@@ -4345,12 +4345,10 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
       return;
     }
 
-    // version
-    ctx->at_version = get_next_version();
     ctx->mtime = m->get_mtime();
 
     dout(10) << __func__ << " " << soid << " " << *ctx->ops
-	     << " ov " << obc->obs.oi.version << " av " << ctx->at_version
+             << " ov " << obc->obs.oi.version
 	     << " snapc " << ctx->snapc
 	     << " snapset " << obc->ssc->snapset
 	     << dendl;
@@ -7227,7 +7225,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	dout(10) << "watch " << ceph_osd_watch_op_name(op.watch.op)
 		 << ": ctx->obc=" << (void *)obc.get() << " cookie=" << cookie
-		 << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
+                 << " oi.version=" << oi.version.version << dendl;
 	dout(10) << "watch: oi.user_version=" << oi.user_version<< dendl;
 	dout(10) << "watch: peer_addr="
 	  << ctx->op->get_req()->get_connection()->get_peer_addr() << dendl;
@@ -9183,6 +9181,11 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
 
   // prepare the actual mutation
   int result = do_osd_ops(ctx, *ctx->ops);
+  if (ctx->op->may_write() || ctx->op->may_cache()) {
+    // an EC CALL can yield in do_osd_ops, so take the version after it
+    ctx->at_version = get_next_version();
+    dout(10) << __func__ << " av " << ctx->at_version << dendl;
+  }
   if (result < 0) {
     if (ctx->op->may_write() &&
 	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
