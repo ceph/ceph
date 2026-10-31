@@ -714,14 +714,16 @@ Usage::
     ceph mgr dump
 
 Subcommand ``fail`` will mark a Manager daemon as failed, removing it
-from the Manager map.  If it is the active Manager daemon a standby
-will take its place.
+from the Manager map. Without a name, it fails the active Manager daemon.
+If the failed daemon is the active Manager daemon, a standby will take its
+place.
 
 Usage::
 
-    ceph mgr fail <name>
+    ceph mgr fail [<name>]
 
-Subcommand ``module ls`` will list currently enabled Manager modules (plugins).
+Subcommand ``module ls`` lists the Manager modules (plugins) and shows which
+are always on, which are enabled, and which are disabled.
 
 Usage::
 
