@@ -143,6 +143,41 @@ describe('ServiceFormComponent', () => {
       formHelper.expectError('count', 'pattern');
     });
 
+    it('should reject count greater than selected hosts', () => {
+      formHelper.setValue('service_type', 'cephfs-mirror');
+      formHelper.setValue('placement', 'hosts');
+      formHelper.setValue('hosts', [{ content: 'host1', selected: true }]);
+      formHelper.setValue('count', 2);
+      formHelper.expectError('count', 'maxHosts');
+    });
+
+    it('should allow count equal to selected hosts', () => {
+      formHelper.setValue('service_type', 'cephfs-mirror');
+      formHelper.setValue('placement', 'hosts');
+      formHelper.setValue('hosts', [
+        { content: 'host1', selected: true },
+        { content: 'host2', selected: true }
+      ]);
+      formHelper.setValue('count', 2);
+      formHelper.expectValid('count');
+    });
+
+    it('should allow count without selected hosts', () => {
+      formHelper.setValue('service_type', 'crash');
+      formHelper.setValue('placement', 'hosts');
+      formHelper.setValue('hosts', []);
+      formHelper.setValue('count', 3);
+      formHelper.expectValid('count');
+    });
+
+    it('should allow count greater than hosts for colocated services', () => {
+      formHelper.setValue('service_type', 'mds');
+      formHelper.setValue('placement', 'hosts');
+      formHelper.setValue('hosts', [{ content: 'host1', selected: true }]);
+      formHelper.setValue('count', 2);
+      formHelper.expectValid('count');
+    });
+
     it('should test unmanaged', () => {
       formHelper.setValue('service_type', 'mgr');
       formHelper.setValue('service_id', 'svc');
@@ -212,6 +247,32 @@ describe('ServiceFormComponent', () => {
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'nfs',
+          placement: {},
+          unmanaged: false
+        });
+      });
+    });
+
+    describe('should test service cephfs-mirror', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'cephfs-mirror');
+      });
+
+      it('should allow creating cephfs-mirror without a name', () => {
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'cephfs-mirror',
+          placement: {},
+          unmanaged: false
+        });
+      });
+
+      it('should submit cephfs-mirror with the given name', () => {
+        formHelper.setValue('service_id', 'foo');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'cephfs-mirror',
+          service_id: 'foo',
           placement: {},
           unmanaged: false
         });
