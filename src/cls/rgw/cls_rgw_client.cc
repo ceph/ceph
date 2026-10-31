@@ -666,67 +666,7 @@ void cls_rgw_usage_log_add(ObjectWriteOperation& op, rgw_usage_log_info& info)
   op.exec(method::user_usage_log_add, in);
 }
 
-/* garbage collection */
-
-void cls_rgw_gc_set_entry(ObjectWriteOperation& op, uint32_t expiration_secs, cls_rgw_gc_obj_info& info)
-{
-  bufferlist in;
-  cls_rgw_gc_set_entry_op call;
-  call.expiration_secs = expiration_secs;
-  call.info = info;
-  encode(call, in);
-  op.exec(method::gc_set_entry, in);
-}
-
-void cls_rgw_gc_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, const string& tag)
-{
-  bufferlist in;
-  cls_rgw_gc_defer_entry_op call;
-  call.expiration_secs = expiration_secs;
-  call.tag = tag;
-  encode(call, in);
-  op.exec(method::gc_defer_entry, in);
-}
-
-void cls_rgw_gc_list(ObjectReadOperation& op, const string& marker,
-                     uint32_t max, bool expired_only, bufferlist& out)
-{
-  bufferlist in;
-  cls_rgw_gc_list_op call;
-  call.marker = marker;
-  call.max = max;
-  call.expired_only = expired_only;
-  encode(call, in);
-  op.exec(method::gc_list, in, &out, nullptr);
-}
-
-int cls_rgw_gc_list_decode(const bufferlist& out,
-                           std::list<cls_rgw_gc_obj_info>& entries,
-                           bool& truncated, std::string& next_marker)
-{
-  cls_rgw_gc_list_ret ret;
-  try {
-    auto iter = out.cbegin();
-    decode(ret, iter);
-  } catch (ceph::buffer::error& err) {
-    return -EIO;
-  }
-
-  entries.swap(ret.entries);
-
-  truncated = ret.truncated;
-  next_marker = std::move(ret.next_marker);
-  return 0;
-}
-
-void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const vector<string>& tags)
-{
-  bufferlist in;
-  cls_rgw_gc_remove_op call;
-  call.tags = tags;
-  encode(call, in);
-  op.exec(method::gc_remove, in);
-}
+/* lifecycle */
 
 void cls_rgw_lc_get_head(ObjectReadOperation& op, bufferlist& out)
 {
