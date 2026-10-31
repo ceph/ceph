@@ -19,6 +19,7 @@
 #include "rgw_zone.h"
 #include "rgw_common.h"
 #include "rgw_rest.h"
+#include "rgw_tag_s3.h"
 #include "svc_zone.h"
 #include "rgw_rados.h"
 
@@ -1531,26 +1532,27 @@ static int cloud_tier_bucket_exists(RGWLCCloudTierCtx& tier_ctx)
   return ret;
 }
 
-static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
+static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx, bool with_tags = true) {
   bufferlist out_bl;
   int ret = 0;
   pair<string, string> key(tier_ctx.storage_class, tier_ctx.target_bucket_name);
   stringstream ss;
   XMLFormatter formatter;
   bufferlist bl;
-  std::string lconstraint;
 
   struct CreateBucketReq {
 	  std::optional<std::string>  lconstraint;
-
-    explicit CreateBucketReq(std::optional<std::string> _lconstraint) : lconstraint(_lconstraint) {}
+    RGWObjTagSet_S3 tags;
 
     void dump_xml(Formatter *f) const {
       if (lconstraint) {
         encode_xml("LocationConstraint", lconstraint, f);
       };
+      if (!tags.empty()) {
+        encode_xml("Tags", tags, f);
+      }
     }
-  } req_enc(lconstraint);
+  } req_enc;
 
   struct CreateBucketResult {
     std::string code;
@@ -1565,6 +1567,19 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
 
   if (!tier_ctx.location_constraint.empty()) {
     req_enc.lconstraint = tier_ctx.location_constraint;
+  }
+  if (with_tags && tier_ctx.target_by_bucket) {
+    auto& attrs = tier_ctx.obj->get_bucket()->get_attrs();
+    if (auto i = attrs.find(RGW_ATTR_TAGS); i != attrs.end()) {
+      if (decode_bl(i->second, req_enc.tags) < 0) {
+        ldpp_dout(tier_ctx.dpp, 0) << "WARNING: failed to decode TagSet, "
+                                      "creating target bucket without tags" << dendl;
+        req_enc.tags.clear();
+      }
+    }
+  }
+
+  if (req_enc.lconstraint || !req_enc.tags.empty()) {
     encode_xml("CreateBucketConfiguration", req_enc, &formatter);
 
     formatter.flush(ss);
@@ -1581,6 +1596,12 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
    */
   if (ret == -EBUSY || ret == -ERR_INTERNAL_ERROR) {
     return ret;
+  }
+  // tags are best effort
+  if (ret < 0 && !req_enc.tags.empty()) {
+    ldpp_dout(tier_ctx.dpp, 0) << "WARNING: creating target bucket " << tier_ctx.target_bucket_name
+                               << " with tags returned ret=" << ret << ", retrying without tags" << dendl;
+    return cloud_tier_create_bucket(tier_ctx, false);
   }
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "create target bucket : " << tier_ctx.target_bucket_name << " returned ret:" << ret << dendl;
