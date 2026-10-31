@@ -416,9 +416,12 @@ SegmentedJournal::do_submit_record(
       return std::move(submit_fut);
     }).safe_then([FNAME, this, &handle, on_submission=std::move(on_submission)
 		 ](record_locator_t result) mutable {
+      auto finalize_start = std::chrono::steady_clock::now();
       return handle.enter(write_pipeline->finalize
-      ).then([FNAME, this, result, &handle,
-	      on_submission=std::move(on_submission)] {
+      ).then([FNAME, this, result, &handle, finalize_start,
+	      on_submission=std::move(on_submission)]() mutable {
+        result.finalize_wait =
+          std::chrono::steady_clock::now() - finalize_start;
         DEBUG("H{} finish with {}", (void*)&handle, result);
         auto new_committed_to = result.write_result.get_end_seq();
         record_submitter.update_committed_to(new_committed_to);

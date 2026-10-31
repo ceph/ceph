@@ -829,12 +829,15 @@ TransactionManager::do_submit_transaction(
   );
 
   SUBTRACET(seastore_t, "write delayed ool extents", tref);
+  // drop ool_* time left over from an attempt that was interrupted
+  tref.get_phase_durations().reset_ool_attempt();
   auto ool_start = std::chrono::steady_clock::now();
   co_await epm->write_delayed_ool_extents(
     tref, dispatch_result.alloc_map
   );
   tref.get_phase_durations().ool_write +=
     std::chrono::steady_clock::now() - ool_start;
+  tref.get_phase_durations().commit_ool_attempt();
 
   auto allocated_extents = tref.get_valid_pre_alloc_list();
   auto lba_start = std::chrono::steady_clock::now();
@@ -860,6 +863,7 @@ TransactionManager::do_submit_transaction(
   co_await epm->write_preallocated_ool_extents(tref, allocated_extents);
   tref.get_phase_durations().ool_write +=
     std::chrono::steady_clock::now() - ool_start;
+  tref.get_phase_durations().commit_ool_attempt();
 
   SUBTRACET(seastore_t, "entering prepare", tref);
   auto prepare_enter_start = std::chrono::steady_clock::now();
@@ -900,14 +904,33 @@ TransactionManager::do_submit_transaction(
     std::move(record),
     tref.get_handle(),
     tref.get_src(),
-    [&locker, this, FNAME, &tref](record_locator_t submit_result) {
+    [&locker, this, FNAME, &tref, &journal_start](record_locator_t submit_result) {
     SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
+    tref.get_phase_durations().journal_batch_wait +=
+      submit_result.write_start - journal_start;
+    tref.get_phase_durations().journal_disk_write +=
+      submit_result.write_end - submit_result.write_start;
+    tref.get_phase_durations().journal_finalize_wait +=
+      submit_result.finalize_wait;
+    // the segmented journal doesn't fill in dma_times, leaving start blank
+    const auto &dma_times = submit_result.dma_times;
+    if (dma_times.start != std::chrono::steady_clock::time_point{}) {
+      tref.get_phase_durations().journal_pre_dma +=
+        dma_times.start - submit_result.write_start;
+      tref.get_phase_durations().journal_dma +=
+        dma_times.end - dma_times.start;
+      tref.get_phase_durations().journal_post_dma +=
+        submit_result.write_end - dma_times.end;
+    }
     auto start_seq = submit_result.write_result.start_seq;
     journal->get_trimmer().set_journal_head(start_seq);
+    auto complete_commit_start = std::chrono::steady_clock::now();
     cache->complete_commit(
       tref,
       submit_result.record_block_base,
       start_seq);
+    tref.get_phase_durations().complete_commit +=
+      std::chrono::steady_clock::now() - complete_commit_start;
     locker.release_lock();
     journal->get_trimmer().update_journal_tails(
       cache->get_oldest_dirty_from().value_or(start_seq),
