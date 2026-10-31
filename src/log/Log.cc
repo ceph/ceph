@@ -409,7 +409,7 @@ void Log::_flush(EntryVector& t, bool crash)
     if (do_fd || do_syslog || do_stderr) {
       const std::size_t cur = m_log_buf.size();
       std::size_t used = 0;
-      const std::size_t allocated = e.size() + 80;
+      const std::size_t allocated = str.size() + 80;
       m_log_buf.resize(cur + allocated);
 
       char* const start = m_log_buf.data();
