@@ -1122,8 +1122,10 @@ void Locker::create_lock_cache(const MDRequestRef& mdr, CInode *diri, file_layou
   }
 
   int cap_bit = MDLockCache::get_cap_bit_for_lock_cache(opcode);
-  if (!(cap->issued() & cap_bit)) {
-    dout(10) << " client cap lacks rights for lock cache: " << ccap_string(cap_bit) << dendl;
+  // Dc and Du are issued only once a lock cache exists, so a client that
+  // wants them cannot hold them yet.
+  if (!((cap->issued() | cap->wanted()) & cap_bit)) {
+    dout(10) << " client cap neither holds nor wants " << ccap_string(cap_bit) << dendl;
     return;
   }
 
