@@ -252,7 +252,7 @@ public:
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
-  void dump(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f, const OSDMap *osdmap = nullptr) const;
   static std::list<PGMapDigest> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(PGMapDigest::pg_count);
