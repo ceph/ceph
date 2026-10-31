@@ -781,6 +781,42 @@ To rotate the secret for an entity, use:
 This avoids the need to delete and recreate the entity when its key is
 compromised, lost, or scheduled for rotation.
 
+The rotation is fully complete; only the new key is accepted for
+authentication. This means a client which loses the Monitor's response cannot
+re-authenticate with the old key and retry safely.
+
+Note that ``auth rotate`` always generates a *new* key, even if one is
+:ref:`already pending <auth-pending-key>`. Automation that may need to retry
+a rotation (for example, if it fails partway through applying the new key and
+rotates again) should use ``auth rotate-pending`` instead:
+
+.. prompt:: bash #
+
+    ceph auth rotate-pending <entity>
+
+.. _auth-pending-key:
+
+``auth rotate-pending`` stores the new key as a ``pending_key``, and a retry
+returns the same pending key. Both the old key and the new key are accepted
+until the new key is first used to authenticate or the rotation is committed.
+
+To commit the rotation and invalidate the old key:
+
+.. prompt:: bash #
+
+    ceph auth commit-pending <entity>
+
+To cancel the rotation and discard the pending key:
+
+.. prompt:: bash #
+
+    ceph auth clear-pending <entity>
+
+To generate a pending key without using ``auth rotate-pending``:
+
+.. prompt:: bash #
+
+    ceph auth get-or-create-pending <entity>
 
 Command Line Usage
 ==================
