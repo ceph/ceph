@@ -4,19 +4,27 @@ project(dbstore-tests)
 set(dbstore_tests_srcs
     dbstore_tests.cc)
 
+# the dbstore sources are built into rgw_common
+set(dbstore_tests_incs
+    "${CMAKE_SOURCE_DIR}/src/rgw/driver/dbstore/common"
+    "${CMAKE_SOURCE_DIR}/src/rgw/driver/dbstore/sqlite")
+
 add_executable(unittest_dbstore_tests ${dbstore_tests_srcs})
+target_include_directories(unittest_dbstore_tests PRIVATE ${dbstore_tests_incs})
 target_link_libraries(unittest_dbstore_tests
-    dbstore
-    gtest)
+    rgw_common
+    GTest::GTest)
 add_ceph_unittest(unittest_dbstore_tests)
 if(COMPILER_SUPPORTS_VLA_ERROR)
   target_compile_options(unittest_dbstore_tests PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
 endif()
 
 add_executable(unittest_dbstore_mgr_tests dbstore_mgr_tests.cc)
+target_include_directories(unittest_dbstore_mgr_tests PRIVATE ${dbstore_tests_incs})
 target_link_libraries(unittest_dbstore_mgr_tests
-    dbstore
-    gtest_main)
+    rgw_common
+    GTest::Main
+    GTest::GTest)
 add_ceph_unittest(unittest_dbstore_mgr_tests)
 if(COMPILER_SUPPORTS_VLA_ERROR)
   target_compile_options(unittest_dbstore_mgr_tests PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
