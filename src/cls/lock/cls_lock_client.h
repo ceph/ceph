@@ -29,8 +29,8 @@ namespace rados {
 			     const std::string& name, const std::string& cookie,
 			     const entity_name_t& locker);
 
-      extern void get_lock_info_start(librados::ObjectReadOperation *rados_op,
-				      const std::string& name);
+      extern void get_lock_info_start(librados::ObjectReadOperation *rados_op, const std::string& name);
+      extern void get_lock_info_start(librados::ObjectReadOperation *rados_op, const std::string& name, ceph::bufferlist* obl, int* prval);
       extern int get_lock_info_finish(ceph::bufferlist::const_iterator *out,
 				      std::map<locker_id_t, locker_info_t> *lockers,
 				      ClsLockType *type, std::string *tag);
