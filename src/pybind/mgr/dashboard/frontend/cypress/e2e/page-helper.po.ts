@@ -42,6 +42,59 @@ export abstract class PageHelper {
   }
 
   /**
+   * Stubs the orchestrator-related API endpoints that the ModuleStatusGuardService
+   * and CreateClusterComponent consult on every navigation to /add-storage. Without
+   * these stubs the guard's fire-and-forget error handler can redirect away from
+   * cd-create-cluster before Cypress can assert its existence.
+   */
+  stubOrchestratorEndpoints() {
+    cy.intercept('GET', '**/ui-api/orchestrator/status', {
+      statusCode: 200,
+      body: {
+        available: true,
+        message: '',
+        features: {
+          cancel_completions: { available: false },
+          pause: { available: true },
+          resume: { available: true },
+          add_host: { available: true },
+          remove_host: { available: true },
+          drain_host: { available: true },
+          stop_drain_host: { available: true },
+          update_host_addr: { available: true },
+          get_hosts: { available: true },
+          get_facts: { available: true },
+          add_host_label: { available: true },
+          remove_host_label: { available: true },
+          host_ok_to_stop: { available: true },
+          enter_host_maintenance: { available: true },
+          exit_host_maintenance: { available: true },
+          rescan_host: { available: true },
+          blink_device_light: { available: true }
+        }
+      }
+    }).as('orchStatus');
+    cy.intercept('GET', '**/api/mgr/module/orchestrator', {
+      statusCode: 200,
+      body: { orchestrator: 'cephadm' }
+    }).as('orchConfig');
+    cy.intercept('GET', '**/ui-api/osd/deployment_options', {
+      statusCode: 200,
+      body: {
+        recommended_option: 'cost_capacity',
+        options: {
+          cost_capacity: {
+            title: 'Cost/Capacity-Optimized',
+            desc: 'All available devices will be configured as data devices',
+            available: true,
+            used: null
+          }
+        }
+      }
+    }).as('deploymentOptions');
+  }
+
+  /**
    * Navigates back and waits for the hash to change
    */
   navigateBack() {
@@ -266,7 +319,7 @@ export abstract class PageHelper {
       return cy
         .contains('[cdstablerow] [cdstabledata]', content)
         .parent('[cdstablerow]')
-        .find('[cdstableexpandbutton] .cds--table-expand__button');
+        .find('.cds--table-expand__button');
     }
     return cy.get('.cds--table-expand__button').first();
   }
@@ -338,7 +391,7 @@ export abstract class PageHelper {
   // Click the action button
   clickActionButton(action: string) {
     cy.get('[data-testid="table-action-btn"]').first().click({ force: true }); // open submenu
-    cy.get(`button.${action}`).click({ force: true }); // click on "action" menu item
+    cy.get(`cds-overflow-menu-option.${action}`).click({ force: true }); // click on "action" menu item
   }
 
   clickActionButtonFromMultiselect(content: string, action?: string) {
@@ -371,7 +424,7 @@ export abstract class PageHelper {
       .find('[cdstabledata] [data-testid="table-action-btn"]')
       .click({ force: true });
     cy.wait(waitTime);
-    cy.get(`button.${action}`).should('not.be.disabled').click({ force: true });
+    cy.get(`cds-overflow-menu-option.${action}`).should('not.be.disabled').click({ force: true });
   }
 
   /**
