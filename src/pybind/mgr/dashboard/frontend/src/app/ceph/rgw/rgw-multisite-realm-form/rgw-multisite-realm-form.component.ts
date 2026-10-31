@@ -25,7 +25,6 @@ export class RgwMultisiteRealmFormComponent extends BaseModal implements OnInit 
   realmNames: string[];
   newRealmName: string;
   isMaster: boolean;
-  defaultRealmDisabled = false;
   docUrl: string;
 
   constructor(
@@ -79,24 +78,18 @@ export class RgwMultisiteRealmFormComponent extends BaseModal implements OnInit 
       this.multisiteRealmForm.get('default_realm').setValue(this.info.data.is_default);
       if (this.info.data.is_default) {
         this.multisiteRealmForm.get('default_realm').disable();
+      } else {
+        this.multisiteRealmForm.get('default_realm').enable();
       }
-    }
-    this.zonegroupList.forEach((zgp: any) => {
-      if (zgp.is_master === true && zgp.realm_id === this.info.data.id) {
-        this.isMaster = true;
-      }
-    });
-    if (this.defaultsInfo && this.defaultsInfo['defaultRealmName'] !== null) {
-      this.multisiteRealmForm.get('default_realm').disable();
-      this.defaultRealmDisabled = true;
-    }
-    this.docUrl = this.docService.urlGenerator('rgw-multisite');
-
-    if (this.action === this.actionLabels?.EDIT) {
-      this.multisiteRealmForm.get('default_realm').disable();
     } else {
       this.multisiteRealmForm.get('default_realm').enable();
     }
+    this.zonegroupList.forEach((zgp: any) => {
+      if (zgp.is_master === true && zgp.realm_id === this.info?.data?.id) {
+        this.isMaster = true;
+      }
+    });
+    this.docUrl = this.docService.urlGenerator('rgw-multisite');
   }
 
   submit() {
