@@ -672,10 +672,15 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   }
 
   std::string fe_name = get_frontend_name();
-  r = env.driver->register_to_service_map(dpp, fe_name, service_map_meta);
-  if (r < 0) {
-    derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
-    /* ignore error */
+  // Skip service map registration for rgw-smb frontend. Since SMB forks a
+  // process per client connection, each client-driven RGW init would
+  // would create a spurious service entry and inflate the service count.
+  if (fe_name != "rgw-smb") {
+    r = env.driver->register_to_service_map(dpp, fe_name, service_map_meta);
+    if (r < 0) {
+      derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
+      /* ignore error */
+    }
   }
 #ifdef WITH_RADOSGW_RADOS
   if (env.driver->get_name() == "rados") {
