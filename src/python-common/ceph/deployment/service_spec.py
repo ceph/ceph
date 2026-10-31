@@ -858,6 +858,7 @@ class ServiceSpec(object):
         'container',
         'crash',
         'elasticsearch',
+        'fcm-dedup',
         'grafana',
         'ingress',
         'mgmt-gateway',
@@ -951,6 +952,7 @@ class ServiceSpec(object):
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
             'ceph-exporter': CephExporterSpec,
+            'fcm-dedup': FcmDedupSpec,
             'prometheus': PrometheusSpec,
             'loki': MonitoringSpec,
             'promtail': MonitoringSpec,
@@ -4114,6 +4116,33 @@ class CephExporterSpec(ServiceSpec):
 
 
 yaml.add_representer(CephExporterSpec, ServiceSpec.yaml_representer)
+
+
+class FcmDedupSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'fcm-dedup',
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 config: Optional[Dict[str, str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 ):
+        assert service_type == 'fcm-dedup'
+
+        super(FcmDedupSpec, self).__init__(
+            service_type,
+            service_id=service_id,
+            placement=placement,
+            unmanaged=unmanaged,
+            preview_only=preview_only,
+            config=config,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args)
+
+
+yaml.add_representer(FcmDedupSpec, ServiceSpec.yaml_representer)
 
 
 class SMBClusterPublicIPSpec:

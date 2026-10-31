@@ -209,7 +209,7 @@ class VersionStatusUpdater(DaemonStatusUpdater):
         if daemon_type == SMB.daemon_type:
             version = SMB.get_version(ctx, container_id)
         elif not version:
-            if daemon_type in ceph_daemons():
+            if daemon_type in ceph_daemons() or daemon_type == 'fcm-dedup':
                 out, err, code = call(
                     ctx,
                     [

@@ -56,7 +56,7 @@ SERIAL_UPGRADE_DAEMON_TYPES = ['osd', 'mds', 'mon'] + INGRESS_TYPES
 CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + INGRESS_TYPES + MONITORING_STACK_TYPES + MGMT_GATEWAY_STACK_TYPES
 
 # these daemon types use the ceph container image
-CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs', 'node-proxy']
+CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs', 'node-proxy', 'fcm-dedup']
 
 # these daemons do not use the ceph image. There are other daemons
 # that also don't use the ceph image, but we only care about those
@@ -177,7 +177,7 @@ def name_to_config_section(name: str) -> ConfEntity:
     Map from daemon names to ceph entity names (as seen in config)
     """
     daemon_type = name.split('.', 1)[0]
-    if daemon_type in ['rgw', 'rbd-mirror', 'nfs', 'crash', 'iscsi', 'ceph-exporter', 'nvmeof', 'smb']:
+    if daemon_type in ['rgw', 'rbd-mirror', 'nfs', 'crash', 'iscsi', 'ceph-exporter', 'nvmeof', 'smb', 'fcm-dedup']:
         return ConfEntity('client.' + name)
     elif daemon_type in ['mon', 'osd', 'mds', 'mgr', 'client']:
         return ConfEntity(name)
