@@ -135,27 +135,29 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     ];
 
     this.subsystems$ = this.subsystemSubject.pipe(
-      switchMap(() => {
-        if (!this.groupHandler.group) {
-          if (this.groupHandler.groupSelectionCleared) {
-            return of([]);
+      switchMap(
+        (): Observable<(NvmeofSubsystem & { gw_group?: string; initiator_count?: number })[]> => {
+          if (!this.groupHandler.group) {
+            if (this.groupHandler.groupSelectionCleared) {
+              return of([]);
+            }
+            return this.fetchAllGroupsSubsystems();
           }
-          return this.fetchAllGroupsSubsystems();
+          return this.nvmeofService.listSubsystems(this.groupHandler.group).pipe(
+            switchMap((subsystems: any) => {
+              const subs: NvmeofSubsystem[] = Array.isArray(subsystems) ? subsystems : [subsystems];
+              if (subs.length === 0) return of([]);
+              return forkJoin(
+                subs.map((sub) => this.enrichSubsystemForGroup(sub, this.groupHandler.group))
+              );
+            }),
+            catchError((error) => {
+              this.handleError(error);
+              return of([]);
+            })
+          );
         }
-        return this.nvmeofService.listSubsystems(this.groupHandler.group).pipe(
-          switchMap((subsystems: any) => {
-            const subs: NvmeofSubsystem[] = Array.isArray(subsystems) ? subsystems : [subsystems];
-            if (subs.length === 0) return of([]);
-            return forkJoin(
-              subs.map((sub) => this.enrichSubsystemForGroup(sub, this.groupHandler.group))
-            );
-          }),
-          catchError((error) => {
-            this.handleError(error);
-            return of([]);
-          })
-        );
-      }),
+      ),
       tap((subs) => {
         this.subsystems = subs;
         this.setTableLoading(false);
