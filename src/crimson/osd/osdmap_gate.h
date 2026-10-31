@@ -57,6 +57,10 @@ private:
   waiting_peering_t waiting_peering;
   epoch_t current = 0;
   bool stopping = false;
+
+  /// the returned blocker is null if no wait is required
+  std::pair<seastar::future<epoch_t>, OSDMapBlocker*>
+  do_wait_for_map(epoch_t epoch, ShardServices *shard_services);
 public:
   OSDMapGate(const char *blocker_type)
     : blocker_type(blocker_type) {}
@@ -70,6 +74,17 @@ public:
   seastar::future<epoch_t>
   wait_for_map(
     typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
+    epoch_t epoch,
+    ShardServices *shard_services=nullptr
+  );
+  /**
+   * wait_for_map_untracked
+   *
+   * As wait_for_map(), for callers that are not operations (e.g. admin
+   * commands). The wait is not recorded as a blocking event.
+   */
+  seastar::future<epoch_t>
+  wait_for_map_untracked(
     epoch_t epoch,
     ShardServices *shard_services=nullptr
   );
