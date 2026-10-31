@@ -1528,6 +1528,9 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   bool lost_lock = false;
   bool lost_bid = false;
 
+  rgw_meta_sync_marker shared_marker; //< shard marker as stored in rados
+  std::string end_marker; //< marker recorded at the end of a past period
+
   bool *reset_backoff;
 
   // hold a reference to the cr stack while it's in the map
@@ -1567,6 +1570,29 @@ public:
   void set_marker_tracker(RGWMetaSyncShardMarkerTrack *mt) {
     delete marker_tracker;
     marker_tracker = mt;
+  }
+
+  // same test incremental_sync() applies after taking the lease: a marker
+  // from an earlier realm epoch gets cleared there, so it doesn't count
+  bool shard_done_with_period(const rgw_meta_sync_marker& m) const {
+    if (m.state != rgw_meta_sync_marker::IncrementalSync) {
+      return false;
+    }
+    if (m.realm_epoch > realm_epoch) {
+      return true; // the owner already moved on to a later period
+    }
+    return m.realm_epoch == realm_epoch && period_marker <= m.marker;
+  }
+
+  // RGWMetaSyncCR only advances past a past period once every shard of it
+  // completes in this process. a gateway that isn't the highest bidder for a
+  // shard never syncs it, so it reads the shard marker instead and treats the
+  // shard as complete if the owner already finished the period
+  RGWCoroutine* read_shared_marker_cr() {
+    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(
+        sync_env->dpp, sync_env->store,
+        rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
+        &shared_marker);
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -1650,6 +1676,14 @@ public:
       /* grab lock */
 
       if (!sync_env->bid_manager->is_highest_bidder(shard_id)) {
+        if (!period_marker.empty()) { // past period
+          yield call(read_shared_marker_cr());
+          if (retcode >= 0 && shard_done_with_period(shared_marker)) {
+            tn->log(10, SSTR("not the highest bidder, but shard already finished period: marker="
+                             << shared_marker.marker << " period_marker=" << period_marker));
+            return set_cr_done();
+          }
+        }
         tn->log(10, "not the highest bidder");
         return -EBUSY;
       }
@@ -1668,12 +1702,32 @@ public:
         if (lease_cr->is_done()) {
           drain_all();
           tn->log(5, "failed to take lease");
+          if (!period_marker.empty()) { // past period
+            // the lease holder may be another gateway that already finished this period and
+            // now keeps the lease while it syncs the shard in a later one
+            yield call(read_shared_marker_cr());
+            if (retcode >= 0 && shard_done_with_period(shared_marker)) {
+              tn->log(10, SSTR("failed to take lease, but shard already finished period: marker="
+                               << shared_marker.marker << " period_marker=" << period_marker));
+              return set_cr_done();
+            }
+          }
           return lease_cr->get_ret_status();
         }
         set_sleeping(true);
         yield;
       }
       tn->log(10, "took lease");
+      if (!period_marker.empty()) { // past period, see incremental_sync()
+        yield call(read_shared_marker_cr());
+        if (retcode >= 0 && shard_done_with_period(shared_marker)) {
+          tn->log(10, SSTR("took lease, but shard already finished period: marker="
+                           << shared_marker.marker << " period_marker=" << period_marker));
+          yield lease_cr->go_down();
+          drain_all();
+          return set_cr_done();
+        }
+      }
 
       /* lock succeeded, a retry now should avoid previous backoff status */
       *reset_backoff = true;
@@ -1820,6 +1874,14 @@ public:
       /* grab lock */
 
       if (!sync_env->bid_manager->is_highest_bidder(shard_id)) {
+        if (!period_marker.empty()) { // past period
+          yield call(read_shared_marker_cr());
+          if (retcode >= 0 && shard_done_with_period(shared_marker)) {
+            tn->log(10, SSTR("not the highest bidder, but shard already finished period: marker="
+                             << shared_marker.marker << " period_marker=" << period_marker));
+            return set_cr_done();
+          }
+        }
         tn->log(10, "not the highest bidder");
         return -EBUSY;
       }
@@ -1839,6 +1901,14 @@ public:
           if (lease_cr->is_done()) {
             drain_all();
             tn->log(5, "failed to take lease");
+            if (!period_marker.empty()) { // past period, see full_sync()
+              yield call(read_shared_marker_cr());
+              if (retcode >= 0 && shard_done_with_period(shared_marker)) {
+                tn->log(10, SSTR("failed to take lease, but shard already finished period: marker="
+                                 << shared_marker.marker << " period_marker=" << period_marker));
+                return set_cr_done();
+              }
+            }
             return lease_cr->get_ret_status();
           }
           set_sleeping(true);
@@ -1846,6 +1916,19 @@ public:
         }
       }
       tn->log(10, "took lease");
+      if (!period_marker.empty()) { // past period
+        // our marker can be stale: while we waited for the bid or the lease, another gateway
+        // may have finished this period and moved the shard on to a later one. don't replay
+        // the period, and don't let the end-of-period write below move its marker back
+        yield call(read_shared_marker_cr());
+        if (retcode >= 0 && shard_done_with_period(shared_marker)) {
+          tn->log(10, SSTR("took lease, but shard already finished period: marker="
+                           << shared_marker.marker << " period_marker=" << period_marker));
+          yield lease_cr->go_down();
+          drain_all();
+          return set_cr_done();
+        }
+      }
       // if the period has advanced, we can't use the existing marker
       if (sync_marker.realm_epoch < realm_epoch) {
         ldpp_dout(sync_env->dpp, 4) << "clearing marker=" << sync_marker.marker
@@ -1883,8 +1966,15 @@ public:
 
 #define INCREMENTAL_MAX_ENTRIES 100
         ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << " truncated=" << truncated << dendl;
-        if (!period_marker.empty() && period_marker <= mdlog_marker) {
-          tn->log(10, SSTR("finished syncing current period: mdlog_marker=" << mdlog_marker << " sync_marker=" << sync_marker.marker << " period_marker=" << period_marker));
+        // compare with what we've read, not with what was cloned: the clone fetches the
+        // remote log up to its tip, while each pass below reads at most
+        // INCREMENTAL_MAX_ENTRIES of it. once the clone has reached period_marker and the
+        // last read found nothing more, there is nothing left of the period to read: its
+        // entries may have been trimmed (e.g. we were its master, our peers synced it and
+        // the log got trimmed), so max_marker would never get there
+        if (!period_marker.empty() &&
+            (period_marker <= max_marker || (period_marker <= mdlog_marker && !truncated))) {
+          tn->log(10, SSTR("finished syncing current period: max_marker=" << max_marker << " mdlog_marker=" << mdlog_marker << " sync_marker=" << sync_marker.marker << " period_marker=" << period_marker));
           done_with_period = true;
           break;
         }
@@ -1974,6 +2064,49 @@ public:
       while (num_spawned() > 1) {
         yield wait_for_child();
         collect_children();
+      }
+
+      if (done_with_period && !lease_cr->is_locked()) {
+        // the lease ran out while we drained, retry the period instead of finishing it
+        // without the end-of-period marker below
+        lost_lock = true;
+      }
+
+      if (done_with_period && can_adjust_marker && !lost_lock && !lost_bid &&
+          sync_marker.realm_epoch == realm_epoch) {
+        // record in the shard marker that this period is complete, while we still hold the
+        // lease. the marker tracker only writes when an entry gets applied, so a period that
+        // is finished without applying anything (nothing left in the log, or the entries
+        // were already applied before a reload) would otherwise leave the marker on the
+        // previous realm epoch, and gateways that lost the bid for this shard could never
+        // tell that it's done. start from the stored marker: it has the tracker's pos and
+        // timestamp, and if it already says the period is done (or is on a later realm
+        // epoch) there is nothing to record and it must not move back
+        yield call(read_shared_marker_cr());
+        if (retcode < 0) {
+          shared_marker = sync_marker;
+        }
+        end_marker = std::max(sync_marker.marker, period_marker);
+        if (retcode < 0 || !(shared_marker.state == rgw_meta_sync_marker::IncrementalSync &&
+                             (shared_marker.realm_epoch > realm_epoch ||
+                              (shared_marker.realm_epoch == realm_epoch &&
+                               shared_marker.marker >= end_marker)))) {
+          shared_marker.state = rgw_meta_sync_marker::IncrementalSync;
+          shared_marker.realm_epoch = realm_epoch;
+          shared_marker.marker = end_marker;
+          yield call(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(
+                  sync_env->dpp, sync_env->store,
+                  rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
+                  shared_marker));
+          if (retcode < 0) {
+            tn->log(0, SSTR("ERROR: failed to record end of period in shard marker: retcode=" << retcode));
+            yield lease_cr->go_down();
+            drain_all();
+            return retcode;
+          }
+          tn->log(10, SSTR("recorded end of period in shard marker: realm_epoch=" << realm_epoch
+                           << " marker=" << shared_marker.marker));
+        }
       }
 
       yield lease_cr->go_down();
