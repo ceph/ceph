@@ -8,6 +8,7 @@ import isodate
 import email.utils
 import datetime
 import threading
+import concurrent.futures
 import re
 import pytz
 from collections import OrderedDict
@@ -94,6 +95,7 @@ from . import (
     configured_storage_classes,
     configure,
     get_lc_debug_interval,
+    get_lc_list_cnt,
     get_restore_debug_interval,
     get_restore_processor_period,
     get_read_through_days,
@@ -8391,6 +8393,32 @@ def test_versioning_obj_list_marker():
 
 @pytest.mark.fails_on_dbstore
 @pytest.mark.versioning
+def test_versioning_obj_list_marker_null_delete_marker():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+    key = 'testobj'
+    response = client.put_object(Bucket=bucket_name, Key=key, Body='data')
+    version_id = response['VersionId']
+    # a null delete marker in front of the version
+    check_configure_versioning_retry(bucket_name, "Suspended", "Suspended")
+    client.delete_object(Bucket=bucket_name, Key=key)
+
+    # one entry per page: the first page ends on the null delete marker
+    response = client.list_object_versions(Bucket=bucket_name, MaxKeys=1)
+    assert [m['VersionId'] for m in response['DeleteMarkers']] == ['null']
+    assert response['IsTruncated']
+    assert response['NextVersionIdMarker'] == 'null'
+
+    response = client.list_object_versions(
+        Bucket=bucket_name, MaxKeys=1, KeyMarker=response['NextKeyMarker'],
+        VersionIdMarker=response['NextVersionIdMarker'])
+    versions = response.get('Versions', [])
+    assert [v['VersionId'] for v in versions] == [version_id]
+
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_versioning_copy_obj_version():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -9243,6 +9271,109 @@ def test_lifecycle_expiration_newer_noncurrent():
 
     # at T+20, 6 objects should exist (1 current and (9 - 5) noncurrent)
     assert num_objs == 6
+
+def _lc_page_boundary_wait(client, bucket_name, key, gone, lc_interval):
+    # wait for lifecycle to expire the version(s) it must expire
+    for _ in range(10):
+        time.sleep(lc_interval)
+        response = client.list_object_versions(Bucket=bucket_name, Prefix=key)
+        remaining = {v['VersionId'] for v in response.get('Versions', [])}
+        if not (gone & remaining):
+            break
+    assert not (gone & remaining), 'lifecycle did not expire %s' % gone
+    # the expected versions are gone; wait one more cycle before checking what survived
+    time.sleep(lc_interval)
+    response = client.list_object_versions(Bucket=bucket_name, Prefix=key)
+    return {v['VersionId'] for v in response.get('Versions', [])}
+
+def _lc_page_boundary_fill(client, bucket_name, count):
+    def put(ix):
+        client.put_object(Bucket=bucket_name, Key='a%05d' % ix, Body='x')
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
+        list(pool.map(put, range(count)))
+
+def _lc_put_newer_noncurrent_rule(client, bucket_name, newer):
+    lifecycle_config = {
+        'Rules': [{
+            'NoncurrentVersionExpiration': {
+                'NoncurrentDays': 1,
+                'NewerNoncurrentVersions': newer,
+            },
+            'ID': 'newer_noncurrent_page_boundary',
+            'Filter': {'Prefix': ''},
+            'Status': 'Enabled',
+        }]
+    }
+    response = client.put_bucket_lifecycle_configuration(
+        Bucket=bucket_name, LifecycleConfiguration=lifecycle_config)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+# LC resumes each listing page after the last entry of the previous one
+# a null version that ends a page must not be listed again
+# lc_list_cnt should match to rgw_lc_list_cnt
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_expiration
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+def test_lifecycle_expiration_newer_noncurrent_page_boundary_null_current():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    lc_interval = get_lc_debug_interval()
+    page = get_lc_list_cnt()
+
+    # fill with plain objects to reach the page boundary
+    _lc_page_boundary_fill(client, bucket_name, page - 1)
+
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+    client.put_object(Bucket=bucket_name, Key='k', Body='v1')
+    client.put_object(Bucket=bucket_name, Key='k', Body='v2')
+    check_configure_versioning_retry(bucket_name, "Suspended", "Suspended")
+    client.put_object(Bucket=bucket_name, Key='k', Body='null')
+
+    # newest first: the null version, v2, v1
+    response = client.list_object_versions(Bucket=bucket_name, Prefix='k')
+    ids = [v['VersionId'] for v in response['Versions']]
+    assert len(ids) == 3 and ids[0] == 'null'
+    null_id, v2_id, v1_id = ids
+
+    # keep one noncurrent version: v1 is expired, v2 must stay
+    _lc_put_newer_noncurrent_rule(client, bucket_name, 1)
+    # wait for LC to remove the noncurrent version v1
+    remaining = _lc_page_boundary_wait(client, bucket_name, 'k', {v1_id}, lc_interval)
+    assert remaining == {null_id, v2_id}
+
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_expiration
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+def test_lifecycle_expiration_newer_noncurrent_page_boundary_null_noncurrent():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    lc_interval = get_lc_debug_interval()
+    page = get_lc_list_cnt()
+
+    # the 5 versions of "k" end the first page; "z" keeps it truncated
+    _lc_page_boundary_fill(client, bucket_name, page - 5)
+
+    # an object from before versioning becomes the oldest, null, version
+    client.put_object(Bucket=bucket_name, Key='k', Body='before versioning')
+    client.put_object(Bucket=bucket_name, Key='z', Body='x')
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+    for ix in range(1, 5):
+        client.put_object(Bucket=bucket_name, Key='k', Body='v%d' % ix)
+
+    # newest first: v4, v3, v2, v1, the null version
+    response = client.list_object_versions(Bucket=bucket_name, Prefix='k')
+    ids = [v['VersionId'] for v in response['Versions']]
+    assert len(ids) == 5 and ids[4] == 'null'
+
+    # keep three noncurrent versions: only the null version is expired
+    _lc_put_newer_noncurrent_rule(client, bucket_name, 3)
+    remaining = _lc_page_boundary_wait(client, bucket_name, 'k',
+                                       {'null'}, lc_interval)
+    assert remaining == set(ids[:4])
 
 def get_byte_buffer(nbytes):
     buf = BytesIO(b"")

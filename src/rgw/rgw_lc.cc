@@ -521,7 +521,7 @@ public:
         return false;
       } else {
 	fetch_barrier();
-        list_params.marker = pre_obj.key;
+        list_params.marker = rgw::lc::list_resume_marker(pre_obj, list_params.list_versions);
         int ret = fetch(dpp, y);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret
@@ -3268,6 +3268,18 @@ RGWLC::~RGWLC()
 } /* ~RGWLC() */
 
 namespace rgw::lc {
+
+rgw_obj_key list_resume_marker(const rgw_bucket_dir_entry& entry,
+                               bool list_versions)
+{
+  rgw_obj_key marker(entry.key);
+
+  if (list_versions && marker.instance.empty() && (entry.flags & rgw_bucket_dir_entry::FLAG_VER)) {
+    marker.instance = "null";
+  }
+
+  return marker;
+}
 
 int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
                        rgw::sal::Driver* driver,

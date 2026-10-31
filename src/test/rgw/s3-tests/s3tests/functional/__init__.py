@@ -250,6 +250,11 @@ def configure():
         config.lc_debug_interval = 10
 
     try:
+        config.lc_list_cnt = int(cfg.get('s3 main',"lc_list_cnt"))
+    except (configparser.NoSectionError, configparser.NoOptionError):
+        config.lc_list_cnt = 1000
+
+    try:
         config.rgw_restore_debug_interval = int(cfg.get('s3 main',"rgw_restore_debug_interval"))
     except (configparser.NoSectionError, configparser.NoOptionError):
         config.rgw_restore_debug_interval = 100
@@ -853,6 +858,9 @@ def get_cloud_target_storage_class():
 
 def get_lc_debug_interval():
     return config.lc_debug_interval
+
+def get_lc_list_cnt():
+    return config.lc_list_cnt
 
 def get_restore_debug_interval():
     return config.rgw_restore_debug_interval
