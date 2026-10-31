@@ -14,6 +14,7 @@
 SET_SUBSYS(osd);
 
 using std::string;
+namespace purged_snaps = ceph::osd::purged_snaps;
 
 void OSDMeta::create(ceph::os::Transaction& t)
 {
@@ -139,6 +140,96 @@ void OSDMeta::store_final_pool_info(
     }
     previous = map;
   }
+}
+
+ghobject_t OSDMeta::purged_snaps_oid()
+{
+  return ghobject_t(hobject_t(sobject_t(object_t("purged_snaps"), 0)));
+}
+
+void OSDMeta::touch_purged_snaps(ceph::os::Transaction& t)
+{
+  t.touch(coll->get_cid(), purged_snaps_oid());
+}
+
+void OSDMeta::update_purged_snaps(
+  ceph::os::Transaction& t,
+  const purged_snaps::row_update_t& upd)
+{
+  t.touch(coll->get_cid(), purged_snaps_oid());
+  if (!upd.rm_keys.empty()) {
+    t.omap_rmkeys(coll->get_cid(), purged_snaps_oid(), upd.rm_keys);
+  }
+  if (!upd.set_rows.empty()) {
+    t.omap_setkeys(coll->get_cid(), purged_snaps_oid(), upd.set_rows);
+  }
+}
+
+seastar::future<std::vector<purged_snaps::interval_t>>
+OSDMeta::load_purged_snaps()
+{
+  return load_purged_rows(
+    std::string{purged_snaps::row_prefix},
+    std::string{purged_snaps::row_prefix},
+    [](const auto&) { return false; });
+}
+
+seastar::future<std::vector<purged_snaps::interval_t>>
+OSDMeta::load_purged_snaps_touching(const purged_snaps::interval_t& iv)
+{
+  // the first row that may touch 'iv' is the one ending at iv.begin
+  const snapid_t first_last = iv.begin > 0 ? iv.begin - 1 : 0;
+  return load_purged_rows(
+    purged_snaps::make_key(iv.pool, first_last),
+    purged_snaps::make_pool_prefix(iv.pool),
+    [end = iv.end](const auto& row) { return row.begin > end; });
+}
+
+seastar::future<std::vector<purged_snaps::interval_t>>
+OSDMeta::load_purged_rows(
+  std::string from,
+  std::string prefix,
+  std::function<bool(const purged_snaps::interval_t&)> is_past)
+{
+  LOG_PREFIX(OSDMeta::load_purged_rows);
+  std::vector<purged_snaps::interval_t> rows;
+
+  auto collect = [&](std::string_view key, std::string_view value) {
+    if (!key.starts_with(prefix)) {
+      return ObjectStore::omap_iter_ret_t::STOP;
+    }
+    const auto row = purged_snaps::decode_row(key, value);
+    if (!row) {
+      WARN("ignoring malformed purged_snaps row '{}'", key);
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    }
+    if (is_past(*row)) {
+      return ObjectStore::omap_iter_ret_t::STOP;
+    }
+    rows.push_back(*row);
+    return ObjectStore::omap_iter_ret_t::NEXT;
+  };
+  // on a conflict, the store restarts the iteration from 'from'
+  auto restart = [&rows] {
+    rows.clear();
+    return ObjectStore::omap_iter_ret_t::NEXT;
+  };
+
+  co_await crimson::os::with_store<
+    &crimson::os::FuturizedStore::Shard::omap_iterate>(
+      store, coll, purged_snaps_oid(),
+      ObjectStore::omap_iter_seek_t{
+        std::move(from),
+        ObjectStore::omap_iter_seek_t::LOWER_BOUND},
+      std::move(collect), 0, std::move(restart)
+  ).handle_error(
+    crimson::ct_error::enoent::handle([FNAME] {
+      DEBUG("no purged_snaps object");
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    }),
+    crimson::ct_error::assert_all("purged_snaps omap_iterate error"));
+  DEBUG("{} rows", rows.size());
+  co_return rows;
 }
 
 ghobject_t OSDMeta::osdmap_oid(epoch_t epoch)

@@ -5,11 +5,17 @@
 
 #include <sys/utsname.h>
 
+#include <algorithm>
+#include <iterator>
+#include <random>
+#include <ranges>
+
 #include <boost/iterator/counting_iterator.hpp>
 #include <boost/range/join.hpp>
 #include <fmt/format.h>
 #include <fmt/os.h>
 #include <fmt/ostream.h>
+#include <seastar/util/defer.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
 
@@ -18,6 +24,8 @@
 #include "include/uuid_fmt.h"
 
 #include "messages/MCommand.h"
+#include "messages/MMonGetPurgedSnaps.h"
+#include "messages/MMonGetPurgedSnapsReply.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
@@ -88,6 +96,7 @@ using std::vector;
 
 using crimson::common::local_conf;
 using crimson::os::FuturizedStore;
+namespace purged_snaps = ceph::osd::purged_snaps;
 
 using namespace std::string_literals;
 
@@ -138,6 +147,7 @@ OSD::OSD(int id, uint32_t nonce,
       ).then([this] {
 	update_stats();
 	check_debug_levels();
+	maybe_scrub_purged_snaps();
         mgrc->update_daemon_health(get_health_metrics());
 	if (++trim_queue_length_countdown >= TRIM_QLENGTHS_UPDATE_PERIOD) {
 	  trim_queue_length_countdown = 0;
@@ -151,6 +161,14 @@ OSD::OSD(int id, uint32_t nonce,
 	tick_timer.arm(
 	  std::chrono::seconds(TICK_INTERVAL));
       });
+    }},
+    purged_snaps_retry_timer{[this] {
+      if (pg_shard_manager.is_preboot()) {
+        gate.dispatch_in_background(
+          "purged_snaps_retry", *this, [this] {
+          return get_purged_snaps(true);
+        });
+      }
     }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
     log_client(cluster_msgr.get(), LogClient::NO_FLAGS),
@@ -442,6 +460,7 @@ seastar::future<> OSD::_write_superblock(
 	  ceph::os::Transaction t;
 	  meta_coll.create(t);
 	  meta_coll.store_superblock(t, superblock);
+	  meta_coll.touch_purged_snaps(t);
 	  DEBUG("do_transaction: create meta collection and store superblock");
 	  return store.get_sharded_store().do_transaction(
 	    meta_coll.collection(),
@@ -604,6 +623,7 @@ seastar::future<> OSD::start()
     superblock.cluster_osdmap_trim_lower_bound = superblock.get_oldest_map();
   }
   co_await pg_shard_manager.set_superblock(superblock);
+  co_await normalize_purged_snaps();
   auto local_map = co_await pg_shard_manager.get_local_map(superblock.current_epoch);
   osdmap = make_local_shared_foreign(OSDMapService::local_cached_map_t(local_map));
   co_await pg_shard_manager.update_map(std::move(local_map));
@@ -734,6 +754,9 @@ seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
     ERROR("osdmap require_osd_release < octopus; please upgrade to octopus");
   } else if (false) {
     // TODO: update mon if current fullness state is different from osdmap
+  } else if (superblock.purged_snaps_last < superblock.current_epoch) {
+    // booting resumes when all the purged snaps are recorded
+    return get_purged_snaps();
   } else if (version_t n = local_conf()->osd_map_message_max;
              osdmap->get_epoch() >= oldest - 1 &&
              osdmap->get_epoch() + n > newest) {
@@ -886,6 +909,8 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_admin_commands();
     asok->register_command(make_asok_hook<OsdStatusHook>(std::as_const(*this)));
     asok->register_command(make_asok_hook<SendBeaconHook>(*this));
+    asok->register_command(make_asok_hook<ScrubPurgedSnapsHook>(*this));
+    asok->register_command(make_asok_hook<ResetPurgedSnapsLastHook>(*this));
     asok->register_command(make_asok_hook<RunOSDBenchHook>(*this));
     asok->register_command(make_asok_hook<FlushPgStatsHook>(*this));
     asok->register_command(
@@ -932,6 +957,7 @@ seastar::future<> OSD::stop()
   INFO();
   beacon_timer.cancel();
   tick_timer.cancel();
+  purged_snaps_retry_timer.cancel();
   // see also OSD::shutdown()
   co_await prepare_to_stop();
   co_await pg_shard_manager.set_stopping();
@@ -947,6 +973,8 @@ seastar::future<> OSD::stop()
     co_await asok->stop();
     co_await heartbeat->stop();
     co_await pg_shard_manager.stop_registries();
+    // the scrub is not a registered operation, and reads from the store
+    co_await purged_snaps_scrub_gate.close();
     co_await store.umount();
     co_await store.stop();
     co_await pg_shard_manager.stop_pgs();
@@ -1019,6 +1047,7 @@ OSD::do_ms_dispatch(
     case CEPH_MSG_OSD_MAP:
     case MSG_COMMAND:
     case MSG_OSD_MARK_ME_DOWN:
+    case MSG_MON_GET_PURGED_SNAPS_REPLY:
       // FIXME: order is not guaranteed in this path
       return conn.get_foreign(
       ).then([this, m=std::move(m)](auto f_conn) {
@@ -1036,6 +1065,16 @@ OSD::do_ms_dispatch(
   switch (m->get_type()) {
   case CEPH_MSG_OSD_MAP:
     return handle_osd_map(boost::static_pointer_cast<MOSDMap>(m));
+  case MSG_MON_GET_PURGED_SNAPS_REPLY:
+    if (!conn->peer_is_mon()) {
+      // only the monitor may tell us which snaps were purged
+      LOG_PREFIX(OSD::do_ms_dispatch);
+      WARN("ignoring a purged snaps reply from non-monitor {}",
+           conn->get_peer_name());
+      return seastar::now();
+    }
+    return handle_get_purged_snaps_reply(
+      boost::static_pointer_cast<MMonGetPurgedSnapsReply>(m));
   case CEPH_MSG_OSD_OP:
     return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
   case MSG_OSD_PG_CREATE2:
@@ -1331,13 +1370,23 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
   }
 
   ceph::os::Transaction t;
-  co_await pg_shard_manager.store_maps(t, start, m);
+  purged_snaps::by_epoch_t new_purged;
+  co_await pg_shard_manager.store_maps(t, start, m, new_purged);
 
   // even if this map isn't from a mon, we may have satisfied our subscription
   monc->sub_got("osdmap", last);
 
   if (!superblock.is_maps_empty()) {
     pg_shard_manager.trim_maps(t, superblock);
+  }
+
+  if (superblock.purged_snaps_last == start - 1) {
+    co_await record_purged_snaps(t, new_purged);
+    superblock.purged_snaps_last = last;
+  } else {
+    // to be fetched from the monitor when booting
+    DEBUG("superblock purged_snaps_last is {}, not recording new purged_snaps",
+          superblock.purged_snaps_last);
   }
 
   superblock.insert_osdmap_epochs(first, last);
@@ -1357,6 +1406,210 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
 
   // TODO: write to superblock and commit the transaction
   co_await committed_osd_maps(start, last, m);
+}
+
+seastar::future<> OSD::normalize_purged_snaps()
+{
+  LOG_PREFIX(OSD::normalize_purged_snaps);
+  auto meta_coll = pg_shard_manager.get_meta_coll();
+  const auto rows = co_await meta_coll.load_purged_snaps();
+  // an empty update if the rows are already normalized
+  const auto upd = purged_snaps::merge_rows(rows, {});
+  if (upd.empty()) {
+    DEBUG("{} purged_snaps rows", rows.size());
+  } else {
+    INFO("{} purged_snaps rows: merging overlapping or adjacent ones "
+         "(removing {} rows, setting {})",
+         rows.size(), upd.rm_keys.size(), upd.set_rows.size());
+  }
+  ceph::os::Transaction t;
+  meta_coll.update_purged_snaps(t, upd);
+  co_await store.get_sharded_store().do_transaction(
+    meta_coll.collection(), std::move(t));
+}
+
+seastar::future<> OSD::record_purged_snaps(
+  ceph::os::Transaction& t,
+  const purged_snaps::by_epoch_t& new_purged)
+{
+  LOG_PREFIX(OSD::record_purged_snaps);
+  const auto added =
+    purged_snaps::normalize(purged_snaps::flatten(new_purged));
+  if (added.empty()) {
+    co_return;
+  }
+
+  // the rows on disk that the new intervals may merge with
+  auto meta_coll = pg_shard_manager.get_meta_coll();
+  std::vector<purged_snaps::interval_t> existing;
+  for (const auto& iv : added) {
+    std::ranges::copy(
+      co_await meta_coll.load_purged_snaps_touching(iv),
+      std::back_inserter(existing));
+  }
+  // a row may touch two consecutive new intervals
+  std::ranges::sort(existing);
+  const auto [dups_begin, dups_end] = std::ranges::unique(existing);
+  existing.erase(dups_begin, dups_end);
+
+  const auto upd = purged_snaps::merge_rows(existing, added);
+  DEBUG("epochs [{}, {}]: {} new purged intervals, touching {} rows: "
+        "removing {} rows, setting {}",
+        new_purged.begin()->first, new_purged.rbegin()->first,
+        added.size(), existing.size(), upd.rm_keys.size(),
+        upd.set_rows.size());
+  meta_coll.update_purged_snaps(t, upd);
+}
+
+seastar::future<> OSD::get_purged_snaps(bool retry)
+{
+  LOG_PREFIX(OSD::get_purged_snaps);
+  static constexpr std::chrono::seconds retry_interval{30};
+  // The monitor returns the epochs (start, last]. Only ask for the epochs
+  // we have maps for: the maps that follow are recorded as they arrive
+  // (see _handle_osd_map()).
+  const epoch_t start = superblock.purged_snaps_last;
+  if (purged_snaps_request && purged_snaps_request->start == start) {
+    if (!retry) {
+      DEBUG("already requested the purged snaps of epochs ({}, {}]",
+            start, purged_snaps_request->last);
+      co_return;
+    }
+    // re-send the same request: any reply then covers the same range
+  } else {
+    purged_snaps_request = purged_snaps_request_t{
+      start, superblock.current_epoch};
+  }
+  const auto [req_start, req_last] = *purged_snaps_request;
+  INFO("requesting the purged snaps of epochs ({}, {}]{}",
+       req_start, req_last, retry ? " (retrying)" : "");
+  purged_snaps_retry_timer.rearm(
+    seastar::lowres_clock::now() + retry_interval);
+  co_await monc->send_message(
+    crimson::make_message<MMonGetPurgedSnaps>(req_start, req_last));
+}
+
+seastar::future<> OSD::handle_get_purged_snaps_reply(
+  Ref<MMonGetPurgedSnapsReply> m)
+{
+  LOG_PREFIX(OSD::handle_get_purged_snaps_reply);
+  bool all_recorded = false;
+  {
+    const auto lock = co_await seastar::get_unique_lock(handle_osd_map_lock);
+    INFO("epochs ({}, {}], purged_snaps_last {}",
+         m->start, m->last, superblock.purged_snaps_last);
+    if (!pg_shard_manager.is_preboot() || !purged_snaps_request ||
+        m->start != purged_snaps_request->start ||
+        m->start != superblock.purged_snaps_last) {
+      DEBUG("not matching the pending request: ignored");
+      co_return;
+    }
+    // The reply covers the epochs (start, last] - but its 'last' may be
+    // beyond the requested range: the monitor may report the first epoch
+    // it did not return, or (if it found nothing) the requested 'last'.
+    // Capping at the current epoch would not do: maps may have advanced
+    // since the request was sent.
+    const epoch_t covered = std::min(m->last, purged_snaps_request->last);
+    // the rows of the epochs beyond 'covered' are fetched again later
+    m->purged_snaps.erase(
+      m->purged_snaps.upper_bound(covered), m->purged_snaps.end());
+
+    ceph::os::Transaction t;
+    co_await record_purged_snaps(t, m->purged_snaps);
+    superblock.purged_snaps_last = covered;
+    auto meta_coll = pg_shard_manager.get_meta_coll();
+    meta_coll.store_superblock(t, superblock);
+    co_await pg_shard_manager.set_superblock(superblock);
+    co_await store.get_sharded_store().do_transaction(
+      meta_coll.collection(), std::move(t));
+    // only now: if anything above fails, the retry timer re-sends the
+    // request (otherwise nothing would resume the boot)
+    purged_snaps_request.reset();
+    purged_snaps_retry_timer.cancel();
+    all_recorded = superblock.purged_snaps_last >= superblock.current_epoch;
+  }
+  // the monitor limits the size of each reply
+  co_await (all_recorded ? start_boot() : get_purged_snaps());
+}
+
+void OSD::maybe_scrub_purged_snaps()
+{
+  LOG_PREFIX(OSD::maybe_scrub_purged_snaps);
+  if (purged_snaps_scrub_running) {
+    return;
+  }
+  // as Classic: once per (randomized) scrub interval
+  const auto& conf = local_conf();
+  const utime_t last = superblock.last_purged_snaps_scrub;
+  // a seed that is stable for each scrub interval, but varies by OSD,
+  // to avoid any herds
+  std::mt19937 rng(whoami + last.sec());
+  const double r = (rng() % 1024) / 1024.0;
+  utime_t next = last;
+  next += conf->osd_scrub_min_interval *
+          (1.0 + conf->osd_scrub_interval_randomize_ratio * r);
+  if (next >= ceph_clock_now()) {
+    return;
+  }
+  DEBUG("last_purged_snaps_scrub {}, was due at {}", last, next);
+  gate.dispatch_in_background("purged_snaps_scrub", *this, [this] {
+    return scrub_purged_snaps();
+  });
+}
+
+seastar::future<> OSD::scrub_purged_snaps()
+{
+  LOG_PREFIX(OSD::scrub_purged_snaps);
+  const auto holder = purged_snaps_scrub_gate.try_hold();
+  if (!holder) {
+    DEBUG("stopping");
+    co_return;
+  }
+  if (purged_snaps_scrub_running) {
+    INFO("already running");
+    co_return;
+  }
+  purged_snaps_scrub_running = true;
+  const auto done = seastar::defer([this] {
+    purged_snaps_scrub_running = false;
+  });
+
+  clog->debug() << "purged_snaps scrub starts";
+  auto meta_coll = pg_shard_manager.get_meta_coll();
+  const purged_snaps::index_t purged{co_await meta_coll.load_purged_snaps()};
+  INFO("{} purged intervals", purged.size());
+  if (const auto requeued = co_await pg_shard_manager.scrub_purged_snaps(purged);
+      requeued > 0) {
+    clog->debug() << fmt::format("purged_snaps scrub found {} strays", requeued);
+  } else {
+    clog->debug() << "purged_snaps scrub ok";
+  }
+
+  if (pg_shard_manager.is_stopping()) {
+    co_return;
+  }
+  const auto lock = co_await seastar::get_unique_lock(handle_osd_map_lock);
+  // reported to the monitor by the next beacon
+  superblock.last_purged_snaps_scrub = ceph_clock_now();
+  ceph::os::Transaction t;
+  meta_coll.store_superblock(t, superblock);
+  co_await pg_shard_manager.set_superblock(superblock);
+  co_await store.get_sharded_store().do_transaction(
+    meta_coll.collection(), std::move(t));
+}
+
+seastar::future<> OSD::reset_purged_snaps_last()
+{
+  LOG_PREFIX(OSD::reset_purged_snaps_last);
+  const auto lock = co_await seastar::get_unique_lock(handle_osd_map_lock);
+  INFO("purged_snaps_last was {}", superblock.purged_snaps_last);
+  superblock.purged_snaps_last = 0;
+  ceph::os::Transaction t;
+  auto meta_coll = pg_shard_manager.get_meta_coll();
+  meta_coll.store_superblock(t, superblock);
+  co_await pg_shard_manager.set_superblock(superblock);
+  co_await store.get_sharded_store().do_transaction(
+    meta_coll.collection(), std::move(t));
 }
 
 seastar::future<> OSD::committed_osd_maps(
@@ -1715,6 +1968,7 @@ seastar::future<> OSD::restart()
 {
   beacon_timer.cancel();
   tick_timer.cancel();
+  purged_snaps_retry_timer.cancel();
   stats_timer.cancel();
   co_await pg_shard_manager.set_up_epoch(0);
   bind_epoch = osdmap->get_epoch();

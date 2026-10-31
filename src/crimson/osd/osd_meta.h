@@ -3,11 +3,14 @@
 
 #pragma once
 
+#include <functional>
 #include <map>
 #include <string>
+#include <vector>
 #include <seastar/core/future.hh>
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
+#include "osd/purged_snaps.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
@@ -66,7 +69,40 @@ public:
     ceph::os::Transaction&,
     LocalOSDMapRef lastmap,
     std::map<epoch_t, LocalOSDMapRef>&);
+
+  // --- the purged_snaps object (see osd/purged_snaps.h)
+
+  /// the object holding the purged snaps of all pools. Same as Classic's.
+  static ghobject_t purged_snaps_oid();
+
+  void touch_purged_snaps(ceph::os::Transaction& t);
+  void update_purged_snaps(
+    ceph::os::Transaction& t,
+    const ceph::osd::purged_snaps::row_update_t& upd);
+
+  /// all the purged_snaps rows, in key order. None if there is no object.
+  seastar::future<std::vector<ceph::osd::purged_snaps::interval_t>>
+  load_purged_snaps();
+
+  /**
+   * the rows of iv.pool that overlap or touch 'iv'
+   *
+   * Relies on the rows of the pool being disjoint and non-adjacent (as
+   * written by Crimson), i.e. on their key order (by 'end') being their
+   * 'begin' order as well.
+   */
+  seastar::future<std::vector<ceph::osd::purged_snaps::interval_t>>
+  load_purged_snaps_touching(const ceph::osd::purged_snaps::interval_t& iv);
+
 private:
+  /// the rows starting at the key 'from', as long as their keys
+  /// have 'prefix' and they are not 'is_past'
+  seastar::future<std::vector<ceph::osd::purged_snaps::interval_t>>
+  load_purged_rows(
+    std::string from,
+    std::string prefix,
+    std::function<bool(const ceph::osd::purged_snaps::interval_t&)> is_past);
+
   static ghobject_t osdmap_oid(epoch_t epoch);
   static ghobject_t inc_osdmap_oid(epoch_t epoch);
   static ghobject_t final_pool_info_oid(int64_t pool);
