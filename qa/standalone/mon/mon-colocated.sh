@@ -13,11 +13,11 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON_A="127.0.0.1:7139" # git grep '\<7139\>' : there must be only one
-    export CEPH_MON_B="127.0.0.2:7141" # git grep '\<7141\>' : there must be only one
-    export CEPH_MON_C="127.0.0.3:7142" # git grep '\<7142\>' : there must be only one
-    export CEPH_MON_D="127.0.0.1:7143" # git grep '\<7143\>' : there must be only one
-    export CEPH_MON_E="127.0.0.2:7144" # git grep '\<7144\>' : there must be only one
+    export CEPH_MON_A="127.0.0.1:7260" # git grep '\<7260\>' : there must be only one
+    export CEPH_MON_B="127.0.0.2:7261" # git grep '\<7261\>' : there must be only one
+    export CEPH_MON_C="127.0.0.3:7262" # git grep '\<7262\>' : there must be only one
+    export CEPH_MON_D="127.0.0.1:7263" # git grep '\<7263\>' : there must be only one
+    export CEPH_MON_E="127.0.0.2:7264" # git grep '\<7264\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
 
