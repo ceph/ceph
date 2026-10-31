@@ -15760,6 +15760,21 @@ void BlueStore::log_latency_fn_scrub(
 }
 
 #if defined(WITH_LTTNG)
+static bool txc_tracepoints_enabled()
+{
+#if defined(WITH_EVENTTRACE)
+  return true;
+#else
+  return tracepoint_enabled(bluestore, transaction_initial_state) ||
+    tracepoint_enabled(bluestore, transaction_initial_state_rocksdb) ||
+    tracepoint_enabled(bluestore, transaction_state_duration) ||
+    tracepoint_enabled(bluestore, transaction_kv_submit_latency) ||
+    tracepoint_enabled(bluestore, transaction_kv_sync_latency) ||
+    tracepoint_enabled(bluestore, transaction_commit_latency) ||
+    tracepoint_enabled(bluestore, transaction_total_duration);
+#endif
+}
+
 void BlueStore::BlueStoreThrottle::emit_initial_tracepoint(
   KeyValueDB &db,
   TransContext &txc,
@@ -15770,44 +15785,14 @@ void BlueStore::BlueStoreThrottle::emit_initial_tracepoint(
     pending_deferred_ios += txc.ios;
   }
 
+  if (!txc_tracepoints_enabled()) {
+    return;
+  }
+
   uint64_t started = 0;
   uint64_t completed = 0;
   if (should_trace(&started, &completed)) {
     txc.tracing = true;
-    uint64_t rocksdb_base_level,
-      rocksdb_estimate_pending_compaction_bytes,
-      rocksdb_cur_size_all_mem_tables,
-      rocksdb_compaction_pending,
-      rocksdb_mem_table_flush_pending,
-      rocksdb_num_running_compactions,
-      rocksdb_num_running_flushes,
-      rocksdb_actual_delayed_write_rate;
-    db.get_property(
-      "rocksdb.base-level",
-      &rocksdb_base_level);
-    db.get_property(
-      "rocksdb.estimate-pending-compaction-bytes",
-      &rocksdb_estimate_pending_compaction_bytes);
-    db.get_property(
-      "rocksdb.cur-size-all-mem-tables",
-      &rocksdb_cur_size_all_mem_tables);
-    db.get_property(
-      "rocksdb.compaction-pending",
-      &rocksdb_compaction_pending);
-    db.get_property(
-      "rocksdb.mem-table-flush-pending",
-      &rocksdb_mem_table_flush_pending);
-    db.get_property(
-      "rocksdb.num-running-compactions",
-      &rocksdb_num_running_compactions);
-    db.get_property(
-      "rocksdb.num-running-flushes",
-      &rocksdb_num_running_flushes);
-    db.get_property(
-      "rocksdb.actual-delayed-write-rate",
-      &rocksdb_actual_delayed_write_rate);
-
-  
     tracepoint(
       bluestore,
       transaction_initial_state,
@@ -15821,19 +15806,53 @@ void BlueStore::BlueStoreThrottle::emit_initial_tracepoint(
       completed,
       ceph::to_seconds<double>(mono_clock::now() - start_throttle_acquire));
 
-    tracepoint(
-      bluestore,
-      transaction_initial_state_rocksdb,
-      txc.osr->get_sequencer_id(),
-      (uint64_t)&txc,
-      rocksdb_base_level,
-      rocksdb_estimate_pending_compaction_bytes,
-      rocksdb_cur_size_all_mem_tables,
-      rocksdb_compaction_pending,
-      rocksdb_mem_table_flush_pending,
-      rocksdb_num_running_compactions,
-      rocksdb_num_running_flushes,
-      rocksdb_actual_delayed_write_rate);
+    if (tracepoint_enabled(bluestore, transaction_initial_state_rocksdb)) {
+      uint64_t rocksdb_base_level = 0,
+        rocksdb_estimate_pending_compaction_bytes = 0,
+        rocksdb_cur_size_all_mem_tables = 0,
+        rocksdb_compaction_pending = 0,
+        rocksdb_mem_table_flush_pending = 0,
+        rocksdb_num_running_compactions = 0,
+        rocksdb_num_running_flushes = 0,
+        rocksdb_actual_delayed_write_rate = 0;
+      db.get_property(
+        "rocksdb.base-level",
+        &rocksdb_base_level);
+      db.get_property(
+        "rocksdb.estimate-pending-compaction-bytes",
+        &rocksdb_estimate_pending_compaction_bytes);
+      db.get_property(
+        "rocksdb.cur-size-all-mem-tables",
+        &rocksdb_cur_size_all_mem_tables);
+      db.get_property(
+        "rocksdb.compaction-pending",
+        &rocksdb_compaction_pending);
+      db.get_property(
+        "rocksdb.mem-table-flush-pending",
+        &rocksdb_mem_table_flush_pending);
+      db.get_property(
+        "rocksdb.num-running-compactions",
+        &rocksdb_num_running_compactions);
+      db.get_property(
+        "rocksdb.num-running-flushes",
+        &rocksdb_num_running_flushes);
+      db.get_property(
+        "rocksdb.actual-delayed-write-rate",
+        &rocksdb_actual_delayed_write_rate);
+      do_tracepoint(
+        bluestore,
+        transaction_initial_state_rocksdb,
+        txc.osr->get_sequencer_id(),
+        (uint64_t)&txc,
+        rocksdb_base_level,
+        rocksdb_estimate_pending_compaction_bytes,
+        rocksdb_cur_size_all_mem_tables,
+        rocksdb_compaction_pending,
+        rocksdb_mem_table_flush_pending,
+        rocksdb_num_running_compactions,
+        rocksdb_num_running_flushes,
+        rocksdb_actual_delayed_write_rate);
+    }
   }
 }
 #endif
@@ -15905,7 +15924,9 @@ void BlueStore::BlueStoreThrottle::finish_start_transaction(
 void BlueStore::BlueStoreThrottle::complete_kv(TransContext &txc)
 {
   pending_kv_ios -= 1;
-  ios_completed_since_last_traced++;
+  if (txc_tracepoints_enabled()) {
+    ios_completed_since_last_traced++;
+  }
   if (txc.tracing) {
     tracepoint(
       bluestore,
