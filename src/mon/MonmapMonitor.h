@@ -31,6 +31,7 @@
 #include "MonitorDBStore.h"
 
 struct Subscription;
+class CrushWrapper;
 
 class MonmapMonitor : public PaxosService {
  public:

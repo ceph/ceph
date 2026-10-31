@@ -64,6 +64,7 @@
 #include "include/ceph_assert.h"
 #include "include/str_list.h"
 #include "include/str_map.h"
+#include "include/stringify.h"
 #include "include/compat.h"
 #include "include/utime_fmt.h"
 

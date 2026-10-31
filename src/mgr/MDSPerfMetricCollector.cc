@@ -3,6 +3,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/container_ios.h"
 
 #include "messages/MMgrReport.h"
 #include "mgr/MDSPerfMetricTypes.h"
