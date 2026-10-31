@@ -795,6 +795,12 @@ namespace rgw::sal {
       const DoutPrefixProvider* dpp,
       optional_yield y)
   {
+    // nothing is copied, so the data cannot be transformed
+    if (dp_factory && dp_factory->need_copy_data()) {
+      ldpp_dout(dpp, 0) << "ERROR: cannot copy " << get_name()
+                        << ": data transformation is not supported" << dendl;
+      return -ERR_NOT_IMPLEMENTED;
+    }
         return 0;
   }
 
