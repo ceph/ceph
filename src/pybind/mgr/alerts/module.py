@@ -7,11 +7,20 @@ from mgr_module import HandleCommandResult, MgrModule, Option
 from email.utils import formatdate, make_msgid
 from threading import Event
 from typing import Any, Optional, Dict, List, TYPE_CHECKING, Union
+from urllib.parse import urlparse
+import http.client
 import json
 import smtplib
 import ssl
 
 from .cli import AlertsCLICommand
+
+
+PAGERDUTY_SEVERITY_MAP = {
+    'HEALTH_ERR': 'critical',
+    'HEALTH_WARN': 'warning',
+    'HEALTH_OK': 'info',
+}
 
 
 class Alerts(MgrModule):
@@ -65,7 +74,34 @@ class Alerts(MgrModule):
             name='smtp_from_name',
             default='Ceph',
             desc='Email From: name',
-            runtime=True)
+            runtime=True),
+        # pagerduty
+        Option(
+            name='pagerduty_routing_key',
+            default='',
+            desc='PagerDuty Events API v2 integration/routing key',
+            runtime=True),
+        Option(
+            name='pagerduty_url',
+            default='https://events.pagerduty.com/v2/enqueue',
+            desc='PagerDuty Events API v2 endpoint URL',
+            runtime=True),
+        Option(
+            name='pagerduty_source',
+            default='',
+            desc='PagerDuty event source (defaults to cluster fsid)',
+            runtime=True),
+        Option(
+            name='pagerduty_component',
+            default='ceph',
+            desc='PagerDuty event component field',
+            runtime=True),
+        Option(
+            name='pagerduty_timeout',
+            type='secs',
+            default=10,
+            desc='Timeout for PagerDuty API requests',
+            runtime=True),
     ]
 
     # These are "native" Ceph options that this module cares about.
@@ -94,6 +130,11 @@ class Alerts(MgrModule):
             self.smtp_password = ''
             self.smtp_sender = ''
             self.smtp_from_name = ''
+            self.pagerduty_routing_key = ''
+            self.pagerduty_url = ''
+            self.pagerduty_source = ''
+            self.pagerduty_component = ''
+            self.pagerduty_timeout = 10
 
     def config_notify(self) -> None:
         """
@@ -154,6 +195,11 @@ class Alerts(MgrModule):
                     checks[code] = alert
         else:
             self.log.warning('Alert is not sent because smtp_host is not configured')
+        if self.pagerduty_routing_key:
+            r = self._send_alert_pagerduty(status, diff)
+            if r:
+                for code, alert in r.items():
+                    checks[code] = alert
         self.set_health_checks(checks)
 
     def serve(self) -> None:
@@ -260,4 +306,124 @@ class Alerts(MgrModule):
                 }
             }
         self.log.debug('Sent email to %s' % self.smtp_destination)
+        return None
+
+    # PagerDuty
+    def _pagerduty_get_source(self) -> str:
+        if self.pagerduty_source:
+            return self.pagerduty_source
+        try:
+            return self.get('mon_map')['fsid']
+        except Exception:
+            return 'ceph'
+
+    def _pagerduty_dedup_key(self, source: str, code: str) -> str:
+        if source:
+            return '{s}/{c}'.format(s=source, c=code)
+        return code
+
+    def _pagerduty_severity(self, alert: Dict[str, Any]) -> str:
+        return PAGERDUTY_SEVERITY_MAP.get(alert.get('severity', ''), 'warning')
+
+    def _pagerduty_enqueue(self, payload: Dict[str, Any]) -> None:
+        url = self.pagerduty_url or 'https://events.pagerduty.com/v2/enqueue'
+        parsed = urlparse(url)
+        host = parsed.netloc or parsed.path
+        path = parsed.path if parsed.netloc else '/v2/enqueue'
+        if not path:
+            path = '/v2/enqueue'
+        timeout = self.pagerduty_timeout or 10
+        conn: Union[http.client.HTTPSConnection, http.client.HTTPConnection]
+        if parsed.scheme == 'http':
+            conn = http.client.HTTPConnection(host, timeout=timeout)
+        else:
+            conn = http.client.HTTPSConnection(host, timeout=timeout)
+        try:
+            headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            }
+            conn.request('POST', path, json.dumps(payload), headers)
+            res = conn.getresponse()
+            data = res.read()
+            body = data.decode(errors='replace')
+            if res.status >= 300:
+                raise RuntimeError(
+                    'PagerDuty API returned {s}: {b}'.format(s=res.status, b=body))
+            self.log.debug('PagerDuty response: %s', body)
+        finally:
+            conn.close()
+
+    def _pagerduty_trigger(self,
+                           code: str,
+                           alert: Dict[str, Any],
+                           source: str) -> None:
+        payload = {
+            'routing_key': self.pagerduty_routing_key,
+            'event_action': 'trigger',
+            'dedup_key': self._pagerduty_dedup_key(source, code),
+            'payload': {
+                'summary': '[{code}] {msg}'.format(
+                    code=code,
+                    msg=alert.get('summary', {}).get('message', code)),
+                'source': source,
+                'severity': self._pagerduty_severity(alert),
+                'component': self.pagerduty_component or 'ceph',
+                'class': code,
+                'custom_details': {
+                    'code': code,
+                    'severity': alert.get('severity', ''),
+                    'count': alert.get('summary', {}).get('count', 0),
+                    'detail': [d.get('message', '')
+                               for d in alert.get('detail', [])],
+                },
+            },
+        }
+        self._pagerduty_enqueue(payload)
+
+    def _pagerduty_resolve(self, code: str, source: str) -> None:
+        payload = {
+            'routing_key': self.pagerduty_routing_key,
+            'event_action': 'resolve',
+            'dedup_key': self._pagerduty_dedup_key(source, code),
+        }
+        self._pagerduty_enqueue(payload)
+
+    def _send_alert_pagerduty(self,
+                              status: Dict[str, Any],
+                              diff: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        self.log.debug('_send_alert_pagerduty')
+        source = self._pagerduty_get_source()
+        # An empty diff means this is an on-demand `alerts send`; re-trigger
+        # every currently-active check so PagerDuty state matches the cluster.
+        if not diff:
+            diff = {'new': dict(status.get('checks', {}))}
+        errors: List[str] = []
+        for code, alert in diff.get('new', {}).items():
+            try:
+                self._pagerduty_trigger(code, alert, source)
+            except Exception as e:
+                self.log.exception('PagerDuty trigger failed for %s', code)
+                errors.append('trigger {c}: {e}'.format(c=code, e=e))
+        for code, alert in diff.get('updated', {}).items():
+            try:
+                self._pagerduty_trigger(code, alert, source)
+            except Exception as e:
+                self.log.exception('PagerDuty update failed for %s', code)
+                errors.append('update {c}: {e}'.format(c=code, e=e))
+        for code, alert in diff.get('cleared', {}).items():
+            try:
+                self._pagerduty_resolve(code, source)
+            except Exception as e:
+                self.log.exception('PagerDuty resolve failed for %s', code)
+                errors.append('resolve {c}: {e}'.format(c=code, e=e))
+        if errors:
+            return {
+                'ALERTS_PAGERDUTY_ERROR': {
+                    'severity': 'warning',
+                    'summary': 'unable to send one or more PagerDuty events',
+                    'count': len(errors),
+                    'detail': errors,
+                }
+            }
         return None
