@@ -20,6 +20,8 @@
 #include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "include/Context.h"
+#include "include/container_ios.h"
 #include "messages/MClientRequest.h"
 #include "messages/MMDSPeerRequest.h"
 
@@ -604,6 +606,11 @@ void MDRequestImpl::_dump_op_descriptor(ostream& os) const
     // FIXME
     os << "rejoin:" << reqid;
   }
+}
+
+MDPeerUpdate::~MDPeerUpdate() {
+  if (waiter)
+    waiter->complete(0);
 }
 
 void MDLockCache::attach_locks()

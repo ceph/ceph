@@ -17,6 +17,7 @@
 #include "crypto/qat/qat_crypto_plugin.h"
 
 #include "ceph_ver.h"
+#include "common/PluginRegistry.h"
 
 std::mutex QccCryptoPlugin::qat_init;
 

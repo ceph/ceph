@@ -42,6 +42,14 @@
 #include "include/ceph_fs.h"
 #include "include/common_fwd.h"
 #include "include/Context.h"
+#include "include/encoding_chrono.h"
+#include "include/encoding_flat_map.h"
+#include "include/encoding_flat_set.h"
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string_view.h"
+#include "include/encoding_vector.h"
 #include "include/expected.hpp"
 #include "include/types.h"
 #include "include/rados/rados_types.hpp"
@@ -62,7 +70,6 @@
 
 #include "mon/MonClient.h"
 
-#include "messages/MOSDOp.h"
 #include "msg/Dispatcher.h"
 
 #include "osd/OSDMap.h"
@@ -83,6 +90,9 @@ template<typename T>
 struct EnumerationContext;
 template<typename t>
 struct CB_EnumerateReply;
+
+namespace _mosdop { template<typename V> class MOSDOp; }
+class MOSDOpReply;
 
 inline constexpr std::size_t osdc_opvec_len = 2;
 using osdc_opvec = boost::container::small_vector<OSDOp, osdc_opvec_len>;
@@ -940,7 +950,7 @@ struct ObjectOperation {
     using ceph::encode;
     ceph::buffer::list bl;
     encode(attrs, bl);
-    add_xattr(CEPH_OSD_OP_RESETXATTRS, 0, bl.length());
+    add_xattr(CEPH_OSD_OP_RESETXATTRS, 0, bl);
   }
   void resetxattrs(const char *prefix, std::map<std::string, ceph::buffer::list>& attrs) {
     using ceph::encode;

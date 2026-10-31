@@ -63,7 +63,7 @@ endif(ENABLE_GIT_VERSION)
 #   <release name, e.g. 'luminous'>
 #   <release type: 'dev' for x.0.z, 'rc' or x.1.z, or 'stable' or x.2.z>
 # note that the release name is semi-redundant and must match CEPH_RELEASE_*
-# definitions in include/rados.h and common/ceph_strings.c.
+# definitions in include/ceph_release_numbers.h and common/ceph_strings.cc.
 file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/ceph_release CEPH_RELEASE_FILE)
 list(GET CEPH_RELEASE_FILE 0 CEPH_RELEASE)
 list(GET CEPH_RELEASE_FILE 1 CEPH_RELEASE_NAME)
@@ -405,6 +405,7 @@ set(mds_files)
 list(APPEND mds_files
   mds/MDSMap.cc
   mds/MDSAuthCaps.cc
+  mds/MDSPerfMetricTypes.cc
   mds/FSMap.cc
   mds/FSMapUser.cc
   mds/inode_backtrace.cc
@@ -426,7 +427,7 @@ endif()
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
 option(WITH_SYSTEM_FMT "build against system fmt" OFF)
 if(WITH_SYSTEM_FMT)
-  find_package(fmt 8.1.1...11.1.4 REQUIRED)
+  find_package(fmt 8.1.1...12.1.0 REQUIRED)
 endif()
 if (WITH_FMT_HEADER_ONLY)
   message(STATUS "Using fmt header-only.")
@@ -524,6 +525,9 @@ if(WITH_CRIMSON)
   endif()
   add_subdirectory(crimson)
   add_dependencies(crimson-osd erasure_code)
+else()
+  # Empty definition because non-Crimson libraries depend on it.
+  add_library(crimson::cflags INTERFACE IMPORTED)
 endif()
 
 include(CheckTypeSize)
@@ -539,6 +543,8 @@ set(libcommon_files
   include/filepath.cc
   include/invoke_date.cc
   include/object.cc
+  include/snapid.cc
+  include/sobject.cc
   include/client_t.cc
   include/errorcode32.cc
   include/shard_id.cc
@@ -549,16 +555,32 @@ set(libcommon_files
   common/frag.cc
   common/tracer.cc
   log/Log.cc
+  messages/MClientReply.cc
+  messages/MClientRequest.cc
+  messages/MClientSession.cc
+  messages/MClientSnap.cc
+  messages/MMonCommand.cc
+  messages/MMonCommandAck.cc
+  mon/DataStats.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
   mon/MonSub.cc
+  mon/MonitorDBStoreStats.cc
+  mon/mon_feature_t.cc
   mon/error_code.cc
+  mon/FeatureMap.cc
+  mon/PoolAvailability.cc
+  mon/ProgressEvent.cc
+  mon/ScrubResult.cc
   mgr/DaemonHealthMetric.cc
+  mgr/MetricTypes.cc
   mgr/MgrClient.cc
   mon/MgrMap.cc
   mon/PGMap.cc
   mgr/ServiceMap.cc
+  mgr/OSDPerfMetricTypes.cc
+  mgr/MDSPerfMetricTypes.cc
   osd/ECMsgTypes.cc
   osd/HitSet.cc
   osd/OSDMap.cc

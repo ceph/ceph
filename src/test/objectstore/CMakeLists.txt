@@ -48,7 +48,7 @@ add_executable(unittest_rocksdb_option
   )
 add_ceph_unittest(unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option
-  global os ${BLKID_LIBRARIES}
+  global kv os ${BLKID_LIBRARIES}
   RocksDB::RocksDB)
 
 if(WITH_EVENTTRACE)

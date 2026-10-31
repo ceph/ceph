@@ -11,6 +11,7 @@
 #include "common/errno.h"
 #include "common/TextTable.h"
 #include "include/stringify.h"
+#include "include/weightf_t.h"
 
 #define dout_subsys ceph_subsys_crush
 

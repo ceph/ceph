@@ -29,6 +29,7 @@ using std::string;
 
 using ceph::bufferlist;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, paxos, service_name, get_first_committed(), get_last_committed())
@@ -231,7 +232,7 @@ void PaxosService::propose_pending()
    *	   bufferlist, so we can then propose that as a value through
    *	   Paxos.
    */
-  MonitorDBStore::TransactionRef t = paxos.get_pending_transaction();
+  MonitorDBStoreTransactionRef t = paxos.get_pending_transaction();
 
   if (should_stash_full())
     encode_full(t);
@@ -287,13 +288,13 @@ bool PaxosService::should_stash_full()
 	  (get_last_committed() - latest_full > (version_t)g_conf()->paxos_stash_full_interval));
 }
 
-void PaxosService::put_version_full(MonitorDBStore::TransactionRef t,
+void PaxosService::put_version_full(MonitorDBStoreTransactionRef t,
 				    version_t ver, ceph::buffer::list& bl) {
   std::string key = mon.store->combine_strings(full_prefix_name, ver);
   t->put(get_service_name(), key, bl);
 }
 
-void PaxosService::put_version_latest_full(MonitorDBStore::TransactionRef t, version_t ver) {
+void PaxosService::put_version_latest_full(MonitorDBStoreTransactionRef t, version_t ver) {
   std::string key = mon.store->combine_strings(full_prefix_name, full_latest_name);
   t->put(get_service_name(), key, ver);
 }
@@ -476,7 +477,7 @@ void PaxosService::maybe_trim()
   trim_to = first_committed + to_remove;
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
-  MonitorDBStore::TransactionRef t = paxos.get_pending_transaction();
+  MonitorDBStoreTransactionRef t = paxos.get_pending_transaction();
   trim(t, first_committed, trim_to);
   put_first_committed(t, trim_to);
   cached_first_committed = trim_to;
@@ -487,7 +488,7 @@ void PaxosService::maybe_trim()
   paxos.trigger_propose();
 }
 
-void PaxosService::trim(MonitorDBStore::TransactionRef t,
+void PaxosService::trim(MonitorDBStoreTransactionRef t,
 			version_t from, version_t to)
 {
   dout(10) << __func__ << " from " << from << " to " << to << dendl;
@@ -519,7 +520,7 @@ void PaxosService::_create_pending() {
   create_pending();
 }
 
-void PaxosService::_encode_pending(MonitorDBStore::TransactionRef t) {
+void PaxosService::_encode_pending(MonitorDBStoreTransactionRef t) {
   dout(10) << __func__ << dendl;
   using ceph::encode;
 

@@ -17,10 +17,6 @@
 
 #include <boost/intrusive/list.hpp>
 #include <utility>
-#include <fmt/format.h>
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
 
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
@@ -940,18 +936,6 @@ struct RecoveryMessages {
   std::map<pg_shard_t, std::vector<PushReplyOp>> push_replies;
   ceph::os::Transaction t;
 };
-
-template <>
-struct fmt::formatter<ECCommon::read_request_t> : fmt::ostream_formatter {};
-
-template <>
-struct fmt::formatter<ECCommon::read_result_t> : fmt::ostream_formatter {};
-
-template <>
-struct fmt::formatter<ECCommon::ReadOp> : fmt::ostream_formatter {};
-
-template <>
-struct fmt::formatter<ECCommon::RMWPipeline::Op> : fmt::ostream_formatter {};
 
 
 template <class F, class G>

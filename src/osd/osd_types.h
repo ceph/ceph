@@ -31,11 +31,6 @@
 #include <tuple>
 #include <variant>
 
-#include <fmt/format.h>
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
-
 #ifdef WITH_CRIMSON
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #endif
@@ -47,6 +42,7 @@
 #include "include/common_fwd.h" // for CephContext
 #include "include/compat.h"
 #include "include/container_ios.h"
+#include "include/encoding_string.h"
 #include "include/errorcode32.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
@@ -768,10 +764,6 @@ public:
 WRITE_CLASS_ENCODER(coll_t)
 
 std::ostream& operator<<(std::ostream& out, const coll_t& c);
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<coll_t> : fmt::ostream_formatter {};
-#endif
 
 namespace std {
   template<> struct hash<coll_t> {
@@ -4253,7 +4245,6 @@ struct OSDOp {
   }
 };
 std::ostream& operator<<(std::ostream& out, const OSDOp& op);
-template <> struct fmt::formatter<OSDOp> : fmt::ostream_formatter {};
 
 struct pg_log_op_return_item_t {
   int32_t rval;
@@ -4282,16 +4273,6 @@ struct pg_log_op_return_item_t {
   friend std::ostream& operator<<(std::ostream& out, const pg_log_op_return_item_t& i);
 };
 WRITE_CLASS_ENCODER(pg_log_op_return_item_t)
-namespace fmt {
-template <>
-struct formatter<pg_log_op_return_item_t> {
-  constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-  template <typename FormatContext>
-  auto format(const pg_log_op_return_item_t& litm, FormatContext& ctx) const {
-    return fmt::format_to(ctx.out(), "r={}+{}b", litm.rval, litm.bl.length());
-  }
-};
-} // namespace fmt
 
 /**
  * pg_log_entry_t - single entry/event in pg log
@@ -4784,9 +4765,6 @@ struct pg_missing_item {
 };
 WRITE_CLASS_ENCODER_FEATURES(pg_missing_item)
 std::ostream& operator<<(std::ostream& out, const pg_missing_item &item);
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<pg_missing_item> : fmt::ostream_formatter {};
-#endif
 
 class pg_missing_const_i {
 public:

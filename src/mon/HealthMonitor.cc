@@ -20,12 +20,12 @@
 #include <time.h>
 #include <iterator>
 
-#include "crush/CrushWrapper.h"
-
+#include "include/byte_u_t.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 #include "include/stringify.h"
 
+#include "mon/DataStats.h"
 #include "mon/Monitor.h"
 #include "mon/MonMap.h"
 #include "mon/HealthMonitor.h"
@@ -39,8 +39,10 @@
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/prime.h"
+
 #include "crush/CrushWrapper.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
@@ -200,7 +202,7 @@ bool health_monitor_detail::health_checks_are_current(
   return rebuilt_health == current_health;
 }
 
-void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void HealthMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   ++version;
   dout(10) << " " << version << dendl;

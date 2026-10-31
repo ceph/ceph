@@ -15,6 +15,7 @@
 #include "acconfig.h"
 #include "ceph_ver.h"
 #include "common/ceph_context.h"
+#include "common/PluginRegistry.h"
 #include "CompressionPluginLZ4.h"
 
 // -----------------------------------------------------------------------------

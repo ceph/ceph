@@ -16,8 +16,12 @@
 #ifndef CEPH_MMONGETVERSION_H
 #define CEPH_MMONGETVERSION_H
 
+#include <ostream>
+#include <string>
+
 #include "msg/Message.h"
 
+#include "include/encoding_string.h"
 #include "include/types.h"
 
 /*

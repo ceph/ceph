@@ -20,6 +20,7 @@
 #include <string.h>
 #include <iostream>
 #include <memory>
+#include <semaphore>
 #include <time.h>
 #include <sys/mount.h>
 #include <boost/random/mersenne_twister.hpp>
@@ -244,6 +245,7 @@ class MultiLabelTest : public CheckedUmount {
   std::string get_data_dir() {
     return data_dir;
   }
+#ifdef WITH_BLUESTORE
   bool bdev_supports_label() {
     BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
     if (!bstore) return false;
@@ -251,6 +253,7 @@ class MultiLabelTest : public CheckedUmount {
     if (!bdev) return false;
     return bdev->supported_bdev_label();
   }
+#endif // WITH_BLUESTORE
   bool corrupt_disk_at(uint64_t position) {
     int fd = -1;
     auto close_fd = make_scope_guard([&] {
@@ -265,6 +268,7 @@ class MultiLabelTest : public CheckedUmount {
     if (r != 0) return false;
     return true;
   }
+#ifdef WITH_BLUESTORE
   bool read_bdev_label(bluestore_bdev_label_t* label, uint64_t position) {
     string bdev_path = get_data_dir() + "/block";
     int r = BlueStore::read_bdev_label_at_pos(g_ceph_context, bdev_path, position, label);
@@ -281,6 +285,7 @@ class MultiLabelTest : public CheckedUmount {
     bdev->close();
     return r;
   }
+#endif // WITH_BLUESTORE
   void online_expand_reserves_new_label(const char* allocator);
 };
 

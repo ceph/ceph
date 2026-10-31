@@ -24,7 +24,7 @@
 #include "include/ceph_features.h"
 #include "include/types.h"
 #include "mon/PaxosService.h"
-#include "mon/MonitorDBStore.h"
+#include "mon/MonitorDBStoreTransaction.h"
 
 class MAuth;
 class KeyRing;
@@ -171,8 +171,8 @@ private:
   bool check_health();
 
   // propose pending update to peers
-  void encode_pending(MonitorDBStore::TransactionRef t) override;
-  void encode_full(MonitorDBStore::TransactionRef t) override;
+  void encode_pending(MonitorDBStoreTransactionRef t) override;
+  void encode_full(MonitorDBStoreTransactionRef t) override;
   version_t get_trim_to() const override;
 
   bool preprocess_query(MonOpRequestRef op) override;  // true if processed.

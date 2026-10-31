@@ -31,6 +31,7 @@
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon)
@@ -108,7 +109,7 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   mon.monmap->decode(monmap_bl);
 
   if (mon.store->exists("mkfs", "monmap")) {
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
+    auto t(std::make_shared<MonitorDBStoreTransaction>());
     t->erase("mkfs", "monmap");
     mon.store->apply_transaction(t);
   }
@@ -142,7 +143,7 @@ void MonmapMonitor::create_pending()
   pending_map.removed_ranks.clear();
 }
 
-void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void MonmapMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   dout(10) << __func__ << " epoch " << pending_map.epoch << dendl;
 
@@ -245,7 +246,7 @@ void MonmapMonitor::on_active()
        single-threaded process and, truth be told, no one else relies on this
        thing besides us.
      */
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
+    auto t(std::make_shared<MonitorDBStoreTransaction>());
     t->put(Monitor::MONITOR_NAME, "joined", 1);
     mon.store->apply_transaction(t);
     mon.has_ever_joined = true;

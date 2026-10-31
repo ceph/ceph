@@ -51,6 +51,7 @@
 #include "QuarantineManager.h"
 
 #include "include/ceph_fs.h"
+#include "include/cephfs/encoding.h"
 #include "include/filepath.h"
 #include "include/util.h"
 
@@ -83,6 +84,8 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/MemoryModel.h"
+#include "common/OnFinisher.h"
 #include "common/perf_counters.h"
 #include "common/safe_io.h"
 
@@ -8028,7 +8031,7 @@ void MDCache::trim_client_leases()
   }
 }
 
-void MDCache::check_memory_usage()
+void MDCache::check_memory_usage(MemoryModel *upkeep_memory_stats, long baseline_heap)
 {
   MemoryModel::mem_snap_t memory_snap;
 
@@ -8050,7 +8053,7 @@ void MDCache::check_memory_usage()
 	   << " total " << memory_snap.get_total()
 	   << ", rss " << memory_snap.get_rss()
 	   << ", heap " << memory_snap.get_heap()
-	   << ", baseline " << upkeep_mem_baseline.get_heap()
+	   << ", baseline " << baseline_heap
 	   << ", " << num_inodes_with_caps << " / " << CInode::count() << " inodes have caps"
 	   << ", " << Capability::count() << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
@@ -14777,9 +14780,11 @@ void MDCache::upkeep_main(void)
   // create a "memory model" for the upkeep thread. The object maintains
   // the relevant '/proc' files open. We only check for a failure to open
   // the files once, and then we'll just keep the object around.
+  std::optional<MemoryModel> upkeep_memory_stats;
   upkeep_memory_stats = MemoryModel{};
 
   // get initial sample upon thread creation
+  long baseline_heap = 0;
   {
     auto maybe_base = upkeep_memory_stats->full_sample();
     if (!maybe_base) {
@@ -14790,7 +14795,7 @@ void MDCache::upkeep_main(void)
 	      << dendl;
       upkeep_memory_stats = std::nullopt;
     } else {
-      upkeep_mem_baseline = *maybe_base;
+      baseline_heap = maybe_base->get_heap();
     }
   }
 
@@ -14806,7 +14811,7 @@ void MDCache::upkeep_main(void)
         return;
       {
         MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_cache_memory);
-        check_memory_usage();
+        check_memory_usage(upkeep_memory_stats ? &*upkeep_memory_stats : nullptr, baseline_heap);
       }
       if (mds->is_cache_trimmable()) {
         dout(20) << "upkeep thread trimming cache; last trim " << since << " ago" << dendl;

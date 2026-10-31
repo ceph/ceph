@@ -14,6 +14,9 @@
  */
 
 #include "test/osd/PGBackendTestFixture.h"
+
+#include <iomanip>  // for std::setfill, std::setw
+
 #include "common/errno.h"
 #include "crush/CrushWrapper.h"
 #include "messages/MOSDECSubOpWrite.h"

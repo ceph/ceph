@@ -10,7 +10,6 @@
 #include <string>
 
 #include "include/buffer.h"
-#include "include/ceph_fs.h" // for struct ceph_file_layout
 #include "include/encoding.h"
 #include "include/hash.h" // for rjhash
 
@@ -18,6 +17,8 @@ namespace ceph {
   class Formatter;
 }
 
+struct ceph_dir_layout;
+struct ceph_file_layout;
 class JSONObj;
 
 // taken from linux kernel: include/uapi/linux/fcntl.h
@@ -88,9 +89,7 @@ struct hash<inodeno_t> {
 
 // file modes
 
-inline bool file_mode_is_readonly(int mode) {
-  return (mode & CEPH_FILE_MODE_WR) == 0;
-}
+bool file_mode_is_readonly(int mode);
 
 
 // dentries

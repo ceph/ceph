@@ -8,6 +8,8 @@
 #include <string>
 
 #include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 
 namespace ceph { class Formatter; }
 

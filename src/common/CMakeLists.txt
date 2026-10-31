@@ -15,7 +15,10 @@ add_library(common_texttable_obj OBJECT
 
 add_library(common_prioritycache_obj OBJECT
   PriorityCache.cc)
-target_link_libraries(common_prioritycache_obj legacy-option-headers)
+target_link_libraries(common_prioritycache_obj
+  PRIVATE
+    crimson::cflags
+    legacy-option-headers)
 
 if(WIN32)
   add_library(dlfcn_win32 STATIC win32/dlfcn.cc win32/errno.cc)
@@ -52,6 +55,8 @@ set(common_srcs
   TableFormatter.cc
   Thread.cc
   Throttle.cc
+  OrderedThrottle.cc
+  TokenBucketThrottle.cc
   Timer.cc
   TracepointProvider.cc
   TrackedOp.cc

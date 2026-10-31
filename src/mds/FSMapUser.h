@@ -21,7 +21,7 @@
 #include <string_view>
 
 #include "include/encoding.h"
-#include "include/cephfs/types.h" // for fs_cluster_id_t
+#include "include/cephfs/cluster_id.h" // for fs_cluster_id_t
 #include "include/types.h" // for epoch_t
 
 namespace ceph { class Formatter; }

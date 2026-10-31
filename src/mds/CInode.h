@@ -28,7 +28,6 @@
 #include "common/config.h"
 #include "common/ref.h" // for cref_t
 #include "include/compat.h"
-#include "include/Context.h" // for C_GatherBuilder
 #include "include/counter.h"
 #include "include/elist.h"
 #include "include/filepath.h"
@@ -53,6 +52,10 @@
 struct sr_t;
 class BatchOp;
 class Context;
+template <class ContextType, class ContextInstanceType> class C_GatherBase;
+template <class ContextType, class GatherType> class C_GatherBuilderBase;
+typedef C_GatherBase<Context, Context> C_Gather;
+typedef C_GatherBuilderBase<Context, C_Gather> C_GatherBuilder;
 class CDentry;
 class CDir;
 class CInode;
