@@ -34,6 +34,20 @@ target_link_libraries(unittest_mgr_daemonstate
   Python3::Python
 )
 
+# unittest_mgr_perfcounterinstance
+# Scaffolding (test_perfcounterinstance.cc and this target) cherry-picked from
+# PR https://github.com/ceph/ceph/pull/71237 as a temporary measure until it
+# merges; reconcile when the PR lands.
+add_executable(unittest_mgr_perfcounterinstance
+  test_perfcounterinstance.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PerfCounterInstance.cc
+)
+add_ceph_unittest(unittest_mgr_perfcounterinstance)
+target_link_libraries(unittest_mgr_perfcounterinstance
+  ceph-common
+  Python3::Python
+)
+
 # unittest_mgr_mgrcap
 add_executable(unittest_mgr_mgrcap
   test_mgrcap.cc
