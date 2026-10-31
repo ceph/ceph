@@ -10,6 +10,7 @@
 #include "global/global_context.h"
 #include "common/dout.h"
 
+#include <fcntl.h>
 #include <unistd.h>
 
 #include <limits.h>
@@ -242,6 +243,21 @@ TEST(Log, StderrPipeAtomic)
   ASSERT_EQ(pid, waited);
   ASSERT_NE(WIFEXITED(status), 0);
   ASSERT_EQ(WEXITSTATUS(status), 0);
+}
+
+TEST(Log, StderrPipeStaysBlocking)
+{
+  int pfd[2] = {-1, -1};
+  ASSERT_EQ(0, pipe(pfd));
+
+  SubsystemMap subs;
+  Log log(&subs);
+  log.set_stderr_fd(pfd[1]);
+  int flags = fcntl(pfd[1], F_GETFL);
+  ASSERT_NE(-1, flags);
+  ASSERT_EQ(0, flags & O_NONBLOCK);
+  close(pfd[0]);
+  close(pfd[1]);
 }
 
 TEST(Log, StderrPipeBig)
