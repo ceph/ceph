@@ -2460,6 +2460,111 @@ TEST_F(PeeringStateTest, Issue79706_test3) {
   EXPECT_TRUE(get_ps(acting_primary)->is_peered());
 }
 
+// ============================================================================
+// Test for a stale pwlc copy merged after proc_master_log() rolled the
+// primary's log and pwlc back. A peer that logged the rolled-back write still
+// holds the pre-rollback pwlc map with the same epoch and a higher toversion;
+// a notify it sends later in peering merges it back through
+// proc_replica_notify(), activate() stamps it as the definitive copy, and a
+// shard the range covers advances its last_update and log head past the
+// primary's head. The first write of the interval reuses
+// that version and asserts in PGLog::IndexedLog::add ("e.version.version >
+// head.version").
+// ============================================================================
+//
+// 3+2 pool; shards 1 and 2 are the nonprimary shards, 3 and 4 the parity shards.
+//  v1    full write
+//  v2    partial write to shards 0,3,4 skipping shards 1 and 2, committed on
+//        shards 0 and 4 only: shard 3 never received it. pwlc on shards 0 and
+//        4 covers shards 1 and 2 with (v1,v2).
+//  OSD 2 (shard 2) is replaced by OSD 9: new interval, peering
+//   GetInfo     the primary merges shard 4's pwlc (equal to its own) and
+//               apply_pwlc() advances its view of shard 1 to v2
+//   GetLog      shard 3 has the oldest last_update (v1) and is the
+//               authoritative log shard; v2 lists shard 3 as written, so it
+//               is divergent: the primary rolls its head back to v1 and its
+//               pwlc to (v1,v1); the pwlc epoch is left alone
+//   GetMissing  shard 4's log is requested (it is ahead of the new head);
+//               proc_replica_log() rewinds the primary's view of it and rolls
+//               the pwlc copy in that view back (the fix for #80360)
+//   WaitUpThru  a new map arrives; the stray on shard 4 notifies the primary
+//               again with its own info, whose pwlc copy still has the same
+//               epoch and toversion v2: proc_replica_notify() takes it, the
+//               primary's pwlc is (v1,v2) again and apply_pwlc() advances its
+//               view of shard 1 to v2
+//   activate()  stamps the map with the new epoch and sends it to shard 1
+//               with an empty catch-up log; shard 1 applies it and advances
+//               last_update and its log head to v2 while the primary's head
+//               is v1
+TEST_F(PeeringStateTest, PwlcStaleCopyAfterRollback) {
+  dout(0) << "== PwlcStaleCopyAfterRollback ==" << dendl;
+  create_ec_pool(3, 2);
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+  // v1: full write
+  eversion_t v1 = test_append_log_entry();
+  // v2: partial write to shards 0,3,4, committed on shards 0 and 4 only
+  eversion_t v2 = test_append_log_entry(ss({0, 3, 4}), ss({0, 4}));
+  EXPECT_EQ(get_ps(0)->get_info().last_update, v2);
+  EXPECT_EQ(get_ps(3)->get_info().last_update, v1);
+  EXPECT_EQ(get_ps(4)->get_info().last_update, v2);
+  {
+    auto pwlc = get_ps(0)->get_info().partial_writes_last_complete;
+    ASSERT_TRUE(pwlc.contains(shard_id_t(1)));
+    EXPECT_EQ(pwlc[shard_id_t(1)], std::pair(v1, v2));
+  }
+  // Replace OSD 2 (shard 2) with OSD 9. A real acting-set change comes with
+  // a new map, so publish one: the pwlc copies of the previous interval were
+  // stamped with its epoch.
+  modify_up_acting(2, 9);
+  new_epoch(true);
+  test_create_peering_state(9, 2);
+  test_init(9);
+  test_event_initialize(9);
+  // First round: GetInfo, GetLog (the rollback), GetMissing (the logs of the
+  // shards that are ahead are requested and rewound), then WaitUpThru
+  test_event_advance_map();
+  test_event_activate_map();
+  dispatch_all();
+  EXPECT_EQ(get_listener(acting_primary)->last_state_entered,
+            "Started/Primary/Peering/WaitUpThru");
+  EXPECT_EQ(get_ps(acting_primary)->get_pg_log().get_head(), v1);
+  // The map with up_thru. The stray on OSD 4 sees it first and notifies the
+  // primary again with its own info, whose pwlc copy still covers v2; the
+  // primary, still in WaitUpThru, merges it (proc_replica_notify). Then the
+  // primary sees the map and activates.
+  ASSERT_TRUE(new_epoch(false));
+  test_event_advance_map();
+  test_event_activate_map(4);
+  dispatch_peering_messages(4, acting_primary);
+  for (auto osd : up_acting) {
+    if (osd != 4) {
+      get_ps(osd)->activate_map(*(get_ctx(osd)));
+    }
+  }
+  dispatch_all();
+  test_peering();
+  // v2 was rolled back: the primary's log head is v1
+  auto primary = get_ps(acting_primary);
+  ASSERT_TRUE(primary->is_primary());
+  EXPECT_TRUE(primary->is_peered());
+  const eversion_t head = primary->get_pg_log().get_head();
+  EXPECT_EQ(head, v1);
+  // Once activated, no pwlc range may reach past the primary's log head
+  for (const auto &[shard, range] :
+       primary->get_info().partial_writes_last_complete) {
+    EXPECT_LE(range.second, head) << "shard " << shard << " pwlc " << range;
+  }
+  // Shard 1 must not have been advanced past the primary's head, neither
+  // on OSD 1 itself nor in the primary's view of it
+  EXPECT_LE(get_ps(1)->get_info().last_update, head) << get_ps(1)->get_info();
+  EXPECT_LE(get_ps(1)->get_pg_log().get_head(), head);
+  EXPECT_LE(primary->get_peer_info(pg_shard_t(1, shard_id_t(1))).last_update,
+            head);
+}
+
 
 // ============================================================================
 // PG Vulnerability-Window Perf Counter Tests
