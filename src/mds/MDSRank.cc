@@ -490,6 +490,11 @@ MDSRank::MDSRank(
       mdsmap_->get_metadata_pool(), objecter,
       new LambdaContext([this](int r) {
 	  std::lock_guard l(mds_lock);
+	  // As in MDSIOContextBase::complete(), ignore errors once
+	  // MDSRank::stopping is set. The purge queue finisher may run this
+	  // callback during shutdown while mds_lock is released.
+	  if (is_daemon_stopping())
+	    return;
 	  handle_write_error(r);
 	}
       )
@@ -835,7 +840,13 @@ void MDSRankDispatcher::shutdown()
   // shut down cache
   mdcache->shutdown();
 
+  // The purge queue's finisher runs MDS contexts that take mds_lock, so it
+  // must be joined without holding it, as with the rank finisher below.
+  // MDSRank::stopping is already set; MDSIOContextBase::complete() and the
+  // purge queue's on_error callback check it before handling the result.
+  mds_lock.unlock();
   purge_queue.shutdown();
+  mds_lock.lock();
 
   // shutdown metrics handler/updater -- this is ok even if it was not
   // inited.
