@@ -112,6 +112,12 @@
 %bcond_with system_qat
 %endif
 %bcond_with system_rdkafka
+# SPDK userspace NVMe driver, for crimson SeaStore and BlueStore
+%ifarch x86_64 aarch64
+%bcond_without spdk
+%else
+%bcond_with spdk
+%endif
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} || 0%{?openEuler}
 %global weak_deps 1
 %endif
@@ -422,6 +428,13 @@ BuildRequires:	python3-devel
 %endif
 %if 0%{?openruyi}
 BuildRequires:	ninja
+%endif
+# build deps of SPDK and its bundled DPDK
+%if 0%{with spdk} || 0%{with make_check}
+BuildRequires:	meson
+BuildRequires:	python3dist(jinja2)
+BuildRequires:	python3dist(pyelftools)
+BuildRequires:	python3dist(tabulate)
 %endif
 # distro-conditional make check dependencies
 %if 0%{with make_check}
@@ -1836,6 +1849,9 @@ cmake .. \
 %if 0%{with crimson}
     -DWITH_CRIMSON:BOOL=ON \
     -DWITH_JAEGER:BOOL=OFF \
+%endif
+%if 0%{with spdk}
+    -DWITH_SPDK:BOOL=ON \
 %endif
     -DWITH_GRAFANA:BOOL=ON \
 %if %{with sccache}

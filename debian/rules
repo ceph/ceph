@@ -29,6 +29,10 @@ endif
 ifneq ($(filter pkg.ceph.system-rdkafka,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_SYSTEM_RDKAFKA=ON
 endif
+# SPDK userspace NVMe driver, for crimson SeaStore and BlueStore
+ifneq ($(filter amd64 arm64,$(DEB_HOST_ARCH)),)
+  extraopts += -DWITH_SPDK=ON
+endif
 
 extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_JERASURE=ON
