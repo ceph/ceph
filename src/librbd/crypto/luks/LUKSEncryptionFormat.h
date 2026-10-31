@@ -40,7 +40,8 @@ public:
     return std::make_unique<LUKSEncryptionFormat>(m_passphrase);
   }
 
-  void format(ImageCtxT* ictx, Context* on_finish) override;
+  void format(ImageCtxT* ictx, bool insecure_fast_mode,
+              Context* on_finish) override;
   void load(ImageCtxT* ictx, std::string* detected_format_name,
             Context* on_finish) override;
 
@@ -58,7 +59,8 @@ public:
     return std::make_unique<LUKS1EncryptionFormat>(m_alg, m_passphrase);
   }
 
-  void format(ImageCtxT* ictx, Context* on_finish) override;
+  void format(ImageCtxT* ictx, bool insecure_fast_mode,
+              Context* on_finish) override;
   void load(ImageCtxT* ictx, std::string* detected_format_name,
             Context* on_finish) override;
 
@@ -77,7 +79,8 @@ public:
     return std::make_unique<LUKS2EncryptionFormat>(m_alg, m_passphrase);
   }
 
-  void format(ImageCtxT* ictx, Context* on_finish) override;
+  void format(ImageCtxT* ictx, bool insecure_fast_mode,
+              Context* on_finish) override;
   void load(ImageCtxT* ictx, std::string* detected_format_name,
             Context* on_finish) override;
 
