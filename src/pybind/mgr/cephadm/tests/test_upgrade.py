@@ -13,6 +13,7 @@ from cephadm.upgrade import (
     OkToUpgradeMonReport,
     UpgradeState,
     health_mute_flags_from_report,
+    _short_ceph_version,
     parse_ok_to_upgrade_mon_json,
     request_osd_ok_to_upgrade_report,
 )
@@ -3120,3 +3121,17 @@ def test_upgrade_nvmeof_not_safe_does_not_redeploy(
         daemon.name()
         not in cephadm_module.upgrade._nvmeof_disabled_daemons
     )
+
+
+def test_short_ceph_version():
+    # full ``ceph version ...`` output as reported by inspect-image
+    assert _short_ceph_version(
+        'ceph version 19.2.0 (hash) squid (stable)') == '19.2.0'
+    # already-short version strings pass through unchanged; the old
+    # ``target_version.split(' ')[2]`` mangled or rejected these
+    assert _short_ceph_version('19.2.0') == '19.2.0'
+    assert _short_ceph_version('19.2.0-5-gabc') == '19.2.0-5-gabc'
+    # unusable input
+    assert _short_ceph_version(None) is None
+    assert _short_ceph_version('') is None
+    assert _short_ceph_version('ceph version') is None
