@@ -279,6 +279,7 @@ public:
   void send_response() override;
 
   static bool is_formpost_req(req_state* const s);
+  static std::vector<std::string_view> get_supported_digest_algorithms();
 };
 
 
