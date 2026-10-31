@@ -806,7 +806,15 @@ bool CDentry::scrub(snapid_t next_seq)
 bool CDentry::check_corruption(bool load)
 {
   auto&& snapclient = dir->mdcache->mds->snapclient;
-  auto next_snap = snapclient->get_last_seq()+1;
+  /*
+   * Include prepared-but-uncommitted snaps: the rank doing mksnap/rmsnap
+   * notifies clients and the other ranks (snap_update) at the same time, so
+   * a client can flush caps with follows=<new snapid> to this rank before it
+   * has processed the snap_update. The snapserver does not agree until every
+   * rank has acked notify_prep, so the new snapid is already in our pending
+   * set by then.
+   */
+  auto next_snap = snapclient->get_last_pending_seq()+1;
   if (first > last || (snapclient->is_synced() && first > next_snap)) {
     if (load) {
       dout(1) << "loaded already corrupt dentry: " << *this << dendl;
