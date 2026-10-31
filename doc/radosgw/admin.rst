@@ -979,6 +979,8 @@ ID, as in the following example command:
    ``--rgw-usage-max-shards`` command-line parameter.
 
 
+.. _rgw-trim-usage:
+
 Trim Usage
 ----------
 
