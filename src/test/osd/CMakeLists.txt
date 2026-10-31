@@ -114,8 +114,9 @@ target_link_libraries(unittest_pglog osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBR
 # unittest_peeringstate
 add_executable(unittest_peeringstate
   TestPeeringState.cc
+  TestReplicaPeering.cc
   $<TARGET_OBJECTS:pg_backend_test_fixture>
-  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  $<TARGET_OBJECTS:peering_test_fixture>
   )
 add_ceph_unittest(unittest_peeringstate)
 target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
@@ -128,12 +129,14 @@ add_library(pg_backend_test_fixture OBJECT
 )
 target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
 
-# ec_peering_test_fixture: object library for ECPeeringTestFixture implementation
-add_library(ec_peering_test_fixture OBJECT
+# peering_test_fixture: object library for the peering test fixtures
+add_library(peering_test_fixture OBJECT
+  PeeringTestFixture.cc
   ECPeeringTestFixture.cc
+  ReplicaPeeringTestFixture.cc
   MockPeeringListener.cc
 )
-target_link_libraries(ec_peering_test_fixture osd os global GTest::GTest)
+target_link_libraries(peering_test_fixture osd os global GTest::GTest)
 
 # object_tracker: object library for ObjectTracker implementation
 add_library(object_tracker OBJECT
@@ -165,7 +168,7 @@ add_executable(unittest_ecfailover_with_peering
   $<TARGET_OBJECTS:unit-main>
   $<TARGET_OBJECTS:store_test_fixture>
   $<TARGET_OBJECTS:pg_backend_test_fixture>
-  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  $<TARGET_OBJECTS:peering_test_fixture>
   )
 add_ceph_unittest(unittest_ecfailover_with_peering)
 target_link_libraries(unittest_ecfailover_with_peering osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
@@ -182,7 +185,7 @@ add_executable(unittest_ec_with_crush
   TestECWithCRUSH.cc
   $<TARGET_OBJECTS:unit-main>
   $<TARGET_OBJECTS:ec_crush_test_fixture>
-  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  $<TARGET_OBJECTS:peering_test_fixture>
   $<TARGET_OBJECTS:pg_backend_test_fixture>
   )
 add_ceph_unittest(unittest_ec_with_crush)
