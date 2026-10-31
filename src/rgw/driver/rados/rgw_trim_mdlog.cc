@@ -724,7 +724,7 @@ bool sanity_check_endpoints(const DoutPrefixProvider *dpp, rgw::sal::RadosStore*
   auto current = store->svc()->mdlog->get_period_history()->get_current();
   const auto& period = current.get_period();
   for (const auto& [_, zonegroup] : period.get_map().zonegroups) {
-    if (zonegroup.endpoints.empty()) {
+    if (rgw::get_zonegroup_system_endpoints(zonegroup, zonegroup.endpoints).empty()) {
       ldpp_dout(dpp, -1)
 	<< __PRETTY_FUNCTION__ << ":" << __LINE__
 	<< " WARNING: Cluster is is misconfigured! "

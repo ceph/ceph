@@ -271,6 +271,9 @@ struct RGWZoneGroup {
   std::string name;
   std::string api_name;
   std::list<std::string> endpoints;
+  // system traffic only; endpoints stays the client redirect target.
+  // see rgw::get_zonegroup_system_endpoints()
+  std::list<std::string> admin_endpoints;
   bool is_master = false;
 
   rgw_zone_id master_zone;
@@ -295,6 +298,8 @@ struct RGWZoneGroup {
 20:08 < yehudasa> yeah, probably
 20:08 < _robbat21irssi> s3, s3website, swift, swith_auth, swift_website
 */
+  // TODO: not encoded or used. admin_endpoints covers the split between
+  // client and system endpoints until per-API maps exist.
   std::map<std::string, std::list<std::string> > api_hostname_map;
   std::map<std::string, std::list<std::string> > api_endpoints_map;
 
@@ -321,7 +326,7 @@ struct RGWZoneGroup {
   bool is_master_zonegroup() const { return is_master;}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(7, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
     encode(is_master, bl);
@@ -343,11 +348,12 @@ struct RGWZoneGroup {
     encode(realm_id, bl);
     encode(sync_policy, bl);
     encode(enabled_features, bl);
+    encode(admin_endpoints, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(6, bl);
+    DECODE_START(7, bl);
     decode(name, bl);
     decode(api_name, bl);
     decode(is_master, bl);
@@ -380,6 +386,9 @@ struct RGWZoneGroup {
     }
     if (struct_v >= 6) {
       decode(enabled_features, bl);
+    }
+    if (struct_v >= 7) {
+      decode(admin_endpoints, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -812,6 +821,17 @@ int set_default_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
 
 /// Return an endpoint from the zonegroup or its master zone.
 std::string get_zonegroup_endpoint(const RGWZoneGroup& info);
+
+/// Return the endpoints for system traffic to the zonegroup (period push,
+/// admin and inter-zonegroup requests, not client redirects): admin_endpoints
+/// if set, otherwise the legacy_endpoints the caller used before
+/// admin_endpoints existed. The legacy fallback is deprecated.
+const std::list<std::string>& get_zonegroup_system_endpoints(
+    const RGWZoneGroup& info, const std::list<std::string>& legacy_endpoints);
+
+/// True when system traffic to the zonegroup still uses the deprecated
+/// legacy endpoints because admin_endpoints is unset.
+bool uses_legacy_system_endpoints(const RGWZoneGroup& info);
 
 /// Return the zonegroup with the given id, which may be the local zonegroup or
 /// any other zonegroup of the given period. Returns null if the id matches
