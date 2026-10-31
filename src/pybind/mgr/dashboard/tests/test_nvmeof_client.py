@@ -696,3 +696,115 @@ class TestNVMeoFClientInit:
         with pytest.raises(DashboardException) as exc_info:
             NVMeoFClient(server_address='10.0.0.99')
         assert exc_info.value.code == 'server_address_not_found'
+
+
+class TestNVMeoFClientFailover:
+
+    _GW1_ADDR = TestNVMeoFClientInit._GW1_ADDR
+    _GW2_ADDR = TestNVMeoFClientInit._GW2_ADDR
+    _GW2_DAEMON = TestNVMeoFClientInit._GW2_DAEMON
+    _SERVICE_INFO = TestNVMeoFClientInit._SERVICE_INFO
+    _GATEWAYS_CONFIG = TestNVMeoFClientInit._GATEWAYS_CONFIG
+
+    class FakeRpcError(Exception):
+        def __init__(self, code):
+            super().__init__(str(code))
+            self._code = code
+
+        def code(self):
+            return self._code
+
+        def details(self):
+            return 'details'
+
+    @pytest.fixture
+    def failover_env(self):
+        stubs = {}
+
+        def make_channel(addr):
+            return addr
+
+        def make_stub(channel):
+            stubs.setdefault(channel, MagicMock())
+            return stubs[channel]
+
+        with patch('dashboard.services.nvmeof_client.NvmeofGatewaysConfig.get_service_info',
+                   return_value=self._SERVICE_INFO), \
+             patch('dashboard.services.nvmeof_client.NvmeofGatewaysConfig.get_gateways_config',
+                   return_value=self._GATEWAYS_CONFIG), \
+             patch('dashboard.services.nvmeof_client.is_mtls_enabled', return_value=False), \
+             patch('dashboard.services.nvmeof_client.grpc') as mock_grpc, \
+             patch('dashboard.services.nvmeof_client.pb2_grpc') as mock_pb2_grpc:
+            mock_grpc.RpcError = self.FakeRpcError
+            mock_grpc.FutureTimeoutError = TimeoutError
+            mock_grpc.StatusCode.UNAVAILABLE = 'UNAVAILABLE'
+            mock_grpc.insecure_channel.side_effect = make_channel
+            mock_pb2_grpc.GatewayStub.side_effect = make_stub
+            yield stubs
+
+    def test_failover_to_next_gateway(self, failover_env):
+        client = NVMeoFClient()
+        failover_env[self._GW1_ADDR].get_gateway_info.side_effect = \
+            self.FakeRpcError('UNAVAILABLE')
+        failover_env.setdefault(self._GW2_ADDR, MagicMock()).get_gateway_info.return_value = 'ok'
+        assert client.stub.get_gateway_info('req') == 'ok'
+        assert client.gateway_addr == self._GW2_ADDR
+        assert client.daemon_name == self._GW2_DAEMON
+        # the new gateway is reused for subsequent calls
+        client.stub.get_gateway_info('req')
+        assert failover_env[self._GW1_ADDR].get_gateway_info.call_count == 1
+
+    def test_no_failover_on_other_errors(self, failover_env):
+        client = NVMeoFClient()
+        failover_env[self._GW1_ADDR].get_gateway_info.side_effect = \
+            self.FakeRpcError('INVALID_ARGUMENT')
+        with pytest.raises(self.FakeRpcError):
+            client.stub.get_gateway_info('req')
+        assert client.gateway_addr == self._GW1_ADDR
+
+    def test_all_gateways_unavailable_raises(self, failover_env):
+        client = NVMeoFClient()
+        failover_env[self._GW1_ADDR].get_gateway_info.side_effect = \
+            self.FakeRpcError('UNAVAILABLE')
+        failover_env.setdefault(self._GW2_ADDR, MagicMock()).get_gateway_info.side_effect = \
+            self.FakeRpcError('UNAVAILABLE')
+        with pytest.raises(self.FakeRpcError):
+            client.stub.get_gateway_info('req')
+        assert client.gateway_addr == self._GW1_ADDR
+
+    def test_failover_when_gateway_connect_times_out(self, failover_env):
+        # a stopped host drops packets: no RPC error, the connection just never
+        # completes, so the client must give up on it and use the next gateway
+        client = NVMeoFClient()
+        failover_env.setdefault(self._GW2_ADDR, MagicMock()).get_gateway_info.return_value = 'ok'
+
+        def ready_future(channel):
+            fut = MagicMock()
+            if channel == self._GW1_ADDR:
+                fut.result.side_effect = TimeoutError()
+            return fut
+
+        with patch('dashboard.services.nvmeof_client.grpc.channel_ready_future',
+                   side_effect=ready_future):
+            assert client.stub.get_gateway_info('req') == 'ok'
+        failover_env[self._GW1_ADDR].get_gateway_info.assert_not_called()
+        assert client.gateway_addr == self._GW2_ADDR
+
+    def test_all_gateways_unreachable_raises(self, failover_env):
+        client = NVMeoFClient()
+        fut = MagicMock()
+        fut.result.side_effect = TimeoutError()
+        with patch('dashboard.services.nvmeof_client.grpc.channel_ready_future',
+                   return_value=fut):
+            with pytest.raises(DashboardException) as exc_info:
+                client.stub.get_gateway_info('req')
+        assert exc_info.value.code == 'gateway_unavailable'
+        assert client.gateway_addr == self._GW1_ADDR
+
+    def test_no_failover_with_server_address(self, failover_env):
+        client = NVMeoFClient(server_address='10.0.0.1')
+        failover_env[self._GW1_ADDR].get_gateway_info.side_effect = \
+            self.FakeRpcError('UNAVAILABLE')
+        with pytest.raises(self.FakeRpcError):
+            client.stub.get_gateway_info('req')
+        assert self._GW2_ADDR not in failover_env

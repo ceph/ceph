@@ -270,6 +270,26 @@ class TestNvmeofTopCollector:
         assert collector.health.rc == -errno.ECONNREFUSED
         assert collector.health.msg == 'RPC endpoint unavailable at 192.168.1.1:5500'
 
+    def test_initialise_uses_failover_client_for_group(self, collector):
+        pinned = MagicMock()
+        collector.clients = {('mygroup', '10.0.0.1:5500'): pinned}
+        collector.client = None
+        with patch('dashboard.services.nvmeof_top_cli.NVMeoFClient') as mock_client:
+            collector.initialise(collector.tool)
+        # group wide client (not pinned to one gateway) so it can fail over
+        mock_client.assert_called_once_with('mygroup')
+        assert collector.client is mock_client.return_value
+
+    def test_initialise_server_address_stays_pinned(self, collector):
+        pinned = MagicMock()
+        collector.clients = {('mygroup', '10.0.0.1:5500'): pinned}
+        collector.client = None
+        collector.tool.args = {'gw_group': '', 'server_address': '10.0.0.1'}
+        with patch('dashboard.services.nvmeof_top_cli.NVMeoFClient') as mock_client:
+            collector.initialise(collector.tool)
+        mock_client.assert_not_called()
+        assert collector.client is pinned
+
     def test_set_gateways_no_services(self, collector):
         collector.service = ''
         collector.group = ''
