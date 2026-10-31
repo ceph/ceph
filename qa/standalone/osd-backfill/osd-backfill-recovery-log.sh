@@ -100,7 +100,7 @@ function _common_test() {
     done
 
     newprimary=$(wait_for_pg_data '.pg_stats[0].up_primary') || return 1
-    kill_daemons
+    kill_daemons $dir
 
     ERRORS=0
     _objectstore_tool_nodown $dir $newprimary --no-mon-config --pgid 1.0 --op log | tee $dir/result.log
