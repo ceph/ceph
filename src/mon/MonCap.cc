@@ -725,18 +725,20 @@ bool MonCap::merge(MonCap newcap)
   auto& ng = newcap.grants[0];
 
   for (auto& g : grants) {
-    /* TODO: check case where cap is "allow rw *". */
-
-    if (g.fs_name == ng.fs_name) {
-      if (g.allow == ng.allow) {
-	// no update required; maintain idempotency.
-	return false;
-      } else {
-	// cap for given fs name is present, let's update it.
-	g.allow = ng.allow;
-	return true;
-      }
+    // only a plain grant ("allow <rwx> [fsname=<fs>]") can be the grant
+    // that "fs authorize" generated; leave service, profile, command and
+    // network grants as they are.
+    if (!g.service.empty() || !g.profile.empty() || !g.command.empty() ||
+        !g.network.empty() || g.fs_name != ng.fs_name) {
+      continue;
     }
+    if ((g.allow & ng.allow) == ng.allow) {
+      // no update required (e.g. "allow *"); maintain idempotency.
+      return false;
+    }
+    // cap for given fs name is present; add to it, never take away.
+    g.allow = g.allow | ng.allow;
+    return true;
   }
 
   // cap for given fs name is absent, let's add a new cap for it.
@@ -746,17 +748,9 @@ bool MonCap::merge(MonCap newcap)
 
 string MonCapGrant::to_string()
 {
-  string str = "allow ";
-
-  if (allow & MON_CAP_R) {
-      str+= "r";
-  } else if (allow & MON_CAP_W) {
-      str+= "w";
-  } else if (allow & MON_CAP_X) {
-      str+= "x";
-  } else if (allow == MON_CAP_ANY) {
-      str+= "*";
-  }
+  // render every field the parser accepts, so that merging a cap does not
+  // drop or change the grants it already had.
+  string str = stringify(*this);
 
   if (not fs_name.empty()) {
     str += " fsname=" + fs_name;

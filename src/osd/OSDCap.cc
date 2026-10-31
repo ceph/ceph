@@ -18,6 +18,7 @@
 #include <boost/phoenix/operator.hpp>
 #include <boost/phoenix.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <sstream>
 
 #include "OSDCap.h"
 #include "common/config.h"
@@ -555,7 +556,16 @@ bool OSDCap::merge(OSDCap newcap)
   auto ng = newcap.grants[0];
 
   for (auto& g : grants) {
-    /* TODO: check case where cap is "allow rw tag cephfs *". */
+    // only a grant that matches exactly what the new grant matches can be
+    // updated; leave grants that also name a pool, namespace, object prefix,
+    // class, profile or network as they are.
+    if (g.profile.is_valid() || !g.network.empty() ||
+	!g.spec.class_name.empty() ||
+	g.match.pool_namespace.pool_name != ng.match.pool_namespace.pool_name ||
+	g.match.pool_namespace.nspace != ng.match.pool_namespace.nspace ||
+	g.match.object_prefix != ng.match.object_prefix) {
+      continue;
+    }
 
     if (g.match.pool_tag.application == ng.match.pool_tag.application and
 	g.match.pool_tag.key == ng.match.pool_tag.key and
@@ -579,27 +589,82 @@ bool OSDCap::merge(OSDCap newcap)
   return true;
 }
 
+// quote a string for the cap grammar unless it is an unquoted word; the
+// grammar has no escapes, so use whichever quote character it lacks.
+static string cap_quote(const string& s)
+{
+  if (!s.empty() &&
+      s.find_first_not_of("abcdefghijklmnopqrstuvwxyz"
+			  "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+			  "0123456789_./-") == string::npos) {
+    return s;
+  }
+  if (s.find('"') == string::npos) {
+    return "\"" + s + "\"";
+  }
+  return "'" + s + "'";
+}
+
+static string cap_quote_wildcard(const string& s)
+{
+  return s == "*" ? s : cap_quote(s);
+}
+
+// " [pool <p>] [namespace <ns>]"; a trailing '*' on the namespace is the
+// prefix wildcard and stays outside the quotes.
+static string pool_namespace_to_string(const OSDCapPoolNamespace& pns)
+{
+  string str;
+  if (!pns.pool_name.empty()) {
+    str += " pool " + cap_quote(pns.pool_name);
+  }
+  if (pns.nspace) {
+    string ns = *pns.nspace;
+    bool wildcard = !ns.empty() && ns.back() == '*';
+    if (wildcard) {
+      ns.pop_back();
+    }
+    str += " namespace " + (ns.empty() ? string("\"\"") : cap_quote(ns));
+    if (wildcard) {
+      str += "*";
+    }
+  }
+  return str;
+}
+
 string OSDCapGrant::to_string() {
-  string str = "allow ";
+  // render every field the parser accepts, so that merging a cap does not
+  // drop or change the grants it already had.
+  string str;
 
-  if (spec.allow & OSD_CAP_R)
-    str += "r";
-  if (spec.allow & OSD_CAP_W)
-    str += "w";
+  if (profile.is_valid()) {
+    str = "profile " + cap_quote(profile.name) +
+	  pool_namespace_to_string(profile.pool_namespace);
+  } else {
+    string m = pool_namespace_to_string(match.pool_namespace);
+    if (!match.pool_tag.application.empty()) {
+      m += " tag " + cap_quote(match.pool_tag.application) + " " +
+	   cap_quote_wildcard(match.pool_tag.key) + "=" +
+	   cap_quote_wildcard(match.pool_tag.value);
+    }
+    if (!match.object_prefix.empty()) {
+      m += " object_prefix " + cap_quote(match.object_prefix);
+    }
 
-  if ((spec.allow & OSD_CAP_X) == OSD_CAP_X)
-    str += "x";
-  else {
-    if (spec.allow & OSD_CAP_CLS_R)
-      str += " class-read";
-    else if (spec.allow & OSD_CAP_CLS_W)
-      str += " class-write";
+    std::ostringstream s;
+    s << spec;
+    if (spec.class_name.empty()) {
+      str = "allow " + s.str() + m;
+    } else {
+      // "allow class <name> <match>" would read the match as the method
+      // name, so put the match first.
+      str = "allow" + m + " " + s.str();
+    }
   }
 
-  if (not (match.pool_tag.application.empty() and match.pool_tag.key.empty()
-	   and match.pool_tag.value.empty()))
-    str += " tag " + match.pool_tag.application + " " + \
-	   match.pool_tag.key + "=" + match.pool_tag.value;
+  if (!network.empty()) {
+    str += " network " + network;
+  }
 
   return str;
 }
