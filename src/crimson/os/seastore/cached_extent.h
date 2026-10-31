@@ -488,7 +488,7 @@ public:
     return true;
   }
 
-  void rewrite(Transaction &t, CachedExtent &e, extent_len_t o) {
+  void rewrite(Transaction &t, CachedExtent &e, extent_len_t o, bool may_modify) {
     assert(is_initial_pending());
     assert(e.is_valid());
     if (e.is_stable()) {
@@ -502,7 +502,9 @@ public:
       get_length(),
       get_bptr().c_str());
     set_modify_time(e.get_modify_time());
-    set_last_committed_crc(e.get_last_committed_crc());
+    if (!may_modify) {
+      set_last_committed_crc(e.get_last_committed_crc());
+    }
     on_rewrite(t, e, o);
   }
 

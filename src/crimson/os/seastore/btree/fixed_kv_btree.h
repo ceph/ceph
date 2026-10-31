@@ -1825,7 +1825,7 @@ public:
             c.cache.get_epm().wait_background());
         }
       }
-      n_fixed_kv_extent->rewrite(c.trans, fixed_kv_extent, 0);
+      n_fixed_kv_extent->rewrite(c.trans, fixed_kv_extent, 0, false);
 
       SUBTRACET(
         seastore_fixedkv_tree,
