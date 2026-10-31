@@ -63,15 +63,15 @@ If you serve more than one CephFS file system from your Ceph cluster, use the op
 
     ceph-fuse --id foo --client_fs mycephfs2 /mnt/mycephfs2
 
-To enable LazyIO globally for all regular file opens, use
+To enable LazyIO for every file opened on the mount, pass
 ``--client_force_lazyio``::
 
     ceph-fuse --id foo --client_force_lazyio /mnt/mycephfs
 
 .. warning::
-   LazyIO relaxes CephFS cache coherency guarantees.  Only use it for
-   specialized workloads (such as HPC) that manage their own data
-   consistency.  See :doc:`/cephfs/lazyio` for details.
+   LazyIO relaxes CephFS cache coherency. Use it only for HPC and similar
+   specialized workloads that manage their own data consistency. See
+   :doc:`/cephfs/lazyio`.
 
 You may also add a ``client_fs`` setting to your ``ceph.conf``. Alternatively, the option
 ``--client_mds_namespace`` is supported for backward compatibility.

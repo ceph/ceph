@@ -38,6 +38,7 @@ Client Config Reference
 .. confval:: client_caps_release_delay
 .. confval:: client_debug_force_sync_read
 .. confval:: client_dirsize_rbytes
+.. confval:: client_force_lazyio
 .. confval:: client_fscrypt_as
 .. confval:: client_fscrypt_dummy_encryption
 .. confval:: client_max_inline_size
@@ -62,7 +63,6 @@ Client Config Reference
 .. confval:: client_snapdir
 .. confval:: client_tick_interval
 .. confval:: client_use_random_mds
-.. confval:: client_force_lazyio
 .. confval:: fuse_default_permissions
 .. confval:: fuse_max_write
 .. confval:: fuse_disable_pagecache

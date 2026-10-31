@@ -11,12 +11,12 @@ when they are on different hosts as when they are on the same host.
 However, there are a few places where CephFS diverges from strict
 POSIX semantics for various reasons:
 
-- **LazyIO:** When the ``lazyio`` (kernel) or ``client_force_lazyio``
-  (ceph-fuse / libcephfs) option is enabled, the client relaxes cache
-  coherency.  Buffered I/O via the page cache is permitted even when
-  multiple clients hold the file open for write, and applications may
-  read stale data.  This is an opt-in relaxation intended for HPC and
-  similar specialized workloads.  See :doc:`/cephfs/lazyio`.
+- With LazyIO, which the kernel ``lazyio`` mount option or the ceph-fuse and
+  libcephfs ``client_force_lazyio`` option enables, clients relax cache
+  coherency. A client keeps caching and buffering a file's data even while
+  clients on other hosts have the file open for writing, so applications
+  might read stale data. This opt-in relaxation is intended for HPC and
+  similar specialized workloads. See :doc:`/cephfs/lazyio`.
 
 - If a client is writing to a file and fails, its writes are not
   necessarily atomic. That is, the client may call write(2) on a file

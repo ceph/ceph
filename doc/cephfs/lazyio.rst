@@ -3,18 +3,20 @@ LazyIO
 ======
 
 .. warning::
-   LazyIO relaxes CephFS cache coherency guarantees.  Applications may read
-   stale data, and overlapping writes from different clients may produce
-   undefined behavior or silent data corruption.  Do not use this feature
-   unless you fully understand its consequences and are handling your own
-   data consistency — for example, via explicit
-   ``lazyio_propagate()`` / ``lazyio_synchronize()`` calls and
-   application-level barriers.  This feature is intended only for HPC and
-   similar specialized workloads that coordinate I/O externally.
+   LazyIO relaxes CephFS cache coherency. Applications might read stale data,
+   and overlapping writes from different clients can produce undefined
+   results, including silent data corruption. Use LazyIO only if you
+   understand these consequences and your application manages its own data
+   consistency, for example with ``lazyio_propagate()``,
+   ``lazyio_synchronize()``, and application-level barriers. LazyIO is
+   intended only for HPC and similar specialized workloads that coordinate
+   their I/O themselves.
 
 LazyIO relaxes POSIX semantics. Buffered reads/writes are allowed even when a
 file is opened by multiple applications on multiple clients. Applications are
-responsible for managing cache coherency themselves.
+responsible for managing cache coherency themselves. Because clients keep
+caching and buffering, LazyIO can greatly improve I/O throughput for such
+applications.
 
 Libcephfs supports LazyIO since Nautilus release.
 
@@ -23,20 +25,19 @@ Enable LazyIO
 
 LazyIO can be enabled in the following ways.
 
-- ``client_force_lazyio`` option enables LazyIO globally for libcephfs and
-  ceph-fuse mount. This option takes effect only at mount time and cannot
-  be changed at runtime. LazyIO allows buffered reads and writes via the
-  page cache even when multiple clients hold the file open, which can
-  significantly improve I/O throughput for applications that manage their
-  own data consistency. For ceph-fuse, pass
-  ``--client_force_lazyio`` on the command line. For ``/etc/fstab``, add
-  ``ceph.client_force_lazyio=true`` to the options column.
+- The ``client_force_lazyio`` option enables LazyIO for every file that a
+  libcephfs or ceph-fuse client opens. It takes effect only when the client
+  mounts the file system, and it cannot be changed at runtime. For
+  ceph-fuse, pass ``--client_force_lazyio`` on the command line, or add
+  ``ceph.client_force_lazyio=true`` to the options column of the file
+  system's entry in ``/etc/fstab``.
 
-- ``lazyio`` / ``nolazyio`` mount option enables LazyIO globally for the
-  kernel CephFS client (kclient).  Pass it via ``mount -o lazyio`` or
-  add it to ``/etc/fstab``.  This is the kclient equivalent of
-  ``client_force_lazyio`` and supports remount.  Available since Linux
-  v6.22.
+- The ``lazyio`` mount option enables LazyIO for every regular file that the
+  kernel client opens on that mount, and ``nolazyio`` disables it. This is
+  the kernel client's equivalent of ``client_force_lazyio``. Pass it with
+  ``mount -o lazyio`` or in ``/etc/fstab``. A remount can change it, and the
+  change applies to files opened afterward. The option was added in Linux
+  7.4.
 
 - ``ceph_lazyio(...)`` and ``ceph_ll_lazyio(...)`` enable LazyIO for a file
   handle in libcephfs.
