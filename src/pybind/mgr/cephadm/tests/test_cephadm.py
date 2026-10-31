@@ -1495,6 +1495,76 @@ class TestCephadm(object):
                 image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
             )
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_osd_save_min_alloc_size(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        cephadm_module._mon_command_mock_config_help = lambda cmd: json.dumps(
+            {'name': cmd['key'], 'can_update_at_runtime': False})
+        cephadm_module.check_mon_command({
+            'prefix': 'config set', 'who': 'osd',
+            'name': 'osd_spec_max_min_alloc_size', 'value': '65536'})
+        with with_host(cephadm_module, 'test'):
+
+            spec = DriveGroupSpec(
+                service_id='foo',
+                placement=PlacementSpec(
+                    host_pattern='*',
+                ),
+                data_devices=DeviceSelection(
+                    all=True
+                ),
+                config={'bluestore_min_alloc_size': '16384'},
+            )
+
+            c = cephadm_module.apply([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd.foo update...']
+
+            cephadm_module.cache.update_host_devices('test', [Device('/dev/sdb', available=True)])
+
+            _run_cephadm.side_effect = async_side_effect((['{}'], '', 0))
+
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
+
+            # mkfs-time only, so it must reach ceph-volume's ceph.conf
+            _run_cephadm.assert_any_call(
+                'test', 'osd', 'ceph-volume',
+                ['--config-json', '-', '--', 'lvm', 'batch',
+                    '--no-auto', '/dev/sdb', '--objectstore', 'bluestore',
+                    '--yes', '--no-systemd'],
+                env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True,
+                stdin=json.dumps({
+                    'config': '\n\n[osd]\nbluestore_min_alloc_size = 16384\n',
+                    'keyring': '',
+                }))
+
+    @pytest.mark.parametrize('value, max_size, error', [
+        ('16384', '65536', None),
+        ('65536', '65536', None),
+        (131072, '131072', None),
+        ('12288', '65536', 'not a power of 2'),
+        ('0', '65536', 'not a power of 2'),
+        ('131072', '65536', 'exceeds osd_spec_max_min_alloc_size'),
+        ('16K', '65536', 'integer number of bytes'),
+        (16384.0, '65536', 'integer number of bytes'),
+    ])
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_apply_osd_min_alloc_size_validation(self, value, max_size, error, cephadm_module):
+        cephadm_module.check_mon_command({
+            'prefix': 'config set', 'who': 'osd',
+            'name': 'osd_spec_max_min_alloc_size', 'value': max_size})
+        with with_host(cephadm_module, 'test'):
+            spec = DriveGroupSpec(
+                service_id='foo',
+                placement=PlacementSpec(host_pattern='test'),
+                data_devices=DeviceSelection(all=True),
+                config={'bluestore_min_alloc_size': value},
+            )
+            if error:
+                with pytest.raises(OrchestratorError, match=error):
+                    cephadm_module._apply_service_spec(spec)
+            else:
+                assert cephadm_module._apply_service_spec(spec) == 'Scheduled osd.foo update...'
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
     def test_apply_osd_save_placement(self, _save_spec, cephadm_module):
