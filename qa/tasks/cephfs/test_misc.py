@@ -1,6 +1,7 @@
 from io import StringIO
 
 from tasks.cephfs.fuse_mount import FuseMount
+from tasks.cephfs.kernel_mount import KernelMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, classhook
 from teuthology.exceptions import CommandFailedError
 from textwrap import dedent
@@ -218,6 +219,42 @@ class TestMisc(CephFSTestCase):
         self.assertTrue(type(ino) is int)
         info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
         self.assertEqual(info['path'], "/foo")
+
+    def test_async_dirops_caps(self):
+        """
+        That a kernel client mounted with nowsync gets Dc and Du on a
+        directory that only it is using, so that it can create and unlink
+        files there without waiting for the MDS.
+        """
+        if not isinstance(self.mount_a, KernelMount):
+            self.skipTest("async dirops need the kernel client")
+        self.mount_b.umount_wait()
+        self.mount_a.umount_wait()
+        self.mount_a.mount_wait(mntopts=["nowsync"])
+        self.mount_a.run_shell(["mkdir", "d"])
+        ino = self.mount_a.path_to_ino("d")
+
+        def issued_file_caps():
+            info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
+            caps = [c['issued'] for c in info['client_caps']]
+            log.info(f"caps issued on d: {caps}")
+            m = re.search(r'F([a-z]*)', caps[0]) if caps else None
+            return m.group(1) if m else ""
+
+        # The client asks for Dc (Fc) and Du (Fr) once it has used the
+        # directory, so the first operations of each kind may still wait.
+        n = iter(range(1000))
+        def create():
+            self.mount_a.run_shell(["touch", f"d/f{next(n)}"])
+            return all(c in issued_file_caps() for c in "xc")
+        self.wait_until_true(create, timeout=60)
+
+        self.mount_a.run_shell_payload("for i in $(seq 30); do touch d/g$i; done")
+        rest = [f"d/g{i}" for i in range(1, 31)]
+        def unlink():
+            self.mount_a.run_shell(["rm", rest.pop()])
+            return all(c in issued_file_caps() for c in "xr")
+        self.wait_until_true(unlink, timeout=60)
 
     def test_dump_dir(self):
         self.mount_a.run_shell(["mkdir", "-p", "foo/bar"])
