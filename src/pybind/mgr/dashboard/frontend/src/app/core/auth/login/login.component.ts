@@ -72,16 +72,13 @@ export class LoginComponent implements OnInit {
       next: () => {
         const permissions = this.authStorageService.getPermissions();
         const canSetupCluster = !this.postInstalled && permissions.configOpt?.update;
-        const urlPath = canSetupCluster ? '/add-storage' : '/';
-        let url = _.get(this.route.snapshot.queryParams, 'returnUrl', urlPath);
-        if (canSetupCluster && this.route.snapshot.queryParams['returnUrl'] === '/overview') {
-          url = '/add-storage';
+        const returnUrl = _.get(this.route.snapshot.queryParams, 'returnUrl', '');
+        // Always land on the welcome page when the cluster still needs setup.
+        if (canSetupCluster) {
+          this.router.navigateByUrl('/add-storage?welcome=true');
+          return;
         }
-        if (url === '/add-storage') {
-          this.router.navigate([url], { queryParams: { welcome: true } });
-        } else {
-          this.router.navigate([url]);
-        }
+        this.router.navigateByUrl(returnUrl || '/');
       },
       error: (err) => {
         err.preventDefault();

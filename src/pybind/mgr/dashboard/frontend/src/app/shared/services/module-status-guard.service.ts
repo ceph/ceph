@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { ActivatedRouteSnapshot, Router } from '@angular/router';
+import { ActivatedRouteSnapshot, Router, RouterStateSnapshot } from '@angular/router';
 
 import { of as observableOf } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -48,16 +48,40 @@ export class ModuleStatusGuardService {
     private authStorageService: AuthStorageService
   ) {}
 
-  canActivate(route: ActivatedRouteSnapshot) {
-    return this.doCheck(route);
+  canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
+    return this.doCheck(route, state);
   }
 
-  canActivateChild(childRoute: ActivatedRouteSnapshot) {
-    return this.doCheck(childRoute);
+  canActivateChild(childRoute: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
+    return this.doCheck(childRoute, state);
   }
 
-  private doCheck(route: ActivatedRouteSnapshot) {
+  /**
+   * Allow only /add-storage?welcome=true through without an orch status check.
+   * Other modules must not bypass the guard via ?welcome=true.
+   */
+  private isAddStorageWelcome(route: ActivatedRouteSnapshot, state?: RouterStateSnapshot): boolean {
+    const isAddStorage =
+      route.routeConfig?.path === 'add-storage' ||
+      route.url?.[0]?.path === 'add-storage' ||
+      !!state?.url?.match(/^\/add-storage(?:\?|$)/);
+    if (!isAddStorage) {
+      return false;
+    }
+    const welcome = route.queryParams?.['welcome'];
+    if (welcome === true || welcome === 'true') {
+      return true;
+    }
+    return !!state?.url && /(?:\?|&)welcome=true(?:&|$)/.test(state.url);
+  }
+
+  private doCheck(route: ActivatedRouteSnapshot, state?: RouterStateSnapshot) {
     if (route.url.length > 0 && ModuleStatusGuardService.ALLOWLIST.includes(route.url[0].path)) {
+      return observableOf(true);
+    }
+    // Login → /add-storage?welcome=true must not be bounced to overview when orch
+    // is not ready yet. Scoped to add-storage so other modules stay guarded.
+    if (this.isAddStorageWelcome(route, state)) {
       return observableOf(true);
     }
     const config = route.data['moduleStatusGuardConfig'];
