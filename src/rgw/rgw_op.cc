@@ -992,8 +992,8 @@ void rgw_build_iam_environment(req_state* s)
 {
   const auto& m = s->info.env->get_map();
   auto t = ceph::real_clock::now();
-  s->env.emplace("aws:CurrentTime", std::to_string(ceph::real_clock::to_time_t(t)));
-  s->env.emplace("aws:EpochTime", ceph::to_iso_8601(t));
+  s->env.emplace("aws:CurrentTime", ceph::to_iso_8601(t));
+  s->env.emplace("aws:EpochTime", std::to_string(ceph::real_clock::to_time_t(t)));
   // TODO: This is fine for now, but once we have STS we'll need to
   // look and see. Also this won't work with the IdentityApplier
   // model, since we need to know the actual credential.

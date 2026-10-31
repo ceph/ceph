@@ -13260,6 +13260,106 @@ def test_versioning_bucket_multipart_upload_return_version_id():
     response = client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts})
     assert not 'VersionId' in response
 
+def _check_time_condition(key, greater_than, less_than, past, future):
+    """
+    Check that a request-time condition key works with the operators
+    it is specified for: 'past' and 'future' are values of the key, in
+    the operators' syntax, that the request time must fall between.
+
+    Every comparison is made from both sides, so a key that is
+    silently never satisfied (for example, because the server
+    populates it in a format the operator can't parse) fails here
+    instead of looking like a correct denial.
+    """
+    bucket_name = _create_objects(keys=['foo'])
+    client = get_client()
+    alt_client = get_alt_client()
+    resource = _make_arn_resource("{}/{}".format(bucket_name, "*"))
+
+    def put_policy(effect, conditions):
+        policy_document = make_json_policy("s3:GetObject", resource,
+                                           effect=effect,
+                                           conditions=conditions)
+        client.put_bucket_policy(Bucket=bucket_name, Policy=policy_document)
+
+    def expect_allowed():
+        response = alt_client.get_object(Bucket=bucket_name, Key='foo')
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    def expect_denied():
+        e = assert_raises(ClientError, alt_client.get_object, Bucket=bucket_name, Key='foo')
+        status, error_code = _get_status_and_error_code(e.response)
+        assert status == 403
+        assert error_code == 'AccessDenied'
+
+    # Allow when the condition holds
+    put_policy("Allow", {greater_than: {key: past}})
+    expect_allowed()
+    put_policy("Allow", {less_than: {key: future}})
+    expect_allowed()
+
+    # Allow when the condition doesn't hold
+    put_policy("Allow", {less_than: {key: past}})
+    expect_denied()
+    put_policy("Allow", {greater_than: {key: future}})
+    expect_denied()
+
+    # Deny when the condition holds, with an unconditional Allow that
+    # the Deny must beat. A condition that is never satisfied would
+    # pass the Allow cases above by accident, but it can't fire this
+    # Deny.
+    policy = Policy()
+    policy.add_statement(Statement("s3:GetObject", resource))
+    policy.add_statement(Statement("s3:GetObject", resource, effect="Deny",
+                                   condition={greater_than: {key: past}}))
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy.to_json())
+    expect_denied()
+
+    # Deny when the condition doesn't hold: the Allow stands
+    policy = Policy()
+    policy.add_statement(Statement("s3:GetObject", resource))
+    policy.add_statement(Statement("s3:GetObject", resource, effect="Deny",
+                                   condition={less_than: {key: past}}))
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy.to_json())
+    expect_allowed()
+
+@pytest.mark.bucket_policy
+def test_bucket_policy_condition_current_time():
+    # aws:CurrentTime holds the request time as an ISO 8601 date, for
+    # use with the Date* condition operators.
+    # https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-currenttime
+    #
+    # Give an hour of slack either way so clock skew between the test
+    # host and the server can't flip a result.
+    now = datetime.datetime.now(datetime.timezone.utc)
+    past = (now - datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    future = (now + datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    _check_time_condition('aws:CurrentTime', 'DateGreaterThan', 'DateLessThan',
+                          past, future)
+
+@pytest.mark.bucket_policy
+def test_bucket_policy_condition_epoch_time_numeric():
+    # aws:EpochTime holds the request time as an integer number of
+    # seconds since the Unix epoch, for use with the Numeric* condition
+    # operators.
+    # https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-epochtime
+    now = int(time.time())
+    past = str(now - 3600)
+    future = str(now + 3600)
+    _check_time_condition('aws:EpochTime', 'NumericGreaterThan', 'NumericLessThan',
+                          past, future)
+
+@pytest.mark.bucket_policy
+def test_bucket_policy_condition_epoch_time_date():
+    # aws:EpochTime is also specified to work with the Date* operators,
+    # which accept an epoch value as well as an ISO 8601 one.
+    # https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-epochtime
+    now = int(time.time())
+    past = str(now - 3600)
+    future = str(now + 3600)
+    _check_time_condition('aws:EpochTime', 'DateGreaterThan', 'DateLessThan',
+                          past, future)
+
 @pytest.mark.tagging
 @pytest.mark.bucket_policy
 @pytest.mark.fails_on_dbstore
