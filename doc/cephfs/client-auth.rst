@@ -9,8 +9,9 @@ the lowest level of authority necessary.
    in the Jewel release of Ceph.
 
 .. note:: Using Erasure Coded (EC) pools with CephFS is supported only with
-   :term:`BlueStore`. Erasure-coded pools cannot be used as metadata pools.
-   Overwrites must be enabled on erasure-coded data pools.
+   :term:`BlueStore`. Overwrites must be enabled on erasure-coded extra data pools.
+   Both overwrites and optimizations must be enabled on erasure-coded metadata pools,
+   or default data pools.
 
 
 Path restriction
