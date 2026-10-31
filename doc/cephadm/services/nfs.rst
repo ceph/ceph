@@ -204,6 +204,45 @@ Per-component memory-statistics capture is enabled by default. To disable it,
 set ``mem_stats_disable: true`` in the service spec. This writes
 ``Mem_Stats_Disable = true;`` into the ``NFS_CORE_PARAM`` block of
 ``ganesha.conf`` and triggers a full NFS daemon restart.
+.. _cephadm-nfs-conditional-logging:
+
+Conditional Logging
+-------------------
+
+Conditional logging lets users raise or lower log levels for selected clients
+and/or exports, without changing the global log levels used for other traffic.
+It is handy for debugging a single client or export on a busy server.
+
+Configure it using ``ceph nfs cluster config set`` with a ``LOG`` block:
+
+.. code-block:: bash
+
+    ceph nfs cluster config set mynfs -i - << 'EOF'
+    LOG {
+        Match_Policy = MATCH_ANY;
+        Conditional {
+            Clients = 192.0.2.25;
+            Exports = 101;
+            NFS4 = DEBUG;
+        }
+    }
+    EOF
+
+``Match_Policy`` controls when the conditional log level applies:
+
+* ``MATCH_ANY`` or ``ANY`` — client **or** export matches (either is enough).
+* ``MATCH_ALL`` or ``ALL`` — client **and** export must both match.
+
+Valid log levels: ``NULL``, ``FATAL``, ``MAJ``, ``CRIT``, ``WARN``,
+``EVENT``, ``INFO``, ``DEBUG``, ``MID_DEBUG``, ``FULL_DEBUG``.
+
+Notes:
+
+* ``MATCH_ALL`` requires both ``Clients`` and ``Exports`` to be set,
+  or the command is rejected.
+* Client values must be valid IP addresses or CIDR ranges.
+* Export values must be positive integers.
+* Changes take effect without restarting the NFS daemon.
 
 .. _cephadm-nfs-colocation:
 
