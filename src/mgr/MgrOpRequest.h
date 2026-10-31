@@ -27,6 +27,9 @@
  */
 struct MgrOpRequest : public TrackedOp {
   friend class OpTracker;
+  // test-only access to private mark_flag_point helpers (see
+  // src/test/mgr/test_mgroprequest.cc)
+  friend struct MgrOpRequestTestAccess;
 
 public:
   void _dump(ceph::Formatter *f) const override;
