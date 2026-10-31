@@ -71,6 +71,30 @@
 .. confval:: mds_extraordinary_events_dump_interval
 .. confval:: subv_metrics_window_interval
 
+Readdir page size
+-----------------
+
+The MDS encodes a readdir reply while holding ``mds_lock``, and the client
+chooses how large it is. A client walking a large directory, such as a backup or
+an indexer, can therefore make every other request on the rank wait. Readdir
+pages are separate requests, so ending a page early costs the reader one more
+round trip and lets the waiting work run.
+
+By default the MDS ends a page once it has been encoding for
+``mds_readdir_yield_budget`` and the oldest message in the dispatch queue has
+waited as long. On an idle rank nothing waits, so pages are not cut. Set it to 0
+to disable this.
+
+.. confval:: mds_readdir_yield_budget
+
+Two fixed caps are also available, off by default. They apply whether or not
+the rank is busy, so prefer the budget above unless you need a hard limit on
+reply size.
+
+.. confval:: mds_max_readdir_entries
+.. confval:: mds_max_readdir_bytes
+
+
 The following options control the dmClock QoS scheduler for client
 metadata requests. See :ref:`mds-qos` for an explanation of the
 feature and a worked example.
