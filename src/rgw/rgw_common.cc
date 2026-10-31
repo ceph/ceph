@@ -2014,6 +2014,29 @@ std::string url_remove_prefix(const std::string& url)
   return dst;
 }
 
+void path_encode(const std::string& src, std::string& dst)
+{
+  const char *p = src.c_str();
+  dst.clear();
+
+  for (unsigned i = 0; i < src.size(); i++, p++) {
+    /* For paths, always encode '.' and '/' */
+    if ((*p == 0x2E) || char_needs_url_encoding(*p)) {
+      rgw_uri_escape_char(*p, dst);
+    } else {
+      dst.append(p, 1);
+    }
+  }
+}
+
+std::string path_encode(const std::string& src)
+{
+  std::string dst;
+  path_encode(src, dst);
+
+  return dst;
+}
+
 string rgw_trim_whitespace(const string& src)
 {
   if (src.empty()) {
