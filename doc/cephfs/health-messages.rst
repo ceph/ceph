@@ -277,3 +277,72 @@ other daemons, please see :ref:`health-checks`.
 
   Description
     When an MDS journal replay takes more than 30 seconds, this message indicates the estimated time to completion.
+
+
+.. _cephfs-large-omap-objects:
+
+Large omap objects in the metadata pool
+=======================================
+
+Deep scrub raises the ``LARGE_OMAP_OBJECTS`` health warning (see
+:ref:`health-checks`) for an object with more omap keys than
+:confval:`osd_deep_scrub_large_omap_object_key_threshold` or more omap data
+than :confval:`osd_deep_scrub_large_omap_object_value_sum_threshold`. In a
+CephFS metadata pool, such an object is usually a directory fragment
+(dirfrag): the MDS stores the entries of each fragment as the omap keys of one
+object. With the default settings, the MDS splits a fragment long before it
+has that many entries (see :doc:`/cephfs/dirfrags`), but a fragment whose
+entries are large can exceed the size threshold with few entries. Snapshots
+and large extended attributes are common causes. If the object is in an RGW
+pool instead, it is usually a bucket index shard: see
+:ref:`rgw_dynamic_bucket_index_resharding`.
+
+To find the directory, search the cluster log for ``Large omap object
+found``. The message names the object, for example::
+
+    cluster [WRN] Large omap object found. Object: 10:bbf5850a:::10000000007.00000000:head PG: 10.50a1afdd (10.5d) Key count: 7060 Size (bytes): 1249291802
+
+The object name, ``10000000007.00000000`` here, is the directory's inode
+number in hexadecimal, a period, and the ID of the fragment. The directory's
+path is recorded in the backtrace that is stored with the object
+``<inode>.00000000``. To read it, run commands of the following form:
+
+.. prompt:: bash #
+
+   rados -p <metadata_pool> getxattr <inode>.00000000 parent > parent.bin
+   ceph-dencoder type inode_backtrace_t import parent.bin decode dump_json
+
+The ``ancestors`` list in the output names the directory and each directory
+above it, starting with the directory itself.
+
+To have the MDS split the fragment, scrub the directory:
+
+.. prompt:: bash #
+
+   ceph tell mds.<fsname>:0 scrub start <path>
+
+After scrubbing a directory fragment, the MDS splits it if it has more than
+:confval:`mds_bal_split_size` entries. A fragment that is too large only in
+bytes is not split this way. To split it explicitly, list the directory's
+fragments and split the one named in the warning, for example into eight
+fragments:
+
+.. prompt:: bash #
+
+   ceph tell mds.<fsname>:<rank> dirfrag ls <path>
+   ceph tell mds.<fsname>:<rank> dirfrag split <path> <frag> 3
+
+Here ``<frag>`` is the ``str`` value of the fragment in the ``dirfrag ls``
+output, and ``<rank>`` is the rank of the MDS that holds the directory, which
+is 0 when the file system has one active MDS. Both commands act only on a
+directory that is in that MDS's cache, so run them soon after the scrub.
+
+The warning clears after the next deep scrub of the placement group that the
+message names. To clear it sooner, run ``ceph pg deep-scrub <pgid>``.
+
+The MDS never fragments the root directory, whose object is
+``1.00000000``, stray directories, whose objects are ``600.00000000``
+through ``609.00000000`` for rank 0, or directories inside stray directories.
+For the root directory, move its entries into subdirectories. For stray
+directories, evaluate the strays with a recursive scrub of ``~mdsdir`` (see
+:ref:`mds-scrub`).
