@@ -7436,7 +7436,7 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
       auto iter = dec_output.cbegin();
       decode(token, iter);
     } catch (const buffer::error& e) {
-      ldpp_dout(dpp, 0) << "ERROR: decode SessionToken failed: " << error << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: decode SessionToken failed: " << e.what() << dendl;
       return -EINVAL;
     }
   }
