@@ -475,6 +475,29 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'exceed this value when a single nfs service is larger than it.'
         ),
         Option(
+            'upgrade_prepull_image',
+            type='bool',
+            default=False,
+            desc='Pre-pull the upgrade target image to in-scope hosts from the '
+                 'cluster registry before any daemon is upgraded. Requires '
+                 'registry reachability from hosts.',
+        ),
+        Option(
+            'upgrade_prepull_max_parallel',
+            type='int',
+            default=8,
+            desc='Maximum number of hosts pulling the upgrade image in parallel '
+                 'when upgrade_prepull_image is true.',
+        ),
+        Option(
+            'upgrade_prepull_timeout',
+            type='int',
+            default=7200,
+            desc='Timeout in seconds for each cephadm image pull while '
+                 'upgrade_prepull_image is true. Multi-GB images on slow '
+                 'links may need a higher value.',
+        ),
+        Option(
             'pg_autoscale_during_upgrade',
             type='bool',
             default=False,
@@ -739,6 +762,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.max_osd_draining_count = 10
             self.max_parallel_osd_upgrades = 16
             self.max_gateway_upgrades_per_pass = 16
+            self.upgrade_prepull_image = False
+            self.upgrade_prepull_max_parallel = 8
+            self.upgrade_prepull_timeout = 7200
             self.device_enhanced_scan = False
             self.inventory_list_all = False
             self.cgroups_split = True
@@ -980,6 +1006,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 self.log.info(f'Found default timeout set to {timeout}. Instead trying minimum of 60.')
                 timeout = 60
         return self.event_loop.get_result(coro, timeout)
+
+    def _any_inventory_host(self) -> Optional[str]:
+        """Return an arbitrary inventory host (the first one), or None."""
+        return next(iter(self.inventory.keys()), None)
 
     def update_host_timeout_error(self, host: str, remove: bool = False) -> None:
         if 'CEPHADM_HOST_TIMEOUT_ERROR' in self.health_checks:
