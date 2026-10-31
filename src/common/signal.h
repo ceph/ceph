@@ -17,6 +17,8 @@
 #define CEPH_COMMON_SIGNAL_H
 
 #include <signal.h>
+#include <sys/types.h>
+
 #include <string>
 
 // Returns a string showing the set of blocked signals for the calling thread.
@@ -39,5 +41,13 @@ extern void restore_sigset(const sigset_t *old_sigset);
 // old_sigset. On failure, stores an invalid set of blocked signals in
 // old_sigset.
 extern void unblock_all_signals(sigset_t *old_sigset);
+
+// Returns the path of the running executable, without the " (deleted)" marker
+// the kernel appends once it is unlinked, so that a respawn execs whatever is
+// at that path now rather than the image it is running. buff_length must not
+// be zero.
+// On success, returns the length of the path. On failure, or if the path does
+// not fit, returns -1.
+extern ssize_t get_respawn_exe_path(char *path, size_t buff_length);
 
 #endif
