@@ -144,10 +144,25 @@ Non Trivial Configuration
   * ``zonegroup_id``: the zonegroup ID
   * ``zone``: the zone name
   * ``zone_id``: the zone id
-  * ``bucket``: source bucket name
-  * ``owner``: source bucket owner ID
+  * ``bucket``: source bucket name, ``<tenant>/<bucket>`` for a tenanted bucket
+  * ``owner``: source bucket owner ID, ``<tenant>-<owner>`` for a tenanted bucket
 
   For example: ``target_path = rgwx-${zone}-${sid}/${owner}/${bucket}``
+
+  .. note:: ``${bucket}`` must not be the first component of ``target_path``
+     where tenanted buckets are synced. The destination bucket name is
+     everything before the first ``/``, and a tenanted bucket expands to
+     ``<tenant>/<bucket>``. So with ``target_path = ${bucket}``, bucket
+     ``data`` in tenant ``proj1`` would be written to a destination bucket
+     named ``proj1`` with the object under ``data/`` -- every bucket in that
+     tenant sharing one destination, and colliding with an untenanted bucket
+     named ``proj1``. Prefix the target with a destination bucket, as in
+     ``<dest-bucket>/${bucket}``. Syncing a tenanted bucket through such a
+     target is refused.
+
+     ``radosgw-admin bucket list`` shows which buckets those are: a tenanted
+     bucket is listed as ``<tenant>/<bucket>``, an untenanted one by name
+     alone.
 
 * ``acl_profiles`` (array)
 
@@ -162,7 +177,7 @@ Non Trivial Configuration
 
   A list of profiles. Each profile contains the following:
 
-  * ``source_bucket``: either a bucket name, or a bucket prefix (if ends with ``*``) that defines the source bucket(s) for this profile
+  * ``source_bucket``: either a bucket name, or a bucket prefix (if ends with ``*``) that defines the source bucket(s) for this profile. A tenanted bucket is matched as ``<tenant>/<bucket>``
   * ``target_path``: as defined above
   * ``connection_id``: ID of the connection that will be used for this profile
   * ``acls_id``: ID of ACLs profile that will be used for this profile
