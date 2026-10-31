@@ -4038,7 +4038,8 @@ int CrushWrapper::_choose_type_stack(
   set<int>& used,
   vector<int> *pw,
   int root_bucket,
-  int rule) const
+  int rule,
+  uint32_t seed) const
 {
   vector<int> w = *pw;
   vector<int> o;
@@ -4187,8 +4188,13 @@ int CrushWrapper::_choose_type_stack(
 	}
       }
       if (j + 1 < stack.size()) {
-	// check if any buckets have overfull leaves but no underfull candidates
-	for (int pos = 0; pos < fanout; ++pos) {
+	// check if any buckets have overfull leaves but no underfull candidates.
+	// Start at a seed-dependent position: always scanning from position 0
+	// hands the first alternative bucket to the lowest position, i.e. the
+	// primary (shard 0 for EC), which skews primaries towards whatever the
+	// balancer has to fill from other buckets.
+	for (int k = 0; k < fanout; ++k) {
+	  int pos = (k + seed) % fanout;
 	  if (underfull_buckets[j].count(o[pos]) == 0) {
 	    // are any leaves overfull?
 	    bool any_overfull = false;
@@ -4251,7 +4257,8 @@ int CrushWrapper::try_remap_rule(
   const vector<int>& underfull,
   const vector<int>& more_underfull,
   const vector<int>& orig,
-  vector<int> *out) const
+  vector<int> *out,
+  uint32_t seed) const
 {
   const crush_map *map = crush;
   const crush_rule *rule = get_rule(ruleno);
@@ -4299,7 +4306,7 @@ int CrushWrapper::try_remap_rule(
         if (type > 0)
 	  type_stack.push_back(make_pair(0, 1));
 	int r = _choose_type_stack(cct, type_stack, overfull, underfull, more_underfull, orig,
-				   i, used, &w, root_bucket, ruleno);
+				   i, used, &w, root_bucket, ruleno, seed);
 	if (r < 0)
 	  return r;
 	type_stack.clear();
@@ -4321,7 +4328,7 @@ int CrushWrapper::try_remap_rule(
       ldout(cct, 10) << " emit " << w << dendl;
       if (!type_stack.empty()) {
 	int r = _choose_type_stack(cct, type_stack, overfull, underfull, more_underfull, orig,
-				   i, used, &w, root_bucket, ruleno);
+				   i, used, &w, root_bucket, ruleno, seed);
 	if (r < 0)
 	  return r;
 	type_stack.clear();
