@@ -20,6 +20,7 @@
 #include <vector>
 #include "include/ceph_assert.h"
 #include "bluestore_types.h"
+#include "bluestore_common.h"
 #include "common/ceph_mutex.h"
 
 typedef interval_set<uint64_t> release_set_t;
@@ -52,12 +53,27 @@ public:
    * to free block search algorithm and availability of contiguous space.
    */
   virtual int64_t allocate(uint64_t want_size, uint64_t block_size,
-			   uint64_t max_alloc_size, int64_t hint,
-			   PExtentVector *extents) = 0;
+	                        uint64_t max_alloc_size, int64_t hint,
+	                        alloc_tag_t tag,
+	                        PExtentVector *extents) = 0;
 
   int64_t allocate(uint64_t want_size, uint64_t block_size,
-		   int64_t hint, PExtentVector *extents) {
-    return allocate(want_size, block_size, want_size, hint, extents);
+                  uint64_t max_alloc_size, int64_t hint,
+                  PExtentVector *extents) {
+    return allocate(want_size, block_size, max_alloc_size, hint,
+                    alloc_tag_t::unknown(), extents);
+  }
+
+  int64_t allocate(uint64_t want_size, uint64_t block_size,
+                  int64_t hint, PExtentVector *extents) {
+    return allocate(want_size, block_size, want_size, hint,
+                    alloc_tag_t::unknown(), extents);
+  }
+
+  int64_t allocate(uint64_t want_size, uint64_t block_size,
+                  int64_t hint, alloc_tag_t tag,
+                  PExtentVector *extents) {
+    return allocate(want_size, block_size, want_size, hint, tag, extents);
   }
 
   /* Bulk release. Implementations may override this method to handle the whole
@@ -135,7 +151,8 @@ public:
     std::function<void(uint64_t offset, uint64_t length)> notify);
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
-  virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
+  virtual void init_rm_free(uint64_t offset, uint64_t length,
+                            alloc_tag_t tag = alloc_tag_t::unknown()) = 0;
 
   virtual uint64_t get_free() = 0;
   virtual double get_fragmentation()

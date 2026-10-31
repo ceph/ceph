@@ -380,6 +380,7 @@ int64_t BtreeAllocator::allocate(
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint,
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   ldout(cct, 10) << __func__ << std::hex
@@ -517,7 +518,7 @@ void BtreeAllocator::init_add_free(uint64_t offset, uint64_t length)
   _add_to_tree(offset, length);
 }
 
-void BtreeAllocator::init_rm_free(uint64_t offset, uint64_t length)
+void BtreeAllocator::init_rm_free(uint64_t offset, uint64_t length, alloc_tag_t tag)
 {
   if (!length)
     return;

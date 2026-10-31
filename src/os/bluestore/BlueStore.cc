@@ -3241,7 +3241,7 @@ void BlueStore::_main_bdev_label_try_reserve()
   // When we create it, replace code.
   alloc->foreach(look_for_bdev);
   for (auto& location : accepted_positions) {
-    alloc->init_rm_free(location, lsize);
+    alloc->init_rm_free(location, lsize, alloc_tag_t::bluestore_meta());
   }
 
   for (size_t i = 0; i < candidate_positions.size(); i++) {
@@ -5052,7 +5052,7 @@ int BlueStore::mkfs()
   // full free
   alloc->init_add_free(0, p2align(bdev->get_size(), min_alloc_size));
   // allocate bdev label + bluefs superblock reserved space.
-  alloc->init_rm_free(BDEV_FIRST_LABEL_POSITION, reserved);
+  alloc->init_rm_free(BDEV_FIRST_LABEL_POSITION, reserved, alloc_tag_t::bluestore_meta());
 
   // take possible bdev locations, so it will not be used
   if (cct->_conf.get_val<bool>("bluestore_bdev_label_multi")) {
@@ -5062,7 +5062,7 @@ int BlueStore::mkfs()
       uint64_t size = p2roundup(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
       if (location + size > bdev->get_size()) continue;
       ceph_assert(p2align(location, min_alloc_size) == location);
-      alloc->init_rm_free(location, size);
+      alloc->init_rm_free(location, size, alloc_tag_t::bluestore_meta());
     }
   }
 
@@ -7879,9 +7879,16 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair, bluestore_
 	    }
 	    PExtentVector exts;
 	    dout(5) << __func__ << "::NCB::(F)alloc=" << alloc << ", length=" << e->length << dendl;
+	    alloc_tag_t tag = alloc_tag_t::unknown();
+	    if (c) {
+	      spg_t pgid_val;
+	      if (c->cid.is_pg(&pgid_val)) {
+	        tag = alloc_tag_t::pg(pgid_val.pool(), pgid_val.ps());
+	      }
+	    }
 	    int64_t alloc_len =
-              alloc->allocate(e->length, min_alloc_size,
-				       0, -1, &exts);
+	        alloc->allocate(e->length, min_alloc_size,
+	                                0, -1, tag, &exts);
 	    if (alloc_len < 0 || alloc_len < (int64_t)e->length) {
 	      derr << __func__
 	           << " failed to allocate 0x" << std::hex << e->length
@@ -8345,7 +8352,7 @@ void BlueStore::inject_leaked(uint64_t len)
 {
   PExtentVector exts;
   int64_t alloc_len = alloc->allocate(len, min_alloc_size,
-					   min_alloc_size * 256, -1, &exts);
+					   min_alloc_size * 256, -1, alloc_tag_t::unknown(), &exts);
   ceph_assert(alloc_len >= 0); // generally we do not expect any errors
   if (fm->is_null_manager()) {
     return;
@@ -13825,9 +13832,17 @@ int BlueStore::_do_alloc_write(
   prealloc.reserve(2 * wctx->writes.size());
   int64_t prealloc_left = 0;
   auto start = mono_clock::now();
+  alloc_tag_t tag = alloc_tag_t::unknown();
+  if (coll) {
+    spg_t pgid;
+    if (coll->cid.is_pg(&pgid)) {
+      tag = alloc_tag_t::pg(pgid.pool(), pgid.ps());
+    }
+  }
   prealloc_left = alloc->allocate(
     need, min_alloc_size, need,
     use_last_allocator_lookup_position ? -1 : 0,
+    tag,
     &prealloc);
   log_latency("allocator@_do_alloc_write",
     l_bluestore_allocator_lat,
@@ -17739,7 +17754,7 @@ int BlueStore::add_existing_bluefs_allocation(Allocator* allocator, read_alloc_s
     bluefs->foreach_block_extents(
       bluefs_layout.shared_bdev,
       [&](uint64_t start, uint32_t len) {
-        allocator->init_rm_free(start, len);
+        allocator->init_rm_free(start, len, alloc_tag_t::bluefs(alloc_tag_bluefs_t::OTHER));
         stats.extent_count++;
       }
     );
@@ -17798,9 +17813,9 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
     if (bdev_label_multi) {
       uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
       for (uint64_t p : bdev_label_valid_locations) {
-	if (p != BDEV_FIRST_LABEL_POSITION) {
-	  allocator->init_rm_free(p, lsize);
-	}
+        if (p != BDEV_FIRST_LABEL_POSITION) {
+          allocator->init_rm_free(p, lsize, alloc_tag_t::bluestore_meta());
+        }
       }
     }
 
