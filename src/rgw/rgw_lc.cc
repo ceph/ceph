@@ -21,7 +21,7 @@
 #include "common/async/spawn_throttle.h"
 #include "common/Formatter.h"
 #include "common/containers.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include <common/errno.h>
 #include "include/random.h"
 #include "cls/lock/cls_lock_client.h"

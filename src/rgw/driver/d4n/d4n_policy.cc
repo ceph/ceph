@@ -2,10 +2,12 @@
 
 #include <iomanip>  // for std::setprecision
 
-#include "../../../common/async/yield_context.h"
-#include "common/split.h"
-
 #include "yield_completion.h"
+#include "common/async/blocked_completion.h"
+#include "../../../common/async/yield_context.h"
+
+#include "include/str_lib.h"
+
 #include "rgw_perf_counters.h"
 
 namespace rgw { namespace d4n {
@@ -279,9 +281,7 @@ CacheBlock* LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, optiona
   std::string key = entry->key;
   CacheBlock* victim = new CacheBlock();
 
-  auto parts = split(key, "#");
-  std::vector<std::string> block_info;
-  block_info.assign(parts.begin(), parts.end());
+  const auto block_info = ceph::split_strings(key, "#");
   
   if (block_info.size() != 5) {
     ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Key of the top entry in the min heap has not been constructed correctly." << dendl;

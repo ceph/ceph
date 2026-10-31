@@ -806,4 +806,3 @@ void rgw_sync_policy_info::decode_json(JSONObj *obj)
     groups.emplace(std::make_pair(group.id, std::move(group)));
   }
 }
-

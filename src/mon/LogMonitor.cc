@@ -62,7 +62,7 @@
 #include "common/safe_io.h"
 #include "common/strtol.h"
 #include "include/ceph_assert.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/str_map.h"
 #include "include/compat.h"
 #include "include/utime_fmt.h"
@@ -1047,7 +1047,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     string level_str = cmd_getval_or<string>(cmdmap, "level", "info");
     le.prio = LogEntry::str_to_level(level_str);
     le.channel = CLOG_CHANNEL_DEFAULT;
-    le.msg = str_join(logtext, " ");
+    le.msg = ceph::str_join(logtext, " ");
     pending_keys.insert(le.key());
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
     wait_for_commit(op, new Monitor::C_Command(

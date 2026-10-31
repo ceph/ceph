@@ -7,7 +7,7 @@
 #include <map>
 
 #include "include/types.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 
 #include "rgw_acl_s3.h"
 #include "driver/rados/rgw_user.h"
