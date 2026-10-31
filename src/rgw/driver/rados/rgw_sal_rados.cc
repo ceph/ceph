@@ -4304,8 +4304,17 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   list<rgw_obj_index_key> remove_objs;
   bool truncated;
   int marker = 0;
-  int ret;
   uint64_t parts_accounted_size = 0;
+
+  // flag the upload as aborted so racing Aborts/Completes will be rejected
+  const std::string tag = "ABORTED";
+  bufferlist tag_bl;
+  tag_bl.append(tag);
+  int ret = set_completion_record(dpp, y, &tag_bl, tag);
+  if (ret < 0) {
+    // the meta object was already flagged or deleted
+    return -ERR_NO_SUCH_UPLOAD;
+  }
 
   prefix_map_t processed_prefixes;
 
@@ -4407,6 +4416,62 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   }
 
   return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
+}
+
+int RadosMultipartUpload::set_completion_record(const DoutPrefixProvider* dpp, optional_yield y,
+                                                const bufferlist* tag, const std::string& instance)
+{
+  std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
+  meta_obj->set_in_extra_data(true);
+  rgw_raw_obj raw_obj;
+  static_cast<RadosObject*>(meta_obj.get())->get_raw_obj(&raw_obj);
+  rgw_rados_ref ref;
+  int ret = store->getRados()->get_raw_obj_ref(dpp, raw_obj, &ref);
+  if (ret < 0) {
+    return ret;
+  }
+  librados::ObjectWriteOperation op;
+  op.assert_exists();
+  if (tag) {
+    bufferlist instance_bl;
+    instance_bl.append(instance);
+    // assert that we haven't set a completion tag yet
+    op.cmpxattr(RGW_ATTR_MP_COMPLETION_TAG, LIBRADOS_CMPXATTR_OP_EQ, bufferlist());
+    op.setxattr(RGW_ATTR_MP_COMPLETION_TAG, *tag);
+    op.setxattr(RGW_ATTR_MP_COMPLETION_INSTANCE, instance_bl);
+  } else {
+    op.rmxattr(RGW_ATTR_MP_COMPLETION_TAG);
+    op.rmxattr(RGW_ATTR_MP_COMPLETION_INSTANCE);
+  }
+  return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+}
+
+// the head a completion record names. "null" names the head object of
+// the key itself, and is read without following the OLH: a completion's
+// head in a bucket that is not versioned, or the null version in one
+// whose versioning is suspended
+std::unique_ptr<rgw::sal::Object> RadosMultipartUpload::recorded_head(const rgw::sal::Attrs& meta_attrs)
+{
+  std::string instance = "null";
+  if (auto i = meta_attrs.find(RGW_ATTR_MP_COMPLETION_INSTANCE); i != meta_attrs.end()) {
+    instance = i->second.to_str();
+  }
+  return bucket->get_object(rgw_obj_key(mp_obj.get_key(), instance));
+}
+
+// 1 if the head carries the ID tag, 0 if it does not or is gone
+int RadosMultipartUpload::head_carries(const DoutPrefixProvider* dpp, optional_yield y,
+                                       rgw::sal::Object* head, const bufferlist& tag)
+{
+  int ret = head->load_obj_state(dpp, y);
+  if (ret == -ENOENT) {
+    return 0;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  bufferlist id_tag;
+  return head->get_attr(RGW_ATTR_ID_TAG, id_tag) && id_tag.contents_equal(tag);
 }
 
 std::unique_ptr<rgw::sal::Object> RadosMultipartUpload::get_meta_obj()
@@ -4759,10 +4824,11 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   });
   attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
 
-  rgw_placement_rule* ru;
-  ru = &placement;
   rgw::sal::Attrs mpu_attrs; // don't overwrite the target object attrs we are updating
-  ret = RadosMultipartUpload::get_info(dpp, y, &ru, &mpu_attrs);
+  ret = get_info(dpp, y, nullptr, &mpu_attrs);
+  if (ret < 0) {
+    return ret == -ENOENT ? -ERR_NO_SUCH_UPLOAD : ret;
+  }
 
   if (upload_information.obj_retention_exist) {
     bufferlist obj_retention_bl;
@@ -4819,10 +4885,69 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.if_match = if_match;
   obj_op.meta.if_nomatch = if_nomatch;
 
+  // record this completion's tag, the ID tag its head will carry, and the
+  // version it writes: its own instance in a version-enabled bucket,
+  // otherwise the null one
+  {
+    const std::string& instance = target_obj->get_instance();
+    bufferlist tag_bl;
+    tag_bl.append(tag.c_str(), tag.size() + 1);
+    ret = set_completion_record(dpp, y, &tag_bl, instance.empty() ? "null" : instance);
+    if (ret == -ECANCELED) {
+      // RGW_ATTR_MP_COMPLETION_TAG was already set. read the updated attrs
+      rgw::sal::Attrs meta_attrs;
+      ret = get_info(dpp, y, nullptr, &meta_attrs);
+      if (ret < 0) {
+        return ret == -ENOENT ? -ERR_NO_SUCH_UPLOAD : ret;
+      }
+
+      auto i = meta_attrs.find(RGW_ATTR_MP_COMPLETION_TAG);
+      if (i == meta_attrs.end()) {
+        // set_completion_record() failed because RGW_ATTR_MP_COMPLETION_TAG
+        // was there, but it was subsequently removed. return a retryable error
+        return -ERR_SERVICE_UNAVAILABLE;
+      }
+      const bufferlist& target_tag = i->second;
+      const bufferlist& target_etag = attrs[RGW_ATTR_ETAG];
+
+      std::unique_ptr<rgw::sal::Object> head = recorded_head(meta_attrs);
+      ret = head->load_obj_state(dpp, y);
+      if (ret < 0) {
+        return ret == -ENOENT ? -ERR_NO_SUCH_UPLOAD : ret;
+      }
+
+      // only return success if the target head object exists with the same tag/etag
+      bufferlist existing_tag;
+      bufferlist existing_etag;
+      if (!head->get_attr(RGW_ATTR_ID_TAG, existing_tag) ||
+          !head->get_attr(RGW_ATTR_ETAG, existing_etag) ||
+          !existing_tag.contents_equal(target_tag) ||
+          !existing_etag.contents_equal(target_etag)) {
+        return -ERR_NO_SUCH_UPLOAD;
+      }
+
+      // answer with the version the earlier completion wrote, not the one
+      // generated for this request
+      if (head->get_key().need_to_encode_instance()) {
+        target_obj->set_instance(head->get_instance());
+      }
+      target_obj->set_attrs(head->get_attrs());
+      return 0;
+    }
+    if (ret < 0) {
+      return ret == -ENOENT ? -ERR_NO_SUCH_UPLOAD : ret;
+    }
+  }
+
   const req_context rctx{dpp, y, nullptr};
   ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
-  if (ret < 0)
+  if (ret < 0) {
+    if (ret != -ETIMEDOUT) {
+      // the head was not written, so a retry may still complete the upload
+      std::ignore = set_completion_record(dpp, y, nullptr, {});
+    }
     return ret;
+  }
 
   return ret;
 }
