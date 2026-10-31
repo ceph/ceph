@@ -687,14 +687,22 @@ class CephFSShell(Cmd):
                                   'for destination')
                 return
 
-        if root_dst_dir[-1] != b'/':
-            root_dst_dir += b'/'
-
         if args.local_path == b'-' or os.path.isfile(root_src_dir):
+            if is_dir_exists(root_dst_dir):
+                if args.local_path != b'-':
+                    filename = os.path.basename(root_src_dir)
+                else:
+                    filename = b'stdin_dump'
+                root_dst_dir = os.path.join(root_dst_dir, filename)
+            else:
+                root_dst_dir = root_dst_dir.rstrip(b'/')
+
             if args.local_path == b'-':
                 root_src_dir = b'-'
             copy_from_local(root_src_dir, root_dst_dir)
         else:
+            if not root_dst_dir.endswith(b'/'):
+                root_dst_dir += b'/'
             for src_dir, dirs, files in os.walk(root_src_dir):
                 if isinstance(src_dir, str):
                     src_dir = to_bytes(src_dir)

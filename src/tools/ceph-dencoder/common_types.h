@@ -18,7 +18,7 @@ TYPE(string_wrapper)
 #include "include/CompatSet.h"
 TYPE(CompatSet)
 
-#include "include/filepath.h"
+#include "common/filepath.h"
 TYPE(filepath)
 
 #include "include/fs_types.h"
