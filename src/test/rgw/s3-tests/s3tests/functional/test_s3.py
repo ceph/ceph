@@ -3147,6 +3147,32 @@ def test_get_object_ifmatch_failed():
     assert status == 412
     assert error_code == 'PreconditionFailed'
 
+def test_get_object_ifmatch_failed_with_ifmodifiedsince():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo', Body='bar')
+
+    future = datetime.datetime(2100, 1, 1, tzinfo=pytz.UTC)
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key='foo',
+                      IfMatch='"ABCORZ"', IfModifiedSince=future)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 412
+    assert error_code == 'PreconditionFailed'
+
+def test_get_object_ifmatch_good_with_ifmodifiedsince_future():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    response = client.put_object(Bucket=bucket_name, Key='foo', Body='bar')
+    etag = response['ETag']
+
+    future = datetime.datetime(2100, 1, 1, tzinfo=pytz.UTC)
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key='foo',
+                      IfMatch=etag, IfModifiedSince=future)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 304
+    assert e.response['Error']['Message'] == 'Not Modified'
+    assert e.response['ResponseMetadata']['HTTPHeaders']['etag'] == etag
+
 def test_get_object_ifnonematch_good():
     bucket_name = get_new_bucket()
     client = get_client()
