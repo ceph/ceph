@@ -288,7 +288,8 @@ public:
     uint64_t off,
     uint64_t len,
     ceph::buffer::list *pbl,
-    IOContext *ioc) = 0;
+    IOContext *ioc,
+    bool buffered = false) = 0;
   virtual int aio_write(
     uint64_t off,
     ceph::buffer::list& bl,

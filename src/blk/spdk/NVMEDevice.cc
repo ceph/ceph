@@ -963,8 +963,12 @@ int NVMEDevice::aio_read(
     uint64_t off,
     uint64_t len,
     bufferlist *pbl,
-    IOContext *ioc)
+    IOContext *ioc,
+    bool buffered)
 {
+  // SPDK bypasses the kernel entirely, so there is no page cache to read
+  // through and the buffered hint has nothing to act on.
+  (void)buffered;
   dout(20) << __func__ << " " << off << "~" << len << " ioc " << ioc << dendl;
   ceph_assert(is_valid_io(off, len));
   bufferptr p = buffer::create_small_page_aligned(len);

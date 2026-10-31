@@ -153,7 +153,7 @@ public:
 	   IOContext *ioc,
 	   bool buffered) override;
   int aio_read(uint64_t off, uint64_t len, ceph::buffer::list *pbl,
-	       IOContext *ioc) override;
+	       IOContext *ioc, bool buffered = false) override;
   int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
 
   int write(uint64_t off, ceph::buffer::list& bl, bool buffered, int write_hint = WRITE_LIFE_NOT_SET) override;

@@ -2569,6 +2569,13 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_reads_with_retries, "reads_with_retries",
                     "Read operations that required at least one retry due to failed checksum validation",
 		    "rd_r", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_page_cache_read_bytes, "page_cache_read_bytes",
+                    "Bytes of object data read through the page cache "
+                    "(bluestore_page_cache_read)",
+                    NULL, 0, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluestore_page_cache_csum_retries, "page_cache_csum_retries",
+                    "Page cache reads that failed checksum validation and were "
+                    "retried with O_DIRECT after dropping the cached pages");
   b.add_time_avg(l_bluestore_read_lat, "read_lat",
 		 "Average read latency",
 		 "r_l", PerfCountersBuilder::PRIO_CRITICAL);
@@ -9344,11 +9351,16 @@ void BlueStore::_read_cache(
 int BlueStore::_prepare_read_ioc(
   blobs2read_t& blobs2read,
   vector<bufferlist>* compressed_blob_bls,
-  IOContext* ioc)
+  IOContext* ioc,
+  bool page_cache)
 {
   for (auto& p : blobs2read) {
     const BlobRef& bptr = p.first;
     regions2read_t& r2r = p.second;
+    // Only read through the page cache when the blob is checksummed: a page
+    // left stale by a racing O_DIRECT write then fails verification, and
+    // the read is retried with O_DIRECT, instead of returning old data.
+    const bool pc = page_cache && bptr->get_blob().has_csum();
     dout(20) << __func__ << "  blob " << *bptr << " need "
              << r2r << dendl;
     if (bptr->get_blob().is_compressed()) {
@@ -9362,9 +9374,11 @@ int BlueStore::_prepare_read_ioc(
       auto r = bptr->get_blob().map(
         0, bptr->get_blob().get_ondisk_size(),
         [&](uint64_t offset, uint64_t length) {
-          int r = bdev->aio_read(offset, length, &bl, ioc);
+          int r = bdev->aio_read(offset, length, &bl, ioc, pc);
           if (r < 0)
             return r;
+          if (pc)
+            logger->inc(l_bluestore_page_cache_read_bytes, length);
           return 0;
         });
       if (r < 0) {
@@ -9389,9 +9403,11 @@ int BlueStore::_prepare_read_ioc(
         auto r = bptr->get_blob().map(
           req.r_off, req.r_len,
           [&](uint64_t offset, uint64_t length) {
-            int r = bdev->aio_read(offset, length, &req.bl, ioc);
+            int r = bdev->aio_read(offset, length, &req.bl, ioc, pc);
             if (r < 0)
               return r;
+            if (pc)
+              logger->inc(l_bluestore_page_cache_read_bytes, length);
             return 0;
           });
         if (r < 0) {
@@ -9408,6 +9424,29 @@ int BlueStore::_prepare_read_ioc(
     }
   }
   return 0;
+}
+
+void BlueStore::_drop_page_cache(blobs2read_t& blobs2read)
+{
+  // Drop the pages a failed read came from, so the retry cannot be served
+  // the same stale data; the retry itself reads O_DIRECT.
+  for (auto& p : blobs2read) {
+    const bluestore_blob_t& blob = p.first->get_blob();
+    if (!blob.has_csum()) {
+      continue;  // never read through the page cache
+    }
+    auto drop = [&](uint64_t offset, uint64_t length) {
+      bdev->invalidate_cache(offset, length);
+      return 0;
+    };
+    if (blob.is_compressed()) {
+      blob.map(0, blob.get_ondisk_size(), drop);
+    } else {
+      for (auto& req : p.second) {
+        blob.map(req.r_off, req.r_len, drop);
+      }
+    }
+  }
 }
 
 int BlueStore::_generate_read_result_bl(
@@ -9622,7 +9661,10 @@ int BlueStore::_do_read(
                              // The error isn't that much...
   vector<bufferlist> compressed_blob_bls;
   IOContext ioc(cct, NULL, !cct->_conf->bluestore_fail_eio);
-  r = _prepare_read_ioc(blobs2read, &compressed_blob_bls, &ioc);
+  // Retries after a checksum failure always go O_DIRECT.
+  const bool page_cache = buffered && retry_count == 0 &&
+                          cct->_conf->bluestore_page_cache_read;
+  r = _prepare_read_ioc(blobs2read, &compressed_blob_bls, &ioc, page_cache);
   // we always issue aio for reading, so errors other than EIO are not allowed
   if (r < 0)
     return r;
@@ -9692,6 +9734,10 @@ int BlueStore::_do_read(
     // high memory pressure. Retrying the failing read succeeds in most 
     // cases.
     // See also: http://tracker.ceph.com/issues/22464
+    if (page_cache) {
+      _drop_page_cache(blobs2read);
+      logger->inc(l_bluestore_page_cache_csum_retries);
+    }
     if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
       return -EIO;
     }
@@ -10036,6 +10082,9 @@ int BlueStore::_do_readv(
   _dump_onode<30>(cct, *o);
 
   IOContext ioc(cct, NULL, !cct->_conf->bluestore_fail_eio);
+  // Retries after a checksum failure always go O_DIRECT.
+  const bool page_cache = buffered && retry_count == 0 &&
+                          cct->_conf->bluestore_page_cache_read;
   vector<std::tuple<ready_regions_t, vector<bufferlist>, blobs2read_t>> raw_results;
   raw_results.reserve(m.num_intervals());
   int i = 0;
@@ -10043,7 +10092,8 @@ int BlueStore::_do_readv(
     raw_results.push_back({});
     _read_cache(o, p.get_start(), p.get_len(), read_cache_policy,
                 std::get<0>(raw_results[i]), std::get<2>(raw_results[i]));
-    r = _prepare_read_ioc(std::get<2>(raw_results[i]), &std::get<1>(raw_results[i]), &ioc);
+    r = _prepare_read_ioc(std::get<2>(raw_results[i]), &std::get<1>(raw_results[i]),
+                          &ioc, page_cache);
     // we always issue aio for reading, so errors other than EIO are not allowed
     if (r < 0)
       return r;
@@ -10120,6 +10170,12 @@ int BlueStore::_do_readv(
       // high memory pressure. Retrying the failing read succeeds in most
       // cases.
       // See also: http://tracker.ceph.com/issues/22464
+      if (page_cache) {
+        for (auto& rr : raw_results) {
+          _drop_page_cache(std::get<2>(rr));
+        }
+        logger->inc(l_bluestore_page_cache_csum_retries);
+      }
       if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
         return -EIO;
       }
