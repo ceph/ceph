@@ -450,6 +450,17 @@ void MgrClient::_send_report()
   }
 
   session->con->send_message2(report);
+
+  // The mgr sends nothing back on this lossy session, and the idle check
+  // counts only received traffic. Send a keepalive once half of our
+  // ms_connection_idle_timeout has passed since the last one, so its ack
+  // keeps the session from being reset.
+  auto now = ceph::mono_clock::now();
+  if (now - session->last_keepalive >=
+      ceph::make_timespan(cct->_conf->ms_connection_idle_timeout / 2.0)) {
+    session->con->send_keepalive();
+    session->last_keepalive = now;
+  }
 }
 
 void MgrClient::send_pgstats()
