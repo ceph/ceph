@@ -21,6 +21,8 @@
 #include "include/common_fwd.h"
 #include "include/utime.h"
 
+#include <algorithm>
+#include <optional>
 #include <sstream>
 
 using std::ostringstream;
@@ -112,18 +114,32 @@ bool PerfCountersCollectionImpl::reset(std::string_view name)
  * @param counter name of counter within subsystem, e.g. "num_strays",
  *                may be empty.
  * @param schema if true, output schema instead of current data.
- * @param histograms if true, dump histogram values,
- *                   if false dump all non-histogram counters
+ * @param histograms whether to dump only histogram counters, only scalar counters,
+ *                   or both
+ * @param histogram_loggers with select_histograms_t::include, if not empty,
+ *                          dump histograms only of loggers with these key names
  */
 void PerfCountersCollectionImpl::dump_formatted_generic(
     Formatter *f,
     bool schema,
-    bool histograms,
+    select_histograms_t histograms,
     select_labeled_t dump_labeled,
     const std::string &logger,
-    const std::string &counter) const
+    const std::string &counter,
+    const std::vector<std::string> &histogram_loggers) const
 {
   Formatter::ObjectSection collection_section(*f, "perfcounter_collection"sv);
+
+  const auto histograms_for = [&](const PerfCounters& l) {
+    if (histograms != select_histograms_t::include ||
+        histogram_loggers.empty() ||
+        std::find(histogram_loggers.begin(), histogram_loggers.end(),
+                          ceph::perf_counters::key_name(l.get_name())) !=
+            histogram_loggers.end()) {
+      return histograms;
+    }
+    return select_histograms_t::exclude;
+  };
 
   if (dump_labeled == select_labeled_t::labeled) {
     // dump all counters (labeled and unlabeled), using the "labeled format"
@@ -135,9 +151,9 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
         // close previous set of counters before dumping new one
         array_section.emplace(*f, key_name);
         prev_key_name = key_name;
-        (*l)->dump_formatted_generic(f, schema, histograms, select_labeled_t::labeled, ""s);
+        (*l)->dump_formatted_generic(f, schema, histograms_for(**l), select_labeled_t::labeled, ""s);
       } else {
-        (*l)->dump_formatted_generic(f, schema, histograms, select_labeled_t::labeled, ""s);
+        (*l)->dump_formatted_generic(f, schema, histograms_for(**l), select_labeled_t::labeled, ""s);
       }
     }
   } else {
@@ -145,14 +161,14 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
     if (logger.empty()) {
       // dump all loggers
       for (auto& l : m_loggers) {
-        l->dump_formatted_generic(f, schema, histograms,
+        l->dump_formatted_generic(f, schema, histograms_for(*l),
                                   select_labeled_t::unlabeled, counter);
       }
     } else {
       // dump only specified logger
       auto l = m_loggers.find(logger);
       if (l != m_loggers.end()) {
-        (*l)->dump_formatted_generic(f, schema, histograms,
+        (*l)->dump_formatted_generic(f, schema, histograms_for(**l),
                                      select_labeled_t::unlabeled, counter);
       }
     }
@@ -451,21 +467,48 @@ utime_t PerfCounters::tget(int idx) const
   return utime_t(v / 1000000000ull, v % 1000000000ull);
 }
 
-void PerfCounters::hinc(int idx, int64_t x, int64_t y)
+PerfCounters::perf_counter_data_any_d*
+PerfCounters::histogram_get(int idx, perfcounter_type_d type, int dims)
 {
 #ifndef WITH_CRIMSON
   if (!m_cct->_conf->perf)
-    return;
+    return nullptr;
 #endif
-
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
-
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  ceph_assert(data.type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
+  ceph_assert(data.type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | type));
   ceph_assert(data.histogram);
+  ceph_assert(data.histogram->dims() == dims);
+  return &data;
+}
 
-  data.histogram->inc(x, y);
+void PerfCounters::hinc(int idx, int64_t x, int64_t y)
+{
+  if (auto* data = histogram_get(idx, PERFCOUNTER_U64, 2)) {
+    data->histogram->observe(x, y);
+  }
+}
+
+void PerfCounters::hinc(int idx, int64_t x)
+{
+  if (auto* data = histogram_get(idx, PERFCOUNTER_U64, 1)) {
+    data->histogram->observe(x, 0);
+  }
+}
+
+void PerfCounters::htinc(int idx, ceph::timespan x)
+{
+  if (auto* data = histogram_get(idx, PERFCOUNTER_TIME, 1)) {
+    data->histogram->observe(x.count(), 0);
+  }
+}
+
+void PerfCounters::htinc(int idx, utime_t x)
+{
+  if (auto* data = histogram_get(idx, PERFCOUNTER_TIME, 1)) {
+    data->histogram->observe(x.to_nsec(), 0);
+  }
 }
 
 pair<uint64_t, uint64_t> PerfCounters::get_tavg_ns(int idx) const
@@ -504,7 +547,7 @@ void PerfCounters::reset()
  * counter format".
  */
 void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
-    bool histograms, select_labeled_t dump_labeled,
+    select_histograms_t histograms, select_labeled_t dump_labeled,
     const std::string &counter) const
 {
   // 'labeled_2nd_lvl_section' is only used in the context of dumping
@@ -544,9 +587,9 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       continue;
     }
 
-    // Switch between normal and histogram view
-    bool is_histogram = (d->type & PERFCOUNTER_HISTOGRAM) != 0;
-    if (is_histogram != histograms) {
+    const bool is_histogram = (d->type & PERFCOUNTER_HISTOGRAM) != 0;
+    if ((histograms == select_histograms_t::exclude && is_histogram) ||
+        (histograms == select_histograms_t::only && !is_histogram)) {
       continue;
     }
 
@@ -570,11 +613,9 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 	  f->dump_string("value_type", "integer-integer-pair");
 	}
       } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-	if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_string("value_type", "real-2d-histogram");
-	} else {
-	  f->dump_string("value_type", "integer-2d-histogram");
-	}
+	const int dims = d->histogram ? d->histogram->dims() : 2;
+	const char *base = (d->type & PERFCOUNTER_TIME) ? "real" : "integer";
+        f->dump_format("value_type", "%s-%dd-histogram", base, dims);
       } else {
 	if (d->type & PERFCOUNTER_TIME) {
 	  f->dump_string("value_type", "real");
@@ -632,7 +673,8 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 	  ceph_abort();
 	}
       } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-        ceph_assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
+        ceph_assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64)
+                    || d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_TIME));
         ceph_assert(d->histogram);
         Formatter::ObjectSection histogram_section{*f, d->name};
         d->histogram->dump_formatted(f);
@@ -731,13 +773,34 @@ void PerfCountersBuilder::add_u64_counter_histogram(
 {
   add_impl(idx, name, description, nick, prio,
 	   PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER, unit,
-           std::unique_ptr<PerfHistogram<>>{new PerfHistogram<>{x_axis_config, y_axis_config}});
+           std::make_unique<PerfHistogram<2>>(
+             PerfHistogram<2>{x_axis_config, y_axis_config}));
+}
+
+void PerfCountersBuilder::add_u64_counter_histogram(
+  int idx, const char *name,
+  PerfHistogramCommon::axis_config_d x_axis_config,
+  const char *description, const char *nick, int prio, int unit)
+{
+  add_impl(idx, name, description, nick, prio,
+	   PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER, unit,
+           std::make_unique<PerfHistogram<1>>(PerfHistogram<1>{x_axis_config}));
+}
+
+void PerfCountersBuilder::add_time_histogram(
+  int idx, const char *name,
+  PerfHistogramCommon::axis_config_d x_axis_config,
+  const char *description, const char *nick, int prio)
+{
+  add_impl(idx, name, description, nick, prio,
+	   PERFCOUNTER_TIME | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER, UNIT_NONE,
+           std::make_unique<PerfHistogram<1>>(PerfHistogram<1>{x_axis_config}));
 }
 
 void PerfCountersBuilder::add_impl(
   int idx, const char *name,
   const char *description, const char *nick, int prio, int ty, int unit,
-  std::unique_ptr<PerfHistogram<>> histogram)
+  std::unique_ptr<PerfHistogramCommon> histogram)
 {
   ceph_assert(idx > m_perf_counters->m_lower_bound);
   ceph_assert(idx < m_perf_counters->m_upper_bound);
