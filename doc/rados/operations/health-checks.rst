@@ -1860,9 +1860,79 @@ For more information, see :ref:`specifying_pool_target_size`.
 TOO_FEW_OSDS
 ____________
 
-The number of OSDs in the cluster is below the configurable threshold of
-:confval:`osd_pool_default_size`. This means that some or all data may not be able to
+The number of OSDs in the cluster is below the size of a new pool,
+:confval:`osd_pool_default_num_zones` times :confval:`osd_pool_default_size`,
+which counts the replicas in each zone.
+This means that some or all data may not be able to
 satisfy the data protection policy specified in CRUSH rules and pool settings.
+
+.. _pool-default-config-override:
+
+POOL_DEFAULT_CONFIG_OVERRIDE
+____________________________
+
+A pool creation default has a value in the ``global`` section of the
+central config store, as ``ceph osd pool default set`` writes it, but one or
+more Monitors override it. ``ceph osd pool create`` runs on the Monitors,
+so it does not use the global value. A setting that is more specific than the
+``global`` section overrides it: one in a ``mon`` or ``mon.<id>`` section of
+the central config store, a masked one such as ``global/host:<host>``, or one
+in a Monitor's local configuration file, environment, command line or runtime
+settings. A setting in the central config store raises the warning even when
+its value is the same as the global value; a Monitor's local setting raises it
+only when its value differs.
+
+``ceph health detail`` names each option and where it is set, for example:
+
+.. code-block:: none
+
+   [WRN] POOL_DEFAULT_CONFIG_OVERRIDE: mon a has pool creation defaults that override their global values
+       osd_pool_default_size is set in section mon of the configuration database
+
+To resolve the warning, remove the override and then set the default with
+``ceph osd pool default set``, which checks the value and writes it to the
+``global`` section:
+
+#. Find where the override is set. ``ceph health detail`` names the option and
+   the section or Monitor. ``ceph osd pool default get`` shows the value that
+   the Monitor serving the command uses and where it comes from.
+
+#. Remove the override where it is set:
+
+   * In a section of the central config store (``mon``, ``mon.<id>`` or a
+     masked section such as ``global/host:<host>``), remove it from that
+     section:
+
+     .. prompt:: bash $
+
+        ceph config rm mon osd_pool_default_size
+
+   * In a Monitor's local configuration file, remove the option from the
+     ``ceph.conf`` on that Monitor's host and restart the Monitor.
+   * On a Monitor's command line or in its environment (for example
+     ``CEPH_ARGS``), remove it there and restart the Monitor.
+   * As a runtime setting made with ``ceph tell mon.<id> config set``, unset
+     it:
+
+     .. prompt:: bash $
+
+        ceph tell mon.<id> config unset osd_pool_default_size
+
+#. Set the default that you want with ``ceph osd pool default set``, for
+   example:
+
+   .. prompt:: bash $
+
+      ceph osd pool default set --replica 3
+
+#. Check that every default now comes from the ``global`` section, or is the
+   built-in default:
+
+   .. prompt:: bash $
+
+      ceph osd pool default get
+
+The warning clears once every Monitor uses the global values.
 
 SMALLER_PGP_NUM
 _______________
@@ -2219,6 +2289,24 @@ not belong to any of the dividing buckets in stretch mode.
 We encourage you to fix this by making sure the CRUSH locations of all Monitors,
 with the exception of a tiebreaker Monitor,
 belong to the dividing buckets. For more information, see :ref:`stretch_mode`.
+
+STRETCH_MODE_POOL_NOT_CONVERTED
+_______________________________
+
+When an upgrade is committed with ``ceph osd require-osd-release`` on a cluster
+in stretch mode, the Monitors give each stretch pool two zones, with half of its
+replicas in each. Only a replicated pool whose CRUSH rule places half of an even
+number of replicas in each zone can be split this way. Any other stretch pool
+keeps one zone and the rules of earlier releases.
+
+Before the commit, this warning names the stretch pools that the commit will
+leave with one zone. Change them so that it can split them, for example with
+``ceph osd pool set {pool-name} size 4`` if their rule places two replicas in
+each zone.
+
+After the commit, this warning names the stretch pools that kept one zone. They
+still serve I/O, but ``ceph mon disable_stretch_mode`` leaves them stretched.
+For more information, see :ref:`stretch_mode`.
 
 NVMeoF Gateway
 --------------

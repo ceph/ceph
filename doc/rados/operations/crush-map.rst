@@ -740,6 +740,9 @@ The relevant erasure-code profile properties are as follows:
    a CRUSH MSR rule being created.
  * **crush-device-class**: the device class on which to place data [default:
    none, which means that all devices are used].
+ * **crush-zone-failure-domain**: the CRUSH bucket type of the zones of a pool
+   or rule over more than one zone [default:
+   :confval:`osd_pool_default_zone_failure_domain`].
  * **k** and **m** (and, for the ``lrc`` plugin, **l**): these determine the
    number of erasure-code shards, affecting the resulting CRUSH rule.
 
@@ -748,12 +751,47 @@ The relevant erasure-code profile properties are as follows:
 
 .. prompt:: bash $
 
-   ceph osd crush rule create-erasure {name} {profile-name}
+   ceph osd crush rule create-erasure {name} {profile-name} [{num_zones}]
+
+``num_zones`` (default ``1``) is the number of zones that the rule spans. A
+rule over more than one zone places the ``k+m`` shards in each of
+``num_zones`` buckets of the profile's ``crush-zone-failure-domain`` type, or
+of :confval:`osd_pool_default_zone_failure_domain` if the profile does not set
+one.
 
 .. note:: When creating a new pool, it is not necessary to create the rule
    explicitly. If only the erasure-code profile is specified and the rule
    argument is omitted, then Ceph will create the CRUSH rule automatically.
 
+Replicated CRUSH rules over zones
+---------------------------------
+
+Ceph generates a CRUSH rule for each replicated pool that is stretched over
+zones without being given one: by ``ceph osd pool create {pool-name}
+--num_zones 2``, by ``ceph osd pool set {pool-name} num_zones 2``, and by
+``ceph mon enable_stretch_mode`` once the upgrade is committed. The generated
+rule has this form, from the pool's ``replica`` and the
+:confval:`osd_pool_default_root`, :confval:`osd_pool_default_zone_failure_domain`,
+:confval:`osd_pool_default_osd_failure_domain` and
+:confval:`osd_pool_default_class` defaults, unless the command gives them::
+
+   rule {pool-name} {
+      id 2
+      type replicated
+      step take {root}
+      step choose firstn {num_zones} type {zone_failure_domain}
+      step chooseleaf firstn {replica} type {osd_failure_domain}
+      step emit
+   }
+
+If ``{osd_failure_domain}`` is ``osd``, the rule uses ``step choose firstn``
+instead of ``step chooseleaf firstn``.
+
+A rule shared by several pools, or a rule over three or more zones for an
+individual stretch pool (see :ref:`individual_stretch_pools`), is written by hand: get the
+CRUSH map with ``ceph osd getcrushmap``, decompile it with ``crushtool -d``, add
+a rule of the form above with an unused ``id``, compile it with ``crushtool
+-c`` and set it with ``ceph osd setcrushmap``.
 
 .. _rados-crush-msr-rules:
 
@@ -775,8 +813,9 @@ OSDs and clients are required to support the CRUSH_MSR feature bit
 Deleting rules
 --------------
 
-To delete rules that are not in use by pools, run a command of the following
-form:
+The Monitors delete a rule automatically when the last pool that uses it is
+deleted or given another rule, unless it is the default replicated rule. To
+delete a rule that no pool uses, run a command of the following form:
 
 .. prompt:: bash $
 

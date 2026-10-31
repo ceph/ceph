@@ -56,16 +56,34 @@ function TEST_set() {
     ceph osd erasure-code-profile get $profile | \
         grep -e key=value -e plugin=jerasure || return 1
     #
-    # --force & --yes-i-really-mean-it are required to override
-    # an existing profile
+    # a profile that no pool uses changes without flags
     #
-    ! ceph osd erasure-code-profile set $profile > $dir/out 2>&1 || return 1
-    grep 'will not override' $dir/out || return 1
-    ceph osd erasure-code-profile set $profile key=other --force --yes-i-really-mean-it || return 1
+    ceph osd erasure-code-profile set $profile key=other || return 1
     ceph osd erasure-code-profile get $profile | \
         grep key=other || return 1
 
     ceph osd erasure-code-profile rm $profile # cleanup
+}
+
+# Changing a profile that a pool uses needs --yes-i-really-mean-it
+function TEST_set_in_use() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    local profile=myprofile
+    ceph osd erasure-code-profile set $profile k=2 m=1 || return 1
+    ceph osd erasure-code-profile set $profile k=3 m=1 || return 1
+    create_pool poolname 12 12 erasure $profile || return 1
+    ! ceph osd erasure-code-profile set $profile k=4 m=1 > $dir/out 2>&1 || return 1
+    grep "will not override.*poolname.*--yes-i-really-mean-it" $dir/out || return 1
+    ! ceph osd erasure-code-profile set $profile k=4 m=1 --force || return 1
+    ceph osd erasure-code-profile get $profile | grep k=3 || return 1
+    ceph osd erasure-code-profile set $profile k=4 m=1 --yes-i-really-mean-it || return 1
+    ceph osd erasure-code-profile get $profile | grep k=4 || return 1
+    # no pool uses default
+    ceph osd erasure-code-profile set default k=3 m=2 || return 1
+    ceph osd erasure-code-profile get default | grep k=3 || return 1
+    ceph osd pool delete poolname poolname --yes-i-really-really-mean-it || return 1
 }
 
 function TEST_ls() {
@@ -106,6 +124,66 @@ function TEST_rm() {
     ceph osd erasure-code-profile rm $profile || return 1
 
     ceph osd erasure-code-profile rm $profile # cleanup
+}
+
+# A pool created while the deletion of a profile's last pool is pending must
+# not get the profile, or the rule, that the deletion removes: the monitor
+# would crash computing the new pool's PGs with a rule that is gone
+function TEST_create_while_profile_removed() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph config set mon mon_allow_pool_delete true || return 1
+    ceph osd erasure-code-profile set p21 k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd crush rule create-erasure r21 p21 || return 1
+    ceph osd pool create a 8 8 erasure p21 r21 || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    # an OSDMap change just committed delays the next proposal
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool rm a a --yes-i-really-really-mean-it &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd pool create b 8 8 erasure p21 r21 > $dir/out 2>&1
+    wait $pid || return 1
+    cat $dir/out
+    timeout 60 ceph osd pool ls > $dir/pools || return 1
+    if grep -qx b $dir/pools; then
+        ceph osd erasure-code-profile ls | grep -qx p21 || return 1
+    else
+        grep "does not exist" $dir/out || return 1
+    fi
+}
+
+# Deleting an erasure coded pool deletes its profile once no pool uses it,
+# never the default profile, and also when the profile's pools are deleted
+# in one epoch
+function TEST_profile_removed_with_last_pool() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph config set mon mon_allow_pool_delete true || return 1
+    ceph osd erasure-code-profile set p21 k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create a 8 8 erasure p21 || return 1
+    ceph osd pool create b 8 8 erasure p21 || return 1
+    ceph osd pool rm a a --yes-i-really-really-mean-it || return 1
+    ceph osd erasure-code-profile ls | grep -qx p21 || return 1
+    ceph osd pool rm b b --yes-i-really-really-mean-it || return 1
+    ! ceph osd erasure-code-profile ls | grep -qx p21 || return 1
+
+    ceph osd pool create d 8 8 erasure || return 1
+    ceph osd pool rm d d --yes-i-really-really-mean-it || return 1
+    ceph osd erasure-code-profile ls | grep -qx default || return 1
+
+    ceph osd erasure-code-profile set q21 k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create c1 8 8 erasure q21 || return 1
+    ceph osd pool create c2 8 8 erasure q21 || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    ceph osd pool rm c1 c1 --yes-i-really-really-mean-it &
+    local pid=$!
+    ceph osd pool rm c2 c2 --yes-i-really-really-mean-it || return 1
+    wait $pid || return 1
+    ! ceph osd erasure-code-profile ls | grep -qx q21 || return 1
 }
 
 function TEST_get() {
@@ -232,6 +310,52 @@ function TEST_invalid_crush_failure_domain() {
     local crush_failure_domain=invalid_failure_domain
 
     ! ceph osd erasure-code-profile set $profile k=4 m=2 crush-failure-domain=$crush_failure_domain 2>&1 || return 1
+}
+
+# A pool created while the deletion of the last pool of the rule it would
+# reuse by name is pending must not get that rule: the monitor would crash
+# computing the new pool's PGs with a rule that is gone
+function TEST_create_while_rule_of_its_name_removed() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set prof k=2 m=1 crush-failure-domain=osd || return 1
+    # keeps the profile while the rule named a goes
+    ceph osd pool create keep 8 8 erasure prof || return 1
+    ceph osd pool create a 8 8 erasure prof || return 1
+    ceph osd pool rename a z || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    # an OSDMap change just committed delays the next proposal
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool rm z z --yes-i-really-really-mean-it &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd pool create a 8 8 erasure prof || return 1
+    wait $pid || return 1
+    timeout 60 ceph osd pool get a crush_rule > $dir/rule || return 1
+    ceph osd crush rule ls | grep -qx "$(awk '{print $2}' $dir/rule)" || return 1
+}
+
+# A profile set again while its removal with its last pool is pending exists
+# afterwards
+function TEST_profile_set_while_removed() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set prof k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create a 8 8 erasure prof || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    # an OSDMap change just committed delays the next proposal
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool rm a a --yes-i-really-really-mean-it &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd erasure-code-profile set prof k=2 m=1 \
+        crush-failure-domain=osd || return 1
+    wait $pid || return 1
+    ceph osd erasure-code-profile ls | grep -qx prof || return 1
 }
 
 main osd-erasure-code-profile "$@"

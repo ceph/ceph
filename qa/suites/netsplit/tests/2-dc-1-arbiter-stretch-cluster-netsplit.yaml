@@ -3,6 +3,10 @@ overrides:
     conf:
       global:
         mon election default strategy: 3
+    # in the configuration database, where enable_stretch_mode can change it
+    cluster-conf:
+      global:
+        osd pool default size: 2
 tasks:
 - workunit:
     clients:

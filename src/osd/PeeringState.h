@@ -1592,6 +1592,9 @@ public:
 
   std::set<pg_shard_t> backfill_targets;       ///< osds to be backfilled
   shard_id_set backfill_target_shard_id_set;
+  /// multi-zone EC: backfill targets complete and contiguous with the auth
+  /// log, waiting for their zone block to move to them
+  std::set<pg_shard_t> usable_backfill_targets;
   std::set<pg_shard_t> async_recovery_targets; ///< osds to be async recovered
 
   /// osds which might have objects on them which are unfound on the primary
@@ -1738,6 +1741,24 @@ private:
     std::set<pg_shard_t> *backfill,
     std::set<pg_shard_t> *acting_backfill,
     std::ostream &ss);
+
+public:
+  static void calc_ec_acting_stretch(
+    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    unsigned size,
+    const std::vector<int> &acting,
+    const std::vector<int> &up,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
+    bool restrict_to_up_acting,
+    std::vector<int> *want,
+    std::set<pg_shard_t> *backfill,
+    std::set<pg_shard_t> *acting_backfill,
+    const OSDMapRef osdmap,
+    const PGPool& pool,
+    const IsPGRecoverablePredicate &is_recoverable,
+    std::ostream &ss);
+
+private:
 
   static std::pair<std::map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
   select_replicated_primary(
@@ -2523,8 +2544,12 @@ public:
    * applicable stretch cluster constraints.
    */
   bool acting_set_writeable() {
-    return (actingset.size() >= pool.info.min_size) &&
-      (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
+    if(pool.info.is_stretch_pool()) {
+      return (get_osdmap()->stretch_num_acting_below_min_size(pool.info, acting) == 0) &&
+        (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
+    } else {
+      return (actingset.size() >= pool.info.min_size);
+    }
   }
 
   /**

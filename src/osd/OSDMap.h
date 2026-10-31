@@ -518,7 +518,8 @@ private:
     CEPH_FEATUREMASK_SERVER_REEF |
     CEPH_FEATUREMASK_SERVER_TENTACLE |
     CEPH_FEATUREMASK_SERVER_UMBRELLA |
-    CEPH_FEATUREMASK_SERVER_VAMPIRE;
+    CEPH_FEATUREMASK_SERVER_VAMPIRE |
+    CEPH_FEATUREMASK_OSD_STRETCH_ZONES;
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
@@ -723,6 +724,9 @@ public:
 
   int get_flags() const { return flags; }
   bool test_flag(int f) const { return flags & f; }
+  /// the upgrade to pools over zones is committed: stretch pools follow
+  /// this release's peering rules, and every OSD has OSD_STRETCH_ZONES
+  bool stretch_zones() const { return test_flag(CEPH_OSDMAP_STRETCH_ZONES); }
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
@@ -876,6 +880,16 @@ public:
    */
   bool subtree_is_down(int id, std::set<int> *down_cache) const;
   bool containing_subtree_is_down(CephContext *cct, int osd, int subtree_type, std::set<int> *down_cache) const;
+
+  void get_stretch_zones(const pg_pool_t& pool,
+                         std::map<int, std::set<int>>* zone_osds) const;
+  unsigned stretch_num_acting_below_min_size(const pg_pool_t& pool, const std::vector<int>& acting) const;
+
+  /// Whether async recovery may leave the PG the acting set candidate_want,
+  /// which lacks one OSD of the set it wants: each zone of a stretch pool,
+  /// or else the whole set, keeps min_size OSDs.
+  bool async_recovery_can_shrink(const pg_pool_t& pool,
+                                 const std::vector<int>& candidate_want) const;
 
   bool subtree_type_is_down(CephContext *cct, int id, int subtree_type, std::set<int> *down_in_osds, std::set<int> *up_in_osds,
                             std::set<int> *subtree_up, std::unordered_map<int, std::set<int> > *subtree_type_down) const;
@@ -1199,12 +1213,19 @@ public:
   const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 			   const pg_t pg,
 			   const std::vector<int>& acting) const;
-  const shard_id_t pgtemp_primaryfirst(const pg_pool_t& pool,
-				       const pg_t pg,
-				       const shard_id_t shard) const;
   shard_id_t pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 					    const pg_t pg,
 					    const shard_id_t shard) const;
+  /// Correct the shard that a pre-Tentacle client gives an op to an
+  /// optimized EC pool with pg_temp: its position in primary-first order.
+  /// The client's map can be older than this one: false if the pool or
+  /// the shard is not in this map.
+  bool undo_pre_tentacle_primaryfirst(spg_t *pgid) const;
+  /// Correct the shard that a client without OSD_STRETCH_ZONES gives an op
+  /// to an optimized EC pool over zones with pg_temp: it computes it from the
+  /// position in primary-first order as if the pool had one zone. False as
+  /// undo_pre_tentacle_primaryfirst().
+  bool undo_pre_stretch_zones_primaryfirst(spg_t *pgid) const;
 
   bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
     auto p = removed_snaps_queue.find(pool);

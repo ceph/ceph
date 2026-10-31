@@ -1,0 +1,140 @@
+meta:
+- desc: |
+   Upgrade a cluster in global stretch mode from Tentacle under a write load
+   that checks every read: datacenter dc2 is lost while the mons are mixed and
+   again with dc1 on the new release, the upgrade is committed while dc2 is
+   down, and dc2's OSDs, still on Tentacle, must stay down until upgraded.
+overrides:
+  ceph:
+    log-ignorelist:
+      - Telemetry requires re-opt-in
+      - telemetry module includes new collections
+      - CEPHADM_STRAY_HOST
+      - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
+      - DEGRADED_STRETCH_MODE
+      - RECOVERING_STRETCH_MODE
+      - is down
+      - OSD_DOWN
+      - OSD_HOST_DOWN
+      - osds down
+      - osd down
+      - mons down
+      - mon down
+      - MON_DOWN
+      - out of quorum
+      - PG_AVAILABILITY
+      - PG_DEGRADED
+      - Reduced data availability
+      - Degraded data redundancy
+      - pg .* is stuck inactive
+      - pg .* is stuck undersized
+      - pg .* is stuck peering
+      - pg .* is .*degraded
+      - SLOW_OPS
+      - slow request
+      - OSDMAP_FLAGS
+      - OSD_UPGRADE_FINISHED
+      - but it is still running
+      - do not have an application enabled
+      - POOL_APP_NOT_ENABLED
+tasks:
+- install:
+    branch: tentacle
+    exclude_packages:
+      - ceph-osd-classic
+      - ceph-volume
+      - ceph-osd-crimson
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:tentacle
+    compiled_cephadm_branch: tentacle
+    conf:
+      osd:
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+      - ceph config set mgr mgr/cephadm/daemon_cache_timeout 60
+      - ceph config set global log_to_journald false --force
+      - ceph config set mon mon_stretch_recovery_min_wait 30
+- workunit:
+    clients:
+      client.0:
+        - mon/pool-fields-upgrade-setup.sh
+    env:
+      POOL_FIELD_SCENARIO: 2az
+- parallel:
+    - stretch-writes
+    - zone-loss-sequence
+- workunit:
+    clients:
+      client.0:
+        - mon/pool-fields-upgrade-verify.sh
+    env:
+      POOL_FIELD_SCENARIO: 2az
+
+#################
+
+stretch-writes:
+- rados:
+    clients: [client.0]
+    pools: [pool_fields_upgrade]
+    ops: 60000
+    objects: 200
+    max_in_flight: 16
+    op_weights:
+      read: 100
+      write: 100
+      delete: 10
+
+#################
+
+zone-loss-sequence:
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - echo the mgrs, then the mons of dc1, onto the new release
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mgr
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon --hosts $(ceph osd metadata 0 -f json | jq -r .hostname)
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+
+      - echo dc2 lost while the mons are mixed - min_size is halved as before
+      - ceph orch daemon stop mon.b
+      - for o in 4 5 6 7 ; do ceph orch daemon stop osd.$o ; done
+      - timeout 900 bash -c 'until ceph osd dump -f json | jq -e ".stretch_mode.degraded_stretch_mode == 1" ; do sleep 10 ; done'
+      - ceph osd pool get pool_fields_upgrade min_size -f json | jq -e '.min_size == 1'
+      - sleep 120
+      - ceph orch daemon start mon.b
+      - for o in 4 5 6 7 ; do ceph orch daemon start osd.$o ; done
+      - timeout 1800 bash -c 'until ceph osd dump -f json | jq -e ".stretch_mode.degraded_stretch_mode == 0" ; do sleep 10 ; done'
+      - ceph osd pool get pool_fields_upgrade min_size -f json | jq -e '.min_size == 2'
+
+      - echo every mon, and the OSDs of dc1, onto the new release
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types osd --hosts $(ceph osd metadata 0 -f json | jq -r .hostname)
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+
+      - echo dc2 lost again, its OSDs still on Tentacle, and the upgrade committed
+      - ceph orch daemon stop mon.b
+      - for o in 4 5 6 7 ; do ceph orch daemon stop osd.$o ; done
+      - timeout 900 bash -c 'until ceph osd dump -f json | jq -e ".stretch_mode.degraded_stretch_mode == 1" ; do sleep 10 ; done'
+      - ceph osd require-osd-release vampire
+      - ceph osd dump -f json | jq -r .flags | grep stretch_zones
+      - ceph osd pool ls detail -f json | jq -e '.[] | select(.pool_name == "pool_fields_upgrade") | .num_zones == 2 and .replica == 2 and .min_size == 1'
+      - sleep 120
+
+      - echo dc2 back - its Tentacle OSDs cannot connect and stay down
+      - ceph orch daemon start mon.b
+      - for o in 4 5 6 7 ; do ceph orch daemon start osd.$o ; done
+      - sleep 180
+      - for o in 4 5 6 7 ; do ceph osd dump -f json | jq -e ".osds[] | select(.osd == $o) | .up == 0" ; done
+
+      - echo the rest of the upgrade
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+      - ceph versions | jq -e '.overall | length == 1'
+      - ceph versions | jq -e '.overall | keys' | grep $sha1
+      - timeout 1800 bash -c 'until ceph osd dump -f json | jq -e ".stretch_mode.degraded_stretch_mode == 0" ; do sleep 10 ; done'
