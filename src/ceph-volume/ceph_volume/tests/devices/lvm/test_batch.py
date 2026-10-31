@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from ceph_volume.devices.lvm import batch
 from ceph_volume.util import arg_validators, disk, device
+from ceph_volume.util.nvme import FcmDedupInfo
 from ceph_volume.configuration import Conf
 from typing import List, Callable
 
@@ -61,6 +62,21 @@ class TestBatch(object):
         )
         with pytest.raises(ArgumentError):
             arg_validators.ValidBatchDevice()('foo')
+
+    @patch('ceph_volume.devices.lvm.batch.fcm_dedup_info')
+    def test_fcm_device_rejects_multiple_osds_per_device(self, m_fcm_info, factory, mock_device_generator):
+        """Verify Batch._check_slot_args raises RuntimeError if osds_per_device > 1 on FCM device."""
+        m_fcm_info.return_value = FcmDedupInfo(supported=True, slot_size_bytes=16384, dvs=4, lba_size_bytes=512)
+        dev = mock_device_generator(path='/dev/nvme0n1')
+        args = factory(
+            data_slots=2,
+            osds_per_device=2,
+            devices=[dev]
+        )
+        b = batch.Batch([])
+        b.args = args
+        with pytest.raises(RuntimeError, match='Cannot use --osds-per-device > 1 or --data-slots > 1 on FCM dedup device'):
+            b._check_slot_args()
 
     def test_exit_on_unavailable_fast_allocation(self, factory, conf_ceph_stub, mock_device_generator):
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
