@@ -120,6 +120,7 @@ class RGWHTTPClient : public RGWIOProvider,
   rgw_http_req_data *req_data;
 
   bool verify_ssl; // Do not validate self signed certificates, default to false
+  bool sensitive_request{false};
 
   std::string ca_path;
 
@@ -224,6 +225,14 @@ public:
 
   void set_verify_ssl(bool flag) {
     verify_ssl = flag;
+  }
+
+  // Request-local policy: never toggle shared logging settings around secrets.
+  void set_sensitive_request(bool flag = true) {
+    sensitive_request = flag;
+  }
+  bool is_sensitive_request() const {
+    return sensitive_request;
   }
 
   // set request timeout in seconds

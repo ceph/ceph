@@ -5,8 +5,12 @@
 
 #define TIME_BUF_SIZE 128
 
+#include <functional>
 #include <mutex>
+#include <string>
 #include <string_view>
+
+#include "include/sha_digest.h"
 
 #include <boost/container/static_vector.hpp>
 #include <boost/crc.hpp>
@@ -1000,6 +1004,22 @@ public:
       std::function<rgw::auth::Completer::cmplptr_t(
         const boost::optional<std::string>& secret_key)>;
 
+    enum class ProofKind { unknown, s3_v2, s3_v4, browser_v2, browser_v4 };
+
+    // Signing-key authentication is separate from the root-secret callbacks.
+    // Own the scope and date through cache lookup and deferred completion.
+    struct DerivedKeyAuth {
+      std::string date;
+      std::string region;
+      std::string service;
+      std::string request_date;
+      std::string credential_scope;
+      std::function<server_signature_t(
+        const sha256_digest_t&, const string_to_sign_t&)> signature_factory;
+      std::function<rgw::auth::Completer::cmplptr_t(
+        const sha256_digest_t&)> completer_factory;
+    };
+
     struct auth_data_t {
       access_key_id_t access_key_id;
       client_signature_t client_signature;
@@ -1007,6 +1027,8 @@ public:
       string_to_sign_t string_to_sign;
       signature_factory_t signature_factory;
       completer_factory_t completer_factory;
+      ProofKind proof_kind = ProofKind::unknown;
+      boost::optional<DerivedKeyAuth> derived_key = boost::none;
     };
 
     virtual auth_data_t get_auth_data(const req_state* s) const = 0;
@@ -1025,6 +1047,12 @@ protected:
   using string_to_sign_t = VersionAbstractor::string_to_sign_t;
   using signature_factory_t = VersionAbstractor::signature_factory_t;
   using completer_factory_t = VersionAbstractor::completer_factory_t;
+
+  // Metadata-aware hook; existing root-secret engines retain their interface.
+  virtual result_t authenticate(const DoutPrefixProvider* dpp,
+                                const VersionAbstractor::auth_data_t& auth_data,
+                                const req_state* s,
+                                optional_yield y) const;
 
   /* TODO(rzarzynski): clean up. We've too many input parameter hee. Also
    * the signature get_auth_data() of VersionAbstractor is too complicated.

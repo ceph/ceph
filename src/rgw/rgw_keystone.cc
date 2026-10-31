@@ -5,6 +5,8 @@
 #include <fnmatch.h>
 
 #include <algorithm>
+#include <initializer_list>
+#include <set>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string.hpp>
@@ -115,8 +117,11 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
                              const Config& config,
                              optional_yield y,
                              std::string& token,
-                             bool& token_cached)
+                             bool& token_cached,
+                             RequestOptions options)
 {
+  token.clear();
+  token_cached = false;
   TokenEnvelope t;
 
   /* Try cache first before calling Keystone for a new admin token. */
@@ -128,7 +133,7 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
   }
 
   /* Call Keystone now. */
-  const auto ret = issue_admin_token_request(dpp, config, y, t);
+  const auto ret = issue_admin_token_request(dpp, config, y, t, options);
   if (! ret) {
     token_cache.add_admin(t);
     token = t.token.id;
@@ -140,8 +145,10 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
 int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
                                        const Config& config,
                                        optional_yield y,
-                                       TokenEnvelope& t)
+                                       TokenEnvelope& t,
+                                       RequestOptions options)
 {
+  t = TokenEnvelope{};
   std::string token_url = config.get_endpoint_url();
   if (token_url.empty()) {
     return -EINVAL;
@@ -149,6 +156,9 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
 
   bufferlist token_bl;
   RGWGetKeystoneAdminToken token_req(dpp->get_cct(), "POST", "", &token_bl);
+  token_req.set_req_connect_timeout(options.connect_timeout);
+  token_req.set_req_timeout(options.timeout);
+  token_req.set_sensitive_request(options.sensitive);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
@@ -176,10 +186,12 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  ret = t.parse(dpp, token_req.get_subject_token(), token_bl);
+  TokenEnvelope parsed;
+  ret = parsed.parse(dpp, token_req.get_subject_token(), token_bl);
   if (ret != 0) {
     return -EINVAL;
   }
+  t = std::move(parsed);
 
   return 0;
 }
@@ -228,7 +240,7 @@ int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
   ldpp_dout(dpp, 20) << "Requesting secret from barbican url=" << token_url << dendl;
   int ret = token_req.process(dpp, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
+    ldpp_dout(dpp, 20) << "Barbican token request failed" << dendl;
     return ret;
   }
 
@@ -279,11 +291,173 @@ int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
     } else {
       return -EINVAL;
     }
-  } catch (const JSONDecoder::err& err) {
-    ldpp_dout(dpp, 0) << "Keystone token parse error: " << err.what() << dendl;
+  } catch (const JSONDecoder::err&) {
+    // Decoder exceptions can contain response values; never log them.
+    ldpp_dout(dpp, 0) << "Keystone token parse error: invalid response" << dendl;
     return -EINVAL;
   }
 
+  return 0;
+}
+
+namespace {
+
+// JSONDecoder accepts non-string scalar values as strings. Validate the wire
+// types and every field name (including duplicates) before using that decoder.
+bool s3_exact_object(JSONObj* obj,
+                     std::initializer_list<std::string_view> fields)
+{
+  if (!obj || !obj->is_object()) {
+    return false;
+  }
+  std::set<std::string_view> seen;
+  for (auto it = obj->find_first(); !it.end(); ++it) {
+    const std::string_view name = (*it)->get_name();
+    if (std::find(fields.begin(), fields.end(), name) == fields.end() ||
+        !seen.insert(name).second) {
+      return false;
+    }
+  }
+  return seen.size() == fields.size();
+}
+
+JSONObj* s3_field(JSONObj* obj, const char* name)
+{
+  auto it = obj->find_first(name);
+  return it.end() ? nullptr : *it;
+}
+
+bool s3_nonempty_string(JSONObj* obj)
+{
+  return obj && obj->get_data_val().quoted && !obj->get_data().empty();
+}
+
+bool s3_identity(JSONObj* obj)
+{
+  if (!s3_exact_object(obj, {"id", "name", "domain"}) ||
+      !s3_nonempty_string(s3_field(obj, "id")) ||
+      !s3_nonempty_string(s3_field(obj, "name"))) {
+    return false;
+  }
+  auto domain = s3_field(obj, "domain");
+  return s3_exact_object(domain, {"id", "name"}) &&
+         s3_nonempty_string(s3_field(domain, "id")) &&
+         s3_nonempty_string(s3_field(domain, "name"));
+}
+
+bool s3_utc_expiry(std::string_view value)
+{
+  // Require an explicit UTC designator, fixed-width calendar/time fields and
+  // optional fractional seconds. Legacy parse_iso8601 also accepts timezone-
+  // less dates, whitespace and dates that timegm would silently normalize.
+  if (value.size() < 20 || value.size() > 30 ||
+      value[4] != '-' || value[7] != '-' || value[10] != 'T' ||
+      value[13] != ':' || value[16] != ':' || value.back() != 'Z') {
+    return false;
+  }
+  for (size_t i = 0; i < 19; ++i) {
+    if (i == 4 || i == 7 || i == 10 || i == 13 || i == 16) {
+      continue;
+    }
+    if (value[i] < '0' || value[i] > '9') {
+      return false;
+    }
+  }
+  if (value.size() != 20) {
+    if (value.size() < 22 || value[19] != '.') {
+      return false;
+    }
+    for (size_t i = 20; i + 1 < value.size(); ++i) {
+      if (value[i] < '0' || value[i] > '9') {
+        return false;
+      }
+    }
+  }
+  auto number = [value](size_t start, size_t length) {
+    unsigned result = 0;
+    for (size_t i = start; i < start + length; ++i) {
+      result = result * 10 + (value[i] - '0');
+    }
+    return result;
+  };
+  const unsigned year = number(0, 4);
+  const unsigned month = number(5, 2);
+  const unsigned day = number(8, 2);
+  if (year == 0 || month < 1 || month > 12 || day == 0 ||
+      number(11, 2) > 23 || number(14, 2) > 59 || number(17, 2) > 59) {
+    return false;
+  }
+  constexpr unsigned month_days[] = {31, 28, 31, 30, 31, 30,
+                                      31, 31, 30, 31, 30, 31};
+  const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+  const unsigned days = month_days[month - 1] + (month == 2 && leap);
+  return day <= days;
+}
+
+} // anonymous namespace
+
+int TokenEnvelope::decode_s3_authentication(JSONObj* authentication,
+                                             std::string& credential_id_out)
+{
+  *this = TokenEnvelope{};
+  credential_id_out.clear();
+  if (!s3_exact_object(authentication, {"user", "project", "roles", "methods",
+                                         "consumer", "credential_id", "expires_at"}) ||
+      !s3_identity(s3_field(authentication, "user")) ||
+      !s3_identity(s3_field(authentication, "project"))) {
+    return -EINVAL;
+  }
+
+  auto roles_obj = s3_field(authentication, "roles");
+  if (!roles_obj->is_array()) {
+    return -EINVAL;
+  }
+  auto role = roles_obj->find_first();
+  if (role.end()) {
+    return -EINVAL;
+  }
+  for (; !role.end(); ++role) {
+    if (!s3_exact_object(*role, {"id", "name"}) ||
+        !s3_nonempty_string(s3_field(*role, "id")) ||
+        !s3_nonempty_string(s3_field(*role, "name"))) {
+      return -EINVAL;
+    }
+  }
+
+  auto methods = s3_field(authentication, "methods");
+  if (!methods->is_array()) {
+    return -EINVAL;
+  }
+  auto method = methods->find_first();
+  if (method.end() || !s3_nonempty_string(*method) ||
+      (*method)->get_data() != "ec2credential") {
+    return -EINVAL;
+  }
+  ++method;
+  if (!method.end()) {
+    return -EINVAL;
+  }
+
+  auto consumer = s3_field(authentication, "consumer");
+  auto credential = s3_field(authentication, "credential_id");
+  auto expiry = s3_field(authentication, "expires_at");
+  if (!s3_nonempty_string(consumer) || consumer->get_data() != "s3" ||
+      !s3_nonempty_string(credential) || !s3_nonempty_string(expiry) ||
+      !s3_utc_expiry(expiry->get_data())) {
+    return -EINVAL;
+  }
+
+  TokenEnvelope identity;
+  try {
+    identity.decode(authentication);
+  } catch (const JSONDecoder::err&) {
+    // Neither raw exceptions nor identity response contents are safe to log.
+    return -EINVAL;
+  }
+  // decode() populates identity/roles/expiry only. In particular token.id stays
+  // empty, app_cred absent and roles unclassified; this is not a bearer token.
+  credential_id_out = credential->get_data();
+  *this = std::move(identity);
   return 0;
 }
 
@@ -446,7 +620,8 @@ void TokenCache::invalidate(const DoutPrefixProvider *dpp, const std::string& to
   if (iter == tokens.end())
     return;
 
-  ldpp_dout(dpp, 20) << "invalidating revoked token id=" << token_id << dendl;
+  // Non-PKI token IDs are the bearer token itself, not a safe log identifier.
+  ldpp_dout(dpp, 20) << "invalidating revoked token" << dendl;
   token_entry& e = iter->second;
   tokens_lru.erase(e.lru_iter);
   tokens.erase(iter);

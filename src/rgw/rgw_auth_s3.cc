@@ -2,9 +2,11 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <algorithm>
+#include <charconv>
 #include <boost/algorithm/string/predicate.hpp>
 #include <map>
 #include <iterator>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -121,7 +123,7 @@ get_canon_resource(const DoutPrefixProvider *dpp, const char* const request_uri,
     }
   }
 
-  ldpp_dout(dpp, 10) << "get_canon_resource(): dest=" << dest << dendl;
+  ldpp_dout(dpp, 10) << "canonical resource constructed" << dendl;
   return dest;
 }
 
@@ -415,8 +417,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
     if (parsed_pair) {
       kv[parsed_pair->first] = parsed_pair->second;
     } else {
-      ldpp_dout(dpp, 10) << "NOTICE: failed to parse auth header (s=" << s << ")"
-               << dendl;
+      ldpp_dout(dpp, 10) << "NOTICE: failed to parse auth header" << dendl;
       return -EINVAL;
     }
   }
@@ -439,8 +440,6 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   signedheaders = kv["SignedHeaders"];
   signature = kv["Signature"];
 
-  /* sig hex str */
-  ldpp_dout(dpp, 10) << "v4 signature format = " << signature << dendl;
 
   /* ------------------------- handle x-amz-date header */
 
@@ -585,7 +584,6 @@ int parse_v4_credentials(const req_info& info,                     /* in */
   }
 
   /* access_key/YYYYMMDD/region/service/aws4_request */
-  ldpp_dout(dpp, 10) << "v4 credential format = " << credential << dendl;
 
   if (std::count(credential.begin(), credential.end(), '/') != 4) {
     return -EINVAL;
@@ -603,7 +601,6 @@ int parse_v4_credentials(const req_info& info,                     /* in */
 
   /* grab credential scope */
   credential_scope = credential.substr(pos + 1);
-  ldpp_dout(dpp, 10) << "credential scope = " << credential_scope << dendl;
 
   return 0;
 }
@@ -939,10 +936,7 @@ get_v4_canon_req_hash(CephContext* cct,
 
   const auto canonical_req_hash = calc_hash_sha256(canonical_req);
 
-  using sanitize = rgw::crypt_sanitize::log_content;
-  ldpp_dout(dpp, 10) << "canonical request = " << sanitize{canonical_req} << dendl;
-  ldpp_dout(dpp, 10) << "canonical request hash = "
-                 << canonical_req_hash << dendl;
+  ldpp_dout(dpp, 10) << "canonical request constructed" << dendl;
 
   return canonical_req_hash;
 }
@@ -969,9 +963,7 @@ get_v4_string_to_sign(CephContext* const cct,
     credential_scope,
     hexed_cr_hash_str);
 
-  ldpp_dout(dpp, 10) << "string to sign = "
-                 << rgw::crypt_sanitize::log_content{string_to_sign}
-                 << dendl;
+  ldpp_dout(dpp, 10) << "string to sign constructed" << dendl;
 
   return string_to_sign;
 }
@@ -1042,11 +1034,6 @@ get_v4_signing_key(CephContext* const cct,
   const auto signing_key = calc_hmac_sha256(service_k,
                                             std::string_view("aws4_request"));
 
-  ldpp_dout(dpp, 10) << "date_k    = " << date_k << dendl;
-  ldpp_dout(dpp, 10) << "region_k  = " << region_k << dendl;
-  ldpp_dout(dpp, 10) << "service_k = " << service_k << dendl;
-  ldpp_dout(dpp, 10) << "signing_k = " << signing_key << dendl;
-
   return signing_key;
 }
 
@@ -1068,7 +1055,15 @@ get_v4_signature(const std::string_view& credential_scope,
 {
   auto signing_key = get_v4_signing_key(cct, credential_scope, secret_key, dpp);
 
-  /* The server-side generated digest for comparison. */
+  return get_v4_signature_from_signing_key(signing_key, string_to_sign);
+}
+
+AWSEngine::VersionAbstractor::server_signature_t
+get_v4_signature_from_signing_key(
+  const sha256_digest_t& signing_key,
+  const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign)
+{
+  /* The digest overload uses all 32 key bytes, including embedded NULs. */
   const auto digest = calc_hmac_sha256(signing_key, string_to_sign);
 
   /* TODO(rzarzynski): I would love to see our sstring having reserve() and
@@ -1077,8 +1072,6 @@ get_v4_signature(const std::string_view& credential_scope,
   srv_signature_t signature(srv_signature_t::initialized_later(),
                             digest.SIZE * 2);
   buf_to_hex(std::span{digest.v, digest.SIZE}, signature.begin());
-
-  ldpp_dout(dpp, 10) << "generated signature = " << signature << dendl;
 
   return signature;
 }
@@ -1113,17 +1106,17 @@ get_v2_signature(CephContext* const cct,
 
 bool AWSv4ComplMulti::ChunkMeta::is_new_chunk_in_stream(size_t stream_pos) const
 {
-  return stream_pos >= (data_offset_in_stream + data_length);
+  return stream_pos >= data_offset_in_stream &&
+         stream_pos - data_offset_in_stream >= data_length;
 } /* ChunkMeta::is_new_chunk_in_stream */
 
 size_t AWSv4ComplMulti::ChunkMeta::get_data_size(size_t stream_pos) const
 {
-  if (stream_pos > (data_offset_in_stream + data_length)) {
-    /* Data in parsing_buf. */
-    return data_length;
-  } else {
-    return data_offset_in_stream + data_length - stream_pos;
+  if (stream_pos < data_offset_in_stream ||
+      stream_pos - data_offset_in_stream > data_length) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
   }
+  return data_length - (stream_pos - data_offset_in_stream);
 } /* ChunkMeta::get_data_size */
 
 /* AWSv4 completers begin. */
@@ -1141,14 +1134,41 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
 
   ldout(cct, 20) << "AWSv4ComplMulti::create_next() old.cnt: " << old.cnt << dendl;
 
-  char* data_field_end;
-  /* strtoull ignores the "\r\n" sequence after each non-first chunk. */
-  const size_t data_length = std::strtoull(metabuf, &data_field_end, 16);
-  if (data_length == 0 && data_field_end == metabuf) {
-    ldout(cct, 20) << "AWSv4ComplMulti: cannot parse the data size"
-                   << dendl;
-    /* this case is no longer treated as an exception */
+  if (old.data_offset_in_stream != 0 && !metastr.starts_with("\r\n")) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
   }
+  auto size_field = metastr;
+  if (size_field.starts_with("\r\n")) {
+    size_field.remove_prefix(2);
+  }
+  const auto size_end = size_field.find_first_of(";\r");
+  if (size_end == std::string_view::npos || size_end == 0) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
+  }
+  size_t data_length = 0;
+  const auto [end, error] = std::from_chars(
+    size_field.data(), size_field.data() + size_end, data_length, 16);
+  if (error != std::errc{} || end != size_field.data() + size_end) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
+  }
+  const auto metadata = size_field.substr(size_end);
+  if ((expect_chunk_signature && !metadata.starts_with(";chunk-signature=")) ||
+      (!expect_chunk_signature && !metadata.starts_with("\r\n"))) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
+  }
+
+  const auto checked_data_offset = [&](size_t consumed) {
+    constexpr auto max = std::numeric_limits<size_t>::max();
+    if (old.data_length > max - old.data_offset_in_stream ||
+        consumed > max - old.data_offset_in_stream - old.data_length) {
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
+    const auto offset = old.data_offset_in_stream + old.data_length + consumed;
+    if (data_length > max - offset) {
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
+    return offset;
+  };
 
   if (expect_chunk_signature) {
 
@@ -1187,19 +1207,18 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
       throw rgw::io::Exception(EINVAL, std::system_category());
     }
 
-    const size_t data_starts_in_stream =
-        +semicolon_pos + sarrlen(";") + data_sep_pos + sarrlen("\r\n") +
-        old.data_offset_in_stream + old.data_length;
+    const size_t consumed = semicolon_pos + sarrlen(";") +
+                            data_sep_pos + sarrlen("\r\n");
+    const size_t data_starts_in_stream = checked_data_offset(consumed);
 
-    ldout(cct, 20) << "parsed new chunk; signature=" << signature
-                   << ", data_length=" << data_length
+    ldout(cct, 20) << "parsed new chunk; data_length=" << data_length
                    << ", data_starts_in_stream=" << data_starts_in_stream
                    << dendl;
 
     return std::make_pair(
 	     ChunkMeta(data_starts_in_stream, data_length, signature, flags,
 		       ++old.cnt),
-	     semicolon_pos + 83);
+             consumed);
   } else {
     /* no-chunk-signature aws-chunked */
     ldout(cct, 20) << "AWSv4ComplMulti: non-signature meta chunk; data_length "
@@ -1218,8 +1237,7 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
     }
 
     const size_t consumed = crlf_pos + sarrlen("\r\n");
-    const size_t data_starts_in_stream =
-        consumed + old.data_offset_in_stream + old.data_length;
+    const size_t data_starts_in_stream = checked_data_offset(consumed);
     return std::make_pair(ChunkMeta(data_starts_in_stream, data_length,
 			    "" /* signature */, flags, ++old.cnt),
                           consumed);
@@ -1236,9 +1254,6 @@ AWSv4ComplMulti::calc_chunk_signature(const std::string& payload_hash) const
     prev_chunk_signature,
     AWS4_EMPTY_PAYLOAD_HASH,
     payload_hash);
-
-  ldout(cct(), 20) << "AWSv4ComplMulti: string_to_sign=\n" << string_to_sign
-                 << dendl;
 
   /* new chunk signature */
   const auto sig = calc_hmac_sha256(signing_key, string_to_sign);
@@ -1262,15 +1277,6 @@ bool AWSv4ComplMulti::is_signature_mismatched()
    * data of the next one. */
   const auto payload_hash = calc_hash_sha256_restart_stream(&sha256_hash);
   const auto calc_signature = calc_chunk_signature(payload_hash);
-
-  if (cct()->_conf->subsys.should_gather(ceph_subsys_rgw, 16)) [[unlikely]] {
-    ldout(cct(), 16) << "AWSv4ComplMulti: declared signature="
-		     << chunk_meta.get_signature()
-		     << "\nAWSv4ComplMulti: calculated signature="
-		     << calc_signature << dendl;
-    ldout(cct(), 16) << "AWSv4ComplMulti: prev_chunk_signature="
-		     << prev_chunk_signature << dendl;
-  }
 
   auto match_signatures = [&]() -> bool {
     /* sentinel case: 0-length chunk, likely chunk 0 */
@@ -1300,12 +1306,24 @@ AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
 
   ldout(cct(), 20) << "AWSv4ComplMulti::recv_chunk() cnt: " << cnt << dendl;
 
-  if (chunk_meta.is_new_chunk_in_stream(stream_pos)) {
-    /* Verify signature of the previous chunk. We aren't doing that for new
-     * one as the procedure requires calculation of payload hash. This code
-     * won't be triggered for the last, zero-length chunk. Instead, it will
-     * be checked in the complete() method.  */
-    if (stream_pos >= ChunkMeta::META_MAX_SIZE && is_signature_mismatched()) {
+  if (stream_pos < parsing_buf.size()) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
+  }
+  // stream_pos includes transport prefetch. Only the consumed wire cursor can
+  // establish that all payload bytes of the current chunk have been hashed.
+  const auto cursor = stream_pos - parsing_buf.size();
+  if (chunk_meta.is_new_chunk_in_stream(cursor)) {
+    if (chunk_meta.get_data_size(cursor) != 0) {
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
+    if (chunk_meta.get_offset() != 0 && cursor == chunk_meta.get_offset()) {
+      // The terminal zero chunk has already been parsed by a preceding read.
+      eof = true;
+      return ReceiveChunkResult(0, chunk_meta.get_offset());
+    }
+    // The initial sentinel has no payload signature to verify. All later
+    // transitions require the complete preceding payload, regardless of size.
+    if (chunk_meta.get_offset() != 0 && is_signature_mismatched()) {
       throw rgw::io::Exception(ERR_SIGNATURE_NO_MATCH, std::system_category());
     }
 
@@ -1333,9 +1351,14 @@ AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
 		     << received
 		     << dendl;
 
+      if (received > to_extract ||
+          received > std::numeric_limits<size_t>::max() - stream_pos) {
+        throw rgw::io::Exception(EINVAL, std::system_category());
+      }
       parsing_buf.resize(parsing_buf.size() - (to_extract - received));
       if (received == 0) {
-        eof = true;
+        // EOF on the transport does not discard complete chunks buffered here.
+        eof = parsing_buf.empty();
         break;
       }
 
@@ -1343,6 +1366,9 @@ AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
       to_extract -= received;
     } while (to_extract > 0);
 
+    if (eof) {
+      return ReceiveChunkResult(0, chunk_meta.get_offset());
+    }
     size_t consumed;
     std::tie(chunk_meta, consumed) = \
       ChunkMeta::create_next(cct(), std::move(chunk_meta),
@@ -1350,9 +1376,16 @@ AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
 
     /* We can drop the bytes consumed during metadata parsing. The remainder
      * can be chunk's data plus possibly beginning of next chunks' metadata. */
+    if (consumed > parsing_buf.size()) {
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
     parsing_buf.erase(std::begin(parsing_buf),
                       std::begin(parsing_buf) + consumed);
-  } /* if (chunk_meta.is_new_chunk_in_stream(stream_pos)) */
+    if (chunk_meta.is_new_chunk_in_stream(stream_pos - parsing_buf.size())) {
+      eof = true; // A parsed zero chunk produces no decoded payload bytes.
+      return ReceiveChunkResult(0, chunk_meta.get_offset());
+    }
+  }
 
   size_t stream_pos_was = stream_pos - parsing_buf.size();
 
@@ -1373,9 +1406,6 @@ AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
 	     << ", data_len=" << data_len
 	     << dendl;
 
-    /* if is-last-frag, then */
-    lf_bytes = stream_pos - stream_pos_was - data_len;
-
     std::copy(std::begin(parsing_buf), data_end_iter, buf);
     parsing_buf.erase(std::begin(parsing_buf), data_end_iter);
 
@@ -1391,6 +1421,10 @@ AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
     const size_t received = io_base_t::recv_body(buf + buf_pos, to_extract);
     dout(30) << "AWSv4ComplMulti: to_extract=" << to_extract << ", received=" << received << dendl;
 
+    if (received > to_extract ||
+        received > std::numeric_limits<size_t>::max() - stream_pos) {
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
     if (received == 0) {
       eof = true;
       break;
@@ -1411,7 +1445,19 @@ std::string
 AWSv4ComplMulti::calc_v4_trailer_signature(const trailer_map_t& trailer_map,
 					   const std::string_view last_chunk_sig)
 {
-  const auto headers = get_canon_amz_hdrs(trailer_map);
+  // SigV4 CanonicalHeaders rules apply to the protected trailers too: lower
+  // case names, sorted order, trimmed values and collapsed SP/HTAB runs.
+  // https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-streaming-trailers.html
+  // https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
+  // Keep this trailer-only; shared V2 canonicalization must not change here.
+  std::map<std::string, std::string> canonical_trailers;
+  for (const auto& [name, value] : trailer_map) {
+    auto canonical_value = std::string(value);
+    boost::trim_all(canonical_value);
+    canonical_trailers.emplace(boost::to_lower_copy(std::string(name)),
+                               std::move(canonical_value));
+  }
+  const auto headers = get_canon_amz_hdrs(canonical_trailers);
   const auto canon_header_hash = calc_hash_sha256(headers);
 
   const auto string_to_sign = string_join_reserve("\n",
@@ -1424,109 +1470,111 @@ AWSv4ComplMulti::calc_v4_trailer_signature(const trailer_map_t& trailer_map,
   const auto trailer_signature =
     calc_hmac_sha256(signing_key, string_to_sign).to_str();
 
-  ldout(cct(), 10) << "trailer headers = " << headers
-		 << "\ntrailers string to sign = "
-                 << rgw::crypt_sanitize::log_content{string_to_sign}
-		 << "\ncalc trailer signature = "
-		 << trailer_signature
-		 << "\nexpected last-chunk-sig = "
-		 << last_chunk_sig
-		 << dendl;
-
   return trailer_signature;
 } /* calc_v4_trailer_signature */
 
 
-/* the following templates capture the start (and for extract_helper)
- * end boundaries of a substring match as constant strings, moving
- * a small amount of work to compile time */
-
-using ExtractResult = std::tuple<bool, std::string_view, size_t>;
-
-/* adapted from here: https://ctrpeach.io/posts/cpp20-string-literal-template-parameters/ */
-template<size_t N>
-struct StringLiteral {
-    constexpr StringLiteral(const char (&str)[N]) {
-        std::copy_n(str, N, val);
-    }
-    char val[N];
-};
-
-template <StringLiteral start, StringLiteral end>
-static inline ExtractResult mut_extract_helper(std::string_view& region) {
-  if (auto spos = region.find(start.val);
-      spos != std::string_view::npos) {
-    if (auto epos = region.find(end.val, spos + sarrlen(start.val));
-	epos != std::string_view::npos) {
-      std::string_view matched = region.substr(spos, epos - spos);
-      auto consumed = matched.size() + sarrlen(end.val);
-      region.remove_prefix(consumed);
-      return ExtractResult(true, matched, spos + consumed);
-    }
-  }
-  return ExtractResult(false, "", 0);
-} /* mut_extract_helper <begin, end> */
-
-template <StringLiteral end>
-static inline ExtractResult extract_helper(const std::string_view& region,
-					   const std::string_view start) {
-  if (auto spos = region.find(start);
-      spos != std::string_view::npos) {
-    if (auto epos = region.find(end.val, spos + start.length());
-	epos != std::string_view::npos) {
-      std::string_view matched = region.substr(spos, epos - spos);
-      auto consumed = matched.size() + sarrlen(end.val);
-      return ExtractResult(true, matched, consumed);
-    }
-  }
-  return ExtractResult(false, "", 0);
-} /* extract_helper <end> */
-
-using split_func_t =
-  const fu2::unique_function<void(const std::string_view k,
-				  const std::string_view v) const>;
-
-static inline void split_header(const std::string_view hdr, split_func_t f)
+static std::string_view take_v4_trailer_line(std::string_view& remaining)
 {
-  auto kv = ceph::split(hdr, ":");
-  auto k = kv.begin();
-  if (k != kv.end()) {
-    auto v = std::next(k);
-    if (v != kv.end()) [[likely]] {
-      f(*k, *v);
-    }
+  const auto end = remaining.find("\r\n");
+  if (end == std::string_view::npos) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
   }
-} /* split_header */
+  const auto line = remaining.substr(0, end);
+  remaining.remove_prefix(end + 2);
+  return line;
+}
+
+static bool valid_v4_trailer_name(std::string_view name)
+{
+  // RFC 9110 field-name = token; no whitespace before ':' or obs-fold.
+  return !name.empty() && std::all_of(name.begin(), name.end(), [](unsigned char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') ||
+           std::string_view("!#$%&'*+-.^_`|~").find(c) != std::string_view::npos;
+  });
+}
+
+static std::string_view trim_v4_trailer_ows(std::string_view value)
+{
+  const auto first = value.find_first_not_of(" \t");
+  if (first == std::string_view::npos) {
+    return {};
+  }
+  return value.substr(first, value.find_last_not_of(" \t") - first + 1);
+}
+
+static std::pair<std::string_view, std::string_view>
+parse_v4_trailer_field(std::string_view line)
+{
+  const auto colon = line.find(':');
+  if (colon == std::string_view::npos ||
+      !valid_v4_trailer_name(line.substr(0, colon))) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
+  }
+  const auto value = line.substr(colon + 1); // Retain the entire RHS, including ':'.
+  if (std::any_of(value.begin(), value.end(), [](unsigned char c) {
+        return (c < 0x20 && c != '\t') || c == 0x7f;
+      })) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
+  }
+  return {line.substr(0, colon), trim_v4_trailer_ows(value)};
+}
+
+static bool valid_v4_trailer_signature(std::string_view value)
+{
+  return value.size() == 64 &&
+    std::all_of(value.begin(), value.end(), [](unsigned char c) {
+      return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+             (c >= 'A' && c <= 'F');
+    });
+}
 
 inline void AWSv4ComplMulti::extract_trailing_headers(
   std::string_view x_amz_trailer, std::string_view& mut_sv_trailer,
   AWSv4ComplMulti::trailer_map_t& trailer_map)
 {
-  using std::get;
-  size_t consumed = 0;
-  /* spliterate x_amz_trailer */
-  auto kv = ceph::split(x_amz_trailer, ",");
-  for (auto k = kv.begin(); k != kv.end(); k = std::next(k)) {
-    /* extract trailer;  if there's more than one trailer, don't rely on their
-     * order in x-amz-trailer */
-    auto ex_header = extract_helper<"\r\n">(mut_sv_trailer, *k);
-    if (get<0>(ex_header)) {
-      auto header = get<1>(ex_header);
-      split_header(header, [&](const std::string_view k, const std::string_view v) -> void {
-	if (cct()->_conf->subsys.should_gather(ceph_subsys_rgw, 10)) [[unlikely]] {
-	  ldout(cct(), 10) << fmt::format("\nextracted trailing header {}={}", k, v) << dendl;
-	}
-	/* populate trailer map with expected headers and their values, if sent */
-	trailer_map.insert(trailer_map_t::value_type(k, v));
-	/* populate to req_info.env as well */
-	put_prop(ys_header_mangle(fmt::format("HTTP-{}", k)), v);
-      });
-      consumed += get<2>(ex_header);
-    } /* one trailer */
-  } /* foreach trailer */
-  /* advance mut_sv_trailer */
-  mut_sv_trailer.remove_prefix(consumed);
-} /* AWSv4complmulti::extract_trailing_headers */
+  std::vector<std::string_view> declared;
+  for (;;) {
+    const auto comma = x_amz_trailer.find(',');
+    const auto name = trim_v4_trailer_ows(x_amz_trailer.substr(0, comma));
+    if (!valid_v4_trailer_name(name) ||
+        boost::iequals(name, "x-amz-trailer-signature") ||
+        std::any_of(declared.begin(), declared.end(), [&](const auto previous) {
+          return boost::iequals(previous, name);
+        })) {
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
+    declared.push_back(name);
+    if (comma == std::string_view::npos) {
+      break;
+    }
+    x_amz_trailer.remove_prefix(comma + 1);
+  }
+
+  // Consume whole field lines in wire order, never skip unknown bytes while
+  // searching for a name. Declared fields may arrive in any order/case.
+  while (!mut_sv_trailer.empty() && !mut_sv_trailer.starts_with("\r\n")) {
+    auto remaining = mut_sv_trailer;
+    const auto [name, value] = parse_v4_trailer_field(take_v4_trailer_line(remaining));
+    if (boost::iequals(name, "x-amz-trailer-signature")) {
+      break; // Completion consumes the signature only after all declared fields.
+    }
+    if (std::none_of(declared.begin(), declared.end(), [&](const auto expected) {
+          return boost::iequals(expected, name);
+        }) || std::any_of(trailer_map.begin(), trailer_map.end(), [&](const auto& field) {
+          return boost::iequals(field.first, name);
+        })) {
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
+    trailer_map.emplace(name, value);
+    put_prop(ys_header_mangle(fmt::format("HTTP-{}", name)), value);
+    mut_sv_trailer = remaining;
+  }
+  if (trailer_map.size() != declared.size()) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
+  }
+} /* AWSv4ComplMulti::extract_trailing_headers */
 
 size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
 {
@@ -1544,8 +1592,31 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
     total += rcr.received;
   }
 
+  if (total > std::numeric_limits<size_t>::max() - decoded_bytes) {
+    throw rgw::io::Exception(EINVAL, std::system_category());
+  }
+  decoded_bytes += total; // Only bytes actually returned to the payload caller.
   dout(20) << "AWSv4ComplMulti: received=" << total << dendl;
   return total;
+}
+
+static boost::optional<size_t>
+get_v4_decoded_content_length(const req_state* s)
+{
+  const char* value = s->info.env->get("HTTP_X_AMZ_DECODED_CONTENT_LENGTH");
+  if (!value) {
+    return boost::none;
+  }
+  const std::string_view field(value);
+  size_t length = 0;
+  const auto [end, error] = std::from_chars(
+    field.data(), field.data() + field.size(), length);
+  if (field.empty() || error != std::errc{} ||
+      end != field.data() + field.size() ||
+      length > uint64_t(std::numeric_limits<int64_t>::max())) {
+    throw -EINVAL;
+  }
+  return length;
 }
 
 void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
@@ -1556,7 +1627,7 @@ void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_st
   if (decoded_length) {
     /* XXXX oh my, we forget the original content length */
     s_rw->length = decoded_length;
-    s_rw->content_length = parse_content_length(decoded_length);
+    s_rw->content_length = *get_v4_decoded_content_length(s_rw);
 
     if (s_rw->content_length < 0) {
       ldpp_dout(dpp, 10) << "negative AWSv4's content length, aborting" << dendl;
@@ -1571,6 +1642,19 @@ void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_st
 
 bool AWSv4ComplMulti::complete()
 {
+  if (stream_pos < parsing_buf.size()) {
+    return false;
+  }
+  const auto cursor = stream_pos - parsing_buf.size();
+  if (chunk_meta.get_data_size(cursor) != 0) {
+    return false; // A valid HMAC of a shorter payload cannot complete this frame.
+  }
+  const auto expected_length = get_v4_decoded_content_length(s);
+  if (expected_length && decoded_bytes != *expected_length) {
+    return false;
+  }
+  const bool final_already_parsed = chunk_meta.get_offset() != 0 &&
+                                    cursor == chunk_meta.get_offset();
   /* historically, this code has been validating not the final zero-length
    * chunk, but the one before that; we'll do that as before, and then
    * consume the last chunk signature and the trailer section */
@@ -1588,32 +1672,20 @@ bool AWSv4ComplMulti::complete()
     AWS4_EMPTY_PAYLOAD_HASH,
     AWS4_EMPTY_PAYLOAD_HASH);
 
-    const auto final_chunk_signature =
-      calc_hmac_sha256(signing_key, string_to_sign).to_str();
+    const auto final_chunk_signature = final_already_parsed ?
+      prev_chunk_signature : calc_hmac_sha256(signing_key, string_to_sign).to_str();
 
-    ldout(cct(), 10) << "final chunk signature = "
-		     << final_chunk_signature
-		     << "\nprev_chunk_signature was "
-		     << prev_chunk_signature
-		     << dendl;
-
-    /* in the last-chunk case, parsing_buf potentially holds unconsumed
-     * data, including the final chunk boundary */
-    std::string_view last_frag(parsing_buf.begin().get_ptr(), lf_bytes);
-
-    size_t tbuf_pos = 0;
-
+    /* In the last-chunk case parsing_buf may already contain part of the
+     * terminal chunk and trailers. Use initialized, bounded storage. */
+    size_t tbuf_pos = parsing_buf.size();
     static constexpr size_t trailer_buf_size = 256;
-    boost::container::static_vector<char, trailer_buf_size> trailer_vec;
-
-    std::copy(parsing_buf.begin(), parsing_buf.begin() + lf_bytes,
-              trailer_vec.begin());
-    tbuf_pos += lf_bytes;
+    std::array<char, trailer_buf_size> trailer_vec{};
+    std::copy(parsing_buf.begin(), parsing_buf.end(), trailer_vec.begin());
 
     while (tbuf_pos < trailer_buf_size) {
       const size_t received =
           io_base_t::recv_body(trailer_vec.data() + tbuf_pos,
-			       trailer_buf_size - tbuf_pos - 1);
+                               trailer_buf_size - tbuf_pos);
       dout(30) << "AWSv4ComplMulti: recv trailer received=" << received
                << dendl;
       if (received == 0) {
@@ -1632,43 +1704,55 @@ bool AWSv4ComplMulti::complete()
 
     std::string_view expected_trailer_signature;
     std::string calculated_trailer_signature;
+    std::string_view expected_final_signature = final_already_parsed ?
+      std::string_view(chunk_meta.get_signature()) : std::string_view{};
+    bool terminal_chunk = final_already_parsed;
+    bool end_of_body = false;
 
     /* I have seen variations in the 0-byte case, with and without
      * ssl transport. I have observed "\r\n0;" but also "0;" in the
      * trailer-signature case.  I have observed only "\r\n0" in the
      * no-trailer-signature case--but assume "0" might be possible.
      * The logic below handles all 4 cases. */
-    if (tbuf_pos > sarrlen("\r\n0")) {
+    if (tbuf_pos != 0) {
       const char* tv_data = trailer_vec.data();
-      auto trailer_off = 0;
-      if (*(tv_data + trailer_off) == '\r') {
-	trailer_off += 2;
-      }
-      if (*(tv_data + trailer_off) == '0') {
-	++trailer_off;
-      }
-      if (*(tv_data + trailer_off) == ';') {
-	++trailer_off;
+      size_t trailer_off = 0;
+      if (!final_already_parsed) {
+        if (chunk_meta.get_offset() != 0 &&
+            !std::string_view(tv_data, tbuf_pos).starts_with("\r\n")) {
+          throw rgw::io::Exception(EINVAL, std::system_category());
+        }
+        if (std::string_view(tv_data, tbuf_pos).starts_with("\r\n")) {
+          trailer_off = 2;
+        }
+        const auto terminal = std::string_view(tv_data + trailer_off,
+                                               tbuf_pos - trailer_off);
+        if (flags & FLAG_UNSIGNED_CHUNKED) {
+          terminal_chunk = terminal.starts_with("0\r\n");
+          trailer_off += terminal_chunk ? 3 : 0;
+        } else {
+          terminal_chunk = terminal.starts_with("0;chunk-signature=");
+          trailer_off += terminal_chunk ? 2 : 0;
+        }
+        if (!terminal_chunk) {
+          throw rgw::io::Exception(EINVAL, std::system_category());
+        }
       }
       const std::string_view sv_trailer(
         trailer_vec.data() + trailer_off, tbuf_pos - trailer_off);
 
-      if (cct()->_conf->subsys.should_gather(ceph_subsys_rgw, 10)) [[unlikely]] {
-        ldout(cct(), 10) << "trailer_section: " << sv_trailer << dendl;
-      }
-
       std::string_view mut_sv_trailer(sv_trailer);
 
-      auto chunk_signature =
-          mut_extract_helper<"chunk-signature=", "\r\n">(mut_sv_trailer);
-
-      std::string_view sig_sv;
-      if (get<0>(chunk_signature)) {
-        sig_sv = get<1>(chunk_signature);
-        sig_sv.remove_prefix(sarrlen("chunk-signature="));
-
-        ldout(cct(), 10) << "expected last chunk signature: " << sig_sv
-                         << " remaining: " << mut_sv_trailer << dendl;
+      if (!final_already_parsed && !(flags & FLAG_UNSIGNED_CHUNKED)) {
+        const auto line = take_v4_trailer_line(mut_sv_trailer);
+        constexpr std::string_view prefix = "chunk-signature=";
+        if (!line.starts_with(prefix)) {
+          throw rgw::io::Exception(EINVAL, std::system_category());
+        }
+        expected_final_signature = line.substr(prefix.size());
+        if (!valid_v4_trailer_signature(expected_final_signature)) {
+          throw rgw::io::Exception(ERR_SIGNATURE_NO_MATCH, std::system_category());
+        }
       }
 
       trailer_map_t trailer_map;
@@ -1677,28 +1761,28 @@ bool AWSv4ComplMulti::complete()
         extract_trailing_headers(*x_amz_trailer, mut_sv_trailer, trailer_map);
       }
 
-      auto trailer_signature =
-          mut_extract_helper<"x-amz-trailer-signature:", "\r\n">(
-              mut_sv_trailer);
-      if (get<0>(trailer_signature)) {
-        auto trailing_sig = get<1>(trailer_signature);
-        split_header(
-            trailing_sig,
-            [&](const std::string_view k, const std::string_view v) -> void {
-              expected_trailer_signature = v;
-            });
-
+      if (!mut_sv_trailer.empty() && !mut_sv_trailer.starts_with("\r\n")) {
+        const auto [name, value] =
+          parse_v4_trailer_field(take_v4_trailer_line(mut_sv_trailer));
+        if (!expect_trailer_signature() ||
+            !boost::iequals(name, "x-amz-trailer-signature") ||
+            !valid_v4_trailer_signature(value)) {
+          throw rgw::io::Exception(ERR_SIGNATURE_NO_MATCH, std::system_category());
+        }
+        expected_trailer_signature = value;
         calculated_trailer_signature =
-            calc_v4_trailer_signature(trailer_map, final_chunk_signature);
-
-        ldout(cct(), 10) << "expected trailer signature="
-                         << expected_trailer_signature
-                         << "\n calculated trailer signature="
-                         << calculated_trailer_signature
-                         << "\n trailer bytes remaining/not consumed: "
-                         << mut_sv_trailer << dendl;
-      } /* matched trailer signature */
+          calc_v4_trailer_signature(trailer_map, final_chunk_signature);
+      }
+      // RestfulClient bounds this to the current HTTP body. Require its final
+      // blank line, without accepting trailing bytes or a partial trailer.
+      end_of_body = mut_sv_trailer == "\r\n";
     } /* have trailer */
+
+    if (!terminal_chunk || !end_of_body ||
+        (!(flags & FLAG_UNSIGNED_CHUNKED) &&
+         expected_final_signature != final_chunk_signature)) {
+      throw rgw::io::Exception(ERR_SIGNATURE_NO_MATCH, std::system_category());
+    }
 
     if (expect_trailer_signature() &&
 	(expected_trailer_signature.empty() ||
@@ -1728,6 +1812,19 @@ AWSv4ComplMulti::create(const req_state* const s,
   const auto signing_key = \
     rgw::auth::s3::get_v4_signing_key(s->cct, credential_scope, *secret_key, s);
 
+  return create_from_signing_key(s, date, credential_scope, seed_signature,
+                                 flags, signing_key);
+}
+
+rgw::auth::Completer::cmplptr_t
+AWSv4ComplMulti::create_from_signing_key(
+  const req_state* const s,
+  std::string_view date,
+  std::string_view credential_scope,
+  std::string_view seed_signature,
+  uint32_t flags,
+  const sha256_digest_t& signing_key)
+{
   return std::make_shared<AWSv4ComplMulti>(s,
                                            std::move(date),
                                            std::move(credential_scope),
