@@ -8,6 +8,7 @@
 
 #include <seastar/core/future-util.hh>
 
+#include "common/fmt_common.h"
 #include "crimson/common/utility.h"
 #include "include/ceph_assert.h"
 
