@@ -9,6 +9,7 @@
 #include "include/encoding.h"
 #include <iosfwd>
 #include <list>
+#include <vector>
 #include <string>
 
 namespace ceph {
@@ -52,7 +53,7 @@ struct ObjectPosition {
     return entry_tid < rhs.entry_tid;
   }
 
-  static std::list<ObjectPosition> generate_test_instances();
+  static std::vector<ObjectPosition> generate_test_instances();
 };
 
 typedef std::list<ObjectPosition> ObjectPositions;
@@ -73,7 +74,7 @@ struct ObjectSetPosition {
     return (object_positions == rhs.object_positions);
   }
 
-  static std::list<ObjectSetPosition> generate_test_instances();
+  static std::vector<ObjectSetPosition> generate_test_instances();
 };
 
 enum ClientState {
@@ -107,7 +108,7 @@ struct Client {
   void decode(ceph::buffer::list::const_iterator& iter);
   void dump(ceph::Formatter *f) const;
 
-  static std::list<Client> generate_test_instances();
+  static std::vector<Client> generate_test_instances();
 };
 
 struct Tag {
@@ -134,7 +135,7 @@ struct Tag {
   void decode(ceph::buffer::list::const_iterator& iter);
   void dump(ceph::Formatter *f) const;
 
-  static std::list<Tag> generate_test_instances();
+  static std::vector<Tag> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(ObjectPosition);

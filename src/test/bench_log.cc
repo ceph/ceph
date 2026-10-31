@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <vector>
 #include <iostream> // for std::cout
 
 #include "include/container_ios.h"
@@ -62,16 +63,15 @@ int main(int argc, const char **argv)
 
   utime_t start = ceph_clock_now();
 
-  list<T*> ls;
+  vector<T*> workers;
+
   for (int i=0; i<threads; i++) {
     T *t = new T(num);
     t->create("t");
-    ls.push_back(t);
+    workers.push_back(t);
   }
 
-  for (int i=0; i<threads; i++) {
-    T *t = ls.front();
-    ls.pop_front();
+  for (auto *t : workers) {
     t->join();
     delete t;
   }
