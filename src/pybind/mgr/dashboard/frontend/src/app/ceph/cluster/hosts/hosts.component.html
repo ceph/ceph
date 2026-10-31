@@ -157,6 +157,22 @@
   }
 </ng-template>
 
+<ng-template
+  #hostMemoryDimlessTmpl
+  let-value="data.value"
+>
+  @if (!validValue(value)) {
+    <div>
+      <span ngbTooltip="Not available. Data could not be fetched from Ceph">-</span>
+    </div>
+  }
+  @if (validValue(value)) {
+    <div>
+      <span>{{ value | dimlessBinary: 2 }}</span>
+    </div>
+  }
+</ng-template>
+
 <ng-template #orchTmpl>
   <span
     i18n

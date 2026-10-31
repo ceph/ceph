@@ -85,6 +85,14 @@ describe('HostsComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should format Total Memory with higher precision than other dimless columns', () => {
+    fixture.detectChanges();
+    const memoryColumn = component.columns.find((col) => col.prop === 'memory_total_bytes');
+    const capacityColumn = component.columns.find((col) => col.prop === 'raw_capacity');
+    expect(memoryColumn?.cellTemplate).toBe(component.hostMemoryDimlessTmpl);
+    expect(capacityColumn?.cellTemplate).toBe(component.hostDimlessTmpl);
+  });
+
   it('should render hosts list even with not permission mapped services', () => {
     const hostname = 'ceph.dev';
     const payload = [
