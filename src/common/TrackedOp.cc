@@ -24,6 +24,7 @@
 #include "common/perf_counters_collection.h"
 #endif
 
+#include <algorithm> // for std::sort
 #include <shared_mutex> // for std::shared_lock
 #include <sstream>
 
@@ -432,6 +433,14 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
     return false;
 
   l.unlock();
+  // Each shard is roughly in arrival order, but the shards were
+  // concatenated above, so the combined list is not. Visitors such as
+  // the slow-op counters stop at the first op that is not yet old
+  // enough, so hand them the ops oldest first.
+  std::sort(ops_in_flight.begin(), ops_in_flight.end(),
+            [](const TrackedOpRef& a, const TrackedOpRef& b) {
+              return a->get_initiated() < b->get_initiated();
+            });
   for (auto& op : ops_in_flight) {
     // `lock` neither `ops_in_flight_lock_sharded` should be held when
     // calling the visitor. Otherwise `OSD::get_health_metrics()` can
