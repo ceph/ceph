@@ -885,11 +885,17 @@ public:
         bool keep_tail;
         bool completeMultipart;
         bool appendable;
+        // set by copy_obj() only: arms cls_obj_check_prefix_exist(RGW_ATTR_SHARE_MANIFEST);
+        // in _do_write_meta() when the destination had no shared_manifest at
+        // get_state() time, to catch a dedup commit racing the copy's head
+        // write. Left false for PUT/multipart so their behavior is unchanged.
+        bool dedup_race_guard;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
                  if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
-                 modify_tail(false), keep_tail(false), completeMultipart(false), appendable(false) {}
+                 modify_tail(false), keep_tail(false), completeMultipart(false), appendable(false),
+                 dedup_race_guard(false) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
@@ -898,10 +904,14 @@ public:
                      std::map<std::string, bufferlist>& attrs,
                      bool assume_noent, void *index_op,
                      const req_context& rctx, jspan_context& trace,
-                     bool log_op = true);
+                     bool log_op = true,
+                     bool after_shared_manifest_race = false,
+                     bool *dedup_race_retry = nullptr);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,
-                     const req_context& rctx, jspan_context& trace, bool log_op = true);
+                     const req_context& rctx, jspan_context& trace, bool log_op = true,
+                     bool after_shared_manifest_race = false,
+                     bool *dedup_race_retry = nullptr);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
       const req_state* get_req_state() {
         return nullptr;  /* XXX dang Only used by LTTng, and it handles null anyway */
@@ -950,6 +960,15 @@ public:
 		     const bool force, // if head object missing, do a best effort
 		     const bool skip_olh_obj_update // true for all deletes (except the last one) initiated by a multi-object delete op
         );
+
+    private:
+      int delete_obj_impl(optional_yield y,
+			  const DoutPrefixProvider* dpp,
+			  bool log_op,
+			  const bool force,
+			  const bool skip_olh_obj_update,
+			  bool after_shared_manifest_race,
+			  bool *dedup_race_retry);
     }; // struct RGWRados::Object::Delete
 
     struct Stat {
@@ -1838,6 +1857,47 @@ public:
                      optional_yield y);
 
  private:
+  // copy_obj() worker; see copy_obj() for parameter docs. The two trailing
+  // params mirror RGWRados::Object::Delete::delete_obj_impl()'s dedup-race
+  // retry pattern: after_shared_manifest_race=true suppresses re-arming the
+  // guard on the retry pass, dedup_race_retry is the out-param copy_obj()
+  // checks to decide whether to run a single retry.
+  int copy_obj_impl(RGWObjectCtx& src_obj_ctx,
+               RGWObjectCtx& dest_obj_ctx,
+               const ACLOwner& owner,
+               const rgw_user& remote_user,
+               req_info *info,
+               const rgw_zone_id& source_zone,
+               const rgw_obj& dest_obj,
+               const rgw_obj& src_obj,
+               RGWBucketInfo& dest_bucket_info,
+               RGWBucketInfo& src_bucket_info,
+               const rgw_placement_rule& dest_placement,
+               ceph::real_time *src_mtime,
+               ceph::real_time *mtime,
+               const ceph::real_time *mod_ptr,
+               const ceph::real_time *unmod_ptr,
+               bool high_precision_time,
+               const char *if_match,
+               const char *if_nomatch,
+               AttrsMod attrs_mod,
+               bool copy_if_newer,
+               std::map<std::string, bufferlist>& attrs,
+               RGWObjCategory category,
+               uint64_t olh_epoch,
+	       ceph::real_time delete_at,
+               std::string *version_id,
+               std::string *ptag,
+               std::string *petag,
+               void (*progress_cb)(off_t, void *),
+               void *progress_data,
+               rgw::sal::DataProcessorFactory *dp_factory,
+               const DoutPrefixProvider *dpp,
+               optional_yield y,
+               jspan_context& trace,
+               bool after_shared_manifest_race,
+               bool *dedup_race_retry);
+
   /**
    * Check the actual on-disk state of the object specified
    * by list_state, and fill in the time and size of object.

@@ -3422,7 +3422,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
                                            map<string, bufferlist>& attrs,
                                            bool assume_noent, void *_index_op,
                                            const req_context& rctx,
-                                           jspan_context& trace, bool log_op)
+                                           jspan_context& trace, bool log_op,
+                                           bool after_shared_manifest_race,
+                                           bool *dedup_race_retry)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   RGWRados *store = target->get_store();
@@ -3444,6 +3446,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   int r = target->get_state(rctx.dpp, &state, &manifest, false, rctx.y, assume_noent);
   if (r < 0)
     return r;
+
+  const bool shared_manifest_absent_guard = meta.dedup_race_guard &&
+    (state->attrset.find(RGW_ATTR_SHARE_MANIFEST) == state->attrset.end());
 
   rgw_obj& obj = target->get_obj();
 
@@ -3537,6 +3542,16 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   if (meta.manifest) {
     storage_class = meta.manifest->get_tail_placement().placement_rule.storage_class;
+
+    if (shared_manifest_absent_guard) {
+      /* object was not a dedup target at read time; if dedup makes it one
+       * (sets shared_manifest + its own manifest) before we overwrite the
+       * manifest here, restart the copy so it replans against the
+       * post-dedup state instead of clobbering it with a stale manifest */
+
+      /* fail if RGW_ATTR_SHARE_MANIFEST exists */
+      store->cls_obj_check_prefix_exist(op, RGW_ATTR_SHARE_MANIFEST, true);
+    }
 
     /* remove existing manifest attr */
     iter = attrs.find(RGW_ATTR_MANIFEST);
@@ -3748,6 +3763,15 @@ done_cancel:
     meta.canceled = true;
   }
 
+  if (r == -ECANCELED && shared_manifest_absent_guard) {
+    // dest attrs changed (dedup set shared_manifest) between our get_state()
+    // and this operate(); invalidate so a retry's get_state() re-reads them.
+    target->invalidate_state();
+    if (!after_shared_manifest_race && dedup_race_retry) {
+      *dedup_race_retry = true;
+    }
+  }
+
   /* we lost in a race. There are a few options:
    * - existing object was rewritten (ECANCELED)
    * - nonexistent object was created (EEXIST)
@@ -3790,7 +3814,9 @@ done_cancel:
 
 int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
                                         map<string, bufferlist>& attrs, const req_context& rctx,
-                                        jspan_context& trace, bool log_op)
+                                        jspan_context& trace, bool log_op,
+                                        bool after_shared_manifest_race,
+                                        bool *dedup_race_retry)
 {
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
@@ -3801,13 +3827,15 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   int r;
   if (assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op);
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op,
+                       after_shared_manifest_race, dedup_race_retry);
     if (r == -EEXIST) {
       assume_noent = false;
     }
   }
   if (!assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op);
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op,
+                       after_shared_manifest_race, dedup_race_retry);
   }
   return r;
 }
@@ -5236,6 +5264,64 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                optional_yield y,
                jspan_context& trace)
 {
+  bool dedup_race_retry = false;
+  auto ret = copy_obj_impl(src_obj_ctx, dest_obj_ctx, owner, remote_user, info,
+                           source_zone, dest_obj, src_obj, dest_bucket_info,
+                           src_bucket_info, dest_placement, src_mtime, mtime,
+                           mod_ptr, unmod_ptr, high_precision_time, if_match,
+                           if_nomatch, attrs_mod, copy_if_newer, attrs, category,
+                           olh_epoch, delete_at, version_id, ptag, petag,
+                           progress_cb, progress_data, dp_factory, dpp, y, trace,
+                           false, &dedup_race_retry);
+  if (!dedup_race_retry) {
+    return ret;
+  }
+  return copy_obj_impl(src_obj_ctx, dest_obj_ctx, owner, remote_user, info,
+                       source_zone, dest_obj, src_obj, dest_bucket_info,
+                       src_bucket_info, dest_placement, src_mtime, mtime,
+                       mod_ptr, unmod_ptr, high_precision_time, if_match,
+                       if_nomatch, attrs_mod, copy_if_newer, attrs, category,
+                       olh_epoch, delete_at, version_id, ptag, petag,
+                       progress_cb, progress_data, dp_factory, dpp, y, trace,
+                       true, nullptr);
+}
+
+int RGWRados::copy_obj_impl(RGWObjectCtx& src_obj_ctx,
+	       RGWObjectCtx& dest_obj_ctx,
+               const ACLOwner& owner,
+               const rgw_user& remote_user,
+               req_info *info,
+               const rgw_zone_id& source_zone,
+               const rgw_obj& dest_obj,
+               const rgw_obj& src_obj,
+               RGWBucketInfo& dest_bucket_info,
+               RGWBucketInfo& src_bucket_info,
+               const rgw_placement_rule& dest_placement,
+               real_time *src_mtime,
+               real_time *mtime,
+               const real_time *mod_ptr,
+               const real_time *unmod_ptr,
+               bool high_precision_time,
+               const char *if_match,
+               const char *if_nomatch,
+               AttrsMod attrs_mod,
+               bool copy_if_newer,
+               rgw::sal::Attrs& attrs,
+               RGWObjCategory category,
+               uint64_t olh_epoch,
+	       real_time delete_at,
+               string *version_id,
+               string *ptag,
+               string *petag,
+               void (*progress_cb)(off_t, void *),
+               void *progress_data,
+               rgw::sal::DataProcessorFactory *dp_factory,
+               const DoutPrefixProvider *dpp,
+               optional_yield y,
+               jspan_context& trace,
+               bool after_shared_manifest_race,
+               bool *dedup_race_retry)
+{
   int ret;
   uint64_t obj_size;
   rgw_obj shadow_obj = dest_obj;
@@ -5571,8 +5657,10 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   write_op.meta.delete_at = delete_at;
   write_op.meta.modify_tail = !copy_itself;
   write_op.meta.keep_tail = copy_itself;
+  write_op.meta.dedup_race_guard = true;
 
-  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace);
+  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace,
+                            true /* log_op */, after_shared_manifest_race, dedup_race_retry);
   if (ret < 0) {
     goto done_ret;
   }
@@ -7050,6 +7138,24 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
 					 const bool force,
 					 const bool skip_olh_obj_update)
 {
+  bool dedup_race_retry = false;
+  auto ret = delete_obj_impl(y, dpp, log_op, force, skip_olh_obj_update, false,
+			     &dedup_race_retry);
+  if (!dedup_race_retry) {
+    return ret;
+  }
+  return delete_obj_impl(y, dpp, log_op, force, skip_olh_obj_update, true,
+			 nullptr);
+}
+
+int RGWRados::Object::Delete::delete_obj_impl(optional_yield y,
+					      const DoutPrefixProvider* dpp,
+					      bool log_op,
+					      const bool force,
+					      const bool skip_olh_obj_update,
+					      bool after_shared_manifest_race,
+					      bool *dedup_race_retry)
+{
   RGWRados *store = target->get_store();
   const rgw_obj& src_obj = target->get_obj();
   const string& instance = src_obj.key.instance;
@@ -7296,6 +7402,16 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     return r;
   }
 
+  const bool shared_manifest_absent_guard =
+    (state->attrset.find(RGW_ATTR_SHARE_MANIFEST) == state->attrset.end());
+  if (shared_manifest_absent_guard) {
+    /* object was not a dedup target at read time; if dedup makes it one before
+     * we remove the head, restart delete so GC sees the shared manifest */
+
+    /* fail if RGW_ATTR_SHARE_MANIFEST exists */
+    store->cls_obj_check_prefix_exist(op, RGW_ATTR_SHARE_MANIFEST, true);
+  }
+
   store->remove_rgw_head_obj(op);
 
   if (params.check_objv != nullptr) {
@@ -7340,6 +7456,11 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
   }
 
   if (r < 0) {
+    if (r == -ECANCELED && shared_manifest_absent_guard &&
+	!after_shared_manifest_race && dedup_race_retry) {
+      *dedup_race_retry = true;
+      return r;
+    }
     return r;
   }
 
