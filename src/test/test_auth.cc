@@ -10,12 +10,15 @@
 #include "auth/AuthRegistry.h"
 #include "auth/KeyRing.h"
 #include "auth/RotatingKeyRing.h"
+#include "auth/cephx/CephxClientHandler.h"
 #include "auth/cephx/CephxProtocol.h"
 #include "common/Clock.h"
 
+#include <chrono>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 
 TEST(AuthRegistry, con_modes)
@@ -583,4 +586,156 @@ TEST_F(CephxServiceTicket, reject_undecodable_caps)
 
   ASSERT_FALSE(
       verify_authorizer(cct, keys, mint_fixed(cct, keys, false, &caps)));
+}
+
+namespace {
+
+CephXSessionAuthInfo
+session_info(CephContext* cct, uint32_t service_id, int validity)
+{
+  CephXSessionAuthInfo info;
+  info.service_id = service_id;
+  info.secret_id = 1;
+  info.ticket.name.set(CEPH_ENTITY_TYPE_CLIENT, eid);
+  info.ticket.global_id = gid;
+  info.ticket.init_timestamps(ceph_clock_now(), validity);
+  info.validity = utime_t(validity, 0);
+  EXPECT_EQ(0, info.session_key.create(cct, CEPH_CRYPTO_AES));
+  EXPECT_EQ(0, info.service_secret.create(cct, CEPH_CRYPTO_AES));
+  return info;
+}
+
+// mon side: a service ticket reply sealed for the holder of 'principal'
+void
+build_reply(
+    CephContext* cct,
+    CryptoKey& principal,
+    std::vector<CephXSessionAuthInfo> infos,
+    ceph::bufferlist& bl)
+{
+  CryptoKey unused;
+  EXPECT_TRUE(cephx_build_service_ticket_reply(
+      cct, principal, std::move(infos), false, unused, bl));
+}
+
+} // anonymous namespace
+
+// a later renew_after for the MGR ticket could leave it due on its own
+TEST(CephxTicketManager, tickets_in_one_reply_come_due_together)
+{
+  CephContext* cct = g_ceph_context;
+  CryptoKey principal;
+  ASSERT_EQ(0, principal.create(cct, CEPH_CRYPTO_AES));
+  ceph::bufferlist bl;
+  build_reply(cct, principal,
+	      {session_info(cct, CEPH_ENTITY_TYPE_MON, 3600),
+	       session_info(cct, CEPH_ENTITY_TYPE_OSD, 3600),
+	       session_info(cct, CEPH_ENTITY_TYPE_MGR, 3600)},
+	      bl);
+
+  CephXTicketManager tickets(cct);
+  auto p = bl.cbegin();
+  ASSERT_TRUE(tickets.verify_service_ticket_reply(principal, p));
+  const utime_t mon = tickets.get_handler(CEPH_ENTITY_TYPE_MON).renew_after;
+  EXPECT_EQ(mon, tickets.get_handler(CEPH_ENTITY_TYPE_OSD).renew_after);
+  EXPECT_EQ(mon, tickets.get_handler(CEPH_ENTITY_TYPE_MGR).renew_after);
+}
+
+class CephxClientTickets : public ::testing::Test {
+protected:
+  CephContext* cct = g_ceph_context;
+  KeyRing keyring;
+  RotatingKeyRing rotating{cct, CEPH_ENTITY_TYPE_CLIENT, &keyring};
+  std::unique_ptr<CephxClientHandler> client;
+  CryptoKey auth_session_key;
+
+  int respond(uint16_t type, CryptoKey& principal,
+	      std::vector<CephXSessionAuthInfo> infos) {
+    using ceph::encode;
+    ceph::bufferlist bl;
+    CephXResponseHeader header;
+    header.request_type = type;
+    header.status = 0;
+    encode(header, bl);
+    build_reply(cct, principal, std::move(infos), bl);
+    auto p = bl.cbegin();
+    return client->handle_response(0, p, nullptr, nullptr);
+  }
+
+  // authenticate, then get service tickets back with the given lifetimes
+  void get_tickets(std::vector<std::pair<uint32_t, int>> services) {
+    using ceph::encode;
+    CryptoKey secret;
+    ASSERT_EQ(0, secret.create(cct, CEPH_CRYPTO_AES));
+    keyring.add(cct->_conf->name, secret);
+    client = std::make_unique<CephxClientHandler>(cct, &rotating);
+    client->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD |
+			  CEPH_ENTITY_TYPE_MGR);
+
+    ceph::bufferlist bl;
+    CephXServerChallenge challenge;
+    challenge.server_challenge = 1;
+    encode(challenge, bl);
+    auto p = bl.cbegin();
+    ASSERT_EQ(-EAGAIN, client->handle_response(0, p, nullptr, nullptr));
+
+    CephXSessionAuthInfo auth = session_info(cct, CEPH_ENTITY_TYPE_AUTH, 3600);
+    auth_session_key = auth.session_key;
+    ASSERT_EQ(-EAGAIN, respond(CEPHX_GET_AUTH_SESSION_KEY, secret, {auth}));
+
+    std::vector<CephXSessionAuthInfo> infos;
+    for (auto& [service_id, validity] : services)
+      infos.push_back(session_info(cct, service_id, validity));
+    ASSERT_EQ(0, respond(CEPHX_GET_PRINCIPAL_SESSION_KEY, auth_session_key,
+			 infos));
+  }
+};
+
+// a held MGR ticket left unrenewed outlives its rotating secret
+TEST_F(CephxClientTickets, renew_mgr_ticket_due_alone)
+{
+  // validity 2s: renew_after is 1.5s out (validity/4 before expiry)
+  ASSERT_NO_FATAL_FAILURE(get_tickets({{CEPH_ENTITY_TYPE_MON, 3600},
+				       {CEPH_ENTITY_TYPE_OSD, 3600},
+				       {CEPH_ENTITY_TYPE_MGR, 2}}));
+  ASSERT_FALSE(client->need_tickets());
+  std::this_thread::sleep_for(std::chrono::milliseconds(1700));
+  ASSERT_TRUE(client->need_tickets());
+
+  // the renewal asks for the MGR ticket alone
+  client->prepare_build_request();
+  ceph::bufferlist req;
+  ASSERT_EQ(0, client->build_request(req));
+  auto p = req.cbegin();
+  CephXRequestHeader header;
+  header.decode(p);
+  ASSERT_EQ(CEPHX_GET_PRINCIPAL_SESSION_KEY, header.request_type);
+  p = req.cbegin();
+  p += req.length() - 5; // ends with the CephXServiceTicketRequest
+  CephXServiceTicketRequest ticket_req;
+  ticket_req.decode(p);
+  ASSERT_TRUE(p.end());
+  ASSERT_EQ((uint32_t)CEPH_ENTITY_TYPE_MGR, ticket_req.keys);
+
+  // and once it arrives, nothing is due
+  ASSERT_EQ(0, respond(CEPHX_GET_PRINCIPAL_SESSION_KEY, auth_session_key,
+		       {session_info(cct, CEPH_ENTITY_TYPE_MGR, 3600)}));
+  ASSERT_FALSE(client->need_tickets());
+}
+
+// mons that never issue a MGR ticket must not be asked for one in a loop
+TEST_F(CephxClientTickets, skip_mgr_ticket_never_issued)
+{
+  ASSERT_NO_FATAL_FAILURE(get_tickets(
+      {{CEPH_ENTITY_TYPE_MON, 3600}, {CEPH_ENTITY_TYPE_OSD, 3600}}));
+  ASSERT_FALSE(client->need_tickets());
+}
+
+// likewise for a MGR ticket issued without an expiry (a zero ttl)
+TEST_F(CephxClientTickets, skip_mgr_ticket_without_expiry)
+{
+  ASSERT_NO_FATAL_FAILURE(get_tickets({{CEPH_ENTITY_TYPE_MON, 3600},
+				       {CEPH_ENTITY_TYPE_OSD, 3600},
+				       {CEPH_ENTITY_TYPE_MGR, 0}}));
+  ASSERT_FALSE(client->need_tickets());
 }
