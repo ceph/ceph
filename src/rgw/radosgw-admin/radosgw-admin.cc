@@ -181,7 +181,7 @@ void usage()
   cout << "  account rm                       remove an account\n";
   cout << "  account list                     list all account ids\n";
   cout << "  bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)\n";
-  cout << "  bucket limit check               show bucket sharding stats\n";
+  cout << "  bucket limit check               show bucket sharding stats (optional --uid or --bucket)\n";
   cout << "  bucket link                      link bucket to specified user\n";
   cout << "  bucket unlink                    unlink bucket from specified user\n";
   cout << "  bucket stats                     returns bucket statistics\n";
@@ -7671,6 +7671,23 @@ int main(int argc, const char **argv)
     int max = 1000;
 
     bool truncated;
+
+    if (!bucket_name.empty()) {
+      ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+      if (ret < 0) {
+	cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret)
+	     << std::endl;
+	return -ret;
+      }
+      if (!rgw::sal::User::empty(user) &&
+	  bucket->get_info().owner != rgw_owner{user->get_id()}) {
+	cerr << "ERROR: bucket owner does not match --uid" << std::endl;
+	return ENOENT;
+      }
+      ret = RGWBucketAdminOp::limit_check(driver, *bucket, stream_flusher,
+					  null_yield, dpp(), warnings_only);
+      return -ret;
+    }
 
     if (!rgw::sal::User::empty(user)) {
       user_ids.push_back(user->get_id().id);
