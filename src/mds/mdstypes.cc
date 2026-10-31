@@ -336,7 +336,7 @@ std::list<inline_data_t> inline_data_t::generate_test_instances()
  */
 void fnode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 3, bl);
   encode(version, bl);
   encode(snap_purged_thru, bl);
   encode(fragstat, bl);
@@ -348,6 +348,7 @@ void fnode_t::encode(bufferlist &bl) const
   encode(recursive_scrub_stamp, bl);
   encode(localized_scrub_version, bl);
   encode(localized_scrub_stamp, bl);
+  encode(frag_bytes, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -368,6 +369,11 @@ void fnode_t::decode(bufferlist::const_iterator &bl)
     decode(recursive_scrub_stamp, bl);
     decode(localized_scrub_version, bl);
     decode(localized_scrub_stamp, bl);
+  }
+  if (struct_v >= 5) {
+    decode(frag_bytes, bl);
+  } else {
+    frag_bytes = -1;
   }
   DECODE_FINISH(bl);
 }
@@ -392,6 +398,8 @@ void fnode_t::dump(Formatter *f) const
   f->open_object_section("accounted_rstat");
   accounted_rstat.dump(f);
   f->close_section();
+
+  f->dump_int("frag_bytes", frag_bytes);
 }
 void fnode_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("version", version, obj, true);
@@ -402,6 +410,8 @@ void fnode_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("accounted_fragstat", accounted_fragstat, obj, true);
   JSONDecoder::decode_json("rstat", rstat, obj, true);
   JSONDecoder::decode_json("accounted_rstat", accounted_rstat, obj, true);
+  frag_bytes = -1;  // unknown unless the dump has it
+  JSONDecoder::decode_json("frag_bytes", frag_bytes, obj, false);
 }
 std::list<fnode_t> fnode_t::generate_test_instances()
 {
@@ -416,6 +426,7 @@ std::list<fnode_t> fnode_t::generate_test_instances()
   list<nest_info_t> nls = nest_info_t::generate_test_instances();
   ls.back().rstat = nls.front();
   ls.back().accounted_rstat = nls.back();
+  ls.back().frag_bytes = 4096;
   return ls;
 }
 
