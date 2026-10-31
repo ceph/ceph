@@ -37,6 +37,114 @@ class _FakeToolExecer:
         return (0, '{}', '')
 
 
+class _InvalidUserFakeToolExecer:
+    """Mock tool executor that simulates an invalid/non-existent user."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec that returns failure for non-existent user."""
+        # Check if this is a radosgw-admin bucket stats command
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_stats = json.dumps(
+                {
+                    'owner': 'nonexistent_user',
+                    'bucket': 'my-bucket',
+                    'usage': {},
+                }
+            )
+            return (0, bucket_stats, '')
+        # User info fails for invalid user
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            return (1, '', 'ERROR: failed to get user info')
+        return (0, '{}', '')
+
+
+class _InvalidAccessKeyFakeToolExecer:
+    """Mock tool executor that has mismatched credentials (invalid access key)."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec with wrong access key."""
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_stats = json.dumps(
+                {'owner': 'testuser', 'bucket': 'my-bucket', 'usage': {}}
+            )
+            return (0, bucket_stats, '')
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            # Return user info but with different access key
+            user_info = json.dumps(
+                {
+                    'user_id': 'testuser',
+                    'keys': [
+                        {
+                            'access_key': 'DIFFERENT_ACCESS_KEY',
+                            'secret_key': 'AUTO_FETCHED_SECRET_KEY',
+                        }
+                    ],
+                }
+            )
+            return (0, user_info, '')
+        return (0, '{}', '')
+
+
+class _SuspendedUserFakeToolExecer:
+    """Mock tool executor that returns a suspended user."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec returning suspended user."""
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_stats = json.dumps(
+                {
+                    'owner': 'suspended_user',
+                    'bucket': 'my-bucket',
+                    'usage': {},
+                }
+            )
+            return (0, bucket_stats, '')
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            # Return user info with suspended flag set
+            user_info = json.dumps(
+                {
+                    'user_id': 'suspended_user',
+                    'suspended': 1,
+                    'keys': [
+                        {
+                            'access_key': 'SUSPENDED_USER_ACCESS_KEY',
+                            'secret_key': 'SUSPENDED_USER_SECRET_KEY',
+                        }
+                    ],
+                }
+            )
+            return (0, user_info, '')
+        return (0, '{}', '')
+
+
+class _InactiveKeyFakeToolExecer:
+    """Mock tool executor that returns user with inactive key."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec returning user with inactive key."""
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_stats = json.dumps(
+                {'owner': 'testuser', 'bucket': 'my-bucket', 'usage': {}}
+            )
+            return (0, bucket_stats, '')
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            # Return user info with inactive key
+            user_info = json.dumps(
+                {
+                    'user_id': 'testuser',
+                    'keys': [
+                        {
+                            'access_key': 'INACTIVE_ACCESS_KEY',
+                            'secret_key': 'INACTIVE_SECRET_KEY',
+                            'active': False,
+                        }
+                    ],
+                }
+            )
+            return (0, user_info, '')
+        return (0, '{}', '')
+
+
 def _cluster(**kwargs):
     """Helper to create cluster with default clustering setting."""
     if 'clustering' not in kwargs:
@@ -1144,12 +1252,12 @@ def test_tenant_user_extraction():
 
     # Test plain user format (no tenant)
     tenant, user = _split_tenant_user_id('plainuser')
-    assert tenant == ''
+    assert tenant is None
     assert user == 'plainuser'
 
     # Test empty string
     tenant, user = _split_tenant_user_id('')
-    assert tenant == ''
+    assert tenant is None
     assert user == ''
 
 
@@ -1363,3 +1471,513 @@ def test_tenant_bucket_without_user_id_fails():
 
     with pytest.raises(ValueError):
         fetch_rgw_credentials(executor, 'tenant-bucket', user_id='')
+
+
+def test_rgw_share_with_invalid_user():
+    """Test that RGW share creation fails when provided user does not exist."""
+    # Use a custom handler with the invalid user executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_InvalidUserFakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='invaliduser',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential with invalid user
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='invalid_cred_1',
+        user_id='nonexistent_user',
+        access_key_id='SOME_ACCESS_KEY',
+        secret_access_key='SOME_SECRET_KEY',
+        linked_to_cluster='invaliduser',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='invaliduser',
+        share_id='invalidshare',
+        name='Invalid User Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='invalid_cred_1',
+        ),
+    )
+
+    # Apply should fail because user does not exist
+    rg = handler.apply([cluster, cred, share])
+    assert not rg.success, 'Expected share creation to fail with invalid user'
+    # Verify share was not created
+    assert (
+        'shares',
+        'invaliduser.invalidshare',
+    ) not in handler.internal_store.data
+
+
+def test_rgw_share_with_invalid_access_key():
+    """Test that RGW share creation fails when provided access key does not match."""
+    # Use a custom handler with the mismatched key executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_InvalidAccessKeyFakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='invalidkey',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential with wrong access key
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='mismatch_cred_1',
+        user_id='testuser',
+        access_key_id='WRONG_ACCESS_KEY',  # This doesn't match what the mock returns
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='invalidkey',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='invalidkey',
+        share_id='mismatchshare',
+        name='Mismatched Key Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='mismatch_cred_1',
+        ),
+    )
+
+    # Apply should fail because access key does not match
+    rg = handler.apply([cluster, cred, share])
+    assert (
+        not rg.success
+    ), 'Expected share creation to fail with mismatched access key'
+    # Verify share was not created
+    assert (
+        'shares',
+        'invalidkey.mismatchshare',
+    ) not in handler.internal_store.data
+
+
+def test_rgw_share_with_suspended_user():
+    """Test that RGW share creation fails when user is suspended."""
+    # Use a custom handler with the suspended user executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_SuspendedUserFakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='suspendeduser',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential with suspended user
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='suspended_cred_1',
+        user_id='suspended_user',
+        access_key_id='SUSPENDED_USER_ACCESS_KEY',
+        secret_access_key='SUSPENDED_USER_SECRET_KEY',
+        linked_to_cluster='suspendeduser',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='suspendeduser',
+        share_id='suspendedshare',
+        name='Suspended User Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='suspended_cred_1',
+        ),
+    )
+
+    # Apply should fail because user is suspended
+    rg = handler.apply([cluster, cred, share])
+    assert (
+        not rg.success
+    ), 'Expected share creation to fail with suspended user'
+    # Verify share was not created
+    assert (
+        'shares',
+        'suspendeduser.suspendedshare',
+    ) not in handler.internal_store.data
+
+
+def test_rgw_share_with_inactive_key():
+    """Test that RGW share creation fails when key is inactive."""
+    # Use a custom handler with the inactive key executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_InactiveKeyFakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='inactivekey',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential with inactive key
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='inactive_cred_1',
+        user_id='testuser',
+        access_key_id='INACTIVE_ACCESS_KEY',
+        secret_access_key='INACTIVE_SECRET_KEY',
+        linked_to_cluster='inactivekey',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='inactivekey',
+        share_id='inactiveshare',
+        name='Inactive Key Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='inactive_cred_1',
+        ),
+    )
+
+    # Apply should fail because key is inactive
+    rg = handler.apply([cluster, cred, share])
+    assert not rg.success, 'Expected share creation to fail with inactive key'
+    # Verify share was not created
+    assert (
+        'shares',
+        'inactivekey.inactiveshare',
+    ) not in handler.internal_store.data
+
+
+def test_credential_only_update_with_invalid_creds():
+    """Test that updating just credentials (without share) still validates them.
+
+    This tests the fix for the reviewer comment: "Updating an RGWCredential
+    without reapplying its share bypasses this check, allowing invalid keys
+    to be saved and potentially breaking existing shares."
+    """
+    # First phase: Create valid cluster, share, and credentials
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_FakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='credupdate',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create valid credential and share
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-1',
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credupdate',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='credupdate',
+        share_id='credshare',
+        name='Credential Update Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='valid-cred-1',
+        ),
+    )
+
+    # Apply initial resources - should succeed
+    rg = handler.apply([cluster, cred, share])
+    assert rg.success, 'Expected initial setup to succeed'
+    assert ('shares', 'credupdate.credshare') in handler.internal_store.data
+
+    # Second phase: Try to update credential to have suspended user
+    # WITHOUT reapplying the share
+    ext_store2 = smb.config_store.MemConfigStore()
+    handler2 = smb.handler.ClusterConfigHandler(
+        internal_store=handler.internal_store,  # Keep same internal store
+        public_store=ext_store2,
+        priv_store=ext_store2,
+        mon_cmd_issuer=None,
+        tool_execer=_SuspendedUserFakeToolExecer(),
+    )
+
+    # Update credential to use suspended user, but don't update the share
+    updated_cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-1',
+        user_id='suspended_user',
+        access_key_id='SUSPENDED_USER_ACCESS_KEY',
+        secret_access_key='SUSPENDED_USER_SECRET_KEY',
+        linked_to_cluster='credupdate',
+    )
+
+    # Apply should fail - credential validation should catch suspended user
+    # even though we're not touching the share
+    rg2 = handler2.apply([updated_cred])
+    assert (
+        not rg2.success
+    ), 'Expected credential-only update to fail with suspended user'
+
+
+def test_credential_only_update_with_inactive_key():
+    """Test that updating just credentials with inactive key is rejected.
+
+    Similar to test_credential_only_update_with_invalid_creds but for
+    inactive keys to ensure credential-only updates are fully validated.
+    """
+    # First phase: Create valid cluster, share, and credentials
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_FakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='credupdate2',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-2',
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credupdate2',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='credupdate2',
+        share_id='credshare2',
+        name='Credential Update Share 2',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='valid-cred-2',
+        ),
+    )
+
+    # Apply initial resources - should succeed
+    rg = handler.apply([cluster, cred, share])
+    assert rg.success, 'Expected initial setup to succeed'
+    assert ('shares', 'credupdate2.credshare2') in handler.internal_store.data
+
+    # Second phase: Try to update credential to have inactive key
+    ext_store2 = smb.config_store.MemConfigStore()
+    handler2 = smb.handler.ClusterConfigHandler(
+        internal_store=handler.internal_store,
+        public_store=ext_store2,
+        priv_store=ext_store2,
+        mon_cmd_issuer=None,
+        tool_execer=_InactiveKeyFakeToolExecer(),
+    )
+
+    # Update credential to use inactive key
+    updated_cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-2',
+        user_id='testuser',
+        access_key_id='INACTIVE_ACCESS_KEY',
+        secret_access_key='INACTIVE_SECRET_KEY',
+        linked_to_cluster='credupdate2',
+    )
+
+    # Apply should fail - credential validation should catch inactive key
+    rg2 = handler2.apply([updated_cred])
+    assert (
+        not rg2.success
+    ), 'Expected credential-only update to fail with inactive key'
+
+
+def test_credential_only_update_with_valid_creds():
+    """Test that updating credentials with valid credentials succeeds.
+
+    Positive counterpart to the invalid-credential update tests — confirms
+    that _check_rgw_credential_present does not block a legitimate update.
+    """
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_FakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='credupdate3',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-3',
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credupdate3',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='credupdate3',
+        share_id='credshare3',
+        name='Credential Update Share 3',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='valid-cred-3',
+        ),
+    )
+
+    # Apply initial resources - should succeed
+    rg = handler.apply([cluster, cred, share])
+    assert rg.success, 'Expected initial setup to succeed'
+    assert ('shares', 'credupdate3.credshare3') in handler.internal_store.data
+
+    # Second phase: update credential with still-valid credentials
+    ext_store2 = smb.config_store.MemConfigStore()
+    handler2 = smb.handler.ClusterConfigHandler(
+        internal_store=handler.internal_store,
+        public_store=ext_store2,
+        priv_store=ext_store2,
+        mon_cmd_issuer=None,
+        tool_execer=_FakeToolExecer(),
+    )
+
+    updated_cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-3',
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credupdate3',
+    )
+
+    # Apply should succeed - credentials are still valid
+    rg2 = handler2.apply([updated_cred])
+    assert (
+        rg2.success
+    ), 'Expected credential-only update with valid creds to succeed'
+
+
+def test_share_staged_with_stale_credential():
+    """Test that a share staged against a pre-existing invalid credential is rejected.
+
+    Covers the gap where a credential was stored in a previous transaction and
+    has since become invalid (user suspended, key deactivated, etc.).
+    Staging only the share — without re-staging the credential — must still
+    validate the referenced credential against RGW.
+    """
+    # Phase 1: Create cluster and a valid credential (without a share)
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_FakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='stalecred',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='stale-cred-1',
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='stalecred',
+    )
+
+    # Store cluster and credential — no share yet
+    rg = handler.apply([cluster, cred])
+    assert rg.success, 'Expected initial cluster+credential setup to succeed'
+    assert ('clusters', 'stalecred') in handler.internal_store.data
+    assert ('rgw_creds', 'stale-cred-1') in handler.internal_store.data
+
+    # Phase 2: Credential has become invalid (user suspended) between transactions.
+    # Stage only the share — the credential is NOT re-staged.
+    # The share check must still validate the existing stored credential.
+    ext_store2 = smb.config_store.MemConfigStore()
+    handler2 = smb.handler.ClusterConfigHandler(
+        internal_store=handler.internal_store,
+        public_store=ext_store2,
+        priv_store=ext_store2,
+        mon_cmd_issuer=None,
+        tool_execer=_SuspendedUserFakeToolExecer(),
+    )
+
+    share = smb.resources.Share(
+        cluster_id='stalecred',
+        share_id='staleshare',
+        name='Stale Credential Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='stale-cred-1',
+        ),
+    )
+
+    # Apply only the share — credential is pre-existing but now invalid
+    rg2 = handler2.apply([share])
+    assert (
+        not rg2.success
+    ), 'Expected share creation to fail when referenced credential is invalid'
+    assert (
+        'shares',
+        'stalecred.staleshare',
+    ) not in handler2.internal_store.data
