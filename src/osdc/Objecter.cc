@@ -2717,8 +2717,9 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
 
   bool check_for_latest_map = false;
   int r = 0;
-  // Avoid duplicating _calc_target for direct reads, where _calc_target has
-  // already been called with this map.
+  // SplitOp has calculated a direct read's target, so skip _calc_target
+  // unless a map has landed since, as one can while an earlier sub-read
+  // relocks.
   if ((op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) == 0 ||
       op->target.epoch != osdmap->get_epoch()) {
     r = _calc_target(&op->target);
@@ -2744,7 +2745,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
     epoch_t orig_epoch = osdmap->get_epoch();
     sul.unlock();
     if (cct->_conf->objecter_debug_inject_relock_delay) {
-      sleep(1);
+      relock_delay();
     }
     sul.lock();
     if (orig_epoch != osdmap->get_epoch()) {
@@ -3099,11 +3100,15 @@ bool Objecter::target_should_be_paused(op_target_t *t)
 {
   const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
   bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) ||
-    (t->respects_full() && (_osdmap_full_flag() || _osdmap_pool_full(*pi)));
+  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR);
+  // Not only writes: an RWORDERED read must wait behind the writes that a
+  // full pool pauses.
+  bool pausefull = t->respects_full() &&
+    (_osdmap_full_flag() || _osdmap_pool_full(*pi));
 
   return (t->flags & CEPH_OSD_FLAG_READ && pauserd) ||
     (t->flags & CEPH_OSD_FLAG_WRITE && pausewr) ||
+    pausefull ||
     (osdmap->get_epoch() < epoch_barrier);
 }
 
@@ -3320,8 +3325,8 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
   bool recovery_deletes = osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
   pg_t prev_pgid(prev_seed, pgid.pool());
-  // A forced OSD can leave the acting set without the primary changing, and
-  // drops ops sent to it in an earlier interval.
+  // A non-primary OSD drops ops from an earlier interval, so a forced-OSD
+  // target must notice every new interval, not only a primary change.
   if ((any_change || (t->flags & CEPH_OSD_FLAG_FORCE_OSD)) &&
       PastIntervals::is_new_interval(
 	t->acting_primary,
@@ -3395,10 +3400,9 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
     if (t->flags & CEPH_OSD_FLAG_FORCE_OSD) {
-      // A direct read gets one attempt, so fail it back once its PG changes.
-      // If FAIL_ON_EAGAIN is set, we must not failover - the caller expects
-      // -EAGAIN to be returned. Otherwise, clear the direct read flags and
-      // redrive to the primary OSD (similar to what happens when we get -EAGAIN).
+      // A forced OSD gets one attempt.  Once the op's PG changes, fail it
+      // with -EAGAIN if the caller asked for that (FAIL_ON_EAGAIN), otherwise
+      // redrive it to the primary as if the OSD had returned -EAGAIN.
       if (t->flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) {
         ldout(cct, 10) << __func__ << " forced osd." << t->osd
                        << " pg changed, acting " << t->acting
