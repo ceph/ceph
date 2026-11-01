@@ -54,7 +54,11 @@ int create_image_full_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
 
 int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
                     const std::string &name, uint64_t size) {
-  int order = 0;
+  return create_image_pp(rbd, ioctx, name, size, 0);
+}
+
+int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
+                    const std::string &name, uint64_t size, int order) {
   uint64_t features = 0;
   if (!get_features(&features)) {
     // ensure old-format tests actually use the old format
