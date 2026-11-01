@@ -188,6 +188,19 @@ Enabling Cephadm and Adding the Hosts
 
    The command prints nothing on success.
 
+#. Set the container image that cephadm deploys new daemons with, such as
+   the MDS and RGW daemons later in this procedure. Replace ``<image>`` with
+   the image that you passed to ``cephadm adopt``:
+
+   .. prompt:: bash #
+
+      ceph config set global container_image <image>
+
+   The command prints nothing on success. ``cephadm adopt`` does not set
+   this option. Without it, cephadm deploys new daemons with the default
+   image, ``docker.io/ceph/daemon-base:latest-master-devel``, and not with
+   ``<image>``.
+
 #. Generate an SSH key for cephadm:
 
    .. prompt:: bash #
