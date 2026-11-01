@@ -706,6 +706,12 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
 
+if(NOT WIN32)
+  # ceph-crash.in imports grp and pwd
+  add_ceph_test(test_ceph_crash.py
+    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_ceph_crash.py)
+endif()
+
 # unittest_admin_socket
 add_executable(unittest_admin_socket
   admin_socket.cc
