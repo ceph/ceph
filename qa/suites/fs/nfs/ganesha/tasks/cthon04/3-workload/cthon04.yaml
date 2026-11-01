@@ -1,0 +1,38 @@
+overrides:
+  install:
+    ceph:
+      extra_system_packages:
+        deb:
+        - libtirpc-dev
+        - pkg-config
+        # general tests run time(1), tbl and nroff
+        - time
+        - groff-base
+        rpm:
+        - libtirpc-devel
+        - pkgconf-pkg-config
+        - time
+        - groff-base
+tasks:
+- exec:
+    client.0:
+      # Connectathon test suite: basic, general, special and lock tests. Built
+      # on local disk and run against a directory on the NFS mount.
+      - |
+        set -ex
+        MNT=$(findmnt -n -t nfs,nfs4 -o TARGET | head -n 1)
+        test -n "$MNT"
+        SRC=$(mktemp -d /tmp/cthon04.XXXXXX)
+        trap 'rm -rf "$SRC"' EXIT
+        # upstream git://git.linux-nfs.org/projects/steved/cthon04.git at
+        # commit 86a4501a6e1e, mirrored in the lab
+        cd "$SRC"
+        curl -fsSL -o cthon04.tar.gz https://apt-mirror.sepia.ceph.com/qa/cthon04/cthon04-86a4501.tar.gz
+        echo "1010b2b8601a363e11f3636278127e880597739053bedc5e92faa21e57d591b3  cthon04.tar.gz" | sha256sum -c -
+        mkdir cthon04
+        tar -xzf cthon04.tar.gz -C cthon04 --strip-components=1
+        cd cthon04
+        make
+        for t in -b -g -s -l; do
+            ./runtests $t -t "$MNT/cthon04"
+        done
