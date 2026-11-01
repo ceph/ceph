@@ -4,14 +4,14 @@
 #include "crimson/os/seastore/seastore_dma_alloc.h"
 
 #include "include/buffer.h"
-#ifdef HAVE_SPDK
+#ifdef HAVE_CRIMSON_SPDK
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/spdk_dma_buffer.h"
 #endif
 
 namespace crimson::os::seastore {
 
-#ifdef HAVE_SPDK
+#ifdef HAVE_CRIMSON_SPDK
 namespace {
 
 // seastore_spdk_transport_id is a startup option, so read it once per shard
@@ -30,7 +30,7 @@ bool spdk_transport_active()
 ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_dma_or_page_aligned(
   size_t len)
 {
-#ifdef HAVE_SPDK
+#ifdef HAVE_CRIMSON_SPDK
   if (spdk_transport_active()) {
     return create_spdk_dma(len);
   }

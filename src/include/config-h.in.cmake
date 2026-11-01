@@ -108,6 +108,9 @@
 /* SPDK conditional compilation */
 #cmakedefine HAVE_SPDK
 
+/* SPDK conditional compilation for crimson SeaStore */
+#cmakedefine HAVE_CRIMSON_SPDK
+
 /* DPDK conditional compilation */
 #cmakedefine HAVE_DPDK
 

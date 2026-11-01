@@ -73,9 +73,9 @@ if(WITH_ZNS)
 endif()
 
 # Per-shard SPDK NVMe engine and the SPDK block/RBM I/O drivers
-# (SPDKBlockIODriver / SPDKNVMeIODriver). Guarded by WITH_SPDK so the
-# default io_uring build pulls in no SPDK code.
-if(WITH_SPDK)
+# (SPDKBlockIODriver / SPDKNVMeIODriver). Guarded by WITH_CRIMSON_SPDK so a
+# build without it pulls in no SPDK code.
+if(WITH_CRIMSON_SPDK)
   list(APPEND crimson_seastore_srcs
     spdk_nvme_io.cc
     spdk_block_io_driver.cc
@@ -91,7 +91,7 @@ if(WITH_ZNS)
   target_link_libraries(crimson-seastore
     Linux::ZNS)
 endif()
-if(WITH_SPDK)
+if(WITH_CRIMSON_SPDK)
   target_link_libraries(crimson-seastore
     spdk::spdk)
 endif()

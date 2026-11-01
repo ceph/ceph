@@ -73,10 +73,6 @@ function(do_build_dpdk dpdk_dir)
       "\"${target}\" not listed in ${supported_targets}")
   endif()
 
-  if(WITH_SPDK)
-    message(FATAL_ERROR "not able to build DPDK with "
-      "both Seastar_DPDK and WITH_SPDK enabled")
-  endif()
   set(dpdk_source_dir ${CMAKE_SOURCE_DIR}/src/seastar/dpdk)
 
   set(extra_cflags "-fPIC")

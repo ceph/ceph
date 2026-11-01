@@ -13,7 +13,7 @@
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/block_io_driver.h"
-#ifdef HAVE_SPDK
+#ifdef HAVE_CRIMSON_SPDK
 #include "crimson/os/seastore/spdk_block_io_driver.h"
 #endif
 
@@ -296,11 +296,11 @@ BlockIODriverRef make_block_io_driver(
       "seastore_spdk_transport_id is set but device type is ZBD; "
       "SPDK is not supported for zoned (ZNS) devices");
   }
-#ifdef HAVE_SPDK
+#ifdef HAVE_CRIMSON_SPDK
   return std::make_unique<SPDKBlockIODriver>(trid);
 #else
   throw std::invalid_argument(
-    "seastore_spdk_transport_id is set but this build has WITH_SPDK=OFF");
+    "seastore_spdk_transport_id is set but this build has WITH_CRIMSON_SPDK=OFF");
 #endif
 }
 
