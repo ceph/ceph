@@ -1099,6 +1099,10 @@ if(WITH_RADOSGW_LANCEDB)
 endif()
 
 if(WITH_TESTS)
+  if(WITH_RADOSGW_DBSTORE OR WITH_RADOSGW_STANDALONE)
+    add_subdirectory(driver/dbstore/tests)
+  endif()
+
   add_executable(ceph_rgw_jsonparser
     rgw_jsonparser.cc)
   target_link_libraries(ceph_rgw_jsonparser
