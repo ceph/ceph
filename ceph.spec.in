@@ -23,6 +23,7 @@
 %bcond_with make_check
 %bcond_with cmake_verbose_logging
 %bcond_without ceph_test_package
+%bcond_with radosgw_fdb
 %ifarch s390
 %bcond_with tcmalloc
 %else
@@ -235,6 +236,9 @@ BuildRequires:	selinux-policy-devel
 %endif
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
+%if %{with radosgw_fdb}
+BuildRequires:  foundationdb-clients >= 7.3
+%endif
 BuildRequires:	pkgconfig(fuse3)
 BuildRequires:	git
 BuildRequires:	pkgconfig(grpc++)
@@ -1792,6 +1796,7 @@ cmake .. \
 %else
     -DWITH_RADOSGW_AMQP_ENDPOINT:BOOL=OFF \
 %endif
+    -DWITH_RADOSGW_FDB:BOOL=%{with radosgw_fdb} \
 %if 0%{with kafka_endpoint}
     -DWITH_RADOSGW_KAFKA_ENDPOINT:BOOL=ON \
 %else

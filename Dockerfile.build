@@ -25,6 +25,7 @@ ARG CUSTOM_IMAGE_COMMANDS=
 ARG SCCACHE_VERSION=v0.15.0
 ARG SCCACHE_REPO=https://github.com/mozilla/sccache
 ARG WITH_CRIMSON=true
+ARG WITH_RADOSGW_FDB=OFF
 ARG FOR_MAKE_CHECK=1
 # Non-empty: fail the image build if the ceph-libboost packages can't be
 # installed, instead of leaving boost to the submodule (see install-deps.sh).
@@ -40,6 +41,7 @@ RUN DISTRO=$DISTRO \
     CUSTOM_IMAGE_COMMANDS=$CUSTOM_IMAGE_COMMANDS \
     CEPH_CTR_SRC=${CEPH_CTR_SRC} \
     WITH_CRIMSON=${WITH_CRIMSON} \
+    WITH_RADOSGW_FDB=${WITH_RADOSGW_FDB} \
     FOR_MAKE_CHECK=${FOR_MAKE_CHECK} \
     REQUIRE_BOOST_PKGS=${REQUIRE_BOOST_PKGS} \
     bash -x ${CEPH_CTR_SRC}/buildcontainer-setup.sh
