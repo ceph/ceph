@@ -1,0 +1,2 @@
+# ceph-fuse without fscrypt dummy encryption, so that it gets EC data pools
+# from the objectstore-ec facet (fscrypt cannot be used with an EC layout)
