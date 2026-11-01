@@ -86,6 +86,24 @@ class Module(MgrModule):
         self._self_test()
         return 0, '', 'Self-test succeeded'
 
+    @SelftestCLICommand('mgr self-test perf-schema-test', perm='r')
+    def perf_schema_test(self) -> Tuple[int, str, str]:
+        result = self._collect_perf_schema()
+        return 0, json.dumps(result, indent=2), ''
+
+    @SelftestCLICommand('mgr self-test dump-unlabeled-perf-schema', perm='r')
+    def dump_unlabeled_perf_schema(self,
+                                   svc_type: str,
+                                   svc_id: str) -> Tuple[int, str, str]:
+        '''Return get_unlabeled_perf_schema(svc_type, svc_id) as JSON.'''
+        return 0, json.dumps(self.get_unlabeled_perf_schema(svc_type, svc_id)), ''
+
+    @SelftestCLICommand('mgr self-test dump-perf-schema', perm='r')
+    def dump_perf_schema(self,
+                         svc_type: str,
+                         svc_id: str) -> Tuple[int, str, str]:
+        return 0, json.dumps(self.get_perf_schema(svc_type, svc_id)), ''
+
     @SelftestCLICommand('mgr self-test background start')
     def backgroun_start(self, workload: Workload) -> Tuple[int, str, str]:
         '''
@@ -364,11 +382,33 @@ class Module(MgrModule):
         assert (set(self.get_store_prefix("test").keys())
                 == {"testkey"} | existing_keys)
 
+    def _collect_perf_schema(self) -> Dict[str, Any]:
+        servers = self.list_servers()
+        mon_services = [
+            svc
+            for srv in servers
+            for svc in srv.get("services", [])
+            if svc["type"] == "mon"
+        ]
+
+        labeled: Dict[str, Any] = {}
+        for mon_svc in mon_services:
+            schema = self.get_perf_schema(mon_svc["type"], mon_svc["id"])
+            labeled.update(schema)
+
+        return {
+            "unlabeled":            self.get_unlabeled_perf_schema("osd", "0"),
+            "unlabeled_wildcard":   self.get_unlabeled_perf_schema("", ""),
+            "unlabeled_by_service": self.get_unlabeled_perf_schema("osd", ""),
+            "labeled":              labeled,
+            "labeled_wildcard":     self.get_perf_schema("", ""),
+            "labeled_by_service":   self.get_perf_schema("mon", ""),
+        }
+
     def _self_test_perf_counters(self) -> None:
         self.get_unlabeled_perf_schema("osd", "0")
+        self.get_perf_schema("osd", "0")
         self.get_unlabeled_counter("osd", "0", "osd.op")
-        # get_counter
-        # get_all_perf_coutners
 
     def _self_test_misc(self) -> None:
         self.set_uri("http://this.is.a.test.com")
