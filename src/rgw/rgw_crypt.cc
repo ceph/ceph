@@ -231,6 +231,57 @@ get_tenant_or_id(req_state *s)
     return s->user->get_id().id;
 }
 
+int rgw_crypt_sse_kms_key_scope_check(std::string_view scope_mode,
+                                      std::string_view separator,
+                                      std::string_view expected_owner,
+                                      std::string_view key_id,
+                                      std::string* err_message)
+{
+  if (scope_mode != "tenant" && scope_mode != "owner") {
+    return 0; // feature disabled (default "none", or an unrecognized value)
+  }
+  bool allowed = false;
+  if (!expected_owner.empty() && !separator.empty()) {
+    auto pos = key_id.rfind(separator);
+    if (pos != std::string_view::npos &&
+        key_id.substr(0, pos) == expected_owner) {
+      allowed = true;
+    }
+  }
+  if (!allowed && err_message) {
+    *err_message = "The specified KMS key id does not belong to this " +
+      std::string(scope_mode == "owner" ? "bucket's owner" : "tenant");
+  }
+  return allowed ? 0 : -EACCES;
+}
+
+// Builds a backend-safe owner identifier for the "owner" scope mode: joins
+// tenant and id using the configured separator instead of rgw_user::to_str()'s
+// '$', since '$' (like several other punctuation characters) is rejected by
+// Vault's transit secrets engine key-name routing.
+static std::string owner_scope_id(const rgw_user& u, std::string_view separator)
+{
+  if (u.tenant.empty()) {
+    return u.id;
+  }
+  return u.tenant + std::string(separator) + u.id;
+}
+
+int rgw_s3_validate_kms_key_scope(req_state* s, std::string_view key_id,
+                                  std::string& err_message)
+{
+  const std::string& scope_mode = s->cct->_conf->rgw_crypt_s3_kms_key_scope;
+  if (scope_mode != "tenant" && scope_mode != "owner") {
+    return 0;
+  }
+  const std::string& separator = s->cct->_conf->rgw_crypt_s3_kms_key_scope_separator;
+  const std::string expected_owner = (scope_mode == "owner")
+    ? owner_scope_id(s->bucket_owner.get_id(), separator)
+    : get_tenant_or_id(s);
+  return rgw_crypt_sse_kms_key_scope_check(scope_mode, separator, expected_owner,
+                                           key_id, &err_message);
+}
+
 int
 make_canonical_context(req_state *s,
     std::string_view &context,
@@ -2233,6 +2284,10 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
           s->err.message = "Server Side Encryption with KMS managed key requires "
             "HTTP header x-amz-server-side-encryption-aws-kms-key-id";
           return -EINVAL;
+        }
+        if ((res = rgw_s3_validate_kms_key_scope(s, key_id, s->err.message))) {
+          ldpp_dout(s, 5) << "ERROR: " << s->err.message << ": " << key_id << dendl;
+          return res;
         }
         /* try to retrieve actual key */
         if (s->cct->_conf->rgw_crypt_s3_kms_backend == RGW_SSE_KMS_BACKEND_TESTING) {
