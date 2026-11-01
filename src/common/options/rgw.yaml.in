@@ -5234,7 +5234,7 @@ options:
   level: advanced
   desc: LanceDB vector index type used for background index builds
   long_desc: Controls which vector index algorithm LanceDB uses when rebuilding
-    indexes. Valid values are:
+    indexes. Valid values are
     auto (lets LanceDB choose based on dataset size),
     ivf_pq (IVF with product quantization, good balance of speed and memory),
     ivf_hnsw_pq (IVF with HNSW graph and PQ, optimized for IO-bound workloads),
