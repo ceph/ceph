@@ -57,4 +57,15 @@ if(${WITH_CEPHFS})
     )
   install(TARGETS ceph_test_client_async_full
     DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+  add_executable(unittest_client_command_reset
+    command_reset.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_client_command_reset)
+  target_link_libraries(unittest_client_command_reset
+    client
+    global
+    ceph-common
+    )
 endif(${WITH_CEPHFS})
