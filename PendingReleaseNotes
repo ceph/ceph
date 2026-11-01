@@ -252,6 +252,10 @@
   This enables proper pagination through versioned bucket listings without duplicates or
   infinite loops. For non-versioned buckets, use only ``--marker`` as before (backward compatible).
 
+  infinite loops. For non-versioned buckets, use only --marker as before (backward compatible).
+* RGW: ``radosgw-admin bucket limit check`` accepts ``--bucket`` (and optional
+  ``--tenant``) to report sharding stats for a single bucket; ``--uid`` limits the
+  scan to one user's buckets (unchanged behavior, now documented).
 * RGW: ``radosgw-admin bucket suspend`` and ``bucket unsuspend`` can suspend an
   individual bucket without suspending its owner. S3 requests against a suspended
   bucket fail with ``403 BucketSuspended``. The ``suspended`` field is now included
