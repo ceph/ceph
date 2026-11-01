@@ -6,6 +6,8 @@
 # To run this script on a vstart cluter, use the following command:
 #   cd ceph/build
 #   ../qa/workunits/mgr/test_mgr_module_loading_time.sh --vstart
+#
+#   (assumes there is no existing vstart cluster)
 
 vstart=0
 if [ "$1" = "--vstart" ]; then
@@ -15,8 +17,12 @@ fi
 ceph="ceph"
 if [ $vstart -eq 1 ]; then
     ceph="./bin/ceph"
-fi
+    MGR=2 ../src/vstart.sh --debug --new -x --localhost --bluestore --without-dashboard
+    echo "Wait for cluster to settle..."
+    sleep 20
 
+    "$ceph" mgr module enable nvmeof # simply to match the active modules in the corresponding teuthology cluster
+fi
 
 # This will create CEPHADM_STRAY_HOST warnings, but we just want to be able to run an orch command.
 echo "Enabling cephadm module..."
@@ -217,5 +223,64 @@ echo "Re-enabling the balancer module..."
 
 # Give the health error a bit of time to clear
 sleep 10
+
+# ----- Test 5 -----
+# Regression test for https://tracker.ceph.com/issues/81666
+#
+# If mgr_module_load_expiration elapses before Mgr::init() has reached
+# PyModuleRegistry::active_start(), MgrStandby::send_beacon() marks the mgr as
+# available and calls PyModuleRegistry::get_services() while active_modules is
+# still null. That trips ceph_assert(active_modules) and aborts the mgr.
+#
+# mgr_init_delay is a dev-only option that exists ONLY to reproduce this: it
+# makes Mgr::init() sleep before starting the python modules. We pair it with a
+# shorter mgr_module_load_expiration so the expiration elapses inside that window.
+echo "Test 5: Let the load expiration (20000 ms default value) elapse before the mgr starts its modules (init delay 25000 ms)"
+
+echo "Clearing module load delays so only the init delay and expiration are under test..."
+"$ceph" config set mgr mgr_module_load_delay_name ""
+"$ceph" config set mgr mgr_module_load_delay 0
+
+"$ceph" config get mgr mgr_module_load_expiration # for debug purposes, should be default value
+"$ceph" config set mgr mgr_init_delay 25000
+
+"$ceph" mgr fail
+
+# mgr_status is registered at the very end of Mgr::init(), so it only answers
+# once the active mgr is alive and has finished initializing. Poll until it
+# answers. If the active mgr crashed, the mon only drops it from `ceph -s`
+# after mgr_beacon_grace passes, at which point `ceph -s` reports
+# "no daemons active"; treat that as a failure instead of waiting forever.
+echo "Waiting for the active mgr to finish initializing (up to 120 seconds)..."
+alive=0
+no_active_mgr=0
+deadline=$((SECONDS + 120))
+while [ $SECONDS -lt $deadline ]; do
+    if timeout 3 "$ceph" tell mgr mgr_status >/dev/null 2>&1; then
+        alive=1
+        break
+    fi
+    if timeout 10 "$ceph" -s 2>&1 | grep -q "no daemons active"; then
+        no_active_mgr=1
+        break
+    fi
+    sleep 1
+done
+
+echo "Restoring default config..."
+"$ceph" config set mgr mgr_init_delay 0
+
+if [ $alive -eq 0 ]; then
+    if [ $no_active_mgr -eq 1 ]; then
+        echo "FAIL: Test 5: no active mgr in 'ceph -s'; the mgr(s) likely crashed (see tracker 81666)."
+    else
+        echo "FAIL: Test 5: the active mgr never finished initializing (see tracker 81666)."
+    fi
+    "$ceph" -s
+    exit 1
+fi
+echo "PASS: Mgr survived its load expiration elapsing before its modules were started."
+
+"$ceph" -s
 
 echo "All tests passed."
