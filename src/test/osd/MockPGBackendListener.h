@@ -288,7 +288,8 @@ public:
       Context *on_apply = nullptr;
       Context *on_apply_sync = nullptr;
       Context *on_commit = nullptr;
-      ObjectStore::Transaction::collect_contexts(tls, &on_apply, &on_commit, &on_apply_sync);
+      ObjectStore::Transaction::collect_contexts(
+        tls, on_apply, on_commit, on_apply_sync);
 
       // Execute transactions through the store (without contexts - we stole them)
       store->queue_transactions(ch, tls, TrackedOpRef(), nullptr);
@@ -813,4 +814,3 @@ public:
     return static_cast<ECListener *>(this);
   }
 };
-

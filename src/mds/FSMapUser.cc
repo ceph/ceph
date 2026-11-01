@@ -42,9 +42,9 @@ void FSMapUser::fs_info_t::decode(ceph::buffer::list::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-std::list<FSMapUser> FSMapUser::generate_test_instances()
+std::vector<FSMapUser> FSMapUser::generate_test_instances()
 {
-  std::list<FSMapUser> ls;
+  std::vector<FSMapUser> ls;
   FSMapUser m;
   m.epoch = 2;
   m.legacy_client_fscid = 1;

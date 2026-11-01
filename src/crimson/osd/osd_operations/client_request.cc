@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab expandtab
 
+#include <vector>
+#include <iterator>
+
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 
@@ -24,10 +27,13 @@ namespace crimson::osd {
 void ClientRequest::Orderer::requeue(Ref<PG> pg)
 {
   LOG_PREFIX(ClientRequest::Orderer::requeue);
-  std::list<ClientRequest*> to_requeue;
+  std::vector<ClientRequest*> to_requeue;
+  to_requeue.reserve(std::size(list));
+
   for (auto &req : list) {
     to_requeue.emplace_back(&req);
   }
+
   // Client requests might be destroyed in the following
   // iteration leading to short lived dangling pointers
   // to those requests, but this doesn't hurt as we won't

@@ -14,8 +14,8 @@ void DaemonHealthMetric::dump(ceph::Formatter *f) const {
   f->dump_int("n2", get_n2());
 }
 
-std::list<DaemonHealthMetric> DaemonHealthMetric::generate_test_instances() {
-  std::list<DaemonHealthMetric> o;
+std::vector<DaemonHealthMetric> DaemonHealthMetric::generate_test_instances() {
+  std::vector<DaemonHealthMetric> o;
   o.push_back(DaemonHealthMetric(daemon_metric::SLOW_OPS, 1));
   o.push_back(DaemonHealthMetric(daemon_metric::PENDING_CREATING_PGS, 1, 2));
   return o;

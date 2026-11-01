@@ -789,9 +789,9 @@ void rgw_sync_policy_info::dump(Formatter *f) const
   }
 }
 
-list<rgw_sync_policy_info> rgw_sync_policy_info::generate_test_instances()
+vector<rgw_sync_policy_info> rgw_sync_policy_info::generate_test_instances()
 {
-  list<rgw_sync_policy_info> o;
+  vector<rgw_sync_policy_info> o;
   o.emplace_back();
   return o;
 }

@@ -38,7 +38,6 @@
 using std::dec;
 using std::hex;
 using std::less;
-using std::list;
 using std::make_pair;
 using std::map;
 using std::pair;
@@ -573,7 +572,7 @@ struct ClientReadCompleter : ECCommonL::ReadCompleter {
   void finish_single_request(
     const hobject_t &hoid,
     ECCommonL::read_result_t &res,
-    list<ec_align_t> to_read,
+    std::span<const ec_align_t> to_read,
     set<int> wanted_to_read) override
   {
     auto* cct = read_pipeline.cct;
@@ -677,7 +676,7 @@ static ostream& _prefix(std::ostream *_dout, ClientReadCompleter *read_completer
 }
 
 void ECCommonL::ReadPipeline::objects_read_and_reconstruct(
-  const map<hobject_t, std::list<ec_align_t>> &reads,
+  const map<hobject_t, std::vector<ec_align_t>> &reads,
   bool fast_read,
   GenContextURef<ECCommonL::ec_extents_t &&> &&func)
 {
@@ -756,7 +755,7 @@ int ECCommonL::ReadPipeline::send_all_remaining_reads(
   if (r)
     return r;
 
-  list<ec_align_t> to_read = rop.to_read.find(hoid)->second.to_read;
+  auto to_read = rop.to_read.find(hoid)->second.to_read;
 
   // (Note cuixf) If we need to read attrs and we read failed, try to read again.
   bool want_attrs =
@@ -770,7 +769,7 @@ int ECCommonL::ReadPipeline::send_all_remaining_reads(
   rop.to_read.insert(make_pair(
       hoid,
       read_request_t(
-	to_read,
+	std::move(to_read),
 	shards,
 	want_attrs)));
   return 0;
@@ -778,7 +777,7 @@ int ECCommonL::ReadPipeline::send_all_remaining_reads(
 
 void ECCommonL::ReadPipeline::kick_reads()
 {
-  while (in_progress_client_reads.size() &&
+  while (!in_progress_client_reads.empty() &&
          in_progress_client_reads.front().is_complete()) {
     in_progress_client_reads.front().run();
     in_progress_client_reads.pop_front();
@@ -1025,10 +1024,9 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       op->trace);
   }
 
-  for (auto i = op->on_write.begin();
-       i != op->on_write.end();
-       op->on_write.erase(i++)) {
-    (*i)();
+  while (!op->on_write.empty()) {
+    op->on_write.front()();
+    op->on_write.pop_front();
   }
 
   return true;
