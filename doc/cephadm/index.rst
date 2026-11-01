@@ -37,6 +37,7 @@ support older versions of Ceph.
 
 .. toctree::
     :maxdepth: 2
+    :titlesonly:
 
     compatibility
     install
