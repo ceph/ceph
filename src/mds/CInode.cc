@@ -3438,9 +3438,90 @@ client_t CInode::calc_ideal_loner()
   return loner;
 }
 
+client_t CInode::append_excl_next()
+{
+  while (!append_excl_queue.empty()) {
+    client_t c = append_excl_queue.front();
+    Capability *cap = get_client_cap(c);
+    if (cap && !cap->is_stale() && (cap->wanted() & CEPH_CAP_FILE_EXCL))
+      return c;
+    // The client went away, closed its O_APPEND fd, or stopped
+    // responding (its caps are being revoked); a stale one asks again
+    // once it is back.
+    append_excl_queue.pop_front();
+  }
+  return -1;
+}
+
+void CInode::append_excl_enqueue(client_t c)
+{
+  if (std::find(append_excl_queue.begin(), append_excl_queue.end(), c) ==
+      append_excl_queue.end())
+    append_excl_queue.push_back(c);
+}
+
+void CInode::append_excl_dequeue(client_t c)
+{
+  auto it = std::find(append_excl_queue.begin(), append_excl_queue.end(), c);
+  if (it != append_excl_queue.end())
+    append_excl_queue.erase(it);
+}
+
+/*
+ * Whether a client waits to read the file that is not an O_APPEND
+ * writer, here or on another MDS.  It cannot get Fr while the writers
+ * take turns as the filelock loner, and would wait for as long as they
+ * keep appending.
+ */
+bool CInode::append_excl_reader_waiting() const
+{
+  for (const auto &p : client_caps) {
+    const Capability &cap = p.second;
+    if (!cap.is_stale() &&
+	(cap.wanted() & CEPH_CAP_FILE_RD) &&
+	!(cap.wanted() & CEPH_CAP_FILE_EXCL) &&
+	!(cap.issued() & CEPH_CAP_FILE_RD))
+      return true;
+  }
+  // We do not see whether the readers on other MDSs got Fr: they have
+  // a moment once the filelock lets them read, see Locker::issue_caps()
+  if (append_excl_replica_reader() &&
+      (append_excl_replica_until.is_zero() ||
+       ceph_clock_now() < append_excl_replica_until))
+    return true;
+  return false;
+}
+
+/*
+ * Whether another MDS has a client that wants to read the file.
+ */
+bool CInode::append_excl_replica_reader() const
+{
+  for (const auto &p : mds_caps_wanted) {
+    if (p.second & (CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE))
+      return true;
+  }
+  return false;
+}
+
 bool CInode::choose_ideal_loner()
 {
   want_loner_cap = calc_ideal_loner();
+  want_loner_append = false;
+  // An O_APPEND writer waiting for its turn goes first, but between
+  // two turns the readers that wait get theirs: the filelock leaves
+  // EXCL and they are issued Fr, see Locker::issue_caps().  Unlike
+  // calc_ideal_loner(), do so while other MDSs want caps too, or the
+  // writers would wait for as long as those do: the filelock gathers
+  // their replicas like for any other loner.
+  client_t next = append_excl_next();
+  if (next >= 0 &&
+      (loner_cap == next || !append_excl_reader_waiting())) {
+    want_loner_cap = next;
+    want_loner_append = true;
+  }
+  if (loner_cap >= 0 && loner_cap == want_loner_cap)
+    append_excl_loner = want_loner_append;
   int changed = false;
   if (loner_cap >= 0 && loner_cap != want_loner_cap) {
     if (!try_drop_loner())
@@ -3470,6 +3551,7 @@ bool CInode::try_set_loner()
 void CInode::set_loner_cap(client_t l)
 {
   loner_cap = l;
+  append_excl_loner = l >= 0 && l == want_loner_cap && want_loner_append;
   authlock.set_excl_client(loner_cap);
   filelock.set_excl_client(loner_cap);
   linklock.set_excl_client(loner_cap);
@@ -3699,6 +3781,7 @@ void CInode::clear_client_caps_after_export()
     remove_client_cap(client_caps.begin()->first);
   loner_cap = -1;
   want_loner_cap = -1;
+  append_excl_loner = false;
   if (!get_mds_caps_wanted().empty()) {
     mempool::mds_co::compact_map<int32_t,int32_t> empty;
     set_mds_caps_wanted(empty);
@@ -4449,13 +4532,18 @@ void CInode::encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap)
  
   const mempool_inode *oi = get_inode().get();
   const mempool_inode *pi = get_projected_inode().get();
-  const mempool_inode *i = (pfile|pauth|plink|pxattr) ? pi : oi;
+  // A client that holds or wants WR caps should see the projected size,
+  // which may include the previous writer's size flush that is not
+  // committed yet.
+  bool wr = (cap->issued() | cap->pending() | cap->wanted()) &
+	    CEPH_CAP_FILE_WR;
+  const mempool_inode *i = (pfile|pauth|plink|pxattr|wr) ? pi : oi;
 
   dout(20) << __func__ << " pfile " << pfile
 	   << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
 	   << " mtime " << i->mtime << " ctime " << i->ctime << " change_attr " << i->change_attr << dendl;
 
-  i = pfile ? pi:oi;
+  i = (pfile || wr) ? pi : oi;
   m->set_layout(i->layout);
   m->size = i->size;
   m->truncate_seq = i->truncate_seq;
@@ -4706,6 +4794,10 @@ void CInode::finish_export()
   //dirlock.clear_updated();
 
   loner_cap = -1;
+  append_excl_loner = false;
+  // the queued clients resend their requests to the new auth
+  append_excl_queue.clear();
+  append_excl_replica_until = utime_t();
 
   put(PIN_TEMPEXPORTING);
 }

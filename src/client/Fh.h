@@ -30,6 +30,11 @@ struct Fh {
 
   Readahead readahead;
 
+  // an O_APPEND write from ll_append(), which may be followed by
+  // another piece of the same write(2): keep the append turn once it
+  // is ours
+  bool append_more = false;
+
   // file lock
   std::unique_ptr<ceph_lock_state_t> fcntl_locks;
   std::unique_ptr<ceph_lock_state_t> flock_locks;
