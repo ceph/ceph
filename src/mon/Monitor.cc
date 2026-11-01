@@ -1432,7 +1432,7 @@ void Monitor::bootstrap()
   }
 
   // stretch mode bits
-  set_elector_disallowed_leaders(false);
+  set_elector_disallowed_leaders();
 
   // singleton monitor?
   if (monmap->size() == 1 && rank == 0) {
@@ -2205,9 +2205,9 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       monmap->decode(m->monmap_bl);
       dout(20) << "has_ever_joined: " << has_ever_joined << dendl;
       if (epoch_diff == 1 && has_ever_joined) {
-        notify_new_monmap(false);
+        notify_new_monmap();
       } else {
-        notify_new_monmap(false, false);
+        notify_new_monmap(false);
         elector.notify_clear_peer_state();
       }
       bootstrap();
@@ -7015,11 +7015,10 @@ void Monitor::set_mon_crush_location(const string& loc)
   need_set_crush_loc = true;
 }
 
-void Monitor::notify_new_monmap(bool can_change_external_state, bool remove_rank_elector)
+void Monitor::notify_new_monmap(bool remove_rank_elector)
 {
   dout(20) << __func__
-           << ": can_change_external_state=" << can_change_external_state
-           << " remove_rank_elector=" << remove_rank_elector << dendl;
+           << ": remove_rank_elector=" << remove_rank_elector << dendl;
   if (need_set_crush_loc) {
     auto my_info_i = monmap->mon_info.find(name);
     if (my_info_i != monmap->mon_info.end() &&
@@ -7061,7 +7060,7 @@ void Monitor::notify_new_monmap(bool can_change_external_state, bool remove_rank
       set_degraded_stretch_mode();
     }
   }
-  set_elector_disallowed_leaders(can_change_external_state);
+  set_elector_disallowed_leaders();
 
   {
     std::lock_guard lock{cipher_mutex};
@@ -7080,7 +7079,7 @@ void Monitor::notify_new_monmap(bool can_change_external_state, bool remove_rank
   }
 }
 
-void Monitor::set_elector_disallowed_leaders(bool allow_election)
+void Monitor::set_elector_disallowed_leaders()
 {
   set<int> dl;
   // inherit dl from monmap
@@ -7095,10 +7094,7 @@ void Monitor::set_elector_disallowed_leaders(bool allow_election)
       dl.insert(monmap->get_rank(monmap->tiebreaker_mon));
   }
 
-  bool disallowed_changed = elector.set_disallowed_leaders(dl);
-  if (disallowed_changed && allow_election) {
-    elector.call_election();
-  }
+  elector.set_disallowed_leaders(dl);
 }
 
 struct CMonEnableStretchMode : public Context {
