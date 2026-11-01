@@ -942,6 +942,65 @@ TEST_F(CrushWrapperTest, dump_rules) {
   ASSERT_TRUE(wm[0] == 1.0);
 }
 
+TEST_F(CrushWrapperTest, add_multi_osd_per_failure_domain_rule) {
+  CrushWrapper c;
+  c.create();
+  c.set_tunables_optimal();
+
+  const int OSD_TYPE = 0;
+  c.set_type_name(OSD_TYPE, "osd");
+  const int HOST_TYPE = 1;
+  c.set_type_name(HOST_TYPE, "host");
+  const int ROOT_TYPE = 2;
+  c.set_type_name(ROOT_TYPE, "root");
+
+  int rootno;
+  c.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+	       ROOT_TYPE, 0, nullptr, nullptr, &rootno);
+  c.set_item_name(rootno, "default");
+
+  for (int host = 0; host < 2; ++host) {
+    for (int i = 0; i < 2; ++i) {
+      int osd = host * 2 + i;
+      map<string,string> loc = {
+	{"root", "default"},
+	{"host", "host" + stringify(host)}};
+      ASSERT_EQ(0, c.insert_item(cct, osd, 1.0, "osd." + stringify(osd), loc));
+    }
+  }
+
+  // a leaf failure domain is rejected
+  {
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, c.add_indep_multi_osd_per_failure_domain_rule(
+		"leaf", "default", "osd", 2, 2, "", &ss));
+    EXPECT_NE(string::npos, ss.str().find("leaf failure domain"));
+    EXPECT_FALSE(c.rule_exists("leaf"));
+  }
+  // so is a missing failure domain
+  {
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, c.add_indep_multi_osd_per_failure_domain_rule(
+		"none", "default", "", 2, 2, "", &ss));
+    EXPECT_NE(string::npos, ss.str().find("without failure domain"));
+    EXPECT_FALSE(c.rule_exists("none"));
+  }
+  // and an unknown one
+  {
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, c.add_indep_multi_osd_per_failure_domain_rule(
+		"unknown", "default", "rack", 2, 2, "", &ss));
+    EXPECT_NE(string::npos, ss.str().find("unknown type"));
+    EXPECT_FALSE(c.rule_exists("unknown"));
+  }
+  // a non-leaf failure domain is accepted
+  {
+    stringstream ss;
+    EXPECT_LE(0, c.add_indep_multi_osd_per_failure_domain_rule(
+		"host", "default", "host", 2, 2, "", &ss)) << ss.str();
+  }
+}
+
 TEST_F(CrushWrapperTest, weight_osd_map_zero_weights) {
   std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
