@@ -248,16 +248,6 @@ void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, const std::strin
 void cls_rgw_usage_log_clear(librados::ObjectWriteOperation& op);
 void cls_rgw_usage_log_add(librados::ObjectWriteOperation& op, rgw_usage_log_info& info);
 
-/* garbage collection */
-void cls_rgw_gc_set_entry(librados::ObjectWriteOperation& op, uint32_t expiration_secs, cls_rgw_gc_obj_info& info);
-void cls_rgw_gc_defer_entry(librados::ObjectWriteOperation& op, uint32_t expiration_secs, const std::string& tag);
-void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const std::vector<std::string>& tags);
-void cls_rgw_gc_list(librados::ObjectReadOperation& op, const std::string& marker,
-                     uint32_t max, bool expired_only, bufferlist& bl);
-int cls_rgw_gc_list_decode(const bufferlist& bl,
-                           std::list<cls_rgw_gc_obj_info>& entries,
-                           bool& truncated, std::string& next_marker);
-
 /* lifecycle */
 void cls_rgw_lc_get_head(librados::ObjectReadOperation& op, bufferlist& bl);
 int cls_rgw_lc_get_head_decode(const bufferlist& bl, cls_rgw_lc_obj_head& head);
