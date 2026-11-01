@@ -251,15 +251,7 @@ export class CephfsSnapshotscheduleListComponent
 
   deleteSnapshotSchedule() {
     const { path, start, fs, schedule, subvol, group, retention } = this.selection.first();
-    const retentionPolicy = retention
-      ?.split(/\s/gi)
-      ?.filter((r: string) => !!r)
-      ?.map((r: string) => {
-        const frequency = r.substring(r.length - 1);
-        const interval = r.substring(0, r.length - 1);
-        return `${interval}-${frequency}`;
-      })
-      ?.join('|');
+    const retentionPolicy = this.snapshotScheduleService.buildRetentionPolicyParam(retention);
 
     this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
