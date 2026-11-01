@@ -84,6 +84,7 @@ Mon
 - [x] common/options/global.yaml.in remove `mon_debug_no_require_X-2`
 - [x] mon/OSDMonitor.cc `create_initial`: adjust new `require_osd_release`, and add associated `mon_debug_no_require_X`
 - [x] mon/OSDMonitor.cc `preprocess_boot`: adjust "disallow boot of " condition to disallow X if `require_osd_release` < X-2.
+- [x] common/ceph_releases.cc `ceph_release_server_feature`: return `SERVER_X` for X, so that `preprocess_boot` refuses OSDs of earlier releases once `require_osd_release` is X (`unittest_features` fails until it does)
 - [x] mon/OSDMonitor.cc: adjust "osd require-osd-release" to (1) allow setting X, and (2) check that all mons *and* OSDs have X
 - [x] mon/MonCommands.h: adjust "osd require-osd-release" allows options to include X
 - [x] qa/workunits/cephtool/test.sh: adjust `require-osd-release` test
