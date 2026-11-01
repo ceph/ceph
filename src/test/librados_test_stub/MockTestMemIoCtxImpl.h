@@ -114,9 +114,9 @@ public:
   }
 
   MOCK_METHOD2(list_watchers, int(const std::string& o,
-                                  std::list<obj_watch_t> *out_watchers));
+                                  std::vector<obj_watch_t> *out_watchers));
   int do_list_watchers(const std::string& o,
-                       std::list<obj_watch_t> *out_watchers) {
+                       std::vector<obj_watch_t> *out_watchers) {
     return TestMemIoCtxImpl::list_watchers(o, out_watchers);
   }
 

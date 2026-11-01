@@ -104,7 +104,7 @@ struct MgrCapGrant {
 
   // explicit grants that a profile grant expands to; populated as
   // needed by expand_profile() (via is_match()) and cached here.
-  mutable std::list<MgrCapGrant> profile_grants;
+  mutable std::vector<MgrCapGrant> profile_grants;
 
   void expand_profile(std::ostream *err=nullptr) const;
 
@@ -195,7 +195,7 @@ struct MgrCap {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<MgrCap> generate_test_instances();
+  static std::vector<MgrCap> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(MgrCap)
 

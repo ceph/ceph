@@ -13,6 +13,7 @@
  *
  */
 #include <iostream>
+#include <vector>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "rgw_common.h"
@@ -98,12 +99,12 @@ public:
 };
 WRITE_CLASS_ENCODER(OldObjManifest)
 
-void append_head(list<rgw_obj> *objs, rgw_obj& head)
+void append_head(vector<rgw_obj> *objs, rgw_obj& head)
 {
   objs->push_back(head);
 }
 
-void append_stripes(list<rgw_obj> *objs, RGWObjManifest& manifest, uint64_t obj_size, uint64_t stripe_size)
+void append_stripes(vector<rgw_obj> *objs, RGWObjManifest& manifest, uint64_t obj_size, uint64_t stripe_size)
 {
   string prefix = manifest.get_prefix();
   rgw_bucket bucket = manifest.get_obj().bucket;
@@ -122,7 +123,7 @@ void append_stripes(list<rgw_obj> *objs, RGWObjManifest& manifest, uint64_t obj_
 
 static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size, uint64_t stripe_size,
                     RGWObjManifest *manifest, const rgw_placement_rule& placement_rule, rgw_bucket *bucket, rgw_obj *head, RGWObjManifest::generator *gen,
-                    list<rgw_obj> *test_objs)
+                    vector<rgw_obj> *test_objs)
 {
   manifest->set_trivial_rule(head_max_size, stripe_size);
 
@@ -142,7 +143,7 @@ static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size
   ASSERT_EQ(manifest->has_tail(), false);
 
   uint64_t ofs = 0;
-  list<rgw_obj>::iterator iter = test_objs->begin();
+  vector<rgw_obj>::iterator iter = test_objs->begin();
 
   while (ofs < obj_size) {
     rgw_raw_obj obj = gen->get_cur_obj(env.zonegroup, env.zone_params);
@@ -173,7 +174,7 @@ static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size
 
 static void gen_old_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size, uint64_t stripe_size,
                     OldObjManifest *manifest, old_rgw_bucket *bucket, old_rgw_obj *head,
-                    list<old_rgw_obj> *test_objs)
+                    vector<old_rgw_obj> *test_objs)
 {
   test_rgw_init_old_bucket(bucket, "buck");
 
@@ -216,13 +217,13 @@ TEST(TestRGWManifest, head_only_obj) {
 
   int obj_size = 256 * 1024;
 
-  list<rgw_obj> objs;
+  vector<rgw_obj> objs;
 
   gen_obj(env, obj_size, 512 * 1024, 4 * 1024 * 1024, &manifest, env.zonegroup.default_placement, &bucket, &head, &gen, &objs);
 
   cout <<  " manifest.get_obj_size()=" << manifest.get_obj_size() << std::endl;
   cout <<  " manifest.get_head_size()=" << manifest.get_head_size() << std::endl;
-  list<rgw_obj>::iterator liter;
+  vector<rgw_obj>::iterator liter;
 
   RGWObjManifest::obj_iterator iter;
   for (iter = manifest.obj_begin(&dp), liter = objs.begin();
@@ -248,7 +249,7 @@ TEST(TestRGWManifest, obj_with_head_and_tail) {
   rgw_obj head;
   RGWObjManifest::generator gen;
 
-  list<rgw_obj> objs;
+  vector<rgw_obj> objs;
 
   int obj_size = 21 * 1024 * 1024 + 1000;
   int stripe_size = 4 * 1024 * 1024;
@@ -256,7 +257,7 @@ TEST(TestRGWManifest, obj_with_head_and_tail) {
 
   gen_obj(env, obj_size, head_size, stripe_size, &manifest, env.zonegroup.default_placement, &bucket, &head, &gen, &objs);
 
-  list<rgw_obj>::iterator liter;
+  vector<rgw_obj>::iterator liter;
 
   rgw_obj_select last_obj;
 
@@ -343,7 +344,7 @@ TEST(TestRGWManifest, old_obj_manifest) {
   uint64_t stripe_size = 4 * 1024 * 1024;
   uint64_t head_size = 512 * 1024;
 
-  list<old_rgw_obj> old_objs;
+  vector<old_rgw_obj> old_objs;
 
   gen_old_obj(env, obj_size, head_size, stripe_size, &old_manifest, &old_bucket, &old_head, &old_objs);
 
@@ -394,4 +395,3 @@ int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-

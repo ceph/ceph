@@ -4,6 +4,8 @@
 #include "CrushWrapper.h"
 #include "CrushTreeDumper.h"
 
+#include <iterator>
+
 #include "osd/osd_types.h"
 #include "common/ceph_context.h"
 #include "common/debug.h"
@@ -15,7 +17,7 @@
 #define dout_subsys ceph_subsys_crush
 
 using std::cout;
-using std::list;
+using std::deque;
 using std::map;
 using std::make_pair;
 using std::ostream;
@@ -866,7 +868,7 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id) const
   return parent_hierarchy;
 }
 
-int CrushWrapper::get_children(int id, list<int> *children) const
+int CrushWrapper::get_children(int id, vector<int>& children) const
 {
   // leaf?
   if (id >= 0) {
@@ -878,9 +880,12 @@ int CrushWrapper::get_children(int id, list<int> *children) const
     return -ENOENT;
   }
 
-  for (unsigned n=0; n<b->size; n++) {
-    children->push_back(b->items[n]);
+  children.reserve(std::size(children) + b->size);
+
+  for (unsigned n = 0; n < b->size; ++n) {
+    children.push_back(b->items[n]);
   }
+
   return b->size;
 }
 
@@ -1051,13 +1056,11 @@ int CrushWrapper::verify_upmap(CephContext *cct,
   return 0;
 }
 
-int CrushWrapper::_get_leaves(int id, list<int> *leaves) const
+int CrushWrapper::_get_leaves(int id, vector<int>& leaves) const
 {
-  ceph_assert(leaves);
-
   // Already leaf?
   if (id >= 0) {
-    leaves->push_back(id);
+    leaves.push_back(id);
     return 0;
   }
 
@@ -1068,10 +1071,11 @@ int CrushWrapper::_get_leaves(int id, list<int> *leaves) const
 
   for (unsigned n = 0; n < b->size; n++) {
     if (b->items[n] >= 0) {
-      leaves->push_back(b->items[n]);
+      leaves.push_back(b->items[n]);
     } else {
       // is a bucket, do recursive call
-      int r = _get_leaves(b->items[n], leaves);
+      const auto r = _get_leaves(b->items[n], leaves);
+
       if (r < 0) {
         return r;
       }
@@ -1097,14 +1101,15 @@ int CrushWrapper::get_leaves(const string &name, set<int> *leaves) const
     return 0;
   }
 
-  list<int> unordered;
-  int r = _get_leaves(id, &unordered);
+  vector<int> collected_leaves;
+  const auto r = _get_leaves(id, collected_leaves);
+
   if (r < 0) {
     return r;
   }
 
-  for (auto &p : unordered) {
-    leaves->insert(p);
+  for (const auto leaf : collected_leaves) {
+    leaves->insert(leaf);
   }
 
   return 0;
@@ -1610,29 +1615,33 @@ int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight,
 					bool update_weight_sets)
 {
   ldout(cct, 5) << __func__ << " " << id << " weight " << weight << dendl;
-  crush_bucket *b = get_bucket(id);
-  if (IS_ERR(b))
-    return PTR_ERR(b);
+  const auto root_bucket = get_bucket(id);
+
+  if (IS_ERR(root_bucket))
+    return PTR_ERR(root_bucket);
+
   int changed = 0;
-  list<crush_bucket*> q;
-  q.push_back(b);
-  while (!q.empty()) {
-    b = q.front();
-    q.pop_front();
-    for (unsigned i=0; i<b->size; ++i) {
-      int n = b->items[i];
-      if (n >= 0) {
-	adjust_item_weight_in_bucket(cct, n, weight, b->id, update_weight_sets);
+  vector<crush_bucket *> pending_buckets {root_bucket};
+
+  for (std::size_t next = 0; next < std::size(pending_buckets); ++next) {
+    const auto bucket = pending_buckets[next];
+
+    for (unsigned i=0; i<bucket->size; ++i) {
+      const auto child_id = bucket->items[i];
+      if (child_id >= 0) {
+	adjust_item_weight_in_bucket(cct, child_id, weight, bucket->id, update_weight_sets);
 	++changed;
       } else {
-	crush_bucket *sub = get_bucket(n);
-	if (IS_ERR(sub))
+	const auto child_bucket = get_bucket(child_id);
+	if (IS_ERR(child_bucket))
 	  continue;
-	q.push_back(sub);
+	pending_buckets.push_back(child_bucket);
       }
     }
   }
-  int ret = rebuild_roots_with_classes(cct);
+
+  const auto ret = rebuild_roots_with_classes(cct);
+
   if (ret < 0) {
     ldout(cct, 0) << __func__ << " unable to rebuild roots with classes: "
 		  << cpp_strerror(ret) << dendl;
@@ -1743,7 +1752,8 @@ void CrushWrapper::get_subtree_of_type(int type, vector<int> *subtrees) const
 
 bool CrushWrapper::class_is_in_use(int class_id, ostream *ss)
 {
-  list<unsigned> rules;
+  bool found = false;
+
   for (unsigned i = 0; i < crush->max_rules; ++i) {
     crush_rule *r = crush->rules[i];
     if (!r)
@@ -1751,28 +1761,25 @@ bool CrushWrapper::class_is_in_use(int class_id, ostream *ss)
     for (unsigned j = 0; j < r->len; ++j) {
       if (r->steps[j].op == CRUSH_RULE_TAKE) {
         int root = r->steps[j].arg1;
-        for (auto &p : class_bucket) {
-          auto& q = p.second;
-          if (q.count(class_id) && q[class_id] == root) {
-            rules.push_back(i);
+        for (const auto& entry : class_bucket) {
+          const auto& classes = entry.second;
+          const auto match = classes.find(class_id);
+
+          if (match != std::end(classes) && match->second == root) {
+            if (nullptr == ss) {
+              return true;
+            }
+
+            *ss << (found ? "," : "still referenced by crush_rule(s): ")
+                << "'" << get_rule_name(i) << "'";
+            found = true;
           }
         }
       }
     }
   }
-  if (rules.empty()) {
-    return false;
-  }
-  if (ss) {
-    ostringstream os;
-    for (auto &p: rules) {
-      os << "'" << get_rule_name(p) <<"',";
-    }
-    string out(os.str());
-    out.resize(out.size() - 1); // drop last ','
-    *ss << "still referenced by crush_rule(s): " << out;
-  }
-  return true;
+
+  return found;
 }
 
 int CrushWrapper::rename_class(const string& srcname, const string& dstname)
@@ -1890,25 +1897,28 @@ int CrushWrapper::set_subtree_class(
     return -ENOENT;
   }
 
-  int new_class_id = get_or_create_class_id(new_class);
-  int id = get_item_id(subtree);
-  list<int> q = { id };
-  while (!q.empty()) {
-    int id = q.front();
-    q.pop_front();
-    crush_bucket *b = get_bucket(id);
-    if (IS_ERR(b)) {
-      return PTR_ERR(b);
+  const auto new_class_id = get_or_create_class_id(new_class);
+  const auto root_id = get_item_id(subtree);
+  vector<int> pending_buckets {root_id};
+
+  for (std::size_t next = 0; next < std::size(pending_buckets); ++next) {
+    const auto bucket_id = pending_buckets[next];
+    const auto bucket = get_bucket(bucket_id);
+
+    if (IS_ERR(bucket)) {
+      return PTR_ERR(bucket);
     }
-    for (unsigned i = 0; i < b->size; ++i) {
-      int item = b->items[i];
+
+    for (unsigned i = 0; i < bucket->size; ++i) {
+      const auto item = bucket->items[i];
       if (item >= 0) {
 	class_map[item] = new_class_id;
       } else {
-	q.push_back(item);
+	pending_buckets.push_back(item);
       }
     }
   }
+
   return 0;
 }
 
@@ -1961,12 +1971,14 @@ int CrushWrapper::reclassify(
     // rebuild new buckets for root
     //cout << "before class_bucket: " << class_bucket << std::endl;
     map<int,int> renumber;
-    list<int> q;
-    q.push_back(root_id);
-    while (!q.empty()) {
-      int id = q.front();
-      q.pop_front();
-      crush_bucket *bucket = get_bucket(id);
+    vector<int> pending_buckets {root_id};
+
+    while (!pending_buckets.empty()) {
+      const auto id = pending_buckets.back();
+      pending_buckets.pop_back();
+
+      const auto bucket = get_bucket(id);
+
       if (IS_ERR(bucket)) {
 	out << "cannot find bucket " << id
 	    << ": " << cpp_strerror(PTR_ERR(bucket)) << std::endl;
@@ -1996,7 +2008,7 @@ int CrushWrapper::reclassify(
 
       for (unsigned j = 0; j < bucket->size; ++j) {
 	if (bucket->items[j] < 0) {
-	  q.push_front(bucket->items[j]);
+	  pending_buckets.push_back(bucket->items[j]);
 	} else {
 	  // we don't reclassify the device here; if the users wants that,
 	  // they can pass --set-subtree-class separately.
@@ -2506,25 +2518,27 @@ float CrushWrapper::_get_take_weight_osd_map(int root,
 					     map<int,float> *pmap) const
 {
   float sum = 0.0;
-  list<int> q;
-  q.push_back(root);
-  //breadth first iterate the OSD tree
-  while (!q.empty()) {
-    int bno = q.front();
-    q.pop_front();
-    crush_bucket *b = crush->buckets[-1-bno];
-    ceph_assert(b);
-    for (unsigned j=0; j<b->size; ++j) {
-      int item_id = b->items[j];
+  vector<int> pending_buckets {root};
+
+  // Traverse the OSD tree breadth first:
+  for (std::size_t next = 0; next < std::size(pending_buckets); ++next) {
+    const auto bucket_id = pending_buckets[next];
+    const auto bucket = crush->buckets[-1-bucket_id];
+
+    ceph_assert(bucket);
+
+    for (unsigned j=0; j<bucket->size; ++j) {
+      const auto item_id = bucket->items[j];
       if (item_id >= 0) { //it's an OSD
-	float w = crush_get_bucket_item_weight(b, j);
-	(*pmap)[item_id] = w;
-	sum += w;
+	const float weight = crush_get_bucket_item_weight(bucket, j);
+	(*pmap)[item_id] = weight;
+	sum += weight;
       } else { //not an OSD, expand the child later
-	q.push_back(item_id);
+	pending_buckets.push_back(item_id);
       }
     }
   }
+
   return sum;
 }
 
@@ -2991,15 +3005,16 @@ int CrushWrapper::get_rules_by_osd(int osd, set<int> *rules)
     for (unsigned j = 0; j < r->len; ++j) {
       if (r->steps[j].op == CRUSH_RULE_TAKE) {
         int step_item = r->steps[j].arg1;
-        list<int> unordered;
-        int rc = _get_leaves(step_item, &unordered);
+        vector<int> collected_leaves;
+        const auto rc = _get_leaves(step_item, collected_leaves);
+
         if (rc < 0) {
           return rc; // propagate fatal errors!
         }
         bool match = false;
-        for (auto &o: unordered) {
-          ceph_assert(o >= 0);
-          if (o == osd) {
+        for (const auto leaf : collected_leaves) {
+          ceph_assert(leaf >= 0);
+          if (leaf == osd) {
             match = true;
             break;
           }
@@ -3969,9 +3984,9 @@ void CrushWrapper::dump_tree(
   }
 }
 
-list<CrushWrapper> CrushWrapper::generate_test_instances()
+deque<CrushWrapper> CrushWrapper::generate_test_instances()
 {
-  list<CrushWrapper> o;
+  deque<CrushWrapper> o;
   o.emplace_back();
   // fixme
   return o;

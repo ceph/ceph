@@ -540,7 +540,9 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
 }
 
 
-bool have_local_addr(CephContext *cct, const std::list<entity_addr_t>& ls, entity_addr_t *match)
+bool have_local_addr(CephContext *cct,
+                     std::span<const entity_addr_t> addresses,
+                     entity_addr_t& match)
 {
   struct ifaddrs *ifa;
   int r = getifaddrs(&ifa);
@@ -554,9 +556,9 @@ bool have_local_addr(CephContext *cct, const std::list<entity_addr_t>& ls, entit
     if (addrs->ifa_addr) {
       entity_addr_t a;
       a.set_sockaddr(addrs->ifa_addr);
-      for (auto& p : ls) {
-        if (a.is_same_host(p)) {
-          *match = p;
+      for (const auto& address : addresses) {
+        if (a.is_same_host(address)) {
+          match = address;
           return true;
         }
       }

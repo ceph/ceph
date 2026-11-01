@@ -171,7 +171,7 @@ public:
    * Get logical pins overlapping offset~length
    */
   using get_pins_iertr = base_iertr;
-  using get_pins_ret = get_pins_iertr::future<lba_mapping_list_t>;
+  using get_pins_ret = get_pins_iertr::future<lba_mappings_t>;
   get_pins_ret get_pins(
     Transaction &t,
     laddr_t offset,
@@ -179,7 +179,8 @@ public:
     LOG_PREFIX(TransactionManager::get_pins);
     SUBDEBUGT(seastore_tm, "{}~0x{:x} ...", t, offset, length);
     auto cursors = co_await lba_manager->get_cursors(t, offset, length);
-    std::list<LBAMapping> ret;
+    lba_mappings_t ret;
+    ret.reserve(std::size(cursors));
     for (auto &cursor: cursors) {
       ret.emplace_back(co_await resolve_cursor_to_mapping(t, cursor));
     }

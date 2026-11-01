@@ -4,7 +4,9 @@
 #ifndef CEPH_CLS_LOCK_CLIENT_H
 #define CEPH_CLS_LOCK_CLIENT_H
 
+#include <list>
 #include <chrono>
+#include <vector>
 
 #include "include/rados/librados_fwd.hpp"
 #include "cls/lock/cls_lock_types.h"
@@ -62,6 +64,8 @@ namespace rados {
 			    const std::string& name, const std::string& cookie,
 			    const entity_name_t& locker);
 
+      extern int list_locks(librados::IoCtx *ioctx, const std::string& oid,
+			    std::vector<std::string>& locks);
       extern int list_locks(librados::IoCtx *ioctx, const std::string& oid,
 			    std::list<std::string> *locks);
       extern int get_lock_info(librados::IoCtx *ioctx, const std::string& oid,

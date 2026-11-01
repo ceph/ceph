@@ -44,9 +44,9 @@ void SnapRealmInfo::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-std::list<SnapRealmInfo> SnapRealmInfo::generate_test_instances()
+std::vector<SnapRealmInfo> SnapRealmInfo::generate_test_instances()
 {
-  std::list<SnapRealmInfo> o;
+  std::vector<SnapRealmInfo> o;
   o.emplace_back();
   o.push_back(SnapRealmInfo(1, 10, 10, 0));
   o.push_back(SnapRealmInfo(1, 10, 10, 0));
@@ -92,9 +92,9 @@ void SnapRealmInfoNew::dump(ceph::Formatter *f) const
   f->dump_bool("is_snapdir_visible", flags & SNAPDIR_VISIBILITY);
 }
 
-std::list<SnapRealmInfoNew> SnapRealmInfoNew::generate_test_instances()
+std::vector<SnapRealmInfoNew> SnapRealmInfoNew::generate_test_instances()
 {
-  std::list<SnapRealmInfoNew> o;
+  std::vector<SnapRealmInfoNew> o;
   o.emplace_back();
   o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 0, 1));
   o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 1, 1));
@@ -149,9 +149,9 @@ void SnapContext::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-std::list<SnapContext> SnapContext::generate_test_instances()
+std::vector<SnapContext> SnapContext::generate_test_instances()
 {
-  std::list<SnapContext> o;
+  std::vector<SnapContext> o;
   o.emplace_back();
   std::vector<snapid_t> v;
   o.push_back(SnapContext(10, v));

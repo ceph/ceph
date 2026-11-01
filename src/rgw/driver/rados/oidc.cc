@@ -379,8 +379,9 @@ public:
   void
   filter_transform(
       std::vector<std::string>& oids,
-      std::list<std::string>& keys) override
+      std::vector<std::string>& keys) override
   {
+    keys.reserve(std::size(oids));
     // convert oid format "{tenant}oidc_url.{url}" to metadata key "{tenant}${url}"
     // filter out any objects that don't contain "oidc_url."
     for (const auto& oid : oids) {
@@ -523,7 +524,7 @@ public:
       const DoutPrefixProvider* dpp,
       void* handle,
       int max,
-      std::list<std::string>& keys,
+      std::vector<std::string>& keys,
       bool* truncated) override
   {
     auto lister = static_cast<RGWMetadataLister*>(handle);
@@ -557,4 +558,3 @@ create_metadata_handler(
 }
 
 } // rgwrados::oidc
-
