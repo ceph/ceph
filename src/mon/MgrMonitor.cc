@@ -568,6 +568,9 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 	      << " (was " << pending_map.clients << ")" << dendl;
       pending_map.clients = clients;
       updated = true;
+      // A module is blocked until its client is in the map, so do not
+      // make it sit through paxos_propose_interval as well.
+      force_immediate_propose();
     }
   } else if (m->get_available()) {
     dout(4) << "mgr thinks it is active but it is not, dropping!" << dendl;

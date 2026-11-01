@@ -614,6 +614,32 @@ options:
     each enabled module. If set to 0, collection of these stats will be disabled.
   default: 5
   min: 0
+- name: mgr_debug_client_register_delay
+  type: millisecs
+  level: dev
+  desc: Delay the beacon requested when a module registers a RADOS client
+  long_desc: For testing only. Registering a client asks for a beacon straight
+    away, which leaves no observable gap before the monitor has the client.
+    Delaying that beacon leaves the client reaching the MgrMap to the next tick,
+    so a test can check that a module is not allowed to run ahead of it.
+  default: 0
+  flags:
+  - runtime
+  services:
+  - mgr
+- name: mgr_client_register_timeout
+  type: secs
+  level: advanced
+  desc: How long a module waits for a RADOS client it registered to reach the MgrMap
+  long_desc: A module must not use a RADOS client until the monitor has it in the
+    MgrMap, otherwise the client cannot be blocklisted if the mgr is failed over.
+    Registration blocks until then, or until this timeout, after which the
+    registration fails and the module sees an exception. 0 waits indefinitely.
+  default: 30
+  flags:
+  - runtime
+  services:
+  - mgr
 - name: mgr_tick_period
   type: secs
   level: advanced

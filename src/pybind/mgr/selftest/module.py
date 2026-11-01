@@ -67,6 +67,9 @@ class Module(MgrModule):
         self._workload: Optional[Workload] = None
         self._health: Dict[str, Dict[str, Any]] = {}
         self._repl = InteractiveInterpreter(dict(mgr=self))
+        # Clients from rados-client-register, kept alive so they stay
+        # registered for the rest of the test.
+        self._registered_clients: List[Any] = []
 
     @SelftestCLICommand('mgr self-test python-version', perm='r')
     def python_version(self) -> Tuple[int, str, str]:
@@ -77,6 +80,23 @@ class Module(MgrModule):
         minor = sys.version_info.minor
         micro = sys.version_info.micro
         return 0, f'{major}.{minor}.{micro}', ''
+
+    @SelftestCLICommand('mgr self-test rados-client-register')
+    def rados_client_register(self) -> Tuple[int, str, str]:
+        '''
+        Create a fresh RADOS client, register it in the MgrMap, and use it.
+        Same sequence every module follows via the 'rados' property,
+        mgr_util's CephFS connections and open_db().
+        '''
+        import rados
+        client = rados.Rados(context=self.get_context())
+        client.connect()
+        addrs = client.get_addrs()
+        self._ceph_register_client(None, addrs, False)
+        # Modules start using the client right here.
+        client.wait_for_latest_osdmap()
+        self._registered_clients.append(client)
+        return 0, addrs, ''
 
     @SelftestCLICommand('mgr self-test run')
     def run(self) -> Tuple[int, str, str]:
