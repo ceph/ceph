@@ -198,37 +198,32 @@ it utilizes native Ceph operations. For example, to import from the image
   and ``"key": "config://rbd/native/my_key"`` in ``source-spec``).
 
 .. note::
-  The ``snap_name`` key must refer to a snapshot in the user snapshot
+  The ``snap_name`` parameter must refer to a snapshot in the user snapshot
   namespace: a snapshot created with ``rbd snap create``. Snapshots in
   other namespaces (for example, snapshots created with ``rbd group snap
   create``) cannot be used as a live-migration source.
 
-Live-migration of a group as a whole is not currently supported. Pending
-such support, the consistent point in time captured by a group snapshot
-can still be migrated by cloning it first -- this is also how a group
-snapshot is cloned in general, since there is no ``rbd group clone``
-command. For each member image, obtain the id of the member's snapshot
-under the group snapshot with ``rbd group snap info`` and clone it (this
-requires clone format 2)::
+Live-migration of a group as a whole is not currently supported. To copy the
+consistent point in time captured by a group snapshot to another cluster,
+clone each member image's snapshot under the group snapshot first: there is
+no ``rbd group clone`` command, and ``rbd export`` cannot read a snapshot in
+the group snapshot namespace. Obtain the id of each member's snapshot with
+``rbd group snap info`` and clone it (this requires clone format 2)::
 
         $ rbd group snap info mypool/mygroup@mygroupsnap
-        $ rbd clone --snap-id <member-snap-id> mypool/image1 mypool/image1-migr
+        $ rbd clone --snap-id <member-snap-id> mypool/image1 mypool/image1-copy
 
 Since nothing writes to the clones, their contents remain identical to the
 group snapshot regardless of any activity on the original member images.
-Create a snapshot on each clone and use it as the import source::
+Copy each clone to the destination cluster with ``rbd export`` and
+``rbd import``, which need no snapshot of the clone::
 
-        $ rbd snap create mypool/image1-migr@snap
-        $ rbd migration prepare --import-only \
-            --source-spec '{"type": "native", "pool_name": "mypool",
-                            "image_name": "image1-migr", "snap_name": "snap"}' \
-            mypool/image1
+        $ rbd export mypool/image1-copy - | rbd --cluster dest import - mypool/image1
 
-After all member images have been migrated and committed, and before the
-destination images receive any writes, re-create the group and take a new
-group snapshot on the destination cluster (``rbd group create``,
-``rbd group image add``, ``rbd group snap create``). The clones on the
-source cluster can then be removed.
+After all member images have been imported, and before any of them receives
+writes, re-create the group and take a new group snapshot on the destination
+cluster (``rbd group create``, ``rbd group image add``, ``rbd group snap
+create``). The clones on the source cluster can then be removed.
 
 The ``qcow`` format can be used to describe a QCOW (QEMU copy-on-write) block
 device. Both the QCOW (v1) and QCOW2 formats are currently supported with the
