@@ -2546,6 +2546,7 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
                             const rgw_bucket& bucket,
                             const rgw_owner& owner,
                             const std::string& zonegroup_id,
+                            const std::string& local_zone_id,
                             const rgw_placement_rule& placement_rule,
                             const RGWZonePlacementInfo* zone_placement,
                             const std::map<std::string, bufferlist>& attrs,
@@ -2574,6 +2575,7 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
 
     info.owner = owner;
     info.zonegroup = zonegroup_id;
+    info.local_zone_id  = local_zone_id;
     info.placement_rule = placement_rule;
     info.swift_versioning = swift_ver_location.has_value();
     if (swift_ver_location) {
@@ -3704,7 +3706,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   state = NULL;
 
   if (versioned_op && meta.olh_epoch) {
-    bool add_log = log_op && store->svc.zone->need_to_log_data();
+    bool add_log = log_op
+        && target->bucket_info.local_zone_id.empty()
+        && store->svc.zone->need_to_log_data();
     r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, add_log);
     if (r < 0) {
       return r;
@@ -7062,7 +7066,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
   bool explicit_marker_version = (!params.marker_version_id.empty());
 
   if (params.versioning_status & BUCKET_VERSIONED || explicit_marker_version) {
-    bool add_log = log_op && store->svc.zone->need_to_log_data();
+    bool add_log = log_op
+        && target->bucket_info.local_zone_id.empty()
+        && store->svc.zone->need_to_log_data();
 
     if (instance.empty() || explicit_marker_version) {
       rgw_obj marker = obj;
@@ -8722,7 +8728,9 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
   ent.meta.restore_status = restore_status;
   ent.meta.restore_expiry_date = restore_expiry_date;
 
-  const bool add_log = log_op && store->svc.zone->need_to_log_data();
+  const bool add_log = log_op
+      && target->bucket_info.local_zone_id.empty()
+      && store->svc.zone->need_to_log_data();
 
   ret = store->cls_obj_complete_add(dpp, target->bucket_info, *bs, obj, optag,
                                     poolid, epoch, ent, category,
@@ -8756,7 +8764,9 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  const bool add_log = log_op && store->svc.zone->need_to_log_data();
+  const bool add_log = log_op
+      && target->bucket_info.local_zone_id.empty()
+      && store->svc.zone->need_to_log_data();
 
   ret = store->cls_obj_complete_del(dpp, target->bucket_info, *bs, optag,
                                     poolid, epoch, obj, removed_mtime,
@@ -8783,7 +8793,9 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp,
   RGWRados *store = target->get_store();
   BucketShard *bs;
 
-  const bool add_log = log_op && store->svc.zone->need_to_log_data();
+  const bool add_log = log_op
+      && target->bucket_info.local_zone_id.empty()
+      && store->svc.zone->need_to_log_data();
 
   int ret = guard_reshard(dpp, obj, &bs, [&](BucketShard *bs) -> int {
 				 return store->cls_obj_complete_cancel(dpp, target->bucket_info,
