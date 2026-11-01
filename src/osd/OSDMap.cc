@@ -8218,6 +8218,23 @@ void OSDMap::check_health(CephContext *cct,
     }
   }
 
+  // CRUSH_WEIGHT_LIMIT: the mons raise weight_shift as capacity is added, so
+  // this only fires once it is at its maximum
+  if (crush->get_weight_shift() >= CRUSH_MAX_WEIGHT_SHIFT &&
+      crush->get_weight_utilization() > 0.9) {
+    double headroom = 1.0 - crush->get_weight_utilization();
+    ostringstream ss;
+    ss << "CRUSH map is within " << (unsigned)(headroom * 100)
+       << "% of the largest bucket weight it can represent";
+    auto& d = checks->add("CRUSH_WEIGHT_LIMIT", HEALTH_WARN, ss.str(), 0);
+    d.detail.push_back(
+      "weight_shift is already at its maximum of " +
+      stringify(CRUSH_MAX_WEIGHT_SHIFT) +
+      "; no further capacity can be added under the affected bucket");
+    d.detail.push_back(
+      "see https://docs.ceph.com/en/latest/rados/operations/crush-map/#weight-shift");
+  }
+
   // CACHE_POOL_NO_HIT_SET
   if (cct->_conf->mon_warn_on_cache_pools_without_hit_sets) {
     list<string> detail;
