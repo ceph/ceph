@@ -508,9 +508,9 @@ class TestFSCryptVolumes(_FSCryptVolumeTestCase):
         #compare unlocked
         self.mount_a.compare_trees(src_path, dst_path)
 
-        #compare locked
+        #compare locked. The key is gone, so file bytes cannot be read.
         self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {src_path}")
-        self.mount_a.compare_trees(src_path, dst_path)
+        self.mount_a.compare_trees(src_path, dst_path, compare_data=False)
 
     def test_fscrypt_clone_long_name(self):
         """ Test that an fscrypt tree with long names can be cloned """
@@ -551,9 +551,9 @@ class TestFSCryptVolumes(_FSCryptVolumeTestCase):
         #compare unlocked
         self.mount_a.compare_trees(src_path, dst_path)
 
-        #compare locked
+        #compare locked. The key is gone, so file bytes cannot be read.
         self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {src_path}")
-        self.mount_a.compare_trees(src_path, dst_path)
+        self.mount_a.compare_trees(src_path, dst_path, compare_data=False)
 
 class TestFSCryptBackup(_FSCryptVolumeTestCase):
     def test_fscrypt_backup(self):

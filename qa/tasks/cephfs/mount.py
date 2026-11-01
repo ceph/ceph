@@ -1625,12 +1625,14 @@ class CephFSMountBase(object):
         proc = self._run_python(pyscript)
         proc.wait()
 
-    def compare_trees(self, src, dst):
+    def compare_trees(self, src, dst, compare_data=True):
         """
         Compare two directory trees. Compare based on file names and contents.
 
         :param src:
         :param dst:
+        :param compare_data: hash regular-file bytes. A locked fscrypt file
+            cannot be opened, so callers comparing a locked tree pass False.
         :return:
         """
         pyscript = dedent("""
@@ -1646,6 +1648,7 @@ class CephFSMountBase(object):
                 md5.update(contents.encode("utf-8"))
                 return md5.hexdigest()
 
+            compare_data = {compare_data}
             files = os.listdir('{src}')
             for file in files:
                 src_file = '{src}/' + file
@@ -1667,12 +1670,13 @@ class CephFSMountBase(object):
                     if not rsize_match:
                         raise
 
-                    #check contents
-                    src_hash = _md5hash_file(src_file)
-                    dest_hash = _md5hash_file(dst_file)
-                    if src_hash != dest_hash:
-                        raise
-            """).format(src=src, dst=dst)
+                    if compare_data:
+                        #check contents
+                        src_hash = _md5hash_file(src_file)
+                        dest_hash = _md5hash_file(dst_file)
+                        if src_hash != dest_hash:
+                            raise
+            """).format(src=src, dst=dst, compare_data=compare_data)
         proc = self._run_python(pyscript)
         proc.wait()
 
