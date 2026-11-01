@@ -18,8 +18,10 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <boost/optional.hpp>
 #include "include/rados/librados_fwd.hpp"
 #include "common/ceph_time.h"
+#include "cls/version/cls_version_types.h"
 #include "rgw_pubsub.h"
 
 class DoutPrefixProvider;
@@ -48,7 +50,8 @@ int read(const DoutPrefixProvider* dpp, optional_yield y,
          const RGWZoneParams& zone, const std::string& topic_key,
          rgw_pubsub_topic& info, RGWChainedCacheImpl<cache_entry>& cache,
          ceph::real_time* pmtime = nullptr,
-         RGWObjVersionTracker* pobjv = nullptr);
+         RGWObjVersionTracker* pobjv = nullptr,
+         boost::optional<obj_version> expected_version = boost::none);
 
 /// Write or overwrite topic info.
 int write(const DoutPrefixProvider* dpp, optional_yield y,

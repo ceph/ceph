@@ -185,13 +185,15 @@ int read(const DoutPrefixProvider* dpp,
          RGWAccountInfo& info,
          std::map<std::string, ceph::buffer::list>& attrs,
          ceph::real_time& mtime,
-         RGWObjVersionTracker& objv)
+         RGWObjVersionTracker& objv,
+         boost::optional<obj_version> expected_version)
 {
   const rgw_raw_obj obj = get_account_obj(zone, account_id);
 
   bufferlist bl;
   int r = rgw_get_system_obj(&sysobj, obj.pool, obj.oid, bl,
-                             &objv, &mtime, y, dpp, &attrs);
+                             &objv, &mtime, y, dpp, &attrs,
+                             nullptr, boost::none, false, expected_version);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "account lookup with id=" << account_id
         << " failed: " << cpp_strerror(r) << dendl;
@@ -572,7 +574,8 @@ class MetadataHandler : public RGWMetadataHandler {
   }
 
   int get(std::string& entry, RGWMetadataObject** obj,
-          optional_yield y, const DoutPrefixProvider* dpp) override
+          optional_yield y, const DoutPrefixProvider* dpp,
+          boost::optional<obj_version> expected_version = boost::none) override
   {
     const std::string& account_id = entry;
     CompleteInfo aci;
@@ -580,7 +583,7 @@ class MetadataHandler : public RGWMetadataHandler {
     ceph::real_time mtime;
 
     int r = read(dpp, y, sysobj, zone, account_id,
-                 aci.info, aci.attrs, mtime, objv);
+                 aci.info, aci.attrs, mtime, objv, expected_version);
     if (r < 0) {
       return r;
     }
