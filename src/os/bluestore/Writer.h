@@ -57,8 +57,10 @@ public:
     virtual ~read_divertor() = default;
     virtual bufferlist read(uint32_t object_offset, uint32_t object_length) = 0;
   };
-  Writer(BlueStore* bstore, TransContext* txc, WriteContext* wctx, OnodeRef o)
+  Writer(BlueStore* bstore, TransContext* txc, WriteContext* wctx, OnodeRef o,
+    uint32_t left_affected_range = OBJECT_MAX_SIZE, uint32_t right_affected_range = 0)
     :left_shard_bound(0), right_shard_bound(OBJECT_MAX_SIZE)
+    , left_affected_range(left_affected_range), right_affected_range(right_affected_range)
     , bstore(bstore), txc(txc), wctx(wctx), onode(o) {
       pp_mode = debug_level_to_pp_mode(bstore->cct);
     }
@@ -85,8 +87,8 @@ public:
   volatile_statfs statfs_delta;
   uint32_t left_shard_bound;  // if sharding is in effect,
   uint32_t right_shard_bound; // do not cross this line
-  uint32_t left_affected_range;
-  uint32_t right_affected_range;
+  uint32_t left_affected_range; // set before: range of transfered data
+  uint32_t right_affected_range; // get after: range of affected blobs
 private:
   BlueStore* bstore;
   TransContext* txc;
