@@ -389,33 +389,14 @@ class OSD(Ceph):
             logger.error(
                 f'Failed to parse keyring from {keyring_content} for rotation of key for osd.{self.identity.daemon_id}'
             )
-        c_v_container = CephContainer(
-            ctx,
-            image=ctx.image,
-            privileged=True,
-            entrypoint='ceph-volume',
-            args=[
-                'lvm',
-                'list',
-                str(self.identity.daemon_id),
-                '--format',
-                'json',
-            ],
-            volume_mounts=get_ceph_mounts_for_type(
-                ctx, ctx.fsid, 'ceph-volume'
-            ),
-        )
-        out, err, ret = call(
-            ctx,
-            c_v_container.run_cmd(),
-            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-        )
+        out, err, ret = self._get_osd_lvm_bluestore_data()
         if ret:
             raise Error(
                 f'Got error using ceph-volume lvm list to get lv path for osd.{self.identity.daemon_id}\n'
                 f'Out:{out}\n'
                 f'Err:{err}'
             )
+
         osd_bluestore_data = json.loads(out)
         lv_path = ''
         encrypted = False
@@ -425,26 +406,14 @@ class OSD(Ceph):
                 'No lv data found for OSD.%s, checking for raw OSD',
                 self.identity.daemon_id,
             )
-            c_v_container = CephContainer(
-                ctx,
-                image=ctx.image,
-                privileged=True,
-                entrypoint='ceph-volume',
-                args=[
-                    'raw',
-                    'list',
-                    '--format',
-                    'json',
-                ],
-                volume_mounts=get_ceph_mounts_for_type(
-                    ctx, ctx.fsid, 'ceph-volume'
-                ),
-            )
-            out, err, ret = call(
-                ctx,
-                c_v_container.run_cmd(),
-                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-            )
+            out, err, ret = self._get_osd_raw_bluestore_data()
+            if ret:
+                raise Error(
+                    f'Got error using ceph-volume raw list to get raw path for osd.{self.identity.daemon_id}\n'
+                    f'Out:{out}\n'
+                    f'Err:{err}'
+                )
+
             raw_list_data = json.loads(out)
             for osd_data in raw_list_data.values():
                 if str(osd_data.get('osd_id', -1)) == str(
@@ -487,41 +456,7 @@ class OSD(Ceph):
 
         if encrypted:
             dev_path = f'/dev/mapper/tmp_open_osd_{self._osd_fsid}'
-            cryptsetup_action = """#!/bin/bash
-DM_CRYPT_KEY=%s
-LV_PATH=%s
-DEV_NAME=%s
-
-echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
-""" % (
-                self._osd_dm_crypt_key,
-                lv_path,
-                dev_path.split('/')[-1],
-            )
-            helper_script_path = (
-                f'/tmp/cephadm-osd-{self.identity.daemon_id}-rotate-helper.sh'
-            )
-            with write_new(helper_script_path, perms=0o700) as f:
-                f.write(cryptsetup_action)
-            cryptsetup_open_container = CephContainer(
-                ctx,
-                image=ctx.image,
-                privileged=True,
-                entrypoint='/tmp/cryptsetup_action.sh',
-                volume_mounts={
-                    '/dev': '/dev',
-                    helper_script_path: '/tmp/cryptsetup_action.sh',
-                },
-            )
-            logger.info(
-                f'Opening osd.{self.identity.daemon_id} with crypsetup'
-            )
-            out, err, ret = call(
-                ctx,
-                cryptsetup_open_container.run_cmd(),
-                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-            )
-            os.remove(helper_script_path)
+            out, err, ret = self._open_encrypted_device(lv_path, dev_path)
             if ret:
                 raise Error(
                     'Got error rotating osd keyring while using cryptsetup tool\n'
@@ -529,9 +464,201 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     f'Err:{err}'
                 )
 
+        # The OSD may take some time to shutdown fully and make the device
+        # available for the key rotation
+        error: Optional[Error] = None
+        try:
+            out, err, ret = self._rotate_device_key_with_bluestore(
+                dev_path, actual_keyring
+            )
+            if ret:
+                error = Error(
+                    'Got error rotating osd keyring using ceph-bluestore-tool\n'
+                    f'Out:{out}\n'
+                    f'Err:{err}'
+                )
+        finally:
+            # regardless of success or failure, the decrypted device must be
+            # closed and the osd must be restarted before we can raise
+            if encrypted:
+                out, err, ret = self._close_decrypted_device(dev_path)
+                if ret and error is None:
+                    error = Error(
+                        'Got error rotating osd keyring while using cryptsetup tool\n'
+                        f'Out:{out}\n'
+                        f'Err:{err}'
+                    )
+            logger.info(f'Restarting osd: {self.identity.daemon_id}')
+            call(
+                ctx,
+                ['systemctl', 'reset-failed', self.identity.unit_name],
+                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+            )
+            call(
+                ctx,
+                ['systemctl', 'start', self.identity.unit_name],
+                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+            )
+
+        if error:
+            raise error
+
+    def _get_osd_lvm_bluestore_data(self) -> Tuple[str, str, int]:
+        """
+        Get the Bluestore data for the OSD.
+
+        Returns:
+            Tuple[str, str, int]: The stdout, stderr, and return code from the ceph-volume command.
+        """
+        c_v_container = CephContainer(
+            self.ctx,
+            image=self.ctx.image,
+            privileged=True,
+            entrypoint='ceph-volume',
+            args=[
+                'lvm',
+                'list',
+                str(self.identity.daemon_id),
+                '--format',
+                'json',
+            ],
+            volume_mounts=get_ceph_mounts_for_type(
+                self.ctx, self.ctx.fsid, 'ceph-volume'
+            ),
+        )
+        out, err, ret = call(
+            self.ctx,
+            c_v_container.run_cmd(),
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+        return out, err, ret
+
+    def _get_osd_raw_bluestore_data(self) -> Tuple[str, str, int]:
+        """
+        Get the raw Bluestore data for the OSD.
+
+        Returns:
+            Tuple[str, str, int]: The stdout, stderr, and return code from the ceph-volume command.
+        """
+        c_v_container = CephContainer(
+            self.ctx,
+            image=self.ctx.image,
+            privileged=True,
+            entrypoint='ceph-volume',
+            args=[
+                'raw',
+                'list',
+                '--format',
+                'json',
+            ],
+            volume_mounts=get_ceph_mounts_for_type(
+                self.ctx, self.ctx.fsid, 'ceph-volume'
+            ),
+        )
+        out, err, ret = call(
+            self.ctx,
+            c_v_container.run_cmd(),
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+        return out, err, ret
+
+    def _open_encrypted_device(
+        self, lv_path: str, dev_path: str
+    ) -> Tuple[str, str, int]:
+        """
+        Open an encrypted OSD device using cryptsetup.
+
+        Args:
+            lv_path (str): The logical volume path of the encrypted OSD.
+            dev_path (str): The name for the decrypted mapped device.
+
+        Returns:
+            Tuple[str, str, int]: The stdout, stderr, and return code from the cryptsetup command.
+        """
+        cryptsetup_action = """#!/bin/bash
+DM_CRYPT_KEY=%s
+LV_PATH=%s
+DEV_NAME=%s
+
+echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
+""" % (
+            self._osd_dm_crypt_key,
+            lv_path,
+            dev_path.split('/')[-1],
+        )
+        helper_script_path = (
+            f'/tmp/cephadm-osd-{self.identity.daemon_id}-rotate-helper.sh'
+        )
+        with write_new(helper_script_path, perms=0o700) as f:
+            f.write(cryptsetup_action)
+        cryptsetup_open_container = CephContainer(
+            self.ctx,
+            image=self.ctx.image,
+            privileged=True,
+            entrypoint='/tmp/cryptsetup_action.sh',
+            volume_mounts={
+                '/dev': '/dev',
+                helper_script_path: '/tmp/cryptsetup_action.sh',
+            },
+        )
+        logger.info(f'Opening osd.{self.identity.daemon_id} with cryptsetup')
+        out, err, ret = call(
+            self.ctx,
+            cryptsetup_open_container.run_cmd(),
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+        os.remove(helper_script_path)
+        return out, err, ret
+
+    def _close_decrypted_device(self, dev_path: str) -> Tuple[str, str, int]:
+        """
+        Close a decrypted mapped device using cryptsetup.
+
+        Args:
+            dev_path (str): The name for the decrypted mapped device.
+
+        Returns:
+            Tuple[str, str, int]: The stdout, stderr, and return code from the cryptsetup command.
+        """
+        logger.info(f'Closing osd.{self.identity.daemon_id} with cryptsetup')
+        cryptsetup_close_container = CephContainer(
+            self.ctx,
+            image=self.ctx.image,
+            privileged=True,
+            entrypoint='cryptsetup',
+            args=[
+                'luksClose',
+                dev_path,
+            ],
+            volume_mounts={
+                '/dev': '/dev',
+            },
+        )
+        out, err, ret = call(
+            self.ctx,
+            cryptsetup_close_container.run_cmd(),
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+        return out, err, ret
+
+    def _rotate_device_key_with_bluestore(
+        self,
+        dev_path: str,
+        actual_keyring: str,
+    ) -> Tuple[str, str, int]:
+        """
+        Rotate the key for a Bluestore device using ceph-bluestore-tool.
+
+        Args:
+            dev_path (str): The path to the device.
+            actual_keyring (str): The actual keyring.
+
+        Returns:
+            Tuple[str, str, int]: The stdout, stderr, and return code from the ceph-bluestore-tool command.
+        """
         bluestore_tool_container = CephContainer(
-            ctx,
-            image=ctx.image,
+            self.ctx,
+            image=self.ctx.image,
             privileged=True,
             entrypoint='ceph-bluestore-tool',
             args=[
@@ -545,26 +672,17 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
             ],
             volume_mounts={'/dev': '/dev'},
         )
+
         logger.info(
             f'Rotating osd.{self.identity.daemon_id} key with ceph-bluestore-tool'
         )
-        # The OSD may take some time to shutdown fully and make the device
-        # available for the key rotation
-        for i in [2, 5, 10, 30, 0]:
-            if not i:
-                break
+        for i in [2, 5, 10, 30]:
             out, err, ret = call(
-                ctx,
+                self.ctx,
                 bluestore_tool_container.run_cmd(),
                 verbosity=CallVerbosity.VERBOSE,
             )
             if ret:
-                if not i:
-                    raise Error(
-                        'Got error rotating osd keyring using ceph-bluestore-tool\n'
-                        f'Out:{out}\n'
-                        f'Err:{err}'
-                    )
                 logger.info(
                     f'Got issue rotating osd keyring using ceph-bluestore-tool:\n{out}\n{err}\nRetrying in {i} seconds'
                 )
@@ -574,43 +692,7 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     f'Successfully rotated osd.{self.identity.daemon_id} keyring'
                 )
                 break
-
-        if encrypted:
-            cryptsetup_close_container = CephContainer(
-                ctx,
-                image=ctx.image,
-                privileged=True,
-                entrypoint='cryptsetup',
-                args=[
-                    'luksClose',
-                    dev_path,
-                ],
-                volume_mounts={
-                    '/dev': '/dev',
-                },
-            )
-            out, err, ret = call(
-                ctx,
-                cryptsetup_close_container.run_cmd(),
-                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-            )
-            if ret:
-                raise Error(
-                    'Got error rotating osd keyring while using cryptsetup tool\n'
-                    f'Out:{out}\n'
-                    f'Err:{err}'
-                )
-
-        call(
-            ctx,
-            ['systemctl', 'reset-failed', self.identity.unit_name],
-            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-        )
-        call(
-            ctx,
-            ['systemctl', 'start', self.identity.unit_name],
-            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-        )
+        return out, err, ret
 
 
 @register_daemon_form
