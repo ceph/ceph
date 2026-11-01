@@ -3,8 +3,8 @@
 Debug
 ^^^^^
 
-This plugin allows to customize the behaviour of the dashboard according to the
-debug mode. It can be enabled, disabled or checked with the following command:
+This plug-in changes the behavior of the dashboard in debug mode. It can be
+enabled, disabled or checked with the following command:
 
 .. prompt:: bash #
 
@@ -14,30 +14,25 @@ debug mode. It can be enabled, disabled or checked with the following command:
 
    Debug: 'disabled'
 
-.. prompt:: bash 
+.. prompt:: bash #
 
    ceph dashboard debug enable
-
-::
-
-   Debug: 'enabled'
 
 .. prompt:: bash #
 
    ceph dashboard debug disable
 
-::
-
-   Debug: 'disabled'
+The ``enable`` and ``disable`` commands print nothing. Run
+``ceph dashboard debug status`` to check the result. While debug mode is
+enabled, the cluster reports the ``DASHBOARD_DEBUG`` health warning
+(``Dashboard debug mode is enabled``).
 
 By default, it's disabled. This is the recommended setting for production
 deployments. If required, debug mode can be enabled without need of restarting.
-Currently, disabled debug mode equals to CherryPy ``production`` environment,
-while when enabled, it uses ``test_suite`` defaults (please refer to
-`CherryPy Environments
-<https://docs.cherrypy.org/en/latest/config.html#environments>`_ for more
-details).
+When debug mode is disabled, the dashboard uses the CherryPy ``production``
+environment. When debug mode is enabled, it uses the CherryPy ``test_suite``
+environment. See `CherryPy Environments
+<https://docs.cherrypy.dev/en/latest/config.html#environments>`_.
 
-It also adds request uuid (``unique_id``) to Cherrypy on versions that don't
-support this. It additionally prints the ``unique_id`` to error responses and
-log messages.
+Error responses always include a ``request_id``. With debug mode enabled,
+they also include the Python traceback and the CherryPy version.
