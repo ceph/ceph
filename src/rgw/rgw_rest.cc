@@ -2161,7 +2161,11 @@ int rgw_rest_transform_s3_vhost_style(req_state* s)
     s->info.domain = s->cct->_conf->rgw_dns_name;
   }
 
-  s->decoded_uri = url_decode(s->info.request_uri);
+  /* Reject a malformed percent-escape rather than route on a silently-altered
+   * path (a bad hex digit empties the decode, a trailing '%' truncates it). */
+  if (!url_decode(s->info.request_uri, s->decoded_uri)) {
+    return -EINVAL;
+  }
   /* Validate for being free of the '\0' buried in the middle of the string. */
   if (std::strlen(s->decoded_uri.c_str()) != s->decoded_uri.length()) {
     return -ERR_ZERO_IN_URL;
@@ -2181,7 +2185,11 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
 
   s->cio = cio;
 
-  s->decoded_uri = url_decode(s->info.request_uri);
+  /* Reject a malformed percent-escape rather than route on a silently-altered
+   * path (a bad hex digit empties the decode, a trailing '%' truncates it). */
+  if (!url_decode(s->info.request_uri, s->decoded_uri)) {
+    return -EINVAL;
+  }
   /* Validate for being free of the '\0' buried in the middle of the string. */
   if (std::strlen(s->decoded_uri.c_str()) != s->decoded_uri.length()) {
     return -ERR_ZERO_IN_URL;
