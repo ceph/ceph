@@ -26,6 +26,7 @@
 .. confval:: mds_bal_replicate_threshold
 .. confval:: mds_bal_unreplicate_threshold
 .. confval:: mds_bal_split_size
+.. confval:: mds_bal_split_bytes
 .. confval:: mds_bal_split_rd
 .. confval:: mds_bal_split_wr
 .. confval:: mds_bal_split_bits
@@ -52,6 +53,7 @@
 .. confval:: mds_dump_cache_on_map
 .. confval:: mds_dump_cache_after_rejoin
 .. confval:: mds_verify_scatter
+.. confval:: mds_verify_frag_bytes
 .. confval:: mds_debug_scatterstat
 .. confval:: mds_debug_frag
 .. confval:: mds_debug_auth_pins
