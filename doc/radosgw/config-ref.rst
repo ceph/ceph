@@ -21,6 +21,7 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_cache_enabled
 .. confval:: rgw_cache_lru_size
 .. confval:: rgw_dns_name
+.. confval:: rgw_dns_s3website_name
 .. confval:: rgw_script_uri
 .. confval:: rgw_request_uri
 .. confval:: rgw_print_continue
@@ -38,6 +39,7 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_obj_stripe_size
 .. confval:: rgw_extended_http_attrs
 .. confval:: rgw_exit_timeout_secs
+.. confval:: rgw_graceful_stop
 .. confval:: rgw_get_obj_window_size
 .. confval:: rgw_get_obj_max_req_size
 .. confval:: rgw_multipart_min_part_size
@@ -225,6 +227,7 @@ Swift Settings
 .. confval:: rgw_swift_account_in_url
 .. confval:: rgw_swift_versioning_enabled
 .. confval:: rgw_trust_forwarded_https
+.. confval:: rgw_service_provider_name
 
 Logging Settings
 ================
