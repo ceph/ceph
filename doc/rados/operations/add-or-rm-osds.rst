@@ -421,8 +421,10 @@ to remove an OSD from each drive by repeating this procedure.
    from the OSD map. The :ref:`purge subcommand <ceph-admin-osd>` first checks
    that the OSD is safe to destroy, and stops if it is not:
 
-   .. warning:: This step deletes everything that the Monitors store about the
-      OSD, including its ID and its CRUSH position. ``--force`` (or its older
+   .. warning:: This step deletes the OSD's ID, its CRUSH position, its CephX
+      keys, and its config-key data from the Monitors. It does not delete
+      settings for ``osd.{id}`` in the central configuration database, and an
+      OSD that later reuses the ID inherits them. ``--force`` (or its older
       synonym ``--yes-i-really-mean-it``) skips the safety check and can cause
       permanent data loss.
 
