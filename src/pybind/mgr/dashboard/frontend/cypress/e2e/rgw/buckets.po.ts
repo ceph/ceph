@@ -45,7 +45,7 @@ export class BucketsPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.create.url)
-  create(name: string, owner: string, isLocking = false) {
+  create(name: string, owner: string, isLocking = false, lockDays: number | null = 3) {
     // Enter in bucket name
     cy.get('#bid').type(name);
 
@@ -57,13 +57,25 @@ export class BucketsPageHelper extends PageHelper {
       cy.get('#lock_enabled_input').click({ force: true });
       // Select lock mode:
       this.selectLockMode('Compliance');
-      cy.get('#lock_retention_period_days').type('3');
+      if (lockDays !== null) {
+        cy.get('[data-testid=lock-retention-days]').find('input').clear().type(String(lockDays));
+      }
     }
 
     // Click the create button and wait for bucket to be made
     cy.contains('button', 'Create Bucket').wait(WAIT_TIMER).click();
 
     this.getFirstTableCell(name).should('exist');
+  }
+
+  @PageHelper.restrictTo(pages.create.url)
+  testLockRetentionZeroIsValid() {
+    cy.get('#lock_enabled_input').click({ force: true });
+    this.selectLockMode('Compliance');
+    cy.get('[data-testid=lock-retention-days]').find('input').should('have.value', '0');
+    // 0 must not trigger a validation error
+    cy.get('[data-testid=lock-retention-days]').find('input').clear().type('0').blur();
+    cy.get('[data-testid=lock-retention-days]').find('span.invalid-feedback').should('not.exist');
   }
 
   @PageHelper.restrictTo(pages.index.url)
