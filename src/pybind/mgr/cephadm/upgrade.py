@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast, Set, U
 from cephadm.services.service_registry import service_registry
 
 import orchestrator
+from cephadm.image_prepull import (
+    PrePullBatchResult,
+    UpgradeImagePrePull,
+)
 from cephadm.registry import Registry
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -242,6 +246,17 @@ def request_osd_ok_to_upgrade_report(
     return report
 
 
+def _short_ceph_version(version: Optional[str]) -> Optional[str]:
+    if not version:
+        return None
+    if version.startswith('ceph version'):
+        parts = version.split(' ')
+        if len(parts) >= 3 and parts[2]:
+            return parts[2]
+        return None
+    return version
+
+
 class UpgradeState:
     def __init__(self,
                  target_name: str,
@@ -267,6 +282,7 @@ class UpgradeState:
                  has_set_cephx_allowed_ciphers: Optional[bool] = False,
                  health_warnings_muted: Optional[bool] = False,
                  health_warnings_mute_skipped: Optional[bool] = False,
+                 target_image_pre_pull_hosts: Optional[List[str]] = None,
                  ):
 
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -295,6 +311,7 @@ class UpgradeState:
         # set when the mutes were deliberately not applied, so the decision is
         # made once per upgrade rather than on every _do_upgrade pass
         self.health_warnings_mute_skipped = health_warnings_mute_skipped
+        self.target_image_pre_pull_hosts = list(target_image_pre_pull_hosts or [])
 
     def to_json(self) -> dict:
         return {
@@ -321,6 +338,7 @@ class UpgradeState:
             'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
             'health_warnings_muted': self.health_warnings_muted,
             'health_warnings_mute_skipped': self.health_warnings_mute_skipped,
+            'target_image_pre_pull_hosts': self.target_image_pre_pull_hosts,
         }
 
     @classmethod
@@ -367,6 +385,7 @@ class CephadmUpgrade:
         # report (``osds_in_crush_bucket``). Used so ok-to-stop ``known`` (cluster-wide)
         # cannot schedule OSDs outside the bucket.
         self._ok_to_upgrade_osds_in_crush_bucket: Optional[Set[str]] = None
+        self.image_prepull = UpgradeImagePrePull(self)
 
     @property
     def target_image(self) -> str:
@@ -378,6 +397,15 @@ class CephadmUpgrade:
 
         # FIXME: we assume the first digest is the best one to use
         return self.upgrade_state.target_digests[0]
+
+    def _announce_target(self, target_version: str,
+                         target_digests: Optional[List[str]]) -> None:
+        (target_major, _) = target_version.split('.', 1)
+        target_major_name = self.mgr.lookup_release_name(int(target_major))
+        logger.info('Upgrade: Target is version %s (%s)' % (
+            target_version, target_major_name))
+        logger.info('Upgrade: Target container is %s, digests %s' % (
+            self.target_image, target_digests))
 
     def _upgrade_status_osd_bucket_scope_active(self) -> bool:
         """True when upgrade state selects OSD bucket scope"""
@@ -848,8 +876,18 @@ class CephadmUpgrade:
             self._validate_failure_domain_upgrade_options(
                 bucket_type, bucket_name, daemon_types)
 
+        # Reuse the validation pull's metadata only when pre-pull is enabled.
+        # Otherwise _do_upgrade() still does the normal first pull.
+        prepull = self.image_prepull.enabled()
         if daemon_types is not None or services is not None or hosts is not None:
-            self._validate_upgrade_filters(target_name, daemon_types, hosts, services)
+            scoped_id, scoped_ver, scoped_digests, scoped_host = (
+                self._validate_upgrade_filters(target_name, daemon_types, hosts, services))
+            if not prepull:
+                scoped_id = scoped_ver = scoped_host = None
+                scoped_digests = None
+        else:
+            scoped_id = scoped_ver = scoped_host = None
+            scoped_digests = None
 
         if self.upgrade_state:
             if self.upgrade_state._target_name != target_name:
@@ -872,6 +910,9 @@ class CephadmUpgrade:
         self.upgrade_state = UpgradeState(
             target_name=target_name,
             progress_id=str(uuid.uuid4()),
+            target_id=scoped_id,
+            target_digests=scoped_digests,
+            target_version=scoped_ver,
             fail_fs=fail_fs_value,
             daemon_types=daemon_types,
             hosts=hosts,
@@ -881,6 +922,13 @@ class CephadmUpgrade:
             crush_bucket_type=bucket_type,
             crush_bucket_name=bucket_name,
         )
+        if scoped_host:
+            scope_hosts = self.image_prepull.get_upgrade_scope_hosts(
+                self._get_filtered_daemons())
+            if scoped_host in scope_hosts:
+                self.image_prepull.mark_host_done(scoped_host)
+        if prepull and scoped_ver:
+            self._announce_target(scoped_ver, scoped_digests)
         # One-time PG autoscaling decision when upgrade includes OSDs
         if self._upgrade_includes_osds(daemon_types, hosts, services):
             # prior_autoscale: current OSD noautoscale status from osd_map flags (before we touch it)
@@ -913,7 +961,7 @@ class CephadmUpgrade:
         )
         return 'Initiating upgrade to %s' % (target_name)
 
-    def _validate_upgrade_filters(self, target_name: str, daemon_types: Optional[List[str]] = None, hosts: Optional[List[str]] = None, services: Optional[List[str]] = None) -> None:
+    def _validate_upgrade_filters(self, target_name: str, daemon_types: Optional[List[str]] = None, hosts: Optional[List[str]] = None, services: Optional[List[str]] = None) -> Tuple[Optional[str], Optional[str], Optional[List[str]], Optional[str]]:
         def _latest_type(dtypes: List[str]) -> str:
             # [::-1] gives the list in reverse
             for daemon_type in CEPH_UPGRADE_ORDER[::-1]:
@@ -945,7 +993,13 @@ class CephadmUpgrade:
         if self.upgrade_state:
             raise OrchestratorError(
                 'Cannot set values for --daemon-types, --services or --hosts when upgrade already in progress.')
+        # remember the host the validation pull runs on so pre-pull can
+        # count it as already done
+        first_host = self.mgr._any_inventory_host()
         try:
+            # keep the normal command timeout here: this runs in the CLI
+            # command thread and must not hang the client behind the long
+            # pre-pull timeout. The long pull happens in serve.
             with self.mgr.async_timeout_handler('cephadm inspect-image'):
                 target_id, target_version, target_digests = self.mgr.wait_async(
                     CephadmServe(self.mgr)._get_container_image_info(target_name))
@@ -1007,6 +1061,7 @@ class CephadmUpgrade:
             raise OrchestratorError(f'{err_msg_base}Please first upgrade '
                                     f'{", ".join(list(set([d[0].name() for d in n1] + [d[0].name() for d in n2])))}\n'
                                     f'NOTE: Enforced upgrade order is: {" -> ".join(CEPH_TYPES + GATEWAY_TYPES)}')
+        return target_id, _short_ceph_version(target_version), target_digests, first_host
 
     def upgrade_pause(self) -> str:
         if not self.upgrade_state:
@@ -2400,24 +2455,51 @@ class CephadmUpgrade:
         target_digests = self.upgrade_state.target_digests
         target_version = self.upgrade_state.target_version
 
+        prepull = self.image_prepull.enabled()
+
         first = False
-        if not target_id or not target_version or not target_digests:
-            # need to learn the container hash
+        first_host: Optional[str] = None
+        need_metadata = not target_id or not target_version or not target_digests
+        if need_metadata:
+            # Serial pull on one host is the source of target metadata. Pre-pull
+            # then distributes self.target_image (digest by default) in batches.
             logger.info('Upgrade: First pull of %s' % target_image)
             self.upgrade_info_str = 'Doing first pull of %s image' % (target_image)
-            try:
-                with self.mgr.async_timeout_handler(f'cephadm inspect-image (image {target_image})'):
-                    target_id, target_version, target_digests = self.mgr.wait_async(
-                        CephadmServe(self.mgr)._get_container_image_info(target_image))
-            except OrchestratorError as e:
-                self._fail_upgrade('UPGRADE_FAILED_PULL', {
-                    'severity': 'warning',
-                    'summary': 'Upgrade: failed to pull target image',
-                    'count': 1,
-                    'detail': [str(e)],
-                })
-                return
-            if not target_version:
+            if prepull:
+                # The long-timeout pull runs as a background task so the
+                # serve loop keeps running; completion is polled on later
+                # serve iterations.
+                outcome = self.image_prepull.first_pull_start_or_poll(target_image)
+                if outcome is None:
+                    return
+                kind, value = outcome
+                if kind == 'error':
+                    self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                        'severity': 'warning',
+                        'summary': 'Upgrade: failed to pull target image',
+                        'count': 1,
+                        'detail': [str(value)],
+                    })
+                    return
+                target_id, target_version, target_digests = value
+                first_host = self.image_prepull.first_pull_host
+            else:
+                first_host = self.mgr._any_inventory_host()
+                try:
+                    with self.mgr.async_timeout_handler(
+                            f'cephadm inspect-image (image {target_image})'):
+                        target_id, target_version, target_digests = self.mgr.wait_async(
+                            CephadmServe(self.mgr)._get_container_image_info(target_image))
+                except OrchestratorError as e:
+                    self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                        'severity': 'warning',
+                        'summary': 'Upgrade: failed to pull target image',
+                        'count': 1,
+                        'detail': [str(e)],
+                    })
+                    return
+            version_token = _short_ceph_version(target_version)
+            if not version_token:
                 self._fail_upgrade('UPGRADE_FAILED_PULL', {
                     'severity': 'warning',
                     'summary': 'Upgrade: failed to pull target image',
@@ -2429,14 +2511,16 @@ class CephadmUpgrade:
             # Short token from ``ceph version …`` inside the target image; this
             # is what the monitor expects for ``osd ok-to-upgrade`` ceph_version
             # (may differ from CLI --ceph-version, e.g. full build id vs tag).
-            self.upgrade_state.target_version = target_version.split(' ')[2]
+            self.upgrade_state.target_version = version_token
             self.upgrade_state.target_digests = target_digests
             self._save_upgrade_state()
             target_image = self.target_image
+            target_version = self.upgrade_state.target_version
             first = True
 
         if target_digests is None:
             target_digests = []
+        assert target_version is not None
         if target_version.startswith('ceph version '):
             # tolerate/fix upgrade state from older version
             self.upgrade_state.target_version = target_version.split(' ')[2]
@@ -2445,10 +2529,7 @@ class CephadmUpgrade:
         target_major_name = self.mgr.lookup_release_name(int(target_major))
 
         if first:
-            logger.info('Upgrade: Target is version %s (%s)' % (
-                target_version, target_major_name))
-            logger.info('Upgrade: Target container is %s, digests %s' % (
-                target_image, target_digests))
+            self._announce_target(target_version, target_digests)
 
         version_error = self._check_target_version(target_version)
         if version_error:
@@ -2471,6 +2552,17 @@ class CephadmUpgrade:
                 'detail': self._host_cpu_isa_error_detail(isa_errors),
             })
             return
+
+        if prepull:
+            daemons = self._get_filtered_daemons()
+            hosts = self.image_prepull.get_upgrade_scope_hosts(daemons)
+            if first and first_host and first_host in hosts:
+                self.image_prepull.mark_host_done(first_host)
+            if hosts and not self.image_prepull.all_hosts_done(hosts):
+                result = self.image_prepull.pre_pull_next_batch(
+                    self.target_image, target_digests, hosts)
+                if result != PrePullBatchResult.COMPLETE:
+                    return
 
         image_settings = self.get_distinct_container_image_settings()
 

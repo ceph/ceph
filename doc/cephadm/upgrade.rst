@@ -2,6 +2,8 @@
 Upgrading Ceph
 ==============
 
+.. _cephadm-upgrade:
+
 Cephadm can safely upgrade Ceph from one point release to the next.  For
 example, you can upgrade from v15.2.0 (the first Octopus release) to the next
 point release, v15.2.1.
@@ -62,6 +64,62 @@ The automated upgrade process follows Ceph best practices.  For example:
    If autoscaling was already off before the upgrade, it is still off after
    the upgrade. Setting ``pg_autoscale_during_upgrade`` to ``true`` tells
    cephadm to leave the autoscaler as it is. It does not turn autoscaling on.
+
+
+Upgrade image pre-pull
+======================
+
+On clusters with many hosts and large container images, pulling the target
+image from a registry on each host during the upgrade can add significant
+time. This is especially noticeable during MDS upgrades when CephFS may
+already be offline while a host still downloads the image.
+
+When enabled, cephadm pre-pulls the target image to in-scope hosts
+**before any daemon is upgraded**. Configure this with
+``mgr/cephadm/upgrade_prepull_image`` (default ``false``).
+
+The image is pulled in parallel batches on each in-scope host from the
+cluster registry (Harbor, Quay, etc.). Use this when every node already
+has registry connectivity. The existing first pull on one host still
+learns the target digest and Ceph version (and rejects a bad target)
+before the cluster-wide pre-pull; ``ceph orch upgrade start`` keeps the
+normal command timeout for that validation, and the long-timeout pull
+runs in the background on the mgr. Hosts already completed are skipped
+after a pause or mgr failover. If pre-pull fails on any host, the
+upgrade is paused before any daemon is upgraded. Staggered upgrades
+pre-pull only on hosts in the current upgrade scope.
+
+Pulls never block the mgr's serve loop: each batch runs as a background
+task on the cephadm event loop and the serve loop polls for results, so
+orchestration (host refresh, service deployment, health checks) keeps
+running and ``ceph orch upgrade pause`` and ``stop`` keep working while
+pulls are in flight. A batch whose upgrade was stopped, replaced or
+paused discards its results; after a resume the affected hosts are
+pulled again, which is cheap for images that are already present.
+
+Enable pre-pull:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_prepull_image true
+
+Disable again:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_prepull_image false
+
+Optional tuning (hosts pulled per serve iteration):
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_prepull_max_parallel 8
+
+Optional tuning (per-host pull timeout in seconds, default 7200):
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_prepull_timeout 7200
 
 
 Starting the Upgrade
