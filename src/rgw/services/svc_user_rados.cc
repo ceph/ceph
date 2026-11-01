@@ -362,12 +362,33 @@ public:
     }
 
     for (const auto& group_id : info.group_ids) {
-      if (old_info && old_info->group_ids.count(group_id)) {
-        continue;
-      }
-      // link the user to its group
       const RGWZoneParams& zone = svc.zone->get_zone_params();
       const auto& users = rgwrados::group::get_users_obj(zone, group_id);
+
+      if (old_info && old_info->group_ids.count(group_id)) {
+        // skip group list update if nothing there changed
+        if (old_info->user_id == info.user_id &&
+            old_info->display_name == info.display_name &&
+            old_info->path == info.path) {
+          continue;
+        }
+        // only the (case-insensitive) name is part of the resource's omap key.
+        // if the name changed, we have to remove the old name's entry before
+        // writing the new one. otherwise, users::add() below will just update
+        // the existing entry
+        if (!boost::iequals(old_info->display_name, info.display_name)) {
+          ret = rgwrados::users::remove(dpp, y, rados, users,
+                                        old_info->display_name);
+          if (ret < 0) {
+            ldpp_dout(dpp, 20) << "WARNING: failed to unlink user "
+                << old_info->user_id << " from group " << group_id
+                << ": " << cpp_strerror(ret) << dendl;
+            return ret;
+          }
+        }
+      }
+
+      // link the user to its group
       ret = rgwrados::users::add(dpp, y, rados, users, info, false,
                                  std::numeric_limits<uint32_t>::max());
       if (ret < 0) {
