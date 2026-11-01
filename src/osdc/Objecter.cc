@@ -2554,6 +2554,13 @@ void Objecter::_take_inflight_slot(Op *op)
   inflight_ops++;
   logger->inc(l_osdc_op_active);
   op->inflight_accounted = true;
+
+  // add to gather set(s)
+  if (op->has_completion()) {
+    num_in_flight++;
+  } else {
+    ldout(cct, 20) << " note: not requesting reply" << dendl;
+  }
 }
 
 void Objecter::add_op_to_splitop_session(Op *op) {
@@ -2612,13 +2619,8 @@ void Objecter::_op_submit_with_budget(Op *op,
 
 void Objecter::_send_op_account(Op *op)
 {
-  _take_inflight_slot(op);
-
-  // add to gather set(s)
-  if (op->has_completion()) {
-    num_in_flight++;
-  } else {
-    ldout(cct, 20) << " note: not requesting reply" << dendl;
+  if (!op->inflight_accounted) {
+    _take_inflight_slot(op);
   }
 
   if (op->target.used_replica) {
