@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MDS_CACHE_OVERSIZED
+      - MDS_CLIENT_RECALL
+      - overall HEALTH_
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_readdir_cache_pressure
