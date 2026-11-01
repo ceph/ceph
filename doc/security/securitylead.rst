@@ -2,10 +2,10 @@
  Security Lead
 ================
 
-The CSC designates a member as Security Lead, with responsibility for
-co-ordinating security posture. The Security Lead also keeps the CSC updated
-about vulnerabilities within Ceph and progress toward addressing them. The lead
-notably drives resolution of critical vulnerabilities.
+The Security Lead has responsibility for co-ordinating security posture. The
+Security Lead also keeps the CSC updated about vulnerabilities within Ceph and
+progress toward addressing them. The lead notably drives resolution of critical
+vulnerabilities.
 
 A responsibility of this role will be to give a monthly status report to the CSC
 on vulnerabilities and novel security concerns, such as AI exploit scanners and
