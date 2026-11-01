@@ -820,6 +820,11 @@ def cluster(ctx, config):
     log.info("remote_to_roles_to_devs: {}".format(remote_to_roles_to_devs))
     for osd_role, dev_name in remote_to_roles_to_devs.items():
         assert dev_name, "{} has no associated device!".format(osd_role)
+    # devices exported by spdk_nvmet_tcp are not mounted
+    spdk_trids = getattr(ctx, 'spdk_nvmet_tcp', {})
+    for remote, role_to_trid in spdk_trids.items():
+        for role in role_to_trid:
+            remote_to_roles_to_devs.get(remote, {}).pop(role, None)
 
     log.info('Generating config...')
     remotes_and_roles = ctx.cluster.remotes.items()
@@ -840,6 +845,12 @@ def cluster(ctx, config):
             if section not in conf:
                 conf[section] = {}
             conf[section][key] = value
+    for role_to_trid in spdk_trids.values():
+        for role, trid in role_to_trid.items():
+            _, _, id_ = teuthology.split_role(role)
+            section = 'osd.{id}'.format(id=id_)
+            conf.setdefault(section, {})
+            conf[section]['seastore spdk transport id'] = trid
 
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
@@ -1032,6 +1043,9 @@ def cluster(ctx, config):
             _, _, id_ = teuthology.split_role(role)
 
             mnt_point = DATA_PATH.format(type_='osd', cluster=cluster_name, id_=id_)
+            if role in spdk_trids.get(remote, {}):
+                # no fresh fs is mounted here: drop an earlier run's data
+                remote.run(args=['sudo', 'rm', '-rf', '--', mnt_point])
             remote.run(
                 args=[
                     'sudo',

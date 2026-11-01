@@ -1,0 +1,11 @@
+# OSD devices are reached over loopback NVMe/TCP, see spdk_nvmet_tcp.py
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+        crimson cpu num: 4
+        # NVMe/TCP does no device DMA, so DPDK needs no physical addresses.
+        seastore spdk iova mode: va
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, client.0]
