@@ -1,0 +1,5 @@
+storage-servers: count=3, CPU-Cores=1, MEM-GB=4
+Log-server: count=3, CPU-Cores=1, MEM-GB=4
+stateless-servers: count=3, CPU-Cores=1, MEM-GB=4
+throttle: enable
+storage_hard_limit_mb: 500
