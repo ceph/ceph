@@ -1544,15 +1544,17 @@ Planned failover
 Use planned failover when the primary site is healthy and you are switching production
 to the remote site in a controlled way.
 
-#. **Quiesce the primary.** Pause applications writing to mirrored paths. Disable
-   mirroring and stop mirror daemons on the primary cluster::
+#. **Quiesce the primary.** Pause applications writing to mirrored paths.
+   Optionally, refuse new client sessions on the primary file system::
 
-     ceph fs snapshot mirror disable <primary_fs>
-     systemctl stop 'cephfs-mirror@*'
+     ceph fs set <primary_fs> refuse_client_session true
 
-   Optionally refuse new client sessions on the primary file system::
+#. **Take a final snapshot.** Mirroring replicates snapshots, not the live
+   directory, so writes made after the latest snapshot reach the remote site
+   only in a new snapshot. On a client mount of the primary file system, create
+   one in each mirrored directory::
 
-     ceph fs set <primary_fs> refuse_client_sessions true
+     mkdir <mount_point>/<mirrored_dir>/.snap/<final_snap_name>
 
 #. **Confirm synchronization is complete.** On the primary cluster, check per-directory
    status (see :ref:`Directory snapshot sync metrics
@@ -1564,21 +1566,38 @@ to the remote site in a controlled way.
 
    - ``state`` is ``idle`` (not ``syncing``, ``failed``, or ``stale``).
    - ``current_syncing_snap`` is absent.
-   - Note ``last_synced_snap.name`` and ``last_synced_snap.sync_time_stamp``.
+   - ``last_synced_snap.name`` is the final snapshot. Note it and
+     ``last_synced_snap.sync_time_stamp``: they are the recovery point.
 
-   Optionally confirm checkpoints show ``complete`` if set::
+   If you set checkpoints, optionally confirm that they show ``complete``::
 
      ceph fs snapshot mirror checkpoint ls <primary_fs> <mirrored_dir_path>
 
-#. **Promote the remote site.** On the remote cluster, allow clients::
+#. **Stop mirroring.** Do this only after the final snapshot has synchronized,
+   because disabling mirroring stops synchronization. Disable mirroring on the
+   primary file system::
 
-     ceph fs set <remote_fs> refuse_client_sessions false
+     ceph fs snapshot mirror disable <primary_fs>
+
+   Then stop the mirror daemons. On a cluster managed by cephadm, run::
+
+     ceph orch stop cephfs-mirror
+
+   On a cluster that is not managed by cephadm, run::
+
+     systemctl stop 'cephfs-mirror@*'
+
+#. **Promote the remote site.** If ``refuse_client_session`` is set on the remote
+   file system, clear it so that clients can connect::
+
+     ceph fs set <remote_fs> refuse_client_session false
 
    Redirect applications, DNS, Kubernetes PVs, or NFS exports to the remote cluster's
-   monitors and file system.
+   Monitors and file system.
 
 #. **Recover data.** If the last sync completed cleanly, the live mirrored directories
-   already reflect ``last_synced_snap`` (see the next section). Run the
+   already reflect ``last_synced_snap`` (see `Recover to the latest synchronized
+   snapshot`_). Run the
    :ref:`verification checklist <cephfs_mirroring_failover_verification>` before
    resuming production traffic.
 
@@ -1588,9 +1607,10 @@ Unplanned failover
 Use unplanned failover when the primary site is unavailable and you must cut over
 immediately.
 
-#. **Promote the remote site.** On the remote cluster if set to true::
+#. **Promote the remote site.** If ``refuse_client_session`` is set on the remote
+   file system, clear it so that clients can connect::
 
-     ceph fs set <remote_fs> refuse_client_sessions false
+     ceph fs set <remote_fs> refuse_client_session false
 
    Redirect clients to the remote cluster as soon as possible.
 
@@ -1640,15 +1660,16 @@ end-of-day snapshot) or when the live directory may be inconsistent.
 
      ls <mount_point>/<mirrored_dir>/.snap/
 
-   Pick ``<target_snap_name>``. If the primary is still reachable, confirm the snapshot
-   was replicated using the below command if checkpoint is set::
+   Pick ``<target_snap_name>``. If mirroring is still enabled on the primary and you
+   set checkpoints, confirm that the snapshot was replicated::
 
      ceph fs snapshot mirror checkpoint ls <primary_fs> <mirrored_dir_path>
 
    Checkpoints with status ``complete`` identify snapshots known to have reached the
    remote site. See :doc:`cephfs-mirroring-checkpoints`.
 
-#. **Quiesce writes** i.e., don't allow any writes on the affected mirrored paths on the remote site.
+#. **Quiesce writes.** Stop all writes to the affected mirrored paths on the remote
+   site.
 
 #. **Restore live data from the snapshot.** CephFS does not provide an in-place
    directory rollback for generic paths. Copy from the snapshot view into the live
@@ -1668,7 +1689,7 @@ end-of-day snapshot) or when the live directory may be inconsistent.
 
    Repeat for each mirrored directory that requires rollback.
 
-   Redirect clients to the cloned subvolume after the clone completes.
+   After the copy completes, resume writes on the restored paths.
 
 .. warning:: ``rsync --delete`` removes files present in the live directory but absent
              from the selected snapshot. Test restore procedures in a non-production
@@ -1681,12 +1702,12 @@ Verification checklist
 
 After promotion, verify the following before resuming production traffic:
 
-**Mirroring and recovery point (if primary is reachable)**
+**Recovery point**
 
-- ``ceph fs snapshot mirror status <primary_fs> [<mirrored_dir_path>]`` — note
-  ``last_synced_snap`` for each directory.
-- ``ceph fs snapshot mirror checkpoint ls <primary_fs> <mirrored_dir_path>`` — target
-  snapshots show ``complete`` when checkpoints were used.
+- Planned failover: the newest snapshot in each mirrored directory on the remote site
+  is the ``last_synced_snap.name`` that you noted before you disabled mirroring.
+- Unplanned failover: the snapshot that you chose as the recovery point exists on the
+  remote site.
 
 **Remote file system health**
 
@@ -1708,11 +1729,9 @@ specific snapshot.
 
 - Compare file counts and sizes against known-good baselines.
 - Run application-level consistency checks (database integrity, checksums, and so on).
-- Confirm clients can mount, read, and write::
-
-    ceph fs get <remote_fs>
-
-  ``refuse_client_sessions`` should be ``false``.
+- Confirm that ``refuse_client_session`` is not among the flags that
+  ``ceph fs get <remote_fs>`` reports, and that clients can mount the file system,
+  read, and write.
 
 Failback
 ~~~~~~~~
