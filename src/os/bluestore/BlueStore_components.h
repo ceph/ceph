@@ -463,6 +463,9 @@ namespace bluestore {
     }
   };
 
+  inline void intrusive_ptr_add_ref(OpSequencer *o) { o->get(); }
+  inline void intrusive_ptr_release(OpSequencer *o) { o->put(); }
+
   struct deferred_osr_queue_t : public
     boost::intrusive::list<
     OpSequencer,
