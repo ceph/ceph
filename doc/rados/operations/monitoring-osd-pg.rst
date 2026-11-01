@@ -689,8 +689,8 @@ the object name and the pool name, run a command of the following form:
 
 .. topic:: Exercise: Locate an Object
 
-        No pool named ``data`` exists by default. Create a pool for the
-        exercise and use its name in place of ``data``:
+        No pool named ``data`` exists by default, so create a pool for the
+        exercise:
 
         .. prompt:: bash $
 
@@ -703,33 +703,33 @@ the object name and the pool name, run a command of the following form:
 
         .. prompt:: bash $
    
-           rados put {object-name} {file-path} --pool=data
-           rados put test-object-1 testfile.txt --pool=data
+           rados put {object-name} {file-path} --pool={pool-name}
+           rados put test-object-1 testfile.txt --pool=testpool
    
         To verify that the Ceph Object Store stored the object, run the
         following command:
    
         .. prompt:: bash $
 
-           rados -p data ls
+           rados -p testpool ls
    
         To identify the object location, run the following commands:
 
         .. prompt:: bash $
 
            ceph osd map {pool-name} {object-name}
-           ceph osd map data test-object-1
+           ceph osd map testpool test-object-1
 
-        Ceph should output the object's location. For example:: 
+        Ceph should output the object's location. For example::
 
-           osdmap e537 pool 'data' (1) object 'test-object-1' -> pg 1.d1743484 (1.4) -> up ([0,1], p0) acting ([0,1], p0)
+           osdmap e537 pool 'testpool' (2) object 'test-object-1' -> pg 2.d1743484 (2.4) -> up ([0,1], p0) acting ([0,1], p0)
 
         To remove the test object, simply delete it by running the ``rados rm``
         command. For example:
 
         .. prompt:: bash $
 
-           rados rm test-object-1 --pool=data
+           rados rm test-object-1 --pool=testpool
 
 As the cluster evolves, the object location may change dynamically. One benefit
 of Ceph's dynamic rebalancing is that Ceph spares you the burden of manually
