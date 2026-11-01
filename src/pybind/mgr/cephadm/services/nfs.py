@@ -470,6 +470,7 @@ class NFSService(CephService):
                 ),
                 "mem_stats_disable": nfs_spec.mem_stats_disable,
                 "clients_per_pool": nfs_spec.clients_per_pool,
+                "ceph_nodeid": daemon_id
             }
             if nfs_spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
