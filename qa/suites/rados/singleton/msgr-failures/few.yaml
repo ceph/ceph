@@ -8,3 +8,4 @@ overrides:
       - \(OSD_SLOW_PING_TIME
       - \(MON_DOWN\)
       - \(MON_NETSPLIT\)
+      - marked LAGGY
