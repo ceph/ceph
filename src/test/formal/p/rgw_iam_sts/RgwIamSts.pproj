@@ -1,0 +1,11 @@
+<Project>
+<ProjectName>RgwIamSts</ProjectName>
+<InputFiles>
+	<PFile>../common/Common.p</PFile>
+	<PFile>../common/Rados.p</PFile>
+	<PFile>./PSrc/</PFile>
+	<PFile>./PSpec/</PFile>
+	<PFile>./PTst/</PFile>
+</InputFiles>
+<OutputDir>./PGenerated/</OutputDir>
+</Project>
