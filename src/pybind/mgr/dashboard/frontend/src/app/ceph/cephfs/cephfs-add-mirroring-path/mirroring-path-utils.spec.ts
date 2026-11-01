@@ -83,10 +83,10 @@ describe('MirroringPathUtils', () => {
         fullPath: '/volumes/g1/sv1',
         expanded: true,
         levels: [
-          { options: ['volumes'], selected: 'volumes' },
-          { options: ['g1'], selected: 'g1' },
-          { options: ['sv1', 'sv2'], selected: 'sv1' },
-          { options: [], selected: '' }
+          { options: ['volumes'], loading: false, selected: 'volumes' },
+          { options: ['g1'], loading: false, selected: 'g1' },
+          { options: ['sv1', 'sv2'], loading: false, selected: 'sv1' },
+          { options: [], loading: false, selected: '' }
         ]
       };
 
