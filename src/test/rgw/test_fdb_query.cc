@@ -23,9 +23,12 @@
 #include <algorithm>
 #include <array>
 #include <compare>
+#include <concepts>
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace lfdb = ceph::libfdb;
@@ -347,6 +350,238 @@ consteval bool structural_predicates_are_constant_expressions()
 
 static_assert(structural_predicates_are_constant_expressions());
 
+struct noncopyable_int_interval final
+{
+ using domain_type = int_domain;
+ int first;
+ int last;
+
+ constexpr noncopyable_int_interval(int first, int last) : first(first), last(last) {}
+ noncopyable_int_interval(const noncopyable_int_interval&) = delete;
+
+ constexpr auto lower() const { return li::boundary_ref<int_domain>::closed(first); }
+ constexpr auto upper() const { return li::boundary_ref<int_domain>::open(last); }
+};
+
+static_assert([] {
+ const noncopyable_int_interval outer {0, 10};
+ const noncopyable_int_interval inner {2, 8};
+ return li::encloses(outer, inner) && !li::encloses(inner, outer) &&
+        li::intersects(outer, inner) && li::contains(inner, 3) && !li::is_empty(inner);
+}());
+
+static_assert(not std::invocable<decltype(lq::detail::clamp_to_keyspace), lq::interval&>);
+static_assert(std::invocable<decltype(lq::detail::clamp_to_keyspace), lq::interval&&>);
+
+constexpr auto prepared_int_intervals = [] {
+ using query = li::query<int_domain>;
+ const auto expression = li::difference(
+  li::set_union(query::closed_open(0, 8), query::closed_open(12, 20)),
+  li::set_union(query::closed_open(4, 6), query::closed_open(14, 16)));
+ static_assert(4 == li::interval_capacity_v<decltype(expression)>);
+ return li::compile_intervals(std::in_place, expression);
+}();
+
+static_assert(std::same_as<std::remove_cv_t<decltype(prepared_int_intervals)>,
+                          li::static_interval_set<int_domain, 4>>);
+static_assert(4 == prepared_int_intervals.size());
+static_assert(0 == prepared_int_intervals[0].lower().finite_key());
+static_assert(4 == prepared_int_intervals[0].upper().finite_key());
+static_assert(6 == prepared_int_intervals[1].lower().finite_key());
+static_assert(16 == prepared_int_intervals[3].lower().finite_key());
+static_assert(20 == prepared_int_intervals[3].upper().finite_key());
+
+template <std::size_t Count>
+constexpr auto separated_int_intervals(const int first = 0)
+{
+ if constexpr (1 == Count) {
+  return li::query<int_domain>::closed_open(4 * first, 4 * first + 2);
+ } else {
+  return li::set_union(separated_int_intervals<Count / 2>(first),
+                       separated_int_intervals<Count - Count / 2>(first + Count / 2));
+ }
+}
+
+constexpr auto large_interval_count = 1 + li::detail::inline_interval_bytes / sizeof(li::query<int_domain>);
+constexpr auto prepared_large_intervals = [] {
+ const auto expression = separated_int_intervals<large_interval_count>();
+ return li::compile_intervals(std::in_place, expression);
+}();
+static_assert(large_interval_count == prepared_large_intervals.size());
+static_assert(4 * (large_interval_count - 1) ==
+              prepared_large_intervals[large_interval_count - 1].lower().finite_key());
+
+struct text_view_domain final
+{
+ using value_type = std::string_view;
+ static constexpr auto compare(value_type lhs, value_type rhs) { return lhs <=> rhs; }
+};
+
+constexpr auto prepared_text_intervals = [] {
+ using query = li::query<text_view_domain>;
+ return li::compile_intervals(std::in_place, li::difference(
+  query::closed_open("collection/very/long/prefix/", "collection/very/long/prefix0"),
+  query::closed_open("collection/very/long/prefix/private/", "collection/very/long/prefix/private0")));
+}();
+static_assert(2 == prepared_text_intervals.size());
+static_assert(prepared_text_intervals[0].lower().finite_key() == "collection/very/long/prefix/");
+static_assert(prepared_text_intervals[1].lower().finite_key() == "collection/very/long/prefix/private0");
+
+struct tracked_int_interval final
+{
+ using domain_type = int_domain;
+ int first;
+ int last;
+ std::size_t *evaluations;
+
+ auto lower() const
+ {
+  ++*evaluations;
+  return li::boundary_ref<int_domain>::closed(first);
+ }
+ auto upper() const { return li::boundary_ref<int_domain>::open(last); }
+};
+
+TEST_CASE("difference prepares its right operand once and only when needed", "[fdb][query]")
+{
+ using query = li::query<int_domain>;
+ std::size_t evaluations = 0;
+ const auto rhs = li::set_union(tracked_int_interval {10, 12, &evaluations},
+                                tracked_int_interval {14, 16, &evaluations});
+ CHECK(0 == li::interval_count(li::difference(query::empty(), rhs)));
+ CHECK(0 == evaluations);
+ CHECK(1 == li::interval_count(li::difference(query::closed_open(0, 2), rhs)));
+ const auto single = std::exchange(evaluations, 0);
+ REQUIRE(0 < single);
+ const auto lhs = li::set_union(query::closed_open(0, 2), query::closed_open(4, 6));
+ CHECK(2 == li::interval_count(li::difference(lhs, rhs)));
+ CHECK(single == evaluations);
+}
+
+static_assert([] {
+ // Long owned keys exercise transient constexpr allocation, beyond string SSO.
+ const std::string prefix(96, 'p');
+ const auto expression = lq::with_options(
+  lq::difference(lq::prefix(prefix), lq::between(prefix + "m", prefix + "p")),
+  lq::query_options {.result_limit = 7, .reverse_order = true});
+ const auto compiled = lq::compile_intervals(std::in_place, expression);
+ return compiled.size() == 2 && compiled[0].begin_key == prefix &&
+        compiled[1].begin_key == prefix + "p" && compiled[1].options.reverse_order &&
+        compiled[0].options.result_limit == 7 && 2 == lq::interval_count(expression);
+}());
+
+TEST_CASE("typed interval preparation preserves canonical geometry", "[fdb][query][constexpr]")
+{
+ using query = li::query<int_domain>;
+ const auto lhs = li::set_union(query::closed_open(0, 8), query::closed_open(12, 20));
+ const auto rhs = li::set_union(query::closed(4, 6), query::open(14, 16));
+ auto check = [](const auto& expression) {
+  const auto fixed = li::compile_intervals(std::in_place, expression);
+  const auto dynamic = li::compile_intervals(expression);
+  CHECK_THAT(fixed, Catch::Matchers::RangeEquals(dynamic));
+  CHECK(fixed.size() <= li::interval_capacity_v<decltype(expression)>);
+ };
+ check(li::difference(lhs, rhs));
+ check(li::intersection(lhs, rhs));
+ check(li::set_union(lhs, rhs));
+ check(li::set_union(li::difference(lhs, rhs), li::intersection(lhs, rhs)));
+ check(li::difference(query::empty(), rhs));
+ check(li::difference(lhs, li::difference(rhs, rhs)));
+
+ for (bool outer_lower : {false, true}) {
+  for (bool outer_upper : {false, true}) {
+   for (bool inner_lower : {false, true}) {
+    for (bool inner_upper : {false, true}) {
+     const auto outer = query::between(li::boundary<int_domain>::closed(0).with_inclusive(outer_lower),
+                                      li::boundary<int_domain>::closed(4).with_inclusive(outer_upper));
+     const auto inner = query::between(li::boundary<int_domain>::closed(0).with_inclusive(inner_lower),
+                                      li::boundary<int_domain>::closed(4).with_inclusive(inner_upper));
+     CHECK(li::encloses(outer, inner) == li::is_empty_expression(li::difference(inner, outer)));
+    }
+   }
+  }
+ }
+ CHECK(li::encloses(query::universal(), query::universal()));
+ CHECK(li::encloses(query::empty(), query::empty()));
+ CHECK_FALSE(li::encloses(query::empty(), lhs));
+ CHECK_FALSE(li::intersects(query::empty(), li::difference(lhs, rhs)));
+}
+
+TEST_CASE("owning query factories preserve consumed key storage", "[fdb][query][api]")
+{
+ const std::string original(96, 'a');
+ auto check = [&original](auto make_selection) {
+  auto key = original;
+  const auto *storage = key.data();
+  const auto selection = make_selection(std::move(key));
+  CHECK(selection.begin_key == original);
+  CHECK(selection.begin_key.data() == storage);
+ };
+ check([](std::string key) { return lq::prefix(std::move(key)); });
+ check([](std::string key) { return lq::at(std::move(key)); });
+ check([](std::string key) { return lq::after(std::move(key)); });
+ check([](std::string key) { return lq::between(std::move(key), "z"); });
+ check([](std::string key) { return lq::closed_between(std::move(key), "z"); });
+ check([](std::string key) { return lfdb::select(std::move(key), "z"); });
+ check([](std::string key) { return lfdb::select(lfdb::inclusive(std::move(key)), "z"); });
+
+ auto key = original;
+ const auto *storage = key.data();
+ auto endpoint = li::lower_at_or_after<lq::byte_string_domain>(std::move(key));
+ const auto core_selection = li::from(std::move(endpoint));
+ CHECK(core_selection.lower().finite_key().data() == storage);
+ const auto borrowed = lq::prefix(original);
+ CHECK(borrowed.begin_key == original);
+ CHECK(borrowed.begin_key.data() != original.data());
+}
+
+TEST_CASE("borrowed query counts stay inside ordinary keyspace", "[fdb][query][constexpr]")
+{
+ const auto reserved = std::string("\xFF/metadata");
+ const auto outside = algebraic_byte_query::closed(reserved, reserved + "z");
+ CHECK(0 == lq::interval_count(outside));
+ CHECK(lq::is_empty_expression(outside));
+ CHECK(lq::compile_intervals(std::in_place, outside).empty());
+ CHECK(emitted_intervals(lq::set_union(outside, lq::prefix("a"))) ==
+       emitted_intervals(lq::prefix("a")));
+}
+
+struct value_bound_interval final
+{
+ using domain_type = lq::byte_string_domain;
+ std::string first;
+ std::string last;
+
+ auto lower() const { return li::boundary<domain_type>::closed(first); }
+ auto upper() const { return li::boundary<domain_type>::open(last); }
+};
+
+TEST_CASE("borrowed geometry retains providers' temporary owning bounds", "[fdb][query]")
+{
+ const std::string first(96, 'a');
+ const std::string last(96, 'z');
+ const std::string middle(96, 'm');
+ const std::string next(96, 'p');
+ const auto expression = li::difference(value_bound_interval {first, last},
+  li::set_union(value_bound_interval {middle, next},
+                value_bound_interval {std::string(96, 't'), std::string(96, 'v')}));
+ const auto compiled = li::compile_intervals(std::in_place, expression);
+ REQUIRE(3 == compiled.size());
+ CHECK(compiled[0].lower().finite_key() == first);
+ CHECK(compiled[0].upper().finite_key() == middle);
+ CHECK(compiled[1].lower().finite_key() == next);
+ CHECK(compiled[2].upper().finite_key() == last);
+ const auto overlap = li::intersection(value_bound_interval {first, last},
+                                       value_bound_interval {middle, next});
+ CHECK(overlap.lower().finite_key() == middle);
+ CHECK(overlap.upper().finite_key() == next);
+ const auto merged = li::compile_intervals(std::in_place, li::set_union(
+  value_bound_interval {first, next}, value_bound_interval {middle, last}));
+ REQUIRE(1 == merged.size());
+ CHECK(merged[0].lower().finite_key() == first);
+ CHECK(merged[0].upper().finite_key() == last);
+}
+
 TEST_CASE("generic interval algebra emits canonical intervals", "[fdb][query]")
 {
  using int_query = li::query<int_domain>;
@@ -590,6 +825,57 @@ TEST_CASE("query difference emits only necessary intervals", "[fdb][query]")
                        [expected_options = configured.options](const lfdb::select& interval) {
                          CHECK(interval.options == expected_options);
                        });
+}
+
+TEST_CASE("query execution options survive compilation and combine symmetrically",
+          "[fdb][query][api]")
+{
+ const lq::query_options options {.result_limit = 7, .target_bytes = 4096,
+                                  .reverse_order = true,
+                                  .streaming_mode = FDB_STREAMING_MODE_SMALL};
+ const auto configured = lq::with_options(lq::interval("a", "z"), options);
+ const auto cut = lq::interval("m", "p");
+ const auto expression = lq::difference(configured, cut);
+ const auto dynamic = lq::compile_intervals(expression);
+ const auto fixed = lq::compile_intervals<2>(expression);
+ const auto inferred = lq::compile_intervals(std::in_place, expression);
+ REQUIRE(dynamic.size() == 2);
+ CHECK_THAT(fixed, Catch::Matchers::RangeEquals(dynamic));
+ CHECK_THAT(inferred, Catch::Matchers::RangeEquals(dynamic));
+ for (const auto& part : fixed) {
+  CHECK(part.options == options);
+  CHECK(lq::compile_intervals(part).front() == part);
+ }
+ CHECK_THROWS_AS(lq::compile_intervals<1>(expression), lfdb::libfdb_exception);
+ CHECK(lq::compile_intervals<0>(lq::empty()).empty());
+ CHECK(lq::is_universal(lq::with_options(lq::universal(), options)));
+ CHECK_FALSE(lq::is_universal(configured));
+ static_assert(not std::default_initializable<lq::interval>);
+
+ auto check_combination = [&](auto combine) {
+  const auto forward = lq::compile_intervals(combine(configured, cut));
+  const auto reverse = lq::compile_intervals(combine(cut, configured));
+  CHECK(forward == reverse);
+  REQUIRE_FALSE(forward.empty());
+  CHECK(forward.front().options == options);
+  CHECK(lq::compile_intervals(combine(configured, configured)).front().options == options);
+  const auto composite = lq::difference(cut, lq::at("n"));
+  CHECK(lq::compile_intervals(combine(configured, composite)) ==
+        lq::compile_intervals(combine(composite, configured)));
+  const auto conflicting = lq::with_options(cut, lq::query_options {.result_limit = 3});
+  CHECK_THROWS_AS(combine(configured, conflicting), lfdb::libfdb_exception);
+  CHECK_THROWS_AS(combine(conflicting, configured), lfdb::libfdb_exception);
+  CHECK_THROWS_AS(combine(expression, conflicting), lfdb::libfdb_exception);
+ };
+ check_combination([](const auto& lhs, const auto& rhs) { return lq::intersection(lhs, rhs); });
+ check_combination([](const auto& lhs, const auto& rhs) { return lq::set_union(lhs, rhs); });
+
+ static_assert([] {
+  const auto selection = lq::with_options(lq::interval("a", "b"),
+                                         lq::query_options {.result_limit = 4});
+  const auto compiled = lq::compile_intervals<1>(selection);
+  return compiled.size() == 1 and compiled[0].options.result_limit == 4;
+ }());
 }
 
 TEST_CASE("query complement subtracts from universal", "[fdb][query]")
