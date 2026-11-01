@@ -366,8 +366,13 @@ private:
                     epoch_t e, bufferlist&& bl);
   void store_inc_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
-  seastar::future<> store_maps(ceph::os::Transaction& t,
-                               epoch_t start, Ref<MOSDMap> m);
+  /// store the maps of 'm' (from 'start'), and collect the snaps they
+  /// report as newly purged into 'new_purged'
+  seastar::future<> store_maps(
+    ceph::os::Transaction& t,
+    epoch_t start,
+    Ref<MOSDMap> m,
+    ceph::osd::purged_snaps::by_epoch_t& new_purged);
   void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
 
   // -- PG merging --
@@ -555,6 +560,19 @@ public:
     store.store_index = store_index;
     return store;
   }
+
+  /// the OSD is shutting down
+  bool is_stopping() const {
+    return local_state.osd_state.is_stopping();
+  }
+
+  /**
+   * scan the snap-mappers of the local active primary PGs for clones
+   * still mapped to purged snaps, and requeue those snaps for trimming.
+   * \returns the number of (PG, snap) pairs requeued
+   */
+  seastar::future<std::size_t> scrub_purged_snaps(
+    const ceph::osd::purged_snaps::index_t& purged);
 
   bool is_local_storage_full(store_index_t store_index) const {
     const auto &shard_store =

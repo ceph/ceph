@@ -3,6 +3,7 @@
 
 #include "pg.h"
 
+#include <algorithm>
 #include <functional>
 
 #include <boost/range/adaptor/filtered.hpp>
@@ -13,6 +14,7 @@
 #include <boost/range/numeric.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 
 #include <seastar/util/defer.hh>
 
@@ -391,6 +393,7 @@ void PG::on_activate(interval_set<snapid_t> snaps)
 {
   logger().debug("{}: {} snaps={}", *this, __func__, snaps);
   snap_trimq = std::move(snaps);
+  snap_trimq_repeat.clear();
   projected_last_update = peering_state.get_info().last_update;
 }
 
@@ -616,11 +619,41 @@ PG::interruptible_future<seastar::stop_iteration> PG::trim_snap(
           seastar::stop_iteration::yes);
       })
     );
-  }).then_interruptible([this, trimmed=to_trim] {
+  }).then_interruptible([this, trimmed=to_trim]
+                        -> interruptible_future<seastar::stop_iteration> {
     logger().debug("{}: trimmed snap={}", *this, trimmed);
     snap_trimq.erase(trimmed);
-    return seastar::make_ready_future<seastar::stop_iteration>(
-      seastar::stop_iteration::no);
+    if (snap_trimq_repeat.erase(trimmed) ||
+        peering_state.state_test(PG_STATE_SNAPTRIM_ERROR)) {
+      // a re-trimmed snap is already in purged_snaps
+      return interruptor::make_ready_future<seastar::stop_iteration>(
+        seastar::stop_iteration::no);
+    }
+    return mark_snap_purged(trimmed).then_interruptible([] {
+      return seastar::stop_iteration::no;
+    });
+  });
+}
+
+PG::interruptible_future<> PG::mark_snap_purged(snapid_t snap)
+{
+  // as Classic: the monitor considers a snap purged once all PGs of the
+  // pool report it in their purged_snaps
+  peering_state.adjust_purged_snaps([snap](auto& purged_snaps) {
+    if (!purged_snaps.contains(snap)) {
+      purged_snaps.insert(snap);
+    }
+  });
+  logger().debug("{}: purged_snaps now {}, snap_trimq now {}",
+                 *this, peering_state.get_info().purged_snaps, snap_trimq);
+  ceph::os::Transaction t;
+  peering_state.write_if_dirty(t);
+  return interruptor::make_interruptible(
+    crimson::os::with_store_do_transaction(
+      shard_services.get_store(store_index),
+      coll_ref, std::move(t))
+  ).then_interruptible([this] {
+    peering_state.share_pg_info();
   });
 }
 
@@ -682,7 +715,7 @@ void PG::initiate_snap_trim()
   }
 }
 
-void PG::kick_snap_trim()
+void PG::kick_snap_trim(std::string_view reason)
 {
   // Scrub completion may try to resume snaptrim during PG shutdown.
   if (stopping) {
@@ -691,9 +724,116 @@ void PG::kick_snap_trim()
   if (peering_state.is_active() && peering_state.is_clean()
       && !snap_trimq.empty()
       && !peering_state.state_test(PG_STATE_SNAPTRIM)) {
-    logger().info("{}: scrub complete, retriggering snap trim", *this);
+    logger().info("{}: {}, retriggering snap trim", *this, reason);
     (void) shard_services.start_operation<SnapTrimInitiate>(this);
   }
+}
+
+void PG::queue_snap_retrim(std::span<const snapid_t> snaps)
+{
+  if (stopping || !is_active() || !is_primary()) {
+    logger().debug("{}: {} not an active primary", *this, __func__);
+    return;
+  }
+  const auto queued_before = snap_trimq.size();
+  std::ranges::for_each(snaps, [this](snapid_t snap) {
+    if (!snap_trimq.contains(snap)) {
+      snap_trimq.insert(snap);
+      // already in purged_snaps
+      snap_trimq_repeat.insert(snap);
+    }
+  });
+  if (snap_trimq.size() == queued_before) {
+    logger().debug("{}: {} all of {} already queued",
+                   *this, __func__, snaps);
+    return;
+  }
+  logger().info("{}: {} requeued purged snaps {}, snap_trimq now {}",
+                *this, __func__, snaps, snap_trimq);
+  kick_snap_trim("purged snaps requeued");
+}
+
+seastar::future<std::vector<snapid_t>> PG::find_purged_strays(
+  const ceph::osd::purged_snaps::index_t& purged)
+{
+  namespace purged_snaps = ceph::osd::purged_snaps;
+  using omap_iter_ret_t = ObjectStore::omap_iter_ret_t;
+  LOG_PREFIX(PG::find_purged_strays);
+
+  std::vector<snapid_t> strays;
+  if (purged.pool_view(pgid.pool()).empty()) {
+    DEBUGDPP("no purged snaps in pool {}", *this, pgid.pool());
+    co_return strays;
+  }
+
+  // The mapping keys are sorted by snap, and each snap is looked up
+  // once. The keys are read in chunks, to keep each of the store's read
+  // transactions short (and less likely to conflict with snap trimming
+  // or with clones being created).
+  constexpr std::size_t keys_per_chunk = 1024;
+  std::optional<snapid_t> prev_snap;
+  std::string last_key{purged_snaps::mapping_prefix};
+  std::size_t total_keys = 0;
+  // the OSD stops the store before stopping the PGs: also check the
+  // OSD's state between chunks
+  for (bool more = true; more && !stopping && !shard_services.is_stopping();) {
+    // the state at the start of the chunk, for restarting it on a conflict
+    const auto strays_at_start = strays.size();
+    const auto prev_snap_at_start = prev_snap;
+    std::string chunk_last_key = last_key;
+    std::size_t keys = 0;
+
+    auto check = [&](std::string_view key, std::string_view) {
+      if (!key.starts_with(purged_snaps::mapping_prefix)) {
+        more = false;
+        return omap_iter_ret_t::STOP;
+      }
+      chunk_last_key = key;
+      if (const auto mapping = purged_snaps::parse_mapping_key(key); !mapping) {
+        WARNDPP("ignoring malformed mapping key '{}'", *this, key);
+      } else if (mapping->snap != prev_snap) {
+        prev_snap = mapping->snap;
+        if (purged.find(mapping->pool, mapping->snap)) {
+          strays.push_back(mapping->snap);
+        }
+      }
+      return ++keys < keys_per_chunk ? omap_iter_ret_t::NEXT
+                                     : omap_iter_ret_t::STOP;
+    };
+    auto restart = [&] {
+      strays.resize(strays_at_start);
+      prev_snap = prev_snap_at_start;
+      chunk_last_key = last_key;
+      keys = 0;
+      more = true;
+      return omap_iter_ret_t::NEXT;
+    };
+
+    const auto ret = co_await crimson::os::with_store<
+      &crimson::os::FuturizedStore::Shard::omap_iterate>(
+        shard_services.get_store(get_store_index()),
+        coll_ref,
+        pgid.make_snapmapper_oid(),
+        ObjectStore::omap_iter_seek_t{
+          last_key,
+          ObjectStore::omap_iter_seek_t::UPPER_BOUND},
+        std::move(check), 0, std::move(restart)
+    ).handle_error(
+      crimson::ct_error::enoent::handle([] {
+        // no snap-mapper object (yet, or anymore)
+        return omap_iter_ret_t::NEXT;
+      }),
+      crimson::ct_error::assert_all("snap-mapper omap_iterate error"));
+    if (ret == omap_iter_ret_t::NEXT) {
+      more = false;  // reached the end of the omap
+    }
+    total_keys += keys;
+    last_key = std::move(chunk_last_key);
+  }
+
+  DEBUGDPP("{} mapping keys checked, {} purged snaps with clones: {}",
+           *this, total_keys, strays.size(), strays);
+  co_return strays;
 }
 
 void PG::on_active_advmap(const OSDMapRef &osdmap)

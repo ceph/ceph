@@ -5,6 +5,9 @@
 
 #include <memory>
 #include <optional>
+#include <set>
+#include <span>
+#include <string_view>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include <seastar/core/future.hh>
@@ -25,6 +28,7 @@
 #include "osd/ECCommon.h"
 #include "osd/osd_types.h"
 #include "osd/osd_types_fmt.h"
+#include "osd/purged_snaps.h"
 #include "crimson/osd/object_context.h"
 #include "osd/PeeringState.h"
 #include "osd/SnapMapper.h"
@@ -542,6 +546,7 @@ public:
   void clear_primary_state() final {
     recovery_finisher = nullptr;
     projected_log = PGLog::IndexedLog();
+    snap_trimq_repeat.clear();
   }
 
   void queue_check_readable(epoch_t last_peering_reset,
@@ -890,6 +895,7 @@ public:
     peering_state.split_into(child_pgid, &child->peering_state, split_bits);
     child->update_snap_mapper_bits(split_bits);
     child->snap_trimq = snap_trimq;
+    child->snap_trimq_repeat = snap_trimq_repeat;
   }
 
   static hobject_t get_oid(const hobject_t& hobj);
@@ -1015,6 +1021,15 @@ public:
     osd_op_params_t&& oop,
     std::vector<pg_log_entry_t>&& log_entries);
 
+  /// Trim again snaps that were already purged, but still have clones
+  /// mapped to them (as found by the OSD's purged-snaps scrub).
+  /// Ignored unless the PG is an active primary.
+  void queue_snap_retrim(std::span<const snapid_t> snaps);
+  /// the snaps that were purged (according to 'purged'), but still have
+  /// clones mapped to them in this PG's snap-mapper. Sorted and unique.
+  seastar::future<std::vector<snapid_t>> find_purged_strays(
+    const ceph::osd::purged_snaps::index_t& purged);
+
 private:
   interruptible_future<> repair_object(
     const hobject_t& oid,
@@ -1023,11 +1038,14 @@ private:
   interruptible_future<seastar::stop_iteration> trim_snap(
     snapid_t to_trim,
     bool needs_pause);
-  /// Re-trigger snap trimming after scrub completion. Snap trimming is
-  /// deferred while the PG is scrubbing; call this from notify_scrub_end()
-  /// to resume. Spawns a SnapTrimInitiate operation to avoid nesting
-  /// interrupt conditions.
-  void kick_snap_trim();
+  /// record a trimmed snap in the PG's info.purged_snaps (persisted,
+  /// and shared with the replicas)
+  interruptible_future<> mark_snap_purged(snapid_t snap);
+  /// Re-trigger snap trimming, e.g. after scrub completion (snap trimming
+  /// is deferred while the PG is scrubbing) or after new snaps were
+  /// queued for trimming. Spawns a SnapTrimInitiate operation to avoid
+  /// nesting interrupt conditions.
+  void kick_snap_trim(std::string_view reason);
   /// Initiate the snap trim loop with all state checks. Called from
   /// SnapTrimInitiate and on_active_actmap().
   void initiate_snap_trim();
@@ -1341,6 +1359,9 @@ private:
   std::map<ceph_tid_t, log_update_t> log_entry_update_waiting_on;
   // snap trimming
   interval_set<snapid_t> snap_trimq;
+  /// snaps in snap_trimq that are already in info.purged_snaps (queued
+  /// again by queue_snap_retrim())
+  std::set<snapid_t> snap_trimq_repeat;
 };
 
 struct PG::do_osd_ops_params_t {

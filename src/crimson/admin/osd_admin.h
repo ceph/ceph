@@ -17,6 +17,8 @@ class FlushPgStatsHook;
 class InjectDataErrorHook;
 class InjectMDataErrorHook;
 class OsdStatusHook;
+class ResetPurgedSnapsLastHook;
+class ScrubPurgedSnapsHook;
 class SendBeaconHook;
 class RunOSDBenchHook;
 class DumpInFlightOpsHook;
