@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "pretty_binary.h"
+#include <cstdint>
 #include <stdexcept>
 #include <sstream>
 
