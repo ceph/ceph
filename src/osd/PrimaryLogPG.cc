@@ -118,6 +118,67 @@ static ostream& _prefix(std::ostream *_dout, T *pg) {
   return pg->gen_prefix(*_dout);
 }
 
+static force_allocated_extents_t detect_zero_blocks(
+  const bufferlist& bl,
+  uint64_t write_offset)
+{
+  force_allocated_extents_t zero_blocks;
+  if (bl.length() == 0) {
+    return zero_blocks;
+  }
+
+  const uint64_t write_end = write_offset + bl.length();
+  const uint64_t first_block = round_up_to(write_offset, FAE_BLOCK_SIZE) /
+    FAE_BLOCK_SIZE;
+  const uint64_t last_block = write_end / FAE_BLOCK_SIZE;
+
+  for (uint64_t block = first_block; block < last_block; ++block) {
+    const uint64_t block_offset = block * FAE_BLOCK_SIZE;
+    const uint64_t in_bl_offset = block_offset - write_offset;
+
+    ceph_assert(block_offset >= write_offset);
+    ceph_assert(in_bl_offset + FAE_BLOCK_SIZE <= bl.length());
+
+    bufferlist block_bl;
+    block_bl.substr_of(bl, in_bl_offset, FAE_BLOCK_SIZE);
+
+    // Stage 1: cheap check — if the first word of the first bufferptr is
+    // non-zero the block cannot be all-zero; skip the full scan.
+    const auto& first_ptr = block_bl.front();
+    if (first_ptr.length() >= sizeof(uint64_t) &&
+        !mem_is_zero(first_ptr.c_str(), sizeof(uint64_t))) {
+      continue;
+    }
+
+    // Stage 2: full scan using mem_is_zero across all bufferptrs.
+    if (block_bl.is_zero()) {
+      zero_blocks.insert_exact(block_offset, FAE_BLOCK_SIZE);
+    }
+  }
+
+  return zero_blocks;
+}
+
+static bool should_track_zero_blocks(
+  const pg_pool_t& pool_info,
+  PrimaryLogPG::OpContext *ctx,
+  ceph_release_t min_osd_release)
+{
+  if (min_osd_release < ceph_release_t::vampire) {
+    return false;
+  }
+  if (pool_info.tracks_zero_blocks()) {
+    return true;
+  }
+  if (pool_info.is_erasure() && ctx->op && ctx->op->get_req()) {
+    const auto *m = ctx->op->get_req<MOSDOp>();
+    if (m && m->has_flag(CEPH_OSD_FLAG_PRESERVE_ALLOCATION)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * The CopyCallback class defines an interface for completions to the
  * copy_start code. Users of the copy infrastructure must implement
@@ -318,9 +379,16 @@ void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
   ceph_assert(inflightreads > 0);
   --inflightreads;
   if (async_reads_complete()) {
-    ceph_assert(pg->in_progress_async_reads.size());
-    ceph_assert(pg->in_progress_async_reads.front().second == this);
-    pg->in_progress_async_reads.pop_front();
+    // Fast-EC direct async reads (ECSparseReadResult, ECMapextResult) are
+    // dispatched inside do_osd_op and push onto in_progress_async_reads
+    // immediately, so multiple concurrent fast-EC reads can be present in
+    // the list and may complete out of order.  Find our entry by identity
+    // rather than assuming we are always at front().
+    auto it = pg->in_progress_async_reads.begin();
+    while (it != pg->in_progress_async_reads.end() && it->second != this)
+      ++it;
+    ceph_assert(it != pg->in_progress_async_reads.end());
+    pg->in_progress_async_reads.erase(it);
 
     // Restart the op context now that all reads have been
     // completed. Read failures will be handled by the op finisher
@@ -3209,6 +3277,15 @@ void PrimaryLogPG::do_proxy_read(OpRequestRef op, ObjectContextRef obc)
   ObjectOperation obj_op;
   obj_op.dup(prdop->ops);
 
+  // The proxied request has no handler that could merge a split reply back
+  // together (dup() only wires up outdata), so ask the base tier for the legacy
+  // combined sparse-read format. obj_op.ops is a copy; m->ops is untouched.
+  for (auto& o : obj_op.ops) {
+    if (o.op.op == CEPH_OSD_OP_SPARSE_READ) {
+      o.op.flags = o.op.flags & ~CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA;
+    }
+  }
+
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
       (agent_state && agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL)) {
     for (unsigned i = 0; i < obj_op.ops.size(); i++) {
@@ -4408,11 +4485,13 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     if (ctx->op->allows_returnvec()) {
       // enforce reasonable bound on the return buffer sizes
       for (auto& i : *ctx->ops) {
-	if (i.outdata.length() > cct->_conf->osd_max_write_op_reply_len) {
+	if (i.outdata.length() + i.outmetadata.length() >
+	    cct->_conf->osd_max_write_op_reply_len) {
 	  dout(10) << __func__ << " op " << i << " outdata overflow" << dendl;
 	  result = -EOVERFLOW;  // overall result is overflow
 	  i.rval = -EOVERFLOW;
 	  i.outdata.clear();
+	  i.outmetadata.clear();
 	}
       }
     } else {
@@ -5538,26 +5617,93 @@ struct FillInVerifyExtent : public Context {
   }
 };
 
+/**
+ * Store the result of a SPARSE_READ in osd_op. This is the only place that
+ * decides the reply format:
+ *  - client set CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA: outmetadata = the
+ *    encoded extent map, outdata = the raw data (no length prefix);
+ *  - otherwise (legacy): outdata = encoded extent map followed by the data
+ *    encoded as a bufferlist (u32 length + bytes).
+ * Any previous content of osd_op.outdata/outmetadata is replaced. @c data is
+ * consumed and must not alias osd_op.outdata.
+ */
+static void set_sparse_read_result(
+  OSDOp& osd_op,
+  const std::map<uint64_t, uint64_t>& extents,
+  bufferlist&& data)
+{
+  osd_op.outdata.clear();
+  osd_op.outmetadata.clear();
+  if (osd_op.op.flags & CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA) {
+    encode(extents, osd_op.outmetadata);
+    osd_op.outdata = std::move(data);
+  } else {
+    encode(extents, osd_op.outdata);
+    ::encode_destructively(data, osd_op.outdata);
+  }
+}
+
 struct ToSparseReadResult : public Context {
-  int* result;
-  bufferlist* data_bl;
+  OSDOp* osd_op;
   uint64_t data_offset;
-  ceph_le64* len;
-  ToSparseReadResult(int* result, bufferlist* bl, uint64_t offset,
-		     ceph_le64* len)
-    : result(result), data_bl(bl), data_offset(offset),len(len) {}
+  ToSparseReadResult(OSDOp* osd_op, uint64_t offset)
+    : osd_op(osd_op), data_offset(offset) {}
+  void finish(int r) override {
+    if (r < 0) {
+      osd_op->rval = r;
+      return;
+    }
+    osd_op->rval = 0;
+    osd_op->op.extent.length = r;
+    // the async read stored the raw data in outdata
+    bufferlist data = std::move(osd_op->outdata);
+    set_sparse_read_result(*osd_op, {{data_offset, (uint64_t)r}},
+			   std::move(data));
+  }
+};
+
+struct ECSparseReadResult : public Context {
+  PrimaryLogPG *pg;
+  PrimaryLogPG::OpContext *opctx;
+  OSDOp* osd_op;
+  std::map<uint64_t, uint64_t> ext_map;
+  bufferlist data_bl;
+  ECSparseReadResult(PrimaryLogPG *pg, PrimaryLogPG::OpContext *opctx,
+                     OSDOp* osd_op)
+    : pg(pg), opctx(opctx), osd_op(osd_op) {}
+  void finish(int r) override {
+    if (r < 0) {
+      osd_op->rval = r;
+    } else {
+      uint64_t bytes = 0;
+      for (auto& [off, l] : ext_map) bytes += l;
+      osd_op->rval = 0;
+      osd_op->op.extent.length = bytes;
+      set_sparse_read_result(*osd_op, ext_map, std::move(data_bl));
+    }
+    opctx->finish_read(pg);
+  }
+};
+
+struct ECMapextResult : public Context {
+  PrimaryLogPG *pg;
+  PrimaryLogPG::OpContext *opctx;
+  int* result;
+  bufferlist* out_bl;
+  std::map<uint64_t, uint64_t> ext_map;
+  ECMapextResult(PrimaryLogPG *pg, PrimaryLogPG::OpContext *opctx,
+                 int* result, bufferlist* out_bl)
+    : pg(pg), opctx(opctx), result(result), out_bl(out_bl) {}
   void finish(int r) override {
     if (r < 0) {
       *result = r;
-      return;
+    } else {
+      *result = 0;
+      bufferlist bl;
+      encode(ext_map, bl);
+      out_bl->swap(bl);
     }
-    *result = 0;
-    *len = r;
-    bufferlist outdata;
-    map<uint64_t, uint64_t> extents = {{data_offset, r}};
-    encode(extents, outdata);
-    encode_destructively(*data_bl, outdata);
-    data_bl->swap(outdata);
+    opctx->finish_read(pg);
   }
 };
 
@@ -6103,80 +6249,105 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
 
   ++ctx->num_read;
   if (pool.info.is_erasure() && !ctx->op->ec_direct_read()) {
-    // translate sparse read to a normal one if not supported
-
     if (length > 0) {
-      ctx->pending_async_reads.push_back(
-        make_pair(
-          boost::make_tuple(offset, length, op.flags),
+      auto *sparse_ctx = new ECSparseReadResult(this, ctx, &osd_op);
+      int r = -EOPNOTSUPP;
+      if (get_osdmap()->require_osd_release >= ceph_release_t::vampire) {
+        r = pgbackend->objects_sparse_read_async(
+          soid, offset, length, size, op.flags,
+          &sparse_ctx->ext_map, &sparse_ctx->data_bl,
+          sparse_ctx, oi.force_allocated_extents.get_intervals());
+      }
+      if (r == -EOPNOTSUPP) {
+        // legacy EC: fall back to translating sparse read to a normal async read
+        delete sparse_ctx;
+        ctx->pending_async_reads.push_back(
           make_pair(
-     &osd_op.outdata,
-     new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
-  		   &op.extent.length))));
-      dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
-
-      ctx->op_finishers[ctx->current_osd_subop_num].reset(
-        new ReadFinisher(osd_op));
-      // For async reads, op.extent.length will be updated by ToSparseReadResult
-      bytes_read = length;
+            boost::make_tuple(offset, length, op.flags),
+            make_pair(
+              &osd_op.outdata,
+              new ToSparseReadResult(&osd_op, offset))));
+        dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
+        ctx->op_finishers[ctx->current_osd_subop_num].reset(
+          new ReadFinisher(osd_op));
+        bytes_read = length;
+      } else if (r < 0) {
+        delete sparse_ctx;
+        return r;
+      } else {
+        dout(10) << " ec sparse_read async noted for " << soid << dendl;
+        ctx->op_finishers[ctx->current_osd_subop_num].reset(
+          new ReadFinisher(osd_op));
+        ctx->inflightreads = 1;
+        in_progress_async_reads.push_back(make_pair(ctx->op, ctx));
+        ctx->delta_stats.num_rd_kb += shift_round_up(length, 10);
+        ctx->delta_stats.num_rd++;
+        return -EINPROGRESS;
+      }
     } else {
       dout(10) << " sparse read ended up empty for " << soid << dendl;
-      map<uint64_t, uint64_t> extents;
-      encode(extents, osd_op.outdata);
-      bufferlist data_bl;
-      encode(data_bl, osd_op.outdata);
+      set_sparse_read_result(osd_op, {}, bufferlist());
     }
   } else {
-    // read into a buffer
-    map<uint64_t, uint64_t> m;
-    auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length);
-    int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
-  			      info.pgid.shard),
-  	       shard_offset, shard_length, m);
-    if (r < 0)  {
-      return r;
-    }
+    if (length == 0) {
+      // Nothing to read: return an empty extent map and empty data.
+      // extent_to_shard_extent() is not safe to call with length == 0
+      // (integer underflow in the end_chunk calculation), so we must
+      // short-circuit here just as the EC non-direct-read branch does.
+      dout(10) << " sparse read ended up empty for " << soid << dendl;
+      set_sparse_read_result(osd_op, {}, bufferlist());
+    } else {
+      // read into a buffer
+      map<uint64_t, uint64_t> m;
+      auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length);
+      int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
+    			      info.pgid.shard),
+    	       shard_offset, shard_length, m);
+      if (r < 0)  {
+        return r;
+      }
 
-    bufferlist data_bl;
-    r = pgbackend->objects_readv_sync(soid, m, op.flags, &data_bl);
-    if (r == -EIO) {
-      r = rep_repair_primary_object(soid, ctx);
-    }
-    if (r < 0) {
-      dout(10) << " sparse_read failed r=" << r << " from object " << soid << dendl;
-      return r;
-    }
-
-    // Why SPARSE_READ need checksum? In fact, librbd always use sparse-read.
-    // Maybe at first, there is no much whole objects. With continued use, more
-    // and more whole object exist. So from this point, for spare-read add
-    // checksum make sense.
-    if ((uint64_t)r == oi.size && oi.is_data_digest()) {
-      uint32_t crc = data_bl.crc32c(-1);
-      if (oi.data_digest != crc) {
-        osd->clog->error() << info.pgid << std::hex
-          << " full-object read crc 0x" << crc
-          << " != expected 0x" << oi.data_digest
-          << std::dec << " on " << soid;
+      bufferlist data_bl;
+      r = pgbackend->objects_readv_sync(soid, m, op.flags, &data_bl);
+      if (r == -EIO) {
         r = rep_repair_primary_object(soid, ctx);
-        if (r < 0) {
-          return r;
+      }
+      if (r < 0) {
+        dout(10) << " sparse_read failed r=" << r << " from object " << soid << dendl;
+        return r;
+      }
+
+      // Why SPARSE_READ need checksum? In fact, librbd always use sparse-read.
+      // Maybe at first, there is no much whole objects. With continued use, more
+      // and more whole object exist. So from this point, for spare-read add
+      // checksum make sense.
+      if ((uint64_t)r == oi.size && oi.is_data_digest()) {
+        uint32_t crc = data_bl.crc32c(-1);
+        if (oi.data_digest != crc) {
+          osd->clog->error() << info.pgid << std::hex
+            << " full-object read crc 0x" << crc
+            << " != expected 0x" << oi.data_digest
+            << std::dec << " on " << soid;
+          r = rep_repair_primary_object(soid, ctx);
+          if (r < 0) {
+            return r;
+          }
         }
       }
+
+      bytes_read = r;
+      // Only set op.extent.length for non-EC-direct-read to avoid issues
+      // with recursive calls from operations like CHECKSUM
+      if (!ctx->op->ec_direct_read()) {
+        op.extent.length = r;
+      }
+
+      // m is re-encoded since it might have been modified
+      set_sparse_read_result(osd_op, m, std::move(data_bl));
+
+      dout(10) << " sparse_read got " << m.size() << " extents and " << r
+               << " bytes from object " << soid << dendl;
     }
-
-    bytes_read = r;
-    // Only set op.extent.length for non-EC-direct-read to avoid issues
-    // with recursive calls from operations like CHECKSUM
-    if (!ctx->op->ec_direct_read()) {
-      op.extent.length = r;
-    }
-
-    encode(m, osd_op.outdata); // re-encode since it might be modified
-    ::encode_destructively(data_bl, osd_op.outdata);
-
-    dout(10) << " sparse_read got " << m.size() << " extents and " << r
-             << " bytes from object " << soid << dendl;
   }
 
   ctx->delta_stats.num_rd_kb += shift_round_up(bytes_read, 10);
@@ -6329,25 +6500,58 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     /* map extents */
     case CEPH_OSD_OP_MAPEXT:
       tracepoint(osd, do_osd_op_pre_mapext, soid.oid.name.c_str(), soid.snap.val, op.extent.offset, op.extent.length);
-      if (pool.info.is_erasure()) {
-	result = -EOPNOTSUPP;
-	break;
+      if (pool.info.is_erasure() &&
+          (!pool.info.allows_ecoptimizations() ||
+           get_osdmap()->require_osd_release < ceph_release_t::vampire)) {
+        result = -EOPNOTSUPP;
+        break;
       }
       ++ctx->num_read;
-      {
-	// read into a buffer
-	bufferlist bl;
-	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
-						  info.pgid.shard),
-				   op.extent.offset, op.extent.length, bl);
-	auto bl_length = bl.length();
+      if (pool.info.is_erasure()) {
+       // Fast EC: issue async fiemap-only sub-read with drop_data=true
+        if (op_finisher == nullptr) {
+          // A zero-size object has no data extents, so return an empty map
+          if (oi.size == 0) {
+            std::map<uint64_t, uint64_t> empty_map;
+            encode(empty_map, osd_op.outdata);
+            ctx->delta_stats.num_rd++;
+            break;
+          }
+          auto *mapext_ctx = new ECMapextResult(
+            this, ctx, &osd_op.rval, &osd_op.outdata);
+          int r = pgbackend->objects_mapext_async(
+            soid, op.extent.offset, op.extent.length, oi.size, op.flags,
+            &mapext_ctx->ext_map, mapext_ctx,
+            oi.force_allocated_extents.get_intervals());
+         if (r < 0) {
+            delete mapext_ctx;
+            result = r;
+            break;
+          }
+          dout(10) << " ec mapext async noted for " << soid << dendl;
+          ctx->op_finishers[ctx->current_osd_subop_num].reset(
+            new ReadFinisher(osd_op));
+          ctx->inflightreads = 1;
+          in_progress_async_reads.push_back(make_pair(ctx->op, ctx));
+          ctx->delta_stats.num_rd++;
+          return -EINPROGRESS;
+        } else {
+          result = op_finisher->execute();
+        }
+      } else {
+        // replicated pool: synchronous fiemap
+        bufferlist bl;
+        int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
+    		        info.pgid.shard),
+             op.extent.offset, op.extent.length, bl);
+        auto bl_length = bl.length();
         osd_op.outdata = std::move(bl);
-	if (r < 0)
-	  result = r;
-	else
-	  ctx->delta_stats.num_rd_kb += shift_round_up(bl_length, 10);
-	ctx->delta_stats.num_rd++;
-	dout(10) << " map_extents done on object " << soid << dendl;
+        if (r < 0)
+          result = r;
+        else
+          ctx->delta_stats.num_rd_kb += shift_round_up(bl_length, 10);
+        ctx->delta_stats.num_rd++;
+        dout(10) << " map_extents done on object " << soid << dendl;
       }
       break;
 
@@ -7031,6 +7235,15 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length);
 	ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
+	if (should_track_zero_blocks(pool.info, ctx,
+	                             get_osdmap()->require_osd_release)) {
+	  if (op.extent.length > 0) {
+	    oi.force_allocated_extents.remove(op.extent.offset,
+	                                      op.extent.length);
+	  }
+	  oi.force_allocated_extents.union_of(
+	    detect_zero_blocks(osd_op.indata, op.extent.offset));
+	}
 	dout(10) << "clean_regions modified" << ctx->clean_regions << dendl;
       }
       break;
@@ -7072,6 +7285,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           std::max((uint64_t)op.extent.length, oi.size));
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 	    0, op.extent.length, true);
+	if (should_track_zero_blocks(pool.info, ctx,
+	                             get_osdmap()->require_osd_release)) {
+	  // WRITEFULL replaces the entire object: reset FAE and re-detect.
+	  oi.force_allocated_extents.clear();
+	  oi.force_allocated_extents.union_of(
+	    detect_zero_blocks(osd_op.indata, 0));
+	}
       }
       break;
 
@@ -7090,28 +7310,84 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_ZERO:
       tracepoint(osd, do_osd_op_pre_zero, soid.oid.name.c_str(), soid.snap.val, op.extent.offset, op.extent.length);
       if (pool.info.requires_aligned_append()) {
-	result = -EOPNOTSUPP;
-	break;
+        result = -EOPNOTSUPP;
+        break;
       }
       ++ctx->num_write;
       { // zero
-	result = check_offset_and_length(
-	  op.extent.offset, op.extent.length,
+        result = check_offset_and_length(
+          op.extent.offset, op.extent.length,
           *osd->osd_max_object_size, get_dpp());
-	if (result < 0)
-	  break;
+        if (result < 0)
+          break;
 
-	if (op.extent.length && obs.exists && !oi.is_whiteout()) {
-	  t->zero(soid, op.extent.offset, op.extent.length);
-	  interval_set<uint64_t> ch;
-	  ch.insert(op.extent.offset, op.extent.length);
-	  ctx->modified_ranges.union_of(ch);
-	  ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
-	  ctx->delta_stats.num_wr++;
-	  oi.clear_data_digest();
-	} else {
-	  // no-op
-	}
+        if (op.extent.length && obs.exists && !oi.is_whiteout()) {
+          const uint64_t zero_off = op.extent.offset;
+          const uint64_t zero_len = op.extent.length;
+          const uint64_t zero_end = zero_off + zero_len;
+
+          // For EC pools with ecoptimizations, ZERO is a deallocation
+          // operation at 4K (FAE_BLOCK_SIZE) granularity.  Full blocks
+          // entirely covered by the range are deallocated; partial leading
+          // and trailing blocks are written with literal zeros instead.
+          // For all other pools, use the original single zero() call.
+          if (pool.info.is_erasure() && pool.info.allows_ecoptimizations()) {
+            // Inward-rounded boundaries: only fully-covered 4K blocks.
+            const uint64_t interior_start =
+              round_up_to(zero_off, FAE_BLOCK_SIZE);
+            const uint64_t interior_end =
+              round_down_to(zero_end, FAE_BLOCK_SIZE);
+
+            if (interior_start >= interior_end) {
+              // No fully-covered blocks: write literal zeros for the whole range.
+              bufferlist whole_bl;
+              whole_bl.append_zero(zero_len);
+              t->write(soid, zero_off, zero_len, whole_bl, op.flags);
+            } else {
+              // Sub-4K head: partial leading block gets a literal-zero write.
+              if (zero_off < interior_start) {
+                const uint64_t head_len = interior_start - zero_off;
+                bufferlist head_bl;
+                head_bl.append_zero(head_len);
+                t->write(soid, zero_off, head_len, head_bl, op.flags);
+              }
+              // 4K-aligned interior: fully-covered blocks are deallocated.
+              t->zero(soid, interior_start, interior_end - interior_start);
+              // Sub-4K tail: partial trailing block gets a literal-zero write.
+              if (zero_end > interior_end) {
+                const uint64_t tail_len = zero_end - interior_end;
+                bufferlist tail_bl;
+                tail_bl.append_zero(tail_len);
+                t->write(soid, interior_end, tail_len, tail_bl, op.flags);
+              }
+            }
+          } else {
+            t->zero(soid, zero_off, zero_len);
+          }
+
+          interval_set<uint64_t> ch;
+          ch.insert(zero_off, zero_len);
+          ctx->modified_ranges.union_of(ch);
+          ctx->clean_regions.mark_data_region_dirty(zero_off, zero_len);
+          ctx->delta_stats.num_wr++;
+          oi.clear_data_digest();
+          if (should_track_zero_blocks(pool.info, ctx,
+                                       get_osdmap()->require_osd_release)) {
+            // ZERO punches holes only in fully-covered 4K blocks; partial
+            // leading/trailing blocks are written as zeros (not holes) so
+            // their FAE entries must not be removed here.
+            const uint64_t interior_start =
+              round_up_to(zero_off, FAE_BLOCK_SIZE);
+            const uint64_t interior_end =
+              round_down_to(zero_end, FAE_BLOCK_SIZE);
+            if (interior_start < interior_end) {
+              oi.force_allocated_extents.remove(interior_start,
+                                               interior_end - interior_start);
+            }
+          }
+        } else {
+          // no-op
+        }
       }
       break;
     case CEPH_OSD_OP_CREATE:
@@ -7198,6 +7474,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// do no set exists, or we will break above DELETE -> TRUNCATE munging.
 
 	oi.clear_data_digest();
+	if (should_track_zero_blocks(pool.info, ctx,
+	                             get_osdmap()->require_osd_release)) {
+	  // TRUNCATE removes all data at or beyond the new size:
+	  // drop any FAE entries that fall beyond the truncate point.
+	  oi.force_allocated_extents.truncate(op.extent.offset);
+	}
       }
       break;
 
@@ -8537,6 +8819,7 @@ inline int PrimaryLogPG::_delete_oid(
   if (whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    oi.force_allocated_extents.clear();
     ctx->delta_stats.num_whiteouts++;
     t->create(soid);
     ctx->use_replace_op = true;
@@ -8792,6 +9075,7 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
   ctx->clean_regions.mark_data_region_dirty(0, std::max(obs.oi.size, rollback_to->obs.oi.size));
   ctx->clean_regions.mark_omap_dirty();
   obs.oi.size = rollback_to->obs.oi.size;
+  obs.oi.force_allocated_extents = rollback_to->obs.oi.force_allocated_extents;
   if (rollback_to->obs.oi.is_data_digest())
     obs.oi.set_data_digest(rollback_to->obs.oi.data_digest);
   else
@@ -9453,24 +9737,45 @@ struct C_Copyfrom : public Context {
 };
 
 struct C_CopyFrom_AsyncReadCb : public Context {
+  PrimaryLogPG *pg;
+  PrimaryLogPG::OpContext *opctx;
   OSDOp *osd_op;
   object_copy_data_t reply_obj;
   uint64_t features;
   size_t len;
-  C_CopyFrom_AsyncReadCb(OSDOp *osd_op, uint64_t features) :
-    osd_op(osd_op), features(features), len(0) {}
+  uint64_t data_offset_start = 0; // cursor.data_offset before the read advance
+  uint64_t data_offset_end = 0;   // cursor.data_offset after the read advance
+  // Populated by the sparse-read path (Fast EC); empty for the legacy path.
+  std::map<uint64_t, uint64_t> ext_map;
+  ceph::buffer::list data_bl;
+  bool sparse_read = false;
+  C_CopyFrom_AsyncReadCb(PrimaryLogPG *pg, PrimaryLogPG::OpContext *ctx,
+                         OSDOp *osd_op, uint64_t features) :
+    pg(pg), opctx(ctx), osd_op(osd_op), features(features), len(0) {}
   void finish(int r) override {
     osd_op->rval = r;
-    if (r < 0) {
-      return;
+    if (r >= 0) {
+      if (sparse_read) {
+        // Sparse path: data_bl contains only the non-hole bytes; ext_map has
+        // the object-space extent map.
+        reply_obj.data.swap(data_bl);
+        reply_obj.extent_map = std::move(ext_map);
+        reply_obj.flags |= object_copy_data_t::FLAG_SPARSE_READ;
+        reply_obj.cursor.data_offset = data_offset_end;
+      } else {
+        // Legacy path: reply_obj.data was written directly; truncate to len.
+        ceph_assert(len > 0);
+        ceph_assert(len <= reply_obj.data.length());
+        bufferlist bl;
+        bl.substr_of(reply_obj.data, 0, len);
+        reply_obj.data.swap(bl);
+      }
+      encode(reply_obj, osd_op->outdata, features);
     }
 
-    ceph_assert(len > 0);
-    ceph_assert(len <= reply_obj.data.length());
-    bufferlist bl;
-    bl.substr_of(reply_obj.data, 0, len);
-    reply_obj.data.swap(bl);
-    encode(reply_obj, osd_op->outdata, features);
+    if (sparse_read) {
+      opctx->finish_read(pg);
+    }
   }
 };
 
@@ -9521,7 +9826,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
   object_copy_data_t _reply_obj;
   C_CopyFrom_AsyncReadCb *cb = nullptr;
   if (pool.info.is_erasure()) {
-    cb = new C_CopyFrom_AsyncReadCb(&osd_op, features);
+    cb = new C_CopyFrom_AsyncReadCb(this, ctx, &osd_op, features);
   }
   object_copy_data_t &reply_obj = cb ? cb->reply_obj : _reply_obj;
   // size, mtime
@@ -9570,24 +9875,52 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
     if (cursor.data_offset < oi.size) {
       uint64_t max_read = std::min(oi.size - cursor.data_offset, (uint64_t)left);
       if (cb) {
-	async_read_started = true;
-	ctx->pending_async_reads.push_back(
-	  make_pair(
-	    boost::make_tuple(cursor.data_offset, max_read, osd_op.op.flags),
-	    make_pair(&bl, cb)));
-	cb->len = max_read;
-
-        ctx->op_finishers[ctx->current_osd_subop_num].reset(
-          new ReadFinisher(osd_op));
-	result = -EINPROGRESS;
-
-	dout(10) << __func__ << ": async_read noted for " << soid << dendl;
+        async_read_started = true;
+        // Fast EC: try sparse read to get data + extent map in one pass.
+        int sparse_r = -EOPNOTSUPP;
+        if (get_osdmap()->require_osd_release >= ceph_release_t::vampire) {
+          sparse_r = pgbackend->objects_sparse_read_async(
+            oi.soid, cursor.data_offset, max_read, oi.size, osd_op.op.flags,
+            &cb->ext_map, &cb->data_bl, cb,
+            oi.force_allocated_extents.get_intervals());
+        }
+        if (sparse_r == 0) {
+          // Sparse read accepted: completion will fire cb->finish().
+          cb->sparse_read = true;
+          cb->data_offset_start = cursor.data_offset;
+          cb->data_offset_end = cursor.data_offset + max_read;
+          ctx->op_finishers[ctx->current_osd_subop_num].reset(
+            new ReadFinisher(osd_op));
+          ctx->inflightreads = 1;
+          in_progress_async_reads.push_back(make_pair(ctx->op, ctx));
+          result = -EINPROGRESS;
+          dout(10) << __func__ << ": ec sparse_read async noted for " << soid << dendl;
+        } else if (sparse_r == -EOPNOTSUPP) {
+          // Classic EC: fall back to the legacy async read path.
+          ctx->pending_async_reads.push_back(
+            make_pair(
+              boost::make_tuple(cursor.data_offset, max_read, osd_op.op.flags),
+              make_pair(&bl, cb)));
+          cb->len = max_read;
+          ctx->op_finishers[ctx->current_osd_subop_num].reset(
+            new ReadFinisher(osd_op));
+          result = -EINPROGRESS;
+          dout(10) << __func__ << ": async_read noted for " << soid << dendl;
+        } else {
+          delete cb;
+          cb = nullptr;
+          return sparse_r;
+        }
       } else {
- result = pgbackend->objects_read_sync(
-   oi.soid, cursor.data_offset, max_read, osd_op.op.flags, &bl,
-   oi.size, ctx->op->coro_handles);
-	if (result < 0)
-	  return result;
+        result = pgbackend->objects_read_sync(
+          oi.soid, cursor.data_offset, max_read, osd_op.op.flags, &bl,
+          oi.size, ctx->op->coro_handles);
+        if (result < 0)
+          return result;
+        // Replicated pool: get extent map via synchronous fiemap.
+        osd->store->fiemap(ch,
+          ghobject_t(oi.soid, ghobject_t::NO_GEN, whoami_shard().shard),
+          cursor.data_offset, max_read, reply_obj.extent_map);
       }
       left -= max_read;
       cursor.data_offset += max_read;
@@ -9808,17 +10141,18 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     ceph_assert(cop->cursor.is_initial());
   }
   op.copy_get(&cop->cursor, get_copy_chunk_size(),
-	      &cop->results.object_size, &cop->results.mtime,
-	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap_data,
-	      &cop->results.snaps, &cop->results.snap_seq,
-	      &cop->results.flags,
-	      &cop->results.source_data_digest,
-	      &cop->results.source_omap_digest,
-	      &cop->results.reqids,
-	      &cop->results.reqid_return_codes,
-	      &cop->results.truncate_seq,
-	      &cop->results.truncate_size,
-	      &cop->rval);
+              &cop->results.object_size, &cop->results.mtime,
+              &cop->attrs, &cop->data, &cop->omap_header, &cop->omap_data,
+              &cop->results.snaps, &cop->results.snap_seq,
+              &cop->results.flags,
+              &cop->results.source_data_digest,
+              &cop->results.source_omap_digest,
+              &cop->results.reqids,
+              &cop->results.reqid_return_codes,
+              &cop->results.truncate_seq,
+              &cop->results.truncate_size,
+              &cop->extent_map,
+              &cop->rval);
   op.set_last_op_flags(cop->src_obj_fadvise_flags);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
@@ -9987,6 +10321,8 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   ceph_assert(cop->rval >= 0);
 
+  cop->is_sparse_read = cop->results.flags & object_copy_data_t::FLAG_SPARSE_READ;
+
   if (!cop->temp_cursor.data_complete) {
     cop->results.data_digest = cop->data.crc32c(cop->results.data_digest);
   }
@@ -10004,8 +10340,8 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   if (!cop->temp_cursor.attr_complete) {
     for (map<string,bufferlist>::iterator p = cop->attrs.begin();
-	 p != cop->attrs.end();
-	 ++p) {
+         p != cop->attrs.end();
+         ++p) {
       cop->results.attrs[string("_") + p->first] = p->second;
     }
     cop->attrs.clear();
@@ -10278,10 +10614,15 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
     t->create(cop->results.temp_oid);
   }
   if (!cop->temp_cursor.data_complete) {
-    ceph_assert(cop->data.length() + cop->temp_cursor.data_offset ==
-	   cop->cursor.data_offset);
+    ceph_assert(cop->is_sparse_read ||
+    cop->data.length() + cop->temp_cursor.data_offset ==
+    cop->cursor.data_offset);
+    ceph_assert(!cop->is_sparse_read ||
+    cop->data.length() + cop->temp_cursor.data_offset <=
+    cop->cursor.data_offset);
     if (pool.info.required_alignment() &&
-	!cop->cursor.data_complete) {
+        !cop->cursor.data_complete &&
+        !cop->is_sparse_read) {
       /**
        * Trim off the unaligned bit at the end, we'll adjust cursor.data_offset
        * to pick it up on the next pass.
@@ -10299,13 +10640,50 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
 	       cop->cursor.data_offset);
       }
     }
-    if (cop->data.length()) {
+    const bool track_fae = pool.info.is_erasure() &&
+                           pool.info.allows_ecoptimizations() &&
+                           get_osdmap()->require_osd_release >= ceph_release_t::vampire;
+    if (cop->is_sparse_read) {
+      // Sparse path: write only the extents that have data, leaving holes.
+      // cop->data holds the non-hole bytes for this chunk packed sequentially.
+      const uint64_t chunk_start = cop->temp_cursor.data_offset;
+      uint64_t bl_pos = 0;
+      for (auto& [ext_off, ext_len] : cop->extent_map) {
+        ceph_assert(ext_off >= chunk_start);
+        if (bl_pos + ext_len > cop->data.length()) {
+          derr << __func__ << " extent overflows data buffer:"
+               << " ext_off=" << ext_off
+               << " ext_len=" << ext_len
+               << " bl_pos=" << bl_pos
+               << " data_length=" << cop->data.length()
+               << " extent_map=" << cop->extent_map
+               << " chunk_start=" << chunk_start
+               << dendl;
+          ceph_abort_msg("bl_pos + ext_len > cop->data.length()");
+        }
+        bufferlist slice;
+        slice.substr_of(cop->data, bl_pos, ext_len);
+        t->write(cop->results.temp_oid, ext_off, ext_len, slice,
+                 cop->dest_obj_fadvise_flags);
+        if (track_fae) {
+          cop->results.force_allocated_extents.union_of(
+            detect_zero_blocks(slice, ext_off));
+        }
+        bl_pos += ext_len;
+      }
+      cop->extent_map.clear();
+    } else if (!cop->is_sparse_read && cop->data.length()) {
+      // Non-sparse path (Classic EC or old peer): single contiguous write.
       t->write(
-	cop->results.temp_oid,
-	cop->temp_cursor.data_offset,
-	cop->data.length(),
-	cop->data,
-	cop->dest_obj_fadvise_flags);
+        cop->results.temp_oid,
+        cop->temp_cursor.data_offset,
+        cop->data.length(),
+        cop->data,
+        cop->dest_obj_fadvise_flags);
+      if (track_fae) {
+        cop->results.force_allocated_extents.union_of(
+          detect_zero_blocks(cop->data, cop->temp_cursor.data_offset));
+      }
     }
     cop->data.clear();
   }
@@ -10358,6 +10736,10 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     ctx->discard_temp_oid = cb->results->temp_oid;
   }
   cb->results->fill_in_final_tx(ctx->op_t.get());
+
+  if (get_osdmap()->require_osd_release >= ceph_release_t::vampire) {
+    obs.oi.force_allocated_extents = cb->results->force_allocated_extents;
+  }
 
   // CopyFromCallback fills this in for us
   obs.oi.user_version = ctx->user_at_version;
@@ -10569,6 +10951,7 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     // create a whiteout
     tctx->op_t->create(soid);
     tctx->new_obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    tctx->new_obs.oi.force_allocated_extents.clear();
     ++tctx->delta_stats.num_whiteouts;
     dout(20) << __func__ << " creating whiteout on " << soid << dendl;
     osd->logger->inc(l_osd_tier_whiteout);
@@ -13828,9 +14211,10 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
 	      ObjectStore::Transaction t;
 	      bufferlist b2;
-	      obc->obs.oi.encode(
-		b2,
-		get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+              obc->obs.oi.encode(
+                b2,
+                get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr),
+                get_osdmap()->require_osd_release);
 	      ceph_assert(!pool.info.require_rollback());
 	      t.setattr(coll, ghobject_t(soid), OI_ATTR, b2);
 

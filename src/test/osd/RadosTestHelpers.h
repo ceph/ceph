@@ -33,8 +33,9 @@
  * This function is limited to boolean pool variables.
  * The full set of supported flag_var names is:
  *   supports_omap, allow_ec_overwrites, allow_ec_optimizations,
- *   hashpspool, eio, nodelete, bulk, nopgchange, nosizechange,
- *   write_fadvise_dontneed, noscrub, nodeep-scrub, use_gmt_hitset.
+ *   preserve_allocation, hashpspool, eio, nodelete, bulk, nopgchange,
+ *   nosizechange, write_fadvise_dontneed, noscrub, nodeep-scrub,
+ *   use_gmt_hitset.
  * Passing a non-boolean variable (e.g. "pg_num", "crush_rule") will cause
  * the monitor to return an integer or string value; this function will
  * detect the type mismatch and return std::unexpected(-EINVAL).

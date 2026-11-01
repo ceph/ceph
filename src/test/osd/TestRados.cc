@@ -16,6 +16,7 @@
 
 #include "test/osd/RadosModel.h"
 #include "test/osd/RadosTestHelpers.h"
+#include "test/osd/RadosPoolSupport.h"
 
 using namespace std;
 
@@ -292,6 +293,13 @@ private:
 	   << context.current_snap << std::endl;
       return new WriteSameOp(m_op, &context, oid, m_stats);
 
+    case TEST_OP_ZERO:
+      oid = *(rand_choose(context.oid_not_in_use));
+      context.cout_prefix() << m_op << ": " << "zero oid "
+           << oid << " current snap is "
+           << context.current_snap << std::endl;
+      return new ZeroOp(m_op, &context, oid, m_stats);
+
     case TEST_OP_DELETE:
       oid = *(rand_choose(context.oid_not_in_use));
       context.cout_prefix() << m_op << ": " << "delete oid " << oid << " current snap is "
@@ -439,11 +447,25 @@ private:
       context.cout_prefix() << m_op << ": " << "tier_evict oid " << oid << std::endl;
       return new TierEvictOp(m_op, &context, oid, m_stats);
 
-    default:
-      cerr << m_op << ": Invalid op type " << type << std::endl;
-      ceph_abort();
-      return nullptr;
+    case TEST_OP_MAPEXT:
+      oid = *(rand_choose(context.oid_not_in_use));
+      context.cout_prefix() << m_op << ": " << "mapext oid " << oid << std::endl;
+      return new MapextOp(m_op, &context, oid, m_stats);
+
+    case TEST_OP_WRITE_ZEROS:
+      oid = *(rand_choose(context.oid_not_in_use));
+      context.cout_prefix() << m_op << ": " << "write_zeros oid "
+           << oid << " current snap is "
+           << context.current_snap << std::endl;
+      return new WriteZeroDataOp(m_op, &context, oid, m_stats);
+
+    case NUM_TEST_OP_TYPES:
+      break;
     }
+    // No default label above, so -Wswitch flags a TestOpType without a case.
+    cerr << m_op << ": Invalid op type " << type << std::endl;
+    ceph_abort();
+    return nullptr;
   }
 
   TestOp *m_nextop;
@@ -465,14 +487,86 @@ private:
   RadosTestContext *context;
 };
 
+/*
+ * Op table.  Each op names the pool support it needs when the target pool is
+ * erasure coded (SUPPORT_NONE = no requirement).  Ops the pool cannot support
+ * are removed at startup with a warning; nothing else needs to know op names.
+ *
+ * How to add a new op:
+ *   1. add an enumerator to TestOpType in RadosModel.h (before NUM_TEST_OP_TYPES);
+ *   2. add a row here with its required_ec_support;
+ *   3. add a case to WeightedTestGenerator::gen_op;
+ *   4. update usage() and doc/dev/osd_internals/ceph_test_rados.rst.
+ */
+struct OpTypeInfo {
+  TestOpType op;
+  const char *name;
+  unsigned required_ec_support;
+};
+
+static constexpr OpTypeInfo op_types[] = {
+  { TEST_OP_READ, "read", SUPPORT_NONE },
+  { TEST_OP_WRITE, "write", SUPPORT_WRITE },
+  { TEST_OP_WRITE_EXCL, "write_excl", SUPPORT_WRITE },
+  { TEST_OP_WRITESAME, "writesame", SUPPORT_WRITE },
+  { TEST_OP_ZERO, "zero", SUPPORT_WRITE },
+  { TEST_OP_DELETE, "delete", SUPPORT_NONE },
+  { TEST_OP_SNAP_CREATE, "snap_create", SUPPORT_NONE },
+  { TEST_OP_SNAP_REMOVE, "snap_remove", SUPPORT_NONE },
+  { TEST_OP_ROLLBACK, "rollback", SUPPORT_NONE },
+  { TEST_OP_SETATTR, "setattr", SUPPORT_NONE },
+  { TEST_OP_RMATTR, "rmattr", SUPPORT_NONE },
+  { TEST_OP_WATCH, "watch", SUPPORT_NONE },
+  { TEST_OP_COPY_FROM, "copy_from", SUPPORT_NONE },
+  { TEST_OP_HIT_SET_LIST, "hit_set_list", SUPPORT_NONE },
+  { TEST_OP_IS_DIRTY, "is_dirty", SUPPORT_NONE },
+  { TEST_OP_UNDIRTY, "undirty", SUPPORT_NONE },
+  { TEST_OP_CACHE_FLUSH, "cache_flush", SUPPORT_NONE },
+  { TEST_OP_CACHE_TRY_FLUSH, "cache_try_flush", SUPPORT_NONE },
+  { TEST_OP_CACHE_EVICT, "cache_evict", SUPPORT_NONE },
+  { TEST_OP_APPEND, "append", SUPPORT_NONE },
+  { TEST_OP_APPEND_EXCL, "append_excl", SUPPORT_NONE },
+  { TEST_OP_SET_REDIRECT, "set_redirect", SUPPORT_NONE },
+  { TEST_OP_UNSET_REDIRECT, "unset_redirect", SUPPORT_NONE },
+  { TEST_OP_CHUNK_READ, "chunk_read", SUPPORT_NONE },
+  { TEST_OP_TIER_PROMOTE, "tier_promote", SUPPORT_NONE },
+  { TEST_OP_TIER_FLUSH, "tier_flush", SUPPORT_NONE },
+  { TEST_OP_SET_CHUNK, "set_chunk", SUPPORT_NONE },
+  { TEST_OP_TIER_EVICT, "tier_evict", SUPPORT_NONE },
+  { TEST_OP_MAPEXT, "mapext", SUPPORT_ALLOCATION_TRACKING },
+  { TEST_OP_WRITE_ZEROS, "write_zeros", SUPPORT_WRITE },
+};
+
+// Forgetting the table row for a new TestOpType fails the build here.
+static_assert(op_table_is_complete(op_types, NUM_TEST_OP_TYPES),
+	      "op_types[] must have exactly one row per TestOpType");
+
+/// Returns nullptr if @p name is not a known op.
+static const OpTypeInfo *find_op_type(const char *name)
+{
+  for (const auto& info : op_types) {
+    if (strcmp(info.name, name) == 0) {
+      return &info;
+    }
+  }
+  return nullptr;
+}
+
+/// Features that are not ops but still depend on pool support.
+static const PoolFeatureRequirement pool_features[] = {
+  { POOL_FEATURE_SPARSE_READ, "sparse reads", SUPPORT_ALLOCATION_TRACKING },
+  { POOL_FEATURE_OMAP, "omap", SUPPORT_OMAP_OPS },
+};
+
 void usage(const char *prog)
 {
   cout << "Usage: " << prog << std::endl;
-  cout << "        --op <read|write|write_excl|writesame|delete|snap_create|snap_remove|" << std::endl;
+  cout << "        --op <read|write|write_excl|writesame|zero|write_zeros|delete|" << std::endl;
+  cout << "              snap_create|snap_remove|" << std::endl;
   cout << "              rollback|setattr|rmattr|watch|copy_from|hit_set_list|is_dirty|" << std::endl;
   cout << "              undirty|cache_flush|cache_try_flush|cache_evict|append|append_excl|" << std::endl;
   cout << "              set_redirect|unset_redirect|chunk_read|tier_promote|tier_flush|" << std::endl;
-  cout << "              set_chunk|tier_evict> <weight>" << std::endl;
+  cout << "              set_chunk|tier_evict|mapext> <weight>" << std::endl;
   cout << "        [--op <operation_type> <weight> ...]" << std::endl;
   cout << "        [--pool <pool_name>]" << std::endl;
   cout << "        [--max-ops <op_count>]" << std::endl;
@@ -482,7 +576,7 @@ void usage(const char *prog)
   cout << "        [--min-stride-size <bytes>]" << std::endl;
   cout << "        [--max-stride-size <bytes>]" << std::endl;
   cout << "        [--max-seconds <seconds>]" << std::endl;
-  cout << "        [--ec-pool]" << std::endl;
+  cout << "        [--ec-pool]   (deprecated, ignored; pool type is detected)" << std::endl;
   cout << "        [--no-omap]" << std::endl;
   cout << "        [--no-sparse]" << std::endl;
   cout << "        [--pool-snaps]" << std::endl;
@@ -518,41 +612,6 @@ int main(int argc, char **argv)
   bool write_fadvise_dontneed = false;
 
   struct {
-    TestOpType op;
-    const char *name;
-    bool ec_pool_valid;
-  } op_types[] = {
-    { TEST_OP_READ, "read", true },
-    { TEST_OP_WRITE, "write", false },
-    { TEST_OP_WRITE_EXCL, "write_excl", false },
-    { TEST_OP_WRITESAME, "writesame", false },
-    { TEST_OP_DELETE, "delete", true },
-    { TEST_OP_SNAP_CREATE, "snap_create", true },
-    { TEST_OP_SNAP_REMOVE, "snap_remove", true },
-    { TEST_OP_ROLLBACK, "rollback", true },
-    { TEST_OP_SETATTR, "setattr", true },
-    { TEST_OP_RMATTR, "rmattr", true },
-    { TEST_OP_WATCH, "watch", true },
-    { TEST_OP_COPY_FROM, "copy_from", true },
-    { TEST_OP_HIT_SET_LIST, "hit_set_list", true },
-    { TEST_OP_IS_DIRTY, "is_dirty", true },
-    { TEST_OP_UNDIRTY, "undirty", true },
-    { TEST_OP_CACHE_FLUSH, "cache_flush", true },
-    { TEST_OP_CACHE_TRY_FLUSH, "cache_try_flush", true },
-    { TEST_OP_CACHE_EVICT, "cache_evict", true },
-    { TEST_OP_APPEND, "append", true },
-    { TEST_OP_APPEND_EXCL, "append_excl", true },
-    { TEST_OP_SET_REDIRECT, "set_redirect", true },
-    { TEST_OP_UNSET_REDIRECT, "unset_redirect", true },
-    { TEST_OP_CHUNK_READ, "chunk_read", true },
-    { TEST_OP_TIER_PROMOTE, "tier_promote", true },
-    { TEST_OP_TIER_FLUSH, "tier_flush", true },
-    { TEST_OP_SET_CHUNK, "set_chunk", true },
-    { TEST_OP_TIER_EVICT, "tier_evict", true },
-    { TEST_OP_READ /* grr */, NULL },
-  };
-
-  struct {
     const char *name;
   } chunk_algo_types[] = {
     { "fastcdc" },
@@ -562,7 +621,6 @@ int main(int argc, char **argv)
   map<TestOpType, unsigned int> op_weights;
   string pool_name = "rbd";
   string low_tier_pool_name = "";
-  bool ec_pool = false;
   bool no_omap = false;
   bool no_sparse = false;
   bool balance_reads = false;
@@ -617,45 +675,30 @@ int main(int argc, char **argv)
     else if (strcmp(argv[i], "--max-attr-len") == 0)
       max_attr_len = atoi(argv[++i]);
     else if (strcmp(argv[i], "--ec-pool") == 0) {
-      if (!op_weights.empty()) {
-	cerr << "--ec-pool must be specified prior to any ops" << std::endl;
-	exit(1);
-      }
-      ec_pool = true;
-      no_sparse = true;
+      cerr << "Warning: --ec-pool is deprecated and ignored; "
+           << "pool type is detected automatically" << std::endl;
     } else if (strcmp(argv[i], "--op") == 0) {
       i++;
       if (i == argc) {
         cerr << "Missing op after --op" << std::endl;
         return 1;
       }
-      int j;
-      for (j = 0; op_types[j].name; ++j) {
-	if (strcmp(op_types[j].name, argv[i]) == 0) {
-	  break;
-	}
-      }
-      if (!op_types[j].name) {
-	cerr << "unknown op " << argv[i] << std::endl;
-	exit(1);
+      const OpTypeInfo *op_type = find_op_type(argv[i]);
+      if (!op_type) {
+        cerr << "unknown op " << argv[i] << std::endl;
+        exit(1);
       }
       i++;
       if (i == argc) {
-	cerr << "Weight unspecified." << std::endl;
-	return 1;
+        cerr << "Weight unspecified." << std::endl;
+        return 1;
       }
       int weight = atoi(argv[i]);
       if (weight < 0) {
-	cerr << "Weights must be nonnegative." << std::endl;
-	return 1;
+        cerr << "Weights must be nonnegative." << std::endl;
+        return 1;
       } else if (weight > 0) {
-	if (ec_pool && !op_types[j].ec_pool_valid) {
-	  cerr << "Error: cannot use op type " << op_types[j].name
-	       << " with --ec-pool" << std::endl;
-	  exit(1);
-	}
-	cout << "adding op weight " << op_types[j].name << " -> " << weight << std::endl;
-	op_weights.insert(pair<TestOpType, unsigned int>(op_types[j].op, weight));
+        op_weights.insert(pair<TestOpType, unsigned int>(op_type->op, weight));
       }
     } else if (strcmp(argv[i], "--set_redirect") == 0) {
       set_redirect = true;
@@ -770,31 +813,73 @@ int main(int argc, char **argv)
     id);
 
   TestOpStat stats;
-  WeightedTestGenerator gen = WeightedTestGenerator(
-    ops, objects,
-    op_weights, &stats, max_seconds,
-    ec_pool, balance_reads, localize_reads,
-    offlen_randomization_ratio,
-    set_redirect, set_chunk, enable_dedup, &context);
   int r = context.init();
   if (r < 0) {
     cerr << "Error initializing rados test context: "
-	 << cpp_strerror(r) << std::endl;
+  << cpp_strerror(r) << std::endl;
     exit(1);
   }
 
-  // Query pool's supports_omap flag if user didn't explicitly set --no-omap
-  if (!no_omap) {
-    auto result = query_pool_flag(pool_name, "supports_omap", context.rados);
-    if (!result) {
-      cerr << "Warning: failed to query supports_omap for pool " << pool_name
-           << ": " << cpp_strerror(result.error()) << std::endl;
-    } else if (!result.value()) {
-      cout << "Pool " << pool_name << " does not support omap, setting no_omap=true" << std::endl;
+  // Find out what the pool supports and drop what it cannot do.
+  PoolSupportLevel support = detect_pool_support(
+    pool_name, context.rados,
+    [](const std::string& msg) { cerr << msg << std::endl; });
+
+  auto filtered = filter_unsupported_ops(op_weights, op_types, pool_name,
+                                         support);
+  for (const auto& w : filtered.warnings) {
+    cerr << w << std::endl;
+  }
+  op_weights = std::move(filtered.weights);
+
+  // Features the user did not already disable are turned off if unsupported.
+  for (const auto& f : unsupported_features(pool_features, pool_name,
+                                            support)) {
+    if (f.feature == POOL_FEATURE_SPARSE_READ && !no_sparse) {
+      cerr << f.warning << std::endl;
+      no_sparse = true;
+      context.set_no_sparse(true);
+    } else if (f.feature == POOL_FEATURE_OMAP && !no_omap) {
+      cerr << f.warning << std::endl;
       no_omap = true;
       context.set_no_omap(true);
     }
   }
+
+  for (const auto& info : op_types) {
+    auto it = op_weights.find(info.op);
+    if (it != op_weights.end()) {
+      cout << "adding op weight " << info.name << " -> " << it->second
+           << std::endl;
+    }
+  }
+
+  if (op_weights.empty()) {
+    cerr << "Error: no operations left to run after removing ops "
+         << "unsupported by pool " << pool_name << std::endl;
+    context.shutdown();
+    exit(1);
+  }
+
+  // When allow_ec_optimizations is enabled, mapext returns BlueStore fiemap
+  // extents rounded to BlueStore's allocation granularity (4096 bytes), not
+  // stripe-width-rounded extents.  Override the alignment so the model rounds
+  // expected extents to 4096 rather than the (coarser) stripe width.
+  if (support.is_ec && (support.have & SUPPORT_EC_OPTIMIZATIONS)) {
+    context.mapext_alignment = 4096;
+  }
+
+  // EC pools without overwrites only accept stripe-aligned appends, so the
+  // initial objects must be created with append.
+  bool append_initial_objects =
+    support.is_ec && !(support.have & SUPPORT_EC_OVERWRITES);
+
+  WeightedTestGenerator gen = WeightedTestGenerator(
+    ops, objects,
+    op_weights, &stats, max_seconds,
+    append_initial_objects, balance_reads, localize_reads,
+    offlen_randomization_ratio,
+    set_redirect, set_chunk, enable_dedup, &context);
 
   context.loop(&gen);
   if (enable_dedup) {

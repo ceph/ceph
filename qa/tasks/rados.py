@@ -81,12 +81,28 @@ def task(ctx, config):
           min_stride_size: <minimum write stride size in bytes>
           max_stride_size: <maximum write stride size in bytes>
           op_weights: <dictionary mapping operation type to integer weight>
+              Recognised op names include: read, write, delete, snap_create,
+              snap_remove, rollback, setattr, rmattr, watch, copy_from,
+              hit_set_list, is_dirty, undirty, cache_flush, cache_try_flush,
+              cache_evict, append, set_chunk, tier_promote, tier_evict,
+              tier_flush, zero, write_zeros, mapext.
+              ``zero`` and ``write_zeros`` require the pool to support EC
+              overwrites (SUPPORT_WRITE); they are skipped silently on pools
+              that do not.  ``mapext`` requires allocation tracking
+              (SUPPORT_ALLOCATION_TRACKING, i.e. Fast EC with
+              FLAG_PRESERVE_ALLOCATION); it is skipped on other pool types.
+              ceph_test_rados detects what the pool supports at startup and
+              drops any op whose requirements are not met.
           runs: <number of times to run> - the pool is remade between runs
           ec_pool: use an ec pool
           erasure_code_profile: profile to use with the erasure coded pool
           erasure_code_crush: crush rule configuration for erasure coded pool
           fast_read: enable ec_pool's fast_read
           min_size: set the min_size of created pool
+          no_sparse: if true, pass --no-sparse to disable sparse reads in
+                     ReadOp (analogous to no_omap).  Sparse reads are on by
+                     default and auto-disabled when the pool does not support
+                     allocation tracking.
           pool_snaps: use pool snapshots instead of selfmanaged snapshots
           write_fadvise_dontneed: write behavior like with LIBRADOS_OP_FLAG_FADVISE_DONTNEED.
                                   This mean data don't access in the near future.
@@ -265,11 +281,10 @@ def task(ctx, config):
         'daemon-helper',
         'kill', 
         'ceph_test_rados']
-    if config.get('ec_pool', False):
-        if not config.get('erasure_code_use_overwrites', False):
-            args.extend(['--ec-pool'])
     if config.get('no_omap', False):
         args.extend(['--no-omap'])
+    if config.get('no_sparse', False):
+        args.extend(['--no-sparse'])
     if config.get('write_fadvise_dontneed', False):
         args.extend(['--write-fadvise-dontneed'])
     if config.get('set_redirect', False):
@@ -336,7 +351,10 @@ def task(ctx, config):
         "tier_promote",
         "tier_evict",
         "tier_promote",
-        "tier_flush"
+        "tier_flush",
+        "zero",
+        "write_zeros",
+        "mapext",
         ]:
         if field in op_weights:
             weights[field] = op_weights[field]

@@ -17,4 +17,7 @@ tasks:
         snap_remove: 50
         rollback: 50
         copy_from: 50
+        zero: 50
+        write_zeros: 50
+        mapext: 25
   - print: "**** done rados ec pool-snaps overwrites task"
