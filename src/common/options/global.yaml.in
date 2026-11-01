@@ -5121,6 +5121,8 @@ options:
     the original size must be at least this small in order to store the compressed
     version.
   default: 0.875
+  min: 0
+  max: 1
   flags:
   - runtime
   with_legacy: true
