@@ -693,6 +693,21 @@ impl ObjectStore for RGWObjectStore {
                 }
                 OwnedRGWBuffer(buffer).to_bytes()
             };
+            // object_store callers (lance) slice the result by the requested
+            // length, so a short read must be an error, never a shorter buffer.
+            if bytes.len() as u64 != total_len {
+                return Err(ObjectStoreError::Generic {
+                    store: "rgw",
+                    source: format!(
+                        "short read of {}: got {} of {} bytes at offset {}",
+                        location,
+                        bytes.len(),
+                        total_len,
+                        range_start
+                    )
+                    .into(),
+                });
+            }
 
             return Ok(GetResult {
                 payload: GetResultPayload::Stream(stream::once(async move { Ok(bytes) }).boxed()),
