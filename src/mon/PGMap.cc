@@ -1023,10 +1023,12 @@ PGMap::PGMap() noexcept
 
 PGMap::~PGMap() noexcept = default;
 
-int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
+int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno, int size) const
 {
   map<int,float> wm;
-  int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
+  int r = (size > 0)
+    ? osdmap.crush->get_rule_weight_osd_map(ruleno, size, &wm)
+    : osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
   if (r < 0) {
     return r;
   }
@@ -1071,14 +1073,17 @@ void PGMap::get_rules_avail(const OSDMap& osdmap,
 			    std::map<int,int64_t> *avail_map) const
 {
   avail_map->clear();
-  for (auto p : osdmap.get_pools()) {
-    int64_t pool_id = p.first;
+  std::map<int, std::set<int>> sizes_by_rule;
+  for (const auto& [pool_id, pool] : osdmap.get_pools()) {
     if ((pool_id < 0) || (pg_pool_sum.count(pool_id) == 0))
       continue;
-    const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
-    int ruleno = pool->get_crush_rule();
-    if (avail_map->count(ruleno) == 0)
-      (*avail_map)[ruleno] = get_rule_avail(osdmap, ruleno);
+    sizes_by_rule[pool.get_crush_rule()].insert(pool.get_size());
+  }
+  for (const auto& [ruleno, sizes] : sizes_by_rule) {
+    // PGMapDigest caches available space per rule; if pools sharing a rule
+    // have different sizes, fall back to the size-independent weight map.
+    int size = (sizes.size() == 1) ? *sizes.begin() : 0;
+    (*avail_map)[ruleno] = get_rule_avail(osdmap, ruleno, size);
   }
 }
 
