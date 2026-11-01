@@ -40,15 +40,16 @@ public:
             bool read_only,
 	    bool need_open_db = true,
 	    bool need_stats = false);
-  uint32_t traverse(const std::string& prefix,
-                    const bool do_crc,
-                    const bool pretty_binary_key,
-                    const bool do_value_dump,
-                    std::ostream *out);
-  void list(const std::string& prefix,
-	    const bool do_crc,
-	    const bool pretty_binary_key,
-	    const bool do_value_dump);
+  int traverse(const std::string& prefix,
+               const bool do_crc,
+               const bool pretty_binary_key,
+               const bool do_value_dump,
+               std::ostream *out,
+               uint32_t *crc_out = nullptr);
+  int list(const std::string& prefix,
+           const bool do_crc,
+           const bool pretty_binary_key,
+           const bool do_value_dump);
   bool exists(const std::string& prefix);
   bool exists(const std::string& prefix, const std::string& key);
   ceph::bufferlist get(const std::string& prefix,
