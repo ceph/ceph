@@ -18,7 +18,7 @@ Description
 user administration utility. It scans the data pool for objects that
 belong to a given bucket and tries to add those objects back to the
 bucket index. It's intended as a **last resort** after a
-**catastrophic** loss of a bucket index. Please review thoroughly the
+**catastrophic** loss of a bucket index. Please thoroughly review the
 *Warnings* listed below.
 
 The utility works with regular (i.e., un-versioned) buckets, versioned

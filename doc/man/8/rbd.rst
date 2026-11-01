@@ -402,7 +402,7 @@ Commands
   used together.
 
   The --export-format accepts '1' or '2' currently. Format 2 allows us to import not only the content
-  of image, but also the snapshots and other properties, such as image_order and features.
+  of the image, but also the snapshots and other properties, such as image_order and features.
 
 :command:`import-diff` *src-path* *image-spec*
   Import an incremental diff of an image and apply it to the current image.  If the diff

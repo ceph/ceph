@@ -80,7 +80,7 @@ Global Options
 
    Uses the striping API of RADOS rather than the default one.
    Available for stat, stat2, get, put, append, truncate, rm, ls
-   and all xattr-related operation.
+   and all xattr-related operations.
 
 .. option:: -O object_size, --object-size object_size
 

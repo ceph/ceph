@@ -15,8 +15,8 @@ Synopsis
 Description
 ===========
 
-**cephfs-top** provides top(1)-like functionality for Ceph Filesystem.
-Various client metrics are displayed and updated in real-time.
+**cephfs-top** provides top(1)-like functionality for the Ceph File System.
+Various client metrics are displayed and updated in real time.
 
 Ceph Metadata Servers periodically send client metrics to Ceph Manager.
 ``Stats`` plugin in Ceph Manager provides an interface to fetch these metrics.

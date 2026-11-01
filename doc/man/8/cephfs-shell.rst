@@ -229,7 +229,7 @@ Usage :
 mv
 --
 
-Moves files/directory from source to destination.
+Moves files or directories from source to destination.
 
 Usage : 
     
@@ -436,7 +436,7 @@ Usage:
 locate
 ------
 
-Find an item in file system
+Find an item in the file system
 
 Usage:
 
