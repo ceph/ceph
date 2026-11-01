@@ -337,6 +337,34 @@ TEST(MgrCap, Profile)
       nullptr, {}, "", "rbd_support", "", {}, true, false, false, {}));
 }
 
+TEST(MgrCap, ProfileFailureClearsGrants)
+{
+  // A capability whose grammar parses but whose profile evaluation fails must
+  // not leave any grants behind. Otherwise an authorization object retains
+  // unvalidated grammar-parsed grants after parse() has returned false.
+  MgrCap cap;
+
+  // "profile does-not-exist" is grammar-valid but names an unrecognized
+  // profile, so expand_profile() reports an error and parse() must fail.
+  ASSERT_FALSE(cap.parse("profile does-not-exist", &cout));
+  ASSERT_TRUE(cap.grants.empty())
+      << "Current: grants retained after failed profile parse; "
+      << "Expected: grants cleared (empty cap)";
+  ASSERT_EQ("", stringify(cap))
+      << "Current: grants retained after failed profile parse; "
+      << "Expected: grants cleared (empty cap)";
+  // With no surviving grants, no operation may be authorized.
+  ASSERT_FALSE(
+      cap.is_capable(nullptr, {}, "", "", "", {}, true, false, false, {}));
+
+  // The same must hold for a profile that rejects an unknown argument key.
+  MgrCap rbd_cap;
+  ASSERT_FALSE(rbd_cap.parse("profile rbd badkey=x", &cout));
+  ASSERT_TRUE(rbd_cap.grants.empty())
+      << "Current: grants retained after failed profile parse; "
+      << "Expected: grants cleared (empty cap)";
+}
+
 /* Begin Negative Tests */
 
 TEST(MgrCap, IsCapableEmptyCommand)
