@@ -129,6 +129,72 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.create_destroy()
         self.mount_b.create_destroy()
 
+    def test_defer_client_range_shrink(self):
+        """
+        With mds_defer_client_range_shrink the MDS drops a client's writeable
+        range in memory only, so the journal still has it after the client
+        gave up its write caps.  If that client then dies and the MDS
+        restarts, those files must be probed during recovery and come back
+        with the right size.
+        """
+        self.config_set('mds', 'mds_defer_client_range_shrink', True)
+        # Keep the files' journal events until the restart: once a segment
+        # expires its dirfrags are committed with the dropped ranges, and
+        # there is nothing left to probe.  The qa conf trims after only 10
+        # segments, so raise that on the running MDS only; restarting it,
+        # below or in the next test's setUp, brings the configured value back.
+        self.fs.rank_asok(['config', 'set', 'mds_log_max_segments', '100000'])
+        nfiles = 64
+        # Create the empty files with a bare open and close: touch would
+        # also set the mtime, and a dirty mtime is journaled with the range.
+        self.mount_a.run_python(dedent(f"""
+            import os
+            d = os.path.join("{self.mount_a.mountpoint}", "range")
+            os.mkdir(d)
+            for i in range({nfiles}):
+                os.close(os.open(os.path.join(d, "empty%d" % i),
+                                 os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+                with open(os.path.join(d, "data%d" % i), "wb") as f:
+                    f.write(bytes(3901))
+            """))
+
+        # Wait for the client to give up its write caps on the empty files,
+        # i.e. for the MDS to drop their ranges, in memory only.
+        def ranges(path):
+            info = self.fs.rank_asok(['dump', 'inode', hex(self.mount_a.path_to_ino(path))])
+            return info.get('client_ranges', info.get('inode', {}).get('client_ranges', []))
+        last = f"range/empty{nfiles - 1}"
+        self.wait_until_true(lambda: not ranges(last), timeout=120)
+
+        # The writer dies without closing its session, so after the restart
+        # nobody reconnects with caps on these files.
+        self.mount_a.kill()
+        self.mount_a.kill_cleanup()
+
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_state('up:active', timeout=MDS_RESTART_GRACE + self.mds_reconnect_timeout)
+        def recovering():
+            c = self.fs.rank_asok(['perf', 'dump', 'mds_cache'])['mds_cache']
+            return c['num_recovering_enqueued'] + c['num_recovering_processing']
+        self.wait_until_true(lambda: recovering() == 0, timeout=60)
+        recovered = self.fs.rank_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['recovery_completed']
+        log.info(f"files recovered after restart: {recovered}")
+        self.assertGreaterEqual(recovered, nfiles)
+
+        self.mount_a.mount_wait()
+        for i in range(nfiles):
+            self.assertEqual(self.mount_a.stat(f"range/empty{i}")['st_size'], 0)
+            self.assertEqual(self.mount_a.stat(f"range/data{i}")['st_size'], 3901)
+        self.mount_a.run_shell_payload(dedent(f"""
+            set -e
+            for i in $(seq 0 {nfiles - 1}); do
+                echo x > range/empty$i
+            done
+            """))
+        for i in range(nfiles):
+            self.assertEqual(self.mount_a.stat(f"range/empty{i}")['st_size'], 2)
+        self.mount_a.run_shell(["rm", "-rf", "range"])
+
     def _session_num_caps(self, client_id):
         ls_data = self.fs.mds_asok(['session', 'ls'])
         return int(self._session_by_id(ls_data).get(client_id, {'num_caps': None})['num_caps'])

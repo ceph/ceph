@@ -19,6 +19,7 @@
 .. confval:: mds_dirstat_min_interval
 .. confval:: mds_scatter_nudge_interval
 .. confval:: mds_client_prealloc_inos
+.. confval:: mds_defer_client_range_shrink
 .. confval:: mds_early_reply
 .. confval:: mds_default_dir_hash
 .. confval:: mds_log_skip_corrupt_events
