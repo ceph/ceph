@@ -1,0 +1,18 @@
+overrides:
+  check-counter:
+    dry_run: true
+  ceph:
+    log-ignorelist:
+      - RECENT_CRASH
+      # the tests suppress journal trimming (mds_log_max_segments) so that a
+      # dirfrag commit cannot purge behind them
+      - Behind on trimming
+      - \(MDS_TRIM\)
+
+tasks:
+- cephfs_test_runner:
+    # the two tests are independent; report both rather than stopping at the
+    # first failure
+    failfast: false
+    modules:
+      - tasks.cephfs.test_old_inodes
