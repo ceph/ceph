@@ -71,8 +71,9 @@ Run from the **build directory**:
 | `--lwe` | off | Enable GPFS LWE cluster-wide locking (implies `--gpfs`) |
 | `--gpfs-root DIR` | `/mnt/rgw/nsfs` | GPFS data directory |
 | `--debug-rgw N` | `20` | RGW debug log level |
+| `--port N` | `8000` | The port radosgw serves on;  the one your s3tests.conf names |
 | `--foreground` | off | Print the radosgw command instead of running it |
-| `--restart` | off | Stop the running radosgw and start it again on the same `ceph.conf`, without `vstart.sh` and cleaning nothing;  takes only `--store`, `--adoption-mode`, `--debug-rgw`, `--perf` and `--with-impersonation` |
+| `--restart` | off | Stop the running radosgw and start it again on the same `ceph.conf`, without `vstart.sh` and cleaning nothing;  takes only `--store`, `--adoption-mode`, `--debug-rgw`, `--port`, `--perf` and `--with-impersonation` |
 
 ### What it does
 
@@ -123,8 +124,13 @@ changes the machine, and needs the machine to allow it:
 
 Both checks run before the running gateway is stopped.
 
-In every mode the gateway listens on port 8000, and the script stops
-whatever holds that port (`fuser -k 8000/tcp`).
+In every mode the gateway listens on `--port`, 8000 by default.  The
+script stops every radosgw this build directory runs, on any port,
+since they share its state, and whatever else of yours holds the port
+(`fuser -k`).  It then refuses the start unless the radosgw it started
+is alive and the port is listened on:  something it could not stop --
+a gateway of root's, say -- would otherwise answer for one that failed
+to bind.
 
 ### Accounts and IAM
 
