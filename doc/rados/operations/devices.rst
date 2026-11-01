@@ -39,9 +39,11 @@ Identifying physical devices
 
 To make the replacement of failed disks easier and less error-prone, you can
 (in some cases) "blink" the drive's LEDs on hardware enclosures by running a
-command of the following form::
+command of the following form:
 
-  device light on|off <devid> [ident|fault] [--force]
+.. prompt:: bash $
+
+   ceph device light on|off <devid> [ident|fault] [--force]
 
 .. note:: Using this command to blink the lights might not work. Whether it
    works will depend upon such factors as your kernel revision, your SES
@@ -55,7 +57,7 @@ information, run the following command:
    ceph device ls
 
 The ``[ident|fault]`` parameter determines which kind of light will blink.  By
-default, the `identification` light is used.
+default, the ``ident`` light is used.
 
 .. note:: This command works only if the Cephadm or the Rook
    :ref:`orchestrator <orchestrator-cli-module>` module is enabled.  To see
@@ -65,7 +67,7 @@ default, the `identification` light is used.
 
       ceph orch status
 
-The command that makes the drive's LEDs blink is `lsmcli`. To customize this
+The command that makes the drive's LEDs blink is ``lsmcli``. To customize this
 command, configure it via a Jinja2 template by running commands of the
 following forms::
 
@@ -74,14 +76,12 @@ following forms::
 
 The following arguments can be used to customize the Jinja2 template:
 
-* ``on``
-    A boolean value.
-* ``ident_fault``
-    A string that contains `ident` or `fault`.
-* ``dev``
-    A string that contains the device ID: for example, `SanDisk_X400_M.2_2280_512GB_162924424784`.
-* ``path``
-    A string that contains the device path: for example, `/dev/sda`.
+* ``on``: A Boolean value.
+* ``ident_fault``: A string that contains ``ident`` or ``fault``.
+* ``dev``: The kernel name of the device on its host, for example ``sda``.
+* ``path``: The device's link under ``/dev/disk/by-path``, if the Manager has
+  recorded one. Otherwise this is an empty string, and the default template,
+  ``{{ path or dev }}``, uses ``dev`` instead.
 
 .. _enabling-monitoring:
 
@@ -148,19 +148,27 @@ Failure prediction
 Ceph can predict drive life expectancy and device failures by analyzing the
 health metrics that it collects. The prediction modes are as follows:
 
-* *none*: disable device failure prediction.
-* *local*: use a pre-trained prediction model from the ``ceph-mgr`` daemon.
+* *none*: disable device failure prediction. This is the default.
+* *local*: use a pre-trained prediction model from the ``diskprediction_local``
+  Manager module.
 
-To configure the prediction mode, run a command of the following form:
+The *local* mode works only when the ``diskprediction_local`` module is
+enabled. To use it, run the following commands:
 
 .. prompt:: bash $
 
-   ceph config set global device_failure_prediction_mode <mode>
+   ceph mgr module enable diskprediction_local
+   ceph config set global device_failure_prediction_mode local
 
-Under normal conditions, failure prediction runs periodically in the
-background.  For this reason, life expectancy values might be populated only
-after a significant amount of time has passed.  The life expectancy of all
-devices is displayed in the output of the following command:
+In the *local* mode, failure prediction runs periodically in the background.
+The predictor runs once a day, and it needs at least six sets of health
+metrics for a device (six days at the default scrape interval) before it can
+estimate that device's life expectancy. For this reason, life expectancy
+values might be populated only after a significant amount of time has passed.
+See :ref:`diskprediction`.
+
+The life expectancy of all devices is displayed in the output of the following
+command:
 
 .. prompt:: bash $
 
@@ -172,8 +180,10 @@ To see the metadata of a specific device, run a command of the following form:
 
    ceph device info <devid>
 
-To explicitly force prediction of a specific device's life expectancy, run a
-command of the following form:
+To print the local predictor's estimate for a single device (``>6w``,
+``>=2w and <=6w``, ``<2w``, or ``unknown``), run a command of the following
+form. It works only in the *local* mode, and it does not change the stored
+life expectancy that ``ceph device ls`` shows:
 
 .. prompt:: bash $
 
@@ -190,17 +200,20 @@ specific device's life expectancy, run a command of the following form:
 Life expectancies are expressed as a time interval. This means that the
 uncertainty of the life expectancy can be expressed in the form of a range of
 time, and perhaps a wide range of time. The interval's end can be left
-unspecified.
+unspecified, but then Ceph neither raises ``DEVICE_HEALTH`` for the device nor
+marks its OSDs ``out``.
 
 Health alerts
 -------------
 
-The ``mgr/devicehealth/warn_threshold`` configuration option controls the
-health check for an expected device failure. If the device is expected to fail
-within the specified time interval, an alert is raised.
+The ``mgr/devicehealth/warn_threshold`` option (default 12 weeks) controls the
+``DEVICE_HEALTH`` health check. The Manager raises it when the end of a
+device's life expectancy interval is closer than this threshold.
 
-To check the stored life expectancy of all devices and generate any appropriate
-health alert, run the following command:
+To check the stored life expectancy of all devices now, raise any
+appropriate health alerts, and (when ``mgr/devicehealth/self_heal`` is
+enabled) mark ``out`` the OSDs on devices that are expected to fail within
+``mgr/devicehealth/mark_out_threshold``, run the following command:
 
 .. prompt:: bash $
 
@@ -211,16 +224,18 @@ Automatic Migration
 
 The ``mgr/devicehealth/self_heal`` option (enabled by default) automatically
 migrates data away from devices that are expected to fail soon. If this option
-is enabled, the module marks such devices ``out`` so that automatic migration
-will occur.
+is enabled, the module marks the OSDs that use such devices ``out`` and sets
+their primary affinity to 0, so that automatic migration will occur.
 
-.. note:: The ``mon_osd_min_up_ratio`` configuration option can help prevent
-   this process from cascading to total failure. If the "self heal" module
-   marks ``out`` so many OSDs that the ratio value of ``mon_osd_min_up_ratio``
-   is exceeded, then the cluster raises the ``DEVICE_HEALTH_TOOMANY`` health
-   check. For instructions on what to do in this situation, see
+.. note:: The :confval:`mon_osd_min_in_ratio` option prevents this process
+   from cascading to total failure. The module does not mark an OSD ``out``
+   if that would bring the ratio of ``in`` OSDs below
+   :confval:`mon_osd_min_in_ratio`. Instead, the cluster raises the
+   ``DEVICE_HEALTH_TOOMANY`` health check. For instructions on what to do in
+   this situation, see
    :ref:`DEVICE_HEALTH_TOOMANY<rados_health_checks_device_health_toomany>`.
 
-The ``mgr/devicehealth/mark_out_threshold`` configuration option specifies the
-time interval for automatic migration. If a device is expected to fail within
-the specified time interval, it will be automatically marked ``out``.
+The ``mgr/devicehealth/mark_out_threshold`` option (default 4 weeks) controls
+automatic migration. When ``mgr/devicehealth/self_heal`` is enabled, the
+Manager marks ``out`` the OSDs on any device whose life expectancy interval
+ends closer than this threshold.
