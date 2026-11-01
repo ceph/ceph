@@ -33,6 +33,9 @@ class RedisDriver : public CacheDriver {
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp, optional_yield y) override;
+	virtual int reserve_space(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) { return 0; } // TODO: Implement
+	virtual int check_and_reserve_space(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) { return 0; } // TODO: Implement
+	virtual int release_reservation(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) { return 0; } // TODO: Implement
 
     virtual int initialize(const DoutPrefixProvider* dpp) override;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y) override;
