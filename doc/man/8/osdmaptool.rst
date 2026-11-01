@@ -101,11 +101,11 @@ Options
 
 .. option:: --test-map-pg <pgid>
 
-   map a particular placement group(specified by pgid) to the OSDs.
+   map a particular placement group (specified by pgid) to the OSDs.
 
 .. option:: --test-map-object <objectname> [--pool <poolid>]
 
-   map a particular placement group(specified by objectname) to the OSDs.
+   map a particular placement group (specified by objectname) to the OSDs.
 
 .. option:: --test-crush [--range-first <first> --range-last <last>]
 
@@ -365,4 +365,4 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`crushtool <crushtool>`\(8),
+:doc:`crushtool <crushtool>`\(8)

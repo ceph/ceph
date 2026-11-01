@@ -9,23 +9,23 @@
 Synopsis
 ========
 
-| **mount.ceph** *name*@*fsid*.*fs_name*=/[*subdir*] *dir* [-o *options* ]
+| **mount.ceph** *name*\ @\ *fsid*\ .\ *fs_name*\ =/[*subdir*] *dir* [ -o *options* ]
 
 
 Description
 ===========
 
 **mount.ceph** is a helper for mounting the Ceph file system on a Linux host.
-It serves to resolve monitor hostname(s) into IP addresses and read
+It serves to resolve Monitor hostname(s) into IP addresses and read
 authentication keys from disk; the Linux kernel client component does most of
-the real work. To mount a Ceph file system use::
+the real work. To mount a Ceph file system, use::
 
   mount.ceph name@07fe3187-00d9-42a3-814b-72a4d5e7d5be.fs_name=/ /mnt/mycephfs -o mon_addr=1.2.3.4
 
 where "name" is the RADOS client name (referred to hereafter as "RADOS user",
 and meaning any individual or system actor such as an application). 
 
-Mount helper can fill in the cluster FSID by reading the ceph configuration file.
+Mount helper can fill in the cluster FSID by reading the Ceph configuration file.
 It is recommended to call the mount helper via mount(8) as per::
 
   mount -t ceph name@.fs_name=/ /mnt/mycephfs -o mon_addr=1.2.3.4
@@ -36,21 +36,21 @@ The first argument is the device part of the mount command. It includes the
 RADOS user for authentication, the file system name and a path within CephFS
 that will be mounted at the mount point.
 
-Monitor addresses can be passed using ``mon_addr`` mount option. Multiple monitor
+Monitor addresses can be passed using ``mon_addr`` mount option. Multiple Monitor
 addresses can be passed by separating addresses with a slash ("/"). Only one
-monitor is needed to mount successfully; the client will learn about all monitors
-from any responsive monitor. However, it is a good idea to specify more than one
-in case the one happens to be down at the time of mount. Monitor addresses takes
+Monitor is needed to mount successfully; the client will learn about all Monitors
+from any responsive Monitor. However, it is a good idea to specify more than one
+in case the one happens to be down at the time of mount. Monitor addresses take
 the form ip_address[:port]. If the port is not specified, the Ceph default of 6789
 is assumed.
 
-If monitor addresses are not specified, then **mount.ceph** will attempt to determine
-monitor addresses using local configuration files and/or DNS SRV records. In similar
+If Monitor addresses are not specified, then **mount.ceph** will attempt to determine
+Monitor addresses using local configuration files and/or DNS SRV records. In a similar
 way, if authentication is enabled on Ceph cluster (which is done using CephX) and
 options ``secret`` and ``secretfile`` are not specified in the command, the mount
 helper will spawn a child process that will use the standard Ceph library routines
-to find a keyring and fetch the secret from it (including the monitor address and
-FSID if those not specified).
+to find a keyring and fetch the secret from it (including the Monitor address and
+FSID if those are not specified).
 
 A sub-directory of the file system can be mounted by specifying the (absolute)
 path to the sub-directory right after "=" in the device part of the mount command.
@@ -68,7 +68,7 @@ Basic
 
 :command:`conf`
     Path to a ceph.conf file. This is used to initialize the Ceph context
-    for autodiscovery of monitor addresses and auth secrets. The default is
+    for autodiscovery of Monitor addresses and auth secrets. The default is
     to use the standard search path for ceph.conf files.
 
 :command:`mount_timeout`
@@ -262,7 +262,7 @@ Mount only part of the namespace/file system::
 
     mount.ceph fs_user@.mycephfs2=/some/directory/in/cephfs /mnt/mycephfs
 
-Pass the monitor host's IP address, optionally::
+Pass the Monitor host's IP address, optionally::
 
     mount.ceph fs_user@.mycephfs2=/ /mnt/mycephfs -o mon_addr=192.168.0.1
 
@@ -270,7 +270,7 @@ Pass the port along with IP address if it is running on a non-standard port::
 
     mount.ceph fs_user@.mycephfs2=/ /mnt/mycephfs -o mon_addr=192.168.0.1:7000
 
-If there are multiple monitors, pass each address separated by a "/"::
+If there are multiple Monitors, pass each address separated by a "/"::
 
    mount.ceph fs_user@.mycephfs2=/ /mnt/mycephfs -o mon_addr=192.168.0.1/192.168.0.2/192.168.0.3
 
