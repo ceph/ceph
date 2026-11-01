@@ -3,11 +3,11 @@
 
 #include "test/librados_test_stub/TestClassHandler.h"
 #include "test/librados_test_stub/TestIoCtxImpl.h"
-#include <boost/algorithm/string/predicate.hpp>
 #include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string_view>
 #include "common/debug.h"
 #include "include/ceph_assert.h"
 #include "include/dlfcn_compat.h"
@@ -63,19 +63,21 @@ void TestClassHandler::open_all_classes() {
     ceph_abort();;
   }
 
+  constexpr std::string_view prefix{"libcls_"};
+  constexpr std::string_view suffix{SHARED_LIB_SUFFIX};
   std::set<std::string> names;
   struct dirent *pde = nullptr;
   while ((pde = ::readdir(dir))) {
     std::string name(pde->d_name);
-    if (!boost::algorithm::starts_with(name, "libcls_") ||
-        !boost::algorithm::ends_with(name, SHARED_LIB_SUFFIX)) {
+    if (!name.starts_with(prefix) || !name.ends_with(suffix)) {
       continue;
     }
     names.insert(name);
   }
 
   for (auto& name : names) {
-    std::string class_name = name.substr(7, name.size() - 10);
+    std::string class_name = name.substr(
+      prefix.size(), name.size() - prefix.size() - suffix.size());
     open_class(class_name, CEPH_LIB + "/" + name);
   }
   closedir(dir);
