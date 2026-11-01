@@ -1,0 +1,46 @@
+This suite checks that ganesha recalls NFSv4 delegations when a CephFS
+client other than ganesha accesses the same file. An NFS client (kernel
+mount of the ganesha export) holds a file open under a delegation while
+ceph-fuse writes, reads or chmods it. The MDS revokes caps from ganesha's
+libcephfs client, which calls back into ganesha (FSAL_CEPH) to recall the
+delegation. The ganesha-deleg-recall task checks that the NFS client returns
+its delegation and that both clients see the same data.
+
+Scenarios that hit a known ganesha bug are listed under known_failures in
+3-deleg-recall.yaml. They are logged, not failed; the task logs any known
+failure that passed. Both bugs below need fixing for every scenario to pass.
+
+  read-deleg-vs-write read-deleg-vs-setattr
+    The delegation is not recalled once the NFS client has closed the open
+    that obtained it. FSAL_CEPH sets the libcephfs delegation on the Fh of
+    that open and releases the Fh at CLOSE, which drops the libcephfs
+    delegation. The NFS client keeps its delegation after CLOSE (as NFSv4
+    allows) and ganesha's state layer still records it, but nothing ties it
+    to CephFS any more: a conflicting CephFS client gets its caps without a
+    recall. The NFS client keeps serving cached (or, with a write delegation,
+    unflushed) data. The DELEGRETURN at unmount logs
+    "fsal_start_io :CRIT :No openstate with delegation".
+
+    Both scenarios create the file over NFS, close it and reopen it, so the
+    reopen runs under the delegation from the create.
+
+  write-deleg-vs-read
+    The NFS client holds the creating open, so the libcephfs delegation is
+    in place and the recall is sent, but too late. FSAL_CEPH's recall
+    callback (ceph_deleg_cb) queues the CB_RECALL and at once releases the
+    libcephfs delegation (ceph_join_deleg ->
+    ceph_ll_delegation(CEPH_DELEGATION_NONE)), instead of when the NFS client
+    returns the delegation (DELEGRETURN). libcephfs drops the caps the
+    delegation held, the MDS completes the revoke and the CephFS client goes
+    ahead before the NFS client has flushed: the CephFS read misses the NFS
+    client's buffered write. Introduced by ganesha commit 271aa38243cb
+    ("FSAL_CEPH: Avoid OPEN_DOWNGRADE hang by fixing async deleg recall
+    handling"); every recall triggered by another CephFS client is affected.
+
+Conflicts between NFS clients of the same ganesha are caught in ganesha's
+state layer and are not affected by either bug (pynfs does not see them).
+Any other CephFS client is: the kernel client, ceph-fuse, other libcephfs
+users, and other ganesha daemons exporting the same file system (an NFS
+cluster with more than one backend). Fixing them is part of supporting
+multi-protocol access and multiple ganesha servers exporting the same share.
+When a fix lands, drop the scenarios it fixes from known_failures.
