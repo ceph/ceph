@@ -811,6 +811,43 @@ def get_custom_field(issue, field_id):
         pass
     return None
 
+def get_branch_history(issue):
+    """Integration branches this QA ticket has run, oldest first, read from
+    the SHAMAN_BUILD custom-field journal details (the creating run's branch
+    is the first old_value)."""
+    history = []
+    for journal in sorted(issue.journals, key=lambda j: j.id):
+        for d in journal.details:
+            if d.get('property') == 'cf' and d.get('name') == str(REDMINE_CUSTOM_FIELD_ID_SHAMAN_BUILD):
+                if not history and d.get('old_value'):
+                    history.append(d['old_value'])
+                if d.get('new_value'):
+                    history.append(d['new_value'])
+    return history
+
+def format_subject(current, previous, max_len=255):
+    """'<current> (<previous, newest first>)', dropping the oldest entries
+    (marked with a trailing '...') until it fits Redmine's subject cap."""
+    for n in range(len(previous), -1, -1):
+        shown = previous[:n] + (['...'] if n < len(previous) else [])
+        subject = f"{current} ({', '.join(shown)})" if shown else current
+        if len(subject) <= max_len:
+            return subject
+    return current[:max_len]
+
+def subject_for_update(issue, old_branch, branch, max_len=255):
+    """Subject for an --update-qa: the new branch anchors it and the earlier
+    branches follow newest-first. Built from the journals on every call, so
+    the existing subject is never parsed."""
+    history = get_branch_history(issue)
+    if not history and old_branch != "unknown":
+        history = [old_branch]
+    prev = []
+    for b in reversed(history):
+        if b != branch and b not in prev:
+            prev.append(b)
+    return format_subject(branch, prev, max_len)
+
 class CommitParityCheck(BaseAuditCheck):
     @property
     def name(self) -> str:
@@ -1961,7 +1998,7 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
         issue_kwargs['tag_list'] = sorted(list(pr_tags))
 
     if args.update_qa:
-        issue = R.issue.get(args.update_qa)
+        issue = R.issue.get(args.update_qa, include=['journals'])
         if issue.project.id != project.id:
             log.error(f"issue {issue.url} project {issue.project} does not match {project}")
             sys.exit(1)
@@ -2024,6 +2061,9 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
             notes += "**Previous PRs included in that run:** None\n"
 
         issue_kwargs['notes'] = notes.strip()
+
+        if args.subject_branch_history:
+            issue_kwargs['subject'] = subject_for_update(issue, old_branch, branch)
 
         if args.dry_run:
             log.info(f"[DRY RUN] Would update redmine qa issue {issue.url} with kwargs: {issue_kwargs}")
@@ -2641,6 +2681,7 @@ def main():
     group.add_argument('--qa-release', dest='qa_release', action='store', help='QA release for tracker (defaults to PR base when --integration)')
     group.add_argument('--qa-tags', dest='qa_tags', action='store', help='QA tags for tracker')
     group.add_argument('--update-qa', dest='update_qa', action='store', help='update QA run ticket')
+    group.add_argument('--subject-branch-history', dest='subject_branch_history', action='store_true', help='on --update-qa, rewrite the tracker subject to make the new integration branch the anchor and keep prior branches newest-first in a trailing parenthesized list')
 
     group = parser.add_argument_group('CI Repository Options')
     group.add_argument('--no-push-ci', dest='no_push_ci', action='store_true', help='don\'t push branch to ceph-ci repo (when making QA tickets)')
