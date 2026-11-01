@@ -147,7 +147,7 @@ TEST_F(DeviceStateTest, SetMetadataWithInvalidValues)
       {"wear_level", "zeropointsevenfive"}};
   device->set_metadata(std::move(invalid_metadata));
 
-  ASSERT_EQ(device->wear_level, 0.0f);
+  ASSERT_EQ(device->wear_level, -1.0f);
   ASSERT_EQ(device->life_expectancy.first, utime_t());
   ASSERT_EQ(device->life_expectancy.second, utime_t());
   ASSERT_EQ(device->life_expectancy_stamp, utime_t());
@@ -162,7 +162,7 @@ TEST_F(DeviceStateTest, SetMetadataWithEmptyStrings)
       {"wear_level", ""}};
   device->set_metadata(std::move(empty_str_metadata));
 
-  ASSERT_EQ(device->wear_level, 0.0f);
+  ASSERT_EQ(device->wear_level, -1.0f);
   ASSERT_EQ(device->life_expectancy.first, utime_t());
   ASSERT_EQ(device->life_expectancy.second, utime_t());
   ASSERT_EQ(device->life_expectancy_stamp, utime_t());
