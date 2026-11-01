@@ -150,11 +150,18 @@ public:
   void chown(uid_t uid, gid_t gid);
   void chmod(mode_t mode);
 
-  /// execute (async)
+  /**
+   * execute (async)
+   *
+   * @param peer_features features of the requesting peer.  Command
+   *        descriptions are encoded so that a peer with these features
+   *        can parse them; local callers pass CEPH_FEATURES_ALL.
+   */
   void execute_command(
     const std::vector<std::string>& cmd,
     const ceph::buffer::list& inbl,
-    asok_finisher on_fin);
+    asok_finisher on_fin,
+    uint64_t peer_features);
 
   /// execute (blocking)
   int execute_command(
@@ -213,6 +220,10 @@ private:
   std::pair<int, AdminSocketHook*> find_matched_hook(
     std::string& prefix,
     const cmdmap_t& cmdmap);
+
+  /// dump descriptions of all registered commands, encoded for a peer
+  /// with the given features
+  void dump_command_descriptions(ceph::Formatter *f, uint64_t features);
 
   std::multimap<std::string, hook_info, std::less<>> hooks;
 
