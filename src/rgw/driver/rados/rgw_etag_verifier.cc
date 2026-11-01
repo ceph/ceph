@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_etag_verifier.h"
+#include "rgw_etag.h"
 #include "rgw_obj_manifest.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -12,7 +13,8 @@ int create_etag_verifier(const DoutPrefixProvider *dpp,
                          CephContext* cct, rgw::sal::DataProcessor* filter,
                          const bufferlist& manifest_bl,
                          const std::optional<RGWCompressionInfo>& compression,
-                         etag_verifier_ptr& verifier)
+                         etag_verifier_ptr& verifier,
+                         std::string_view etag)
 {
   RGWObjManifest manifest;
 
@@ -33,6 +35,14 @@ int create_etag_verifier(const DoutPrefixProvider *dpp,
 
   if (rule.start_part_num == 0) {
     /* Atomic object */
+    if (rgw::is_multipart_etag(etag)) {
+      // an ETag that is not the MD5 of the data, such as the MD5 of the
+      // stripes' CRCs an OSD-direct PUT stores: the MD5 this verifier
+      // computes could never match it
+      ldpp_dout(dpp, 4) << "the etag of an atomic object has the multipart "
+          "form, not the MD5 of its data" << dendl;
+      return -ENOTSUP;
+    }
     verifier.emplace<ETagVerifier_Atomic>(cct, filter);
     return 0;
   }

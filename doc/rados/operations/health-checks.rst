@@ -1727,6 +1727,29 @@ To disable this health check, run the following command:
 
 Note that disabling this health check is not recommended.
 
+POOL_RDMA_DELIVERY_OUT_OF_RANGE
+_______________________________
+
+One or more pools have an ``rdma_delivery_lease`` or ``rdma_delivery_drain``
+value outside the range that the monitor accepts. A monitor of this release
+rejects such values, but a value can come by another path, such as from a
+development or downstream build. The OSDs and clients of this release use
+the nearest bound instead. A daemon or client that does not clamp the value
+uses it as stored, so the two disagree about when an out-of-band transfer
+ends. A client can then reuse a memory window while an OSD can still write
+to it.
+
+``ceph health detail`` names each pool and value. Set the value within
+its range, or to ``0`` to restore the default, by running a command of
+the following form:
+
+.. prompt:: bash #
+
+   ceph osd pool set <pool-name> rdma_delivery_drain <value>
+
+See :ref:`rdma_delivery_lease` and :ref:`rdma_delivery_drain` for the
+ranges.
+
 
 POOL_TOO_FEW_PGS
 ________________

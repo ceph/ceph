@@ -1,0 +1,14 @@
+# Each process holds every 50th UET request it receives for 600 ms, past
+# the sender's retransmit timeout: the sender completes the transfer with
+# its retransmit, and the held copy lands late, as a copy that a switch
+# queued would. A window owner that retired the key of a window when its
+# request ended drops the copy (the soak checks every window for late
+# writes). With RUD the target places no packet twice.
+overrides:
+  uet_host:
+    hold:
+      ms: 600
+      dir: rx
+      types: [rudi_req, rud_req]
+      every: 50
+      log: /var/log/ceph/uet-hold.log

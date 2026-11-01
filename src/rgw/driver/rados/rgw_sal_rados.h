@@ -1153,6 +1153,11 @@ public:
   // Process a bufferlist
   virtual int process(bufferlist&& data, uint64_t offset) override;
 
+  virtual bool set_pulled() override;
+  virtual int process_pulled(uint64_t len, const std::string& token,
+                             uint32_t want,
+                             std::vector<PulledStripe>* stripes) override;
+
   // complete the operation and make its result visible to clients
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,

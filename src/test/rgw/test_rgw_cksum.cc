@@ -25,14 +25,15 @@
 #include "common/ceph_argparse.h"
 #include "rgw/rgw_cksum.h"
 #include "rgw/rgw_cksum_pipe.h"
+#include "rgw/rgw_rdma_cksum.h"
 #include <openssl/sha.h>
 #include "rgw/rgw_hex.h"
 
 extern "C" {
-#include "madler/crc64nvme.h"
-#include "madler/crc32iso_hdlc.h"
-#include "madler/crc32iscsi.h"
-#include "spdk/crc64.h"
+#include "common/madler/crc64nvme.h"
+#include "common/madler/crc32iso_hdlc.h"
+#include "common/madler/crc32iscsi.h"
+#include "common/spdk/crc64.h"
 } // extern "C"
 
 #define dout_subsys ceph_subsys_rgw
@@ -798,6 +799,158 @@ TEST(RGWCksum, CtorUnarmor)
 				  rgw::cksum::Cksum::CtorStyle::from_armored);
 
   ASSERT_EQ(armored_text1, cksum2.to_armor());
+}
+
+TEST(RGWCksum, RdmaCanonical)
+{
+  /* S3 over RDMA renders the canonical CRCs that the OSDs report; the
+   * rendering must be the one a digest stores for the same bytes, on
+   * either byte order, or a whole-object GET or an OSD-direct PUT finds
+   * a mismatch */
+  for (const auto* s : {&lorem, &dolor, &lacrimae}) {
+    const auto* p = (const unsigned char *) s->c_str();
+
+    auto t = cksum::Type::crc64nvme;
+    DigestVariant dv1 = rgw::cksum::digest_factory(t);
+    Digest* digest1 = get_digest(dv1);
+    ASSERT_NE(digest1, nullptr);
+    digest1->Update(p, s->length());
+    auto stored1 = rgw::cksum::finalize_digest(digest1, t);
+    EXPECT_EQ(stored1.to_armor(),
+	      rgw::rdma::cksum_crc64nvme(
+		spdk_crc64_nvme(p, s->length(), 0)).to_armor());
+
+    t = cksum::Type::crc32c;
+    DigestVariant dv2 = rgw::cksum::digest_factory(t);
+    Digest* digest2 = get_digest(dv2);
+    ASSERT_NE(digest2, nullptr);
+    digest2->Update(p, s->length());
+    auto stored2 = rgw::cksum::finalize_digest(digest2, t);
+    EXPECT_EQ(stored2.to_armor(),
+	      rgw::rdma::cksum_crc32c(
+		rgw::rdma::crc32c_of(p, s->length())).to_armor());
+  }
+
+  /* the values that DigestCRC32c and CRC64NVME2 compare with */
+  const auto* p = (const unsigned char *) dolor.c_str();
+  EXPECT_EQ("wiBA+PSv41M=",
+	    rgw::rdma::cksum_crc64nvme(
+	      spdk_crc64_nvme(p, dolor.length(), 0)).to_armor());
+  EXPECT_EQ("ldwuSw==",
+	    rgw::rdma::cksum_crc32c(
+	      rgw::rdma::crc32c_of(p, dolor.length())).to_armor());
+}
+
+TEST(RGWCksum, RdmaStoredOrder)
+{
+  /* a stored CRC holds the big-endian bytes of the CRC, on either byte
+   * order */
+  const uint32_t crc32 = 0x01020304;
+  const uint64_t crc64 = 0x0102030405060708;
+  const uint32_t stored32 = rgw::cksum::stored_crc_order(crc32);
+  const uint64_t stored64 = rgw::cksum::stored_crc_order(crc64);
+  const auto* b32 = reinterpret_cast<const unsigned char*>(&stored32);
+  const auto* b64 = reinterpret_cast<const unsigned char*>(&stored64);
+  EXPECT_EQ(0x01, b32[0]);
+  EXPECT_EQ(0x04, b32[3]);
+  EXPECT_EQ(0x01, b64[0]);
+  EXPECT_EQ(0x08, b64[7]);
+  EXPECT_EQ(crc32, rgw::cksum::stored_crc_order(stored32));
+  EXPECT_EQ(crc64, rgw::cksum::stored_crc_order(stored64));
+}
+
+/* what an OSD reports of the bytes of s, delivered as one contiguous
+ * extent */
+librados::ObjectOperation::rdma_delivery_result
+rdma_result(const std::string& s)
+{
+  using R = librados::ObjectOperation::rdma_delivery_result;
+  const auto* p = (const unsigned char *) s.c_str();
+  R r;
+  r.bytes = s.length();
+  r.crc64 = spdk_crc64_nvme(p, s.length(), 0);
+  r.crc32c = rgw::rdma::crc32c_of(p, s.length());
+  r.flags = R::COMBINABLE | R::CRC64_VALID |
+    R::CRC32C_VALID;
+  return r;
+}
+
+TEST(RGWCksum, RdmaDeliveredCrcs)
+{
+  using R = librados::ObjectOperation::rdma_delivery_result;
+  const auto whole = rdma_result(dolorem);
+
+  /* one contiguous extent: each CRC that is valid */
+  auto c = rgw::rdma::delivered_crcs(whole);
+  EXPECT_EQ(whole.crc64, c.crc64);
+  EXPECT_EQ(whole.crc32c, c.crc32c);
+  auto r = whole;
+  r.flags &= ~R::CRC32C_VALID;
+  c = rgw::rdma::delivered_crcs(r);
+  EXPECT_EQ(whole.crc64, c.crc64);
+  EXPECT_FALSE(c.crc32c);
+
+  /* placed as ranges, in any order, that cover the bytes: their fold */
+  const auto d = rdma_result(dolor);
+  const auto l = rdma_result(lorem);
+  r = whole;
+  r.flags = R::RANGES | R::CRC64_VALID |
+    R::CRC32C_VALID;
+  r.ranges = {{dolor.length(), lorem.length(), l.crc64, l.crc32c},
+	      {0, dolor.length(), d.crc64, d.crc32c}};
+  c = rgw::rdma::delivered_crcs(r);
+  EXPECT_EQ(whole.crc64, c.crc64);
+  EXPECT_EQ(whole.crc32c, c.crc32c);
+
+  /* not when they leave bytes out */
+  r.bytes += 1;
+  c = rgw::rdma::delivered_crcs(r);
+  EXPECT_FALSE(c.crc64);
+  EXPECT_FALSE(c.crc32c);
+  r.bytes = whole.bytes;
+  r.ranges[0].ofs += 1;
+  c = rgw::rdma::delivered_crcs(r);
+  EXPECT_FALSE(c.crc64);
+  EXPECT_FALSE(c.crc32c);
+
+  /* nor from a result that is neither */
+  r = whole;
+  r.flags &= ~R::COMBINABLE;
+  c = rgw::rdma::delivered_crcs(r);
+  EXPECT_FALSE(c.crc64);
+  EXPECT_FALSE(c.crc32c);
+}
+
+TEST(RGWCksum, RdmaCrcFold)
+{
+  /* the CRCs of consecutive extents fold into those of the whole */
+  const auto whole = rgw::rdma::delivered_crcs(rdma_result(dolorem));
+  const auto d = rgw::rdma::delivered_crcs(rdma_result(dolor));
+  const auto l = rgw::rdma::delivered_crcs(rdma_result(lorem));
+
+  rgw::rdma::crc_fold both({true, true});
+  EXPECT_FALSE(both.result().crc64);
+  EXPECT_FALSE(both.result().crc32c);
+  both.append(d, dolor.length());
+  both.append(l, lorem.length());
+  EXPECT_EQ(whole.crc64, both.result().crc64);
+  EXPECT_EQ(whole.crc32c, both.result().crc32c);
+
+  /* only those wanted */
+  rgw::rdma::crc_fold only64({.crc64nvme = true});
+  only64.append(d, dolor.length());
+  only64.append(l, lorem.length());
+  EXPECT_EQ(whole.crc64, only64.result().crc64);
+  EXPECT_FALSE(only64.result().crc32c);
+
+  /* an extent without one of them ends that one, and only that one */
+  const auto all = rgw::rdma::delivered_crcs(rdma_result(dolorem + dolor));
+  rgw::rdma::crc_fold cut({true, true});
+  cut.append(d, dolor.length());
+  cut.append({l.crc64, std::nullopt}, lorem.length());
+  cut.append(d, dolor.length());
+  EXPECT_EQ(all.crc64, cut.result().crc64);
+  EXPECT_FALSE(cut.result().crc32c);
 }
 
 } /* namespace */

@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include "include/crc32c.h"
 #include <boost/crc.hpp>
-#include "spdk/crc64.h"
+#include "common/crc64nvme.h"
 
 namespace rgw { namespace digest {
 
@@ -92,6 +92,8 @@ namespace rgw { namespace digest {
     }
   }; /* Crc32c */
 
+  /* use Ceph's CRC-64/NVME, which picks ISA-L or madler's tables for
+   * the CPU */
   class Crc64Nvme {
   private:
     uint64_t crc;
@@ -105,7 +107,7 @@ namespace rgw { namespace digest {
     void Restart() { crc = initial_value; }
 
     void Update(const unsigned char *data, uint64_t len) {
-      crc = spdk_crc64_nvme(data, len, crc);
+      crc = ceph::crc64nvme(crc, data, len);
     }
 
     void Final(unsigned char* digest) {

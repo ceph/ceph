@@ -31,6 +31,15 @@ export LC_ALL=C.UTF-8
 ARCH=$(uname -m)
 
 
+# WITH_OOB_OFI asks for out-of-band delivery over libfabric: ON, as for
+# the CMake option (or 1, true, yes)
+function oob_ofi_wanted {
+    case "${WITH_OOB_OFI:-}" in
+        ON|On|on|1|TRUE|True|true|YES|Yes|yes) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 function munge_ceph_spec_in {
     local with_crimson=$1
     shift
@@ -42,8 +51,14 @@ function munge_ceph_spec_in {
     if ! $with_crimson; then
         sed -i -e 's/%bcond_without crimson/%bcond_with crimson/g' $OUTFILE
     fi
+    if oob_ofi_wanted; then
+        sed -i -e 's/%bcond_with oob_ofi/%bcond_without oob_ofi/g' $OUTFILE
+    fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
+    fi
+    if [ "${WITH_RADOSGW_CUOBJ:-OFF}" = ON ]; then
+        sed -i -e 's/%bcond_with cuobj/%bcond_without cuobj/g' $OUTFILE
     fi
 }
 
@@ -298,14 +313,51 @@ function setup_lab_extras_repo() {
     # NOTE This repo should be temporary while we work to get the
     # needed deps into EPEL, etc.
     local baseurlprefix="https://apt-mirror.sepia.ceph.com/lab-extras"
+    # RHEL's $releasever includes the minor version (for example, 10.2),
+    # but lab-extras is organized by EL major version.
+    local el_major=$1
     local path="/etc/yum.repos.d/ceph-lab-extras.repo"
     $SUDO tee "${path}" <<EOF
 [ceph-lab-extras]
-name=ceph-lab-extras-\$releasever
-baseurl=${baseurlprefix}/\$releasever
+name=ceph-lab-extras-${el_major}
+baseurl=${baseurlprefix}/${el_major}
 enabled=1
 gpgcheck=0
 EOF
+}
+
+function setup_cuobj_repo() {
+    if [ "${WITH_RADOSGW_CUOBJ:-OFF}" != ON ]; then
+        return
+    fi
+
+    local el_major=${VERSION_ID%%.*}
+    case "${ID}:${el_major}" in
+        rocky:9|centos:9|almalinux:9|rhel:9|rocky:10|centos:10|almalinux:10|rhel:10) ;;
+        fedora:*)
+            echo "cuObject is not supported on Fedora: NVIDIA's Fedora repository does not provide the required libcuobjserver-devel server SDK." >&2
+            return 1
+            ;;
+        *)
+            echo "cuObject repository setup requires an EL9 or EL10 distribution" >&2
+            return 1
+            ;;
+    esac
+    local cuda_arch
+    case "$ARCH" in
+        x86_64) cuda_arch=x86_64 ;;
+        aarch64) cuda_arch=sbsa ;;
+        *)
+            echo "cuObject repository setup does not support ${ID} ${VERSION_ID} on ${ARCH}" >&2
+            return 1
+            ;;
+    esac
+
+    # The spec's cuobj BuildRequires selects the server library and headers.
+    # The CUDA toolkit and client packages are not needed for the RGW build.
+    $SUDO dnf install -y dnf-plugins-core || return 1
+    $SUDO dnf config-manager --add-repo \
+        "https://developer.download.nvidia.com/compute/cuda/repos/rhel${el_major}/${cuda_arch}/cuda-rhel${el_major}.repo"
 }
 
 function populate_wheelhouse() {
@@ -443,7 +495,9 @@ if [ x$(uname)x = xFreeBSDx ]; then
     exit
 else
     [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
+    oob_ofi_wanted && with_oob_ofi=true || with_oob_ofi=false
     source /etc/os-release
+    setup_cuobj_repo || exit 1
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
         echo "Using apt-get to install dependencies"
@@ -519,9 +573,13 @@ else
         if $with_crimson; then
             build_profiles+=",pkg.ceph.crimson"
         fi
+        if $with_oob_ofi; then
+            build_profiles+=",pkg.ceph.oob-ofi"
+        fi
 
         ci_debug "for_make_check=$for_make_check"
         ci_debug "with_crimson=$with_crimson"
+        ci_debug "with_oob_ofi=$with_oob_ofi"
         ci_debug "with_jaeger=$with_jaeger"
         ci_debug "build_profiles=$build_profiles"
         ci_debug "Now running 'mk-build-deps' and installing ceph-build-deps package"
@@ -551,11 +609,21 @@ else
                     $SUDO dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
+                if { [ "$ID" = centos ] || [ "$ID" = rocky ] || [ "$ID" = almalinux ] || [ "$ID" = rhel ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
                     dts_ver=13
-                    $SUDO dnf config-manager --set-enabled crb
+                    if [ "$ID" = rhel ]; then
+                        # UBI provides only a subset of the RHEL build deps.
+                        # Use dnf here: subscription-manager cannot enable
+                        # repositories while operating in container mode.
+                        $SUDO dnf config-manager --set-enabled \
+                            "rhel-${MAJOR_VERSION}-for-${ARCH}-baseos-rpms" \
+                            "rhel-${MAJOR_VERSION}-for-${ARCH}-appstream-rpms" \
+                            "codeready-builder-for-rhel-${MAJOR_VERSION}-${ARCH}-rpms"
+                    else
+                        $SUDO dnf config-manager --set-enabled crb
+                    fi
                     if [ "$MAJOR_VERSION" -eq 10 ]; then
-                        setup_lab_extras_repo
+                        setup_lab_extras_repo "$MAJOR_VERSION"
                     fi
                 fi
                 ;;

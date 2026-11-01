@@ -9,6 +9,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 from cephadm import utils
 from ceph.cephadm.d3n_types import D3NCache, D3NCacheError, D3NCacheSpec, d3n_get_host_devs, d3n_paths
 from cephadm.services.rgw_d3n import D3NDevicePlanner
+from cephadm.services.oob import oob_changed, oob_container_config, oob_dependencies
 from .service_registry import register_cephadm_service
 from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, RGW_PROFILE_RELEASE
 import logging
@@ -42,9 +43,12 @@ class RgwService(CephService):
         # Only REDEPLOY when frontend config changed, as rgw_frontends
         # can't be updated at runtime other changes like ssl
         # certs can be applied via reconfig without a restart.
+        # The oob config sets container arguments, so it needs a REDEPLOY too.
         if step.action is utils.Action.RECONFIG:
             changed = set(curr_deps).symmetric_difference(last_deps)
             if any(d.startswith('frontend:') for d in changed):
+                return utils.NextDaemonStep(utils.Action.REDEPLOY)
+            if oob_changed(curr_deps, last_deps):
                 return utils.NextDaemonStep(utils.Action.REDEPLOY)
         return step
 
@@ -81,6 +85,10 @@ class RgwService(CephService):
             allow_reuse = getattr(rgw_spec, 'allow_port_reuse', False)
             frontend_parts.append(f'allow_port_reuse={allow_reuse}')
             deps.append(f'frontend:{utils.config_hash(str(sorted(frontend_parts)))}')
+
+            if rgw_spec.service_id:
+                section = f"{utils.name_to_config_section('rgw')}.{rgw_spec.service_id}"
+                deps += oob_dependencies(mgr, rgw_spec, section)
 
         return sorted(deps)
 
@@ -566,6 +574,11 @@ class RgwService(CephService):
 
         if svc_spec.qat:
             config['qat'] = svc_spec.qat
+
+        oob = oob_container_config(
+            self.mgr, svc_spec, utils.name_to_config_section(daemon_spec.name()))
+        if oob:
+            config['oob'] = oob
 
         d3n_cache = self._compute_d3n_cache_for_daemon(daemon_spec, svc_spec)
         if d3n_cache:

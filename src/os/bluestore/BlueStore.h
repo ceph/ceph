@@ -144,6 +144,8 @@ enum {
   l_bluestore_csum_lat,
   l_bluestore_read_eio,
   l_bluestore_reads_with_retries,
+  l_bluestore_read_into_direct_bytes,
+  l_bluestore_read_into_copied_bytes,
   l_bluestore_read_lat,
   //****************************************
 
@@ -1794,6 +1796,16 @@ public:
     ceph::buffer::list& bl,
     uint32_t op_flags = 0) override;
 
+  int read_into(
+    CollectionHandle &c,
+    const ghobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    const struct iovec* iov,
+    int iovcnt,
+    uint32_t op_flags = 0) override;
+  uint64_t get_read_into_block_size() const override;
+
 private:
 
   // --------------------------------------------------------
@@ -1829,6 +1841,9 @@ private:
     uint64_t r_len = 0;
     ceph::buffer::list bl;
     std::list<region_t> regs; // original read regions
+    /// read_into(): the caller's memory the device read this request
+    /// into, or null when it went into bl's own buffers
+    char* direct = nullptr;
 
     read_req_t(uint64_t off, uint64_t len) : r_off(off), r_len(len) {}
 
@@ -1868,9 +1883,125 @@ private:
     bool* csum_error,
     ceph::buffer::list& bl);
 
+  /// the caller's memory a read_into() lands in, positions counted from
+  /// the read's offset
+  struct read_dest_t {
+    const struct iovec* iov = nullptr;
+    int iovcnt = 0;
+    /// the n bytes at pos, when one segment holds them all; else null
+    char* span(uint64_t pos, uint64_t n) const;
+    /// copy bl to pos, across segments
+    void copy_in(uint64_t pos, const ceph::buffer::list& bl) const;
+    void zero(uint64_t pos, uint64_t n) const;
+  };
+
+  /// where the device can read req straight into dst: req is one
+  /// contiguous run of the read, with no padding, in one segment, and
+  /// the device can read each of its pieces there
+  /// (BlockDevice::can_read_into()); else null
+  char* _read_into_span(
+    const BlobRef& bptr,
+    const read_req_t& req,
+    uint64_t offset,
+    size_t length,
+    const read_dest_t& dst);
+
+  int _prepare_read_into_ioc(
+    blobs2read_t& blobs2read,
+    std::vector<ceph::buffer::list>* compressed_blob_bls,
+    uint64_t offset,
+    size_t length,
+    const read_dest_t& dst,
+    IOContext* ioc,
+    uint64_t* direct_bytes);
+
+  int _do_read_into(
+    Collection *c,
+    OnodeRef& o,
+    uint64_t offset,
+    size_t len,
+    const read_dest_t& dst,
+    uint32_t op_flags = 0,
+    uint64_t retry_count = 0);
+
   void _measure_runtime_frag(Collection *c, const blobs2read_t& blobs2read);
 
   void _measure_static_frag(Collection *c, const OnodeRef& o);
+
+  // the steps that _do_read(), _do_read_into() and _do_readv() share;
+  // caller names the read in the logs
+  /// whether a read with op_flags keeps what it reads in the cache
+  bool _read_buffered(const char* caller, uint32_t op_flags);
+  /// fault in the extents of offset~length for a read, and time it
+  void _fault_read_range(
+    const char* caller,
+    OnodeRef& o,
+    uint64_t offset,
+    uint64_t length);
+  /// what a read with op_flags takes from the cache (BufferSpace)
+  int _read_cache_policy(const char* caller, uint32_t op_flags);
+  /// the steps above for a read of one range: whether to keep what it
+  /// reads in the cache; length cut to the object's end, and the
+  /// extents faulted in; what the cache holds of the range
+  /// (ready_regions) and what the device must read (blobs2read)
+  bool _start_read(
+    const char* caller,
+    OnodeRef& o,
+    uint64_t offset,
+    size_t& length,
+    uint32_t op_flags,
+    ready_regions_t& ready_regions,
+    blobs2read_t& blobs2read);
+  /// submit the reads in ioc and wait for them, with the latencies of
+  /// a read that started at start: is_miss when the cache did not hold
+  /// all of it, num_ios the reads to log when there were none to submit.
+  /// -EIO when the device failed one
+  int _submit_read_ioc(
+    const char* caller,
+    uint32_t op_flags,
+    bool is_miss,
+    int64_t num_ios,
+    IOContext* ioc,
+    ceph::mono_clock::time_point start);
+  /// the fragmentation samples of a read of offset~length that read
+  /// blobs2read from the device
+  void _sample_read_frag(
+    Collection *c,
+    OnodeRef& o,
+    uint64_t offset,
+    size_t length,
+    uint32_t op_flags,
+    const blobs2read_t& blobs2read);
+  /// both for a read of one range: _submit_read_ioc(), and when it
+  /// succeeded, _sample_read_frag()
+  int _wait_read_ioc(
+    const char* caller,
+    Collection *c,
+    OnodeRef& o,
+    uint64_t offset,
+    size_t length,
+    uint32_t op_flags,
+    const blobs2read_t& blobs2read,
+    IOContext* ioc,
+    ceph::mono_clock::time_point start);
+  /// a read that succeeded after retry_count checksum failures: count
+  /// it, log it and raise BLUESTORE_SPURIOUS_READ_ERRORS
+  void _note_read_retries(
+    const char* caller,
+    uint64_t offset,
+    size_t length,
+    uint64_t retry_count);
+  /// r, or -EIO where the debug options inject a read error into oid
+  int _debug_read_err(
+    const char* caller,
+    Collection *c,
+    const ghobject_t& oid,
+    int r);
+  /// the latency of a read() or read_into() that started at start
+  void _log_read_latency(
+    const char* caller,
+    uint32_t op_flags,
+    ceph::mono_clock::time_point start);
 
   int _do_read(
     Collection *c,

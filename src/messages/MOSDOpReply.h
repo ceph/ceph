@@ -53,8 +53,21 @@ private:
   int32_t retry_attempt = -1;
   bool do_redirect;
   request_redirect_t redirect;
+  /// per-op out-of-band delivery results (RDMA); empty when no op was
+  /// delivered out of band. When ops[i] went out of band its outdata
+  /// is empty and oob_results[i] holds the pushed byte count plus the
+  /// optional CRC64-NVME of those bytes. Encoded after the v8 fields
+  /// only when non-empty, and decoded when bytes remain there.
+  std::vector<ceph::rdma::oob_result_t> oob_results;
 
 public:
+  void set_oob_results(std::vector<ceph::rdma::oob_result_t>&& v) {
+    oob_results = std::move(v);
+  }
+  const std::vector<ceph::rdma::oob_result_t>& get_oob_results() const {
+    return oob_results;
+  }
+
   const object_t& get_oid() const { return oid; }
   const pg_t&     get_pg() const { return pgid; }
   int      get_flags() const { return flags; }
@@ -232,6 +245,12 @@ public:
         }
       }
       encode_trace(payload, features);
+      if (header.version == HEAD_VERSION && !oob_results.empty()) {
+        // the results trail the v8 fields, where a client that does
+        // not know them stops decoding; only a client that sent
+        // delivery descriptors is answered with any
+        encode(oob_results, payload);
+      }
     }
   }
   void decode_payload() override {
@@ -265,6 +284,9 @@ public:
       if (do_redirect)
 	decode(redirect, p);
       decode_trace(p);
+      if (!p.end()) {
+	decode(oob_results, p);
+      }
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
       decode(head, p);

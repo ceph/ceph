@@ -1,0 +1,13 @@
+# Five bare-metal nodes with an Ethernet port each, such as mako nodes
+# (--machine-type mako). The uet provider's software core keeps one
+# endpoint per process, on one interface, so each process that uses UET
+# gets a node of its own: the three OSDs and the S3 client (client.1).
+# The gateway (client.0) opens no UET endpoint, since this suite does not
+# cover the relay windows of RC clients. UET has no gateway support, so
+# the nodes must share an L2 segment, as nodes on one switch do.
+roles:
+- [mon.a, mgr.x, osd.0]
+- [mon.b, mgr.y, osd.1]
+- [mon.c, osd.2]
+- [client.0]
+- [client.1]

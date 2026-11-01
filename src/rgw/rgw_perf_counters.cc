@@ -93,6 +93,11 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->add_time_avg(l_rgw_bucket_reshard_ok_time_avg,
                     "bucket_reshard_ok_time_avg",
                     "Average time span to complete successful reshards");
+
+  pcb->add_u64_counter(l_rgw_rdma_cksum_unchecked,
+                       "rdma_checksum_unchecked",
+                       "Whole-object out-of-band GETs whose delivered bytes "
+                       "were not compared with the stored checksum");
 }
 
 void add_rgw_op_counters(PerfCountersBuilder *lpcb) {

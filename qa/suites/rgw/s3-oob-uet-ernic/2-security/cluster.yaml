@@ -1,0 +1,7 @@
+# The engines wrap every UET frame in TSS, in cluster mode. A TSS
+# handshake makes the first round trip slower, hence the longer
+# retransmit timeout (rocm-ernic docs/uet.rst).
+ernic:
+  uet:
+    sec: cluster
+    rto: 1000

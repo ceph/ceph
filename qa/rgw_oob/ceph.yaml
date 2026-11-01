@@ -1,0 +1,18 @@
+# the cluster and its gateway, with the out-of-band transports of
+# transport/ and the OSD-direct data path of the gateway. oob_check waits
+# until every OSD's transport is up, and checks the OSDs' counters, logs
+# and health at the end.
+overrides:
+  ceph:
+    conf:
+      global:
+        # each OSD and the gateway lock this much memory for transfers:
+        # 192 MiB or more leaves room for the 16 gather windows
+        oob memory: 536870912
+      client:
+        rgw rdma osd direct: true
+        rgw rdma checksum: true
+tasks:
+- ceph:
+- rgw: [client.0]
+- oob_check:

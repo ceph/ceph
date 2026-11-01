@@ -1,0 +1,6 @@
+# the gateway reads each object from its PG's primary
+overrides:
+  ceph:
+    conf:
+      client:
+        rados replica read policy: default

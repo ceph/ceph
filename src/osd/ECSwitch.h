@@ -282,6 +282,17 @@ public:
     return -EOPNOTSUPP;
   }
 
+  int objects_read_local_into(const hobject_t &hoid, uint64_t off,
+                              uint64_t len, uint32_t op_flags,
+                              const struct iovec *iov, int iovcnt) override
+  {
+    if (is_optimized()) {
+      return optimized.objects_read_local_into(hoid, off, len, op_flags,
+                                               iov, iovcnt);
+    }
+    return -EOPNOTSUPP;
+  }
+
   int objects_readv_sync(const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
@@ -307,11 +318,12 @@ public:
     const std::list<std::pair<ec_align_t,
                               std::pair<ceph::buffer::list*, Context*>>> &
     to_read,
-    Context *on_complete, bool fast_read = false) override
+    Context *on_complete, bool fast_read = false,
+    bool into_arena = false) override
   {
     if (is_optimized()) {
       optimized.objects_read_async(hoid, object_size, to_read, on_complete,
-                                   fast_read);
+                                   fast_read, into_arena);
     }
     else {
       legacy.objects_read_async(hoid, object_size, to_read, on_complete,
@@ -407,6 +419,10 @@ public:
 
     ceph_abort_msg("This interface is not supported by legacy EC");
     return {0, 0, 0};
+  }
+
+  bool ec_supports_direct_reads() const override {
+    return is_optimized() && optimized.ec_supports_direct_reads();
   }
 
   int objects_get_attrs(

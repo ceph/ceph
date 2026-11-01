@@ -1061,6 +1061,36 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
+    /**
+     * RDMA_DELIVERY_LEASE
+     *
+     * Seconds after receiving a read that asks for out-of-band RDMA
+     * delivery during which an OSD may still start the RDMA write
+     * into the client's memory window; a push that would start later
+     * is delivered inline instead. The lease is also part of how long
+     * a client that gave up on a request waits before it writes its
+     * window again (see RDMA_DELIVERY_DRAIN), so the value the OSDs
+     * enforce must be the value the clients see - hence a pool option
+     * rather than a daemon option. Unset means
+     * pg_pool_t::DEFAULT_RDMA_DELIVERY_LEASE.
+     */
+    RDMA_DELIVERY_LEASE,
+    /**
+     * RDMA_DELIVERY_DRAIN
+     *
+     * Seconds after the delivery lease runs out by which every
+     * out-of-band write an OSD started for a read has landed or been
+     * cut off. The lease bounds when a write may start, the drain when
+     * it may still land: an OSD stops waiting for its writes at receipt
+     * plus lease plus drain and cuts off any still in flight, and a
+     * libfabric cut-off can end up to osd_oob_cutoff_late_tolerance
+     * after that. A window owner that gave up on a request writes the
+     * window again only once lease plus drain plus that tolerance have
+     * passed since the last operation of the request reached its OSD.
+     * A pool option for the same reason as the lease. Unset means
+     * pg_pool_t::DEFAULT_RDMA_DELIVERY_DRAIN.
+     */
+    RDMA_DELIVERY_DRAIN,
   };
 
   enum type_t {
@@ -1555,6 +1585,85 @@ public:
   bool fast_read = false;            ///< whether turn on fast read on the pool or not
   shard_id_set nonprimary_shards; ///< EC partial writes: shards that cannot become a primary
   pool_opts_t opts; ///< options
+
+  /// default for pool_opts_t::RDMA_DELIVERY_LEASE (seconds); a
+  /// constant rather than a daemon option so that OSDs, which enforce
+  /// it, and clients, which reason about it, cannot disagree
+  static constexpr double DEFAULT_RDMA_DELIVERY_LEASE = 5.0;
+  double get_rdma_delivery_lease() const {
+    return rdma_delivery_option(pool_opts_t::RDMA_DELIVERY_LEASE,
+				DEFAULT_RDMA_DELIVERY_LEASE,
+				MIN_RDMA_DELIVERY_LEASE,
+				MAX_RDMA_DELIVERY_LEASE);
+  }
+  /// default for pool_opts_t::RDMA_DELIVERY_DRAIN (seconds); a
+  /// constant for the same reason as the lease's
+  static constexpr double DEFAULT_RDMA_DELIVERY_DRAIN = 3.0;
+  double get_rdma_delivery_drain() const {
+    return rdma_delivery_option(pool_opts_t::RDMA_DELIVERY_DRAIN,
+				DEFAULT_RDMA_DELIVERY_DRAIN,
+				MIN_RDMA_DELIVERY_DRAIN,
+				MAX_RDMA_DELIVERY_DRAIN);
+  }
+  /// the largest RDMA_DELIVERY_LEASE and RDMA_DELIVERY_DRAIN (seconds)
+  /// the mon takes. An out-of-band transfer holds its op thread and its
+  /// PG's lock for up to lease plus drain, which must stay well below
+  /// osd_op_thread_timeout (15 s), past which the OSD stops answering
+  /// heartbeats.
+  static constexpr double MAX_RDMA_DELIVERY_LEASE = 6.0;
+  static constexpr double MAX_RDMA_DELIVERY_DRAIN = 4.0;
+  /// the smallest RDMA_DELIVERY_LEASE and RDMA_DELIVERY_DRAIN (seconds)
+  /// the mon takes, other than 0, which restores the default. An OSD
+  /// starts no transfer for a read after the lease. It cuts off each
+  /// write that has not landed by the end of the drain, and a transport
+  /// needs time to cut off its writes.
+  static constexpr double MIN_RDMA_DELIVERY_LEASE = 0.1;
+  static constexpr double MIN_RDMA_DELIVERY_DRAIN = 0.5;
+  /// a delivery option as set, or what a value out of the bounds reads
+  /// as: the default for one that is not a positive number, the
+  /// smallest for one under it, the largest for one past it. A mon of
+  /// this release rejects such values. One that came by another path,
+  /// as from a development or downstream build, is clamped here, and
+  /// raises POOL_RDMA_DELIVERY_OUT_OF_RANGE until it is set again.
+  double rdma_delivery_option(pool_opts_t::key_t key, double dflt,
+			      double min, double max) const {
+    const double v = opts.value_or(key, double{dflt});
+    if (!(v > 0.0)) {
+      return dflt;
+    }
+    return v < min ? min : v > max ? max : v;
+  }
+  /// a delivery option whose stored value the pool reads as another
+  /// (rdma_delivery_option()): its name, the value stored, and the value
+  /// that the daemons and clients of this release use
+  struct rdma_delivery_out_of_range_t {
+    std::string_view name;
+    double stored = 0.0;
+    double used = 0.0;
+  };
+  /// the delivery options stored out of the range that the mon takes. A
+  /// mon of this release rejects such values, but a development or
+  /// downstream build may have stored them. This release uses the value
+  /// rdma_delivery_option() reads, and a build that does not clamp uses
+  /// the value stored. OSDMap::check_health() raises
+  /// POOL_RDMA_DELIVERY_OUT_OF_RANGE for them
+  std::vector<rdma_delivery_out_of_range_t>
+  rdma_delivery_out_of_range() const {
+    std::vector<rdma_delivery_out_of_range_t> found;
+    auto check = [&](std::string_view name, pool_opts_t::key_t key,
+		     double used) {
+      double stored = 0.0;
+      // unset, or 0, which restores the default, reads as it should
+      if (opts.get(key, &stored) && stored != 0.0 && !(stored == used)) {
+	found.push_back({name, stored, used});
+      }
+    };
+    check("rdma_delivery_lease", pool_opts_t::RDMA_DELIVERY_LEASE,
+	  get_rdma_delivery_lease());
+    check("rdma_delivery_drain", pool_opts_t::RDMA_DELIVERY_DRAIN,
+	  get_rdma_delivery_drain());
+    return found;
+  }
 
   typedef enum {
     TYPE_FINGERPRINT_NONE = 0,

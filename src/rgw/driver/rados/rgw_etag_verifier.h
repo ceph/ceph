@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include "rgw_putobj.h"
 #include "rgw_op.h"
 #include "common/static_ptr.h"
@@ -81,10 +83,17 @@ constexpr auto max_etag_verifier_size = std::max(
   );
 using etag_verifier_ptr = ceph::static_ptr<ETagVerifier, max_etag_verifier_size>;
 
+/*
+ * etag is the source object's ETag, when the caller has it: an object
+ * stored in one piece whose ETag has the multipart form '<md5>-<n>', as
+ * an OSD-direct PUT stores (rgw_rdma_osd_direct), cannot be verified by
+ * the MD5 of its data, so no verifier is created for it.
+ */
 int create_etag_verifier(const DoutPrefixProvider *dpp, 
                          CephContext* cct, rgw::sal::DataProcessor* next,
                          const bufferlist& manifest_bl,
                          const std::optional<RGWCompressionInfo>& compression,
-                         etag_verifier_ptr& verifier);
+                         etag_verifier_ptr& verifier,
+                         std::string_view etag);
 
 } // namespace rgw::putobj

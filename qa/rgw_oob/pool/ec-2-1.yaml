@@ -1,0 +1,17 @@
+# the gateway's data pool erasure-coded, k=2 m=1, with the optimized EC
+# code: an erasure-coded PG reads into the out-of-band arena
+# (osd_oob_direct_read) only with it
+overrides:
+  ceph:
+    conf:
+      global:
+        osd pool default flag ec optimizations: true
+  rgw:
+    ec-data-pool: true
+    erasure_code_profile:
+      name: oob-ec-2-1
+      k: 2
+      m: 1
+      crush-failure-domain: osd
+  s3tests:
+    slow_backend: true

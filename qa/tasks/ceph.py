@@ -1571,6 +1571,11 @@ def run_daemon(ctx, config, type_):
                 '--cluster', cluster_name,
                 '-i', id_]
 
+            daemon_env = config.get('daemon_env')
+            if daemon_env:
+                run_cmd.extend(['env'] + ['%s=%s' % (k, v) for k, v in
+                                          sorted(daemon_env.items())])
+
             if type_ in config.get('cpu_profile', []):
                 profile_path = '/var/log/ceph/profiling-logger/%s.prof' % (role)
                 run_cmd.extend(['env', 'CPUPROFILE=%s' % profile_path])
@@ -2141,6 +2146,14 @@ def task(ctx, config):
 
     Those nodes which are using memcheck or valgrind will get
     checked for bad results.
+
+    To set environment variables for every daemon that this task runs,
+    such as one that a libfabric provider reads::
+
+        tasks:
+        - ceph:
+            daemon_env:
+              FI_UNIVERSE_SIZE: 16
 
     To adjust or modify config options, use::
 

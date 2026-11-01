@@ -13,10 +13,13 @@
  *
  */
 
+#include <deque>
+
 #include "include/rados/librados.hpp"
 #include "rgw_aio.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_multi.h"
+#include "rgw_rdma_cksum.h"
 #include "rgw_compression.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"
@@ -143,6 +146,19 @@ static int process_completed(const AioResultList& completed, RawObjSet *written)
   return error.value_or(0);
 }
 
+RadosWriter::RadosWriter(Aio *aio, RGWRados *store,
+                         const RGWBucketInfo& bucket_info,
+                         RGWObjectCtx& obj_ctx, const rgw_obj& _head_obj,
+                         const DoutPrefixProvider *dpp, optional_yield y,
+                         jspan_context& _trace)
+  : aio(aio), store(store),
+    // the window RadosStore::get_atomic_writer() makes aio with: only
+    // its writer pulls
+    pull_window(store->ctx()->_conf->rgw_put_obj_min_window_size),
+    bucket_info(bucket_info), obj_ctx(obj_ctx), head_obj(_head_obj),
+    dpp(dpp), y(y), trace(_trace)
+{}
+
 void RadosWriter::add_write_hint(librados::ObjectWriteOperation& op) {
   const RGWObjStateManifest *sm = obj_ctx.get_state(head_obj);
   const bool compressed = sm->state.compressed;
@@ -183,6 +199,33 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
   auto c = aio->get(stripe_obj.obj, Aio::librados_op(stripe_obj.ioctx,
 						     std::move(op), y, &trace),
 		    cost, id);
+  return process_completed(c, &written);
+}
+
+int RadosWriter::process_pulled(
+  uint64_t len, const std::string& token, uint64_t client_ofs, uint32_t want,
+  librados::ObjectOperation::rdma_delivery_result* result)
+{
+  if (len == 0) {
+    return 0;
+  }
+  librados::ObjectWriteOperation op;
+  add_write_hint(op);
+  // the primary pulls the stripe, and reports its CRC-64/NVME, from
+  // which the gateway builds the ETag, and the CRCs want asks for, from
+  // which it builds the object's checksum
+  op.write_full_pulled(len, token, client_ofs, want, result);
+  constexpr uint64_t id = 0; // unused
+  // the stripe's bytes count against the throttle window as if they
+  // passed through: pulls in flight are bounded the same way. A stripe
+  // larger than the window (rgw_obj_stripe_size over
+  // rgw_put_obj_min_window_size) costs the whole window, so that it
+  // waits for the others to drain instead of failing with -EDEADLK. A
+  // window of 0 fits no write: the pull fails, as it would over HTTP
+  const uint64_t cost = pull_window ? std::min(len, pull_window) : len;
+  auto c = aio->get(stripe_obj.obj, Aio::librados_op(stripe_obj.ioctx,
+                                                     std::move(op), y, &trace),
+                    cost, id);
   return process_completed(c, &written);
 }
 
@@ -338,6 +381,11 @@ int AtomicObjectProcessor::prepare(optional_yield y)
     }
     chunk_size = max_head_chunk_size;
   }
+  if (pulled) {
+    // the head is written last, with the checksum and ETag of bytes the
+    // gateway never saw: it can hold none of them
+    head_max_size = 0;
+  }
 
   uint64_t stripe_size;
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
@@ -444,6 +492,63 @@ int AtomicObjectProcessor::complete(
   return 0;
 }
 
+
+int AtomicObjectProcessor::process_pulled(
+  uint64_t len, const std::string& token, uint32_t want,
+  std::vector<rgw::sal::PulledStripe>* stripes)
+{
+  ceph_assert(pulled);
+  // the OSDs' reports land here as the writes complete: a deque keeps
+  // each in place while later ones are added
+  std::deque<librados::ObjectOperation::rdma_delivery_result> results;
+  std::vector<std::pair<uint64_t, uint64_t>> extents;
+  int r = 0;
+  for (uint64_t ofs = 0; ofs < len; ) {
+    // with no head data the first stripe starts at offset 0, as it does
+    // when process() sends the first bytes on
+    uint64_t stripe_size = 0;
+    r = next(ofs, &stripe_size);
+    if (r < 0) {
+      break;
+    }
+    const uint64_t n = std::min(stripe_size, len - ofs);
+    auto& res = results.emplace_back();
+    extents.emplace_back(ofs, n);
+    r = writer.process_pulled(n, token, ofs, want, &res);
+    if (r < 0) {
+      break;
+    }
+    ofs += n;
+  }
+  // every report must be in before it is read, and before results goes
+  const int dr = writer.drain();
+  if (r == 0) {
+    r = dr;
+  }
+  // the stripes that were sent, also after a failure: the request is
+  // charged for what their OSDs pulled
+  stripes->clear();
+  stripes->reserve(extents.size());
+  for (size_t i = 0; i < extents.size(); i++) {
+    const auto& res = results[i];
+    rgw::sal::PulledStripe st;
+    st.ofs = extents[i].first;
+    st.len = extents[i].second;
+    st.bytes = res.bytes;
+    // the CRCs that fold with the neighbours', as a GET takes them
+    const auto crcs = rgw::rdma::delivered_crcs(res);
+    st.crc64 = crcs.crc64.value_or(0);
+    st.crc64_valid = crcs.crc64.has_value();
+    st.crc32c = crcs.crc32c.value_or(0);
+    st.crc32c_valid = crcs.crc32c.has_value();
+    stripes->push_back(st);
+  }
+  if (r < 0) {
+    return r;
+  }
+  set_actual_size(len);
+  return 0;
+}
 
 int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
                                                   DataProcessor **processor)

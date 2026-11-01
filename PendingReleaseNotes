@@ -163,6 +163,17 @@
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
   less to each root's allocation.
   
+* RADOS: In an erasure-coded pool with ``allow_ec_optimizations``, a client
+  read that decodes its data around a shard whose object store failed the
+  read with EIO now repairs that shard: the primary marks the object missing
+  on it and recovers it at once, instead of leaving it to a deep scrub with
+  repair. The PG goes through recovery (degraded and repair) meanwhile, the
+  cluster log warns naming the object and shard, and the repair counts
+  toward the damaged OSD's ``OSD_TOO_MANY_REPAIRS``. Only an active+clean PG
+  in which k+1 undamaged shards hold the object repairs this way, so a pool
+  with m=1 does not. ``osd_ec_repair_on_read`` (default true) turns it off;
+  the OSD perf counter ``ec_read_repair`` counts the shards marked.
+
 * CephFS: CephFS snapshots metadata is now mutable. It is now possible to add,
   update and remove existing key-value pairs that are part of a snapshot
   metadata via ``libcephfs`` API ``ceph_do_snap_md_op()``.
@@ -191,6 +202,59 @@
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
 
+* RGW/RADOS: S3 objects can now be served over RDMA (``x-amz-rdma-token``).
+  The gateway forwards the client's token to the OSDs as a per-operation
+  advisory delivery field on the RADOS request, so each OSD writes GET data
+  straight into client (or client GPU) memory, and pulls the object of a
+  body-less PUT out of it, without the data crossing the gateway
+  (``rgw_rdma_osd_direct``, on by default). Replicated and erasure-coded
+  pools are supported, including a shard-direct interleave for EC split
+  reads. Any OSD that cannot deliver (older release, no executor for the
+  token's transport, expired delivery lease, retransmitted request) returns
+  the data inline as a normal read, so mixed-version clusters degrade
+  transparently. librados gains ``ObjectReadOperation::set_rdma_delivery()``.
+  Four options in ``[global]`` configure a cluster. ``oob_network`` picks
+  each daemon's address, and from it the interface, RDMA device and GID, as
+  ``public_network`` does. ``oob_client_transports`` lists the tokens that
+  the cluster accepts: a libfabric provider (build with ``WITH_OOB_OFI``;
+  ``verbs_ofi_rxm``, ``efa`` or a UET provider, or ``tcp`` for tests only,
+  because it cannot cut off a write that misses its deadline), ``cuobj`` for
+  NVIDIA's cuObject library (DC transport on ConnectX; build with
+  ``WITH_RADOSGW_CUOBJ``), which also serves gateway-staged GET and PUT, and ``rc``
+  for Reliable Connection clients. ``oob_cluster_transport`` names the
+  transport between daemons, which lets an EC primary gather its shards out
+  of band. ``oob_memory`` sizes the memory that each daemon registers. OSDs
+  can checksum (CRC-64/NVME or CRC-32C) each stripe they deliver, and the
+  gateway compares whole-object GETs with the stored full-object checksum
+  before responding (``rgw_rdma_checksum``, on by default), which catches
+  corruption at the storage node and inside the cluster before the client
+  is answered. Two pool options bound every out-of-band transfer, and the
+  OSDs enforce both: ``rdma_delivery_lease`` bounds when a write may start,
+  and ``rdma_delivery_drain`` bounds when it may still land. A write that
+  misses the drain is cut off. When a write may still land, the gateway
+  waits the largest lease plus drain that any pool can have, and the
+  largest ``osd_oob_cutoff_late_tolerance`` that an OSD takes (2 s), after
+  its operations complete before it reuses a window. A client that gives a read up waits lease plus drain
+  plus ``osd_oob_cutoff_late_tolerance`` (1 s by default) after the last
+  operation of the request reached its OSD. For an S3 GET, that is the
+  gateway's last stripe operation, which can reach an OSD long after the
+  client sent the request. See "Reusing a window" in
+  ``doc/radosgw/s3-rdma.rst``. An OSD counts the lease and the drain of a
+  pull from receipt of the write, as for a read: a pulled write that waited
+  longer than the lease in its placement group pulls nothing, and fails with
+  ``EOPNOTSUPP``. A client that gives a pulled write up waits lease plus
+  drain plus ``osd_oob_cutoff_late_tolerance`` after the last attempt of the
+  write reached its OSD, as for a read, or closes or re-keys its window. The
+  gateway ignores the token of an anonymous
+  request, and declines an anonymous body-less PUT with a token with
+  ``501``, unless ``rgw_rdma_token_allow_anonymous`` is true.
+* RGW: The gateway now serves S3 over RDMA to clients that use Reliable
+  Connection transport, such as AMD's hipObject library (the ``hipobj-rc-v2``
+  control protocol on ``/.hipobj-rc/``). These clients do not need NVIDIA
+  ConnectX NICs. For a GET, the OSDs can write the stripes into a gateway
+  session buffer over ``oob_cluster_transport``, and the gateway relays
+  them to the client while the read is still in progress. Enable with
+  ``rc`` in ``oob_client_transports``. See ``doc/radosgw/s3-rdma.rst``.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
 
 * RGW: PutBucketEncryption and GetBucketEncryption now support the

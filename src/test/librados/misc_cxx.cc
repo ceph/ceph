@@ -24,6 +24,7 @@
 #include "test/librados/test_cxx.h"
 #include "test/librados/test_pool_types.h"
 #include "cls/version/cls_version_ops.h"
+#include "cls/hello/cls_hello_ops.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "erasure-code/consistency/RadosCommands.h"
 
@@ -835,6 +836,377 @@ TEST_P(LibRadosMiscPP, CmpExtPP) {
   ASSERT_EQ(-MAX_ERRNO - 5, ioctx.cmpext("cmpextpp", 0, bad_cmp_bl));
 }
 
+TEST_P(LibRadosMiscPP, RdmaDeliveryInlineFallbackPP) {
+  // exercises the advisory rdma delivery descriptor against an OSD
+  // without an executor for the token (no transport in
+  // oob_client_transports, or built without one): the read must succeed
+  // with the data returned INLINE, zero bytes reported as delivered out
+  // of band, and the result marked declined, since no transfer started -
+  // the transparent degradation the RGW passthrough fallback keys on, and
+  // the bit that lets it skip the fence. An OSD that predates the result
+  // field would report no flags at all
+  const std::string payload = "0123456789";
+  bufferlist write_bl;
+  write_bl.append(payload);
+  // NB: write_full claims the bufferlist, so write_bl is empty after
+  ASSERT_EQ(0, ioctx.write_full("rdma_delivery_obj", write_bl));
+
+  // well-formed descriptor token (addr:size:rkey:lid:qp:has_gid:gid)
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  // two reads in one compound op, each carrying its own descriptor
+  // (the delivery request is per op, like the reply's result): both
+  // must degrade independently
+  ObjectReadOperation::rdma_delivery_result res1, res2;
+  res1.bytes = res2.bytes = 42;
+  res1.flags = res2.flags = 7;
+  int rval1 = 0, rval2 = 0;
+  bufferlist read_bl1, read_bl2;
+  ObjectReadOperation op;
+  op.read(0, 4, &read_bl1, &rval1);
+  op.set_rdma_delivery(token, 0,
+                       ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64, &res1);
+  op.read(4, payload.size() - 4, &read_bl2, &rval2);
+  op.set_rdma_delivery(token, 4, 0, &res2);
+  // the call reset each result, which only the reply fills in
+  ASSERT_EQ(0u, res1.bytes);
+  ASSERT_EQ(0u, res1.flags);
+  ASSERT_EQ(0u, res2.bytes);
+  ASSERT_EQ(0u, res2.flags);
+  int r = ioctx.operate("rdma_delivery_obj", &op, nullptr);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, rval1);
+  ASSERT_EQ(0, rval2);
+  ASSERT_EQ(0u, res1.bytes);  // nothing was delivered out of band
+  // declined, and no crc came back
+  ASSERT_EQ(ObjectReadOperation::rdma_delivery_result::DECLINED, res1.flags);
+  ASSERT_EQ(0u, res2.bytes);
+  ASSERT_EQ(ObjectReadOperation::rdma_delivery_result::DECLINED, res2.flags);
+  bufferlist expected1, expected2;
+  expected1.append(payload.substr(0, 4));
+  expected2.append(payload.substr(4));
+  ASSERT_TRUE(read_bl1.contents_equal(expected1));  // data arrived inline
+  ASSERT_TRUE(read_bl2.contents_equal(expected2));
+}
+
+TEST_P(LibRadosMiscPP, RdmaDeliveryReadOfAMissingObjectPP) {
+  // a read of an object that does not exist fails before any transfer
+  // could start: its result is declined, so that the caller need not
+  // fence the window
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  ObjectReadOperation::rdma_delivery_result res;
+  int rval = 0;
+  bufferlist read_bl;
+  ObjectReadOperation op;
+  op.read(0, 4096, &read_bl, &rval);
+  op.set_rdma_delivery(token, 0,
+                       ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64, &res);
+  ASSERT_EQ(-ENOENT, ioctx.operate("rdma_delivery_missing_obj", &op,
+                                   nullptr));
+  ASSERT_EQ(0u, res.bytes);
+  ASSERT_EQ(ObjectReadOperation::rdma_delivery_result::DECLINED, res.flags);
+  ASSERT_EQ(0u, read_bl.length());
+}
+
+TEST_P(LibRadosMiscPP, RdmaPulledWriteRedirectedPP) {
+  // crimson has no cache tiers
+  SKIP_IF_CRIMSON();
+  // A readonly cache tier redirects a write to its base pool. Nothing of
+  // the write runs in the cache pool, so the redirect declines its
+  // descriptor, and the client sends the write to the base pool as a
+  // resend of an attempt that pulled nothing: its result is not marked
+  // RESENT. An OSD that cannot pull from the token (no transport in
+  // oob_client_transports, or built without one) fails the write there
+  // with EOPNOTSUPP, its descriptor declined
+  const std::string base = get_temp_pool_name("rdma_redirect_base_");
+  const std::string cache = get_temp_pool_name("rdma_redirect_cache_");
+  auto mon = [&](std::string cmd) {
+    bufferlist inbl, outbl;
+    std::string outs;
+    return cluster.mon_command(std::move(cmd), std::move(inbl), &outbl,
+                               &outs);
+  };
+  for (const auto& p : {base, cache}) {
+    ASSERT_EQ(0, mon("{\"prefix\": \"osd pool create\", \"pool\": \"" + p +
+                     "\", \"pg_num\": 4}"));
+  }
+  ASSERT_EQ(0, mon("{\"prefix\": \"osd tier add\", \"pool\": \"" + base +
+                   "\", \"tierpool\": \"" + cache + "\"}"));
+  ASSERT_EQ(0, mon("{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" +
+                   cache + "\", \"mode\": \"readonly\", "
+                   "\"yes_i_really_mean_it\": true}"));
+  ASSERT_EQ(0, mon("{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" +
+                   base + "\", \"overlaypool\": \"" + cache + "\"}"));
+  ASSERT_EQ(0, cluster.wait_for_latest_osdmap());
+
+  IoCtx base_ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(base.c_str(), base_ioctx));
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  ObjectWriteOperation::rdma_delivery_result res;
+  ObjectWriteOperation op;
+  op.write_pulled(0, 4096, token, 0, 0, &res);
+  EXPECT_EQ(-EOPNOTSUPP, base_ioctx.operate("rdma_pulled_redirect_obj", &op));
+  EXPECT_EQ(0u, res.bytes);
+  EXPECT_EQ(ObjectWriteOperation::rdma_delivery_result::DECLINED, res.flags);
+  base_ioctx.close();
+
+  ASSERT_EQ(0, mon("{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" +
+                   base + "\"}"));
+  ASSERT_EQ(0, mon("{\"prefix\": \"osd tier remove\", \"pool\": \"" + base +
+                   "\", \"tierpool\": \"" + cache + "\"}"));
+  for (const auto& p : {cache, base}) {
+    ASSERT_EQ(0, mon("{\"prefix\": \"osd pool delete\", \"pool\": \"" + p +
+                     "\", \"pool2\": \"" + p +
+                     "\", \"yes_i_really_really_mean_it\": true}"));
+  }
+  ASSERT_EQ(0, cluster.wait_for_latest_osdmap());
+}
+
+TEST_P(LibRadosMiscPP, RdmaDeliveryNullResultPP) {
+  // the result is optional, as it is for write_pulled() and
+  // write_full_pulled(): a read that asks for delivery without one
+  // completes like any other when its reply is processed
+  const std::string payload = "0123456789";
+  bufferlist write_bl;
+  write_bl.append(payload);
+  ASSERT_EQ(0, ioctx.write_full("rdma_delivery_null_obj", write_bl));
+
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  int rval = -1;
+  bufferlist read_bl;
+  ObjectReadOperation op;
+  op.read(0, payload.size(), &read_bl, &rval);
+  op.set_rdma_delivery(token, 0,
+                       ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64, nullptr);
+  ASSERT_EQ(0, ioctx.operate("rdma_delivery_null_obj", &op, nullptr));
+  ASSERT_EQ(0, rval);
+  bufferlist expected;
+  expected.append(payload);
+  ASSERT_TRUE(read_bl.contents_equal(expected));
+}
+
+TEST_P(LibRadosMiscPP, RdmaDeliveryBeforeAnyReadPP) {
+  // set_rdma_delivery() on an operation that has no op yet requests
+  // nothing: its result says at once that no transfer starts, and keeps
+  // saying so once the read added after it came back inline, so that the
+  // caller does not fence a window that nothing could write
+  const std::string payload = "0123456789";
+  bufferlist write_bl;
+  write_bl.append(payload);
+  ASSERT_EQ(0, ioctx.write_full("rdma_delivery_early_obj", write_bl));
+
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  ObjectReadOperation::rdma_delivery_result res;
+  res.bytes = 42;
+  res.flags = ObjectReadOperation::rdma_delivery_result::LANDED;
+  ObjectReadOperation op;
+  op.set_rdma_delivery(token, 0, 0, &res);
+  ASSERT_EQ(0u, res.bytes);
+  ASSERT_EQ(ObjectReadOperation::rdma_delivery_result::DECLINED, res.flags);
+  int rval = -1;
+  bufferlist read_bl;
+  op.read(0, payload.size(), &read_bl, &rval);
+  ASSERT_EQ(0, ioctx.operate("rdma_delivery_early_obj", &op, nullptr));
+  ASSERT_EQ(0, rval);
+  bufferlist expected;
+  expected.append(payload);
+  ASSERT_TRUE(read_bl.contents_equal(expected));
+  ASSERT_EQ(0u, res.bytes);
+  ASSERT_EQ(ObjectReadOperation::rdma_delivery_result::DECLINED, res.flags);
+}
+
+TEST_P(LibRadosMiscPP, RdmaZeroLengthPulledWriteFullPP) {
+  // a pulled WRITEFULL of no bytes has nothing to pull, but it would
+  // empty the object: an OSD that cannot pull from the token (no
+  // transport in oob_client_transports, or built without one) fails it,
+  // as it fails a longer one, and the object stays as it was
+  const std::string payload = "0123456789";
+  bufferlist write_bl;
+  write_bl.append(payload);
+  ASSERT_EQ(0, ioctx.write_full("rdma_pulled_empty_obj", write_bl));
+
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  ObjectWriteOperation::rdma_delivery_result res;
+  res.bytes = 42;
+  res.flags = ObjectWriteOperation::rdma_delivery_result::LANDED;
+  ObjectWriteOperation op;
+  op.write_full_pulled(0, token, 0, 0, &res);
+  // the call reset the result, which only the reply fills in
+  ASSERT_EQ(0u, res.bytes);
+  ASSERT_EQ(0u, res.flags);
+  ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("rdma_pulled_empty_obj", &op));
+  // nothing was pulled, nor started
+  ASSERT_EQ(0u, res.bytes);
+  ASSERT_EQ(ObjectWriteOperation::rdma_delivery_result::DECLINED, res.flags);
+
+  bufferlist read_bl;
+  ASSERT_EQ((int)payload.size(),
+            ioctx.read("rdma_pulled_empty_obj", read_bl, 0, 0));
+  bufferlist expected;
+  expected.append(payload);
+  ASSERT_TRUE(read_bl.contents_equal(expected));
+}
+
+TEST_P(LibRadosMiscPP, RdmaPulledWriteWithoutATokenPP) {
+  // a pulled write whose token is empty names no window: the client
+  // library fails it before it sends it, whatever its length and
+  // whatever the OSDs can pull, its result declined, and the object stays
+  // as it was. Sent, it would empty the object as a WRITEFULL of no bytes
+  const std::string payload = "0123456789";
+  bufferlist write_bl;
+  write_bl.append(payload);
+  ASSERT_EQ(0, ioctx.write_full("rdma_pulled_notoken_obj", write_bl));
+
+  for (uint64_t len : {uint64_t(0), uint64_t(4096)}) {
+    SCOPED_TRACE(len);
+    ObjectWriteOperation::rdma_delivery_result full_res, res;
+    ObjectWriteOperation full;
+    full.write_full_pulled(len, "", 0, 0, &full_res);
+    ASSERT_EQ(-EINVAL, ioctx.operate("rdma_pulled_notoken_obj", &full));
+    ASSERT_EQ(0u, full_res.bytes);
+    ASSERT_EQ(ObjectWriteOperation::rdma_delivery_result::DECLINED,
+              full_res.flags);
+    ObjectWriteOperation op;
+    op.write_pulled(0, len, "", 0, 0, &res);
+    ASSERT_EQ(-EINVAL, ioctx.operate("rdma_pulled_notoken_obj", &op));
+    ASSERT_EQ(ObjectWriteOperation::rdma_delivery_result::DECLINED,
+              res.flags);
+  }
+
+  bufferlist read_bl;
+  ASSERT_EQ((int)payload.size(),
+            ioctx.read("rdma_pulled_notoken_obj", read_bl, 0, 0));
+  bufferlist expected;
+  expected.append(payload);
+  ASSERT_TRUE(read_bl.contents_equal(expected));
+}
+
+TEST_P(LibRadosMiscPP, RdmaPulledWriteFailOkPP) {
+  // A pulled write past osd_max_object_size is bound to fail: an OSD
+  // that pulls fails it before its pull, with EFBIG, and its descriptor
+  // declined. With FAILOK it is not: do_osd_ops() goes on past its
+  // failure, and the request succeeds, so the OSD goes on to its pull.
+  // One that cannot pull from the token (no transport in
+  // oob_client_transports) fails that with EOPNOTSUPP, as does an OSD
+  // built without a transport, whatever the write
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  const uint64_t past_max = 1ull << 40;
+  for (const bool failok : {false, true}) {
+    SCOPED_TRACE(failok ? "FAILOK" : "no FAILOK");
+    ObjectWriteOperation::rdma_delivery_result res;
+    ObjectWriteOperation op;
+    op.write_pulled(past_max, 4096, token, 0, 0, &res);
+    if (failok) {
+      op.set_op_flags2(LIBRADOS_OP_FLAG_FAILOK);
+    }
+#ifdef HAVE_OSD_OOB_DELIVERY
+    const int want = failok ? -EOPNOTSUPP : -EFBIG;
+#else
+    const int want = -EOPNOTSUPP;
+#endif
+    ASSERT_EQ(want, ioctx.operate("rdma_pulled_failok_obj", &op));
+    // nothing was pulled, nor started
+    ASSERT_EQ(0u, res.bytes);
+    ASSERT_EQ(ObjectWriteOperation::rdma_delivery_result::DECLINED,
+              res.flags);
+  }
+  uint64_t size;
+  time_t mtime;
+  ASSERT_EQ(-ENOENT, ioctx.stat("rdma_pulled_failok_obj", &size, &mtime));
+}
+
+TEST_P(LibRadosMiscPP, RdmaDeliveryLeasePP) {
+  // the lease an OSD enforces on out-of-band delivery is a pool option
+  // the client reads from its OSDMap: the built-in default when unset,
+  // the pool's value once set, and the default again after clearing it
+  double lease = 0;
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_lease(&lease));
+  ASSERT_DOUBLE_EQ(5.0, lease);
+  ASSERT_EQ(-EINVAL, ioctx.pool_rdma_delivery_lease(nullptr));
+
+  auto set_lease = [&](const std::string& val) {
+    bufferlist inbl, outbl;
+    std::string outs;
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+      "\", \"var\": \"rdma_delivery_lease\", \"val\": \"" + val +
+      "\"}", std::move(inbl), &outbl, &outs)) << outs;
+    ASSERT_EQ(0, cluster.wait_for_latest_osdmap());
+  };
+  set_lease("2.5");
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_lease(&lease));
+  ASSERT_DOUBLE_EQ(2.5, lease);
+  set_lease("0");  // 0 clears the option, restoring the default
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_lease(&lease));
+  ASSERT_DOUBLE_EQ(5.0, lease);
+
+  // a lease too short to start a transfer in is refused
+  bufferlist inbl, outbl;
+  std::string outs;
+  ASSERT_EQ(-EINVAL, cluster.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+    "\", \"var\": \"rdma_delivery_lease\", \"val\": \"0.05\"}",
+    std::move(inbl), &outbl, &outs));
+  ASSERT_NE(std::string::npos, outs.find("must be at least 0.1 seconds"))
+    << outs;
+  set_lease("0.1");
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_lease(&lease));
+  ASSERT_DOUBLE_EQ(0.1, lease);
+  set_lease("0");
+}
+
+TEST_P(LibRadosMiscPP, RdmaDeliveryDrainPP) {
+  // the drain bound is a pool option too, read the same way
+  double drain = 0;
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_drain(&drain));
+  ASSERT_DOUBLE_EQ(3.0, drain);
+  ASSERT_EQ(-EINVAL, ioctx.pool_rdma_delivery_drain(nullptr));
+
+  auto set_drain = [&](const std::string& val) {
+    bufferlist inbl, outbl;
+    std::string outs;
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+      "\", \"var\": \"rdma_delivery_drain\", \"val\": \"" + val +
+      "\"}", std::move(inbl), &outbl, &outs)) << outs;
+    ASSERT_EQ(0, cluster.wait_for_latest_osdmap());
+  };
+  set_drain("1.5");
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_drain(&drain));
+  ASSERT_DOUBLE_EQ(1.5, drain);
+  set_drain("0");  // 0 clears the option, restoring the default
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_drain(&drain));
+  ASSERT_DOUBLE_EQ(3.0, drain);
+
+  // a drain too short for a transport to cut off a write that missed
+  // it is refused
+  bufferlist inbl, outbl;
+  std::string outs;
+  ASSERT_EQ(-EINVAL, cluster.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+    "\", \"var\": \"rdma_delivery_drain\", \"val\": \"0.4\"}",
+    std::move(inbl), &outbl, &outs));
+  ASSERT_NE(std::string::npos, outs.find("must be at least 0.5 seconds"))
+    << outs;
+  set_drain("0.5");
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_drain(&drain));
+  ASSERT_DOUBLE_EQ(0.5, drain);
+  set_drain("0");
+}
+
 TEST_P(LibRadosMiscPP, Applications) {
   // Applications are pool-level, not namespace-level, so they persist across
   // parameterized test runs. Skip this test for split_ops to avoid conflicts.
@@ -943,6 +1315,86 @@ TEST_P(LibRadosMiscECPP, CompareExtentRange) {
   ObjectReadOperation read2;
   read2.cmpext(2097152, bl3, nullptr);
   ASSERT_EQ(0, ioctx.operate("foo", &read2, nullptr));
+}
+
+TEST_P(LibRadosMiscECPP, RdmaPulledWriteNotAnAppendPP) {
+  SKIP_IF_CRIMSON();
+  // An erasure-coded pool without overwrites only appends: a pulled
+  // WRITE that would not append at the end of the object is bound to
+  // fail. An OSD that pulls fails it before its pull, its descriptor
+  // declined, with EINVAL: EOPNOTSUPP, the error of the same write
+  // inline, would tell the client to send the payload inline, and the
+  // write would fail again. An OSD built without a transport fails
+  // every pulled write with EOPNOTSUPP
+  const std::string oid = "rdma_pulled_ec_obj";
+  const std::string content(alignment, 'a');
+  bufferlist bl;
+  bl.append(content);
+  ASSERT_EQ(0, ioctx.write_full(oid, bl));
+  bufferlist again;
+  again.append(content);
+  ASSERT_EQ(-EOPNOTSUPP, ioctx.write(oid, again, again.length(), 0));
+
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  // before the end, and past it
+  for (const uint64_t off : {uint64_t(0), 2 * alignment}) {
+    SCOPED_TRACE(off);
+    ObjectWriteOperation::rdma_delivery_result res;
+    ObjectWriteOperation op;
+    op.write_pulled(off, alignment, token, 0, 0, &res);
+#ifdef HAVE_OSD_OOB_DELIVERY
+    const int want = -EINVAL;
+#else
+    const int want = -EOPNOTSUPP;
+#endif
+    ASSERT_EQ(want, ioctx.operate(oid, &op));
+    ASSERT_EQ(0u, res.bytes);
+    ASSERT_EQ(ObjectWriteOperation::rdma_delivery_result::DECLINED,
+              res.flags);
+  }
+  // an append is no such write: an OSD that cannot pull from the token
+  // (no transport in oob_client_transports) fails it as such
+  ObjectWriteOperation::rdma_delivery_result res;
+  ObjectWriteOperation op;
+  op.write_pulled(alignment, alignment, token, 0, 0, &res);
+  ASSERT_EQ(-EOPNOTSUPP, ioctx.operate(oid, &op));
+  ASSERT_EQ(ObjectWriteOperation::rdma_delivery_result::DECLINED, res.flags);
+
+  bufferlist read_bl;
+  ASSERT_EQ((int)content.size(), ioctx.read(oid, read_bl, 0, 0));
+  ASSERT_EQ(content, read_bl.to_str());
+}
+
+// On an optimized EC pool, a CALL whose method reads the object
+// (cls_cxx_read) runs in a coroutine. When an op before it starts an
+// async read, as a CHECKSUM does, the request runs again once that read
+// completes, and the CALL's read must still find its coroutine then.
+TEST_P(LibRadosMiscECPP, ClassReadAfterAsyncRead) {
+  SKIP_IF_CRIMSON();
+  if (!fast_ec) {
+    GTEST_SKIP() << "a CALL reads an EC object only with optimizations";
+  }
+  const std::string content(8192, 'h');
+  bufferlist data;
+  data.append(content);
+  ASSERT_EQ(0, ioctx.write_full("foo", data));
+
+  ObjectReadOperation op;
+  bufferlist init;
+  encode(uint32_t(-1), init);
+  bufferlist csum;
+  int csum_r = -1;
+  op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init, 0, content.size(), 0,
+	      &csum, &csum_r);
+  bufferlist in, out;
+  int call_r = -1;
+  op.exec(cls::hello::method::replay, in, &out, &call_r);
+  ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+  EXPECT_EQ(0, csum_r);
+  EXPECT_EQ(0, call_r);
+  EXPECT_EQ(content.substr(0, 1100), out.to_str());
 }
 
 TEST_P(LibRadosMiscPP, MinCompatOSD) {

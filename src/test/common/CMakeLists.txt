@@ -259,6 +259,51 @@ add_executable(unittest_bit_vector
 add_ceph_unittest(unittest_bit_vector)
 target_link_libraries(unittest_bit_vector ceph-common)
 
+# unittest_crc64nvme
+add_executable(unittest_crc64nvme
+  test_crc64nvme.cc
+  # spdk's table routine, a reference that ceph-common does not ship
+  ${CMAKE_SOURCE_DIR}/src/common/spdk/crc64.c
+  )
+add_ceph_unittest(unittest_crc64nvme)
+target_link_libraries(unittest_crc64nvme ceph-common)
+
+# unittest_rdma_token
+add_executable(unittest_rdma_token
+  test_rdma_token.cc
+  )
+add_ceph_unittest(unittest_rdma_token)
+target_link_libraries(unittest_rdma_token ceph-common)
+
+# unittest_oob_gid
+add_executable(unittest_oob_gid
+  test_oob_gid.cc
+  )
+add_ceph_unittest(unittest_oob_gid)
+target_link_libraries(unittest_oob_gid ceph-common)
+
+if(LINUX)
+  # unittest_oob_caps: keeping and raising CAP_NET_RAW for the uet
+  # provider across the switch to the ceph user
+  add_executable(unittest_oob_caps
+    test_oob_caps.cc
+    )
+  add_ceph_unittest(unittest_oob_caps)
+  target_link_libraries(unittest_oob_caps ceph-common cap)
+endif()
+
+if(WITH_OOB_OFI AND NOT WITH_SYSTEM_OFI_RMA)
+  # unittest_ofi_rma: the ofi-rma submodule's own tests, token encoding
+  # and writes over the tcp and shm providers, which need no special
+  # hardware
+  add_executable(unittest_ofi_rma
+    ${CMAKE_SOURCE_DIR}/src/ofi-rma/test/test_ofi_rma.cc)
+  add_ceph_unittest(unittest_ofi_rma)
+  target_link_libraries(unittest_ofi_rma ofi_rma)
+  # its tests time writes and waits in fractions of a second
+  set_tests_properties(unittest_ofi_rma PROPERTIES RUN_SERIAL TRUE)
+endif()
+
 # unittest_interval_map
 add_executable(unittest_interval_map
   test_interval_map.cc

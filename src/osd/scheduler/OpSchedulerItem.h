@@ -594,6 +594,78 @@ public:
   }
 };
 
+#ifdef HAVE_OSD_OOB_DELIVERY
+/**
+ * The pulls that a hold of a PG waits for settled: those of the pulled
+ * write that holds the object, or of an earlier attempt of its request.
+ * The PG runs it again, with the ops behind it
+ * (PrimaryLogPG::oob_pull_kick()). The transfer thread that settled
+ * them queues it, since it takes no PG lock. It holds no PG reference:
+ * a PG that went away drops it, as it does any item. Nor does it hold
+ * the request whose pulls settled, which only names them in the log: a
+ * request that the OSD dropped meanwhile is gone.
+ */
+class PGOobPullKick : public PGOpQueueable {
+  utime_t time_queued;
+  osd_reqid_t reqid;
+  hobject_t head;
+public:
+  PGOobPullKick(spg_t pgid, osd_reqid_t reqid, hobject_t head)
+    : PGOpQueueable(pgid),
+      time_queued(ceph_clock_now()),
+      reqid(std::move(reqid)), head(std::move(head)) {}
+  std::ostream &print(std::ostream &rhs) const final {
+    return rhs << "PGOobPullKick(pgid=" << get_pgid()
+	       << " reqid=" << reqid << " head=" << head << ")";
+  }
+  std::string print() const final {
+    return fmt::format(
+	"PGOobPullKick(pgid={} reqid={} head={})", get_pgid(), reqid, head);
+  }
+  utime_t get_time_queued() const final {
+    return time_queued;
+  }
+  void run(
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
+  SchedulerClass get_scheduler_class() const final {
+    return SchedulerClass::immediate;
+  }
+};
+
+/**
+ * The reply of a read whose pushes a transfer thread ran left, and the
+ * fence of its object may wait for no other: the PG runs the ops that
+ * waited in it again (PrimaryLogPG::oob_read_kick()). The thread that
+ * sent the reply queues it, since it takes no PG lock. It holds no PG
+ * reference: a PG that went away drops it, as it does any item.
+ */
+class PGOobReadKick : public PGOpQueueable {
+  utime_t time_queued;
+  hobject_t head;
+public:
+  PGOobReadKick(spg_t pgid, hobject_t head)
+    : PGOpQueueable(pgid),
+      time_queued(ceph_clock_now()),
+      head(std::move(head)) {}
+  std::ostream &print(std::ostream &rhs) const final {
+    return rhs << "PGOobReadKick(pgid=" << get_pgid()
+	       << " head=" << head << ")";
+  }
+  std::string print() const final {
+    return fmt::format(
+	"PGOobReadKick(pgid={} head={})", get_pgid(), head);
+  }
+  utime_t get_time_queued() const final {
+    return time_queued;
+  }
+  void run(
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
+  SchedulerClass get_scheduler_class() const final {
+    return SchedulerClass::immediate;
+  }
+};
+#endif
+
 class PGDelete : public PGOpQueueable {
   epoch_t epoch_queued;
 public:

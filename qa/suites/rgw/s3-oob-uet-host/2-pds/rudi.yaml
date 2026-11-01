@@ -1,0 +1,5 @@
+# Windows are written over RUDI: reliable, unordered and connectionless,
+# for idempotent writes. The provider's default.
+overrides:
+  uet_host:
+    pds: rudi

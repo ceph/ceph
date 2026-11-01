@@ -67,6 +67,14 @@ int main(int argc, char *argv[])
 { 
   int r{0};
 
+#ifdef WITH_OOB_OFI
+  // a released libfabric relay window must get a new key, and verbs caches
+  // registrations and hands back the old key unless the cache is off.
+  // set it before any thread starts: setenv() can free the environment
+  // that a concurrent getenv() is reading
+  setenv("FI_MR_CACHE_MONITOR", "disabled", 0);
+#endif
+
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
   // Redirect stderr to stdout.
   TEMP_FAILURE_RETRY(close(STDERR_FILENO));
