@@ -3785,6 +3785,9 @@ class CptreeDir:
         self.dst_fd = self.fs.openat(self.parent_dir_dst_fd, self.dst_rel_path,
                                      os.O_RDONLY | os.O_DIRECTORY, 0o755)
 
+        # Filename ciphertext was produced with this directory's nonce.
+        copy_fscrypt_xattrs(self.fs, self.src_fd, self.dst_fd)
+
         self.src_handle = self.fs.fdopendir(self.src_fd)
 
         # List of dir entries to be ignored instead of copying them.
@@ -3899,28 +3902,29 @@ def copy_reg_file(fs, src_fd, dst_fd, file_name, should_sync_attrs=False):
         src_file_fd = fs.openat(src_fd, file_name, os.O_RDONLY, 0o755)
         dst_file_fd = fs.openat(dst_fd, file_name, os.O_CREAT | os.O_TRUNC |
                                 os.O_WRONLY, 0o755)
-    except Exception:
-        if src_file_fd:
+
+        while True:
+            data = fs.read(src_file_fd, -1, 1 * 1024 * 1024)
+            if not len(data):
+                break
+
+            written = 0
+            while written < len(data):
+                written += fs.write(dst_file_fd, data[written:], -1)
+
+        # The bytes just written are the source ciphertext. Keep the nonce
+        # that decrypts them, then the logical size.
+        copy_fscrypt_xattrs(fs, src_file_fd, dst_file_fd)
+
+        if should_sync_attrs:
+            sync_attrs(fs, src_fd, dst_fd, file_name)
+
+        fs.fsync(dst_file_fd, 0)
+    finally:
+        if src_file_fd is not None:
             fs.close(src_file_fd)
-        if dst_file_fd:
+        if dst_file_fd is not None:
             fs.close(dst_file_fd)
-        raise
-
-    while True:
-        data = fs.read(src_file_fd, -1, 1 * 1024 * 1024)
-        if not len(data):
-            break
-
-        written = 0
-        while written < len(data):
-            written += fs.write(dst_file_fd, data[written:], -1)
-
-    if should_sync_attrs:
-        sync_attrs(fs, src_fd, dst_fd, file_name)
-
-    fs.fsync(dst_file_fd, 0)
-    fs.close(src_file_fd)
-    fs.close(dst_file_fd)
 
 
 def copy_sym_link(fs, src_fd, dst_fd, de_name, should_sync_attrs=False):
@@ -3945,5 +3949,36 @@ def copy_sym_link(fs, src_fd, dst_fd, de_name, should_sync_attrs=False):
                  f'symlink: {e}')
         raise
 
+    src_sl_fd = dst_sl_fd = None
+    try:
+        src_sl_fd = fs.openat(src_fd, de_name, os.O_PATH | os.O_NOFOLLOW, 0)
+        dst_sl_fd = fs.openat(dst_fd, de_name, os.O_PATH | os.O_NOFOLLOW, 0)
+        copy_fscrypt_xattrs(fs, src_sl_fd, dst_sl_fd)
+    finally:
+        if src_sl_fd is not None:
+            fs.close(src_sl_fd)
+        if dst_sl_fd is not None:
+            fs.close(dst_sl_fd)
+
     if should_sync_attrs:
         sync_attrs(fs, src_fd, dst_fd, de_name, src_stx_b)
+
+
+# Ciphertext copied by cptree decrypts only with the source nonce. auth is
+# applied before file so the logical-size update does not discard the blocks.
+_FSCRYPT_CLONE_XATTRS = (
+    'ceph.fscrypt.auth',
+    'ceph.fscrypt.file',
+    'ceph.alternate_name',
+)
+
+
+def copy_fscrypt_xattrs(fs, src_fd, dst_fd):
+    for name in _FSCRYPT_CLONE_XATTRS:
+        try:
+            # Getter uses a 256-byte buffer. alternate_name is at most 255.
+            value = fs.fgetxattr(src_fd, name, 256)
+        except NoData:
+            continue
+        if value:
+            fs.fsetxattr(dst_fd, name, value, 0)
