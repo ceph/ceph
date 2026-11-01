@@ -8,7 +8,7 @@
 #include "rgw_auth_registry.h"
 #include "rgw_kms_cache.h"
 
-class ActiveRateLimiter;
+class RateLimitService;
 class OpsLogSink;
 class RGWREST;
 
@@ -50,7 +50,7 @@ struct RGWProcessEnv {
   RGWREST *rest = nullptr;
   std::unique_ptr<OpsLogSink> olog;
   std::unique_ptr<rgw::auth::StrategyRegistry> auth_registry;
-  ActiveRateLimiter* ratelimiting = nullptr;
+  RateLimitService* ratelimiting = nullptr;
   std::unique_ptr<rgw::kms::KMSCache> kms_cache;
 
 #ifdef WITH_ARROW_FLIGHT
