@@ -6204,6 +6204,52 @@ static bool copy_dest_requests_encryption(req_state* s)
   return false;
 }
 
+/*
+ * A copy onto itself is legal when it changes the object's encryption. CBC
+ * and GCM are different schemes, so a CBC object copied under GCM changes.
+ */
+static bool copy_changes_encryption(req_state* s)
+{
+  const auto& req = s->info.crypt_attribute_map;
+  auto get = [&req] (const char* name) {
+    auto i = req.find(name);
+    return i == req.end() ? std::string{} : i->second;
+  };
+  const std::string cipher =
+      s->cct->_conf->rgw_crypt_sse_algorithm == "aes-256-gcm" ? "-GCM" : "";
+  const auto sse = get("x-amz-server-side-encryption");
+
+  std::string mode;
+  const char* key_attr = nullptr;
+  std::string key;
+  if (!get("x-amz-server-side-encryption-customer-algorithm").empty()) {
+    mode = "SSE-C-AES256" + cipher;
+    key_attr = RGW_ATTR_CRYPT_KEYMD5;
+    key = get("x-amz-server-side-encryption-customer-key-md5");
+  } else if (sse == "aws:kms") {
+    mode = "SSE-KMS" + cipher;
+    key_attr = RGW_ATTR_CRYPT_KEYID;
+    key = get("x-amz-server-side-encryption-aws-kms-key-id");
+  } else if (!sse.empty()) {
+    mode = "AES256" + cipher;
+  } else if (!s->cct->_conf->rgw_crypt_default_encryption_key.empty()) {
+    mode = "RGW-AUTO" + cipher;
+  }
+
+  const auto& attrs = s->src_object->get_attrs();
+  if (mode != get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE)) {
+    return true;
+  }
+  if (!key_attr) {
+    return false;
+  }
+  std::string stored = get_str_attribute(attrs, key_attr);
+  if (key_attr == RGW_ATTR_CRYPT_KEYMD5) {
+    stored = rgw::to_base64(stored);
+  }
+  return key != stored;
+}
+
 class RGWCopyObjDPF : public RGWRecompressDPF {
   req_state* s;
   std::string normalized_dest_compression;
@@ -6404,7 +6450,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     }
 
     /* follow up on previous checks that required reading source object head */
-    if (need_to_check_storage_class) {
+    if (need_to_check_storage_class && !copy_changes_encryption(s)) {
       src_placement.inherit_from(src_bucket->get_placement_rule());
 
       op_ret  = check_storage_class(src_placement);
