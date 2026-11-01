@@ -216,7 +216,7 @@ public:
   }
   int rm_val(const std::string_view key) {
     std::lock_guard l{lock};
-    return config.rm_val(values, key);
+    return config.rm_val(values, obs_mgr, key);
   }
   // Expand all metavariables. Make any pending observer callbacks.
   void apply_changes(std::ostream* oss) {

@@ -152,7 +152,7 @@ public:
   seastar::future<> rm_val(const std::string& key) {
     ceph::global::g_conf_rm_val(key);
     return do_change([key, this](ConfigValues& values) {
-      auto ret = get_config().rm_val(values, key);
+      auto ret = get_config().rm_val(values, obs_mgr, key);
       if (ret < 0) {
         throw std::invalid_argument(cpp_strerror(ret));
       }
