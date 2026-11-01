@@ -83,34 +83,21 @@ Log::~Log()
 void Log::_configure_stderr()
 {
 #ifndef _WIN32
+  stderr_is_fifo = false;
   struct stat info;
   if (int rc = fstat(m_fd_stderr, &info); rc == -1) {
     std::cerr << "failed to stat stderr: " << cpp_strerror(errno) << std::endl;
     return;
   }
 
-  if (S_ISFIFO(info.st_mode)) {
-    /* Set O_NONBLOCK on FIFO stderr file. We want to ensure atomic debug log
-     * writes so they do not get partially read by e.g. buggy container
-     * runtimes. See also IEEE Std 1003.1-2017 and Log::_log_stderr below.
-     *
-     * This isn't required on Windows.
-     */
-    int flags = fcntl(m_fd_stderr, F_GETFL);
-    if (flags == -1) {
-      std::cerr << "failed to get fcntl flags for stderr: " << cpp_strerror(errno) << std::endl;
-      return;
-    }
-    if (!(flags & O_NONBLOCK)) {
-      flags |= O_NONBLOCK;
-      flags = fcntl(m_fd_stderr, F_SETFL, flags);
-      if (flags == -1) {
-        std::cerr << "failed to set fcntl flags for stderr: " << cpp_strerror(errno) << std::endl;
-        return;
-      }
-    }
-    do_stderr_poll = true;
-  }
+  /* Writes of at most PIPE_BUF bytes to a FIFO are atomic, so
+   * Log::_log_stderr() writes in such chunks to keep e.g. buggy container
+   * runtimes from reading torn log lines, as long as a line fits in
+   * PIPE_BUF bytes. See IEEE Std 1003.1-2017.
+   *
+   * This isn't required on Windows.
+   */
+  stderr_is_fifo = S_ISFIFO(info.st_mode);
 #endif // !_WIN32
 }
 
@@ -318,7 +305,7 @@ void Log::set_stderr_fd(int fd)
 
 void Log::_log_stderr(std::string_view strv)
 {
-  if (do_stderr_poll) {
+  if (stderr_is_fifo) {
     auto& prefix = m_log_stderr_prefix;
     size_t const len = prefix.size() + strv.size();
     boost::container::small_vector<char, PIPE_BUF> buf;
