@@ -972,6 +972,188 @@ Example of protocol interaction (WIP)
    }
 
 
+.. _msgr2-async-state-machine:
+
+AsyncMessenger connection lifecycle
+-------------------------------------
+
+These diagrams show how AsyncMessenger manages an msgr2 connection in
+``src/msg/async/ProtocolV2.{h,cc}``, alongside the wire handshakes described above.
+The kernel client and Crimson have separate implementations.
+``ProtocolV2::state`` tracks the protocol handshake and message exchange;
+``AsyncConnection::state`` tracks the transport. After TCP connects, the peers
+still need to authenticate and negotiate the session.
+
+The composite states below group outgoing negotiation, incoming negotiation,
+and message exchange. Banner and hello states share a node to keep the diagram
+readable. The ``Fault`` node shows where ``_fault()`` chooses the next state;
+there is no ``Fault`` enum value. Fault transitions leave the composite boxes
+because an error can occur in any of their substates.
+
+.. mermaid::
+
+   stateDiagram-v2
+       state "NONE" as None
+       state "_fault() decision" as Fault
+
+       state "Connecting" as Connecting {
+           [*] --> START_CONNECT
+           state "BANNER_CONNECTING / HELLO_CONNECTING" as ClientBanner
+           START_CONNECT --> ClientBanner: TCP connects
+           ClientBanner --> AUTH_CONNECTING: banner and hello exchanged
+           AUTH_CONNECTING --> AUTH_CONNECTING: more authentication or another method
+           AUTH_CONNECTING --> AUTH_CONNECTING_SIGN: AUTH_DONE
+           AUTH_CONNECTING_SIGN --> COMPRESSION_CONNECTING: signatures verified and compression supported
+           AUTH_CONNECTING_SIGN --> SESSION_CONNECTING: no compression support and no server cookie
+           AUTH_CONNECTING_SIGN --> SESSION_RECONNECTING: no compression support and server cookie exists
+           COMPRESSION_CONNECTING --> SESSION_CONNECTING: COMPRESSION_DONE and no server cookie
+           COMPRESSION_CONNECTING --> SESSION_RECONNECTING: COMPRESSION_DONE and server cookie exists
+           SESSION_CONNECTING --> [*]: SERVER_IDENT accepted
+           SESSION_RECONNECTING --> SESSION_CONNECTING: peer resets session
+           SESSION_RECONNECTING --> SESSION_RECONNECTING: peer requests retry
+           SESSION_RECONNECTING --> [*]: RECONNECT_OK accepted
+       }
+
+       state "Accepting" as Accepting {
+           [*] --> START_ACCEPT
+           state "BANNER_ACCEPTING / HELLO_ACCEPTING" as ServerBanner
+           START_ACCEPT --> ServerBanner: begin banner exchange
+           ServerBanner --> AUTH_ACCEPTING: banner and hello exchanged
+           AUTH_ACCEPTING --> AUTH_ACCEPTING: reject authentication method
+           AUTH_ACCEPTING --> AUTH_ACCEPTING_MORE: more authentication needed
+           AUTH_ACCEPTING_MORE --> AUTH_ACCEPTING_MORE: more authentication needed
+           AUTH_ACCEPTING --> AUTH_ACCEPTING_SIGN: authentication succeeds
+           AUTH_ACCEPTING_MORE --> AUTH_ACCEPTING_SIGN: authentication succeeds
+           AUTH_ACCEPTING_SIGN --> COMPRESSION_ACCEPTING: signatures verified and compression supported
+           AUTH_ACCEPTING_SIGN --> SESSION_ACCEPTING: signatures verified and no compression support
+           COMPRESSION_ACCEPTING --> SESSION_ACCEPTING: compression negotiated
+           SESSION_ACCEPTING --> [*]: identification or reconnect handshake completes
+       }
+
+       state "Message exchange" as Exchanging {
+           [*] --> READY
+           READY --> READY: control frame handled
+           READY --> THROTTLE_MESSAGE: message frame header received
+           THROTTLE_MESSAGE --> THROTTLE_BYTES: message reservation acquired or not required
+           THROTTLE_BYTES --> THROTTLE_DISPATCH_QUEUE: byte reservation acquired or not required
+           THROTTLE_DISPATCH_QUEUE --> THROTTLE_DONE: dispatch reservation acquired or not required
+           THROTTLE_DONE --> READ_MESSAGE_COMPLETE: message read and decoded
+           READ_MESSAGE_COMPLETE --> READY: message handled
+       }
+
+       [*] --> None
+       None --> Connecting: connect()
+       None --> Accepting: accept()
+       Connecting --> Exchanging: ready()
+       Accepting --> Exchanging: ready()
+       SESSION_CONNECTING --> WAIT: peer sends WAIT
+       SESSION_RECONNECTING --> WAIT: peer sends WAIT
+       WAIT --> Fault: handle_wait() calls _fault()
+       Connecting --> Fault: transport or protocol error
+       Accepting --> Fault: transport or protocol error
+       Exchanging --> Fault: transport or protocol error
+       Fault --> CLOSED: lossy or shutdown or unused accepted connection
+       Fault --> STANDBY: server policy or idle standby policy
+       Fault --> Connecting: reconnect immediately or after backoff
+       STANDBY --> Connecting: queued work and not server policy
+       READY --> None: reuse_connection() reuses this object
+       STANDBY --> None: reuse_connection() reuses this object
+       Connecting --> None: replacement wins a connection race
+       None --> SESSION_ACCEPTING: transfer_existing() resumes session handshake
+       None --> None: _fault() returns without changing state
+       None --> CLOSED: stop() cancels pending replacement
+       CLOSED --> CLOSED: _fault() and stop() return
+
+A throttle substate can wait for capacity before advancing. The diagram shows
+successful receive progress; a revoked message can return to ``READY`` without
+reaching ``READ_MESSAGE_COMPLETE``. ``NONE``, ``STANDBY``, ``WAIT``, and ``CLOSED``
+remain outside the composites because they have different fault and replacement
+rules. Replacement enters ``SESSION_ACCEPTING`` directly, bypassing the accepting
+composite's initial banner and authentication path.
+
+``_fault()`` chooses between closing, waiting in standby, and reconnecting.
+It checks the conditions in this order:
+
+#. In ``CLOSED`` or ``NONE``, return without changing state. ``NONE`` also
+   covers a pending socket replacement, so it does not mean that the connection
+   object is permanently closed.
+#. If the policy is lossy, stop and queue a reset unless the state is between
+   ``START_CONNECT`` and ``SESSION_RECONNECTING``, inclusive. A lossy connection
+   can still retry while establishing an outgoing session.
+#. Disable writes and requeue sent messages. Stop and queue a reset if the
+   connection is shutting down. Also stop if the outgoing queue is empty during
+   the accepting phase and ``replacing`` is false.
+#. Clear ``replacing``, fault the transport, reset receive state, and clear
+   ``reconnecting``. Enter ``STANDBY`` if the standby policy is set, there are no
+   queued messages or pending keepalive, and the state is not ``WAIT``. The
+   server policy also enters ``STANDBY``, even with queued messages, because it
+   cannot initiate an outgoing connection.
+#. Enter ``START_CONNECT``. Apply backoff if the fault occurred during outgoing
+   negotiation, in ``WAIT``, or in ``SESSION_ACCEPTING``. Otherwise, schedule an
+   immediate reconnect. ``WAIT`` uses the maximum backoff to give the winning
+   connection time to complete.
+
+``stop()`` closes a connection from any state except ``CLOSED``. It discards
+the outgoing queues and unregisters the connection. Calling it instead of
+following the ordinary non-lossy fault path loses the messages held for retry.
+
+Socket replacement and callback preconditions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``reuse_connection()`` installs a newly accepted connection's socket in an
+existing connection object. It moves the incoming socket and negotiated handlers
+into the replacement callbacks, then stops the temporary connection object.
+The existing object keeps the session's message queues and sequence state,
+subject to the session reset and acknowledgement rules above. If ``reconnecting``
+is set, it sends ``RECONNECT_OK``; otherwise it sends ``SERVER_IDENT``.
+``replacing`` stays set until ``ready()`` or fault handling clears it.
+
+.. mermaid::
+
+   sequenceDiagram
+       participant New as Newly accepted connection
+       participant Existing as Existing connection object
+       participant Old as Existing EventCenter
+       participant Target as Incoming socket EventCenter
+
+       New->>Existing: reuse_connection() selects the existing session
+       Note over New,Existing: Save incoming socket and handlers for callbacks; stop the new object
+       New->>Existing: Disable writes; replacing = true; state = NONE
+       New->>Old: Queue deactivate_existing()
+       Note over Existing,Old: State stays NONE unless stop() sets CLOSED
+       Old->>Existing: Lock; requeue sent messages; install negotiated handlers
+       alt state is CLOSED before socket installation
+           Old->>Target: Queue closing the incoming socket; return
+       else state is NONE
+           Old->>Existing: Shut down old socket and timers; install incoming socket
+           Old->>Existing: Transfer worker and EventCenter ownership
+           Old->>Target: Run or queue transfer_existing()
+           Target->>Existing: Lock and check state
+           alt state is CLOSED before handshake resumes
+               Note over Existing,Target: Return without resuming the handshake
+           else state is NONE
+               Target->>Existing: Set SESSION_ACCEPTING; arm timer; register reads
+               Target->>Existing: Send SERVER_IDENT or RECONNECT_OK
+               Note over Existing,Target: Handshake completes: ready() clears replacing
+           end
+       end
+
+Both callbacks may run in the same EventCenter. If the EventCenters differ,
+each callback runs in the event thread of its EventCenter.
+``transfer_existing()`` runs after
+``deactivate_existing()`` installs the socket and transfers ownership.
+``deactivate_existing()`` accepts only ``NONE`` or ``CLOSED``.
+``transfer_existing()`` returns for ``CLOSED`` and otherwise asserts ``NONE``,
+then sets ``SESSION_ACCEPTING`` before resuming protocol I/O.
+
+Moving a pending replacement from ``NONE`` to ``STANDBY`` or ``START_CONNECT``
+causes these callback state checks to fail. To handle a fault during replacement,
+both callbacks must agree on whether to finish or cancel the replacement.
+Cancellation or recovery must also respect socket ownership and clean up or
+restart the timers. Removing the ``NONE`` guard in ``_fault()`` alone leaves
+the callbacks expecting a state that no longer holds.
+
+
 .. _crc:
 
 CRC Calculation
