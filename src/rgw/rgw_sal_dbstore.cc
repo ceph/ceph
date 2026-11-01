@@ -83,7 +83,8 @@ namespace rgw::sal {
   int DBUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   {
     int ret;
-    ret = store->getDB()->get_user(dpp, string("user_id"), get_id().id, info, &attrs,
+    std::string id = get_id().id;
+    ret = store->getDB()->get_user(dpp, string("user_id"), id, get_info_mut(), &attrs,
         &objv_tracker);
     return ret;
   }
@@ -102,9 +103,9 @@ namespace rgw::sal {
 
   int DBUser::load_user(const DoutPrefixProvider *dpp, optional_yield y)
   {
-    int ret = 0;
-
-    ret = store->getDB()->get_user(dpp, string("user_id"), get_id().id, info, &attrs,
+    int ret;
+    std::string id = get_id().id;
+    ret = store->getDB()->get_user(dpp, string("user_id"), id, get_info_mut(), &attrs,
         &objv_tracker);
 
     return ret;
@@ -120,7 +121,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDB()->store_user(dpp, info, exclusive, &attrs, &objv_tracker, old_info);
+    ret = store->getDB()->store_user(dpp, get_info(), exclusive, &attrs, &objv_tracker, old_info);
 
     return ret;
   }
@@ -129,7 +130,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDB()->remove_user(dpp, info, &objv_tracker);
+    ret = store->getDB()->remove_user(dpp, get_info(), &objv_tracker);
 
     return ret;
   }
