@@ -105,6 +105,18 @@ public:
     out << ")";
   }
 
+  // Called once the op is done; it may then sit in the op history.  Every
+  // buffer of a push, even a small xattr, can share the receive buffer
+  // holding the whole push, so drop them all.
+  void clear_buffers() override {
+    for (auto& p : pushes) {
+      p.data.clear();
+      p.omap_header.clear();
+      p.omap_entries.clear();
+      p.attrset.clear();
+    }
+  }
+
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
