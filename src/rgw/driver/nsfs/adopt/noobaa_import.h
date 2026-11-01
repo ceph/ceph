@@ -106,6 +106,13 @@ struct ImportResult {
    * Written, and refused until the uid resolves, as under NooBaa. */
   std::vector<std::string> unresolved_uids;
 
+  /* Roles whose trust policy names an account that IAM users also
+   * name, as "<owner>: role <name> trusts the account <name> (<user
+   * ARN>, ...) ...".  NooBaa's STS admitted those users too;  the role
+   * trusts the account only (DECISIONS.md 2026-10-30, amended
+   * 2026-11-01). */
+  std::vector<std::string> trust_narrowed;
+
   /* Every identity that could not be written, named.  Non-empty means
    * the import did not finish, and re-running it is the recovery. */
   std::vector<std::string> failures;
@@ -115,9 +122,9 @@ struct ImportResult {
  *
  * I3 checks the collisions visible in the store alone;  this checks
  * the same four constraints against **state RGW already holds** -- a
- * NooBaa account whose name matches an existing account, an email
- * already in RGW's index, which is shared across users and accounts,
- * or an access key another RGW user already holds.  Just as fatal,
+ * NooBaa account whose name matches an existing account, an account's
+ * email already in RGW's index, which is shared across users and
+ * accounts, or an access key another RGW user already holds.  Just as fatal,
  * and invisible without a lookup.
  *
  * An identity already imported is **not** a collision:  it is

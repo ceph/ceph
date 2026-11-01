@@ -22,16 +22,17 @@
  * leaving `_id` alone, so the name is not a stable key and the id is.
  *
  * THE GATE.  RGW enforces four uniqueness constraints a NooBaa store
- * does not (§6.3), and the one most likely to stop a real import is
- * **email**:  NooBaa's `email` is a copy of the account name, not an
- * email -- `manage_nsfs.js` sets `email: String(user_input.name)` with
- * the comment "temp, keep the email internally" -- and RGW's email
- * index is shared **across users and accounts**.  So two IAM users
- * named `alice` under different root accounts collide, deterministically,
- * partway through an import that did not check first.
+ * does not (§6.3).  One is **email**:  NooBaa's `email` is a copy of
+ * the name, not an email -- `manage_nsfs.js` sets
+ * `email: String(user_input.name)` with the comment "temp, keep the
+ * email internally" -- and RGW's email index is shared **across users
+ * and accounts**.  Only an account's email is written, so only
+ * accounts' are checked:  an IAM user is written with none, as an AWS
+ * IAM user has none, and its name is unique only in its account, in
+ * NooBaa and in AWS.
  *
- * Discarding the value is not available:  it is a matchable principal
- * in NooBaa's trust policies, so dropping it changes authorization.
+ * The value is carried rather than discarded:  NooBaa's STS matches a
+ * trust principal against it (`sts_rest.js:143`).
  *
  * **Every collision is reported and the plan is rejected.**  Not the
  * first one -- an operator needs the list, because fixing them one
@@ -39,13 +40,9 @@
  * rejected rather than reported, because a partial import leaves a
  * state nobody asked for (§6.1a).
  *
- * WHAT THIS DOES NOT CHECK:  collisions against **RGW's existing
- * state**.  A NooBaa account whose name matches an email already in
- * RGW's index is just as fatal and is not visible here -- it needs
- * lookups into the account and user indexes, which is where I4
- * writes.  Building that interface now would be a reader for nobody.
- * The store-internal half is complete, and it is the half §6.3 names
- * as the likeliest first failure.
+ * Collisions against **RGW's existing state** are not visible here:
+ * they need lookups into RGW's indexes, which `check_rgw_state`
+ * (`noobaa_import.h`) makes.
  */
 
 #pragma once

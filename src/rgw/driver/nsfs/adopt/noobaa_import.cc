@@ -296,14 +296,15 @@ int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
 	    "an RGW account named " + e.name + " already exists, and it is "
 	    "not the one _id " + e.noobaa_id + " was imported as");
       }
-    }
-    if (!e.email.empty() &&
-	driver->load_account_by_email(dpp, y, e.email,
-				      info, attrs, objv) == 0) {
-      collisions.push_back(
-	  "the email \"" + e.email + "\" is already in RGW's index, which "
-	  "is shared across users and accounts, so _id " + e.noobaa_id +
-	  " cannot take it");
+      /* an account's only:  an IAM user is written with no email */
+      if (!e.email.empty() &&
+	  driver->load_account_by_email(dpp, y, e.email,
+					info, attrs, objv) == 0) {
+	collisions.push_back(
+	    "the email \"" + e.email + "\" is already in RGW's index, "
+	    "which is shared across users and accounts, so _id " +
+	    e.noobaa_id + " cannot take it");
+      }
     }
     /* An access key is unique across RGW.  The user-add path rejects
      * one already held, but only when it reaches that key -- after the
@@ -682,9 +683,9 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
     std::string rewritten;
-    std::vector<std::string> unresolved;
+    std::vector<std::string> unresolved, also_users;
     if (int r = rewrite_policy_principals(dpp, trust, mapping, rewritten,
-					  unresolved); r < 0) {
+					  unresolved, &also_users); r < 0) {
       fail(e.noobaa_name, (r == -ENOENT)
 	   ? "the trust policy names principals that resolve to nothing: " +
 	     describe_unresolved(mapping, unresolved)
@@ -711,12 +712,18 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
      * creation date and the ARN clients assume it by, and stores it
      * exclusively */
     int ret = role->create(dpp, "", y);
-    if (ret == -EEXIST) {
-      /* a re-run meeting its own output */
+    if (ret < 0 && ret != -EEXIST) {
+      fail(e.noobaa_name, std::string("create: ") + cpp_strerror(-ret));
       continue;
     }
-    if (ret < 0) {
-      fail(e.noobaa_name, std::string("create: ") + cpp_strerror(-ret));
+    for (const auto& a : also_users) {
+      result.trust_narrowed.push_back(
+	  e.noobaa_name + ": role " + role_name + " trusts the account " +
+	  a + ";  NooBaa's STS also admitted these IAM users of its name, "
+	  "and the role does not trust them");
+    }
+    if (ret == -EEXIST) {
+      /* a re-run meeting its own output */
       continue;
     }
     ++result.roles_created;

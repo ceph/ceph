@@ -64,7 +64,7 @@ IdentityMapping::resolve(const std::string& principal) const
 
 bool IdentityMapping::names_only_users(const std::string& principal) const
 {
-  return !resolve(principal) && iam_user_names.contains(principal);
+  return !resolve(principal) && user_arns_by_name.contains(principal);
 }
 
 std::string describe_unresolved(const IdentityMapping& mapping,
@@ -87,10 +87,11 @@ IdentityMapping mapping_from(const ImportPlan& plan)
     if (e.iam_user) {
       /* RGW matches a user principal on `display_name`, which the
        * import set to the NooBaa name. */
-      m.user_arn_by_noobaa_id[e.noobaa_id] =
+      const std::string arn =
 	"arn:aws:iam::" + e.account_id + ":user/" + e.display_name;
+      m.user_arn_by_noobaa_id[e.noobaa_id] = arn;
       if (!e.noobaa_name.empty()) {
-	m.iam_user_names.insert(e.noobaa_name);
+	m.user_arns_by_name.emplace(e.noobaa_name, arn);
       }
     } else {
       m.account_by_noobaa_id[e.noobaa_id] = e.account_id;
@@ -107,7 +108,8 @@ namespace {
 /* Rewrite one principal value in place, or record it as unresolved. */
 void rewrite_one(rapidjson::Value& v, rapidjson::Document& d,
 		 const IdentityMapping& mapping,
-		 std::vector<std::string>& unresolved)
+		 std::vector<std::string>& unresolved,
+		 std::vector<std::string>* also_users)
 {
   if (!v.IsString()) {
     return;
@@ -122,6 +124,19 @@ void rewrite_one(rapidjson::Value& v, rapidjson::Document& d,
     unresolved.push_back(before);
     return;
   }
+  /* resolved, and not by an id, so by an account's name */
+  if (also_users &&
+      !mapping.account_by_noobaa_id.contains(before) &&
+      !mapping.user_arn_by_noobaa_id.contains(before)) {
+    auto [b, e] = mapping.user_arns_by_name.equal_range(before);
+    if (b != e) {
+      std::string users;
+      for (auto u = b; u != e; ++u) {
+	users += (users.empty() ? "" : ", ") + u->second;
+      }
+      also_users->push_back(before + " (" + users + ")");
+    }
+  }
   v.SetString(after->c_str(),
 	      static_cast<rapidjson::SizeType>(after->size()),
 	      d.GetAllocator());
@@ -135,15 +150,16 @@ void rewrite_one(rapidjson::Value& v, rapidjson::Document& d,
  * namespaces and are left exactly as they are. */
 void rewrite_principal(rapidjson::Value& principal, rapidjson::Document& d,
 		       const IdentityMapping& mapping,
-		       std::vector<std::string>& unresolved)
+		       std::vector<std::string>& unresolved,
+		       std::vector<std::string>* also_users)
 {
   if (principal.IsString()) {
-    rewrite_one(principal, d, mapping, unresolved);
+    rewrite_one(principal, d, mapping, unresolved, also_users);
     return;
   }
   if (principal.IsArray()) {
     for (auto& v : principal.GetArray()) {
-      rewrite_one(v, d, mapping, unresolved);
+      rewrite_one(v, d, mapping, unresolved, also_users);
     }
     return;
   }
@@ -156,10 +172,10 @@ void rewrite_principal(rapidjson::Value& principal, rapidjson::Document& d,
       continue;
     }
     if (i->value.IsString()) {
-      rewrite_one(i->value, d, mapping, unresolved);
+      rewrite_one(i->value, d, mapping, unresolved, also_users);
     } else if (i->value.IsArray()) {
       for (auto& v : i->value.GetArray()) {
-	rewrite_one(v, d, mapping, unresolved);
+	rewrite_one(v, d, mapping, unresolved, also_users);
       }
     }
   }
@@ -171,7 +187,8 @@ int rewrite_policy_principals(const DoutPrefixProvider* dpp,
 			      const std::string& doc,
 			      const IdentityMapping& mapping,
 			      std::string& out,
-			      std::vector<std::string>& unresolved)
+			      std::vector<std::string>& unresolved,
+			      std::vector<std::string>* also_users)
 {
   rapidjson::Document d;
   d.Parse(doc.c_str(), doc.size());
@@ -195,7 +212,7 @@ int rewrite_policy_principals(const DoutPrefixProvider* dpp,
     for (const char* key : {"Principal", "NotPrincipal"}) {
       auto p = s.FindMember(key);
       if (p != s.MemberEnd()) {
-	rewrite_principal(p->value, d, mapping, unresolved);
+	rewrite_principal(p->value, d, mapping, unresolved, also_users);
       }
     }
   };

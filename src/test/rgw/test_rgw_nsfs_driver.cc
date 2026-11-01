@@ -14918,13 +14918,13 @@ TEST_F(NooBaaPlanTest, AnIamUserTakesItsOwnersAccount)
   EXPECT_TRUE(said("6ac7cb27fd4af3569191ffff")) << why();
 }
 
-/* The email collision, which is the likeliest first failure.
+/* Two IAM users named `alice` under different root accounts do not
+ * collide.
  *
  * NooBaa's email is a copy of the name, and RGW's email index is shared
- * across users and accounts.  So two IAM users named `alice` under
- * different root accounts collide -- which is §6.3's own example, and
- * nothing about it is visible one record at a time. */
-TEST_F(NooBaaPlanTest, TwoUsersOfOneNameUnderDifferentAccountsCollide)
+ * across users and accounts, but an IAM user is written with no email:
+ * a user's name is unique only in its account, in NooBaa and in AWS. */
+TEST_F(NooBaaPlanTest, TwoUsersOfOneNameUnderDifferentAccountsDoNotCollide)
 {
   add_identity("a1", R"({"_id":"a1","name":"acct-one","email":"acct-one"})");
   add_identity("a2", R"({"_id":"a2","name":"acct-two","email":"acct-two"})");
@@ -14935,13 +14935,8 @@ TEST_F(NooBaaPlanTest, TwoUsersOfOneNameUnderDifferentAccountsCollide)
   add_identity("u2", R"({"_id":"u2","name":"alice","email":"alice",
     "owner":"a2"})");
 
-  EXPECT_EQ(build(4), -EEXIST);
-  EXPECT_TRUE(said("both carry the email \"alice\"")) << why();
-  EXPECT_TRUE(said("u1")) << why();
-  EXPECT_TRUE(said("u2")) << why();
-  /* the plan is still returned, because an operator reading a rejected
-   * plan wants to see what would have been imported */
-  EXPECT_EQ(plan.entries.size(), 4u);
+  EXPECT_EQ(build(4), 0) << why();
+  EXPECT_TRUE(plan.collisions.empty()) << why();
 }
 
 /* Every collision is reported, not the first.
@@ -16155,6 +16150,60 @@ TEST_F(NooBaaImportTest, ATrustNameOnlyAUserHasFailsTheRole)
 	    std::string::npos) << why();
 }
 
+/* A trust policy naming an account that an IAM user's name also matches
+ * trusts the account only, and reports the user NooBaa's STS also
+ * admitted (DECISIONS.md 2026-10-30, amended 2026-11-01). */
+TEST_F(NooBaaImportTest, ATrustNameAnAccountAndAUserShareTrustsTheAccount)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account("interchange").c_str());
+  add_identity("u9", NB_USER_NAMED_INTERCHANGE);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+
+  const auto* holder = entry("ix-groups");
+  const auto* named = entry("interchange");
+  ASSERT_NE(holder, nullptr);
+  ASSERT_NE(named, nullptr);
+  auto role = driver->get_role("nb-role", holder->tenant,
+			       rgw_account_id{holder->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0);
+  const auto& trust = role->get_info().trust_policy;
+  EXPECT_NE(trust.find(named->account_id), std::string::npos) << trust;
+  EXPECT_EQ(trust.find(":user/"), std::string::npos) << trust;
+
+  ASSERT_EQ(result.trust_narrowed.size(), 1u);
+  const auto& t = result.trust_narrowed[0];
+  EXPECT_NE(t.find("role nb-role trusts the account interchange (arn:aws:"
+		   "iam::" + holder->account_id + ":user/"),
+	    std::string::npos) << t;
+}
+
+/* An IAM user whose name, and so whose NooBaa email, is an imported
+ * account's email is no collision with RGW's state:  the user is
+ * written with no email. */
+TEST_F(NooBaaImportTest, AUserOfAnImportedAccountsEmailIsNoCollision)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  ASSERT_EQ(run(), 0) << why();
+
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  add_identity("u9", NB_USER_NAMED_INTERCHANGE);
+  auto c = read_store();
+  nsfs::ImportPlan p;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
+  std::vector<std::string> collisions;
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p,
+				  collisions), 0)
+      << collisions.front();
+}
+
 class NooBaaPolicyTest : public ::testing::Test {
 public:
   nsfs::IdentityMapping mapping;
@@ -16165,7 +16214,8 @@ public:
     mapping.noobaa_id_by_account_name["acct-one"] = "6ac7cb27fd4af356919110a3";
     mapping.user_arn_by_noobaa_id["u1"] =
       "arn:aws:iam::RGW11111111111111111:user/alice";
-    mapping.iam_user_names.insert("alice");
+    mapping.user_arns_by_name.emplace(
+      "alice", "arn:aws:iam::RGW11111111111111111:user/alice");
   }
 
   std::string rewrite(const std::string& doc, int expect = 0) {
@@ -16217,6 +16267,29 @@ TEST_F(NooBaaPolicyTest, AnUnresolvedUserNameSaysWhy)
   EXPECT_EQ(nsfs::describe_unresolved(mapping, {"ghost", "alice"}),
 	    "ghost, alice (an IAM user's name;  a name resolves only to an "
 	    "account)");
+}
+
+/* An account's name that IAM users also have resolves to the account,
+ * and each such name is returned with the users' ARNs.  An id is never
+ * one of them. */
+TEST_F(NooBaaPolicyTest, AnAccountNameUsersAlsoHaveIsReturned)
+{
+  mapping.user_arns_by_name.emplace(
+    "acct-one", "arn:aws:iam::RGW22222222222222222:user/acct-one");
+  mapping.user_arns_by_name.emplace(
+    "acct-one", "arn:aws:iam::RGW33333333333333333:user/acct-one");
+  const std::string doc = R"({"Version":"2012-10-17","Statement":[{
+    "Effect":"Allow","Principal":{"AWS":["acct-one","u1"]},
+    "Action":["sts:AssumeRole"]}]})";
+  std::string out;
+  std::vector<std::string> unresolved, also_users;
+  ASSERT_EQ(nsfs::rewrite_policy_principals(env->dpp, doc, mapping, out,
+					    unresolved, &also_users), 0);
+  EXPECT_NE(out.find("\"RGW11111111111111111\""), std::string::npos) << out;
+  ASSERT_EQ(also_users.size(), 1u);
+  EXPECT_EQ(also_users[0],
+	    "acct-one (arn:aws:iam::RGW22222222222222222:user/acct-one, "
+	    "arn:aws:iam::RGW33333333333333333:user/acct-one)");
 }
 
 /* Everything outside Principal survives byte-for-byte.

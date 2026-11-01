@@ -68,7 +68,6 @@
 
 #include <map>
 #include <optional>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -100,11 +99,13 @@ struct IdentityMapping {
    * (`s3_rest.js:287-289,321`), and accepts one into a policy only as an
    * account's (`config_fs.js:661-677`) */
   std::map<std::string, std::string> noobaa_id_by_account_name;
-  /* the IAM users' names.  Never resolved through:  it says why a name
-   * resolved to nothing.  The plan refuses two identities of one name,
-   * since their emails are copies of the names and RGW's email index is
-   * shared, so a name is an account's or a user's, never both */
-  std::set<std::string> iam_user_names;
+  /* NooBaa IAM user name -> the RGW user ARN of each user of that
+   * name, which is unique only in its account, as in AWS.  Never
+   * resolved through:  it says why a name resolved to nothing, and
+   * which users an account's name in a trust policy also admitted --
+   * NooBaa's STS matches a principal against the caller's email
+   * (`sts_rest.js:143`), and a user's email is a copy of its name */
+  std::multimap<std::string, std::string> user_arns_by_name;
 
   /* Id first, then an account's name.  Nothing if neither resolves --
    * which is a fact to report, not a value to invent. */
@@ -123,6 +124,10 @@ IdentityMapping mapping_from(const ImportPlan& plan);
  * an operator fixing them needs the list rather than the first.
  * -EBADMSG when the document will not parse.
  *
+ * `also_users`, when given, gets each principal that resolved to an
+ * account by its name and is also an IAM user's name, as
+ * "<name> (<user ARN>, ...)".
+ *
  * Only values under `Principal` are visited.  Exposed for its own
  * tests:  it is the part of this stage where being subtly wrong
  * changes who may do what. */
@@ -130,7 +135,8 @@ int rewrite_policy_principals(const DoutPrefixProvider* dpp,
 			      const std::string& doc,
 			      const IdentityMapping& mapping,
 			      std::string& out,
-			      std::vector<std::string>& unresolved);
+			      std::vector<std::string>& unresolved,
+			      std::vector<std::string>* also_users = nullptr);
 
 /* `unresolved` as an operator reads it:  each principal, and for an IAM
  * user's name, that a name resolves only to an account. */

@@ -321,13 +321,14 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
     }
   }
 
-  /* Email, globally unique **across users and accounts**.  This is
-   * the one §6.3 names as the likeliest first failure, because NooBaa's
-   * email is a copy of the name. */
+  /* Email, globally unique **across users and accounts**.  Only an
+   * account's is written:  an IAM user is written with no email, as an
+   * AWS IAM user has none, so two users of one name under different
+   * accounts -- legal in NooBaa and in AWS -- do not collide. */
   {
     std::map<std::string, std::string> seen;
     for (const auto& e : plan.entries) {
-      if (e.email.empty()) {
+      if (e.iam_user || e.email.empty()) {
 	continue;
       }
       auto [i, fresh] = seen.emplace(e.email, e.noobaa_id);
@@ -335,9 +336,7 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
 	plan.collisions.push_back(
 	    "_id " + i->second + " and _id " + e.noobaa_id +
 	    " both carry the email \"" + e.email + "\", and RGW's email "
-	    "index is shared across users and accounts.  Their email is a "
-	    "copy of the name, so two identities of the same name collide "
-	    "even under different accounts");
+	    "index is shared across users and accounts");
 	ret = -EEXIST;
       }
     }

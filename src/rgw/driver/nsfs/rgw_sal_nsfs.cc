@@ -18408,6 +18408,10 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 0) << "WARNING: adoption:  an identity with no group "
       "list runs as a uid nsswitch does not know:  " << u << dendl;
   }
+  put_report("trust_narrowed", std::to_string(ir.trust_narrowed.size()));
+  for (const auto& t : ir.trust_narrowed) {
+    ldpp_dout(dpp, 0) << "WARNING: adoption:  " << t << dendl;
+  }
   if (ret < 0) {
     put_report("ran", "partial");
     return ret;
