@@ -1046,6 +1046,39 @@ example:
 .. note:: Use ``zonegroup modify --rgw-zonegroup=<zonegroup-name>`` to modify
           an existing zonegroup’s settings.
 
+.. _radosgw-zonegroup-admin-endpoints:
+
+Zonegroup Admin Endpoints
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A zonegroup's ``endpoints`` are the URLs that clients are redirected to when
+they send a request for a bucket that belongs to that zonegroup. They are often
+public or load-balancer URLs.
+
+Gateways also send system requests to other zonegroups: the master zone pushes
+new periods to them, and other zonegroups use the master zonegroup's
+connection to forward metadata changes and cross-zonegroup copies.
+``radosgw-admin`` commands that use ``--remote`` with a zonegroup ID connect
+to that zonegroup too. When the client URLs are not reachable from the other
+zones, set ``admin_endpoints`` to URLs that are:
+
+.. prompt:: bash #
+
+   radosgw-admin zonegroup modify --rgw-zonegroup={zonegroup-name} \
+                                  --admin-endpoints=http://{sync-fqdn}:80[,http://{sync-fqdn}:80]
+   radosgw-admin period update --commit
+
+Client redirects keep using ``endpoints``. To clear ``admin_endpoints``, pass
+an empty list (``--admin-endpoints=``).
+
+If ``admin_endpoints`` is not set, system traffic uses the URLs it used before
+this setting existed: period push and ``radosgw-admin --remote`` use the
+zonegroup's ``endpoints``, and the connections that gateways keep to other
+zonegroups use the endpoints of each zonegroup's master zone. This fallback is
+deprecated and will be removed in a future release. In realms with more than
+one zonegroup, ``radosgw-admin period update --commit`` and the gateways log a
+warning for each zonegroup that does not set ``admin_endpoints``.
+
 Making a Zonegroup the Default
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1263,6 +1296,10 @@ specifying the required settings. Here is a list of the required settings:
 9. ``default_placement``: The default placement target for the object index and
    object data. Set to ``default-placement`` by default. It is also possible
    to set a per-user default placement in the user info for each user.
+
+10. ``admin_endpoints``: A list of URLs that gateways and ``radosgw-admin`` use
+    for system traffic to this zonegroup. Optional. See
+    :ref:`radosgw-zonegroup-admin-endpoints`.
 
 Setting a Zonegroup - Procedure
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

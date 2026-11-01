@@ -461,6 +461,8 @@ void usage()
   cout << "   --tags-add=<list>                 list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>                  list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>                zone endpoints\n";
+  cout << "   --admin-endpoints=<list>          zonegroup system endpoints (period push, admin and\n";
+  cout << "                                     inter-zonegroup requests); empty value clears them\n";
   cout << "   --index-pool=<pool>               placement target index pool\n";
   cout << "   --data-pool=<pool>                placement target data pool\n";
   cout << "   --data-extra-pool=<pool>          placement target data extra (non-ec) pool\n";
@@ -1706,7 +1708,10 @@ static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver
 {
   boost::optional<RGWRESTConn> conn;
   if (remote == zonegroup.get_id()) {
-    conn.emplace(driver->ctx(), driver, remote, zonegroup.endpoints, zonegroup.api_name);
+    const auto& system_endpoints =
+      rgw::get_zonegroup_system_endpoints(zonegroup, zonegroup.endpoints);
+    conn.emplace(driver->ctx(), driver, remote, system_endpoints,
+                 zonegroup.api_name);
   } else {
     for (const auto& z : zonegroup.zones) {
       const auto& zone = z.second;
@@ -1937,6 +1942,21 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
   return ret;
 }
 
+static void warn_legacy_system_endpoints(const RGWPeriodMap& period_map)
+{
+  if (period_map.zonegroups.size() < 2) {
+    return;
+  }
+  for (const auto& [_, zonegroup] : period_map.zonegroups) {
+    if (rgw::uses_legacy_system_endpoints(zonegroup)) {
+      cerr << "WARNING: zonegroup " << zonegroup.get_name()
+           << " has no admin_endpoints; system traffic falls back to its "
+              "endpoints, which is deprecated. Set them with 'radosgw-admin "
+              "zonegroup modify --admin-endpoints=<list>'" << std::endl;
+    }
+  }
+}
+
 static int update_period(rgw::sal::ConfigStore* cfgstore,
                          const string& realm_id, const string& realm_name,
                          const string& period_epoch, bool commit,
@@ -1980,6 +2000,7 @@ static int update_period(rgw::sal::ConfigStore* cfgstore,
     return ret;
   }
   if (commit) {
+    warn_legacy_system_endpoints(period.get_map());
     ret = commit_period(cfgstore, realm, *realm_writer, period, remote, url,
                         opt_region, access, secret, force, site);
     if (ret < 0) {
@@ -3473,6 +3494,7 @@ int main(int argc, const char **argv)
   std::string redirect_zone;
   bool redirect_zone_set = false;
   list<string> endpoints;
+  std::optional<list<string>> admin_endpoints;
   int tmp_int;
   int sync_from_all_specified = false;
   bool sync_from_all = false;
@@ -4168,6 +4190,8 @@ int main(int argc, const char **argv)
       zone_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
       get_str_list(val, endpoints);
+    } else if (ceph_argparse_witharg(args, i, &val, "--admin-endpoints", (char*)NULL)) {
+      get_str_list(val, admin_endpoints.emplace());
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from", (char*)NULL)) {
       get_str_list(val, sync_from);
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*)NULL)) {
@@ -5540,6 +5564,9 @@ int main(int argc, const char **argv)
         zonegroup.is_master = is_master;
         zonegroup.realm_id = realm.get_id();
         zonegroup.endpoints = endpoints;
+        if (admin_endpoints) {
+          zonegroup.admin_endpoints = *admin_endpoints;
+        }
         zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
 
         zonegroup.enabled_features = enable_features;
@@ -5692,6 +5719,11 @@ int main(int argc, const char **argv)
 
         if (!endpoints.empty()) {
           zonegroup.endpoints = endpoints;
+          need_update = true;
+        }
+
+        if (admin_endpoints) {
+          zonegroup.admin_endpoints = *admin_endpoints;
           need_update = true;
         }
 
@@ -7090,6 +7122,7 @@ int main(int argc, const char **argv)
         cerr << "failed to load period: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
+      warn_legacy_system_endpoints(period.get_map());
       ret = commit_period(cfgstore.get(), realm, *realm_writer, period,
                           remote, url, opt_region, access_key, secret_key,
                           yes_i_really_mean_it, site.get());
