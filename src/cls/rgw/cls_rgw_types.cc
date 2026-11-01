@@ -422,7 +422,8 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
 
 bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
                                 RGWObjCategory *category,
-                                rgw_bucket_category_stats *accounted_stats) const
+                                rgw_bucket_category_stats *accounted_stats,
+                                string *storage_class) const
 {
   using ceph::decode;
   auto iter = data.cbegin();
@@ -442,6 +443,7 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
   rgw_bucket_dir_entry entry;
   decode(entry, iter);
   *key = entry.key;
+  *storage_class = entry.meta.storage_class;
   *category = entry.meta.category;
   accounted_stats->num_entries++;
   accounted_stats->total_size += entry.meta.accounted_size;
@@ -717,6 +719,20 @@ list<rgw_bucket_dir_header> rgw_bucket_dir_header::generate_test_instances()
   }
 
   o.emplace_back();
+
+  // one storage class only: the order of an unordered_map can change when
+  // it is decoded, which fails the binary reencode check of ceph-dencoder
+  rgw_bucket_dir_header sc_h;
+  sc_h.stats[RGWObjCategory::Main].num_entries = 3;
+  sc_h.stats[RGWObjCategory::Main].total_size = 3072;
+  sc_h.storage_class_stats.emplace();
+  (*sc_h.storage_class_stats)["COLD"].num_entries = 3;
+  (*sc_h.storage_class_stats)["COLD"].total_size = 3072;
+  o.push_back(std::move(sc_h));
+
+  rgw_bucket_dir_header empty_sc_h;
+  empty_sc_h.storage_class_stats.emplace(); // known, no objects
+  o.push_back(std::move(empty_sc_h));
   return o;
 }
 
@@ -734,6 +750,19 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
   f->close_section();
   ::encode_json("new_instance", new_instance, f);
   f->dump_int("reshardlog_entries", reshardlog_entries);
+  if (storage_class_stats) { // omitted if unknown
+    // sorted, so the output doesn't depend on the hash order
+    const std::map<std::string, rgw_bucket_category_stats> sorted(
+        storage_class_stats->begin(), storage_class_stats->end());
+    f->open_array_section("storage_class_stats");
+    for (const auto& [storage_class, s] : sorted) {
+      f->open_object_section("entry");
+      f->dump_string("storage_class", storage_class);
+      s.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 list<rgw_bucket_dir> rgw_bucket_dir::generate_test_instances()
