@@ -424,6 +424,13 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
                                 RGWObjCategory *category,
                                 rgw_bucket_category_stats *accounted_stats) const
 {
+  return cls_rgw_get_bi_entry_info(type, data, key, category, accounted_stats);
+}
+
+bool cls_rgw_get_bi_entry_info(const BIIndexType type, const ::ceph::buffer::list& data,
+                               cls_rgw_obj_key *key, RGWObjCategory *category,
+                               rgw_bucket_category_stats *accounted_stats)
+{
   using ceph::decode;
   auto iter = data.cbegin();
   if (type == BIIndexType::OLH) {
