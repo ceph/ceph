@@ -70,6 +70,19 @@ void connect_attach_cb(void*, const spdk_nvme_transport_id*,
   tls_attached_ctrlr = ctrlr;
 }
 
+} // anonymous namespace
+
+// A shard's qpair lives as long as the controller: a freed qpair's queue ID
+// would go to the next qpair allocated, possibly on another shard, while the
+// target may still be tearing the queue down (the kernel nvmet target rejects
+// that). spdk_nvme_detach() frees the qpairs.
+struct spdk_nvme_io::shard_qpair {
+  spdk_nvme_qpair* qpair = nullptr;
+  std::optional<seastar::reactor::poller> poller;
+  unsigned users = 0;
+};
+
+namespace {
 
 // A single NVMe controller is attached once per process, then shared across all
 // Seastar shards (each shard owns its own qpair, not its own controller). The
@@ -86,6 +99,8 @@ struct shared_ctrlr {
   // vfio-user transport exposes a single controller, and a concurrent
   // spdk_nvme_connect_async() to it deadlocks in the version handshake.
   bool connecting = false;
+  // indexed by shard, each slot touched only from its shard
+  std::unique_ptr<spdk_nvme_io::shard_qpair[]> shard_qpairs;
 };
 std::mutex registry_mutex;
 std::map<std::string, shared_ctrlr> registry;
@@ -216,6 +231,8 @@ seastar::future<> spdk_nvme_io::probe(const std::string& trid_str)
   entry.ns = spdk_nvme_ctrlr_get_ns(new_ctrlr, new_nsid);
   entry.sector_size = spdk_nvme_ns_get_sector_size(entry.ns);
   entry.nsid = new_nsid;
+  entry.shard_qpairs =
+    std::make_unique<shard_qpair[]>(seastar::smp::count);
   INFO("attached '{}' nsid={} sector_size={} size={}",
        parse_str, new_nsid, entry.sector_size, spdk_nvme_ns_get_size(entry.ns));
   adopt(entry);
@@ -243,11 +260,22 @@ void spdk_nvme_io::start_shard()
 {
   ceph_assert(ctrlr);
   owning_shard = seastar::this_shard_id();
-  qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, nullptr, 0);
-  ceph_assert(qpair);
-  poller = seastar::reactor::poller::simple([this] {
-    return spdk_nvme_qpair_process_completions(qpair, 0) > 0;
-  });
+  {
+    std::lock_guard l(registry_mutex);
+    auto it = registry.find(transport_id);
+    ceph_assert(it != registry.end() && it->second.ctrlr == ctrlr);
+    shared = &it->second.shard_qpairs[owning_shard];
+  }
+  if (shared->qpair == nullptr) {
+    shared->qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, nullptr, 0);
+    ceph_assert(shared->qpair);
+  }
+  if (shared->users++ == 0) {
+    shared->poller = seastar::reactor::poller::simple([qp = shared->qpair] {
+      return spdk_nvme_qpair_process_completions(qp, 0) > 0;
+    });
+  }
+  qpair = shared->qpair;
   if (owning_shard == 0) {
     admin_timer.emplace();
     admin_timer->set_callback([this] {
@@ -262,14 +290,16 @@ void spdk_nvme_io::start_shard()
 
 void spdk_nvme_io::stop_shard()
 {
-  poller.reset();
   if (admin_timer) {
     admin_timer->cancel();
     admin_timer.reset();
   }
   if (qpair) {
-    spdk_nvme_ctrlr_free_io_qpair(qpair);
+    if (--shared->users == 0) {
+      shared->poller.reset();
+    }
     qpair = nullptr;
+    shared = nullptr;
   }
 }
 
