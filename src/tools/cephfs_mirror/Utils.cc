@@ -38,6 +38,7 @@ int connect(std::string_view client_name, std::string_view cluster_name,
   int r = cct->_conf.parse_config_files(nullptr, nullptr, 0);
   if (r < 0 && r != -ENOENT) {
     derr << ": could not read ceph conf: " << ": " << cpp_strerror(r) << dendl;
+    cct->put();
     return r;
   }
 
