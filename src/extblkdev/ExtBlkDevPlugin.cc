@@ -199,13 +199,12 @@ namespace ceph {
       string plugins = conf.get_val<std::string>("osd_extblkdev_plugins");
       dout(10) << "starting preload of extblkdev plugins: " << plugins << dendl;
 
-      list<string> plugins_list;
-      get_str_list(plugins, plugins_list);
+      const auto plugins_list = get_str_vec(plugins);
 
       auto registry = cct->get_plugin_registry();
       {
 	std::lock_guard l(registry->lock);
-	for (auto& plg : plugins_list) {
+	for (const auto& plg : plugins_list) {
 	  dout(10) << "starting load of extblkdev plugin: " << plg << dendl;
 	  int rc = registry->load("extblkdev", std::string("ebd_") + plg);
 	  if (rc) {

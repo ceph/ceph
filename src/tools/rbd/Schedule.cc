@@ -8,8 +8,9 @@
 #include "tools/rbd/Schedule.h"
 #include "tools/rbd/Utils.h"
 
-#include <iostream>
 #include <regex>
+#include <iostream>
+#include <iterator>
 
 namespace rbd {
 
@@ -197,7 +198,10 @@ int Schedule::parse(json_spirit::mValue &schedule_val) {
   }
 
   try {
-    for (auto &item_val : schedule_val.get_array()) {
+    auto &schedule_items = schedule_val.get_array();
+    items.reserve(std::size(items) + std::size(schedule_items));
+
+    for (auto &item_val : schedule_items) {
       if (item_val.type() != json_spirit::obj_type) {
         std::cerr << "rbd: unexpected schedule JSON received: "
                   << "schedule item is not object" << std::endl;

@@ -20,7 +20,6 @@ using std::cerr;
 using std::cout;
 using std::dec;
 using std::hex;
-using std::list;
 using std::map;
 using std::make_pair;
 using std::ostream;

@@ -23,10 +23,10 @@
 #include "include/cephfs/types.h" // for fs_cluster_id_t"
 
 #include <iosfwd>
-#include <list>
 #include <memory>
 #include <string>
 #include <variant>
+#include <vector>
 
 class Filesystem;
 class FSMap;
@@ -90,7 +90,7 @@ public:
     return is_op_allowed(op, fsmap, cmdmap, ss);
   }
 
-  static std::list<std::shared_ptr<FileSystemCommandHandler> > load(Paxos *paxos);
+  static std::vector<std::shared_ptr<FileSystemCommandHandler>> load(Paxos *paxos);
 
   virtual int handle(
     Monitor *mon,

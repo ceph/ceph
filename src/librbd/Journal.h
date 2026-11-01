@@ -22,10 +22,11 @@
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 
-#include <algorithm>
-#include <list>
-#include <string>
 #include <atomic>
+#include <string>
+#include <vector>
+#include <iterator>
+#include <algorithm>
 #include <unordered_map>
 
 class ContextWQ;
@@ -191,9 +192,9 @@ private:
   typedef typename TypeTraits::Future Future;
   typedef typename TypeTraits::ReplayEntry ReplayEntry;
 
-  typedef std::list<bufferlist> Bufferlists;
-  typedef std::list<Context *> Contexts;
-  typedef std::list<Future> Futures;
+  typedef std::vector<bufferlist> Bufferlists;
+  typedef std::vector<Context *> Contexts;
+  typedef std::vector<Future> Futures;
   typedef interval_set<uint64_t> ExtentInterval;
 
   struct Event {

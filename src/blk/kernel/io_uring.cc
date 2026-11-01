@@ -9,7 +9,6 @@
 #include <sys/epoll.h>
 #include <map>
 
-using std::list;
 using std::make_unique;
 
 struct ioring_data {
@@ -72,24 +71,24 @@ static void init_sqe(struct ioring_data *d, struct io_uring_sqe *sqe,
 }
 
 static int ioring_queue(struct ioring_data *d, void *priv,
-			list<aio_t>::iterator beg, list<aio_t>::iterator end)
+			io_queue_t::aio_iter first, io_queue_t::aio_iter last)
 {
   struct io_uring *ring = &d->io_uring;
   struct aio_t *io = nullptr;
 
-  ceph_assert(beg != end);
+  ceph_assert(first != last);
 
   do {
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
     if (!sqe)
       break;
 
-    io = &*beg;
+    io = &*first;
     io->priv = priv;
 
     init_sqe(d, sqe, io);
 
-  } while (++beg != end);
+  } while (++first != last);
 
   if (!io)
     /* Queue is full, go and reap something first */
@@ -179,14 +178,14 @@ void ioring_queue_t::shutdown()
   io_uring_queue_exit(&d->io_uring);
 }
 
-int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
+int ioring_queue_t::submit_batch(aio_iter first, aio_iter last,
                                  void *priv,
                                  int *retries, int submit_retries, int initial_delay_us)
 {
   (void)retries;
 
   pthread_mutex_lock(&d->sq_mutex);
-  int rc = ioring_queue(d.get(), priv, beg, end);
+  int rc = ioring_queue(d.get(), priv, first, last);
   pthread_mutex_unlock(&d->sq_mutex);
 
   return rc;
@@ -248,7 +247,7 @@ void ioring_queue_t::shutdown()
   ceph_assert(0);
 }
 
-int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
+int ioring_queue_t::submit_batch(aio_iter first, aio_iter last,
                                  void *priv,
                                  int *retries, int submit_retries, int initial_delay_us)
 {

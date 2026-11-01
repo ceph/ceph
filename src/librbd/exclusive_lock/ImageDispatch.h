@@ -11,8 +11,8 @@
 #include "common/zipkin_trace.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
+#include <deque>
 #include <atomic>
-#include <list>
 #include <unordered_set>
 
 struct Context;
@@ -103,7 +103,7 @@ public:
   }
 
 private:
-  typedef std::list<Context*> Contexts;
+  using Contexts = std::deque<Context *>;
   typedef std::unordered_set<uint64_t> Tids;
 
   ImageCtxT* m_image_ctx;

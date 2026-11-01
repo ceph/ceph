@@ -21,7 +21,7 @@
 #include "librbd/cache/pwl/ssd/Builder.h"
 #include "librbd/cache/pwl/ssd/Types.h"
 #include <functional>
-#include <list>
+#include <vector>
 
 namespace librbd {
 
@@ -50,7 +50,7 @@ public:
 
   bool alloc_resources(C_BlockIORequestT *req) override;
   void setup_schedule_append(
-      pwl::GenericLogOperationsVector &ops, bool do_early_flush,
+      pwl::GenericLogOperationBatch &ops, bool do_early_flush,
       C_BlockIORequestT *req) override;
   void complete_user_request(Context *&user_req, int r) override;
 
@@ -67,7 +67,8 @@ protected:
                        pwl::DeferredContexts &later) override;
   void process_work() override;
   void append_scheduled_ops(void) override;
-  void schedule_append_ops(pwl::GenericLogOperations &ops, C_BlockIORequestT *req) override;
+  void schedule_append_ops(pwl::GenericLogOperationBatch ops,
+                           C_BlockIORequestT *req) override;
   void remove_pool_file() override;
   void release_ram(std::shared_ptr<GenericLogEntry> log_entry) override;
 
@@ -95,8 +96,8 @@ private:
       : root(r), ctx(c) {}
   };
 
-  using WriteLogPoolRootUpdateList = std::list<std::shared_ptr<WriteLogPoolRootUpdate>>;
-  WriteLogPoolRootUpdateList m_poolroot_to_update; /* pool root list to update to SSD */
+  using WriteLogPoolRootUpdates = std::vector<std::shared_ptr<WriteLogPoolRootUpdate>>;
+  WriteLogPoolRootUpdates m_poolroot_to_update; /* pool root updates to write to SSD */
   bool m_updating_pool_root = false;
 
   std::atomic<int> m_async_update_superblock = {0};
@@ -119,15 +120,13 @@ private:
       std::vector<bufferlist*> &bls_to_read, Context *ctx) override;
   void enlist_op_appender();
   bool retire_entries(const unsigned long int frees_per_tx);
-  bool has_sync_point_logs(GenericLogOperations &ops);
-  void append_op_log_entries(GenericLogOperations &ops);
-  void alloc_op_log_entries(GenericLogOperations &ops);
-  void construct_flush_entries(pwl::GenericLogEntries entires_to_flush,
-				DeferredContexts &post_unlock,
+  void append_op_log_entries(GenericLogOperationBatch ops);
+  void alloc_op_log_entries(const GenericLogOperationBatch &ops);
+  void construct_flush_entries(pwl::GenericLogEntryBatch entries_to_flush,
 				bool has_write_entry) override;
-  void append_ops(GenericLogOperations &ops, Context *ctx,
+  void append_ops(const GenericLogOperationBatch &ops, Context *ctx,
                   uint64_t* new_first_free_entry);
-  void write_log_entries(GenericLogEntriesVector log_entries,
+  void write_log_entries(const GenericLogEntryBatch &log_entries,
                          AioTransContext *aio, uint64_t *pos);
   void schedule_update_root(std::shared_ptr<WriteLogPoolRoot> root,
                             Context *ctx);

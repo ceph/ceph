@@ -4,12 +4,13 @@
 #ifndef RBD_MIRROR_THROTTLER_H
 #define RBD_MIRROR_THROTTLER_H
 
-#include <list>
+#include <deque>
 #include <map>
 #include <set>
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "common/ceph_mutex.h"
 #include "common/config_obs.h"
@@ -56,7 +57,7 @@ private:
 
   ceph::mutex m_lock;
   uint32_t m_max_concurrent_ops;
-  std::list<Id> m_queue;
+  std::deque<Id> m_queue;
   std::map<Id, Context *> m_queued_ops;
   std::set<Id> m_inflight_ops;
 

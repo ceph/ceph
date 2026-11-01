@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <deque>
 #include <vector>
 #include <boost/circular_buffer.hpp>
 #include <boost/intrusive/set.hpp>
@@ -73,7 +74,7 @@ int index_complete(librados::IoCtx& ioctx, const std::string& oid,
                    const cls_rgw_obj_key& key, const std::string& tag,
                    RGWModifyOp type, const rgw_bucket_entry_ver& ver,
                    const rgw_bucket_dir_entry_meta& meta,
-                   std::list<cls_rgw_obj_key>* remove_objs)
+                   const std::vector<cls_rgw_obj_key>& remove_objs)
 {
   librados::ObjectWriteOperation op;
   constexpr bool log_op = false;
@@ -332,7 +333,7 @@ void simulator::finish(const operation& op)
 void simulator::complete(const operation& op, RGWModifyOp type)
 {
   int r = index_complete(ioctx, oid, op.key, op.tag, type,
-                         op.ver, op.meta, nullptr);
+                         op.ver, op.meta, {});
   if (r != 0) {
     derr << "< failed to complete operation key=" << op.key
         << " tag=" << op.tag << " type=" << op.type
@@ -456,7 +457,7 @@ int simulator::init_multipart(const operation& op)
   rgw_bucket_dir_entry_meta meta_meta;
   meta_meta.category = RGWObjCategory::MultiMeta;
   int r = index_complete(ioctx, oid, meta_key, empty_tag, CLS_RGW_OP_ADD,
-                         empty_ver, meta_meta, nullptr);
+                         empty_ver, meta_meta, {});
   if (r != 0) {
     derr << "  < failed to create multipart meta key=" << meta_key
         << ": " << cpp_strerror(r) << dendl;
@@ -473,7 +474,7 @@ int simulator::init_multipart(const operation& op)
   }
 
   // prepare part uploads
-  std::list<cls_rgw_obj_key> remove_objs;
+  std::vector<cls_rgw_obj_key> remove_objs;
   size_t part_id = 0;
 
   size_t remaining = op.meta.size;
@@ -489,7 +490,7 @@ int simulator::init_multipart(const operation& op)
       // if part prepare fails, remove the meta object and remove_objs
       [[maybe_unused]] int ignored =
           index_complete(ioctx, oid, meta_key, empty_tag, CLS_RGW_OP_DEL,
-                         empty_ver, meta_meta, &remove_objs);
+                         empty_ver, meta_meta, remove_objs);
       derr << "  > failed to prepare part key=" << part_key
           << " size=" << part_size << dendl;
       return r; // return the error from prepare
@@ -508,7 +509,7 @@ void simulator::complete_multipart(const operation& op)
 
   // try to finish part uploads
   size_t part_id = 0;
-  std::list<cls_rgw_obj_key> remove_objs;
+  std::vector<cls_rgw_obj_key> remove_objs;
 
   RGWModifyOp type = op.type; // OP_ADD, or OP_CANCEL for abort
 
@@ -533,7 +534,7 @@ void simulator::complete_multipart(const operation& op)
       meta.size = meta.accounted_size = part_size;
 
       int r = index_complete(ioctx, oid, part_key, op.tag, op.type,
-                             empty_ver, meta, nullptr);
+                             empty_ver, meta, {});
       if (r != 0) {
         derr << "  < failed to complete part key=" << part_key
             << " size=" << meta.size << ": " << cpp_strerror(r) << dendl;
@@ -561,7 +562,7 @@ void simulator::complete_multipart(const operation& op)
   meta_meta.category = RGWObjCategory::MultiMeta;
 
   int r = index_complete(ioctx, oid, meta_key, empty_tag, CLS_RGW_OP_DEL,
-                         empty_ver, meta_meta, nullptr);
+                         empty_ver, meta_meta, {});
   if (r != 0) {
     derr << "  < failed to remove multipart meta key=" << meta_key
         << ": " << cpp_strerror(r) << dendl;
@@ -578,7 +579,7 @@ void simulator::complete_multipart(const operation& op)
 
   // create or cancel the head object
   r = index_complete(ioctx, oid, op.key, empty_tag, type,
-                     empty_ver, op.meta, &remove_objs);
+                     empty_ver, op.meta, remove_objs);
   if (r != 0) {
     derr << "< failed to complete multipart upload key=" << op.key
         << " upload=" << op.upload_id << " tag=" << op.tag

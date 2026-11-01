@@ -5,7 +5,7 @@
 
 #include <string>
 #include <map>
-#include <list>
+#include <vector>
 
 #include "include/utime.h"
 #include "include/buffer.h"
@@ -28,7 +28,7 @@ struct ServiceMap {
     void encode(ceph::buffer::list& bl, uint64_t features) const;
     void decode(ceph::buffer::list::const_iterator& p);
     void dump(ceph::Formatter *f) const;
-    static std::list<Daemon> generate_test_instances();
+    static std::vector<Daemon> generate_test_instances();
   };
 
   struct Service {
@@ -38,7 +38,7 @@ struct ServiceMap {
     void encode(ceph::buffer::list& bl, uint64_t features) const;
     void decode(ceph::buffer::list::const_iterator& p);
     void dump(ceph::Formatter *f) const;
-    static std::list<Service> generate_test_instances();
+    static std::vector<Service> generate_test_instances();
 
     std::string get_summary() const;
     bool has_running_tasks() const;
@@ -54,7 +54,7 @@ struct ServiceMap {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<ServiceMap> generate_test_instances();
+  static std::vector<ServiceMap> generate_test_instances();
 
   std::pair<Daemon*,bool> get_daemon(const std::string& service,
 				     const std::string& daemon) {

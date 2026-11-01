@@ -18,7 +18,6 @@
 #define dout_prefix *_dout << "rbd::mirror::ClusterWatcher:" << this << " " \
                            << __func__ << ": "
 
-using std::list;
 using std::map;
 using std::pair;
 using std::set;
@@ -78,8 +77,8 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers)
     return;
   }
 
-  list<pair<int64_t, string> > pools;
-  r = m_cluster->pool_list2(pools);
+  vector<pair<int64_t, string>> pools;
+  r = m_cluster->pool_list(pools);
   if (r < 0) {
     derr << "error listing pools: " << cpp_strerror(r) << dendl;
     return;

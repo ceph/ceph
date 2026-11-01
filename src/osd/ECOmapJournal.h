@@ -79,11 +79,11 @@ class ECOmapValue {
 class ECOmapRemovedRanges {
  public:
   eversion_t version;
-  std::list<std::pair<std::string, std::optional<std::string>>> ranges;
+  std::vector<std::pair<std::string, std::optional<std::string>>> ranges;
 
   explicit ECOmapRemovedRanges(const eversion_t version) : version(version) {}
   ECOmapRemovedRanges(
-    const eversion_t version, std::list<std::pair<std::string,
+    const eversion_t version, std::vector<std::pair<std::string,
     std::optional<std::string>>> ranges)
     : version(version), ranges(std::move(ranges)) {}
 
@@ -108,11 +108,11 @@ class ECOmapJournal {
   using RangeMapType = std::map<std::string, std::optional<std::string>>;
  private:
   // Unprocessed journal entries 
-  std::map<hobject_t, std::list<ECOmapJournalEntry>> entries;
+  std::map<hobject_t, std::vector<ECOmapJournalEntry>> entries;
 
   // Processed journal entries
   std::map<hobject_t, std::map<std::string, ECOmapValue>> key_map;
-  std::map<hobject_t, std::list<ECOmapRemovedRanges>> removed_ranges_map;
+  std::map<hobject_t, std::vector<ECOmapRemovedRanges>> removed_ranges_map;
   std::map<hobject_t, ECOmapHeader> header_map;
 
   // Contains the set of versions and lost object booleans corresponding to
@@ -136,7 +136,7 @@ class ECOmapJournal {
   void clear(const hobject_t &hoid);
   void clear_all();
   [[nodiscard]] std::size_t entries_size(const hobject_t &hoid) const;
-  [[nodiscard]] std::list<ECOmapJournalEntry> snapshot_entries(const hobject_t &hoid) const;
+  [[nodiscard]] std::vector<ECOmapJournalEntry> snapshot_entries(const hobject_t &hoid) const;
   [[nodiscard]] bool has_unprocessed_entries(const hobject_t &hoid) const;
   [[nodiscard]] bool has_omap_updates(const hobject_t &hoid) const;
   std::tuple<UpdateMapType, RangeMapType> get_value_updates(const hobject_t &hoid);

@@ -13,12 +13,13 @@
  * 
  */
 
+#include <utility>
+
 #include "include/types.h"
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
 #include "include/utime.h"
 
-using std::list;
 using std::string;
 using namespace librados;
 
@@ -41,7 +42,7 @@ namespace rados {
       }
 
       void OTP::set(librados::ObjectWriteOperation *rados_op,
-                       const list<otp_info_t>& entries) {
+                       const std::vector<otp_info_t>& entries) {
         cls_otp_set_otp_op op;
         op.entries = entries;
         bufferlist in;
@@ -101,7 +102,7 @@ namespace rados {
 
       int OTP::get(librados::ObjectReadOperation *rop,
                    librados::IoCtx& ioctx, const string& oid,
-                   const list<string> *ids, bool get_all, list<otp_info_t> *result) {
+                   const std::vector<string> *ids, bool get_all, std::vector<otp_info_t> *result) {
         librados::ObjectReadOperation _rop;
         if (!rop) {
           rop = &_rop;
@@ -132,7 +133,7 @@ namespace rados {
 	  return -EBADMSG;
         }
 
-        *result = ret.found_entries;;
+        *result = std::move(ret.found_entries);
 
         return 0;
       }
@@ -140,8 +141,8 @@ namespace rados {
       int OTP::get(librados::ObjectReadOperation *op,
                    librados::IoCtx& ioctx, const string& oid,
                     const string& id, otp_info_t *result) {
-        list<string> ids{ id };
-        list<otp_info_t> ret;
+        std::vector<string> ids {id};
+        std::vector<otp_info_t> ret;
 
         int r = get(op, ioctx, oid, &ids, false, &ret);
         if (r < 0) {
@@ -150,13 +151,13 @@ namespace rados {
         if (ret.empty()) {
           return -ENOENT;
         }
-        *result = ret.front();
+        *result = std::move(ret.front());
 
         return 0;
       }
 
       int OTP::get_all(librados::ObjectReadOperation *op, librados::IoCtx& ioctx, const string& oid,
-                       list<otp_info_t> *result) {
+                       std::vector<otp_info_t> *result) {
         return get(op, ioctx, oid, nullptr, true, result);
       }
 

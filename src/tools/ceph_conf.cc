@@ -78,7 +78,7 @@ Return code will be 0 on success; error code otherwise.
 }
 
 static int list_sections(const std::string &prefix,
-			 const std::list<string>& filter_key,
+			 const std::vector<string>& filter_key,
 			 const std::map<string,string>& filter_key_value)
 {
   std::vector <std::string> sections;
@@ -94,7 +94,7 @@ static int list_sections(const std::string &prefix,
     sec.push_back(*p);
 
     int r = 0;
-    for (std::list<string>::const_iterator q = filter_key.begin(); q != filter_key.end(); ++q) {
+    for (std::vector<string>::const_iterator q = filter_key.begin(); q != filter_key.end(); ++q) {
       string v;
       r = g_conf().get_val_from_conf_file(sec, q->c_str(), v, false);
       if (r < 0)
@@ -188,7 +188,7 @@ int main(int argc, const char **argv)
   std::string action;
   std::string lookup_key;
   std::string section_list_prefix;
-  std::list<string> filter_key;
+  std::vector<string> filter_key;
   std::map<string,string> filter_key_value;
   std::string dump_format;
 

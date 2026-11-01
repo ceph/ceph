@@ -13,6 +13,9 @@
  */
 
 #include "rgw_sal_posix.h"
+#include "include/scope_guard.h"
+
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <iostream>
 #include <filesystem>
@@ -1248,6 +1251,42 @@ TEST_F(POSIXDriverTest, BucketCreate)
   EXPECT_TRUE(sf::is_directory(tp));
 }
 
+TEST_F(POSIXDriverTest, MetadataBucketPagination)
+{
+  const std::vector<std::string> expected {"bucket-a", "bucket-b", "bucket-c"};
+  for (const auto& bucket : expected) {
+    sf::create_directory(bp / "root" / bucket);
+  }
+
+  void *handle = nullptr;
+  ASSERT_EQ(0, driver->meta_list_keys_init(
+    env->dpp, "bucket", std::string {}, &handle));
+  auto complete = make_scope_guard([this, handle] {
+    driver->meta_list_keys_complete(handle);
+  });
+
+  bool truncated = false;
+  std::vector<std::string> keys {"stale"};
+  ASSERT_EQ(0, driver->meta_list_keys_next(
+    env->dpp, handle, 2, keys, &truncated));
+  EXPECT_TRUE(truncated);
+  ASSERT_EQ(2, std::size(keys));
+
+  std::vector<std::string> all_keys;
+  all_keys.insert(std::end(all_keys), std::begin(keys), std::end(keys));
+  keys.assign({"stale"});
+
+  ASSERT_EQ(0, driver->meta_list_keys_next(
+    env->dpp, handle, 2, keys, &truncated));
+  EXPECT_FALSE(truncated);
+  ASSERT_EQ(1, std::size(keys));
+  EXPECT_NE("stale", keys.front());
+  all_keys.insert(std::end(all_keys), std::begin(keys), std::end(keys));
+
+  std::ranges::sort(all_keys);
+  EXPECT_EQ(expected, all_keys);
+}
+
 class POSIXBucketTest : public POSIXDriverTest {
 protected:
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -1706,7 +1745,7 @@ public:
       parts[i] = "part-" + fmt::format("{:0>5}", i);
     }
 
-    std::list<rgw_obj_index_key> remove_objs;
+    std::vector<rgw_obj_index_key> remove_objs;
     bool compressed = false;
     RGWCompressionInfo cs_info;
     std::unique_ptr<Object> mp_obj = bucket->get_object(rgw_obj_key(name));
@@ -2482,7 +2521,7 @@ public:
       parts[i] = "part-" + fmt::format("{:0>5}", i);
     }
 
-    std::list<rgw_obj_index_key> remove_objs;
+    std::vector<rgw_obj_index_key> remove_objs;
     bool compressed = false;
     RGWCompressionInfo cs_info;
     std::unique_ptr<Object> mp_obj = bucket->get_object(rgw_obj_key(objname));

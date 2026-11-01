@@ -2306,7 +2306,7 @@ int POSIXDriver::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>
 }
 
 int POSIXDriver::list_all_zones(const DoutPrefixProvider* dpp,
-			    std::list<std::string>& zone_ids)
+			    std::vector<std::string>& zone_ids)
 {
   zone_ids.push_back(zone.get_id());
   return 0;
@@ -2657,7 +2657,7 @@ int POSIXDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
   }
 
 int POSIXDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
-                                     int max, std::list<std::string>& keys,
+                                     int max, std::vector<std::string>& keys,
                                      bool* truncated)
 {
   meta_list_handle *h = static_cast<meta_list_handle *>(handle);
@@ -2669,8 +2669,8 @@ int POSIXDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle
     if (ret < 0) {
       return ret;
     }
-    if (keys.size() > 0) {
-      h->marker = *keys.rbegin();
+    if (not keys.empty()) {
+      h->marker = keys.back();
       if (std::cmp_equal(keys.size(),max)) {
         *truncated = true;
       }
@@ -3124,7 +3124,7 @@ int POSIXBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
   return 0;
 }
 
-int POSIXBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
+int POSIXBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, const std::vector<rgw_obj_index_key>& objs_to_unlink)
 {
   return 0;
 }
@@ -3252,7 +3252,7 @@ int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object*
 int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
 				uint32_t flags,
-                                std::list<rgw_obj_index_key>* remove_objs,
+                                std::vector<rgw_obj_index_key>* remove_objs,
 				RGWObjVersionTracker* objv)
 {
   POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
@@ -4332,7 +4332,7 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
 int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    optional_yield y, CephContext* cct,
 				    std::map<int, std::string>& part_etags,
-				    std::list<rgw_obj_index_key>& remove_objs,
+				    std::vector<rgw_obj_index_key>& remove_objs,
 				    uint64_t& accounted_size, bool& compressed,
 				    RGWCompressionInfo& cs_info, off_t& ofs,
 				    std::string& tag, ACLOwner& owner,
@@ -4496,7 +4496,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
 int POSIXMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
     CephContext *cct, optional_yield y,
     const rgw_obj& obj,
-    std::list<rgw_obj_index_key>& remove_objs,
+    std::vector<rgw_obj_index_key>& remove_objs,
     prefix_map_t& processed_prefixes)
 {
   return -ENOTSUP;

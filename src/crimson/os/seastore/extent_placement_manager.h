@@ -3,6 +3,11 @@
 
 #pragma once
 
+#include <map>
+#include <deque>
+#include <vector>
+#include <iterator>
+
 #include <seastar/core/gate.hh>
 #include <seastar/core/lowres_clock.hh>
 
@@ -101,7 +106,7 @@ private:
   uint64_t tokens;
   const uint64_t max_tokens;
   seastar::timer<seastar::steady_clock_type> timer;
-  std::list<Blocker> blockers;
+  std::deque<Blocker> blockers;
 };
 
 using TokenBucketRef = std::unique_ptr<TokenBucket>;
@@ -114,6 +119,8 @@ using TokenBucketRef = std::unique_ptr<TokenBucket>;
  */
 class ExtentOolWriter {
 public:
+  using extent_queue_t = std::deque<CachedExtentRef>;
+
   virtual ~ExtentOolWriter() {}
 
   virtual backend_type_t get_type() const = 0;
@@ -126,7 +133,7 @@ public:
 
   virtual paddr_t alloc_paddr(extent_len_t length) = 0;
 
-  virtual std::list<alloc_paddr_result> alloc_paddrs(
+  virtual alloc_paddr_results_t alloc_paddrs(
     extent_len_t length,
     paddr_t hint) = 0;
 
@@ -134,7 +141,7 @@ public:
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
   virtual alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> &extents) = 0;
+    extent_queue_t &extents) = 0;
 
   using close_ertr = base_ertr;
   virtual close_ertr::future<> close() = 0;
@@ -177,7 +184,7 @@ public:
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> &extents) final;
+    extent_queue_t &extents) final;
 
   close_ertr::future<> close() final {
     return write_guard.close().then([this] {
@@ -191,7 +198,7 @@ public:
     return make_delayed_temp_paddr(0);
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length, paddr_t) final {
+  alloc_paddr_results_t alloc_paddrs(extent_len_t length, paddr_t) final {
     return {alloc_paddr_result{make_delayed_temp_paddr(0), length}};
   }
 
@@ -203,12 +210,12 @@ public:
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
-    std::list<CachedExtentRef> &extent);
+    extent_queue_t &extent);
 
   alloc_write_ertr::future<> write_record(
     Transaction& t,
     record_t&& record,
-    std::list<LogicalCachedExtentRef> &&extents,
+    std::vector<LogicalCachedExtentRef> &&extents,
     bool with_atomic_roll_segment=false);
 
   store_index_t store_index;
@@ -244,7 +251,7 @@ public:
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> &extents) final;
+    extent_queue_t &extents) final;
 
   close_ertr::future<> close() final {
     return write_guard.close().then([this] {
@@ -258,7 +265,7 @@ public:
     return rb_cleaner->alloc_paddr(length);
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(
+  alloc_paddr_results_t alloc_paddrs(
     extent_len_t length, paddr_t hint) final {
     assert(rb_cleaner);
     return rb_cleaner->alloc_paddrs(length, hint);
@@ -289,7 +296,7 @@ private:
     paddr_t offset;
     ceph::bufferptr bp;
     RandomBlockManager* rbm;
-    std::list<ceph::bufferptr> mergeable_bps;
+    std::vector<ceph::bufferptr> mergeable_bps;
 
     extent_len_t get_mergeable_length() const {
       if (mergeable_bps.size() == 0) {
@@ -304,7 +311,7 @@ private:
   };
   alloc_write_iertr::future<> do_write(
     Transaction& t,
-    std::list<CachedExtentRef> &extent);
+    extent_queue_t &extent);
 
   RBMCleaner* rb_cleaner;
   seastar::gate write_guard;
@@ -522,7 +529,7 @@ public:
     return alloc_result_t{addr, std::move(bp), opt.gen};
   }
 
-  std::list<alloc_result_t> alloc_new_data_extents(
+  std::vector<alloc_result_t> alloc_new_data_extents(
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
@@ -542,7 +549,7 @@ public:
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
-    std::list<alloc_result_t> allocs;
+    std::vector<alloc_result_t> allocs;
 #ifdef UNIT_TESTS_BUILT
     if (unlikely(opt.external_paddr.has_value())) {
       assert(opt.external_paddr->is_fake());
@@ -554,6 +561,7 @@ public:
       assert(category == data_category_t::DATA);
       auto addrs = get_writer(opt.hint, category, opt.gen)->alloc_paddrs(
         length, opt.paddr_hint);
+      allocs.reserve(std::size(addrs));
       for (auto &ext : addrs) {
         auto left = ext.len;
         while (left > 0) {
@@ -616,7 +624,7 @@ public:
    * usage is used to reserve projected space
    */
   using extents_by_writer_t =
-    std::map<ExtentOolWriter*, std::list<CachedExtentRef>>;
+    std::map<ExtentOolWriter*, ExtentOolWriter::extent_queue_t>;
   struct dispatch_result_t {
     extents_by_writer_t alloc_map;
     std::vector<CachedExtentRef> delayed_extents;

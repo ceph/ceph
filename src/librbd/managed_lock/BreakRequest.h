@@ -8,8 +8,8 @@
 #include "include/buffer_fwd.h"
 #include "include/rados/librados_fwd.hpp"
 #include "msg/msg_types.h"
-#include <list>
 #include <string>
+#include <vector>
 #include <boost/optional.hpp>
 #include "librbd/managed_lock/Types.h"
 
@@ -82,7 +82,7 @@ private:
 
   bufferlist m_out_bl;
 
-  std::list<obj_watch_t> m_watchers;
+  std::vector<obj_watch_t> m_watchers;
   int m_watchers_ret_val;
 
   Locker m_refreshed_locker;

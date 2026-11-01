@@ -1,6 +1,7 @@
 #ifndef TEST_SSTRING_H
 #define TEST_SSTRING_H
 
+#include <vector>
 #include "common/sstring.hh"
 
 // wrapper for sstring that implements the dencoder interface
@@ -25,8 +26,8 @@ class sstring_wrapper {
     f->dump_string("s1", s1.c_str());
     f->dump_string("s2", reinterpret_cast<const char*>(s2.c_str()));
   }
-  static std::list<sstring_wrapper> generate_test_instances() {
-    std::list<sstring_wrapper> ls;
+  static std::vector<sstring_wrapper> generate_test_instances() {
+    std::vector<sstring_wrapper> ls;
     ls.push_back(sstring_wrapper());
     // initialize sstrings that fit in internal storage
     constexpr auto cstr6 = "abcdef";
