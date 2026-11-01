@@ -5966,6 +5966,8 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
 int RGWHandler_Auth_S3::init(rgw::sal::Driver* driver, req_state *state,
                              rgw::io::BasicClient *cio)
 {
+  state->dialect = "admin";
+
   int ret = RGWHandler_REST_S3::init_from_header(driver, state, RGWFormat::JSON, true);
   if (ret < 0)
     return ret;
@@ -6858,6 +6860,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_SYNC_MDLOG_NOTIFY:
         case RGW_OP_PERIOD_POST:
         case RGW_OP_SET_BUCKET_WEBSITE:
+        case RGW_OP_DELETE_BUCKET_WEBSITE:
         case RGW_OP_PUT_BUCKET_POLICY:
         case RGW_OP_PUT_OBJ_TAGGING:
 	case RGW_OP_PUT_BUCKET_TAGGING:

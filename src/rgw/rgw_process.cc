@@ -622,6 +622,14 @@ done:
           << " ======"
           << dendl;
 
+  {
+    const auto labels = rgw::op_hist::labels(s, op);
+    rgw::op_hist::get(s->cct, labels)->htinc(l_rgw_op_hist_lat, lat);
+    if (s->is_err()) {
+      rgw::op_hist::inc_error(s->cct, s, labels);
+    }
+  }
+
   if (handler)
     handler->put_op(op);
   rest->put_handler(handler);
