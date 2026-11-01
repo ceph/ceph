@@ -1664,6 +1664,34 @@ can be caused by RGW bucket index objects that do not have automatic resharding
 enabled. For more information on resharding, see :ref:`RGW Dynamic Bucket Index
 Resharding <rgw_dynamic_bucket_index_resharding>`.
 
+The pool that holds the object usually shows what it is:
+
+- In an RGW log pool, such as ``default.rgw.log``, the object is usually a log
+  that has not been trimmed. Usage logs (``usage.<n>``) grow until they are
+  trimmed: see :ref:`rgw-trim-usage`. In multisite deployments, RGW trims the
+  metadata log (``meta.log.*``), the data log, and bucket index logs every
+  :confval:`rgw_sync_log_trim_interval` unless that is set to 0, but it never
+  trims the sync error log (``sync.error-log.<n>``) on its own. See
+  :ref:`rgw-multisite-check-the-logs`, and the ``trim`` commands in
+  :ref:`man-radosgw-admin`.
+- In an RGW bucket index pool, such as ``default.rgw.buckets.index``, the object
+  is a bucket index shard, which holds an entry for each object in its part of
+  the bucket. A bucket that has outgrown its shards needs resharding, as
+  described above. In multisite deployments, the shard also holds the bucket
+  index log (bilog), which RGW trims as the other zones sync it. To trim a
+  bilog by hand, check that sync has caught up, then run ``radosgw-admin bilog
+  trim`` as described in :ref:`man-radosgw-admin`. Beginning with the Vampire
+  release, new buckets keep their bilog in a FIFO in the log pool instead, and
+  existing buckets move it there when they are next resharded.
+- In a CephFS metadata pool, the object is usually a directory fragment. See
+  :ref:`cephfs-large-omap-objects`.
+
+Changing the pool's ``pg_num`` does not prevent large omap objects: an object
+and all of its omap are stored in a single placement group, so splitting or
+merging placement groups moves the object without making it smaller. After a
+split or merge, the warning can remain until the placement group that holds
+the object is deep scrubbed again.
+
 To adjust the thresholds mentioned above, run a command of following form:
 
 .. prompt:: bash #
