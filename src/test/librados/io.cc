@@ -713,5 +713,110 @@ TEST_P(LibRadosIoEC, ObjectInfoXattr) {
   check_object_info_xattr(pool_name, nspace);
 }
 
+// Wait until the OI of oid is not old_oi any more, then return it in oi.
+static int wait_object_info_change(rados_ioctx_t ioctx, const char *oid,
+                                   const char *old_oi, int old_len,
+                                   char *oi, size_t oi_size)
+{
+  for (int i = 0; i < 120; ++i) {
+    int len = rados_getxattr(ioctx, oid, "", oi, oi_size);
+    if (len < 0 || !same_value(old_oi, old_len, oi, len)) {
+      return len;
+    }
+    sleep(1);
+  }
+  return -ETIMEDOUT;
+}
+
+// The snap trimmer writes a new OI to the clone and a new OI and SS to
+// the head. Reads of the object info must return these new values, also
+// before the primary loads the obcs again from the store.
+static void check_object_info_xattr_after_snap_trim(
+  const std::string& pool_name, const std::string& nspace)
+{
+  rados_t cluster;
+  ASSERT_EQ(0, rados_create(&cluster, nullptr));
+  auto shutdown = make_scope_guard([&] { rados_shutdown(cluster); });
+  ASSERT_EQ(0, rados_conf_read_file(cluster, nullptr));
+  rados_conf_parse_env(cluster, nullptr);
+  ASSERT_EQ(0, rados_conf_set(cluster, "rados_osd_op_timeout", "120"));
+  ASSERT_EQ(0, rados_connect(cluster));
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
+  auto destroy = make_scope_guard([&] { rados_ioctx_destroy(ioctx); });
+  rados_ioctx_set_namespace(ioctx, nspace.c_str());
+
+  const char *oid = "object_info_xattr_snap_trim";
+  char data1[] = "data1";
+  char data2[] = "data2";
+
+  // one clone for snap1 and snap2
+  ASSERT_EQ(0, rados_write_full(ioctx, oid, data1, sizeof(data1)));
+  ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snap1"));
+  ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snap2"));
+  ASSERT_EQ(0, rados_write_full(ioctx, oid, data2, sizeof(data2)));
+  rados_snap_t snap2;
+  ASSERT_EQ(0, rados_ioctx_snap_lookup(ioctx, "snap2", &snap2));
+
+  char head1[4096];
+  int head1_len = rados_getxattr(ioctx, oid, "", head1, sizeof(head1));
+  ASSERT_LT(0, head1_len);
+  rados_ioctx_snap_set_read(ioctx, snap2);
+  char clone1[4096];
+  int clone1_len = rados_getxattr(ioctx, oid, "", clone1, sizeof(clone1));
+  rados_ioctx_snap_set_read(ioctx, LIBRADOS_SNAP_HEAD);
+  ASSERT_LT(0, clone1_len);
+
+  // the trimmer removes snap1 from the clone and updates the head
+  ASSERT_EQ(0, rados_ioctx_snap_remove(ioctx, "snap1"));
+  char head2[4096];
+  int head2_len = wait_object_info_change(ioctx, oid, head1, head1_len,
+                                          head2, sizeof(head2));
+  ASSERT_LT(0, head2_len);
+  rados_ioctx_snap_set_read(ioctx, snap2);
+  char clone2[4096];
+  int clone2_len = rados_getxattr(ioctx, oid, "", clone2, sizeof(clone2));
+  rados_ioctx_snap_set_read(ioctx, LIBRADOS_SNAP_HEAD);
+  ASSERT_LT(0, clone2_len);
+  ASSERT_FALSE(same_value(clone1, clone1_len, clone2, clone2_len));
+
+  force_new_interval(cluster, pool_name);
+  if (::testing::Test::HasFatalFailure() || ::testing::Test::IsSkipped()) {
+    return;
+  }
+  char oi[4096];
+  int len = rados_getxattr(ioctx, oid, "", oi, sizeof(oi));
+  ASSERT_TRUE(same_value(head2, head2_len, oi, len));
+  rados_ioctx_snap_set_read(ioctx, snap2);
+  len = rados_getxattr(ioctx, oid, "", oi, sizeof(oi));
+  rados_ioctx_snap_set_read(ioctx, LIBRADOS_SNAP_HEAD);
+  ASSERT_TRUE(same_value(clone2, clone2_len, oi, len));
+
+  // the trimmer removes the clone and updates the head
+  ASSERT_EQ(0, rados_ioctx_snap_remove(ioctx, "snap2"));
+  char head3[4096];
+  int head3_len = wait_object_info_change(ioctx, oid, head2, head2_len,
+                                          head3, sizeof(head3));
+  ASSERT_LT(0, head3_len);
+
+  force_new_interval(cluster, pool_name);
+  if (::testing::Test::HasFatalFailure()) {
+    return;
+  }
+  len = rados_getxattr(ioctx, oid, "", oi, sizeof(oi));
+  ASSERT_TRUE(same_value(head3, head3_len, oi, len));
+}
+
+TEST_P(LibRadosIo, ObjectInfoXattrAfterSnapTrim) {
+  check_object_info_xattr_after_snap_trim(pool_name, nspace);
+}
+
+TEST_P(LibRadosIoEC, ObjectInfoXattrAfterSnapTrim) {
+  // crimson EC pools do not add clones to the snap mapper, so the snap
+  // trimmer does not find them
+  SKIP_IF_CRIMSON();
+  check_object_info_xattr_after_snap_trim(pool_name, nspace);
+}
+
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosIo);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosIoEC);
