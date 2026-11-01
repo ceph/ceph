@@ -5,13 +5,10 @@ The alerts module can send simple alert messages about cluster health
 via e-mail. In the future, it will support other notification methods
 as well.
 
-:note: This module is *not* intended to be a robust monitoring
-       solution. The fact that it is run as part of the Ceph cluster
-       itself is fundamentally limiting in that a failure of the
-       ``ceph-mgr`` daemon prevents alerts from being sent. This module
-       can, however, be useful for standalone clusters that exist in
-       environments where other monitoring infrastructure does not
-       exist.
+.. note:: This module is not a robust monitoring solution. It runs as part of
+   the Ceph cluster, so a failure of the ``ceph-mgr`` daemon prevents alerts
+   from being sent. It can be useful for standalone clusters in environments
+   that have no other monitoring infrastructure.
 
 Enabling
 --------
