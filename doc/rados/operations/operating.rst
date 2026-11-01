@@ -10,16 +10,20 @@ Running Ceph with systemd
 
 In deployments managed by systemd, Ceph daemons behave like any other
 services controlled by the ``systemctl`` command, as in
-the following examples. Note that this applies to Podman-based container
-deployments. Docker-based deployments do not integrate with systemd in the
-same way and might require different management commands.
+the following examples. The unit names on this page are those that the Ceph
+packages install. A cluster managed by cephadm, with Podman or with Docker,
+names its units ``ceph-{fsid}@{type}.{id}`` instead: to start, stop, or restart
+its daemons, see the Ceph Daemon Control section of
+:doc:`/cephadm/operations`.
 
 .. prompt:: bash $
 
    sudo systemctl start ceph.target       # start all daemons
    sudo systemctl status ceph-osd@12      # check status of osd.12
 
-To list all of the Ceph systemd units on a node, run the following command:
+To show the status of the Ceph units that systemd has loaded on a node, run the
+following command. A unit that is stopped and disabled is usually not loaded,
+and is then not shown:
 
 .. prompt:: bash $
 
@@ -83,8 +87,12 @@ following commands:
 .. prompt:: bash $
 
    sudo systemctl start ceph-osd@{id}
-   sudo systemctl start ceph-mon@{hostname}
-   sudo systemctl start ceph-mds@{hostname}
+   sudo systemctl start ceph-mon@{mon-id}
+   sudo systemctl start ceph-mds@{mds-id}
+
+The name after ``@`` is the daemon's ID, the part of its name after the type:
+``12`` for ``osd.12``, ``a`` for ``mon.a``. Many deployments use the short host
+name (the output of ``hostname -s``) as the ID of a Monitor or MDS.
 
 For example:
 
@@ -104,8 +112,8 @@ following commands:
 .. prompt:: bash $
 
    sudo systemctl stop ceph-osd@{id}
-   sudo systemctl stop ceph-mon@{hostname}
-   sudo systemctl stop ceph-mds@{hostname}
+   sudo systemctl stop ceph-mon@{mon-id}
+   sudo systemctl stop ceph-mds@{mds-id}
 
 For example:
 
@@ -114,6 +122,3 @@ For example:
    sudo systemctl stop ceph-osd@1
    sudo systemctl stop ceph-mon@ceph-server
    sudo systemctl stop ceph-mds@ceph-server
-
-
-.. _Valgrind: https://www.valgrind.org/
