@@ -1,0 +1,84 @@
+<div [formGroup]="formGroup">
+  <div class="form-item">
+    <cds-text-label
+      label="Policy name"
+      [labelInputID]="nameInputId"
+      [invalid]="nameReadonly ? false : nameRef.isInvalid"
+      [invalidText]="policyNameError"
+      [helperText]="nameHelperText"
+      i18n-helperText
+    >
+      Policy name
+      <input
+        cdsText
+        cdValidate
+        #nameRef="cdValidate"
+        type="text"
+        [id]="nameInputId"
+        name="policy_name"
+        formControlName="policy_name"
+        [placeholder]="namePlaceholder"
+        [readonly]="nameReadonly"
+        [autofocus]="autofocus"
+        [attr.modal-primary-focus]="autofocus ? true : null"
+        [invalid]="nameReadonly ? false : nameRef.isInvalid"
+      />
+    </cds-text-label>
+    <ng-template #policyNameError>
+      @if (showError('policy_name', 'required')) {
+        <span
+          class="invalid-feedback"
+          i18n
+          >This field is required.</span
+        >
+      }
+      @if (showUniqueNameError && showError('policy_name', 'uniqueName')) {
+        <span
+          class="invalid-feedback"
+          i18n
+          >Policy name already exists.</span
+        >
+      }
+    </ng-template>
+  </div>
+
+  <div class="form-item">
+    <cds-textarea-label
+      [labelInputID]="docInputId"
+      [invalid]="docRef.isInvalid"
+      [invalidText]="policyDocError"
+      [helperText]="docHelperText"
+      i18n-helperText
+    >
+      JSON
+      <textarea
+        cdsTextArea
+        cdValidate
+        #docRef="cdValidate"
+        [id]="docInputId"
+        name="policy_doc"
+        formControlName="policy_doc"
+        [placeholder]="docPlaceholder"
+        [rows]="rows"
+        cols="200"
+        [invalid]="docRef.isInvalid"
+      ></textarea>
+    </cds-textarea-label>
+    <ng-template #policyDocError>
+      @if (showError('policy_doc', 'required')) {
+        <span
+          class="invalid-feedback"
+          i18n
+          >This field is required.</span
+        >
+      }
+      @if (showError('policy_doc', 'invalidJson')) {
+        <span
+          class="invalid-feedback"
+          i18n
+          >Please enter a valid JSON policy document.</span
+        >
+      }
+    </ng-template>
+  </div>
+</div>

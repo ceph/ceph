@@ -1,0 +1,120 @@
+<cd-side-panel
+  [expanded]="expanded"
+  [headerText]="panelHeaderText"
+  size="lg"
+  (closed)="close()"
+>
+  <div
+    panel-header-description
+    class="cds--type-body-compact-01 cds--text-secondary"
+  >
+    {{ panelHeaderDescription }}
+  </div>
+
+  <div class="panel-content policies-panel-content">
+    @if (!isEditing) {
+      <div
+        class="policies-panel-actions"
+        cdsStack="horizontal"
+        [gap]="4"
+      >
+        <button
+          type="button"
+          cdsButton="tertiary"
+          size="md"
+          [disabled]="!selectedPolicyName || policyDocumentLoading"
+          (click)="startEdit()"
+        >
+          {{ actionLabels.EDIT }}
+          <svg
+            [cdsIcon]="icons.edit"
+            [size]="icons.size16"
+            class="cds--btn__icon"
+          ></svg>
+        </button>
+        <button
+          type="button"
+          cdsButton="danger--tertiary"
+          size="md"
+          [disabled]="!selectedPolicyName || policyDocumentLoading"
+          (click)="deleteSelectedPolicy()"
+        >
+          {{ actionLabels.DELETE }}
+          <svg
+            [cdsIcon]="icons.trash"
+            [size]="icons.size16"
+            class="cds--btn__icon"
+          ></svg>
+        </button>
+      </div>
+
+      @if (policyDocumentLoading) {
+        <cds-skeleton-text [lines]="8"></cds-skeleton-text>
+      } @else if (selectedPolicyDocument) {
+        <div class="policies-panel-snippet">
+          <cds-code-snippet
+            display="multi"
+            [wrapText]="true"
+            [maxCollapsedNumberOfRows]="0"
+            copyButtonDescription="Copy policy document"
+            i18n-copyButtonDescription
+          >
+            {{ selectedPolicyDocument }}
+          </cds-code-snippet>
+        </div>
+      }
+    } @else {
+      <form
+        class="policies-panel-form"
+        name="form"
+        #formDir="ngForm"
+        [formGroup]="form"
+        novalidate
+      >
+        <cd-rgw-account-role-policy-fields
+          [formGroup]="form"
+          [formDir]="formDir"
+          [nameReadonly]="true"
+          [rows]="16"
+        ></cd-rgw-account-role-policy-fields>
+      </form>
+    }
+  </div>
+
+  @if (isEditing) {
+    <div
+      class="panel-footer cds-p-0"
+      cdsStack="horizontal"
+      [gap]="0"
+    >
+      <button
+        type="button"
+        cdsButton="secondary"
+        size="xl"
+        [disabled]="isSubmitLoading"
+        (click)="cancelEdit()"
+        i18n
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        cdsButton="primary"
+        size="xl"
+        [disabled]="isSubmitLoading || form?.invalid"
+        (click)="saveChanges()"
+      >
+        @if (isSubmitLoading) {
+          <cds-loading
+            [isActive]="true"
+            [overlay]="false"
+            size="sm"
+          ></cds-loading>
+          {{ actionLabels.SAVING }}...
+        } @else {
+          {{ actionLabels.UPDATE }}
+        }
+      </button>
+    </div>
+  }
+</cd-side-panel>
