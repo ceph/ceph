@@ -17,6 +17,7 @@ if(WITH_MGR)
     DaemonPerfCounters.cc
     DaemonServer.cc
     DaemonState.cc
+    FailSlowOSDDetector.cc
     Gil.cc
     Mgr.cc
     mgr_perf_counters.cc
