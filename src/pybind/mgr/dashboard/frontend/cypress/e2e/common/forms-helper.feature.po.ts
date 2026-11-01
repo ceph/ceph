@@ -55,20 +55,19 @@ And('select options {string}', (labels: string) => {
   }
 });
 
-And('{string} option {string}', (action: string, labels: string) => {
+And('{string} option {string}', (_action: string, labels: string) => {
   if (labels) {
     cy.get('cds-modal').find('input[id=labels]').click();
-    if (action === 'add') {
-      for (const label of labels.split(', ')) {
-        cy.get('input[id=labels]').clear().type(`${label}`);
-
-        cy.get('cds-dropdown-list').find('li').should('have.attr', 'title', label).click();
-      }
-    } else {
-      for (const label of labels.split(', ')) {
-        cy.get('input[id=labels]').clear().type(`${label}`);
-        cy.get('cds-dropdown-list').find('li').should('have.attr', 'title', label).click();
-      }
+    for (const label of labels.split(', ')) {
+      cy.get('input[id=labels]').clear().type(`${label}`);
+      // The DynamicInputComboboxDirective debounces 300 ms before it re-renders the
+      // dropdown list items.  Additionally, FormModalComponent uses
+      // [appendInline]="false" on its cds-combo-box, which means the dropdown is
+      // appended to <body> — outside the <cds-modal> element — so we must NOT scope
+      // the search inside .within().  Using cy.contains() at document root lets
+      // Cypress retry the full locate-and-click chain on each attempt, avoiding
+      // stale <li> references caused by mid-flight re-renders.
+      cy.contains('cds-dropdown-list li', label).click();
     }
   }
 });
