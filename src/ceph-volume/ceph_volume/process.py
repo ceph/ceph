@@ -175,6 +175,9 @@ def call(command, run_on_host=False, **kw):
     :param logfile_verbose: Log stderr/stdout output to log file. Defaults to True
     :param verbose_on_failure: On a non-zero exit status, it will forcefully set logging ON for
                                the terminal. Defaults to True
+    :param timeout: Kill the command if it has not finished after this many
+                    seconds; the call then reports the kill signal as a
+                    negative return code (-9). Defaults to None (no bound)
     """
     executable = which(command.pop(0), run_on_host)
     command.insert(0, executable)
@@ -184,6 +187,7 @@ def call(command, run_on_host=False, **kw):
     logfile_verbose = kw.pop('logfile_verbose', True)
     verbose_on_failure = kw.pop('verbose_on_failure', True)
     show_command = kw.pop('show_command', False)
+    timeout = kw.pop('timeout', None)
     command_msg = "Running command: %s" % ' '.join(command)
     stdin = kw.pop('stdin', None)
     logger.debug(command_msg)
@@ -199,8 +203,15 @@ def call(command, run_on_host=False, **kw):
         **kw
     )
 
-    if stdin:
-        stdout_stream, stderr_stream = process.communicate(as_bytes(stdin))
+    if stdin or timeout:
+        try:
+            stdout_stream, stderr_stream = process.communicate(
+                as_bytes(stdin) if stdin else None, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            logger.warning('%s did not finish within %s seconds, killing it',
+                           command[0], timeout)
+            process.kill()
+            stdout_stream, stderr_stream = process.communicate()
     else:
         stdout_stream = process.stdout.read()
         stderr_stream = process.stderr.read()
