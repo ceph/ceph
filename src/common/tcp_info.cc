@@ -15,6 +15,15 @@
 
 #include "common/tcp_info.h"
 
+// musl's <netinet/tcp.h> lacks these Linux TCP ABI constants.
+// Avoid including <linux/tcp.h>, which conflicts with <netinet/tcp.h>.
+#ifndef TCPI_OPT_ECN_SEEN
+# define TCPI_OPT_ECN_SEEN 16 /* we received at least one packet with ECT */
+#endif
+#ifndef TCPI_OPT_SYN_DATA
+# define TCPI_OPT_SYN_DATA 32 /* SYN-ACK acked data in SYN sent or rcvd */
+#endif
+
 #include "common/Formatter.h"
 
 namespace ceph {
