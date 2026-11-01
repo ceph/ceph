@@ -94,6 +94,22 @@ class OSDService(CephService):
 
         return creation_cfg, post_create_cfg
 
+    def validate_min_alloc_size(self, spec: DriveGroupSpec) -> None:
+        value = spec.config.get('bluestore_min_alloc_size') if spec.config else None
+        if value is None:
+            return
+        if isinstance(value, bool) or not str(value).isdigit():
+            raise OrchestratorError(
+                f'bluestore_min_alloc_size must be an integer number of bytes, not {value!r}')
+        size = int(value)
+        if size == 0 or size & (size - 1):
+            raise OrchestratorError(
+                f'bluestore_min_alloc_size {size} is not a power of 2')
+        max_size = int(self.mgr.get_foreign_ceph_option('osd', 'osd_spec_max_min_alloc_size'))
+        if size > max_size:
+            raise OrchestratorError(
+                f'bluestore_min_alloc_size {size} exceeds osd_spec_max_min_alloc_size {max_size}')
+
     def create_from_spec(self, drive_group: DriveGroupSpec, force_apply: bool = False) -> str:
         """
         :param force_apply: If True, do not check osdspec_needs_apply(). Used by

@@ -4953,6 +4953,9 @@ Then run the following:
                     raise OrchestratorError(f"Cannot create nvmeof service with group {nvmeof_spec.group}. That group is already "
                                             f"being used by the service {nspec.service_name()}")
 
+        if spec.service_type == 'osd':
+            self.osd_service.validate_min_alloc_size(cast(DriveGroupSpec, spec))
+
         if spec.placement.count is not None:
             if spec.service_type in ['mon', 'mgr']:
                 if spec.placement.count > max(5, host_count):
