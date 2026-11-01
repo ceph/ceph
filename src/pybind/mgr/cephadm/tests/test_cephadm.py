@@ -3045,6 +3045,32 @@ Traceback (most recent call last):
                           no_fsid=False, error_ok=False, log_output=False, use_current_daemon_image=False),
             ]
 
+    @mock.patch("cephadm.ssh.SSHManager._remote_connection")
+    @mock.patch("cephadm.ssh.SSHManager._execute_command")
+    @mock.patch("cephadm.ssh.SSHManager._check_execute_command")
+    def test_run_cephadm_error_includes_host(
+        self, check_execute_command, execute_command, remote_connection,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        """OrchestratorError from _run_cephadm must name the host while
+        keeping the existing 'cephadm exited with an error code:' prefix
+        that callers match on.
+        """
+        remote_connection.side_effect = async_side_effect(mock.Mock())
+        check_execute_command.side_effect = async_side_effect('/usr/bin/python3')
+        execute_command.side_effect = async_side_effect(('', 'boom', 1))
+
+        with with_host(cephadm_module, 'test'):
+            with pytest.raises(OrchestratorError) as err:
+                cephadm_module.wait_async(
+                    CephadmServe(cephadm_module)._run_cephadm(
+                        'test', cephadmNoImage, 'check-host', [],
+                        error_ok=False, no_fsid=True))
+            msg = str(err.value)
+            assert msg.startswith('cephadm exited with an error code: 1')
+            assert 'on host test' in msg
+            assert 'stderr: boom' in msg
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_osd_activate_datadevice(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
