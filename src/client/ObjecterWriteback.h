@@ -38,12 +38,27 @@ class ObjecterWriteback : public WritebackHandler {
 			   ceph::real_time mtime, uint64_t trunc_size,
 			   __u32 trunc_seq, ceph_tid_t journal_tid,
                            const ZTracer::Trace &parent_trace,
-			   Context *oncommit) override {
-    return m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
-				   trunc_size, trunc_seq,
-				   new C_OnFinisher(new C_Lock(m_lock,
-							       oncommit),
-						    m_finisher));
+                           Context *oncommit, uint64_t change_attr=0) override {
+    ceph_tid_t tid;
+    if (change_attr) {
+      ObjectOperation change_op;
+      bufferlist cbl;
+      encode(change_attr, cbl);
+      change_op.setxattr(CHANGE_ATTR_NAME, cbl);
+      tid = m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
+                              trunc_size, trunc_seq,
+                              new C_OnFinisher(new C_Lock(m_lock,
+                                                          oncommit),
+                                               m_finisher),
+                              /*objver*/ 0, &change_op);
+    } else {
+      tid = m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
+                                    trunc_size, trunc_seq,
+                                    new C_OnFinisher(new C_Lock(m_lock,
+                                                                oncommit),
+                                                     m_finisher));
+    }
+    return tid;
   }
 
   bool can_scattered_write() override { return true; }
@@ -52,11 +67,15 @@ class ObjecterWriteback : public WritebackHandler {
                            std::vector<std::pair<uint64_t, bufferlist> >& io_vec,
 			   const SnapContext& snapc, ceph::real_time mtime,
 			   uint64_t trunc_size, __u32 trunc_seq,
-			   Context *oncommit) override {
+                           Context *oncommit, uint64_t change_attr=0) override {
     ObjectOperation op;
     for (auto& [offset, bl] : io_vec)
       op.write(offset, bl, trunc_size, trunc_seq);
-
+    if (change_attr) {
+      bufferlist cbl;
+      encode(change_attr, cbl);
+      op.setxattr(CHANGE_ATTR_NAME, cbl);
+    }
     return m_objecter->mutate(oid, oloc, op, snapc, mtime, 0,
 			      new C_OnFinisher(new C_Lock(m_lock, oncommit),
 					       m_finisher));

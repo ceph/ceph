@@ -42,7 +42,7 @@ private:
   friend class C_MDC_Recover;
 
   void _start(CInode *in);  ///< start recovering this file
-  void _recovered(CInode *in, int r, uint64_t size, utime_t mtime);
+  void _recovered(CInode *in, int r, uint64_t size, utime_t mtime, uint64_t change_attr);
 
   size_t file_recover_queue_size = 0;
   size_t file_recover_queue_front_size = 0;
