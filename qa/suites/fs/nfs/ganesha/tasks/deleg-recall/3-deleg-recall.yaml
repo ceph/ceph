@@ -1,0 +1,9 @@
+overrides:
+  # cephadm's ganesha config disables delegations
+  ganesha-reconf:
+    delegations: RW
+tasks:
+- ganesha-deleg-recall:
+    cluster_id: nfs-ganesha-test
+    nfs_client: client.0
+    cephfs_client: client.1
