@@ -1292,6 +1292,57 @@ TEST_F(CrushWrapperTest, populate_classes) {
   ASSERT_EQ(old_class_bucket, c.class_bucket);
 }
 
+TEST_F(CrushWrapperTest, get_nonshadow_parent_of_type) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(0, "osd");
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "datacenter");
+  c.set_type_name(3, "root");
+  int bno;
+  ASSERT_EQ(0, c.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT, 3, 0,
+			    NULL, NULL, &bno));
+  c.set_item_name(bno, "default");
+  c.set_max_devices(2);
+
+  map<string,string> loc;
+  loc["host"] = "host1";
+  loc["datacenter"] = "dc1";
+  loc["root"] = "default";
+  c.insert_item(cct, 0, 1, "osd.0", loc);
+  loc["host"] = "host2";
+  loc["datacenter"] = "dc2";
+  c.insert_item(cct, 1, 1, "osd.1", loc);
+
+  int class_id = c.get_or_create_class_id("ssd");
+  c.class_map[0] = class_id;
+  c.class_map[1] = class_id;
+  map<int32_t, map<int32_t, int32_t>> old_class_bucket;
+  ASSERT_EQ(0, c.populate_classes(old_class_bucket));
+  c.finalize();
+
+  int dc1 = c.get_item_id("dc1");
+  int dc1_ssd = c.get_item_id("dc1~ssd");
+  ASSERT_NE(dc1, dc1_ssd);
+
+  // a rule that takes a device class sees the shadow bucket...
+  int class_rule = c.add_simple_rule("class_rule", "dc1", "host", "ssd",
+				     "firstn", pg_pool_t::TYPE_REPLICATED);
+  ASSERT_GE(class_rule, 0);
+  ASSERT_EQ(dc1_ssd, c.get_parent_of_type(0, 2, class_rule));
+  // ...which the nonshadow variant maps back to the real bucket
+  ASSERT_EQ(dc1, c.get_nonshadow_parent_of_type(0, 2, class_rule));
+  // an OSD outside the rule's take has no parent either way
+  ASSERT_EQ(0, c.get_nonshadow_parent_of_type(1, 2, class_rule));
+
+  // without a device class, both agree
+  int plain_rule = c.add_simple_rule("plain_rule", "dc1", "host", "",
+				     "firstn", pg_pool_t::TYPE_REPLICATED);
+  ASSERT_GE(plain_rule, 0);
+  ASSERT_EQ(dc1, c.get_parent_of_type(0, 2, plain_rule));
+  ASSERT_EQ(dc1, c.get_nonshadow_parent_of_type(0, 2, plain_rule));
+}
+
 TEST_F(CrushWrapperTest, remove_class_name) {
   CrushWrapper c;
   c.create();
