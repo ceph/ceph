@@ -88,6 +88,7 @@ struct rgw_log_entry {
   std::string uri;
   std::string http_status;
   std::string error_code;
+  int error_ret = 0;
   uint64_t bytes_sent = 0;
   uint64_t bytes_received = 0;
   uint64_t obj_size = 0;
@@ -110,7 +111,7 @@ struct rgw_log_entry {
   std::optional<rgw::keystone::ScopeInfo> keystone_scope;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(16, 5, bl);
+    ENCODE_START(17, 5, bl);
     // old object/bucket owner ids, encoded in full in v8
     std::string empty_owner_id;
     encode(empty_owner_id, bl);
@@ -125,6 +126,7 @@ struct rgw_log_entry {
     encode(uri, bl);
     encode(http_status, bl);
     encode(error_code, bl);
+    encode(error_ret, bl);
     encode(bytes_sent, bl);
     encode(obj_size, bl);
     encode(total_time, bl);
@@ -150,7 +152,7 @@ struct rgw_log_entry {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(16, 5, 5, p);
+    DECODE_START_LEGACY_COMPAT_LEN(17, 5, 5, p);
     std::string object_owner_id;
     std::string bucket_owner_id;
     decode(object_owner_id, p);
@@ -165,6 +167,9 @@ struct rgw_log_entry {
     decode(uri, p);
     decode(http_status, p);
     decode(error_code, p);
+    if (struct_v >= 17) {
+      decode(error_ret, p);
+    }
     decode(bytes_sent, p);
     decode(obj_size, p);
     decode(total_time, p);
