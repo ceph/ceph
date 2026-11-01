@@ -2982,15 +2982,69 @@ void RGWGetObj::execute(optional_yield y)
   }
 
   attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
-  if (attr_iter != attrs.end() && !skip_manifest) {
-    is_slo = true;
-    op_ret = handle_slo_manifest(attr_iter->second, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret
-		       << dendl;
-      goto done_err;
+  if (attr_iter != attrs.end()) {
+    // swift ?multipart-manifest=get: return the manifest json instead of
+    // assembling segments. manifest_get is only ever set by the swift
+    // frontend for this purpose.
+    if (manifest_get) {
+      is_slo = true;
+      RGWSLOInfo slo_info;
+      try {
+        auto bliter = attr_iter->second.cbegin();
+        decode(slo_info, bliter);
+      } catch (buffer::error& err) {
+        ldpp_dout(this, 0) << "ERROR: failed to decode slo manifest" << dendl;
+        op_ret = -EIO;
+        goto done_err;
+      }
+
+      // Reconstruct JSON: [{"path":"...","etag":"...","size_bytes":N}, ...]
+      ceph::JSONFormatter jf(false);
+      jf.open_array_section("");
+      for (const auto& entry : slo_info.entries) {
+        jf.open_object_section("");
+        encode_json("path", entry.path, &jf);
+        encode_json("etag", entry.etag, &jf);
+        encode_json("size_bytes", entry.size_bytes, &jf);
+        jf.close_section();
+      }
+      jf.close_section();
+
+      bufferlist manifest_bl;
+      jf.flush(manifest_bl);
+
+      // Set response metadata
+      total_len = manifest_bl.length();
+      s->obj_size = total_len;
+
+      // Override content-type to application/json
+      bufferlist ct_bl;
+      ct_bl.append("application/json");
+      attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
+
+      op_ret = send_response_data(manifest_bl, 0, manifest_bl.length());
+      if (op_ret < 0) {
+        ldpp_dout(this, 0) << "ERROR: failed to send_response_data ret="
+                           << op_ret << dendl;
+        goto done_err;
+      }
+      return;
     }
-    return;
+
+    // skip_manifest is also set by multisite sync requests
+    // (rgwx-sync-manifest): those must read the raw manifest object itself
+    // and fall through to the normal read path below, as the segments are
+    // synced as separate objects
+    if (!skip_manifest) {
+      is_slo = true;
+      op_ret = handle_slo_manifest(attr_iter->second, y);
+      if (op_ret < 0) {
+        ldpp_dout(this, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret
+                           << dendl;
+        goto done_err;
+      }
+      return;
+    }
   }
 
   /**
