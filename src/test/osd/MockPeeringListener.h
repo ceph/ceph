@@ -141,8 +141,10 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     ObjectStore::Transaction &t) override {
     prepare_write_called = true;
     
-    // If a callback is set, queue the transaction
-    if (queue_transaction_callback && !t.empty()) {
+    // Queue the PeeringCtx transaction. Any other transaction (e.g. a
+    // recovery push from the backend) is queued by its caller.
+    if (queue_transaction_callback && !t.empty() &&
+        (!ctx || &t == &ctx->transaction)) {
       ObjectStore::Transaction copy;
       copy.append(t);
       queue_transaction_callback(std::move(copy));
@@ -432,7 +434,9 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
   PGLog::LogEntryHandlerRef get_log_handler(
     ObjectStore::Transaction &t) override {
-    return std::make_unique<MockPGLogEntryHandler>(backend.get(), &t);
+    // Like PrimaryLogPG, use the PG's IO backend when there is one
+    return std::make_unique<MockPGLogEntryHandler>(
+      pg_backend ? pg_backend : backend.get(), &t);
   }
 
   void rebuild_missing_set_with_deletes(PGLog &pglog) override {

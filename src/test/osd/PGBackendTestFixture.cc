@@ -1511,6 +1511,101 @@ int PGBackendTestFixture::write_attribute(
     });
 }
 
+void PGBackendTestFixture::do_write_omap_impl(
+  const std::string& obj_name,
+  const std::map<std::string, std::string>& to_set,
+  const std::set<std::string>& to_remove,
+  std::shared_ptr<int> result)
+{
+  hobject_t hoid = make_test_object(obj_name);
+  PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+
+  ObjectContextRef obc = get_object_context(hoid, true);
+  pg_t->obc_map[hoid] = obc;
+
+  get_test_pg()->outstanding_writes[hoid]++;
+
+  eversion_t prior_version = obc->obs.oi.version;
+  eversion_t at_version = get_next_version();
+
+  object_info_t new_oi = obc->obs.oi;
+  new_oi.version = at_version;
+  new_oi.prior_version = prior_version;
+  new_oi.set_flag(object_info_t::FLAG_OMAP);
+  {
+    bufferlist oi_bl;
+    new_oi.encode(oi_bl, osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+    pg_t->setattr(hoid, OI_ATTR, oi_bl);
+  }
+  if (!to_set.empty()) {
+    std::map<std::string, bufferlist> keys;
+    for (const auto& [key, value] : to_set) {
+      keys[key].append(value);
+    }
+    pg_t->omap_setkeys(hoid, keys);
+  }
+  if (!to_remove.empty()) {
+    std::set<std::string> keys = to_remove;
+    pg_t->omap_rmkeys(hoid, keys);
+  }
+
+  obc->obs.oi = new_oi;
+
+  std::vector<pg_log_entry_t> log_entries;
+  pg_log_entry_t entry;
+  entry.op = pg_log_entry_t::MODIFY;
+  entry.soid = hoid;
+  entry.version = at_version;
+  entry.prior_version = prior_version;
+  entry.clean_regions.mark_omap_dirty();
+  log_entries.push_back(entry);
+
+  object_stat_sum_t delta_stats;
+
+  auto write_complete = make_write_completion(
+    get_test_pg(), hoid, result,
+    [obc, prior_version]() {
+      obc->obs.oi.version = prior_version;
+      obc->attr_cache.clear();
+    },
+    nullptr);
+
+  do_transaction(
+    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
+}
+
+int PGBackendTestFixture::write_omap(
+  const std::string& obj_name,
+  const std::map<std::string, std::string>& to_set,
+  const std::set<std::string>& to_remove,
+  bool run)
+{
+  return run_primary_op(
+    [this, obj_name, to_set, to_remove](std::shared_ptr<int> result) {
+      do_write_omap_impl(obj_name, to_set, to_remove, result);
+    }, run);
+}
+
+std::set<std::string> PGBackendTestFixture::get_shard_omap_keys(
+  const std::string& obj_name,
+  int shard)
+{
+  std::set<std::string> keys;
+  TestPG* test_pg = get_test_pg_by_shard(shard);
+  ceph_assert(test_pg);
+  OsdTestFixture* fixture = get_osd_fixture(test_pg->pg_whoami.osd);
+  ceph_assert(fixture && test_pg->ch);
+  bufferlist header;
+  std::map<std::string, bufferlist> omap;
+  ghobject_t goid(make_test_object(obj_name), ghobject_t::NO_GEN,
+                  test_pg->pg_whoami.shard);
+  fixture->store->omap_get(test_pg->ch, goid, &header, &omap);
+  for (const auto& [key, value] : omap) {
+    keys.insert(key);
+  }
+  return keys;
+}
+
 int PGBackendTestFixture::list_attributes(
   const std::string& obj_name,
   std::map<std::string, ceph::buffer::list, std::less<>>& attrs)
