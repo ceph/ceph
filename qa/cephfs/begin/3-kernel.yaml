@@ -1,9 +1,14 @@
 # When the --kernel option is given to teuthology-suite, the kernel is set for
 # all nodes (also, the kernel is "distro" when the --kernel option is not set).
-# We don't generally want to use a custom kernel for all tests, so unset it.
-# The k-testing.yaml will set it, if given, for only the client nodes.
+# We don't generally want to use a custom kernel for all tests, so unset it:
+# the job is left asking for the distro kernel on every node, exactly as if it
+# had been scheduled with "-k distro". The k-testing.yaml will set the custom
+# kernel, if given, for only the client nodes.
 # When the --kernel option is "none" there is no "kernel" dictionary created
 # in the job base config and there is no need to unset anything.
+#
+# Note that "unset" here means "kernel: null", not an empty mapping; see the
+# comment below for why the difference matters.
 #
 # Allow overriding this by using a branch ending in "-all".
 
@@ -24,5 +29,38 @@ teuthology:
           py_attrgetter(kernel).pop('rpm', nil)
           py_attrgetter(kernel).pop('sha1', nil)
           py_attrgetter(kernel).pop('tag', nil)
+          -- Whatever is left that is not one of the kernel task's own generic
+          -- keys is a role - "client", "mon", "osd.0", ... - put there by a
+          -- mount facet such as k-testing.yaml or k-stock.yaml. Such a job
+          -- does want a kernel on those roles, so leave its mapping alone.
+          local per_role = false
+          for i, k in py_enumerate(py_list(kernel)) do
+            if k ~= 'flavor' and k ~= 'hwe' and k ~= 'kdb' and k ~= 'timeout' then
+              per_role = true
+            end
+          end
+          if not per_role then
+            -- Emptying the mapping is not enough. Once every postmerge script
+            -- has run, the scheduler copies the "sha1" of the base config back
+            -- into the job yaml at every level where it still finds a dict to
+            -- descend into (update_key(), teuthology/misc.py), so a "kernel:
+            -- {}" left here reappears as "kernel: {sha1: <custom>}" - and a
+            -- bare sha1 is all the kernel task needs to install that kernel on
+            -- every node, which is what this fragment exists to prevent.
+            --
+            -- "kernel: null" is not a dict, so update_key() has nothing to
+            -- descend into. The task is still scheduled, because
+            -- get_initial_tasks() only tests for the presence of the "kernel"
+            -- key, and the task's own normalize_config() then falls back to
+            -- its default of {branch: distro, sha1: distro} for every role.
+            -- So the nodes end up on the distro kernel, which is what the
+            -- emptied mapping was always meant to produce.
+            --
+            -- This is a workaround. The bug is update_key() rewriting keys
+            -- that the job yaml does not have; once that is fixed in
+            -- teuthology, popping the version keys above is enough and this
+            -- whole branch can go away.
+            py_attrgetter(yaml).update(yaml_load("kernel: null"))
+          end
         end
       end
