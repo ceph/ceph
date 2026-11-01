@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - object missing on disk
+      - Metadata damage detected
+      - MDS_DAMAGE
+      - MDS_CACHE_OVERSIZED
+      - overall HEALTH_
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_dir_prefetch
