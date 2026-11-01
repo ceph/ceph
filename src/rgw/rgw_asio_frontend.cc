@@ -1267,7 +1267,7 @@ void AsioFrontend::join()
 
 void AsioFrontend::pause()
 {
-  ldout(ctx(), 4) << "frontend pausing, closing connections..." << dendl;
+  ldout(ctx(), 4) << "frontend pausing..." << dendl;
 
   // cancel pending calls to accept(), but don't close the sockets
   boost::system::error_code ec;
@@ -1281,10 +1281,19 @@ void AsioFrontend::pause()
   if (!graceful_stop) {
     // close all connections so outstanding requests fail quickly
     connections.close();
+    pause_mutex.lock(ec);
+  } else {
+    // wait for outstanding requests to complete, up to the timeout
+    const auto timeout = ctx()->_conf.get_val<std::chrono::seconds>(
+        "rgw_realm_reload_pause_timeout");
+    ldout(ctx(), 4) << "frontend waiting up to " << timeout.count()
+        << "s for outstanding requests to complete..." << dendl;
+    if (rgw::asio::lock_or_close_on_timeout(pause_mutex, connections,
+                                            timeout, ec)) {
+      ldout(ctx(), 1) << "frontend outstanding requests did not complete within "
+          << timeout.count() << "s, closed remaining connections" << dendl;
+    }
   }
-
-  // pause and wait until outstanding requests complete
-  pause_mutex.lock(ec);
 
   if (ec) {
     ldout(ctx(), 1) << "frontend failed to pause: " << ec.message() << dendl;

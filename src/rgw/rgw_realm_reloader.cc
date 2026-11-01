@@ -17,6 +17,7 @@
 #include "services/svc_zone.h"
 
 #include "common/errno.h"
+#include "include/random.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -80,10 +81,17 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
   reload_scheduled = new C_Reload(this);
   cond.notify_one(); // wake reload() if it blocked on a bad configuration
 
-  // schedule reload() without delay
-  timer.add_event_after(0, reload_scheduled);
+  // spread reloads over a random delay so that gateways behind the same load
+  // balancer don't all pause their frontends at the same time
+  const auto max_delay = cct->_conf.get_val<std::chrono::seconds>(
+      "rgw_realm_reload_max_delay");
+  const auto delay = std::chrono::milliseconds(
+      ceph::util::generate_random_number<int64_t>(
+          0, std::chrono::milliseconds(max_delay).count()));
+  timer.add_event_after(delay, reload_scheduled);
 
-  ldout(cct, 4) << "Notification on realm, reconfiguration scheduled" << dendl;
+  ldout(cct, 4) << "Notification on realm, reconfiguration scheduled in "
+      << delay.count() << "ms" << dendl;
 }
 
 void RGWRealmReloader::reload()

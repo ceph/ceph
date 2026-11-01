@@ -353,6 +353,34 @@ After updating the master zone configuration, update the period.
 .. note:: Updating the period changes the epoch, and ensures that other zones
           will receive the updated configuration.
 
+Applying Period Changes to Running Gateways
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Committing a period notifies every running gateway in the realm, and each
+gateway reloads its realm configuration without a restart. During the reload a
+gateway stops accepting new requests, applies the new period, and then resumes.
+
+By default, a gateway closes its open connections when the reload starts, so
+requests that are in progress fail and clients must retry them. To let
+outstanding requests finish first, enable :confval:`rgw_graceful_stop`. The
+gateway then waits for up to :confval:`rgw_realm_reload_pause_timeout` seconds
+before it closes any remaining connections.
+
+All gateways receive the notification at the same time. When several gateways
+serve the same endpoint behind a load balancer, set
+:confval:`rgw_realm_reload_max_delay` to a few seconds so that each gateway
+reloads after a random delay and the gateways don't all pause together. For
+example:
+
+.. prompt:: bash #
+
+   ceph config set client.rgw rgw_graceful_stop true
+   ceph config set client.rgw rgw_realm_reload_pause_timeout 30
+   ceph config set client.rgw rgw_realm_reload_max_delay 10
+
+Gateways that are not running when the period is committed load the current
+period when they start.
+
 Update the Ceph Configuration File
 ----------------------------------
 
