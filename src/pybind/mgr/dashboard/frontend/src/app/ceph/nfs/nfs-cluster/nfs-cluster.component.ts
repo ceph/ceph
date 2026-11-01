@@ -1,4 +1,5 @@
 import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { BehaviorSubject, Observable, forkJoin, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
@@ -13,6 +14,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 import { NFSBackend, NFSCluster, NFSShare } from '../models/nfs.model';
+import { getFsalFromRoute, getPathfromFsal } from '../utils';
 
 interface NFSClusterRow extends NFSCluster {
   status: string;
@@ -38,6 +40,7 @@ export class NfsClusterComponent implements OnInit {
   private authStorageService = inject(AuthStorageService);
   private nfsService = inject(NfsService);
   private orchService = inject(OrchestratorService);
+  private router = inject(Router);
 
   constructor() {
     this.permission = this.authStorageService.getPermissions().nfs;
@@ -60,11 +63,16 @@ export class NfsClusterComponent implements OnInit {
         )
       )
     );
+    const nfsBasePath = `/${getPathfromFsal(getFsalFromRoute(this.router.url))}/nfs/cluster`;
     this.columns = [
       {
         name: $localize`Name`,
         prop: 'name',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.redirect,
+        customTemplateConfig: {
+          redirectLink: [nfsBasePath, '::prop', 'overview']
+        }
       },
       {
         name: $localize`Status`,
