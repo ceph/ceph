@@ -519,7 +519,7 @@ struct Condition {
 				  * 1000000000)));
       }
 
-      return from_iso_8601(std::string_view(s), false);
+      return from_iso_8601(std::string_view(s), ceph::iso_8601_mode::strict);
     } catch (const std::logic_error& e) {
       return std::nullopt;
     }

@@ -3,149 +3,233 @@
 
 #include "iso_8601.h"
 
+#include <chrono>
 #include <iomanip>
 #include <sstream>
 
-#include "include/timegm.h"
+#include "common/ceph_time.h"
 #include "include/ceph_assert.h"
 
+#include "common/strtol.h"
+
 namespace ceph {
-using std::chrono::duration_cast;
-using std::chrono::nanoseconds;
-using std::chrono::seconds;
+
+namespace chrono = std::chrono;
+using chrono::duration_cast;
 using std::setw;
 using std::size_t;
 using std::stringstream;
 using std::string;
 using std::uint16_t;
 
-using std::string_view;
-
-using ceph::real_clock;
-using ceph::real_time;
-
-using sriter = string_view::const_iterator;
+using namespace std::literals;
 
 namespace {
-// This assumes a contiguous block of numbers in the correct order.
-uint16_t digit(char c) {
-  if (!(c >= '0' && c <= '9')) {
-    throw std::invalid_argument("Not a digit.");
-  }
-  return static_cast<uint16_t>(c - '0');
-}
-
-std::optional<real_time> calculate(const tm& t, uint32_t n = 0) {
-  ceph_assert(n < 1'000'000'000);
-  std::optional<real_time> ret;
-  time_t tt = internal_timegm(&t);
-  if (tt != static_cast<time_t>(-1)) {
-    ret = real_clock::from_time_t(tt) + nanoseconds(n);
-  }
-  return ret;
-}
-}
-
-std::optional<real_time> from_iso_8601(const string_view s,
-				  const bool ws_terminates) {
-  auto end = s.cend();
-  auto read_digit = [end](sriter& c) mutable {
-    if (c == end) {
-      throw std::invalid_argument("End of input.");
-    }
-    auto f = digit(*c);
-    ++c;
-    return f;
-  };
-
-  auto read_digits = [&read_digit](sriter& c, std::size_t n) {
-    auto v = 0ULL;
-    for (auto i = 0U; i < n; ++i) {
-      auto d = read_digit(c);
-      v = (10ULL * v) + d;
-    }
-    return v;
-  };
-  auto partial_date = [end, ws_terminates](sriter& c) {
-    return (c == end || (ws_terminates && std::isspace(*c)));
-  };
-  auto time_end = [end, ws_terminates](sriter& c) {
-    return (c != end && *c == 'Z' &&
-	    ((c + 1) == end ||
-	     (ws_terminates && std::isspace(*(c + 1)))));
-  };
-  auto consume_delimiter = [end](sriter& c, char q) {
-    if (c == end || *c != q) {
-      throw std::invalid_argument("Expected delimiter not found.");
-    } else {
-      ++c;
-    }
-  };
-
-  tm t = { 0, // tm_sec
-	   0, // tm_min
-	   0, // tm_hour
-	   1, // tm_mday
-	   0, // tm_mon
-	   70, // tm_year
-	   0, // tm_wday
-	   0, // tm_yday
-	   0, // tm_isdst
-  };
-  try {
-    auto c = s.cbegin();
-    {
-      auto y = read_digits(c, 4);
-      if (y < 1970) {
-	return std::nullopt;
-      }
-      t.tm_year = y - 1900;
-    }
-    if (partial_date(c)) {
-      return calculate(t, 0);
-    }
-
-    consume_delimiter(c, '-');
-    t.tm_mon = (read_digits(c, 2) - 1);
-    if (partial_date(c)) {
-      return calculate(t);
-    }
-    consume_delimiter(c, '-');
-    t.tm_mday = read_digits(c, 2);
-    if (partial_date(c)) {
-      return calculate(t);
-    }
-    consume_delimiter(c, 'T');
-    t.tm_hour = read_digits(c, 2);
-    if (time_end(c)) {
-      return calculate(t);
-    }
-    consume_delimiter(c, ':');
-    t.tm_min = read_digits(c, 2);
-    if (time_end(c)) {
-      return calculate(t);
-    }
-    consume_delimiter(c, ':');
-    t.tm_sec = read_digits(c, 2);
-    if (time_end(c)) {
-      return calculate(t);
-    }
-    consume_delimiter(c, '.');
-
-    auto n = 0UL;
-    auto multiplier = 100000000UL;
-    for (auto i = 0U; i < 9U; ++i) {
-      auto d = read_digit(c);
-      n += d * multiplier;
-      multiplier /= 10;
-      if (time_end(c)) {
-	return calculate(t, n);
-      }
-    }
-  } catch (std::invalid_argument& e) {
-    // fallthrough
+template <typename Field, typename Validate = decltype([](auto) { return true; })>
+std::optional<Field> consume_bounded(std::string_view& remaining, size_t bound,
+                                     Validate validate = {})
+{
+  auto view = remaining.substr(0, bound);
+  if (view.size() != bound)
+    return std::nullopt;
+  if (auto val = parse<uint16_t>(view); val && validate(*val)) {
+    remaining.remove_prefix(view.size());
+    return Field(*val);
   }
   return std::nullopt;
+}
+
+std::optional<char> optional_delimiter(std::string_view& remaining,
+                                       std::string_view valid)
+{
+  if (!remaining.empty() && valid.contains(remaining.front())) {
+    auto c = remaining.front();
+    remaining.remove_prefix(1);
+    return c;
+  }
+  return std::nullopt;
+}
+
+inline auto less(std::uint16_t max)
+{
+  return [max](auto x) { return x < max; };
+}
+
+inline auto between(std::uint16_t min, std::uint16_t max)
+{
+  return [min, max](auto x) { return x > min && x < max; };
+}
+
+template <typename Rep, typename Period>
+inline std::optional<real_time> bounded_sub(
+    ceph::real_time time, chrono::duration<Rep, Period> decrement)
+{
+  auto delta = chrono::duration_cast<timespan>(chrono::abs(decrement));
+  if (decrement > decrement.zero()) {
+    if (time.time_since_epoch() < delta) return std::nullopt;
+    time -= delta;
+  } else {
+    if (time > real_time::max() - delta) return std::nullopt;
+    time += delta;
+  }
+  return time;
+}
+
+template <typename Rep, typename Period>
+inline std::optional<real_time> bounded_add(
+    ceph::real_time time, chrono::duration<Rep, Period> increment)
+{
+  auto delta = chrono::duration_cast<timespan>(chrono::abs(increment));
+  if (increment > increment.zero()) {
+    if (time > real_time::max() - delta) return std::nullopt;
+    time += delta;
+  } else {
+    if (time.time_since_epoch() < delta) return std::nullopt;
+    time -= delta;
+  }
+  return time;
+}
+
+std::optional<real_time> read_date(std::string_view& remaining)
+{
+  std::optional<chrono::day> day;
+  std::optional<chrono::month> month;
+  auto year = consume_bounded<chrono::year>(remaining, 4, between(1969, 2555));
+  if (!year) return std::nullopt;
+  if (optional_delimiter(remaining, "-")) {
+    if (!(month = consume_bounded<chrono::month>(remaining, 2)))
+      return std::nullopt;
+    if (optional_delimiter(remaining, "-")) {
+      if (!(day = consume_bounded<chrono::day>(remaining, 2)))
+        return std::nullopt;
+    }
+  }
+  if ((!month || !day) && !remaining.empty()) return std::nullopt;
+  chrono::year_month_day ymd = (*year) / month.value_or(chrono::month(1)) /
+                               day.value_or(chrono::day(1));
+  if (!ymd.ok()) {
+    return std::nullopt;
+  }
+  if (chrono::sys_days(ymd) > chrono::sys_days(2554y / 7 / 21d))
+    // 21 July 2554 is the last day `ceph::real_time` can represent.
+    return std::nullopt;
+  // On Linux `system_clock::to_time_t` is not usable for large, unsigned values
+  return real_clock::from_time_t(
+      duration_cast<chrono::seconds>(chrono::sys_days(ymd).time_since_epoch())
+          .count());
+}
+
+inline std::optional<chrono::nanoseconds> parse_nanoseconds(
+    std::string_view& remaining)
+{
+  constexpr auto digits = "0123456789"sv;
+  constexpr uint64_t pow10[] = {
+      1,         10,         100,
+      1'000,     10'000,     100'000,
+      1'000'000, 10'000'000, 100'000'000};
+
+  auto nend = remaining.find_first_not_of(digits);
+  auto nv = remaining.substr(0, nend);
+
+  if (nv.empty())
+    return std::nullopt;
+  // We only handle nanoseconds, but larger timestamps are valid, so
+  // only parse nine but trim all provided.
+  auto to_trim = nv.size();
+  if (nv.size() > 9) {
+    nv.remove_suffix(nv.size() - 9);
+  }
+  auto fractsecs = parse<uint64_t>(nv);
+  if (!fractsecs)
+    return std::nullopt;
+  chrono::nanoseconds nanosecond(*fractsecs * pow10[9 - nv.size()]);
+  remaining.remove_prefix(to_trim);
+  return nanosecond;
+}
+
+std::optional<real_time> add_time(std::string_view& remaining,
+                                  bool lax, real_time midnight)
+{
+  std::optional<real_time> time = midnight;
+
+  // HH
+  {
+    auto hours = consume_bounded<chrono::hours>(remaining, 2, less(24));
+    if (!hours) return std::nullopt;
+    time = bounded_add(*time, *hours);
+    if (!time) return std::nullopt;
+  }
+
+  // HH:MM
+  if (optional_delimiter(remaining, ":")) {
+    auto minutes = consume_bounded<chrono::minutes>(remaining, 2, less(60));
+    if (!minutes)
+      return std::nullopt;
+    time = bounded_add(*time, *minutes);
+    if (!time) return std::nullopt;
+
+    // HH:MM:SS
+    if (optional_delimiter(remaining, ":")) {
+      auto seconds = consume_bounded<chrono::seconds>(remaining, 2, less(60));
+      if (!seconds) return std::nullopt;
+      time = bounded_add(*time, *seconds);
+      if (!time) return std::nullopt;
+
+      // HH::MM::SS.fff…
+      if (optional_delimiter(remaining, ".,")) {
+        auto nanoseconds = parse_nanoseconds(remaining);
+        if (!nanoseconds) return std::nullopt;
+        time = bounded_add(*time, *nanoseconds);
+        if (!time) return std::nullopt;
+      }
+    }
+  }
+  chrono::minutes offset{0};
+  // ±hh[:mm]
+  if (auto sign = optional_delimiter(remaining, "+-"); sign) {
+    short signum = *sign == '-' ? -1 : 1;
+    auto hours = consume_bounded<chrono::hours>(remaining, 2);
+    if (!hours)
+      return std::nullopt;
+    offset += *hours;
+    if (auto colon = optional_delimiter(remaining, ":"); colon) {
+      if (remaining.empty())
+        return std::nullopt;
+    }
+    if (!remaining.empty()) {
+      auto minutes = consume_bounded<chrono::minutes>(remaining, 2, less(60));
+      if (!minutes) return std::nullopt;
+      offset += *minutes;
+    }
+    offset *= signum;
+    if (offset < -12h || offset > 14h) return std::nullopt;
+  } else if (optional_delimiter(remaining, lax ? "Zz"sv : "Z"sv)) {
+    // Explicit UTC
+  } else if (lax && remaining.empty()) {
+    // Allow unterminated
+  } else {
+    return std::nullopt;
+  }
+  return bounded_sub(*time, offset);
+}
+} // namespace
+
+std::optional<real_time> from_iso_8601(const std::string_view s,
+                                       const iso_8601_mode mode) noexcept
+{
+  auto remaining = s;
+  ceph_assert(mode == iso_8601_mode::strict || mode == iso_8601_mode::lax);
+  auto lax = (mode == iso_8601_mode::lax);
+
+  auto time = read_date(remaining);
+  if (!time) return std::nullopt;
+
+  if (!remaining.empty()) {
+    if (!optional_delimiter(remaining, lax ? "Tt "sv : "T"sv)) return std::nullopt;
+    time = add_time(remaining, lax, *time);
+  }
+  if (!remaining.empty()) return std::nullopt;
+  return time;
 }
 
 string to_iso_8601(const real_time t,
@@ -157,8 +241,8 @@ string to_iso_8601(const real_time t,
   stringstream out(std::ios_base::out);
 
   auto sec = real_clock::to_time_t(t);
-  auto nsec = duration_cast<nanoseconds>(t.time_since_epoch() %
-					 seconds(1)).count();
+  auto nsec =
+      duration_cast<chrono::nanoseconds>(t.time_since_epoch() % (1s)).count();
 
   struct tm bt;
   gmtime_r(&sec, &bt);
@@ -199,5 +283,4 @@ string to_iso_8601(const real_time t,
   out << '.' << setw(9) << nsec << 'Z';
   return out.str();
 }
-
-}
+} // namespace ceph

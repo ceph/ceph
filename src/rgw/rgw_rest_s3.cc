@@ -7502,7 +7502,7 @@ rgw::auth::s3::STSEngine::authenticate(
   if (! token.expiration.empty()) {
     std::string expiration = token.expiration;
     if (! expiration.empty()) {
-      auto exp = ceph::from_iso_8601(expiration, false);
+      auto exp = ceph::from_iso_8601(expiration, ceph::iso_8601_mode::strict);
       if (exp) {
         real_clock::time_point now = real_clock::now();
         if (now >= *exp) {
