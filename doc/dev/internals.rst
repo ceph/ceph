@@ -51,6 +51,7 @@ Development Processes
 
    quick_guide
    dev_cluster_deployment
+   vstart_chaos
    development-workflow
    testing
    sepia
