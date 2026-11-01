@@ -285,12 +285,14 @@ with the CRUSH topology.
 
    **Option 1: Automatic tiebreaker selection** (recommended):
 
-   Let the cluster automatically select the tiebreaker:
+   Let the cluster automatically select the tiebreaker. The first positional
+   argument of ``ceph mon enable_stretch_mode`` is the tiebreaker, so give the
+   other two arguments by name:
 
    .. prompt:: bash #
 
       ceph mon set_location e datacenter=zone3
-      ceph mon enable_stretch_mode stretch_replicated_rule datacenter
+      ceph mon enable_stretch_mode --new_crush_rule stretch_replicated_rule --dividing_bucket datacenter
 
    **Option 2: Explicit tiebreaker Monitor**:
 
