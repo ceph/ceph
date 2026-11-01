@@ -45,6 +45,9 @@ function munge_ceph_spec_in {
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
     fi
+    if ! $with_cuobj_shim; then
+        sed -i -e 's/^%bcond_without cuobj_shim$/%bcond_with cuobj_shim/' $OUTFILE
+    fi
 }
 
 function munge_debian_control {
@@ -298,14 +301,51 @@ function setup_lab_extras_repo() {
     # NOTE This repo should be temporary while we work to get the
     # needed deps into EPEL, etc.
     local baseurlprefix="https://apt-mirror.sepia.ceph.com/lab-extras"
+    # RHEL's $releasever includes the minor version (for example, 10.2),
+    # but lab-extras is organized by EL major version.
+    local el_major=$1
     local path="/etc/yum.repos.d/ceph-lab-extras.repo"
     $SUDO tee "${path}" <<EOF
 [ceph-lab-extras]
-name=ceph-lab-extras-\$releasever
-baseurl=${baseurlprefix}/\$releasever
+name=ceph-lab-extras-${el_major}
+baseurl=${baseurlprefix}/${el_major}
 enabled=1
 gpgcheck=0
 EOF
+}
+
+function setup_cuobj_repo() {
+    if $with_cuobj_shim; then
+        return
+    fi
+
+    local el_major=${VERSION_ID%%.*}
+    case "${ID}:${el_major}" in
+        rocky:9|centos:9|almalinux:9|rhel:9|rocky:10|centos:10|almalinux:10|rhel:10) ;;
+        fedora:*)
+            echo "Direct cuObject linking is not supported on Fedora: NVIDIA's Fedora repository does not provide libcuobjserver-devel. Use the default WITH_RADOSGW_CUOBJ_SHIM=ON." >&2
+            return 1
+            ;;
+        *)
+            echo "cuObject SDK repository setup requires an EL9 or EL10 distribution (Rocky, AlmaLinux, RHEL, or CentOS Stream)." >&2
+            return 1
+            ;;
+    esac
+    local cuda_arch
+    case "$ARCH" in
+        x86_64) cuda_arch=x86_64 ;;
+        aarch64) cuda_arch=sbsa ;;
+        *)
+            echo "cuObject SDK repository setup does not support ${ID} ${VERSION_ID} on ${ARCH}." >&2
+            return 1
+            ;;
+    esac
+
+    # The spec's conditional BuildRequires installs the server SDK and its
+    # dependencies. RGW does not need the CUDA toolkit or client packages.
+    $SUDO dnf install -y dnf-plugins-core || return 1
+    $SUDO dnf config-manager --add-repo \
+        "https://developer.download.nvidia.com/compute/cuda/repos/rhel${el_major}/${cuda_arch}/cuda-rhel${el_major}.repo"
 }
 
 function populate_wheelhouse() {
@@ -385,7 +425,21 @@ elif tty -s; then
     for_make_check=true
 fi
 
+with_cuobj_shim=true
+case "${WITH_RADOSGW_CUOBJ_SHIM:-ON}" in
+    ON|on|TRUE|true|YES|yes|1) ;;
+    OFF|off|FALSE|false|NO|no|0) with_cuobj_shim=false ;;
+    *)
+        echo "error: unexpected WITH_RADOSGW_CUOBJ_SHIM value: ${WITH_RADOSGW_CUOBJ_SHIM}" >&2
+        exit 2
+        ;;
+esac
+
 if [ x$(uname)x = xFreeBSDx ]; then
+    if ! $with_cuobj_shim; then
+        echo "cuObject SDK repository setup requires an EL9 or EL10 distribution." >&2
+        exit 1
+    fi
     if [ "$INSTALL_EXTRA_PACKAGES" ]; then
         echo "Installing extra packages not supported on FreeBSD" >&2
         exit 1
@@ -444,6 +498,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
 else
     [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
     source /etc/os-release
+    setup_cuobj_repo || exit 1
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
         echo "Using apt-get to install dependencies"
@@ -551,11 +606,21 @@ else
                     $SUDO dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
+                if { [ "$ID" = centos ] || [ "$ID" = rocky ] || [ "$ID" = almalinux ] || [ "$ID" = rhel ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
                     dts_ver=13
-                    $SUDO dnf config-manager --set-enabled crb
+                    if [ "$ID" = rhel ]; then
+                        # UBI provides only a subset of the RHEL build deps.
+                        # Use dnf here: subscription-manager cannot enable
+                        # repositories while operating in container mode.
+                        $SUDO dnf config-manager --set-enabled \
+                            "rhel-${MAJOR_VERSION}-for-${ARCH}-baseos-rpms" \
+                            "rhel-${MAJOR_VERSION}-for-${ARCH}-appstream-rpms" \
+                            "codeready-builder-for-rhel-${MAJOR_VERSION}-${ARCH}-rpms"
+                    else
+                        $SUDO dnf config-manager --set-enabled crb
+                    fi
                     if [ "$MAJOR_VERSION" -eq 10 ]; then
-                        setup_lab_extras_repo
+                        setup_lab_extras_repo "$MAJOR_VERSION"
                     fi
                 fi
                 ;;
