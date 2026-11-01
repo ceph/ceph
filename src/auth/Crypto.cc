@@ -135,6 +135,9 @@ void CryptoRandom::get_bytes(char *buf, int len)
 }
 
 #else // !HAVE_GETENTROPY && !_WIN32
+
+namespace TOPNSPC::auth {
+
 // open /dev/urandom once on construction and reuse the fd for all reads
 CryptoRandom::CryptoRandom()
   : fd{open_urandom()}
