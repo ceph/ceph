@@ -546,7 +546,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     description=null,
     sort=null,
     transform=null,
-    pluginVersion='9.1.3',
+    pluginVersion='12.3.1',
     options=null,
     gridPosition={},
     custom=null,
@@ -556,24 +556,34 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     overrides=[],
     color=null
   )::
-    g.tablePanel.new(datasource=datasource,
-                     description=description,
-                     sort=sort,
-                     title=title,
-                     transform=transform) + {
-      pluginVersion: pluginVersion,
+    {
+      type: 'table',
+      title: title,
+      [if description != null then 'description']: description,
+      datasource: if std.isObject(datasource) then datasource else { uid: datasource },
       gridPos: gridPosition,
-      [if options != null then 'options']: options,
-      fieldConfig+: {
-        defaults+: {
+      pluginVersion: pluginVersion,
+      targets: [],
+      fieldConfig: {
+        defaults: {
           [if custom != null then 'custom']: custom,
           [if decimals != null then 'decimals']: decimals,
           [if thresholds != null then 'thresholds']: thresholds,
           [if unit != null then 'unit']: unit,
           [if color != null then 'color']: color,
-
         },
         overrides: overrides,
+      },
+      [if options != null then 'options']: options,
+      _nextTarget:: 0,
+      addTarget(target):: self {
+        local nextTarget = super._nextTarget,
+        _nextTarget: nextTarget + 1,
+        targets+: [target { refId: std.char(std.codepoint('A') + nextTarget) }],
+      },
+      addTargets(targets):: std.foldl(function(p, t) p.addTarget(t), targets, self),
+      addTransformations(transformations):: self {
+        transformations: transformations,
       },
     },
   timeSeriesPanel(
