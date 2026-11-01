@@ -62,7 +62,7 @@ function(do_build_dpdk dpdk_dir)
   find_make("MAKE_EXECUTABLE" "make_cmd")
   execute_process(
     COMMAND ${MAKE_EXECUTABLE} showconfigs
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/seastar/dpdk
     OUTPUT_VARIABLE supported_targets
     OUTPUT_STRIP_TRAILING_WHITESPACE)
   string(REPLACE "\n" ";" supported_targets "${supported_targets}")
@@ -73,14 +73,11 @@ function(do_build_dpdk dpdk_dir)
       "\"${target}\" not listed in ${supported_targets}")
   endif()
 
-  if(Seastar_DPDK AND WITH_SPDK)
+  if(WITH_SPDK)
     message(FATAL_ERROR "not able to build DPDK with "
       "both Seastar_DPDK and WITH_SPDK enabled")
-  elseif(Seastar_DPDK)
-    set(dpdk_source_dir ${CMAKE_SOURCE_DIR}/src/seastar/dpdk)
-  else() # WITH_SPDK or WITH_DPDK is enabled
-    set(dpdk_source_dir ${CMAKE_SOURCE_DIR}/src/spdk/dpdk)
   endif()
+  set(dpdk_source_dir ${CMAKE_SOURCE_DIR}/src/seastar/dpdk)
 
   set(extra_cflags "-fPIC")
   include(CheckCCompilerFlag)

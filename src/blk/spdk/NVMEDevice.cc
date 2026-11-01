@@ -593,6 +593,7 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
         struct spdk_pci_addr addr;
         int r;
 
+        opts.opts_size = sizeof(opts);
         spdk_env_opts_init(&opts);
 
         bool local_pci_device = false;
