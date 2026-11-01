@@ -234,7 +234,7 @@ int ErasureCodeLrc::layers_init(ostream *ss)
     if (layer.profile.find("m") == layer.profile.end())
       layer.profile["m"] = stringify(layer.coding.size());
     if (layer.profile.find("plugin") == layer.profile.end())
-      layer.profile["plugin"] = "isa";
+      layer.profile["plugin"] = layer_plugin_default;
     if (layer.profile.find("technique") == layer.profile.end())
       layer.profile["technique"] = "reed_sol_van";
     int err = registry.factory(layer.profile["plugin"],
@@ -516,6 +516,10 @@ int ErasureCodeLrc::init(ErasureCodeProfile &profile,
   r = layers_parse(description_string, description, ss);
   if (r)
     return r;
+
+  auto lp = profile.find(ceph::LRC_LAYER_PLUGIN_KEY);
+  if (lp != profile.end())
+    layer_plugin_default = lp->second;
 
   r = layers_init(ss);
   if (r)
