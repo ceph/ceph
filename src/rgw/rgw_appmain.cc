@@ -623,6 +623,11 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       fe = new RGWLoadGenFrontend(env, config);
     }
     else if (framework == "beast") {
+      // Boost 1.87's asio config_get() tests errno after strtoll() without
+      // clearing it first, so a stale ERANGE from earlier startup code (e.g.
+      // getaddrinfo() in the tracer) aborts the reactor construction.
+      // Fixed in Boost 1.88 (boostorg/asio 391c3d116f).
+      errno = 0;
       fe = new RGWAsioFrontend(env, config, *sched_ctx, *context_pool);
       if (g_conf()->rgw_crypt_s3_kms_cache_enabled) {
         env.kms_cache->initialize_ttl_reaper(
