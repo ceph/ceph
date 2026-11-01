@@ -81,9 +81,9 @@ export class RbdNamespaceListComponent implements OnInit {
   }
 
   refresh() {
-    this.poolService.list(['pool_name', 'type', 'application_metadata']).then((pools: any) => {
+    this.poolService.list(['pool_name', 'type', 'flags_names', 'application_metadata']).then((pools: any) => {
       pools = pools.filter(
-        (pool: any) => this.rbdService.isRBDPool(pool) && pool.type === 'replicated'
+        (pool: any) => this.rbdService.isRBDPool(pool) && this.rbdService.isRBDCapablePool(pool)
       );
       const promises: Observable<any>[] = [];
       pools.forEach((pool: any) => {
