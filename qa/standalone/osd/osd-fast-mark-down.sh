@@ -100,7 +100,6 @@ function test_fast_kill() {
         return 1
      fi
    done
-   pkill -SIGTERM rados
    teardown $dir || return 1
 }
 
