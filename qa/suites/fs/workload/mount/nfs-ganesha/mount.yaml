@@ -1,0 +1,60 @@
+teuthology:
+  postmerge:
+  - |
+    local function is_kupstream()
+      return false
+    end
+    local function is_kdistro()
+      return false
+    end
+    local function is_fuse()
+      return false
+    end
+    local function syntax_version()
+      return ''
+    end
+    -- workunits that expect local file system (strict POSIX) semantics or
+    -- use CephFS specific interfaces (vxattrs, client options) that NFS
+    -- does not provide, or that need mount options ganesha-client lacks
+    local nfs_skip = {
+      "/6-workunit/suites/pjd.yaml",
+      "/6-workunit/fs/misc.yaml",
+      "/6-workunit/fs/norstats.yaml",
+      "/6-workunit/postgres.yaml",
+    }
+    for _, path in py_enumerate(base_frag_paths) do
+      for _, skip in ipairs(nfs_skip) do
+        if path:find(skip, 1, true) then
+          log:debug("dropping nfs-ganesha job for %s", path)
+          reject()
+        end
+      end
+    end
+    -- fscrypt is not tested through nfs-ganesha (yet): keep ganesha's
+    -- libcephfs client from picking up dummy encryption
+    local overrides = py_attrgetter(yaml).get('overrides')
+    local ceph = overrides and py_attrgetter(overrides).get('ceph')
+    for _, section in ipairs({'conf', 'cluster-conf'}) do
+      local conf = ceph and py_attrgetter(ceph).get(section)
+      local client = conf and py_attrgetter(conf).get('client')
+      if client then
+        py_attrgetter(client).pop('client_fscrypt_dummy_encryption', nil)
+      end
+    end
+tasks:
+- cephadm.shell:
+    mon.a:
+      - ceph nfs cluster create nfs-ganesha-test
+- ganesha-export:
+    cluster_id: nfs-ganesha-test
+    pseudo_path: /nfsganesha
+    fs_name: cephfs
+- ganesha-reconf:
+    cluster_id: nfs-ganesha-test
+    # debug logging of the longer workloads fills the ganesha node's root disk
+    client_log_level: 1
+    server_log_level: EVENT
+- ganesha-client:
+    client.0:
+      cluster_id: nfs-ganesha-test
+      pseudo_path: /nfsganesha
