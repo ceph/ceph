@@ -143,7 +143,7 @@ class Inventory:
                         # fails over to another host and let them resolve
                         # this host.
                         continue
-                    ip = resolve_ip(cast(str, v.get('addr')))
+                    ip = resolve_ip(cast(str, v.get('addr')), prefer_ipv6=self.mgr.prefer_ipv6())
                 else:
                     # we only have 1 node in the cluster, so we can't
                     # rely on another host doing the lookup.  use the

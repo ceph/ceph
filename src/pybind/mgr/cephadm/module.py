@@ -2246,10 +2246,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         return image
 
+    def prefer_ipv6(self) -> bool:
+        try:
+            return ipaddress.ip_address(self.get_mgr_ip()).version == 6
+        except ValueError:
+            return False
+
     def _check_valid_addr(self, host: str, addr: str) -> str:
         # make sure hostname is resolvable before trying to make a connection
         try:
-            ip_addr = utils.resolve_ip(addr)
+            ip_addr = utils.resolve_ip(addr, prefer_ipv6=self.prefer_ipv6())
         except OrchestratorError as e:
             msg = str(e) + f'''
 You may need to supply an address for {addr}

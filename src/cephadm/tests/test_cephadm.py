@@ -2074,6 +2074,108 @@ class TestBootstrap(object):
                 retval = _cephadm.command_bootstrap(ctx)
                 assert retval == 0
 
+    @pytest.mark.parametrize('mon_ip, mon_addrv, expected_addrv, expected_ipv6',
+        [
+            ('192.168.1.1', None,
+             '[v2:192.168.1.1:3300,v1:192.168.1.1:6789]', False),
+            ('192.168.1.1:3300', None,
+             '[v2:192.168.1.1:3300]', False),
+            (None, '[v2:192.168.1.1:3300,v1:192.168.1.1:6789]',
+             '[v2:192.168.1.1:3300,v1:192.168.1.1:6789]', False),
+            ('2001:db8::1', None,
+             '[v2:[2001:db8::1]:3300,v1:[2001:db8::1]:6789]', True),
+            ('[2001:db8::1]', None,
+             '[v2:[2001:db8::1]:3300,v1:[2001:db8::1]:6789]', True),
+            ('[2001:db8::1]:3300', None,
+             '[v2:[2001:db8::1]:3300]', True),
+            (None, '[v2:[2001:db8::1]:3300,v1:[2001:db8::1]:6789]',
+             '[v2:[2001:db8::1]:3300,v1:[2001:db8::1]:6789]', True),
+            (None, '[v2:2001:db8::1:3300,v1:2001:db8::1:6789]',
+             '[v2:2001:db8::1:3300,v1:2001:db8::1:6789]', True),
+            (None, '[v2:2001:db8::1:3300]',
+             '[v2:2001:db8::1:3300]', True),
+        ])
+    def test_prepare_mon_addresses_ipv6_flag(
+        self, mon_ip, mon_addrv, expected_addrv, expected_ipv6
+    ):
+        ctx = _cephadm.CephadmContext()
+        ctx.mon_ip = mon_ip
+        ctx.mon_addrv = mon_addrv
+        ctx.mon_net = None
+        ctx.skip_mon_network = True
+        ctx.skip_ping_check = True
+
+        addrv, ipv6, mon_network = _cephadm.prepare_mon_addresses(ctx)
+
+        assert addrv == expected_addrv
+        assert ipv6 is expected_ipv6
+        assert mon_network is None
+
+    @pytest.mark.parametrize('mon_ip, mon_addrv, expected_ipv6',
+        [
+            ('192.168.1.1', None, False),
+            ('2001:db8::1', None, True),
+            ('[2001:db8::1]:3300', None, True),
+            (None, '[v2:2001:db8::1:3300,v1:2001:db8::1:6789]', True),
+        ])
+    def test_finish_bootstrap_config_ms_bind_ipv6(
+        self, mon_ip, mon_addrv, expected_ipv6
+    ):
+        ctx = _cephadm.CephadmContext()
+        ctx.mon_ip = mon_ip
+        ctx.mon_addrv = mon_addrv
+        ctx.mon_net = None
+        ctx.skip_mon_network = True
+        ctx.skip_ping_check = True
+        ctx.no_minimize_config = True
+        ctx.image = ''
+        ctx.output_config = '/dev/null'
+
+        _, ipv6, _ = _cephadm.prepare_mon_addresses(ctx)
+
+        cli_calls = []
+
+        def fake_cli(cmd, __=None, ___=None):
+            cli_calls.append(cmd)
+
+        _cephadm.finish_bootstrap_config(
+            ctx=ctx,
+            fsid=_cephadm.make_fsid(),
+            config='',
+            mon_id='a', mon_dir='mon_dir',
+            mon_network=None, ipv6=ipv6,
+            cli=fake_cli,
+            cluster_network=None,
+            ipv6_cluster_network=False,
+        )
+
+        ms_bind_ipv6 = ['config', 'set', 'global', 'ms_bind_ipv6', 'true']
+        ms_bind_ipv4 = ['config', 'set', 'global', 'ms_bind_ipv4', 'false']
+        if expected_ipv6:
+            assert ms_bind_ipv6 in cli_calls
+            assert ms_bind_ipv4 in cli_calls
+        else:
+            assert ms_bind_ipv6 not in cli_calls
+            assert ms_bind_ipv4 not in cli_calls
+
+    @pytest.mark.parametrize('mon_ip, mon_addrv, expected',
+        [
+            ('192.168.1.1', None, '192.168.1.1'),
+            ('192.168.1.1:3300', None, '192.168.1.1'),
+            ('2001:db8::1', None, '2001:db8::1'),
+            ('[2001:db8::1]', None, '2001:db8::1'),
+            ('[2001:db8::1]:3300', None, '2001:db8::1'),
+            (None, '[v2:192.168.1.1:3300,v1:192.168.1.1:6789]', '192.168.1.1'),
+            (None, '[v2:[2001:db8::1]:3300,v1:[2001:db8::1]:6789]', '2001:db8::1'),
+            (None, '[v2:2001:db8::1:3300,v1:2001:db8::1:6789]', '2001:db8::1'),
+            (None, None, None),
+        ])
+    def test_bootstrap_host_addr(self, mon_ip, mon_addrv, expected):
+        ctx = _cephadm.CephadmContext()
+        ctx.mon_ip = mon_ip
+        ctx.mon_addrv = mon_addrv
+        assert _cephadm.bootstrap_host_addr(ctx) == expected
+
     @pytest.mark.parametrize('mon_addrv, list_networks, err',
         [
             # IPv4
