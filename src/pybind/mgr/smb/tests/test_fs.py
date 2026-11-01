@@ -24,6 +24,19 @@ def test_mocked_fs_authorizer():
         fsauth.authorize_entity('cephfs', 'client.smb.kaboom')
 
 
+def test_file_system_authorizer_uses_aes256k():
+    m = mock.MagicMock()
+    m.mon_command.return_value = (0, '', '')
+
+    smb.fs.FileSystemAuthorizer(m).authorize_entity(
+        'cephfs', 'client.smb.foo'
+    )
+
+    command = m.mon_command.call_args.args[0]
+    assert command['prefix'] == 'fs authorize'
+    assert command['key_type'] == 'aes256k'
+
+
 def test_mocked_fs_path_resolver(monkeypatch):
     # we have to "re-patch" whatever cephfs module gets mocked with because
     # the ObjectNotFound attribute is not an exception in the test environment
