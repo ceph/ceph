@@ -4,23 +4,26 @@
 Prometheus Module
 =================
 
-The Manager ``prometheus`` module implements a Prometheus exporter to expose
-Ceph performance counters from the collection point in the Manager.  The
-Manager receives ``MMgrReport`` messages from all ``MgrClient`` processes
-(including mons and OSDs) with performance counter schema data and counter
-data, and maintains a circular buffer of the latest samples.  This module
-listens on an HTTP endpoint and retrieves the latest sample of every counter
-when scraped.  The HTTP path and query parameters are ignored. All extant
-counters for all reporting entities are returned in the Prometheus exposition
-format.  (See the Prometheus `documentation
-<https://prometheus.io/docs/instrumenting/exposition_formats/#text-format-details>`_.)
+The Manager ``prometheus`` module is a Prometheus exporter. The active
+Manager serves cluster metrics at the path ``/metrics`` in the Prometheus
+text exposition format (see the Prometheus `documentation
+<https://prometheus.io/docs/instrumenting/exposition_formats/#prometheus-text-format>`_).
+A request for ``/`` returns a short HTML page that links to ``/metrics``,
+and a request with query parameters is refused with HTTP status 404. By
+default, the module collects the metrics in the background once per
+:confval:`mgr/prometheus/scrape_interval` and answers each scrape from that
+cache.
 
 .. note:: Ceph daemon performance counters are no longer exported by
    this module by default. That job has moved to the ``ceph-exporter``
    daemon, which cephadm deploys on every host and which reads the
    counters directly from the local daemon admin sockets. The
-   ``prometheus`` module continues to provide cluster-level metrics,
-   the service discovery endpoint, and RBD image metrics. See
+   ``prometheus`` module continues to provide cluster-level metrics and
+   RBD image metrics. Its ``ceph prometheus file_sd_config`` command
+   prints the Manager endpoints in the Prometheus file-based service
+   discovery format. In a cephadm deployment, the service discovery
+   endpoint that Prometheus uses is served by the ``cephadm`` module
+   (see :ref:`mgr-cephadm-monitoring`). See
    :ref:`monitoring` for an overview of the monitoring stack and
    `Ceph daemon performance counters metrics`_ below for how to
    re-enable the old behavior.
@@ -40,12 +43,16 @@ ceph-exporter
 ``ceph-exporter`` works alongside the Prometheus manager module. The two
 components have distinct responsibilities:
 
-- The **Prometheus manager module** exposes all cluster-level metrics by
-  default other than Ceph daemon performance counters. However, these metrics
-  may be exported by the Prometheus manager module by setting the module option
-  :confval:`mgr/prometheus/exclude_perf_counter` to `false`.
-- The **ceph-exporter daemon** exposes only Ceph daemon performance counters
-  as Prometheus metrics, running on each host in the cluster.
+- The **Prometheus manager module** exposes all cluster-level metrics. By
+  default it does not export Ceph daemon performance counters. To export
+  them from the module as well, set the module option
+  :confval:`mgr/prometheus/exclude_perf_counters` to ``false``.
+- The **ceph-exporter daemon** runs on each host in the cluster. It reads the
+  performance counters of the Ceph daemons on that host, other than Manager
+  daemons, from their admin sockets and exposes them as Prometheus metrics.
+  It also exposes a few metrics of its own, such as
+  ``ceph_exporter_scrape_time`` and, in Tentacle 20.2 and later releases,
+  ``ceph_daemon_socket_up``.
 
 Configuration
 -------------
@@ -88,10 +95,17 @@ SSL/TLS Support
 
 .. note::
 
+   Native TLS for the metrics endpoint is available in later releases only.
+   Squid 19.2, Tentacle 20.2 and Umbrella 21 do not have the ``ssl``,
+   ``ssl_server_port``, ``crt_file`` and ``key_file`` options or the
+   ``ceph prometheus set-ssl-certificate`` commands.
+
+.. note::
+
    For cephadm deployments, TLS for the monitoring stack is managed by
    cephadm itself. Use the ``secure_monitoring_stack`` option instead of
-   the manual configuration described below. See
-   :ref:`cephadm-monitoring-stack-security` for details.
+   the manual configuration described below. See "Enabling Security for the
+   Monitoring Stack" in :ref:`mgr-cephadm-monitoring` for details.
 
 The Prometheus module can be configured to serve metrics over HTTPS
 (HTTP secured with TLS). This is intended for non-cephadm deployments
@@ -131,13 +145,13 @@ to certificate files on disk:
 
       ceph prometheus clear-ssl-certificate
 
-To set a certificate for a specific manager daemon (e.g., ``mgr.a``),
-pass the manager ID:
+To set a certificate for one Manager daemon, pass its ID without the
+``mgr.`` prefix (for ``mgr.a``, the ID is ``a``):
 
 .. prompt:: bash #
 
-   ceph prometheus set-ssl-certificate mgr.a -i /path/to/cert.pem
-   ceph prometheus set-ssl-certificate-key mgr.a -i /path/to/key.pem
+   ceph prometheus set-ssl-certificate a -i /path/to/cert.pem
+   ceph prometheus set-ssl-certificate-key a -i /path/to/key.pem
 
 To disable TLS and revert to HTTP:
 
@@ -191,8 +205,10 @@ If that is the case, **a warning will be logged** and the module will either
 respond with a 503 HTTP status code (service unavailable) or
 it will return the content of the cache, even though it might be stale.
 
-This behavior can be configured. By default, it will return a 503 HTTP status
-code (service unavailable). You can set other options using the ``ceph config
+This behavior is set by ``mgr/prometheus/stale_cache_strategy``. Its default
+value, ``log``, behaves like ``fail``: the module returns a 503 HTTP status
+code (service unavailable). Any value other than ``return`` also behaves like
+``fail``. You can set other options using the ``ceph config
 set`` commands.
 
 To configure the module to respond with possibly stale data, set
@@ -210,7 +226,7 @@ To configure the module to respond with "service unavailable", set it to ``fail`
 
 If you are confident that you don't require the cache, you can disable it:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mgr mgr/prometheus/cache false
 
@@ -242,8 +258,9 @@ Ceph Health Checks
 ------------------
 
 The Manager ``prometheus`` module tracks and maintains a history of Ceph health checks,
-exposing them to the Prometheus server as discrete metrics. This allows Alertmanager
-rules to be configured for specific health check events.
+exposing them to the Prometheus server as discrete metrics. This lets you write
+Prometheus alerting rules for specific health checks. Prometheus sends the
+alerts that these rules raise to Alertmanager.
 
 The metrics take the following form:
 
@@ -256,9 +273,12 @@ The metrics take the following form:
     ceph_health_detail{name="PG_DEGRADED",severity="HEALTH_WARN"} 1.0
 
 The module also maintains an in-memory history of health-check states.
-By default the history retains a maximum of 1000 entries. This limit is configurable via the following runtime option:
-
-  ``mgr/prometheus/healthcheck_history_max_entries`` - the maximum number of unique health check entries to track in memory (default: 1000).
+It saves the history in the monitors' configuration key store, so the
+history survives a Manager restart or failover. The
+:confval:`mgr/prometheus/healthcheck_history_max_entries` option limits the
+number of entries (default: 1000); when the history is full, the oldest entry
+is dropped. The module reads this option only when it starts, so restart the
+module after you change it.
 
 This setting helps avoid unbounded memory growth in large or long-lived clusters.
 
@@ -266,10 +286,10 @@ The health check history may be retrieved and cleared by running the following c
 
 .. prompt:: bash #
 
-   ceph healthcheck history ls [--format {plain|json|json-pretty}]
+   ceph healthcheck history ls [--format {plain|json|json-pretty|yaml}]
    ceph healthcheck history clear
 
-The ``ceph healthcheck ls`` command provides an overview of the health checks that the cluster has
+The ``ceph healthcheck history ls`` command provides an overview of the health checks that the cluster has
 encountered since the last ``clear`` command was issued:
 
 .. prompt:: bash #
@@ -293,8 +313,9 @@ RBD I/O statistics
 
 The ``prometheus`` module can optionally collect RBD per-image I/O statistics by enabling
 dynamic OSD performance counters. Statistics are gathered for all images
-in the pools that are specified by the ``mgr/prometheus/rbd_stats_pools``
-configuration parameter. The parameter is a comma or space separated list
+in the pools that are named in the ``mgr/prometheus/rbd_stats_pools``
+configuration parameter and have the ``rbd`` application enabled. The module
+ignores any other pool in the list. The parameter is a comma or space separated list
 of ``pool[/namespace]`` entries. If the RBD namespace is not specified,
 statistics are collected for all namespaces in the pool.
 
@@ -337,13 +358,17 @@ the module option ``exclude_perf_counters`` to ``false``:
 Statistic names and labels
 ==========================
 
-These Prometheus stats names are the Ceph native names with
-illegal characters ``.``, ``-`` and ``::`` translated to ``_``,
-and ``ceph_`` prepended.
+Prometheus metric names are the Ceph native names with ``ceph_`` prepended.
+The characters ``.``, ``/``, ``-``, spaces and the sequence ``::`` become
+``_``. A ``+`` becomes ``_plus``, and a ``-`` at the end of a name becomes
+``_minus``: for example, the MDS counter ``mds_mem.ino-`` is exported as
+``ceph_mds_mem_ino_minus``.
 
-All daemon statistics have a ``ceph_daemon`` label with a value
+Daemon statistics have a ``ceph_daemon`` label with a value
 that identifies the type and ID of the daemon they come from,
-for example ``osd.123``.
+for example ``osd.123``. Statistics from RGW daemons have an ``instance_id``
+label instead, and ``ceph_rgw_metadata`` maps each ``instance_id`` to its
+``ceph_daemon`` name.
 A given metric may be reported by multiple types of daemon, so for
 example when when querying an OSD RocksDB stats, you may constrain
 the query with a pattern of the form ``ceph_daemon=~'osd.*'`` so that Monitor
@@ -353,8 +378,9 @@ Cluster statistics (i.e. those global to the Ceph cluster)
 have labels appropriate to the entity for which they are reported.  For example,
 metrics relating to pools have a ``pool_id`` label.
 
-Long-running averages that represent Ceph statistic histograms
-are represented by paired ``<name>_sum`` and ``<name>_count`` metrics.
+Long-running averages, such as latency counters, are exported as a pair of
+metrics: ``<name>_sum``, the total (in seconds for daemon time counters), and
+``<name>_count``, the number of events.
 This is similar to how histograms are represented in `Prometheus <https://prometheus.io/docs/concepts/metric_types/#histogram>`_
 and they are  treated `similarly <https://prometheus.io/docs/practices/histograms/>`_.
 
@@ -368,13 +394,15 @@ Pools have a ``ceph_pool_metadata`` metric of the following form:
 
 ::
 
-    ceph_pool_metadata{pool_id="2",name="cephfs_metadata_a"} 1.0
+    ceph_pool_metadata{pool_id="2",name="cephfs_metadata_a",type="replicated",description="replica:3",compression_mode="none",application="Filesystem"} 1.0
+
+The ``application`` label exists in Tentacle 20.2 and later releases.
 
 OSDs have a ``ceph_osd_metadata`` metric of the following form:
 
 ::
 
-    ceph_osd_metadata{cluster_addr="172.21.9.34:6802/19096",device_class="ssd",ceph_daemon="osd.0",public_addr="172.21.9.34:6801/19096",weight="1.0"} 1.0
+    ceph_osd_metadata{back_iface="eth1",ceph_daemon="osd.0",cluster_addr="172.21.9.34",device_class="ssd",front_iface="eth0",hostname="senta04",objectstore="bluestore",public_addr="172.21.9.34",ceph_version="ceph version 20.2.4 (<sha1>) tentacle (stable)"} 1.0
 
 
 Correlating drive statistics with node_exporter
@@ -388,7 +416,10 @@ drive statistics, Ceph creates series of the below form:
 
 ::
 
-    ceph_disk_occupation_human{ceph_daemon="osd.0", device="sdd", exported_instance="myhost"}
+    ceph_disk_occupation_human{ceph_daemon="osd.0", device="/dev/sdd", instance="myhost"}
+
+If Prometheus scrapes the Manager without ``honor_labels``, it renames the
+``instance`` label of these series to ``exported_instance``.
 
 To query drive metrics by OSD ID, use either the ``and`` operator or
 the ``*`` operator in your Prometheus query. All metadata
@@ -400,18 +431,22 @@ so that the results have additional labels from one side of the query.
 See the `prometheus documentation`__ for more information about constructing
 PromQL queries and exploring interactively via the Prometheus expression browser..
 
-__ https://prometheus.io/docs/prometheus/latest/querying/basics
+__ https://prometheus.io/docs/prometheus/latest/querying/basics/
 
 For example we can run a query like the below:
 
 ::
 
     rate(node_disk_written_bytes_total[30s]) and
-    on (device,instance) ceph_disk_occupation_human{ceph_daemon="osd.0"}
+    on (device,instance) label_replace(ceph_disk_occupation_human{ceph_daemon="osd.0"}, "device", "$1", "device", "/dev/(.*)")
 
-Out of the box the above query will not return any metrics since the ``instance`` labels of
-both metrics don't match. The ``instance`` label of ``ceph_disk_occupation_human``
-will be the currently active Manager.
+The ``device`` labels of the two series differ: Ceph reports the full device
+path, such as ``/dev/sdd``, and ``node_exporter`` reports ``sdd``. The example
+queries on this page remove the ``/dev/`` prefix with ``label_replace``.
+
+The ``instance`` labels of the two series must match as well. In a cephadm
+deployment they do, because both are the host name. In other deployments they
+usually differ, so the above query returns nothing.
 
 The following sections outline two approaches to remedy this.
 
@@ -432,17 +467,21 @@ The ``label_replace`` function (cp.
 `label_replace documentation <https://prometheus.io/docs/prometheus/latest/querying/functions/#label_replace>`_)
 can add a label to, or alter a label of, a metric within a query.
 
-To correlate an OSD with its drives' write rate, a query of the following form can be used:
+To correlate an OSD with its drives' write rate, rewrite both labels, as the
+Ceph Grafana dashboards do. The query reads the ``instance`` label that the
+module sets, so Prometheus must scrape the Manager with ``honor_labels: true``
+(see below):
 
 ::
 
     label_replace(
         rate(node_disk_written_bytes_total[30s]),
-        "exported_instance",
+        "instance",
         "$1",
         "instance",
-        "(.*):.*"
-    ) and on (device, exported_instance) ceph_disk_occupation_human{ceph_daemon="osd.0"}
+        "([^:.]*).*"
+    ) and on (instance, device)
+    label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon="osd.0"}, "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*")
 
 Configuring Prometheus server
 =============================
@@ -454,8 +493,10 @@ To enable Ceph to output properly-labeled data relating to any host,
 use the ``honor_labels`` setting when adding the Manager endpoints
 to your Prometheus configuration.
 
-This instructs Ceph to export the proper ``instance`` labels without Prometheus
-overwriting them at ingest. Without this setting, Prometheus applies an ``instance`` label
+``honor_labels: true`` tells Prometheus to keep the ``instance`` label that
+the module puts on a series (for example, on ``ceph_disk_occupation``)
+instead of replacing it with the address of the scraped Manager. Without
+this setting, Prometheus applies an ``instance`` label
 that includes the hostname and port of the endpoint from which each metric is scraped.
 Because Ceph clusters have multiple Manager daemons, this results in an
 ``instance`` label that changes  when the active Manager daemon
@@ -468,8 +509,11 @@ of your first Manager, or something arbitrary like ``ceph_cluster``.
 node_exporter hostname labels
 -----------------------------
 
-Set your ``instance`` labels to match what appears in Ceph's OSD metadata
-in the ``instance`` field.  This is generally the short hostname of the node.
+Set the ``instance`` label of each ``node_exporter`` target to the host name
+that Ceph records for the OSDs on that host: the ``hostname`` field of
+``ceph osd metadata``. This is generally the short hostname of the node. The
+module exports this value as the ``instance`` label of
+``ceph_disk_occupation`` and ``ceph_disk_occupation_human``.
 
 This is only necessary if you want to correlate Ceph stats with host stats,
 but you may find it useful to do so to facilitate correlation of
@@ -486,7 +530,7 @@ This is just an example: there are other ways to configure Prometheus
 scrape targets and label rewrite rules.
 
 prometheus.yml
-~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^
 
 ::
 
@@ -507,7 +551,7 @@ prometheus.yml
 
 
 ceph_targets.yml
-~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^
 
 
 ::
@@ -521,7 +565,7 @@ ceph_targets.yml
 
 
 node_targets.yml
-~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^
 
 ::
 
@@ -538,10 +582,9 @@ node_targets.yml
 Notes
 =====
 
-Counters and gauges are exported. Histograms and long-running
-averages are currently not exported.  It is possible that Ceph's 2-D histograms
-could be reduced to two separate 1-D histograms, and that long-running averages
-could be exported as metrics of Prometheus' ``Summary`` type.
+Counters, gauges and long-running averages are exported; each long-running
+average becomes a ``<name>_sum`` and a ``<name>_count`` metric. Ceph's
+two-dimensional histogram counters are not exported.
 
 Timestamps, as with many exporters, are set by Prometheus at ingest to
 the Prometheus server's scrape time. Prometheus expects that it is polling the
