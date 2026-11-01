@@ -18418,13 +18418,11 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
 }
 
 /* Adopt the whole store:  its identities, then every bucket, each the
- * way a command adopts one.  What `automatic` runs at startup.
- *
- * **Synchronously at startup, for now.**  The background machinery
- * that adopts bucket by bucket while serving is phase 5 (C8-C10) and
- * not built;  until then a startup that takes as long as its adoption
- * is honest about what it is doing.  A bucket that fails is reported
- * and the rest continue;  re-running adopts what is left. */
+ * way a command adopts one.  What `automatic` runs at startup when
+ * there is no io_context or no background tasks, and what `run=true`
+ * runs;  a gateway that serves adopts through the queue instead
+ * (start_adoption_queue()).  A bucket that fails is reported and the
+ * rest continue;  re-running adopts what is left. */
 int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
 			     optional_yield y,
 			     std::map<std::string, std::string>* report)
