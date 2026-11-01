@@ -170,6 +170,7 @@ void RGWRealmReloader::reload()
       ldpp_dout(&dp, 4) << "Got another notification, restarting realm "
           "reload." << dendl;
 
+      store_cleanup->shutdown();
       DriverManager::close_storage(store_cleanup);
     }
   }

@@ -42,6 +42,7 @@
 #include "rgw_bucket_logging.h"
 #include "rgw_crypt.h"
 #include "rgw_bl_rados.h"
+#include "rgw_gc.h"
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
 #include "rgw_lc_tier.h"
@@ -2845,6 +2846,11 @@ int RadosStore::meta_remove(const DoutPrefixProvider* dpp, std::string& metadata
 }
 
 void RadosStore::shutdown(void) {
+  // the io_context threads join before finalize() runs, so the gc
+  // processor has to stop here while they can still unwind it
+  if (auto gc = getRados()->get_gc()) {
+    gc->stop_processor();
+  }
   svc()->datalog_rados->blocking_shutdown();
   return;
 }
