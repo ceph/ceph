@@ -54,7 +54,7 @@ For example, run the following command to benchmark the command to get
    ceph mgr cli_benchmark 100 10 get osd_map
 
 
-In Umbrella 21 and later releases, you can flush one entry of the Manager's
+In Umbrella and later releases, you can flush one entry of the Manager's
 map cache by running a command of the following form:
 
 .. prompt:: bash #
