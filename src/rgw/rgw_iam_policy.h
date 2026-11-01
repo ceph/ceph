@@ -506,7 +506,7 @@ struct Condition {
     }
   }
 
-  static boost::optional<ceph::real_time> as_date(const std::string& s) {
+  static std::optional<ceph::real_time> as_date(const std::string& s) {
     std::size_t p = 0;
 
     try {
@@ -519,9 +519,9 @@ struct Condition {
 				  * 1000000000)));
       }
 
-      return from_iso_8601(std::string_view(s), false);
+      return from_iso_8601(std::string_view(s), ceph::iso_8601_mode::strict);
     } catch (const std::logic_error& e) {
-      return boost::none;
+      return std::nullopt;
     }
   }
 
