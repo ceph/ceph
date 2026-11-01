@@ -12,6 +12,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
+#include <deque>
 #include <map>
 
 class Context;
@@ -479,15 +480,30 @@ private:
   neorados::SnapSet m_snap_set;
   boost::system::error_code m_ec;
 
+  struct MapExtentsRequest {
+    librados::snap_t snap_id;
+    std::pair<librados::snap_t, librados::snap_t> snapshot_delta_key;
+    interval_set<uint64_t> diff_interval;
+  };
+  std::deque<MapExtentsRequest> m_map_extents_requests;
+  std::map<uint64_t, uint64_t> m_mapped_extents;
+  boost::system::error_code m_map_extents_ec;
+  bool m_initial_extents_written = false;
+
   ImageArea m_image_area = ImageArea::DATA;
   SnapshotDelta m_parent_snapshot_delta;
 
   void list_snaps();
   void handle_list_snaps(int r);
+  void map_extents();
+  void handle_map_extents(int r);
+  void append_diff_extents(
+      const std::pair<librados::snap_t, librados::snap_t>& snapshot_delta_key,
+      const interval_set<uint64_t>& diff_interval);
+  void finish_list_snaps();
 
   void list_from_parent();
   void handle_list_from_parent(int r);
-
   void zero_extent(uint64_t snap_id, bool dne);
 };
 
