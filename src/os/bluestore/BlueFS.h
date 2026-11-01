@@ -483,6 +483,15 @@ public:
         --file->num_writers;
       }
       for (unsigned i = 0; i < MAX_BDEV; ++i) {
+        if (iocv[i]) {
+          // Ensure no in-flight aio completions can still reference this
+          // IOContext's aio_t objects before we free them. fsync() only
+          // submits aios -- it does not guarantee they have completed --
+          // so an abrupt destructor call (e.g. simulating a crash) without
+          // a prior close_writer()/_drain_writer() can otherwise race with
+          // KernelDevice::_aio_thread() and use-after-free the aio_t list.
+          iocv[i]->aio_wait();
+        }
         delete iocv[i];
       }
     }
