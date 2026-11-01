@@ -43,13 +43,31 @@ public:
   }
 };
 
+// GET /admin/vectorbucket/rebuild — background rebuild status + event log.
+class RGWHandler_VectorBucketRebuild : public RGWHandler_Auth_S3 {
+protected:
+  RGWOp* op_get() override;
+public:
+  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
+  ~RGWHandler_VectorBucketRebuild() override = default;
+  int read_permissions(RGWOp*, optional_yield) override { return 0; }
+};
+
+class RGWRESTMgr_VectorBucketRebuild : public RGWRESTMgr {
+public:
+  RGWHandler_REST* get_handler(rgw::sal::Driver*,
+                               req_state*,
+                               const rgw::auth::StrategyRegistry& auth_registry,
+                               const std::string&) override {
+    return new RGWHandler_VectorBucketRebuild(auth_registry);
+  }
+};
+
 // Ceph admin REST API for vector-bucket internals, mounted at /admin/vectorbucket.
 // Sub-resources:
-//   /admin/vectorbucket?rebuild=true  — background rebuild status + event log
-//   /admin/vectorbucket/session        — LanceDB session cache (GET list, DELETE evict)
+//   /admin/vectorbucket/rebuild — background rebuild status + event log
+//   /admin/vectorbucket/session — LanceDB session cache (GET list, DELETE evict)
 class RGWHandler_VectorBucket : public RGWHandler_Auth_S3 {
-protected:
-  RGWOp *op_get() override;
 public:
   using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
   ~RGWHandler_VectorBucket() override = default;
@@ -60,6 +78,7 @@ class RGWRESTMgr_VectorBucket : public RGWRESTMgr {
 public:
   RGWRESTMgr_VectorBucket() {
     register_resource("session", new RGWRESTMgr_VectorBucketSession);
+    register_resource("rebuild", new RGWRESTMgr_VectorBucketRebuild);
   }
   ~RGWRESTMgr_VectorBucket() override = default;
 

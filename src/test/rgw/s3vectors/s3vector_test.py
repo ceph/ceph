@@ -6470,7 +6470,7 @@ def _grant_admin_caps():
 
 
 def get_rebuild_admin_status(since=0, bucket='', tenant=''):
-    """Query the ceph admin REST API (/admin/vectorbucket?rebuild=true) for
+    """Query the ceph admin REST API (/admin/vectorbucket/rebuild) for
     this RGW instance's background rebuild status + event log. Replaces log
     scraping. Returns the parsed JSON response. Optionally filter by bucket
     and/or tenant.
@@ -6488,7 +6488,7 @@ def get_rebuild_admin_status(since=0, bucket='', tenant=''):
     port_no = get_config_port()
     scheme = 'https://' if port_no in (443, 8443) else 'http://'
 
-    params = {'rebuild': 'true'}
+    params = {}
     if since:
         params['since'] = str(since)
     if bucket:
@@ -6496,7 +6496,7 @@ def get_rebuild_admin_status(since=0, bucket='', tenant=''):
     if tenant:
         params['tenant'] = tenant
 
-    url = f'{scheme}{hostname}:{port_no}/admin/vectorbucket'
+    url = f'{scheme}{hostname}:{port_no}/admin/vectorbucket/rebuild'
     creds = Credentials(get_access_key(), get_secret_key())
     request = AWSRequest(method='GET', url=url, params=params)
     # S3SigV4Auth (not plain SigV4Auth): RGW is an S3 service, so it expects the

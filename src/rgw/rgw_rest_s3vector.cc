@@ -1552,7 +1552,7 @@ std::string s3v_iso8601(ceph::coarse_real_time t) {
   return ceph::to_iso_8601(ceph::real_time{t.time_since_epoch()});
 }
 
-// GET /admin/vectorbucket?rebuild=true[&vectorbucket=<name>][&since=<epoch>]
+// GET /admin/vectorbucket/rebuild[?vectorbucket=<name>][&tenant=<t>][&since=<epoch>]
 // Returns this RGW instance's background rebuild status + event log.
 class RGWOp_VectorBucket_Rebuild_Status : public RGWRESTOp {
 public:
@@ -1731,11 +1731,8 @@ void RGWOp_VectorBucketSession_Drop::execute(optional_yield) {
 
 } // anonymous namespace
 
-RGWOp* RGWHandler_VectorBucket::op_get() {
-  if (s->info.args.exists("rebuild")) {
-    return new RGWOp_VectorBucket_Rebuild_Status;
-  }
-  return nullptr;
+RGWOp* RGWHandler_VectorBucketRebuild::op_get() {
+  return new RGWOp_VectorBucket_Rebuild_Status;
 }
 
 RGWOp* RGWHandler_VectorBucketSession::op_get() {
