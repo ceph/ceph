@@ -17,6 +17,7 @@
 #pragma clang diagnostic pop
 #pragma GCC diagnostic pop
 #include "rgw_oidc_provider.h"
+#include "rgw_sts_jwks_cache.h"
 
 
 namespace rgw::auth::sts {
@@ -38,6 +39,7 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   bool is_client_id_valid(std::vector<std::string>& client_ids, const std::string& client_id) const;
 
+  std::string get_cert_thumbprint(const std::string& cert) const;
   bool is_cert_valid(const std::vector<std::string>& thumbprints, const std::string& cert) const;
 
   int load_provider(const DoutPrefixProvider *dpp, optional_yield y,
@@ -50,6 +52,23 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::string get_role_name(const string& role_arn) const;
 
   std::string get_cert_url(const std::string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
+
+  mutable detail::JWKSCache jwks_cache;
+
+  struct fetched_jwks {
+    std::string document;
+    std::string cert_thumbprint; // of the JWKS endpoint, empty if not verified
+  };
+
+  fetched_jwks fetch_jwks(const DoutPrefixProvider* dpp, const std::string& iss,
+                          const std::vector<std::string>& thumbprints,
+                          optional_yield y) const;
+
+  // served from the cache only when token_kid is in the cached document
+  std::string get_jwks(const DoutPrefixProvider* dpp, const std::string& iss,
+                       const std::vector<std::string>& thumbprints,
+                       const std::optional<std::string>& token_kid,
+                       optional_yield y) const;
 
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>, bool>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
@@ -71,7 +90,7 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::string get_top_level_domain_from_host(const DoutPrefixProvider* dpp, const std::string& hostname) const;
   std::string extract_last_certificate(const DoutPrefixProvider* dpp, const std::string& pem_chain) const;
   bool verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const std::string& cert_url,
-      const std::vector<std::string>& thumbprints) const;
+      const std::vector<std::string>& thumbprints, std::string& cert_thumbprint) const;
   void shutdown_ssl(const DoutPrefixProvider* dpp, SSL* ssl, SSL_CTX* ctx) const;
 
 public:

@@ -75,6 +75,26 @@ List Global OIDC Providers
    radosgw-admin oidc-provider list
 
 
+JWKS Caching
+============
+
+For ``AssumeRoleWithWebIdentity``, RGW caches each provider's JSON Web Key Set
+(JWKS) for ``rgw_sts_jwks_cache_ttl`` seconds (default 300) instead of
+contacting the provider on every request. A token is served from the cache
+only when its ``kid`` is present in the cached JWKS. Any other token (an
+unknown ``kid``, or no ``kid`` at all) makes RGW fetch the key set from the
+provider as it did without the cache, so a newly rotated signing key is
+accepted without waiting for the cache to expire. A key that the provider
+removes from its JWKS stays accepted until the cached copy expires, so the TTL
+is also the maximum delay before a revoked key is rejected. With
+``rgw_enable_jwks_url_verification`` enabled, a cached JWKS is used only while
+the thumbprint of the certificate it was fetched through is still registered
+with the provider. Setting ``rgw_sts_jwks_cache_ttl`` to ``0`` disables the
+cache.
+
+.. confval:: rgw_sts_jwks_cache_ttl
+
+
 Trust Policy for Roles Using OIDC Providers
 ===========================================
 

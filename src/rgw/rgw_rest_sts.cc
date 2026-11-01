@@ -7,6 +7,7 @@
 #include <openssl/bio.h>
 
 #include <vector>
+#include <optional>
 #include <string>
 #include <array>
 #include <iomanip>
@@ -139,8 +140,8 @@ WebTokenEngine::is_client_id_valid(vector<string>& client_ids, const string& cli
   return false;
 }
 
-bool
-WebTokenEngine::is_cert_valid(const vector<string>& thumbprints, const string& cert) const
+std::string
+WebTokenEngine::get_cert_thumbprint(const string& cert) const
 {
   //calculate thumbprint of cert
   std::unique_ptr<BIO, decltype(&BIO_free_all)> certbio(BIO_new_mem_buf(cert.data(), cert.size()), BIO_free_all);
@@ -152,20 +153,32 @@ WebTokenEngine::is_cert_valid(const vector<string>& thumbprints, const string& c
   unsigned char fprint[EVP_MAX_MD_SIZE];
 
   if (!X509_digest(x_509cert.get(), fprint_type, fprint, &fprint_size)) {
-    return false;
+    return {};
   }
   stringstream ss;
   for (unsigned int i = 0; i < fprint_size; i++) {
     ss << std::setfill('0') << std::setw(2) << std::hex << (0xFF & (unsigned int)fprint[i]);
   }
-  std::string digest = ss.str();
+  return ss.str();
+}
 
+static bool is_thumbprint_registered(const vector<string>& thumbprints, const string& digest)
+{
+  if (digest.empty()) {
+    return false;
+  }
   for (auto& it : thumbprints) {
     if (boost::iequals(it,digest)) {
       return true;
     }
   }
   return false;
+}
+
+bool
+WebTokenEngine::is_cert_valid(const vector<string>& thumbprints, const string& cert) const
+{
+  return is_thumbprint_registered(thumbprints, get_cert_thumbprint(cert));
 }
 
 template <typename T>
@@ -592,8 +605,9 @@ WebTokenEngine::validate_signature_using_n_e(const DoutPrefixProvider* dpp, cons
 }
 
 bool WebTokenEngine::verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const std::string& cert_url,
-    const std::vector<std::string>& thumbprints) const
+    const std::vector<std::string>& thumbprints, std::string& cert_thumbprint) const
 {
+  cert_thumbprint.clear();
   if (!cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification")) {
     ldpp_dout(dpp, 5) << "Verification of JWKS endpoint is turned off." << dendl;
     return true;
@@ -618,39 +632,82 @@ bool WebTokenEngine::verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const
     return false;
   }
 
-  if (!is_cert_valid(thumbprints, cert)) {
+  const auto digest = get_cert_thumbprint(cert);
+  if (!is_thumbprint_registered(thumbprints, digest)) {
     ldpp_dout(dpp, 20) << "Cert doesn't match that with the thumbprints registered with oidc provider: " << cert.c_str() << dendl;
     return false;
   }
 
+  cert_thumbprint = digest;
   return true;
+}
+
+WebTokenEngine::fetched_jwks
+WebTokenEngine::fetch_jwks(const DoutPrefixProvider* dpp, const string& iss, const vector<string>& thumbprints, optional_yield y) const
+{
+  fetched_jwks result;
+  const auto cert_url = get_cert_url(iss, dpp, y);
+  if (cert_url.empty() || !verify_oidc_thumbprint(dpp, cert_url, thumbprints, result.cert_thumbprint)) {
+    ldpp_dout(dpp, 5) << "Not able to validate JWKS url with registered thumbprints" << dendl;
+    throw std::system_error(EINVAL, std::system_category());
+  }
+
+  // Get certificate
+  bufferlist cert_resp;
+  RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
+
+  int res = cert_req.process(dpp, y);
+  if (res < 0) {
+    ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
+    throw std::system_error(EINVAL, std::system_category());
+  }
+  //Debug only
+  ldpp_dout(dpp, 20) << "HTTP status: " << cert_req.get_http_status() << dendl;
+  ldpp_dout(dpp, 20) << "JSON Response is: " << cert_resp.c_str() << dendl;
+
+  result.document = cert_resp.to_str();
+  return result;
+}
+
+std::string
+WebTokenEngine::get_jwks(const DoutPrefixProvider* dpp, const string& iss, const vector<string>& thumbprints, const std::optional<std::string>& token_kid, optional_yield y) const
+{
+  const std::chrono::seconds ttl{cct->_conf.get_val<uint64_t>("rgw_sts_jwks_cache_ttl")};
+  if (ttl.count() == 0) {
+    return fetch_jwks(dpp, iss, thumbprints, y).document;
+  }
+
+  static const vector<string> no_thumbprints;
+  const auto& required_thumbprints =
+      cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification") ? thumbprints : no_thumbprints;
+
+  const auto now = detail::JWKSCache::clock::now();
+  if (auto cached = jwks_cache.lookup(iss, required_thumbprints, token_kid, ttl, now)) {
+    ldpp_dout(dpp, 20) << "Using cached JWKS for issuer " << iss << dendl;
+    return *cached;
+  }
+
+  // fetched outside the cache lock; concurrent misses may all fetch
+  auto fetched = fetch_jwks(dpp, iss, thumbprints, y);
+  // don't cache a bad response for the whole TTL
+  if (detail::is_jwks_document(fetched.document)) {
+    jwks_cache.store(iss, std::move(fetched.cert_thumbprint), fetched.document, now);
+  }
+  return fetched.document;
 }
 
 void
 WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
-    const auto cert_url = get_cert_url(iss, dpp, y);
-    if (cert_url.empty() || !verify_oidc_thumbprint(dpp, cert_url, thumbprints)) {
-      ldpp_dout(dpp, 5) << "Not able to validate JWKS url with registered thumbprints" << dendl;
-      throw std::system_error(EINVAL, std::system_category());
+    std::optional<std::string> token_kid;
+    if (decoded.has_key_id()) {
+      token_kid = decoded.get_key_id();
     }
-
-    // Get certificate
-    bufferlist cert_resp;
-    RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
-
-    int res = cert_req.process(dpp, y);
-    if (res < 0) {
-      ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
-      throw std::system_error(EINVAL, std::system_category());
-    }
-    //Debug only
-    ldpp_dout(dpp, 20) << "HTTP status: " << cert_req.get_http_status() << dendl;
-    ldpp_dout(dpp, 20) << "JSON Response is: " << cert_resp.c_str() << dendl;
+    const auto jwks = get_jwks(dpp, iss, thumbprints, token_kid, y);
 
     JSONParser parser;
-    if (parser.parse(cert_resp.c_str(), cert_resp.length())) {
+    if (parser.parse(jwks.c_str(), jwks.length())) {
       JSONObj* val = parser.find_obj("keys");
       if (val && val->is_array()) {
         vector<string> keys = val->get_array_elements();

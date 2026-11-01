@@ -4040,6 +4040,23 @@ options:
   with_legacy: true
   see_also:
   - rgw_sts_max_session_duration
+- name: rgw_sts_jwks_cache_ttl
+  type: uint
+  level: advanced
+  desc: Seconds to cache an OIDC provider's JWKS for AssumeRoleWithWebIdentity
+  long_desc: AssumeRoleWithWebIdentity verifies the web identity token against
+    the signing keys published by the OIDC provider. With a non-zero value the
+    provider's OpenID discovery document and JWKS are fetched once per issuer
+    and reused for this many seconds for tokens whose key id is in the cached
+    key set. A token with an unknown key id, or without one, fetches the keys
+    from the provider as before, so provider key rotation is still honored. A
+    key the provider removes stays accepted until the cached copy expires. Set
+    to 0 to fetch the keys on every request.
+  default: 300
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_jwks_url_verification
 - name: rgw_max_listing_results
   type: uint
   level: advanced
