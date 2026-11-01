@@ -107,6 +107,7 @@
                 @for (poolType of data.poolTypes; track poolType) {
                   <cds-radio
                     [value]="poolType"
+                    [checked]="form.controls['poolType'].value === poolType"
                     [id]="poolType"
                     [disabled]="isStretchMode && !editing && poolType === 'erasure'"
                     (change)="data.erasureInfo = false; data.crushInfo = false"
@@ -126,6 +127,7 @@
               @for (poolType of data.poolTypes; track poolType) {
                 <cds-radio
                   [value]="poolType"
+                  [checked]="form.controls['poolType'].value === poolType"
                   [id]="poolType"
                   [disabled]="isStretchMode && !editing && poolType === 'erasure'"
                   (change)="data.erasureInfo = false; data.crushInfo = false"
