@@ -296,6 +296,51 @@ public:
     auto file_path = make_file_path(relpath);
     return ceph_chmod(cmount, file_path.c_str(), mode);
   }
+  int chmod_path(const string& path, int mode)
+  {
+    return ceph_chmod(cmount, path.c_str(), mode);
+  }
+  int punch_hole(const char* relpath, int64_t offset, int64_t len)
+  {
+    auto file_path = make_file_path(relpath);
+    int fd = ceph_open(cmount, file_path.c_str(), O_WRONLY, 0);
+    if (fd < 0) {
+      return fd;
+    }
+    int r = ceph_fallocate(cmount, fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+                           offset, len);
+    ceph_close(cmount, fd);
+    return r;
+  }
+  int truncate(const char* relpath, int64_t size)
+  {
+    auto file_path = make_file_path(relpath);
+    return ceph_truncate(cmount, file_path.c_str(), size);
+  }
+  // wait for the MDS to finish trimming objects after a truncate
+  bool wait_for_truncate(const char* relpath, uint64_t size)
+  {
+    struct ceph_statx stx;
+    if (statx(relpath, &stx, CEPH_STATX_INO, 0) < 0) {
+      return false;
+    }
+    for (unsigned attempt = 0; attempt < 30; ++attempt) {
+      cmdmap_t cmdmap;
+      cmdmap["number"] = (int64_t)stx.stx_ino;
+      auto dump = tell_rank0("dump inode", std::move(cmdmap));
+      if (dump.type() == json_spirit::obj_type) {
+        auto& inode = dump.get_obj();
+        auto s = inode.find("size");
+        auto p = inode.find("truncate_pending");
+        if (s != inode.end() && s->second.get_uint64() == size &&
+            p != inode.end() && p->second.get_uint64() == 0) {
+          return true;
+        }
+      }
+      sleep(1);
+    }
+    return false;
+  }
   int utimes(const char* relpath, struct timeval times[2])
   {
     auto file_path = make_file_path(relpath);
@@ -505,8 +550,12 @@ public:
   int for_each_file_blockdiff(const char* relpath,
 			      const char* snap1,
 			      const char* snap2,
-			      interval_set<uint64_t> *expected=nullptr)
+			      interval_set<uint64_t> *expected=nullptr,
+			      interval_set<uint64_t> *actual=nullptr)
   {
+    if (actual) {
+      actual->clear();
+    }
     auto s1 = make_snap_name(snap1);
     auto s2 = make_snap_name(snap2);
     ceph_file_blockdiff_info info;
@@ -537,6 +586,9 @@ public:
 	if (expected) {
 	  expected->erase(b->offset, b->len);
 	}
+	if (actual) {
+	  actual->union_insert(b->offset, b->len);
+	}
 	++b;
 	--nr_blocks;
       }
@@ -552,6 +604,37 @@ public:
     }
 
     return r;
+  }
+
+  int read_range(const char* relpath, uint64_t offset, uint64_t len,
+                 std::string* out)
+  {
+    auto file_path = make_file_path(relpath);
+    int fd = ceph_open(cmount, file_path.c_str(), O_RDONLY, 0);
+    if (fd < 0) {
+      return fd;
+    }
+    out->resize(len);
+    int r = ceph_read(cmount, fd, out->data(), len, offset);
+    ceph_close(cmount, fd);
+    out->resize(std::max(r, 0));
+    return r;
+  }
+
+  // the layout can only be set on an empty file
+  int create_file_with_layout(const char* relpath, uint64_t stripe_unit,
+                              uint64_t stripe_count, uint64_t object_size)
+  {
+    auto file_path = make_file_path(relpath);
+    int r = ceph_mknod(cmount, file_path.c_str(), 0666, 0);
+    if (r < 0) {
+      return r;
+    }
+    auto layout = "stripe_unit=" + std::to_string(stripe_unit) +
+                  " stripe_count=" + std::to_string(stripe_count) +
+                  " object_size=" + std::to_string(object_size);
+    return ceph_setxattr(cmount, file_path.c_str(), "ceph.file.layout",
+                         layout.c_str(), layout.size(), 0);
   }
 
   int mkdir(const char* relpath)
@@ -2446,4 +2529,185 @@ TEST(LibCephFS, SnapDiffStatDelta) {
 
   test_mount.rmsnap("snap1");
   test_mount.rmsnap("snap2");
+}
+
+// remove snapshots even if an assertion fails
+struct SnapCleanup {
+  TestMount& test_mount;
+  std::vector<const char*> snaps;
+  ~SnapCleanup() {
+    for (auto snap : snaps) {
+      test_mount.rmsnap(snap);
+    }
+  }
+};
+
+// objects created between the snapshots, but not after snap2, are reported
+TEST(LibCephFS, BlockDiffHolesFilledAroundNewerSnapshot)
+{
+  TestMount test_mount;
+  SnapCleanup cleanup{test_mount, {"snap1", "snap2"}};
+  const uint64_t obj = 4 * 1024 * 1024;
+  const uint64_t blk = 1024 * 1024;
+  ASSERT_EQ(0, test_mount.create_file_with_layout("fileA", obj, 1, obj));
+
+  // objects 0 and 5 exist, 1-4 are holes
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, 0));
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, 5 * obj));
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  // between the snapshots: change object 0, create objects 1 and 3
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, blk, 0));
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, obj));
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, 3 * obj));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // after snap2: create object 2, rewrite the start of object 3
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, 2 * obj));
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, blk, 3 * obj));
+
+  interval_set<uint64_t> changed;
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2",
+                                                  nullptr, &changed));
+  std::cout << "changed=" << changed << std::endl;
+  interval_set<uint64_t> expected;
+  expected.insert(0, blk);
+  expected.insert(obj, obj);
+  expected.insert(3 * obj, obj);
+  ASSERT_TRUE(changed.contains(expected))
+    << "expected=" << expected << " changed=" << changed;
+  // objects 2, 4 and 5 are not reported
+  interval_set<uint64_t> unchanged;
+  unchanged.insert(2 * obj, obj);
+  unchanged.insert(4 * obj, 2 * obj);
+  unchanged.intersection_of(changed);
+  ASSERT_TRUE(unchanged.empty()) << "unchanged extents reported: " << unchanged;
+}
+
+// another client's setattr ends the snap2 inode at a foreign snapid, then
+// object 1 is cloned at snap3
+TEST(LibCephFS, BlockDiffHoleFilledAfterForeignSeqCow)
+{
+  TestMount test_mount;
+  SnapCleanup cleanup{test_mount, {"snap1", "snap2", "snap3"}};
+  TestMount other("blockdiff_other");
+  SnapCleanup other_cleanup{other, {"foreign"}};
+  const uint64_t obj = 4 * 1024 * 1024;
+  const uint64_t blk = 1024 * 1024;
+  ASSERT_EQ(0, test_mount.create_file_with_layout("fileA", obj, 1, obj));
+
+  // objects 0 and 4 exist, 1-3 are holes
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, 0));
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, 4 * obj));
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  // create object 1 between the snapshots
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, obj));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // end the snap2 inode at a foreign snapid
+  ASSERT_EQ(0, other.mksnap("foreign"));
+  ASSERT_EQ(0, other.chmod_path(test_mount.make_file_path("fileA"), 0600));
+
+  // clone object 1 at snap3
+  ASSERT_EQ(0, test_mount.mksnap("snap3"));
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, blk, obj));
+
+  uint64_t snapid1, snapid2, foreign;
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  ASSERT_EQ(0, other.get_snapid("foreign", &foreign));
+  std::cout << "snap1=" << snapid1 << " snap2=" << snapid2
+            << " foreign=" << foreign << std::endl;
+
+  // object 1 in snap2 holds the data written between the snapshots
+  std::string data;
+  auto snap2_file = test_mount.make_snap_path("snap2", "fileA");
+  ASSERT_EQ((int)obj, test_mount.read_range(snap2_file.c_str(), obj, obj, &data));
+  ASSERT_EQ(std::string::npos, data.find('\0'));
+
+  interval_set<uint64_t> changed;
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2",
+                                                  nullptr, &changed));
+  std::cout << "changed=" << changed << std::endl;
+  interval_set<uint64_t> expected;
+  expected.insert(obj, obj);
+  ASSERT_EQ(expected, changed) << "changed=" << changed;
+}
+
+// same as above, but object 1 is truncated instead of rewritten
+TEST(LibCephFS, BlockDiffHoleFilledTruncatedAfterForeignSeqCow)
+{
+  TestMount test_mount;
+  SnapCleanup cleanup{test_mount, {"snap1", "snap2"}};
+  TestMount other("blockdiff_other");
+  SnapCleanup other_cleanup{other, {"foreign"}};
+  const uint64_t obj = 4 * 1024 * 1024;
+  const uint64_t blk = 1024 * 1024;
+  ASSERT_EQ(0, test_mount.create_file_with_layout("fileA", obj, 1, obj));
+
+  // objects 0 and 4 exist, 1-3 are holes
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, 0));
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, 4 * obj));
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  // create object 1 between the snapshots
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, obj, obj));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // end the snap2 inode at a foreign snapid
+  ASSERT_EQ(0, other.mksnap("foreign"));
+  ASSERT_EQ(0, other.chmod_path(test_mount.make_file_path("fileA"), 0600));
+
+  // keep the first block of object 1
+  ASSERT_EQ(0, test_mount.truncate("fileA", obj + blk));
+  ASSERT_TRUE(test_mount.wait_for_truncate("fileA", obj + blk));
+
+  uint64_t snapid1, snapid2, foreign;
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  ASSERT_EQ(0, other.get_snapid("foreign", &foreign));
+  std::cout << "snap1=" << snapid1 << " snap2=" << snapid2
+            << " foreign=" << foreign << std::endl;
+
+  // object 1 in snap2 still holds the data written between the snapshots
+  std::string data;
+  auto snap2_file = test_mount.make_snap_path("snap2", "fileA");
+  ASSERT_EQ((int)obj, test_mount.read_range(snap2_file.c_str(), obj, obj, &data));
+  ASSERT_EQ(std::string::npos, data.find('\0'));
+
+  interval_set<uint64_t> changed;
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2",
+                                                  nullptr, &changed));
+  std::cout << "changed=" << changed << std::endl;
+  interval_set<uint64_t> expected;
+  expected.insert(obj, obj);
+  ASSERT_EQ(expected, changed) << "changed=" << changed;
+}
+
+// punching out a whole object between the snapshots removes it
+TEST(LibCephFS, BlockDiffObjectPunchedBetweenSnapshots)
+{
+  TestMount test_mount;
+  SnapCleanup cleanup{test_mount, {"snap1", "snap2"}};
+  const uint64_t obj = 4 * 1024 * 1024;
+  ASSERT_EQ(0, test_mount.create_file_with_layout("fileA", obj, 1, obj));
+  ASSERT_LE(0, test_mount.write_random("fileA", 3, obj, 0));
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+  ASSERT_EQ(0, test_mount.punch_hole("fileA", obj, obj));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // object 1 reads as zeros in snap2
+  std::string data;
+  auto snap2_file = test_mount.make_snap_path("snap2", "fileA");
+  ASSERT_EQ((int)obj, test_mount.read_range(snap2_file.c_str(), obj, obj, &data));
+  ASSERT_EQ(std::string::npos, data.find_first_not_of('\0'));
+
+  interval_set<uint64_t> changed;
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2",
+                                                  nullptr, &changed));
+  std::cout << "changed=" << changed << std::endl;
+  interval_set<uint64_t> expected;
+  expected.insert(obj, obj);
+  ASSERT_EQ(expected, changed) << "changed=" << changed;
 }
