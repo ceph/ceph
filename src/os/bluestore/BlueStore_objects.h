@@ -774,6 +774,13 @@ namespace bluestore {
       return true;
     }
 
+    /// end of offset~length, clamped to OBJECT_MAX_SIZE instead of
+    /// wrapping around 2^32
+    static uint32_t range_end(uint32_t offset, uint32_t length) {
+      return std::min<uint64_t>((uint64_t)offset + length,
+                                BlueStore::OBJECT_MAX_SIZE);
+    }
+
     /// ensure that a range of the map is loaded
     void fault_range(KeyValueDB *db,
 		     uint32_t offset, uint32_t length);
