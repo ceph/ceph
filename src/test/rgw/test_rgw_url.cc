@@ -140,3 +140,58 @@ TEST(TestURL, WithPath)
     ASSERT_TRUE(parse_url_authority(url, host, user, password));
 }
 
+
+TEST(TestURL, HostPortDefault)
+{
+  std::string host;
+  uint16_t port = 0;
+  ASSERT_TRUE(parse_url_host_port("https://example.com/.well-known/jwks", host, port, 443));
+  EXPECT_EQ("example.com", host);
+  EXPECT_EQ(443, port);
+}
+
+TEST(TestURL, HostPortExplicit)
+{
+  std::string host;
+  uint16_t port = 0;
+  ASSERT_TRUE(parse_url_host_port("https://kubernetes.example.com:6443/openid/v1/jwks", host, port, 443));
+  EXPECT_EQ("kubernetes.example.com", host);
+  EXPECT_EQ(6443, port);
+}
+
+TEST(TestURL, HostPortExplicitDefault)
+{
+  std::string host;
+  uint16_t port = 0;
+  ASSERT_TRUE(parse_url_host_port("https://example.com:443/", host, port, 443));
+  EXPECT_EQ("example.com", host);
+  EXPECT_EQ(443, port);
+}
+
+TEST(TestURL, HostPortIPv6)
+{
+  std::string host;
+  uint16_t port = 0;
+  ASSERT_TRUE(parse_url_host_port("https://[fe80::1]:6443/openid/v1/jwks", host, port, 443));
+  EXPECT_EQ("fe80::1", host);
+  EXPECT_EQ(6443, port);
+}
+
+TEST(TestURL, HostPortUserinfo)
+{
+  std::string host;
+  uint16_t port = 0;
+  ASSERT_TRUE(parse_url_host_port("https://user:pass@example.com:8443", host, port, 443));
+  EXPECT_EQ("example.com", host);
+  EXPECT_EQ(8443, port);
+}
+
+TEST(TestURL, HostPortInvalid)
+{
+  std::string host;
+  uint16_t port = 0;
+  EXPECT_FALSE(parse_url_host_port("", host, port, 443));
+  EXPECT_FALSE(parse_url_host_port("example.com:6443/jwks", host, port, 443));
+  EXPECT_FALSE(parse_url_host_port("https:///", host, port, 443));
+  EXPECT_FALSE(parse_url_host_port("not a url", host, port, 443));
+}
