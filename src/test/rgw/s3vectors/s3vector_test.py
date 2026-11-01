@@ -3749,43 +3749,41 @@ def test_put_vectors_duplicate_metadata_field_names():
     conn = connection()
     bucket_name = gen_bucket_name()
     dimension = 4
-    _ensure_s3_bucket_for_vector_bucket(bucket_name)
-    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    try:
+        _create_vector_bucket(conn, bucket_name)
 
-    index_name = 'test-index'
-    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
-                               dataType='float32', dimension=dimension, distanceMetric='euclidean',
-                               metadataConfiguration={'filterableMetadataKeys': [{'name': 'genre'}]})
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        index_name = 'test-index'
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension, distanceMetric='euclidean',
+                                   metadataConfiguration={'filterableMetadataKeys': [{'name': 'genre'}]})
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    # note that the metadata is not built with a JSON encoder here, since it would
-    # keep only one of the values of a duplicated field
-    vectors = [
-        {'key': 'v0', 'data': generate_data(dimension, 0),
-         'metadata': '{"color": "red", "color": "blue"}'},
-    ]
-    assert_put_vectors_validation_error(conn,
-        'vectors[0].metadata.color',
-        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        # note that the metadata is not built with a JSON encoder here, since it would
+        # keep only one of the values of a duplicated field
+        vectors = [
+            {'key': 'v0', 'data': generate_data(dimension, 0),
+             'metadata': '{"color": "red", "color": "blue"}'},
+        ]
+        assert_put_vectors_validation_error(conn,
+            'vectors[0].metadata.color',
+            vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
 
-    # the same, for a filterable field
-    vectors = [
-        {'key': 'v1', 'data': generate_data(dimension, 1),
-         'metadata': '{"genre": "rock", "genre": "jazz"}'},
-    ]
-    assert_put_vectors_validation_error(conn,
-        'vectors[0].metadata.genre',
-        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        # the same, for a filterable field
+        vectors = [
+            {'key': 'v1', 'data': generate_data(dimension, 1),
+             'metadata': '{"genre": "rock", "genre": "jazz"}'},
+        ]
+        assert_put_vectors_validation_error(conn,
+            'vectors[0].metadata.genre',
+            vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
 
-    # none of the vectors was added
-    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    assert len(result.get('vectors', [])) == 0
+        # none of the vectors was added
+        result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert len(result.get('vectors', [])) == 0
 
-    # cleanup
-    _ = _delete_vector_bucket(conn, bucket_name)
-    _delete_s3_bucket_for_vector_bucket(bucket_name)
+    finally:
+        _cleanup_vector_bucket(conn, bucket_name)
 
 @pytest.mark.vector_test
 def test_put_vectors_metadata_limits():

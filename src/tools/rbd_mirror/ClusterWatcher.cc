@@ -3,7 +3,6 @@
 
 #include "ClusterWatcher.h"
 #include "include/stringify.h"
-#include "common/ceph_json.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"

@@ -243,14 +243,12 @@ int RGWPolicy::check(RGWPolicyEnv *env, string& err_msg)
   return 0;
 }
 
-
-int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
+int RGWPolicy::from_json(std::string_view json_in, string& err_msg)
 {
   JSONParser parser;
-
-  if (!parser.parse(bl.c_str(), bl.length())) {
-    err_msg = "Malformed JSON";
-    dout(0) << "malformed json" << dendl;
+  if (!parser.parse(json_in)) {
+    err_msg = fmt::format("malformed JSON (RGWPolicy) length = {}:\n{}\n----\n", json_in.length(), json_in);
+    dout(0) << err_msg << dendl;
     return -EINVAL;
   }
 
@@ -258,7 +256,7 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
   JSONObjIter iter = parser.find_first("expiration");
   if (iter.end()) {
     err_msg = "Policy missing expiration";
-    dout(0) << "expiration not found" << dendl;
+    dout(0) << err_msg << dendl;
     return -EINVAL; // change to a "no expiration" error following S3
   }
 
@@ -312,3 +310,9 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
   }
   return 0;
 }
+
+int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
+{
+ return from_json(std::string_view { bl.c_str(), bl.length() }, err_msg);
+}
+
