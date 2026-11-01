@@ -723,8 +723,10 @@ function test_mon_caps()
   cat $TMPFILE
   check_response "Permission denied"
 
+  # Cleanup bad keyring
   rm -rf $TEMP_DIR/ceph.client.bug.keyring
   ceph auth del client.bug
+
   ceph-authtool --create-keyring $TEMP_DIR/ceph.client.bug.keyring
   chmod +r  $TEMP_DIR/ceph.client.bug.keyring
   ceph-authtool  $TEMP_DIR/ceph.client.bug.keyring -n client.bug --gen-key
@@ -732,6 +734,10 @@ function test_mon_caps()
   ceph auth add client.bug -i  $TEMP_DIR/ceph.client.bug.keyring
   rados lspools --no-mon-config --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
   check_response "Permission denied"
+
+  # Cleanup bad keyring
+  rm -rf $TEMP_DIR/ceph.client.bug.keyring
+  ceph auth del client.bug
 }
 
 function test_mon_misc()
@@ -2934,7 +2940,8 @@ function test_osd_messenger_dump()
 }
 function test_mon_messenger_dump()
 {
-  do_messenger_dump_basics_test mon.a
+  local target="mon.a"
+  do_messenger_dump_basics_test "$target"
   # Testing the tcp_info feature requires at lease one messenger TCP
   # conneciton. Test only the mon as it is very unlikely that it
   # doesn't have an active connection. Also only test for one
