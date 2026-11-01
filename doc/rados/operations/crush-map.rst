@@ -771,6 +771,69 @@ steps when an out OSD is encountered.  Using MSR rules requires that
 OSDs and clients are required to support the CRUSH_MSR feature bit
 (Squid or newer).
 
+.. _crush-rule-change-preserve-acting:
+
+Changing a pool's CRUSH rule with minimal data movement
+-------------------------------------------------------
+
+When an erasure-coded pool is switched to a CRUSH rule with a different
+failure domain (for example, from ``rack`` to ``row``), CRUSH recomputes the
+placement of every PG, and the ``indep`` placement used by erasure-coded rules
+selects most shards differently at the new level. Any existing
+``pg-upmap-items`` entries for the pool, such as those created by the
+:ref:`balancer`, are cancelled or pruned because they no longer match the new
+rule. As a result, most of the data in the pool usually moves, even though
+many shards could legally stay where they are under the new failure domain.
+Reverting the rule change does not undo this: the original CRUSH placement is
+restored, but the cancelled upmap entries are not.
+
+Replicated pools are much less affected. With the default tunables
+(``chooseleaf_vary_r=1``), the ``firstn`` placement used by replicated rules
+keeps each replica on its current OSD unless it now shares a failure-domain
+bucket with another replica, and most existing ``pg-upmap-items`` entries
+remain valid. A plain rule change therefore already moves close to the
+minimum amount of data for replicated pools.
+
+When :confval:`mon_crush_rule_change_preserve_acting` is enabled, the
+``ceph osd pool set <pool-name> crush_rule <rule-name>`` command also stages,
+in the same OSDMap epoch as the rule change, ``pg-upmap-items`` entries that
+keep each shard (or replica) on an OSD of its current acting set whenever the
+new failure domain allows it. Only the shards that violate the new failure
+domain are relocated, so data movement is reduced to the minimum the new rule
+requires. Because the rule change and the entries are applied atomically, it
+is not necessary to set ``norebalance`` beforehand. For erasure-coded pools,
+retained shards are kept at their position in the acting set. The option
+also applies to replicated pools, where it is harmless but, for the reasons
+above, usually brings little or no additional reduction in data movement.
+
+To enable this behavior, run the following command before you change the
+pool's CRUSH rule:
+
+.. prompt:: bash $
+
+   ceph config set mon mon_crush_rule_change_preserve_acting true
+
+The replacement OSDs for the relocated shards are chosen according to
+:confval:`mon_crush_rule_change_preserve_acting_fill_strategy`.
+``load-aware`` (the default) leaves the pool close to balanced, while ``hash``
+generates fewer ``pg-upmap-items`` entries at the cost of a less even
+distribution. Either way, if the upmap balancer is enabled, it progressively
+optimizes the remaining imbalance and retires the generated entries, just as
+it does for any other ``pg-upmap-items`` entry.
+
+The monitor falls back to a plain rule change (without staging any entries)
+and logs the reason when any of the following is true:
+
+- ``require_min_compat_client`` is older than ``luminous`` (see :ref:`upmap`).
+- The pool has a ``pg_num`` change in progress.
+- The pool has more PGs than
+  :confval:`mon_crush_rule_change_preserve_acting_max_pgs`, which bounds the
+  work done synchronously by the monitor.
+
+.. confval:: mon_crush_rule_change_preserve_acting
+.. confval:: mon_crush_rule_change_preserve_acting_fill_strategy
+.. confval:: mon_crush_rule_change_preserve_acting_max_pgs
+
 
 Deleting rules
 --------------
