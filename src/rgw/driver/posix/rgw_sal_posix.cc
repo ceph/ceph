@@ -82,7 +82,7 @@ std::string get_key_fname(rgw_obj_key& key, bool use_version)
   } else {
     oid = key.get_index_key_name();
   }
-  std::string fname = url_encode(oid, true);
+  std::string fname = path_encode(oid);
 
   if (!key.get_ns().empty()) {
     /* Namespaced objects are hidden */
@@ -113,9 +113,9 @@ static inline std::string bucket_fname(std::string name, std::optional<std::stri
   std::string bname;
 
   if (ns)
-    bname = "." + *ns + "_" + url_encode(name, true);
+    bname = "." + *ns + "_" + path_encode(name);
   else
-    bname = url_encode(name, true);
+    bname = path_encode(name);
 
   return bname;
 }
@@ -150,7 +150,7 @@ static bool decode_attr(Attrs &attrs, const char *name, F &f) {
 static inline rgw_obj_key decode_obj_key(const char* fname)
 {
   std::string dname, oname, ns; // XXX ns is unused?
-  dname = url_decode(fname);
+  dname = path_decode(fname);
   rgw_obj_key key;
   rgw_obj_key::parse_raw_oid(dname, &key);
   return key;
@@ -2440,7 +2440,7 @@ int POSIXDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& ow
       continue;
     }
     RGWBucketEnt ent;
-    ent.bucket.name = url_decode(entry->d_name);
+    ent.bucket.name = path_decode(entry->d_name);
     ent.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
     // TODO: ent.size and ent.count
 
@@ -4562,7 +4562,7 @@ std::string POSIXMultipartUpload::get_fname()
 {
   std::string name;
 
-  name = "." + mp_ns + "_" + url_encode(get_meta(), true);
+  name = "." + mp_ns + "_" + path_encode(get_meta());
 
   return name;
 }

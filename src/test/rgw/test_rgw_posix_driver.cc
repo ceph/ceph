@@ -1601,7 +1601,7 @@ TEST_F(POSIXBucketTest, MultipartUpload)
 TEST_F(POSIXBucketTest, MPUploadCreate)
 {
   std::string upload_id = "c0ffee";
-  std::string mpname{".multipart_" + testname + "." + upload_id};
+  std::string mpname{".multipart_" + path_encode(testname + "." + upload_id)};
   sf::path tp{bp / "root" / testname / mpname};
   EXPECT_FALSE(sf::exists(tp));
 
@@ -1633,7 +1633,7 @@ public:
 
   std::unique_ptr<rgw::sal::MultipartUpload> get_upload(std::string upload_id) {
     POSIXBucketTest::SetUp();
-    mpname = ".multipart_" + testname + "." + upload_id;
+    mpname = ".multipart_" + path_encode(testname + "." + upload_id);
 
     std::unique_ptr<rgw::sal::MultipartUpload> upload =
       bucket->get_multipart_upload(testname, upload_id);

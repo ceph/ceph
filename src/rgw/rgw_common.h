@@ -1954,6 +1954,13 @@ extern void url_encode(const std::string& src, std::string& dst,
                        bool encode_slash = true);
 extern std::string url_encode(const std::string& src, bool encode_slash = true);
 extern std::string url_remove_prefix(const std::string& url); // Removes http, https and www from url
+extern void path_encode(const std::string& src, std::string& dst);
+extern std::string path_encode(const std::string& src);
+static inline std::string path_decode(const std::string_view& src_str,
+                              bool in_query = false)
+{
+  return url_decode(src_str, in_query);
+}
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
