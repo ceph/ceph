@@ -293,6 +293,13 @@ public:
     ceph_abort_msg("Sync reads legacy EC");
   }
 
+  bool is_direct_read_local(uint64_t off, uint64_t len) override {
+    if (is_optimized()) {
+      return optimized.is_direct_read_local(off, len);
+    }
+    ceph_abort_msg("Direct reads legacy EC");
+  }
+
   std::pair<uint64_t, uint64_t> extent_to_shard_extent(
     uint64_t off, uint64_t len) override {
     if (is_optimized()) {

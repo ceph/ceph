@@ -2059,6 +2059,14 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   }
 
   if (m->get_flags() & CEPH_OSD_FLAG_EC_DIRECT_READ) {
+    if (!pgbackend->get_is_ec_optimized()) {
+      // A client only sends a direct read to an optimized EC pool. Refuse one
+      // to any other pool rather than serve it from the wrong place.
+      dout(4) << __func__ << ": direct read on a pool without EC optimizations "
+              << *m << dendl;
+      osd->reply_op_error(op, -EOPNOTSUPP);
+      return;
+    }
     // This means "is in acting set"
     if (is_primary() || is_nonprimary()) {
       op->set_ec_direct_read();
@@ -2249,6 +2257,18 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     dout(20) << __func__ << ": oid=" << head << " missing in direct read" << dendl;
     osd->reply_op_error(op, -EAGAIN);
     return;
+  }
+
+  // Older clients send a whole op to one shard when each read is within a
+  // chunk, even when the chunks belong to different shards.
+  if (m->has_flag(CEPH_OSD_FLAG_EC_DIRECT_READ)) {
+    int r = pgbackend->check_direct_read(m->ops);
+    if (r < 0) {
+      dout(4) << __func__ << ": direct read of data that is not this shard's "
+              << *m << dendl;
+      osd->reply_op_error(op, r);
+      return;
+    }
   }
 
   if (write_ordered) {

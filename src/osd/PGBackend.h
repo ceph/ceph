@@ -671,6 +671,21 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      return std::pair(off, len);
    }
 
+   virtual bool is_direct_read_local(uint64_t off, uint64_t len) {
+     return true;
+   }
+
+   /// -EINVAL if a read of a direct read op holds none of this shard's data.
+   int check_direct_read(const std::vector<OSDOp> &ops) {
+     for (auto &o : ops) {
+       if ((o.op.op == CEPH_OSD_OP_READ || o.op.op == CEPH_OSD_OP_SPARSE_READ) &&
+           !is_direct_read_local(o.op.extent.offset, o.op.extent.length)) {
+         return -EINVAL;
+       }
+     }
+     return 0;
+   }
+
    virtual void objects_read_async(
      const hobject_t &hoid,
      uint64_t object_size,

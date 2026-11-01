@@ -149,6 +149,10 @@ class ECBackend : public ECCommon {
 
   std::pair<uint64_t, uint64_t> extent_to_shard_extent(uint64_t off, uint64_t len);
 
+  bool is_direct_read_local(uint64_t off, uint64_t len) {
+    return extent_to_shard_extent(off, len).second != 0;
+  }
+
   int objects_readv_sync(const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
