@@ -1321,6 +1321,17 @@ TEST_P(AllocTest, test_get_free_extents_needle_at_end)
   alloc->shutdown();
 }
 
+TEST_P(AllocTest, test_fragmentation_score_single_block)
+{
+  const uint64_t unit = 4096;
+  const uint64_t capacity = 4 * 1024 * 1024;
+  init_alloc(capacity, unit);
+  alloc->init_add_free(0, unit);
+  ASSERT_EQ(unit, alloc->get_free());
+  EXPECT_EQ(0.0, alloc->get_fragmentation_score());
+  alloc->shutdown();
+}
+
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
