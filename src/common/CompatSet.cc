@@ -94,8 +94,8 @@ void CompatSet::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-std::list<CompatSet> CompatSet::generate_test_instances() {
-  std::list<CompatSet> o;
+std::vector<CompatSet> CompatSet::generate_test_instances() {
+  std::vector<CompatSet> o;
   o.emplace_back();
   o.emplace_back();
   o.back().compat.insert(Feature(1, "one"));

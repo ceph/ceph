@@ -21,6 +21,7 @@
 
 #include <iosfwd>
 #include <string>
+#include <vector>
 #include <variant>
 #include <fmt/format.h>
 
@@ -132,7 +133,7 @@ struct rgw_user {
   friend auto operator<=>(const rgw_user&, const rgw_user&) = default;
 
   void dump(ceph::Formatter *f) const;
-  static std::list<rgw_user> generate_test_instances();
+  static std::vector<rgw_user> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_user)
 

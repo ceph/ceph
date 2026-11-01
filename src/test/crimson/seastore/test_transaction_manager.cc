@@ -1,7 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <deque>
 #include <random>
+#include <algorithm>
 
 #include <boost/iterator/counting_iterator.hpp>
 
@@ -1769,12 +1771,12 @@ struct transaction_manager_test_t :
             if (pieces % 2 == 1) {
               pieces++;
             }
-	    std::list<uint32_t> split_points;
+	    std::deque<uint32_t> split_points;
 	    for (uint32_t i = 0; i < pieces; i++) {
 	      auto p = std::uniform_int_distribution<>(1, 120)(gen);
 	      split_points.push_back(p - p % 4);
 	    }
-            split_points.sort();
+            std::ranges::sort(split_points);
 
 	    auto t = create_transaction();
             auto pin0 = try_get_pin(t, offset);

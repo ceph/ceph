@@ -62,8 +62,10 @@ int TestMemRadosClient::pool_get_base_tier(int64_t pool_id, int64_t* base_tier) 
   return 0;
 }
 
-int TestMemRadosClient::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
-  return m_mem_cluster->pool_list(v);
+int TestMemRadosClient::pool_list(
+  std::vector<std::pair<int64_t, std::string>>& pools)
+{
+  return m_mem_cluster->pool_list(pools);
 }
 
 int64_t TestMemRadosClient::pool_lookup(const std::string &pool_name) {

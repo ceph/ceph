@@ -120,8 +120,8 @@ void PurgeItem::dump(Formatter *f) const
   f->close_section();
 }
 
-std::list<PurgeItem> PurgeItem::generate_test_instances() {
-  std::list<PurgeItem> ls;
+std::vector<PurgeItem> PurgeItem::generate_test_instances() {
+  std::vector<PurgeItem> ls;
   ls.push_back(PurgeItem());
   ls.push_back(PurgeItem());
   ls.back().action = PurgeItem::PURGE_FILE;

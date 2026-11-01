@@ -25,6 +25,7 @@ using std::map;
 using std::make_pair;
 using std::ostream;
 using std::string;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::bufferptr;
@@ -117,9 +118,9 @@ void bluestore_bdev_label_t::dump(Formatter *f) const
   }
 }
 
-list<bluestore_bdev_label_t> bluestore_bdev_label_t::generate_test_instances()
+vector<bluestore_bdev_label_t> bluestore_bdev_label_t::generate_test_instances()
 {
-  list<bluestore_bdev_label_t> o;
+  vector<bluestore_bdev_label_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().size = 123;
@@ -146,9 +147,9 @@ void bluestore_cnode_t::dump(Formatter *f) const
   f->dump_unsigned("bits", bits);
 }
 
-std::list<bluestore_cnode_t> bluestore_cnode_t::generate_test_instances()
+std::vector<bluestore_cnode_t> bluestore_cnode_t::generate_test_instances()
 {
-  std::list<bluestore_cnode_t> o;
+  std::vector<bluestore_cnode_t> o;
   o.push_back(bluestore_cnode_t());
   o.push_back(bluestore_cnode_t(0));
   o.push_back(bluestore_cnode_t(123));
@@ -424,9 +425,9 @@ void bluestore_extent_ref_map_t::dump(Formatter *f) const
   f->close_section();
 }
 
-list<bluestore_extent_ref_map_t> bluestore_extent_ref_map_t::generate_test_instances()
+vector<bluestore_extent_ref_map_t> bluestore_extent_ref_map_t::generate_test_instances()
 {
-  list<bluestore_extent_ref_map_t> o;
+  vector<bluestore_extent_ref_map_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().get(10, 10);
@@ -742,9 +743,9 @@ void bluestore_blob_use_tracker_t::dump(Formatter *f) const
   }
 }
 
-list<bluestore_blob_use_tracker_t> bluestore_blob_use_tracker_t::generate_test_instances()
+vector<bluestore_blob_use_tracker_t> bluestore_blob_use_tracker_t::generate_test_instances()
 {
-  list<bluestore_blob_use_tracker_t> o;
+  vector<bluestore_blob_use_tracker_t> o;
   o.push_back(bluestore_blob_use_tracker_t());
   o.back().init(16, 16);
   o.back().get(10, 10);
@@ -794,9 +795,9 @@ ostream& operator<<(ostream& out, const bluestore_pextent_t& o) {
     return out << "!~" << std::hex << o.length << std::dec;
 }
 
-list<bluestore_pextent_t> bluestore_pextent_t::generate_test_instances()
+vector<bluestore_pextent_t> bluestore_pextent_t::generate_test_instances()
 {
-  list<bluestore_pextent_t> ls;
+  vector<bluestore_pextent_t> ls;
   ls.emplace_back();
   ls.push_back(bluestore_pextent_t(1, 2));
   return ls;
@@ -879,9 +880,9 @@ void bluestore_blob_t::dump(Formatter *f) const
   f->dump_unsigned("unused", unused);
 }
 
-list<bluestore_blob_t> bluestore_blob_t::generate_test_instances()
+vector<bluestore_blob_t> bluestore_blob_t::generate_test_instances()
 {
-  list<bluestore_blob_t> ls;
+  vector<bluestore_blob_t> ls;
   ls.emplace_back();
   ls.push_back(bluestore_blob_t(0));
   ls.emplace_back();
@@ -1417,9 +1418,9 @@ void bluestore_shared_blob_t::dump(Formatter *f) const
   f->dump_object("ref_map", ref_map);
 }
 
-list<bluestore_shared_blob_t> bluestore_shared_blob_t::generate_test_instances()
+vector<bluestore_shared_blob_t> bluestore_shared_blob_t::generate_test_instances()
 {
-  list<bluestore_shared_blob_t> ls;
+  vector<bluestore_shared_blob_t> ls;
   auto extent_ref_maps = bluestore_extent_ref_map_t::generate_test_instances();
   // use 0 for sbid, as this field is not persited, and is always set during
   // instance construction, so including a non-default value in dumps would
@@ -1444,9 +1445,9 @@ void bluestore_onode_t::shard_info::dump(Formatter *f) const
   f->dump_unsigned("bytes", bytes);
 }
 
-auto bluestore_onode_t::shard_info::generate_test_instances() -> list<shard_info>
+auto bluestore_onode_t::shard_info::generate_test_instances() -> vector<shard_info>
 {
-  list<shard_info> o;
+  vector<shard_info> o;
   o.emplace_back();
   o.emplace_back();
   o.back().offset = 123;
@@ -1483,9 +1484,9 @@ void bluestore_onode_t::dump(Formatter *f) const
   f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
 }
 
-list<bluestore_onode_t> bluestore_onode_t::generate_test_instances()
+vector<bluestore_onode_t> bluestore_onode_t::generate_test_instances()
 {
-  list<bluestore_onode_t> o;
+  vector<bluestore_onode_t> o;
 
   auto onode1 = bluestore_onode_t();
   onode1.nid = 0xDEADBEEF;
@@ -1548,9 +1549,9 @@ void bluestore_deferred_op_t::dump(Formatter *f) const
   f->close_section();
 }
 
-list<bluestore_deferred_op_t> bluestore_deferred_op_t::generate_test_instances()
+vector<bluestore_deferred_op_t> bluestore_deferred_op_t::generate_test_instances()
 {
-  list<bluestore_deferred_op_t> o;
+  vector<bluestore_deferred_op_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().op = OP_WRITE;
@@ -1564,8 +1565,8 @@ void bluestore_deferred_transaction_t::dump(Formatter *f) const
 {
   f->dump_unsigned("seq", seq);
   f->open_array_section("ops");
-  for (list<bluestore_deferred_op_t>::const_iterator p = ops.begin(); p != ops.end(); ++p) {
-    f->dump_object("op", *p);
+  for (const auto& op : ops) {
+    f->dump_object("op", op);
   }
   f->close_section();
 
@@ -1579,9 +1580,9 @@ void bluestore_deferred_transaction_t::dump(Formatter *f) const
   f->close_section();
 }
 
-list<bluestore_deferred_transaction_t> bluestore_deferred_transaction_t::generate_test_instances()
+vector<bluestore_deferred_transaction_t> bluestore_deferred_transaction_t::generate_test_instances()
 {
-  list<bluestore_deferred_transaction_t> o;
+  vector<bluestore_deferred_transaction_t> o;
   o.push_back(bluestore_deferred_transaction_t());
   o.push_back(bluestore_deferred_transaction_t());
   o.back().seq = 123;
@@ -1602,9 +1603,9 @@ void bluestore_compression_header_t::dump(Formatter *f) const
   }
 }
 
-list<bluestore_compression_header_t> bluestore_compression_header_t::generate_test_instances()
+vector<bluestore_compression_header_t> bluestore_compression_header_t::generate_test_instances()
 {
-  list<bluestore_compression_header_t> o;
+  vector<bluestore_compression_header_t> o;
   o.emplace_back();
   o.push_back(bluestore_compression_header_t(1));
   o.back().length = 1234;

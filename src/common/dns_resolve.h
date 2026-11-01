@@ -23,7 +23,7 @@
 #include "common/ceph_mutex.h"
 #include "msg/msg_types.h"		// for entity_addr_t
 
-#include <list>
+#include <deque>
 #include <map>
 #include <string>
 
@@ -140,7 +140,7 @@ class DNSResolver {
     ceph::mutex lock = ceph::make_mutex("DNSResolver::lock");
     ResolvHWrapper *resolv_h;
 #ifdef HAVE_RES_NQUERY
-    std::list<res_state> states;
+    std::deque<res_state> states;
 
     int get_state(CephContext *cct, res_state *ps);
     void put_state(res_state s);
@@ -169,4 +169,3 @@ class DNSResolver {
 }
 
 #endif
-

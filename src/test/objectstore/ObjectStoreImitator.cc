@@ -278,9 +278,9 @@ int ObjectStoreImitator::queue_transactions(CollectionHandle &ch,
                                             std::vector<Transaction> &tls,
                                             TrackedOpRef op,
                                             ThreadPool::TPHandle *handle) {
-  std::list<Context *> on_applied, on_commit, on_applied_sync;
-  ObjectStore::Transaction::collect_contexts(tls, &on_applied, &on_commit,
-                                             &on_applied_sync);
+  std::vector<Context *> on_applied, on_commit, on_applied_sync;
+  ObjectStore::Transaction::collect_contexts(
+    tls, on_applied, on_commit, on_applied_sync);
   Collection *c = static_cast<Collection *>(ch.get());
 
   for (std::vector<Transaction>::iterator p = tls.begin(); p != tls.end();
@@ -292,25 +292,15 @@ int ObjectStoreImitator::queue_transactions(CollectionHandle &ch,
     handle->reset_tp_timeout();
 
   // Immediately complete contexts
-  for (auto c : on_applied_sync) {
-    c->complete(0);
+  finish_contexts(nullptr, on_applied_sync);
+
+  if (c->commit_queue) {
+    c->commit_queue->queue(on_applied);
   }
 
-  if (!on_applied.empty()) {
-    if (c->commit_queue) {
-      c->commit_queue->queue(on_applied);
-    } else {
-      for (auto c : on_applied) {
-        c->complete(0);
-      }
-    }
-  }
+  finish_contexts(nullptr, on_applied);
 
-  if (!on_commit.empty()) {
-    for (auto c : on_commit) {
-      c->complete(0);
-    }
-  }
+  finish_contexts(nullptr, on_commit);
 
   verify_objects(ch);
   return 0;
