@@ -17,7 +17,7 @@
 #define CEPH_MDS_SNAP_H
 
 #include <iosfwd>
-#include <list>
+#include <vector>
 #include <map>
 #include <set>
 #include <string>
@@ -43,7 +43,7 @@ struct SnapInfo {
   void do_md_op(const std::string& key, const std::string& val,
                 const unsigned int op_flag);
 
-  static std::list<SnapInfo> generate_test_instances();
+  static std::vector<SnapInfo> generate_test_instances();
 
   std::string_view get_long_name() const;
 
@@ -75,7 +75,7 @@ struct snaplink_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<snaplink_t> generate_test_instances();
+  static std::vector<snaplink_t> generate_test_instances();
 
   inodeno_t ino;
   snapid_t first;
@@ -101,7 +101,7 @@ struct sr_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<sr_t> generate_test_instances();
+  static std::vector<sr_t> generate_test_instances();
   void print(std::ostream&) const;
 
   snapid_t seq = 0;                     // basically, a version/seq # for changes to _this_ realm.

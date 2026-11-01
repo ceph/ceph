@@ -18,6 +18,7 @@
 #include <map>
 #include <iosfwd>
 #include <string>
+#include <vector>
 #include <string_view>
 
 #include "include/encoding.h"
@@ -54,7 +55,7 @@ public:
   void print(std::ostream& out) const;
   void print_summary(ceph::Formatter *f, std::ostream *out) const;
 
-  static std::list<FSMapUser> generate_test_instances();
+  static std::vector<FSMapUser> generate_test_instances();
 
   std::map<fs_cluster_id_t, fs_info_t> filesystems;
   fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;
