@@ -2588,6 +2588,88 @@ int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno,
   return 0;
 }
 
+int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno,
+					  int size,
+					  map<int,float> *pmap) const
+{
+  if (size <= 0)
+    return -EINVAL;
+  if (ruleno >= crush->max_rules)
+    return -ENOENT;
+  if (crush->rules[ruleno] == NULL)
+    return -ENOENT;
+  const crush_rule *rule = crush->rules[ruleno];
+
+  // Normalize each TAKE scope against its own subtree weight sum, weighted
+  // by the number of items it emits after resolving arg1 <= 0 against pool
+  // size and clamping at EMIT (matching crush_do_rule in mapper.c).
+  // Note: if a subtree has fewer failure domains than requested, CRUSH may
+  // emit fewer items than width; that mapping-failure case is not modeled here.
+  struct take_t {
+    map<int,float> m;
+    float sum = 0.0f;
+    int64_t width = 0;
+    int emitted = 0;
+  };
+  vector<take_t> takes;
+  int emitted_total = 0;
+
+  for (unsigned i = 0; i < rule->len; ++i) {
+    const crush_rule_step &s = rule->steps[i];
+    switch (s.op) {
+    case CRUSH_RULE_TAKE: {
+      take_t t;
+      if (s.arg1 >= 0) {
+	t.m[s.arg1] = 1.0f;
+	t.sum = 1.0f;
+      } else {
+	t.sum = _get_take_weight_osd_map(s.arg1, &t.m);
+      }
+      t.width = 1;
+      takes.push_back(std::move(t));
+      break;
+    }
+    case CRUSH_RULE_CHOOSE_FIRSTN:
+    case CRUSH_RULE_CHOOSE_INDEP:
+    case CRUSH_RULE_CHOOSELEAF_FIRSTN:
+    case CRUSH_RULE_CHOOSELEAF_INDEP:
+    case CRUSH_RULE_CHOOSE_MSR: {
+      if (takes.empty())
+	break;
+      int64_t n = s.arg1;
+      if (n <= 0)
+	n += size;
+      takes.back().width =
+	(n > 0) ? std::min<int64_t>(takes.back().width * n, size) : 0;
+      break;
+    }
+    case CRUSH_RULE_EMIT: {
+      if (takes.empty())
+	break;
+      int e = static_cast<int>(
+	std::min<int64_t>(takes.back().width, std::max(0, size - emitted_total)));
+      takes.back().emitted += e;
+      emitted_total += e;
+      takes.back().width = 0;
+      break;
+    }
+    default:
+      break;
+    }
+  }
+
+  if (emitted_total == 0)
+    return 0;
+
+  for (const auto &t : takes) {
+    if (t.emitted > 0) {
+      _normalize_weight_map(t.sum * emitted_total / t.emitted, t.m, pmap);
+    }
+  }
+
+  return 0;
+}
+
 int CrushWrapper::remove_rule(int ruleno)
 {
   if (ruleno >= (int)crush->max_rules)

@@ -982,6 +982,129 @@ TEST_F(CrushWrapperTest, weight_osd_map_zero_weights) {
     EXPECT_FALSE(std::isnan(w)) << "osd." << osd << " weight is nan";
     EXPECT_EQ(0.0f, w);
   }
+
+  wm.clear();
+  ASSERT_EQ(0, c->get_rule_weight_osd_map(0, 3, &wm));
+  ASSERT_EQ(3u, wm.size());
+  for (auto& [osd, w] : wm) {
+    EXPECT_FALSE(std::isnan(w)) << "osd." << osd << " weight is nan";
+    EXPECT_EQ(0.0f, w);
+  }
+}
+
+TEST_F(CrushWrapperTest, weight_osd_map_multi_take) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(0, "osd");
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "root");
+  c.set_max_devices(10);
+
+  // Two roots with 1:3 total weight ratio:
+  // ssd_root (total weight 2.0): osd.0 (1.0), osd.1 (1.0)
+  // hdd_root (total weight 6.0): osd.2 (3.0), osd.3 (3.0)
+  for (int i = 0; i < 2; ++i) {
+    map<string,string> loc = {{"host", "ssd_h" + stringify(i)}, {"root", "ssd_root"}};
+    ASSERT_EQ(0, c.insert_item(cct, i, 1.0f, "osd." + stringify(i), loc));
+  }
+  for (int i = 2; i < 4; ++i) {
+    map<string,string> loc = {{"host", "hdd_h" + stringify(i)}, {"root", "hdd_root"}};
+    ASSERT_EQ(0, c.insert_item(cct, i, 3.0f, "osd." + stringify(i), loc));
+  }
+  c.finalize();
+
+  const int ssd_root = c.get_item_id("ssd_root");
+  const int hdd_root = c.get_item_id("hdd_root");
+
+  auto make_two_take_rule = [&](int ruleno, int n1, int n2) {
+    int r = c.add_rule(ruleno, 6, pg_pool_t::TYPE_REPLICATED);
+    ceph_assert(r == ruleno);
+    c.set_rule_step_take(r, 0, ssd_root);
+    c.set_rule_step_choose_leaf_firstn(r, 1, n1, 1);
+    c.set_rule_step_emit(r, 2);
+    c.set_rule_step_take(r, 3, hdd_root);
+    c.set_rule_step_choose_leaf_firstn(r, 4, n2, 1);
+    c.set_rule_step_emit(r, 5);
+    return r;
+  };
+
+  // Invalid size <= 0 returns -EINVAL
+  {
+    int r = make_two_take_rule(0, 1, 1);
+    map<int,float> wm;
+    EXPECT_EQ(-EINVAL, c.get_rule_weight_osd_map(r, 0, &wm));
+    EXPECT_EQ(-EINVAL, c.get_rule_weight_osd_map(r, -1, &wm));
+  }
+
+  // Case A: explicit 1 + 1 on size 2 -> 0.50 : 0.50 regardless of 1:3 root weights
+  {
+    int r = make_two_take_rule(1, 1, 1);
+    map<int,float> wm;
+    ASSERT_EQ(0, c.get_rule_weight_osd_map(r, 2, &wm));
+    EXPECT_FLOAT_EQ(0.5f, wm[0] + wm[1]);
+    EXPECT_FLOAT_EQ(0.5f, wm[2] + wm[3]);
+  }
+
+  // Case B: 1 + (-1) on size 2 (1 + 1) and size 3 (1 + 2)
+  {
+    int r = make_two_take_rule(2, 1, -1);
+    map<int,float> wm2, wm3;
+    ASSERT_EQ(0, c.get_rule_weight_osd_map(r, 2, &wm2));
+    EXPECT_FLOAT_EQ(0.5f, wm2[0] + wm2[1]);
+    EXPECT_FLOAT_EQ(0.5f, wm2[2] + wm2[3]);
+
+    ASSERT_EQ(0, c.get_rule_weight_osd_map(r, 3, &wm3));
+    EXPECT_FLOAT_EQ(1.0f / 3.0f, wm3[0] + wm3[1]);
+    EXPECT_FLOAT_EQ(2.0f / 3.0f, wm3[2] + wm3[3]);
+  }
+
+  // Case D: 2 + 2 on size 3 -> EMIT truncates second take to 1 (2 : 1)
+  {
+    int r = make_two_take_rule(3, 2, 2);
+    map<int,float> wm;
+    ASSERT_EQ(0, c.get_rule_weight_osd_map(r, 3, &wm));
+    EXPECT_FLOAT_EQ(2.0f / 3.0f, wm[0] + wm[1]);
+    EXPECT_FLOAT_EQ(1.0f / 3.0f, wm[2] + wm[3]);
+  }
+
+  // Case E: 0 + 0 on size 2 -> first take fills all 2 slots, second emits 0
+  {
+    int r = make_two_take_rule(4, 0, 0);
+    map<int,float> wm;
+    ASSERT_EQ(0, c.get_rule_weight_osd_map(r, 2, &wm));
+    EXPECT_FLOAT_EQ(1.0f, wm[0] + wm[1]);
+    EXPECT_EQ(0u, wm.count(2) + wm.count(3));
+  }
+
+  // Case F: take hdd_root (choose 1) + take osd.0 directly on size 2 -> 0.50 : 0.50
+  {
+    int r = c.add_rule(5, 5, pg_pool_t::TYPE_REPLICATED);
+    ASSERT_EQ(5, r);
+    c.set_rule_step_take(r, 0, hdd_root);
+    c.set_rule_step_choose_leaf_firstn(r, 1, 1, 1);
+    c.set_rule_step_emit(r, 2);
+    c.set_rule_step_take(r, 3, 0); // osd.0
+    c.set_rule_step_emit(r, 4);
+
+    map<int,float> wm;
+    ASSERT_EQ(0, c.get_rule_weight_osd_map(r, 2, &wm));
+    EXPECT_FLOAT_EQ(0.5f, wm[0]);
+    EXPECT_FLOAT_EQ(0.5f, wm[2] + wm[3]);
+  }
+
+  // Chained large choose args do not overflow width before clamping at EMIT
+  {
+    int r = c.add_rule(6, 4, pg_pool_t::TYPE_REPLICATED);
+    ASSERT_EQ(6, r);
+    c.set_rule_step_take(r, 0, ssd_root);
+    c.set_rule_step_choose_firstn(r, 1, 65536, 1);
+    c.set_rule_step_choose_firstn(r, 2, 65536, 0);
+    c.set_rule_step_emit(r, 3);
+
+    map<int,float> wm;
+    ASSERT_EQ(0, c.get_rule_weight_osd_map(r, 2, &wm));
+    EXPECT_FLOAT_EQ(1.0f, wm[0] + wm[1]);
+  }
 }
 
 TEST_F(CrushWrapperTest, distance) {

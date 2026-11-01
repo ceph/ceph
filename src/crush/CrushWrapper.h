@@ -1141,6 +1141,8 @@ public:
    * @return 0 for success, or negative error code
    */
   int get_rule_weight_osd_map(unsigned ruleno, std::map<int,float> *pmap) const;
+  int get_rule_weight_osd_map(unsigned ruleno, int size,
+			      std::map<int,float> *pmap) const;
 
   /**
    * calculate a map of osds to weights for a given starting root
