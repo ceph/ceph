@@ -289,18 +289,30 @@ int NVMeofGwMap::cfg_admin_state_change(const NvmeGwId &gw_id,
   return 0;
 }
 
-int NVMeofGwMap::is_ok_to_stop(const NvmeGroupKey& group_key)
+int NVMeofGwMap::is_ok_to_stop(const NvmeGroupKey& group_key, const NvmeGwId &gw_id,
+    bool gw_present,  bool disable_if_ok, bool &propose_pending)
 {
   auto grp_it = created_gws.find(group_key);
   if (grp_it == created_gws.end()) {
     return -ENOENT;
   }
-
   const uint32_t num_gws = grp_it->second.size();
   uint32_t num_down_gws = 0;
   uint32_t num_avail_gws = 0;
 
-  for (const auto& [gw_id, state] : grp_it->second) {
+  if (gw_present) {
+    if (created_gws[group_key].find(gw_id) == created_gws[group_key].end()) {
+       dout(1) << "ok to stop not approved: gw not found " << gw_id << dendl;
+       return -ENOENT;
+    }
+    if (created_gws[group_key][gw_id].gw_admin_state ==
+          gw_admin_state_t::GW_ADMIN_DISABLED) {
+      dout(1) << "the gw is already in state "
+              << created_gws[group_key][gw_id].gw_admin_state << dendl;
+      return -EALREADY;
+    }
+  }
+  for (const auto& [_, state] : grp_it->second) {
     if (state.availability != gw_availability_t::GW_AVAILABLE) {
       num_down_gws++; // GWs passing redeploy process
     } else {
@@ -316,8 +328,26 @@ int NVMeofGwMap::is_ok_to_stop(const NvmeGroupKey& group_key)
   if (num_avail_gws == 0) {
     return -EBUSY;
   } else if (max_down_gws == 0 || max_down_gws > num_down_gws) {
-    return 0;
+      if (gw_present) {
+        if (created_gws[group_key][gw_id].availability
+             != gw_availability_t::GW_AVAILABLE) {
+          dout(1) << "ok to stop not approved: gw is not Available " << gw_id << dendl;
+         return -EINVAL;
+        }
+        if (disable_if_ok) {
+          dout(1) << "ok to stop approved: set gw to admin disabled " << gw_id << dendl;
+          return cfg_admin_state_change(gw_id, group_key, gw_admin_state_t::GW_ADMIN_DISABLED,
+                                 propose_pending);
+        } else {
+          dout(1) << "the probe approved" << dendl;
+          return 0;
+        }
+      } else {
+        dout(1) << "the probe approved" << dendl;
+        return 0;
+      }
   } else {
+    dout(1) << "not approved - busy" << dendl;
     return -EBUSY;
   }
 }

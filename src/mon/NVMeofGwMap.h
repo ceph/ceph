@@ -139,7 +139,8 @@ public:
          const NvmeGroupKey& group_key, uint64_t beacon_sequence);
   bool is_location_in_disaster(const NvmeGroupKey& group_key,
              NvmeLocation& location, bool &cleanup_in_process);
-  int is_ok_to_stop(const NvmeGroupKey& group_key);
+  int is_ok_to_stop(const NvmeGroupKey& group_key, const NvmeGwId &gw_id,
+             bool gw_present, bool disable_if_ok, bool &propose_pending);
 private:
   int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   int  do_erase_gw_id(const NvmeGwId &gw_id,
