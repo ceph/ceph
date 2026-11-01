@@ -824,9 +824,10 @@ The default bootstrap process works for most users. These options of
    * - ``--ssl-dashboard-port <port>``
      - The HTTPS port of the Dashboard. The default is 8443.
    * - ``--skip-firewalld``
-     - Does not open ports in firewalld for the daemons that bootstrap deploys
-       on this host or for the Dashboard. Daemons that cephadm deploys later
-       still get their ports opened.
+     - Does not open ports in firewalld for the Monitor and the Manager that
+       bootstrap deploys on this host, or for the Dashboard. Daemons that the
+       Manager deploys still get their ports opened, including the monitoring
+       stack that bootstrap asks it to deploy.
 
 For example, to pass the ``osd_crush_chooseleaf_type`` option, create a file
 named ``initial-ceph.conf`` with the following content. This value suits a
@@ -998,11 +999,11 @@ your own.
    - AlertManager container image
 
    Start with the Ceph image of the release of ``cephadm``, for example
-   ``quay.io/ceph/ceph:v20`` for Tentacle. Pull it:
+   ``quay.io/ceph/ceph:v21`` for Umbrella. Pull it:
 
    .. prompt:: bash #
 
-      podman pull quay.io/ceph/ceph:v20
+      podman pull quay.io/ceph/ceph:v21
 
    The last line of the output is the ID of the image.
 
@@ -1010,7 +1011,7 @@ your own.
 
    .. prompt:: bash #
 
-      podman tag quay.io/ceph/ceph:v20 host1701:5000/ceph/ceph:v20
+      podman tag quay.io/ceph/ceph:v21 host1701:5000/ceph/ceph:v21
 
    The command prints nothing on success.
 
@@ -1019,7 +1020,7 @@ your own.
 
    .. prompt:: bash #
 
-      podman push --tls-verify=false host1701:5000/ceph/ceph:v20
+      podman push --tls-verify=false host1701:5000/ceph/ceph:v21
 
    The output ends with ``Writing manifest to image destination``.
 
@@ -1047,7 +1048,7 @@ your own.
 
    .. prompt:: bash #
 
-      cephadm --image host1701:5000/ceph/ceph:v20 bootstrap --mon-ip <mon-ip> --config initial-ceph.conf
+      cephadm --image host1701:5000/ceph/ceph:v21 bootstrap --mon-ip <mon-ip> --config initial-ceph.conf
 
    The output is the same as in `Running the Bootstrap Command`_.
 
