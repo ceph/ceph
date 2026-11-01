@@ -1895,12 +1895,20 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             raise MonCommandFailed(f'{cmd_dict["prefix"]} failed: {r.stderr} retval: {r.retval}')
         return r
 
-    def mon_command(self, cmd_dict: dict, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+    def mon_command(
+        self,
+        cmd_dict: dict,
+        inbuf: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> Tuple[int, str, str]:
         """
         Helper for modules that do simple, synchronous mon command
         execution.
 
         See send_command for general case.
+
+        With no timeout, waits forever for a reply, as before. If timeout
+        is set, gives up after that many seconds and returns -ETIMEDOUT.
 
         :return: status int, out std, err str
         """
@@ -1908,7 +1916,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         t1 = time.time()
         result = CommandResult()
         self.send_command(result, "mon", "", json.dumps(cmd_dict), "", inbuf)
-        r = result.wait()
+        if timeout is None:
+            r = result.wait()
+        elif result.ev.wait(timeout):
+            r = (result.r, result.outb, result.outs)
+        else:
+            r = (-errno.ETIMEDOUT, '', f"'{cmd_dict['prefix']}' timed out after {timeout}s")
         t2 = time.time()
 
         self.log.debug("mon_command: '{0}' -> {1} in {2:.3f}s".format(
