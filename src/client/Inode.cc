@@ -651,6 +651,7 @@ void Inode::set_async_err(int r)
   for (const auto &fh : fhs) {
     fh->async_err = r;
   }
+  client->set_sync_fs_err(r);
 }
 
 bool Inode::has_recalled_deleg()
