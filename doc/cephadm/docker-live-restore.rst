@@ -11,6 +11,13 @@ optional `Live Restore
 <https://docs.docker.com/engine/daemon/live-restore/>`_ feature is facilitated
 with cephadm-managed daemons.
 
+.. note::
+
+   This page describes later releases. In Squid 19.2, Tentacle 20.2 and
+   Umbrella 21, cephadm runs Docker containers in the foreground with
+   ``docker run`` and sets ``Restart=on-failure`` for Docker units as well as
+   for Podman units.
+
 
 How Cephadm Runs Containers with Docker
 ========================================
@@ -27,8 +34,9 @@ The systemd unit also sets ``Restart=always``, which means systemd will restart
 the service whenever the tracked process exits for any reason.
 
 This differs from Podman, where cephadm uses ``Restart=on-failure`` (restarting
-after a non-zero exit code, termination by a signal, or a timeout) and cleans
-up both a PID file and a CID file on each stop.
+after a non-zero exit code, a timeout, or termination by a signal other than
+``SIGHUP``, ``SIGINT``, ``SIGTERM`` or ``SIGPIPE``) and cleans up both a PID
+file and a CID file on each stop.
 
 
 Behavior With Live Restore Enabled
@@ -39,16 +47,19 @@ enabled in the Docker daemon configuration, containers continue running if the
 Docker Engine process is down or restarted for example during a system update via 
 the command:
 
-   .. prompt:: bash #
+.. prompt:: bash #
 
-      systemctl restart docker.service
+   systemctl restart docker.service
 
 The PID tracked by systemd remains valid throughout the daemon restart, so 
 systemd does not trigger a service restart.
-Ceph daemons stay online while the Docker Engine restarts. Docker supports
-Live Restore across Engine updates only between patch releases (``YY.MM.x``),
-not across major (``YY.MM``) upgrades, and only if daemon options such as
-bridge IP addresses and the graph driver are unchanged.
+Ceph daemons stay online while the Docker Engine restarts. When it starts
+again, the Docker Engine can manage the running containers only if Docker
+daemon options such as bridge IP addresses and the graph driver are unchanged;
+otherwise, you might need to stop the containers manually. Across Docker
+Engine upgrades, Live Restore is supported only for patch releases, which
+change only the last number of the version (for example, from 29.9.0 to
+29.9.1).
 
 This is the **recommended configuration** for production deployments that use
 Docker as the container engine.
