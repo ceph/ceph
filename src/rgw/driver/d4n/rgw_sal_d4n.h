@@ -253,6 +253,8 @@ class D4NFilterObject : public FilterObject {
                               bool high_precision_time,
                               const char* if_match,
                               const char* if_nomatch,
+                              const char* dest_if_match,
+                              const char* dest_if_nomatch,
                               AttrsMod attrs_mod,
                               bool copy_if_newer,
                               Attrs& attrs,
