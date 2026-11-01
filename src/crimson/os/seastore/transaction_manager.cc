@@ -13,6 +13,7 @@
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "crimson/os/seastore/object_data_handler.h"
 #include "crimson/os/seastore/omap_manager/btree/omap_btree_node_impl.h"
+#include "crimson/os/seastore/omap_manager/log/log_node.h"
 
 /*
  * TransactionManager logs
@@ -722,8 +723,10 @@ TransactionManager::update_lba_mappings(
       }
       if (extent->is_logical()) {
         assert(is_logical_type(extent->get_type()));
-        // for rewritten extents, last_committed_crc should have been set
-        // because the crc of the original extent may be reused.
+        // last_committed_crc should have been set if the extents are purely
+        // rewritten and not supposed to be modified, like in TRIM_DIRTY and
+        // CLEANER trnasactions, because the crc of the original extent may
+        // be reused.
         // also see rewrite_logical_extent()
 	if (!extent->get_last_committed_crc()) {
 	  if (get_checksum_needed(extent->get_paddr())) {
@@ -999,7 +1002,7 @@ TransactionManager::rewrite_logical_extent(
       }
     }
     assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
-    nextent->rewrite(t, *extent, 0);
+    nextent->rewrite(t, *extent, 0, false);
 
     DEBUGT("rewriting meta -- {} to {}", t, *extent, *nextent);
 
@@ -1075,7 +1078,7 @@ TransactionManager::rewrite_logical_extent(
       assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
       bool first_extent = (off == 0);
       ceph_assert(left >= nextent->get_length());
-      nextent->rewrite(t, *extent, off);
+      nextent->rewrite(t, *extent, off, false);
       DEBUGT("rewriting data -- {} to {}", t, *extent, *nextent);
 
       /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
@@ -1318,6 +1321,7 @@ TransactionManager::move_region(
       }
       if (loaded_extent && loaded_extent->is_stable_dirty()) {
         using namespace crimson::os::seastore::omap_manager;
+        using namespace crimson::os::seastore::log_manager;
         ceph_assert(!src.has_shadow_val());
         auto this_dst_key = calc_dst_key();
         auto category = get_extent_category(src.get_extent_type());
@@ -1346,6 +1350,11 @@ TransactionManager::move_region(
           co_await alloc_and_copy_non_data_extent<OMapInnerNode>(
             t, this_dst_key, src.get_length(),
             *loaded_extent->cast<OMapInnerNode>());
+          break;
+        case extent_types_t::LOG_NODE:
+          co_await alloc_and_copy_non_data_extent<LogNode>(
+            t, this_dst_key, src.get_length(),
+            *loaded_extent->cast<LogNode>());
           break;
         default:
           ceph_abort("unexpected extent type");
@@ -1450,7 +1459,7 @@ TransactionManager::promote_extent(
     for (auto &extent : promoted_raw_extents) {
       auto slice_laddr = (orig_laddr + offset).checked_to_laddr();
       auto slice_length = extent->get_length();
-      extent->rewrite(t, *orig_ext, offset);
+      extent->rewrite(t, *orig_ext, offset, false);
       if (extent->get_paddr().is_absolute()) {
         assert(!cache->is_on_cold_tier(extent->get_paddr()));
       }
@@ -1499,7 +1508,7 @@ TransactionManager::promote_extent(
     }
     auto lext = promoted_extent->cast<LogicalChildNode>();
     lext->set_laddr(orig_ext->get_laddr());
-    lext->rewrite(t, *orig_ext, 0);
+    lext->rewrite(t, *orig_ext, 0, false);
     if (lext->get_paddr().is_absolute()) {
       assert(!cache->is_on_cold_tier(lext->get_paddr()));
     }
