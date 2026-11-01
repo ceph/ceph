@@ -626,14 +626,17 @@ class TestStretchCluster(MgrTestCase):
         )
 
     def _wait_for_recovering_stretch_mode(self):
-        """Wait until the cluster enters recovering stretch mode."""
+        """
+        Wait until the cluster enters recovering stretch mode. It leaves it
+        as soon as its PGs are clean, so this does not wait for it to hold.
+        """
         def _is_recovering():
             stretch = self._get_stretch_mode_osdmap()
             return stretch.get('recovering_stretch_mode', 0) == 1
-        self.wait_until_true_and_hold(
+        self.wait_until_true(
             _is_recovering,
             timeout=self.RECOVERY_PERIOD,
-            success_hold_time=self.SUCCESS_HOLD_TIME
+            period=1
         )
 
     def _wait_for_normal_stretch_mode(self):
@@ -933,7 +936,6 @@ class TestStretchCluster(MgrTestCase):
 
         # The cluster should move through recovering stretch mode …
         self._wait_for_recovering_stretch_mode()
-        self._assert_recovering_stretch_mode(expected=True)
 
         # settle back to fully healthy
         self.wait_until_true_and_hold(
