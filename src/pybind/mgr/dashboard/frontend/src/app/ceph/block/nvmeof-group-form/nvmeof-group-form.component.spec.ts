@@ -277,6 +277,25 @@ describe('NvmeofGroupFormComponent', () => {
       );
     });
 
+    it('should create service with listener_network_masks when provided', () => {
+      component.gatewayNodeComponent = {
+        getSelectedHosts: (): any[] => [{ hostname: 'host1' }],
+        getSelectedHostnames: (): string[] => ['host1']
+      } as any;
+
+      component.groupForm.get('groupName').setValue('test-group');
+      component.groupForm.get('listener_network_masks').setValue(['10.0.0.0/24', '192.168.1.0/24']);
+      component.onSubmit();
+
+      expect(cephServiceService.create).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          service_type: 'nvmeof',
+          service_id: 'test-group',
+          listener_network_masks: ['10.0.0.0/24', '192.168.1.0/24']
+        })
+      );
+    });
+
     it('should navigate to list view on success', () => {
       component.gatewayNodeComponent = {
         getSelectedHosts: (): any[] => [{ hostname: 'host1' }],
@@ -319,7 +338,8 @@ describe('NvmeofGroupFormComponent', () => {
         enable_auth: true,
         ssl: true,
         certificate_source: 'cephadm-signed',
-        custom_sans: ['gw1.local']
+        custom_sans: ['gw1.local'],
+        listener_network_masks: ['10.0.0.0/24']
       }
     };
 
@@ -354,6 +374,7 @@ describe('NvmeofGroupFormComponent', () => {
       expect(form.controls.enableMtls.value).toBe(true);
       expect(form.controls.certificateType.value).toBe(CertificateType.internal);
       expect(form.controls.custom_sans.value).toEqual(['gw1.local']);
+      expect(form.controls.listener_network_masks.value).toEqual(['10.0.0.0/24']);
       expect(component.currentCertificate).toEqual(mockCertificate);
       expect(component.currentSpecCertificateSource).toBe('cephadm-signed');
     });

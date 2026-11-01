@@ -96,6 +96,28 @@
           ></cd-nvmeof-gateway-node>
         </div>
       </div>
+
+      <!-- Network Masks -->
+      <div
+        cdsRow
+        class="form-item"
+      >
+        <div cdsCol>
+          <cd-text-label-list
+            formControlName="listener_network_masks"
+            label="Gateway discovery networks"
+            i18n-label
+            helperText="Specify subnet masks to discover gateway listeners for this gateway group. Enter an IP address and subnet mask in CIDR format (for example, 192.168.1.0/24)."
+            i18n-helperText
+            placeholder="e.g. 192.168.1.0/24"
+            i18n-placeholder
+            addButtonLabel="Add network mask"
+            i18n-addButtonLabel
+          >
+          </cd-text-label-list>
+        </div>
+      </div>
+
       <!-- Encryption — same cdsRow/cdsCol layout as the nodes table for horizontal alignment -->
       <div
         cdsRow

@@ -696,6 +696,20 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         });
       });
 
+      it('should submit nvmeof with listener_network_masks', () => {
+        formHelper.setValue('listener_network_masks', ['10.0.0.0/24']);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'default',
+          placement: {},
+          unmanaged: false,
+          group: 'default',
+          enable_auth: false,
+          listener_network_masks: ['10.0.0.0/24']
+        });
+      });
+
       it('should submit nvmeof with mTLS', () => {
         formHelper.setValue('enable_mtls', true);
         formHelper.setValue('certificateType', 'external');

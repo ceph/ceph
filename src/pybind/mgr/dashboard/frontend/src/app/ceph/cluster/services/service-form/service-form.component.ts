@@ -532,6 +532,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       ],
       certificateType: [CertificateType.internal],
       custom_sans: [null],
+      listener_network_masks: [[]],
       virtual_host_enabled: [false],
       zonegroup_hostnames: [null],
       wildcard_enabled: [true],
@@ -814,6 +815,11 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               break;
             case 'nvmeof':
               this.serviceForm.get('group').setValue(response[0].spec.group);
+              if (response[0].spec?.listener_network_masks) {
+                this.serviceForm
+                  .get('listener_network_masks')
+                  .setValue(response[0].spec.listener_network_masks);
+              }
               this.serviceForm.get('enable_mtls').setValue(response[0].spec?.enable_auth);
               if (response[0].spec?.enable_auth) {
                 if (response[0].spec?.certificate_source !== 'cephadm-signed') {
@@ -1565,6 +1571,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
       case 'nvmeof':
         serviceSpec['group'] = values['group'];
+        if (values['listener_network_masks']?.length > 0) {
+          serviceSpec['listener_network_masks'] = values['listener_network_masks'];
+        }
         serviceSpec['enable_auth'] = values['enable_mtls'];
         if (values['enable_mtls']) {
           serviceSpec['ssl'] = true;
