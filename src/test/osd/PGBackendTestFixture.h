@@ -941,6 +941,14 @@ public:
    */
   void corrupt_shard_data(const hobject_t& obj, pg_shard_t shard);
 
+  uint64_t get_shard_size_on_disk(const hobject_t& hoid, int shard);
+
+  /**
+   * Lay out an EC object as a pool without EC optimizations would: every
+   * shard zero-padded to legacy_shard_size, with a hinfo attr.
+   */
+  void make_legacy_layout(const hobject_t& hoid, uint64_t legacy_shard_size);
+
   /**
    * Create a bufferlist filled with random data.
    *

@@ -43,6 +43,7 @@
 #include "test/osd/TestCommon.h"
 #include "crush/CrushWrapper.h"
 #include "messages/MOSDECSubOpWrite.h"
+#include "osd/ECUtil.h"
 
 using namespace std;
 
@@ -82,6 +83,32 @@ public:
     PGBackendTestFixture::SetUp();
     initialize_scrub_infra();
   }
+
+  bool runs_legacy_tests() const;
+  ECUtil::stripe_info_t get_sinfo();
+
+  /* Write data to a new object and lay it out as a pool without EC
+   * optimizations would. */
+  void create_legacy_object(const std::string& obj_name,
+                            const std::string& data);
+
+  /* Every shard of the object must be its shard size for data, and the
+   * object must scrub clean and read back as data. */
+  void check_trimmed_object(const std::string& obj_name,
+                            const std::string& data);
+
+  /* Create a legacy object of old_size random bytes, then truncate it and
+   * write to it in one op. */
+  void truncate_legacy_object(
+    const std::string& obj_name,
+    uint64_t old_size,
+    uint64_t truncate_size,
+    const std::vector<std::pair<uint64_t, std::string>>& writes = {});
+
+  /* The ops of TruncateGrowWithSuspendedReads on an object holding data,
+   * which is left holding what the object should. */
+  void truncate_grow_with_suspended_reads(const std::string& obj_name,
+                                          std::string& data);
 
   /**
    * Simulate failure of multiple OSDs by marking them down in the OSDMap.
@@ -394,16 +421,21 @@ TEST_P(TestBackendBasics, DISABLED_TruncateGrowWithSuspendedReads)
     GTEST_SKIP() << "TruncateGrowWithSuspendedReads test only applies to EC backends";
   }
 
+  std::string obj = "delayed_x_" + backend_config.label;
+  std::string data(get_stripe_width() * 2, 'A');
+  ASSERT_EQ(0, create_and_write(obj, data));
+  truncate_grow_with_suspended_reads(obj, data);
+
+  // Delete object so teardown scrub doesn't verify against stale ObjectTracker state
+  delete_object(obj);
+}
+
+void TestBackendBasics::truncate_grow_with_suspended_reads(
+  const std::string& obj,
+  std::string& data)
+{
   const uint64_t chunk_size = stripe_unit;
   const uint64_t stripe_width = get_stripe_width();
-
-  std::string obj = "delayed_x_" + backend_config.label;
-
-  uint64_t object_size = stripe_width * 2;
-  {
-    std::string data(object_size, 'A');
-    ASSERT_EQ(0, create_and_write(obj, data));
-  }
 
   {
     auto new_osdmap = std::make_shared<OSDMap>();
@@ -415,26 +447,43 @@ TEST_P(TestBackendBasics, DISABLED_TruncateGrowWithSuspendedReads)
   event_loop->suspend_to_osd(0);
 
   {
-    std::string data(chunk_size, 'B');
-    ASSERT_EQ(-EINPROGRESS, write(obj, stripe_width - chunk_size, data, object_size));
+    std::string b(chunk_size, 'B');
+    ASSERT_EQ(-EINPROGRESS, write(obj, stripe_width - chunk_size, b, data.size()));
+    data.replace(stripe_width - chunk_size, chunk_size, b);
   }
 
   {
-    ASSERT_EQ(-EINPROGRESS, truncate_and_write(obj, object_size, stripe_width,
-      {{stripe_width * 3 - chunk_size, std::string(chunk_size, 'C')}}));
-    object_size = stripe_width * 3;
+    std::string c(chunk_size, 'C');
+    ASSERT_EQ(-EINPROGRESS, truncate_and_write(obj, data.size(), stripe_width,
+      {{stripe_width * 3 - chunk_size, c}}));
+    data.resize(stripe_width);
+    data.resize(stripe_width * 3 - chunk_size, '\0');
+    data += c;
   }
 
   {
-    std::string data(chunk_size, 'D');
-    ASSERT_EQ(-EINPROGRESS, write(obj, stripe_width * 3 - chunk_size, data, object_size));
+    std::string d(chunk_size, 'D');
+    ASSERT_EQ(-EINPROGRESS, write(obj, stripe_width * 3 - chunk_size, d, data.size()));
+    data.replace(stripe_width * 3 - chunk_size, chunk_size, d);
   }
 
   event_loop->unsuspend_to_osd(0);
   event_loop->run_until_idle();
+}
 
-  // Delete object so teardown scrub doesn't verify against stale ObjectTracker state
-  delete_object(obj);
+// TruncateGrowWithSuspendedReads on a legacy object whose last stripe holds
+// only its first chunk, truncated to the start of that stripe.
+TEST_P(TestBackendBasics, TruncateGrowWithSuspendedReadsLegacy)
+{
+  if (!runs_legacy_tests()) {
+    GTEST_SKIP() << "only applies to optimized EC pools";
+  }
+  const std::string obj = "delayed_x_legacy";
+  std::string data =
+    create_random_buffer(get_stripe_width() + stripe_unit).to_str();
+  ASSERT_NO_FATAL_FAILURE(create_legacy_object(obj, data));
+  ASSERT_NO_FATAL_FAILURE(truncate_grow_with_suspended_reads(obj, data));
+  check_trimmed_object(obj, data);
 }
 
 // Emulate a rollback operation. We use multiple objects here in an attempt
@@ -558,6 +607,30 @@ TEST_P(TestBackendBasics, TruncateAndWrite) {
   if (primary_listener) {
     primary_listener->sent_messages.clear();
   }
+}
+
+// TruncateAndWrite on a legacy object with omap, so that the truncate to
+// zero is not made a delete. The object is shorter than a chunk, so the data
+// shards past the first hold only padding.
+TEST_P(TestBackendBasics, TruncateAndWriteLegacy) {
+  if (!runs_legacy_tests()) {
+    GTEST_SKIP() << "only applies to optimized EC pools";
+  }
+  const std::string obj_name = "test_truncate_write_legacy";
+  std::string data = create_random_buffer(stripe_unit / 2 + 100).to_str();
+  ASSERT_NO_FATAL_FAILURE(create_legacy_object(obj_name, data));
+  get_object_context(make_test_object(obj_name), false)->obs.oi.set_flag(
+    object_info_t::FLAG_OMAP);
+
+  const std::string a = create_random_buffer(stripe_unit).to_str();
+  const std::string b = create_random_buffer(stripe_unit).to_str();
+  ASSERT_EQ(0, truncate_and_write(obj_name, data.size(), 0,
+                                  {{stripe_unit, a},
+                                   {(k + 1) * stripe_unit, b}}));
+  data.assign((k + 2) * stripe_unit, '\0');
+  data.replace(stripe_unit, stripe_unit, a);
+  data.replace((k + 1) * stripe_unit, stripe_unit, b);
+  check_trimmed_object(obj_name, data);
 }
 
 // ---------------------------------------------------------------------------
@@ -733,6 +806,21 @@ TEST_P(TestBackendBasics, TruncateToChunkSizeAndWrite) {
 }
 
 
+// TruncateToChunkSizeAndWrite on a legacy object, truncated to the end of the
+// first chunk of its last stripe.
+TEST_P(TestBackendBasics, TruncateToChunkSizeAndWriteLegacy) {
+  if (!runs_legacy_tests() || k < 3) {
+    GTEST_SKIP() << "only applies to optimized EC pools with k >= 3";
+  }
+  const uint64_t truncate_size = 2 * get_stripe_width() + stripe_unit;
+  truncate_legacy_object("test_truncate4k_write_legacy", truncate_size + 100,
+                         truncate_size,
+                         {{truncate_size,
+                           create_random_buffer(stripe_unit).to_str()},
+                          {truncate_size + k * stripe_unit,
+                           create_random_buffer(stripe_unit).to_str()}});
+}
+
 // ---------------------------------------------------------------------------
 // TestBackendBasics: TruncateToChunkSizeAndWrite
 // ---------------------------------------------------------------------------
@@ -821,6 +909,211 @@ TEST_P(TestBackendBasics, TruncateToChunkSizeAndWriteToSameSize) {
   if (primary_listener) {
     primary_listener->sent_messages.clear();
   }
+}
+
+// TruncateToChunkSizeAndWriteToSameSize on a legacy object, truncated to the
+// end of the first chunk of its last stripe.
+TEST_P(TestBackendBasics, TruncateToChunkSizeAndWriteToSameSizeLegacy) {
+  if (!runs_legacy_tests() || k < 3) {
+    GTEST_SKIP() << "only applies to optimized EC pools with k >= 3";
+  }
+  const std::string obj_name = "test_truncate4k_write_same_legacy";
+  const uint64_t truncate_size = get_stripe_width() + stripe_unit;
+  std::string data = create_random_buffer(truncate_size + stripe_unit).to_str();
+  ASSERT_NO_FATAL_FAILURE(create_legacy_object(obj_name, data));
+  const std::string a = create_random_buffer(stripe_unit).to_str();
+  const std::string b = create_random_buffer(stripe_unit).to_str();
+  ASSERT_EQ(0, truncate_and_write(obj_name, data.size(), truncate_size,
+                                  {{stripe_unit, a}, {truncate_size, b}}));
+  data.replace(stripe_unit, stripe_unit, a);
+  data.replace(truncate_size, stripe_unit, b);
+  check_trimmed_object(obj_name, data);
+
+  simulate_multiple_osd_failures({1});
+  verify_object(obj_name, data, 0, data.size());
+}
+
+// ---------------------------------------------------------------------------
+// TestBackendBasics: shrinking objects written before EC optimizations
+// ---------------------------------------------------------------------------
+
+bool TestBackendBasics::runs_legacy_tests() const
+{
+  return GetParam().backend.pool_type == EC &&
+         (pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) &&
+         GetParam().write_read.label == "4k";
+}
+
+ECUtil::stripe_info_t TestBackendBasics::get_sinfo()
+{
+  return ECUtil::stripe_info_t(k, m, k * stripe_unit,
+                               osdmap->get_pg_pool(pool_id));
+}
+
+void TestBackendBasics::create_legacy_object(const std::string& obj_name,
+                                             const std::string& data)
+{
+  const ECUtil::stripe_info_t sinfo = get_sinfo();
+  const uint64_t legacy_size = sinfo.ro_offset_to_next_chunk_offset(data.size());
+  ASSERT_EQ(0, create_and_write(obj_name, data));
+  ASSERT_NO_FATAL_FAILURE(make_legacy_layout(make_test_object(obj_name),
+                                             legacy_size));
+  // Deep scrub of parity CRCs assumes the primary shards have their
+  // optimized size, so it rejects a legacy layout where they do not.
+  if (legacy_size == sinfo.object_size_to_shard_size(
+        data.size(), sinfo.get_shard(raw_shard_id_t(0)))) {
+    ASSERT_FALSE(scrub_object(obj_name)) << "scrub should accept the legacy layout";
+  }
+}
+
+void TestBackendBasics::check_trimmed_object(const std::string& obj_name,
+                                             const std::string& data)
+{
+  const hobject_t hoid = make_test_object(obj_name);
+  const ECUtil::stripe_info_t sinfo = get_sinfo();
+  for (int shard = 0; shard < k + m; shard++) {
+    EXPECT_EQ(sinfo.object_size_to_shard_size(data.size(), shard_id_t(shard)),
+              get_shard_size_on_disk(hoid, shard))
+      << "shard " << shard;
+  }
+  EXPECT_FALSE(scrub_object(obj_name));
+  verify_object(obj_name, data, 0, data.size());
+}
+
+void TestBackendBasics::truncate_legacy_object(
+  const std::string& obj_name,
+  uint64_t old_size,
+  uint64_t truncate_size,
+  const std::vector<std::pair<uint64_t, std::string>>& writes)
+{
+  SCOPED_TRACE(obj_name);
+  std::string data = create_random_buffer(old_size).to_str();
+  ASSERT_NO_FATAL_FAILURE(create_legacy_object(obj_name, data));
+  ASSERT_EQ(0, truncate_and_write(obj_name, old_size, truncate_size, writes));
+  data.resize(truncate_size, '\0');
+  for (const auto& [off, buf] : writes) {
+    if (data.size() < off + buf.size()) {
+      data.resize(off + buf.size(), '\0');
+    }
+    data.replace(off, buf.size(), buf);
+  }
+  check_trimmed_object(obj_name, data);
+}
+
+// Without EC optimizations, every shard is padded to the stripe.
+TEST_P(TestBackendBasics, LegacyShardsArePadded) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+  if (backend_config.pool_type != EC ||
+      (pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) ||
+      param.label != "4k") {
+    GTEST_SKIP() << "only applies to legacy EC pools";
+  }
+
+  std::string obj_name = "test_legacy_padded_" + backend_config.label;
+  const uint64_t stripe_width = k * stripe_unit;
+  const uint64_t size = 4 * stripe_width + stripe_unit;
+  ASSERT_EQ(0, create_and_write(obj_name, std::string(size, 'X')));
+
+  hobject_t hoid = make_test_object(obj_name);
+  for (int shard = 0; shard < k + m; shard++) {
+    EXPECT_EQ(5 * stripe_unit, get_shard_size_on_disk(hoid, shard))
+      << "shard " << shard;
+  }
+}
+
+// Truncating a legacy object to a stripe boundary, like a discard at the end
+// of an RBD object, must trim the padding on every shard.
+TEST_P(TestBackendBasics, TruncateLegacyObject) {
+  if (!runs_legacy_tests()) {
+    GTEST_SKIP() << "only applies to optimized EC pools";
+  }
+  const uint64_t stripe_width = k * stripe_unit;
+  truncate_legacy_object("test_truncate_legacy",
+                         4 * stripe_width + stripe_unit, 4 * stripe_width);
+}
+
+// With chunks larger than a page, shard 0 and the parity shards are padded
+// too.
+TEST_P(TestBackendBasics, TruncateLegacyObjectPartialChunk) {
+  if (!runs_legacy_tests() || stripe_unit == EC_ALIGN_SIZE) {
+    GTEST_SKIP() << "only applies to optimized EC pools with chunks larger than a page";
+  }
+  const uint64_t stripe_width = k * stripe_unit;
+  truncate_legacy_object("test_truncate_legacy_partial",
+                         4 * stripe_width + EC_ALIGN_SIZE, 4 * stripe_width);
+}
+
+// Truncating into the middle of a stripe, like a write-zeroes at the end of
+// an RBD object, must also trim shards whose expected size does not shrink.
+TEST_P(TestBackendBasics, TruncateLegacyObjectUnaligned) {
+  if (!runs_legacy_tests() || k < 4) {
+    GTEST_SKIP() << "only applies to optimized EC pools with k >= 4";
+  }
+  const uint64_t stripe_width = k * stripe_unit;
+  truncate_legacy_object("test_truncate_legacy_unaligned",
+                         5 * stripe_width + stripe_unit,
+                         4 * stripe_width + 3 * stripe_unit);
+}
+
+// A truncate and writes in one op, as a write with a newer truncate_seq or
+// a writefull sends.
+TEST_P(TestBackendBasics, TruncateLegacyObjectAndWrite) {
+  if (!runs_legacy_tests()) {
+    GTEST_SKIP() << "only applies to optimized EC pools";
+  }
+  const uint64_t sw = k * stripe_unit;
+  const uint64_t old_size = 4 * sw + stripe_unit;
+  const uint64_t new_size = 4 * sw;
+  auto data = [this](uint64_t len) {
+    return create_random_buffer(len).to_str();
+  };
+  truncate_legacy_object("below", old_size, new_size,
+                         {{3 * sw, data(stripe_unit)}});
+  truncate_legacy_object("across", old_size, new_size,
+                         {{new_size - 512, data(1024)}});
+  truncate_legacy_object("in_truncated_range", old_size, new_size,
+                         {{new_size + 512, data(512)}});
+  truncate_legacy_object("past_old_end", old_size, new_size,
+                         {{old_size + sw, data(stripe_unit)}});
+  truncate_legacy_object("same_page", old_size, new_size + 100,
+                         {{new_size + 1000, data(100)}});
+  truncate_legacy_object("to_zero", old_size, 0,
+                         {{stripe_unit, data(stripe_unit)},
+                          {(k + 1) * stripe_unit, data(stripe_unit)}});
+}
+
+// A truncate within the last stripe leaves the legacy size of that stripe
+// valid, but can leave the primary shards shorter than the data shards it
+// does not shrink.
+TEST_P(TestBackendBasics, TruncateLegacyObjectWithinStripe) {
+  if (!runs_legacy_tests() || k < 3) {
+    GTEST_SKIP() << "only applies to optimized EC pools with k >= 3";
+  }
+  const uint64_t sw = k * stripe_unit;
+  truncate_legacy_object("within_stripe",
+                         4 * sw + stripe_unit + EC_ALIGN_SIZE,
+                         4 * sw + EC_ALIGN_SIZE);
+}
+
+// Grow a legacy object with EC optimizations, so that one data shard holds
+// data where the others hold padding, then truncate it.
+TEST_P(TestBackendBasics, TruncateGrownLegacyObject) {
+  if (!runs_legacy_tests() || k < 3) {
+    GTEST_SKIP() << "only applies to optimized EC pools with k >= 3";
+  }
+  const uint64_t sw = k * stripe_unit;
+  const std::string obj_name = "grown";
+  std::string data = create_random_buffer(4 * sw + stripe_unit).to_str();
+  ASSERT_NO_FATAL_FAILURE(create_legacy_object(obj_name, data));
+  const std::string append = create_random_buffer(stripe_unit).to_str();
+  ASSERT_EQ(0, write(obj_name, data.size(), append, data.size()));
+  data += append;
+  EXPECT_FALSE(scrub_object(obj_name));
+
+  ASSERT_EQ(0, truncate_and_write(obj_name, data.size(), 4 * sw, {}));
+  data.resize(4 * sw);
+  check_trimmed_object(obj_name, data);
 }
 
 // ---------------------------------------------------------------------------
