@@ -714,6 +714,7 @@ extern void dump_errno(int http_ret, std::string& out);
 extern void dump_errno(const struct rgw_err &err, std::string& out);
 extern void dump_errno(req_state *s);
 extern void dump_errno(req_state *s, int http_ret);
+extern void dump_swift_www_authenticate(req_state *s);
 extern void end_header(req_state *s,
                        RGWOp* op = nullptr,
                        const char *content_type = nullptr,
