@@ -2438,6 +2438,13 @@ CtPtr ProtocolV2::handle_client_ident(ceph::bufferlist &payload)
                 << " flags=" << client_ident.flags()
                 << " cookie=" << client_ident.cookie() << std::dec << dendl;
 
+  if (connection->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
+      cct->_conf.get_val<bool>("ms_inject_stall_server_ident")) {
+    ldout(cct, 0) << __func__ << " injecting stall, not replying to "
+		  << "client_ident" << dendl;
+    return nullptr;
+  }
+
   if (client_ident.addrs().empty() ||
       client_ident.addrs().front() == entity_addr_t()) {
     ldout(cct,5) << __func__ << " oops, client_ident.addrs() is empty" << dendl;
