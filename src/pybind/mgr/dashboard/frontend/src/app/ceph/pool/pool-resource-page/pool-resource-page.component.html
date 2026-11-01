@@ -10,6 +10,84 @@
       >
       </cd-resource-overview-card>
 
+      @if (overviewModel.isMigrating) {
+        <cds-tile class="pool-overview-card cds-mt-6">
+          <div class="pool-overview-panels pool-overview-panels--single">
+            <section class="pool-detail-panel">
+              <h4
+                class="cds--type-heading-02"
+                i18n
+              >
+                Migration Progress
+              </h4>
+              <p
+                class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+                i18n
+              >
+                Data is being transferred from the source pool
+              </p>
+
+              <div class="pool-detail-panel__usage-head">
+                <span
+                  class="cds--type-label-01"
+                  i18n
+                  >Overall progress</span
+                >
+                <span class="cds--type-heading-04">{{ overviewModel.migrationProgress }}%</span>
+              </div>
+
+              <cds-progress-bar
+                [value]="overviewModel.migrationProgress"
+                size="md"
+                [label]="overviewModel.migrationProgress + '%'"
+                [status]="overviewModel.migrationProgress >= 100 ? 'finished' : 'active'"
+                i18n-helperText
+                helperText="Objects migrated"
+              ></cds-progress-bar>
+
+              <div class="pool-detail-stats cds-mt-5">
+                <div class="pool-detail-stat-box">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >Objects migrated</span
+                  >
+                  <span class="cds--type-heading-03">
+                    {{ overviewModel.migrationObjectsMigrated | number }}
+                    <span class="cds--type-body-compact-01">
+                      / {{ overviewModel.migrationObjectsTotal | number }}
+                    </span>
+                  </span>
+                </div>
+                <div class="pool-detail-stat-box">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >Bytes migrated</span
+                  >
+                  <span class="cds--type-heading-03">
+                    {{ overviewModel.migrationBytesMigrated | dimlessBinary }}
+                    <span class="cds--type-body-compact-01">
+                      / {{ overviewModel.migrationBytesTotal | dimlessBinary }}
+                    </span>
+                  </span>
+                </div>
+                <div class="pool-detail-stat-box">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >PGs migrating</span
+                  >
+                  <span class="cds--type-heading-03">
+                    {{ overviewModel.migrationMigratingPgs || '-' }}
+                  </span>
+                </div>
+              </div>
+            </section>
+          </div>
+        </cds-tile>
+      }
+
       <cd-pool-capacity-protection-card [overviewModel]="overviewModel">
       </cd-pool-capacity-protection-card>
 

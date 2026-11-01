@@ -22,7 +22,9 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, Mocks } from '~/testing/unit-test-helper';
-import { Pool, transformPgStatus } from '../pool';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { isReleaseAtLeast, Pool, transformPgStatus } from '../pool';
 import { PoolListComponent } from './pool-list.component';
 
 describe('PoolListComponent', () => {
@@ -289,6 +291,7 @@ describe('PoolListComponent', () => {
         _.merge(Mocks.getPool('a', 0), {
           application_metadata: ['Block'],
           cdIsBinary: true,
+          migrationTag: null,
           pg_status: '',
           stats: {
             bytes_used: { latest: 0, rate: 0, rates: [] },
@@ -504,6 +507,132 @@ describe('PoolListComponent', () => {
       component.monAllowPoolDelete$.next(false);
       component.enablePoolDeletion();
       expect(component.monAllowPoolDelete$.value).toBe(false);
+    });
+  });
+
+  describe('isReleaseAtLeast', () => {
+    it('should return true when current equals minimum', () => {
+      expect(isReleaseAtLeast('umbrella', 'umbrella')).toBe(true);
+    });
+
+    it('should return true when current is newer than minimum', () => {
+      expect(isReleaseAtLeast('umbrella', 'squid')).toBe(true);
+    });
+
+    it('should return false when current is older than minimum', () => {
+      expect(isReleaseAtLeast('reef', 'umbrella')).toBe(false);
+    });
+
+    it('should return false for unknown release names', () => {
+      expect(isReleaseAtLeast('unknown', 'umbrella')).toBe(false);
+    });
+
+    it('should be case-insensitive', () => {
+      expect(isReleaseAtLeast('Umbrella', 'UMBRELLA')).toBe(true);
+    });
+  });
+
+  describe('migration disable reasons', () => {
+    let migrateAction: CdTableAction;
+    let selection: CdTableSelection;
+
+    const makeSelection = (pool: Partial<Pool>): CdTableSelection => {
+      const sel = new CdTableSelection();
+      sel.selected = [pool];
+      return sel;
+    };
+
+    beforeEach(() => {
+      migrateAction = component.tableActions.find((a) => a.name === component.actionLabels.MIGRATE);
+    });
+
+    it('should disable when no selection', () => {
+      selection = new CdTableSelection();
+      expect(migrateAction.disable(selection)).toBe(true);
+    });
+
+    it('should disable with executing reason when pool is migrating', () => {
+      selection = makeSelection({ cdExecuting: 'Migrating' });
+      expect(migrateAction.disable(selection)).toContain('migration is in progress');
+    });
+
+    it('should disable with executing reason when pool has any task', () => {
+      selection = makeSelection({ cdExecuting: 'Updating' });
+      expect(migrateAction.disable(selection)).toBe(true);
+    });
+
+    it('should return precondition reasons when flag is not enabled', () => {
+      component.migrationPreconditions.experimentalFlag = false;
+      component.migrationPreconditions.minCompatClient = true;
+      component.migrationPreconditions.osdRelease = true;
+      selection = makeSelection(Mocks.getPool('test', 1));
+      const result = migrateAction.disable(selection);
+      expect(typeof result).toBe('string');
+      expect(result as string).toContain('experimental flag');
+    });
+
+    it('should return multiple reasons separated by newlines', () => {
+      component.migrationPreconditions.experimentalFlag = false;
+      component.migrationPreconditions.minCompatClient = false;
+      component.migrationPreconditions.osdRelease = false;
+      selection = makeSelection(Mocks.getPool('test', 1));
+      const result = migrateAction.disable(selection) as string;
+      const lines = result.split('\n');
+      expect(lines.length).toBe(3);
+    });
+
+    it('should return PG autoscaling reason when pg_num differs from target', () => {
+      component.migrationPreconditions.experimentalFlag = true;
+      component.migrationPreconditions.minCompatClient = true;
+      component.migrationPreconditions.osdRelease = true;
+      selection = makeSelection({
+        ...Mocks.getPool('test', 1),
+        pg_num: 32,
+        pg_num_target: 64,
+        pg_placement_num: 32,
+        pg_placement_num_target: 32
+      });
+      const result = migrateAction.disable(selection);
+      expect(typeof result).toBe('string');
+      expect(result as string).toContain('autoscaling');
+    });
+
+    it('should return false (enabled) when all preconditions are met', () => {
+      component.migrationPreconditions.experimentalFlag = true;
+      component.migrationPreconditions.minCompatClient = true;
+      component.migrationPreconditions.osdRelease = true;
+      selection = makeSelection(Mocks.getPool('test', 1));
+      expect(migrateAction.disable(selection)).toBe(false);
+    });
+  });
+
+  describe('transformPoolsData with migration', () => {
+    it('should set cdExecuting to Migrating when pool has migration_src', () => {
+      const pool = _.merge(Mocks.getPool('target', 1), {
+        migration_src: 0,
+        stats: {}
+      });
+      const result = component.transformPoolsData([pool]);
+      expect(result[0].cdExecuting).toBe('Migrating');
+    });
+
+    it('should set cdExecuting to Migrating when pool has migration_target', () => {
+      const pool = _.merge(Mocks.getPool('source', 0), {
+        migration_target: 1,
+        stats: {}
+      });
+      const result = component.transformPoolsData([pool]);
+      expect(result[0].cdExecuting).toBe('Migrating');
+    });
+
+    it('should not override cdExecuting if already set by a task', () => {
+      const pool = _.merge(Mocks.getPool('target', 1), {
+        migration_src: 0,
+        cdExecuting: 'Updating... 50%',
+        stats: {}
+      });
+      const result = component.transformPoolsData([pool]);
+      expect(result[0].cdExecuting).toBe('Updating... 50%');
     });
   });
 });

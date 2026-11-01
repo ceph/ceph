@@ -17,4 +17,6 @@ export class PoolFormInfo {
   used_rules: { [rule_name: string]: string[] };
   used_profiles: { [profile_name: string]: string[] };
   nodes: CrushNode[];
+  require_min_compat_client: string;
+  require_osd_release: string;
 }
