@@ -7775,6 +7775,37 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair, bluestore_
     dout(1) << __func__ << " sorting out misreferenced extents" << dendl;
     auto& misref_extents = repairer.get_misreferences();
     interval_set<uint64_t> to_release;
+    // With a bitmap freelist, 'alloc' was built from the freelist, which may
+    // report blocks as free that objects still use (false free, fixed in the
+    // freelist further below). Take those out of 'alloc' first, so the
+    // relocation below cannot copy data over them, and so they are not
+    // marked allocated in the freelist twice.
+    {
+      std::vector<std::pair<uint64_t, uint64_t>> false_free;
+      alloc->foreach([&](uint64_t offset, uint64_t length) {
+        uint64_t first = offset / alloc_size;
+        uint64_t last = p2roundup(offset + length, alloc_size) / alloc_size;
+        size_t pos = first ? used_blocks.find_next(first - 1) :
+                             used_blocks.find_first();
+        while (pos != mempool_dynamic_bitset::npos && pos < last) {
+          uint64_t s = std::max<uint64_t>(pos * alloc_size, offset);
+          uint64_t e = std::min<uint64_t>((pos + 1) * alloc_size,
+                                          offset + length);
+          if (!false_free.empty() &&
+              false_free.back().first + false_free.back().second == s) {
+            false_free.back().second += e - s;
+          } else {
+            false_free.emplace_back(s, e - s);
+          }
+          pos = used_blocks.find_next(pos);
+        }
+      });
+      for (auto& [offset, length] : false_free) {
+        dout(5) << __func__ << " not relocating to in-use 0x" << std::hex
+                << offset << "~" << length << std::dec << dendl;
+        alloc->init_rm_free(offset, length);
+      }
+    }
     it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
     if (it) {
       // fill global if not overriden below
