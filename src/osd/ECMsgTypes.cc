@@ -35,7 +35,11 @@ void ECSubWrite::encode(bufferlist &bl) const
 
 void ECSubWrite::encode(bufferlist &p_bl, bufferlist &d_bl, uint64_t features) const
 {
-  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 5 : 4;
+  // Version 6 adds `unlogged`, and only an EC journal record is sent with
+  // it: every other sub-write is encoded exactly as before (version 5), so
+  // pools without the journal put the same bytes on the wire as a build
+  // without this code.
+  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? (unlogged ? 6 : 5) : 4;
   ENCODE_START(ver, 1, p_bl);
   encode(from, p_bl);
   encode(tid, p_bl);
@@ -55,6 +59,9 @@ void ECSubWrite::encode(bufferlist &p_bl, bufferlist &d_bl, uint64_t features) c
   encode(updated_hit_set_history, p_bl);
   encode(pg_committed_to, p_bl);
   encode(backfill_or_async_recovery, p_bl);
+  if (ver >= 6) {
+    encode(unlogged, p_bl);
+  }
   ENCODE_FINISH(p_bl);
 }
 
@@ -66,7 +73,7 @@ void ECSubWrite::decode(bufferlist::const_iterator &bl)
 void ECSubWrite::decode(bufferlist::const_iterator &p_bl,
 			bufferlist::const_iterator &d_bl)
 {
-  DECODE_START(5, p_bl);
+  DECODE_START(6, p_bl);
   decode(from, p_bl);
   decode(tid, p_bl);
   decode(reqid, p_bl);
@@ -96,6 +103,11 @@ void ECSubWrite::decode(bufferlist::const_iterator &p_bl,
     // The old protocol used an empty transaction to indicate backfill or async_recovery
     backfill_or_async_recovery = t.empty();
   }
+  if (struct_v >= 6) {
+    decode(unlogged, p_bl);
+  } else {
+    unlogged = false;
+  }
   DECODE_FINISH(p_bl);
 }
 
@@ -124,6 +136,7 @@ void ECSubWrite::dump(Formatter *f) const
   f->dump_bool("has_updated_hit_set_history",
       static_cast<bool>(updated_hit_set_history));
   f->dump_bool("backfill_or_async_recovery", backfill_or_async_recovery);
+  f->dump_bool("unlogged", unlogged);
 }
 
 list<ECSubWrite> ECSubWrite::generate_test_instances()

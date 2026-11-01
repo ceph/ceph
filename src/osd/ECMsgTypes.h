@@ -41,6 +41,10 @@ struct ECSubWrite {
   std::set<hobject_t> temp_removed;
   std::optional<pg_hit_set_history_t> updated_hit_set_history;
   bool backfill_or_async_recovery = false;
+  // An EC journal record: t holds slot data and headers only, there is no
+  // log entry, version or stats, and the shard neither logs nor applies
+  // anything beyond t. It replies on commit as for any sub-write.
+  bool unlogged = false;
   ECSubWrite() : tid(0) {}
   ECSubWrite(
     pg_shard_t from,
@@ -82,6 +86,7 @@ struct ECSubWrite {
     temp_removed.swap(other.temp_removed);
     updated_hit_set_history = other.updated_hit_set_history;
     backfill_or_async_recovery = other.backfill_or_async_recovery;
+    unlogged = other.unlogged;
   }
   void encode(ceph::buffer::list &bl) const;
   void encode(ceph::buffer::list &p_bl,
