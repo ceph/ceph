@@ -93,7 +93,7 @@
 #                       the same ceph.conf:  no vstart.sh, nothing cleaned,
 #                       so the userdb, the LMDB cache and the tree are as
 #                       they were.  Takes only --store, --adoption-mode
-#                       (patched into ceph.conf), --debug-rgw, --perf and
+#                       (patched into ceph.conf), --debug-rgw, --port, --perf and
 #                       --with-impersonation, which is on the command line
 #                       rather than in ceph.conf and so is given again.
 #
