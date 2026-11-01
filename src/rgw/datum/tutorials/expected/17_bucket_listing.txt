@@ -1,0 +1,5 @@
+object: photos/ant.jpg
+object: photos/bee.jpg
+object: photos/cat.jpg
+pages: 2
+complete: true

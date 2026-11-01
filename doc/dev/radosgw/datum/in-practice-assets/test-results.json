@@ -1,0 +1,145 @@
+{
+  "recorded_date": "2026-10-25",
+  "gate_ref": "7965b27b3e36fe6997a93d047ca76e287e616e07",
+  "executables": 27,
+  "cases": 364,
+  "assertions": 774435,
+  "results": [
+    {
+      "name": "cls_rgw_bi_wire",
+      "assertions": 27266,
+      "cases": 34
+    },
+    {
+      "name": "cls_rgw_write_wire",
+      "assertions": 19571,
+      "cases": 6
+    },
+    {
+      "name": "cls_rgw_bilog_wire",
+      "assertions": 6877,
+      "cases": 3
+    },
+    {
+      "name": "cls_rgw_bucket_wire",
+      "assertions": 161847,
+      "cases": 3
+    },
+    {
+      "name": "cls_rgw_index_stats_wire",
+      "assertions": 38678,
+      "cases": 5
+    },
+    {
+      "name": "cls_rgw_object_wire",
+      "assertions": 9864,
+      "cases": 4
+    },
+    {
+      "name": "cls_rgw_usage_wire",
+      "assertions": 31898,
+      "cases": 4
+    },
+    {
+      "name": "cls_rgw_reshard_wire",
+      "assertions": 25977,
+      "cases": 4
+    },
+    {
+      "name": "cls_rgw_gc_wire",
+      "assertions": 77456,
+      "cases": 4
+    },
+    {
+      "name": "cls_rgw_lifecycle_wire",
+      "assertions": 4149,
+      "cases": 5
+    },
+    {
+      "name": "cls_rgw_multipart_wire",
+      "assertions": 14345,
+      "cases": 3
+    },
+    {
+      "name": "cls_rgw_bi_client",
+      "assertions": 7660,
+      "cases": 21
+    },
+    {
+      "name": "cls_rgw_bilog_client",
+      "assertions": 3818,
+      "cases": 8
+    },
+    {
+      "name": "cls_rgw_olh_module",
+      "assertions": 5641,
+      "cases": 9
+    },
+    {
+      "name": "cls_rgw_bi_put_module",
+      "assertions": 11293,
+      "cases": 70
+    },
+    {
+      "name": "cls_rgw_bi_get_module",
+      "assertions": 1309,
+      "cases": 3
+    },
+    {
+      "name": "cls_rgw_object_module",
+      "assertions": 2214,
+      "cases": 6
+    },
+    {
+      "name": "cls_rgw_olh_wire",
+      "assertions": 30088,
+      "cases": 14
+    },
+    {
+      "name": "cls_rgw_olh_client",
+      "assertions": 983,
+      "cases": 3
+    },
+    {
+      "name": "cls_rgw_olh_admin",
+      "assertions": 28,
+      "cases": 2
+    },
+    {
+      "name": "cls_rgw_queued_gc_client",
+      "assertions": 624,
+      "cases": 4
+    },
+    {
+      "name": "cls_rgw_queued_gc_module",
+      "assertions": 1639,
+      "cases": 6
+    },
+    {
+      "name": "cls_user_client",
+      "assertions": 4051,
+      "cases": 4
+    },
+    {
+      "name": "cls_user_module",
+      "assertions": 2312,
+      "cases": 7
+    },
+    {
+      "name": "cls_user_wire",
+      "assertions": 8620,
+      "cases": 4
+    },
+    {
+      "name": "unittest_rgw_datum_core",
+      "assertions": 256497,
+      "cases": 52
+    },
+    {
+      "name": "unittest_rgw_datum_data",
+      "assertions": 19730,
+      "cases": 76
+    }
+  ],
+  "scope": "Focused Datum and native object-class gate. The six BI binding, client, and test sources match the comparison revision bf356195f0bd1983eeb0d6730f03e24d983bf189."
+}

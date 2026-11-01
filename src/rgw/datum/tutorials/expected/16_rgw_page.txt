@@ -1,0 +1,4 @@
+object: photos/ant.jpg
+object: photos/bee.jpg
+more: true
+next marker: photos/bee.jpg

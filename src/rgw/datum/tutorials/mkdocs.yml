@@ -1,0 +1,56 @@
+site_name: Datum
+site_description: A practical guide to selecting and observing data in C++26.
+docs_dir: docs
+site_dir: build/site
+use_directory_urls: true
+strict: true
+
+theme:
+  name: readthedocs
+  custom_dir: docs/theme
+  highlightjs: false
+  navigation_depth: 3
+  collapse_navigation: true
+  prev_next_buttons_location: none
+
+nav:
+  - Overview: index.md
+  - Tutorial:
+      - Contents: tutorial/index.md
+  - Design: design.md
+  - Build and run: build-and-run.md
+  - Examples: examples.md
+  - Index: lookup.md
+
+not_in_nav: |
+  references.md
+
+hooks:
+  - docs/hooks.py
+
+exclude_docs: |
+  hooks.py
+  theme/
+
+markdown_extensions:
+  - tables
+  - sane_lists
+  - fenced_code
+  - md_in_html
+  - codehilite:
+      guess_lang: false
+  - toc:
+      permalink: true
+
+extra_css:
+  - stylesheets/datum.css
+  - stylesheets/code.css
+
+watch:
+  - README.md
+  - CMakeLists.txt
+  - tutorial.md
+  - examples
+  - expected
+  - figures
+  - cmake

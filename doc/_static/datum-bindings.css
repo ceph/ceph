@@ -1,0 +1,179 @@
+/* The comparison page keeps Ceph's navigation and document typography. */
+.wy-nav-content:has(#psst-wanna-buy-a-codec) { max-width: 1280px; }
+
+#psst-wanna-buy-a-codec .datum-lead { font-size: 18px; line-height: 1.6; }
+#psst-wanna-buy-a-codec .datum-scope,
+#psst-wanna-buy-a-codec .datum-source,
+#psst-wanna-buy-a-codec .datum-annotation { color: #5e706b; font-size: 13px; line-height: 1.5; }
+#psst-wanna-buy-a-codec .datum-takeaway { color: #18625b; font-weight: 600; }
+
+#psst-wanna-buy-a-codec .datum-code-comparison,
+#psst-wanna-buy-a-codec .datum-checks-table { display: block; width: 100%; border: 0; }
+#psst-wanna-buy-a-codec .datum-code-comparison tbody,
+#psst-wanna-buy-a-codec .datum-checks-table tbody { display: block; width: 100%; }
+#psst-wanna-buy-a-codec .datum-code-comparison tr,
+#psst-wanna-buy-a-codec .datum-checks-table tr {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+}
+#psst-wanna-buy-a-codec .datum-code-comparison td,
+#psst-wanna-buy-a-codec .datum-checks-table td {
+  display: block;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #dce4df;
+  border-radius: 5px;
+  white-space: normal;
+  background: #f8f9f5;
+}
+#psst-wanna-buy-a-codec .datum-code-comparison td:first-child { background: #f8f5ee; }
+#psst-wanna-buy-a-codec .datum-code-comparison td > p:first-child { font-size: 13px; }
+#psst-wanna-buy-a-codec .datum-code-comparison .highlight { margin: 12px 0; background: #fff; }
+#psst-wanna-buy-a-codec .datum-code-comparison pre {
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+#psst-wanna-buy-a-codec .datum-code-comparison p:last-child,
+#psst-wanna-buy-a-codec .datum-checks-table p:last-child { margin-bottom: 0; }
+
+#psst-wanna-buy-a-codec .selection-demo {
+  margin: 24px 0 12px;
+  padding: 18px;
+  border: 1px solid #cadcca;
+  border-radius: 5px;
+  background: #f1f6ed;
+}
+#psst-wanna-buy-a-codec .demo-heading { margin-bottom: 12px; font-weight: 600; }
+#psst-wanna-buy-a-codec .steps,
+#psst-wanna-buy-a-codec .keys { display: flex; gap: 8px; flex-wrap: wrap; }
+#psst-wanna-buy-a-codec .step {
+  padding: 7px 10px;
+  border: 1px solid #bdcabc;
+  border-radius: 4px;
+  background: white;
+  color: #395b4c;
+  cursor: pointer;
+  font-size: 13px;
+}
+#psst-wanna-buy-a-codec .step.active { background: #18625b; color: white; border-color: #18625b; }
+#psst-wanna-buy-a-codec .step:focus-visible { outline: 3px solid #b56c32; outline-offset: 3px; }
+#psst-wanna-buy-a-codec .keys { margin: 20px 0 12px; }
+#psst-wanna-buy-a-codec .key {
+  padding: 9px;
+  border: 1px solid #cad5c4;
+  border-radius: 4px;
+  font: 12px monospace;
+}
+#psst-wanna-buy-a-codec .key.kept { background: #d7ead9; color: #164d39; }
+#psst-wanna-buy-a-codec .key.excluded { background: #eeefea; color: #819086; }
+#psst-wanna-buy-a-codec .selection-status { margin-bottom: 0; color: #18625b; font-size: 13px; }
+
+/* Numeric range labels stay readable at the page's normal font size. */
+#psst-wanna-buy-a-codec .datum-cache-gaps {
+  margin: 24px 0;
+  padding: 18px;
+  border: 1px solid #cadcca;
+  border-radius: 5px;
+  background: #f8faf6;
+}
+#psst-wanna-buy-a-codec .datum-gap-label { margin: 12px 0 6px; font-size: 14px; font-weight: 600; }
+#psst-wanna-buy-a-codec .datum-gap-label:first-child { margin-top: 0; }
+#psst-wanna-buy-a-codec .datum-gap-row { display: grid; grid-template-columns: repeat(4, 1fr); }
+#psst-wanna-buy-a-codec .datum-gap-row span {
+  padding: 8px 4px;
+  border: 1px solid #b8d2bf;
+  border-radius: 4px;
+  background: #d7ead9;
+  color: #164d39;
+  text-align: center;
+  font-size: 13px;
+}
+#psst-wanna-buy-a-codec .datum-gap-request { grid-column: 1 / -1; }
+#psst-wanna-buy-a-codec .datum-gap-cached { grid-column: 2 / span 2; }
+#psst-wanna-buy-a-codec .datum-gap-left { grid-column: 1; }
+#psst-wanna-buy-a-codec .datum-gap-right { grid-column: 4; }
+#psst-wanna-buy-a-codec .datum-cache-gaps figcaption { margin-top: 14px; font-size: 13px; }
+
+#psst-wanna-buy-a-codec .stats {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1fr;
+  gap: 18px;
+  margin: 24px 0 12px;
+  padding: 22px;
+  background: #edf5ef;
+}
+#psst-wanna-buy-a-codec .stats strong { display: block; color: #18625b; font: 600 36px sans-serif; }
+#psst-wanna-buy-a-codec .stats span { font-size: 13px; }
+#psst-wanna-buy-a-codec .benchmark-case { padding: 18px; margin: 20px 0; background: #edf5ef; }
+#psst-wanna-buy-a-codec .benchmark-case span { display: block; margin-top: 6px; font-size: 13px; }
+
+@media (max-width: 600px) {
+  #psst-wanna-buy-a-codec .stats { grid-template-columns: 1fr; gap: 14px; }
+  #psst-wanna-buy-a-codec .stats strong { font-size: 30px; }
+}
+
+/* Optional runnable examples and implementation details stay closed initially. */
+#psst-wanna-buy-a-codec .datum-explain {
+  margin: 20px 0 28px;
+  padding: 14px 18px;
+  border: 1px solid #cadcca;
+  border-radius: 5px;
+  background: #f8faf6;
+}
+#psst-wanna-buy-a-codec .datum-explain > summary {
+  cursor: pointer;
+  color: #18625b;
+  font-weight: 600;
+}
+#psst-wanna-buy-a-codec .datum-explain[open] > summary { margin-bottom: 16px; }
+#psst-wanna-buy-a-codec .datum-explain > summary:focus-visible {
+  outline: 3px solid #b56c32;
+  outline-offset: 3px;
+}
+#psst-wanna-buy-a-codec .datum-explain pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+#psst-wanna-buy-a-codec .datum-byte-flow {
+  margin: 24px 0;
+  padding: 18px;
+  border: 1px solid #cadcca;
+  border-radius: 5px;
+  background: #f1f6ed;
+}
+#psst-wanna-buy-a-codec .datum-flow-stages {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+#psst-wanna-buy-a-codec .datum-flow-stage { min-width: 0; }
+#psst-wanna-buy-a-codec .datum-flow-stage strong { display: block; margin-bottom: 10px; }
+#psst-wanna-buy-a-codec .datum-flow-pieces { display: flex; flex-wrap: wrap; gap: 6px; }
+#psst-wanna-buy-a-codec .datum-flow-pieces span {
+  padding: 7px;
+  border: 1px solid #b8d2bf;
+  border-radius: 4px;
+  background: #d7ead9;
+  color: #164d39;
+  font: 13px monospace;
+}
+#psst-wanna-buy-a-codec .datum-flow-pieces .datum-unread {
+  background: #eeefea;
+  border-color: #cad5c4;
+  color: #5e706b;
+}
+#psst-wanna-buy-a-codec .datum-flow-arrow::after { content: '→'; color: #217f67; font-size: 26px; }
+#psst-wanna-buy-a-codec .datum-byte-flow figcaption { margin-top: 18px; font-size: 13px; }
+@media (max-width: 700px) {
+  #psst-wanna-buy-a-codec .datum-flow-stages { grid-template-columns: minmax(0, 1fr); }
+  #psst-wanna-buy-a-codec .datum-flow-arrow { text-align: center; }
+  #psst-wanna-buy-a-codec .datum-flow-arrow::after { content: '↓'; }
+}
