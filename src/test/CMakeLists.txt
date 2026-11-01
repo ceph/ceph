@@ -548,6 +548,14 @@ target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES} ${UNIT
 install(TARGETS
   ceph_test_snap_mapper
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# unittest_scrubber_run
+add_executable(unittest_scrubber_run
+  test_scrubber_run.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_scrubber_run)
+target_link_libraries(unittest_scrubber_run osd global ${BLKID_LIBRARIES})
 endif(NOT WIN32)
 
 add_executable(ceph_test_stress_watch
