@@ -387,6 +387,8 @@ class _FSCryptVolumeTestCase(CephFSTestCase):
         self.key_file = "/tmp/key_volume"
         self.path = "dir/"
 
+        # Mount setup reads /etc/fscrypt.conf, which this creates.
+        self.mount_a.run_shell_payload("sudo fscrypt setup --force --verbose")
         self.mount_a.run_shell_payload(f"sudo fscrypt setup {self.mount_a.hostfs_mntpt} --verbose")
         self.mount_a.run_shell_payload("sudo fscrypt status --verbose")
         self.mount_a.run_shell_payload(f"sudo dd if=/dev/urandom of={self.key_file} bs=32 count=1")
