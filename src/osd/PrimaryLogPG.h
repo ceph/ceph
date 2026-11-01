@@ -2026,6 +2026,17 @@ public:
                             std::map<shard_id_t, eversion_t>* out);
   int get_internal_versions_v2(const hobject_t& soid,
                             std::map<shard_id_t, eversion_t>* out);
+  /// the version of each shard of an object of an erasure coded pool; the
+  /// shards of every zone have the versions of the first zone's shards
+  static std::map<shard_id_t, eversion_t> get_shard_versions(
+    const object_info_t& oi, const pg_pool_t& pool) {
+    std::map<shard_id_t, eversion_t> versions;
+    for (unsigned i = 0; i < pool.get_size(); ++i) {
+      const shard_id_t shard(i);
+      versions[shard] = oi.get_version_for_shard(pool.get_relative_shard(shard));
+    }
+    return versions;
+  }
 
 public:
   void set_dynamic_perf_stats_queries(

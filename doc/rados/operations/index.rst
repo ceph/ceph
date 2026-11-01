@@ -49,6 +49,7 @@ CRUSH algorithm.
 	crush-map
 	crush-map-edits
 	stretch-mode
+        individual-stretch-pools
 	change-mon-elections
 
 

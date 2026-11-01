@@ -11,6 +11,7 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
 #include "crush/CrushWrapper.h"
+#include "test/osd/OSDMapTestHelpers.h"
 #include "include/stringify.h"
 
 #include <iostream>
@@ -3579,6 +3580,31 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst) {
     }
     ASSERT_TRUE(pool.nonprimary_shards.size() > 0);
     encoded = osdmap.pgtemp_primaryfirst(pool, set);
+    // pgtemp_primaryfirst() stable-partitions shards into "primary-eligible"
+    // (kept first, in their original relative order) then "non-primary"
+    // (kept last, in their original relative order). A stable partition is
+    // a no-op exactly when the range is already partitioned, i.e. no
+    // primary-eligible shard appears after a non-primary one.
+    bool already_partitioned = true;
+    bool seen_nonprimary = false;
+    for (int s = 0; s < pool.size; s++) {
+      if (pool.is_nonprimary_shard(shard_id_t(s))) {
+        seen_nonprimary = true;
+      } else if (seen_nonprimary) {
+        already_partitioned = false;
+        break;
+      }
+    }
+    // There is no per-shard forward-mapping entry point on OSDMap (only the
+    // vector form is used in production), so derive a shard's forward
+    // position from `encoded` directly: since `set` is the identity vector,
+    // shard s ends up at whichever index in `encoded` holds the value s.
+    auto forward_pos = [&](int s) -> shard_id_t {
+      auto it = std::find(encoded.begin(), encoded.end(), s);
+      ceph_assert(it != encoded.end());
+      return shard_id_t(it - encoded.begin());
+    };
+    bool any_nonzero_shard_moved = false;
     for (size_t osd = 0; osd < 6; osd++ ) {
       if (osd < pool.size - pool.nonprimary_shards.size() ) {
 	// primary shards first
@@ -3587,26 +3613,58 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst) {
 	// non-primary shards last
 	ASSERT_TRUE(pool.is_nonprimary_shard(shard_id_t(encoded[osd])));
       }
-      std::cout << osd << " " << seed << " " << osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)) << std::endl;
-      // Encode and decode should be equivalent
-      ASSERT_EQ(osdmap.pgtemp_undo_primaryfirst(pool, pgid,
-		  osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd))),
+      // Per-shard forward position should round-trip through the per-shard
+      // undo transform.
+      ASSERT_EQ(osdmap.pgtemp_undo_primaryfirst(pool, pgid, forward_pos(osd)),
 		shard_id_t(osd));
-      // Shard 0 never changes, seed 62 is a special case because all the other
-      // shards are non-primary
-      if ((osd != 0) && (seed != 62)) {
-	// Encode should be different
-	ASSERT_NE(osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)),
-		  shard_id_t(osd));
-      } else {
-	// Encode should not change
-	ASSERT_EQ(osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)),
-		  shard_id_t(osd));
+      // Shard 0 is never in nonprimary_shards (seed is always even, so bit 0
+      // is never set -- see the loop above), so it is always in the primary
+      // group and always already first: it never moves.
+      if (osd == 0) {
+        ASSERT_EQ(forward_pos(osd), shard_id_t(osd));
+      } else if (forward_pos(osd) != shard_id_t(osd)) {
+        any_nonzero_shard_moved = true;
       }
     }
+    // Some shard must have moved unless the arrangement was already
+    // partitioned (see already_partitioned above).
+    ASSERT_EQ(any_nonzero_shard_moved, !already_partitioned);
     decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
     ASSERT_EQ(set, decoded);
   }
+}
+
+// The shard of an op from a pre-Tentacle client comes from the client's map,
+// which can be older than the OSD's: of a pool that has since become smaller,
+// for example by osd pool set num_zones, or that has been deleted
+TEST_F(OSDMapTest, undo_pre_tentacle_primaryfirst) {
+  set_up_map();
+
+  pg_pool_t pool = *osdmap.get_pg_pool(my_ec_pool);
+  pool.size = 3;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  pool.nonprimary_shards = {shard_id_t(1)};
+  pg_t pgid = osdmap.raw_pg_to_pg(pg_t(0, my_ec_pool));
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.new_pools[my_ec_pool] = pool;
+    inc.new_pg_temp[pgid] = mempool::osdmap::vector<int>{0, 2, 1};
+    osdmap.apply_incremental(inc);
+  }
+
+  spg_t spgid(pgid, shard_id_t(1));
+  ASSERT_TRUE(osdmap.undo_pre_tentacle_primaryfirst(&spgid));
+  EXPECT_EQ(shard_id_t(2), spgid.shard);
+  spgid = spg_t(pgid, shard_id_t(4));
+  EXPECT_FALSE(osdmap.undo_pre_tentacle_primaryfirst(&spgid));
+
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.old_pools.insert(my_ec_pool);
+    osdmap.apply_incremental(inc);
+  }
+  spgid = spg_t(pgid, shard_id_t(1));
+  EXPECT_FALSE(osdmap.undo_pre_tentacle_primaryfirst(&spgid));
 }
 
 // Helper function to test primaryfirst mapping with an OSD-per-shard array
@@ -3732,9 +3790,7 @@ void test_primaryfirst_patterns(
   }
 }
 
-// Main test: test all combinations of k, m for a single zone.
-//
-// num_zones is intentionally fixed at 1 here (stretch EC not implemented yet)
+// Main test: test all combinations of k, m, num_zones
 TEST_F(OSDMapTest, pgtemp_primaryfirst_comprehensive) {
   set_up_map();
 
@@ -3744,13 +3800,383 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst_comprehensive) {
   // Test all combinations:
   // k = 2 to 5 inclusive
   // m = 1 to 3 inclusive
-  constexpr int num_zones = 1;
+  // num_zones = 1 to 3 inclusive
   for (int k = 2; k <= 5; k++) {
     for (int m = 1; m <= 3; m++) {
-      SCOPED_TRACE(::testing::Message()
-        << "k=" << k << " m=" << m << " num_zones=" << num_zones);
-      test_primaryfirst_patterns(osdmap, pgid, k, m, num_zones);
+      for (int num_zones = 1; num_zones <= 3; num_zones++)
+      {
+        SCOPED_TRACE(::testing::Message()
+          << "k=" << k << " m=" << m << " num_zones=" << num_zones);
+        test_primaryfirst_patterns(osdmap, pgid, k, m, num_zones);
+      }
     }
+  }
+}
+
+// The full map is written in the format without num_zones until the commit
+// sets stretch_zones, so before it every OSD reads the same pools
+TEST_F(OSDMapTest, EncodingFollowsStretchZonesFlag) {
+  set_up_map(6);
+  for (bool committed : {false, true}) {
+    SCOPED_TRACE(committed ? "committed" : "before the commit");
+    OSDMap m;
+    m.deepish_copy_from(osdmap);
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    inc.new_require_osd_release =
+      committed ? ceph_release_t::vampire : ceph_release_t::umbrella;
+    inc.new_flags = committed ? m.get_flags() | CEPH_OSDMAP_STRETCH_ZONES
+                              : m.get_flags() & ~CEPH_OSDMAP_STRETCH_ZONES;
+    pg_pool_t p = *m.get_pg_pool(my_rep_pool);
+    p.size = 4;
+    p.min_size = 1;
+    p.num_zones = 2;
+    p.replica = 2;
+    inc.new_pools[my_rep_pool] = p;
+    ASSERT_EQ(0, m.apply_incremental(inc));
+    EXPECT_EQ(committed, m.stretch_zones());
+    EXPECT_EQ(committed, HAVE_SIGNIFICANT_FEATURE(m.get_encoding_features(),
+                                                  OSD_STRETCH_ZONES));
+    bufferlist bl;
+    m.encode(bl, m.get_encoding_features() | CEPH_FEATURE_RESERVED);
+    OSDMap decoded;
+    decoded.decode(bl);
+    EXPECT_EQ(committed, decoded.stretch_zones());
+    const pg_pool_t *q = decoded.get_pg_pool(my_rep_pool);
+    ASSERT_TRUE(q);
+    EXPECT_EQ(committed ? 2u : 1u, q->get_num_zones());
+    EXPECT_EQ(committed ? 1u : 2u, q->get_min_size());
+  }
+}
+
+// From the commit on an OSD needs OSD_STRETCH_ZONES to connect; a client
+// never does
+TEST_F(OSDMapTest, OsdFeaturesRequireStretchZonesOnceCommitted) {
+  set_up_map(6);
+  for (bool committed : {false, true}) {
+    SCOPED_TRACE(committed ? "committed" : "before the commit");
+    OSDMap m;
+    m.deepish_copy_from(osdmap);
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    inc.new_flags = committed ? m.get_flags() | CEPH_OSDMAP_STRETCH_ZONES
+                              : m.get_flags() & ~CEPH_OSDMAP_STRETCH_ZONES;
+    ASSERT_EQ(0, m.apply_incremental(inc));
+    uint64_t mask = 0;
+    const uint64_t osd_features = m.get_features(CEPH_ENTITY_TYPE_OSD, &mask);
+    EXPECT_EQ(committed, HAVE_FEATURE(osd_features, OSD_STRETCH_ZONES));
+    EXPECT_TRUE(mask & CEPH_FEATURE_OSD_STRETCH_ZONES);
+    const uint64_t client_features =
+      m.get_features(CEPH_ENTITY_TYPE_CLIENT, &mask);
+    EXPECT_FALSE(client_features & CEPH_FEATURE_OSD_STRETCH_ZONES);
+  }
+}
+
+// Before the upgrade is committed the monitor writes the earlier release's
+// format, whose min_size an OSD of that release reads as a total over all
+// copies. A pool of global stretch mode must decode as it does there, one
+// zone with replica the size and min_size as written, also in degraded
+// stretch mode where the monitor halved it, and be written back unchanged.
+TEST_F(OSDMapTest, LegacyGlobalStretchPoolBeforeCommit) {
+  set_up_map(6);
+  const uint64_t older_features =
+    (CEPH_FEATURES_ALL & ~CEPH_FEATURE_OSD_STRETCH_ZONES) |
+    CEPH_FEATURE_RESERVED;
+  const vector<std::pair<unsigned, bool>> cases = {
+    {1, false}, {2, false}, {3, false}, {1, true}, {2, true}};
+  for (const auto& [min_size, degraded] : cases) {
+    SCOPED_TRACE("min_size " + std::to_string(min_size) +
+                 (degraded ? " degraded" : ""));
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    inc.new_require_osd_release = ceph_release_t::umbrella;
+    inc.new_flags = osdmap.get_flags() & ~CEPH_OSDMAP_STRETCH_ZONES;
+    inc.change_stretch_mode = true;
+    inc.stretch_mode_enabled = true;
+    inc.new_stretch_bucket_count = 2;
+    inc.new_degraded_stretch_mode = degraded ? 1 : 0;
+    inc.new_recovering_stretch_mode = 0;
+    inc.new_stretch_mode_bucket = 8;
+    pg_pool_t p = *osdmap.get_pg_pool(my_rep_pool);
+    p.size = 4;
+    p.min_size = min_size;
+    p.num_zones = 1;
+    p.replica = 4;
+    p.peering_crush_bucket_barrier = 8;
+    p.peering_crush_bucket_target = 2;
+    p.peering_crush_bucket_count = degraded ? 1 : 2;
+    p.peering_crush_mandatory_member =
+      degraded ? osdmap.crush->get_item_id("default") : CRUSH_ITEM_NONE;
+    inc.new_pools[my_rep_pool] = p;
+
+    // the incremental as the monitor sends it before the commit
+    bufferlist inc_bl;
+    inc.encode(inc_bl, older_features);
+    auto inc_it = inc_bl.cbegin();
+    OSDMap::Incremental older_inc(inc_it);
+    OSDMap applied;
+    applied.deepish_copy_from(osdmap);
+    ASSERT_EQ(0, applied.apply_incremental(older_inc));
+    ASSERT_EQ(ceph_release_t::umbrella, applied.require_osd_release);
+
+    // the full map as the monitor stores it before the commit
+    bufferlist map_bl;
+    applied.encode(map_bl, applied.get_encoding_features() |
+                           CEPH_FEATURE_RESERVED);
+    OSDMap decoded;
+    decoded.decode(map_bl);
+
+    for (const OSDMap *o : {&applied, &decoded}) {
+      const pg_pool_t *q = o->get_pg_pool(my_rep_pool);
+      ASSERT_TRUE(q);
+      EXPECT_TRUE(q->is_stretch_pool());
+      EXPECT_EQ(1u, q->get_num_zones());
+      EXPECT_EQ(4u, q->get_replica());
+      EXPECT_EQ(4u, q->get_size());
+      EXPECT_EQ(min_size, q->get_min_size());
+
+      // the min_size an OSD of the earlier release reads once the monitor
+      // writes the pool again
+      bufferlist pool_bl;
+      q->encode(pool_bl, o->get_encoding_features());
+      auto pool_it = pool_bl.cbegin();
+      pg_pool_t older;
+      older.decode(pool_it);
+      EXPECT_EQ(min_size, older.get_min_size());
+    }
+  }
+}
+
+// Test the raw space per byte stored of an erasure coded pool over zones,
+// which keeps a full set of k+m shards in each zone, as ceph df and the
+// autoscaler use it
+TEST_F(OSDMapTest, PoolRawUsedRateCountsZones) {
+  set_up_map();
+  OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+  inc.new_pool_max = osdmap.get_pool_max();
+  inc.new_erasure_code_profiles["k4m2"] = {{"k", "4"}, {"m", "2"}};
+  const int64_t one_zone = set_ec_pool("one_zone", inc, false);
+  inc.new_pools[one_zone].erasure_code_profile = "k4m2";
+  inc.new_pools[one_zone].size = 6;
+  const int64_t two_zones = set_ec_pool("two_zones", inc, false);
+  inc.new_pools[two_zones].erasure_code_profile = "k4m2";
+  inc.new_pools[two_zones].size = 12;
+  inc.new_pools[two_zones].num_zones = 2;
+  osdmap.apply_incremental(inc);
+
+  EXPECT_FLOAT_EQ(1.5, osdmap.pool_raw_used_rate(one_zone));
+  EXPECT_FLOAT_EQ(3.0, osdmap.pool_raw_used_rate(two_zones));
+}
+
+// A replicated stretch pool from a release before num_zones keeps the
+// meaning it had there, one zone with min_size counted over all its copies,
+// as an individual stretch pool and in global stretch mode: only the update
+// that commits the upgrade gives a pool of global stretch mode its zones.
+TEST_F(OSDMapTest, LegacyStretchPoolDecode) {
+  set_up_map(6);
+  const uint64_t older_features =
+    (CEPH_FEATURES_ALL & ~CEPH_FEATURE_SERVER_UMBRELLA) | CEPH_FEATURE_RESERVED;
+  for (bool stretch_mode : {false, true}) {
+    SCOPED_TRACE(stretch_mode ? "global stretch mode" : "individual stretch pool");
+    OSDMap m;
+    m.deepish_copy_from(osdmap);
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    pg_pool_t p = *m.get_pg_pool(my_rep_pool);
+    p.peering_crush_bucket_barrier = 8;
+    p.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    if (stretch_mode) {
+      p.size = 4;
+      p.min_size = 1;
+      p.num_zones = 2;
+      p.replica = 2;
+      p.peering_crush_bucket_count = 2;
+      p.peering_crush_bucket_target = 2;
+      inc.change_stretch_mode = true;
+      inc.stretch_mode_enabled = true;
+      inc.new_stretch_bucket_count = 2;
+      inc.new_stretch_mode_bucket = 8;
+    } else {
+      // three zones, one copy in each, active with any two
+      p.size = 3;
+      p.min_size = 2;
+      p.num_zones = 1;
+      p.replica = 3;
+      p.peering_crush_bucket_count = 2;
+      p.peering_crush_bucket_target = 3;
+    }
+    inc.new_pools[my_rep_pool] = p;
+
+    // the incremental as an older monitor sends it
+    bufferlist inc_bl;
+    inc.encode(inc_bl, older_features);
+    auto inc_it = inc_bl.cbegin();
+    OSDMap::Incremental older_inc(inc_it);
+    OSDMap applied;
+    applied.deepish_copy_from(osdmap);
+    ASSERT_EQ(0, applied.apply_incremental(older_inc));
+
+    // the full map as an older monitor stores it
+    bufferlist map_bl;
+    applied.encode(map_bl, older_features);
+    OSDMap decoded;
+    decoded.decode(map_bl);
+
+    for (const OSDMap *o : {&applied, &decoded}) {
+      const pg_pool_t *q = o->get_pg_pool(my_rep_pool);
+      ASSERT_TRUE(q);
+      EXPECT_TRUE(q->is_stretch_pool());
+      if (stretch_mode) {
+        EXPECT_EQ(1u, q->get_num_zones());
+        EXPECT_EQ(4u, q->get_replica());
+        EXPECT_EQ(4u, q->get_size());
+        EXPECT_EQ(2u, q->get_min_size());
+      } else {
+        EXPECT_EQ(1u, q->get_num_zones());
+        EXPECT_EQ(3u, q->get_replica());
+        EXPECT_EQ(3u, q->get_size());
+        EXPECT_EQ(2u, q->get_min_size());
+        EXPECT_EQ(0u, o->stretch_num_acting_below_min_size(*q, {0, 1}));
+        EXPECT_EQ(1u, o->stretch_num_acting_below_min_size(*q, {0}));
+      }
+    }
+  }
+}
+
+// A client without OSD_STRETCH_ZONES works out the shard of an op to an
+// optimized EC pool with pg_temp from the primary's position in primary-first
+// order as if the pool had one zone; the OSD finds the shard that position
+// stands for
+TEST_F(OSDMapTest, UndoPreStretchZonesPrimaryFirst) {
+  set_up_map(18);
+  int64_t pool_id = 100;
+  for (int num_zones : {1, 2, 3}) {
+    for (auto [k, m] : {std::pair{2, 1}, std::pair{4, 2}, std::pair{3, 3}}) {
+      const int size = (k + m) * num_zones;
+      if (size > 18) {
+        continue;
+      }
+      SCOPED_TRACE(::testing::Message() << "k=" << k << " m=" << m
+                                        << " num_zones=" << num_zones);
+      pg_pool_t p;
+      p.type = pg_pool_t::TYPE_ERASURE;
+      p.size = size;
+      p.min_size = k;
+      p.num_zones = num_zones;
+      p.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+      p.set_pg_num(8);
+      p.set_pgp_num(8);
+      for (int z = 0; z < num_zones; ++z) {
+        for (int i = 1; i < k; ++i) {
+          p.nonprimary_shards.insert(shard_id_t(i + (k + m) * z));
+        }
+      }
+      ++pool_id;
+      const pg_t with_temp(0, pool_id);
+      const pg_t without_temp(1, pool_id);
+      OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+      inc.fsid = osdmap.get_fsid();
+      inc.new_pools[pool_id] = p;
+      inc.new_pool_names[pool_id] = "ec" + std::to_string(pool_id);
+      vector<int> temp(size);
+      std::iota(temp.begin(), temp.end(), 0);
+      inc.new_pg_temp[with_temp] =
+        mempool::osdmap::vector<int>(temp.begin(), temp.end());
+      ASSERT_EQ(0, osdmap.apply_incremental(inc));
+      const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
+      ASSERT_TRUE(pool);
+
+      const int parity = size - p.nonprimary_shards.size() - 1;
+      for (int pos = 1; pos < size; ++pos) {
+        // as an earlier release's Objecter computes it
+        const int sent = pos > parity ? pos - parity : pos + size - parity - 1;
+        spg_t spg(with_temp, shard_id_t(sent));
+        ASSERT_TRUE(osdmap.undo_pre_stretch_zones_primaryfirst(&spg));
+        EXPECT_EQ(osdmap.pgtemp_undo_primaryfirst(*pool, with_temp,
+                                                  shard_id_t(pos)),
+                  spg.shard) << "position " << pos;
+        spg_t untouched(without_temp, shard_id_t(sent));
+        ASSERT_TRUE(osdmap.undo_pre_stretch_zones_primaryfirst(&untouched));
+        EXPECT_EQ(shard_id_t(sent), untouched.shard);
+      }
+      spg_t out_of_range(with_temp, shard_id_t(size));
+      EXPECT_FALSE(osdmap.undo_pre_stretch_zones_primaryfirst(&out_of_range));
+    }
+  }
+}
+
+// Stretch EC pg_temp with CRUSH_ITEM_NONE holes decodes to the shard-ordered
+// acting set and picks a primary-capable acting primary.
+TEST_F(OSDMapTest, pgtemp_primaryfirst_stretch_none_holes) {
+  set_up_map(18);
+  int64_t pool_id = my_rep_pool + 1;
+  for (auto [k, m, num_zones] : std::vector<std::tuple<int, int, int>>{
+         {4, 2, 2}, {2, 1, 3}, {2, 2, 2}}) {
+    pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(
+      k, m, k * 4096,
+      pg_pool_t::FLAG_EC_OPTIMIZATIONS | pg_pool_t::FLAG_EC_OVERWRITES,
+      pool_id, num_zones);
+    OSDMapTestHelpers::add_pool(osdmap, pool_id, pool);
+    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    pg_t pgid(0, pool_id);
+    int zone_size = k + m;
+
+    std::vector<std::vector<int>> patterns;
+    std::vector<int> all(p->size);
+    std::iota(all.begin(), all.end(), 0);
+    auto zone0_down = all;
+    std::fill(zone0_down.begin(), zone0_down.begin() + zone_size, CRUSH_ITEM_NONE);
+    patterns.push_back(zone0_down);
+    auto zone0_primaries_down = all;
+    zone0_primaries_down[0] = CRUSH_ITEM_NONE;
+    for (int s = k; s < zone_size; s++) {
+      zone0_primaries_down[s] = CRUSH_ITEM_NONE;
+    }
+    patterns.push_back(zone0_primaries_down);
+    auto alternating = all;
+    for (int s = 0; s < p->size; s += 2) {
+      alternating[s] = CRUSH_ITEM_NONE;
+    }
+    patterns.push_back(alternating);
+
+    for (auto& acting_in : patterns) {
+      SCOPED_TRACE(::testing::Message() << "k=" << k << " m=" << m
+                   << " zones=" << num_zones << " acting=" << acting_in);
+      std::vector<int> encoded = osdmap.pgtemp_primaryfirst(*p, acting_in);
+      OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+      inc.new_pg_temp[pgid] = mempool::osdmap::vector<int>(encoded.begin(),
+                                                           encoded.end());
+      osdmap.apply_incremental(inc);
+
+      std::vector<int> up, acting;
+      int up_primary, acting_primary;
+      osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &acting_primary);
+      EXPECT_EQ(acting_in, acting);
+
+      int expected_primary = -1;
+      for (int osd : encoded) {
+        if (osd != CRUSH_ITEM_NONE) {
+          expected_primary = osd;
+          break;
+        }
+      }
+      ASSERT_NE(-1, acting_primary);
+      EXPECT_EQ(expected_primary, acting_primary);
+      EXPECT_FALSE(p->is_nonprimary_shard(shard_id_t(acting_primary)));
+      if (acting_in[0] == CRUSH_ITEM_NONE && acting_in[k] == CRUSH_ITEM_NONE &&
+          acting_in[zone_size] != CRUSH_ITEM_NONE) {
+        EXPECT_EQ(zone_size, acting_primary);
+      }
+
+      for (size_t pos = 0; pos < encoded.size(); pos++) {
+        shard_id_t shard = osdmap.pgtemp_undo_primaryfirst(*p, pgid, shard_id_t(pos));
+        EXPECT_EQ(encoded[pos], acting_in[shard.id]) << "pos " << pos;
+      }
+    }
+    OSDMap::Incremental clear(osdmap.get_epoch() + 1);
+    clear.new_pg_temp[pgid] = mempool::osdmap::vector<int>();
+    osdmap.apply_incremental(clear);
+    pool_id++;
   }
 }
 

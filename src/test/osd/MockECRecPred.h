@@ -45,8 +45,13 @@ class MockECRecPred : public IsPGRecoverablePredicate {
     if (k == 0) {
       return true;
     }
-    // Recoverable when we have at least k shards (can tolerate up to m failures)
-    return static_cast<int>(have.size()) >= k;
+    // Recoverable when we have at least k distinct shards (can tolerate up to
+    // m failures).  Shard i of a multi-zone pool is relative shard i % (k+m).
+    std::set<int> shards;
+    for (const auto &s : have) {
+      shards.insert(s.shard.id % (k + m));
+    }
+    return static_cast<int>(shards.size()) >= k;
   }
 
  private:

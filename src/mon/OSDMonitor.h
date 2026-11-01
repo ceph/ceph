@@ -22,6 +22,7 @@
 #ifndef CEPH_OSDMONITOR_H
 #define CEPH_OSDMONITOR_H
 
+#include <functional>
 #include <map>
 #include <set>
 #include <utility>
@@ -33,6 +34,7 @@
 #include "common/simple_cache.hpp"
 #include "common/PriorityCache.h"
 
+#include "crush/crush.h"
 #include "osd/OSDMap.h"
 #include "osd/OSDMapMapping.h"
 
@@ -41,6 +43,7 @@
 
 #include "erasure-code/ErasureCodeInterface.h"
 #include "mon/MonOpRequest.h"
+#include "mon/PoolCreateParams.h"
 #include <boost/functional/hash.hpp>
 
 class Monitor;
@@ -421,6 +424,8 @@ private:
   // ...
   MOSDMap *build_latest_full(uint64_t features);
   MOSDMap *build_incremental(epoch_t first, epoch_t last, uint64_t features);
+  // whether session, with these features, must not get osdmaps
+  bool withhold_maps(const MonSession *session, uint64_t features) const;
   void send_full(MonOpRequestRef op);
   void send_incremental(MonOpRequestRef op, epoch_t first);
 
@@ -491,6 +496,21 @@ private:
       int64_t base_pool_id, const pg_pool_t *base_pool, const pg_pool_t *tier_pool,
       int *err, std::ostream *ss) const;
 
+  bool is_last_stretch_pool(int64_t pool);
+  // a pool other than skip_pool that matches pred once the pending changes
+  // are committed
+  std::optional<int64_t> other_pool(
+    int64_t skip_pool,
+    const std::function<bool(const pg_pool_t&)>& pred) const;
+  // whether stretch mode is enabled, or enabled by the pending changes
+  bool stretch_mode_enabled_or_pending() const;
+  // also true while only the MonMap is in stretch mode, as enable_stretch_mode
+  // leaves a cluster with no pools until a pool has two zones
+  bool cluster_stretch_mode_or_pending() const;
+  // legacy individual stretch pools ('osd pool stretch set' while stretch
+  // mode is off) and stretch mode cannot be combined
+  int check_no_legacy_individual_stretch_pools(int64_t skip_pool,
+                                               std::ostream *ss) const;
   int _prepare_remove_pool(int64_t pool, std::ostream *ss, bool no_fake);
   int _prepare_rename_pool(int64_t pool, std::string newname);
 
@@ -505,14 +525,31 @@ private:
 			  std::ostream *ss);
   void check_legacy_ec_plugin(const std::string& plugin, 
 			      const std::string& profile) const;
-  int normalize_profile(const std::string& profilename, 
+public:
+  int normalize_profile(const std::string& profilename,
 			ceph::ErasureCodeProfile &profile,
 			bool force,
 			std::ostream *ss);
+private:
+  int crush_rule_create_replica(const std::string &name,
+                                const std::string &root,
+                                int64_t num_zones,
+                                int num_replica_per_zone,
+                                const std::string &zone_failure_domain,
+                                const std::string &osd_failure_domain,
+                                const std::string &device_class,
+                                bool force,
+                                int *rule,
+                                std::ostream *ss);
   int crush_rule_create_erasure(const std::string &name,
-				const std::string &profile,
-				int *rule,
-				std::ostream *ss);
+                                int64_t num_zones,
+                                const std::string &root,
+                                const std::string &zone_failure_domain,
+                                const std::string &osd_failure_domain,
+                                const std::string &device_class,
+                                const std::string &profile,
+                                int *rule,
+                                std::ostream *ss);
   int get_crush_rule(const std::string &rule_name,
 		     int *crush_rule,
 		     std::ostream *ss);
@@ -520,46 +557,75 @@ private:
 		       ceph::ErasureCodeInterfaceRef *erasure_code,
 		       std::ostream *ss) const;
   int prepare_pool_crush_rule(const unsigned pool_type,
-			      const std::string &erasure_code_profile,
-			      const std::string &rule_name,
-			      int *crush_rule,
-			      std::ostream *ss);
+                              const std::string &pool_name,
+                              const std::string &erasure_code_profile,
+                              const std::string &rule_name,
+                              int64_t num_zones,
+                              const std::string &root,
+                              int num_replica_per_zone,
+                              const std::string &zone_failure_domain,
+                              const std::string &osd_failure_domain,
+                              const std::string &device_class,
+                              int *crush_rule,
+                              std::ostream *ss);
   bool erasure_code_profile_in_use(
     const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
     const std::string &profile,
     std::ostream *ss);
+  bool should_remove_ec_profile(const int64_t pool,
+                                const std::string &profile,
+                                std::ostream *ss);
   int parse_erasure_code_profile(const std::vector<std::string> &erasure_code_profile,
 				 std::map<std::string,std::string> *erasure_code_profile_map,
 				 std::ostream *ss);
+  void maybe_remove_unused_crush_rule(int64_t skip_pool, int old_rule_id);
+  void note_created_crush_rule(const std::string& name);
+  void note_created_ec_profile(const std::string& name);
+  bool remove_what_failed_op_created(MonOpRequestRef op);
+  // the command or pool operation being prepared
+  MonOpRequestRef preparing_op;
+  bool erasure_code_profile_removal_pending(const std::string& name) const;
   int prepare_pool_size(const unsigned pool_type,
-			const std::string &erasure_code_profile,
+                        const std::string &erasure_code_profile,
                         uint8_t repl_size,
-			unsigned *size, unsigned *min_size,
-			std::ostream *ss);
+                        int &replica,
+                        int64_t &num_zones,
+                        unsigned *size, unsigned *min_size,
+                        std::ostream *ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
-				const std::string &erasure_code_profile,
-				unsigned *stripe_width,
-				std::ostream *ss);
+                                const std::string &erasure_code_profile,
+                                bool ec_optimized,
+                                unsigned *stripe_width,
+                                std::ostream *ss);
   uint32_t get_osd_num_by_crush(int crush_rule);
   int check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, std::ostream* ss);
   int prepare_new_pool(std::string& name,
-		       int crush_rule,
-		       const std::string &crush_rule_name,
+                       int crush_rule,
+                       const std::string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
-		       unsigned pg_num_min,
-		       unsigned pg_num_max,
+                       unsigned pg_num_min,
+                       unsigned pg_num_max,
                        uint64_t repl_size,
-		       const uint64_t target_size_bytes,
-		       const float target_size_ratio,
-		       const std::string &erasure_code_profile,
+                       const uint64_t target_size_bytes,
+                       const float target_size_ratio,
+                       int64_t min_size,
+                       const std::string &erasure_code_profile,
+                       const std::string &root,
+                       int64_t num_zones,
+                       int replica,
+                       int num_replica_per_zone,
+                       const std::string &zone_failure_domain,
+                       const std::string &osd_failure_domain,
+                       const std::string &device_class,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
-		       std::string pg_autoscale_mode,
-		       bool bulk,
-		       bool crimson,
-           bool force_create,
-		       std::ostream *ss);
+                       std::string pg_autoscale_mode,
+                       bool bulk,
+                       bool crimson,
+                       bool force_create,
+                       std::ostream *ss,
+                       const std::string& rule_defaults = {});
   int prepare_new_pool(MonOpRequestRef op);
 
   void set_pool_flags(int64_t pool_id, uint64_t flags);
@@ -737,6 +803,9 @@ public:
 		     int32_t* new_id);
   int prepare_command_osd_purge(MonOpRequestRef op, int32_t id, std::stringstream& ss);
   int prepare_command_osd_destroy(MonOpRequestRef op, int32_t id, std::stringstream& ss);
+
+  int handle_crush_rule_creation_result(int err, const std::string& rule_name);
+
   int _prepare_command_osd_crush_remove(
       CrushWrapper &newcrush,
       int32_t id,
@@ -764,6 +833,43 @@ public:
   void maybe_enable_pool_split_ops(pg_pool_t &p);
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                std::stringstream& ss);
+  int prepare_command_pool_set_num_zones(const cmdmap_t& cmdmap,
+                                         int64_t pool,
+                                         const std::string& poolstr,
+                                         int64_t n,
+                                         const std::string& val,
+                                         const std::string& interr,
+                                         pg_pool_t& p,
+                                         std::stringstream& ss);
+  // Recompute the shards of a FastEC pool that cannot become a primary, for
+  // its num_zones.
+  int update_nonprimary_shards(pg_pool_t& p, std::ostream *ss);
+  // The zone failure domain that ceph osd pool set num_zones gives pool p:
+  // --zone_failure_domain, else for an erasure coded pool its profile's, else
+  // dflt.
+  static std::string num_zones_zone_failure_domain(
+    const cmdmap_t& cmdmap, const pg_pool_t& p,
+    const ceph::ErasureCodeProfile& profile, const std::string& dflt);
+  // The rule enable_stretch_mode generates, without a rule of its own, for a
+  // replicated pool that already has two zones and another replica count:
+  // <pool>-replica-2 over zone_failure_domain, from the pool defaults
+  int prepare_stretch_replica_crush_rule(const std::string& poolstr,
+                                         const std::string& zone_failure_domain,
+                                         int *crush_rule, std::ostream *ss);
+  int prepare_num_zones_crush_rule(const cmdmap_t& cmdmap,
+                                   const std::string& poolstr,
+                                   int64_t n,
+                                   const pg_pool_t& p,
+                                   int *crush_rule,
+                                   std::ostream *ss);
+  int prepare_command_pool_set_replica(int64_t pool,
+                                       const std::string& poolstr,
+                                       int64_t n,
+                                       const std::string& val,
+                                       const std::string& interr,
+                                       pg_pool_t& p,
+                                       std::stringstream& ss,
+                                       bool force);
 
   int prepare_command_pool_application(const std::string &prefix,
                                        const cmdmap_t& cmdmap,
@@ -843,6 +949,26 @@ public:
 				     int *errcode,
 				     std::set<pg_pool_t*>* pools,
 				     const std::string& new_crush_rule);
+
+  /**
+   * Static helper for validating pools for stretch mode.
+   * Extracted for testability - can be called from unit tests.
+   * @param crush: CrushWrapper to validate rule against
+   * @param pool_names: Map of pool IDs to names (for error messages)
+   * @param pools: Map of pool IDs to pool objects to validate
+   * @param ss: stringstream for error messages
+   * @param okay: Set to true if validation passes
+   * @param errcode: Set to error code if validation fails
+   * @param new_crush_rule: Name of the CRUSH rule to validate
+   */
+  static void validate_stretch_mode_pools(
+      const CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, std::string>& pool_names,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      std::stringstream& ss,
+      bool *okay,
+      int *errcode,
+      const std::string& new_crush_rule);
   /**
    * Check validity of inputs and OSD/CRUSH state to
    * engage stretch mode. Designed to be used with
@@ -865,7 +991,183 @@ public:
 			       uint32_t bucket_count,
 			       const std::set<pg_pool_t*>& pools,
 			       const std::string& new_crush_rule,
-			       CrushWrapper& crush);
+                               CrushWrapper& crush,
+                               bool legacy);
+
+  static void extract_sites_from_crush_rule(CrushWrapper& crush, std::set<int> &rule_sites, const std::set<int> &rule_roots, int dividing_id);
+
+  /**
+   * Validate that a CRUSH rule is compatible with stretch mode.
+   * Checks that the rule's take roots map to the expected 2 sites.
+   * @param crush_rule The CRUSH rule ID to validate
+   * @param zone_failure_domain Failure domain that the pools stretch across
+   * @param ss Output stream for error messages
+   * @return 0 on success, negative error code on failure
+   */
+  static int validate_stretch_mode_new_pool(CrushWrapper& crush, int crush_rule, int stretch_bucket_count, int stretch_mode_bucket,
+    const mempool::osdmap::map<int64_t, pg_pool_t>& pools, const std::string& zone_failure_domain, std::ostream *ss);
+  // The pg_temp, primary_temp and pg_upmap of a pool whose size changes
+  // from old_size to new_size, in the pending update inc
+  static void clear_pool_mappings_of_size(const OSDMap& osdmap,
+                                          OSDMap::Incremental& inc,
+                                          int64_t pool, unsigned old_size,
+                                          unsigned new_size);
+  // The root and the zone and OSD failure domain types of a replicated rule
+  // over num_zones zones, from which ceph osd pool set <pool> replica builds
+  // the pool's new rule
+  static int stretch_replicated_rule_layout(const CrushWrapper& crush,
+                                            int rule, int64_t num_zones,
+                                            int *root, int *zone_type,
+                                            int *osd_type, std::ostream *ss);
+  // validate_stretch_mode_new_pool() for a pool joining stretch mode, which
+  // may be entered in the pending update, against the pools it leaves; the
+  // joining pool, if it exists, is not compared with itself
+  int validate_joining_pool(CrushWrapper& crush, int crush_rule,
+                            const std::string& zone_failure_domain,
+                            int64_t pool, std::ostream *ss) const;
+  // Whether the Monitors can divide the cluster by zone for a pool that puts
+  // it in stretch mode: with the tiebreaker they would choose, or with theirs
+  // while only the MonMap is in stretch mode, as enable_stretch_mode leaves a
+  // cluster with no pools
+  int validate_monitor_stretch(const std::string& zone,
+                               const CrushWrapper& crush, std::ostream *ss);
+
+  // The release that ships per-pool num_zones. The update that raises
+  // require_osd_release to it sets the OSDMap flag stretch_zones; until
+  // then the monitors keep the behavior of earlier releases.
+  static constexpr ceph_release_t NUM_ZONES_RELEASE = ceph_release_t::vampire;
+  bool num_zones_supported() const {
+    return osdmap.stretch_zones();
+  }
+  // the pending update commits the upgrade
+  bool num_zones_commit_pending() const {
+    return !num_zones_supported() &&
+           osdmap.require_osd_release < NUM_ZONES_RELEASE &&
+           pending_inc.new_require_osd_release >= NUM_ZONES_RELEASE;
+  }
+  // What check_pool_params() needs from this cluster, with crush as its
+  // CRUSH map. crush must outlive the result.
+  PoolCreateCluster pool_create_cluster(CrushWrapper& crush);
+  bool crush_rule_removal_pending(const std::string& rule_name, int rule_id);
+
+  // -EINVAL unless rule places a pool over zones in num_zones buckets of the
+  // zone type, with its share of size in each.
+  int check_rule_places_pool(int rule, unsigned pool_type, int64_t num_zones,
+                             const std::string& zone_failure_domain,
+                             unsigned size, std::ostream *ss);
+  // Whether a rule can serve a new pool: a rule of the pool's type that, for
+  // more than one zone, divides the cluster as the pool's zones would.
+  // A zone_size other than 0 is the number of items each zone must get.
+  static bool crush_rule_suits_pool(
+      CrushWrapper& crush,
+      int64_t rule,
+      int pool_type,
+      int64_t num_zones,
+      const std::string& zone_failure_domain,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      unsigned zone_size = 0);
+
+  // The number of items a rule places in each bucket of zone_type for a
+  // pool of the given size, or -1 if the zones do not all get the same.
+  static int rule_items_per_zone(
+      const CrushWrapper& crush,
+      int rule,
+      int zone_type,
+      unsigned size);
+
+  // The reason why a command waits for the upgrade to be committed.
+  static std::string num_zones_upgrade_hint();
+
+  // The pool creation defaults that the stretch mode commands write: the
+  // zone count and replicas per zone, and the zone failure domain unless it
+  // is empty.
+  static std::map<std::string, std::string> stretch_pool_defaults(
+      int num_zones, int replica, const std::string& zone_failure_domain);
+
+  // The pool creation defaults that global stretch mode of an earlier
+  // release becomes when the upgrade is committed; none without stretch mode.
+  static std::map<std::string, std::string> stretch_mode_defaults_at_commit(
+      bool stretch_mode_enabled,
+      const CrushWrapper& crush,
+      int stretch_mode_bucket,
+      uint64_t stretch_pool_size);
+
+  // Set the default EC profile, the template of generated profiles, and
+  // propose it.
+  void propose_default_profile(
+      const std::map<std::string, std::string>& profile);
+
+  // The data and coding chunk counts of profile's plugin.
+  int profile_chunk_counts(const std::map<std::string, std::string>& profile,
+                           unsigned *k, unsigned *m, std::ostream *ss) const;
+
+  // The name for a pool's own copy of a profile with these contents: base,
+  // else the first base-<n>, that lookup finds free or holding the same
+  // contents.
+  static std::string profile_copy_name(
+      const std::string& base,
+      const std::map<std::string, std::string>& contents,
+      const std::function<const std::map<std::string, std::string>*(
+        const std::string&)>& lookup);
+
+  // At the upgrade commit: every EC pool that refers to the default profile
+  // gets a verbatim copy of its own, in the pending OSDMap.
+  void copy_default_profile_to_pools();
+
+  // What ceph mon enable_stretch_mode or disable_stretch_mode does to a pool.
+  enum class StretchModeChange {
+    STRETCH,    // num_zones 1 to 2
+    REPLICA,    // stays at num_zones 2 with a new replica count
+    UNSTRETCH,  // num_zones 2 to 1
+  };
+  static constexpr int STRETCH_MODE_REPLICA = 2;
+  static constexpr int LOCAL_REPLICA = 3;
+
+  static std::map<int64_t, StretchModeChange> plan_stretch_mode_changes(
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools, bool enable);
+
+  // The checks of ceph mon enable_stretch_mode that need no cluster state
+  // other than the CRUSH map and the pools.
+  static int validate_enable_stretch_mode(
+      CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, std::string>& pool_names,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      const std::string& new_crush_rule,
+      const std::string& dividing_bucket,
+      std::ostream *ss);
+
+  // The checks of ceph mon disable_stretch_mode that need no cluster state
+  // other than the CRUSH map, the pools and whether stretch mode recovers.
+  static int validate_disable_stretch_mode(
+      const CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      const std::string& crush_rule,
+      bool recovering,
+      std::ostream *ss);
+
+  // ceph osd pool stretch set takes min_size as a total over all copies, as
+  // earlier releases do, from 1 to size; 0 or a negative error.
+  static int stretch_set_min_size(int64_t min_size, int64_t size,
+                                  std::ostream *ss);
+
+  // Whether ceph osd pool stretch unset may clear the stretch values of an
+  // EC pool with k data chunks and k_plus_m chunks, giving it size and
+  // min_size.
+  static int check_stretch_unset_ec(const std::string& pool_name,
+                                    int num_zones, int k, int k_plus_m,
+                                    int64_t size, int64_t min_size,
+                                    std::ostream *ss);
+
+  // ceph mon enable_stretch_mode and disable_stretch_mode once the upgrade
+  // is committed: change every pool as ceph osd pool set num_zones does and
+  // set the pool creation defaults. -EAGAIN when CRUSH rules were created
+  // and the command must be retried once they are committed.
+  int enable_stretch_mode(std::ostream& ss,
+                          const std::string& tiebreaker_mon,
+                          const std::string& dividing_bucket,
+                          const std::string& new_crush_rule);
+  int disable_stretch_mode(std::ostream& ss, const std::string& crush_rule);
+
   /**
   *
   * Set all stretch mode values of all pools back to pre-stretch mode values.
@@ -925,6 +1227,46 @@ public:
    * Sets the osdmap and pg_pool_t values back to healthy stretch mode status.
    */
   void trigger_healthy_stretch_mode();
+  /**
+   * Update each pool that is stretched once inc is applied, including
+   * pools that inc creates or changes, for a stretch mode transition:
+   * force an op resend and, if bucket_count is non-zero, set the peering
+   * bucket count and mandatory member. A pool of one zone, whose min_size
+   * counts all its copies as in earlier releases, also has min_size halved
+   * when a zone is lost and set to mon_stretch_pool_min_size once healthy,
+   * as earlier releases did.
+   */
+  static void apply_stretch_transition_to_pools(
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      OSDMap::Incremental& inc,
+      uint32_t bucket_count = 0,
+      int mandatory_member = CRUSH_ITEM_NONE);
+  /**
+   * In the update that commits the upgrade, with tmp the OSDMap once inc
+   * is applied: give each pool of global stretch mode that has its copies
+   * evenly in its two zones two zones and min_size per zone, and force an
+   * op resend on every stretch pool, as the peering rules change.
+   */
+  static void convert_stretch_pools_at_commit(
+      const OSDMap& tmp,
+      OSDMap::Incremental& inc,
+      unsigned stretch_pool_min_size);
+  // Whether convert_stretch_pools_at_commit() gives pool p two zones
+  static bool converts_at_commit(const OSDMap& osdmap, const pg_pool_t& p);
+  // Whether p is a pool of global stretch mode that keeps one zone at the
+  // commit, or kept it
+  static bool keeps_one_zone(const OSDMap& osdmap, const pg_pool_t& p);
+  // Refuse disable_stretch_mode while a pool kept one zone at the commit,
+  // as the disable would leave it stretched
+  static int check_disable_leaves_no_stretch_pool(const OSDMap& osdmap,
+                                                  std::ostream *ss);
+  /**
+   * Warn about the pools of global stretch mode that keep one zone at the
+   * commit: before it, while they can still be changed, and after it, until
+   * they are given two zones.
+   */
+  static void check_unconverted_stretch_pools(const OSDMap& osdmap,
+                                              health_check_map_t* checks);
   /**
    * Obtain the crush rule being used for stretch pools.
    * Note that right now this is heuristic and simply selects the
