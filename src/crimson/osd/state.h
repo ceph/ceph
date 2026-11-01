@@ -15,6 +15,14 @@ namespace crimson::osd {
 // seastar::sharded puts start_single on core 0
 constexpr core_id_t PRIMARY_CORE = 0;
 
+// Core used as canonical authority for new PG-to-core mappings.
+// Separated from PRIMARY_CORE so that PG mapping arbitration does not
+// contend with OSDSingletonState traffic on reactor 0.  Falls back to
+// PRIMARY_CORE on single-reactor configurations.
+inline core_id_t get_mapping_core() {
+  return (seastar::this_smp_shard_count() > 1) ? 1 : PRIMARY_CORE;
+}
+
 /**
  * OSDState
  *

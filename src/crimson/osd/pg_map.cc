@@ -4,6 +4,7 @@
 #include "crimson/osd/pg_map.h"
 #include "crimson/common/log.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/state.h"
 #include "common/Formatter.h"
 
 SET_SUBSYS(osd);
@@ -77,7 +78,8 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
     DEBUG("calling primary to add mapping for pg {} to the expected core {}",
           pgid, core_expected);
     return container().invoke_on(
-        0, [pgid, core_expected, store_index, FNAME, this](auto &primary_mapping) {
+        get_mapping_core(),
+        [pgid, core_expected, store_index, FNAME, this](auto &primary_mapping) {
       auto core_to_update = core_expected;
       auto shard_index_update = store_index;
       auto find_iter = primary_mapping.pg_to_core.find(pgid);
