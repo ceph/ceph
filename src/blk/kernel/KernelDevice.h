@@ -59,7 +59,9 @@ private:
   std::unique_ptr<io_queue_t> io_queue;
   aio_callback_t discard_callback;
   void *discard_callback_priv;
-  bool aio_stop;
+  // set by _aio_stop(), polled by _aio_thread(); relaxed is enough: it
+  // guards no other data, and _aio_stop() joins the thread
+  std::atomic<bool> aio_stop;
   bool need_notify = false;
   std::unique_ptr<PerfCounters> logger;
 

@@ -43,7 +43,7 @@ std::function<void ()> NetworkStack::add_thread(Worker* w)
       ldout(cct, 10) << __func__ << " starting" << dendl;
       w->initialize();
       w->init_done();
-      while (!w->done) {
+      while (!w->done.load(std::memory_order_relaxed)) {
         ldout(cct, 30) << __func__ << " calling event process" << dendl;
 
         ceph::timespan dur;
@@ -162,7 +162,7 @@ void NetworkStack::stop()
   std::lock_guard lk(pool_spin);
   unsigned i = 0;
   for (Worker* worker : workers) {
-    worker->done = true;
+    worker->done.store(true, std::memory_order_relaxed);
     worker->center.wakeup();
     join_worker(i++);
   }
