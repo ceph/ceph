@@ -50,19 +50,34 @@ IdentityMapping::resolve(const std::string& principal) const
     return i->second;
   }
 
-  /* Then name. */
-  if (auto n = noobaa_id_by_name.find(principal);
-      n != noobaa_id_by_name.end()) {
-    if (auto i = user_arn_by_noobaa_id.find(n->second);
-	i != user_arn_by_noobaa_id.end()) {
-      return i->second;
-    }
+  /* Then an account's name, never a user's:  a user's name is not
+   * unique, and NooBaa matches a bare name only for an account. */
+  if (auto n = noobaa_id_by_account_name.find(principal);
+      n != noobaa_id_by_account_name.end()) {
     if (auto i = account_by_noobaa_id.find(n->second);
 	i != account_by_noobaa_id.end()) {
       return i->second;
     }
   }
   return std::nullopt;
+}
+
+bool IdentityMapping::names_only_users(const std::string& principal) const
+{
+  return !resolve(principal) && iam_user_names.contains(principal);
+}
+
+std::string describe_unresolved(const IdentityMapping& mapping,
+				const std::vector<std::string>& unresolved)
+{
+  std::string out;
+  for (const auto& u : unresolved) {
+    out += (out.empty() ? "" : ", ") + u;
+    if (mapping.names_only_users(u)) {
+      out += " (an IAM user's name;  a name resolves only to an account)";
+    }
+  }
+  return out;
 }
 
 IdentityMapping mapping_from(const ImportPlan& plan)
@@ -74,11 +89,14 @@ IdentityMapping mapping_from(const ImportPlan& plan)
        * import set to the NooBaa name. */
       m.user_arn_by_noobaa_id[e.noobaa_id] =
 	"arn:aws:iam::" + e.account_id + ":user/" + e.display_name;
+      if (!e.noobaa_name.empty()) {
+	m.iam_user_names.insert(e.noobaa_name);
+      }
     } else {
       m.account_by_noobaa_id[e.noobaa_id] = e.account_id;
-    }
-    if (!e.noobaa_name.empty()) {
-      m.noobaa_id_by_name[e.noobaa_name] = e.noobaa_id;
+      if (!e.noobaa_name.empty()) {
+	m.noobaa_id_by_account_name[e.noobaa_name] = e.noobaa_id;
+      }
     }
   }
   return m;
@@ -327,10 +345,8 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 	if (unresolved.empty()) {
 	  why += "it does not parse";
 	} else {
-	  why += "these principals resolve to nothing:";
-	  for (const auto& u : unresolved) {
-	    why += " " + u;
-	  }
+	  why += "these principals resolve to nothing: " +
+	    describe_unresolved(mapping, unresolved);
 	}
 	result.policies_refused.push_back(std::move(why));
       }

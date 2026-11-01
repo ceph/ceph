@@ -16128,6 +16128,33 @@ TEST_F(NooBaaImportTest, ARolePrincipalThatResolvesToNothingFailsTheRole)
       << why();
 }
 
+/* An IAM user of the trust policy's name, in another account. */
+static constexpr const char* NB_USER_NAMED_INTERCHANGE = R"({"_id":"u9",
+  "name":"interchange","email":"interchange",
+  "owner":"6ac7d2121e63a748e37663e0",
+  "nsfs_account_config":{"uid":1500,"gid":1500,
+    "new_buckets_path":"/lv2tb/nsfs-interchange/data/root"},
+  "access_keys":[{"access_key":"USERNAMEDINTERCHANGE",
+    "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
+  "master_key_id":"6ac7cb2751b72219a4bae375"})";
+
+/* A trust policy naming only an IAM user's name resolves to nothing,
+ * so the role fails as for any unresolved principal, and the failure
+ * says why. */
+TEST_F(NooBaaImportTest, ATrustNameOnlyAUserHasFailsTheRole)
+{
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account("interchange").c_str());
+  add_identity("u9", NB_USER_NAMED_INTERCHANGE);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  EXPECT_LT(run(), 0);
+  EXPECT_EQ(result.roles_created, 0u);
+  EXPECT_NE(why().find("resolve to nothing: interchange (an IAM user's "
+		       "name;  a name resolves only to an account)"),
+	    std::string::npos) << why();
+}
+
 class NooBaaPolicyTest : public ::testing::Test {
 public:
   nsfs::IdentityMapping mapping;
@@ -16135,10 +16162,10 @@ public:
   void SetUp() override {
     mapping.account_by_noobaa_id["6ac7cb27fd4af356919110a3"] =
       "RGW11111111111111111";
-    mapping.noobaa_id_by_name["acct-one"] = "6ac7cb27fd4af356919110a3";
+    mapping.noobaa_id_by_account_name["acct-one"] = "6ac7cb27fd4af356919110a3";
     mapping.user_arn_by_noobaa_id["u1"] =
       "arn:aws:iam::RGW11111111111111111:user/alice";
-    mapping.noobaa_id_by_name["alice"] = "u1";
+    mapping.iam_user_names.insert("alice");
   }
 
   std::string rewrite(const std::string& doc, int expect = 0) {
@@ -16151,11 +16178,14 @@ public:
   }
 };
 
-/* Id first, then name -- which is the whole of the disambiguation.
+/* Id first, then an account's name -- which is the whole of the
+ * disambiguation.
  *
  * A name and an id are both bare strings and cannot be told apart
  * syntactically:  an account may legally be *named* twenty-four hex
- * characters.  So the order matters, and it mirrors NooBaa's. */
+ * characters.  So the order matters, and it mirrors NooBaa's.  A user is
+ * reached by its id only:  NooBaa matches a bare name only for an
+ * account (DECISIONS.md 2026-10-30). */
 TEST_F(NooBaaPolicyTest, APrincipalResolvesByIdThenByName)
 {
   EXPECT_EQ(*mapping.resolve("6ac7cb27fd4af356919110a3"),
@@ -16163,17 +16193,30 @@ TEST_F(NooBaaPolicyTest, APrincipalResolvesByIdThenByName)
   EXPECT_EQ(*mapping.resolve("acct-one"), "RGW11111111111111111");
   EXPECT_EQ(*mapping.resolve("u1"),
 	    "arn:aws:iam::RGW11111111111111111:user/alice");
-  EXPECT_EQ(*mapping.resolve("alice"),
-	    "arn:aws:iam::RGW11111111111111111:user/alice");
+  EXPECT_FALSE(mapping.resolve("alice").has_value())
+      << "a user's name resolved";
+  EXPECT_TRUE(mapping.names_only_users("alice"));
   EXPECT_FALSE(mapping.resolve("nobody").has_value());
+  EXPECT_FALSE(mapping.names_only_users("nobody"));
 
   /* an account *named* like an id resolves as the id it is, not the
    * name it looks like */
   nsfs::IdentityMapping ambiguous = mapping;
-  ambiguous.noobaa_id_by_name["6ac7cb27fd4af356919110a3"] = "u1";
+  ambiguous.account_by_noobaa_id["6ac7cb27fd4af3569191ffff"] =
+    "RGW22222222222222222";
+  ambiguous.noobaa_id_by_account_name["6ac7cb27fd4af356919110a3"] =
+    "6ac7cb27fd4af3569191ffff";
   EXPECT_EQ(*ambiguous.resolve("6ac7cb27fd4af356919110a3"),
 	    "RGW11111111111111111")
-      << "the name arm won, so the order is wrong";
+      << "the name branch won, so the order is wrong";
+}
+
+/* An unresolved principal that is an IAM user's name says so. */
+TEST_F(NooBaaPolicyTest, AnUnresolvedUserNameSaysWhy)
+{
+  EXPECT_EQ(nsfs::describe_unresolved(mapping, {"ghost", "alice"}),
+	    "ghost, alice (an IAM user's name;  a name resolves only to an "
+	    "account)");
 }
 
 /* Everything outside Principal survives byte-for-byte.
@@ -16217,9 +16260,9 @@ TEST_F(NooBaaPolicyTest, OnlyPrincipalsAreTouched)
  * exactly as they are. */
 TEST_F(NooBaaPolicyTest, EveryPrincipalShapeIsRewritten)
 {
-  EXPECT_NE(rewrite(R"({"Statement":[{"Principal":"alice"}]})")
+  EXPECT_NE(rewrite(R"({"Statement":[{"Principal":"u1"}]})")
 		.find("user/alice"), std::string::npos);
-  EXPECT_NE(rewrite(R"({"Statement":[{"Principal":["alice","acct-one"]}]})")
+  EXPECT_NE(rewrite(R"({"Statement":[{"Principal":["u1","acct-one"]}]})")
 		.find("RGW11111111111111111"), std::string::npos);
 
   const std::string obj =
@@ -16231,7 +16274,7 @@ TEST_F(NooBaaPolicyTest, EveryPrincipalShapeIsRewritten)
       << "a Service principal was rewritten: " << obj;
 
   /* NotPrincipal is a denial's subject and matters just as much */
-  EXPECT_NE(rewrite(R"({"Statement":[{"NotPrincipal":{"AWS":"alice"}}]})")
+  EXPECT_NE(rewrite(R"({"Statement":[{"NotPrincipal":{"AWS":"u1"}}]})")
 		.find("user/alice"), std::string::npos);
 
   /* `*` means everyone on both sides */
@@ -16239,7 +16282,7 @@ TEST_F(NooBaaPolicyTest, EveryPrincipalShapeIsRewritten)
   EXPECT_NE(star.find("\"*\""), std::string::npos) << star;
 
   /* a single statement rather than an array */
-  EXPECT_NE(rewrite(R"({"Statement":{"Principal":"alice"}})")
+  EXPECT_NE(rewrite(R"({"Statement":{"Principal":"u1"}})")
 		.find("user/alice"), std::string::npos);
 }
 
@@ -16255,7 +16298,7 @@ TEST_F(NooBaaPolicyTest, APolicyWithAnUnresolvedPrincipalIsRejected)
   std::vector<std::string> unresolved;
   EXPECT_EQ(nsfs::rewrite_policy_principals(
 		env->dpp,
-		R"({"Statement":[{"Principal":{"AWS":["alice","ghost",
+		R"({"Statement":[{"Principal":{"AWS":["u1","ghost",
 		  "phantom"]}}]})",
 		mapping, out, unresolved), -ENOENT);
   ASSERT_EQ(unresolved.size(), 2u);
@@ -16286,7 +16329,9 @@ TEST_F(NooBaaPlanTest, TheMappingFollowsThePlan)
   /* an IAM user resolves to an ARN, because that is what an RGW user
    * principal is, and it matches on display_name */
   EXPECT_EQ(*m.resolve("u1"), "arn:aws:iam::" + acct + ":user/alice");
-  EXPECT_EQ(*m.resolve("alice"), "arn:aws:iam::" + acct + ":user/alice");
+  /* and by name not at all:  a bare name is an account's only */
+  EXPECT_FALSE(m.resolve("alice").has_value());
+  EXPECT_TRUE(m.names_only_users("alice"));
 }
 
 /* NooBaa's bucket state reaches RGW:  the owner, the policy and logging.
@@ -16306,7 +16351,7 @@ public:
 
     mapping.account_by_noobaa_id["6560e1f1c0ffee0000000002"] =
       "RGW11111111111111111";
-    mapping.noobaa_id_by_name["their-acct"] = "6560e1f1c0ffee0000000002";
+    mapping.noobaa_id_by_account_name["their-acct"] = "6560e1f1c0ffee0000000002";
   }
 
   int run() {

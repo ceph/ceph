@@ -685,13 +685,9 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     std::vector<std::string> unresolved;
     if (int r = rewrite_policy_principals(dpp, trust, mapping, rewritten,
 					  unresolved); r < 0) {
-      std::string names;
-      for (const auto& u : unresolved) {
-	names += (names.empty() ? "" : ", ") + u;
-      }
       fail(e.noobaa_name, (r == -ENOENT)
 	   ? "the trust policy names principals that resolve to nothing: " +
-	     names
+	     describe_unresolved(mapping, unresolved)
 	   : "the trust policy will not translate: " + cpp_strerror(-r));
       continue;
     }

@@ -18969,12 +18969,9 @@ int NSFSDriver::rewrite_unadopted_policy(const DoutPrefixProvider* dpp,
   std::string rewritten;
   if (nsfs::rewrite_policy_principals(dpp, i->second.to_str(), *m,
 				      rewritten, unresolved) < 0) {
-    std::string who;
-    for (const auto& u : unresolved) {
-      who += " " + u;
-    }
     ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket << "'s policy names "
-      "principals the import has not written (" << who << " );  it is not "
+      "principals the import has not written ("
+      << nsfs::describe_unresolved(*m, unresolved) << ");  it is not "
       "served until it can be rewritten, as the import would not write it"
       << dendl;
     attrs.erase(i);

@@ -31,9 +31,10 @@
  * way.  NooBaa's principals are bare strings -- an account's `email` is
  * a copy of its name -- and each must be resolved against the
  * imported identity set, **id first and then name**, mirroring
- * `config_fs.js:662-678`.  A principal may name an IAM user or a
- * role, not only an account, so the mapping is
- * `NooBaa id -> (account id | user ARN)`.
+ * `config_fs.js:662-678`.  An id may name an IAM user, not only an
+ * account, so the mapping is `NooBaa id -> (account id | user ARN)`;  a
+ * name resolves only to an account (DECISIONS.md 2026-10-30, amended
+ * 2026-11-01).
  *
  * **The document is a DOM, not a template.**  RGW stores a policy as
  * its own source text -- `from_noobaa_bucket_policy` keeps `p.text`
@@ -67,6 +68,7 @@
 
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -92,13 +94,24 @@ struct IdentityMapping {
    * user.  RGW matches a user principal on `display_name`, which the
    * import set to the NooBaa name (§6.6) */
   std::map<std::string, std::string> user_arn_by_noobaa_id;
-  /* NooBaa name -> NooBaa `_id`, for the second half of "id first, then
-   * name" */
-  std::map<std::string, std::string> noobaa_id_by_name;
+  /* NooBaa account name -> NooBaa `_id`, for the second half of "id
+   * first, then name".  Accounts only:  NooBaa matches a bare name in a
+   * bucket policy only for an account, whose names are unique
+   * (`s3_rest.js:287-289,321`), and accepts one into a policy only as an
+   * account's (`config_fs.js:661-677`) */
+  std::map<std::string, std::string> noobaa_id_by_account_name;
+  /* the IAM users' names.  Never resolved through:  it says why a name
+   * resolved to nothing.  The plan refuses two identities of one name,
+   * since their emails are copies of the names and RGW's email index is
+   * shared, so a name is an account's or a user's, never both */
+  std::set<std::string> iam_user_names;
 
-  /* Id first, then name.  Nothing if neither resolves -- which is a
-   * fact to report, not a value to invent. */
+  /* Id first, then an account's name.  Nothing if neither resolves --
+   * which is a fact to report, not a value to invent. */
   std::optional<std::string> resolve(const std::string& principal) const;
+
+  /* A principal that resolves to nothing and is an IAM user's name. */
+  bool names_only_users(const std::string& principal) const;
 };
 
 IdentityMapping mapping_from(const ImportPlan& plan);
@@ -118,6 +131,11 @@ int rewrite_policy_principals(const DoutPrefixProvider* dpp,
 			      const IdentityMapping& mapping,
 			      std::string& out,
 			      std::vector<std::string>& unresolved);
+
+/* `unresolved` as an operator reads it:  each principal, and for an IAM
+ * user's name, that a name resolves only to an account. */
+std::string describe_unresolved(const IdentityMapping& mapping,
+				const std::vector<std::string>& unresolved);
 
 struct BucketImportResult {
   size_t buckets_written{0};
