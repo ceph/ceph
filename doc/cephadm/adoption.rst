@@ -409,8 +409,9 @@ ones.
 
    The output is an XML document that contains ``ListAllMyBucketsResult``.
    If you deployed the service with ``--ssl``, run
-   ``curl --insecure https://<host>:<port>`` instead: cephadm signs the
-   certificate of the service with its own certificate authority, which
+   ``curl --insecure https://<host>:<port>`` instead. Beginning with the
+   Umbrella release, when a service is given no certificate, cephadm
+   generates one and signs it with its own certificate authority, which
    ``curl`` does not trust.
 
 #. On each host that runs a legacy RGW, stop the legacy RGW daemons.
@@ -488,8 +489,10 @@ Troubleshooting
 - **"could not detect legacy fsid; set fsid in ceph.conf".** The
   ``cephadm adopt`` command reads the ID of the cluster from the ``fsid``
   setting in the ``[global]`` section of ``/etc/ceph/ceph.conf`` on the host.
-  Add the setting, then run the command again. ``ceph fsid`` prints the
-  value.
+  For an OSD, it first reads the ID from
+  ``/var/lib/ceph/osd/ceph-<id>/ceph_fsid``, and uses the setting only if it
+  cannot read an ID from that file. Add the setting, then run the command
+  again. ``ceph fsid`` prints the value.
 - **"data directory ... does not exist. Incorrect ID specified, or daemon
   already adopted?"** No legacy daemon with that name has its data on this
   host. Run ``cephadm ls`` on the host, and use a ``name`` that has the style
