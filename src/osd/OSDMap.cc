@@ -8347,6 +8347,64 @@ void OSDMap::check_health(CephContext *cct,
     }
   }
 
+  // POOL_MIN_SIZE_TOO_LOW
+  if (cct->_conf.get_val<bool>("mon_warn_on_pool_min_size_too_low")) {
+    list<string> detail;
+    for (const auto& [pool_id, pool] : get_pools()) {
+      const unsigned size = pool.get_size();
+      const unsigned min_size = pool.get_min_size();
+      if (size <= 1) {
+        // no redundancy at all: already reported by POOL_NO_REDUNDANCY
+        continue;
+      }
+      if (degraded_stretch_mode && pool.is_stretch_pool()) {
+        // degraded stretch mode lowers min_size on purpose; reported
+        // separately by DEGRADED_STRETCH_MODE
+        continue;
+      }
+      if (pool.is_replicated()) {
+        if (min_size <= 1) {
+          ostringstream ss;
+          ss << "pool '" << get_pool_name(pool_id) << "' has min_size "
+             << min_size << " with size " << size
+             << "; min_size >= 2 is recommended for replicated pools";
+          detail.push_back(ss.str());
+        }
+      } else if (pool.is_erasure()) {
+        const auto& ecp = get_erasure_code_profile(pool.erasure_code_profile);
+        auto pk = ecp.find("k");
+        if (pk == ecp.end()) {
+          continue;
+        }
+        const unsigned k = atoi(pk->second.c_str());
+        if (k == 0 || k >= size || min_size > k) {
+          continue;
+        }
+        const unsigned m = size - k;
+        ostringstream ss;
+        ss << "pool '" << get_pool_name(pool_id) << "' has min_size "
+           << min_size << " with k=" << k << " m=" << m;
+        if (m == 1) {
+          ss << "; writes are accepted with no redundancy left and m=1 "
+             << "cannot provide min_size >= k+1 without blocking I/O on any "
+             << "failure, use a profile with m >= 2";
+        } else {
+          ss << "; min_size >= k+1 (" << k + 1
+             << ") is recommended for erasure-coded pools";
+        }
+        detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pool(s) have min_size too low to protect "
+         << "against data loss";
+      auto& d = checks->add("POOL_MIN_SIZE_TOO_LOW", HEALTH_WARN,
+                            ss.str(), detail.size());
+      d.detail.swap(detail);
+    }
+  }
+
   // DEGRADED STRETCH MODE
   if (cct->_conf.get_val<bool>("mon_warn_on_degraded_stretch_mode")) {
     if (recovering_stretch_mode) {
