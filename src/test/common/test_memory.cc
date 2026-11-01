@@ -8,6 +8,7 @@
 #include "include/inline_memory.h"
 #include "include/utime.h"
 #include "common/Clock.h"
+#include "test/sanitized_bench.h"
 #include "gtest/gtest.h"
 
 class MemoryIsZeroBigTest : public ::testing::TestWithParam<size_t> {};
@@ -39,7 +40,7 @@ TEST_P(MemoryIsZeroSmallTest, MemoryIsZeroTestSmall) {
 }
 
 TEST_P(MemoryIsZeroPerformance, MemoryIsZeroPerformanceTest) {
-  constexpr size_t ITER = 1000000;
+  constexpr size_t ITER = sanitized_bench_rounds(1000000);
   utime_t start;
   utime_t end;
 
