@@ -1,5 +1,6 @@
 #include "IoSequence.h"
 #include <algorithm>
+#include <set>
 
 #include <iostream>
 
@@ -62,6 +63,9 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os,
     case Sequence::SEQUENCE_SEQ16:
       os << "SEQUENCE_SEQ16";
       break;
+    case Sequence::SEQUENCE_SEQ17:
+      os << "SEQUENCE_SEQ17";
+      break;
     case Sequence::SEQUENCE_END:
       os << "SEQUENCE_END";
       break;
@@ -113,6 +117,8 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(
       return std::make_unique<Seq15>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ16:
       return std::make_unique<Seq16>(obj_size_range, seed, check_consistency);
+    case Sequence::SEQUENCE_SEQ17:
+      return std::make_unique<Seq17>(obj_size_range, seed, check_consistency);
     default:
       break;
   }
@@ -939,5 +945,79 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq16::_next() {
   
   // Should not reach here
   barrier = true;
+  return BarrierOp::generate();
+}
+
+// Seq17: TruncateWrite ops that truncate an object of size X to T and then
+// write blocks O to E - 1. T takes every value up to X + 3. O and E take the
+// values at and either side of T and X, O also takes 0 and 1, and E also
+// takes O + 1 and max(X, T) + 2. Each op is applied to a new object of size
+// X and followed by a read of the whole object.
+ceph::io_exerciser::Seq17::Seq17(std::pair<int, int> obj_size_range, int seed,
+                                 bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency) {
+  select_random_object_size();
+  setup_writes();
+}
+
+Sequence ceph::io_exerciser::Seq17::get_id() const {
+  return Sequence::SEQUENCE_SEQ17;
+}
+
+std::string ceph::io_exerciser::Seq17::get_name() const {
+  return "Permutations of truncate size, write offset and write length in "
+         "a TruncateWrite op on an object of size " +
+         std::to_string(obj_size);
+}
+
+void ceph::io_exerciser::Seq17::setup_writes() {
+  std::set<uint64_t> boundaries{truncate_size, truncate_size + 1, obj_size,
+                                obj_size + 1};
+  if (truncate_size > 0) {
+    boundaries.insert(truncate_size - 1);
+  }
+  if (obj_size > 0) {
+    boundaries.insert(obj_size - 1);
+  }
+  std::set<uint64_t> offsets = boundaries;
+  offsets.insert({0, 1});
+  std::set<uint64_t> ends = boundaries;
+  ends.insert(std::max(obj_size, truncate_size) + 2);
+
+  writes.clear();
+  for (uint64_t offset : offsets) {
+    writes.emplace_back(offset, offset + 1);
+    for (uint64_t end : ends) {
+      if (end > offset + 1) {
+        writes.emplace_back(offset, end);
+      }
+    }
+  }
+  write_index = 0;
+}
+
+std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq17::_next() {
+  const auto [offset, end] = writes[write_index];
+  if (!donewrite) {
+    donewrite = true;
+    barrier = true;
+    return SingleTruncateWriteOp::generate(truncate_size, offset, end - offset);
+  }
+  if (!doneread) {
+    doneread = true;
+    return SingleReadOp::generate(0, std::max(truncate_size, end));
+  }
+  donewrite = false;
+  doneread = false;
+  if (++write_index == writes.size()) {
+    if (++truncate_size > obj_size + 3) {
+      done = true;
+    } else {
+      setup_writes();
+    }
+  }
+  create = true;
+  barrier = true;
+  remove = true;
   return BarrierOp::generate();
 }
