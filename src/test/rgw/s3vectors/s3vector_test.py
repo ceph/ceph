@@ -4257,6 +4257,7 @@ def test_background_index_rebuild():
     """Test that vector index is rebuilt in the background when unindexed rows exceed threshold.
     The default threshold is 256 rows. We insert 500 vectors (above LanceDB's IVF_PQ minimum)
     and wait for the background manager to build the vector index."""
+    _grant_admin_caps()
     dimension = 32
     conn = connection()
     bucket_name = gen_bucket_name()
@@ -4278,7 +4279,6 @@ def test_background_index_rebuild():
     # (numIndexSegments==0, numUnindexedRows==total) are racy: the FIRST rebuild
     # of a table is not gated by the cooldown, so on a fast cluster the worker
     # fires the moment the row count crosses the threshold, mid-load.
-    _grant_admin_caps()
     set_rgw_config_option('rgw_s3vector_max_concurrent_rebuilds', 0)
     # block until the daemon has actually applied it (config push is async); the
     # admin API reports the same cct value the worker's scan reads.
@@ -6459,14 +6459,12 @@ def test_below_threshold_no_rebuild():
 
 
 def _grant_admin_caps():
-    """Grant the main test user 'buckets=*' so it can call GET and DELETE on
+    """Grant the main test user 'buckets=read' so it can call GET on
     the ceph admin REST API at /admin/vectorbucket. Idempotent — safe to call
     multiple times."""
-    out, ret = admin(['user', 'info', '--access-key', get_access_key()])
-    assert ret == 0, f'failed to look up test user for admin caps: {out}'
-    uid = json.loads(out)['user_id']
-    _, ret = admin(['caps', 'add', '--uid', uid, '--caps', 'buckets=*'])
-    assert ret == 0, f'failed to grant buckets=* cap to {uid}'
+    uid = _admin_json(['user', 'info', '--access-key', get_access_key()])['user_id']
+    _, ret = admin(['caps', 'add', '--uid', uid, '--caps', 'buckets=read'])
+    assert ret == 0, f'failed to grant buckets=read cap to {uid}'
 
 
 def get_rebuild_admin_status(since=0, bucket='', tenant=''):
