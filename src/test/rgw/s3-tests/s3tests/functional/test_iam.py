@@ -1,5 +1,8 @@
 import json
 import datetime
+import os
+import random
+import threading
 import time
 
 from botocore.exceptions import ClientError
@@ -1038,6 +1041,87 @@ def test_account_user_update_name(iam_root):
     assert response['User']['Arn'].endswith(f':user{path}{new_name1}')
 
     assert [name2, new_name1] == user_list_names(iam_root, PathPrefix=path)
+
+_IAM_DUP_NAME_ROUNDS = int(os.environ.get('IAM_DUP_ROUNDS', '20'))
+_IAM_DUP_NAME_THREADS = 6
+
+
+def _iam_call_result(fn):
+    try:
+        return 'OK', fn()
+    except ClientError as e:
+        return e.response['Error'].get('Code', '?'), e.response
+
+
+def _race_iam_calls(fns):
+    results = [None] * len(fns)
+    barrier = threading.Barrier(len(fns))
+
+    def run(i, f):
+        barrier.wait()
+        time.sleep(random.random() * 0.002)
+        results[i] = _iam_call_result(f)
+
+    threads = [threading.Thread(target=run, args=(i, f)) for i, f in enumerate(fns)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return results
+
+
+@pytest.mark.iam_account
+@pytest.mark.iam_user
+def test_account_user_concurrent_create(iam_root):
+    """Concurrent CreateUser with the same name must not create duplicates (#81348)."""
+    path = get_iam_path_prefix()
+    for i in range(_IAM_DUP_NAME_ROUNDS):
+        name = make_iam_name(f'dup{i}')
+        fns = [(lambda n=name, p=path: iam_root.create_user(UserName=n, Path=p))
+               for _ in range(_IAM_DUP_NAME_THREADS)]
+        results = _race_iam_calls(fns)
+        ok = [r for r in results if r[0] == 'OK']
+        assert len(ok) <= 1
+        if len(ok) == 1:
+            user_id = ok[0][1]['User']['UserId']
+            assert all(r[0] != 'OK' or r[1]['User']['UserId'] == user_id for r in results)
+
+
+@pytest.mark.iam_account
+@pytest.mark.group
+def test_account_group_concurrent_create(iam_root):
+    """Concurrent CreateGroup with the same name must not create duplicates (#81348)."""
+    path = get_iam_path_prefix()
+    for i in range(_IAM_DUP_NAME_ROUNDS):
+        name = make_iam_name(f'gdup{i}')
+        fns = [(lambda n=name, p=path: iam_root.create_group(GroupName=n, Path=p))
+               for _ in range(_IAM_DUP_NAME_THREADS)]
+        results = _race_iam_calls(fns)
+        ok = [r for r in results if r[0] == 'OK']
+        assert len(ok) <= 1
+        if len(ok) == 1:
+            group_id = ok[0][1]['Group']['GroupId']
+            assert all(r[0] != 'OK' or r[1]['Group']['GroupId'] == group_id for r in results)
+
+
+@pytest.mark.iam_account
+@pytest.mark.iam_user
+def test_account_user_concurrent_rename(iam_root):
+    """Concurrent UpdateUser renames to the same name must not both succeed (#81348)."""
+    path = get_iam_path_prefix()
+    for i in range(_IAM_DUP_NAME_ROUNDS):
+        name_x = make_iam_name(f'x{i}')
+        name_y = make_iam_name(f'y{i}')
+        name_z = make_iam_name(f'z{i}')
+        iam_root.create_user(UserName=name_x, Path=path)
+        iam_root.create_user(UserName=name_y, Path=path)
+        results = _race_iam_calls([
+            lambda nx=name_x, nz=name_z: iam_root.update_user(UserName=nx, NewUserName=nz),
+            lambda ny=name_y, nz=name_z: iam_root.update_user(UserName=ny, NewUserName=nz),
+        ])
+        ok = [r for r in results if r[0] == 'OK']
+        assert len(ok) <= 1
+
 
 @pytest.mark.iam_account
 @pytest.mark.iam_user

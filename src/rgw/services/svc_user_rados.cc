@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <limits>
+
 #include <boost/algorithm/string.hpp>
 
 #include "svc_user.h"
@@ -189,6 +191,7 @@ class PutOperation
   RGWObjVersionTracker ot;
   string err_msg;
   optional_yield y;
+  bool account_link_reserved = false;
 
   void set_err_msg(string msg) {
     if (!err_msg.empty()) {
@@ -262,20 +265,39 @@ public:
             "can't be empty in an account" << dendl;
         return -EINVAL;
       }
-
-      const RGWZoneParams& zone = svc.zone->get_zone_params();
-      const auto& users = rgwrados::account::get_users_obj(zone, info.account_id);
-      std::string existing_uid;
-      int r = rgwrados::users::get(dpp, y, rados, users,
-                                   info.display_name, existing_uid);
-      if (r >= 0 && existing_uid != info.user_id.id) {
-        ldpp_dout(dpp, 0) << "WARNING: can't store user info, display name "
-            "already exists in account" << dendl;
-        return -EEXIST;
-      }
     }
 
     return 0;
+  }
+
+  int link_account_exclusive(const DoutPrefixProvider *dpp) {
+    if (!account_users_link(&info) ||
+        account_users_link(&info) == account_users_link(old_info)) {
+      return 0;
+    }
+
+    const RGWZoneParams& zone = svc.zone->get_zone_params();
+    const auto& users = rgwrados::account::get_users_obj(zone, info.account_id);
+    int ret = rgwrados::users::add(dpp, y, rados, users, info, true,
+                                   std::numeric_limits<uint32_t>::max());
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "WARNING: can't store user info, display name "
+          << info.display_name << " already exists in account "
+          << info.account_id << ": " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+    account_link_reserved = true;
+    return 0;
+  }
+
+  void unlink_account_on_failure(const DoutPrefixProvider *dpp) {
+    if (!account_link_reserved) {
+      return;
+    }
+    const RGWZoneParams& zone = svc.zone->get_zone_params();
+    const auto& users = rgwrados::account::get_users_obj(zone, info.account_id);
+    std::ignore = rgwrados::users::remove(dpp, y, rados, users, info.display_name);
+    account_link_reserved = false;
   }
 
   int put(const DoutPrefixProvider *dpp) {
@@ -342,23 +364,6 @@ public:
       if (ret < 0) {
         return ret;
       }
-    }
-
-    if (account_users_link(&info) &&
-        account_users_link(&info) != account_users_link(old_info)) {
-      // link the user to its account
-      const RGWZoneParams& zone = svc.zone->get_zone_params();
-      const auto& users = rgwrados::account::get_users_obj(zone, info.account_id);
-      ret = rgwrados::users::add(dpp, y, rados, users, info, false,
-                                 std::numeric_limits<uint32_t>::max());
-      if (ret < 0) {
-        ldpp_dout(dpp, 20) << "WARNING: failed to link user "
-            << info.user_id << " to account " << info.account_id
-            << ": " << cpp_strerror(ret) << dendl;
-        return ret;
-      }
-      ldpp_dout(dpp, 20) << "linked user " << info.user_id
-          << " to account " << info.account_id << dendl;
     }
 
     for (const auto& group_id : info.group_ids) {
@@ -479,8 +484,14 @@ int RGWSI_User_RADOS::store_user_info(const RGWUserInfo& info,
     return r;
   }
 
+  r = op.link_account_exclusive(dpp);
+  if (r < 0) {
+    return r;
+  }
+
   r = op.put(dpp);
   if (r < 0) {
+    op.unlink_account_on_failure(dpp);
     return r;
   }
 
