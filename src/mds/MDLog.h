@@ -139,6 +139,10 @@ public:
   bool is_capped() const { return mds_is_shutting_down; }
   void cap();
 
+  bool is_hard_limit_reached() const {
+    return hard_limit_segments > 0 && segments.size() >= hard_limit_segments;
+  }
+
   void kick_submitter();
   void shutdown();
 
@@ -317,6 +321,7 @@ private:
   uint64_t events_per_segment;
   int64_t max_events;
   uint64_t max_segments;
+  uint64_t hard_limit_segments;
   uint64_t minor_segments_per_major_segment;
   bool pause;
   bool skip_corrupt_events;
