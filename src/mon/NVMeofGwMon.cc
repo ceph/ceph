@@ -1096,7 +1096,9 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   bool gw_propose    = false;
   bool gw_created = true;
   bool correct_sequence = true;
-  uint64_t stored_sequence;
+  // only read when correct_sequence is false, which implies
+  // put_gw_beacon_sequence_number() set it
+  uint64_t stored_sequence = 0;
   NVMeofGwMap ack_map;
   bool epoch_filter_enabled = true; // NVMEOFHAMAP
   auto& group_gws = map.created_gws[group_key];

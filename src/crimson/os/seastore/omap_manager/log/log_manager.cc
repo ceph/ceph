@@ -998,7 +998,8 @@ LogManager::omap_iterate(
     }
   }
 
-  ObjectStore::omap_iter_ret_t ret;
+  // if kvs is empty, the loop never runs and never sets ret
+  auto ret = ObjectStore::omap_iter_ret_t::NEXT;
   for (auto &[key, val] : kvs) {
     std::string result(val.c_str(), val.length());
     ret = callback(key, result);
