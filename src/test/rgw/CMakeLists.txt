@@ -409,6 +409,14 @@ target_include_directories(unittest_rgw_url
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_url ${rgw_libs})
 
+# unittest_rgw_sts_jwks_cache
+add_executable(unittest_rgw_sts_jwks_cache test_rgw_sts_jwks_cache.cc)
+add_ceph_unittest(unittest_rgw_sts_jwks_cache)
+target_include_directories(unittest_rgw_sts_jwks_cache
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_sts_jwks_cache
+  ceph-common ${UNITTEST_LIBS})
+
 # unittest_rgw_sync_trace
 add_executable(unittest_rgw_sync_trace test_rgw_sync_trace.cc)
 add_ceph_unittest(unittest_rgw_sync_trace)
