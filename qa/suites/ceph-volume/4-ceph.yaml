@@ -1,0 +1,8 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+tasks:
+- install:
+- cephadm:
