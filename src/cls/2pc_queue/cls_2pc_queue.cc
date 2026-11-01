@@ -186,6 +186,9 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
   // note that last id is incremented regardless of failures
   // to avoid "old reservation" issues below
   ++urgent_data.last_id;
+  if (urgent_data.last_id == cls_2pc_reservation::NO_ID) {
+    ++urgent_data.last_id;
+  }
   bool result;
   cls_2pc_reservations::iterator last_reservation;
   std::tie(last_reservation, result) = urgent_data.reservations.emplace(std::piecewise_construct,
