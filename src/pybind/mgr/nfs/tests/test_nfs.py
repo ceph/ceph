@@ -3653,3 +3653,61 @@ class TestCephfsClientForMgr:
             r2 = mgr_util.CephFSEarmarkResolver(mgr=mgr, client=cephfs_client_for_mgr(mgr))
             assert r1._cephfs_client is r2._cephfs_client
             mock_cephfs_cls.assert_called_once_with(mgr)
+
+
+class TestValidateLogConfig:
+    """Tests for _validate_log_config() — validates conditional logging fields
+    when the user runs: ceph nfs cluster config set <cluster> '<config>'"""
+
+    def _validate(self, config: str) -> None:
+        from nfs.cluster import _validate_log_config
+        _validate_log_config(config)
+
+    def test_valid_match_all_with_clients_and_exports(self):
+        """Valid config: MATCH_ALL with valid client IP, export ID, and log level."""
+        self._validate("""
+LOG {
+    Match_Policy = MATCH_ALL;
+    Conditional {
+        Clients = 10.0.0.1;
+        Exports = 101;
+        NFS4 = INFO;
+    }
+}
+""")
+
+    def test_invalid_log_level(self):
+        """Unknown log level in Conditional raises NFSInvalidOperation."""
+        from nfs.exception import NFSInvalidOperation
+        with pytest.raises(NFSInvalidOperation, match='log level'):
+            self._validate("""
+LOG {
+    Match_Policy = MATCH_ANY;
+    Conditional { Clients = 10.0.0.1; ALL = NOTAVALIDLEVEL; }
+}
+""")
+
+    def test_match_all_without_exports_rejected(self):
+        """MATCH_ALL without Exports raises NFSInvalidOperation."""
+        from nfs.exception import NFSInvalidOperation
+        with pytest.raises(NFSInvalidOperation, match='MATCH_ALL'):
+            self._validate("""
+LOG {
+    Match_Policy = MATCH_ALL;
+    Conditional { Clients = 10.0.0.1; ALL = DEBUG; }
+}
+""")
+
+    def test_invalid_export_id_quoted_string(self):
+        """Exports = "101" looks correct but parser returns string not int — rejected."""
+        from nfs.exception import NFSInvalidOperation
+        with pytest.raises(NFSInvalidOperation, match='export ID'):
+            self._validate("""
+LOG {
+    Conditional { Exports = "101"; ALL = DEBUG; }
+}
+""")
+
+    def test_unparseable_config_silently_ignored(self):
+        """Garbled config that GaneshaConfParser cannot parse is not rejected here."""
+        self._validate("this is not valid ganesha config {{{")
