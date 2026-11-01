@@ -26,7 +26,7 @@ There are important considerations when planning these pools:
   management and disaster recovery. For this reason, all CephFS inodes
   have at least one RADOS object in the default data pool. If erasure-coded
   pools are planned for file system data, it is best to configure the default as
-  a replicated pool to improve small-object write and
+  a replicated pool, or to use a Fast EC pool, to improve small-object write and
   read performance when updating backtraces. Separately, another erasure-coded
   data pool can be added (see also :ref:`ecpool`) that can be used on an entire
   hierarchy of directories and files (see also :ref:`file-layouts`).
@@ -82,8 +82,7 @@ you have sufficient standby daemons available to accommodate the new file system
 
 The ``--force`` option is used to achieve any of the following:
 
-- To set an erasure-coded pool for the default data pool. Use of an EC pool for the
-  default data pool is discouraged. Refer to `Creating pools`_ for details.
+- To set an erasure-coded pool for the default data pool.
 - To set non-empty pool (pool already contains some objects) for the metadata pool.
 - To create a file system with a specific file system's ID (fscid).
   The --force option is required with --fscid option.
@@ -143,7 +142,7 @@ See :ref:`adding-data-pool-to-file-system`.
 Using Erasure Coded pools with CephFS
 =====================================
 
-You may use Erasure Coded pools as CephFS data pools as long as they have overwrites enabled, which is done as follows:
+You may use Erasure Coded pools as CephFS extra data pools as long as they have overwrites enabled, which is done as follows:
 
 .. code:: bash
 
@@ -151,11 +150,36 @@ You may use Erasure Coded pools as CephFS data pools as long as they have overwr
 
 Note that EC overwrites are only supported when using OSDs with the BlueStore backend.
 
-If you are storing lots of small files or are frequently modifying files you can improve performance by enabling EC optimizations, which is done as follows:
+If you would like to use an EC pool as the default data pool, or you are planning on storing lots of small files or are
+frequently modifying files, you can improve performance by enabling EC optimizations, which is done as follows:
 
 .. code:: bash
 
     ceph osd pool set my_ec_pool allow_ec_optimizations true
 
-You may not use Erasure Coded pools as CephFS metadata pools, because CephFS metadata is stored using RADOS *OMAP* data structures, which EC pools cannot store.
+RADOS *omap* data structures are required to use a pool for metadata. It is recommended that you use a Replicated pool
+for metadata in CephFS, as Replicated pools have native, well tested, support for these data structures.
+However, it is possible to use Erasure Coded pools for metadata in CephFS, by enabling overwrites and optimizations on
+an EC pool using commands of the above forms. You must then use the --force flag when creating the filesystem.
 
+Here is a complete example of how a filesystem can be setup using an EC metadata pool and an EC default data pool:
+
+.. code:: bash
+    ceph osd erasure-code-profile set ec_profile plugin=isa k=4 m=2 technique=reed_sol_van stripe_unit=4k crush-failure-domain=osd
+
+    ceph osd pool create cephfs_metadata_ec erasure ec_profile
+    ceph osd pool set my_ec_pool allow_ec_overwrites true
+    ceph osd pool set my_ec_pool allow_ec_optimizations true
+
+    ceph osd pool create cephfs_data_ec erasure ec_profile
+    ceph osd pool set my_ec_pool allow_ec_overwrites true
+    ceph osd pool set my_ec_pool allow_ec_optimizations true
+
+    ceph fs new fs_name cephfs_metadata_ec cephfs_data_ec --force
+
+Creating a filesystem with an EC metadata pool and a Replicated default data pool is discouraged. Therefore, creating a
+filesystem with this configuration requires the --yes-i-really-really-mean-it flag:
+
+.. code:: bash
+
+    ceph fs new fs_name cephfs_metadata_ec cephfs_data_replicated --yes-i-really-really-mean-it

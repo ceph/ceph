@@ -285,7 +285,20 @@ class FsNewHandler : public FileSystemCommandHandler
     if (r < 0) {
       return r;
     }
-    
+
+    if (metadata_pool->is_erasure() && !data_pool->is_erasure()) {
+      bool really_mean_it = false;
+      cmd_getval(cmdmap, "yes_i_really_really_mean_it", really_mean_it);
+      if (!really_mean_it) {
+        ss << "pool '" << metadata_name << "' is an erasure-coded pool but"
+              " pool '" << data_name << "' is a replicated pool."
+              " Using an EC metadata pool with a replicated data pool is not a"
+              " recommended configuration."
+              " Use --yes-i-really-really-mean-it to override.";
+        return -EINVAL;
+      }
+    }
+
     if (!mon->osdmon()->is_writeable()) {
       // not allowed to write yet, so retry when we can
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
@@ -1966,10 +1979,17 @@ int FileSystemCommandHandler::_check_pool(
   }
 
   if (pool->is_erasure()) {
-    if (type == POOL_METADATA) {
+    if (type == POOL_METADATA && !pool->supports_omap()) {
       *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
-         << " is an erasure-coded pool.  Use of erasure-coded pools"
-         << " for CephFS metadata is not permitted";
+         << " is an erasure-coded pool that doesn't support omap."
+         << " Erasure-coded pools require EC optimizations to be enabled to support omap,"
+         << " which is necessary for use as a CephFS metadata pool."
+         << " Enable EC optimizations on this pool to make it available as a metadata pool.";
+      return -EINVAL;
+    } else if (type == POOL_METADATA && !force) {
+      *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
+             " is an erasure-coded pool."
+             " Use of an EC pool as a CephFS metadata pool requires --force.";
       return -EINVAL;
     } else if (type == POOL_DATA_DEFAULT && !force) {
       *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
