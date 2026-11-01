@@ -158,19 +158,12 @@ function(do_build_boost root_dir version)
   set(b2_targets stage)
   set(b2_install_targets install)
   if(WITH_ASAN)
-    # via boost_features, not ${b2}: the `headers` step lacks the
-    # libs/context/build target below
+    # via boost_features, not ${b2}: only the build and install steps need it,
+    # not the `headers` step
     list(APPEND boost_features context-impl=ucontext)
     # build the library with the BOOST_USE_ASAN consumers get from Boost::context,
     # so fiber_activation_record has one layout (else heap-buffer-overflow)
     list(APPEND boost_features define=BOOST_USE_ASAN)
-    # `context-impl` is declared in libs/context/build/Jamfile.v2; the stage and
-    # install targets never load it, so b2 aborts with `unknown feature
-    # "<context-impl>"`. Name the context project as a target so its Jamfile loads
-    # the feature first. Fixed in Boost 1.88, drop it at that bump:
-    # https://github.com/boostorg/context/commit/12ac945158ae
-    list(PREPEND b2_targets libs/context/build)
-    list(PREPEND b2_install_targets libs/context/build)
   endif()
   set(build_command
     ${b2} ${b2_targets}
@@ -183,14 +176,14 @@ function(do_build_boost root_dir version)
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
       SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
-  elseif(version VERSION_GREATER 1.87)
+  elseif(version VERSION_GREATER 1.92)
     message(FATAL_ERROR "Unknown BOOST_REQUESTED_VERSION: ${version}")
   else()
     message(STATUS "boost will be downloaded...")
     # NOTE: If you change this version number make sure the package is available
     # at the three URLs below (may involve uploading to download.ceph.com)
-    set(boost_version 1.87.0)
-    set(boost_sha256 af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
+    set(boost_version 1.92.0)
+    set(boost_sha256 5c1d40cb8e19adbf740a4ec2da35b3e58f3f5804b1dce44deb53df72193cbc6c)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
     list(APPEND boost_url
       https://download.ceph.com/qa/boost_${boost_version_underscore}.tar.bz2
@@ -227,11 +220,10 @@ function(do_build_boost root_dir version)
   ExternalProject_Add_StepTargets(Boost headers)
 endfunction()
 
-set(Boost_context_DEPENDENCIES thread chrono system date_time)
-set(Boost_coroutine_DEPENDENCIES context system)
-set(Boost_filesystem_DEPENDENCIES system)
+set(Boost_context_DEPENDENCIES thread chrono date_time)
+set(Boost_coroutine_DEPENDENCIES context)
 set(Boost_iostreams_DEPENDENCIES regex)
-set(Boost_thread_DEPENDENCIES chrono system date_time atomic)
+set(Boost_thread_DEPENDENCIES chrono date_time atomic)
 
 # define a macro, so the Boost_* variables are visible by its caller
 macro(build_boost version)
