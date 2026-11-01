@@ -136,7 +136,8 @@ CircularBoundedJournal::submit_record(
   if (is_trim_transaction(t_src)) {
     co_await update_journal_tail(
       trimmer.get_dirty_tail(),
-      trimmer.get_alloc_tail());
+      trimmer.get_alloc_tail(),
+      trimmer.get_log_tail());
   }
 }
 
@@ -342,6 +343,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
   DEBUG("header : {}", cjs.get_cbj_header());
   cjs.set_initialized(true);
   std::map<paddr_t, std::pair<CachedExtentRef, uint32_t>> crc_info;
+  assert(get_dirty_tail() <= get_log_tail());
   auto tail = get_dirty_tail() <= get_alloc_tail() ?
     get_dirty_tail() : get_alloc_tail();
   set_written_to(tail);
@@ -374,6 +376,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
         e,
         get_dirty_tail(),
         get_alloc_tail(),
+	get_log_tail(),
         modify_time
       ).safe_then([&e, &crc_info](auto ret) {
         auto [applied, ext] = ret;
@@ -402,7 +405,8 @@ Journal::replay_ret CircularBoundedJournal::replay(
   }
   trimmer.update_journal_tails(
     get_dirty_tail(),
-    get_alloc_tail());
+    get_alloc_tail(),
+    get_log_tail());
 }
 
 void CircularBoundedJournal::register_metrics()

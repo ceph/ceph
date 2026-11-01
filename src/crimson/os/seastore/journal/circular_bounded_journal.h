@@ -110,14 +110,18 @@ public:
 
   seastar::future<> update_journal_tail(
     journal_seq_t dirty,
-    journal_seq_t alloc) {
-    return cjs.update_journal_tail(dirty, alloc);
+    journal_seq_t alloc,
+    journal_seq_t log) {
+    return cjs.update_journal_tail(dirty, alloc, log);
   }
   journal_seq_t get_dirty_tail() const {
     return cjs.get_dirty_tail();
   }
   journal_seq_t get_alloc_tail() const {
     return cjs.get_alloc_tail();
+  }
+  journal_seq_t get_log_tail() const {
+    return cjs.get_log_tail();
   }
 
   void set_write_pipeline(WritePipeline *_write_pipeline) final {

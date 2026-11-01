@@ -386,7 +386,8 @@ public:
 	assert(is_aligned(pin.partial_off, get_block_size()));
 	assert(is_aligned(pin.partial_len, get_block_size()));
 	// must be user-oriented required by maybe_init
-	assert(is_user_transaction(t.get_src()));
+	assert(is_user_transaction(t.get_src()) ||
+	  t.get_src() == Transaction::src_t::TRIM_LOG);
 	if (pin.mapping.is_zero_reserved()) {
 	  co_return;
 	}
@@ -458,7 +459,8 @@ public:
     assert(is_aligned(partial_off, get_block_size()));
     assert(is_aligned(partial_len, get_block_size()));
     // must be user-oriented required by maybe_init
-    assert(is_user_transaction(t.get_src()));
+    assert(is_user_transaction(t.get_src()) ||
+      t.get_src() == Transaction::src_t::TRIM_LOG);
 
     co_await pin.co_refresh();
 
@@ -591,7 +593,8 @@ public:
       }
     }
     // user must initialize the logical extent themselves.
-    assert(is_user_transaction(t.get_src()));
+    assert(is_user_transaction(t.get_src()) ||
+      t.get_src() == Transaction::src_t::TRIM_LOG);
     ext->set_seen_by_users();
     co_await lba_manager->alloc_extent(
       t,
@@ -1001,6 +1004,27 @@ public:
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes) final;
+  
+  std::optional<std::pair<lognode_deltas_t, size_t>> get_pending_lognode_delta_by_oid(
+    ghobject_t oid, transaction_id_t trans_id, bool force = false) {
+    return cache->get_pending_lognode_delta_by_oid(oid, trans_id, force);
+  }
+
+  using ExtentCallbackInterface::get_next_dirty_log_node_by_oid_ret;
+  get_next_dirty_log_node_by_oid_ret get_next_dirty_log_node_by_oid(
+    journal_seq_t seq) final;
+
+  bool has_pending_lognode_deltas() final {
+    return cache->has_pending_lognode_deltas();
+  }
+
+  std::optional<size_t> pending_lognode_delta_size(ghobject_t oid) {
+    return cache->pending_lognode_delta_size(oid); 
+  }
+
+  void delete_lognode_delta(ghobject_t oid) {
+    return cache->delete_lognode_delta(oid); 
+  }
 
   using ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
@@ -1893,7 +1917,8 @@ private:
               t, pin, direct_partial_off, partial_len);
     static_assert(is_logical_type(T::TYPE));
     // must be user-oriented required by maybe_init
-    assert(is_user_transaction(t.get_src()));
+    assert(is_user_transaction(t.get_src()) ||
+      t.get_src() == Transaction::src_t::TRIM_LOG);
     assert(pin.is_viewable());
     auto direct_length = pin.get_intermediate_length();
     if (full_extent_integrity_check) {

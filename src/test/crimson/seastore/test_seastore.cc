@@ -109,7 +109,7 @@ struct seastore_test_t :
 
   struct object_state_t {
     const coll_t cid;
-    const CollectionRef coll;
+    CollectionRef coll;
     const ghobject_t oid;
 
     std::map<string, bufferlist> omap;
@@ -254,8 +254,45 @@ struct seastore_test_t :
 	std::move(t)).get();
     }
 
+    void set_omap(
+      SeaStoreShard &sharded_seastore,
+      CollectionRef &coll,
+      const string &key,
+      const bufferlist &val) {
+      CTransaction t;
+      set_omap(t, key, val);
+      sharded_seastore.do_transaction(
+	coll,
+	std::move(t)).get();
+    }
+
     auto get_omaps(
       SeaStoreShard &sharded_seastore,
+      std::string start,
+      decltype(ObjectStore::omap_iter_seek_t::seek_type) bound =
+	ObjectStore::omap_iter_seek_t::LOWER_BOUND) {
+      ObjectStore::omap_iter_seek_t start_from{start, bound};
+      std::map<std::string, bufferlist> kvs;
+      std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+        [&kvs] (std::string_view key, std::string_view value)
+      {
+        ceph::bufferlist bl;
+        bl.append(value);
+	kvs[std::string(key)] = bl;
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      };
+
+      sharded_seastore.omap_iterate(
+        coll,
+        oid,
+	start_from,
+        callback).unsafe_get();
+      return kvs;
+    }
+
+    auto get_omaps(
+      SeaStoreShard &sharded_seastore,
+      CollectionRef &coll, 
       std::string start,
       decltype(ObjectStore::omap_iter_seek_t::seek_type) bound =
 	ObjectStore::omap_iter_seek_t::LOWER_BOUND) {
@@ -298,6 +335,17 @@ struct seastore_test_t :
         std::move(t)).get();
     }
 
+    void rm_omap(
+      SeaStoreShard &sharded_seastore,
+      CollectionRef &coll,
+      const string &key) {
+      CTransaction t;
+      rm_omap(t, key);
+      sharded_seastore.do_transaction(
+        coll,
+        std::move(t)).get();
+    }
+
     void rm_omaps(
       CTransaction &t,
       const std::set<std::string> &s) {
@@ -312,6 +360,17 @@ struct seastore_test_t :
 
     void rm_omaps(
       SeaStoreShard &sharded_seastore,
+      const std::set<std::string> &keys) {
+      CTransaction t;
+      rm_omaps(t, keys);
+      sharded_seastore.do_transaction(
+        coll,
+        std::move(t)).get();
+    }
+
+    void rm_omaps(
+      SeaStoreShard &sharded_seastore,
+      CollectionRef &coll,
       const std::set<std::string> &keys) {
       CTransaction t;
       rm_omaps(t, keys);
@@ -336,6 +395,18 @@ struct seastore_test_t :
 
     void rm_omap_range(
       SeaStoreShard &sharded_seastore,
+      const std::string &first,
+      const std::string &last) {
+      CTransaction t;
+      rm_omap_range(t, first, last);
+      sharded_seastore.do_transaction(
+        coll,
+        std::move(t)).get();
+    }
+
+    void rm_omap_range(
+      SeaStoreShard &sharded_seastore,
+      CollectionRef &coll,
       const std::string &first,
       const std::string &last) {
       CTransaction t;
@@ -642,6 +713,29 @@ struct seastore_test_t :
       }
     }
 
+    void check_omap_key(
+      SeaStoreShard &sharded_seastore,
+      CollectionRef &coll,
+      const string &key) {
+      std::set<string> to_check;
+      to_check.insert(key);
+      auto result = sharded_seastore.omap_get_values(
+	coll,
+	oid,
+	to_check).unsafe_get();
+
+      if (result.empty()) {
+	EXPECT_EQ(omap.find(key), omap.end());
+      } else {
+	auto iter = omap.find(key);
+	EXPECT_NE(iter, omap.end());
+	if (iter != omap.end()) {
+	  EXPECT_EQ(result.size(), 1);
+	  EXPECT_EQ(iter->second, result.begin()->second);
+	}
+      }
+    }
+
     void check_omap(SeaStoreShard &sharded_seastore,
       std::map<string, bufferlist>::iterator &refiter,
       std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback)
@@ -666,6 +760,38 @@ struct seastore_test_t :
       }
     }
   };
+
+  object_state_t& get_pgmeta_object(uint32_t pg_seed)
+  {
+    spg_t pgid{pg_t{pg_seed, 0}};
+    coll_t cid{pgid};
+    ghobject_t oid = pgid.make_pgmeta_oid();
+
+    ceph_assert(oid.is_pgmeta());
+
+    auto it = test_objects.find(oid);
+    if (it != test_objects.end()) {
+      return it->second;
+    }
+
+    CollectionRef pg_coll = coll;
+
+    if (cid != coll_name) {
+      pg_coll =
+	sharded_seastore->create_new_collection(cid).get();
+
+      CTransaction t;
+      t.create_collection(cid, 0);
+      do_transaction(std::move(t));
+    }
+
+    return test_objects.emplace(
+      std::make_pair(
+	oid,
+	object_state_t{cid, pg_coll, oid}
+      )
+    ).first->second;
+  }
 
   map<ghobject_t, object_state_t> test_objects;
   object_state_t &get_object(
@@ -1803,7 +1929,7 @@ TEST_P(seastore_test_t, pgmeta_io)
 {
   run_async([this] {
 
-    auto &test_obj = get_object(make_oid(0));
+    auto &test_obj  = get_pgmeta_object(0);
     test_obj.touch(*sharded_seastore);
     test_obj.set_log_object(*sharded_seastore);
     int log_count = 1024;
@@ -1827,13 +1953,16 @@ TEST_P(seastore_test_t, pgmeta_io)
       bufferlist l;
       std::string ss(&c_array[0], sizeof(c_array));
       encode(ss, l);
-      test_obj.set_omap(*sharded_seastore, key, l);
+      CTransaction t;
+      test_obj.set_omap(t, key, l);
+      sharded_seastore->do_transaction(
+	test_obj.coll, std::move(t)).get();
       key_for_test_obj.insert(key);
     }
 
     version += 1;
     std::string to_remove = generate_key(epoch, version);
-    auto &test_obj2 = get_object(make_oid(100));
+    auto &test_obj2  = get_pgmeta_object(1);
     test_obj2.touch(*sharded_seastore);
     test_obj2.set_log_object(*sharded_seastore);
 
@@ -1865,13 +1994,15 @@ TEST_P(seastore_test_t, pgmeta_io)
 	kvs[key2] = l2;
 	test_obj2.set_omaps(t, kvs);
       }
-      do_transaction(std::move(t));
+      sharded_seastore->do_transaction(
+	test_obj2.coll, std::move(t)).get();
       key_for_test_obj2.insert(key);
       key_for_test_obj2.insert(key2);
     }
     for (auto p : key_for_test_obj) {
       test_obj.check_omap_key(
         *sharded_seastore,
+	test_obj.coll,
         p);
     }
 
@@ -1898,7 +2029,8 @@ TEST_P(seastore_test_t, pgmeta_io)
       test_obj2.set_omap(t, key3, l);
       test_obj2.set_omap(t, key4, l);
       test_obj2.set_omap(t, key5, l);
-      do_transaction(std::move(t));
+      sharded_seastore->do_transaction(
+	test_obj2.coll, std::move(t)).get();
       key_for_test_obj2.insert(key);
       key_for_test_obj2.insert(key2);
       key_for_test_obj2.insert(key3);
@@ -1908,11 +2040,12 @@ TEST_P(seastore_test_t, pgmeta_io)
     for (auto p : key_for_test_obj2) {
       test_obj2.check_omap_key(
         *sharded_seastore,
+	test_obj2.coll,
         p);
     }
 
     // more than 64 entries in a node to check bitmap operation
-    auto &test_obj3 = get_object(make_oid(200));
+    auto &test_obj3  = get_pgmeta_object(2);
     test_obj3.touch(*sharded_seastore);
     test_obj3.set_log_object(*sharded_seastore);
     for (int i = 0; i < 96; i++) {
@@ -1921,17 +2054,21 @@ TEST_P(seastore_test_t, pgmeta_io)
       bufferlist l;
       std::string ss(&c_array[0], sizeof(c_array));
       encode(ss, l);
-      test_obj3.set_omap(*sharded_seastore, key, l);
+      CTransaction t;
+      test_obj3.set_omap(t, key, l);
+      sharded_seastore->do_transaction(
+	test_obj3.coll, std::move(t)).get();
       key_for_test_obj3.insert(key);
     }
     for (auto p : key_for_test_obj3) {
       test_obj3.check_omap_key(
         *sharded_seastore,
+	test_obj3.coll,
         p);
     }
 
     // normal write (_fastinfo + pg log entry)
-    auto &test_obj4 = get_object(make_oid(300));
+    auto &test_obj4  = get_pgmeta_object(3);
     test_obj4.touch(*sharded_seastore);
     test_obj4.set_log_object(*sharded_seastore);
     epoch += 1;
@@ -1948,13 +2085,15 @@ TEST_P(seastore_test_t, pgmeta_io)
       kvs[key] = l;
       kvs[key2] = l;
       test_obj4.set_omaps(t, kvs);
-      do_transaction(std::move(t));
+      sharded_seastore->do_transaction(
+	test_obj4.coll, std::move(t)).get();
       key_for_test_obj4.insert(key);
       key_for_test_obj4.insert(key2);
     }
     for (auto p : key_for_test_obj4) {
       test_obj4.check_omap_key(
         *sharded_seastore,
+	test_obj4.coll,
         p);
     }
 
@@ -1966,9 +2105,11 @@ TEST_P(seastore_test_t, pgmeta_io)
 	bufferlist bl;
 	bl.append(std::string(50, 'b')); 
 	test_obj4.set_omap(t, fastinfo_key, bl);
-	do_transaction(std::move(t));
+	//do_transaction(std::move(t));
+	sharded_seastore->do_transaction(
+	  test_obj4.coll, std::move(t)).get();
       }
-      test_obj4.check_omap_key(*sharded_seastore, fastinfo_key);
+      test_obj4.check_omap_key(*sharded_seastore, test_obj4.coll, fastinfo_key);
     }
 
     // large fastinfo
@@ -1978,9 +2119,11 @@ TEST_P(seastore_test_t, pgmeta_io)
 	bufferlist bl;
 	bl.append(std::string(256, 'c')); 
 	test_obj4.set_omap(t, fastinfo_key, bl);
-	do_transaction(std::move(t));
+	//do_transaction(std::move(t));
+	sharded_seastore->do_transaction(
+	  test_obj4.coll, std::move(t)).get();
       }
-      test_obj4.check_omap_key(*sharded_seastore, fastinfo_key);
+      test_obj4.check_omap_key(*sharded_seastore, test_obj4.coll, fastinfo_key);
     }
 
     // pglog entry doesn't fit in the existing LogNode
@@ -1992,13 +2135,14 @@ TEST_P(seastore_test_t, pgmeta_io)
 
       test_obj4.set_omap(t, fastinfo_key, bl_fast);
       test_obj4.set_omap(t, "next_key", bl_normal);
-      do_transaction(std::move(t));
-      test_obj4.check_omap_key(*sharded_seastore, "next_key");
-      test_obj4.check_omap_key(*sharded_seastore, fastinfo_key);
+      sharded_seastore->do_transaction(
+	test_obj4.coll, std::move(t)).get();
+      test_obj4.check_omap_key(*sharded_seastore, test_obj4.coll, "next_key");
+      test_obj4.check_omap_key(*sharded_seastore, test_obj4.coll, fastinfo_key);
     }
 
     // mixed writes (_fastinfo + pglog entry + _info + dup pglog entry)
-    auto &test_obj5 = get_object(make_oid(400));
+    auto &test_obj5  = get_pgmeta_object(4);
     test_obj5.touch(*sharded_seastore);
     test_obj5.set_log_object(*sharded_seastore);
     epoch += 1;
@@ -2028,16 +2172,18 @@ TEST_P(seastore_test_t, pgmeta_io)
 	key_for_test_obj5.insert(key4);
       }
       test_obj5.set_omaps(t, kvs);
-      do_transaction(std::move(t));
+      sharded_seastore->do_transaction(
+	test_obj5.coll, std::move(t)).get();
     }
     for (auto p : key_for_test_obj5) {
       test_obj5.check_omap_key(
         *sharded_seastore,
+	test_obj5.coll,
         p);
     }
 
     // multi block writes 
-    auto &test_obj6 = get_object(make_oid(500));
+    auto &test_obj6  = get_pgmeta_object(5);
     test_obj6.touch(*sharded_seastore);
     test_obj6.set_log_object(*sharded_seastore);
     epoch += 1;
@@ -2081,15 +2227,17 @@ TEST_P(seastore_test_t, pgmeta_io)
 	obj6_from_remove = key4;
       }
       test_obj6.set_omaps(t, kvs);
-      do_transaction(std::move(t));
+      sharded_seastore->do_transaction(
+	test_obj6.coll, std::move(t)).get();
     }
     for (auto p : key_for_test_obj6) {
       test_obj6.check_omap_key(
         *sharded_seastore,
+	test_obj6.coll,
         p);
     }
 
-    auto &test_obj7 = get_object(make_oid(600));
+    auto &test_obj7  = get_pgmeta_object(6);
     test_obj7.touch(*sharded_seastore);
     test_obj7.set_log_object(*sharded_seastore);
     epoch += 1;
@@ -2108,83 +2256,83 @@ TEST_P(seastore_test_t, pgmeta_io)
 	  test_obj7.set_omaps(t, kvs);
 	  version += i;
 	}
-	do_transaction(std::move(t));
+	sharded_seastore->do_transaction(
+	  test_obj7.coll, std::move(t)).get();
       }
       bufferlist l;
-      test_obj7.set_omap(*sharded_seastore, "_info", l);
-      test_obj7.rm_omap_range(*sharded_seastore, eversion_t().get_key_name(), 
+      test_obj7.set_omap(*sharded_seastore, test_obj7.coll, "_info", l);
+      test_obj7.rm_omap_range(*sharded_seastore, test_obj7.coll, eversion_t().get_key_name(), 
 	eversion_t::max().get_key_name());
       std::map<string, bufferlist> kvs;
       kvs[start] = l;
-      test_obj7.set_omap(*sharded_seastore, start, l);
+      test_obj7.set_omap(*sharded_seastore, test_obj7.coll, start, l);
       std::set<std::string> keys;
       keys.insert(start);
       keys.insert(generate_key(epoch, version));
-      test_obj7.rm_omaps(*sharded_seastore, keys);
-      kvs = test_obj7.get_omaps(*sharded_seastore, start);
-      // test_obj7 should have only _info at this point
+      test_obj7.rm_omaps(*sharded_seastore, test_obj7.coll, keys);
+      kvs = test_obj7.get_omaps(*sharded_seastore, test_obj7.coll, start);
       EXPECT_EQ(kvs.size(), 1);
     }
 
-    auto kvs = test_obj.get_omaps(*sharded_seastore, std::string());
+    auto kvs = test_obj.get_omaps(*sharded_seastore, test_obj.coll, std::string());
     EXPECT_EQ(kvs.size(), test_obj.omap.size());
 
     std::string str_for_del = "_biginfo";
-    test_obj2.rm_omap(*sharded_seastore, str_for_del);
-    auto kvs2 = test_obj2.get_omaps(*sharded_seastore, str_for_del);
+    test_obj2.rm_omap(*sharded_seastore, test_obj2.coll, str_for_del);
+    auto kvs2 = test_obj2.get_omaps(*sharded_seastore, test_obj2.coll, str_for_del);
     for (auto p : kvs2) {
       EXPECT_NE(p.first, str_for_del);
     }
 
     str_for_del = "_epoch";
-    test_obj2.rm_omap(*sharded_seastore, str_for_del);
-    kvs2 = test_obj2.get_omaps(*sharded_seastore, str_for_del);
+    test_obj2.rm_omap(*sharded_seastore, test_obj2.coll, str_for_del);
+    kvs2 = test_obj2.get_omaps(*sharded_seastore, test_obj2.coll, str_for_del);
     for (auto p : kvs2) {
       EXPECT_NE(p.first, str_for_del);
     }
 
     str_for_del = *(key_for_test_obj3.rbegin());
-    test_obj3.rm_omap(*sharded_seastore, str_for_del);
-    auto kvs3 = test_obj3.get_omaps(*sharded_seastore, str_for_del);
+    test_obj3.rm_omap(*sharded_seastore, test_obj3.coll, str_for_del);
+    auto kvs3 = test_obj3.get_omaps(*sharded_seastore, test_obj3.coll,  str_for_del);
     for (auto p : kvs3) {
       EXPECT_NE(p.first, str_for_del);
     }
 
     auto it = std::next(key_for_test_obj.begin(), 2);
     auto target_value = *it;  
-    kvs = test_obj.get_omaps(*sharded_seastore, target_value,
+    kvs = test_obj.get_omaps(*sharded_seastore, test_obj.coll, target_value,
       ObjectStore::omap_iter_seek_t::UPPER_BOUND);
     EXPECT_EQ(kvs.size(), test_obj.omap.size() - 3);
-    kvs = test_obj.get_omaps(*sharded_seastore, "",
+    kvs = test_obj.get_omaps(*sharded_seastore, test_obj.coll, "",
       ObjectStore::omap_iter_seek_t::UPPER_BOUND);
     EXPECT_EQ(kvs.size(), test_obj.omap.size());
-    test_obj.rm_omap_range(*sharded_seastore, std::string(), target_value);
-    kvs = test_obj.get_omaps(*sharded_seastore, std::string());
+    test_obj.rm_omap_range(*sharded_seastore, test_obj.coll, std::string(), target_value);
+    kvs = test_obj.get_omaps(*sharded_seastore, test_obj.coll,  std::string());
     EXPECT_EQ(kvs.size(), log_count - 3);
 
     auto rit = std::next(key_for_test_obj.rbegin(), 2);
     target_value = *rit;  
     test_obj.rm_omap_range(*sharded_seastore, std::string(), target_value);
-    kvs = test_obj.get_omaps(*sharded_seastore, std::string());
+    kvs = test_obj.get_omaps(*sharded_seastore, test_obj.coll, std::string());
     EXPECT_EQ(kvs.size(), 2);
-    test_obj.rm_omap_range(*sharded_seastore, std::string(), to_remove);
-    kvs = test_obj.get_omaps(*sharded_seastore, std::string());
+    test_obj.rm_omap_range(*sharded_seastore, test_obj.coll, std::string(), to_remove);
+    kvs = test_obj.get_omaps(*sharded_seastore, test_obj.coll, std::string());
     EXPECT_EQ(kvs.size(), test_obj.omap.size());
 
     // for test_obj5
     auto orig_st = get_stat();
     std::string del_key = generate_key(epoch, version);
     test_obj5.rm_omap_range(*sharded_seastore, obj5_from_remove, del_key);
-    kvs = test_obj5.get_omaps(*sharded_seastore, std::string());
+    kvs = test_obj5.get_omaps(*sharded_seastore, test_obj5.coll, std::string());
     EXPECT_EQ(kvs.size(), test_obj5.omap.size());
-    test_obj5.rm_omap_range(*sharded_seastore, std::string("dup_" + obj5_from_remove),
+    test_obj5.rm_omap_range(*sharded_seastore, test_obj5.coll, std::string("dup_" + obj5_from_remove),
       std::string("dup_" + del_key));
     kvs = test_obj5.get_omaps(*sharded_seastore, std::string());
     EXPECT_EQ(kvs.size(), test_obj5.omap.size());
-    test_obj5.check_omap_key(*sharded_seastore, "_info");
-    test_obj5.check_omap_key(*sharded_seastore, "_fastinfo");
-    test_obj5.rm_omap(*sharded_seastore, "_info");
-    test_obj5.rm_omap(*sharded_seastore, "_fastinfo");
+    test_obj5.check_omap_key(*sharded_seastore, test_obj5.coll, "_info");
+    test_obj5.check_omap_key(*sharded_seastore, test_obj5.coll, "_fastinfo");
+    test_obj5.rm_omap(*sharded_seastore, test_obj5.coll, "_info");
+    test_obj5.rm_omap(*sharded_seastore, test_obj5.coll, "_fastinfo");
     kvs = test_obj5.get_omaps(*sharded_seastore, std::string());
 
     EXPECT_EQ(kvs.size(), test_obj5.omap.size());
@@ -2192,18 +2340,18 @@ TEST_P(seastore_test_t, pgmeta_io)
     EXPECT_LE(orig_st.available, st.available);
 
     // for test_obj6
-    kvs = test_obj6.get_omaps(*sharded_seastore, std::string());
+    kvs = test_obj6.get_omaps(*sharded_seastore, test_obj6.coll, std::string());
     EXPECT_EQ(kvs.size(), test_obj6.omap.size());
-    test_obj6.rm_omap_range(*sharded_seastore, std::string("test" + std::to_string(0)),
+    test_obj6.rm_omap_range(*sharded_seastore, test_obj6.coll, std::string("test" + std::to_string(0)),
       std::string("test" + std::to_string(crimson::os::seastore::log_manager::BATCH_CREATE_SIZE - 1)));
-    kvs = test_obj6.get_omaps(*sharded_seastore, std::string());
+    kvs = test_obj6.get_omaps(*sharded_seastore, test_obj6.coll, std::string());
     EXPECT_EQ(kvs.size(), test_obj6.omap.size());
-    test_obj5.rm_omap(*sharded_seastore, "_fastinfo");
-    kvs = test_obj6.get_omaps(*sharded_seastore, std::string());
+    test_obj5.rm_omap(*sharded_seastore, test_obj5.coll, "_fastinfo");
+    kvs = test_obj6.get_omaps(*sharded_seastore, test_obj6.coll, std::string());
     EXPECT_EQ(kvs.size(), test_obj6.omap.size());
-    test_obj5.rm_omap_range(*sharded_seastore, std::string("dup_" + obj6_from_remove),
+    test_obj5.rm_omap_range(*sharded_seastore, test_obj5.coll, std::string("dup_" + obj6_from_remove),
       std::string("dup_" + obj6_to_remove));
-    kvs = test_obj6.get_omaps(*sharded_seastore, std::string());
+    kvs = test_obj6.get_omaps(*sharded_seastore, test_obj6.coll, std::string());
     EXPECT_EQ(kvs.size(), test_obj6.omap.size());
 
     // test to detect continous keys
@@ -2231,8 +2379,8 @@ TEST_P(seastore_test_t, pgmeta_io)
       bl.append(std::string(128, 'f'));
       test_obj.set_omap(t, key, bl);
       do_transaction(std::move(t));
-      test_obj.check_omap_key(*sharded_seastore, key);
-      test_obj.rm_omap_range(*sharded_seastore, key, key);
+      test_obj.check_omap_key(*sharded_seastore, test_obj.coll, key);
+      test_obj.rm_omap_range(*sharded_seastore, test_obj.coll, key, key);
     }
   });
 }
@@ -2244,7 +2392,7 @@ TEST_P(seastore_test_t, pgmeta_io)
 TEST_P(seastore_test_t, pglog_rm_discontinuous_keys)
 {
   run_async([this] {
-    auto &test_obj = get_object(make_oid(0));
+    auto &test_obj = get_pgmeta_object(0);
     test_obj.touch(*sharded_seastore);
     test_obj.set_log_object(*sharded_seastore);
 
