@@ -258,6 +258,8 @@ public:
   void inc_with_max(int idx, uint64_t v = 1);
   void dec(int idx, uint64_t v = 1);
   void set(int idx, uint64_t v);
+  /// Atomically raise a U64 counter to at least v (lock-free high-water mark).
+  void set_max(int idx, uint64_t v);
   uint64_t get(int idx) const;
   /// Atomically lower a gauge to v if v is less than its current value, or
   /// if the gauge is still at its initial 0 ("unset"); a v of 0 is ignored.
