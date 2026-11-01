@@ -927,8 +927,8 @@ public:
     std::visit(DumpPayloadVisitor(f), payload);
   }
 
-  static std::list<ClientMetricMessage> generate_test_instances() {
-    std::list<ClientMetricMessage> ls;
+  static std::vector<ClientMetricMessage> generate_test_instances() {
+    std::vector<ClientMetricMessage> ls;
     ls.push_back(ClientMetricMessage(CapInfoPayload(1, 2, 3)));
     return ls;
   }
