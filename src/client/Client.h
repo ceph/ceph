@@ -863,7 +863,9 @@ public:
   void handle_quarantine_disable(const MConstRef<MQuarantineDisable>& m);
   void handle_quota(const MConstRef<MClientQuota>& m);
   void handle_snap(const MConstRef<MClientSnap>& m);
+  void _handle_snap(MetaSession *session, const MConstRef<MClientSnap>& m);
   void handle_caps(const MConstRef<MClientCaps>& m);
+  void _handle_caps(MetaSession *session, const MConstRef<MClientCaps>& m);
   void handle_cap_import(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
   void handle_cap_export(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
   void handle_cap_trunc(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
@@ -1097,6 +1099,8 @@ protected:
   bool _any_stale_sessions() const;
   void _kick_stale_sessions();
   void handle_client_session(const MConstRef<MClientSession>& m);
+  bool maybe_defer_mds_msg(MetaSession *session, const MessageConstRef& m);
+  void replay_deferred_mds_msgs(MetaSession *session);
   void send_reconnect(MetaSession *s);
   void resend_unsafe_requests(MetaSession *s);
   void wait_unsafe_requests();
