@@ -6,10 +6,11 @@
 
 The ``require_osd_release`` field of the OSDMap is the cluster-wide
 declaration that every OSD is running at least the named release. It is
-set by the operator at the tail of a cluster upgrade, once all OSDs have
-been upgraded to the new binary. Raising it unlocks features that would
-otherwise be rejected as unsafe, and it bounds how far ahead of the
-cluster a new OSD release is allowed to boot.
+raised at the tail of a cluster upgrade, once all OSDs have been upgraded
+to the new release. cephadm (``ceph orch upgrade``) and Rook raise it
+automatically; on other clusters, the operator raises it. Raising it unlocks
+features that would otherwise be rejected as unsafe, and it bounds how far
+ahead of the cluster a new OSD release is allowed to boot.
 
 Unlike :ref:`require_min_compat_client`, which can be lowered when
 features in use permit, ``require_osd_release`` can only move forward.
@@ -27,9 +28,9 @@ For example, after finishing an upgrade to *tentacle*:
 
    ceph osd require-osd-release tentacle
 
-Monitors only accept a small set of recent release names. The current
-accepted targets are ``squid``, ``tentacle``, and ``umbrella``; any
-older release name is rejected with ``not supported for this release``.
+Monitors only accept a small set of recent release names. As of 2026 November,
+the accepted targets are ``squid``, ``tentacle``, and ``umbrella``; any older
+release name is rejected.
 The accepted set slides forward as new Ceph releases are added.
 
 The target release must be in the accepted set and must not be older
@@ -39,6 +40,10 @@ every up OSD advertises the target release's feature bits. The Monitor
 feature check has no bypass; the OSD feature check can be overridden
 with ``--yes-i-really-mean-it``, but any OSD that lacks the feature
 will still be refused when it tries to boot (see `OSD boot window`_).
+
+The Monitors also refuse the command, unless you pass
+``--yes-i-really-mean-it``, when the current value is older than ``squid``
+or when no OSD is ``up``.
 
 Checking the current value
 ==========================
@@ -77,9 +82,10 @@ are historical on modern clusters and are listed for completeness.
 OSD boot window
 ===============
 
-An OSD refuses to boot if it is running a release that is more than
-two ahead of ``require_osd_release``. For example, with
-``require_osd_release`` set to ``reef``:
+The Monitors refuse the boot of an OSD whose release is more than two
+releases ahead of ``require_osd_release``. Umbrella Monitors also refuse any
+OSD older than ``squid``. For example, on a cluster whose Monitors run
+Umbrella and whose ``require_osd_release`` is ``reef``:
 
 .. list-table::
    :header-rows: 1
@@ -89,8 +95,9 @@ two ahead of ``require_osd_release``. For example, with
      - Boots?
      - Notes
    * - ``reef``
-     - yes
-     - Same release.
+     - **no**
+     - ``disallowing boot of OSD osd.3 v2:10.0.0.3:6802/1234 because the osd
+       lacks CEPH_FEATURE_SERVER_SQUID``
    * - ``squid``
      - yes
      - One release ahead.
@@ -99,7 +106,7 @@ two ahead of ``require_osd_release``. For example, with
      - Two releases ahead (at the edge of the window).
    * - ``umbrella``
      - **no**
-     - ``disallowing boot of umbrella+ OSD ... because
+     - ``disallowing boot of umbrella+ OSD osd.3 v2:10.0.0.3:6802/1234 because
        require_osd_release < squid``
 
 This sliding window forces operators to raise ``require_osd_release``
@@ -117,15 +124,15 @@ a ``HEALTH_WARN`` check ``OSD_UPGRADE_FINISHED`` with the message::
 
    all OSDs are running <release> or later but require_osd_release < <release>
 
-The appearance of this warning is the normal cue to run
-``ceph osd require-osd-release <release>``; the warning clears once the
-flag has been raised.
+On a cluster where no orchestrator raises the flag, the appearance of this
+warning is a cue to run ``ceph osd require-osd-release <release>``. The
+warning clears once the flag has been raised.
 
 Initial value on new clusters
 =============================
 
 New clusters start with ``require_osd_release`` set to the newest
-release the Monitor code knows about. On this release that is
+release the Monitor code knows about. For Umbrella Monitors, that is
 ``umbrella``. Two developer options adjust the initial value for
 testing; neither should be used in production.
 
