@@ -7,10 +7,11 @@ import pytest
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import (
-    CephadmUpgrade,
     MID_UPGRADE_MUTED_WARNINGS,
+    CephadmUpgrade,
     OkToUpgradeMonReport,
     UpgradeState,
+    health_mute_flags_from_report,
     parse_ok_to_upgrade_mon_json,
     request_osd_ok_to_upgrade_report,
 )
@@ -385,6 +386,167 @@ def test_get_upgrade_info_refreshes_bucket_osds_for_upgrade_status(
     mock_request.assert_called_once()
     assert mock_request.call_args.kwargs['max_osds'] == 0
     assert progress == '2/3 daemons upgraded'
+
+
+def test_health_mute_flags_from_report():
+    report = {
+        'status': 'HEALTH_WARN',
+        'checks': {},
+        'mutes': [
+            {'code': 'AUTH_INSECURE_KEYS_ALLOWED', 'sticky': True, 'summary': '', 'count': 0},
+            {'code': 'OSD_DOWN', 'sticky': False, 'summary': '1 osds down', 'count': 1},
+        ],
+    }
+    assert health_mute_flags_from_report(report) == {
+        'AUTH_INSECURE_KEYS_ALLOWED': True,
+        'OSD_DOWN': False,
+    }
+    wrapped = {'health': report}
+    assert health_mute_flags_from_report(wrapped) == health_mute_flags_from_report(report)
+    assert health_mute_flags_from_report({'status': 'HEALTH_OK', 'mutes': []}) == {}
+    assert health_mute_flags_from_report({}) is None
+    assert health_mute_flags_from_report({'mutes': 'nope'}) is None
+
+
+def _health_report(mutes):
+    return json.dumps({
+        'status': 'HEALTH_WARN',
+        'checks': {},
+        'mutes': mutes,
+    })
+
+
+def test_upgrade_keeps_existing_health_mutes(cephadm_module: CephadmOrchestrator):
+    preexisting = [
+        {'code': 'AUTH_INSECURE_KEYS_ALLOWED', 'sticky': True, 'summary': '', 'count': 0},
+        {'code': 'AUTH_INSECURE_CLIENT_KEY_TYPE', 'sticky': False, 'summary': '', 'count': 1},
+    ]
+
+    def _check(cmd):
+        if cmd['prefix'] == 'health':
+            return 0, _health_report(preexisting), ''
+        return 0, '', ''
+
+    cephadm_module.check_mon_command = mock.MagicMock(side_effect=_check)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.upgrade._ensure_upgrade_health_mutes()
+
+    state = cephadm_module.upgrade.upgrade_state
+    assert state is not None
+    assert state.health_warnings_muted is True
+    assert state.health_warnings_muted_by_upgrade is not None
+    added = set(state.health_warnings_muted_by_upgrade)
+    assert 'AUTH_INSECURE_KEYS_ALLOWED' not in added
+    assert 'AUTH_INSECURE_CLIENT_KEY_TYPE' not in added
+    assert added == set(MID_UPGRADE_MUTED_WARNINGS) - {
+        'AUTH_INSECURE_KEYS_ALLOWED',
+        'AUTH_INSECURE_CLIENT_KEY_TYPE',
+    }
+    muted_codes = [
+        call.args[0]['code']
+        for call in cephadm_module.check_mon_command.call_args_list
+        if call.args[0]['prefix'] == 'health mute'
+    ]
+    assert set(muted_codes) == added
+    assert all(call.args[0]['sticky'] is True
+               for call in cephadm_module.check_mon_command.call_args_list
+               if call.args[0]['prefix'] == 'health mute')
+    reloaded = UpgradeState.from_json(
+        json.loads(cephadm_module.get_store('upgrade_state')))
+    assert reloaded is not None
+    assert reloaded.health_warnings_muted_by_upgrade == state.health_warnings_muted_by_upgrade
+
+    cephadm_module.check_mon_command.reset_mock()
+    cephadm_module.check_mon_command.side_effect = lambda cmd: (0, '', '')
+    assert cephadm_module.upgrade.upgrade_stop() == 'Stopped upgrade to target_image'
+    unmuted = [
+        call.args[0]['code']
+        for call in cephadm_module.check_mon_command.call_args_list
+        if call.args[0]['prefix'] == 'health unmute'
+    ]
+    assert set(unmuted) == added
+    assert 'AUTH_INSECURE_KEYS_ALLOWED' not in unmuted
+    assert 'AUTH_INSECURE_CLIENT_KEY_TYPE' not in unmuted
+
+
+def test_upgrade_mutes_nothing_when_all_warnings_are_already_muted(cephadm_module: CephadmOrchestrator):
+    preexisting = [
+        {'code': code, 'sticky': True, 'summary': '', 'count': 0}
+        for code in MID_UPGRADE_MUTED_WARNINGS
+    ]
+
+    def _check(cmd):
+        if cmd['prefix'] == 'health':
+            return 0, _health_report(preexisting), ''
+        return 0, '', ''
+
+    cephadm_module.check_mon_command = mock.MagicMock(side_effect=_check)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.upgrade._ensure_upgrade_health_mutes()
+    state = cephadm_module.upgrade.upgrade_state
+    assert state is not None
+    assert state.health_warnings_muted_by_upgrade == []
+    assert not any(
+        call.args[0]['prefix'] == 'health mute'
+        for call in cephadm_module.check_mon_command.call_args_list
+    )
+
+    cephadm_module.check_mon_command.reset_mock()
+    cephadm_module.check_mon_command.side_effect = lambda cmd: (0, '', '')
+    cephadm_module.upgrade._unmute_upgrade_related_health_warnings()
+    assert not any(
+        call.args[0]['prefix'] == 'health unmute'
+        for call in cephadm_module.check_mon_command.call_args_list
+    )
+
+
+def test_upgrade_does_not_mute_when_health_mutes_are_unknown(cephadm_module: CephadmOrchestrator):
+    cephadm_module.check_mon_command = mock.MagicMock(return_value=(0, 'not-json', ''))
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.upgrade._ensure_upgrade_health_mutes()
+    state = cephadm_module.upgrade.upgrade_state
+    assert state is not None
+    assert state.health_warnings_muted is False
+    assert state.health_warnings_muted_by_upgrade is None
+    assert not any(
+        call.args[0]['prefix'] == 'health mute'
+        for call in cephadm_module.check_mon_command.call_args_list
+    )
+
+
+def test_failed_upgrade_mute_is_not_unmuted(cephadm_module: CephadmOrchestrator):
+    def _check(cmd):
+        if cmd['prefix'] == 'health':
+            return 0, _health_report([]), ''
+        if cmd['prefix'] == 'health mute' and cmd['code'] == 'AUTH_INSECURE_KEYS_ALLOWED':
+            raise RuntimeError('mute failed')
+        return 0, '', ''
+
+    cephadm_module.check_mon_command = mock.MagicMock(side_effect=_check)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.upgrade._ensure_upgrade_health_mutes()
+    state = cephadm_module.upgrade.upgrade_state
+    assert state is not None
+    assert state.health_warnings_muted_by_upgrade is not None
+    assert 'AUTH_INSECURE_KEYS_ALLOWED' not in state.health_warnings_muted_by_upgrade
+    assert len(state.health_warnings_muted_by_upgrade) == len(MID_UPGRADE_MUTED_WARNINGS) - 1
+
+
+def test_legacy_upgrade_state_unmutes_every_mid_upgrade_warning(cephadm_module: CephadmOrchestrator):
+    raw = UpgradeState('target_image', 'pid', health_warnings_muted=True).to_json()
+    del raw['health_warnings_muted_by_upgrade']
+    restored = UpgradeState.from_json(raw)
+    assert restored is not None
+    assert restored.health_warnings_muted_by_upgrade is None
+    cephadm_module.upgrade.upgrade_state = restored
+    cephadm_module.check_mon_command = mock.MagicMock(return_value=(0, '', ''))
+    cephadm_module.upgrade._unmute_upgrade_related_health_warnings()
+    unmuted = [
+        call.args[0]['code']
+        for call in cephadm_module.check_mon_command.call_args_list
+        if call.args[0]['prefix'] == 'health unmute'
+    ]
+    assert unmuted == list(MID_UPGRADE_MUTED_WARNINGS)
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -1944,12 +2106,13 @@ def test_mute_upgrade_health_warnings_applied_when_cephx_insecure(
     check_mon_command, allowed_ciphers, service_cipher, raised_checks,
     cephadm_module: CephadmOrchestrator
 ):
-    check_mon_command.return_value = (0, '', '')
+    check_mon_command.return_value = (0, json.dumps({'mutes': []}), '')
     _set_cephx_health_state(cephadm_module, allowed_ciphers=allowed_ciphers,
                             service_cipher=service_cipher, raised_checks=raised_checks)
 
     assert cephadm_module.upgrade._mute_upgrade_related_health_warnings() is True
-    assert check_mon_command.call_count == len(MID_UPGRADE_MUTED_WARNINGS)
+    # one read of the currently set mutes, plus one mute per warning
+    assert check_mon_command.call_count == len(MID_UPGRADE_MUTED_WARNINGS) + 1
     check_mon_command.assert_has_calls(
         [mock.call({'prefix': 'health mute', 'code': w, 'sticky': True})
          for w in MID_UPGRADE_MUTED_WARNINGS],
