@@ -37,7 +37,7 @@
 
 class MOSDOpReply final : public Message {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -53,6 +53,12 @@ private:
   int32_t retry_attempt = -1;
   bool do_redirect;
   request_redirect_t redirect;
+  /// v9, crimson only: the reactor that runs the PG and the port on which
+  /// that reactor accepts client connections. 0 == not set. A client may
+  /// send later ops for the PG to that port so they arrive on the PG's
+  /// reactor; it is a hint, any connection still works.
+  uint16_t pg_core = 0;
+  uint16_t pg_core_port = 0;
 
 public:
   const object_t& get_oid() const { return oid; }
@@ -99,6 +105,13 @@ public:
   void set_redirect(const request_redirect_t& redir) { redirect = redir; }
   const request_redirect_t& get_redirect() const { return redirect; }
   bool is_redirect_reply() const { return do_redirect; }
+  void set_pg_core(uint16_t core, uint16_t port) {
+    pg_core = core;
+    pg_core_port = port;
+  }
+  uint16_t get_pg_core() const { return pg_core; }
+  /// 0: the reply names no reactor port
+  uint16_t get_pg_core_port() const { return pg_core_port; }
 
   void add_flags(int f) { flags |= f; }
 
@@ -232,6 +245,16 @@ public:
         }
       }
       encode_trace(payload, features);
+      if (header.version >= 9) {
+        if (pg_core_port) {
+          // appended last: v8 decoders stop after the trace and ignore it
+          encode(pg_core, payload);
+          encode(pg_core_port, payload);
+        } else {
+          // nothing to add: byte-identical to a v8 reply
+          header.version = 8;
+        }
+      }
     }
   }
   void decode_payload() override {
@@ -239,7 +262,8 @@ public:
     auto p = payload.cbegin();
 
     // Always keep here the newest version of decoding order/rule
-    if (header.version == HEAD_VERSION) {
+    // (v8 and v9 differ only by the trailing pg_core/pg_core_port)
+    if (header.version == HEAD_VERSION || header.version == 8) {
       decode(oid, p);
       decode(pgid, p);
       decode(flags, p);
@@ -265,6 +289,10 @@ public:
       if (do_redirect)
 	decode(redirect, p);
       decode_trace(p);
+      if (header.version >= 9) {
+        decode(pg_core, p);
+        decode(pg_core_port, p);
+      }
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
       decode(head, p);

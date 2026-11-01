@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include <seastar/core/sharded.hh>
 
 #include "msg/Policy.h"
@@ -225,8 +227,18 @@ private:
    */
   std::unique_ptr<user_private_t> user_private;
 
+  /// Lossy client session that may coexist with others from the same
+  /// address (a shard-aware client's per-reactor connections): kept out of
+  /// the per-address registry and never replaced by a new session.
+  bool multi_session = false;
+  /// For a session accepted on a reactor port: the address the client
+  /// dialled (our address with that port). We identify with it, so the
+  /// client's usual "is this who I dialled" check passes.
+  std::optional<entity_addr_t> shard_target_addr;
+
   friend class IOHandler;
   friend class ProtocolV2;
+  friend class SocketMessenger;
   friend class FrameAssemblerV2;
 };
 
