@@ -1,3 +1,5 @@
+usr/include/rbd/asio/ContextWQ.hpp
+usr/include/rbd/asio/UniqueFunction.hpp
 usr/include/rbd/features.h
 usr/include/rbd/librbd.h
 usr/include/rbd/librbd.hpp
