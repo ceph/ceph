@@ -3173,6 +3173,11 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
     bci.info.placement_rule = old_bci->info.placement_rule;
 
+    /* keep existing layout logs */
+    if (bci.info.layout.logs.empty()) {
+      bci.info.layout.logs = old_bci->info.layout.logs;
+    }
+
     // reject metadata with empty logs, since logs not being empty is
     // an invariant assumed broadly in codebase
     if (bci.info.layout.logs.empty()) {

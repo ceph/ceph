@@ -189,6 +189,25 @@ TEST_P(BucketInstanceMetadata, RejectBucketTypeChanges) {
   EXPECT_EQ(0, index.calls);
 }
 
+TEST_P(BucketInstanceMetadata, PreserveLayoutLogs) {
+  service.exists = true;
+  service.info = bucket_info();
+  service.info.layout.logs.back().gen = 3;
+  // the json format of the instance does not carry the logs, so a local
+  // update of an existing instance keeps the stored ones
+  auto incoming = service.info;
+  incoming.layout.logs.clear();
+  EXPECT_EQ(STATUS_APPLIED, put(incoming, false));
+  EXPECT_EQ(1, service.writes);
+  ASSERT_EQ(1u, service.info.layout.logs.size());
+  EXPECT_EQ(3u, service.info.layout.logs.back().gen);
+
+  // but the logs may not end up empty
+  service.info.layout.logs.clear();
+  EXPECT_EQ(-EINVAL, put(incoming, false));
+  EXPECT_EQ(1, service.writes);
+}
+
 TEST_P(BucketInstanceMetadata, MetadataSync) {
   service.exists = true;
   service.info = bucket_info();
