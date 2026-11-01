@@ -4785,7 +4785,7 @@ options:
   - runtime
   with_legacy: true
 - name: bluestore_min_alloc_size
-  type: uint
+  type: size
   level: advanced
   desc: Minimum allocation size to allocate for an object
   long_desc: A smaller allocation size generally means less data is read and then
