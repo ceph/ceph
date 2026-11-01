@@ -119,7 +119,7 @@ public:
     mark_flag_point(flag_start_mon_command, "start_mon_command");
   }
   void mark_finish_mon_command() {
-    mark_flag_point(flag_start_mon_command, "mon_command_finished");
+    mark_flag_point(flag_finish_mon_command, "mon_command_finished");
   }
 
   typedef boost::intrusive_ptr<MgrOpRequest> Ref;
