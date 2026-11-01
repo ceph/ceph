@@ -235,7 +235,12 @@ void DaemonStateIndex::_insert(DaemonStatePtr dm)
     _erase(dm->key);
   }
 
-  by_server[dm->hostname][dm->key] = dm;
+  // Daemons register before metadata arrives, so hostname may still be
+  // empty; skip by_server to avoid a phantom "" bucket visible in
+  // get_by_server() and with_daemons_by_server().
+  if (!dm->hostname.empty()) {
+    by_server[dm->hostname][dm->key] = dm;
+  }
   all[dm->key] = dm;
 
   for (auto& i : dm->devices) {
@@ -274,10 +279,15 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
     }
   }
 
-  auto &server_collection = by_server[dm->hostname];
-  server_collection.erase(dm->key);
-  if (server_collection.empty()) {
-    by_server.erase(dm->hostname);
+  // Mirror _insert: a daemon with an empty hostname was never indexed in
+  // by_server, so don't touch it here (operator[] would create the empty
+  // bucket we are trying to keep out of the index).
+  if (!dm->hostname.empty()) {
+    auto &server_collection = by_server[dm->hostname];
+    server_collection.erase(dm->key);
+    if (server_collection.empty()) {
+      by_server.erase(dm->hostname);
+    }
   }
 
   all.erase(to_erase);
