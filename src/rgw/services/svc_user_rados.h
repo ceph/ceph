@@ -110,7 +110,8 @@ public:
                       bool exclusive,
                       std::map<std::string, bufferlist> *attrs,
                       optional_yield y,
-                      const DoutPrefixProvider *dpp) override;
+                      const DoutPrefixProvider *dpp,
+                      bool from_remote_zone = false) override;
 
   int remove_user_info(const RGWUserInfo& info,
                        RGWObjVersionTracker *objv_tracker,
