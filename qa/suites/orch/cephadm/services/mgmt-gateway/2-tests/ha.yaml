@@ -1,0 +1,10 @@
+tasks:
+# a virtual IP for the keepalive-only ingress in front of the gateways
+- vip:
+# make sure cephadm notices the new address on every host
+- cephadm.shell:
+    host.a:
+      - ceph orch device ls --refresh
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.services.mgmt_gateway.test_ha.TestMgmtGatewayHA
