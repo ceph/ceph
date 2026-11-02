@@ -200,6 +200,12 @@ function(do_build_boost root_dir version)
       URL ${boost_url}
       URL_HASH SHA256=${boost_sha256}
       DOWNLOAD_NO_PROGRESS 1)
+    if(toolset STREQUAL "clang" AND NOT CMAKE_CROSSCOMPILING)
+      # b2 would pass "--target" to clang even for native builds
+      list(APPEND source_dir
+        PATCH_COMMAND ${CMAKE_COMMAND} -P
+          ${PROJECT_SOURCE_DIR}/cmake/modules/PatchBoostClangJam.cmake)
+    endif()
   endif()
   # build all components in a single shot
   include(ExternalProject)
