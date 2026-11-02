@@ -56,6 +56,43 @@ static PyObject *osdmap_dump(BasePyOSDMap* self, PyObject *obj)
   return f.get();
 }
 
+static PyObject *osdmap_get_require_osd_release(BasePyOSDMap* self, PyObject *obj)
+{
+  return PyUnicode_FromString(stringify(self->osdmap->require_osd_release).c_str());
+}
+
+static PyObject *osdmap_exists(BasePyOSDMap* self, PyObject *args)
+{
+  int osd;
+  if (!PyArg_ParseTuple(args, "i:exists", &osd)) {
+    return nullptr;
+  }
+  return PyBool_FromLong(self->osdmap->exists(osd));
+}
+
+static PyObject *osdmap_get_osd_uuid(BasePyOSDMap* self, PyObject *args)
+{
+  int osd;
+  if (!PyArg_ParseTuple(args, "i:get_osd_uuid", &osd)) {
+    return nullptr;
+  }
+  if (!self->osdmap->exists(osd)) {
+    Py_RETURN_NONE;
+  }
+  return PyUnicode_FromString(stringify(self->osdmap->get_uuid(osd)).c_str());
+}
+
+static PyObject *osdmap_get_pools(BasePyOSDMap* self, PyObject *obj)
+{
+  PyFormatter f;
+  f.open_array_section("pools");
+  for (const auto& [pid, pdata] : self->osdmap->get_pools()) {
+    self->osdmap->dump_pool(g_ceph_context, pid, pdata, &f);
+  }
+  f.close_section();
+  return f.get();
+}
+
 static PyObject *osdmap_new_incremental(BasePyOSDMap *self, PyObject *obj)
 {
   OSDMap::Incremental *inc = new OSDMap::Incremental;
@@ -347,6 +384,13 @@ PyMethodDef BasePyOSDMap_methods[] = {
   {"_get_crush_version", (PyCFunction)osdmap_get_crush_version, METH_NOARGS,
     "Get CRUSH version"},
   {"_dump", (PyCFunction)osdmap_dump, METH_NOARGS, "Dump OSDMap::Incremental"},
+  {"_get_require_osd_release", (PyCFunction)osdmap_get_require_osd_release,
+    METH_NOARGS, "Get require_osd_release"},
+  {"_exists", (PyCFunction)osdmap_exists, METH_VARARGS,
+    "Whether an OSD exists"},
+  {"_get_osd_uuid", (PyCFunction)osdmap_get_osd_uuid, METH_VARARGS,
+    "Get the uuid of an OSD, None if it does not exist"},
+  {"_get_pools", (PyCFunction)osdmap_get_pools, METH_NOARGS, "Dump the pools"},
   {"_new_incremental", (PyCFunction)osdmap_new_incremental, METH_NOARGS,
    "Create OSDMap::Incremental"},
   {"_apply_incremental", (PyCFunction)osdmap_apply_incremental, METH_O,
