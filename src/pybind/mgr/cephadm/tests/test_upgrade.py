@@ -21,6 +21,7 @@ from cephadm.utils import (
     auth_allowed_cipher_names_from_mon_map,
     auth_service_cipher_name_from_mon_map,
 )
+from mgr_module import MonCommandFailed
 from orchestrator import OrchestratorError, DaemonDescription, HostSpec, daemon_type_to_service
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
@@ -83,6 +84,54 @@ def test_upgrade_start_services_mutually_exclusive_with_bucket(cephadm_module: C
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_crush_bucket_type_only_auto_iterate(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                with mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_list_crush_bucket_names_of_type',
+                    return_value=['rack1', 'rack2'],
+                ), mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_validate_upgrade_filters',
+                ):
+                    assert wait(cephadm_module, cephadm_module.upgrade_start(
+                        'image_id', None,
+                        daemon_types=['osd'],
+                        bucket_type='rack',
+                    )) == 'Initiating upgrade to image_id'
+                st = cephadm_module.upgrade.upgrade_state
+                assert st is not None
+                assert st.crush_bucket_type == 'rack'
+                assert st.crush_bucket_name == 'rack1'
+                assert st.crush_iterative_bucket_names == ['rack1', 'rack2']
+                wait(cephadm_module, cephadm_module.upgrade_stop())
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_crush_bucket_type_only_no_buckets(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                with mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_list_crush_bucket_names_of_type',
+                    return_value=[],
+                ), mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_validate_upgrade_filters',
+                ):
+                    with pytest.raises(OrchestratorError) as err:
+                        cephadm_module.upgrade_start(
+                            'image_id', None,
+                            daemon_types=['osd'],
+                            bucket_type='rack',
+                        )
+                assert 'No CRUSH buckets of type \'rack\' found' in str(err.value)
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 def test_upgrade_start_offline_hosts(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'test'):
         with with_host(cephadm_module, 'test2'):
@@ -142,6 +191,51 @@ def test_upgrade_daemons_offline_hosts(cephadm_module: CephadmOrchestrator):
                 _to_upgrade = [(DaemonDescription(daemon_type='crash', daemon_id='test2', hostname='test2'), True)]
                 with pytest.raises(HostConnectionError, match=r"connection failure reason"):
                     cephadm_module.upgrade._upgrade_daemons(_to_upgrade, 'target_image', ['digest1'])
+
+
+@mock.patch.object(CephadmUpgrade, '_rotate_mgr_mon_auth_keys')
+@mock.patch("cephadm.module.CephadmOrchestrator.get")
+def test_upgrade_daemons_stops_redeploying_at_limit(
+    get_: mock.MagicMock,
+    _rotate_keys: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    """
+    Regression test: the redeploy loop inside _upgrade_daemons (the one that
+    actually calls _daemon_action) must stop once remaining_count hits 0,
+    same as the check-only loop above it. _upgrade_daemons has no
+    bucket-specific branching, so this single batch covers both the
+    ok-to-stop and ok-to-upgrade (CRUSH bucket-scoped) cases -- it mirrors
+    the real repro of 4 OSDs in one host bucket upgraded with --limit=2.
+    """
+    get_.return_value = {'json': json.dumps({'checks': {}})}
+    target_digest = 'target_image@repo_digest'
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_id='image_id',
+        target_digests=[target_digest],
+        target_version='19.3.0-0',
+        daemon_types=['osd'],
+        total_count=2,
+        remaining_count=2,
+    )
+    to_upgrade = [
+        (DaemonDescription(daemon_type='osd', daemon_id=str(i), hostname='host1'), False)
+        for i in (1, 2, 4, 6)
+    ]
+
+    with mock.patch(
+        "cephadm.serve.CephadmServe._run_cephadm",
+        _run_cephadm(json.dumps({'repo_digests': [target_digest]})),
+    ), mock.patch.object(cephadm_module, '_daemon_action') as daemon_action:
+        cephadm_module.upgrade._upgrade_daemons(to_upgrade, target_digest, [target_digest])
+
+    # only the first 2 (the --limit) were actually redeployed
+    assert daemon_action.call_count == 2
+    redeployed = {c.args[0].daemon_id for c in daemon_action.call_args_list}
+    assert redeployed == {'1', '2'}
+    assert cephadm_module.upgrade.upgrade_state.remaining_count == 0
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -291,6 +385,36 @@ def test_upgrade_state_crush_roundtrip():
     restored = UpgradeState.from_json(u.to_json())
     assert restored
     assert restored.crush_bucket_type == 'rack'
+    assert restored.crush_bucket_name == 'rack1'
+    assert restored.crush_iterative_bucket_names is None
+
+
+def test_upgrade_state_crush_auto_iterate_roundtrip():
+    u = UpgradeState(
+        'target',
+        'pid',
+        crush_bucket_type='rack',
+        crush_bucket_name='rack2',
+        crush_iterative_bucket_names=['rack1', 'rack2', 'rack3'],
+    )
+    restored = UpgradeState.from_json(u.to_json())
+    assert restored
+    assert restored.crush_bucket_type == 'rack'
+    assert restored.crush_bucket_name == 'rack2'
+    assert restored.crush_iterative_bucket_names == ['rack1', 'rack2', 'rack3']
+    assert 'crush_iterative_bucket_names' in u.to_json()
+
+
+def test_upgrade_state_from_json_without_iterative_bucket_names():
+    """Older persisted state without an iterative queue must still load."""
+    restored = UpgradeState.from_json({
+        'target_name': 'target',
+        'progress_id': 'pid',
+        'crush_bucket_type': 'rack',
+        'crush_bucket_name': 'rack1',
+    })
+    assert restored
+    assert restored.crush_iterative_bucket_names is None
     assert restored.crush_bucket_name == 'rack1'
 
 
@@ -626,78 +750,403 @@ def test_wait_for_ok_to_upgrade_osd_batch_bad_no_version_pauses(
     assert 'osd.99' in detail
 
 
-def test_validate_failure_domain_upgrade_options_ok(cephadm_module: CephadmOrchestrator):
-    cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_unknown_bucket_pauses(
+        cephadm_module: CephadmOrchestrator):
+    # "<name> does not exist" -- the crush_bucket name itself is invalid.
+    # This is a real misconfiguration; pause the upgrade like before.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='host',
+        crush_bucket_name='notabucket',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=MonCommandFailed(
+            'osd ok-to-upgrade failed: "notabucket" does not exist retval: -2'),
+    ):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch([])
+    assert ok is False
+    assert cephadm_module.upgrade.upgrade_state.paused is True
+    assert 'UPGRADE_INVALID_CRUSH_BUCKET' in cephadm_module.health_checks
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_empty_bucket_treated_as_done(
+        cephadm_module: CephadmOrchestrator):
+    # "no osds found in crush bucket" -- the bucket exists but is empty
+    # (e.g. an empty host, or a rack whose hosts are all empty, or OSDs
+    # removed after the auto-iterate queue was built). Mon is the single
+    # source of truth on this; treat it as nothing-to-do rather than
+    # pausing the whole upgrade.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='host',
+        crush_bucket_name='emptyhost',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=MonCommandFailed(
+            'osd ok-to-upgrade failed: no osds found in crush bucket: '
+            '"emptyhost" retval: -2'),
+    ):
+        known_ok_to_upgrade: List[str] = []
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch(known_ok_to_upgrade)
+    assert ok is True
+    assert known_ok_to_upgrade == []
+    assert cephadm_module.upgrade._ok_to_upgrade_all_osds_upgraded is True
+    assert cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket == set()
+    assert cephadm_module.upgrade.upgrade_state.paused is not True
+    assert 'UPGRADE_INVALID_CRUSH_BUCKET' not in cephadm_module.health_checks
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_bucket_no_children_treated_as_done(
+        cephadm_module: CephadmOrchestrator):
+    # "has no children!" -- the other mon-side "empty bucket" message,
+    # returned by _populate_crush_bucket_osds() for a rack/chassis bucket
+    # with zero children at all (distinct from "no osds found in crush
+    # bucket", which covers children that exist but contribute no OSDs).
+    # Must also be treated as nothing-to-do, not a pause.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='rack',
+        crush_bucket_name='emptyrack',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=MonCommandFailed(
+            'osd ok-to-upgrade failed: crush bucket "emptyrack" of type: '
+            'rack has no children! retval: -2'),
+    ):
+        known_ok_to_upgrade: List[str] = []
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch(known_ok_to_upgrade)
+    assert ok is True
+    assert known_ok_to_upgrade == []
+    assert cephadm_module.upgrade._ok_to_upgrade_all_osds_upgraded is True
+    assert cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket == set()
+    assert cephadm_module.upgrade.upgrade_state.paused is not True
+    assert 'UPGRADE_INVALID_CRUSH_BUCKET' not in cephadm_module.health_checks
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_other_enoent_still_pauses(
+        cephadm_module: CephadmOrchestrator):
+    # An ENOENT we don't specifically recognize as "empty bucket" (e.g. a
+    # bucket-name parse failure from get_osds_by_bucket_name()) must still
+    # pause the upgrade with a clear health warning -- not silently retry
+    # forever, which would just stall with no indication anything is wrong.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=MonCommandFailed(
+            'osd ok-to-upgrade failed: cannot parse crush bucket:"host1" '
+            'of type: host. got error code: -2 retval: -2'),
+    ):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch([])
+    assert ok is False
+    assert cephadm_module.upgrade.upgrade_state.paused is True
+    assert 'UPGRADE_INVALID_CRUSH_BUCKET' in cephadm_module.health_checks
+
+
+def test_validate_bucket_upgrade_options_ok(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade._validate_bucket_upgrade_options(
         'rack', 'rack-a', ['osd'])
 
 
-def test_validate_failure_domain_upgrade_options_chassis_ok(cephadm_module: CephadmOrchestrator):
-    cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+def test_validate_bucket_upgrade_options_chassis_ok(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade._validate_bucket_upgrade_options(
         'chassis', 'c1', ['osd'])
 
 
-def test_validate_failure_domain_upgrade_options_host_ok(cephadm_module: CephadmOrchestrator):
-    cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+def test_validate_bucket_upgrade_options_host_ok(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade._validate_bucket_upgrade_options(
         'host', 'host1', ['osd'])
 
 
-def test_validate_failure_domain_upgrade_options_invalid_type(cephadm_module: CephadmOrchestrator):
+def test_validate_bucket_upgrade_options_invalid_type(cephadm_module: CephadmOrchestrator):
     with pytest.raises(OrchestratorError) as err:
-        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        cephadm_module.upgrade._validate_bucket_upgrade_options(
             'root', 'default', ['osd'])
     assert str(err.value) == (
         "Supported bucket types for OSD upgrade are: chassis, host, rack (specified: 'root')")
 
 
-def test_validate_failure_domain_upgrade_options_pairing(cephadm_module: CephadmOrchestrator):
-    both_msg = 'Both --crush_bucket_type and --crush_bucket_name must be specified together'
+def test_validate_bucket_upgrade_options_pairing(cephadm_module: CephadmOrchestrator):
+    # Type-only is allowed (auto-iterate all buckets of that type).
+    cephadm_module.upgrade._validate_bucket_upgrade_options(
+        'rack', None, ['osd'])
+    # Name without type is not allowed.
     with pytest.raises(OrchestratorError) as err:
-        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
-            'rack', None, ['osd'])
-    assert str(err.value) == both_msg
-    with pytest.raises(OrchestratorError) as err:
-        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        cephadm_module.upgrade._validate_bucket_upgrade_options(
             None, 'rack-a', ['osd'])
-    assert str(err.value) == both_msg
+    assert str(err.value) == (
+        '--crush_bucket_name requires --crush_bucket_type')
 
 
-def test_validate_failure_domain_upgrade_options_comma_in_name(cephadm_module: CephadmOrchestrator):
+def test_validate_bucket_upgrade_options_type_only_ok(
+        cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade._validate_bucket_upgrade_options(
+        'rack', None, ['osd'])
+    cephadm_module.upgrade._validate_bucket_upgrade_options(
+        'host', '', ['osd'])
+
+
+def test_validate_bucket_upgrade_options_neither_is_noop(
+        cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade._validate_bucket_upgrade_options(None, None, None)
+    cephadm_module.upgrade._validate_bucket_upgrade_options(None, None, ['osd'])
+
+
+def test_validate_bucket_upgrade_options_empty_type(
+        cephadm_module: CephadmOrchestrator):
+    # Empty (not omitted) --crush_bucket_type is not a valid bucket type, so it
+    # falls through to the same "supported bucket types" error as any other
+    # invalid type string.
     with pytest.raises(OrchestratorError) as err:
-        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        cephadm_module.upgrade._validate_bucket_upgrade_options(
+            '', None, ['osd'])
+    assert str(err.value) == (
+        "Supported bucket types for OSD upgrade are: chassis, host, rack (specified: '')")
+
+
+def test_list_crush_bucket_names_of_type(cephadm_module: CephadmOrchestrator):
+    cephadm_module.get = mock.MagicMock(return_value={
+        'nodes': [
+            {'id': -1, 'name': 'default', 'type': 'root'},
+            {'id': -2, 'name': 'rack1', 'type': 'rack'},
+            {'id': -3, 'name': 'rack2', 'type': 'rack'},
+            {'id': -4, 'name': 'host1', 'type': 'host'},
+            {'id': 0, 'name': 'osd.0', 'type': 'osd'},
+        ]
+    })
+    names = cephadm_module.upgrade._list_crush_bucket_names_of_type('rack')
+    assert names == ['rack1', 'rack2']
+    assert cephadm_module.upgrade._list_crush_bucket_names_of_type('chassis') == []
+
+
+def test_list_crush_bucket_names_of_type_dedupes(cephadm_module: CephadmOrchestrator):
+    # A bucket can be linked under more than one parent (e.g. 'host1' listed
+    # once per root it's reachable from), so osd_map_tree can contain the
+    # same bucket name more than once. If that duplicate reached
+    # crush_iterative_bucket_names, _advance_to_next_crush_bucket()'s
+    # queue.index(name) would always resolve to the earlier occurrence and
+    # the auto-iterate run would cycle between the duplicates forever,
+    # never reaching the rest of the queue.
+    cephadm_module.get = mock.MagicMock(return_value={
+        'nodes': [
+            {'id': -1, 'name': 'host1', 'type': 'host'},
+            {'id': -2, 'name': 'host2', 'type': 'host'},
+            {'id': -3, 'name': 'host1', 'type': 'host'},
+            {'id': -4, 'name': 'host3', 'type': 'host'},
+        ]
+    })
+    names = cephadm_module.upgrade._list_crush_bucket_names_of_type('host')
+    assert names == ['host1', 'host2', 'host3']
+
+
+def test_advance_to_next_crush_bucket(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target',
+        'pid',
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+        crush_iterative_bucket_names=['rack1', 'rack2', 'rack3'],
+    )
+    cephadm_module.upgrade._ok_to_upgrade_all_osds_upgraded = True
+    cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket = {'osd.0'}
+
+    advanced = cephadm_module.upgrade._advance_to_next_crush_bucket()
+    assert advanced is True
+    assert cephadm_module.upgrade.upgrade_state is not None
+    assert cephadm_module.upgrade.upgrade_state.crush_bucket_name == 'rack2'
+    assert cephadm_module.upgrade._ok_to_upgrade_all_osds_upgraded is False
+    assert cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket is None
+
+    # Persisted for mgr failover resume on the new current bucket.
+    stored = json.loads(cephadm_module.get_store('upgrade_state'))
+    assert stored['crush_bucket_name'] == 'rack2'
+    assert stored['crush_iterative_bucket_names'] == ['rack1', 'rack2', 'rack3']
+
+
+def test_advance_to_next_crush_bucket_last_returns_false(
+        cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target',
+        'pid',
+        crush_bucket_type='rack',
+        crush_bucket_name='rack3',
+        crush_iterative_bucket_names=['rack1', 'rack2', 'rack3'],
+    )
+    assert cephadm_module.upgrade._advance_to_next_crush_bucket() is False
+    assert cephadm_module.upgrade.upgrade_state.crush_bucket_name == 'rack3'
+
+
+def test_advance_single_bucket_mode_no_queue(
+        cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target',
+        'pid',
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    assert cephadm_module.upgrade._advance_to_next_crush_bucket() is False
+
+
+def test_advance_after_failover_resume(
+        cephadm_module: CephadmOrchestrator):
+    """Interrupted auto-iterate must continue the queue after mgr failover."""
+    restored = UpgradeState.from_json({
+        'target_name': 'target',
+        'progress_id': 'pid',
+        'crush_bucket_type': 'rack',
+        'crush_bucket_name': 'rack2',
+        'crush_iterative_bucket_names': ['rack1', 'rack2', 'rack3'],
+    })
+    cephadm_module.upgrade.upgrade_state = restored
+    assert cephadm_module.upgrade._advance_to_next_crush_bucket() is True
+    assert cephadm_module.upgrade.upgrade_state is not None
+    assert cephadm_module.upgrade.upgrade_state.crush_bucket_name == 'rack3'
+    assert cephadm_module.upgrade.upgrade_state.crush_iterative_bucket_names == [
+        'rack1', 'rack2', 'rack3']
+
+
+def test_is_current_crush_bucket_upgrade_done_uses_cache(
+        cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target',
+        'pid',
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+        target_digests=['digest-new'],
+    )
+    cephadm_module.upgrade._ok_to_upgrade_all_osds_upgraded = True
+    cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket = {'osd.0'}
+    cephadm_module.use_repo_digest = True
+
+    done_osd = DaemonDescription(
+        daemon_type='osd', daemon_id='0', hostname='host1',
+        container_image_digests=['digest-new'])
+    pending_osd = DaemonDescription(
+        daemon_type='osd', daemon_id='1', hostname='host2',
+        container_image_digests=['digest-old'])
+
+    with mock.patch.object(
+            cephadm_module.cache,
+            'get_daemons_by_type',
+            return_value=[done_osd, pending_osd]):
+        # osd.1 is outside the bucket set, so bucket is still considered done.
+        assert cephadm_module.upgrade._is_current_crush_bucket_upgrade_done(
+            ['digest-new'], 'target') is True
+
+    cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket = {'osd.0', 'osd.1'}
+    with mock.patch.object(
+            cephadm_module.cache,
+            'get_daemons_by_type',
+            return_value=[done_osd, pending_osd]):
+        assert cephadm_module.upgrade._is_current_crush_bucket_upgrade_done(
+            ['digest-new'], 'target') is False
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_status_includes_current_crush_bucket(
+        cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target',
+        'pid',
+        target_digests=['digest1'],
+        daemon_types=['osd'],
+        crush_bucket_type='rack',
+        crush_bucket_name='rack2',
+        crush_iterative_bucket_names=['rack1', 'rack2', 'rack3'],
+    )
+    cephadm_module.upgrade.upgrade_info_str = (
+        cephadm_module.upgrade._crush_bucket_upgrade_info_str('rack2'))
+    with mock.patch.object(cephadm_module.upgrade, '_get_upgrade_info', return_value=('1/3', [])):
+        status = wait(cephadm_module, cephadm_module.upgrade_status())
+    assert status.message == (
+        'Currently upgrading osd daemons in rack2 (1 bucket complete, 2 in progress)')
+    assert 'bucket scope' in status.which
+
+
+def test_crush_bucket_upgrade_info_str_auto_iterate(
+        cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target',
+        'pid',
+        crush_bucket_type='host',
+        crush_bucket_name='ceph-node-2',
+        crush_iterative_bucket_names=['ceph-node-0', 'ceph-node-1', 'ceph-node-2'],
+    )
+    assert cephadm_module.upgrade._crush_bucket_upgrade_info_str('ceph-node-2') == (
+        'Currently upgrading osd daemons in ceph-node-2 '
+        '(2 buckets complete, 1 in progress)')
+    assert cephadm_module.upgrade._crush_bucket_upgrade_info_str('ceph-node-0') == (
+        'Currently upgrading osd daemons in ceph-node-0 '
+        '(0 buckets complete, 3 in progress)')
+
+
+def test_crush_bucket_upgrade_info_str_single_bucket(
+        cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target',
+        'pid',
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    assert cephadm_module.upgrade._crush_bucket_upgrade_info_str('rack1') == (
+        'Currently upgrading osd daemons in rack1')
+
+
+def test_validate_bucket_upgrade_options_comma_in_name(cephadm_module: CephadmOrchestrator):
+    with pytest.raises(OrchestratorError) as err:
+        cephadm_module.upgrade._validate_bucket_upgrade_options(
             'rack', 'a,b', ['osd'])
     assert str(err.value) == (
         'Invalid --crush_bucket_name: use a single name token without commas')
 
 
-def test_validate_failure_domain_upgrade_options_multi_token_name(cephadm_module: CephadmOrchestrator):
+def test_validate_bucket_upgrade_options_multi_token_name(cephadm_module: CephadmOrchestrator):
     with pytest.raises(OrchestratorError) as err:
-        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        cephadm_module.upgrade._validate_bucket_upgrade_options(
             'rack', 'rack-a rack-b', ['osd'])
     assert str(err.value) == (
         'Invalid --crush_bucket_name: use a single name token without commas')
 
 
-def test_validate_failure_domain_upgrade_options_daemon_types(cephadm_module: CephadmOrchestrator):
+def test_validate_bucket_upgrade_options_daemon_types(cephadm_module: CephadmOrchestrator):
     osd_msg = 'Bucket parameters for OSD upgrade require --daemon-types to be "osd"'
     with pytest.raises(OrchestratorError):
-        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        cephadm_module.upgrade._validate_bucket_upgrade_options(
             'rack', 'rack-a', None)
     with pytest.raises(OrchestratorError):
-        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        cephadm_module.upgrade._validate_bucket_upgrade_options(
             'rack', 'rack-a', ['osd', 'mds'])
     with pytest.raises(OrchestratorError):
-        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        cephadm_module.upgrade._validate_bucket_upgrade_options(
             'rack', 'rack-a', ['mgr', 'mon', 'osd'])
     with pytest.raises(OrchestratorError) as err:
-        cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+        cephadm_module.upgrade._validate_bucket_upgrade_options(
             'rack', 'rack-a', ['mgr', 'mon'])
     assert str(err.value) == osd_msg
 
 
-def test_validate_failure_domain_upgrade_options_name_not_consulting_crush_map(
+def test_validate_bucket_upgrade_options_name_not_consulting_crush_map(
         cephadm_module: CephadmOrchestrator):
     """Name existence in the CRUSH map is not validated here."""
-    cephadm_module.upgrade._validate_failure_domain_upgrade_options(
+    cephadm_module.upgrade._validate_bucket_upgrade_options(
         'rack', 'not-in-map', ['osd'])
 
 
@@ -1573,6 +2022,190 @@ def test_do_upgrade_limit_exhausted_marks_complete_without_scope_check(
 
     mark_complete.assert_called_once()
     filtered_scope.assert_not_called()
+
+
+@mock.patch.object(CephadmUpgrade, '_advance_to_next_crush_bucket')
+@mock.patch.object(CephadmUpgrade, '_is_current_crush_bucket_upgrade_done')
+@mock.patch.object(CephadmUpgrade, '_mark_upgrade_complete')
+@mock.patch.object(CephadmUpgrade, '_filtered_scope_up_to_date', return_value=False)
+@mock.patch.object(CephadmUpgrade, '_handle_need_upgrade_self')
+@mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, []))
+@mock.patch.object(
+    CephadmUpgrade, '_detect_need_upgrade', return_value=(False, [], [], 0),
+)
+@mock.patch.object(CephadmUpgrade, '_set_container_images')
+@mock.patch.object(CephadmUpgrade, '_complete_osd_upgrade')
+@mock.patch.object(CephadmUpgrade, '_complete_mds_upgrade')
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={})
+@mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle')
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', ''))
+@mock.patch("cephadm.module.CephadmOrchestrator.set_container_image")
+@mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests")
+@mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+    'min_mon_release': 19,
+    'require_osd_release': 'tentacle',
+    'have_local_config_map': True,
+})
+@mock.patch(
+    "cephadm.module.CephadmOrchestrator.version",
+    new_callable=mock.PropertyMock,
+    return_value='ceph version 19.3.0-0 (hash)',
+)
+@mock.patch("cephadm.module.HostCache.get_daemons")
+def test_do_upgrade_bucket_scoped_limit_exit_skips_bucket_checks(
+    get_daemons: mock.MagicMock,
+    _version: mock.MagicMock,
+    _get: mock.MagicMock,
+    get_active_mgr_digests: mock.MagicMock,
+    _set_container_image: mock.MagicMock,
+    _check_mon_command: mock.MagicMock,
+    _lookup_release_name: mock.MagicMock,
+    _get_distinct_container_image_settings: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    _complete_mds_upgrade: mock.MagicMock,
+    _complete_osd_upgrade: mock.MagicMock,
+    _set_container_images: mock.MagicMock,
+    _detect_need_upgrade: mock.MagicMock,
+    _to_upgrade: mock.MagicMock,
+    _handle_need_upgrade_self: mock.MagicMock,
+    filtered_scope: mock.MagicMock,
+    mark_complete: mock.MagicMock,
+    is_bucket_done: mock.MagicMock,
+    advance_bucket: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    """
+    Once --limit is exhausted on a CRUSH bucket-scoped upgrade, _do_upgrade
+    must stop at the bucket-scoped limit-exit block instead of polling osd
+    ok-to-upgrade for a bucket that can't finish this round, so the bucket
+    completion/advance checks below it must never run.
+    """
+    target_digest = 'new_image@repo_digest'
+    old_digest = 'old_image@repo_digest'
+    get_active_mgr_digests.return_value = [target_digest]
+    get_daemons.return_value = [
+        DaemonDescription(
+            daemon_type='osd',
+            daemon_id=str(i),
+            hostname='host1',
+            container_image_digests=[target_digest] if i < 2 else [old_digest],
+        )
+        for i in range(8)
+    ]
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_id='image_id',
+        target_digests=[target_digest],
+        target_version='19.3.0-0',
+        daemon_types=['osd'],
+        total_count=2,
+        remaining_count=0,
+        crush_bucket_type='host',
+        crush_bucket_name='ceph-node-0',
+    )
+
+    cephadm_module.upgrade._do_upgrade()
+
+    mark_complete.assert_called_once_with([target_digest], target_digest)
+    is_bucket_done.assert_not_called()
+    advance_bucket.assert_not_called()
+    filtered_scope.assert_not_called()
+
+
+@mock.patch.object(CephadmUpgrade, '_advance_to_next_crush_bucket')
+@mock.patch.object(CephadmUpgrade, '_is_current_crush_bucket_upgrade_done')
+@mock.patch.object(CephadmUpgrade, '_mark_upgrade_complete')
+@mock.patch.object(CephadmUpgrade, '_filtered_scope_up_to_date', return_value=False)
+@mock.patch.object(CephadmUpgrade, '_handle_need_upgrade_self')
+@mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, []))
+@mock.patch.object(
+    CephadmUpgrade, '_detect_need_upgrade', return_value=(False, [], [], 0),
+)
+@mock.patch.object(CephadmUpgrade, '_set_container_images')
+@mock.patch.object(CephadmUpgrade, '_complete_osd_upgrade')
+@mock.patch.object(CephadmUpgrade, '_complete_mds_upgrade')
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={})
+@mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle')
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', ''))
+@mock.patch("cephadm.module.CephadmOrchestrator.set_container_image")
+@mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests")
+@mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+    'min_mon_release': 19,
+    'require_osd_release': 'tentacle',
+    'have_local_config_map': True,
+})
+@mock.patch(
+    "cephadm.module.CephadmOrchestrator.version",
+    new_callable=mock.PropertyMock,
+    return_value='ceph version 19.3.0-0 (hash)',
+)
+@mock.patch("cephadm.module.HostCache.get_daemons")
+def test_do_upgrade_limit_hit_mid_auto_iterate_does_not_advance_bucket(
+    get_daemons: mock.MagicMock,
+    _version: mock.MagicMock,
+    _get: mock.MagicMock,
+    get_active_mgr_digests: mock.MagicMock,
+    _set_container_image: mock.MagicMock,
+    _check_mon_command: mock.MagicMock,
+    _lookup_release_name: mock.MagicMock,
+    _get_distinct_container_image_settings: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    _complete_mds_upgrade: mock.MagicMock,
+    _complete_osd_upgrade: mock.MagicMock,
+    _set_container_images: mock.MagicMock,
+    _detect_need_upgrade: mock.MagicMock,
+    _to_upgrade: mock.MagicMock,
+    _handle_need_upgrade_self: mock.MagicMock,
+    filtered_scope: mock.MagicMock,
+    mark_complete: mock.MagicMock,
+    is_bucket_done: mock.MagicMock,
+    advance_bucket: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    """
+    --limit 3 with an auto-iterate queue of ['rack1', 'rack2']: once the
+    limit is hit partway through rack1, the upgrade must end (via
+    _mark_upgrade_complete) with crush_bucket_name still 'rack1'. It must
+    not advance to rack2 or keep polling ok-to-upgrade for rack1.
+    """
+    target_digest = 'new_image@repo_digest'
+    old_digest = 'old_image@repo_digest'
+    get_active_mgr_digests.return_value = [target_digest]
+    get_daemons.return_value = [
+        DaemonDescription(
+            daemon_type='osd',
+            daemon_id=str(i),
+            hostname='host1',
+            container_image_digests=[target_digest] if i < 3 else [old_digest],
+        )
+        for i in range(8)
+    ]
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_id='image_id',
+        target_digests=[target_digest],
+        target_version='19.3.0-0',
+        daemon_types=['osd'],
+        total_count=3,
+        remaining_count=0,
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+        crush_iterative_bucket_names=['rack1', 'rack2'],
+    )
+
+    cephadm_module.upgrade._do_upgrade()
+
+    mark_complete.assert_called_once_with([target_digest], target_digest)
+    is_bucket_done.assert_not_called()
+    advance_bucket.assert_not_called()
+    filtered_scope.assert_not_called()
+    assert cephadm_module.upgrade.upgrade_state.crush_bucket_name == 'rack1'
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
