@@ -6,9 +6,10 @@
 
 RBD Replay is a set of tools for capturing and replaying RADOS Block Device
 (RBD) workloads. To capture an RBD workload, ``lttng-tools`` must be installed
-on the client, and ``librbd`` on the client must be the v0.87 (Giant) release 
-or later. To replay an RBD workload, ``librbd`` on the client must be the Giant
-release or later.
+on the client, and ``rbd_tracing`` must be set to ``true`` for the client, for
+example with ``rbd_tracing = true`` in the ``[client]`` section of its
+``ceph.conf``. While ``rbd_tracing`` is ``false``, the default, ``librbd``
+emits no trace events.
 
 Capture and replay takes three steps:
 
