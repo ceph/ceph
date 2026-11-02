@@ -26,9 +26,6 @@ capability is available in two modes:
   scenario. Any partially applied set of deltas will be rolled back at the 
   moment of failover.
 
-.. note:: journal-based mirroring requires the Ceph Jewel release or later;
-   snapshot-based mirroring requires the Ceph Octopus release or later.
-
 .. note:: All instances of the term "namespace" in this document refer to RBD
    namespaces.
 
@@ -73,8 +70,8 @@ See the `rbd`_ manpage for additional details of how to connect to different
 Ceph clusters.
 
 .. note:: The cluster name in the following examples corresponds to a Ceph
-   configuration file of the same name (e.g. /etc/ceph/site-b.conf).  See the
-   `ceph-conf`_ documentation for how to configure multiple clusters.  Note
+   configuration file of the same name (e.g. /etc/ceph/site-b.conf).  See
+   :ref:`ceph-runtime-config` for how to configure multiple clusters.  Note
    that ``rbd-mirror`` does **not** require the source and destination clusters
    to have unique internal names; both can and should call themselves ``ceph``.
    The config `files` that ``rbd-mirror`` needs for local and remote clusters
@@ -125,9 +122,10 @@ command and the pool name::
 
         rbd mirror pool disable {pool-name}
 
-When mirroring is disabled on a pool in this way, mirroring will also be
-disabled on any images (within the pool) for which mirroring was enabled
-explicitly.
+Before mirroring can be disabled on a pool, its peers must be removed with the
+``mirror pool peer remove`` command. In ``image`` mode, mirroring must also be
+disabled on each image for which it was enabled explicitly. In ``pool`` mode,
+disabling mirroring on the pool also disables it on the images.
 
 For example::
 
@@ -175,12 +173,12 @@ For example, on site-b::
 Add Cluster Peer Manually
 -------------------------
 
-Cluster peers can be specified manually if desired or if the above bootstrap
-commands are not available with the currently installed Ceph release.
+Cluster peers can be specified manually if desired.
 
 The remote ``rbd-mirror`` daemon will need access to the local cluster to
 perform mirroring. A new local Ceph user should be created for the remote
-daemon to use. To `create a Ceph user`_, with ``ceph`` specify the
+daemon to use. To :ref:`create a Ceph user <rados_ops_adding_a_user>`,
+with ``ceph`` specify the
 ``auth get-or-create`` command, user name, monitor caps, and OSD caps::
 
         $ ceph auth get-or-create client.rbd-mirror-peer mon 'profile rbd-mirror-peer' osd 'profile rbd'
@@ -214,10 +212,20 @@ peer cluster connection attributes when adding a mirroring peer, use the
         EOF
         $ rbd --cluster site-a mirror pool peer add image-pool client.rbd-mirror-peer@site-b --remote-mon-host 192.168.1.1,192.168.1.2 --remote-key-file remote-key-file
         $ rbd --cluster site-a mirror pool info image-pool --all
-        Mode: pool
-        Peers: 
-          UUID                                 NAME   CLIENT                 MON_HOST                KEY                                      
-          587b08db-3d33-4f32-8af8-421e77abb081 site-b client.rbd-mirror-peer 192.168.1.1,192.168.1.2 AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw== 
+        Mode: image
+        Site Name: site-a
+        Mirror UUID: 7c51df2a-c4e8-4b2a-9e43-5d4fd5a1b0e1
+        Remote Namespace:
+
+        Peer Sites:
+
+        UUID: 587b08db-3d33-4f32-8af8-421e77abb081
+        Name: site-b
+        Mirror UUID:
+        Direction: rx-tx
+        Client: client.rbd-mirror-peer
+        Mon Host: 192.168.1.1,192.168.1.2
+        Key: AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw==
 
 Remove Cluster Peer
 -------------------
@@ -528,7 +536,7 @@ the ``mirror pool promote`` command along with the pool name::
 
 For example::
 
-        $ rbd --cluster site-a mirror pool promote image-pool
+        $ rbd --cluster site-b mirror pool promote image-pool
 
 .. tip:: Since the primary / non-primary status is per-image, it is possible to
    have two clusters split the I/O load and stage failover / failback.
@@ -593,22 +601,21 @@ For example::
 rbd-mirror Daemon
 =================
 
-The two ``rbd-mirror`` daemons are responsible for watching image journals on
-the remote, peer cluster and replaying the journal events against the local
-cluster. The RBD image journaling feature records all modifications to the
-image in the order they occur. This ensures that a crash-consistent mirror of
-the remote image is available locally.
+Each ``rbd-mirror`` daemon is responsible for watching image journals or
+mirror-snapshots on the remote, peer cluster and applying the journal events or
+snapshot deltas to the local cluster. The RBD image journaling feature records
+all modifications to the image in the order they occur. This ensures that a
+crash-consistent mirror of the remote image is available locally.
 
 The ``rbd-mirror`` daemon is available within the optional ``rbd-mirror``
 distribution package.
 
 .. important:: Each ``rbd-mirror`` daemon requires the ability to connect
    to both clusters simultaneously.
-.. warning:: Pre-Luminous releases: only run a single ``rbd-mirror`` daemon per
-   Ceph cluster.
 
 Each ``rbd-mirror`` daemon should use a unique Ceph user ID. To
-`create a Ceph user`_, with ``ceph`` specify the ``auth get-or-create``
+:ref:`create a Ceph user <rados_ops_adding_a_user>`,
+with ``ceph`` specify the ``auth get-or-create``
 command, user name, monitor caps, and OSD caps::
 
   ceph auth get-or-create client.rbd-mirror.{unique id} mon 'profile rbd-mirror' osd 'profile rbd'
@@ -623,11 +630,9 @@ The ``rbd-mirror`` can also be run in foreground by ``rbd-mirror`` command::
   rbd-mirror -f --log-file={log_path}
 
 .. _rbd: ../../man/8/rbd
-.. _ceph-conf: ../../rados/configuration/ceph-conf/#running-multiple-clusters
 .. _explicitly enabled: #enable-image-mirroring
 .. _configured separately: #namespace-configuration
 .. _bootstrap token: #bootstrap-peers
 .. _force resync command: #force-image-resync
 .. _demote the image: #image-promotion-and-demotion
-.. _create a Ceph user: ../../rados/operations/user-management#add-a-user
 .. _mirror-snapshots: #create-image-mirror-snapshots
