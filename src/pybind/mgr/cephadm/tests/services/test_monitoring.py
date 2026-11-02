@@ -790,6 +790,49 @@ class TestMonitoring:
                     error_ok=True,
                 )
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.module.CephadmOrchestrator._get_mgr_ips", lambda _: ['::1'])
+    @patch("cephadm.services.monitoring.prometheus.password_hash", lambda password: 'prometheus_password_hash')
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
+    @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
+           lambda instance, dspec, ips=None, fqdns=None, ca_cert_required=False: TLSCredentials('mycert', 'mykey'))
+    def test_prometheus_sd_credentials_before_sd_server_restart(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Security just got enabled: prometheus is configured before the
+        service discovery server has restarted with auth (it does so
+        asynchronously). Prometheus must get the credentials the server will
+        use, not unset ones (rendered as 'None', which left prometheus without
+        any target)."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.secure_monitoring_stack = True
+            sd = cephadm_module.http_server.service_discovery
+            sd.username = None
+            sd.password = None
+            with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
+                    with_service(cephadm_module, PrometheusSpec('prometheus')) as _:
+                prom_yml = None
+                for call in _run_cephadm.call_args_list:
+                    stdin = call.kwargs.get('stdin')
+                    if stdin:
+                        files = json.loads(stdin).get('config_blobs', {}).get('files', {})
+                        prom_yml = files.get('prometheus.yml', prom_yml)
+                assert prom_yml is not None, 'prometheus was not deployed'
+                sd_configs = [sd_cfg for job in yaml.safe_load(prom_yml)['scrape_configs']
+                              for sd_cfg in job.get('http_sd_configs', [])]
+                assert sd_configs
+                for sd_cfg in sd_configs:
+                    # unset credentials render as the string 'None'
+                    assert sd_cfg['basic_auth']['username'] not in (None, 'None'), sd_cfg
+                    assert sd_cfg['basic_auth']['password'] not in (None, 'None'), sd_cfg
+                username = cephadm_module.get_store('service_discovery/root/username')
+                password = cephadm_module.get_store('service_discovery/root/password')
+                assert username and password
+                for sd_cfg in sd_configs:
+                    assert sd_cfg['basic_auth'] == {'username': username, 'password': password}
+                # the server, once restarted with auth, accepts them
+                sd.enable_auth()
+                assert sd.validate_password('localhost', username, password)
+
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator._get_mgr_ips", lambda _: ['::1'])
