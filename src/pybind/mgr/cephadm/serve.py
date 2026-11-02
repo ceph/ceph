@@ -1591,9 +1591,10 @@ class CephadmServe:
 
                 # osd deployments needs an --osd-uuid arg
                 if daemon_spec.daemon_type == 'osd':
-                    if not osd_uuid_map:
-                        osd_uuid_map = self.mgr.get_osd_uuid_map()
-                    osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
+                    if osd_uuid_map:
+                        osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
+                    else:
+                        osd_uuid = self.mgr.get_osdmap().get_osd_uuid(int(daemon_spec.daemon_id))
                     if not osd_uuid:
                         raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
                     daemon_params['osd_fsid'] = osd_uuid
