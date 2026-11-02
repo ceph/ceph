@@ -7342,7 +7342,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   // if this is a system request and we have rgwx-perm-check-uid passed,
   // we do impersonation
   if (user->get_info().system) {
-    const std::string perm_check_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "perm-check-uid");
+    const std::string perm_check_uid = s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "perm-check-uid");
     if (!perm_check_uid.empty()) {
       auto perm_check_user = driver->get_user(rgw_user(perm_check_uid));
       if (int r = perm_check_user->load_user(dpp, y); r < 0) {
