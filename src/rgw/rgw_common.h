@@ -1721,6 +1721,8 @@ struct rgw_name_to_flag {
 
 /** time parsing */
 extern int parse_time(const char *time_str, real_time *time);
+/** parse "<secs>[.<fraction>]" epoch time, the format of the Rgwx-Mtime header */
+extern int parse_rgwx_mtime(const DoutPrefixProvider *dpp, const std::string& s, real_time *rt);
 extern bool parse_rfc2616(const char *s, struct tm *t);
 extern bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns = NULL, bool extended_format = true);
 extern std::string rgw_trim_whitespace(const std::string& src);

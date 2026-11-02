@@ -4816,6 +4816,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.modify_tail = true;
   obj_op.meta.completeMultipart = true;
   obj_op.meta.olh_epoch = olh_epoch;
+  obj_op.meta.set_mtime = set_mtime;
   obj_op.meta.if_match = if_match;
   obj_op.meta.if_nomatch = if_nomatch;
 

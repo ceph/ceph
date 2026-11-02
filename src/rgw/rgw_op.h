@@ -2383,6 +2383,21 @@ inline int get_system_versioning_params(req_state *s,
   return 0;
 } /* get_system_versioning_params */
 
+/* rgwx-mtime: system-only param, in the format of the Rgwx-Mtime response header */
+inline int get_system_mtime_param(req_state *s, ceph::real_time *mtime)
+{
+  if (!s->system_request) {
+    return 0;
+  }
+
+  const std::string mtime_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "mtime");
+  if (mtime_str.empty()) {
+    return 0;
+  }
+
+  return parse_rgwx_mtime(s, mtime_str, mtime);
+} /* get_system_mtime_param */
+
 static inline void format_xattr(std::string &xattr)
 {
   /* If the extended attribute is not valid UTF-8, we encode it using

@@ -729,6 +729,38 @@ int parse_time(const char *time_str, real_time *time)
   return 0;
 }
 
+int parse_rgwx_mtime(const DoutPrefixProvider *dpp, const string& s, real_time *rt)
+{
+  auto is_digits = [](const string& v) {
+    return !v.empty() && std::all_of(v.begin(), v.end(), ::isdigit);
+  };
+  string err;
+  const auto dot = s.find('.');
+  const string secs_str = s.substr(0, dot);
+  string frac = (dot == string::npos ? "0" : s.substr(dot + 1));
+  long long secs = 0;
+  long nsecs = 0;
+
+  if (!is_digits(secs_str) || !is_digits(frac) || frac.size() > 9) {
+    err = "invalid format";
+  } else {
+    frac.append(9 - frac.size(), '0');
+    secs = strict_strtoll(secs_str, 10, &err);
+    if (err.empty()) {
+      nsecs = strict_strtol(frac, 10, &err);
+    }
+  }
+  // utime_t holds 32-bit seconds
+  if (!err.empty() || secs > std::numeric_limits<uint32_t>::max()) {
+    ldpp_dout(dpp, 0) << "ERROR: failed converting mtime (" << s << ") to real_time" << dendl;
+    return -EINVAL;
+  }
+
+  *rt = utime_t(secs, nsecs).to_real_time();
+
+  return 0;
+}
+
 #define TIME_BUF_SIZE 128
 
 void rgw_to_iso8601(const real_time& t, char *dest, int buf_size)
