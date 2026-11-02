@@ -106,7 +106,8 @@ How the suggested PG count is calculated
 
 The aim is enough PGs to spread data evenly across the OSDs, without so many
 PGs per OSD that recovery and backfill suffer. Empty or idle pools don't help
-spread data, but their PGs still use memory and CPU.
+spread data, but their PGs still use memory and CPU. To see how much of the
+raw capacity a pool can use across its failure domains, see :ref:`fdcalc`.
 
 For simplicity, the calculator assumes that all of a pool's OSDs are the same
 size. CRUSH places PGs in proportion to OSD weight, so when OSD sizes vary,
