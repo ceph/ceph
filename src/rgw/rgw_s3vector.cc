@@ -2728,6 +2728,38 @@ namespace rgw::s3vector {
       return lancedb_error_to_errno(result);
     }
 
+    // lancedb falls back to L2 when the query has no distance type, regardless
+    // of the metric the index was created with. set the metric of the index, so
+    // that both the ranking and the returned distances are according to it
+    reply.distance_metric = get_distance_metric(table, dpp);
+    LanceDBDistanceType distance_type;
+    switch (reply.distance_metric) {
+      case DistanceMetric::EUCLIDEAN:
+        distance_type = LANCEDB_DISTANCE_L2;
+        break;
+      case DistanceMetric::COSINE:
+        distance_type = LANCEDB_DISTANCE_COSINE;
+        break;
+      default:
+        ldpp_dout(dpp, 1) << "ERROR: s3vector unknown distance metric " <<
+          distance_metric_to_string(reply.distance_metric) <<
+          " for index: " << configuration.index_name << dendl;
+        lancedb_expr_free(json_filter_expr);
+        lancedb_vector_query_free(query);
+        lancedb_table_free(table);
+        lancedb_connection_free(conn);
+        return -EINVAL;
+    }
+    if (const LanceDBError result = lancedb_vector_query_distance_type(query, distance_type, &error_message) ; result != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to set distance type for vector query on index: " << configuration.index_name << ". error: " << error_message << dendl;
+      lancedb_free_string(error_message);
+      lancedb_expr_free(json_filter_expr);
+      lancedb_vector_query_free(query);
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      return lancedb_error_to_errno(result);
+    }
+
     const auto effective_top_k = json_filter_expr
         ? static_cast<unsigned int>(std::lround(configuration.top_k * dpp->get_cct()->_conf->rgw_s3vector_topk_post_filter_factor))
         : configuration.top_k;
@@ -2818,7 +2850,6 @@ namespace rgw::s3vector {
       ret = populate_vectors_from_query(dpp, query_result, reply.vectors, configuration.index_name, false, configuration.return_distance, true, configuration.return_metadata);
     }
 
-    reply.distance_metric = get_distance_metric(table, dpp);
     lancedb_table_free(table);
     lancedb_connection_free(conn);
     return ret;

@@ -3027,6 +3027,66 @@ def test_query_vectors_with_distance():
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
+def test_query_vectors_distance_metric():
+    """
+    The vectors are ranked by the distance metric of the index, and the
+    returned distances are according to it. Cosine distance does not change
+    when the query vector is scaled, while euclidean distance does, so a query
+    with a scaled copy of a stored vector tells the two metrics apart.
+    """
+    dimension = 8
+    num_vectors = 20
+    scale = 3.0
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    vector_created = False
+    try:
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vector_created = True
+
+        vectors = generate_vectors(num_vectors, dimension)
+        stored = vectors[0]['data']['float32']
+        query = [x * scale for x in stored]
+        for metric in ('cosine', 'euclidean'):
+            index_name = f'idx-{metric}'
+            result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                       dataType='float32', dimension=dimension,
+                                       distanceMetric=metric)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                      vectors=vectors)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+            result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                        queryVector={'float32': query}, topK=num_vectors,
+                                        returnDistance=True)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            assert result['distanceMetric'] == metric
+            returned = result['vectors']
+            assert len(returned) == num_vectors
+            distances = [v['distance'] for v in returned]
+            assert distances == sorted(distances), f"{metric} results are not sorted by distance"
+            distance = next(v['distance'] for v in returned if v['key'] == vectors[0]['key'])
+            if metric == 'cosine':
+                # the scaled vector has the same direction as the stored one
+                assert returned[0]['key'] == vectors[0]['key'], \
+                    f"cosine query did not return the stored vector first: {returned[0]['key']}"
+                assert distance == pytest.approx(0.0, abs=1e-5)
+                assert all(abs(d - 1.0) <= 1.0 + 1e-5 for d in distances), f"cosine distances out of range: {distances}"
+            else:
+                # squared euclidean distance between the scaled and the stored vector
+                expected = (scale - 1.0) ** 2 * sum(x * x for x in stored)
+                assert distance == pytest.approx(expected, rel=1e-4)
+    finally:
+        try:
+            if vector_created:
+                _delete_vector_bucket(conn, bucket_name)
+        finally:
+            _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
 def test_put_and_get_vectors_metadata():
     """Test storing and retrieving a mix of vectors with and without metadata."""
     conn = connection()
