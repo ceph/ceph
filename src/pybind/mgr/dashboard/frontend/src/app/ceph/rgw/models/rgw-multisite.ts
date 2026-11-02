@@ -50,6 +50,7 @@ export class RgwZone {
   endpoints: string;
   tier_type: string;
   sync_from: string;
+  sync_from_rm: string;
   sync_from_all: boolean;
 }
 
