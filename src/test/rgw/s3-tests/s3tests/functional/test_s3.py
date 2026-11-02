@@ -14494,6 +14494,97 @@ def test_object_lock_put_obj_retention_shorten_period_bypass():
     assert response['Retention'] == retention
     client.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id, BypassGovernanceRetention=True)
 
+def _create_governance_locked_object(client, bucket_name, key):
+    retention = {'Mode':'GOVERNANCE', 'RetainUntilDate':datetime.datetime(2140,1,1,tzinfo=pytz.UTC)}
+    response = client.put_object(Bucket=bucket_name, Key=key, Body='abc',
+                                 ObjectLockMode=retention['Mode'],
+                                 ObjectLockRetainUntilDate=retention['RetainUntilDate'])
+    return response['VersionId']
+
+def _put_bucket_policy(client, user_id, bucket_name, actions):
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": [f"arn:aws:iam:::user/{user_id}"]},
+            "Action": actions,
+            "Resource": [f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"],
+        }]
+    })
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy)
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_bypass_governance_not_granted_by_bucket_acl():
+    # s3:BypassGovernanceRetention can't be granted by an ACL, not even
+    # FULL_CONTROL; without a policy only the bucket owner may bypass
+    client = get_client()
+    alt_client = get_alt_client()
+    alt_user_id = get_alt_user_id()
+
+    key = 'file1'
+    for permission in ['WRITE', 'FULL_CONTROL']:
+        bucket_name = get_new_bucket_name()
+        client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+        version_id = _create_governance_locked_object(client, bucket_name, key)
+        grant = {'Grantee': {'ID': alt_user_id, 'Type': 'CanonicalUser'}, 'Permission': permission}
+        client.put_bucket_acl(Bucket=bucket_name, AccessControlPolicy=add_bucket_user_grant(bucket_name, grant))
+
+        e = assert_raises(ClientError, alt_client.delete_object, Bucket=bucket_name, Key=key,
+                          VersionId=version_id, BypassGovernanceRetention=True)
+        status, error_code = _get_status_and_error_code(e.response)
+        assert status == 403
+        assert error_code == 'AccessDenied'
+
+        # the bucket owner still can
+        client.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id, BypassGovernanceRetention=True)
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_bypass_governance_granted_by_bucket_policy():
+    client = get_client()
+    alt_client = get_alt_client()
+    alt_user_id = get_alt_user_id()
+    bucket_name = get_new_bucket_name()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    _put_bucket_policy(client, alt_user_id, bucket_name, ["s3:DeleteObjectVersion", "s3:BypassGovernanceRetention"])
+
+    key1 = 'file1'
+    version_id = _create_governance_locked_object(client, bucket_name, key1)
+    alt_client.delete_object(Bucket=bucket_name, Key=key1, VersionId=version_id, BypassGovernanceRetention=True)
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert 'Versions' not in response
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_put_obj_retention_shorten_bypass_requires_permission():
+    client = get_client()
+    alt_client = get_alt_client()
+    alt_user_id = get_alt_user_id()
+    bucket_name = get_new_bucket_name()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+
+    key = 'file1'
+    version_id = _create_governance_locked_object(client, bucket_name, key)
+    shorter = {'Mode':'GOVERNANCE', 'RetainUntilDate':datetime.datetime(2130,1,1,tzinfo=pytz.UTC)}
+
+    # s3:PutObjectRetention alone does not allow shortening with the bypass header
+    _put_bucket_policy(client, alt_user_id, bucket_name, ["s3:PutObjectRetention", "s3:GetObjectRetention"])
+    e = assert_raises(ClientError, alt_client.put_object_retention, Bucket=bucket_name, Key=key,
+                      VersionId=version_id, Retention=shorter, BypassGovernanceRetention=True)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    # with s3:BypassGovernanceRetention it does
+    _put_bucket_policy(client, alt_user_id, bucket_name, ["s3:PutObjectRetention", "s3:GetObjectRetention",
+                                                          "s3:BypassGovernanceRetention"])
+    alt_client.put_object_retention(Bucket=bucket_name, Key=key, VersionId=version_id,
+                                    Retention=shorter, BypassGovernanceRetention=True)
+    response = client.get_object_retention(Bucket=bucket_name, Key=key, VersionId=version_id)
+    assert response['Retention'] == shorter
+
+    client.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id, BypassGovernanceRetention=True)
 
 @pytest.mark.fails_on_dbstore
 def test_object_lock_delete_object_with_retention():

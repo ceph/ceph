@@ -29,6 +29,11 @@
 
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
+* RGW: An ACL grant (WRITE or FULL_CONTROL on the bucket) no longer allows a
+  user to bypass governance-mode object lock retention. When no bucket, user or
+  identity policy allows or denies ``s3:BypassGovernanceRetention``, only the
+  bucket owner may use ``x-amz-bypass-governance-retention``; other users need
+  that permission granted by a policy.
 
 * RGW: Changing ``rgw_dynamic_resharding`` used to turn queuing buckets
   for reshard on or off while not affecting resharding itself until the
