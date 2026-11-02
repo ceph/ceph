@@ -69,6 +69,11 @@ class SMBTestConf:
         return SMBTestServer(nodes[0])
 
     @property
+    def servers(self):
+        nodes = self._data.get('smb_nodes', [])
+        return [SMBTestServer(node) for node in nodes]
+
+    @property
     def admin_node(self):
         return SMBTestServer(self._data.get('admin_node', {}))
 
