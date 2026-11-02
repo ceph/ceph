@@ -1313,6 +1313,7 @@ class RadosLuaManager : public StoreLuaManager {
   uint64_t watch_handle = 0;
   std::map<std::string, uint64_t> script_watches;
   std::map<uint64_t, std::string> reverse_script_watches;
+  std::shared_mutex watch_mutex;
 
 public:
   RadosLuaManager(RadosStore* _s, const std::string& _luarocks_path);
