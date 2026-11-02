@@ -140,6 +140,13 @@ add_executable(unittest_rgw_bucket_sync_cache test_rgw_bucket_sync_cache.cc)
 add_ceph_unittest(unittest_rgw_bucket_sync_cache)
 target_link_libraries(unittest_rgw_bucket_sync_cache ${rgw_libs})
 
+# unittest_rgw_sync_module_aws
+add_executable(unittest_rgw_sync_module_aws test_rgw_sync_module_aws.cc)
+add_ceph_unittest(unittest_rgw_sync_module_aws)
+target_include_directories(unittest_rgw_sync_module_aws
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_sync_module_aws ${rgw_libs})
+
 #unittest_rgw_period_history
 add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history)
