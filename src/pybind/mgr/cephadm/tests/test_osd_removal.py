@@ -55,6 +55,12 @@ class TestOSDRemoval:
         assert q._not_in_cluster() == [gone]
         q.mgr.get_osdmap.assert_called_once()
 
+    def test_cleanup_empty_queue_skips_osdmap(self, rm_util):
+        q = OSDRemovalQueue(mock.Mock())
+        q.rm_util = rm_util
+        q.cleanup()
+        q.mgr.get_osdmap.assert_not_called()
+
     @pytest.mark.parametrize(
         "osd_id, osd_df, expected",
         [
