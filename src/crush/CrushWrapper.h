@@ -1628,7 +1628,8 @@ public:
     std::set<int>& used,
     std::vector<int> *pw,
     int root_bucket,
-    int rule) const;
+    int rule,
+    uint32_t seed = 0) const;
 
   int try_remap_rule(
     CephContext *cct,
@@ -1638,7 +1639,8 @@ public:
     const std::vector<int>& underfull,
     const std::vector<int>& more_underfull,
     const std::vector<int>& orig,
-    std::vector<int> *out) const;
+    std::vector<int> *out,
+    uint32_t seed = 0) const;   ///< e.g. pg.ps(); spreads remaps over positions
 
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &blp);
