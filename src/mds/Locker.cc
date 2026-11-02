@@ -4799,12 +4799,19 @@ void Locker::handle_reqrdlock(SimpleLock *lock, const cref_t<MLock> &m)
     dout(7) << "handle_reqrdlock got rdlock request on " << *lock
 	    << " on " << *parent << dendl;
     ceph_assert(parent->is_auth()); // replica auth pinned if they're doing this!
-    if (lock->is_stable()) {
+    if (lock->is_stable())
       simple_sync(lock);
-    } else {
+    if (!lock->is_stable()) {
+      /*
+       * Wait here like a local rdlock does.  Without a waiter nothing
+       * flushes the log for an update that wrlocks the lock before the
+       * gather ends (see nudge_log() and _need_flush_file_update()), and
+       * the replica waits for the next tick.
+       */
       dout(7) << "handle_reqrdlock delaying request until lock is stable" << dendl;
       lock->add_waiter(SimpleLock::WAIT_STABLE | MDSCacheObject::WAIT_UNFREEZE,
                        new C_MDS_RetryMessage(mds, m));
+      nudge_log(lock);
     }
   } else {
     dout(7) << "handle_reqrdlock dropping rdlock request on " << *lock
