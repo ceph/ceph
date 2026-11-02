@@ -40,6 +40,7 @@ the Monitor container's stderr. If you enable logging to files (see
 :ref:`cephadm-logs`), the Monitors also write them to
 ``/var/log/ceph/<cluster-fsid>/ceph.cephadm.log`` on Monitor hosts.
 
+.. _cephadm-daemon-control:
 
 Ceph Daemon Control
 ===================
