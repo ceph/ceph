@@ -19,7 +19,7 @@ from cephadm.services.service_registry import service_registry
 from cephadm.utils import SpecialHostLabels, cephadmNoImage
 
 try:
-    from typing import List
+    from typing import List, Optional
 except ImportError:
     pass
 
@@ -149,6 +149,38 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
     assert dd.name() == f'osd.{osd_id}'
     yield dd
     cephadm_module._remove_daemons([(f'osd.{osd_id}', host)])
+
+
+def crush_host(name: str, *osds: int) -> dict:
+    """A host bucket as listed by 'ceph osd tree -f json'."""
+    return {'type': 'host', 'name': name, 'children': list(osds)}
+
+
+def noout_call(action: str, who: list):
+    """The mon command maintenance enter/exit sends for noout."""
+    return mock.call({'prefix': f'osd {action}-group', 'flags': 'noout',
+                      'who': who, 'format': 'json'})
+
+
+@contextmanager
+def with_osd_host_for_maintenance(cephadm_module: CephadmOrchestrator, hostname: str,
+                                  crush_bucket: Optional[str] = None):
+    """A host with osd.0 that may be placed into maintenance. The OSD is in
+    the CRUSH bucket crush_bucket, by default named after the short
+    hostname. _run_cephadm and mon_command are left to the test to mock."""
+    cephadm_module.mock_store_set('_ceph_get', 'osd_map_tree', {
+        'nodes': [crush_host(crush_bucket or hostname.split('.')[0], 0)]})
+    with mock.patch("cephadm.module.HostCache.get_hosts",
+                    return_value=[hostname, 'other_host']), \
+            mock.patch("cephadm.module.HostCache.get_daemon_types",
+                       return_value=['osd']), \
+            mock.patch("cephadm.module.HostCache.get_daemons_by_type",
+                       return_value=[DaemonDescription(daemon_type='osd', daemon_id='0',
+                                                       hostname=hostname)]), \
+            mock.patch("cephadm.CephadmOrchestrator._host_ok_to_stop",
+                       return_value=(0, 'it is okay')):
+        cephadm_module.inventory.add_host(HostSpec(hostname))
+        yield
 
 
 class TestCephadm(object):
@@ -2616,6 +2648,102 @@ class TestCephadm(object):
             cephadm_module.exit_host_maintenance(hostname)
 
         assert cephadm_module.inventory._inventory[hostname]['status'] == 'maintenance'
+
+    @pytest.mark.parametrize(
+        "osds, buckets, expected",
+        # (OSD ids on host1.example.com, host buckets in the OSD map tree or
+        #  None if there is no tree, expected noout targets)
+        [
+            pytest.param([], [], ['host1'],
+                         id='no-osds-short-hostname'),
+            pytest.param([1, 2], [crush_host('host1', 1, 2), crush_host('host2', 3)], ['host1'],
+                         id='bucket-named-like-host'),
+            pytest.param([1, 2], [crush_host('host1.example.com', 1, 2)], ['host1.example.com'],
+                         id='bucket-with-fqdn'),
+            pytest.param([1, 2], [crush_host('rack1-srv07', 2, 1)], ['rack1-srv07'],
+                         id='bucket-renamed'),
+            pytest.param([1, 2], [crush_host('host1-hdd', 1), crush_host('host1-ssd', 2)],
+                         ['host1-hdd', 'host1-ssd'],
+                         id='osds-in-several-buckets'),
+            pytest.param([1, 2], [crush_host('host1', 1, 2, 3)], ['osd.1', 'osd.2'],
+                         id='bucket-shared-with-other-host'),
+            pytest.param([1, 2], [crush_host('host1', 1)], ['host1', 'osd.2'],
+                         id='osd-not-in-crush'),
+            pytest.param([1, 2], [{'type': 'rack', 'name': 'rack1', 'children': [1, 2]}],
+                         ['osd.1', 'osd.2'],
+                         id='osds-under-non-host-bucket'),
+            pytest.param([1, 2], [crush_host('old-host'), crush_host('host1', 1, 2)], ['host1'],
+                         id='empty-bucket-ignored'),
+            pytest.param([1, 2], [crush_host('host1', -5, 1, 2)], ['host1'],
+                         id='nested-bucket-ignored'),
+            pytest.param([1, 2], None, ['osd.1', 'osd.2'],
+                         id='no-osd-tree'),
+            pytest.param([1, 2, 5, 7], [crush_host('host1-hdd', 1, 2), crush_host('shared', 5, 9)],
+                         ['host1-hdd', 'osd.5', 'osd.7'],
+                         id='combination'),
+        ])
+    @mock.patch("cephadm.module.HostCache.get_daemons_by_type")
+    def test_get_noout_targets(self, _get_daemons_by_type, osds, buckets, expected,
+                               cephadm_module: CephadmOrchestrator):
+        _get_daemons_by_type.return_value = [
+            DaemonDescription(daemon_type='osd', daemon_id=str(i)) for i in osds]
+        if buckets is None:
+            # the mock store cannot return None
+            with mock.patch.object(cephadm_module, 'get', return_value=None):
+                assert cephadm_module._get_noout_targets('host1.example.com') == expected
+        else:
+            cephadm_module.mock_store_set('_ceph_get', 'osd_map_tree', {'nodes': buckets})
+            assert cephadm_module._get_noout_targets('host1.example.com') == expected
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_maintenance_crush_bucket_name_mismatch(self, _run_cephadm, _mon_command,
+                                                    cephadm_module: CephadmOrchestrator):
+        hostname = 'host1.example.com'
+        _mon_command.return_value = (0, '', '')
+        with with_osd_host_for_maintenance(cephadm_module, hostname, 'renamed-node'):
+            _run_cephadm.side_effect = async_side_effect(
+                ([''], ['something\nsuccess - systemd target xxx disabled'], 0))
+            assert not cephadm_module.enter_host_maintenance(hostname).exception_str
+            assert cephadm_module.inventory._inventory[hostname]['status'] == 'maintenance'
+
+            _run_cephadm.side_effect = async_side_effect(
+                ([''], ['something\nsuccess - systemd target xxx enabled and started'], 0))
+            assert not cephadm_module.exit_host_maintenance(hostname).exception_str
+            assert not cephadm_module.inventory._inventory[hostname]['status']
+
+            assert _mon_command.call_args_list == [
+                noout_call('set', ['renamed-node']),
+                noout_call('unset', ['renamed-node']),
+            ]
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_maintenance_enter_noout_failure_keeps_daemons_running(
+            self, _run_cephadm, _mon_command, cephadm_module: CephadmOrchestrator):
+        _mon_command.return_value = (-22, '', 'unable to parse')  # EINVAL
+        with with_osd_host_for_maintenance(cephadm_module, 'host1'):
+            with pytest.raises(OrchestratorError, match='Unable to set the osds on host1 to noout'):
+                cephadm_module.enter_host_maintenance('host1')
+            # the daemons must not have been stopped
+            _run_cephadm.assert_not_called()
+            assert not cephadm_module.inventory._inventory['host1']['status']
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_maintenance_enter_failure_rolls_back_noout(
+            self, _run_cephadm, _mon_command, cephadm_module: CephadmOrchestrator):
+        _mon_command.return_value = (0, '', '')
+        _run_cephadm.side_effect = async_side_effect(
+            ([''], ['something\nfailed - disable the target'], 0))
+        with with_osd_host_for_maintenance(cephadm_module, 'host1'):
+            with pytest.raises(OrchestratorError, match='Failed to place host1 into maintenance'):
+                cephadm_module.enter_host_maintenance('host1')
+            assert not cephadm_module.inventory._inventory['host1']['status']
+            assert _mon_command.call_args_list == [
+                noout_call('set', ['host1']),
+                noout_call('unset', ['host1']),
+            ]
 
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
