@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from asyncio import gather, to_thread
 from threading import Lock
 from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
@@ -24,6 +25,7 @@ from cephadm.utils import build_ceph_volume_cmd
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
+    from mgr_module import OSDMap
 
 logger = logging.getLogger(__name__)
 
@@ -580,24 +582,30 @@ class OsdIdClaims(object):
 
 
 class RemoveUtil(object):
+    # the removal queue asks for each queued OSD, and more than once per pass
+    OSD_DF_MAX_AGE_SECS = 2.0
+
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr: "CephadmOrchestrator" = mgr
+        self._osd_df: Optional[Tuple[float, dict]] = None
 
-    def get_osds_in_cluster(self) -> List[str]:
-        osd_map = self.mgr.get_osdmap()
-        return [str(x.get('osd')) for x in osd_map.dump().get('osds', [])]
-
-    def osd_df(self) -> dict:
+    def osd_df(self, fresh: bool = False) -> dict:
+        cached = self._osd_df
+        now = time.monotonic()
+        if not fresh and cached and now - cached[0] < self.OSD_DF_MAX_AGE_SECS:
+            return cached[1]
         base_cmd = 'osd df'
         ret, out, err = self.mgr.mon_command({
             'prefix': base_cmd,
             'format': 'json'
         })
         try:
-            return json.loads(out)
+            osd_df = json.loads(out)
         except ValueError:
             logger.exception(f'Cannot decode JSON: \'{out}\'')
             return {}
+        self._osd_df = (now, osd_df)
+        return osd_df
 
     def get_pg_count(self, osd_id: int, osd_df: Optional[dict] = None) -> int:
         if not osd_df:
@@ -916,12 +924,14 @@ class OSD:
     def purge(self) -> bool:
         return self.rm_util.purge_osd(self.osd_id)
 
-    def get_pg_count(self) -> int:
+    def get_pg_count(self, fresh: bool = False) -> int:
+        if fresh:
+            return self.rm_util.get_pg_count(self.osd_id, self.rm_util.osd_df(fresh=True))
         return self.rm_util.get_pg_count(self.osd_id)
 
     @property
     def exists(self) -> bool:
-        return str(self.osd_id) in self.rm_util.get_osds_in_cluster()
+        return self.rm_util.mgr.get_osdmap().exists(self.osd_id)
 
     def drain_status_human(self) -> str:
         default_status = 'not started'
@@ -931,7 +941,8 @@ class OSD:
         return status
 
     def pg_count_str(self) -> str:
-        return 'n/a' if self.get_pg_count() < 0 else str(self.get_pg_count())
+        pg_count = self.get_pg_count()
+        return 'n/a' if pg_count < 0 else str(pg_count)
 
     def _get_display_only_fields(self) -> Dict[str, Any]:
         _display_only_fields = {
@@ -1049,7 +1060,7 @@ class OSDRemovalQueue(object):
         for osd in all_osds:  # type: OSD
             # --force, or an already-failed empty daemon, must not wait on
             # osd safe-to-destroy (it stays false while the cluster is degraded).
-            skip_safety = osd.force or (osd.daemon_is_error() and osd.get_pg_count() <= 0)
+            skip_safety = osd.force or (osd.daemon_is_error() and osd.get_pg_count(fresh=True) <= 0)
             if not skip_safety:
                 if not osd.is_empty:
                     logger.debug(f"{osd} is not empty yet. Waiting a bit more")
@@ -1176,10 +1187,13 @@ class OSDRemovalQueue(object):
             return [osd.to_json() for osd in self.osds]
 
     def _not_in_cluster(self) -> List["OSD"]:
-        return [osd for osd in self.osds if not osd.exists]
+        osdmap = self.mgr.get_osdmap()
+        return [osd for osd in self.osds if not osdmap.exists(osd.osd_id)]
 
-    def enqueue(self, osd: "OSD") -> None:
-        if not osd.exists:
+    def enqueue(self, osd: "OSD", osdmap: Optional["OSDMap"] = None) -> None:
+        """osdmap saves a copy of the map per OSD when enqueuing many"""
+        exists = osd.exists if osdmap is None else osdmap.exists(osd.osd_id)
+        if not exists:
             raise NotFoundError()
         start_new = False
         with self.lock:

@@ -1,6 +1,6 @@
 import json
 
-from cephadm.services.osd import OSDRemovalQueue, OSD
+from cephadm.services.osd import OSDRemovalQueue, OSD, NotFoundError
 import pytest
 from tests import mock
 from .fixtures import with_cephadm_module
@@ -15,6 +15,45 @@ class MockOSD:
 
 
 class TestOSDRemoval:
+
+    @mock.patch("cephadm.services.osd.time.monotonic")
+    def test_osd_df_reused_within_max_age(self, monotonic, rm_util):
+        with mock.patch.object(rm_util.mgr, 'mon_command') as mon_command:
+            mon_command.return_value = (0, '{"nodes": [{"id": 1, "pgs": 7}]}', '')
+            monotonic.return_value = 100.0
+            assert rm_util.get_pg_count(1) == 7
+            assert rm_util.get_pg_count(1) == 7
+            mon_command.assert_called_once()
+            monotonic.return_value = 100.0 + rm_util.OSD_DF_MAX_AGE_SECS
+            mon_command.return_value = (0, '{"nodes": [{"id": 1, "pgs": 0}]}', '')
+            assert rm_util.get_pg_count(1) == 0
+            assert mon_command.call_count == 2
+
+    def test_osd_df_fresh_ignores_cached(self, rm_util):
+        with mock.patch.object(rm_util.mgr, 'mon_command') as mon_command:
+            mon_command.return_value = (0, '{"nodes": [{"id": 1, "pgs": 0}]}', '')
+            assert rm_util.get_pg_count(1) == 0
+            mon_command.return_value = (0, '{"nodes": [{"id": 1, "pgs": 7}]}', '')
+            assert rm_util.get_pg_count(1) == 0
+            assert OSD(osd_id=1, remove_util=rm_util).get_pg_count(fresh=True) == 7
+
+    def test_osd_df_failure_not_reused(self, rm_util):
+        with mock.patch.object(rm_util.mgr, 'mon_command') as mon_command:
+            mon_command.return_value = (1, 'not json', '')
+            assert rm_util.osd_df() == {}
+            assert rm_util.osd_df() == {}
+            assert mon_command.call_count == 2
+
+    def test_not_in_cluster_copies_osdmap_once(self, rm_util):
+        q = OSDRemovalQueue(mock.Mock())
+        q.rm_util = rm_util
+        gone = OSD(osd_id=3, remove_util=rm_util)
+        q.osds.update([OSD(osd_id=1, remove_util=rm_util),
+                       OSD(osd_id=2, remove_util=rm_util), gone])
+        osdmap = q.mgr.get_osdmap.return_value
+        osdmap.exists.side_effect = lambda osd_id: osd_id in (1, 2)
+        assert q._not_in_cluster() == [gone]
+        q.mgr.get_osdmap.assert_called_once()
 
     @pytest.mark.parametrize(
         "osd_id, osd_df, expected",
@@ -340,6 +379,17 @@ class TestOSDRemovalQueue:
         osd_obj.start.assert_called_once()
 
     @mock.patch("cephadm.services.osd.OSD.start")
+    def test_enqueue_uses_given_osdmap(self, start, osd_obj):
+        q = OSDRemovalQueue(mock.Mock())
+        osdmap = mock.Mock()
+        osdmap.exists.side_effect = lambda osd_id: osd_id == osd_obj.osd_id
+        q.enqueue(osd_obj, osdmap)
+        assert q.queue_size() == 1
+        q.mgr.get_osdmap.assert_not_called()
+        with pytest.raises(NotFoundError):
+            q.enqueue(OSD(osd_id=osd_obj.osd_id + 1, remove_util=mock.MagicMock()), osdmap)
+
+    @mock.patch("cephadm.services.osd.OSD.start")
     @mock.patch("cephadm.services.osd.OSD.exists")
     def test_enqueue_updates_existing(self, exist, start, osd_obj):
         q = OSDRemovalQueue(mock.Mock())
@@ -366,7 +416,7 @@ class TestOSDRemovalQueue:
         q.osds.add(osd)
         return q, osd
 
-    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSDRemovalQueue._not_in_cluster", lambda _: [])
     @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=False)
     @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
     @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=False)
@@ -377,7 +427,7 @@ class TestOSDRemovalQueue:
         assert osd in q.osds
         _purge.assert_not_called()
 
-    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSDRemovalQueue._not_in_cluster", lambda _: [])
     @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=False)
     @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
     @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=False)
@@ -391,7 +441,7 @@ class TestOSDRemovalQueue:
         _std.assert_not_called()
         assert osd not in q.osds
 
-    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSDRemovalQueue._not_in_cluster", lambda _: [])
     @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=False)
     @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
     @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=True)
@@ -406,7 +456,7 @@ class TestOSDRemovalQueue:
         _do_zap.assert_not_called()
         assert osd not in q.osds
 
-    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSDRemovalQueue._not_in_cluster", lambda _: [])
     @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=False)
     @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
     @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=True)
@@ -421,7 +471,7 @@ class TestOSDRemovalQueue:
         _do_zap.assert_called_once()
         assert osd not in q.osds
 
-    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSDRemovalQueue._not_in_cluster", lambda _: [])
     @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=True)
     @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
     @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=False)
@@ -435,7 +485,7 @@ class TestOSDRemovalQueue:
         _std.assert_not_called()
         assert osd not in q.osds
 
-    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSDRemovalQueue._not_in_cluster", lambda _: [])
     @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=False)
     @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
     @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=True)

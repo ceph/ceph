@@ -5354,6 +5354,7 @@ Then run the following:
         if not to_remove_daemons:
             return f"Unable to find OSDs: {osd_ids}"
 
+        osdmap = self.get_osdmap()
         for daemon in to_remove_daemons:
             assert daemon.daemon_id is not None
             try:
@@ -5367,7 +5368,8 @@ Then run the following:
                                                 no_destroy=no_destroy,
                                                 hostname=daemon.hostname,
                                                 process_started_at=datetime_now(),
-                                                remove_util=self.to_remove_osds.rm_util))
+                                                remove_util=self.to_remove_osds.rm_util),
+                                            osdmap)
             except NotFoundError:
                 return f"Unable to find OSDs: {osd_ids}"
 
