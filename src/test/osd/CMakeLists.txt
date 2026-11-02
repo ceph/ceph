@@ -61,6 +61,13 @@ add_executable(unittest_osd_types
 add_ceph_unittest(unittest_osd_types)
 target_link_libraries(unittest_osd_types global)
 
+# unittest_ec_coroutines
+add_executable(unittest_ec_coroutines
+  test_ec_coroutines.cc
+  )
+add_ceph_unittest(unittest_ec_coroutines)
+target_link_libraries(unittest_ec_coroutines Boost::context)
+
 # unittest_ecbackend_l (legacy EC)
 add_executable(unittest_ecbackend_l
   TestECBackendL.cc
@@ -262,6 +269,7 @@ target_link_libraries(unittest_ec_omap_journal osd global ${BLKID_LIBRARIES})
 # Not including unittest_osdmap, as it is slow. It is tested elsewhere.
 set(OSD_UNITTESTS
   unittest_backend_basics
+  unittest_ec_coroutines
   unittest_ec_omap_journal
   unittest_ec_transaction
   unittest_ec_transaction_l

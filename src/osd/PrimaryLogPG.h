@@ -944,6 +944,9 @@ protected:
   bool coro_op_in_flight = false;
   std::list<OpRequestRef> waiting_for_coro_op;
   OpContext* active_coro_ctx = nullptr;
+  /// the coroutine waits for active_coro_ctx's async reads, to run the op
+  /// again itself (OpContext::finish_read() resumes it)
+  bool coro_awaits_reads = false;
 
   /**
    * Grabs locks for OpContext, should be cleaned up in close_op_ctx
@@ -1571,6 +1574,8 @@ public:
     OpRequestRef& op,
     ThreadPool::TPHandle &handle) override;
   bool should_use_coroutine(MOSDOp* m);
+  /// unwind a suspended coroutine op, free its stack and its OpContext
+  void stop_coroutine();
   void do_op_impl(OpRequestRef op);
   void do_op(OpRequestRef& op);
   void on_coroutine_complete();
