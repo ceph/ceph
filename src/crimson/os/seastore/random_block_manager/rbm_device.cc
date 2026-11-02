@@ -356,7 +356,8 @@ Device::close_ertr::future<> EphemeralRBMDevice::close() {
 write_ertr::future<> EphemeralRBMDevice::writev(
   uint64_t offset,
   ceph::bufferlist bl,
-  uint16_t stream) {
+  uint16_t stream,
+  dma_write_times_t *dma_times) {
   LOG_PREFIX(EphemeralRBMDevice::writev);
   ceph_assert(buf);
   DEBUG(
@@ -364,7 +365,14 @@ write_ertr::future<> EphemeralRBMDevice::writev(
     offset,
     bl.length());
 
+  // in-memory device: the copy stands in for the dma_write
+  if (dma_times) {
+    dma_times->start = std::chrono::steady_clock::now();
+  }
   bl.begin().copy(bl.length(), buf + offset);
+  if (dma_times) {
+    dma_times->end = std::chrono::steady_clock::now();
+  }
   return write_ertr::now();
 }
 
