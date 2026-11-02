@@ -139,17 +139,9 @@ LogManager::omap_set_keys(
    * live entry and is never freed.
    */
   bool has_ow_key = false;
-  if (kvs.size() == OW_SIZE) {
-    std::vector<std::pair<std::string, ceph::bufferlist>> kvs_for_ow;
-    kvs_for_ow.reserve(2);
-    for (const auto& [k, v] : kvs) {
-      if (is_log_key(k)) {
-	kvs_for_ow.insert(kvs_for_ow.begin(), {k, v});
-      } else if (is_ow_key(k)) {
-	kvs_for_ow.push_back({k, v});
-	has_ow_key = true;
-      }
-    }
+  if (kvs.size() == OW_SIZE &&
+      is_pg_log_key(kvs.begin()->first) &&
+      is_ow_key(kvs.rbegin()->first)) {
     LogNodeRef cur = ext;
     if (has_ow_key) {
       if (!cur->can_ow()) {
@@ -157,7 +149,7 @@ LogManager::omap_set_keys(
 	CachedExtentRef node = co_await resync_log_node(cur);
 	cur = node->template cast<LogNode>();
       }
-      for (auto &[key, val] : kvs_for_ow) {
+      for (auto &[key, val] : kvs) {
 	const bool ends_with_ow_key = is_log_key(key) &&
 	  cur->get_size() + cur->get_reserved_size() > 0 && cur->can_ow();
 	const bool multi_block =
