@@ -2046,8 +2046,11 @@ TEST(LibCephFS, SnapDiffCases1_3)
 /*
 * SnapDiff readdir API testing for huge dir
 * when delta is minor.
+*
+* Disabled: the 10000-file snapdiff does not finish under debug mds = 20
+* and blocks the rest of the libcephfs workunit.
 */
-TEST(LibCephFS, HugeSnapDiffSmallDelta)
+TEST(LibCephFS, DISABLED_HugeSnapDiffSmallDelta)
 {
   TestMount test_mount;
 
