@@ -670,6 +670,21 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
   }
 }
 
+/*
+ * Would the directory be busy enough to be split for load again if this
+ * dirfrag were merged?  Merging a small but hot dirfrag gets it split again
+ * right away, and every split or merge freezes the dirfrags.  A split
+ * spreads the load over the new frags, so estimate the load of the whole
+ * directory from this frag's share, and use half the split thresholds so
+ * that a directory near them does not flap.
+ */
+bool MDBalancer::is_hot_frag(CDir *dir)
+{
+  const double nfrags = 1 << dir->get_frag().bits();
+  return dir->pop_me.get(META_POP_IRD).get() * nfrags > bal_split_rd / 2 ||
+	 dir->pop_me.get(META_POP_IWR).get() * nfrags > bal_split_wr / 2;
+}
+
 void MDBalancer::queue_merge(CDir *dir)
 {
   const auto frag = dir->dirfrag();
@@ -724,7 +739,7 @@ void MDBalancer::queue_merge(CDir *dir)
       bool all = true;
       for (auto& sib : sibs) {
 	auto is_auth = sib->is_auth();
-	auto should_merge = sib->should_merge();
+	auto should_merge = sib->should_merge() && !is_hot_frag(sib);
 
 	dout(20) << ": sib=" << *sib << ", is_auth=" << is_auth << ", should_merge="
 		 << should_merge << dendl;
@@ -1301,8 +1316,9 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
       !dir->inode->is_base() &&  // not root/mdsdir (for now at least)
       !dir->inode->is_stray()) { // not straydir
 
-    // split
-    if (dir->should_split() || hot) {
+    // split, but not for load a frag that is small enough to be merged:
+    // it would only be split into more small frags
+    if (dir->should_split() || (hot && !dir->should_merge())) {
       if (split_pending.count(dir->dirfrag()) == 0) {
         queue_split(dir, false);
       } else {
@@ -1316,7 +1332,8 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
     }
 
     // merge?
-    if (dir->should_merge() && merge_pending.count(dir->dirfrag()) == 0) {
+    if (dir->should_merge() && merge_pending.count(dir->dirfrag()) == 0 &&
+	!is_hot_frag(dir)) {
       queue_merge(dir);
     }
   }

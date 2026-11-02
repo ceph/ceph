@@ -3,6 +3,8 @@ from io import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra import run
 
+from textwrap import dedent
+
 import logging
 import os
 import time
@@ -136,6 +138,43 @@ class TestFragmentation(CephFSTestCase):
 
     def test_oversize(self):
         self._test_oversize()
+
+    def test_hot_small_dir_not_remerged(self):
+        """
+        That a small directory split because it is hot is neither merged
+        nor split further while it stays hot, and is merged once it cools
+        down.  Every split or merge freezes the dirfrags.
+        """
+        self._configure(mds_bal_split_rd=100, mds_bal_split_wr=100,
+                        mds_bal_split_bits=1, mds_bal_merge_size=50,
+                        mds_bal_fragment_interval=1)
+        self.mount_a.run_shell(["mkdir", "hotdir"])
+        path = os.path.join(self.mount_a.hostfs_mntpt, "hotdir")
+        # keep the directory small (< merge size) but busy
+        self.mount_a.run_python(dedent("""
+            import os, time
+            end = time.time() + 30
+            i = 0
+            while time.time() < end:
+                name = os.path.join("{path}", "f%d" % (i % 10))
+                open(name, "w").close()
+                os.unlink(name)
+                i += 1
+            """.format(path=path)), timeout=120)
+        splits, merges = self.get_splits(), self.get_merges()
+        log.info(f"while hot: {splits} splits, {merges} merges")
+        self.assertGreaterEqual(splits, 1)
+        self.assertLessEqual(splits, 2)
+        self.assertEqual(merges, 0)
+
+        # once it cools down, an access lets it be merged
+        def merged():
+            self.mount_a.run_shell(["touch", "hotdir/cool"])
+            return self.get_merges() >= 1
+        self.wait_until_true(merged, timeout=120)
+        self.wait_until_true(
+            lambda: len(self.get_dir_ino("/hotdir")['dirfrags']) == 1,
+            timeout=30)
 
     def test_rapid_creation(self):
         """
