@@ -23,33 +23,54 @@ void OSDMapGate<OSDMapGateTypeV>::OSDMapBlocker::dump_detail(Formatter *f) const
 }
 
 template <OSDMapGateType OSDMapGateTypeV>
-seastar::future<epoch_t> OSDMapGate<OSDMapGateTypeV>::wait_for_map(
-  typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
+std::pair<seastar::future<epoch_t>,
+	  typename OSDMapGate<OSDMapGateTypeV>::OSDMapBlocker*>
+OSDMapGate<OSDMapGateTypeV>::do_wait_for_map(
   epoch_t epoch,
   ShardServices *shard_services)
 {
   if (__builtin_expect(stopping, false)) {
-    return seastar::make_exception_future<epoch_t>(
-	crimson::common::system_shutdown_exception());
+    return {seastar::make_exception_future<epoch_t>(
+	crimson::common::system_shutdown_exception()), nullptr};
   }
   if (current >= epoch) {
-    return seastar::make_ready_future<epoch_t>(current);
+    return {seastar::make_ready_future<epoch_t>(current), nullptr};
   } else {
     logger().info("evt epoch is {}, i have {}, will wait", epoch, current);
     auto &blocker = waiting_peering.emplace(
       epoch, std::make_pair(blocker_type, epoch)).first->second;
     auto fut = blocker.promise.get_shared_future();
     if (shard_services) {
-      return trigger.maybe_record_blocking(
-	shard_services->osdmap_subscribe(current, true).then(
+      return {shard_services->osdmap_subscribe(current, true).then(
 	  [fut=std::move(fut)]() mutable {
 	    return std::move(fut);
 	  }),
-	blocker);
+	&blocker};
     } else {
-      return trigger.maybe_record_blocking(std::move(fut), blocker);
+      return {std::move(fut), &blocker};
     }
   }
+}
+
+template <OSDMapGateType OSDMapGateTypeV>
+seastar::future<epoch_t> OSDMapGate<OSDMapGateTypeV>::wait_for_map(
+  typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
+  epoch_t epoch,
+  ShardServices *shard_services)
+{
+  auto [fut, blocker] = do_wait_for_map(epoch, shard_services);
+  if (blocker) {
+    return trigger.maybe_record_blocking(std::move(fut), *blocker);
+  }
+  return std::move(fut);
+}
+
+template <OSDMapGateType OSDMapGateTypeV>
+seastar::future<epoch_t> OSDMapGate<OSDMapGateTypeV>::wait_for_map_untracked(
+  epoch_t epoch,
+  ShardServices *shard_services)
+{
+  return std::move(do_wait_for_map(epoch, shard_services).first);
 }
 
 template <OSDMapGateType OSDMapGateTypeV>

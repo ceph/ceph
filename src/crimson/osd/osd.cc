@@ -888,6 +888,7 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_command(make_asok_hook<SendBeaconHook>(*this));
     asok->register_command(make_asok_hook<RunOSDBenchHook>(*this));
     asok->register_command(make_asok_hook<FlushPgStatsHook>(*this));
+    asok->register_command(make_asok_hook<GetLatestOSDMapHook>(*this));
     asok->register_command(
       make_asok_hook<DumpPGStateHistory>(std::as_const(pg_shard_manager)));
     asok->register_command(make_asok_hook<DumpMetricsHook>());
@@ -1260,6 +1261,18 @@ seastar::future<uint64_t> OSD::send_pg_stats()
   // mgr client sends the report message in background
   mgrc->report();
   co_return osd_stat.seq;
+}
+
+seastar::future<epoch_t> OSD::wait_for_latest_osdmap()
+{
+  LOG_PREFIX(OSD::wait_for_latest_osdmap);
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  const auto [newest, oldest] = co_await monc->get_version("osdmap");
+  DEBUG("newest osdmap: {}, mine: {}", newest, osdmap->get_epoch());
+  // the OSD-level gate is updated only after all PGs have advanced
+  co_return co_await
+    get_shard_services().local_state.osdmap_gate.wait_for_map_untracked(
+      newest, &get_shard_services());
 }
 
 seastar::future<> OSD::handle_osd_map(Ref<MOSDMap> m)

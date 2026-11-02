@@ -182,6 +182,11 @@ public:
   /// @return the seq id of the pg stats being sent
   seastar::future<uint64_t> send_pg_stats();
 
+  /// fetch the newest osdmap from the mon, and wait until it is
+  /// applied by all PGs
+  /// @return the epoch of that map
+  seastar::future<epoch_t> wait_for_latest_osdmap();
+
   auto &get_shard_services() {
     return shard_services.local();
   }
