@@ -98,6 +98,13 @@
   limits the number of concurrent background fetches.  This reduces latency in
   large directories while retaining cache warmth for hot directories.
 
+* CephFS: An MDS no longer ships the null dentries left by unlinks when it
+  exports a directory fragment: the clean ones are dropped, and an emptied
+  subtree is kept until the rmdir that usually follows, or the journal, cleans
+  them.  A fragment with more null dentries than the new
+  ``mds_null_dentry_drop_batch`` (default 10000) has them dropped in batches of
+  that many before the export, without holding the MDS lock all along; ``0``
+  drops them all at once during the export.
 * BlueStore: The experimental PMEM device backend has been removed, together
   with the ``pmem`` value of the ``bdev_type`` option and the DML/DSA offload
   path. The hardware it targeted, Intel Optane DC persistent memory, was
