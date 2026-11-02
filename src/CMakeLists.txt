@@ -187,7 +187,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(
     -Wno-vla-cxx-extension)
   endif()
-  if(FREEBSD)
+  if(FREEBSD AND NOT CMAKE_LINKER_TYPE)
     # Need to use the GNU binutils linker to get versioning right.
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument")
     string(APPEND CMAKE_SHARED_LINKER_FLAGS " -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument")
