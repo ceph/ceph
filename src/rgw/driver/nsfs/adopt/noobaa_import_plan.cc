@@ -175,6 +175,7 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
     e.name = id.name;
     e.email = id.email;
     e.display_name = id.name;
+    e.iam_path = id.iam_path;
     for (const auto& ak : id.access_keys) {
       e.access_key_ids.push_back(ak.access_key);
     }

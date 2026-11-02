@@ -47,6 +47,7 @@ enum class FindingKind {
   trust_narrowed,
   bucket_failed,
   policy_refused,
+  arn_matched,
   notification_not_carried,
   notification_needs_operator,
   links_not_served,

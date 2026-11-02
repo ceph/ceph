@@ -683,9 +683,10 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
     std::string rewritten;
-    std::vector<std::string> unresolved, also_users;
+    std::vector<std::string> unresolved, also_users, arns;
     if (int r = rewrite_policy_principals(dpp, trust, mapping, rewritten,
-					  unresolved, &also_users); r < 0) {
+					  unresolved, &also_users, &arns);
+	r < 0) {
       fail(e.noobaa_name, (r == -ENOENT)
 	   ? "the trust policy names principals that resolve to nothing: " +
 	     describe_unresolved(mapping, unresolved)
@@ -721,6 +722,10 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 	  e.noobaa_name + ": role " + role_name + " trusts the account " +
 	  a + ";  NooBaa's STS also admitted these IAM users of its name, "
 	  "and the role does not trust them");
+    }
+    for (const auto& a : arns) {
+      result.arns_matched.push_back(
+	  e.noobaa_name + ": role " + role_name + ": " + a);
     }
     if (ret == -EEXIST) {
       /* a re-run meeting its own output */

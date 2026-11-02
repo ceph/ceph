@@ -18417,6 +18417,7 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   adoption_findings.add(nsfs::FindingKind::unresolved_name, ir.unresolved_names);
   adoption_findings.add(nsfs::FindingKind::unresolved_uid, ir.unresolved_uids);
   adoption_findings.add(nsfs::FindingKind::trust_narrowed, ir.trust_narrowed);
+  adoption_findings.add(nsfs::FindingKind::arn_matched, ir.arns_matched);
   put_report("accounts", std::to_string(ir.accounts_created));
   put_report("accounts_present", std::to_string(ir.accounts_skipped));
   put_report("users", std::to_string(ir.users_created));
@@ -18442,6 +18443,11 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   put_report("trust_narrowed", std::to_string(ir.trust_narrowed.size()));
   for (const auto& t : ir.trust_narrowed) {
     ldpp_dout(dpp, 0) << "WARNING: adoption:  " << t << dendl;
+  }
+  put_report("arns_matched", std::to_string(ir.arns_matched.size()));
+  for (const auto& a : ir.arns_matched) {
+    ldpp_dout(dpp, 0) << "WARNING: adoption:  a trust policy now matches an "
+      "ARN NooBaa never matched:  " << a << dendl;
   }
   if (ret < 0) {
     put_report("ran", "partial");
@@ -18942,6 +18948,7 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
   ret = nsfs::import_one_bucket(dpp, y, this, root, bucket_name, contents,
 				mapping, br);
   adoption_findings.add(nsfs::FindingKind::policy_refused, br.policies_refused);
+  adoption_findings.add(nsfs::FindingKind::arn_matched, br.arns_matched);
   adoption_findings.add(nsfs::FindingKind::notification_not_carried, br.notifications_reported);
   adoption_findings.add(nsfs::FindingKind::notification_needs_operator,
 			br.notifications_need_operator);
@@ -18950,6 +18957,7 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
   put_report("buckets", std::to_string(br.buckets_written));
   put_report("policies", std::to_string(br.policies_rewritten));
   put_report("policies_refused", std::to_string(br.policies_refused.size()));
+  put_report("arns_matched", std::to_string(br.arns_matched.size()));
   put_report("logging", std::to_string(br.logging_carried));
   put_report("topics", std::to_string(br.topics_written));
   put_report("notifications", std::to_string(br.notifications_carried));

@@ -14,6 +14,7 @@
  */
 
 #include <set>
+#include <string_view>
 
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
@@ -37,6 +38,38 @@ namespace rgw { namespace sal { namespace nsfs {
 std::optional<std::string>
 IdentityMapping::resolve(const std::string& principal) const
 {
+  /* NooBaa's ARN forms (`access_policy_utils.js`, create_arn_for_root
+   * and create_arn_for_user), whose account is always an `_id`.  An
+   * account's name there is unresolved, as is any other ARN. */
+  static constexpr std::string_view iam_prefix = "arn:aws:iam::";
+  if (principal.starts_with("arn:")) {
+    if (!principal.starts_with(iam_prefix)) {
+      return std::nullopt;
+    }
+    const std::string_view rest =
+      std::string_view{principal}.substr(iam_prefix.size());
+    const auto colon = rest.find(':');
+    if (colon == rest.npos) {
+      return std::nullopt;
+    }
+    auto a = account_by_noobaa_id.find(std::string{rest.substr(0, colon)});
+    if (a == account_by_noobaa_id.end()) {
+      return std::nullopt;
+    }
+    const std::string_view resource = rest.substr(colon + 1);
+    if (resource == "root") {
+      return "arn:aws:iam::" + a->second + ":root";
+    }
+    if (resource.starts_with("user/")) {
+      if (auto u = user_arn_by_account_and_path_name.find(
+	    {a->second, std::string{resource.substr(4)}});
+	  u != user_arn_by_account_and_path_name.end()) {
+	return u->second;
+      }
+    }
+    return std::nullopt;
+  }
+
   /* Id first.  A name and an id are both bare strings and cannot be
    * told apart syntactically -- an account may legally be *named*
    * twenty-four hex characters -- so the order is the whole of the
@@ -85,11 +118,15 @@ IdentityMapping mapping_from(const ImportPlan& plan)
   IdentityMapping m;
   for (const auto& e : plan.entries) {
     if (e.iam_user) {
-      /* RGW matches a user principal on `display_name`, which the
-       * import set to the NooBaa name. */
+      /* RGW matches a user principal on its path, then
+       * `display_name`, which the import set to NooBaa's `iam_path`
+       * and name. */
+      const std::string path_name =
+	(e.iam_path.empty() ? "/" : e.iam_path) + e.display_name;
       const std::string arn =
-	"arn:aws:iam::" + e.account_id + ":user/" + e.display_name;
+	"arn:aws:iam::" + e.account_id + ":user" + path_name;
       m.user_arn_by_noobaa_id[e.noobaa_id] = arn;
+      m.user_arn_by_account_and_path_name[{e.account_id, path_name}] = arn;
       if (!e.noobaa_name.empty()) {
 	m.user_arns_by_name.emplace(e.noobaa_name, arn);
       }
@@ -105,11 +142,14 @@ IdentityMapping mapping_from(const ImportPlan& plan)
 
 namespace {
 
-/* Rewrite one principal value in place, or record it as unresolved. */
+/* Rewrite one principal value in place, or record it as unresolved.
+ * `where` is the statement's "<Effect>, Principal|NotPrincipal". */
 void rewrite_one(rapidjson::Value& v, rapidjson::Document& d,
 		 const IdentityMapping& mapping,
 		 std::vector<std::string>& unresolved,
-		 std::vector<std::string>* also_users)
+		 std::vector<std::string>* also_users,
+		 std::vector<std::string>* arns_matched,
+		 const std::string& where)
 {
   if (!v.IsString()) {
     return;
@@ -137,6 +177,9 @@ void rewrite_one(rapidjson::Value& v, rapidjson::Document& d,
       also_users->push_back(before + " (" + users + ")");
     }
   }
+  if (arns_matched && before.starts_with("arn:")) {
+    arns_matched->push_back(before + " as " + *after + " (" + where + ")");
+  }
   v.SetString(after->c_str(),
 	      static_cast<rapidjson::SizeType>(after->size()),
 	      d.GetAllocator());
@@ -151,15 +194,18 @@ void rewrite_one(rapidjson::Value& v, rapidjson::Document& d,
 void rewrite_principal(rapidjson::Value& principal, rapidjson::Document& d,
 		       const IdentityMapping& mapping,
 		       std::vector<std::string>& unresolved,
-		       std::vector<std::string>* also_users)
+		       std::vector<std::string>* also_users,
+		       std::vector<std::string>* arns_matched,
+		       const std::string& where)
 {
   if (principal.IsString()) {
-    rewrite_one(principal, d, mapping, unresolved, also_users);
+    rewrite_one(principal, d, mapping, unresolved, also_users, arns_matched,
+		where);
     return;
   }
   if (principal.IsArray()) {
     for (auto& v : principal.GetArray()) {
-      rewrite_one(v, d, mapping, unresolved, also_users);
+      rewrite_one(v, d, mapping, unresolved, also_users, arns_matched, where);
     }
     return;
   }
@@ -172,10 +218,11 @@ void rewrite_principal(rapidjson::Value& principal, rapidjson::Document& d,
       continue;
     }
     if (i->value.IsString()) {
-      rewrite_one(i->value, d, mapping, unresolved, also_users);
+      rewrite_one(i->value, d, mapping, unresolved, also_users, arns_matched,
+		  where);
     } else if (i->value.IsArray()) {
       for (auto& v : i->value.GetArray()) {
-	rewrite_one(v, d, mapping, unresolved, also_users);
+	rewrite_one(v, d, mapping, unresolved, also_users, arns_matched, where);
       }
     }
   }
@@ -188,7 +235,8 @@ int rewrite_policy_principals(const DoutPrefixProvider* dpp,
 			      const IdentityMapping& mapping,
 			      std::string& out,
 			      std::vector<std::string>& unresolved,
-			      std::vector<std::string>* also_users)
+			      std::vector<std::string>* also_users,
+			      std::vector<std::string>* arns_matched)
 {
   rapidjson::Document d;
   d.Parse(doc.c_str(), doc.size());
@@ -209,10 +257,16 @@ int rewrite_policy_principals(const DoutPrefixProvider* dpp,
     if (!s.IsObject()) {
       return;
     }
+    std::string effect;
+    if (auto e = s.FindMember("Effect");
+	e != s.MemberEnd() && e->value.IsString()) {
+      effect.assign(e->value.GetString(), e->value.GetStringLength());
+    }
     for (const char* key : {"Principal", "NotPrincipal"}) {
       auto p = s.FindMember(key);
       if (p != s.MemberEnd()) {
-	rewrite_principal(p->value, d, mapping, unresolved, also_users);
+	rewrite_principal(p->value, d, mapping, unresolved, also_users,
+			  arns_matched, effect + ", " + key);
       }
     }
   };
@@ -344,11 +398,14 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
      * it verbatim;  what it holds names identities the way *they* name
      * them. */
     if (auto i = attrs.find(RGW_ATTR_IAM_POLICY); i != attrs.end()) {
-      std::vector<std::string> unresolved;
+      std::vector<std::string> unresolved, arns;
       std::string rewritten;
       ret = rewrite_policy_principals(dpp, i->second.to_str(), mapping,
-				      rewritten, unresolved);
+				      rewritten, unresolved, nullptr, &arns);
       if (ret == 0) {
+	for (const auto& a : arns) {
+	  result.arns_matched.push_back(rec.name + ": " + a);
+	}
 	bufferlist bl;
 	bl.append(rewritten);
 	i->second = std::move(bl);
@@ -557,6 +614,10 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     << result.failures.size() << " failures" << dendl;
   for (const auto& r : result.policies_refused) {
     ldpp_dout(dpp, 0) << "ERROR: import: " << r << dendl;
+  }
+  for (const auto& r : result.arns_matched) {
+    ldpp_dout(dpp, 0) << "WARNING: import: a policy statement now matches "
+      "an ARN NooBaa never matched:  " << r << dendl;
   }
   for (const auto& r : result.notifications_reported) {
     ldpp_dout(dpp, 0) << "WARNING: import: " << r << dendl;

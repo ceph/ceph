@@ -79,6 +79,11 @@ const FindingKindText kind_texts[] = {
    "the bucket is served without its policy:  its grants do not apply, "
    "and its denials do not refuse",
    "write the policy with RGW principals (PutBucketPolicy)"},
+  {"arn_matched",
+   "the statement now applies to the identity the ARN names, which "
+   "NooBaa never matched",
+   "none needed, if the statement should apply;  otherwise remove the "
+   "principal"},
   {"notification_not_carried",
    "no event is sent for it",
    "recreate it with RGW's notification API"},

@@ -113,6 +113,11 @@ struct ImportResult {
    * 2026-11-01). */
   std::vector<std::string> trust_narrowed;
 
+  /* Each NooBaa ARN a role's trust policy now matches, as "<owner>:
+   * role <name>: <rewrite_policy_principals' text>".  NooBaa's STS
+   * never matched one (DECISIONS.md 2026-10-30, amended 2026-11-01). */
+  std::vector<std::string> arns_matched;
+
   /* Every identity that could not be written, named.  Non-empty means
    * the import did not finish, and re-running it is the recovery. */
   std::vector<std::string> failures;

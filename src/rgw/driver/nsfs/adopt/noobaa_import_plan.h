@@ -85,6 +85,9 @@ struct ImportEntry {
    * (`rgw_auth.cc`, `is_identity`), so it is the field that must
    * carry the NooBaa name (§6.6). */
   std::string display_name;
+  /* An IAM user's NooBaa `iam_path`, carried as the RGW user's path;
+   * principal matching consults it before the name. */
+  std::string iam_path;
 
   std::vector<std::string> access_key_ids;
 

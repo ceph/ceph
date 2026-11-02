@@ -89,10 +89,16 @@ namespace nsfs {
 struct IdentityMapping {
   /* NooBaa's `_id` -> the RGW account id */
   std::map<std::string, std::string> account_by_noobaa_id;
-  /* NooBaa's `_id` -> `arn:aws:iam::<account>:user/<name>`, for an IAM
-   * user.  RGW matches a user principal on `display_name`, which the
-   * import set to the NooBaa name (§6.6) */
+  /* NooBaa's `_id` -> `arn:aws:iam::<account>:user<path><name>`, for
+   * an IAM user.  RGW matches a user principal on its path and then
+   * `display_name`, which the import set to NooBaa's `iam_path` and
+   * name (§6.6) */
   std::map<std::string, std::string> user_arn_by_noobaa_id;
+  /* (RGW account id, "<path><name>") -> the same ARN, for a NooBaa
+   * user ARN, `arn:aws:iam::<owner _id>:user<path><name>`
+   * (`access_policy_utils.js`, create_arn_for_user) */
+  std::map<std::pair<std::string, std::string>, std::string>
+    user_arn_by_account_and_path_name;
   /* NooBaa account name -> NooBaa `_id`, for the second half of "id
    * first, then name".  Accounts only:  NooBaa matches a bare name in a
    * bucket policy only for an account, whose names are unique
@@ -107,8 +113,10 @@ struct IdentityMapping {
    * (`sts_rest.js:143`), and a user's email is a copy of its name */
   std::multimap<std::string, std::string> user_arns_by_name;
 
-  /* Id first, then an account's name.  Nothing if neither resolves --
-   * which is a fact to report, not a value to invent. */
+  /* An IAM ARN, by its account `_id` and, for a user, its path and
+   * name;  otherwise id first, then an account's name.  Nothing if
+   * none resolves -- which is a fact to report, not a value to
+   * invent. */
   std::optional<std::string> resolve(const std::string& principal) const;
 
   /* A principal that resolves to nothing and is an IAM user's name. */
@@ -128,15 +136,21 @@ IdentityMapping mapping_from(const ImportPlan& plan);
  * account by its name and is also an IAM user's name, as
  * "<name> (<user ARN>, ...)".
  *
- * Only values under `Principal` are visited.  Exposed for its own
- * tests:  it is the part of this stage where being subtly wrong
- * changes who may do what. */
+ * `arns_matched`, when given, gets each NooBaa ARN rewritten, as
+ * "<ARN> as <RGW ARN> (<Effect>, Principal|NotPrincipal)":  NooBaa NC
+ * never matched one, so the statement applies after adoption where it
+ * did not before (DECISIONS.md 2026-10-30, amended 2026-11-01).
+ *
+ * Only values under `Principal` and `NotPrincipal` are visited.
+ * Exposed for its own tests:  it is the part of this stage where being
+ * subtly wrong changes who may do what. */
 int rewrite_policy_principals(const DoutPrefixProvider* dpp,
 			      const std::string& doc,
 			      const IdentityMapping& mapping,
 			      std::string& out,
 			      std::vector<std::string>& unresolved,
-			      std::vector<std::string>* also_users = nullptr);
+			      std::vector<std::string>* also_users = nullptr,
+			      std::vector<std::string>* arns_matched = nullptr);
 
 /* `unresolved` as an operator reads it:  each principal, and for an IAM
  * user's name, that a name resolves only to an account. */
@@ -153,6 +167,9 @@ struct BucketImportResult {
   /* A policy we would not write, and why.  The bucket's other state
    * was written. */
   std::vector<std::string> policies_refused;
+  /* Each NooBaa ARN a written policy now matches, as "<bucket>:
+   * <rewrite_policy_principals' text>". */
+  std::vector<std::string> arns_matched;
   /* A notification, or part of one, not carried
    * (`noobaa_notification_import.h`). */
   std::vector<std::string> notifications_reported;

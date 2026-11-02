@@ -16211,6 +16211,36 @@ TEST_F(NooBaaImportTest, ATrustNameAnAccountAndAUserShareTrustsTheAccount)
 	    std::string::npos) << t;
 }
 
+/* A trust policy naming an account by NooBaa's ARN trusts the RGW
+ * account, and the role is returned as matching it. */
+TEST_F(NooBaaImportTest, ATrustArnTrustsTheAccountAndIsReturned)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account(
+		 "arn:aws:iam::6ac7cb27fd4af356919110a3:root").c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+
+  const auto* holder = entry("ix-groups");
+  const auto* named = entry("interchange");
+  ASSERT_NE(holder, nullptr);
+  ASSERT_NE(named, nullptr);
+  const std::string arn = "arn:aws:iam::" + named->account_id + ":root";
+  auto role = driver->get_role("nb-role", holder->tenant,
+			       rgw_account_id{holder->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0);
+  const auto& trust = role->get_info().trust_policy;
+  EXPECT_NE(trust.find(arn), std::string::npos) << trust;
+
+  ASSERT_EQ(result.arns_matched.size(), 1u);
+  EXPECT_EQ(result.arns_matched[0].find(
+	      "ix-groups: role nb-role: arn:aws:iam::6ac7cb27fd4af356919110a3"
+	      ":root as " + arn + " ("), 0u) << result.arns_matched[0];
+}
+
 /* An IAM user whose name, and so whose NooBaa email, is an imported
  * account's email is no collision with RGW's state:  the user is
  * written with no email. */
@@ -16245,6 +16275,14 @@ public:
       "arn:aws:iam::RGW11111111111111111:user/alice";
     mapping.user_arns_by_name.emplace(
       "alice", "arn:aws:iam::RGW11111111111111111:user/alice");
+    mapping.user_arn_by_account_and_path_name[
+      {"RGW11111111111111111", "/alice"}] =
+      "arn:aws:iam::RGW11111111111111111:user/alice";
+    mapping.user_arn_by_noobaa_id["u2"] =
+      "arn:aws:iam::RGW11111111111111111:user/eng/bob";
+    mapping.user_arn_by_account_and_path_name[
+      {"RGW11111111111111111", "/eng/bob"}] =
+      "arn:aws:iam::RGW11111111111111111:user/eng/bob";
   }
 
   std::string rewrite(const std::string& doc, int expect = 0) {
@@ -16415,6 +16453,61 @@ TEST_F(NooBaaPolicyTest, APolicyWithAnUnresolvedPrincipalIsRejected)
   EXPECT_TRUE(unresolved.empty());
 }
 
+/* NooBaa's ARN forms resolve by the account `_id` they carry and, for
+ * a user, by its path and name in that account;  an account's name in
+ * the account component, another account's user, and every other ARN
+ * are unresolved (DECISIONS.md 2026-10-30, amended 2026-11-01). */
+TEST_F(NooBaaPolicyTest, ANooBaaArnResolvesByItsAccountId)
+{
+  EXPECT_EQ(*mapping.resolve("arn:aws:iam::6ac7cb27fd4af356919110a3:root"),
+	    "arn:aws:iam::RGW11111111111111111:root");
+  EXPECT_EQ(
+    *mapping.resolve("arn:aws:iam::6ac7cb27fd4af356919110a3:user/alice"),
+    "arn:aws:iam::RGW11111111111111111:user/alice");
+  EXPECT_EQ(
+    *mapping.resolve("arn:aws:iam::6ac7cb27fd4af356919110a3:user/eng/bob"),
+    "arn:aws:iam::RGW11111111111111111:user/eng/bob");
+
+  for (const char* p : {
+	 "arn:aws:iam::acct-one:root",
+	 "arn:aws:iam::6ac7cb27fd4af356919110a3:user/bob",
+	 "arn:aws:iam::6ac7cb27fd4af356919110a3:user/eng/alice",
+	 "arn:aws:iam::6ac7cb27fd4af3569191ffff:user/alice",
+	 "arn:aws:iam::6ac7cb27fd4af356919110a3:role/r",
+	 "arn:aws:sts::6ac7cb27fd4af356919110a3:assumed-role/r/s",
+	 "arn:aws:iam::6ac7cb27fd4af356919110a3",
+	 "arn:aws:iam::RGW11111111111111111:root"}) {
+    EXPECT_FALSE(mapping.resolve(p).has_value()) << p;
+  }
+}
+
+/* Each rewritten ARN is returned with its statement's Effect and
+ * whether it is a Principal or a NotPrincipal;  an id or a name is
+ * not. */
+TEST_F(NooBaaPolicyTest, EachRewrittenArnIsReturnedWithItsStatement)
+{
+  const std::string doc = R"({"Version":"2012-10-17","Statement":[
+    {"Effect":"Allow","Principal":{"AWS":[
+      "arn:aws:iam::6ac7cb27fd4af356919110a3:user/eng/bob","u1",
+      "acct-one"]},"Action":["s3:GetObject"]},
+    {"Effect":"Deny","NotPrincipal":{"AWS":
+      "arn:aws:iam::6ac7cb27fd4af356919110a3:root"},
+      "Action":["s3:DeleteObject"]}]})";
+  std::string out;
+  std::vector<std::string> unresolved, arns;
+  ASSERT_EQ(nsfs::rewrite_policy_principals(env->dpp, doc, mapping, out,
+					    unresolved, nullptr, &arns), 0);
+  EXPECT_NE(out.find("\"arn:aws:iam::RGW11111111111111111:user/eng/bob\""),
+	    std::string::npos) << out;
+  EXPECT_NE(out.find("\"arn:aws:iam::RGW11111111111111111:root\""),
+	    std::string::npos) << out;
+  ASSERT_EQ(arns.size(), 2u);
+  EXPECT_EQ(arns[0], "arn:aws:iam::6ac7cb27fd4af356919110a3:user/eng/bob as "
+	    "arn:aws:iam::RGW11111111111111111:user/eng/bob (Allow, Principal)");
+  EXPECT_EQ(arns[1], "arn:aws:iam::6ac7cb27fd4af356919110a3:root as "
+	    "arn:aws:iam::RGW11111111111111111:root (Deny, NotPrincipal)");
+}
+
 /* The mapping is built from the plan, so it is what I4 wrote by. */
 TEST_F(NooBaaPlanTest, TheMappingFollowsThePlan)
 {
@@ -16434,6 +16527,26 @@ TEST_F(NooBaaPlanTest, TheMappingFollowsThePlan)
   /* and by name not at all:  a bare name is an account's only */
   EXPECT_FALSE(m.resolve("alice").has_value());
   EXPECT_TRUE(m.names_only_users("alice"));
+}
+
+/* A user's ARN carries its `iam_path`, which the import makes the RGW
+ * user's path and RGW matches before the name;  by id and by NooBaa's
+ * ARN alike. */
+TEST_F(NooBaaPlanTest, AUserArnCarriesItsPath)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("u1", R"({"_id":"u1","name":"alice","email":"alice",
+    "owner":"6ac7cb27fd4af356919110a3","iam_path":"/eng/"})");
+  ASSERT_EQ(build(2), 0);
+
+  const auto m = nsfs::mapping_from(plan);
+  const std::string arn = "arn:aws:iam::" +
+    entry("interchange")->account_id + ":user/eng/alice";
+  EXPECT_EQ(*m.resolve("u1"), arn);
+  EXPECT_EQ(
+    *m.resolve("arn:aws:iam::6ac7cb27fd4af356919110a3:user/eng/alice"), arn);
+  EXPECT_FALSE(
+    m.resolve("arn:aws:iam::6ac7cb27fd4af356919110a3:user/alice").has_value());
 }
 
 /* NooBaa's bucket state reaches RGW:  the owner, the policy and logging.
@@ -16735,6 +16848,35 @@ TEST_F(NooBaaBucketImportTest, AResolvablePolicyIsRewrittenAndWritten)
       << stored;
   EXPECT_EQ(stored.find("their-acct"), std::string::npos)
       << "their name survived in the stored policy: " << stored;
+}
+
+/* A bucket policy naming a NooBaa ARN is written with the RGW ARN, and
+ * the bucket's import returns it as matched. */
+TEST_F(NooBaaBucketImportTest, AnArnPrincipalIsRewrittenAndReturned)
+{
+  write_nb_record("DISABLED",
+      R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
+        "Effect":"Allow",
+        "Principal":{"AWS":["arn:aws:iam::6560e1f1c0ffee0000000002:root"]},
+        "Action":["s3:GetObject"],
+        "Resource":["arn:aws:s3:::b/*"]}]})");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.policies_rewritten, 1u);
+  ASSERT_EQ(result.arns_matched.size(), 1u);
+  EXPECT_EQ(result.arns_matched[0], testname + ": "
+	    "arn:aws:iam::6560e1f1c0ffee0000000002:root as "
+	    "arn:aws:iam::RGW11111111111111111:root (Allow, Principal)");
+
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto bucket = driver->get_bucket(info);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto p = bucket->get_attrs().find(RGW_ATTR_IAM_POLICY);
+  ASSERT_NE(p, bucket->get_attrs().end());
+  const std::string stored = p->second.to_str();
+  EXPECT_NE(stored.find("arn:aws:iam::RGW11111111111111111:root"),
+	    std::string::npos) << stored;
 }
 
 /* What is read and not translated is reported rather than silent, and
