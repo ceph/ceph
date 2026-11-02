@@ -45,7 +45,7 @@ QEMU will assume that Ceph configuration resides in the default
 location (e.g., ``/etc/ceph/$cluster.conf``) and that you are executing
 commands as the default ``client.admin`` user unless you expressly specify
 another Ceph configuration file path or another user. When specifying a user,
-QEMU uses the ``ID`` rather than the full ``TYPE:ID``. See `User Management -
+QEMU uses the ``ID`` rather than the full ``TYPE.ID``. See `User Management -
 User`_ for details. Do not prepend the client type (i.e., ``client.``) to the
 beginning of the user  ``ID``, or you will receive an authentication error. You
 should have the key for the ``admin`` user or the key of another user you
@@ -114,8 +114,8 @@ For example::
 Running QEMU with RBD
 =====================
 
-QEMU can pass a block device from the host on to a guest, but since
-QEMU 0.15, there's no need to map an image as a block device on
+QEMU can pass a block device from the host on to a guest, but
+there's no need to map an image as a block device on
 the host. Instead, QEMU attaches an image as a virtual block
 device directly via ``librbd``. This strategy increases performance
 by avoiding context switches and taking advantage of `RBD caching`_.
@@ -127,25 +127,25 @@ block device images. For example, if you have a qcow2 image, you could run::
 
 To run a virtual machine booting from that image, you could run::
 
-    qemu -m 1024 -drive format=raw,file=rbd:data/squeeze
+    qemu-system-x86_64 -m 1024 -drive format=raw,file=rbd:data/squeeze
 
 `RBD caching`_ can significantly improve performance.
 Since QEMU 1.2, QEMU's cache options control ``librbd`` caching::
 
-    qemu -m 1024 -drive format=rbd,file=rbd:data/squeeze,cache=writeback
+    qemu-system-x86_64 -m 1024 -drive format=rbd,file=rbd:data/squeeze,cache=writeback
 
 If you have an older version of QEMU, you can set the ``librbd`` cache
 configuration (like any Ceph configuration option) as part of the
 'file' parameter::
 
-    qemu -m 1024 -drive format=raw,file=rbd:data/squeeze:rbd_cache=true,cache=writeback
+    qemu-system-x86_64 -m 1024 -drive format=raw,file=rbd:data/squeeze:rbd_cache=true,cache=writeback
 
 .. important:: If you set rbd_cache=true, you must set cache=writeback
    or risk data loss. Without cache=writeback, QEMU will not send
    flush requests to librbd. If QEMU exits uncleanly in this
    configuration, file systems on top of rbd can be corrupted.
 
-.. _RBD caching: ../rbd-config-ref/#rbd-cache-config-settings
+.. _RBD caching: ../rbd-config-ref/#cache-settings
 
 
 .. index:: Ceph Block Device; discard trim and libvirt
@@ -153,7 +153,7 @@ configuration (like any Ceph configuration option) as part of the
 Enabling Discard/TRIM
 =====================
 
-Since Ceph version 0.46 and QEMU version 1.1, Ceph Block Devices support the
+Ceph Block Devices support the
 discard operation. This means that a guest can send TRIM requests to let a Ceph
 block device reclaim unused space. This can be enabled in the guest by mounting
 ``ext4`` or ``XFS`` with the ``discard`` option.
@@ -162,7 +162,7 @@ For this to be available to the guest, it must be explicitly enabled
 for the block device. To do this, you must specify a
 ``discard_granularity`` associated with the drive::
 
-    qemu -m 1024 -drive format=raw,file=rbd:data/squeeze,id=drive1,if=none \
+    qemu-system-x86_64 -m 1024 -drive format=raw,file=rbd:data/squeeze,id=drive1,if=none \
          -device driver=ide-hd,drive=drive1,discard_granularity=512
 
 Note that this uses the IDE driver. The virtio driver supports discard since Linux kernel version 5.0.
@@ -206,10 +206,6 @@ None::
 
 QEMU's cache settings override Ceph's cache settings (including settings that
 are explicitly set in the Ceph configuration file).
-
-.. note:: Prior to QEMU v2.4.0, if you explicitly set `RBD Cache`_ settings
-   in the Ceph configuration file, your Ceph settings override the QEMU cache
-   settings.
 
 .. _QEMU Open Source Processor Emulator: https://wiki.qemu.org/Main_Page
 .. _QEMU Manual: https://wiki.qemu.org/Manual
