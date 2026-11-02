@@ -160,6 +160,6 @@ First stable release
 - [x] src/cephadm/cephadmlib/constants.py: set DEFAULT_IMAGE 'quay.io/ceph/ceph:vX' (e.g. v21 for Umbrella)
 - [x] src/cephadm/cephadmlib/constants.py: set DEFAULT_IMAGE_IS_MAIN to False
 - [x] src/cephadm/cephadmlib/constants.py: set DEFAULT_IMAGE_RELEASE to 'release' (e.g. 'umbrella')
-- [ ] activate latest release in readthedocs, as described in `the readthedocs
+- [x] activate latest release in readthedocs, as described in `the readthedocs
   documentation <https://docs.readthedocs.io/en/stable/versions.html>`_ 
 - [ ] add release and supported distros to tables in `doc/start/os-recommendations.rst`
