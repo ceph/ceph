@@ -5410,6 +5410,36 @@ void Locker::mark_updated_scatterlock(ScatterLock *lock)
 }
 
 /*
+ * Move a stable scatterlock towards MIX so that it can be wrlocked, as
+ * wrlock_start() does, for a caller that waits for WAIT_STABLE itself: the
+ * auth scatters it, a replica asks the auth to.  Returns false if nothing
+ * was done to move the lock, i.e. a replica whose auth cannot be asked
+ * while the cluster is degraded, so that the caller does not wait for a
+ * change that nobody started.
+ */
+bool Locker::scatter_for_wrlock(ScatterLock *lock)
+{
+  ceph_assert(lock->is_stable());
+  CInode *in = static_cast<CInode *>(lock->get_parent());
+  if (in->is_auth()) {
+    if (lock->get_state() != LOCK_MIX)
+      scatter_mix(lock);
+    return true;
+  }
+  mds_rank_t auth = in->authority().first;
+  if (mds->is_cluster_degraded() &&
+      !mds->mdsmap->is_clientreplay_or_active_or_stopping(auth)) {
+    dout(10) << __func__ << " auth mds." << auth << " not active, can't "
+	     << "request scatter on " << *lock << " on " << *in << dendl;
+    return false;
+  }
+  dout(10) << __func__ << " requesting scatter from auth on " << *lock
+	   << " on " << *in << dendl;
+  mds->send_message_mds(make_message<MLock>(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+  return true;
+}
+
+/*
  * this is called by scatter_tick and LogSegment::try_to_trim() when
  * trying to flush dirty scattered data (i.e. updated fnode) back to
  * the inode.
@@ -6225,7 +6255,17 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
 
     // requests....
   case LOCK_AC_REQSCATTER:
-    if (lock->is_stable()) {
+    if (!in->is_auth() || in->is_frozen()) {
+      /* Migrator::export_frozen() asks for this from a replica that no
+       * longer holds an auth_pin on the inode, so by now the inode may be
+       * frozen, whose locks must not change, or exported to another mds.
+       * Drop the request; the exporter waits for the lock with a time
+       * limit and gives up on the export.
+       */
+      dout(7) << "handle_file_lock dropping scatter request on " << *lock
+	      << " on " << *lock->get_parent()
+	      << (in->is_auth() ? ", frozen" : ", not auth") << dendl;
+    } else if (lock->is_stable()) {
       /* NOTE: we can do this _even_ if !can_auth_pin (i.e. freezing)
        *  because the replica should be holding an auth_pin if they're
        *  doing this (and thus, we are freezing, not frozen, and indefinite

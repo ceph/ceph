@@ -237,6 +237,7 @@ protected:
   typedef std::map<CDir*, export_state_t>::iterator export_state_iterator;
 
   friend class C_MDC_ExportFreeze;
+  friend class C_MDC_ExportLockSettle;
   friend class C_MDS_ExportFinishLogged;
   friend class C_M_ExportGo;
   friend class C_M_ExportSessionsFlushed;
@@ -250,6 +251,8 @@ protected:
 
   void handle_export_discover_ack(const cref_t<MExportDirDiscoverAck> &m);
   void export_frozen(CDir *dir, uint64_t tid);
+  ScatterLock *export_lock_to_move(CInode *diri);
+  void export_lock_settle(CDir *dir, uint64_t tid);
   void handle_export_prep_ack(const cref_t<MExportDirPrepAck> &m);
   void export_sessions_flushed(CDir *dir, uint64_t tid);
   void export_go(CDir *dir);

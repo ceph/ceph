@@ -127,6 +127,9 @@ struct Migrator::export_state_t {
   utime_t last_cum_auth_pins_change;
   int last_cum_auth_pins = 0;
   int num_remote_waiters = 0; // number of remote authpin waiters
+  int lock_waits = 0; // thaws to get the dir inode's locks (export_frozen())
+  utime_t lock_wait_start;
+  bool lock_wait_pinned = false; // our auth pin holds the freeze back
   std::shared_ptr<export_base_t> parent;
 };
 
@@ -270,6 +273,8 @@ void Migrator::find_stale_export_freeze()
   utime_t now = ceph_clock_now();
   utime_t cutoff = now;
   cutoff -= g_conf()->mds_freeze_tree_timeout;
+  utime_t lock_cutoff = now;
+  lock_cutoff -= g_conf()->mds_tick_interval;
 
 
   /*
@@ -302,6 +307,15 @@ void Migrator::find_stale_export_freeze()
     ++p;
     if (stat.state != EXPORT_DISCOVERING && stat.state != EXPORT_FREEZING)
       continue;
+    if (stat.state == EXPORT_FREEZING && stat.lock_wait_pinned) {
+      // Holding the freeze back until the dir inode's locks can be
+      // wrlocked (see export_frozen()).  Requests in the subtree wait with
+      // it, and the lock may wait for a client that does not answer, so
+      // give up after a tick or two.
+      if (stat.lock_wait_start < lock_cutoff)
+	export_try_cancel(dir);
+      continue;
+    }
     ceph_assert(dir->freeze_tree_state);
     if (stat.last_cum_auth_pins != dir->freeze_tree_state->auth_pins) {
       stat.last_cum_auth_pins = dir->freeze_tree_state->auth_pins;
@@ -363,6 +377,10 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     dout(10) << "export state=freezing : canceling freeze" << dendl;
     it->second.set_state(EXPORT_CANCELLED);
     dir->unfreeze_tree();  // cancel the freeze
+    if (it->second.lock_wait_pinned) {
+      it->second.lock_wait_pinned = false;
+      dir->auth_unpin(this);
+    }
     if (dir->is_subtree_root())
       mdcache->try_subtree_merge(dir);
     if (notify_peer &&
@@ -869,6 +887,22 @@ public:
   void finish(int r) override {
     if (r >= 0)
       mig->export_frozen(dir, tid);
+    dir->put(CDir::PIN_PTRWAITER);
+  }
+};
+
+
+class C_MDC_ExportLockSettle : public MigratorContext {
+  CDir *dir;   // dir i'm exporting
+  uint64_t tid;
+public:
+  C_MDC_ExportLockSettle(Migrator *m, CDir *e, uint64_t t) :
+    MigratorContext(m), dir(e), tid(t) {
+    dir->get(CDir::PIN_PTRWAITER);
+  }
+  void finish(int r) override {
+    if (r >= 0)
+      mig->export_lock_settle(dir, tid);
     dir->put(CDir::PIN_PTRWAITER);
   }
 };
@@ -1491,6 +1525,67 @@ void Migrator::encode_export_prep_trace(bufferlist &final_bl, CDir *bound,
   ENCODE_FINISH(final_bl);
 }
 
+ScatterLock *Migrator::export_lock_to_move(CInode *diri)
+{
+  if (!diri->filelock.can_wrlock(diri->get_loner()))
+    return &diri->filelock;
+  if (!diri->nestlock.can_wrlock(diri->get_loner()))
+    return &diri->nestlock;
+  return nullptr;
+}
+
+/*
+ * The subtree is freezing, held back by our auth pin, until the dir
+ * inode's filelock and nestlock can be wrlocked (see export_frozen()).
+ * Move them towards mix, as wrlock_start() would, and let the freeze
+ * finish once they are there.
+ */
+void Migrator::export_lock_settle(CDir *dir, uint64_t tid)
+{
+  auto it = export_state.find(dir);
+  if (it == export_state.end() || it->second.tid != tid ||
+      !it->second.lock_wait_pinned) {
+    dout(7) << "export must have aborted " << *dir << dendl;
+    return;
+  }
+  ceph_assert(it->second.state == EXPORT_FREEZING);
+
+  CInode *diri = dir->get_inode();
+  ScatterLock *lock = export_lock_to_move(diri);
+  if (lock && lock->is_stable()) {
+    if (diri->is_auth() && diri->is_frozen()) {
+      dout(7) << "export_dir " << *diri << " is frozen, can't move "
+	      << *lock << ", failing" << dendl;
+      export_try_cancel(dir);
+      return;
+    }
+    if (!mds->locker->scatter_for_wrlock(lock)) {
+      dout(7) << "export_dir nothing can move " << *lock << " on "
+	      << *diri << ", failing" << dendl;
+      export_try_cancel(dir);
+      return;
+    }
+    if (lock->is_stable() && lock->can_wrlock(diri->get_loner())) {
+      // the other lock, if needed, in another round
+      mds->queue_waiter(new C_MDC_ExportLockSettle(this, dir, tid));
+      return;
+    }
+  }
+  if (lock) {
+    dout(7) << "export_dir waiting for " << *lock << " to settle on "
+	    << *diri << dendl;
+    lock->add_waiter(SimpleLock::WAIT_STABLE,
+		     new C_MDC_ExportLockSettle(this, dir, tid));
+    return;
+  }
+
+  dout(7) << "export_dir locks of " << *diri << " can be wrlocked, "
+	  << "letting the freeze finish " << *dir << dendl;
+  it->second.lock_wait_pinned = false;
+  it->second.last_cum_auth_pins_change = ceph_clock_now();
+  dir->auth_unpin(this);  // may finish the freeze and call export_frozen()
+}
+
 void Migrator::export_frozen(CDir *dir, uint64_t tid)
 {
   dout(7) << *dir << dendl;
@@ -1510,6 +1605,33 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   CInode *diri = dir->get_inode();
   if ((diri->is_auth() && diri->is_frozen()) ||
       !export_try_grab_locks(dir, it->second.mut)) {
+    // The dir inode's filelock or nestlock may be changing state, e.g.
+    // sync->mix while a client's caps on the directory are revoked, or be
+    // stable in a state that cannot be wrlocked, e.g. sync.  Rather than
+    // throwing the freeze away and starting over, get the lock moving
+    // towards mix and wait for it a few times.  Do not wait frozen: a
+    // gather or scatter that ends meanwhile cannot bring a frozen
+    // dirfrag's accounted fragstat and rstat in step with the inode, and
+    // the next gather would skip the dirfrag.  Thaw the subtree and hold
+    // the new freeze back with an auth pin until the locks can be
+    // wrlocked.  find_stale_export_freeze() cancels the export if this
+    // takes more than a tick or two.
+    if (!(diri->is_auth() && diri->is_frozen()) &&
+	it->second.lock_waits < 4 && export_lock_to_move(diri)) {
+      if (it->second.lock_waits++ == 0)
+	it->second.lock_wait_start = ceph_clock_now();
+      dout(7) << "export_dir thawing until the locks of " << *diri
+	      << " can be wrlocked, " << *dir << dendl;
+      it->second.mut.reset();
+      dir->unfreeze_tree();
+      dir->auth_pin(this);
+      it->second.lock_wait_pinned = true;
+      dir->freeze_tree();
+      ceph_assert(dir->is_freezing_tree());
+      dir->add_waiter(CDir::WAIT_FROZEN, new C_MDC_ExportFreeze(this, dir, tid));
+      export_lock_settle(dir, tid);
+      return;
+    }
     dout(7) << "export_dir couldn't acquire all needed locks, failing. "
 	    << *dir << dendl;
     export_try_cancel(dir);
