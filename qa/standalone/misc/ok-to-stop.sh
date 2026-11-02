@@ -366,6 +366,10 @@ function TEST_0_osd_last_acting_outside_set() {
     # osd.1 (last) not in the set: must still be refused
     ! ceph osd ok-to-stop 0 || return 1
     ! ceph osd ok-to-stop 0 2 || return 1
+    # growing the set from osd.2 must not pick up either remaining copy
+    res=$(ceph osd ok-to-stop 2 --max 3 --format=json)
+    test $(echo $res | jq '.ok_to_stop') = true || return 1
+    test $(echo $res | jq '.osds | length') -eq 1 || return 1
 }
 
 

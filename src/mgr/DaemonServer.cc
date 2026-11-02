@@ -1086,6 +1086,22 @@ void DaemonServer::log_access_denied(
         "#client-authentication";
 }
 
+// the OSDs a PG can count on to stay available: for a degraded PG only those
+// with no missing objects, which may be strays outside acting and up
+template <typename Func>
+static void for_each_usable_osd(const pg_stat_t& stat, Func&& func)
+{
+  if (stat.state & PG_STATE_DEGRADED) {
+    for (const auto& anm : stat.avail_no_missing) {
+      func(anm.osd);
+    }
+  } else {
+    for (int a : stat.acting) {
+      func(a);
+    }
+  }
+}
+
 void DaemonServer::_check_offlines_pgs(
   const ContainerType& osds,
   const OSDMap& osdmap,
@@ -1122,27 +1138,13 @@ void DaemonServer::_check_offlines_pgs(
       report->unknown.insert(q.first);
       continue;
     }
-    if (q.second.state & PG_STATE_DEGRADED) {
-      for (auto& anm : q.second.avail_no_missing) {
-        if (in_set(anm.osd)) {
-          found = true;
-          continue;
-        }
-	if (anm.osd != CRUSH_ITEM_NONE) {
-	  pg_acting.insert(anm.osd);
-	}
+    for_each_usable_osd(q.second, [&](int osd) {
+      if (in_set(osd)) {
+	found = true;
+      } else if (osd != CRUSH_ITEM_NONE) {
+	pg_acting.insert(osd);
       }
-    } else {
-      for (auto& a : q.second.acting) {
-        if (in_set(a)) {
-          found = true;
-          continue;
-        }
-	if (a != CRUSH_ITEM_NONE) {
-	  pg_acting.insert(a);
-	}
-      }
-    }
+    });
     if (!found) {
       continue;
     }
@@ -1194,24 +1196,62 @@ void DaemonServer::_maximize_ok_to_stop_set(
     return;
   }
 
-  // semi-arbitrarily start with the first osd in the set
-  offline_pg_report report;
+  // Adding an OSD can only change the answer for the PGs that use it, so look
+  // at those instead of every PG for every candidate. Built on first use.
+  std::unordered_map<int, std::vector<decltype(pgmap.pg_stat)::const_iterator>> pgs_by_osd;
+  bool indexed = false;
+
   std::set<int> osds = orig_osds;
+
+  // osds already includes the candidate
+  auto still_ok = [&](int candidate) {
+    if (!indexed) {
+      for (auto q = pgmap.pg_stat.cbegin(); q != pgmap.pg_stat.cend(); ++q) {
+	for_each_usable_osd(q->second, [&](int osd) {
+	  pgs_by_osd[osd].push_back(q);
+	});
+      }
+      indexed = true;
+    }
+    auto pgs = pgs_by_osd.find(candidate);
+    if (pgs == pgs_by_osd.end()) {
+      return true;
+    }
+    for (const auto& q : pgs->second) {
+      const pg_pool_t *pi = osdmap.get_pg_pool(q->first.pool());
+      if (!pi || !(q->second.state & PG_STATE_ACTIVE)) {
+	return false;
+      }
+      std::set<int32_t> pg_acting;
+      for_each_usable_osd(q->second, [&](int osd) {
+	if (osd != CRUSH_ITEM_NONE && osds.count(osd) == 0) {
+	  pg_acting.insert(osd);
+	}
+      });
+      if (pg_acting.size() < pi->min_size) {
+	return false;
+      }
+    }
+    return true;
+  };
+
+  // semi-arbitrarily start with the first osd in the set
   int parent = *osds.begin();
   std::set<int> children;
+  bool done = false;
 
-  while (true) {
+  while (!done) {
     // identify the next parent
     int r = osdmap.crush->get_immediate_parent_id(parent, &parent);
     if (r < 0) {
-      return;  // just go with what we have so far!
+      break;  // just go with what we have so far!
     }
 
     // get candidate additions that are beneath this point in the tree
     children.clear();
     r = osdmap.crush->get_all_children(parent, &children);
     if (r < 0) {
-      return;  // just go with what we have so far!
+      break;  // just go with what we have so far!
     }
     dout(20) << "  parent " << parent << " children " << children << dendl;
 
@@ -1220,25 +1260,29 @@ void DaemonServer::_maximize_ok_to_stop_set(
     for (auto o : children) {
       if (o >= 0 && osdmap.is_up(o) && osds.count(o) == 0) {
 	osds.insert(o);
-	_check_offlines_pgs(osds, osdmap, pgmap, &report);
-	if (!report.ok_to_stop()) {
+	if (!still_ok(o)) {
 	  osds.erase(o);
 	  ++failed;
 	  continue;
 	}
-	*out_report = report;
 	if (osds.size() == max) {
 	  dout(20) << " hit max" << dendl;
-	  return;  // yay, we hit the max
+	  done = true;
+	  break;
 	}
       }
     }
 
-    if (failed) {
+    if (!done && failed) {
       // we hit some failures; go with what we have
       dout(20) << " hit some peer failures" << dendl;
-      return;
+      done = true;
     }
+  }
+
+  // the answer always comes from a full check of the final set
+  if (osds.size() > orig_osds.size()) {
+    _check_offlines_pgs(osds, osdmap, pgmap, out_report);
   }
 }
 
