@@ -134,7 +134,13 @@ class TestPhaseTimes(CephFSTestCase):
         self.assertGreater(requests["count"], 0)
         self.assertGreater(requests["total_sec"], 0)
 
-        # the same numbers, by way of the perf counters
+        # the same numbers, by way of the perf counters.  mds_lock's totals
+        # reach them only on the MDS tick (mds_tick_interval), whereas the
+        # phase counters are updated as each phase ends, so the workload can
+        # cross the request threshold above before the first tick since the
+        # reset publishes any lock stats.
+        self.wait_until_true(lambda: self._perf()["lock_acquisitions"] > 0,
+                             timeout=30, period=1)
         perf = self._perf()
         log.info(f"perf dump mds_phase: {perf}")
         self.assertGreater(perf["lock_acquisitions"], 0)
