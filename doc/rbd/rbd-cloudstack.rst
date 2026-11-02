@@ -2,12 +2,12 @@
  Block Devices and CloudStack
 =============================
 
-You may use Ceph Block Device images with CloudStack 4.0 and higher through
+You may use Ceph Block Device images with CloudStack through
 ``libvirt``, which configures the QEMU interface to ``librbd``. Ceph stripes
 block device images as objects across the cluster, which means that large Ceph
 Block Device images have better performance than a standalone server!
 
-To use Ceph Block Devices with CloudStack 4.0 and higher, you must install QEMU,
+To use Ceph Block Devices with CloudStack, you must install QEMU,
 ``libvirt``, and CloudStack first. We recommend using a separate physical host
 for your CloudStack installation. CloudStack recommends a minimum of 4GB of RAM
 and a dual-core processor, but more CPU and RAM will perform better. The
@@ -55,7 +55,7 @@ Create a Pool
 =============
 
 By default, Ceph block devices use the ``rbd`` pool. Create a pool for
-CloudStack NFS Primary Storage. Ensure your Ceph cluster is running, then create
+CloudStack RBD Primary Storage. Ensure your Ceph cluster is running, then create
 the pool. ::
 
    ceph osd pool create cloudstack
@@ -137,7 +137,7 @@ created (e.g., ``cloudstack``).
 Limitations
 ===========
 
-- Until v4.17.1.0, CloudStack will only bind to one monitor at a time. You can however use multiple DNS A or AAAA records in a round-robin fashion to spread connections over multiple monitors.
+- Before v4.18.0.0, CloudStack will only bind to one monitor at a time. You can however use multiple DNS A or AAAA records in a round-robin fashion to spread connections over multiple monitors.
 
 
 
