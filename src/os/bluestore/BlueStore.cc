@@ -1739,6 +1739,15 @@ void *BlueStore::MempoolThread::entry()
 
       if (pcm != nullptr) {
         pcm->shift_bins();
+      } else {
+        // cache admission needs the bins to move even without autotune
+        meta_cache->shift_bins();
+        if (binned_kv_cache != nullptr) {
+          binned_kv_cache->shift_bins();
+        }
+        if (binned_kv_onode_cache != nullptr) {
+          binned_kv_onode_cache->shift_bins();
+        }
       }
       next_bin_rotation = ceph_clock_now();
       next_bin_rotation += age_bin_interval;
@@ -2023,6 +2032,7 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_cache_kv_onode_age_bins"s,
     "bluestore_cache_meta_age_bins"s,
     "bluestore_cache_data_age_bins"s,
+    "bluestore_onode_cache_probation_ratio"s,
     "bluestore_warn_on_legacy_statfs"s,
     "bluestore_warn_on_no_per_pool_omap"s,
     "bluestore_warn_on_no_per_pg_omap"s,
@@ -2079,6 +2089,12 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("bluestore_onode_segment_size")) {
     segment_size = (cct->_conf.get_val<Option::size_t>("bluestore_onode_segment_size"));
+  }
+  if (changed.count("bluestore_onode_cache_probation_ratio")) {
+    double r = conf.get_val<double>("bluestore_onode_cache_probation_ratio");
+    for (auto s : onode_cache_shards) {
+      s->probation_ratio = r;
+    }
   }
   if (changed.count("bluestore_max_blob_size") ||
       changed.count("bluestore_max_blob_size_ssd") ||
@@ -2707,6 +2723,8 @@ void BlueStore::_init_logger()
 	    "Number of onodes in cache");
   b.add_u64(l_bluestore_pinned_onodes, "onodes_pinned",
             "Number of pinned onodes in cache");
+  b.add_u64(l_bluestore_probation_onodes, "onodes_probation",
+            "Number of onodes in cache used only once so far");
   b.add_u64_counter(l_bluestore_onode_hits, "onode_hits",
 		    "Count of onode cache lookup hits",
 		    "o_ht", PerfCountersBuilder::PRIO_USEFUL);
@@ -5696,10 +5714,13 @@ void BlueStore::set_cache_shards(unsigned num)
   ceph_assert(num >= oold && num >= bold);
   onode_cache_shards.resize(num);
   buffer_cache_shards.resize(num);
+  double probation_ratio =
+    cct->_conf.get_val<double>("bluestore_onode_cache_probation_ratio");
   for (unsigned i = oold; i < num; ++i) {
-    onode_cache_shards[i] = 
+    onode_cache_shards[i] =
         OnodeCacheShard::create(cct, cct->_conf->bluestore_cache_type,
                                  logger);
+    onode_cache_shards[i]->probation_ratio = probation_ratio;
   }
   for (unsigned i = bold; i < num; ++i) {
     buffer_cache_shards[i] = 
@@ -8987,12 +9008,13 @@ void BlueStore::refresh_perf_counters()
 {
   uint64_t num_onodes = 0;
   uint64_t num_pinned_onodes = 0;
+  uint64_t num_probation_onodes = 0;
   uint64_t num_extents = 0;
   uint64_t num_blobs = 0;
   uint64_t num_buffers = 0;
   uint64_t num_buffer_bytes = 0;
   for (auto c : onode_cache_shards) {
-    c->add_stats(&num_onodes, &num_pinned_onodes);
+    c->add_stats(&num_onodes, &num_pinned_onodes, &num_probation_onodes);
   }
   for (auto c : buffer_cache_shards) {
     c->add_stats(&num_extents, &num_blobs,
@@ -9000,6 +9022,7 @@ void BlueStore::refresh_perf_counters()
   }
   logger->set(l_bluestore_onodes, num_onodes);
   logger->set(l_bluestore_pinned_onodes, num_pinned_onodes);
+  logger->set(l_bluestore_probation_onodes, num_probation_onodes);
   logger->set(l_bluestore_extents, num_extents);
   logger->set(l_bluestore_blobs, num_blobs);
   logger->set(l_bluestore_buffers, num_buffers);

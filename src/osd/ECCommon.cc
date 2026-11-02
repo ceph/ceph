@@ -1613,7 +1613,9 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         want_omap_keys,
         op.recovery_progress.omap_recovered_to,
         available,
-        chunk_size
+        chunk_size,
+        // shard data is sent once; keep it out of the sources' buffer cache
+        CEPH_OSD_OP_FLAG_FADVISE_DONTNEED
       );
 
       int r = read_pipeline.get_min_avail_to_read_shards(
