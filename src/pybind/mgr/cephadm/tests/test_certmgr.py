@@ -9,6 +9,8 @@ from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObject
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
+from cephadm.agent import AgentEndpoint
+from cephadm.services.agent import CephadmAgent
 from cephadm.ssl_certs import is_ecdsa_cert
 from ceph.deployment.tls_utils import get_certificate_info, get_private_key_info
 from mgr_util import verify_tls
@@ -1058,6 +1060,21 @@ class TestCertMgr(object):
         assert get_private_key_info(tls_creds.key) == {'key_type': 'RSA', 'key_size': 4096}
         cert, key = cert_mgr.ssl_certs.renew_cert(tls_creds.cert)
         assert get_private_key_info(key) == {'key_type': 'RSA', 'key_size': 4096}
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_agent_endpoint_replaces_rsa_cert(self, _set_store, cephadm_module: CephadmOrchestrator):
+        """ Test that the agent endpoint replaces an RSA cert with an ECDSA one, once """
+        cert_mgr = cephadm_module.cert_mgr
+        cert_mgr.register_self_signed_cert_key_pair(CephadmAgent.TYPE)
+        rsa_creds = cert_mgr.generate_cert('host1', '::1')
+        cert_mgr.save_self_signed_cert_key_pair(CephadmAgent.TYPE, rsa_creds, host='host1')
+
+        with mock.patch.object(cephadm_module, 'get_hostname', return_value='host1'):
+            endpoint = AgentEndpoint(cephadm_module)
+            tls_creds = endpoint._get_agent_certificates()
+            assert is_ecdsa_cert(tls_creds.cert)
+            assert cert_mgr.get_self_signed_tls_credentials(CephadmAgent.TYPE, 'host1') == tls_creds
+            assert endpoint._get_agent_certificates() == tls_creds
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_health_errors_appending(self, _set_store, cephadm_module: CephadmOrchestrator):

@@ -16,6 +16,7 @@ from mgr_util import verify_tls_files
 import tempfile
 from cephadm.services.service_registry import service_registry
 from cephadm.services.agent import CephadmAgent
+from cephadm.ssl_certs import is_ecdsa_cert
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 
@@ -72,8 +73,12 @@ class AgentEndpoint:
     def _get_agent_certificates(self) -> TLSCredentials:
         host = self.mgr.get_hostname()
         tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(CephadmAgent.TYPE, host)
-        if not tls_creds:
-            tls_creds = self.mgr.cert_mgr.generate_cert(host, self.mgr.get_mgr_ip(), duration_in_days=CEPHADM_AGENT_CERT_DURATION)
+        # Every agent report is a new connection, and the endpoint signs once
+        # per TLS handshake, so give it an ECDSA key and replace the RSA one
+        # from earlier versions. Agents verify it against the root CA, which
+        # doesn't change.
+        if not tls_creds or not is_ecdsa_cert(tls_creds.cert):
+            tls_creds = self.mgr.cert_mgr.generate_cert(host, self.mgr.get_mgr_ip(), duration_in_days=CEPHADM_AGENT_CERT_DURATION, ecdsa=True)
             self.mgr.cert_mgr.save_self_signed_cert_key_pair(CephadmAgent.TYPE, tls_creds, host=host)
         return tls_creds
 
@@ -829,7 +834,9 @@ class AgentMessageThread(threading.Thread):
             root_cert_tmp.flush()
             root_cert_fname = root_cert_tmp.name
 
-            tls_pair = self.mgr.cert_mgr.generate_cert(self.mgr.get_hostname(), self.mgr.get_mgr_ip(), duration_in_days=CEPHADM_AGENT_CERT_DURATION)
+            # a new key for every message: generating an RSA-4096 key takes
+            # over half a second of CPU, an ECDSA key tens of microseconds
+            tls_pair = self.mgr.cert_mgr.generate_cert(self.mgr.get_hostname(), self.mgr.get_mgr_ip(), duration_in_days=CEPHADM_AGENT_CERT_DURATION, ecdsa=True)
 
             cert_tmp = tempfile.NamedTemporaryFile()
             cert_tmp.write(tls_pair.cert.encode('utf-8'))
