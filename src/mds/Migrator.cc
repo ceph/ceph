@@ -127,6 +127,8 @@ struct Migrator::export_state_t {
   utime_t last_cum_auth_pins_change;
   int last_cum_auth_pins = 0;
   int num_remote_waiters = 0; // number of remote authpin waiters
+  int frozen_lock_waits = 0; // waits for the dir inode's locks once frozen
+  utime_t frozen_lock_wait_start;
   std::shared_ptr<export_base_t> parent;
 };
 
@@ -270,6 +272,8 @@ void Migrator::find_stale_export_freeze()
   utime_t now = ceph_clock_now();
   utime_t cutoff = now;
   cutoff -= g_conf()->mds_freeze_tree_timeout;
+  utime_t lock_cutoff = now;
+  lock_cutoff -= g_conf()->mds_tick_interval;
 
 
   /*
@@ -302,6 +306,14 @@ void Migrator::find_stale_export_freeze()
     ++p;
     if (stat.state != EXPORT_DISCOVERING && stat.state != EXPORT_FREEZING)
       continue;
+    if (stat.state == EXPORT_FREEZING && stat.frozen_lock_waits > 0) {
+      // Frozen, waiting for the dir inode's locks (see export_frozen()).
+      // Every request in the subtree waits with it, and the lock may wait
+      // for a client that does not answer, so give up after a tick or two.
+      if (stat.frozen_lock_wait_start < lock_cutoff)
+	export_try_cancel(dir);
+      continue;
+    }
     ceph_assert(dir->freeze_tree_state);
     if (stat.last_cum_auth_pins != dir->freeze_tree_state->auth_pins) {
       stat.last_cum_auth_pins = dir->freeze_tree_state->auth_pins;
@@ -1510,6 +1522,41 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   CInode *diri = dir->get_inode();
   if ((diri->is_auth() && diri->is_frozen()) ||
       !export_try_grab_locks(dir, it->second.mut)) {
+    // The dir inode's filelock or nestlock may be changing state, e.g.
+    // sync->mix while a client's caps on the directory are revoked, or be
+    // stable in a state that cannot be wrlocked, e.g. sync.  Neither the
+    // change nor a scatter needs the frozen subtree (scatter updates skip
+    // frozen dirfrags), so get the lock moving towards mix and wait for it
+    // a few times rather than throwing the freeze away and starting over.
+    // find_stale_export_freeze() cancels the export if this takes more than
+    // a tick or two.
+    if (!(diri->is_auth() && diri->is_frozen()) &&
+	it->second.frozen_lock_waits < 4) {
+      ScatterLock *lock = nullptr;
+      if (!diri->filelock.can_wrlock(diri->get_loner()))
+	lock = &diri->filelock;
+      else if (!diri->nestlock.can_wrlock(diri->get_loner()))
+	lock = &diri->nestlock;
+      if (lock) {
+	if (it->second.frozen_lock_waits++ == 0)
+	  it->second.frozen_lock_wait_start = ceph_clock_now();
+	if (lock->is_stable() && !mds->locker->scatter_for_wrlock(lock)) {
+	  dout(7) << "export_dir nothing can move " << *lock << " on "
+		  << *diri << ", failing" << dendl;
+	  export_try_cancel(dir);
+	  return;
+	}
+	if (lock->is_stable() && lock->can_wrlock(diri->get_loner())) {
+	  export_frozen(dir, tid);
+	  return;
+	}
+	dout(7) << "export_dir waiting for " << *lock << " to settle on "
+		<< *diri << dendl;
+	lock->add_waiter(SimpleLock::WAIT_STABLE,
+			 new C_MDC_ExportFreeze(this, dir, it->second.tid));
+	return;
+      }
+    }
     dout(7) << "export_dir couldn't acquire all needed locks, failing. "
 	    << *dir << dendl;
     export_try_cancel(dir);
