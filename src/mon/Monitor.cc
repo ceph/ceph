@@ -4721,6 +4721,16 @@ void Monitor::_ms_dispatch(Message *m)
   MonOpRequestRef op = op_tracker.create_request<MonOpRequest>(m);
   bool src_is_mon = op->is_src_mon();
   op->mark_event("mon:_ms_dispatch");
+  // A removed monitor may still authenticate and exchange messages with
+  // quorum members; disconnect it to prevent unbounded message accumulation.
+  if (src_is_mon && (is_leader() || is_peon()) &&
+      !monmap->contains(m->get_source_addrs())) {
+    dout(1) << __func__ << " dropping message from monitor outside monmap "
+            << m->get_source_addrs() << dendl;
+    m->get_connection()->mark_down();
+    return;
+  }
+
   MonSession *s = op->get_session();
   if (s && s->closed) {
     return;
