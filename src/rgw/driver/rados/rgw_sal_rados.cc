@@ -4814,7 +4814,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.bucket_owner = bucket_info.owner;
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.modify_tail = true;
-  obj_op.meta.completeMultipart = true;
+  obj_op.meta.multipart_upload_id = mp_obj.get_upload_id();
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.if_match = if_match;
   obj_op.meta.if_nomatch = if_nomatch;
