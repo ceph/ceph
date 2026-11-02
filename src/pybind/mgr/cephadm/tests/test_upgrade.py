@@ -49,6 +49,19 @@ def test_upgrade_start(cephadm_module: CephadmOrchestrator):
                             ) == 'Stopped upgrade to image_id'
 
 
+@pytest.mark.parametrize("release, ok", [('tentacle', True), ('nautilus', False)])
+def test_check_target_version_require_osd_release(cephadm_module: CephadmOrchestrator, release, ok):
+    upgrade = cephadm_module.upgrade
+    with mock.patch.object(upgrade, '_get_current_version', return_value=(20, 2, '20.2.0')), \
+            mock.patch.object(cephadm_module, 'get', return_value={'min_mon_release': 20}), \
+            mock.patch.object(cephadm_module, 'get_osdmap') as get_osdmap:
+        get_osdmap.return_value.get_require_osd_release.return_value = release
+        error = upgrade._check_target_version('20.2.1')
+    assert (error is None) == ok
+    if not ok:
+        assert 'require_osd_release' in error
+
+
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 def test_upgrade_start_hosts_mutually_exclusive_with_bucket(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'test'):

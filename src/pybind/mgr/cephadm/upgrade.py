@@ -582,8 +582,7 @@ class CephadmUpgrade:
             return f'min_mon_release ({mon_min}) < target {major} - 2; first complete an upgrade to an earlier release'
 
         # check osd min
-        osdmap = self.mgr.get("osd_map")
-        osd_min_name = osdmap.get("require_osd_release", "argonaut")
+        osd_min_name = self.mgr.get_osdmap().get_require_osd_release()
         osd_min = ceph_release_to_major(osd_min_name)
         if osd_min < major - 2:
             return f'require_osd_release ({osd_min_name} or {osd_min}) < target {major} - 2; first complete an upgrade to an earlier release'
@@ -2198,8 +2197,7 @@ class CephadmUpgrade:
                 })
 
     def _complete_osd_upgrade(self, target_major: str, target_major_name: str) -> None:
-        osdmap = self.mgr.get("osd_map")
-        osd_min_name = osdmap.get("require_osd_release", "argonaut")
+        osd_min_name = self.mgr.get_osdmap().get_require_osd_release()
         osd_min = ceph_release_to_major(osd_min_name)
         if osd_min < int(target_major):
             logger.info(
