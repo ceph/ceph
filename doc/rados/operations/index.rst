@@ -9,8 +9,8 @@
 	<table><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>High-level Operations</h3>
 
 High-level cluster operations consist primarily of starting and stopping the
-Ceph daemons on a host with ``systemctl``, checking the cluster's health, and
-monitoring an operating cluster.
+Ceph daemons, checking the cluster's health, and monitoring an operating
+cluster.
 
 .. toctree::
 	:maxdepth: 1

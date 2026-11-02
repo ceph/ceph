@@ -78,10 +78,6 @@ Finally update the period
    radosgw-admin period update --commit
 
 
-Now start the radosgw in the zone
-
-.. prompt:: bash #
-
-   systemctl start ceph-radosgw@rgw.`hostname -s`
-   systemctl enable ceph-radosgw@rgw.`hostname -s`
+Now start the Ceph Object Gateway in the zone, and enable it to start at boot.
+See :ref:`rados-operating-daemons`.
 

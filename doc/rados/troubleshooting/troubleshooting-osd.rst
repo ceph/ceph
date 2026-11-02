@@ -148,10 +148,9 @@ following command:
 
    ceph osd set-group noout prod-ceph-data1701
 
-After the flag is set, stop the OSDs and any other colocated
-Ceph services within the failure domain that requires maintenance work::
-
-   systemctl stop ceph\*.service ceph\*.target
+After the flag is set, stop the OSDs and any other colocated Ceph daemons on
+the hosts in the failure domain that requires maintenance work. See
+:ref:`rados-operating-daemons`.
 
 .. note:: When an OSD is stopped, any placement groups within the OSD are
    marked as ``degraded``.
@@ -159,12 +158,9 @@ Ceph services within the failure domain that requires maintenance work::
 After the maintenance is complete, it will be necessary to restart the OSDs
 and any other daemons that have stopped. However, if the host was rebooted as
 part of the maintenance, they do not need to be restarted and will come back up
-automatically. To restart OSDs or other daemons, use a command of the following
-form:
-
-.. prompt:: bash
-
-   sudo systemctl start ceph.target
+automatically, unless the host is in cephadm maintenance mode: take it out of
+maintenance mode to start them. To start the daemons, see
+:ref:`rados-operating-daemons`.
 
 Finally, unset the ``noout`` flag as needed by running commands like the
 following:

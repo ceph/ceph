@@ -389,11 +389,8 @@ B. Inject a monmap into the Monitor.
 
           In this example, the ID of the stopped Monitor is ``ID-FOO``.
 
-    #. Stop the Monitor into which the monmap will be injected:
-
-       .. prompt:: bash #
-
-          service ceph -a stop mon.{mon-id}
+    #. Stop the Monitor into which the monmap will be injected. See
+       :ref:`rados-operating-daemons`.
 
     #. Inject the monmap into the stopped Monitor:
 

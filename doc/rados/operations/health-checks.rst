@@ -1135,13 +1135,12 @@ OSDs, the cluster usage statistics reported by ``ceph df`` will be inaccurate.
 
 The old OSDs can be updated to use the new usage-tracking scheme by stopping
 each OSD, running a repair operation, and then restarting the OSD. For example,
-to update ``osd.123``, run the following commands:
+to update ``osd.123``, stop it (see :ref:`rados-operating-daemons`), run the
+following command, and then start it again:
 
 .. prompt:: bash #
 
-   systemctl stop ceph-osd@123
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
-   systemctl start ceph-osd@123
 
 To disable this alert, run the following command:
 
@@ -1161,14 +1160,13 @@ cluster will report an approximate value for per-pool omap usage based on the
 most recent deep scrub.
 
 The OSDs can be updated to track by pool by stopping each OSD, running a repair
-operation, and then restarting the OSD. For example, to update ``osd.123``, run
-the following commands:
+operation, and then restarting the OSD. For example, to update ``osd.123``, stop
+it (see :ref:`rados-operating-daemons`), run the following command, and then
+start it again:
 
 .. prompt:: bash #
 
-   systemctl stop ceph-osd@123
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
-   systemctl start ceph-osd@123
 
 To disable this alert, run the following command:
 
@@ -1187,13 +1185,12 @@ Per-PG omap allows faster PG removal when PGs migrate.
 
 The older OSDs can be updated to track by PG by stopping each OSD, running a
 repair operation, and then restarting the OSD. For example, to update
-``osd.123``, run the following commands:
+``osd.123``, stop it (see :ref:`rados-operating-daemons`), run the following
+command, and then start it again:
 
 .. prompt:: bash #
 
-   systemctl stop ceph-osd@123
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
-   systemctl start ceph-osd@123
 
 To disable this alert, run the following command:
 
@@ -1213,17 +1210,16 @@ that is temporarily required during compaction. See
 :ref:`bluestore-rocksdb-sharding` for more information.
 
 The OSDs can be updated to use sharding by stopping each OSD and resharding
-its RocksDB database. For example, to reshard ``osd.123``, run the following
-commands:
+its RocksDB database. For example, to reshard ``osd.123``, stop it (see
+:ref:`rados-operating-daemons`), run the following command, and then start it
+again:
 
 .. prompt:: bash #
 
-   systemctl stop ceph-osd@123
    ceph-bluestore-tool \
     --path /var/lib/ceph/osd/ceph-123 \
     --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
     reshard
-   systemctl start ceph-osd@123
 
 To disable this alert, run the following command:
 

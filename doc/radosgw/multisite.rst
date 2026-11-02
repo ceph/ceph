@@ -378,13 +378,8 @@ For example:
 Start the Gateway
 -----------------
 
-On the object gateway host, start and enable the Ceph Object Gateway
-service:
-
-.. prompt:: bash #
-
-   systemctl start ceph-radosgw@rgw.`hostname -s`
-   systemctl enable ceph-radosgw@rgw.`hostname -s`
+On the object gateway host, start the Ceph Object Gateway and enable it to
+start at boot. See :ref:`rados-operating-daemons`.
 
 .. _secondary-zone-label:
 
@@ -526,20 +521,12 @@ After updating the secondary zone configuration, update the period:
 Starting the Gateway
 --------------------
 
-To start the gateway, start and enable the Ceph Object Gateway service by
-running the following commands on the object gateway host:
+On a cluster installed from packages, start the Ceph Object Gateway on the
+object gateway host and enable it to start at boot. See
+:ref:`rados-operating-daemons`.
 
-.. prompt:: bash #
-
-   systemctl start ceph-radosgw@rgw.`hostname -s`
-   systemctl enable ceph-radosgw@rgw.`hostname -s`
-
-If the ``cephadm`` command was used to deploy the cluster, you will not be able
-to use ``systemctl`` to start the gateway because no services will exist on
-which ``systemctl`` could operate. This is due to the containerized nature of
-the ``cephadm``-deployed Ceph cluster. If you have used the ``cephadm`` command
-and you have a containerized cluster, you must run a command of the following
-form to start the gateway:
+On a cluster managed by cephadm, deploy the gateway instead, with a command of
+the following form:
 
 .. prompt:: bash #
 
@@ -709,11 +696,8 @@ disaster recovery by following these steps:
 
       radosgw-admin period update --commit
 
-#. Finally, restart the Ceph Object Gateway.
-
-   .. prompt:: bash #
-
-      systemctl restart ceph-radosgw@rgw.`hostname -s`
+#. Finally, restart the Ceph Object Gateway. See
+   :ref:`rados-operating-daemons`.
 
 Reverting from Failover
 -----------------------
@@ -740,11 +724,8 @@ If the former master zone recovers, you can revert the failover operation by fol
 
       radosgw-admin period update --commit
 
-#. Restart the Ceph Object Gateway in the recovered zone:
-
-   .. prompt:: bash #
-
-       systemctl restart ceph-radosgw@rgw.`hostname -s`
+#. Restart the Ceph Object Gateway in the recovered zone. See
+   :ref:`rados-operating-daemons`.
 
 #. If the secondary zone needs to be a read-only configuration, update
    the secondary zone:
@@ -759,11 +740,8 @@ If the former master zone recovers, you can revert the failover operation by fol
 
       radosgw-admin period update --commit
 
-#. Restart the Ceph Object Gateway in the secondary zone:
-
-   .. prompt:: bash #
-
-      systemctl restart ceph-radosgw@rgw.`hostname -s`
+#. Restart the Ceph Object Gateway in the secondary zone. See
+   :ref:`rados-operating-daemons`.
 
 .. _rgw-multisite-migrate-from-single-site:
 
@@ -829,11 +807,7 @@ to a multi-site system, follow these steps:
 
       radosgw-admin period update --commit
 
-8. Restart the Ceph Object Gateway:
-
-   .. prompt:: bash #
-
-      systemctl restart ceph-radosgw@rgw.`hostname -s`
+8. Restart the Ceph Object Gateway. See :ref:`rados-operating-daemons`.
 
 After completing this procedure, proceed to :ref:`secondary-zone-label`
 and create a secondary zone in the master zonegroup.

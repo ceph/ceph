@@ -236,6 +236,8 @@ The following host labels have a special meaning to cephadm.  All start with ``_
   ``/var/lib/ceph/<fsid>/config`` directory.
 
 
+.. _cephadm-maintenance-mode:
+
 Maintenance Mode
 ================
 
