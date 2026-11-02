@@ -723,6 +723,12 @@ public:
   seastar::future<bool> seastore_merge_shards_ok(
     spg_t target, const std::set<spg_t>& merge_sources);
 
+  // Run seastore_merge_shards_ok() for the pending merge that pgid (source
+  // or target) belongs to. Called before READY is sent so that the monitor
+  // never commits a pg_num decrement for a cross-shard merge.
+  seastar::future<bool> seastore_pending_merge_shards_ok(
+    spg_t pgid, unsigned pg_num, unsigned pg_num_pending);
+
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
   FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_source)
