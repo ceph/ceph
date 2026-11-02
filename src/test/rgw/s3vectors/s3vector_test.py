@@ -460,6 +460,31 @@ def _delete_s3_bucket_for_vector_bucket(bucket_name, s3conn=None):
             log.warning("Failed to delete S3 bucket '%s': %s", bucket_name, str(err))
 
 
+def _wait_for_s3_bucket_deletion(bucket_name, s3conn=None, retries=12, delay=1):
+    """ verify that a deleted S3 bucket is gone. in a zone that is not the master
+    zone, the deletion is forwarded to the master, and the metadata sync of the
+    creation of the bucket from the master may still be in flight: it then stores
+    the stale bucket in the zone, until the sync of its deletion removes it again.
+    so, in such a zone the check is retried """
+    if not s3conn:
+        s3conn = connection('s3')
+    master_cluster = get_config_master_cluster()
+    if not master_cluster or master_cluster == get_config_cluster():
+        # the bucket was deleted on the master zone, so it is already gone
+        retries = 1
+    for attempt in range(retries):
+        try:
+            s3conn.head_bucket(Bucket=bucket_name)
+        except s3conn.exceptions.ClientError as err:
+            assert err.response['Error']['Code'] in ('404', 'NoSuchBucket'), str(err)
+            return
+        if attempt + 1 < retries:
+            log.info("S3 bucket '%s' still exists, attempt %d/%d",
+                     bucket_name, attempt + 1, retries)
+            time.sleep(delay)
+    raise AssertionError(f"S3 bucket '{bucket_name}' still exists after its deletion")
+
+
 def _delete_all_indexes(conn, bucket_name):
     """
     Delete all indexes of a vector bucket. must be done before the vector bucket
@@ -1410,7 +1435,7 @@ def test_vector_buckets_deletion_with_buckets():
                     s3conn.delete_objects(Bucket=bucket_name2, Delete={'Objects': objects})
     s3conn.delete_bucket(Bucket=bucket_name2)
     # verify s3 bucket is not there
-    pytest.raises(s3conn.exceptions.ClientError, s3conn.head_bucket, Bucket=bucket_name2)
+    _wait_for_s3_bucket_deletion(bucket_name2, s3conn)
     # verify vector bucket still exists (via get and list)
     result = conn.get_vector_bucket(vectorBucketName=bucket_name2)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
