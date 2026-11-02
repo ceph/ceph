@@ -35,10 +35,10 @@ production use. It has been the default back end since the Luminous 12.2.z
 release. Crimson OSDs use a different back end, SeaStore, which is a tech
 preview; see :doc:`/crimson/crimson`.
 
-Filestore, the back end that preceded BlueStore, was deprecated in the Reef
-release and has since been removed: a Filestore OSD cannot start on this
-release. Clusters that still contain Filestore OSDs must migrate them to
-BlueStore before upgrading. See :ref:`rados_operations_bluestore_migration`.
+Filestore, the back end that preceded BlueStore, was deprecated in the Quincy
+release and removed in Reef: a Filestore OSD cannot start on this release.
+Clusters that still contain Filestore OSDs must migrate them to BlueStore
+before upgrading. See :ref:`rados_operations_bluestore_migration`.
 
 .. _rados_config_storage_devices_bluestore:
 
