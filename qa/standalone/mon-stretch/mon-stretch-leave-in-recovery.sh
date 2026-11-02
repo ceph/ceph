@@ -36,6 +36,22 @@ function leave_stretch_mode_while_recovering() {
     "$@" || return 1
     wait_for_quorum 300 3 || return 1
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
+    # Leaving stretch mode allows every monitor to lead again, and another
+    # one can win the election that follows: only the monitor that led in
+    # recovery stretch mode may lead
+    local mon
+    for mon in a b c; do
+        if [ $mon != $leader ]; then
+            ceph mon add disallowed_leader $mon || return 1
+        fi
+    done
+    for i in $(seq 1 60); do
+        wait_for_quorum 300 3 || return 1
+        if [ "$(ceph quorum_status -f json | jq -r .quorum_leader_name)" = $leader ]; then
+            break
+        fi
+        sleep 2
+    done
     test "$(ceph quorum_status -f json | jq -r .quorum_leader_name)" = $leader || return 1
     expect_failure $dir "recovery stretch mode" \
         ceph osd force_healthy_stretch_mode --yes-i-really-mean-it || return 1
