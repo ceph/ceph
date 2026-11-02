@@ -232,7 +232,6 @@ static int remove_otp_instance(cls_method_context_t hctx, const string& id)
 static int read_header(cls_method_context_t hctx, otp_header *h)
 {
   bufferlist bl;
-  encode(h, bl);
   int r = cls_cxx_map_get_val(hctx, otp_header_key, &bl);
   if (r == -ENOENT || r == -ENODATA) {
     *h = otp_header();
