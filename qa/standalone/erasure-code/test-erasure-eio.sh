@@ -295,6 +295,167 @@ function TEST_rados_get_subread_eio_shard_1() {
     delete_erasure_coded_pool $poolname
 }
 
+#
+# With EC optimizations a balanced read goes straight to the shards
+# (EC direct reads). A shard that cannot read its chunk must send the
+# client to the primary, which reconstructs the data, rather than
+# return EIO to the client.
+#
+function create_direct_read_pool() {
+    local poolname=$1
+    shift
+    local overwrites=$1
+
+    create_erasure_coded_pool $poolname 2 1 || return 1
+    if [ "$overwrites" = "overwrites" ]; then
+        ceph osd pool set $poolname allow_ec_overwrites true || return 1
+    fi
+    # also turns on client split reads
+    ceph osd pool set $poolname allow_ec_optimizations true || return 1
+    wait_for_clean || return 1
+}
+
+# osd $2 bounced a direct read of object $3: it is still running,
+# counted the bounce and wrote it to the cluster log
+function check_direct_read_bounced() {
+    local dir=$1
+    local osd_id=$2
+    local objname=$3
+
+    kill -0 $(cat $dir/osd.$osd_id.pid) || return 1
+    local bounced=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.$osd_id) \
+        perf dump osd | jq '.osd.ec_direct_read_redirect_eio')
+    test "$bounced" -ge 1 || return 1
+    TIMEOUT=30 wait_for_string $dir/log \
+        "shard-direct read of .*$objname.* bounced to primary" || return 1
+}
+
+# rados get reads 4 MiB at a time, which the client splits into one
+# direct read per shard
+function rados_get_direct_read_eio() {
+    local dir=$1
+    shift
+    local shard_id=$1
+    shift
+
+    local poolname=pool-jerasure
+    local objname=obj-direct-eio-$$-$shard_id
+    # spans every data shard, whatever the chunk size
+    dd if=/dev/urandom of=$dir/ORIGINAL bs=64k count=8 || return 1
+    rados --pool $poolname put $objname $dir/ORIGINAL || return 1
+
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local osd_id=${initial_osds[$shard_id]}
+    inject_eio ec data $poolname $objname $dir $shard_id || return 1
+
+    CEPH_ARGS="$CEPH_ARGS --rados_replica_read_policy=balance" \
+        rados --pool $poolname get $objname $dir/COPY || return 1
+    cmp $dir/ORIGINAL $dir/COPY || return 1
+    rm -f $dir/ORIGINAL $dir/COPY
+
+    check_direct_read_bounced $dir $osd_id $objname || return 1
+}
+
+function TEST_rados_get_direct_read_eio_shard_0() {
+    local dir=$1
+    setup_osds 4 || return 1
+
+    local poolname=pool-jerasure
+    create_direct_read_pool $poolname || return 1
+    # shard 0 is the primary's own: its direct read bounces as well,
+    # and the retry, a plain read, decodes around it
+    rados_get_direct_read_eio $dir 0 || return 1
+    delete_erasure_coded_pool $poolname
+}
+
+function TEST_rados_get_direct_read_eio_shard_1() {
+    local dir=$1
+    setup_osds 4 || return 1
+
+    local poolname=pool-jerasure
+    create_direct_read_pool $poolname || return 1
+    rados_get_direct_read_eio $dir 1 || return 1
+    delete_erasure_coded_pool $poolname
+}
+
+#
+# A read of at most one chunk that lies in the first chunk of a stripe
+# is not split: the client sends it whole to shard 0 as a single direct
+# read. That bounce comes back without FAIL_ON_EAGAIN, and the Objecter
+# resends the read to the primary with the direct-read flags cleared.
+#
+function TEST_rados_get_direct_read_eio_single_chunk() {
+    local dir=$1
+    setup_osds 4 || return 1
+
+    local poolname=pool-jerasure
+    # without overwrites, rados rounds its op size up to a whole stripe
+    create_direct_read_pool $poolname overwrites || return 1
+    local stripe_width=$(ceph osd dump --format json | \
+        jq ".pools[] | select(.pool_name == \"$poolname\") | .stripe_width")
+    local chunk_size=$(expr $stripe_width / 2)
+
+    local objname=obj-direct-eio-single-$$
+    dd if=/dev/urandom of=$dir/ORIGINAL bs=$stripe_width count=2 || return 1
+    rados --pool $poolname put $objname $dir/ORIGINAL || return 1
+
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local osd_id=${initial_osds[0]}
+    inject_eio ec data $poolname $objname $dir 0 || return 1
+
+    # one chunk per read: the reads of shard 0's chunks go out unsplit
+    local args="--rados_replica_read_policy=balance"
+    args+=" --debug_objecter=20 --log_file=$dir/rados-get.log"
+    CEPH_ARGS="$CEPH_ARGS $args" \
+        rados --pool $poolname -b $chunk_size get $objname $dir/COPY || return 1
+    cmp $dir/ORIGINAL $dir/COPY || return 1
+    rm -f $dir/ORIGINAL $dir/COPY
+    grep -q "reusing original op" $dir/rados-get.log || return 1
+    grep -q "got -EAGAIN, resubmitting" $dir/rados-get.log || return 1
+
+    check_direct_read_bounced $dir $osd_id $objname || return 1
+    delete_erasure_coded_pool $poolname
+}
+
+#
+# librbd reads extents of rbd_sparse_read_threshold_bytes (64K) and up
+# with SPARSE_READ, which a balance policy splits into EC direct sparse
+# reads. One whose shard cannot be read bounces to the primary, and the
+# shard counts the bounce and logs it, as for a dense read.
+# qa/workunits/rados/test_ec_sparse_read_repair_assert.sh checks that the
+# export finishes; this test checks the bounce itself.
+#
+function TEST_rbd_export_direct_read_eio_sparse() {
+    local dir=$1
+    setup_osds 4 || return 1
+
+    local poolname=pool-jerasure
+    # an rbd data pool needs overwrites
+    create_direct_read_pool $poolname overwrites || return 1
+    rbd pool init rbd || return 1
+
+    local image=img-direct-eio-$$
+    dd if=/dev/urandom of=$dir/ORIGINAL bs=1M count=4 || return 1
+    rbd import --data-pool $poolname $dir/ORIGINAL rbd/$image || return 1
+    # the image's first (and only) data object, in the EC pool
+    local objname=$(rbd info --format json rbd/$image | \
+        jq -r .block_name_prefix).0000000000000000
+
+    local shard_id=1
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local osd_id=${initial_osds[$shard_id]}
+    inject_eio ec data $poolname $objname $dir $shard_id || return 1
+
+    CEPH_ARGS="$CEPH_ARGS --rbd_read_from_replica_policy=balance" \
+        rbd export rbd/$image $dir/COPY || return 1
+    cmp $dir/ORIGINAL $dir/COPY || return 1
+    rm -f $dir/ORIGINAL $dir/COPY
+
+    check_direct_read_bounced $dir $osd_id $objname || return 1
+    rbd rm rbd/$image || return 1
+    delete_erasure_coded_pool $poolname
+}
+
 # We don't remove the object from the primary because
 # that just causes it to appear to be missing
 
