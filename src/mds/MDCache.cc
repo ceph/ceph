@@ -3014,6 +3014,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
   ambiguous_peer_updates.erase(who);
 
   rejoin_gather.insert(who);
+  rejoin_weak_applied.erase(who);
   rejoin_sent.erase(who);        // i need to send another
   rejoin_ack_sent.erase(who);    // i need to send another
   rejoin_ack_gather.erase(who);  // i'll need/get another.
@@ -3022,6 +3023,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
   dout(10) << " resolve_ack_gather " << resolve_ack_gather << dendl;
   dout(10) << " rejoin_sent " << rejoin_sent << dendl;
   dout(10) << " rejoin_gather " << rejoin_gather << dendl;
+  dout(10) << " rejoin_weak_applied " << rejoin_weak_applied << dendl;
   dout(10) << " rejoin_ack_gather " << rejoin_ack_gather << dendl;
 
  
@@ -3251,26 +3253,6 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
 void MDCache::set_recovery_set(set<mds_rank_t>& s) 
 {
   dout(7) << "set_recovery_set " << s << dendl;
-
-  // A newly created survivor (creating -> active) never observed peer
-  // failures, so handle_mds_failure() did not populate rejoin_gather.
-  // Likewise, a rank already in rejoin may not have a newly active
-  // survivor in gather. Expect a rejoin from any new recovery peer.
-  for (auto rank : s) {
-    if (rank == mds->get_nodeid() || recovery_set.count(rank))
-      continue;
-    auto st = mds->mdsmap->get_state(rank);
-    if (st >= MDSMap::STATE_REPLAY && st <= MDSMap::STATE_REJOIN) {
-      dout(7) << "set_recovery_set expecting rejoin from mds." << rank
-	      << " (" << ceph_mds_state_name(st) << ")" << dendl;
-      rejoin_gather.insert(rank);
-    } else if (mds->is_rejoin() &&
-	       mds->mdsmap->is_clientreplay_or_active_or_stopping(rank)) {
-      dout(7) << "set_recovery_set expecting rejoin from survivor mds."
-	      << rank << dendl;
-      rejoin_gather.insert(rank);
-    }
-  }
   recovery_set = s;
 }
 
@@ -4095,6 +4077,7 @@ void MDCache::dump_rejoin_status(Formatter *f) const
 {
   f->open_object_section("rejoin_status");
   f->dump_stream("rejoin_gather") << rejoin_gather;
+  f->dump_stream("rejoin_weak_applied") << rejoin_weak_applied;
   f->dump_stream("rejoin_ack_gather") << rejoin_ack_gather;
   f->dump_unsigned("num_opening_inodes", cap_imports_num_opening);
   f->close_section();
@@ -4147,7 +4130,7 @@ void MDCache::rejoin_send_rejoins()
     // Fresh ranks that skipped handle_mds_failure() otherwise crash on
     // rejoin_gather.count(from) when the first OP_WEAK arrives.
     for (const auto& rank : recovery_set) {
-      if (rank == mds->get_nodeid())
+      if (rank == mds->get_nodeid() || rejoin_weak_applied.count(rank))
 	continue;
       if (mds->mdsmap->is_rejoin(rank))
 	rejoin_gather.insert(rank);
@@ -4746,6 +4729,7 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
   ceph_assert(rejoin_gather.count(from));
   rejoin_gather.erase(from);
   if (survivor) {
+    rejoin_weak_applied.insert(from);
     // survivor.  do everything now.
     for (const auto &p : weak->inode_scatterlocks) {
       CInode *in = get_inode(p.first);

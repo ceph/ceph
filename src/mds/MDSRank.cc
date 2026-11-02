@@ -2181,9 +2181,6 @@ void MDSRank::active_start()
 
   finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
 
-  if (mdsmap->is_degraded())
-    calc_recovery_set();
-
   quiesce_agent_setup();
 }
 
