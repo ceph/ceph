@@ -485,3 +485,44 @@ TEST(MonCap, ProfileRBDMirror) {
                                {"key", "rbd/mirror/peer/1/1234"},
                              }, true, false, false, {}));
 }
+
+TEST(MonCap, MergeKeepsExistingGrants) {
+  // "fs authorize" merges the grant it generates into the caps an entity
+  // already holds; the grants that were already there must survive.
+  struct MergeTest {
+    const char *cur;
+    bool updated;
+    const char *merged;
+  };
+  MergeTest tests[] = {
+    {"allow *", true, "allow *, allow r fsname=a"},
+    {"allow rw", true, "allow rw, allow r fsname=a"},
+    {"allow service mds rw", true, "allow service mds rw, allow r fsname=a"},
+    {"profile cephfs-mirror", true,
+     "allow profile cephfs-mirror, allow r fsname=a"},
+    {"allow command \"auth get\" with entity prefix \"client.mirror.x.\"", true,
+     "allow command \"auth get\" with entity prefix \"client.mirror.x.\", "
+     "allow r fsname=a"},
+    {"allow r network 10.0.0.0/8", true,
+     "allow r network 10.0.0.0/8, allow r fsname=a"},
+    {"allow r fsname=b", true, "allow r fsname=b, allow r fsname=a"},
+    {"allow w fsname=a", true, "allow rw fsname=a"},
+    {"allow r fsname=a", false, nullptr},
+    {"allow rw fsname=a", false, nullptr},
+  };
+
+  for (auto& t : tests) {
+    MonCap cap, newcap;
+    ASSERT_TRUE(cap.parse(t.cur, &cout)) << t.cur;
+    ASSERT_TRUE(newcap.parse("allow r fsname=a", &cout));
+    ASSERT_EQ(t.updated, cap.merge(newcap)) << t.cur;
+    if (!t.updated) {
+      continue;
+    }
+    string merged = cap.to_string();
+    ASSERT_EQ(t.merged, merged) << t.cur;
+    MonCap reparsed;
+    ASSERT_TRUE(reparsed.parse(merged, &cout)) << merged;
+    ASSERT_EQ(merged, reparsed.to_string()) << merged;
+  }
+}
