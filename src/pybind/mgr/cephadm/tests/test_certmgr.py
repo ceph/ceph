@@ -9,6 +9,9 @@ from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObject
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
+from cephadm.ssl_certs import is_ecdsa_cert
+from ceph.deployment.tls_utils import get_certificate_info, get_private_key_info
+from mgr_util import verify_tls
 
 EXPIRED_CERT = """
 -----BEGIN CERTIFICATE-----
@@ -1033,6 +1036,28 @@ class TestCertMgr(object):
         with mock.patch.object(cert_mgr.ssl_certs, "renew_cert", return_value=("mock_new_cert", "mock_new_key")) as renew_mock:
             cert_mgr._renew_self_signed_certificate(cert_info, cert_obj)
             renew_mock.assert_called_once()
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_generate_and_renew_ecdsa_cert(self, _set_store, cephadm_module: CephadmOrchestrator):
+        """ Test that cephadm can sign ECDSA certs and renews them as ECDSA """
+        cert_mgr = cephadm_module.cert_mgr
+
+        tls_creds = cert_mgr.generate_cert('host1', '10.0.0.1', ecdsa=True)
+        assert is_ecdsa_cert(tls_creds.cert)
+        verify_tls(tls_creds.cert, tls_creds.key)
+        ec_info = {'key_type': 'EC', 'key_size': 256, 'curve': 'secp256r1'}
+        assert get_private_key_info(tls_creds.key) == ec_info
+        assert get_certificate_info(tls_creds.cert, include_details=True)['public_key'] == ec_info
+
+        cert, key = cert_mgr.ssl_certs.renew_cert(tls_creds.cert)
+        assert is_ecdsa_cert(cert)
+        verify_tls(cert, key)
+
+        # RSA is still the default, and renews as RSA
+        tls_creds = cert_mgr.generate_cert('host1', '10.0.0.1')
+        assert get_private_key_info(tls_creds.key) == {'key_type': 'RSA', 'key_size': 4096}
+        cert, key = cert_mgr.ssl_certs.renew_cert(tls_creds.cert)
+        assert get_private_key_info(key) == {'key_type': 'RSA', 'key_size': 4096}
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_health_errors_appending(self, _set_store, cephadm_module: CephadmOrchestrator):

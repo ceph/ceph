@@ -324,12 +324,14 @@ class CertMgr:
         node_ip: Union[str, List[str]],
         custom_san_list: Optional[List[str]] = None,
         duration_in_days: Optional[int] = None,
+        ecdsa: bool = False,
     ) -> TLSCredentials:
         cert, key = self.ssl_certs.generate_cert(
             host_fqdn,
             node_ip,
             custom_san_list=custom_san_list,
-            duration_in_days=duration_in_days
+            duration_in_days=duration_in_days,
+            ecdsa=ecdsa,
         )
         ca_cert = self.mgr.cert_mgr.get_root_ca()
         return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
