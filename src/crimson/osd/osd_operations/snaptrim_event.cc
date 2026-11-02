@@ -209,6 +209,7 @@ SnapTrimObjSubEvent::remove_clone(
   txn.remove(
     pg->get_collection_ref()->get_cid(),
     ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
+  obc->attr_cache.clear();
   obc->obs.oi = object_info_t(coid);
   return interruptor::now();
 }
@@ -251,6 +252,7 @@ void SnapTrimObjSubEvent::remove_head_whiteout(
   head_obc->obs.oi = object_info_t(head_oid);
   txn.remove(pg->get_collection_ref()->get_cid(),
              ghobject_t{head_oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
+  head_obc->attr_cache.clear();
 }
 
 SnapTrimObjSubEvent::interruptible_future<>
@@ -276,6 +278,10 @@ SnapTrimObjSubEvent::adjust_snaps(
     ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
     OI_ATTR,
     bl);
+  // as PGBackend::set_metadata() does
+  if (!pg->get_pool().is_erasure()) {
+    obc->attr_cache[OI_ATTR] = bl;
+  }
   auto &loge = add_log_entry(
     pg_log_entry_t::MODIFY,
     coid,
@@ -323,6 +329,11 @@ void SnapTrimObjSubEvent::update_head(
     pg->get_collection_ref()->get_cid(),
     ghobject_t{head_oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
     attrs);
+  // as PGBackend::set_metadata() does
+  if (!pg->get_pool().is_erasure()) {
+    head_obc->attr_cache[SS_ATTR] = attrs[SS_ATTR];
+    head_obc->attr_cache[OI_ATTR] = attrs[OI_ATTR];
+  }
 }
 
 SnapTrimObjSubEvent::remove_or_update_iertr::future<ceph::os::Transaction>
