@@ -259,7 +259,9 @@ options:
 	--nolockdep disable lockdep
 	--multimds <count> allow multimds with maximum active count
 	--without-dashboard: do not run using mgr dashboard
-	--bluestore-spdk: enable SPDK and with a comma-delimited list of PCI-IDs of NVME device (e.g, 0000:81:00.0)
+	--bluestore-spdk: enable SPDK with a comma-delimited list of NVMe PCI IDs
+	                 (e.g. 0000:81:00.0) or NVMe-oF transport IDs
+	                 (e.g. "trtype:tcp adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2019-02.io.spdk:cnode0")
 	--msgr1: use msgr1 only
 	--msgr2: use msgr2 only
 	--msgr21: use msgr2 and msgr1
