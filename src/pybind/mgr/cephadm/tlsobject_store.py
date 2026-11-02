@@ -1,6 +1,7 @@
 from typing import (Any,
                     Dict,
                     List,
+                    Set,
                     Tuple,
                     Optional,
                     TYPE_CHECKING,
@@ -21,6 +22,22 @@ logger = logging.getLogger(__name__)
 
 TLSOBJECT_STORE_PREFIX = 'cert_store.'
 
+# Service- and host-scoped objects are stored one KV entry per target, as
+# '<TLSOBJECT_STORE_TARGET_PREFIX><storage prefix>.<obj_name>/<target>'. A
+# single entry holding every target of a name outgrows
+# mon_config_key_max_entry_size once the name has a few dozen targets (e.g.
+# a cephadm-signed cert per host), and the mon then refuses every save.
+# The per-name entry under TLSOBJECT_STORE_PREFIX is kept as an empty map, so
+# that the name is still found by load(). Service ids and hostnames cannot
+# contain the separator.
+TLSOBJECT_STORE_TARGET_PREFIX = 'cert_store.target.'
+TLSOBJECT_TARGET_SEPARATOR = '/'
+
+
+def _kv_preview(key: str, raw: str, n: int = 20) -> Tuple[str, int, str]:
+    # Safe, short, escaped preview for logs
+    return key, (len(raw) if raw else 0), (raw[:n] if raw else "")
+
 
 class TLSObjectStore():
 
@@ -36,6 +53,7 @@ class TLSObjectStore():
         self.host_scoped_objects = known_objects_names[TLSObjectScope.HOST]
         self.global_scoped_objects = known_objects_names[TLSObjectScope.GLOBAL]
         self.store_prefix = f'{TLSOBJECT_STORE_PREFIX}{tlsobject_class.STORAGE_PREFIX}.'
+        self.target_prefix = f'{TLSOBJECT_STORE_TARGET_PREFIX}{tlsobject_class.STORAGE_PREFIX}.'
         # initialize objects by name for the different scopes
         self.objects_by_name: Dict[str, Any] = {}
         for n in self.service_scoped_objects + self.host_scoped_objects:
@@ -48,6 +66,18 @@ class TLSObjectStore():
 
     def _set_store(self, obj_name: str, payload: Any) -> None:
         self.mgr.set_store(self._kv_key(obj_name), json.dumps(payload))
+
+    def _target_kv_key(self, obj_name: str, target: str) -> str:
+        return f'{self.target_prefix}{obj_name}{TLSOBJECT_TARGET_SEPARATOR}{target}'
+
+    def _set_target_store(self, obj_name: str, target: str,
+                          tlsobject: Optional[TLSObjectProtocol]) -> None:
+        """Persist (or, with None, remove) the object of one target of a scoped name."""
+        key = self._target_kv_key(obj_name, target)
+        if tlsobject is None:
+            self.mgr.set_store(key, None)
+        else:
+            self.mgr.set_store(key, json.dumps(self.tlsobject_class.to_json(tlsobject)))
 
     def ensure_tombstone(self, obj_name: str, scope: TLSObjectScope) -> None:
         """
@@ -151,11 +181,7 @@ class TLSObjectStore():
         scope, target = self.get_tlsobject_scope_and_target(obj_name, service_name, host)
         if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
             self.objects_by_name[obj_name][target] = tlsobject
-            serialized_targets = {
-                key: self.tlsobject_class.to_json(self.objects_by_name[obj_name][key])
-                for key in self.objects_by_name[obj_name]
-            }
-            self._set_store(obj_name, serialized_targets)
+            self._set_target_store(obj_name, target, tlsobject)
         elif scope == TLSObjectScope.GLOBAL:
             self.objects_by_name[obj_name] = tlsobject
             self._set_store(obj_name, self.tlsobject_class.to_json(tlsobject))
@@ -200,11 +226,7 @@ class TLSObjectStore():
         if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
             if obj_name in self.objects_by_name and target in self.objects_by_name[obj_name]:
                 del self.objects_by_name[obj_name][target]
-                serialized_targets = {
-                    key: self.tlsobject_class.to_json(self.objects_by_name[obj_name][key])
-                    for key in self.objects_by_name[obj_name]
-                }
-                self._set_store(obj_name, serialized_targets)
+                self._set_target_store(obj_name, target, None)
                 return True
         elif scope == TLSObjectScope.GLOBAL:
             self.objects_by_name[obj_name] = self.tlsobject_class()
@@ -249,10 +271,12 @@ class TLSObjectStore():
         return tlsobjects
 
     def load(self) -> None:
-
-        def _kv_preview(key: str, raw: str, n: int = 20) -> Tuple[str, int, str]:
-            # Safe, short, escaped preview for logs
-            return key, (len(raw) if raw else 0), (raw[:n] if raw else "")
+        # Scoped names whose objects were reset by this load
+        loaded: Set[str] = set()
+        # Targets found in a per-name entry, and the names with a target that
+        # could not be decoded there; see _move_legacy_targets()
+        legacy_targets: Dict[str, Dict[str, TLSObjectProtocol]] = {}
+        undecodable: Set[str] = set()
 
         for k, v in self.mgr.get_store_prefix(self.store_prefix).items():
             obj_name = k[len(self.store_prefix):]
@@ -292,14 +316,16 @@ class TLSObjectStore():
                 if is_cephadm_signed_object and obj_name not in self.host_scoped_objects:
                     self.host_scoped_objects.append(obj_name)
                 self.objects_by_name[obj_name] = {}
+                loaded.add(obj_name)
                 for target, payload in tls_object_targets.items():
                     try:
                         tlsobject = self.tlsobject_class.from_json(payload)
                         if tlsobject:  # skip tombstones
-                            self.objects_by_name[obj_name][target] = tlsobject
+                            legacy_targets.setdefault(obj_name, {})[target] = tlsobject
                         else:
                             logger.debug("TLSObjectStore: Skipping tombstone for %r (target %r)", obj_name, target)
                     except Exception as e:
+                        undecodable.add(obj_name)
                         key_preview, vlen, vstart = _kv_preview(k, str(payload))
                         logger.warning(
                             "TLSObjectStore: Failed to decode scoped TLS object %r (target %r): %r. "
@@ -318,3 +344,56 @@ class TLSObjectStore():
                     )
             else:
                 logger.error("TLSObjectStore: Found a known TLS object name %r with unknown scope!", obj_name)
+
+        self._load_targets(loaded)
+        self._move_legacy_targets(legacy_targets, undecodable)
+
+    def _load_targets(self, loaded: Set[str]) -> None:
+        for k, v in self.mgr.get_store_prefix(self.target_prefix).items():
+            obj_name, sep, target = k[len(self.target_prefix):].partition(TLSOBJECT_TARGET_SEPARATOR)
+            if not (obj_name and sep and target):
+                logger.warning("TLSObjectStore: Ignoring malformed key %r", k)
+                continue
+            is_cephadm_signed_object = self.cephadm_signed_object_checker(obj_name)
+            if not (is_cephadm_signed_object
+                    or obj_name in self.service_scoped_objects
+                    or obj_name in self.host_scoped_objects):
+                logger.warning("TLSObjectStore: Discarding unknown obj_name %r (target %r)", obj_name, target)
+                continue
+            if is_cephadm_signed_object and obj_name not in self.host_scoped_objects:
+                self.host_scoped_objects.append(obj_name)
+            if obj_name not in loaded:
+                self.objects_by_name[obj_name] = {}
+                loaded.add(obj_name)
+            try:
+                tlsobject = self.tlsobject_class.from_json(json.loads(v))
+            except Exception as e:
+                key_preview, vlen, vstart = _kv_preview(k, v)
+                logger.warning(
+                    "TLSObjectStore: Failed to decode scoped TLS object %r (target %r): %r. "
+                    "key=%r, len=%d, startswith=%r",
+                    obj_name, target, e, key_preview, vlen, vstart
+                )
+                continue
+            if tlsobject:
+                self.objects_by_name[obj_name][target] = tlsobject
+
+    def _move_legacy_targets(self, legacy_targets: Dict[str, Dict[str, TLSObjectProtocol]],
+                             undecodable: Set[str]) -> None:
+        """
+        Move targets found in per-name entries to entries of their own.
+
+        Per-name entries held every target until targets got entries of their
+        own, and an older mgr may have written one since. Either way such an
+        entry is newer than any per-target entry for the same name, so its
+        targets win. Once moved, the per-name entry is reset to an empty map,
+        unless a target in it could not be decoded.
+        """
+        for obj_name, targets in legacy_targets.items():
+            self.objects_by_name[obj_name].update(targets)
+            for target, tlsobject in targets.items():
+                self._set_target_store(obj_name, target, tlsobject)
+            if obj_name not in undecodable:
+                self._set_store(obj_name, {})
+            logger.info("TLSObjectStore: Moved %d target(s) of %r to per-target entries",
+                        len(targets), obj_name)
