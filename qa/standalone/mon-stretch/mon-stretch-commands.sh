@@ -9,6 +9,7 @@ function run() {
     export CEPH_MON_A="127.0.0.1:7341" # git grep '\<7341\>' : there must be only one
     export CEPH_MON_B="127.0.0.1:7342" # git grep '\<7342\>' : there must be only one
     export CEPH_MON_C="127.0.0.1:7343" # git grep '\<7343\>' : there must be only one
+    export CEPH_MON_D="127.0.0.1:7344" # git grep '\<7344\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON_A,$CEPH_MON_B,$CEPH_MON_C "
@@ -142,6 +143,20 @@ function TEST_stretch_pool_commands_in_stretch_mode() {
     test "$(pool_field stretched peering_crush_bucket_count)" == 2 || return 1
     test "$(pool_field stretched crush_rule)" == 1 || return 1
     test "$(pool_field stretched size)" == 4 || return 1
+}
+
+# Replacing the tiebreaker with a new mon in its zone, as when the arbiter mon
+# fails over, must also succeed when the command runs again.
+function TEST_set_new_tiebreaker_twice() {
+    local dir=$1
+
+    stretch_cluster $dir || return 1
+    run_mon $dir d --public-addr $CEPH_MON_D --set-crush-location zone=arbiter || return 1
+    wait_for_quorum 300 4 || return 1
+
+    ceph mon set_new_tiebreaker d || return 1
+    ceph mon set_new_tiebreaker d || return 1
+    test "$(ceph mon dump -f json | jq -r .tiebreaker_mon)" == d || return 1
 }
 
 function wait_for_stretch_state() {
