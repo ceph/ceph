@@ -75,21 +75,24 @@ if(MINGW)
   link_directories(${MINGW_LINK_DIRECTORIES})
 endif()
 
-option(WITH_MOLD "Use the Mold linker" OFF)
-if(WITH_MOLD)
-  find_program(_mold_path mold REQUIRED)
-  message(STATUS "Mold linker: ${_mold_path}")
-  set(CMAKE_LINKER ${_mold_path} CACHE FILEPATH "Linker" FORCE)
-  set(MOLD_FUSE_LD_FLAG "-fuse-ld=mold" CACHE INTERNAL "")
+# Select the linker with -DCMAKE_LINKER_TYPE=BFD|LLD|MOLD.  Passed as -fuse-ld,
+# as CMake handles CMAKE_LINKER_TYPE itself only from 3.29 on.
+string(TOLOWER "${CMAKE_LINKER_TYPE}" CEPH_LINKER)
+if(CEPH_LINKER AND NOT CEPH_LINKER MATCHES "^(default|system)$")
+  include(CheckLinkerFlag)
+  check_linker_flag(CXX -fuse-ld=${CEPH_LINKER} HAVE_LINKER_${CEPH_LINKER})
+  if(NOT HAVE_LINKER_${CEPH_LINKER})
+    # Re-check on the next run, e.g. after installing the linker.
+    unset(HAVE_LINKER_${CEPH_LINKER} CACHE)
+    message(FATAL_ERROR "Linker ${CEPH_LINKER} not usable: "
+      "${CMAKE_CXX_COMPILER} rejects -fuse-ld=${CEPH_LINKER}")
+  endif()
   foreach(_flags CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS)
-    if(NOT "${${_flags}}" MATCHES "fuse-ld=")
-      string(APPEND ${_flags} " ${MOLD_FUSE_LD_FLAG}")
-    endif()
+    string(APPEND ${_flags} " -fuse-ld=${CEPH_LINKER}")
   endforeach()
-  set(USING_MOLD_LINKER TRUE CACHE INTERNAL "")
-else()
-  set(USING_MOLD_LINKER FALSE CACHE INTERNAL "")
 endif()
+# Applied above; CMake >= 3.29 would add a -fuse-ld overriding librados's.
+set(CMAKE_LINKER_TYPE "")
 
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
