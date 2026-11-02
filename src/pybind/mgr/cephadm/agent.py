@@ -753,7 +753,11 @@ class HostData:
             # update timestamp of most recent agent update
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
 
-            error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+            def host_error_daemons() -> Set[str]:
+                return {dd.name() for dd in self.mgr.cache.get_daemons_by_host(host)
+                        if dd.status == DaemonDescriptionStatus.error}
+
+            error_daemons_old = host_error_daemons()
             daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
 
             up_to_date = False
@@ -768,9 +772,12 @@ class HostData:
                 self.mgr.log.debug(
                     f'Received old metadata from agent on host {host}. Requested up-to-date metadata.')
 
+            error_daemons_new = error_daemons_old
             if 'ls' in data and data['ls']:
                 self.mgr._process_ls_output(host, data['ls'])
-                self.mgr.update_failed_daemon_health_check()
+                error_daemons_new = host_error_daemons()
+                if error_daemons_new != error_daemons_old:
+                    self.mgr.update_failed_daemon_health_check()
             if 'networks' in data and data['networks']:
                 self.mgr.cache.update_host_networks(host, data['networks'])
             if 'facts' in data and data['facts']:
@@ -780,7 +787,7 @@ class HostData:
                 self.mgr.cache.update_host_devices(host, ret.devices)
 
             if (
-                error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+                error_daemons_old != error_daemons_new
                 or daemon_count_old != len(self.mgr.cache.get_daemons_by_host(host))
             ):
                 self.mgr.log.debug(
