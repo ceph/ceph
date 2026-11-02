@@ -16,6 +16,7 @@ int64_t HybridAllocatorBase<T>::allocate(
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint,
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   dout(10) << __func__ << std::hex
@@ -58,7 +59,7 @@ int64_t HybridAllocatorBase<T>::allocate(
       res2 = T::_allocate(want - res, unit, max_alloc_size, hint, extents);
     } else if (bmap_alloc) {
       res2 =
-        bmap_alloc->allocate(want - res, unit, max_alloc_size, hint, extents);
+        bmap_alloc->allocate(want - res, unit, max_alloc_size, hint, tag, extents);
     }
     if (res2 >= 0) {
       res += res2;
@@ -91,7 +92,7 @@ void HybridAllocatorBase<T>::dump()
 }
 
 template <typename T>
-void HybridAllocatorBase<T>::init_rm_free(uint64_t offset, uint64_t length)
+void HybridAllocatorBase<T>::init_rm_free(uint64_t offset, uint64_t length, alloc_tag_t tag)
 {
   if (!length)
     return;
@@ -104,7 +105,7 @@ void HybridAllocatorBase<T>::init_rm_free(uint64_t offset, uint64_t length)
     [&](uint64_t o, uint64_t l, bool found) {
       if (!found) {
         if (bmap_alloc) {
-          bmap_alloc->init_rm_free(o, l);
+          bmap_alloc->init_rm_free(o, l, tag);
         } else {
           derr << __func__ << " lambda " << std::hex
             << "Uexpected extent: "
@@ -220,7 +221,8 @@ uint64_t HybridAllocatorBase<PrimaryAllocator>::_allocate_or_rollback(
   if (primary) {
     res = PrimaryAllocator::_allocate(want, unit, max_alloc_size, hint, extents);
   } else if (bmap_alloc) {
-    res = bmap_alloc->allocate(want, unit, max_alloc_size, hint, extents);
+    res = bmap_alloc->allocate(want, unit, max_alloc_size, hint,
+                        alloc_tag_t::unknown(), extents);
   }
   if (res < 0) {
     // got a failure, release already allocated

@@ -1222,7 +1222,15 @@ void BlueStore::Writer::_defer_or_allocate(uint32_t need_size)
     statfs_delta.allocated() += need_size;
     disk_allocs.pos = 0;
   } else {
-    int64_t new_alloc_size = bstore->alloc->allocate(need_size, au_size, 0, 0, &allocated);
+    alloc_tag_t tag = alloc_tag_t::unknown();
+    if (onode && onode->c) {
+      spg_t pgid;
+      if (onode->c->cid.is_pg(&pgid)) {
+        tag = alloc_tag_t::pg(pgid.pool(), pgid.ps());
+      }
+    }
+    int64_t new_alloc_size = bstore->alloc->allocate(need_size, au_size,
+                                                  0, 0, tag, &allocated);
     ceph_assert(need_size == new_alloc_size);
     statfs_delta.allocated() += new_alloc_size;
     disk_allocs.it = allocated.begin();

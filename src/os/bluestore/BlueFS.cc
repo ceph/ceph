@@ -771,10 +771,12 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
     if (!alloc[i]) continue;
     bluefs_locked_extents_t res_la = locked_alloc[i].get_merged();
     if (res_la.head_length) {
-      alloc[i]->init_rm_free(res_la.head_offset, res_la.head_length);
+      alloc[i]->init_rm_free(res_la.head_offset, res_la.head_length,
+                              alloc_tag_t::bluefs(alloc_tag_bluefs_t::OTHER));
     }
     if (res_la.tail_length) {
-      alloc[i]->init_rm_free(res_la.tail_offset, res_la.tail_length);
+      alloc[i]->init_rm_free(res_la.tail_offset, res_la.tail_length,
+                              alloc_tag_t::bluefs(alloc_tag_bluefs_t::OTHER));
     }
   }
 
@@ -1174,15 +1176,28 @@ int BlueFS::mount()
       log.uses_envelope_mode = true;
     }
     dout(20) << __func__ << " noting alloc for " << p.second->fnode << dendl;
+    alloc_tag_bluefs_t subkind = alloc_tag_bluefs_t::OTHER;
+    if (p.second->fnode.ino == 1) {
+      subkind = alloc_tag_bluefs_t::LOG;
+    } else {
+      uint64_t hint_val = reinterpret_cast<uint64_t>(p.second->vselector_hint);
+      if (hint_val == 0 || hint_val == 3 || hint_val == 2) {
+        subkind = alloc_tag_bluefs_t::WAL;
+      } else if (hint_val == 1 || hint_val == 4 || hint_val == 2 ||
+                  hint_val == 3 || hint_val == 4) {
+        subkind = alloc_tag_bluefs_t::SST;
+      }
+    }
+    alloc_tag_t tag = alloc_tag_t::bluefs(subkind);
     for (auto& q : p.second->fnode.extents) {
       bool is_shared = is_shared_alloc(q.bdev);
       ceph_assert(!is_shared || (is_shared && shared_alloc));
       if (is_shared && shared_alloc->need_init && shared_alloc->a) {
         shared_alloc->bluefs_used += q.length;
-        alloc[q.bdev]->init_rm_free(q.offset, q.length);
+        alloc[q.bdev]->init_rm_free(q.offset, q.length, tag);
       } else if (!is_shared) {
         locked_alloc[q.bdev].reset_intersected(q);
-        alloc[q.bdev]->init_rm_free(q.offset, q.length);
+        alloc[q.bdev]->init_rm_free(q.offset, q.length, tag);
       }
     }
   }
@@ -1194,10 +1209,12 @@ int BlueFS::mount()
             << " " << locked_alloc[i] << " => " << res_la
             << dendl;
     if (res_la.head_length) {
-      alloc[i]->init_rm_free(res_la.head_offset, res_la.head_length);
+      alloc[i]->init_rm_free(res_la.head_offset, res_la.head_length,
+                              alloc_tag_t::bluefs(alloc_tag_bluefs_t::OTHER));
     }
     if (res_la.tail_length) {
-      alloc[i]->init_rm_free(res_la.tail_offset, res_la.tail_length);
+      alloc[i]->init_rm_free(res_la.tail_offset, res_la.tail_length,
+                              alloc_tag_t::bluefs(alloc_tag_bluefs_t::OTHER));
     }
   }
 
@@ -4133,13 +4150,23 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t end)
   if (allocated < end) {
     // we should never run out of log space here; see the min runway check
     // in _flush_and_sync_log.
+    alloc_tag_bluefs_t subkind = alloc_tag_bluefs_t::OTHER;
+    if (h->writer_type == BlueFS::WRITER_WAL) {
+      subkind = alloc_tag_bluefs_t::WAL;
+    } else if (h->writer_type == BlueFS::WRITER_SST) {
+      subkind = alloc_tag_bluefs_t::SST;
+    }
+    alloc_tag_t tag = alloc_tag_t::bluefs(subkind);
     int r = _allocate(vselector->select_prefer_bdev(h->file->vselector_hint),
-		      end - allocated,
+                      end - allocated,
                       0,
-		      &h->file->fnode,
-		      [&](const bluefs_extent_t& e) {
-		        vselector->add_usage(h->file->vselector_hint, e);
-	              });
+                      &h->file->fnode,
+                      [&](const bluefs_extent_t& e) {
+                        vselector->add_usage(h->file->vselector_hint, e);
+                      },
+                      0,
+                      true,
+                      tag);
     if (r < 0) {
       derr << __func__ << " allocated: 0x" << std::hex << allocated
            << " for " << h->file->fnode << " end: 0x" << end << std::dec << dendl;
@@ -4625,7 +4652,8 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 		      bluefs_fnode_t* node,
                       update_fn_t cb,
                       size_t alloc_attempts,
-                      bool permit_dev_fallback)
+                      bool permit_dev_fallback,
+                      alloc_tag_t tag)
 {
   dout(10) << __func__ << " len 0x" << std::hex << len
            << " au 0x" << alloc_unit
@@ -4666,7 +4694,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     ++alloc_attempts;
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
     auto t0 = mono_clock::now();
-    alloc_len = alloc[id]->allocate(need, alloc_unit, hint, &extents);
+    alloc_len = alloc[id]->allocate(need, alloc_unit, hint, tag, &extents);
     _update_allocate_stats(id, mono_clock::now() - t0);
   }
   if (alloc_len < 0 || alloc_len < need) {
@@ -4768,13 +4796,25 @@ int BlueFS::preallocate(FileRef f, uint64_t off, uint64_t len)/*_LF*/
   if (off + len > allocated) {
     uint64_t want = off + len - allocated;
 
+    alloc_tag_bluefs_t subkind = alloc_tag_bluefs_t::OTHER;
+    uint64_t hint_val = reinterpret_cast<uint64_t>(f->vselector_hint);
+    if (hint_val == 0 || hint_val == 3 || hint_val == 2) {
+      subkind = alloc_tag_bluefs_t::WAL;
+    } else if (hint_val == 1 || hint_val == 4 || hint_val == 2 ||
+                hint_val == 3 || hint_val == 4) {
+      subkind = alloc_tag_bluefs_t::SST;
+    }
+    alloc_tag_t tag = alloc_tag_t::bluefs(subkind);
     int r = _allocate(vselector->select_prefer_bdev(f->vselector_hint),
       want,
       0,
       &f->fnode,
       [&](const bluefs_extent_t& e) {
-	vselector->add_usage(f->vselector_hint, e);
-      });
+        vselector->add_usage(f->vselector_hint, e);
+      },
+      0,
+      true,
+      tag);
     if (r < 0)
       return r;
     log.t.op_file_update_inc(f->fnode);
