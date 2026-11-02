@@ -45,6 +45,7 @@
     bucket check                     check bucket index by verifying size and object count stats
     bucket check olh                 check for olh index entries and objects that are pending removal
     bucket check unlinked            check for object versions that are not visible in a bucket listing 
+    bucket check olh-list            check for version list entries that disagree with their olh
     bucket chown                     link bucket to specified user and update its object ACLs
     bucket reshard                   reshard bucket
     bucket set-min-shards            set the minimum number of shards that dynamic resharding will consider for a bucket

@@ -2124,6 +2124,321 @@ static int rgw_bucket_refresh_instance(cls_method_context_t hctx, bufferlist *in
   return write_bucket_header(hctx, &header); /* updates header version */
 }
 
+// read all index entries whose key starts with prefix
+static int read_prefixed_entries(cls_method_context_t hctx, const string& prefix,
+                                 map<string, rgw_bucket_dir_entry>* entries)
+{
+  string start_after; // the filter prefix makes the listing start at prefix
+  bool more = true;
+  while (more) {
+    map<string, bufferlist> vals;
+    int ret = cls_cxx_map_get_vals(hctx, start_after, prefix, 1000, &vals, &more);
+    if (ret < 0) {
+      return ret;
+    }
+    if (vals.empty()) {
+      break;
+    }
+    for (auto& [idx, bl] : vals) {
+      rgw_bucket_dir_entry entry;
+      try {
+        auto p = bl.cbegin();
+        decode(entry, p);
+      } catch (ceph::buffer::error& err) {
+        CLS_LOG(0, "ERROR: %s: failed to decode entry idx=%s", __func__,
+                escape_str(idx).c_str());
+        return -EIO;
+      }
+      entries->emplace(idx, std::move(entry));
+    }
+    start_after = vals.rbegin()->first;
+  }
+  return 0;
+}
+
+/*
+ * Check the versioned list entries of an object against its instance
+ * entries and olh, and repair them if fix is set:
+ *  - a list entry must be the list entry of an instance entry, as given by
+ *    the instance entry's versioned_epoch; others are orphaned and removed
+ *  - only the list and instance entries of the version the olh points to
+ *    are CURRENT, none if the olh does not exist
+ *  - while the olh exists, the plain entry is a version marker
+ * Objects with operations in progress are reported as busy and left alone.
+ */
+static int check_olh_list(cls_method_context_t hctx, const string& name,
+                          bool fix, rgw_bucket_dir_header& header,
+                          rgw_cls_check_olh_list_ret* result)
+{
+  cls_rgw_obj_key key(name);
+  rgw_bucket_olh_entry olh;
+  string olh_idx;
+  bool olh_found = false;
+  int ret = read_olh(hctx, key, &olh, &olh_idx, &olh_found);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!olh_found) {
+    return 0; // not a versioned object
+  }
+
+  // operations started within the tag timeout are considered in progress;
+  // older ones were abandoned and do not block the check
+  const ConfigProxy& conf = cls_get_config(hctx);
+  const uint64_t config_op_expiration = conf->rgw_pending_bucket_index_op_expiration;
+  const timespan tag_timeout(std::chrono::seconds(
+      header.tag_timeout ? header.tag_timeout :
+      (config_op_expiration ? config_op_expiration : CEPH_RGW_DEFAULT_TAG_TIMEOUT)));
+  const real_time now = real_clock::now();
+
+  // the olh log is keyed by the time of the index operation that wrote it,
+  // and is trimmed once rgw has applied it to the olh object
+  if (!olh.pending_log.empty() &&
+      now <= real_time(timespan(olh.pending_log.rbegin()->first)) + tag_timeout) {
+    result->busy = true;
+    return 0;
+  }
+
+  auto has_pending_ops = [&] (const rgw_bucket_dir_entry& entry) {
+    for (const auto& [tag, info] : entry.pending_map) {
+      if (now <= info.timestamp + tag_timeout) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  map<string, rgw_bucket_dir_entry> instances;
+  string instance_prefix;
+  encode_obj_versioned_data_key(key, &instance_prefix);
+  ret = read_prefixed_entries(hctx, instance_prefix, &instances);
+  if (ret < 0) {
+    return ret;
+  }
+
+  map<string, rgw_bucket_dir_entry> list_entries;
+  ret = read_prefixed_entries(hctx, name + string("\0v", 2), &list_entries);
+  if (ret < 0) {
+    return ret;
+  }
+
+  rgw_bucket_dir_entry plain;
+  string plain_idx = name;
+  ret = read_index_entry(hctx, plain_idx, &plain);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  const bool plain_found = (ret == 0);
+
+  if ((plain_found && has_pending_ops(plain)) ||
+      std::any_of(instances.begin(), instances.end(),
+                  [&] (const auto& i) { return has_pending_ops(i.second); })) {
+    result->busy = true;
+    return 0;
+  }
+
+  // the list entry each instance entry points to
+  map<string, string> instance_of; // list idx -> instance idx
+  for (auto& [idx, entry] : instances) {
+    if ((entry.flags & rgw_bucket_dir_entry::FLAG_VER) && entry.versioned_epoch > 0) {
+      string list_idx;
+      get_list_index_key(entry, &list_idx);
+      instance_of[list_idx] = idx;
+    }
+  }
+
+  auto is_current = [] (const rgw_bucket_dir_entry& entry) {
+    return (entry.flags & rgw_bucket_dir_entry::FLAG_CURRENT) != 0;
+  };
+  auto set_current = [] (rgw_bucket_dir_entry& entry, bool current) {
+    if (current) {
+      entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+    } else {
+      entry.flags &= ~rgw_bucket_dir_entry::FLAG_CURRENT;
+    }
+  };
+  // whether a list entry belongs to the version the olh points to
+  auto is_olh_version = [&olh] (const rgw_bucket_dir_entry& entry) {
+    return entry.key == olh.key && entry.is_delete_marker() == olh.delete_marker;
+  };
+
+  // the list entry of the version the olh points to. When a version becomes
+  // current, link_olh sets its versioned_epoch to the olh epoch, so if its
+  // instance entry is missing (null versions lose it to the same races), its
+  // list entry still identifies it and the instance entry is restored from
+  // it. Otherwise which of that version's list entries is real is unknown:
+  // they and the CURRENT flags are left alone.
+  string current_idx;
+  bool current_known = !olh.exists;
+  if (olh.exists) {
+    string instance_idx;
+    encode_obj_versioned_data_key(olh.key, &instance_idx,
+                                  olh.delete_marker && olh.key.instance.empty());
+    auto i = instances.find(instance_idx);
+    if (i != instances.end() && i->second.versioned_epoch > 0) {
+      get_list_index_key(i->second, &current_idx);
+      current_known = true;
+    } else if (i == instances.end()) {
+      auto match = std::find_if(list_entries.begin(), list_entries.end(),
+                                [&] (const auto& l) {
+          return is_olh_version(l.second) && l.second.versioned_epoch == olh.epoch;
+        });
+      if (match != list_entries.end()) {
+        result->restored_instance = true;
+        current_idx = match->first;
+        current_known = true;
+        rgw_bucket_dir_entry& restored = instances[instance_idx];
+        restored = match->second;
+        set_current(restored, true);
+        instance_of[current_idx] = instance_idx;
+        if (fix) {
+          CLS_LOG(1, "%s: restoring instance entry idx=%s from list entry idx=%s",
+                  __func__, escape_str(instance_idx).c_str(),
+                  escape_str(current_idx).c_str());
+          ret = write_entry(hctx, restored, instance_idx, header);
+          if (ret < 0) {
+            return ret;
+          }
+        }
+      } else {
+        result->unresolved = true;
+      }
+    } else {
+      result->unresolved = true; // instance entry exists but was never linked
+    }
+    if (result->unresolved) {
+      CLS_LOG(1, "WARNING: %s: cannot identify the list entry of olh key=%s, "
+              "leaving its list entries and the CURRENT flags alone", __func__,
+              olh.key.to_string().c_str());
+    }
+  }
+
+  for (auto& [list_idx, list_entry] : list_entries) {
+    auto i = instance_of.find(list_idx);
+    if (i == instance_of.end()) {
+      if (result->unresolved && is_olh_version(list_entry)) {
+        continue; // may be the real current version
+      }
+      result->orphaned.push_back(list_idx);
+      if (fix) {
+        CLS_LOG(1, "%s: removing orphaned list entry idx=%s", __func__,
+                escape_str(list_idx).c_str());
+        ret = remove_entry(hctx, list_idx, list_entry.key, header);
+        if (ret < 0) {
+          return ret;
+        }
+      }
+      continue;
+    }
+    if (!current_known) {
+      continue;
+    }
+    const bool want_current = (list_idx == current_idx);
+    rgw_bucket_dir_entry& instance = instances[i->second];
+    if (is_current(list_entry) == want_current &&
+        is_current(instance) == want_current) {
+      continue;
+    }
+    result->wrong_current.push_back(list_idx);
+    if (fix) {
+      CLS_LOG(1, "%s: setting CURRENT=%d on list entry idx=%s", __func__,
+              (int)want_current, escape_str(list_idx).c_str());
+      set_current(list_entry, want_current);
+      ret = write_entry(hctx, list_entry, list_idx, header);
+      if (ret < 0) {
+        return ret;
+      }
+      set_current(instance, want_current);
+      ret = write_entry(hctx, instance, i->second, header);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+  }
+
+  if (olh.exists &&
+      (!plain_found || plain.flags != rgw_bucket_dir_entry::FLAG_VER_MARKER)) {
+    result->bad_version_marker = true;
+    if (fix) {
+      CLS_LOG(1, "%s: restoring version marker of key=%s", __func__,
+              escape_str(name).c_str());
+      ret = write_version_marker(hctx, key, header);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+  }
+  return 0;
+}
+
+static int rgw_bucket_check_olh_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(10, "entered %s", __func__);
+
+  rgw_cls_check_olh_list_op op;
+  auto iter = in->cbegin();
+  try {
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: %s: failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
+    return rc;
+  }
+
+  rgw_cls_check_olh_list_ret result;
+  rc = check_olh_list(hctx, op.key.name, false, header, &result);
+  if (rc < 0) {
+    return rc;
+  }
+  encode(result, *out);
+  return 0;
+}
+
+static int rgw_bucket_fix_olh_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(10, "entered %s", __func__);
+
+  rgw_cls_check_olh_list_op op;
+  auto iter = in->cbegin();
+  try {
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: %s: failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
+    return rc;
+  }
+
+  rc = guard_bucket_resharding(hctx, header);
+  if (rc < 0) {
+    return rc;
+  }
+
+  rgw_cls_check_olh_list_ret result;
+  rc = check_olh_list(hctx, op.key.name, true, header, &result);
+  if (rc < 0) {
+    return rc;
+  }
+  if (result.busy) {
+    return -EBUSY;
+  }
+  if (!result.needs_fix()) {
+    return 0;
+  }
+  return write_bucket_header(hctx, &header); /* updates header version */
+}
+
 static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -5392,6 +5707,8 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_bucket_trim_olh_log;
   cls_method_handle_t h_rgw_bucket_clear_olh;
   cls_method_handle_t h_rgw_bucket_refresh_instance;
+  cls_method_handle_t h_rgw_bucket_check_olh_list;
+  cls_method_handle_t h_rgw_bucket_fix_olh_list;
   cls_method_handle_t h_rgw_obj_remove;
   cls_method_handle_t h_rgw_obj_store_pg_ver;
   cls_method_handle_t h_rgw_obj_check_attrs_prefix;
@@ -5456,6 +5773,8 @@ CLS_INIT(rgw)
   cls.register_cxx_method(bucket_trim_olh_log, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
   cls.register_cxx_method(bucket_clear_olh, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
   cls.register_cxx_method(bucket_refresh_instance, rgw_bucket_refresh_instance, &h_rgw_bucket_refresh_instance);
+  cls.register_cxx_method(bucket_check_olh_list, rgw_bucket_check_olh_list, &h_rgw_bucket_check_olh_list);
+  cls.register_cxx_method(bucket_fix_olh_list, rgw_bucket_fix_olh_list, &h_rgw_bucket_fix_olh_list);
 
   // Object
   cls.register_cxx_method(obj_remove, rgw_obj_remove, &h_rgw_obj_remove);
