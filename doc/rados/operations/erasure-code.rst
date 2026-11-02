@@ -291,7 +291,7 @@ and when performing cluster recovery or backfill.
 Below is a table showing the overhead factors for various values of ``k`` and ``m``.
 As ``k`` increases above ``4``, the incremental space amplification gain
 experiences diminishing returns but the performance impact grows proportionally.
-We recommend that you do not choose a profile with ``k`` > ``4` or ``m`` > 2 unless
+We recommend that you do not choose a profile with ``k`` > ``4`` or ``m`` > ``2`` unless
 and until you fully understand the ramifications, including the number of
 failure domains your cluster topology presents.  If  you choose ``m=1``,
 expect data unavailability during maintenance and data loss when component
