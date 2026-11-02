@@ -284,8 +284,8 @@ public:
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
       get_attr_errorator>;
-  /// EC pools read xattrs from attr_cache, replicated pools from the store
-  get_attr_ierrorator::future<ceph::bufferlist> get_xattr_maybe_from_cache(
+  /// xattr reads of an obc use its attr_cache, not the store
+  get_attr_ierrorator::future<ceph::bufferlist> get_xattr_from_cache(
     const ObjectState& os,
     const ObjectContext::attr_cache_t& attr_cache,
     std::string&& name) const;

@@ -1193,17 +1193,13 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
 }
 
 PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
-PGBackend::get_xattr_maybe_from_cache(
+PGBackend::get_xattr_from_cache(
   const ObjectState& os,
   const ObjectContext::attr_cache_t& attr_cache,
   std::string&& name) const
 {
-  if (!is_erasure()) {
-    logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
-    return getxattr(os.oi.soid, std::move(name));
-  }
   if (!os.exists) {
-    logger().debug("getxattr: object {} does not exist (erasure)", os.oi.soid);
+    logger().debug("getxattr: object {} does not exist", os.oi.soid);
     return crimson::ct_error::enoent::make();
   }
   if (auto cache_it = attr_cache.find(name); cache_it != std::end(attr_cache)) {
@@ -1227,7 +1223,7 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
   }
-  return get_xattr_maybe_from_cache(
+  return get_xattr_from_cache(
     os, attr_cache, std::move(name)
   ).safe_then_interruptible(
     [&delta_stats, &osd_op] (ceph::bufferlist&& val) {
@@ -1245,31 +1241,22 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  auto get_attrs_maybe_from_cache =
-    [&] () {
-    if (!is_erasure()) {
-      logger().debug("getxattrx on obj={} goes into objstore", os.oi.soid);
-      return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
-        store, coll, ghobject_t{os.oi.soid}, 0);
+  if (!os.exists) {
+    logger().debug("getxattrs: object {} does not exist", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
+  std::vector<std::pair<std::string, bufferlist>> user_xattrs;
+  uint64_t total_len = 0;
+  for (const auto& [key, val] : attr_cache) {
+    if (key.size() > 1 && key[0] == '_') {
+      total_len += val.length();
+      user_xattrs.emplace_back(key.substr(1), val);
     }
-    return crimson::os::FuturizedStore::Shard::get_attrs_ertr::make_ready_future<
-      crimson::os::FuturizedStore::Shard::attrs_t>(attr_cache);
-  };
-  return get_attrs_maybe_from_cache().safe_then(
-    [&delta_stats, &osd_op](auto&& attrs) {
-    std::vector<std::pair<std::string, bufferlist>> user_xattrs;
-    uint64_t total_len = 0;
-    for (auto& [key, val] : attrs) {
-      if (key.size() > 1 && key[0] == '_') {
-	total_len += val.length();
-	user_xattrs.emplace_back(key.substr(1), std::move(val));
-      }
-    }
-    ceph::encode(user_xattrs, osd_op.outdata);
-    delta_stats.num_rd++;
-    delta_stats.num_rd_kb += shift_round_up(total_len, 10);
-    return get_attr_errorator::now();
-  });
+  }
+  ceph::encode(user_xattrs, osd_op.outdata);
+  delta_stats.num_rd++;
+  delta_stats.num_rd_kb += shift_round_up(total_len, 10);
+  return get_attr_ierrorator::now();
 }
 
 namespace {
@@ -1325,7 +1312,7 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
   bp.copy(osd_op.op.xattr.name_len, name);
  
   logger().debug("cmpxattr on obj={} for attr={}", os.oi.soid, name);
-  return get_xattr_maybe_from_cache(
+  return get_xattr_from_cache(
     os, attr_cache, std::move(name)
   ).safe_then_interruptible(
     [&delta_stats, &osd_op] (auto &&xattr) -> cmp_xattr_ierrorator::future<> {
