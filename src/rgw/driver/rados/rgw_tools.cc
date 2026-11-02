@@ -69,7 +69,7 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
       int p = g_conf().get_val<uint64_t>("rgw_rados_pool_recovery_priority");
       r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
-	pool.name + "\", \"var\": \"recovery_priority\": \"" +
+	pool.name + "\", \"var\": \"recovery_priority\", \"val\": \"" +
 	stringify(p) + "\"}",
 	{}, NULL, NULL);
       if (r < 0) {
