@@ -841,7 +841,7 @@ class TestStretchCluster(MgrTestCase):
         # There is a case where one OSD holds multiple shards, so some PGs still have acting
         # above min size
         self._fail_over_one_osd_from_dc(dc='dc2')
-        self.wait_until_true_and_hold(lambda: self._pg_partial_active(),
+        self.wait_until_true_and_hold(lambda: not self._pg_all_active(),
                                       timeout=self.RECOVERY_PERIOD,
                                       success_hold_time=self.SUCCESS_HOLD_TIME)
 
