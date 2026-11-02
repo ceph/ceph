@@ -1439,6 +1439,10 @@ protected:
   boost::optional<ceph::real_time> delete_at;
   std::optional<rgw::cksum::Cksum> cksum;
 
+  //object lock
+  std::optional<RGWObjectRetention> obj_retention;
+  std::optional<RGWObjectLegalHold> obj_legal_hold;
+
   /* Must be called after get_data() or the result is undefined. */
   virtual std::string get_current_filename() const = 0;
   virtual std::string get_current_content_type() const = 0;
