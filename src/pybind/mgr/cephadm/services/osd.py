@@ -1129,6 +1129,8 @@ class OSDRemovalQueue(object):
     def cleanup(self) -> None:
         # OSDs can always be cleaned up manually. This ensures that we run on existing OSDs
         with self.lock:
+            if not self.osds:
+                return
             for osd in self._not_in_cluster():
                 self.osds.remove(osd)
 
