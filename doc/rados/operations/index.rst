@@ -21,6 +21,7 @@ monitoring an operating cluster.
 	monitoring-osd-pg
 	user-management
         pgcalc/index
+        fdcalc/index
 
 .. raw:: html
 
