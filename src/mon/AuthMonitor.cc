@@ -309,6 +309,7 @@ void AuthMonitor::create_initial()
 
   // initialize rotating keys
   mon.clear_secrets();
+  entity_health_ver.reset();
   check_rotate();
   ceph_assert(pending_auth.size() == 1);
 
@@ -343,6 +344,8 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
   ceph_assert(version > keys_ver);
 
   version_t latest_full = get_version_latest_full();
+  bool health_incremental = entity_health_ver == keys_ver;
+  std::set<EntityName> changed;
 
   dout(10) << __func__ << " version " << version << " keys ver " << keys_ver
            << " latest " << latest_full << dendl;
@@ -361,6 +364,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
     decode(mon, p);
     mon.set_ver(latest_full);
     keys_ver = latest_full;
+    health_incremental = false;
   }
 
   dout(10) << __func__ << " key server version " << mon.get_ver() << dendl;
@@ -375,8 +379,10 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
     // reset if we are moving to initial state.  we will normally have
     // keys in here temporarily for bootstrapping that we need to
     // clear out.
-    if (keys_ver == 0)
+    if (keys_ver == 0) {
       mon.clear_secrets();
+      health_incremental = false;
+    }
 
     dout(20) << __func__ << " walking through version " << (keys_ver+1)
              << " len " << bl.length() << dendl;
@@ -398,6 +404,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
           auto iter = inc.auth_data.cbegin();
           decode(auth_inc, iter);
           mon.apply_data_incremental(auth_inc);
+          changed.insert(auth_inc.name);
           break;
         }
       }
@@ -411,6 +418,12 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
       t->erase("mkfs", "keyring");
       mon.store->apply_transaction(t);
     }
+  }
+
+  if (health_incremental) {
+    refresh_entity_health(changed);
+  } else {
+    entity_health_ver.reset();
   }
 
   {
@@ -481,6 +494,44 @@ void AuthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   check_health();
 }
 
+std::optional<AuthMonitor::entity_health_t>
+AuthMonitor::get_entity_health(const EntityName& entity, const EntityAuth& auth)
+{
+  entity_health_t h;
+  for (auto& [type, caps] : auth.caps) {
+    ostringstream ss;
+    if (!valid_caps(type, caps, &ss)) {
+      ostringstream ss2;
+      ss2 << entity << " " << ss.str();
+      h.bad_caps.push_back(ss2.str());
+    }
+  }
+  if (!CryptoManager::get_secure_key_types().contains(auth.key.get_type())) {
+    std::ostringstream ss;
+    ss << "entity " << entity << " using insecure key type: "
+       << CryptoManager::get_key_type_name(auth.key.get_type());
+    h.insecure_key = ss.str();
+  }
+  if (h.bad_caps.empty() && h.insecure_key.empty()) {
+    return std::nullopt;
+  }
+  return h;
+}
+
+void AuthMonitor::refresh_entity_health(const std::set<EntityName>& changed)
+{
+  auto const& secrets = mon.get_secrets();
+  for (auto& entity : changed) {
+    entity_health.erase(entity);
+    if (auto p = secrets.find(entity); p != secrets.end()) {
+      if (auto h = get_entity_health(entity, p->second); h) {
+        entity_health.emplace(entity, std::move(*h));
+      }
+    }
+  }
+  entity_health_ver = mon.get_ver();
+}
+
 bool AuthMonitor::check_health()
 {
   auto& next = get_health_checks_pending_writeable();
@@ -526,89 +577,94 @@ bool AuthMonitor::check_health()
     }
   }
 
-  std::map<std::string,std::list<std::string>> bad_caps_detail;  // entity -> details
-  std::map<EntityName, std::string> bad_key_client_detail;
-  std::map<EntityName, std::string> bad_key_service_detail;
-  for (auto const& [entity, auth] : mon.get_secrets()) {
-    for (auto& p : auth.caps) {
-      ostringstream ss;
-      if (!valid_caps(p.first, p.second, &ss)) {
-	ostringstream ss2;
-	ss2 << entity << " " << ss.str();
-	bad_caps_detail[entity.to_str()].push_back(ss2.str());
+  const auto validate_all_caps = g_conf().get_val<bool>("mon_auth_validate_all_caps");
+  if (entity_health_ver != mon.get_ver() ||
+      entity_health_validate_all_caps != validate_all_caps) {
+    entity_health.clear();
+    for (auto const& [entity, auth] : mon.get_secrets()) {
+      if (auto h = get_entity_health(entity, auth); h) {
+        entity_health.emplace(entity, std::move(*h));
       }
     }
-    if (!secure_key_types.contains(auth.key.get_type())) {
-      auto name = CryptoManager::get_key_type_name(auth.key.get_type());
-      std::ostringstream ss;
-      ss << "entity " << entity << " using insecure key type: " << name;
-      if (entity.is_client()) {
-        bad_key_client_detail[entity] = ss.str();
-      } else {
-        bad_key_service_detail[entity] = ss.str();
-      }
-    }
+    entity_health_ver = mon.get_ver();
+    entity_health_validate_all_caps = validate_all_caps;
   }
 
+  // pending incrementals override the committed verdicts of their entities
+  std::map<EntityName, std::optional<entity_health_t>> pending_health;
   for (auto& inc : pending_auth) {
     if (inc.inc_type == AUTH_DATA) {
       KeyServerData::Incremental auth_inc;
       auto iter = inc.auth_data.cbegin();
       decode(auth_inc, iter);
-      auto& auth = auth_inc.auth;
-      auto& entity = auth_inc.name;
       if (auth_inc.op == KeyServerData::AUTH_INC_DEL) {
-	bad_caps_detail.erase(entity.to_str());
-        bad_key_client_detail.erase(entity);
-        bad_key_service_detail.erase(entity);
+        pending_health[auth_inc.name].reset();
       } else if (auth_inc.op == KeyServerData::AUTH_INC_ADD) {
-	for (auto& p : auth.caps) {
-	  ostringstream ss;
-	  if (!valid_caps(p.first, p.second, &ss)) {
-	    ostringstream ss2;
-	    ss2 << entity << " " << ss.str();
-	    bad_caps_detail[entity.to_str()].push_back(ss2.str());
-	  }
-	}
-        if (!secure_key_types.contains(auth.key.get_type())) {
-          auto name = CryptoManager::get_key_type_name(auth.key.get_type());
-          std::ostringstream ss;
-          ss << "entity " << entity << " using insecure key type: " << name;
-          if (entity.is_client()) {
-            bad_key_client_detail[entity] = ss.str();
-          } else {
-            bad_key_service_detail[entity] = ss.str();
-          }
-        }
+        pending_health[auth_inc.name] = get_entity_health(auth_inc.name, auth_inc.auth);
       }
     }
   }
-  if (bad_caps_detail.size()) {
-    ostringstream ss;
-    ss << bad_caps_detail.size() << " auth entities have invalid capabilities";
-    health_check_t *check = &next.add("AUTH_BAD_CAPS", HEALTH_ERR, ss.str(),
-				      bad_caps_detail.size());
-    for (auto& i : bad_caps_detail) {
-      for (auto& j : i.second) {
-	check->detail.push_back(j);
+
+  struct report_t {
+    uint64_t max;
+    uint64_t count = 0;
+    std::list<std::string> detail;
+    void add(const std::list<std::string>& lines) {
+      if (count++ < max) {
+        detail.insert(detail.end(), lines.begin(), lines.end());
       }
     }
-  }
-  if (!bad_key_client_detail.empty()) {
-    std::ostringstream summary;
-    summary << bad_key_client_detail.size() << " auth client entities with insecure key types";
-    auto& check = next.add("AUTH_INSECURE_CLIENT_KEY_TYPE", HEALTH_WARN, summary.str(), bad_key_client_detail.size());
-    for (auto& [name, detail] : bad_key_client_detail) {
-      check.detail.push_back(detail);
+  };
+  const auto max = g_conf().get_val<uint64_t>("mon_health_max_detail");
+  report_t bad_caps{max}, bad_key_client{max}, bad_key_service{max};
+  auto report = [&](const EntityName& entity, const entity_health_t& h) {
+    if (!h.bad_caps.empty()) {
+      bad_caps.add(h.bad_caps);
     }
-  }
-  if (!bad_key_service_detail.empty()) {
-    std::ostringstream summary;
-    summary << bad_key_service_detail.size() << " auth service entities with insecure key types";
-    auto& check = next.add("AUTH_INSECURE_SERVICE_KEY_TYPE", HEALTH_ERR, summary.str(), bad_key_service_detail.size());
-    for (auto& [name, detail] : bad_key_service_detail) {
-      check.detail.push_back(detail);
+    if (!h.insecure_key.empty()) {
+      (entity.is_client() ? bad_key_client : bad_key_service).add({h.insecure_key});
     }
+  };
+  // both are sorted by entity: report in that order
+  auto c = entity_health.cbegin();
+  auto p = pending_health.cbegin();
+  while (c != entity_health.cend() || p != pending_health.cend()) {
+    if (p == pending_health.cend() ||
+        (c != entity_health.cend() && c->first < p->first)) {
+      report(c->first, c->second);
+      ++c;
+      continue;
+    }
+    if (c != entity_health.cend() && c->first == p->first) {
+      ++c;
+    }
+    if (p->second) {
+      report(p->first, *p->second);
+    }
+    ++p;
+  }
+  auto add_check = [&](const char* code, health_status_t severity,
+                       const std::string& summary, report_t& r) {
+    auto& check = next.add(code, severity, summary, r.count);
+    check.detail = std::move(r.detail);
+    if (r.count > r.max) {
+      check.detail.push_back(std::to_string(r.count - r.max) + " more entities...");
+    }
+  };
+  if (bad_caps.count) {
+    add_check("AUTH_BAD_CAPS", HEALTH_ERR,
+              std::to_string(bad_caps.count) + " auth entities have invalid capabilities",
+              bad_caps);
+  }
+  if (bad_key_client.count) {
+    add_check("AUTH_INSECURE_CLIENT_KEY_TYPE", HEALTH_WARN,
+              std::to_string(bad_key_client.count) + " auth client entities with insecure key types",
+              bad_key_client);
+  }
+  if (bad_key_service.count) {
+    add_check("AUTH_INSECURE_SERVICE_KEY_TYPE", HEALTH_ERR,
+              std::to_string(bad_key_service.count) + " auth service entities with insecure key types",
+              bad_key_service);
   }
 
   std::vector<std::string> bad_rotating_service_keys;
