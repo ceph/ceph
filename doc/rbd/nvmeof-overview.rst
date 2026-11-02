@@ -4,9 +4,9 @@
  Ceph NVMe-oF Gateway
 ======================
 
-Storage administrators can install and configure an NVMe over Fabrics (NVMe-oF) gateways for a Storage Ceph cluster. With Ceph NVMe-oF gateways, you can effectively run a fully integrated block storage infrastructure with all features and benefits of a conventional Storage Area Network (SAN).
+Storage administrators can install and configure NVMe over Fabrics (NVMe-oF) gateways for a Ceph cluster. With Ceph NVMe-oF gateways, you can effectively run a fully integrated block storage infrastructure with all features and benefits of a conventional Storage Area Network (SAN).
 
-The NVMe-oF gateway integrates Storage Ceph with the NVMe over TCP (NVMe/TCP) protocol to provide an NVMe/TCP target that exports RADOS Block Device (RBD) images. The NVMe/TCP protocol allows clients, which are known as initiators, to send NVMe-oF commands to storage devices, which are known as targets, over an Internet Protocol network. Initiators can be Linux clients, VMWare clients, or both. For VMWare clients, the NVMe/TCP volumes are shown as VMFS Datastore and for Linux clients, the NVMe/TCP volumes are shown as block devices.
+The NVMe-oF gateway integrates Ceph with the NVMe over TCP (NVMe/TCP) protocol to provide an NVMe/TCP target that exports RADOS Block Device (RBD) images. The NVMe/TCP protocol allows clients, which are known as initiators, to send NVMe-oF commands to storage devices, which are known as targets, over an Internet Protocol network. Initiators can be Linux clients, VMware clients, or both. For VMware clients, the NVMe/TCP volumes are shown as VMFS Datastore and for Linux clients, the NVMe/TCP volumes are shown as block devices.
 
 .. ditaa::
                   Cluster Network (optional)
@@ -47,9 +47,9 @@ It is important to create redundancy between the host and the gateways. To creat
 
 The HA feature uses the Active/Standby approach for each namespace. Using Active/Standby means that at any point in time, only one of the NVMe-oF gateways in the group serve I/O from the host to a specific namespace. To properly use all NVMe-oF gateways, each namespace is assigned to a different load-balancing group. The number of load-balancing groups is equal to the number of NVMe-oF gateways in the gateway group.
 
-In case the one or more GWs in the group dies or cannot be seen by the Ceph NVMe-oF monitor, an automatic failover is triggered, and another GW in the group will assume reponsibilty to the load-balancing group of the failed GW(s). That means that there is no disruption to the I/O, because another GW will continue serving these namespaces. If the failing GW(s) are showing up again, a failback is automatically triggered.
+In case the one or more GWs in the group dies or cannot be seen by the Ceph NVMe-oF monitor, an automatic failover is triggered, and another GW in the group will assume responsibility to the load-balancing group of the failed GW(s). That means that there is no disruption to the I/O, because another GW will continue serving these namespaces. If the failing GW(s) are showing up again, a failback is automatically triggered.
 
-The NVMe-oF initoator on the host, will also continue trying to connect a failing GW, for the amount of time that was specified in the connect-all command. The recommended amount is 1800 seconds.
+The NVMe-oF initiator on the host, will also continue trying to connect a failing GW, for the amount of time that was specified in the connect-all command. The recommended amount is 1800 seconds.
 
 ================================
 Scaling-out with NVMe-oF gateway
@@ -59,18 +59,18 @@ The NVMe-oF gateway supports scale-out. NVMe-oF gateway scale-out supports:
 Up to four NVMe-oF gateway groups.
 Up to eight NVMe-oF gateways in a gateway group.
 Up to 128 NVMe-oF subsystems within a gateway group.
-Up to 32 hosts per NVMe-oF subsystem.
-1024 namespaces per gateway group.
+Up to 128 hosts per NVMe-oF subsystem.
+4096 namespaces per gateway group.
 
 =========================
 NVMe-oF gateway Discovery
 =========================
 
-Ceph NVMe-oF gateways support Discovery. Each NVMe-oF gateway that runs in the Ceph cluster also runs a Discovery Controller. The Discovery Controller reports all of the Subsystems in the GW group.
+Ceph NVMe-oF gateways support Discovery. Each NVMe-oF gateway that runs in the Ceph cluster also runs a Discovery Controller. The Discovery Controller reports all of the Subsystems in the GW group that the host is allowed to access.
 
 .. toctree::
   :maxdepth: 1
 
   Requirements <nvmeof-requirements>
-  Configuring the NVME-oF Target <nvmeof-target-configure>
+  Configuring the NVMe-oF Target <nvmeof-target-configure>
   Configuring the NVMe-oF Initiators <nvmeof-initiators>
