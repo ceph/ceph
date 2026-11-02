@@ -3,7 +3,7 @@ import json
 import pytest
 import random
 import sqlite3
-from ...fs.schedule import Schedule, parse_retention
+from ...fs.schedule import Schedule, parse_retention, SNAP_DB_TS_FORMAT
 
 SELECT_ALL = ('select * from schedules s'
               ' INNER JOIN schedules_meta sm'
@@ -145,7 +145,103 @@ class TestSchedule(object):
         assert_updated(Schedule._from_db_row(after, simple_schedule.fs),
                        simple_schedule)
 
-    # TODO test get_schedules and list_schedules
+    def test_get_db_schedules_all_for_path(self, db, simple_schedules):
+        for s in simple_schedules:
+            s.store_schedule(db)
+        schedules = Schedule.get_db_schedules('/foo', db, 'fs_name')
+        assert len(schedules) == 2
+        assert {s.schedule for s in schedules} == {'6h', '24h'}
+        assert all(s.path == '/foo' for s in schedules)
+        assert all(s.fs == 'fs_name' for s in schedules)
+
+    def test_get_db_schedules_filter_schedule(self, db, simple_schedules):
+        for s in simple_schedules:
+            s.store_schedule(db)
+        schedules = Schedule.get_db_schedules('/foo', db, 'fs_name', schedule='6h')
+        assert len(schedules) == 1
+        assert schedules[0].schedule == '6h'
+        assert schedules[0].path == '/foo'
+
+        schedules_none = Schedule.get_db_schedules('/foo', db, 'fs_name', schedule='12h')
+        assert schedules_none == []
+
+    def test_get_db_schedules_filter_repeat(self, db, simple_schedules):
+        for s in simple_schedules:
+            s.store_schedule(db)
+        # 6h in seconds is 6 * 3600 = 21600
+        schedules = Schedule.get_db_schedules('/foo', db, 'fs_name', repeat=21600)
+        assert len(schedules) == 1
+        assert schedules[0].schedule == '6h'
+
+        # 24h in seconds is 24 * 3600 = 86400
+        schedules_24h = Schedule.get_db_schedules('/foo', db, 'fs_name', repeat=86400)
+        assert len(schedules_24h) == 1
+        assert schedules_24h[0].schedule == '24h'
+
+    def test_get_db_schedules_filter_start(self, db, simple_schedules):
+        for s in simple_schedules:
+            s.store_schedule(db)
+        target_sched = simple_schedules[2]  # '/bar'
+        start_str = target_sched.start.strftime(SNAP_DB_TS_FORMAT)
+        schedules = Schedule.get_db_schedules('/bar', db, 'fs_name', start=start_str)
+        assert len(schedules) == 1
+        assert schedules[0].path == '/bar'
+        assert schedules[0].schedule == '1d'
+
+        schedules_none = Schedule.get_db_schedules('/bar', db, 'fs_name', start='1970-01-01T00:00:00')
+        assert schedules_none == []
+
+    def test_get_db_schedules_not_found(self, db, simple_schedules):
+        for s in simple_schedules:
+            s.store_schedule(db)
+        schedules = Schedule.get_db_schedules('/nonexistent', db, 'fs_name')
+        assert schedules == []
+
+    def test_list_schedules_exact_match(self, db, simple_schedules):
+        for s in simple_schedules:
+            s.store_schedule(db)
+        schedules = Schedule.list_schedules('/foo', db, 'fs_name', recursive=False)
+        assert len(schedules) == 2
+        assert {s.schedule for s in schedules} == {'6h', '24h'}
+
+        schedules_bar = Schedule.list_schedules('/bar', db, 'fs_name', recursive=False)
+        assert len(schedules_bar) == 1
+        assert schedules_bar[0].path == '/bar'
+
+        schedules_none = Schedule.list_schedules('/nonexistent', db, 'fs_name', recursive=False)
+        assert schedules_none == []
+
+    def test_list_schedules_recursive(self, db):
+        tree_schedules = [
+            Schedule('/dir1', '1h', 'fs_name', '/dir1'),
+            Schedule('/dir1/sub1', '2h', 'fs_name', '/dir1/sub1'),
+            Schedule('/dir1/sub1/sub2', '3h', 'fs_name', '/dir1/sub1/sub2'),
+            Schedule('/dir2', '4h', 'fs_name', '/dir2'),
+        ]
+        for s in tree_schedules:
+            s.store_schedule(db)
+
+        # Non-recursive on /dir1 matches only /dir1
+        schedules_flat = Schedule.list_schedules('/dir1', db, 'fs_name', recursive=False)
+        assert len(schedules_flat) == 1
+        assert schedules_flat[0].path == '/dir1'
+
+        # Recursive on /dir1 matches /dir1 and all subpaths
+        schedules_rec = Schedule.list_schedules('/dir1', db, 'fs_name', recursive=True)
+        assert len(schedules_rec) == 3
+        assert {s.path for s in schedules_rec} == {'/dir1', '/dir1/sub1', '/dir1/sub1/sub2'}
+
+        # Recursive on /dir1/sub1 matches only sub1 and sub2
+        schedules_sub = Schedule.list_schedules('/dir1/sub1', db, 'fs_name', recursive=True)
+        assert len(schedules_sub) == 2
+        assert {s.path for s in schedules_sub} == {'/dir1/sub1', '/dir1/sub1/sub2'}
+
+    def test_list_all_schedules(self, db, simple_schedules):
+        for s in simple_schedules:
+            s.store_schedule(db)
+        schedules = Schedule.list_all_schedules(db, 'fs_name')
+        assert len(schedules) == len(simple_schedules)
+        assert {s.path for s in schedules} == {'/foo', '/bar', '/fnord'}
 
 
 class TestScheduleDB(object):
