@@ -16,6 +16,7 @@
 #include "driver/dbstore/common/dbstore.h"
 #include "rgw_sal_d4n.h"
 #include "rgw_sal_filter.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 

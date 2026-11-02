@@ -16,6 +16,7 @@
 #include <boost/optional.hpp>
 
 #include "include/scope_guard.h"
+#include "include/ceph_hash.h"
 #include "include/function2.hpp"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/async/spawn_throttle.h"

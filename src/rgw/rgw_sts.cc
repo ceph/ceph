@@ -14,6 +14,7 @@
 #include "auth/Crypto.h"
 #include "include/ceph_fs.h"
 #include "common/iso_8601.h"
+#include "common/strtol.h"
 
 #include "include/types.h"
 #include "rgw_string.h"

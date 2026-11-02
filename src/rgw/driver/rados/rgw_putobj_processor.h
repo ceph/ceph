@@ -21,6 +21,7 @@
 #include "services/svc_tier_rados.h"
 #include "rgw_sal.h"
 #include "rgw_obj_manifest.h"
+#include "rgw_tools.h"
 
 namespace rgw {
 

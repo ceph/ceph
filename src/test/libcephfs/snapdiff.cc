@@ -22,6 +22,7 @@
 #include "include/utime.h"
 #include "common/Clock.h"
 #include "common/ceph_context.h"
+#include "common/cmdparse.h"
 #include "common/config_proxy.h"
 #include "common/JSONFormatter.h"
 #include "json_spirit/json_spirit.h"
