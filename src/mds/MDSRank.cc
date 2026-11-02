@@ -3883,7 +3883,8 @@ void MDSRank::create_logger()
     mdm_plb.add_u64(l_mdm_cap, "cap", "Capabilities");
     mdm_plb.add_u64_counter(l_mdm_capa, "cap+", "Capabilities added");
     mdm_plb.add_u64_counter(l_mdm_caps, "cap-", "Capabilities removed");
-    mdm_plb.add_u64(l_mdm_heap, "heap", "Heap size");
+    mdm_plb.add_u64(l_mdm_heap, "heap", "Heap size",
+                    nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
 
     mlogger = mdm_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(mlogger);

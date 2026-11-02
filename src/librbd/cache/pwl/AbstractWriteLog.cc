@@ -149,11 +149,13 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
   };
 
   plb.add_u64_counter(l_librbd_pwl_rd_req, "rd", "Reads");
-  plb.add_u64_counter(l_librbd_pwl_rd_bytes, "rd_bytes", "Data size in reads");
+  plb.add_u64_counter(l_librbd_pwl_rd_bytes, "rd_bytes", "Data size in reads",
+                      nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   plb.add_time_avg(l_librbd_pwl_rd_latency, "rd_latency", "Latency of reads");
 
   plb.add_u64_counter(l_librbd_pwl_rd_hit_req, "hit_rd", "Reads completely hitting PWL");
-  plb.add_u64_counter(l_librbd_pwl_rd_hit_bytes, "rd_hit_bytes", "Bytes read from PWL");
+  plb.add_u64_counter(l_librbd_pwl_rd_hit_bytes, "rd_hit_bytes", "Bytes read from PWL",
+                      nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   plb.add_time_avg(l_librbd_pwl_rd_hit_latency, "hit_rd_latency", "Latency of read hits");
 
   plb.add_u64_counter(l_librbd_pwl_rd_part_hit_req, "part_hit_rd", "reads partially hitting PWL");
@@ -164,13 +166,15 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
     "Histogram of syncpoint's logentry numbers vs bytes number");
 
   plb.add_u64_counter(l_librbd_pwl_wr_req, "wr", "Writes");
-  plb.add_u64_counter(l_librbd_pwl_wr_bytes, "wr_bytes", "Data size in writes");
+  plb.add_u64_counter(l_librbd_pwl_wr_bytes, "wr_bytes", "Data size in writes",
+                      nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   plb.add_u64_counter(l_librbd_pwl_wr_req_def, "wr_def", "Writes deferred for resources");
   plb.add_u64_counter(l_librbd_pwl_wr_req_overlap, "wr_overlap", "Writes overlapping with prior in-progress writes");
   plb.add_u64_counter(l_librbd_pwl_wr_req_queued, "wr_q_barrier", "Writes queued for prior barriers (aio_flush)");
 
   plb.add_u64_counter(l_librbd_pwl_log_ops, "log_ops", "Log appends");
-  plb.add_u64_avg(l_librbd_pwl_log_op_bytes, "log_op_bytes", "Average log append bytes");
+  plb.add_u64_avg(l_librbd_pwl_log_op_bytes, "log_op_bytes", "Average log append bytes",
+                  nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
 
   plb.add_time_avg(
     l_librbd_pwl_req_arr_to_all_t, "req_arr_to_all_t",
@@ -240,7 +244,8 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
     "Histogram of log append persist time (nanoseconds) (vs. op bytes)");
 
   plb.add_u64_counter(l_librbd_pwl_discard, "discard", "Discards");
-  plb.add_u64_counter(l_librbd_pwl_discard_bytes, "discard_bytes", "Bytes discarded");
+  plb.add_u64_counter(l_librbd_pwl_discard_bytes, "discard_bytes", "Bytes discarded",
+                      nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   plb.add_time_avg(l_librbd_pwl_discard_latency, "discard_lat", "Discard latency");
 
   plb.add_u64_counter(l_librbd_pwl_aio_flush, "aio_flush", "AIO flush (flush to PWL)");
@@ -248,11 +253,13 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
   plb.add_time_avg(l_librbd_pwl_aio_flush_latency, "aio_flush_lat", "AIO flush latency");
 
   plb.add_u64_counter(l_librbd_pwl_ws,"ws", "Write Sames");
-  plb.add_u64_counter(l_librbd_pwl_ws_bytes, "ws_bytes", "Write Same bytes to image");
+  plb.add_u64_counter(l_librbd_pwl_ws_bytes, "ws_bytes", "Write Same bytes to image",
+                      nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   plb.add_time_avg(l_librbd_pwl_ws_latency, "ws_lat", "Write Same latency");
 
   plb.add_u64_counter(l_librbd_pwl_cmp, "cmp", "Compare and Write requests");
-  plb.add_u64_counter(l_librbd_pwl_cmp_bytes, "cmp_bytes", "Compare and Write bytes compared/written");
+  plb.add_u64_counter(l_librbd_pwl_cmp_bytes, "cmp_bytes", "Compare and Write bytes compared/written",
+                      nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   plb.add_time_avg(l_librbd_pwl_cmp_latency, "cmp_lat", "Compare and Write latency");
   plb.add_u64_counter(l_librbd_pwl_cmp_fails, "cmp_fails", "Compare and Write compare fails");
 
