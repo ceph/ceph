@@ -99,6 +99,34 @@ TEST_F(TestKMSCacheReaperLifecycle, Async) {
   EXPECT_EQ(io.run(), 0);
 }
 
+// BUG: https://tracker.ceph.com/issues/81968 Cancellation emitted
+// between timer expiry and coroutine resume must still stop the
+// reaper
+TEST_F(TestKMSCacheReaperLifecycle, AsyncStopRace) {
+  boost::asio::io_context io;
+  auto work = boost::asio::make_work_guard(io);
+  std::vector<std::jthread> threads;
+  for (int i = 0; i < 4; ++i) {
+    threads.emplace_back([&] { io.run(); });
+  }
+  for (int i = 0; i < 200; ++i) {
+    auto strand = boost::asio::make_strand(io.get_executor());
+    auto* signal = new boost::asio::cancellation_signal;
+    auto done = make_ttl_reaper_async(
+        g_ceph_context, *cache, std::chrono::seconds(0), strand, *signal);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    boost::asio::dispatch(strand, [signal] {
+      signal->emit(boost::asio::cancellation_type::terminal);
+    });
+    if (done.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
+      io.stop();
+      FAIL() << "reaper ignored stop in iteration " << i;
+    }
+    delete signal;
+  }
+  work.reset();
+}
+
 class TestKMSCache : public ::testing::Test {
  protected:
   CephContext* cct = g_ceph_context;
