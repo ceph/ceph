@@ -39,8 +39,8 @@ package for your host architecture):
 
    sudo apt install qemu-system-x86 qemu-utils qemu-block-extra libvirt-daemon-system libvirt-clients
 
-On RHEL, CentOS Stream, Rocky Linux and other RPM-based distributions, run the
-following command:
+On RHEL, CentOS Stream, Rocky Linux and other Enterprise Linux (EL)
+distributions, run the following command:
 
 .. prompt:: bash $
 
