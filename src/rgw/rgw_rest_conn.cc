@@ -16,7 +16,9 @@ std::string make_connect_to(const std::string& host, uint16_t port,
                             const boost::asio::ip::address& addr)
 {
   const std::string port_str = std::to_string(port);
-  return host + ":" + port_str + ":" + addr.to_string() + ":" + port_str;
+  const std::string addr_str = addr.is_v6() ? "[" + addr.to_string() + "]"
+                                            : addr.to_string();
+  return host + ":" + port_str + ":" + addr_str + ":" + port_str;
 }
 
 void RGWRESTConn::resolve_endpoints() {

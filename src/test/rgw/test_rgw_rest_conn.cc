@@ -40,7 +40,6 @@ TEST(RGWRESTConn, make_connect_to_ipv4)
 TEST(RGWRESTConn, make_connect_to_ipv6)
 {
   // libcurl rejects an unbracketed IPv6 address in a CONNECT_TO entry
-  // (without the fix, the address is not enclosed in brackets)
   EXPECT_EQ("zone.example.com:8000:[2001:db8::1]:8000",
             make_connect_to("zone.example.com", 8000,
                             boost::asio::ip::make_address("2001:db8::1")));
