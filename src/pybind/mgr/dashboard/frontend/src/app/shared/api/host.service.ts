@@ -199,6 +199,24 @@ export class HostService extends ApiClient {
   }
 
   /**
+   * Sums host memory in raw bytes (sum-then-format). Skips hosts without
+   * usable memory_total_kb. Returns undefined when no host contributes.
+   */
+  getHostsTotalMemoryBytes(hosts: HostFactsCapacitySource[] = []): number | undefined {
+    let total = 0;
+    let hasMemory = false;
+    for (const host of hosts) {
+      const memoryBytes = this.getTotalMemoryBytes(host);
+      if (memoryBytes === undefined) {
+        continue;
+      }
+      total += memoryBytes;
+      hasMemory = true;
+    }
+    return hasMemory ? total : undefined;
+  }
+
+  /**
    * Returns raw capacity in bytes when both HDD and flash capacities are available.
    */
   getRawCapacityBytes(host?: HostFactsCapacitySource): number | undefined {

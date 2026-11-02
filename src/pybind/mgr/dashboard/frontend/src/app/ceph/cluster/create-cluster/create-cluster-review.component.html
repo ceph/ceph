@@ -68,7 +68,7 @@
             >
               Memory
             </td>
-            <td>{{ totalMemory | empty }}</td>
+            <td>{{ totalMemory | dimlessBinary: 2 | empty }}</td>
           </tr>
         </tbody>
       </table>
