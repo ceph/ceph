@@ -324,6 +324,7 @@
             @for (option of mirroringOptions; track option) {
               <cds-radio
                 [value]="option.value"
+                [checked]="rbdForm.controls['mirroringMode'].value === option.value"
                 [id]="option.value"
                 (change)="setExclusiveLock()"
                 [disabled]="shouldDisable(option.value)"
