@@ -252,6 +252,9 @@ unsupported combination of plugin and technique, such as CLAY, LRC, or
 SHEC, is blocked with an error message.
 
 The default stripe unit is 4K which works well for standard EC pools.
+A pool over two zones (``num_zones`` 2) is always optimized. Its stripe unit
+is 16K unless :confval:`osd_pool_erasure_code_stripe_unit` is set or its
+profile sets ``stripe_unit``.
 The stripe unit must be a multiple of 4 KiB for optimizations to be
 enabled; enabling the flag on a pool with any other stripe unit is
 rejected.

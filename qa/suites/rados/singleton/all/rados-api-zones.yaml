@@ -1,0 +1,44 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 6
+      size: 10 # GB
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(MON_DOWN\)
+      - slow request
+      - do not have an application enabled
+      - application not enabled
+    conf:
+      client:
+        debug ms: 1
+      mon:
+        mon warn on pool no app: false
+tasks:
+- install:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+- workunit:
+    clients:
+      client.0:
+        - rados/test_rados_api_zones.sh

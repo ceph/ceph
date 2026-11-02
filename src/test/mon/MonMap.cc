@@ -14,6 +14,7 @@
  */
 #include "mon/MonMap.h"
 #include "common/ceph_context.h"
+#include "include/ceph_features.h"
 #include "common/dns_resolve.h"
 #include "test/common/dns_messages.h"
 
@@ -239,4 +240,23 @@ TEST(MonMapBuildInitial, build_initial_mon_host_from_dns_fail) {
   MonMap monmap;
   int r = monmap.build_initial(cct.get(), false, std::cerr);
   ASSERT_EQ(r, -EINVAL);
+}
+
+// Test the stretch mode fields survive an encode and decode
+TEST(MonMapEncode, stretch_mode_round_trip) {
+  MonMap in;
+  in.strategy = MonMap::CONNECTIVITY;
+  in.stretch_mode_enabled = true;
+  in.tiebreaker_mon = "e";
+  in.disallowed_leaders = {"e"};
+  in.stretch_marked_down_mons = {"a", "b"};
+  ceph::buffer::list bl;
+  in.encode(bl, CEPH_FEATURES_ALL);
+  MonMap out;
+  out.decode(bl);
+  ASSERT_EQ(MonMap::CONNECTIVITY, out.strategy);
+  ASSERT_TRUE(out.stretch_mode_enabled);
+  ASSERT_EQ("e", out.tiebreaker_mon);
+  ASSERT_EQ(std::set<std::string>{"e"}, out.disallowed_leaders);
+  ASSERT_EQ((std::set<std::string>{"a", "b"}), out.stretch_marked_down_mons);
 }

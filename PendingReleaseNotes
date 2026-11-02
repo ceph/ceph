@@ -39,6 +39,88 @@
   be removed in the X release. People wanting to continue using
   Elasticsearch can populate it with bucket notifications. The
   upcoming S3 Inventory feature also covers some of the use case.
+
+* RADOS: Replicated and erasure-coded (FastEC) pools can be stretched over two
+  zones, one pool at a time, with ``ceph osd pool create <pool> --num_zones 2``
+  or ``ceph osd pool set <pool> num_zones 2``. Each zone holds a full copy of
+  the pool; an erasure-coded pool keeps a complete ``k+m`` stripe in each zone.
+  Most parameters of ``ceph osd pool create`` now have a configurable default,
+  managed with ``ceph osd pool default set`` and ``get``. See the stretch mode
+  and pools documentation for details.
+* RADOS: Upgrade and behavior changes for the above:
+  - Until ``require_osd_release`` is raised to this release (the commit),
+    every daemon treats every pool as earlier releases do, and the
+    upgrade needs no operator action to stay safe, also through a zone
+    outage. ``ceph osd pool create`` and librados clients such as RGW
+    create pools as earlier releases do, in stretch mode too;
+    ``ceph osd pool default set``, ``num_zones`` changes and creating a
+    pool with two zones are refused.
+  - From the commit on, OSDs of earlier releases can no longer connect
+    or boot, and the commit is refused while one is up unless
+    ``--yes-i-really-mean-it`` is given, which marks such OSDs down.
+  - ``ceph mon enable_stretch_mode`` now works through the per-pool
+    ``num_zones`` setting. It stretches every pool, FastEC erasure-coded
+    pools included, and sets the pool creation defaults so that new pools
+    are stretched, with 2 replicas in each zone. Its CRUSH rule argument is
+    optional: without it, each replicated pool gets a rule generated for it.
+    It fails if a legacy erasure-coded pool or an individual stretch pool
+    exists.
+    ``ceph mon disable_stretch_mode`` returns every stretched pool to one
+    zone, with 3 replicas for a replicated pool, and sets the pool creation
+    defaults to one zone and 3 replicas. Both commands write
+    ``osd_pool_default_size``, replacing any value set before. Stretch mode
+    is also entered when any pool gets ``num_zones`` 2, and left when the last
+    such pool goes, even if ``ceph mon enable_stretch_mode`` entered it;
+    leaving it clears the tiebreaker Monitor and the disallowed leaders. When the
+    upgrade is committed, a cluster already in stretch mode
+    gets stretched pool creation defaults, taken from ``mon_stretch_pool_size``
+    and its zone type, after which ``mon_stretch_pool_size`` and
+    ``mon_stretch_pool_min_size`` are no longer used.
+  - The commit gives each pool of stretch mode two zones and a ``min_size``
+    per zone: a pool with 2 copies in each zone and ``min_size`` 2 then shows
+    ``min_size`` 1, and one with ``min_size`` 3 shows 2. From then on
+    degraded stretch mode no longer lowers ``min_size``.
+  - Individual stretch pools (``ceph osd pool stretch set``) do not change.
+    They keep their earlier behavior, including ``min_size`` counted over all
+    zones, and are still the way to stretch a replicated pool over three or more
+    zones.
+    For a pool over two zones, ``num_zones`` is recommended instead. They
+    still cannot be combined with stretch mode, and
+    ``ceph mon enable_stretch_mode`` now fails while one exists, also before
+    the upgrade is committed, where earlier releases took the pool over.
+  - An erasure code profile is deleted with the last pool that uses it, and a
+    pool created without a named profile gets a profile of its own (for
+    example ``mypool-k2-m2``) instead of ``default``. Scripts that reuse a
+    profile after deleting its pools must set it again.
+  - ``ceph osd erasure-code-profile set`` changes a profile that no pool
+    uses without ``--force``. Changing a profile that a pool uses needs
+    ``--yes-i-really-mean-it``, and ``--force`` is needed only for a
+    ``stripe_unit`` that is not a multiple of 4096 bytes.
+  - ``ceph osd pool create`` refuses an erasure code profile whose
+    ``stripe_unit`` is not a multiple of 4096 bytes unless
+    ``--yes-i-really-mean-it`` is given, and always for a pool over zones.
+  - A CRUSH rule is removed when the last pool that uses it is deleted or
+    moved to another rule, including a rule created by hand, unless it is
+    the default replicated rule. Scripts that reuse such a rule must create
+    it again. A rule that no pool has used yet is kept.
+  - ``osd_pool_default_size`` now counts the copies in each zone, the
+    ``replica`` of a new replicated pool: a pool over ``num_zones`` zones gets
+    ``num_zones`` times this many copies. It keeps its name for backward
+    compatibility, and for a pool of one zone nothing changes.
+    ``ceph osd pool create`` takes ``--replica``; ``--size`` still gives the
+    copies of a pool of one zone, and in stretch mode it still accepts a
+    multiple of the number of zones, such as the 4 that Rook passes, as that
+    many copies in all.
+  - ``ceph mon enable_stretch_mode``, ``ceph mon disable_stretch_mode`` and
+    ``ceph osd pool default set`` fail while a Monitor's ``ceph.conf``,
+    environment or command line sets a pool creation default that they write,
+    such as ``osd_pool_default_size``. Set it in the configuration database
+    (``ceph config set global``) instead. The upgrade commit of a cluster in
+    stretch mode converts only the ``global`` value of
+    ``osd_pool_default_size``: remove a value set in a Monitor's ``ceph.conf``
+    or in a ``mon``, ``mon.<id>`` or masked section of the configuration
+    database, or new pools get that many copies in each zone.
+
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 

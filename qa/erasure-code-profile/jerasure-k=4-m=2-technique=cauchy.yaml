@@ -1,6 +1,8 @@
-# Jerasure plugin with k=4, m=2, cauchy technique
+# Jerasure plugin with k=4, m=2, cauchy_good technique
 overrides:
   ceph:
+    log-ignorelist:
+      - \(DEPRECATED_EC_PLUGIN\)
     pool-config:
       ec_pool: true
       erasure_code_profile:

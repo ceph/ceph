@@ -33,13 +33,13 @@ Synopsis
 
 | **ceph** **mds** [ *compat* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *repaired* ] ...
 
-| **ceph** **mon** [ *add* \| *dump* \| *enable_stretch_mode* \| *getmap* \| *remove* \| *stat* ] ...
+| **ceph** **mon** [ *add* \| *disable_stretch_mode* \| *dump* \| *enable_stretch_mode* \| *getmap* \| *remove* \| *set* \| *set_location* \| *set_new_tiebreaker* \| *stat* ] ...
 
-| **ceph** **osd** [ *blocklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *ok-to-upgrade* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blocklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *ok-to-upgrade* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *force_healthy_stretch_mode* \| *force_recovery_stretch_mode* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
-| **ceph** **osd** **pool** [ *create* \| *delete* \| *get* \| *get-quota* \| *ls* \| *mksnap* \| *rename* \| *rmsnap* \| *set* \| *set-quota* \| *stats* ] ...
+| **ceph** **osd** **pool** [ *create* \| *default get* \| *default set* \| *delete* \| *get* \| *get-quota* \| *ls* \| *mksnap* \| *rename* \| *rmsnap* \| *set* \| *set-quota* \| *stats* \| *stretch set* \| *stretch show* \| *stretch unset* ] ...
 
 | **ceph** **osd** **pool** **application** [ *disable* \| *enable* \| *get* \| *rm* \| *set* ] ...
 
@@ -658,25 +658,65 @@ Usage::
     ceph mon getmap {<int[0-]>}
 
 Subcommand ``enable_stretch_mode`` enables stretch mode, changing the peering
-rules and failure handling on all pools. For a given PG to successfully peer
-and be marked active, ``min_size`` replicas will now need to be active under all
-(currently two) CRUSH buckets of type <dividing_bucket>.
+rules and failure handling on all pools. It sets every pool to two zones, as
+``ceph osd pool set <pool> num_zones 2`` does. A stretched pool's ``min_size``
+applies to each zone: for a given PG to successfully peer and be marked
+active, ``min_size`` OSDs will now need to be active in each of the two CRUSH
+buckets of type <dividing_bucket>. The command also sets the pool creation
+defaults ``osd_pool_default_num_zones`` to 2, ``osd_pool_default_size`` to 2
+and ``osd_pool_default_zone_failure_domain`` to <dividing_bucket>, so that new
+pools are stretched too. It fails, and changes nothing, if a legacy
+erasure-coded pool or an individual stretch pool (see ``osd pool stretch set``)
+exists. Until an upgrade is committed with ``ceph osd require-osd-release``, it
+behaves as in earlier releases, except that it fails while an individual
+stretch pool exists and the ``min_size`` that it gives each pool applies to
+each zone. On a cluster with no pools, it puts only the Monitors in stretch
+mode and sets the defaults; the OSDMap follows when the first pool with two
+zones is created. See "Stretch Clusters" in the Ceph documentation.
 
 <tiebreaker_mon> is the tiebreaker Monitor to use if a network split happens.
 This parameter is optional. If not supplied, the system will automatically
 select a Monitor that is not in either data zone. If there are multiple
 Monitors outside the data zones, automatic selection will fail and you must
-explicitly specify the tiebreaker Monitor.
+explicitly specify the tiebreaker Monitor. Because <tiebreaker_mon> is the
+first positional parameter, <new_crush_rule> and <dividing_bucket> must be
+given by name when it is not supplied.
 
 <dividing_bucket> is the bucket type across which to stretch.
 This will typically be ``datacenter`` or other CRUSH hierarchy bucket type that
 denotes physically or logically distant subdivisions.
 
-<new_crush_rule> will be set as CRUSH rule for all pools.
+<new_crush_rule> will be set as CRUSH rule for all replicated pools, which get
+two replicas in each zone. Once an upgrade is committed it is optional: without
+it, each replicated pool gets a CRUSH rule generated for it over
+<dividing_bucket>. Erasure-coded pools get CRUSH rules of their own.
+A pool that already has two zones is left unchanged, unless it is a replicated
+pool without two replicas in each zone.
 
 Usage::
 
-	ceph mon enable_stretch_mode {<tiebreaker_mon>} <new_crush_rule> <dividing_bucket>
+    ceph mon enable_stretch_mode {<tiebreaker_mon>} {<new_crush_rule>} <dividing_bucket>
+
+    ceph mon enable_stretch_mode {--new_crush_rule <new_crush_rule>}
+    --dividing_bucket <dividing_bucket>
+
+Subcommand ``disable_stretch_mode`` disables stretch mode. It sets every
+stretched pool to one zone, as ``ceph osd pool set <pool> num_zones 1`` does.
+Stretched replicated pools get three replicas and <crush_rule>, or the default
+CRUSH rule if <crush_rule> is not supplied. Erasure-coded pools get single-zone
+CRUSH rules of their own; this can make some of their PGs unavailable (see
+"Reducing the Number of Zones" in the Ceph documentation). The command also
+sets ``osd_pool_default_num_zones`` to 1 and ``osd_pool_default_size``, the
+replicas in each zone, to 3, replacing any earlier value, as
+``enable_stretch_mode`` does. Until an upgrade is committed with
+``ceph osd require-osd-release``, it behaves as in earlier releases. After
+that, stretch mode is also disabled when the last pool with more than one zone
+is deleted or set to one zone; this does not change the pool creation
+defaults.
+
+Usage::
+
+    ceph mon disable_stretch_mode {<crush_rule>} --yes-i-really-mean-it
 
 Subcommand ``remove`` removes Monitor named <name>.
 
@@ -699,6 +739,23 @@ Usage::
 Valid names include ``auth_service_cipher``, ``auth_allowed_ciphers``, and
 ``auth_preferred_cipher``. The meaning of these settings and the valid values
 are as described in :manpage:`monmaptool(8)`.
+
+Subcommand ``set_location`` sets the CRUSH location of Monitor <name> to
+<args>, given as <bucket-type>=<bucket-name> pairs, for example
+``datacenter=dc1``. Stretch mode uses the location of each Monitor.
+
+Usage::
+
+    ceph mon set_location <name> <args> [<args>...]
+
+Subcommand ``set_new_tiebreaker`` makes Monitor <name> the stretch mode
+tiebreaker. <name> must have a location (see ``set_location``) in a bucket of
+the stretch mode dividing bucket type that holds no other Monitor except the
+current tiebreaker. The previous tiebreaker Monitor is not removed.
+
+Usage::
+
+    ceph mon set_new_tiebreaker <name>
 
 
 mgr
@@ -935,11 +992,22 @@ Subcommand ``rule`` is used for creating CRUSH rules. It accepts the following a
 subcommands.
 
 Subcommand ``create-erasure`` creates CRUSH rule <name> for erasure-coded pool
-created with <profile> (default default).
+created with <profile> (default default). With <num_zones> (default 1) greater
+than 1, the rule places k+m shards in each of <num_zones> buckets of the
+profile's ``crush-zone-failure-domain`` type, or of
+``osd_pool_default_zone_failure_domain`` if the profile does not set one.
 
 Usage::
 
-    ceph osd crush rule create-erasure <name> {<profile>}
+    ceph osd crush rule create-erasure <name> {<profile>} {<num_zones>}
+
+Subcommand ``create-replicated`` creates CRUSH rule <name> for replicated pools
+to start from <root>, replicate across buckets of type <type>, and use only
+devices of class <class> if it is supplied.
+
+Usage::
+
+    ceph osd crush rule create-replicated <name> <root> <type> {<class>}
 
 Subcommand ``create-simple`` creates CRUSH rule <name> to start from <root>,
 replicate across buckets of type <type>, using a choose mode of <firstn|indep>
@@ -1058,11 +1126,17 @@ Usage::
     ceph osd erasure-code-profile rm <name>
 
 Subcommand ``set`` creates erasure code profile <name> with [<key[=value]> ...]
-pairs. Add a ``--force`` at the end to override an existing profile (IT IS RISKY).
+pairs. A profile that no pool uses can be changed by setting it again. Changing
+a profile that a pool uses needs ``--yes-i-really-mean-it`` (IT IS RISKY: it can
+corrupt the pool's data). ``--force`` allows a ``stripe_unit`` that is not a
+multiple of 4096 bytes, which ``osd pool create`` then accepts only with
+``--yes-i-really-mean-it``, and, together with ``--yes-i-really-mean-it``, a
+``blaum_roth`` ``w`` for which ``w+1`` is not prime.
 
 Usage::
 
     ceph osd erasure-code-profile set <name> {<profile> [<profile>...]}
+    {--force} {--yes-i-really-mean-it}
 
 Subcommand ``find`` find OSD <id> in the CRUSH map and shows its location.
 
@@ -1218,18 +1292,119 @@ Usage::
 
     ceph osd force-create-pg <pgid>
 
+Subcommand ``force_healthy_stretch_mode`` ends recovery stretch mode at once,
+so that PGs again need OSDs in both zones to peer. PGs may become inactive
+until backfill completes. It fails if the cluster is not in recovery stretch
+mode.
+
+Usage::
+
+    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it
+
+Subcommand ``force_recovery_stretch_mode`` moves the cluster from degraded
+stretch mode to recovery stretch mode, which normally happens by itself when
+the lost zone returns. Run it only in degraded stretch mode, when the Monitors
+of every zone are up.
+
+Usage::
+
+    ceph osd force_recovery_stretch_mode --yes-i-really-mean-it
+
 
 Subcommand ``pool`` is used for managing data pools. It accepts the following additional
 subcommands.
 
-Subcommand ``create`` creates pool.
+Subcommand ``create`` creates pool. Parameters that are not given take their
+defaults from the ``osd_pool_default_*`` options (see ``osd pool default
+get``). See "Pools" in the Ceph documentation for details.
 
 Usage::
 
-    ceph osd pool create <poolname> {<int[0-]>} {<int[0-]>} {replicated|erasure}
-    {<erasure_code_profile>} {<rule>} {<int>} {--autoscale-mode=<on,off,warn>}
+    ceph osd pool create <poolname> {<int[0-]>} {<int[0-]>} {replicated}
+    {<rule>} {<int[0-]>} {<options>...}
 
-Subcommand ``delete`` deletes pool.
+    ceph osd pool create <poolname> {<int[0-]>} {<int[0-]>} erasure
+    {<erasure_code_profile>} {<rule>} {<int[0-]>} {<options>...}
+
+where <options> are any of::
+
+    {--size <int[0-]>} {--replica <int[1-]>} {--min_size <int[1-]>}
+    {--num_zones <int[1-]>} {--k <int[2-]>} {--m <int[1-]>}
+    {--root <root>} {--zone_failure_domain <type>}
+    {--osd_failure_domain <type>} {--class <class>}
+    {--pg_num_min <int[0-]>} {--pg_num_max <int[0-]>}
+    {--autoscale_mode <on|off|warn>} {--bulk}
+    {--target_size_bytes <int[0-]>} {--target_size_ratio <float[0.0-]>}
+    {--force_pg_limit} {--crimson} {--yes-i-really-mean-it}
+
+The positional parameters are pg_num, pgp_num and the pool type (default
+``osd_pool_default_type``), then the CRUSH rule and expected_num_objects for a
+replicated pool, or the erasure code profile, the CRUSH rule and
+expected_num_objects for an erasure-coded pool. Each can also be given by
+name, for example
+``--pg_num 32 --pool_type erasure --erasure_code_profile myprofile``.
+
+``--num_zones`` is the number of zones (1 or 2), each holding a full copy of
+the pool. ``--replica`` is the number of copies in each zone of a replicated
+pool (1 to 10). ``--size`` is the legacy form of ``--replica`` for a replicated
+pool of one zone; it cannot be given with ``--replica`` or with more than one
+zone, except that without ``--num_zones`` a multiple of the default
+``num_zones`` gives a pool over those zones that many copies in all.
+``--min_size`` is the number of OSDs that a PG needs active in each zone.
+
+``--k`` and ``--m``, given together, are the data and coding shards in each zone
+of an erasure-coded pool. They cannot be given with an erasure code profile: an
+erasure-coded pool that names no profile gets one of its own, made from the
+``default`` profile, ``--k``, ``--m`` and the CRUSH options given.
+
+``--root``, ``--zone_failure_domain``, ``--osd_failure_domain`` and ``--class``
+set where the CRUSH rule generated for the pool places it. They cannot be given
+with a CRUSH rule or an erasure code profile, and a replicated pool accepts them
+only with more than one zone.
+
+``--pg_num_min``, ``--pg_num_max``, ``--autoscale_mode``, ``--bulk``,
+``--target_size_bytes`` and ``--target_size_ratio`` set the pool's PG
+autoscaler properties. ``--force_pg_limit`` creates the pool even if it exceeds
+``mon_max_pg_per_osd``. ``--crimson`` creates a pool for Crimson OSDs
+(experimental). ``--yes-i-really-mean-it`` allows a pool name that begins with
+a dot, and an erasure code profile whose ``stripe_unit`` is not a multiple of
+4096 bytes for a pool in one zone.
+
+Subcommand ``default get`` shows the defaults that ``osd pool create`` uses,
+and where each of them comes from.
+
+Usage::
+
+    ceph osd pool default get
+
+Subcommand ``default set`` sets the defaults that ``osd pool create`` uses. It
+takes the parameters of ``osd pool create`` except ``--size``, all given by
+name, and writes them to the ``global`` section of the configuration database;
+``--replica`` is written to ``osd_pool_default_size``, and ``--k`` and ``--m``
+change the ``default`` erasure code profile instead. It never changes an
+existing pool. It refuses defaults that fail the checks that ``osd pool create``
+makes on its parameters, and values that a ``mon`` section of the configuration
+database or a Monitor's local configuration would override. ``--rule`` must
+name a replicated rule, and ``--rule none`` sets
+``osd_pool_default_crush_rule`` back to -1. A default of one copy needs
+``mon_allow_pool_size_one`` and ``--yes-i-really-mean-it``. See "Pool Creation
+Defaults" in the Ceph documentation.
+
+Usage::
+
+    ceph osd pool default set {--pool_type <replicated|erasure>}
+    {--num_zones <int[1-]>} {--rule <rule>} {--zone_failure_domain <type>}
+    {--osd_failure_domain <type>} {--root <root>} {--class <class>}
+    {--replica <int[1-]>} {--min_size <int[0-]>}
+    {--k <int[2-]>} {--m <int[1-]>} {--pg_num <int[1-]>}
+    {--pgp_num <int[0-]>} {--autoscale_mode <on|off|warn>} {--bulk}
+    {--crimson} {--yes-i-really-mean-it}
+
+Subcommand ``delete`` deletes pool. It also deletes the pool's CRUSH rule if no
+other pool uses it, unless it is the default replicated rule, and the erasure
+code profile of an erasure-coded pool if no other pool uses it, unless it is
+``default``. Once an upgrade is committed, deleting the last pool with more than
+one zone disables stretch mode, but does not change the pool creation defaults.
 
 Usage::
 
@@ -1256,6 +1431,11 @@ Only for erasure-coded pools::
 Use ``all`` to get all pool parameters that apply to the pool's type::
 
     ceph osd pool get <poolname> all
+
+``num_zones`` is the number of zones that the pool spans, and ``replica`` the
+number of copies in each zone of a replicated pool::
+
+    ceph osd pool get <poolname> num_zones|replica
 
 Subcommand ``get-quota`` obtains object or byte limits for pool.
 
@@ -1307,6 +1487,29 @@ Usage::
     hit_set_search_last_n
     <val> {--yes-i-really-mean-it}
 
+Variable ``num_zones`` sets the number of zones (1 or 2) that the pool spans.
+``--crush_rule`` names the pool's new CRUSH rule. ``--replica`` gives the copies
+in each zone of a replicated pool, and ``--zone_failure_domain``,
+``--osd_failure_domain``, ``--root`` and ``--class`` the CRUSH rule generated
+for the pool; those not given come from the pool creation defaults, or from the
+profile of an erasure-coded pool. These options are accepted only with
+``num_zones``. Setting an erasure-coded pool's ``num_zones`` to 1 needs
+``--yes-i-really-mean-it``. Variable ``replica`` sets the number of copies in
+each zone of a replicated pool. ``size`` cannot be set for a pool with more
+than one zone: set ``replica`` instead. The ``min_size`` of a pool counts the
+OSDs that a PG needs active in each zone. Giving a pool another CRUSH rule,
+with ``crush_rule``, ``num_zones`` or ``replica``, deletes its previous rule if
+no other pool uses it, unless it is the default replicated rule. See "Stretch
+Clusters" in the Ceph documentation.
+
+Usage::
+
+    ceph osd pool set <poolname> num_zones 1|2 {--yes-i-really-mean-it}
+    {--crush_rule <rule>} {--replica <int[1-]>} {--zone_failure_domain <type>}
+    {--osd_failure_domain <type>} {--root <root>} {--class <class>}
+
+    ceph osd pool set <poolname> replica <int[1-]> {--yes-i-really-mean-it}
+
 Subcommand ``set-quota`` sets object or byte limit on pool.
 
 Usage::
@@ -1318,6 +1521,48 @@ Subcommand ``stats`` obtain stats from all pools, or from specified pool.
 Usage::
 
     ceph osd pool stats {<name>}
+
+Subcommand ``stretch set`` makes a replicated pool an individual stretch pool:
+a PG becomes active only when its acting set has OSDs in at least
+<peering_crush_bucket_count> buckets of type <peering_crush_bucket_barrier>,
+and <peering_crush_bucket_target> limits the OSDs that it takes from one
+bucket. Neither may exceed the number of such buckets that <crush_rule> spans.
+``--replica`` can be given in place of <size>: the pool's size is then
+``replica`` times the number of buckets that <crush_rule> spans. For a pool
+over two zones, setting its ``num_zones`` is recommended instead. The command
+fails while stretch mode is enabled. The pool's previous CRUSH rule is deleted
+if no other pool uses it, unless it is the default replicated rule. See "Pools"
+in the Ceph documentation.
+
+Usage::
+
+    ceph osd pool stretch set <poolname> <peering_crush_bucket_count>
+    <peering_crush_bucket_target> <peering_crush_bucket_barrier> <crush_rule>
+    <size> <min_size>
+
+    ceph osd pool stretch set <poolname> <peering_crush_bucket_count>
+    <peering_crush_bucket_target> <peering_crush_bucket_barrier> <crush_rule>
+    --min_size <min_size> --replica <replica>
+
+Subcommand ``stretch show`` shows the stretch values of a pool.
+
+Usage::
+
+    ceph osd pool stretch show <poolname>
+
+Subcommand ``stretch unset`` makes an individual stretch pool an ordinary pool
+again, with <crush_rule>, <size> and <min_size>; ``--replica`` can be given in
+place of <size>. The command fails while stretch mode is enabled. The pool's
+previous CRUSH rule is deleted if no other pool uses it, unless it is the
+default replicated rule. For an erasure-coded pool with more than one zone, set
+its ``num_zones`` to 1 instead.
+
+Usage::
+
+    ceph osd pool stretch unset <poolname> <crush_rule> <size> <min_size>
+
+    ceph osd pool stretch unset <poolname> <crush_rule> --min_size <min_size>
+    --replica <replica>
 
 Subcommand ``application`` is used for adding an annotation to the given
 pool. By default, the possible applications are object, block, and file

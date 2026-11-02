@@ -6,8 +6,10 @@
 #include "mon/MonMap.h"
 #include "mon/KVMonitor.h"
 #include "mon/MgrMonitor.h"
+#include "mon/MonmapMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "mon/Paxos.h"
+#include "mon/PoolCreateParams.h"
 #include "messages/MConfig.h"
 #include "messages/MGetConfig.h"
 #include "messages/MMonCommand.h"
@@ -15,6 +17,8 @@
 #include "common/JSONFormatter.h"
 #include "common/TextTable.h"
 #include "common/cmdparse.h"
+#include "common/config_values.h"
+#include "include/str_map.h"
 #include "include/stringify.h"
 #include "crush/CrushWrapper.h"
 
@@ -193,7 +197,15 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(cmdmap, "prefix", prefix);
 
   bufferlist odata;
-  if (prefix == "config help") {
+  if (prefix == "osd pool default get") {
+    stringstream out;
+    dump_pool_defaults(f.get(), out);
+    if (f) {
+      f->flush(odata);
+    } else {
+      odata.append(out.str());
+    }
+  } else if (prefix == "config help") {
     stringstream ss;
     string name;
     cmd_getval(cmdmap, "key", name);
@@ -601,6 +613,44 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       pending[key].reset();
     }
     goto update;
+  } else if (prefix == "osd pool default set") {
+    // k and m are kept in the OSDMap's default profile
+    if ((cmdmap.contains("k") || cmdmap.contains("m")) &&
+        !mon.osdmon()->is_writeable()) {
+      mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+      return false;
+    }
+    // a rule that the pending OSDMap update removes is found gone once the
+    // update has committed
+    if (string rule; cmd_getval(cmdmap, "rule", rule) && rule != "none") {
+      const int id = mon.osdmon()->osdmap.crush->get_rule_id(rule);
+      if (id >= 0 && mon.osdmon()->crush_rule_removal_pending(rule, id)) {
+        mon.osdmon()->wait_for_finished_proposal(
+          op, new C_RetryMessage(this, op));
+        return false;
+      }
+    }
+    std::optional<map<string,string>> default_profile;
+    err = prepare_pool_default_set(cmdmap, ss, &default_profile);
+    if (err) {
+      goto reply;
+    }
+    if (default_profile) {
+      if (!has_pending_changes()) {
+        pending.clear();
+        mon.osdmon()->propose_default_profile(*default_profile);
+        mon.osdmon()->wait_for_finished_proposal(
+          op, new Monitor::C_Command(
+            mon, op, 0, ss.str(), mon.osdmon()->get_last_committed() + 1));
+        return false;
+      }
+      // commit with the options
+      paxos.plug();
+      mon.osdmon()->propose_default_profile(*default_profile);
+      paxos.unplug();
+    }
+    pending_description = "osd pool default set";
+    goto update;
   } else if (prefix == "config reset") {
     int64_t revert_to = -1;
     cmd_getval(cmdmap, "num", revert_to);
@@ -984,4 +1034,272 @@ void ConfigMonitor::check_all_subs()
     }
   }
   dout(10) << __func__ << " updated " << updated << " / " << total << dendl;
+}
+
+namespace {
+
+// The parameters that ceph osd pool default get shows, in order.
+const vector<string> POOL_DEFAULT_PARAMS = {
+  "pool_type", "num_zones", "rule", "zone_failure_domain",
+  "osd_failure_domain", "root", "class", "replica", "min_size", "k", "m",
+  "pg_num", "pgp_num", "autoscale_mode", "bulk", "crimson"};
+
+} // anonymous namespace
+
+string ConfigMonitor::pool_default_source(const string& option)
+{
+  const ConfigValues values = g_conf().get_config_values();
+  for (int level = CONF_FINAL; level > CONF_MON; --level) {
+    if (values.get_value(option, level).second) {
+      switch (level) {
+      case CONF_FILE:
+        return "file";
+      case CONF_ENV:
+        return "env";
+      case CONF_CMDLINE:
+        return "cmdline";
+      default:
+        return "override";
+      }
+    }
+  }
+  if (!values.get_value(option, CONF_MON).second) {
+    return "default";
+  }
+  const OSDMap& osdmap = mon.osdmon()->osdmap;
+  map<string,string> crush_location;
+  osdmap.crush->get_full_location(g_conf()->host, &crush_location);
+  std::unordered_map<string,ConfigMap::ValueSource> src;
+  config_map.generate_entity_map(g_conf()->name, crush_location,
+                                 osdmap.crush.get(), string{}, &src);
+  auto p = src.find(option);
+  if (p == src.end()) {
+    return "mon";
+  }
+  string source = p->second.section;
+  if (p->second.option && !p->second.option->mask.empty()) {
+    source += "/" + p->second.option->mask.to_str();
+  }
+  return source;
+}
+
+map<string, string> ConfigMonitor::pool_default_db_overrides()
+{
+  map<string, string> overrides;
+  for (const auto& name : pool_default_option_names()) {
+    const string source = pool_default_source(name);
+    // the local sources are reported on their own
+    if (source != "default" && source != "global" && source != "file" &&
+        source != "env" && source != "cmdline" && source != "override") {
+      overrides[name] = source;
+    }
+  }
+  return overrides;
+}
+
+void ConfigMonitor::dump_pool_defaults(Formatter *f, ostream& out)
+{
+  const OSDMap& osdmap = mon.osdmon()->osdmap;
+  PoolCreateParams d = load_pool_defaults(g_conf());
+  const bool have_default_profile = osdmap.has_erasure_code_profile("default");
+  if (have_default_profile) {
+    d.profile = osdmap.get_erasure_code_profile("default");
+  }
+  auto value_of = [&](const string& param) -> string {
+    if (param == "rule") {
+      const auto id = d.default_rule;
+      if (id < 0) {
+        return "none";
+      }
+      const char *name = osdmap.crush->get_rule_name(id);
+      return name ? string(name) : stringify(id);
+    }
+    return pool_default_value(d, param);
+  };
+  auto option_of = [&](const string& param) -> string {
+    if (param == "k" || param == "m") {
+      // kept in the OSDMap, not an option; the option makes default if missing
+      return have_default_profile ? "-" : "osd_pool_default_erasure_code_profile";
+    }
+    return pool_default_options().at(param);
+  };
+
+  TextTable tbl;
+  if (f) {
+    f->open_object_section("pool_defaults");
+  } else {
+    tbl.define_column("PARAMETER", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("SOURCE", TextTable::LEFT, TextTable::LEFT);
+  }
+  for (const auto& param : POOL_DEFAULT_PARAMS) {
+    const string option = option_of(param);
+    const string value = value_of(param);
+    const string source = option == "-" ? "osdmap" : pool_default_source(option);
+    if (f) {
+      f->open_object_section(param);
+      f->dump_string("value", value);
+      f->dump_string("option", option);
+      f->dump_string("source", source);
+      f->close_section();
+    } else {
+      tbl << param << value << option << source << TextTable::endrow;
+    }
+  }
+  if (f) {
+    f->close_section();
+  } else {
+    out << tbl;
+  }
+}
+
+int ConfigMonitor::prepare_pool_default_set(
+  const cmdmap_t& cmdmap, ostream& ss,
+  std::optional<map<string,string>>* default_profile)
+{
+  if (!mon.osdmon()->num_zones_supported()) {
+    ss << "ceph osd pool default set is refused until "
+       << OSDMonitor::num_zones_upgrade_hint();
+    return -EPERM;
+  }
+  const OSDMap& osdmap = mon.osdmon()->osdmap;
+
+  // 1. the defaults, 2. the default profile, 3. the command line
+  PoolCreateParams p = load_pool_defaults(g_conf());
+  int err = use_profile(
+    p, "",
+    osdmap.has_erasure_code_profile("default")
+      ? &osdmap.get_erasure_code_profile("default") : nullptr,
+    &ss);
+  if (err) {
+    return err;
+  }
+  apply_command_line(p, cmdmap);
+  err = check_command_line(p, PoolCommand::DEFAULT_SET, &ss);
+  if (err) {
+    return err;
+  }
+  int64_t rule_id = -1;
+  if (p.is_given("rule") && p.rule != "none") {
+    rule_id = osdmap.crush->get_rule_id(p.rule);
+    if (rule_id < 0) {
+      ss << "rule '" << p.rule << "' does not exist";
+      return -ENOENT;
+    }
+    // replicated pools fall back on the default rule
+    if (!osdmap.crush->rule_valid_for_pool_type(rule_id,
+                                                pg_pool_t::TYPE_REPLICATED)) {
+      ss << "rule '" << p.rule << "' is not a replicated rule";
+      return -EINVAL;
+    }
+  }
+
+  // 4. the checks that the next ceph osd pool create would make
+  CrushWrapper crush = mon.osdmon()->_get_pending_crush();
+  err = check_pool_defaults(p, mon.osdmon()->pool_create_cluster(crush), &ss);
+  if (err) {
+    return err;
+  }
+  if (p.is_given("replica") && p.replica == 1) {
+    err = check_size_one(
+      g_conf().get_val<bool>("mon_allow_pool_size_one"),
+      cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false), &ss);
+    if (err) {
+      return err;
+    }
+  }
+
+  // the options to write
+  if (p.is_given("rule")) {
+    p.default_rule = rule_id;
+  }
+  map<string,string> values;
+  for (const auto& param : p.given) {
+    if (param != "k" && param != "m") {
+      values[pool_default_options().at(param)] = pool_default_value(p, param);
+    }
+  }
+  if (p.is_given("k") || p.is_given("m")) {
+    *default_profile = p.profile;
+  }
+
+  err = check_pool_default_overrides(values, ss);
+  if (err) {
+    return err;
+  }
+  for (auto& [name, value] : values) {
+    const Option *opt = g_conf().find_option(name);
+    ceph_assert(opt);
+    Option::value_t real_value;
+    string errstr;
+    if (opt->parse_value(value, &real_value, &errstr, &value) < 0) {
+      ss << "error parsing value for " << name << ": " << errstr;
+      return -EINVAL;
+    }
+  }
+  for (const auto& [name, value] : values) {
+    bufferlist bl;
+    bl.append(value);
+    pending["global/" + name] = bl;
+  }
+  return 0;
+}
+
+int ConfigMonitor::check_pool_default_overrides(
+  const map<string,string>& values, ostream& ss)
+{
+  const auto db_overrides = db_pool_default_overrides(config_map);
+  const auto local_overrides =
+    local_pool_default_overrides(g_conf().get_config_values());
+  for (const auto& [name, value] : values) {
+    if (auto p = db_overrides.find(name); p != db_overrides.end()) {
+      ss << name << " is set in section " << p->second
+         << " of the configuration database, which overrides the global "
+            "value for monitors";
+      return -EINVAL;
+    }
+    if (local_overrides.contains(name)) {
+      ss << name << " is set in the local configuration of mon."
+         << mon.name << " (file, environment or command line), which "
+            "overrides the configuration database; remove it there";
+      return -EINVAL;
+    }
+  }
+  return 0;
+}
+
+bool ConfigMonitor::has_pending_changes() const
+{
+  for (const auto& [key, value] : pending) {
+    auto q = current.find(key);
+    if (value ? q == current.end() || *value != q->second : q != current.end()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void ConfigMonitor::propose_global_options(const map<string,string>& values,
+                                           const string& description)
+{
+  ceph_assert(is_writeable());
+  ceph_assert(mon.kvmon()->is_writeable());
+  for (const auto& [name, value] : values) {
+    const string key = "global/" + name;
+    auto q = current.find(key);
+    if (q != current.end() && q->second.to_str() == value) {
+      continue;
+    }
+    bufferlist bl;
+    bl.append(value);
+    pending[key] = bl;
+  }
+  if (pending.empty()) {
+    return;
+  }
+  pending_description = description;
+  encode_pending_to_kvmon();
+  mon.kvmon()->propose_pending();
+  propose_pending();
 }

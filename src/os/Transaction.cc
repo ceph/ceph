@@ -52,6 +52,30 @@ void decode_str_set_to_bl(bufferlist::const_iterator& p,
 
 namespace ceph::os {
 
+void Transaction::remap_shard(shard_id_t new_shard) {
+  std::map<ghobject_t, uint32_t> new_object_index;
+  for (auto& [obj, idx] : object_index) {
+    ghobject_t new_obj = obj;
+    new_obj.shard_id = new_shard;
+    new_object_index[std::move(new_obj)] = idx;
+  }
+  object_index = std::move(new_object_index);
+  std::map<coll_t, uint32_t> new_coll_index;
+  for (auto& [coll, idx] : coll_index) {
+    spg_t pgid;
+    if (coll.is_pg(&pgid)) {
+      pgid.shard = new_shard;
+      new_coll_index[coll_t(pgid)] = idx;
+    } else if (coll.is_temp(&pgid)) {
+      pgid.shard = new_shard;
+      new_coll_index[coll_t(pgid).get_temp()] = idx;
+    } else {
+      new_coll_index[coll] = idx;
+    }
+  }
+  coll_index = std::move(new_coll_index);
+}
+
 void Transaction::dump(ceph::Formatter *f)
 {
   f->open_array_section("ops");
