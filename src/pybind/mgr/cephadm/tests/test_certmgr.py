@@ -6,7 +6,8 @@ from tests import mock
 import logging
 
 from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectProtocol, TLSCredentials
-from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
+from cephadm.tlsobject_store import (TLSOBJECT_STORE_PREFIX, TLSOBJECT_STORE_TARGET_PREFIX,
+                                     TLSObjectStore, TLSObjectScope)
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
 
@@ -290,6 +291,8 @@ IwuZ9Cw+0P6sn81cI8FaeA==
 
 TLSOBJECT_STORE_CERT_PREFIX = f'{TLSOBJECT_STORE_PREFIX}cert.'
 TLSOBJECT_STORE_KEY_PREFIX = f'{TLSOBJECT_STORE_PREFIX}key.'
+TLSOBJECT_STORE_TARGET_CERT_PREFIX = f'{TLSOBJECT_STORE_TARGET_PREFIX}cert.'
+TLSOBJECT_STORE_TARGET_KEY_PREFIX = f'{TLSOBJECT_STORE_TARGET_PREFIX}key.'
 
 
 class TestCertMgr(object):
@@ -321,17 +324,16 @@ class TestCertMgr(object):
         cephadm_module.cert_mgr.save_cert('smb_ssl_ca_cert', smb_ssl_ca_cert, service_name='smb.foo', user_made=True)
 
         expected_calls = [
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}rgw_ssl_cert', json.dumps({'rgw.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_ssl_cert', json.dumps({'nvmeof.self-signed.foo': Cert(nvmeof_ssl_cert, False).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_client_cert', json.dumps({'nvmeof.foo': Cert(nvmeof_client_cert, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_root_ca_cert', json.dumps({'nvmeof.foo': Cert(nvmeof_root_ca_cert, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}grafana_ssl_cert', json.dumps({'host-1': Cert(grafana_cert_host_1, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}grafana_ssl_cert', json.dumps({'host-1': Cert(grafana_cert_host_1, True).to_json(),
-                                                                                    'host-2': Cert(grafana_cert_host_2, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nfs_ssl_cert', json.dumps({'nfs.foo': Cert(nfs_ssl_cert, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nfs_ssl_ca_cert', json.dumps({'nfs.foo': Cert(nfs_ssl_ca_cert, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}smb_ssl_cert', json.dumps({'smb.foo': Cert(smb_ssl_cert, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}smb_ssl_ca_cert', json.dumps({'smb.foo': Cert(smb_ssl_ca_cert, True).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_CERT_PREFIX}rgw_ssl_cert/rgw.foo', json.dumps(Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_CERT_PREFIX}nvmeof_ssl_cert/nvmeof.self-signed.foo', json.dumps(Cert(nvmeof_ssl_cert, False).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_CERT_PREFIX}nvmeof_client_cert/nvmeof.foo', json.dumps(Cert(nvmeof_client_cert, True).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_CERT_PREFIX}nvmeof_root_ca_cert/nvmeof.foo', json.dumps(Cert(nvmeof_root_ca_cert, True).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_CERT_PREFIX}grafana_ssl_cert/host-1', json.dumps(Cert(grafana_cert_host_1, True).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_CERT_PREFIX}grafana_ssl_cert/host-2', json.dumps(Cert(grafana_cert_host_2, True).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_CERT_PREFIX}nfs_ssl_cert/nfs.foo', json.dumps(Cert(nfs_ssl_cert, True).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_CERT_PREFIX}nfs_ssl_ca_cert/nfs.foo', json.dumps(Cert(nfs_ssl_ca_cert, True).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_CERT_PREFIX}smb_ssl_cert/smb.foo', json.dumps(Cert(smb_ssl_cert, True).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_CERT_PREFIX}smb_ssl_ca_cert/smb.foo', json.dumps(Cert(smb_ssl_ca_cert, True).to_json())),
         ]
         _set_store.assert_has_calls(expected_calls)
 
@@ -582,11 +584,10 @@ class TestCertMgr(object):
         cephadm_module.cert_mgr.save_key('nvmeof_ssl_key', nvmeof_ssl_key, service_name='nvmeof.self-signed.foo')
 
         expected_calls = [
-            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}grafana_ssl_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}grafana_ssl_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json(),
-                                                                                  'host2': PrivKey(grafana_host2_key).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_client_key', json.dumps({'nvmeof.foo': PrivKey(nvmeof_client_key).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_ssl_key', json.dumps({'nvmeof.self-signed.foo': PrivKey(nvmeof_ssl_key).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_KEY_PREFIX}grafana_ssl_key/host1', json.dumps(PrivKey(grafana_host1_key).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_KEY_PREFIX}grafana_ssl_key/host2', json.dumps(PrivKey(grafana_host2_key).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_KEY_PREFIX}nvmeof_client_key/nvmeof.foo', json.dumps(PrivKey(nvmeof_client_key).to_json())),
+            mock.call(f'{TLSOBJECT_STORE_TARGET_KEY_PREFIX}nvmeof_ssl_key/nvmeof.self-signed.foo', json.dumps(PrivKey(nvmeof_ssl_key).to_json())),
         ]
         _set_store.assert_has_calls(expected_calls)
 
@@ -683,6 +684,8 @@ class TestCertMgr(object):
                     )
                     for key_name, (target, key_value, scope) in chain(keys.items(), unknown_keys.items())
                 }
+            elif key.startswith(TLSOBJECT_STORE_TARGET_PREFIX):
+                return {}
             else:
                 raise Exception(f'Unexpected key access in store: {key}')
 
@@ -769,6 +772,9 @@ class TestCertMgr(object):
                     "-----BEGIN PRIVATE KEY-----\nSNIP\n-----END PRIVATE KEY-----"  # raw PEM
                 )
                 return store
+
+            if prefix.startswith(TLSOBJECT_STORE_TARGET_PREFIX):
+                return {}
 
             raise Exception(f'Unexpected key access in store: {prefix}')
 
@@ -887,6 +893,9 @@ class TestCertMgr(object):
                     f'{TLSOBJECT_STORE_KEY_PREFIX}totally_unknown_key_global': _dump_key(None, 'ignored-key-3', TLSObjectScope.GLOBAL),
                 }
                 return store
+
+            if prefix.startswith(TLSOBJECT_STORE_TARGET_PREFIX):
+                return {}
 
             raise Exception(f'Unexpected key access in store: {prefix}')
 
@@ -1890,11 +1899,16 @@ class MockTLSObject(TLSObjectProtocol):
 
 
 class MockCephadmOrchestrator:
-    def __init__(self):
+    def __init__(self, max_entry_size=None):
         self.store = {}
+        # like mon_config_key_max_entry_size: larger values are refused
+        self.max_entry_size = max_entry_size
 
     def set_store(self, key, value):
-        self.store[key] = value
+        if value is None:
+            self.store.pop(key, None)
+        elif self.max_entry_size is None or len(value) <= self.max_entry_size:
+            self.store[key] = value
 
     def get_store_prefix(self, prefix):
         return {k: v for k, v in self.store.items() if k.startswith(prefix)}
@@ -1905,14 +1919,23 @@ class TestTLSObjectStore(unittest.TestCase):
     def is_cephadm_signed_entity(self, entity: str) -> bool:
         return entity.startswith('cephadm-signed')
 
-    def setUp(self):
+    def _new_store(self) -> TLSObjectStore:
         objects_by_name = {
             TLSObjectScope.GLOBAL: ["global_cert_1", "global_cert_2"],
             TLSObjectScope.SERVICE: ["per_service1", "per_service2"],
             TLSObjectScope.HOST: ["per_host1", "per_host2"],
         }
+        return TLSObjectStore(self.mgr, MockTLSObject, objects_by_name, self.is_cephadm_signed_entity)
+
+    def _reloaded_store(self) -> TLSObjectStore:
+        # The store as a newly active mgr would load it
+        store = self._new_store()
+        store.load()
+        return store
+
+    def setUp(self):
         self.mgr = MockCephadmOrchestrator()
-        self.store = TLSObjectStore(self.mgr, MockTLSObject, objects_by_name, self.is_cephadm_signed_entity)
+        self.store = self._new_store()
 
     def test_save_and_get_tlsobject(self):
         self.store.save_tlsobject("per_service1", "my_cert_data", service_name="my_service")
@@ -2083,3 +2106,80 @@ class TestTLSObjectStore(unittest.TestCase):
         assert svc_name in self.store.objects_by_name
         assert host_name in self.store.objects_by_name
         assert glob_name in self.store.objects_by_name
+
+    def test_scoped_objects_have_an_entry_per_target(self):
+        self.store.save_tlsobject("per_host1", "cert-a", host="host-a")
+        self.store.save_tlsobject("per_host1", "cert-b", host="host-b")
+        self.store.save_tlsobject("per_service1", "cert-s", service_name="rgw.foo")
+
+        prefix = self.store.target_prefix
+        assert json.loads(self.mgr.store[f"{prefix}per_host1/host-a"]) == MockTLSObject.to_json(MockTLSObject("cert-a"))
+        assert json.loads(self.mgr.store[f"{prefix}per_host1/host-b"]) == MockTLSObject.to_json(MockTLSObject("cert-b"))
+        assert json.loads(self.mgr.store[f"{prefix}per_service1/rgw.foo"]) == MockTLSObject.to_json(MockTLSObject("cert-s"))
+        # Saving a target does not rewrite the per-name entry
+        assert f"{self.store.store_prefix}per_host1" not in self.mgr.store
+
+        assert self.store.rm_tlsobject("per_host1", host="host-a")
+        assert f"{prefix}per_host1/host-a" not in self.mgr.store
+        assert f"{prefix}per_host1/host-b" in self.mgr.store
+
+    def test_load_reads_per_target_entries(self):
+        self.store.save_tlsobject("per_host1", "cert-a", host="host-a")
+        self.store.save_tlsobject("per_service1", "cert-s", service_name="rgw.foo")
+        self.store.register_object_name("cephadm-signed_foo_cert", TLSObjectScope.HOST)
+        self.store.save_tlsobject("cephadm-signed_foo_cert", "cert-f", host="host-a")
+        self.store.save_tlsobject("per_host1", "cert-gone", host="host-gone")
+        self.store.rm_tlsobject("per_host1", host="host-gone")
+
+        store = self._reloaded_store()
+        assert store.get_tlsobject("per_host1", host="host-a").data == "cert-a"
+        assert store.get_tlsobject("per_host1", host="host-gone") is None
+        assert store.get_tlsobject("per_service1", service_name="rgw.foo").data == "cert-s"
+        assert "cephadm-signed_foo_cert" in store.host_scoped_objects
+        assert store.get_tlsobject("cephadm-signed_foo_cert", host="host-a").data == "cert-f"
+
+    def test_load_moves_targets_out_of_the_per_name_entry(self):
+        """
+        Targets in a per-name entry, as written before targets had entries of
+        their own, are loaded and moved to per-target entries. They are newer
+        than any per-target entry for the same name, so they win.
+        """
+        old_layout = {
+            "host-a": MockTLSObject.to_json(MockTLSObject("cert-a")),
+            "host-b": MockTLSObject.to_json(MockTLSObject("cert-b")),
+        }
+        self.mgr.set_store(f"{self.store.store_prefix}per_host1", json.dumps(old_layout))
+        self.mgr.set_store(f"{self.store.target_prefix}per_host1/host-a",
+                           json.dumps(MockTLSObject.to_json(MockTLSObject("older-cert-a"))))
+        self.mgr.set_store(f"{self.store.target_prefix}per_host1/host-c",
+                           json.dumps(MockTLSObject.to_json(MockTLSObject("cert-c"))))
+
+        store = self._reloaded_store()
+        assert store.get_tlsobject("per_host1", host="host-a").data == "cert-a"
+        assert store.get_tlsobject("per_host1", host="host-b").data == "cert-b"
+        assert store.get_tlsobject("per_host1", host="host-c").data == "cert-c"
+
+        assert json.loads(self.mgr.store[f"{self.store.store_prefix}per_host1"]) == {}
+        for host in ("host-a", "host-b"):
+            assert json.loads(self.mgr.store[f"{self.store.target_prefix}per_host1/{host}"]) == old_layout[host]
+
+        store = self._reloaded_store()
+        assert {h: o.data for h, o in store.objects_by_name["per_host1"].items()} == {
+            "host-a": "cert-a", "host-b": "cert-b", "host-c": "cert-c"}
+
+    def test_many_targets_survive_a_reload(self):
+        """
+        One entry for every host's copy of a cephadm-signed key outgrew the
+        mon's default 64 KiB limit at about 19 hosts. Every later save was
+        refused, and a newly active mgr loaded only the first hosts.
+        """
+        self.mgr.max_entry_size = 64 * 1024
+        self.store.register_object_name("cephadm-signed_agent_key", TLSObjectScope.HOST)
+        key = "k" * 3300  # about the size of an RSA-4096 key in PEM
+        hosts = [f"host{i:03d}" for i in range(100)]
+        for host in hosts:
+            self.store.save_tlsobject("cephadm-signed_agent_key", key + host, host=host)
+
+        store = self._reloaded_store()
+        for host in hosts:
+            assert store.get_tlsobject("cephadm-signed_agent_key", host=host).data == key + host
