@@ -19,8 +19,6 @@ RBD cache must be explicitly enabled in
 caching the parent content on the local disk, and future reads on that data
 will be serviced from the local cache.
 
-.. note:: RBD shared read-only parent image cache requires the Ceph Nautilus release or later.
-
 .. ditaa::
 
             +--------------------------------------------------------+
