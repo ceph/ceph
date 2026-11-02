@@ -215,14 +215,23 @@ class OSDMap(ceph_module.BasePyOSDMap):
         return self._dump()
 
     def get_pools(self) -> Dict[int, Dict[str, Any]]:
-        # FIXME: efficient implementation
-        d = self._dump()
-        return dict([(p['pool'], p) for p in d['pools']])
+        pools = getattr(self, '_cached_pools', None)
+        if pools is None:
+            if hasattr(self, '_dump_pools'):
+                raw_pools = self._dump_pools()
+            else:
+                d = self._dump()
+                raw_pools = d['pools']
+            pools = {p['pool']: p for p in raw_pools}
+            self._cached_pools = pools
+        return pools
 
     def get_pools_by_name(self) -> Dict[str, Dict[str, Any]]:
-        # FIXME: efficient implementation
-        d = self._dump()
-        return dict([(p['pool_name'], p) for p in d['pools']])
+        pools_by_name = getattr(self, '_cached_pools_by_name', None)
+        if pools_by_name is None:
+            pools_by_name = {p['pool_name']: p for p in self.get_pools().values()}
+            self._cached_pools_by_name = pools_by_name
+        return pools_by_name
 
     def new_incremental(self) -> 'OSDMapIncremental':
         return self._new_incremental()
@@ -263,12 +272,15 @@ class OSDMap(ceph_module.BasePyOSDMap):
     def build_simple(cls, epoch: int = 1, uuid: Optional[str] = None, num_osd: int = -1) -> 'ceph_module.BasePyOSDMap':
         return cls._build_simple(epoch, uuid, num_osd)
 
-    def get_ec_profile(self, name: str) -> Optional[List[Dict[str, str]]]:
-        # FIXME: efficient implementation
+    def get_ec_profile(self, name: str) -> Optional[Dict[str, str]]:
+        if hasattr(self, '_get_ec_profile'):
+            return self._get_ec_profile(name)
         d = self._dump()
         return d['erasure_code_profiles'].get(name, None)
 
     def get_require_osd_release(self) -> str:
+        if hasattr(self, '_get_require_osd_release'):
+            return self._get_require_osd_release()
         d = self._dump()
         return d['require_osd_release']
 
