@@ -1392,6 +1392,11 @@ void Migrator::handle_export_discover_ack(const cref_t<MExportDirDiscoverAck> &m
       mdcache->request_finish(mdr);
 
       dir->auth_unpin(this);
+      // The freeze waits for the subtree's other auth pins, which may
+      // belong to updates that wait to be journaled, such as early-replied
+      // requests and client cap flushes: flush the log now rather than
+      // waiting for the next tick.
+      mds->mdlog->flush();
       ceph_assert(g_conf()->mds_kill_export_at != 3);
 
     } else {

@@ -4251,7 +4251,10 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 							      ack, client));
   if (need_flush && !*need_flush &&
       ((change_max && new_max) || // max INCREASE
-       _need_flush_mdlog(in, dirty)))
+       _need_flush_mdlog(in, dirty) ||
+       // a freeze, of the inode for a peer rename or of the subtree it is
+       // in for an export, waits for this update's auth pin
+       in->is_freezing()))
     *need_flush = true;
 
   return true;
