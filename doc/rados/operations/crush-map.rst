@@ -640,7 +640,8 @@ failure domain of ``host``, then CRUSH will ensure that each replica of the
 data is stored on a unique host.  Alternatively, if you select a failure domain
 of ``rack``, then each replica of the data will be stored in a different rack.
 Your selection of failure domain should be guided by the size and its CRUSH
-topology. 
+topology. :ref:`fdcalc` shows how the CRUSH weights of the failure domains
+limit the raw capacity that a pool can use.
 
 The entire cluster hierarchy is typically nested beneath a root node that is
 named ``default``. If you have customized your hierarchy, you might want to
