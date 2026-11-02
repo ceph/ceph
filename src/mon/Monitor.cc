@@ -879,7 +879,7 @@ int Monitor::preinit()
     pcb.add_time(l_mon_backup_last_failed, "backup_last_failed", "Last failed mon backup",
         nullptr, PerfCountersBuilder::PRIO_USEFUL);
     pcb.add_u64(l_mon_backup_last_size, "backup_last_size", "Last backup size",
-        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
     pcb.add_u64(l_mon_backup_last_files, "backup_last_files", "Last backup file numbers",
         nullptr, PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64_counter(l_mon_backup_cleanup_started, "backup_cleanup_started", "Mon backup cleanup started",
@@ -891,13 +891,13 @@ int Monitor::preinit()
     pcb.add_u64_counter(l_mon_backup_cleanup_failed, "backup_cleanup_failed", "Mon backup cleanup failed",
         nullptr, PerfCountersBuilder::PRIO_USEFUL);
     pcb.add_u64(l_mon_backup_cleanup_size, "backup_cleanup_size", "Size of backups removed",
-        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
     pcb.add_u64(l_mon_backup_cleanup_kept, "backup_cleanup_kept", "Number of backups kept after cleanup",
         nullptr, PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_time_avg(l_mon_backup_cleanup_duration, "backup_cleanup_duration", "Mon backup cleanup duration",
         nullptr, PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64(l_mon_backup_cleanup_freed, "backup_cleanup_freed", "Mon backup cleanup freed size in bytes",
-        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
     pcb.add_u64(l_mon_backup_cleanup_deleted, "backup_cleanup_deleted", "Mon backup cleanup deleted backups",
         nullptr, PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64(l_mon_data_disk_total_bytes, "data_disk_total_bytes",

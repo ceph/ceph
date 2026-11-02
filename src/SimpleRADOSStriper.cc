@@ -74,7 +74,8 @@ int SimpleRADOSStriper::config_logger(CephContext* cct, std::string_view name, s
   plb.add_u64_counter(P_UPDATE_SIZE, "update_size", "Number of size updates");
   plb.add_u64_counter(P_UPDATE_VERSION, "update_version", "Number of version updates");
   plb.add_u64_counter(P_SHRINK, "shrink", "Number of allocation shrinks");
-  plb.add_u64_counter(P_SHRINK_BYTES, "shrink_bytes", "Bytes shrunk");
+  plb.add_u64_counter(P_SHRINK_BYTES, "shrink_bytes", "Bytes shrunk",
+                      nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   plb.add_u64_counter(P_LOCK, "lock", "Number of locks");
   plb.add_u64_counter(P_UNLOCK, "unlock", "Number of unlocks");
   l->reset(plb.create_perf_counters());
