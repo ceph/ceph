@@ -1,0 +1,202 @@
+roles:
+# Three-node Ceph cluster for CTDB-clustered SMB backed by RGW buckets.
+# Three Samba daemons (host.a / host.b / host.c) form the CTDB ring;
+# host.d is the dedicated SMB client.
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - client.0
+- - host.b
+  - mon.b
+  - osd.2
+  - osd.3
+- - host.c
+  - mon.c
+  - osd.4
+  - osd.5
+# Reserve a host for acting as a samba client
+- - host.d
+  - cephadm.exclude
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+tasks:
+- smb.configure_samba_client_container:
+    role: host.d
+- pexec:
+    all:
+      - sudo setsebool -P virt_sandbox_use_netlink 1 || true
+- cephadm:
+
+- cephadm.shell:
+    host.a:
+      - ceph orch apply rgw rgwsmb --port 8800 "--placement=*"
+- cephadm.wait_for_service:
+    service: rgw.rgwsmb
+
+# create rgw users: a plain user, a second plain user (read-only share),
+# and a tenant-aware user
+- exec:
+    host.a:
+      - dnf install -y python3-boto3 || apt install -y python3-boto3
+      - /home/ubuntu/cephtest/cephadm shell radosgw-admin user create --uid s3user1 --display-name s3user1 > /tmp/s3user1.json
+      - /home/ubuntu/cephtest/cephadm shell radosgw-admin user create --uid s3user2 --display-name s3user2 > /tmp/s3user2.json
+      - /home/ubuntu/cephtest/cephadm shell radosgw-admin user create --tenant ops --uid tenantuser --display-name tenantuser > /tmp/tenantuser.json
+
+# create buckets and seed each with a known object
+- python:
+    host.a: |
+      import json
+      import boto3
+
+      buckets = [
+          ('/tmp/s3user1.json', 's3bucket1'),
+          ('/tmp/s3user2.json', 's3bucket2'),
+          ('/tmp/tenantuser.json', 'tenantbucket'),
+      ]
+      for ufile, bname in buckets:
+          with open(ufile, 'rt') as f:
+              info = json.loads(f.read())
+          s3 = boto3.resource(
+              's3',
+              aws_access_key_id=info['keys'][0]['access_key'],
+              aws_secret_access_key=info['keys'][0]['secret_key'],
+              endpoint_url='http://localhost:8800',
+          )
+          bucket = s3.Bucket(bname)
+          bucket.create()
+          bucket.put_object(Key='seed.txt', Body='hello from s3\n')
+
+- cephadm.shell:
+    host.a:
+      # set up smb cluster (count:3 → CTDB ring) and shares
+      - cmd: ceph mgr module enable smb
+      # TODO: replace sleep with poll of mgr state?
+      - cmd: sleep 30
+      - cmd: ceph smb apply -i -
+        stdin: |
+          # --- Begin Embedded YAML
+          - resource_type: ceph.smb.cluster
+            cluster_id: rgwctdb1
+            auth_mode: user
+            user_group_settings:
+              - {source_type: resource, ref: ug1}
+            placement:
+              count: 3
+          - resource_type: ceph.smb.usersgroups
+            users_groups_id: ug1
+            values:
+              users:
+                - {name: user1, password: t3stP4ss1}
+              groups: []
+          # bucket owner is detected automatically
+          - resource_type: ceph.smb.share
+            cluster_id: rgwctdb1
+            share_id: s3share1
+            rgw:
+              bucket: s3bucket1
+          # tenant-aware user id
+          - resource_type: ceph.smb.share
+            cluster_id: rgwctdb1
+            share_id: s3tenant
+            rgw:
+              bucket: tenantbucket
+              user_id: 'ops$tenantuser'
+          # explicit user id, read-only
+          - resource_type: ceph.smb.share
+            cluster_id: rgwctdb1
+            share_id: s3ro
+            readonly: true
+            rgw:
+              bucket: s3bucket2
+              user_id: s3user2
+          # --- End Embedded YAML
+
+# Wait for the smb service (all 3 daemons) to start
+- cephadm.wait_for_service:
+    service: smb.rgwctdb1
+
+# Confirm CTDB clustermeta object was created in rados
+- cephadm.shell:
+    host.a:
+      - cmd: rados --pool=.smb -N rgwctdb1 get cluster.meta.json /dev/stdout
+
+# Smoke-test all three shares via the first CTDB node
+- template.exec:
+    host.d:
+      - sleep 30
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/s3share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/s3tenant -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/s3ro -c ls"
+
+# Smoke-test a different CTDB node (host.c) to confirm credential propagation
+- template.exec:
+    host.d:
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.c'|role_to_remote|attr('ip_address')}}/s3share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.c'|role_to_remote|attr('ip_address')}}/s3tenant -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.c'|role_to_remote|attr('ip_address')}}/s3ro -c ls"
+
+# Run the pytest workunit: first verify CTDB is healthy (reusing the shared
+# ctdb_healthy test), then run all rgw_share tests
+- smb.workunit:
+    admin_node: host.a
+    smb_nodes: [host.a, host.b, host.c]
+    smb_shares:
+      - s3share1
+      - s3tenant
+      - s3ro
+    smb_users:
+      - username: user1
+        password: t3stP4ss1
+    params:
+      rgw_share:
+        cluster_id: rgwctdb1
+        shares:
+          s3share1:
+            bucket: s3bucket1
+            user_id: s3user1
+          s3tenant:
+            bucket: tenantbucket
+            tenant: ops
+            user_id: 'ops$tenantuser'
+          s3ro:
+            bucket: s3bucket2
+            user_id: s3user2
+            readonly: true
+    timeout: 1h
+    clients:
+      client.0:
+        - [ctdb_healthy]
+        - [rgw_share]
+
+# Teardown
+- cephadm.shell:
+    host.a:
+      - cmd: ceph smb apply -i -
+        stdin: |
+          # --- Begin Embedded YAML
+          - resource_type: ceph.smb.cluster
+            cluster_id: rgwctdb1
+            intent: removed
+          - resource_type: ceph.smb.usersgroups
+            users_groups_id: ug1
+            intent: removed
+          - resource_type: ceph.smb.share
+            cluster_id: rgwctdb1
+            share_id: s3share1
+            intent: removed
+          - resource_type: ceph.smb.share
+            cluster_id: rgwctdb1
+            share_id: s3tenant
+            intent: removed
+          - resource_type: ceph.smb.share
+            cluster_id: rgwctdb1
+            share_id: s3ro
+            intent: removed
+          # --- End Embedded YAML
+# Wait for the smb service to be removed
+- cephadm.wait_for_service_not_present:
+    service: smb.rgwctdb1
