@@ -4406,12 +4406,12 @@ bool OSDMonitor::preprocess_pg_migrated_pool(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (!have_pg_pool(m->pgid.pool())) {
-    // Pool deleted or being deleted
-    dout(20) << __func__ << " pool for " << m->pgid << " dne or being deleted" << dendl;
+  if (!osdmap.have_pg_pool(m->pgid.pool())) {
+    // Pool deleted
+    dout(20) << __func__ << " pool for " << m->pgid << " dne" << dendl;
     goto ignore;
   }
-  pi = std::as_const(*this).get_pg_pool(m->pgid.pool());
+  pi = *osdmap.get_pg_pool(m->pgid.pool());
 
   if (pi.get_pg_num() <= m->pgid.ps()) {
     // Duplicated message
@@ -4438,13 +4438,17 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   dout(10) << __func__ << " " << *m << dendl;
   if (!have_pg_pool(m->pgid.pool())) {
     dout(1) << __func__ << " source pool " << m->pgid.pool() << " deleted during migration" << dendl;
+    mon.no_reply(op);
     return false;
   }
-  pg_pool_t source_p = get_pg_pool(m->pgid.pool());
+  pg_pool_t source_p = std::as_const(*this).get_pg_pool(m->pgid.pool());
 
-  // Checked in preprocess
-  ceph_assert(source_p.migrating_pgs.contains(m->pgid));
-  ceph_assert(source_p.migration_target == m->migration_target);
+  if (!source_p.migrating_pgs.contains(m->pgid) ||
+      source_p.migration_target != m->migration_target) {
+    dout(10) << __func__ << " " << m->pgid << " already finished in this update" << dendl;
+    mon.no_reply(op);
+    return false;
+  }
 
   pg_t pgid = m->pgid;
   source_p.migrating_pgs.erase(pgid);
