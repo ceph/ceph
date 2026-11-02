@@ -2,9 +2,9 @@
 NVMe-oF Gateway Requirements
 ============================
 
-- At least 8 GB of RAM dedicated to each NVME-oF gateway instance
+- At least 8 GB of RAM dedicated to each NVMe-oF gateway instance
 - We highly recommend dedicating at least four CPU threads or vcores to each
-  NVME-oF gateway. A setup with only one CPU thread or vcore can work, but
+  NVMe-oF gateway. A setup with only one CPU thread or vcore can work, but
   performance may be below expectations.  It is preferable to dedicate servers
   to the NVMe-oF gateway service so that these and other Ceph services do not
   degrade each other.
