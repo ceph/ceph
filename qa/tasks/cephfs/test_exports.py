@@ -2,6 +2,7 @@ import logging
 import random
 import signal
 import time
+from textwrap import dedent
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
@@ -49,6 +50,76 @@ class TestExports(CephFSTestCase):
         # Check if rank1 changed (standby tookover?)
         new_rank1 = self.fs.get_rank(rank=1)
         self.assertEqual(rank1['gid'], new_rank1['gid'])
+
+    def test_export_busy_dir(self):
+        """
+        Exporting a directory that a client is busy creating files in must
+        neither wait for mds_tick_interval while the subtree freezes nor be
+        given up once it is frozen.
+
+        The freeze waits for the auth pins of updates that are submitted to
+        the journal but not flushed, such as early-replied creates and cap
+        flushes, and nothing flushed the journal for it. Once frozen, the
+        export was cancelled whenever the directory inode's filelock was in
+        the middle of a state change, which a client's caps on the
+        directory make common, and an "export dir" is not retried.
+        """
+
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+        # "export dir" exports the whole dirfrag only, so keep the busy
+        # directory in one piece however many files the client creates
+        self.config_set('mds', 'mds_bal_fragment_dirs', False)
+
+        def on_rank1(path):
+            for s in self._get_subtrees(status=status, rank=1):
+                if s['dir']['path'] == path:
+                    return s['auth_first'] == 1
+            return False
+
+        def export(path, to, timeout=60):
+            start = time.monotonic()
+            out = self.fs.rank_tell(["export", "dir", path, str(to)], rank=1 - to)
+            self.assertEqual(out.get('results', out).get('return_code', 0), 0)
+            while time.monotonic() - start < timeout:
+                if on_rank1(path) == (to == 1):
+                    return time.monotonic() - start
+                time.sleep(0.2)
+            self.fail(f"export of {path} to mds.{to} did not finish in {timeout}s")
+
+        # the first export to a rank waits for it to become an export target
+        self.mount_a.run_shell(["mkdir", "-p", "warmup", "busy"])
+        export("/warmup", 1)
+        export("/warmup", 0)
+
+        mnt = self.mount_a.mountpoint
+        writer = self.mount_a._run_python(dedent(f"""
+            import os, threading
+            def write(w):
+                i = 0
+                while not os.path.exists("{mnt}/stop"):
+                    with open(f"{mnt}/busy/w{{w}}-{{i}}", "wb") as f:
+                        f.write(b"x" * 4096)
+                    i += 1
+            threads = [threading.Thread(target=write, args=(w,)) for w in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        """))
+        # a long tick, so that an export that waits for it cannot pass
+        self.config_set('mds', 'mds_tick_interval', 20)
+        times = []
+        try:
+            time.sleep(2)
+            for i in range(6):
+                times.append(export("/busy", 1 if i % 2 == 0 else 0))
+                time.sleep(1)
+        finally:
+            self.mount_a.run_shell(["touch", "stop"])
+            writer.wait()
+        log.info(f"exports of a busy directory took {times}")
+        self.assertLess(max(times), 10)
 
 class TestExportPin(CephFSTestCase):
     MDSS_REQUIRED = 3
