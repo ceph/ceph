@@ -58,7 +58,7 @@ options:
 - name: mon_down_mkfs_grace
   type: secs
   level: advanced
-  desc: Period in seconds that the cluster may have a mon down after cluster creation
+  desc: Period in seconds that the cluster may have a Monitor down after cluster creation
   default: 1_min
   services:
   - mon
@@ -67,7 +67,7 @@ options:
 - name: mon_down_added_grace
   type: secs
   level: advanced
-  desc: Period in seconds that the cluster may have a newly added mon down
+  desc: Period in seconds that the cluster may have a newly added Monitor down
   default: 3_min
   services:
   - mon
@@ -85,8 +85,8 @@ options:
 - name: mon_mgr_beacon_grace
   type: secs
   level: advanced
-  desc: Period in seconds from last beacon to Monitor marking a Manager daemon as
-    failed
+  desc: Period in seconds from the last beacon after which the Monitors will mark a
+    Manager daemon as failed
   default: 30
   services:
   - mon
@@ -125,7 +125,7 @@ options:
 - name: mon_nvmeofgw_delete_grace
   type: secs
   level: advanced
-  desc: Issue NVMEOF_GATEWAY_DELETING health warning after this amount of time has elapsed
+  desc: Raise NVMEOF_GATEWAY_DELETING health warning after this amount of time has elapsed
   default: 15_min
   services:
   - mon
@@ -156,7 +156,7 @@ options:
 - name: mon_mgr_mkfs_grace
   type: int
   level: advanced
-  desc: Period in seconds that the cluster may have no active manager before this
+  desc: Period in seconds that the cluster may have no active Manager before this
     is reported as an ERR rather than a WARN
   default: 2_min
   services:
@@ -164,7 +164,7 @@ options:
 - name: mon_mgr_proxy_client_bytes_ratio
   type: float
   level: dev
-  desc: Ratio of mon_client_bytes that can be consumed by proxied mgr commands before
+  desc: Ratio of mon_client_bytes that can be consumed by proxied Manager commands before
     we error out to client
   default: 0.3
   services:
@@ -207,7 +207,7 @@ options:
 - name: mon_cluster_log_to_file
   type: bool
   level: advanced
-  desc: Should the Monitors send cluster log messages to file?
+  desc: Should the Monitors send cluster log messages to a file?
   default: true
   services:
   - mon
@@ -259,7 +259,7 @@ options:
 - name: mon_cluster_log_to_graylog
   type: str
   level: advanced
-  desc: Should the Monitors send cluster log to graylog?
+  desc: Should the Monitors send cluster log messages to Graylog?
   default: 'false'
   services:
   - mon
@@ -293,7 +293,7 @@ options:
 - name: mon_cluster_log_to_journald
   type: str
   level: advanced
-  desc: Should the Monitors send cluster log to journald?
+  desc: Should the Monitors send cluster log messages to journald?
   default: 'false'
   services:
   - mon
@@ -310,7 +310,7 @@ options:
 - name: mon_log_max_summary
   type: uint
   level: advanced
-  desc: Number of recent cluster log messages to dedup against
+  desc: Number of recent cluster log messages to dedup
   default: 50
   services:
   - mon
@@ -334,7 +334,7 @@ options:
 - name: mon_health_to_clog
   type: bool
   level: advanced
-  desc: Log Monitor health to cluster log
+  desc: Log Monitor health to the cluster log
   fmt_desc: Enable sending a health summary to the cluster log periodically.
   default: true
   services:
@@ -343,8 +343,8 @@ options:
 - name: mon_health_to_clog_interval
   type: int
   level: advanced
-  desc: Frequency to log Monitor health to cluster log
-  fmt_desc: How often (in seconds) the Monitor sends a health summary to the cluster
+  desc: Frequency to log Monitor health to the cluster log
+  fmt_desc: How often (in seconds) the Monitors send a health summary to the cluster
     log (a non-positive number disables). Monitors will always
     send a summary to the cluster log whether or not it differs from
     the previous summary.
@@ -357,10 +357,10 @@ options:
 - name: mon_health_to_clog_tick_interval
   type: float
   level: dev
-  fmt_desc: How often (in seconds) the Monitor sends a health summary to the cluster
-    log (a non-positive number disables). If current health summary
-    is empty or identical to the last time, Monitor will not send it
-    to cluster log.
+  fmt_desc: How often (in seconds) the Monitors send a health summary to the cluster
+    log (a non-positive number disables). If the current health summary
+    is empty or identical to the last time, the Monitors will not send it
+    to the cluster log.
   default: 1_min
   services:
   - mon
@@ -368,19 +368,19 @@ options:
 - name: mon_health_detail_to_clog
   type: bool
   level: dev
-  desc: Log health detail to cluster log
+  desc: Log health detail to the cluster log
   default: true
   with_legacy: true
 - name: mon_warn_on_filestore_osds
   type: bool
   level: dev
-  desc: Log health warn for filestore OSDs
+  desc: Raise a health warning for Filestore OSDs
   default: true
   with_legacy: true
 - name: mon_health_max_detail
   type: uint
   level: advanced
-  desc: Max detailed pgs to report in health detail
+  desc: Max detailed PGs to report in health detail
   default: 50
   services:
   - mon
@@ -395,7 +395,7 @@ options:
 - name: mon_data_avail_crit
   type: int
   level: advanced
-  desc: Issue MON_DISK_CRIT health error when mon available space below this percentage
+  desc: Raise MON_DISK_CRIT health error when a Monitor's available space is below this percentage
   fmt_desc: Raise ``HEALTH_ERR`` status when the filesystem that houses a
     Monitor's data store reports that its available capacity is
     less than or equal to this percentage.
@@ -406,7 +406,7 @@ options:
 - name: mon_data_avail_warn
   type: int
   level: advanced
-  desc: Issue MON_DISK_LOW health warning when mon available space below this percentage
+  desc: Raise MON_DISK_LOW health warning when a Monitor's available space is below this percentage
   fmt_desc: Raise ``HEALTH_WARN`` status when the filesystem that houses a
     Monitor's data store reports that its available capacity is
     less than or equal to this percentage.
@@ -417,7 +417,7 @@ options:
 - name: mon_data_size_warn
   type: size
   level: advanced
-  desc: Issue MON_DISK_BIG health warning when mon database is above this size
+  desc: Raise MON_DISK_BIG health warning when a Monitor's database is above this size
   fmt_desc: Raise ``HEALTH_WARN`` status when a Monitor's data
     store grows to be larger than this size, 15GB by default.
   default: 15_G
@@ -427,7 +427,7 @@ options:
 - name: mon_daemon_bytes
   type: size
   level: advanced
-  desc: Max bytes of outstanding mon messages mon will read off the network
+  desc: Max bytes of outstanding Monitor messages a Monitor will read off the network
   fmt_desc: The message memory cap for metadata server and OSD messages (in bytes).
   default: 400_M
   services:
@@ -436,7 +436,7 @@ options:
 - name: mon_election_timeout
   type: float
   level: advanced
-  desc: Maximum time for a mon election (seconds)
+  desc: Maximum time for a Monitor election (seconds)
   fmt_desc: On election proposer, maximum waiting time for all ACKs in seconds.
   default: 5
   services:
@@ -495,7 +495,7 @@ options:
 - name: mon_accept_timeout_factor
   type: float
   level: advanced
-  desc: Multiple of mon_lease for follower mons to accept proposed state changes before
+  desc: Multiple of mon_lease for follower Monitors to accept proposed state changes before
     calling a new election
   fmt_desc: The Leader will wait ``mon_lease`` \* ``mon_accept_timeout_factor``
     for the Requester(s) to accept a Paxos update. It is also used
@@ -536,7 +536,7 @@ options:
 - name: mon_con_tracker_score_halflife
   type: uint
   level: advanced
-  desc: The 'halflife' used when updating/calculating peer connection scores
+  desc: The half-life used when updating/calculating peer connection scores
   default: 43200
   services:
   - mon
@@ -552,7 +552,7 @@ options:
 - name: mon_warn_on_cache_pools_without_hit_sets
   type: bool
   level: advanced
-  desc: Issue CACHE_POOL_NO_HIT_SET health warning for cache pools that do not have
+  desc: Raise CACHE_POOL_NO_HIT_SET health warning for cache pools that do not have
     hit sets configured
   fmt_desc: Raise ``HEALTH_WARN`` when a cache pool does not have the ``hit_set_type``
     value configured. See :ref:`hit_set_type <hit_set_type>` for more details.
@@ -563,7 +563,7 @@ options:
 - name: mon_warn_on_pool_pg_num_not_power_of_two
   type: bool
   level: dev
-  desc: Issue POOL_PG_NUM_NOT_POWER_OF_TWO warning if pool has a non-power-of-two
+  desc: Raise POOL_PG_NUM_NOT_POWER_OF_TWO health warning if a pool has a non-power-of-two
     pg_num value
   default: true
   services:
@@ -571,14 +571,14 @@ options:
 - name: mon_allow_pool_size_one
   type: bool
   level: advanced
-  desc: Allow configuring pool with no replicas
+  desc: Allow configuring pools with no replicas
   default: false
   services:
   - mon
 - name: mon_warn_on_crush_straw_calc_version_zero
   type: bool
   level: advanced
-  desc: Issue OLD_CRUSH_STRAW_CALC_VERSION health warning if the CRUSH map's straw_calc_version
+  desc: Raise OLD_CRUSH_STRAW_CALC_VERSION health warning if the CRUSH map's straw_calc_version
     is zero
   fmt_desc: Raise ``HEALTH_WARN`` when the CRUSH ``straw_calc_version`` is zero. See
     :ref:`CRUSH map tunables <crush-map-tunables>` for details.
@@ -589,7 +589,7 @@ options:
 - name: mon_warn_on_pool_no_redundancy
   type: bool
   level: advanced
-  desc: Issue a health warning if any pool is configured with no replicas
+  desc: Raise a health warning if any pool is configured with no replicas
   fmt_desc: Raise ``HEALTH_WARN`` if any pool is configured with no replicas.
   default: true
   services:
@@ -618,7 +618,7 @@ options:
 - name: mon_warn_on_legacy_crush_tunables
   type: bool
   level: advanced
-  desc: Issue OLD_CRUSH_TUNABLES health warning if CRUSH tunables are older than mon_crush_min_required_version
+  desc: Raise OLD_CRUSH_TUNABLES health warning if CRUSH tunables are older than mon_crush_min_required_version
   fmt_desc: Raise ``HEALTH_WARN`` when CRUSH tunables are too old (older than ``mon_min_crush_required_version``)
   default: true
   services:
@@ -641,14 +641,14 @@ options:
 - name: mon_warn_on_degraded_stretch_mode
   type: bool
   level: advanced
-  desc: Issue a health warning if we are in degraded stretch mode
+  desc: Raise a health warning if the cluster is in degraded stretch mode
   default: true
   services:
   - mon
 - name: mon_warn_on_colocated_monitors
   type: bool
   level: advanced
-  desc: Issue MON_COLOCATED health warning if two or
+  desc: Raise MON_COLOCATED health warning if two or
     more Monitors have the same IP address
   default: false
   services:
@@ -698,7 +698,7 @@ options:
 - name: mon_clock_drift_allowed
   type: float
   level: advanced
-  desc: Allowed clock drift (in seconds) between mons before issuing a health warning
+  desc: Allowed clock drift (in seconds) between Monitors before raising a health warning
   default: 0.05
   services:
   - mon
@@ -717,7 +717,7 @@ options:
 - name: mon_timecheck_interval
   type: float
   level: advanced
-  desc: frequency of clock synchronization checks between Monitors (seconds)
+  desc: Frequency of clock synchronization checks between Monitors (seconds)
   fmt_desc: The time check interval (clock drift check) in seconds
     for the Leader.
   default: 5_min
@@ -728,7 +728,7 @@ options:
 - name: mon_timecheck_skew_interval
   type: float
   level: advanced
-  desc: frequency of clock synchronization (re)checks between Monitors while clocks
+  desc: Frequency of clock synchronization (re)checks between Monitors while clocks
     are believed to be skewed (seconds)
   fmt_desc: The time check interval (clock drift check) in seconds when in
     presence of a skew in seconds for the Leader.
@@ -815,7 +815,7 @@ options:
   default: 250
   services:
   - mon
-  fmt_desc: The minimum amount of versions to trigger a trim (0 disables it)
+  fmt_desc: The minimum number of versions to trigger a trim (0 disables it)
   with_legacy: true
 # maximum amount of versions to trim during a single proposal (0 disables it)
 - name: paxos_service_trim_max
@@ -824,7 +824,7 @@ options:
   default: 500
   services:
   - mon
-  fmt_desc: The maximum amount of versions to trim during a single proposal (0 disables it)
+  fmt_desc: The maximum number of versions to trim during a single proposal (0 disables it)
   with_legacy: true
 - name: paxos_service_trim_max_multiplier
   type: uint
@@ -863,7 +863,7 @@ options:
 - name: mon_auth_emergency_allowed_ciphers
   type: str
   level: advanced
-  desc: set allowed ciphers to override mon map configuration
+  desc: Set allowed ciphers to override the monmap configuration
   services:
   - mon
   flags:
@@ -872,7 +872,7 @@ options:
 - name: mon_auth_validate_all_caps
   type: bool
   level: advanced
-  desc: Whether to parse non-monitor capabilities set by the 'ceph auth ...' commands.
+  desc: Whether to parse non-Monitor capabilities set by the 'ceph auth ...' commands.
     Disabling this saves CPU on the Monitor, but allows invalid capabilities to be
     set, and only be rejected later, when they are used.
   default: true
@@ -884,10 +884,10 @@ options:
 - name: mon_mds_force_trim_to
   type: int
   level: dev
-  desc: Force mons to trim mdsmaps/fsmaps up to this epoch
-  fmt_desc: Force Monitor to trim mdsmaps up to but not including this FSMap
-    epoch. A value of 0 disables (the default) this config. This command is
-    potentially dangerous, use with care.
+  desc: Force Monitors to trim mdsmaps/fsmaps up to this epoch
+  fmt_desc: Force Monitors to trim mdsmaps up to but not including this FSMap
+    epoch. A value of 0 (the default) disables this option. This option is
+    potentially dangerous; use with care.
   default: 0
   services:
   - mon
@@ -943,7 +943,7 @@ options:
 - name: mon_mgr_blocklist_interval
   type: float
   level: dev
-  desc: Duration in seconds that blocklist entries for mgr daemons remain in the OSD
+  desc: Duration in seconds that blocklist entries for Manager daemons remain in the OSD
     map
   default: 1_day
   services:
@@ -1061,7 +1061,7 @@ options:
 - name: mon_osd_destroyed_out_interval
   type: int
   level: advanced
-  desc: Mark any OSD 'out' that has been 'destroy'ed for this long (seconds)
+  desc: Mark any OSD 'out' that has been destroyed for this long (seconds)
   default: 10_min
   services:
   - mon
@@ -1119,7 +1119,7 @@ options:
 - name: mon_osd_warn_op_age
   type: float
   level: advanced
-  desc: Issue REQUEST_SLOW health warning if OSD ops are slower than this age (seconds)
+  desc: Raise REQUEST_SLOW health warning if OSD ops are slower than this age (seconds)
   default: 32
   services:
   - mgr
@@ -1127,7 +1127,7 @@ options:
 - name: mon_osd_warn_num_repaired
   type: uint
   level: advanced
-  desc: Issue OSD_TOO_MANY_REPAIRS health warning if an OSD has more than this many
+  desc: Raise OSD_TOO_MANY_REPAIRS health warning if an OSD has more than this many
     read repairs
   default: 10
   services:
@@ -1191,7 +1191,7 @@ options:
 - name: mon_warn_on_older_version
   type: bool
   level: advanced
-  desc: Issue DAEMON_OLD_VERSION health warning if daemons are not all running the
+  desc: Raise DAEMON_OLD_VERSION health warning if daemons are not all running the
     same version
   default: true
   services:
@@ -1199,15 +1199,15 @@ options:
 - name: mon_warn_older_version_delay
   type: secs
   level: advanced
-  desc: Issue DAEMON_OLD_VERSION health warning after this amount of time has elapsed
+  desc: Raise DAEMON_OLD_VERSION health warning after this amount of time has elapsed
   default: 7_day
   services:
   - mon
 - name: mon_data
   type: str
   level: advanced
-  desc: Path to mon database
-  fmt_desc: The Monitor's data location.
+  desc: Path to Monitor database
+  fmt_desc: The filesystem path to each Monitor's data store.
   default: /var/lib/ceph/mon/$cluster-$id
   services:
   - mon
@@ -1290,7 +1290,7 @@ options:
 - name: mon_enable_op_tracker
   type: bool
   level: advanced
-  desc: Enable/disable MON op tracking
+  desc: Enable/disable Monitor op tracking
   default: true
   services:
   - mon
@@ -1325,7 +1325,7 @@ options:
   default: true
   services:
   - mon
-  fmt_desc: Compact a certain prefix (including paxos) when we trim its old states.
+  fmt_desc: Compact a certain prefix (including Paxos) when we trim its old states.
   with_legacy: true
 - name: mon_op_complaint_time
   type: secs
@@ -1351,14 +1351,14 @@ options:
 - name: mon_op_history_duration
   type: secs
   level: advanced
-  desc: Expiration time in seconds of historical MON OPS
+  desc: Expiration time in seconds of historical Monitor ops
   default: 10_min
   services:
   - mon
 - name: mon_op_history_slow_op_size
   type: uint
   level: advanced
-  desc: Max number of slow historical MON OPS to keep
+  desc: Max number of slow historical Monitor ops to keep
   default: 20
   services:
   - mon
@@ -1454,7 +1454,7 @@ options:
 - name: mon_osd_max_initial_pgs
   type: int
   level: advanced
-  desc: Maximum number of PGs a pool will created with
+  desc: Maximum number of PGs a pool will be created with
   long_desc: If the user specifies more PGs than this, the cluster will subsequently
     split PGs after the pool is created in order to reach the target.
   default: 1024
@@ -1497,7 +1497,7 @@ options:
 - name: mon_tick_interval
   type: int
   level: advanced
-  desc: Interval for internal mon background checks
+  desc: Interval for internal Monitor background checks
   fmt_desc: A Monitor's tick interval in seconds.
   default: 5
   services:
@@ -1506,8 +1506,8 @@ options:
 - name: mon_session_timeout
   type: int
   level: advanced
-  desc: Close inactive mon client connections after this many seconds
-  fmt_desc: Monitor will terminate inactive sessions stay idle over this
+  desc: Close inactive Monitor client connections after this many seconds
+  fmt_desc: The Monitor will terminate sessions that stay idle longer than this
     time limit.
   default: 5_min
   services:
