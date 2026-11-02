@@ -2748,6 +2748,63 @@ def test_get_vectors_multiple_fragments():
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
+def test_get_vectors_large_fragment():
+    """
+    Vectors written by one request whose data is larger than 4 MiB.
+    With the rgw backend the data file of the fragment is larger than
+    rgw_max_chunk_size (4 MiB by default), so it is striped over several RADOS
+    objects, and uploaded in several multipart parts. Reading rows from the
+    middle of the file makes lancedb ask for a byte range that crosses a stripe
+    boundary, which a single SAL read does not return in full. Reading all the
+    rows asks for a range larger than a chunk, which is read in several parts.
+    """
+    # 320 vectors of 4096 floats are 5 MiB of vector data, and about 25 MB of JSON
+    dimension = 4096
+    num_vectors = 320
+    set_rgw_config_option('rgw_s3vector_max_request_size', 64 * 1024 * 1024)
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    index_name = 'test-index'
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    vector_created = False
+    try:
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vector_created = True
+
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        vectors = generate_vectors(num_vectors, dimension)
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # rows 200 to 299 are the bytes between 3.2 MiB and 4.8 MiB of the vector data
+        vector_ids = [v['key'] for v in vectors[200:300]]
+        returned_vectors = verify_get_vectors(conn, bucket_name, index_name, vector_ids,
+                                              expected_dimension=dimension)
+        assert sorted(v['key'] for v in returned_vectors) == sorted(vector_ids)
+
+        # all the rows, with their data, in one page
+        result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                   maxResults=num_vectors, returnData=True)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert 'nextToken' not in result
+        assert sorted(v['key'] for v in result['vectors']) == sorted(v['key'] for v in vectors)
+        for vector in result['vectors']:
+            assert len(vector['data']['float32']) == dimension
+    finally:
+        try:
+            if vector_created:
+                _delete_vector_bucket(conn, bucket_name)
+        finally:
+            _delete_s3_bucket_for_vector_bucket(bucket_name)
+            set_rgw_config_option('rgw_s3vector_max_request_size', 20 * 1024 * 1024)
+
+@pytest.mark.vector_test
 def test_list_vectors_multiple_fragments():
     """
     A page of the listing must be full even when its vectors were written by
