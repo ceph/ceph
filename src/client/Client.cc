@@ -8844,11 +8844,21 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     ldout(cct,10) << "resetting cached fscrypt_file field. size now "
                   << in->fscrypt_file.size() << dendl;
 
-    if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
-      in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
-      in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+    // FILE_EXCL owns this field. Record it and let the next cap flush
+    // publish it. A SETATTR here xlocks filelock before fsync, and the
+    // request cannot carry a release of the FILE_BUFFER still held by
+    // the buffered write. A size change still in the mask goes to the
+    // MDS with this field attached to that request.
+    if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL) &&
+        !(mask & CEPH_SETATTR_SIZE)) {
+      if (paux && in->fscrypt_file != *paux) {
+        in->fscrypt_file = *paux;
+        in->ctime = ceph_clock_now();
+        in->cap_dirtier_uid = perms.uid();
+        in->cap_dirtier_gid = perms.gid();
+        in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      }
+      mask &= ~CEPH_SETATTR_FSCRYPT_FILE;
     } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
                (paux && in->fscrypt_file != *paux)) {
       inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR;
