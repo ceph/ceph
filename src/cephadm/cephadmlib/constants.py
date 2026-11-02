@@ -1,8 +1,8 @@
 # constants.py - constant values used throughout the cephadm sources
 
 # Default container images -----------------------------------------------------
-DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:main'
-DEFAULT_IMAGE_IS_MAIN = True
+DEFAULT_IMAGE = 'quay.io/ceph/ceph:v21'
+DEFAULT_IMAGE_IS_MAIN = False
 DEFAULT_IMAGE_RELEASE = 'umbrella'
 DEFAULT_REGISTRY = 'quay.io'  # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
