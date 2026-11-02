@@ -72,7 +72,7 @@ notable differences:
   This can be used for retrieving the disk path.
 * the ``service`` command was added, allowing ``rbd-wnbd`` to run as a Windows service.
   All mappings are by default persistent, being recreated when the service
-  stops, unless explicitly unmapped. The service disconnects the mappings
+  starts, unless explicitly unmapped. The service disconnects the mappings
   when being stopped.
 * the ``list`` command also includes a ``status`` column.
 
