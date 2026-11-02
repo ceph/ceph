@@ -1329,7 +1329,7 @@ ceph_rgw_op_copy_obj_bytes{User="dashboard",instance_id="aayrrj"} 0
 # HELP ceph_rgw_op_copy_obj_lat_count Copy object latency Count
 # TYPE ceph_rgw_op_copy_obj_lat_count counter
 ceph_rgw_op_copy_obj_lat_count{User="dashboard",instance_id="aayrrj"} 0
-# HELP ceph_rgw_op_copy_obj_lat_sum Copy object latency Total
+# HELP ceph_rgw_op_copy_obj_lat_sum Copy object latency Total (seconds)
 # TYPE ceph_rgw_op_copy_obj_lat_sum gauge
 ceph_rgw_op_copy_obj_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
 # HELP ceph_rgw_op_copy_obj_ops Copy objects
@@ -1338,7 +1338,7 @@ ceph_rgw_op_copy_obj_ops{User="dashboard",instance_id="aayrrj"} 0
 # HELP ceph_rgw_op_del_bucket_lat_count Delete bucket latency Count
 # TYPE ceph_rgw_op_del_bucket_lat_count counter
 ceph_rgw_op_del_bucket_lat_count{User="dashboard",instance_id="aayrrj"} 0
-# HELP ceph_rgw_op_del_bucket_lat_sum Delete bucket latency Total
+# HELP ceph_rgw_op_del_bucket_lat_sum Delete bucket latency Total (seconds)
 # TYPE ceph_rgw_op_del_bucket_lat_sum gauge
 ceph_rgw_op_del_bucket_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
 # HELP ceph_rgw_op_del_bucket_ops Delete Buckets
@@ -1350,7 +1350,7 @@ ceph_rgw_op_del_obj_bytes{User="dashboard",instance_id="aayrrj"} 0
 # HELP ceph_rgw_op_del_obj_lat_count Delete object latency Count
 # TYPE ceph_rgw_op_del_obj_lat_count counter
 ceph_rgw_op_del_obj_lat_count{User="dashboard",instance_id="aayrrj"} 0
-# HELP ceph_rgw_op_del_obj_lat_sum Delete object latency Total
+# HELP ceph_rgw_op_del_obj_lat_sum Delete object latency Total (seconds)
 # TYPE ceph_rgw_op_del_obj_lat_sum gauge
 ceph_rgw_op_del_obj_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
 # HELP ceph_rgw_op_del_obj_ops Delete objects
@@ -1364,7 +1364,7 @@ ceph_rgw_op_get_obj_bytes{User="dashboard",instance_id="aayrrj"} 0
 # TYPE ceph_rgw_op_get_obj_lat_count counter
 ceph_rgw_op_get_obj_lat_count{Bucket="bucket1",instance_id="aayrrj"} 2
 ceph_rgw_op_get_obj_lat_count{User="dashboard",instance_id="aayrrj"} 0
-# HELP ceph_rgw_op_get_obj_lat_sum Get latency Total
+# HELP ceph_rgw_op_get_obj_lat_sum Get latency Total (seconds)
 # TYPE ceph_rgw_op_get_obj_lat_sum gauge
 ceph_rgw_op_get_obj_lat_sum{Bucket="bucket1",instance_id="aayrrj"} 0.003000
 ceph_rgw_op_get_obj_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
@@ -1376,7 +1376,7 @@ ceph_rgw_op_get_obj_ops{User="dashboard",instance_id="aayrrj"} 0
 # TYPE ceph_rgw_op_list_buckets_lat_count counter
 ceph_rgw_op_list_buckets_lat_count{Bucket="bucket1",instance_id="aayrrj"} 1
 ceph_rgw_op_list_buckets_lat_count{User="dashboard",instance_id="aayrrj"} 1
-# HELP ceph_rgw_op_list_buckets_lat_sum List buckets latency Total
+# HELP ceph_rgw_op_list_buckets_lat_sum List buckets latency Total (seconds)
 # TYPE ceph_rgw_op_list_buckets_lat_sum gauge
 ceph_rgw_op_list_buckets_lat_sum{Bucket="bucket1",instance_id="aayrrj"} 0.002300
 ceph_rgw_op_list_buckets_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
@@ -1387,7 +1387,7 @@ ceph_rgw_op_list_buckets_ops{User="dashboard",instance_id="aayrrj"} 1
 # HELP ceph_rgw_op_list_obj_lat_count List objects latency Count
 # TYPE ceph_rgw_op_list_obj_lat_count counter
 ceph_rgw_op_list_obj_lat_count{User="dashboard",instance_id="aayrrj"} 0
-# HELP ceph_rgw_op_list_obj_lat_sum List objects latency Total
+# HELP ceph_rgw_op_list_obj_lat_sum List objects latency Total (seconds)
 # TYPE ceph_rgw_op_list_obj_lat_sum gauge
 ceph_rgw_op_list_obj_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
 # HELP ceph_rgw_op_list_obj_ops List objects
@@ -1401,7 +1401,7 @@ ceph_rgw_op_put_obj_bytes{User="dashboard",instance_id="aayrrj"} 0
 # TYPE ceph_rgw_op_put_obj_lat_count counter
 ceph_rgw_op_put_obj_lat_count{Bucket="bucket1",instance_id="aayrrj"} 2
 ceph_rgw_op_put_obj_lat_count{User="dashboard",instance_id="aayrrj"} 0
-# HELP ceph_rgw_op_put_obj_lat_sum Put latency Total
+# HELP ceph_rgw_op_put_obj_lat_sum Put latency Total (seconds)
 # TYPE ceph_rgw_op_put_obj_lat_sum gauge
 ceph_rgw_op_put_obj_lat_sum{Bucket="bucket1",instance_id="aayrrj"} 2.818065
 ceph_rgw_op_put_obj_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
@@ -1418,28 +1418,28 @@ ceph_rgw_op_put_obj_ops{User="dashboard",instance_id="aayrrj"} 0
   setup_test_data(clients, daemon, LABELED_RBD_MIRROR, collector);
 
   expectedMetrics = R"(
-# HELP ceph_rbd_mirror_snapshot_image_last_sync_bytes Bytes synced for the last snapshot
+# HELP ceph_rbd_mirror_snapshot_image_last_sync_bytes Bytes synced for the last snapshot (bytes)
 # TYPE ceph_rbd_mirror_snapshot_image_last_sync_bytes gauge
 ceph_rbd_mirror_snapshot_image_last_sync_bytes{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 52428800
-# HELP ceph_rbd_mirror_snapshot_image_last_sync_time Time taken to sync the last snapshot
+# HELP ceph_rbd_mirror_snapshot_image_last_sync_time Time taken to sync the last snapshot (seconds)
 # TYPE ceph_rbd_mirror_snapshot_image_last_sync_time gauge
 ceph_rbd_mirror_snapshot_image_last_sync_time{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 0.194676
-# HELP ceph_rbd_mirror_snapshot_image_local_timestamp Timestamp of the local snapshot
+# HELP ceph_rbd_mirror_snapshot_image_local_timestamp Timestamp of the local snapshot (seconds)
 # TYPE ceph_rbd_mirror_snapshot_image_local_timestamp gauge
 ceph_rbd_mirror_snapshot_image_local_timestamp{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 1702884232.559627
-# HELP ceph_rbd_mirror_snapshot_image_remote_timestamp Timestamp of the remote snapshot
+# HELP ceph_rbd_mirror_snapshot_image_remote_timestamp Timestamp of the remote snapshot (seconds)
 # TYPE ceph_rbd_mirror_snapshot_image_remote_timestamp gauge
 ceph_rbd_mirror_snapshot_image_remote_timestamp{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 1702884232.559627
 # HELP ceph_rbd_mirror_snapshot_image_snapshots Number of snapshots synced
 # TYPE ceph_rbd_mirror_snapshot_image_snapshots counter
 ceph_rbd_mirror_snapshot_image_snapshots{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 1
-# HELP ceph_rbd_mirror_snapshot_image_sync_bytes Total bytes synced
+# HELP ceph_rbd_mirror_snapshot_image_sync_bytes Total bytes synced (bytes)
 # TYPE ceph_rbd_mirror_snapshot_image_sync_bytes counter
 ceph_rbd_mirror_snapshot_image_sync_bytes{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 52428800
 # HELP ceph_rbd_mirror_snapshot_image_sync_time_count Average sync time Count
 # TYPE ceph_rbd_mirror_snapshot_image_sync_time_count counter
 ceph_rbd_mirror_snapshot_image_sync_time_count{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 1
-# HELP ceph_rbd_mirror_snapshot_image_sync_time_sum Average sync time Total
+# HELP ceph_rbd_mirror_snapshot_image_sync_time_sum Average sync time Total (seconds)
 # TYPE ceph_rbd_mirror_snapshot_image_sync_time_sum gauge
 ceph_rbd_mirror_snapshot_image_sync_time_sum{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 0.194676
 )";
