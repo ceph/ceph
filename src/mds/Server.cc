@@ -2149,9 +2149,14 @@ void Server::journal_and_reply(const MDRequestRef& mdr, CInode *in, CDentry *dn,
 
     mdr->set_queued_next_replay_op();
     mds->queue_one_replay();
-  } else if (mdr->did_early_reply)
+  } else if (mdr->did_early_reply) {
     mds->locker->handle_locks_for_early_reply(mdr.get());
-  else
+    // Witnesses keep their locks until we commit, and the requests that
+    // wait for those locks on other ranks cannot nudge our log: flush it
+    // rather than leave them waiting for the next tick.
+    if (mdr->has_more() && !mdr->more()->witnessed.empty())
+      mdlog->flush();
+  } else
     mdlog->flush();
 }
 
@@ -10638,6 +10643,10 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
 
       if (!frozen_inode) {
         srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
+        // The other auth pins may belong to updates that wait to be
+        // journaled, such as a client's cap flush: flush the log now
+        // rather than waiting for the next tick.
+        mds->mdlog->flush();
         return;
       }
 

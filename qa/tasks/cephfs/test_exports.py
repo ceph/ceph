@@ -2,6 +2,7 @@ import logging
 import random
 import signal
 import time
+from textwrap import dedent
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
@@ -49,6 +50,46 @@ class TestExports(CephFSTestCase):
         # Check if rank1 changed (standby tookover?)
         new_rank1 = self.fs.get_rank(rank=1)
         self.assertEqual(rank1['gid'], new_rank1['gid'])
+
+    def test_rename_just_written_file_across_ranks(self):
+        """
+        Renaming a file that was just written into a directory on another
+        rank must not wait for the next mds_tick_interval.
+
+        The rank that owns the file freezes its inode for the rename, and the
+        client's flush of its dirty caps holds an auth pin on that inode until
+        the update is journaled. Nothing flushed the journal for it, so each
+        such rename waited for the tick.
+        """
+
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+
+        self.mount_a.run_shell(["mkdir", "-p", "src", "dst"])
+        self.mount_a.setfattr("dst", "ceph.dir.pin", "1")
+        # on a freshly started MDS the pin only takes effect once the
+        # directory sees some activity
+        self.mount_a.run_shell(["touch", "dst/.touch"])
+        self._wait_subtrees([('/dst', 1)], status=status, rank=1)
+
+        # a long tick, so that a rename that waits for it cannot pass
+        self.config_set('mds', 'mds_tick_interval', 10)
+        out = self.mount_a.run_python(dedent(f"""
+            import os, time
+            mnt = "{self.mount_a.mountpoint}"
+            times = []
+            for i in range(10):
+                src = os.path.join(mnt, "src", f"f{{i}}")
+                with open(src, "wb") as f:
+                    f.write(b"x" * 4096)
+                t = time.monotonic()
+                os.rename(src, os.path.join(mnt, "dst", f"f{{i}}"))
+                times.append(time.monotonic() - t)
+            print(max(times))
+        """))
+        slowest = float(out.strip())
+        log.info(f"slowest cross-rank rename of a just written file: {slowest:.3f}s")
+        self.assertLess(slowest, 5)
 
 class TestExportPin(CephFSTestCase):
     MDSS_REQUIRED = 3
