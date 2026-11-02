@@ -76,6 +76,19 @@ class TestMisc(CephFSTestCase):
         # code will check if lookup/open reply contains xattrs
         self.mount_b.run_shell(["cat", "testfile"])
 
+    def test_client_kick_stale_sessions(self):
+        """
+        That the kick_stale_sessions client command returns while the client
+        has an open session, and that the client keeps working.
+        """
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Require FUSE client")
+
+        self.mount_a.run_shell(["touch", "kick_stale_sessions"])
+        self.mount_a.admin_socket(['kick_stale_sessions'])
+        self.mount_a.run_shell(["stat", "kick_stale_sessions"])
+
     def test_root_rctime(self):
         """
         Check that the root inode has a non-default rctime on startup.
