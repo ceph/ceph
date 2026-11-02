@@ -1,0 +1,5 @@
+tasks:
+- cephadm.shell:
+    mon.a:
+      - ceph fs volume create cephfs --placement=4
+      - ceph fs dump
