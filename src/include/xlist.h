@@ -22,6 +22,30 @@
 
 #include "include/ceph_assert.h"
 
+/*
+ * xlist: intrusive doubly linked list.
+ *
+ * An object joins a list through an xlist<T>::item that it embeds and
+ * constructs with a pointer to itself, e.g.
+ *
+ *   xlist<PG*>::item stat_queue_item;   // PG::PG(): stat_queue_item(this)
+ *
+ * The list links items in place and never allocates or owns them, so
+ * push, pop and remove are O(1).
+ *
+ *   - An item is on at most one list at a time. push_front() or push_back()
+ *     of an item that is already on a list, this one or another, first
+ *     removes it from that list.
+ *   - An item must be off its list when it is destroyed, and a list must be
+ *     empty when it is destroyed; both are asserted. Call
+ *     item::remove_myself() or clear() first.
+ *   - Iterators are forward only and dereference to the T the item was
+ *     constructed with. Removing the item under an iterator invalidates the
+ *     iterator, so advance it before removing that item.
+ *   - Copy only an empty list. A copy shares the original's items, but they
+ *     still name the original as their list, so a non-empty copy can be
+ *     neither cleared nor destroyed.
+ */
 template<typename T>
 class xlist {
 public:
