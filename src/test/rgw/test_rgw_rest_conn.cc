@@ -30,6 +30,22 @@ TEST(RGWRESTConn, get_endpoint_uses_resolved_ip)
   EXPECT_EQ("127.0.0.1:8000:127.0.0.1:8000", ep.get_connect_to());
 }
 
+TEST(RGWRESTConn, make_connect_to_ipv4)
+{
+  EXPECT_EQ("zone.example.com:8000:192.0.2.1:8000",
+            make_connect_to("zone.example.com", 8000,
+                            boost::asio::ip::make_address("192.0.2.1")));
+}
+
+TEST(RGWRESTConn, make_connect_to_ipv6)
+{
+  // libcurl rejects an unbracketed IPv6 address in a CONNECT_TO entry
+  // (without the fix, the address is not enclosed in brackets)
+  EXPECT_EQ("zone.example.com:8000:[2001:db8::1]:8000",
+            make_connect_to("zone.example.com", 8000,
+                            boost::asio::ip::make_address("2001:db8::1")));
+}
+
 TEST(RGWRESTConn, get_endpoint_without_endpoints)
 {
   auto conn = make_conn({});
