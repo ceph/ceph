@@ -245,6 +245,17 @@ def get_share_by_id(smb_cfg, cluster_id, share_id):
     return share
 
 
+def get_rgw_credential(smb_cfg, credential_id):
+    """Get a specific RGW credential resource by its id."""
+    creds = _get_resources(
+        smb_cfg, f"ceph.smb.rgw.credential.{credential_id}"
+    )
+    assert len(creds) == 1, (
+        f'expected one credential {credential_id}, found {len(creds)}'
+    )
+    return creds[0]
+
+
 def _apply(smb_cfg, resources, immediate=False, check=None, load_json=True):
     jres = cephutil.cephadm_shell_cmd(
         smb_cfg,
