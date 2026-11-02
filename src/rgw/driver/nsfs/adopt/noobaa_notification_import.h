@@ -77,9 +77,11 @@ void translate_events(const std::vector<std::string>& names,
 struct NotificationImportResult {
   size_t topics_written{0};
   size_t notifications_carried{0};
-  /* a notification or a part of one not carried, or carried and needing
-   * the operator;  one line each, naming the bucket */
+  /* a notification or a part of one not carried;  one line each,
+   * naming the bucket */
   std::vector<std::string> reported;
+  /* carried, and needing the operator:  a connection's warnings */
+  std::vector<std::string> needs_operator;
   /* the topics the bucket's attribute names, to map to the bucket once
    * it is written */
   std::vector<rgw_pubsub_topic> topics;

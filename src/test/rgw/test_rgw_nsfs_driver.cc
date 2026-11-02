@@ -679,8 +679,9 @@ public:
     /* as initialize() does, from rgw_posix_sync_policy */
     init_sync_policy(dpp);
 
-    /* as initialize() does:  adoption's completion record, read once */
-    if (int r = load_adoption_completion(dpp); r < 0) {
+    /* as initialize() does:  adoption's completion record, read once,
+     * and under `automatic` the store adopted */
+    if (int r = start_adoption(dpp); r < 0) {
       return r;
     }
 
@@ -8762,9 +8763,25 @@ public:
     return sf::absolute(sf::path{base_path / get_test_name()}) / "noobaa-conf";
   }
 
+  sf::path report_dir() const {
+    return sf::absolute(sf::path{base_path / get_test_name()}) / "reports";
+  }
+
+  /* the adoption reports written, oldest first */
+  std::vector<sf::path> reports() const {
+    std::vector<sf::path> out;
+    for (const auto& e : sf::directory_iterator(report_dir())) {
+      out.push_back(e.path());
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+  }
+
   void SetUp() override {
     sf::create_directories(conf_root() / "buckets");
+    sf::create_directories(report_dir());
     g_conf().set_val("rgw_nsfs_noobaa_config_root", conf_root().string());
+    g_conf().set_val("rgw_nsfs_adoption_report_dir", report_dir().string());
     NSFSNooBaaBucketTest::SetUp();
     write_file(conf_root() / "system.json", NB_SYSTEM_JSON);
     /* NooBaa made this bucket, so nsfs holds no row for it:  what places
@@ -8776,7 +8793,19 @@ public:
   void TearDown() override {
     NSFSNooBaaBucketTest::TearDown();
     g_conf().set_val("rgw_nsfs_noobaa_config_root", "");
+    g_conf().rm_val("rgw_nsfs_adoption_report_dir");
+    g_conf().rm_val("rgw_nsfs_adoption_mode");
     g_conf().apply_changes(nullptr);
+  }
+
+  /* A gateway started under `automatic` with no io_context, which
+   * adopts the whole store at startup (run_adoption()). */
+  void start_automatic() {
+    g_conf().set_val("rgw_nsfs_adoption_mode", "automatic");
+    bucket.reset();
+    driver.reset();
+    driver = std::make_unique<TestDriver>(bp);
+    ASSERT_EQ(driver->init(env->dpp), 0);
   }
 
   /* A tree we did not write.  The fixture creates its bucket through
@@ -17110,6 +17139,23 @@ TEST_F(NooBaaBucketImportTest, ATopicWithAnotherDestinationIsNotOverwritten)
   EXPECT_EQ(topic.dest.push_endpoint, "http://elsewhere:1/");
 }
 
+/* A notification carried that needs the operator is reported apart
+ * from one not carried:  here a credential NooBaa sent over http. */
+TEST_F(NooBaaBucketImportTest, ACredentialOverHttpIsCarriedAndNeedsTheOperator)
+{
+  connections.push_back(NooBaaConnectionTest::http(R"({"host":"127.0.0.1"})",
+						   "", "user:secret"));
+  write_nb_record("DISABLED",
+      R"(,"notifications":[{"id":["n1"],"event":[],"topic":["hook"]}])");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.notifications_carried, 1u);
+  EXPECT_TRUE(NooBaaConnectionTest::has(result.notifications_need_operator,
+					"over http"));
+  EXPECT_FALSE(NooBaaConnectionTest::has(result.notifications_reported,
+					 "over http"));
+}
+
 /* `kafka:::topic/<connection>/<topic>` names the Kafka topic, and the
  * RGW topic is named after it;  an event RGW does not name is left
  * out and reported. */
@@ -17264,6 +17310,30 @@ TEST_F(NSFSPlaceOverNooBaaTest, AnotherGatewaysCompletionIsSeenWhereTheStoreIsRe
  * through the `adoption` driver hint, which is how an intrusive
  * trigger stays out of a production surface.
  * ------------------------------------------------------------------ */
+
+/* One adoption report's findings, as kind -> {text, effect, action}. */
+static std::multimap<std::string, std::array<std::string, 3>>
+report_findings(const sf::path& file, JSONParser& p)
+{
+  std::ifstream in(file);
+  const std::string doc{std::istreambuf_iterator<char>(in), {}};
+  EXPECT_TRUE(p.parse(doc.data(), doc.size())) << doc;
+  std::multimap<std::string, std::array<std::string, 3>> out;
+  auto* fs = p.find_obj("findings");
+  if (!fs) {
+    ADD_FAILURE() << "no findings:  " << doc;
+    return out;
+  }
+  for (auto i = fs->find_first(); !i.end(); ++i) {
+    std::string kind, text, effect, action;
+    JSONDecoder::decode_json("kind", kind, *i);
+    JSONDecoder::decode_json("text", text, *i);
+    JSONDecoder::decode_json("effect", effect, *i);
+    JSONDecoder::decode_json("action", action, *i);
+    out.emplace(kind, std::array<std::string, 3>{text, effect, action});
+  }
+  return out;
+}
 
 class NooBaaModeTest : public NSFSNooBaaStateTest {
 public:
@@ -18078,6 +18148,20 @@ TEST_F(NooBaaAbandonTest, AbandoningWhatStoppedTheIdentitiesStartsTheQueue)
 				{{"mode", "automatic"}}, &out), -EAGAIN);
   EXPECT_EQ(driver->adoption_queue_workers_for_test(), std::nullopt)
       << "a queue started with the identities not imported";
+  /* and the queue's pass, ended before it began, wrote what stopped it */
+  {
+    const auto files = reports();
+    ASSERT_EQ(files.size(), 1u);
+    JSONParser p;
+    const auto found = report_findings(files[0], p);
+    std::string pass;
+    JSONDecoder::decode_json("pass", pass, &p);
+    EXPECT_EQ(pass, "queue");
+    auto c = found.equal_range("collision");
+    EXPECT_TRUE(std::any_of(c.first, c.second, [](const auto& f) {
+      return f.second[0].find("orphan") != std::string::npos;
+    })) << "no collision names the orphan";
+  }
 
   ASSERT_EQ(abandon(ORPHAN_ID, "its owner was deleted in NooBaa"), 0);
   EXPECT_NE(driver->adoption_queue_workers_for_test(), std::nullopt)
@@ -18228,6 +18312,139 @@ TEST_F(NooBaaModeTest, AnUnknownModeIsRejected)
   }
   /* and the mode it had is unchanged */
   EXPECT_EQ(ask()["mode"], "command");
+}
+
+/* `automatic` adoption writes what it found to a file of its own, each
+ * finding with its kind's effect and action (DECISIONS.md 2026-10-30,
+ * amended 2026-11-01).  NooBaa's LDAP config file is the finding here:
+ * it is the only sign NooBaa served AssumeRoleWithWebIdentity against
+ * LDAP. */
+TEST_F(NooBaaModeTest, AnAutomaticStartupWritesAReportOfWhatItFound)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  const auto ldap = conf_root() / "ldap_config";
+  write_file(ldap, R"({"uri":"ldaps://ldap.example:636"})");
+  write_file(conf_root() / "config.json",
+	     R"({"LDAP_CONFIG_PATH":")" + ldap.string() + R"("})");
+  write_nb_record("ENABLED");
+
+  ASSERT_NO_FATAL_FAILURE(start_automatic());
+  EXPECT_TRUE(driver->adoption_complete());
+
+  const auto files = reports();
+  ASSERT_EQ(files.size(), 1u);
+  EXPECT_TRUE(files[0].filename().string().starts_with("nsfs-adoption-"))
+      << files[0];
+  JSONParser p;
+  const auto found = report_findings(files[0], p);
+  std::string pass;
+  JSONDecoder::decode_json("pass", pass, &p);
+  EXPECT_EQ(pass, "run");
+  bool complete = false;
+  JSONDecoder::decode_json("complete", complete, &p);
+  EXPECT_TRUE(complete);
+
+  ASSERT_EQ(found.count("ldap_configured"), 1u);
+  const auto& f = found.find("ldap_configured")->second;
+  EXPECT_NE(f[0].find(ldap.string()), std::string::npos) << f[0];
+  const auto& t = nsfs::kind_text(nsfs::FindingKind::ldap_configured);
+  EXPECT_EQ(f[1], t.effect);
+  EXPECT_EQ(f[2], t.action);
+}
+
+/* Each startup writes a file of its own, and one that stops at the
+ * store writes what stopped it. */
+TEST_F(NooBaaModeTest, EachAutomaticPassWritesAReportOfItsOwn)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  add_nb_identity("broken", "not JSON");
+  write_nb_record("ENABLED");
+
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_NO_FATAL_FAILURE(start_automatic());
+  }
+  const auto files = reports();
+  ASSERT_EQ(files.size(), 2u);
+  for (const auto& file : files) {
+    JSONParser p;
+    const auto found = report_findings(file, p);
+    ASSERT_EQ(found.count("store_unreadable"), 1u) << file;
+    EXPECT_NE(found.find("store_unreadable")->second[0].find("broken"),
+	      std::string::npos);
+    bool complete = true;
+    JSONDecoder::decode_json("complete", complete, &p);
+    EXPECT_FALSE(complete);
+  }
+}
+
+/* A command writes no report and gathers nothing:  its findings are
+ * its response's and the log's.  Here a bucket command fails before the
+ * owner is imported, and the automatic startup after it, which adopts
+ * the bucket, reports no failure. */
+TEST_F(NooBaaModeTest, ACommandWritesNoReportAndGathersNothing)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  add_nb_identity("broken", "not JSON");
+  write_nb_record("ENABLED");
+
+  std::map<std::string, std::string> out;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption", {{"run", "true"}},
+				&out), 0)
+      << "the control:  the unreadable record stops the run";
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", testname}}, &out), 0);
+  EXPECT_TRUE(reports().empty());
+
+  sf::remove_all(conf_root() / "identities" / "broken");
+  ASSERT_NO_FATAL_FAILURE(start_automatic());
+  EXPECT_TRUE(driver->adoption_complete());
+  const auto files = reports();
+  ASSERT_EQ(files.size(), 1u);
+  JSONParser p;
+  const auto found = report_findings(files[0], p);
+  EXPECT_EQ(found.count("store_unreadable"), 0u);
+  EXPECT_EQ(found.count("bucket_failed"), 0u);
+}
+
+/* With no directory, no file is written. */
+TEST_F(NooBaaModeTest, NoReportDirectoryWritesNoReport)
+{
+  g_conf().set_val("rgw_nsfs_adoption_report_dir", "");
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_nb_record("ENABLED");
+
+  ASSERT_NO_FATAL_FAILURE(start_automatic());
+  EXPECT_TRUE(driver->adoption_complete());
+  EXPECT_TRUE(reports().empty());
+}
+
+/* What the report gathers:  only on a thread holding a Gathering, once
+ * each, and a bucket's failure gone once it adopts. */
+TEST(AdoptionFindings, GathersOnceAndOnlyWhenGathering)
+{
+  using K = nsfs::FindingKind;
+  nsfs::AdoptionFindings af;
+  af.add(K::bucket_failed, "b0: outside");
+  ceph::real_time since;
+  EXPECT_TRUE(af.take(since).empty()) << "gathered outside a Gathering";
+
+  nsfs::AdoptionFindings::Gathering g;
+  af.add(K::bucket_failed, "b1: owner not imported");
+  af.add(K::bucket_failed, "b1: owner not imported");
+  af.add(K::bucket_failed, "b10: owner not imported");
+  af.add(K::policy_refused, "b1: a principal resolves to nothing");
+  EXPECT_TRUE(af.contains(K::bucket_failed, "b1: "));
+  af.remove(K::bucket_failed, "b1: ");
+  EXPECT_FALSE(af.contains(K::bucket_failed, "b1: "));
+  const auto got = af.take(since);
+  ASSERT_EQ(got.size(), 2u);
+  EXPECT_EQ(got[0].text, "b10: owner not imported");
+  EXPECT_EQ(got[1].kind, K::policy_refused);
+  EXPECT_TRUE(af.take(since).empty()) << "take() left findings behind";
 }
 
 /* ------------------------------------------------------------------ *

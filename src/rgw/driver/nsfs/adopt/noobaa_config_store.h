@@ -189,6 +189,13 @@ struct NooBaaSettings {
    * pin.  Set, NooBaa serves a record its schema rejects, so such a
    * store can hold records outside it whatever its release. */
   bool schema_check_disabled{false};
+
+  /* `LDAP_CONFIG_PATH`, `/etc/noobaa-server/ldap_config` by default in
+   * `config.js` at the pin, and whether a file is there:  NooBaa's LDAP
+   * client is configured exactly when it is (`ldap_client.js:139`), and
+   * serves only AssumeRoleWithWebIdentity */
+  std::string ldap_config_path{"/etc/noobaa-server/ldap_config"};
+  bool ldap_configured{false};
 };
 
 /* What `system.json` says about the NooBaa versions that wrote the

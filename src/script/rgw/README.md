@@ -73,7 +73,7 @@ Run from the **build directory**:
 | `--user-identity-override` | off | An account user's own identity row overrides its account's (`rgw_nsfs_user_identity_override`) |
 | `--role-identity-override` | off | A role given an identity row runs as it, not as its account (`rgw_nsfs_role_identity_override`) |
 | `--data-root DIR` | build directory | Serve objects from `DIR/root`;  the LMDB cache and userdb stay in the build directory.  Rejects `--clean` |
-| `--noobaa-config-root DIR` | none | Read NooBaa's configuration store from `DIR`, for adoption |
+| `--noobaa-config-root DIR` | none | Read NooBaa's configuration store from `DIR`, for adoption;  under `--adoption-mode automatic` each adoption pass writes its report to `out/nsfs-adoption-*.json` |
 | `--adoption-mode command\|automatic` | driver's, `command` | `command` adopts only when asked through Admin Ops;  `automatic` adopts the whole store from startup |
 | `--with-lifecycle` | off | `rgw_lc_debug_interval=10`, so lifecycle expiry takes seconds;  uncomments `lc_debug_interval` in s3tests.conf |
 | `--with-non-md5-etag` | off | `rgw_non_md5_etag=true`:  the etag is the mtime-ino string the version ids use |

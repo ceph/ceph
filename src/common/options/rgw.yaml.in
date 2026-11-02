@@ -4768,6 +4768,21 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_nsfs_adoption_report_dir
+  type: str
+  level: advanced
+  desc: Directory each automatic adoption pass writes its report to
+  long_desc: Meaningful only when rgw_nsfs_noobaa_config_root names a NooBaa
+    configuration store and rgw_nsfs_adoption_mode is automatic.  Each
+    automatic adoption pass writes the findings it gathered to a file of its
+    own here, named
+    nsfs-adoption-$cluster-$name-<UTC timestamp>.json.  Each finding names
+    its kind, what it does to the conversion and a proposed course of action.
+    Empty writes no report file.
+  default: /var/log/ceph
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_nsfs_noobaa_config_root
   type: str
   level: advanced

@@ -392,6 +392,9 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       result.notifications_carried += nr.notifications_carried;
       result.notifications_reported.insert(result.notifications_reported.end(),
 					   nr.reported.begin(), nr.reported.end());
+      result.notifications_need_operator.insert(
+	  result.notifications_need_operator.end(),
+	  nr.needs_operator.begin(), nr.needs_operator.end());
     }
 
     /* BucketOwnerEnforced (DECISIONS.md 2026-10-11).  NooBaa records no
@@ -534,7 +537,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 	  t, rgw_make_bucket_entry_name(bucket->get_tenant(), bucket->get_name()),
 	  true, y, dpp);
       if (ret < 0) {
-	result.notifications_reported.push_back(
+	result.notifications_need_operator.push_back(
 	    rec.name + ": mapping topic " + t.name + " to the bucket: " +
 	    cpp_strerror(-ret));
       }
@@ -549,11 +552,16 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     << result.topics_written << " topics written, "
     << result.notifications_carried << " notifications carried, "
     << result.notifications_reported.size() << " notification reports, "
+    << result.notifications_need_operator.size()
+    << " needing the operator, "
     << result.failures.size() << " failures" << dendl;
   for (const auto& r : result.policies_refused) {
     ldpp_dout(dpp, 0) << "ERROR: import: " << r << dendl;
   }
   for (const auto& r : result.notifications_reported) {
+    ldpp_dout(dpp, 0) << "WARNING: import: " << r << dendl;
+  }
+  for (const auto& r : result.notifications_need_operator) {
     ldpp_dout(dpp, 0) << "WARNING: import: " << r << dendl;
   }
   for (const auto& f : result.failures) {

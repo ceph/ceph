@@ -153,9 +153,11 @@ struct BucketImportResult {
   /* A policy we would not write, and why.  The bucket's other state
    * was written. */
   std::vector<std::string> policies_refused;
-  /* A notification, or part of one, not carried;  or carried and
-   * needing the operator (`noobaa_notification_import.h`). */
+  /* A notification, or part of one, not carried
+   * (`noobaa_notification_import.h`). */
   std::vector<std::string> notifications_reported;
+  /* A notification carried and needing the operator. */
+  std::vector<std::string> notifications_need_operator;
   std::vector<std::string> failures;
 };
 

@@ -393,10 +393,21 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 	} catch (const JSONDecoder::err& e) {
 	  unreadable(path, std::string("NC_DISABLE_SCHEMA_CHECK: ") + e.what());
 	}
+	try {
+	  JSONDecoder::decode_json("LDAP_CONFIG_PATH",
+				   out.settings.ldap_config_path, &p);
+	} catch (const JSONDecoder::err& e) {
+	  unreadable(path, std::string("LDAP_CONFIG_PATH: ") + e.what());
+	}
       }
     } else if (ret != -ENOENT) {
       unreadable(path, cpp_strerror(-ret));
     }
+    struct stat st;
+    out.settings.ldap_configured =
+      !out.settings.ldap_config_path.empty() &&
+      ::stat(out.settings.ldap_config_path.c_str(), &st) == 0 &&
+      S_ISREG(st.st_mode);
     /* Absent is not an error.  NooBaa's config.js supplies the defaults,
      * and the one setting that matters here defaults to false --
      * which is itself a permission fact, not an absence, so the

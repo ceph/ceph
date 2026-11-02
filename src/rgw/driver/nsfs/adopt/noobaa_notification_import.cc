@@ -501,7 +501,8 @@ int import_bucket_notifications(const DoutPrefixProvider* dpp,
       report(id, "connection " + connection + ": " + m + " is not carried");
     }
     for (const auto& w : t.warnings) {
-      report(id, "connection " + connection + ": " + w);
+      result.needs_operator.push_back(bucket_name + ": notification " + id +
+                                      ": connection " + connection + ": " + w);
     }
 
     auto& filter = bucket_topics.topics[topic_to_unique(t.name, id)];

@@ -42,6 +42,7 @@
 #include "bucket_profile.h"
 #include "sync_fs_set.h"
 #include "adopt/adoption_queue.h"
+#include "adopt/adoption_report.h"
 
 class RGWLC;
 
@@ -901,6 +902,8 @@ protected:
    * restarts the gateway, which forgets them (DECISIONS.md 2026-10-29). */
   std::mutex adoption_failures_mtx;
   std::map<std::string, int> adoption_failures;
+  /* what `automatic` adoption found since its last report */
+  nsfs::AdoptionFindings adoption_findings;
   /* under the relaxed sync policy only;  see init_sync_policy() */
   std::unique_ptr<nsfs::SyncFsSet> sync_set;
   UserCache user_cache;
@@ -1753,6 +1756,13 @@ public:
     return nb_bucket_state_strategy != nullptr;
   }
 
+  /* The end of an `automatic` adoption pass:  every finding gathered
+   * since the last one, and every abandoned record, written to a file of
+   * its own in rgw_nsfs_adoption_report_dir.  `pass` is "run" (the
+   * synchronous startup) or "queue". */
+  void write_adoption_report(const DoutPrefixProvider* dpp, const char* pass,
+			     const std::map<std::string, std::string>& counts);
+
   /* Adopt the whole store:  its identities, then every bucket.  What
    * `automatic` runs at startup in a process with no background tasks;
    * one that serves adopts through the queue instead. */
@@ -1773,6 +1783,12 @@ public:
 		       const std::string& bucket_name,
 		       std::map<std::string, std::string>* report = nullptr,
 		       nsfs::convert_cb_t* cb = nullptr);
+
+  /* initialize()'s last step:  the completion record read, and under
+   * `automatic` the store adopted, through the queue in a gateway that
+   * serves and at once otherwise.  Fails only when the record does not
+   * load. */
+  int start_adoption(const DoutPrefixProvider* dpp);
 
   /* `automatic` while serving:  the identities now, every bucket
    * through the queue.  -EAGAIN when the identities do not import, and

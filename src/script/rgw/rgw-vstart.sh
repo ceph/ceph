@@ -238,6 +238,7 @@ start_radosgw() {
 		--admin-socket="$BUILD_DIR/out/radosgw.$RGW_PORT.asok"
 		--pid-file="$PID"
 		--rgw_luarocks_location="$BUILD_DIR/out/radosgw.$RGW_PORT.luarocks"
+		--rgw_nsfs_adoption_report_dir="$BUILD_DIR/out"
 		--debug-rgw="$DEBUG_RGW"
 		--debug-ms=0
 		-n "client.rgw.$RGW_PORT"
