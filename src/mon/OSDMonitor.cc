@@ -378,7 +378,16 @@ void LastEpochClean::Lec::report(unsigned pg_num, ps_t ps,
     // removed PG
     return;
   }
-  epoch_by_pg.resize(pg_num, 0);
+  if (epoch_by_pg.size() > pg_num) {
+    // PGs were merged away. The floor may be one of theirs, and nothing will
+    // report on them again, so take it from the PGs that are left.
+    epoch_by_pg.resize(pg_num);
+    floor = *std::min_element(std::begin(epoch_by_pg),
+			      std::end(epoch_by_pg));
+    next_missing = std::min<ps_t>(next_missing, pg_num);
+  } else {
+    epoch_by_pg.resize(pg_num, 0);
+  }
   const auto old_lec = epoch_by_pg[ps];
   if (old_lec >= last_epoch_clean) {
     // stale lec
