@@ -2,9 +2,10 @@
 
 from __future__ import absolute_import
 
+import base64
+import json
 import time
 
-import jwt
 from teuthology.orchestra.run import \
     CommandFailedError  # pylint: disable=import-error
 
@@ -20,7 +21,8 @@ class AuthTest(DashboardTestCase):
         self.reset_session()
 
     def _validate_jwt_token(self, token, username, permissions):
-        payload = jwt.decode(token, options={'verify_signature': False})
+        payload_segment = token.split('.')[1]
+        payload = json.loads(base64.urlsafe_b64decode(payload_segment + '===='))
         self.assertIn('username', payload)
         self.assertEqual(payload['username'], username)
 
