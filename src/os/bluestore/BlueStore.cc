@@ -16248,7 +16248,9 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     }
   }
   bdev->collect_alerts(alerts, "BLOCK");
-  bluefs->collect_alerts(alerts);
+  if (bluefs) {
+    bluefs->collect_alerts(alerts);
+  }
   if (!spurious_read_errors_alert.empty() &&
       cct->_conf->bluestore_warn_on_spurious_read_errors) {
     alerts.emplace(
