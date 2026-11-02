@@ -2075,10 +2075,16 @@ public:
   // resets per_pool_omap | pgmeta_omap for onode
   void inject_legacy_omap(coll_t cid, ghobject_t oid);
   void inject_stray_omap(uint64_t head, const std::string& name);
-
   void inject_bluefs_file(std::string_view dir,
-			  std::string_view name,
-			  size_t new_size);
+                          std::string_view name,
+                          size_t new_size);
+  void debug_force_reshard(
+    coll_t cid, ghobject_t oid,
+    const std::vector<bluestore_onode_t::shard_info>& new_shard_info,
+    unsigned shard_index_begin,
+    unsigned shard_index_end,
+    uint32_t spanning_scan_begin,
+    uint32_t spanning_scan_end);
 
   int compact() override;
   bool has_builtin_csum() const override {
