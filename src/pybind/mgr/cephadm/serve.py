@@ -1627,8 +1627,9 @@ class CephadmServe:
                         daemon_spec.final_config.update(
                             {'custom_config_files': [c.to_json() for c in configs]})
 
-                if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
-                    await self._registry_login(daemon_spec.host, json.loads(str(self.mgr.get_store('registry_credentials'))))
+                registry_credentials = self.mgr.get_store('registry_credentials')
+                if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and registry_credentials:
+                    await self._registry_login(daemon_spec.host, json.loads(registry_credentials))
 
                 self.log.info('%s daemon %s on %s' % (
                     'Reconfiguring' if reconfig else 'Deploying',
@@ -2059,8 +2060,9 @@ class CephadmServe:
             break
         if not host:
             raise OrchestratorError('no hosts defined')
-        if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
-            await self._registry_login(host, json.loads(str(self.mgr.get_store('registry_credentials'))))
+        registry_credentials = self.mgr.get_store('registry_credentials')
+        if self.mgr.cache.host_needs_registry_login(host) and registry_credentials:
+            await self._registry_login(host, json.loads(registry_credentials))
 
         j = None
         if not self.mgr.use_repo_digest:
