@@ -6926,6 +6926,28 @@ TEST(NooBaaXattr, WhatHasNowhereToGo)
   EXPECT_NE(nb.disk_name("rename_intent"), "rename_intent");
 }
 
+/* Neither format claims a marker (DECISIONS.md 2026-11-02), so none
+ * reaches an attribute set and no REPLACE_ALL prunes one.  The control is
+ * a neighbour under user.nsfs. that each still claims. */
+TEST(MarkerXattr, NeitherFormatClaimsAMarker)
+{
+  nsfs::PrefixedXattrStrategy prefixed;
+  nsfs::NooBaaXattrStrategy nb;
+  for (const nsfs::XattrStrategy* xs :
+	 std::initializer_list<const nsfs::XattrStrategy*>{&prefixed, &nb}) {
+    std::string key;
+    for (const char* m : {nsfs::EXTENSIONS_XATTR, nsfs::CONVERTING_XATTR,
+			  nsfs::OWNS_STORAGE_XATTR}) {
+      EXPECT_TRUE(std::string_view(m).starts_with(nsfs::MARKER_XATTR_PREFIX))
+	  << m;
+      EXPECT_FALSE(xs->parse_disk_name(m, key)) << xs->name() << ":  " << m;
+    }
+    EXPECT_TRUE(xs->parse_disk_name("user.nsfs.bucket_info", key))
+	<< xs->name();
+    EXPECT_EQ(key, "bucket_info");
+  }
+}
+
 /* NooBaa's structured attributes are claimed as unmapped rather than
  * surfaced.  Handing a caller one of NooBaa's plain strings under an RGW
  * key would feed a NooBaa value to a ceph decoder. */
@@ -8273,10 +8295,11 @@ static std::map<std::string, bool> listed_versions(rgw::sal::Bucket* bucket,
 /* ------------------------------------------------------------------ *
  * The gate on a bucket not taken over (DECISIONS.md 2026-10-21).
  *
- * A bucket directory without `user.nsfs.extensions` has not been taken
- * over, and a client's write to it is rejected with InvalidBucketState.
- * The status code is the weakest evidence there is, so each case also
- * compares the tree before and after, byte for byte:  every name, its
+ * A bucket directory without `user.nsfs.marker.extensions` has not been
+ * taken over, and a client's write to it is rejected with
+ * InvalidBucketState.  The status code is the weakest evidence there
+ * is, so each case also compares the tree before and after, byte for
+ * byte:  every name, its
  * type, mode, owner, size, mtime and attribute values.
  * ------------------------------------------------------------------ */
 
@@ -11616,12 +11639,15 @@ TEST_F(NSFSUpgradeTest, TheVersionsLockIsNotAVersion)
   EXPECT_EQ(prog.versions, 1u);
 }
 
-/* Neither marker is bucket metadata, so neither reaches the S3
- * attribute set -- including while a conversion is in flight, which is
- * the only time the converting marker exists. */
+/* No marker is bucket metadata, so none reaches the S3 attribute set
+ * -- including while a conversion is in flight, which is the only time
+ * the converting marker exists -- and a write of the bucket's
+ * attributes, which replaces them all, leaves every marker in place. */
 TEST_F(NSFSUpgradeTest, TheMarkersAreNotBucketAttributes)
 {
   nb_object("flat.bin", "text/plain");
+  ASSERT_EQ(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+	      ->set_owns_storage(env->dpp, false), 0);
 
   nsfs::convert_cb_t stop =
     [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
@@ -11635,9 +11661,28 @@ TEST_F(NSFSUpgradeTest, TheMarkersAreNotBucketAttributes)
       << "nothing to check:  the conversion did not stop";
 
   ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  const auto& attrs = bucket->get_attrs();
-  EXPECT_EQ(attrs.find("converting"), attrs.end());
-  EXPECT_EQ(attrs.find("extensions"), attrs.end());
+  auto no_marker = [](const rgw::sal::Attrs& attrs) {
+    for (const auto& [k, _] : attrs) {
+      EXPECT_FALSE(k.starts_with("marker.")) << k;
+      EXPECT_NE(k, "converting");
+      EXPECT_NE(k, "extensions");
+      EXPECT_NE(k, "owns_storage");
+    }
+  };
+  no_marker(bucket->get_attrs());
+
+  /* a write of the bucket's state, as adoption's own */
+  rgw::sal::Attrs more;
+  more["user.rgw.x-amz-meta-probe"].append("x");
+  ASSERT_EQ(b->merge_and_store_attrs(env->dpp, more, null_yield,
+				     rgw::sal::MutationPurpose::adoption), 0);
+  for (const char* m : {nsfs::EXTENSIONS_XATTR, nsfs::CONVERTING_XATTR,
+			nsfs::OWNS_STORAGE_XATTR}) {
+    EXPECT_GT(::getxattr(bucket_path().c_str(), m, nullptr, 0), 0)
+	<< m << " was pruned by a write of the bucket's attributes";
+  }
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  no_marker(bucket->get_attrs());
 }
 
 /* Everything in the tree ends up in nsfs names, and the marker is gone. */

@@ -54,8 +54,8 @@ class NSFSObject;
 
 /* What a mutation's slot is for (DECISIONS.md 2026-10-21, the gate).
  *
- * A bucket without `user.nsfs.extensions` has not been taken over, and
- * a client's write to it is rejected until adoption marks it.  Two
+ * A bucket without `user.nsfs.marker.extensions` has not been taken
+ * over, and a client's write to it is rejected until adoption marks it.  Two
  * writers are not a client's:  adoption, which writes a bucket's state
  * before it marks it, and a copy's source, which is read and not
  * written but takes the slot so it waits out a rewrite. */

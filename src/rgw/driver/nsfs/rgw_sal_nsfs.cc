@@ -2930,23 +2930,9 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       fs_strategy->get_xattrs(dpp, afd, old_raw, y, aid);
 
       for (auto& [disk_name, _] : old_raw) {
-        /* Facts about the bucket that no attribute write owns.  Each
-         * parses as an nsfs name -- they are under user.nsfs. -- so
-         * without this they would be pruned by the next REPLACE_ALL:
-         * a bucket would lose its profile a moment after being marked,
-         * or forget that its directory predates it and delete a tree
-         * it was only lent.
-         *
-         * The converting marker is here for completeness.  A bucket
-         * write cannot land mid-conversion today, because BucketGate
-         * holds mutations off, so it has never been reachable -- which
-         * is a reason to list it rather than to leave it out. */
-        if ((disk_name == nsfs::EXTENSIONS_XATTR) ||
-            (disk_name == nsfs::CONVERTING_XATTR) ||
-            (disk_name == nsfs::OWNS_STORAGE_XATTR)) {
-          continue;
-        }
-        /* Through the fallback as well.  A superseded NooBaa attribute
+        /* Only names a strategy claims are pruned, so the bucket's
+         * markers, which neither claims, survive (MARKER_XATTR_PREFIX).
+         * Through the fallback as well.  A superseded NooBaa attribute
          * then resolves to the key about to be written and
          * lands in to_remove, which is how a converting object stops
          * carrying both spellings of the same fact. */
@@ -9995,10 +9981,10 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
  */
 
 /* A bucket not taken over takes no client writes (DECISIONS.md
- * 2026-10-21, the gate):  no `user.nsfs.extensions` means the bucket is
- * NooBaa's until adoption marks it, and InvalidBucketState says the
- * request is not valid in the bucket's current state, which a command
- * can change. */
+ * 2026-10-21, the gate):  no `user.nsfs.marker.extensions` means the
+ * bucket is NooBaa's until adoption marks it, and InvalidBucketState
+ * says the request is not valid in the bucket's current state, which a
+ * command can change. */
 int NSFSDriver::reject_unadopted(const DoutPrefixProvider* dpp,
 				 NSFSBucket* b, MutationPurpose purpose)
 {
@@ -10346,18 +10332,6 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   ret = dir->read_attrs(dpp, y, attrs);
   if (ret < 0) {
     return ret;
-  }
-
-  /* The markers live under user.nsfs. so they parse as nsfs names and arrive
-   * here as ordinary attributes.  Neither is bucket metadata -- one is
-   * what decided how to read this bucket, the other says the tree is
-   * still being rewritten -- and surfacing either would put it in the
-   * S3 attribute set.  Same reason bucket_info is erased below. */
-  for (const char* m : { nsfs::EXTENSIONS_XATTR, nsfs::CONVERTING_XATTR }) {
-    std::string marker_key;
-    if (xattr_strategy()->parse_disk_name(m, marker_key)) {
-      attrs.erase(marker_key);
-    }
   }
 
   /* Bucket state, from wherever this bucket's format keeps it.  The
@@ -18106,10 +18080,10 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    *                   It describes the DRIVER;  whether a given bucket
    *                   serves them is the next two rows.
    *   extensions      the extension set this build implements, as the
-   *                   integer it writes into user.nsfs.extensions.  A
-   *                   bucket without that marker is read as NooBaa wrote
-   *                   it and the extension-only interfaces are rejected
-   *                   on it.
+   *                   integer it writes into
+   *                   user.nsfs.marker.extensions.  A bucket without that
+   *                   marker is read as NooBaa wrote it and the
+   *                   extension-only interfaces are rejected on it.
    *   bucket_profile  the profile a bucket created here is marked with,
    *                   rgw_nsfs_bucket_profile.  Every bucket created here
    *                   is marked.

@@ -73,16 +73,24 @@ struct Format {
  * tree by inspection, which is exactly why the marker had to exist.
  */
 
+/* Where the markers live:  a sub-namespace of nsfs's that no
+ * XattrStrategy claims.  parse_disk_name() refuses it in both formats,
+ * so a marker never reaches an S3 attribute set, and a REPLACE_ALL
+ * write, which prunes only names a strategy claims, never removes one
+ * (DECISIONS.md 2026-11-02).  Still under user.nsfs., so what looks for
+ * any nsfs state on a directory -- carries_nsfs_state(),
+ * release_nsfs_state(), the sentinel's read -- finds the markers too.
+ * No attribute key may begin "marker.", or its disk name would fall in
+ * here. */
+inline constexpr const char* MARKER_XATTR_PREFIX = "user.nsfs.marker.";
+
 /* The marker.  A physical xattr name, deliberately NOT routed through
  * XattrStrategy::disk_name().
  *
  * Reading it through a strategy would mean choosing the strategy first,
- * and choosing the strategy is what the marker is for.  Worse, a NooBaa
- * XattrStrategy will not claim a user.nsfs.* name at all -- it returns
- * false from parse_disk_name() and the attribute is dropped as foreign --
- * so the marker would be invisible in precisely the case it decides.
- * It is read with its own fgetxattr, before any strategy is consulted. */
-inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs.extensions";
+ * and choosing the strategy is what the marker is for.  It is read with
+ * its own fgetxattr, before any strategy is consulted. */
+inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs.marker.extensions";
 
 /* The tree still holds structure somebody else wrote.
  *
@@ -104,7 +112,7 @@ inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs.extensions";
  * fall back to, and guessing from the one that happens to be
  * compiled in is how the wrong parser gets applied to the right
  * bytes. */
-inline constexpr const char* CONVERTING_XATTR = "user.nsfs.converting";
+inline constexpr const char* CONVERTING_XATTR = "user.nsfs.marker.converting";
 inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
 
 /* WHETHER THE DIRECTORY EXISTS FOR THIS BUCKET, OR PREDATES IT.
@@ -134,7 +142,7 @@ inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
  * gateway made it for that bucket, and taking it over does not change
  * that.  Defaulting adopted buckets to 0 would leave every migrated
  * bucket undeletable. */
-inline constexpr const char* OWNS_STORAGE_XATTR = "user.nsfs.owns_storage";
+inline constexpr const char* OWNS_STORAGE_XATTR = "user.nsfs.marker.owns_storage";
 
 /* THE VALUE IS A SET, NOT A LEVEL.
  *

@@ -14,6 +14,7 @@
  */
 
 #include "xattr_strategy.h"
+#include "bucket_profile.h"
 
 #include <sys/xattr.h>
 
@@ -47,6 +48,10 @@ std::string PrefixedXattrStrategy::disk_name(const std::string& key) const
 bool PrefixedXattrStrategy::parse_disk_name(const std::string& disk,
 				       std::string& key) const
 {
+  /* a marker, which is no attribute's */
+  if (disk.starts_with(MARKER_XATTR_PREFIX)) {
+    return false;
+  }
   if (disk.compare(0, NSFS_RGW_XATTR_PREFIX.size(),
 		   NSFS_RGW_XATTR_PREFIX) == 0) {
     key = RGW_ATTR_PFX + disk.substr(NSFS_RGW_XATTR_PREFIX.size());
@@ -187,7 +192,11 @@ bool NooBaaXattrStrategy::parse_disk_name(const std::string& disk,
     }
   }
 
-  /* nsfs's, written on NooBaa's tree because it has nowhere else to go */
+  /* nsfs's, written on NooBaa's tree because it has nowhere else to go;
+   * a marker is no attribute's */
+  if (disk.starts_with(MARKER_XATTR_PREFIX)) {
+    return false;
+  }
   if (disk.compare(0, NSFS_XATTR_PREFIX.size(), NSFS_XATTR_PREFIX) == 0) {
     key = disk.substr(NSFS_XATTR_PREFIX.size());
     return true;
