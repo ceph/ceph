@@ -493,7 +493,10 @@ For versioned objects:
 
 * For non-current versions, the ``retain_head_object`` setting applies.
 
-* If a non-current version is locked, its transition is skipped.
+* Cloud transition is skipped for any object version protected by active
+  Object Lock retention (``GOVERNANCE`` or ``COMPLIANCE``) or a legal hold,
+  including current versions. Enabling Object Lock on a bucket alone does
+  not prevent unlocked objects from transitioning.
 
 
 Restoring Objects

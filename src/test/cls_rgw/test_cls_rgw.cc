@@ -10,6 +10,7 @@
 #include "include/common_fwd.h"
 
 #include <cerrno>
+#include <chrono>
 #include <string>
 #include <vector>
 #include <map>
@@ -499,6 +500,96 @@ static void list_entries(librados::IoCtx& ioctx,
   cls_rgw_bucket_list_op(op, start_key, empty_prefix, delimiter,
                          num_entries, list_versions, &result);
   ASSERT_EQ(0, ioctx.operate(oid, &op, nullptr));
+}
+
+TEST_P(TestClsRgw, index_metadata_update_refreshes_version_listing)
+{
+  // Retention updates advance mtime by one nanosecond. Lifecycle must see
+  // that same timestamp in the version listing, including for null versions.
+  for (const std::string instance : {"version-1", ""}) {
+    SCOPED_TRACE(instance.empty() ? "null version" : instance);
+    const std::string oid = "metadata-update-" + instance;
+    {
+      ObjectWriteOperation op;
+      cls_rgw_bucket_init_index(op);
+      ASSERT_EQ(0, ioctx.operate(oid, &op));
+    }
+
+    const std::vector<cls_rgw_obj_key> keys = {
+      {"object", instance}, {"object", "version-2"}
+    };
+    rgw_bucket_dir_entry_meta meta;
+    meta.category = RGWObjCategory::Main;
+    meta.size = meta.accounted_size = 4096;
+    meta.mtime = ceph::real_clock::from_time_t(1);
+    meta.etag = "unchanged-etag";
+    bufferlist olh_tag;
+    olh_tag.append("olh-tag");
+    rgw_zone_set zones;
+    uint64_t epoch = 0;
+    for (const auto& key : keys) {
+      const std::string tag = "create-" + key.instance;
+      index_prepare(ioctx, oid, CLS_RGW_OP_ADD, tag, key, "");
+      ObjectWriteOperation op;
+      rgw_bucket_entry_ver ver;
+      ver.pool = ioctx.get_id();
+      ver.epoch = ++epoch;
+      cls_rgw_bucket_complete_op(op, CLS_RGW_OP_ADD, tag, ver, key,
+                                meta, nullptr, true, 0, nullptr);
+      ASSERT_EQ(0, ioctx.operate(oid, &op));
+      ASSERT_EQ(0, cls_rgw_bucket_link_olh(
+          ioctx, oid, key, olh_tag, false, tag, &meta, epoch,
+          ceph::real_time{}, true, true, zones));
+    }
+
+    rgw_cls_list_ret before;
+    list_entries(ioctx, oid, 10, before);
+    ASSERT_EQ(2u, before.dir.m.size());
+    EXPECT_EQ(keys.back(), before.dir.m.begin()->second.key);
+    EXPECT_TRUE(before.dir.m.begin()->second.is_current());
+    EXPECT_FALSE(before.dir.m.rbegin()->second.is_current());
+
+    for (const auto& key : keys) {
+      const std::string tag = "retention-" + key.instance;
+      const auto new_mtime = meta.mtime + std::chrono::nanoseconds{1};
+      auto updated = meta;
+      updated.mtime = new_mtime;
+      index_prepare(ioctx, oid, CLS_RGW_OP_ADD, tag, key, "");
+      {
+        // Metadata updates complete the index transaction without relinking
+        // the version or changing the logical head.
+        ObjectWriteOperation op;
+        rgw_bucket_entry_ver ver;
+        ver.pool = ioctx.get_id();
+        ver.epoch = ++epoch;
+        cls_rgw_bucket_complete_op(op, CLS_RGW_OP_ADD, tag, ver, key,
+                                  updated, nullptr, true, 0, nullptr);
+        ASSERT_EQ(0, ioctx.operate(oid, &op));
+      }
+
+      rgw_cls_list_ret after;
+      list_entries(ioctx, oid, 10, after);
+      ASSERT_EQ(before.dir.m.size(), after.dir.m.size());
+      for (const auto& [idx, original] : before.dir.m) {
+        auto found = after.dir.m.find(idx);
+        ASSERT_NE(after.dir.m.end(), found);
+        const auto& listed = found->second;
+        EXPECT_EQ(original.key, listed.key);
+        EXPECT_EQ(original.flags, listed.flags);
+        EXPECT_EQ(original.versioned_epoch, listed.versioned_epoch);
+        EXPECT_EQ(original.meta.size, listed.meta.size);
+        EXPECT_EQ(original.meta.etag, listed.meta.etag);
+        if (listed.key == key) {
+          EXPECT_EQ(new_mtime.time_since_epoch().count(),
+                    listed.meta.mtime.time_since_epoch().count());
+        } else {
+          EXPECT_EQ(original.meta.mtime, listed.meta.mtime);
+        }
+      }
+      before = std::move(after);
+      test_stats(ioctx, oid, RGWObjCategory::Main, 2, 8192);
+    }
+  }
 }
 
 TEST_P(TestClsRgw, index_suggest_complete)
