@@ -1156,7 +1156,7 @@ void DaemonServer::_check_offlines_pgs(
       report->bad_already_inactive.insert(q.first);
       dangerous = true;
     }
-    if (pg_acting.size() < pi->min_size) {
+    if (pi && pg_acting.size() < pi->min_size) {
       report->bad_become_inactive.insert(q.first);
       dangerous = true;
     }
