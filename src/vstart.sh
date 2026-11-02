@@ -664,7 +664,6 @@ case $1 in
         ;;
     --crimson-poll-mode)
         crimson_poll_mode=true
-        shift
         ;;
     --bluestore-spdk)
         [ -z "$2" ] && usage_exit
