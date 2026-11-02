@@ -155,7 +155,7 @@ First stable release
 ====================
 
 - [x] src/ceph_release: change type `stable`
-- [ ] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
+- [x] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
 - [x] src/cephadm/cephadmlib/constants.py: update `LATEST_STABLE_RELEASE`
 - [x] src/cephadm/cephadmlib/constants.py: set DEFAULT_IMAGE 'quay.io/ceph/ceph:vX' (e.g. v21 for Umbrella)
 - [x] src/cephadm/cephadmlib/constants.py: set DEFAULT_IMAGE_IS_MAIN to False
