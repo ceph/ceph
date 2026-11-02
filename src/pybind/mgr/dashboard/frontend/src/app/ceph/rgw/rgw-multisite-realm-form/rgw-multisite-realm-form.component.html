@@ -79,19 +79,6 @@
               <span>You cannot unset the default flag.</span>
             </cd-help-text>
           }
-          @if (action === actionLabels.EDIT && !info.data.is_default) {
-            <cd-help-text>
-              <span
-                >Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover
-                mechanism</span
-              >
-            </cd-help-text>
-          }
-          @if (defaultRealmDisabled && action === actionLabels.CREATE) {
-            <cd-help-text>
-              <span>Default realm already exists.</span>
-            </cd-help-text>
-          }
         </cds-checkbox>
       </div>
     </form>
