@@ -20,6 +20,8 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <climits>
+#include <string_view>
 
 #include "common/ceph_json.h"
 #include "common/errno.h"
@@ -316,6 +318,50 @@ void decode_identity(JSONObj* obj, NooBaaIdentity& id)
   }
 }
 
+/* Decode one `CreateRole` role, throwing as decode_identity() does. */
+void decode_role(JSONObj* obj, NooBaaRole& r)
+{
+  JSONDecoder::decode_json("_id", r.id, obj);
+  JSONDecoder::decode_json("name", r.name, obj);
+  JSONDecoder::decode_json("owner", r.owner, obj);
+  JSONDecoder::decode_json("iam_path", r.iam_path, obj);
+  JSONDecoder::decode_json("description", r.description, obj);
+  JSONDecoder::decode_json("max_session_duration", r.max_session_duration,
+			   obj);
+  if (JSONObj* d = obj->find_obj("assume_role_policy_document")) {
+    r.assume_role_policy_document = d->get_data();
+  }
+  if (JSONObj* ps = obj->find_obj("iam_inline_policies")) {
+    for (auto i = ps->find_first(); !i.end(); ++i) {
+      std::string name;
+      JSONDecoder::decode_json("policy_name", name, *i);
+      JSONObj* d = (*i)->find_obj("policy_document");
+      r.inline_policies.emplace_back(std::move(name),
+				     d ? d->get_data() : std::string{});
+    }
+  }
+}
+
+/* Whether `<identities>/<owner>/roles/<name>.symlink` names `r`'s
+ * record, as NooBaa writes it:  `../../<_id>/identity.json`
+ * (`config_fs.js` create_role_config_file). */
+bool role_linked(const DoutPrefixProvider* dpp, const std::string& identities,
+		 const NooBaaRole& r)
+{
+  const std::string link =
+    identities + "/" + r.owner + "/roles/" + r.name + ".symlink";
+  char buf[PATH_MAX];
+  ssize_t n = -1;
+  if (as_store_reader(dpp, [&]() -> int {
+	n = ::readlink(link.c_str(), buf, sizeof(buf));
+	return (n < 0) ? -errno : 0;
+      }) < 0) {
+    return false;
+  }
+  return std::string_view{buf, static_cast<size_t>(n)}.ends_with(
+    "/" + r.id + "/identity.json");
+}
+
 } // namespace
 
 int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
@@ -478,6 +524,44 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 	JSONParser p;
 	if (!p.parse(doc.data(), doc.size())) {
 	  unreadable(path, "not JSON");
+	  continue;
+	}
+	std::string identity_type, early_type;
+	try {
+	  JSONDecoder::decode_json("identity_type", identity_type, &p);
+	  JSONDecoder::decode_json("type", early_type, &p);
+	} catch (const JSONDecoder::err& e) {
+	  unreadable(path, e.what());
+	  continue;
+	}
+	if (identity_type == "ROLE") {
+	  if (auto why = unknown_field(noobaa_schema::role, &p);
+	      !why.empty()) {
+	    unreadable(path, why);
+	    continue;
+	  }
+	  NooBaaRole r;
+	  try {
+	    decode_role(&p, r);
+	  } catch (const JSONDecoder::err& e) {
+	    unreadable(path, e.what());
+	    continue;
+	  }
+	  if (r.id.empty()) {
+	    unreadable(path, "no _id");
+	    continue;
+	  }
+	  r.linked = role_linked(dpp, dir, r);
+	  out.roles.push_back(std::move(r));
+	  continue;
+	}
+	if (early_type == "role") {
+	  /* noobaa-core `945053084`'s role, whose fields `6db404dad`
+	   * renamed without converting it, so NooBaa from then on refuses
+	   * it too (DECISIONS.md 2026-10-30, amended 2026-11-02) */
+	  unreadable(path, "a role in NooBaa's shape before 6db404dad "
+		     "(`type: \"role\"`), which NooBaa no longer reads;  "
+		     "recreate the role, or remove the record");
 	  continue;
 	}
 	if (auto why = unknown_field(noobaa_schema::account, &p);
@@ -652,6 +736,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 
   ldpp_dout(dpp, 4) << "nsfs: read NooBaa store " << root << ": "
     << out.accounts() << " accounts, " << out.iam_users() << " IAM users, "
+    << out.roles.size() << " roles, "
     << out.buckets.size() << " buckets, "
     << out.connections.size() << " connections, "
     << (out.master_keys_present ? "master keys present" : "NO MASTER KEYS")

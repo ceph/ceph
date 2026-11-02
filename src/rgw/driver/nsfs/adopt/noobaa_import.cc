@@ -28,6 +28,7 @@
 #include "rgw_auth.h"
 #include "rgw_common.h"
 #include "rgw_formats.h"
+#include "rgw_iam_policy.h"
 #include "rgw_role.h"
 #include "driver/rados/rgw_user.h"
 
@@ -636,6 +637,15 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
   result.role_rights = driver->ctx()->_conf.get_val<std::string>(
     "rgw_nsfs_adoption_role_rights");
 
+  /* The `CreateRole` roles, by owner and name:  one of these wins over
+   * its account's `role_config` role of the same name, as NooBaa's own
+   * migration of `role_config` decides (DECISIONS.md 2026-10-30,
+   * amended 2026-11-02). */
+  std::map<std::pair<std::string, std::string>, std::string> role_by_name;
+  for (const auto& r : contents.roles) {
+    role_by_name.emplace(std::pair{r.owner, r.name}, r.id);
+  }
+
   for (const auto& e : plan.entries) {
     const NooBaaIdentity* src = find_source(contents, e.noobaa_id);
     if (!src || src->role_config.empty()) {
@@ -669,6 +679,13 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     }
     if (role_name.empty()) {
       fail(e.noobaa_name, "role_config names no role");
+      continue;
+    }
+    if (auto r = role_by_name.find({e.noobaa_id, role_name});
+	r != role_by_name.end()) {
+      result.role_config_superseded.push_back(
+	  e.noobaa_name + ": role_config role " + role_name + " is not "
+	  "imported;  the ROLE record " + r->second + " of that name is");
       continue;
     }
 
@@ -735,6 +752,105 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     if (with_rights) {
       ++result.role_policies_written;
     }
+  }
+
+  /* ---- `CreateRole` roles ----
+   *
+   * Each becomes an RGW role in its owner account, with its own
+   * policies, as they are, since NooBaa enforces them;  it gets no
+   * identity row, since NooBaa's session runs as the owner account
+   * (DECISIONS.md 2026-10-30).  A role that cannot be written is its
+   * own failure and stops nothing else (amended 2026-11-02). */
+  for (const auto& r : contents.roles) {
+    const std::string label = "role " + r.name + " (_id " + r.id + ")";
+    auto fail_role = [&](const std::string& why) {
+      result.failures.push_back(label + ": " + why);
+    };
+    auto owner = std::find_if(plan.entries.begin(), plan.entries.end(),
+			      [&](const ImportEntry& w) {
+				return !w.iam_user && w.noobaa_id == r.owner;
+			      });
+    if (owner == plan.entries.end()) {
+      fail_role("its owner " + r.owner + " is not an account in this "
+		"store, so NooBaa cannot assume it either");
+      continue;
+    }
+    if (!owner_by_noobaa_id.contains(r.owner)) {
+      /* its account was not written;  that failure is recorded */
+      continue;
+    }
+    if (!r.linked) {
+      fail_role("identities/" + r.owner + "/roles/" + r.name +
+		".symlink does not name this record, so NooBaa does not "
+		"reach it by its name");
+      continue;
+    }
+
+    std::string rewritten;
+    std::vector<std::string> unresolved, also_users;
+    /* No arns_matched:  NooBaa's STS matched an ARN in a ROLE record's
+     * trust policy (DECISIONS.md 2026-10-30, amended 2026-11-02). */
+    if (int ret = rewrite_policy_principals(dpp,
+					    r.assume_role_policy_document,
+					    mapping, rewritten, unresolved,
+					    &also_users);
+	ret < 0) {
+      fail_role((ret == -ENOENT)
+		? "the trust policy names principals that resolve to "
+		  "nothing: " + describe_unresolved(mapping, unresolved)
+		: "the trust policy will not translate: " +
+		  cpp_strerror(-ret));
+      continue;
+    }
+
+    RGWRoleInfo ri;
+    ri.name = r.name;
+    ri.path = r.iam_path.empty() ? "/" : r.iam_path;
+    ri.description = r.description;
+    ri.account_id = owner->account_id;
+    ri.tenant = owner->tenant;
+    ri.trust_policy = std::move(rewritten);
+    ri.max_session_duration = r.max_session_duration
+      ? r.max_session_duration : RGWRole::SESSION_DURATION_MIN;
+    std::string bad_policy;
+    for (const auto& [name, doc] : r.inline_policies) {
+      try {
+	const rgw::IAM::Policy p(driver->ctx(), nullptr, doc, false);
+      } catch (const rgw::IAM::PolicyParseException& e) {
+	bad_policy = name + ": " + e.what();
+	break;
+      }
+      ri.perm_policy_map[name] = doc;
+    }
+    if (!bad_policy.empty()) {
+      fail_role("RGW will not parse its policy " + bad_policy);
+      continue;
+    }
+
+    std::unique_ptr<RGWRole> role = driver->get_role(ri);
+    int ret = role->create(dpp, "", y);
+    if (ret == -EINVAL) {
+      fail_role("RGW will not accept its name, its path " + ri.path +
+		" or its max_session_duration " +
+		std::to_string(ri.max_session_duration));
+      continue;
+    }
+    if (ret < 0 && ret != -EEXIST) {
+      fail_role(std::string("create: ") + cpp_strerror(-ret));
+      continue;
+    }
+    for (const auto& a : also_users) {
+      result.trust_narrowed.push_back(
+	  owner->noobaa_name + ": " + label + " trusts the account " + a +
+	  ";  NooBaa's STS also admitted these IAM users of its name, and "
+	  "the role does not trust them");
+    }
+    if (ret == -EEXIST) {
+      /* a re-run meeting its own output */
+      continue;
+    }
+    ++result.roles_created;
+    result.role_policies_written += ri.perm_policy_map.size();
   }
 
   ldpp_dout(dpp, 4) << "nsfs: imported " << result.accounts_created

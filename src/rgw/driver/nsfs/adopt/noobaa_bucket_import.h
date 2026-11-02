@@ -138,8 +138,9 @@ IdentityMapping mapping_from(const ImportPlan& plan);
  *
  * `arns_matched`, when given, gets each NooBaa ARN rewritten, as
  * "<ARN> as <RGW ARN> (<Effect>, Principal|NotPrincipal)":  NooBaa NC
- * never matched one, so the statement applies after adoption where it
- * did not before (DECISIONS.md 2026-10-30, amended 2026-11-01).
+ * 5.23 matched none in a bucket policy, nor at 5.23.0 in a trust
+ * policy, so the statement applies after adoption where it did not
+ * before (DECISIONS.md 2026-10-30, amended 2026-11-01 and 2026-11-02).
  *
  * Only values under `Principal` and `NotPrincipal` are visited.
  * Exposed for its own tests:  it is the part of this stage where being

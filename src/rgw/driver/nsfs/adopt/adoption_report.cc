@@ -71,6 +71,10 @@ const FindingKindText kind_texts[] = {
    "IAM users NooBaa's STS admitted by name can no longer assume the role",
    "name each such user in the trust policy by its ARN, if it should "
    "assume the role"},
+  {"role_config_superseded",
+   "the account's role_config role is not imported;  the ROLE record of "
+   "its name is imported in its place",
+   "none needed;  NooBaa's own migration does the same"},
   {"bucket_failed",
    "the bucket is not adopted, and adoption cannot complete",
    "fix what the finding names and run adoption again, or abandon the "
@@ -81,7 +85,8 @@ const FindingKindText kind_texts[] = {
    "write the policy with RGW principals (PutBucketPolicy)"},
   {"arn_matched",
    "the statement now applies to the identity the ARN names, which "
-   "NooBaa never matched",
+   "NooBaa NC 5.23 did not match in a bucket policy, nor at 5.23.0 in a "
+   "trust policy",
    "none needed, if the statement should apply;  otherwise remove the "
    "principal"},
   {"notification_not_carried",

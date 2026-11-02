@@ -13212,6 +13212,25 @@ static constexpr const char* NB_ACCOUNT_ANONYMOUS = R"({
   "master_key_id": "6ac7cb2751b72219a4bae375"
 })";
 
+/* A `CreateRole` role as noobaa-core `6db404dad` writes one
+ * (`_new_role_defaults`, then PutRolePolicy), trusting `principal`. */
+static std::string nb_role(const std::string& id, const std::string& owner,
+			   const std::string& name,
+			   const std::string& principal)
+{
+  return R"({"_id":")" + id + R"(","name":")" + name + R"(","email":")" +
+    name + R"(","identity_type":"ROLE","owner":")" + owner +
+    R"(","iam_path":"/eng/","creation_date":"2026-08-25T10:00:00.000Z",)"
+    R"("description":"reads the reports","max_session_duration":7200,)"
+    R"("assume_role_policy_document":{"Version":"2012-10-17","Statement":[)"
+    R"({"Effect":"Allow","Principal":{"AWS":[")" + principal + R"("]},)"
+    R"("Action":["sts:AssumeRole"]}]},)"
+    R"("nsfs_account_config":{"uid":1000,"gid":1000},)"
+    R"("iam_inline_policies":[{"policy_name":"reports","policy_document":)"
+    R"({"Version":"2012-10-17","Statement":[{"Effect":"Allow",)"
+    R"("Action":["s3:GetObject"],"Resource":["arn:aws:s3:::reports/*"]}]}}]})";
+}
+
 class NooBaaStoreTest : public NSFSDriverTest {
 protected:
   std::string store;
@@ -13242,6 +13261,20 @@ public:
 
   void add_bucket(const std::string& name, const std::string& record) {
     write_file(store + "/buckets/" + name + ".json", record);
+  }
+
+  /* A role's record and, when `link`, the symlink by which NooBaa
+   * finds it by name (`config_fs.js` create_role_config_file). */
+  void add_role(const std::string& id, const std::string& owner,
+		const std::string& name, const std::string& record,
+		bool link = true) {
+    add_identity(id, record.c_str());
+    if (link) {
+      const std::string roles = store + "/identities/" + owner + "/roles";
+      std::filesystem::create_directories(roles);
+      std::filesystem::create_symlink("../../" + id + "/identity.json",
+				      roles + "/" + name + ".symlink");
+    }
   }
 
   nsfs::NooBaaStoreContents read_store() {
@@ -13754,6 +13787,87 @@ TEST_F(NooBaaStoreTest, ARecordHoldingAFieldNooBaaDoesNotWriteIsNotRead)
     EXPECT_NE(all.find(tc.expect), std::string::npos) << all;
     EXPECT_EQ(tc.is_bucket ? c.buckets.size() : c.identities.size(), 0u)
 	<< "a record holding an unknown field was read";
+  }
+}
+
+/* A `CreateRole` role is read as a role, not an identity, with its
+ * fields, its policies, and whether NooBaa reaches it by name. */
+TEST_F(NooBaaStoreTest, ACreateRoleRoleIsReadAsARole)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_role("r1", "6ac7cb27fd4af356919110a3", "reader",
+	   nb_role("r1", "6ac7cb27fd4af356919110a3", "reader", "interchange"));
+  add_role("r2", "6ac7cb27fd4af356919110a3", "reader",
+	   nb_role("r2", "6ac7cb27fd4af356919110a3", "reader", "interchange"),
+	   false);
+  auto c = read_store();
+  EXPECT_TRUE(c.unreadable.empty())
+      << c.unreadable.front().path << ": " << c.unreadable.front().why;
+  EXPECT_EQ(c.identities.size(), 1u) << "a role was read as an identity";
+  ASSERT_EQ(c.roles.size(), 2u);
+  const auto& r = c.roles[0];
+  EXPECT_EQ(r.id, "r1");
+  EXPECT_EQ(r.name, "reader");
+  EXPECT_EQ(r.owner, "6ac7cb27fd4af356919110a3");
+  EXPECT_EQ(r.iam_path, "/eng/");
+  EXPECT_EQ(r.description, "reads the reports");
+  EXPECT_EQ(r.max_session_duration, 7200u);
+  EXPECT_NE(r.assume_role_policy_document.find("interchange"),
+	    std::string::npos) << r.assume_role_policy_document;
+  ASSERT_EQ(r.inline_policies.size(), 1u);
+  EXPECT_EQ(r.inline_policies[0].first, "reports");
+  EXPECT_NE(r.inline_policies[0].second.find("arn:aws:s3:::reports/*"),
+	    std::string::npos) << r.inline_policies[0].second;
+  EXPECT_TRUE(r.linked);
+  EXPECT_FALSE(c.roles[1].linked)
+      << "a record the symlink does not name was reached by name";
+}
+
+/* A role is held to the role structure:  a field it does not write, a
+ * statement key NooBaa's trust schema forbids, and NooBaa's earlier
+ * `type: "role"` shape are each unreadable (DECISIONS.md 2026-10-30,
+ * amended 2026-11-02). */
+TEST_F(NooBaaStoreTest, ARoleRecordIsHeldToTheRoleShape)
+{
+  const std::string role =
+    nb_role("r1", "6ac7cb27fd4af356919110a3", "reader", "interchange");
+  auto changed = [&](const std::string& from, const std::string& to) {
+    std::string doc = role;
+    const auto at = doc.find(from);
+    EXPECT_NE(at, std::string::npos) << from;
+    return doc.replace(at, from.size(), to);
+  };
+  struct Case {
+    const char* what;
+    std::string doc;
+    std::string expect;
+  };
+  const std::vector<Case> cases = {
+    {"a field at the top", changed(R"("_id")", R"("new_field":1,"_id")"),
+     ".new_field is not a field NooBaa writes"},
+    {"a NotPrincipal in the trust policy",
+     changed(R"("Principal":)", R"("NotPrincipal":)"),
+     "NotPrincipal is not a field NooBaa writes"},
+    {"an account's field on a role",
+     changed(R"("_id")", R"("access_keys":[],"_id")"),
+     ".access_keys is not a field NooBaa writes"},
+    {"the shape before 6db404dad",
+     changed(R"("identity_type":"ROLE")", R"("type":"role")"),
+     "before 6db404dad"},
+  };
+  for (const auto& tc : cases) {
+    SCOPED_TRACE(tc.what);
+    std::filesystem::remove_all(store + "/identities");
+    std::filesystem::create_directories(store + "/identities");
+    add_identity("r1", tc.doc.c_str());
+    auto c = read_store();
+    std::string all;
+    for (const auto& u : c.unreadable) {
+      all += "\n  " + u.path + ": " + u.why;
+    }
+    EXPECT_NE(all.find(tc.expect), std::string::npos) << all;
+    EXPECT_TRUE(c.roles.empty());
+    EXPECT_TRUE(c.identities.empty());
   }
 }
 
@@ -16241,6 +16355,98 @@ TEST_F(NooBaaImportTest, ATrustArnTrustsTheAccountAndIsReturned)
 	      ":root as " + arn + " ("), 0u) << result.arns_matched[0];
 }
 
+/* A `CreateRole` role becomes an RGW role in its owner account:  its
+ * path, description and session duration, its trust policy with its
+ * principals rewritten, and its own policies as they are.  An ARN in
+ * its trust policy is rewritten and not reported, since NooBaa's STS
+ * matched it (DECISIONS.md 2026-10-30, amended 2026-11-02). */
+TEST_F(NooBaaImportTest, ACreateRoleRoleIsAnRgwRoleWithItsOwnPolicies)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_role("r1", "6ac7cb27fd4af356919110a3", "reader",
+	   nb_role("r1", "6ac7cb27fd4af356919110a3", "reader",
+		   "arn:aws:iam::6ac7cb27fd4af356919110a3:root"));
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+  EXPECT_EQ(result.role_policies_written, 1u);
+  EXPECT_TRUE(result.arns_matched.empty()) << result.arns_matched.front();
+
+  const auto* acct = entry("interchange");
+  ASSERT_NE(acct, nullptr);
+  auto role = driver->get_role("reader", acct->tenant,
+			       rgw_account_id{acct->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0);
+  const auto& info = role->get_info();
+  EXPECT_EQ(info.path, "/eng/");
+  EXPECT_EQ(info.description, "reads the reports");
+  EXPECT_EQ(info.max_session_duration, 7200u);
+  EXPECT_NE(info.trust_policy.find(
+	      "arn:aws:iam::" + acct->account_id + ":root"),
+	    std::string::npos) << info.trust_policy;
+  ASSERT_EQ(info.perm_policy_map.count("reports"), 1u);
+  EXPECT_NE(info.perm_policy_map.at("reports").find("arn:aws:s3:::reports/*"),
+	    std::string::npos);
+  EXPECT_EQ(info.perm_policy_map.count("NooBaaRoleMigration"), 0u);
+}
+
+/* An account's `role_config` role is not imported when a ROLE record of
+ * its name in that account is, and is reported (DECISIONS.md 2026-10-30,
+ * amended 2026-11-02). */
+TEST_F(NooBaaImportTest, ARoleRecordSupersedesTheRoleConfigOfItsName)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0",
+	       nb_role_account("interchange").c_str());
+  add_role("r1", "6ac7d2121e63a748e37663e0", "nb-role",
+	   nb_role("r1", "6ac7d2121e63a748e37663e0", "nb-role",
+		   "interchange"));
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.roles_created, 1u);
+  ASSERT_EQ(result.role_config_superseded.size(), 1u);
+  EXPECT_EQ(result.role_config_superseded[0],
+	    "ix-groups: role_config role nb-role is not imported;  the ROLE "
+	    "record r1 of that name is");
+
+  const auto* holder = entry("ix-groups");
+  ASSERT_NE(holder, nullptr);
+  auto role = driver->get_role("nb-role", holder->tenant,
+			       rgw_account_id{holder->account_id});
+  ASSERT_EQ(role->load_by_name(env->dpp, null_yield), 0);
+  EXPECT_EQ(role->get_info().description, "reads the reports")
+      << "the role_config role was imported, not the ROLE record";
+}
+
+/* A role that cannot be written fails alone:  one whose owner is not in
+ * the store, and one its name's symlink does not name.  Everything else
+ * is imported (DECISIONS.md 2026-10-30, amended 2026-11-02). */
+TEST_F(NooBaaImportTest, ARoleThatCannotBeWrittenStopsNothingElse)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_role("r1", "6ac7cb27fd4af356919110a3", "reader",
+	   nb_role("r1", "6ac7cb27fd4af356919110a3", "reader", "interchange"));
+  add_role("r2", "6ac7cb27fd4af356919110a3", "reader",
+	   nb_role("r2", "6ac7cb27fd4af356919110a3", "reader", "interchange"),
+	   false);
+  add_role("r3", "6ac7cb27fd4af3569191dead", "orphan",
+	   nb_role("r3", "6ac7cb27fd4af3569191dead", "orphan", "interchange"));
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  EXPECT_LT(run(), 0);
+  EXPECT_EQ(result.accounts_created, 1u);
+  EXPECT_EQ(result.roles_created, 1u);
+  ASSERT_EQ(result.failures.size(), 2u) << why();
+  EXPECT_NE(why().find("role reader (_id r2): identities/6ac7cb27fd4af356919110a3"
+		       "/roles/reader.symlink does not name this record"),
+	    std::string::npos) << why();
+  EXPECT_NE(why().find("role orphan (_id r3): its owner 6ac7cb27fd4af3569191dead "
+		       "is not an account in this store"),
+	    std::string::npos) << why();
+}
+
 /* An IAM user whose name, and so whose NooBaa email, is an imported
  * account's email is no collision with RGW's state:  the user is
  * written with no email. */
@@ -18091,6 +18297,27 @@ TEST_F(NooBaaAbandonTest, AbandoningRejectsWhatItShould)
   ASSERT_EQ(run(), 0);
   EXPECT_EQ(abandon(NB_BUCKET_ID, "adopted already"), -EEXIST)
       << "an adopted bucket, or anything after completion, was abandoned";
+}
+
+/* A role that cannot be written keeps adoption incomplete until it is
+ * abandoned, which is the override (DECISIONS.md 2026-10-30, amended
+ * 2026-11-02);  then the pass completes. */
+TEST_F(NooBaaAbandonTest, AbandoningARoleThatCannotBeWrittenLetsAdoptionComplete)
+{
+  sf::create_directories(conf_root() / "identities" / "r3");
+  write_file(conf_root() / "identities" / "r3" / "identity.json",
+	     nb_role("r3", "6560e1f1c0ffee00000000ee", "orphan", "x"));
+  EXPECT_LT(run(), 0) << "the control:  the orphan role blocks it";
+  EXPECT_FALSE(driver->adoption_complete());
+
+  nsfs::AbandonedRecord r;
+  ASSERT_EQ(abandon("r3", "its account was deleted in NooBaa", &r), 0);
+  EXPECT_EQ(r.kind, "identity");
+  EXPECT_EQ(r.name, "orphan");
+  EXPECT_EQ(r.stage, "not imported");
+
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
 }
 
 /* A record that can never be adopted keeps adoption incomplete until it

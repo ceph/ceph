@@ -154,6 +154,30 @@ struct NooBaaIdentity {
   bool is_iam_user() const { return !owner.empty(); }
 };
 
+/* A `CreateRole` role:  `identities/<id>/identity.json` holding
+ * `identity_type: "ROLE"`, found by name through
+ * `identities/<owner>/roles/<name>.symlink` (noobaa-core `6db404dad`).
+ * Not an identity:  nothing authenticates as it, and its
+ * `nsfs_account_config` copy is not read, since NooBaa's session runs as
+ * the owner account (DECISIONS.md 2026-10-30). */
+struct NooBaaRole {
+  std::string id;
+  std::string name;
+  /* the account's `_id` */
+  std::string owner;
+  std::string iam_path;
+  std::string description;
+  /* seconds;  0 when the record has none */
+  uint64_t max_session_duration{0};
+  /* AWS's format, kept as the JSON text the record holds */
+  std::string assume_role_policy_document;
+  /* (policy_name, policy_document as JSON text) */
+  std::vector<std::pair<std::string, std::string>> inline_policies;
+  /* Whether `identities/<owner>/roles/<name>.symlink` names this
+   * record, which is how NooBaa reaches a role by name. */
+  bool linked{false};
+};
+
 /* What `config.json` says that changes how an account behaves.
  *
  * Not service tunables.  §2.5 point 4:  the switch between an explicit
@@ -284,6 +308,7 @@ struct NooBaaStoreContents {
   NooBaaSettings settings;
   NooBaaSystem system;
   std::vector<NooBaaIdentity> identities;
+  std::vector<NooBaaRole> roles;
 
   std::vector<NooBaaBucketRecord> buckets;
   std::vector<NooBaaConnection> connections;

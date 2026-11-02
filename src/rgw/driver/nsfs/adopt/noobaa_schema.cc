@@ -349,12 +349,113 @@ constexpr Field bucket_record_fields[] = {
   {"force_md5_etag", "5.23.0", Disposition::Carried, &scalar},
   {"logging", "5.23.0", Disposition::Translated, &def_bucket_logging},
   {"lifecycle_configuration_rules", "5.23.0", Disposition::Translated, &def_bucket_lifecycle_configuration},
-  {"notifications", "5.23.0", Disposition::NotCarried, &bucket_notifications},
+  {"notifications", "5.23.0", Disposition::Translated, &bucket_notifications},
   {"cors_configuration_rules", "5.23.0", Disposition::Translated, &def_bucket_cors_configuration},
   {"public_access_block", "5.23.0", Disposition::Translated, &def_public_access_block},
   {"object_lock_configuration", "5.23.0", Disposition::Translated, &def_object_lock_configuration},
 };
 constexpr Node bucket_record{.kind = Kind::Object, .fields = bucket_record_fields};
+
+/* ------------------------------------------------------------------
+ * A `CreateRole` role, `identity_type: "ROLE"`, as noobaa-core
+ * `6db404dad` writes one (`accountspace_fs.js` `_new_role_defaults`,
+ * and `iam_inline_policies` from its role-policy CRUD), against the
+ * `common_api.js` definitions it reaches, the same at `418b1a39b`.  The
+ * role structure, admitted whole (DECISIONS.md 2026-10-30, amended
+ * 2026-11-02);  NooBaa's earlier `type: "role"` shape is not.
+ * ------------------------------------------------------------------ */
+
+constexpr Node def_bucket_policy_ip_condition{.kind = Kind::Map, .each = &def_string_or_string_array};
+constexpr Field def_policy_condition_fields[] = {
+  {"StringEquals", "5.23.0", Disposition::Inherit, &def_bucket_policy_string_condition},
+  {"StringNotEquals", "5.23.0", Disposition::Inherit, &def_bucket_policy_string_condition},
+  {"StringEqualsIgnoreCase", "5.23.0", Disposition::Inherit, &def_bucket_policy_string_condition},
+  {"StringNotEqualsIgnoreCase", "5.23.0", Disposition::Inherit, &def_bucket_policy_string_condition},
+  {"StringLike", "5.23.0", Disposition::Inherit, &def_bucket_policy_string_condition},
+  {"StringNotLike", "5.23.0", Disposition::Inherit, &def_bucket_policy_string_condition},
+  {"Null", "5.23.0", Disposition::Inherit, &def_bucket_policy_null_condition},
+  {"IpAddress", "5.23.0", Disposition::Inherit, &def_bucket_policy_ip_condition},
+  {"NotIpAddress", "5.23.0", Disposition::Inherit, &def_bucket_policy_ip_condition},
+};
+constexpr Node def_policy_condition{.kind = Kind::Object, .fields = def_policy_condition_fields};
+constexpr Field def_iam_inline_policy_document_Statement_item_arm0_fields[] = {
+  {"Sid", "5.23.0", Disposition::Inherit, &scalar},
+  {"Action", "5.23.0", Disposition::Inherit, &def_string_or_string_array},
+  {"NotAction", "5.23.0", Disposition::Inherit, &def_string_or_string_array},
+  {"Resource", "5.23.0", Disposition::Inherit, &def_string_or_string_array},
+  {"NotResource", "5.23.0", Disposition::Inherit, &def_string_or_string_array},
+  {"Effect", "5.23.0", Disposition::Inherit, &scalar},
+  {"Condition", "5.23.0", Disposition::Inherit, &def_policy_condition},
+};
+constexpr Node def_iam_inline_policy_document_Statement_item_arm0{.kind = Kind::Object, .fields = def_iam_inline_policy_document_Statement_item_arm0_fields};
+constexpr Node def_iam_inline_policy_document_Statement_item_arm1_arm0{.kind = Kind::Object, .open = true};
+constexpr Node def_iam_inline_policy_document_Statement_item_arm1_arm1{.kind = Kind::Object, .open = true};
+constexpr const Node* def_iam_inline_policy_document_Statement_item_arm1_arms[] = {&def_iam_inline_policy_document_Statement_item_arm1_arm0, &def_iam_inline_policy_document_Statement_item_arm1_arm1};
+constexpr Node def_iam_inline_policy_document_Statement_item_arm1{.kind = Kind::AnyOf, .arms = def_iam_inline_policy_document_Statement_item_arm1_arms};
+constexpr Node def_iam_inline_policy_document_Statement_item_arm2_arm0{.kind = Kind::Object, .open = true};
+constexpr Node def_iam_inline_policy_document_Statement_item_arm2_arm1{.kind = Kind::Object, .open = true};
+constexpr const Node* def_iam_inline_policy_document_Statement_item_arm2_arms[] = {&def_iam_inline_policy_document_Statement_item_arm2_arm0, &def_iam_inline_policy_document_Statement_item_arm2_arm1};
+constexpr Node def_iam_inline_policy_document_Statement_item_arm2{.kind = Kind::AnyOf, .arms = def_iam_inline_policy_document_Statement_item_arm2_arms};
+constexpr const Node* def_iam_inline_policy_document_Statement_item_arms[] = {&def_iam_inline_policy_document_Statement_item_arm0, &def_iam_inline_policy_document_Statement_item_arm1, &def_iam_inline_policy_document_Statement_item_arm2};
+constexpr Node def_iam_inline_policy_document_Statement_item{.kind = Kind::AllOf, .arms = def_iam_inline_policy_document_Statement_item_arms};
+constexpr Node def_iam_inline_policy_document_Statement{.kind = Kind::Array, .each = &def_iam_inline_policy_document_Statement_item};
+constexpr Field def_iam_inline_policy_document_fields[] = {
+  {"Version", "5.23.0", Disposition::Inherit, &scalar},
+  {"Statement", "5.23.0", Disposition::Inherit, &def_iam_inline_policy_document_Statement},
+};
+constexpr Node def_iam_inline_policy_document{.kind = Kind::Object, .fields = def_iam_inline_policy_document_fields};
+constexpr Field def_iam_inline_policy_fields[] = {
+  {"policy_name", "5.23.0", Disposition::Inherit, &scalar},
+  {"policy_document", "5.23.0", Disposition::Inherit, &def_iam_inline_policy_document},
+};
+constexpr Node def_iam_inline_policy{.kind = Kind::Object, .fields = def_iam_inline_policy_fields};
+constexpr Node role_iam_inline_policies{.kind = Kind::Array, .each = &def_iam_inline_policy};
+constexpr Field def_iam_trust_policy_principal_arm0_fields[] = {
+  {"AWS", "5.23.0", Disposition::Inherit, &def_string_or_string_array},
+  {"Federated", "5.23.0", Disposition::Inherit, &def_string_or_string_array},
+  {"Service", "5.23.0", Disposition::Inherit, &def_string_or_string_array},
+};
+constexpr Node def_iam_trust_policy_principal_arm0{.kind = Kind::Object, .fields = def_iam_trust_policy_principal_arm0_fields};
+constexpr Node def_iam_trust_policy_principal_arm1_arm0{.kind = Kind::Object, .open = true};
+constexpr Node def_iam_trust_policy_principal_arm1_arm1{.kind = Kind::Object, .open = true};
+constexpr Node def_iam_trust_policy_principal_arm1_arm2{.kind = Kind::Object, .open = true};
+constexpr const Node* def_iam_trust_policy_principal_arm1_arms[] = {&def_iam_trust_policy_principal_arm1_arm0, &def_iam_trust_policy_principal_arm1_arm1, &def_iam_trust_policy_principal_arm1_arm2};
+constexpr Node def_iam_trust_policy_principal_arm1{.kind = Kind::AnyOf, .arms = def_iam_trust_policy_principal_arm1_arms};
+constexpr const Node* def_iam_trust_policy_principal_arms[] = {&def_iam_trust_policy_principal_arm0, &def_iam_trust_policy_principal_arm1};
+constexpr Node def_iam_trust_policy_principal{.kind = Kind::AllOf, .arms = def_iam_trust_policy_principal_arms};
+constexpr Node def_iam_trust_policy_action_arm1{.kind = Kind::Array, .each = &scalar};
+constexpr const Node* def_iam_trust_policy_action_arms[] = {&scalar, &def_iam_trust_policy_action_arm1};
+constexpr Node def_iam_trust_policy_action{.kind = Kind::AnyOf, .arms = def_iam_trust_policy_action_arms};
+constexpr Node def_trust_policy_condition{.kind = Kind::Object, .open = true};
+constexpr Field def_iam_trust_policy_statement_fields[] = {
+  {"Sid", "5.23.0", Disposition::Inherit, &scalar},
+  {"Effect", "5.23.0", Disposition::Inherit, &scalar},
+  {"Action", "5.23.0", Disposition::Inherit, &def_iam_trust_policy_action},
+  {"Principal", "5.23.0", Disposition::Inherit, &def_iam_trust_policy_principal},
+  {"Condition", "5.23.0", Disposition::Inherit, &def_trust_policy_condition},
+};
+constexpr Node def_iam_trust_policy_statement{.kind = Kind::Object, .fields = def_iam_trust_policy_statement_fields};
+constexpr Node def_iam_trust_policy_document_Statement{.kind = Kind::Array, .each = &def_iam_trust_policy_statement};
+constexpr Field def_iam_trust_policy_document_fields[] = {
+  {"Version", "5.23.0", Disposition::Inherit, &scalar},
+  {"Statement", "5.23.0", Disposition::Inherit, &def_iam_trust_policy_document_Statement},
+};
+constexpr Node def_iam_trust_policy_document{.kind = Kind::Object, .fields = def_iam_trust_policy_document_fields};
+constexpr Field role_record_fields[] = {
+  {"_id", "5.23.0", Disposition::Translated, &scalar},
+  {"name", "5.23.0", Disposition::Translated, &scalar},
+  {"email", "5.23.0", Disposition::NotCarried, &scalar},
+  {"identity_type", "5.23.0", Disposition::Translated, &scalar},
+  {"owner", "5.23.0", Disposition::Translated, &scalar},
+  {"iam_path", "5.23.0", Disposition::Translated, &scalar},
+  {"creation_date", "5.23.0", Disposition::NotCarried, &scalar},
+  {"description", "5.23.0", Disposition::Translated, &scalar},
+  {"max_session_duration", "5.23.0", Disposition::Translated, &scalar},
+  {"assume_role_policy_document", "5.23.0", Disposition::Translated, &def_iam_trust_policy_document},
+  {"nsfs_account_config", "5.23.0", Disposition::NotCarried, &account_nsfs_account_config},
+  {"iam_inline_policies", "5.23.0", Disposition::Translated, &role_iam_inline_policies},
+};
+constexpr Node role_record{.kind = Kind::Object, .fields = role_record_fields};
 
 constexpr std::string_view releases[] = {"5.23.0"};
 
@@ -531,6 +632,7 @@ bool object_attribute_known(std::string_view xattr)
 }
 
 const Node& account = account_record;
+const Node& role = role_record;
 const Node& bucket = bucket_record;
 const std::span<const std::string_view> reviewed_releases{releases};
 

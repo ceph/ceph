@@ -45,6 +45,7 @@ enum class FindingKind {
   unresolved_name,
   unresolved_uid,
   trust_narrowed,
+  role_config_superseded,
   bucket_failed,
   policy_refused,
   arn_matched,

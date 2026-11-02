@@ -86,9 +86,12 @@ struct Node {
   bool open{false};
 };
 
-/* `identities/<id>/identity.json`:  accounts, IAM users and roles share
- * one schema */
+/* `identities/<id>/identity.json`:  an account or an IAM user, and an
+ * account's `role_config` */
 extern const Node& account;
+/* `identities/<id>/identity.json` holding `identity_type: "ROLE"`:  a
+ * `CreateRole` role (noobaa-core `6db404dad`) */
+extern const Node& role;
 /* `buckets/<name>.json` */
 extern const Node& bucket;
 

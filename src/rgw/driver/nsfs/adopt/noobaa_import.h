@@ -113,10 +113,18 @@ struct ImportResult {
    * 2026-11-01). */
   std::vector<std::string> trust_narrowed;
 
-  /* Each NooBaa ARN a role's trust policy now matches, as "<owner>:
-   * role <name>: <rewrite_policy_principals' text>".  NooBaa's STS
-   * never matched one (DECISIONS.md 2026-10-30, amended 2026-11-01). */
+  /* Each NooBaa ARN a `role_config` trust policy now matches, as
+   * "<owner>: role <name>: <rewrite_policy_principals' text>".  NooBaa's
+   * STS at 5.23.0 matched none;  a ROLE record's, which it matched, are
+   * not here (DECISIONS.md 2026-10-30, amended 2026-11-01 and
+   * 2026-11-02). */
   std::vector<std::string> arns_matched;
+
+  /* Each account's `role_config` role not imported because a ROLE
+   * record of its name in that account was, as "<owner>: role_config
+   * role <name> is not imported;  the ROLE record <_id> of that name
+   * is" (DECISIONS.md 2026-10-30, amended 2026-11-02). */
+  std::vector<std::string> role_config_superseded;
 
   /* Every identity that could not be written, named.  Non-empty means
    * the import did not finish, and re-running it is the recovery. */

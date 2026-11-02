@@ -18418,6 +18418,8 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   adoption_findings.add(nsfs::FindingKind::unresolved_uid, ir.unresolved_uids);
   adoption_findings.add(nsfs::FindingKind::trust_narrowed, ir.trust_narrowed);
   adoption_findings.add(nsfs::FindingKind::arn_matched, ir.arns_matched);
+  adoption_findings.add(nsfs::FindingKind::role_config_superseded,
+			ir.role_config_superseded);
   put_report("accounts", std::to_string(ir.accounts_created));
   put_report("accounts_present", std::to_string(ir.accounts_skipped));
   put_report("users", std::to_string(ir.users_created));
@@ -18445,6 +18447,11 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 0) << "WARNING: adoption:  " << t << dendl;
   }
   put_report("arns_matched", std::to_string(ir.arns_matched.size()));
+  put_report("role_config_superseded",
+	     std::to_string(ir.role_config_superseded.size()));
+  for (const auto& s : ir.role_config_superseded) {
+    ldpp_dout(dpp, 0) << "WARNING: adoption:  " << s << dendl;
+  }
   for (const auto& a : ir.arns_matched) {
     ldpp_dout(dpp, 0) << "WARNING: adoption:  a trust policy now matches an "
       "ARN NooBaa never matched:  " << a << dendl;
@@ -18599,6 +18606,25 @@ int NSFSDriver::abandon_noobaa_record(const DoutPrefixProvider* dpp,
 	r.dependent_buckets.push_back(b.name);
       }
     }
+  }
+  for (const auto& role : contents.roles) {
+    if (role.id != noobaa_id) {
+      continue;
+    }
+    std::string account;
+    if (userDB->get_owner_by_noobaa_id(dpp, role.owner, account) == 0) {
+      auto written = get_role(role.name, "", rgw_account_id{account});
+      if (written->load_by_name(dpp, y) == 0) {
+	ldpp_dout(dpp, 1) << "nsfs: not abandoning role " << role.name
+	  << ":  it is imported" << dendl;
+	return -EEXIST;
+      }
+    }
+    /* an identity in NooBaa's terms:  `identities/<id>/identity.json`,
+     * `identity_type: "ROLE"` */
+    r.kind = "identity";
+    r.name = role.name;
+    r.stage = "not imported";
   }
   for (const auto& b : contents.buckets) {
     if (b.id != noobaa_id) {
@@ -18977,12 +19003,16 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
 size_t NSFSDriver::drop_abandoned_identities(
   const DoutPrefixProvider* dpp, nsfs::NooBaaStoreContents& contents)
 {
-  const size_t before = contents.identities.size();
+  const size_t before = contents.identities.size() + contents.roles.size();
   std::erase_if(contents.identities, [this, dpp](const auto& id) {
     nsfs::AbandonedRecord r;
     return userDB->get_abandoned(dpp, id.id, r) == 0;
   });
-  return before - contents.identities.size();
+  std::erase_if(contents.roles, [this, dpp](const auto& role) {
+    nsfs::AbandonedRecord r;
+    return userDB->get_abandoned(dpp, role.id, r) == 0;
+  });
+  return before - contents.identities.size() - contents.roles.size();
 }
 
 int NSFSDriver::imported_identity_mapping(const DoutPrefixProvider* dpp,
