@@ -320,7 +320,8 @@ RGWHTTPClient::RGWHTTPClient(CephContext *cct,
 
 std::ostream& RGWHTTPClient::gen_prefix(std::ostream& out) const
 {
-  out << "http_client[" << method << "/" << endpoint.get_url() << "]";
+  out << "http_client[" << method << "/"
+      << (sensitive_request ? "redacted" : endpoint.get_url()) << "]";
   return out;
 }
 
@@ -572,7 +573,8 @@ int RGWHTTPClient::process(const DoutPrefixProvider* dpp, optional_yield y)
 string RGWHTTPClient::to_str()
 {
   string method_str = (method.empty() ? "<no-method>" : method);
-  string url_str = (endpoint.get_url().empty() ? "<no-url>" : endpoint.get_url());
+  string url_str = sensitive_request ? "<redacted>" :
+      (endpoint.get_url().empty() ? "<no-url>" : endpoint.get_url());
   return method_str + " " + url_str;
 }
 
@@ -598,7 +600,15 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
 
   CURL *easy_handle = req_data->get_easy_handle();
 
-  dout(20) << "sending request to " << endpoint << dendl;
+  if (!sensitive_request) {
+    dout(20) << "sending request to " << endpoint << dendl;
+  } else {
+    // Reset pooled handles independently of other requests' logging policy.
+    curl_easy_setopt(easy_handle, CURLOPT_VERBOSE, 0L);
+    curl_easy_setopt(easy_handle, CURLOPT_DEBUGFUNCTION, nullptr);
+    curl_easy_setopt(easy_handle, CURLOPT_DEBUGDATA, nullptr);
+    curl_easy_setopt(easy_handle, CURLOPT_FOLLOWLOCATION, 0L);
+  }
 
   curl_slist *h = headers_to_slist(headers);
 
@@ -616,9 +626,11 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
 
     req_data->connect_to_slist = curl_slist_append(req_data->connect_to_slist, endpoint.get_connect_to().c_str());
     if (! req_data->connect_to_slist) {
-      dout(0) << "ERROR: RGWHTTPClient::init_request failed to allocate connect_to_slist: " << endpoint << dendl;
+      dout(0) << "ERROR: failed to allocate HTTP connection routing" << dendl;
     } else {
-      dout(20) << "applying CURLOPT_CONNECT_TO " << endpoint << dendl;
+      if (!sensitive_request) {
+        dout(20) << "applying CURLOPT_CONNECT_TO " << endpoint << dendl;
+      }
       curl_easy_setopt(easy_handle, CURLOPT_CONNECT_TO, req_data->connect_to_slist);
     }
   }
@@ -1221,7 +1233,9 @@ void *RGWHTTPManager::reqs_thread_entry()
           // coverity[unterminated_case:SUPPRESS]
           default:
             dout(20) << "ERROR: msg->data.result=" << result << " req_data->id=" << id << " http_status=" << http_status << dendl;
-            dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << " req_data->error_buf=" << req_data->error_buf << dendl;
+            if (!req_data->client->is_sensitive_request()) {
+              dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << " req_data->error_buf=" << req_data->error_buf << dendl;
+            }
 	    break;
         }
 	finish_request(req_data, status, http_status);
