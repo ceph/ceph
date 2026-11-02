@@ -143,6 +143,34 @@ You can stop the upgrade process at any time by running the following command:
 
   ceph orch upgrade stop
 
+.. _cephadm-downgrading:
+
+Downgrading
+===========
+
+Ceph does not support downgrading a cluster to an earlier major release.
+Cephadm refuses to start such a downgrade, and it also refuses to move a
+cluster from a stable release to a release candidate or a development release.
+When cephadm has upgraded every OSD to a new major release, it raises the
+``require_osd_release`` flag in the OSD map to that release, so no manual step
+is needed. This is a one-way step: the flag can't be lowered again, and OSDs
+from an earlier release can no longer start.
+
+Cephadm does not prevent a downgrade to an earlier point release of the same
+major release, for example from 20.2.1 to 20.2.0, but such downgrades are not
+supported. They may work in some situations and fail in others. They are not
+recommended, and they are done only at the administrator's risk. If you are
+tempted to downgrade to an earlier point release, consider instead a
+configuration workaround, or an upgrade to a later point release or a later
+major release. You can also build a local custom container image of the
+release you are running with the code fixes you need, for example by
+cherry-picking commits from a later release, and upgrade to that image as
+described in `Using Customized Container Images`_.
+
+To return to an earlier major release, deploy a new cluster at that release
+and migrate or restore the data into it.
+
+
 Post upgrade actions
 ====================
 
