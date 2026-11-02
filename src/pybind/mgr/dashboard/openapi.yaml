@@ -22682,21 +22682,26 @@ paths:
                 daemon_name:
                   type: string
                 enabled:
-                  type: string
+                  default: false
+                  type: boolean
+                max_delete_ops:
+                  default: 0
+                  type: integer
+                max_list_ops:
+                  default: 0
+                  type: integer
                 max_read_bytes:
-                  type: string
+                  default: 0
+                  type: integer
                 max_read_ops:
-                  type: string
+                  default: 0
+                  type: integer
                 max_write_bytes:
-                  type: string
+                  default: 0
+                  type: integer
                 max_write_ops:
-                  type: string
-              required:
-              - enabled
-              - max_read_ops
-              - max_write_ops
-              - max_read_bytes
-              - max_write_bytes
+                  default: 0
+                  type: integer
               type: object
       responses:
         '200':
@@ -24715,6 +24720,12 @@ paths:
                 enabled:
                   default: false
                   type: boolean
+                max_delete_ops:
+                  default: 0
+                  type: integer
+                max_list_ops:
+                  default: 0
+                  type: integer
                 max_read_bytes:
                   default: 0
                   type: integer
