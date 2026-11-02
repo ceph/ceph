@@ -29,9 +29,7 @@ import-only mode of operation. This helps to ensure that the client using the
 image is updated to point to the new target image.
 
 .. note::
-   Image live-migration requires the Ceph Nautilus release or later. Support for
-   external data sources requires the Ceph Pacific release of later. The
-   ``krbd`` kernel module does not support live-migration at this time.
+   The ``krbd`` kernel module does not support live-migration at this time.
 
 
 .. ditaa::
@@ -329,7 +327,7 @@ The ``nbd`` stream can be used to import from a remote NBD export. Its
             <format unique parameters>
             "stream": {
                 "type": "nbd",
-                "uri": "<nbd-uri>",
+                "uri": "<nbd-uri>"
             }
         }
 
@@ -341,7 +339,7 @@ JSON is encoded as follows::
             "type": "raw",
             "stream": {
                 "type": "nbd",
-                "uri": "nbd://nbd.ceph.com/image.raw",
+                "uri": "nbd://nbd.ceph.com/image.raw"
             }
         }
 
