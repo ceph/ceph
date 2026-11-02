@@ -300,7 +300,10 @@ pool instead, it is usually a bucket index shard: see
 To find the directory, search the cluster log for ``Large omap object
 found``. The message names the object, for example::
 
-    cluster [WRN] Large omap object found. Object: 10:bbf5850a:::10000000007.00000000:head PG: 10.50a1afdd (10.5d) Key count: 7060 Size (bytes): 1249291802
+    cluster [WRN] Large omap object found. Object: 10:bbf5850a:::10000000007.00000000:head PG: 10.5d Key count: 7060 Size (bytes): 1249291802
+
+Tentacle and earlier releases print the raw hash first and the placement
+group in parentheses, as in ``PG: 10.50a1afdd (10.5d)``.
 
 The object name, ``10000000007.00000000`` here, is the directory's inode
 number in hexadecimal, a period, and the ID of the fragment. The directory's
@@ -313,7 +316,9 @@ path is recorded in the backtrace that is stored with the object
    ceph-dencoder type inode_backtrace_t import parent.bin decode dump_json
 
 The ``ancestors`` list in the output names the directory and each directory
-above it, starting with the directory itself.
+above it, starting with the directory itself. Each entry gives a name
+(``dname``) and the inode number of the directory that contains it
+(``dirino``).
 
 To have the MDS split the fragment, scrub the directory:
 
@@ -344,8 +349,9 @@ The warning clears after the next deep scrub of the placement group that the
 message names. To clear it sooner, run ``ceph pg deep-scrub <pgid>``.
 
 The MDS never fragments the root directory, whose object is
-``1.00000000``, stray directories, whose objects are ``600.00000000``
-through ``609.00000000`` for rank 0, or directories inside stray directories.
+``1.00000000``, or directories inside stray directories, and it does not
+split stray directories on its own. The stray directories' objects are
+``600.00000000`` through ``609.00000000`` for rank 0.
 For the root directory, move its entries into subdirectories. For stray
 directories, evaluate the strays with a recursive scrub of ``~mdsdir`` (see
 :ref:`mds-scrub`).
