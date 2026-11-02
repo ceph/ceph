@@ -163,6 +163,17 @@
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
   less to each root's allocation.
   
+* RADOS: In an erasure-coded pool with ``allow_ec_optimizations``, a client
+  read that decodes its data around a shard whose object store failed the
+  read with EIO now repairs that shard: the primary marks the object missing
+  on it and recovers it at once, instead of leaving it to a deep scrub with
+  repair. The PG goes through recovery (degraded and repair) meanwhile, the
+  cluster log warns naming the object and shard, and the repair counts
+  toward the damaged OSD's ``OSD_TOO_MANY_REPAIRS``. Only an active+clean PG
+  in which k+1 undamaged shards hold the object repairs this way, so a pool
+  with m=1 does not. ``osd_ec_repair_on_read`` (default true) turns it off;
+  the OSD perf counter ``ec_read_repair`` counts the shards marked.
+
 * CephFS: CephFS snapshots metadata is now mutable. It is now possible to add,
   update and remove existing key-value pairs that are part of a snapshot
   metadata via ``libcephfs`` API ``ceph_do_snap_md_op()``.
