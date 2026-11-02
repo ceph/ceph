@@ -8499,32 +8499,6 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
     *params.lastmod = astate->mtime;
   }
 
-  /* Convert all times go GMT to make them compatible */
-  if (conds.mod_ptr || conds.unmod_ptr) {
-    obj_time_weight src_weight;
-    src_weight.init(astate);
-    src_weight.high_precision = conds.high_precision_time;
-
-    obj_time_weight dest_weight;
-    dest_weight.high_precision = conds.high_precision_time;
-
-    if (conds.mod_ptr && !conds.if_nomatch) {
-      dest_weight.init(*conds.mod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
-      ldpp_dout(dpp, 10) << "If-Modified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
-      if (!(dest_weight < src_weight)) {
-        return -ERR_NOT_MODIFIED;
-      }
-    }
-
-    if (conds.unmod_ptr && !conds.if_match) {
-      dest_weight.init(*conds.unmod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
-      ldpp_dout(dpp, 10) << "If-UnModified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
-      if (dest_weight < src_weight) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-    }
-  }
-
   if (conds.if_match || conds.if_nomatch) {
     r = get_attr(dpp, RGW_ATTR_ETAG, etag, y);
     if (r < 0)
@@ -8551,6 +8525,32 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       ldpp_dout(dpp, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-NoMatch: " << if_nomatch_str << dendl;
       if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
         return -ERR_NOT_MODIFIED;
+      }
+    }
+  }
+
+  /* Convert all times go GMT to make them compatible */
+  if (conds.mod_ptr || conds.unmod_ptr) {
+    obj_time_weight src_weight;
+    src_weight.init(astate);
+    src_weight.high_precision = conds.high_precision_time;
+
+    obj_time_weight dest_weight;
+    dest_weight.high_precision = conds.high_precision_time;
+
+    if (conds.mod_ptr && !conds.if_nomatch) {
+      dest_weight.init(*conds.mod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
+      ldpp_dout(dpp, 10) << "If-Modified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
+      if (!(dest_weight < src_weight)) {
+        return -ERR_NOT_MODIFIED;
+      }
+    }
+
+    if (conds.unmod_ptr && !conds.if_match) {
+      dest_weight.init(*conds.unmod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
+      ldpp_dout(dpp, 10) << "If-UnModified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
+      if (dest_weight < src_weight) {
+        return -ERR_PRECONDITION_FAILED;
       }
     }
   }
