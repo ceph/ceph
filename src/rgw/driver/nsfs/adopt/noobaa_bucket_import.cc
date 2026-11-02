@@ -100,6 +100,11 @@ bool IdentityMapping::names_only_users(const std::string& principal) const
   return !resolve(principal) && user_arns_by_name.contains(principal);
 }
 
+bool IdentityMapping::names_unwritten(const std::string& principal) const
+{
+  return planned && !resolve(principal) && planned->resolve(principal);
+}
+
 std::string describe_unresolved(const IdentityMapping& mapping,
 				const std::vector<std::string>& unresolved)
 {
@@ -305,7 +310,8 @@ int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 		      const std::string& bucket_name,
 		      const NooBaaStoreContents& contents,
 		      const IdentityMapping& mapping,
-		      BucketImportResult& result)
+		      BucketImportResult& result,
+		      bool preview)
 {
   /* One record, by name.  Everything else is the same operation, so
    * this narrows the input rather than taking a second path through
@@ -326,7 +332,7 @@ int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     return -ENOENT;
   }
   return import_bucket_state(dpp, y, driver, config_root, one, mapping,
-			     result);
+			     result, preview);
 }
 
 int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
@@ -334,7 +340,8 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 			const std::string& config_root,
 			const NooBaaStoreContents& contents,
 			const IdentityMapping& mapping,
-			BucketImportResult& result)
+			BucketImportResult& result,
+			bool preview)
 {
   auto* nb_state = driver->get_noobaa_bucket_state_strategy();
   if (!nb_state) {
@@ -384,6 +391,13 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     }
     if (!owner_account.empty()) {
       auto owner = mapping.account_by_noobaa_id.find(owner_account);
+      if ((owner == mapping.account_by_noobaa_id.end()) && mapping.planned &&
+	  mapping.planned->account_by_noobaa_id.contains(owner_account)) {
+	result.blocked.push_back(
+	    rec.name + ": its owner_account " + owner_account +
+	    " did not import");
+	continue;
+      }
       if (owner == mapping.account_by_noobaa_id.end()) {
 	result.failures.push_back(
 	    rec.name + ": owner_account " + owner_account +
@@ -402,6 +416,21 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       std::string rewritten;
       ret = rewrite_policy_principals(dpp, i->second.to_str(), mapping,
 				      rewritten, unresolved, nullptr, &arns);
+      /* A principal that names an identity yet to import is not written
+       * as nothing:  once the identity imports it names someone, and a
+       * denial written without it would not apply to it. */
+      std::string unwritten;
+      for (const auto& u : unresolved) {
+	if (mapping.names_unwritten(u)) {
+	  unwritten += (unwritten.empty() ? "" : ", ") + u;
+	}
+      }
+      if (!unwritten.empty()) {
+	result.blocked.push_back(
+	    rec.name + ": its policy names " + unwritten + ", which did "
+	    "not import");
+	continue;
+      }
       if (ret == 0) {
 	for (const auto& a : arns) {
 	  result.arns_matched.push_back(rec.name + ": " + a);
@@ -439,7 +468,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     if (JSONObj* n = p.find_obj("notifications")) {
       ret = import_bucket_notifications(dpp, y, driver, rec.name,
 					n->get_data(), contents.connections,
-					account, attrs, nr);
+					account, attrs, nr, preview);
       if (ret < 0) {
 	result.failures.push_back(
 	    rec.name + ": writing its topics: " + cpp_strerror(-ret));
@@ -500,6 +529,10 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 	    row.path + ";  their record says " + recorded);
 	continue;
       }
+    }
+    if (preview) {
+      ++result.buckets_written;
+      continue;
     }
     /* And write it.
      *
@@ -611,6 +644,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     << result.notifications_reported.size() << " notification reports, "
     << result.notifications_need_operator.size()
     << " needing the operator, "
+    << result.blocked.size() << " blocked by an identity, "
     << result.failures.size() << " failures" << dendl;
   for (const auto& r : result.policies_refused) {
     ldpp_dout(dpp, 0) << "ERROR: import: " << r << dendl;
@@ -625,10 +659,16 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
   for (const auto& r : result.notifications_need_operator) {
     ldpp_dout(dpp, 0) << "WARNING: import: " << r << dendl;
   }
+  for (const auto& w : result.blocked) {
+    ldpp_dout(dpp, 0) << "WARNING: import: not attempted, blocked:  " << w << dendl;
+  }
   for (const auto& f : result.failures) {
     ldpp_dout(dpp, 0) << "ERROR: import: " << f << dendl;
   }
-  return result.failures.empty() ? 0 : -EIO;
+  if (!result.failures.empty()) {
+    return -EIO;
+  }
+  return result.blocked.empty() ? 0 : -EAGAIN;
 }
 
 }}} // namespace rgw::sal::nsfs

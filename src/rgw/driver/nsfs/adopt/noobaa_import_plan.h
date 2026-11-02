@@ -34,11 +34,15 @@
  * The value is carried rather than discarded:  NooBaa's STS matches a
  * trust principal against it (`sts_rest.js:143`).
  *
- * **Every collision is reported and the plan is rejected.**  Not the
- * first one -- an operator needs the list, because fixing them one
- * import at a time means one failed import per collision.  And
- * rejected rather than reported, because a partial import leaves a
- * state nobody asked for (§6.1a).
+ * **A collision fails the identities it names, and nothing else.**
+ * Each is recorded on its entry, and import_identities() writes no
+ * entry that holds one:  the rest are imported, and adoption does not
+ * complete until each is fixed or abandoned, abandonment being the
+ * override per record (DECISIONS.md 2026-11-02).  When two records
+ * collide both fail, so abandoning one lets the other through.  An IAM
+ * user of a failed account fails with it.  Two records of one `_id`
+ * still reject the plan:  abandonment is keyed by `_id`, so it cannot
+ * pick one of them.
  *
  * Collisions against **RGW's existing state** are not visible here:
  * they need lookups into RGW's indexes, which `check_rgw_state`
@@ -102,15 +106,18 @@ struct ImportEntry {
 
   bool iam_user{false};
   bool anonymous{false};
+
+  /* Why this identity is not imported, each naming the constraint and
+   * the identities involved.  Empty for an identity to be written. */
+  std::vector<std::string> failed;
 };
 
 /* The plan, and its collisions. */
 struct ImportPlan {
   std::vector<ImportEntry> entries;
 
-  /* Every collision, each naming the identities involved and the
-   * constraint.  build_import_plan() returns -EEXIST when this is
-   * non-empty, and nothing is imported. */
+  /* Records that repeat one `_id`.  build_import_plan() returns
+   * -EEXIST when this is non-empty, and nothing is imported. */
   std::vector<std::string> collisions;
 
   /* Every IAM user whose POSIX block differs from its account's,
@@ -136,15 +143,20 @@ struct ImportPlan {
 
   size_t accounts() const;
   size_t iam_users() const;
+  /* every entry's `failed`, each once */
+  std::vector<std::string> failures() const;
 };
+
+/* Fail each IAM user whose account has failed and it has not:  it has
+ * no account to be written into. */
+void fail_users_of_failed_accounts(ImportPlan& plan);
 
 /* Map a store, and gate it.
  *
- * Returns 0 only when the plan is clean.  -EEXIST when a constraint
- * is violated, with every violation in `collisions`;  -EINVAL when a
- * record cannot be mapped at all.  The plan is returned either way,
- * because an operator reading a rejected plan wants to see what would
- * have been imported.
+ * Returns 0 when the plan can be written, its failed entries included.
+ * -EEXIST when two records repeat one `_id`, each in `collisions`.  The
+ * plan is returned either way, because an operator reading a rejected
+ * plan wants to see what would have been imported.
  *
  * `cct` is for RGW's account id generator and nothing else. */
 /* `stored`, when given, is consulted before an account id is minted:

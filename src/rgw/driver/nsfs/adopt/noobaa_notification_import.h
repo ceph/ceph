@@ -94,7 +94,7 @@ struct NotificationImportResult {
  * `attrs[RGW_ATTR_BUCKET_NOTIFICATION]`.  A topic of the same name with
  * another destination is not overwritten:  that notification is
  * reported and left out.  Returns a negative errno only when writing a
- * topic fails. */
+ * topic fails.  `preview` writes no topic, and counts each it would. */
 int import_bucket_notifications(const DoutPrefixProvider* dpp,
 				optional_yield y,
 				NSFSDriver* driver,
@@ -103,6 +103,7 @@ int import_bucket_notifications(const DoutPrefixProvider* dpp,
 				const std::vector<NooBaaConnection>& connections,
 				const std::string& account,
 				Attrs& attrs,
-				NotificationImportResult& result);
+				NotificationImportResult& result,
+				bool preview = false);
 
 }}} // namespace rgw::sal::nsfs

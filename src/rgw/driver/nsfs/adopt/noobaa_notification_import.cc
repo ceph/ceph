@@ -376,7 +376,8 @@ int import_bucket_notifications(const DoutPrefixProvider* dpp,
                                 const std::vector<NooBaaConnection>& connections,
                                 const std::string& account,
                                 Attrs& attrs,
-                                NotificationImportResult& result)
+                                NotificationImportResult& result,
+                                bool preview)
 {
   rapidjson::Document d;
   d.Parse(notifications_json.c_str(), notifications_json.size());
@@ -481,6 +482,8 @@ int import_bucket_notifications(const DoutPrefixProvider* dpp,
         continue;
       }
       topic = present;
+    } else if ((ret == -ENOENT) && preview) {
+      ++result.topics_written;
     } else if (ret == -ENOENT) {
       RGWObjVersionTracker objv;
       objv.generate_new_write_ver(dpp->get_cct());

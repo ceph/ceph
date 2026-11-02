@@ -56,6 +56,7 @@
 
 #pragma once
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -126,30 +127,36 @@ struct ImportResult {
    * is" (DECISIONS.md 2026-10-30, amended 2026-11-02). */
   std::vector<std::string> role_config_superseded;
 
-  /* Every identity that could not be written, named.  Non-empty means
-   * the import did not finish, and re-running it is the recovery. */
+  /* Every identity or role that could not be written, named:  the
+   * plan's failures, then the writes'.  Non-empty means adoption cannot
+   * complete until each is fixed or abandoned. */
   std::vector<std::string> failures;
+  /* the NooBaa `_id` of each identity and role in `failures`, the
+   * record to fix or abandon */
+  std::set<std::string> failed_ids;
 };
 
 /* The half of the preflight that needs RGW rather than the store.
  *
  * I3 checks the collisions visible in the store alone;  this checks
- * the same four constraints against **state RGW already holds** -- a
- * NooBaa account whose name matches an existing account, an account's
- * email already in RGW's index, which is shared across users and
- * accounts, or an access key another RGW user already holds.  Just as fatal,
- * and invisible without a lookup.
+ * the same constraints against **state RGW already holds** -- a NooBaa
+ * account whose name matches an existing account, an account's email
+ * already in RGW's index, which is shared across users and accounts, or
+ * an access key another RGW user already holds.  Invisible without a
+ * lookup, and each fails its identity, as I3's do (DECISIONS.md
+ * 2026-11-02).
  *
  * An identity already imported is **not** a collision:  it is
  * recognised by NooBaa's `_id` and skipped, which is what makes a re-run
  * safe.  So this consults the NooBaa id table first and only then
  * asks whether a name or email is taken by something else.
  *
- * Returns -EEXIST with every collision in `collisions`, 0 when clear.
+ * Each collision is added to its entry's `failed`, and the IAM users
+ * of an account it fails fail with it.  Returns 0, or -ENOENT with no
+ * identity database.
  */
 int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
-		    NSFSDriver* driver, const ImportPlan& plan,
-		    std::vector<std::string>& collisions);
+		    NSFSDriver* driver, ImportPlan& plan);
 
 /* Write the plan.
  *
@@ -157,14 +164,20 @@ int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
  * what RGW will hold and the records carry what only the nsfs row
  * holds -- the POSIX identity, the placement fields, the trust policy.
  *
- * Returns 0 when everything was written, -EIO when anything was not,
- * with each failure named in `result.failures`.  Partial success is
- * reported rather than rolled back:  there is nothing to roll back
- * to, and re-running is the recovery. */
+ * An entry the plan failed is not written.  Returns 0 when everything
+ * was written, -EIO when anything was not, with each failure named in
+ * `result.failures`;  any other error means nothing was attempted.
+ * Partial success is reported rather than rolled back:  there is
+ * nothing to roll back to, and re-running is the recovery.
+ *
+ * `preview` writes nothing:  `result` counts what would be written and
+ * holds what the checks before each write find.  A failure only a
+ * write would meet is not found. */
 int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 		      NSFSDriver* driver,
 		      const NooBaaStoreContents& contents,
 		      const ImportPlan& plan,
-		      ImportResult& result);
+		      ImportResult& result,
+		      bool preview = false);
 
 }}} // namespace rgw::sal::nsfs

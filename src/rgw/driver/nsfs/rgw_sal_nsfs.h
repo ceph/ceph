@@ -902,6 +902,14 @@ protected:
    * restarts the gateway, which forgets them (DECISIONS.md 2026-10-29). */
   std::mutex adoption_failures_mtx;
   std::map<std::string, int> adoption_failures;
+  /* Buckets whose import is blocked by an identity that did not import:
+   * not failed, and adopted once it is fixed or abandoned (DECISIONS.md
+   * 2026-11-02).  Under adoption_failures_mtx. */
+  std::set<std::string> adoption_blocked;
+  /* The `_id` of each identity and role the last identity pass did not
+   * write.  Adoption does not complete while one is not abandoned.
+   * Under adoption_failures_mtx. */
+  std::set<std::string> identity_failures;
   /* what `automatic` adoption found since its last report */
   nsfs::AdoptionFindings adoption_findings;
   /* under the relaxed sync policy only;  see init_sync_policy() */
@@ -1773,6 +1781,14 @@ public:
    * first, because every bucket's owner and every policy principal
    * resolves through them. */
   int adopt_identities(const DoutPrefixProvider* dpp, optional_yield y,
+		       std::map<std::string, std::string>* report = nullptr,
+		       bool preview = false);
+
+  /* What a pass would do, with nothing written:  the identities as
+   * adopt_identities() would import them, and each bucket's record up to
+   * its first write.  The conversion of a tree is not predicted.  Writes
+   * the report under rgw_nsfs_adoption_report_dir, as pass "preview". */
+  int preview_adoption(const DoutPrefixProvider* dpp, optional_yield y,
 		       std::map<std::string, std::string>* report = nullptr);
 
   /* Adopt one bucket now, against identities already imported:  its
@@ -1811,18 +1827,24 @@ public:
   size_t drop_abandoned_identities(const DoutPrefixProvider* dpp,
 				   nsfs::NooBaaStoreContents& contents);
   /* NooBaa's principals as RGW names them, for the identities the import
-   * has written:  what adoption rewrites a bucket policy through. */
+   * has written:  what adoption rewrites a bucket policy through.  Its
+   * `planned` is the whole plan's, abandoned identities aside.
+   * `preview` holds instead every identity the plan and RGW's state do
+   * not fail, as though the import had run. */
   int imported_identity_mapping(const DoutPrefixProvider* dpp,
 				const nsfs::NooBaaStoreContents& contents,
-				nsfs::IdentityMapping& out);
+				nsfs::IdentityMapping& out,
+				bool preview = false);
 
   /* A bucket served in NooBaa's format serves its policy with the same
    * principals adoption will write:  NooBaa's names name nobody in RGW.
-   * A policy naming anyone the import did not write is not served, as
-   * the import does not write it (`ACCOUNT_IMPORT.md` §6.1a).  0, or
-   * the error that kept the mapping from being built. */
+   * A policy naming anyone the import did not write does not translate,
+   * and `untranslated` says so;  the bucket is then not served
+   * (DECISIONS.md 2026-11-02).  0, or the error that kept the mapping
+   * from being built. */
   int rewrite_unadopted_policy(const DoutPrefixProvider* dpp,
-			       const std::string& bucket, Attrs& attrs);
+			       const std::string& bucket, Attrs& attrs,
+			       std::string& untranslated);
 
   /* The mapping rewrite_unadopted_policy() uses is built from the whole
    * store, once, and rebuilt after an identities import, the only thing
@@ -2167,6 +2189,10 @@ private:
   bool converting{false};
   /* default_object_owner(), once looked up */
   std::optional<ACLOwner> default_owner;
+  /* Set by load_bucket() when NooBaa's record served this bucket and did
+   * not translate whole:  why.  A client's load is then refused
+   * (DECISIONS.md 2026-11-02). */
+  std::string untranslated;
 
 public:
   /* Whether this is a bucket of RGW's own, such as an upload's staging
@@ -2348,6 +2374,8 @@ public:
   bool upload_awaits_conversion(const DoutPrefixProvider* dpp,
 				const std::string& meta);
   bool is_converting() const { return converting; }
+  /* empty when what is served is what NooBaa served */
+  const std::string& untranslated_by() const { return untranslated; }
 
   /* Move the bucket to a profile.  The one way a bucket's profile
    * changes:  adding extensions is a write, dropping them requires the

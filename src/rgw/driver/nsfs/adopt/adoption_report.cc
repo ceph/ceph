@@ -43,8 +43,8 @@ const FindingKindText kind_texts[] = {
    "issue those clients tokens from an OIDC provider registered with RGW"},
   {"collision",
    "nothing is imported, and the pass stops",
-   "rename, remove or abandon the identities the finding names, then run "
-   "adoption again"},
+   "remove one of the records that share the _id, then run adoption "
+   "again"},
   {"identity_failed",
    "the identity or role is not written, and adoption cannot complete",
    "fix what the finding names and run adoption again, or abandon the "

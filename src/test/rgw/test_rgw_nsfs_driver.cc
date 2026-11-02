@@ -14950,8 +14950,15 @@ public:
     return nullptr;
   }
 
+  /* the plan's failures and its collisions, together */
+  std::vector<std::string> reported() const {
+    auto r = plan.failures();
+    r.insert(r.end(), plan.collisions.begin(), plan.collisions.end());
+    return r;
+  }
+
   bool said(const std::string& fragment) const {
-    for (const auto& c : plan.collisions) {
+    for (const auto& c : reported()) {
       if (c.find(fragment) != std::string::npos) {
 	return true;
       }
@@ -14959,9 +14966,14 @@ public:
     return false;
   }
 
+  bool failed(const std::string& name) const {
+    const auto* e = entry(name);
+    return e && !e->failed.empty();
+  }
+
   std::string why() const {
     std::string s;
-    for (const auto& c : plan.collisions) {
+    for (const auto& c : reported()) {
       s += "\n  " + c;
     }
     return s;
@@ -14981,7 +14993,7 @@ TEST_F(NooBaaPlanTest, AStoreNooBaaToolsWroteMapsCleanly)
   add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
 
   ASSERT_EQ(build(3), 0) << why();
-  EXPECT_TRUE(plan.collisions.empty()) << why();
+  EXPECT_TRUE(reported().empty()) << why();
   EXPECT_EQ(plan.accounts(), 3u);
   EXPECT_EQ(plan.iam_users(), 0u);
 
@@ -15033,8 +15045,8 @@ TEST_F(NooBaaPlanTest, ThePlanNeedsNoMasterKey)
 /* An IAM user takes its owner's account id.
  *
  * Root accounts are mapped first so a user can be placed without a
- * second pass, and an orphan user is reported rather than given an
- * invented account. */
+ * second pass, and an orphan user fails rather than being given an
+ * invented account;  the rest of the plan stands. */
 TEST_F(NooBaaPlanTest, AnIamUserTakesItsOwnersAccount)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
@@ -15056,9 +15068,12 @@ TEST_F(NooBaaPlanTest, AnIamUserTakesItsOwnersAccount)
   /* an owner that is not in the store */
   add_identity("c", R"({"_id":"c","name":"orphan","email":"o@x",
     "owner":"6ac7cb27fd4af3569191ffff"})");
-  EXPECT_EQ(build(3), -EINVAL);
+  EXPECT_EQ(build(3), 0);
   EXPECT_TRUE(said("whose owner")) << why();
   EXPECT_TRUE(said("6ac7cb27fd4af3569191ffff")) << why();
+  EXPECT_TRUE(failed("orphan"));
+  EXPECT_FALSE(failed("interchange")) << why();
+  EXPECT_FALSE(failed("a-user")) << why();
 }
 
 /* Two IAM users named `alice` under different root accounts do not
@@ -15079,14 +15094,18 @@ TEST_F(NooBaaPlanTest, TwoUsersOfOneNameUnderDifferentAccountsDoNotCollide)
     "owner":"a2"})");
 
   EXPECT_EQ(build(4), 0) << why();
-  EXPECT_TRUE(plan.collisions.empty()) << why();
+  EXPECT_TRUE(reported().empty()) << why();
 }
 
-/* Every collision is reported, not the first.
+/* Every collision is reported, not the first, and fails each record it
+ * names.
  *
  * Fixing them one import at a time means one failed import per
  * collision, so the list is the deliverable.  Four kinds at once, and
- * the count is asserted so a gate that stopped early would fail. */
+ * the count is asserted so a gate that stopped early would fail.  The
+ * plan stands:  a collision fails its records, not the pass
+ * (DECISIONS.md 2026-11-02), and the control is the record no
+ * collision names. */
 TEST_F(NooBaaPlanTest, EveryCollisionIsReportedTogether)
 {
   add_identity("a1", R"({"_id":"a1","name":"same-name","email":"e1",
@@ -15097,16 +15116,25 @@ TEST_F(NooBaaPlanTest, EveryCollisionIsReportedTogether)
     "encrypted_secret_key":"x"}]})");
   add_identity("a3", R"({"_id":"a3","name":"third","email":"e1"})");
   add_identity("a4", R"({"_id":"a4","name":"has$dollar","email":"e4"})");
+  add_identity("a5", R"({"_id":"a5","name":"bystander","email":"e5"})");
 
-  EXPECT_EQ(build(4), -EEXIST);
+  EXPECT_EQ(build(5), 0);
 
   EXPECT_TRUE(said("two accounts are named same-name")) << why();
   EXPECT_TRUE(said("both carry the email \"e1\"")) << why();
   EXPECT_TRUE(said("both carry the access key KEYAAAAAAAAAAAAAAAAA"))
       << why();
   EXPECT_TRUE(said("has$dollar")) << why();
-  EXPECT_GE(plan.collisions.size(), 4u)
+  EXPECT_GE(reported().size(), 4u)
       << "the gate stopped before reporting everything:" << why();
+  for (const auto* id : {"a1", "a2", "a3", "a4"}) {
+    const auto e = std::find_if(plan.entries.begin(), plan.entries.end(),
+      [&](const nsfs::ImportEntry& x) { return x.noobaa_id == id; });
+    ASSERT_NE(e, plan.entries.end());
+    EXPECT_FALSE(e->failed.empty()) << id << " did not fail";
+  }
+  EXPECT_FALSE(failed("bystander")) << why();
+  EXPECT_TRUE(plan.collisions.empty()) << why();
 }
 
 /* A name RGW will not accept is reported, not rewritten.
@@ -15117,7 +15145,8 @@ TEST_F(NooBaaPlanTest, EveryCollisionIsReportedTogether)
 TEST_F(NooBaaPlanTest, ANameRgwRejectsIsReportedNotRewritten)
 {
   add_identity("a", R"({"_id":"a","name":"has:colon","email":"a"})");
-  EXPECT_EQ(build(1), -EINVAL);
+  EXPECT_EQ(build(1), 0);
+  EXPECT_TRUE(failed("has:colon"));
   EXPECT_TRUE(said("has:colon")) << why();
   EXPECT_TRUE(said("will not accept")) << why();
   /* the name is carried through unchanged */
@@ -15131,6 +15160,7 @@ TEST_F(NooBaaPlanTest, ANameRgwRejectsIsReportedNotRewritten)
   add_identity("b", R"({"_id":"b","name":"ordinary","email":"b"})");
   auto c = read_store();
   EXPECT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, clean), 0);
+  EXPECT_TRUE(clean.failures().empty());
 }
 
 /* A duplicated NooBaa id is rejected, because re-import depends on it.
@@ -15157,7 +15187,8 @@ TEST_F(NooBaaPlanTest, ADuplicatedNooBaaIdIsRejected)
 TEST_F(NooBaaPlanTest, AnAccountUsersNameFollowsTheIamRules)
 {
   add_identity("a", R"({"_id":"a","name":"has space","email":"a"})");
-  EXPECT_EQ(build(1), -EINVAL);
+  EXPECT_EQ(build(1), 0);
+  EXPECT_TRUE(failed("has space"));
   EXPECT_TRUE(said("has space")) << why();
   EXPECT_TRUE(said("as an account user's")) << why();
 
@@ -15167,13 +15198,16 @@ TEST_F(NooBaaPlanTest, AnAccountUsersNameFollowsTheIamRules)
   add_identity("a", R"({"_id":"a","name":"acct","email":"a"})");
   add_identity("u", R"({"_id":"u","name":"user","email":"u",
     "owner":"a","iam_path":"eng"})");
-  EXPECT_EQ(build(2), -EINVAL);
+  EXPECT_EQ(build(2), 0);
   EXPECT_TRUE(said("IAM path")) << why();
+  EXPECT_TRUE(failed("user"));
+  EXPECT_FALSE(failed("acct")) << why();
 
   /* the control:  the same store with a valid path is clean */
   add_identity("u", R"({"_id":"u","name":"user","email":"u",
     "owner":"a","iam_path":"/eng/"})");
   EXPECT_EQ(build(2), 0) << why();
+  EXPECT_TRUE(reported().empty()) << why();
 }
 
 /* An account above RGW's default limits is created with them raised.
@@ -15252,10 +15286,14 @@ TEST_F(NooBaaPlanTest, AStoreOnDiskPlansCleanly)
   nsfs::ImportPlan p;
   const int ret = nsfs::build_import_plan(env->dpp, env->cct.get(), c, p);
   std::string s;
+  for (const auto& x : p.failures()) {
+    s += "\n  " + x;
+  }
   for (const auto& x : p.collisions) {
     s += "\n  " + x;
   }
   EXPECT_EQ(ret, 0) << s;
+  EXPECT_TRUE(s.empty()) << s;
   EXPECT_EQ(p.entries.size(), c.identities.size());
   for (const auto& e : p.entries) {
     EXPECT_FALSE(e.account_id.empty()) << e.noobaa_name;
@@ -15893,9 +15931,10 @@ TEST_F(NooBaaImportTest, BypassGovernanceBecomesAGrant)
 /* A collision against RGW's existing state is caught before writing.
  *
  * I3 sees the collisions in the store;  this is the other half, and it
- * needs a lookup.  An identity already imported is **not** one -- it is
- * recognised by its id and skipped, which is what makes a re-run safe,
- * so the check has to ask that question first. */
+ * needs a lookup.  Each fails its identity, as I3's do.  An identity
+ * already imported is **not** one -- it is recognised by its id and
+ * skipped, which is what makes a re-run safe, so the check has to ask
+ * that question first. */
 TEST_F(NooBaaImportTest, ACollisionWithExistingRgwStateIsCaught)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
@@ -15908,9 +15947,21 @@ TEST_F(NooBaaImportTest, ACollisionWithExistingRgwStateIsCaught)
 
   auto c = read_store();
   nsfs::ImportPlan p;
-  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p),
-	    -EEXIST)
-      << "two records of one name should collide in the store alone";
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
+  ASSERT_EQ(p.entries.size(), 2u);
+  for (const auto& e : p.entries) {
+    EXPECT_FALSE(e.failed.empty())
+	<< "two records of one name should collide in the store alone";
+  }
+  /* with the database consulted, the one already imported stays so,
+   * and only the newcomer fails */
+  nsfs::ImportPlan pd;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, pd,
+				    driver->get_identity_db()), 0);
+  for (const auto& e : pd.entries) {
+    EXPECT_EQ(e.failed.empty(), e.noobaa_id == "6ac7cb27fd4af356919110a3")
+	<< e.noobaa_id;
+  }
 
   /* and with only the new one in the store, the store looks clean and
    * RGW is the only thing that knows */
@@ -15920,16 +15971,17 @@ TEST_F(NooBaaImportTest, ACollisionWithExistingRgwStateIsCaught)
     "email":"interchange"})");
   auto c2 = read_store();
   nsfs::ImportPlan p2;
-  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c2, p2), 0)
-      << "the store half should be clean here";
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c2, p2), 0);
+  ASSERT_TRUE(p2.failures().empty()) << "the store half should be clean here";
 
-  std::vector<std::string> collisions;
-  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p2,
-				  collisions), -EEXIST)
-      << "a name already in RGW was not noticed";
-  ASSERT_FALSE(collisions.empty());
-  EXPECT_NE(collisions[0].find("interchange"), std::string::npos)
-      << collisions[0];
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p2), 0);
+  /* its name and its email, each already RGW's */
+  const auto f2 = p2.failures();
+  ASSERT_EQ(f2.size(), 2u) << "a name already in RGW was not noticed";
+  EXPECT_NE(f2[0].find("an RGW account named interchange"), std::string::npos)
+      << f2[0];
+  EXPECT_NE(f2[1].find("the email \"interchange\""), std::string::npos)
+      << f2[1];
 
   /* and the same check passes for an identity already imported, which
    * is the case it must not call a collision */
@@ -15939,9 +15991,8 @@ TEST_F(NooBaaImportTest, ACollisionWithExistingRgwStateIsCaught)
   auto c3 = read_store();
   nsfs::ImportPlan p3;
   ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c3, p3), 0);
-  std::vector<std::string> none;
-  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p3,
-				  none), 0)
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p3), 0);
+  EXPECT_TRUE(p3.failures().empty())
       << "an identity already imported was called a collision";
 }
 
@@ -16019,7 +16070,7 @@ TEST_F(NooBaaImportTest, ADeactivatedKeyStaysInactive)
  *
  * Access keys are unique across RGW.  The user-add path would reject
  * the key, but only after the account and the user exist;  the check
- * against RGW's state rejects it first. */
+ * against RGW's state fails the identity first. */
 TEST_F(NooBaaImportTest, AKeyRgwAlreadyHoldsIsCaught)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
@@ -16028,9 +16079,8 @@ TEST_F(NooBaaImportTest, AKeyRgwAlreadyHoldsIsCaught)
   ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
 
   /* the control:  nothing holds it yet */
-  std::vector<std::string> none;
-  ASSERT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p,
-				  none), 0);
+  ASSERT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p), 0);
+  ASSERT_TRUE(p.failures().empty()) << p.failures()[0];
 
   /* an RGW user, from no import, takes the key */
   RGWUserAdminOpState op(driver.get());
@@ -16043,12 +16093,11 @@ TEST_F(NooBaaImportTest, AKeyRgwAlreadyHoldsIsCaught)
   ASSERT_EQ(u.init(env->dpp, driver.get(), op, null_yield), 0);
   ASSERT_EQ(u.add(env->dpp, op, null_yield, &err), 0) << err;
 
-  std::vector<std::string> collisions;
-  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p,
-				  collisions), -EEXIST);
-  ASSERT_EQ(collisions.size(), 1u);
-  EXPECT_NE(collisions[0].find("already held by RGW user someone"),
-	    std::string::npos) << collisions[0];
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p), 0);
+  const auto f = p.failures();
+  ASSERT_EQ(f.size(), 1u);
+  EXPECT_NE(f[0].find("already held by RGW user someone"),
+	    std::string::npos) << f[0];
 }
 
 /* A real store on disk imports.
@@ -16076,9 +16125,8 @@ TEST_F(NooBaaImportTest, AStoreOnDiskImports)
   nsfs::ImportPlan p;
   ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
 
-  std::vector<std::string> collisions;
-  ASSERT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p,
-				  collisions), 0);
+  ASSERT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p), 0);
+  ASSERT_TRUE(p.failures().empty()) << p.failures()[0];
 
   /* The gateway set as a deployment adopting this store sets it:  the
    * import refuses a store with NooBaa's dynamic groups on when
@@ -16463,10 +16511,8 @@ TEST_F(NooBaaImportTest, AUserOfAnImportedAccountsEmailIsNoCollision)
   auto c = read_store();
   nsfs::ImportPlan p;
   ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
-  std::vector<std::string> collisions;
-  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p,
-				  collisions), 0)
-      << collisions.front();
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p), 0);
+  EXPECT_TRUE(p.failures().empty()) << p.failures().front();
 }
 
 class NooBaaPolicyTest : public ::testing::Test {
@@ -17986,20 +18032,24 @@ TEST_F(NooBaaModeTest, OneBucketIsAdoptedByCommand)
  * A plan mints an account id for an identity not yet imported, and a
  * bucket written with it names an account that does not exist.  The
  * other polarity is OneBucketIsAdoptedByCommand:  the same bucket, with
- * the identities imported first, is adopted. */
+ * the identities imported first, is adopted.  It is blocked by its
+ * owner rather than failing (DECISIONS.md 2026-11-02), and is not served,
+ * since its owner does not translate. */
 TEST_F(NooBaaModeTest, ABucketIsNotAdoptedBeforeItsOwner)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
   write_nb_record("ENABLED");
+  remove_rgw_bucket_info();
 
   std::map<std::string, std::string> out;
   EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
 				{{"bucket", testname}}, &out), 0);
   EXPECT_EQ(out["adopted"], "false");
+  EXPECT_EQ(out["blocked"], "true");
+  EXPECT_FALSE(driver->adoption_failed(testname));
 
-  /* its adoption failed, so it is not served (DECISIONS.md 2026-10-29),
-   * and its tree was not converted */
+  /* not served, and its tree was not converted */
   std::unique_ptr<rgw::sal::Bucket> loaded;
   EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
 				&loaded, null_yield), -ERR_INVALID_BUCKET_STATE);
@@ -18013,7 +18063,8 @@ TEST_F(NooBaaModeTest, ABucketIsNotAdoptedBeforeItsOwner)
 /* A bucket served in NooBaa's format takes its owner from
  * `owner_account`, as the account import recorded it, so it is
  * consumable before its adoption.  The control is the same bucket
- * before the identities are imported, which has none. */
+ * before the identities are imported, which has none, and so is not
+ * served (DECISIONS.md 2026-11-02). */
 TEST_F(NooBaaModeTest, AnUnadoptedBucketTakesItsOwnerFromTheImport)
 {
   add_the_owning_account();
@@ -18021,22 +18072,22 @@ TEST_F(NooBaaModeTest, AnUnadoptedBucketTakesItsOwnerFromTheImport)
   write_nb_record("ENABLED");
   remove_rgw_bucket_info();
 
-  auto loaded_owner = [this]() {
+  {
     std::unique_ptr<rgw::sal::Bucket> b;
     EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
-				  null_yield), 0);
-    return b ? to_string(b->get_owner()) : std::string();
-  };
-  const std::string before = loaded_owner();
+				  null_yield), -ERR_INVALID_BUCKET_STATE)
+	<< "the control:  a bucket with no owner was served";
+  }
 
   ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
   std::string imported;
   ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
 		env->dpp, NB_OWNER_ID, imported), 0);
-  EXPECT_NE(before, imported)
-      << "the control:  the owner was there before the import";
 
-  EXPECT_EQ(loaded_owner(), imported);
+  std::unique_ptr<rgw::sal::Bucket> served;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &served,
+				null_yield), 0);
+  EXPECT_EQ(to_string(served->get_owner()), imported);
   std::unique_ptr<rgw::sal::Bucket> b;
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
 				null_yield), 0);
@@ -18139,28 +18190,30 @@ TEST_F(NooBaaCompletionTest, ABucketPolicyNamesTheImportedAccountAtEveryStage)
       << "adopted, the policy names NooBaa's account: " << after;
 }
 
-/* Unadopted, a policy naming a principal the import did not write is
- * not served, as the import does not write it (§6.1a):  pointing at
- * nothing, it would grant nothing and deny nothing it was meant to.  The
- * control is the same policy naming the imported account, which is. */
-TEST_F(NooBaaCompletionTest, AnUnadoptedPolicyNamingNobodyIsNotServed)
+/* Unadopted, a bucket whose policy names a principal the import did not
+ * write is not served (DECISIONS.md 2026-11-02):  without its policy it
+ * would grant nothing and deny nothing it was meant to, which is not
+ * what NooBaa served.  The control is the same policy naming the
+ * imported account, which is served with it. */
+TEST_F(NooBaaCompletionTest, AnUnadoptedBucketWhosePolicyNamesNobodyIsNotServed)
 {
   remove_rgw_bucket_info();
   ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
-  auto served = [&] (const char* who) {
+  auto load = [&] (const char* who, std::unique_ptr<rgw::sal::Bucket>& b) {
     write_nb_record("ENABLED", std::string(
 	R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{)"
 	R"("Effect":"Allow","Principal":{"AWS":[")") + who + R"("]},)"
 	R"("Action":["s3:GetObject"],"Resource":["arn:aws:s3:::b/*"]}]})");
-    std::unique_ptr<rgw::sal::Bucket> b;
-    EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
-				  null_yield), 0);
-    return b && b->get_attrs().count(RGW_ATTR_IAM_POLICY);
+    return driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+			       null_yield);
   };
-  EXPECT_TRUE(served("interchange"))
+  std::unique_ptr<rgw::sal::Bucket> b;
+  ASSERT_EQ(load("interchange", b), 0);
+  EXPECT_TRUE(b->get_attrs().count(RGW_ATTR_IAM_POLICY))
       << "control:  a policy naming the imported account was not served";
-  EXPECT_FALSE(served("nobody-imported"))
-      << "a policy naming a principal the import did not write was served";
+  EXPECT_EQ(load("nobody-imported", b), -ERR_INVALID_BUCKET_STATE)
+      << "a bucket whose policy names a principal the import did not write "
+	 "was served";
 }
 
 /* A record that does not adopt keeps adoption incomplete:  the control
@@ -18281,6 +18334,47 @@ public:
     return driver->driver_hint(env->dpp, "adoption", {{"run", "true"}},
 			       &out);
   }
+
+  /* An account the plan fails:  RGW will not accept its name. */
+  static constexpr const char* DAMAGED_ID = "6560e1f1c0ffee00000000aa";
+  void add_damaged_account() {
+    std::string rec{NB_ACCOUNT_PLAIN};
+    auto replace_all = [&](const std::string& from, const std::string& to) {
+      for (auto at = rec.find(from); at != std::string::npos;
+	   at = rec.find(from, at + to.size())) {
+	rec.replace(at, from.size(), to);
+      }
+    };
+    replace_all("6ac7cb27fd4af356919110a3", DAMAGED_ID);
+    replace_all("\"interchange\"", "\"has$dollar\"");
+    replace_all("INTERCHANGEACCESSKEY", "DOLLARSACCESSKEYAAAA");
+    add_nb_identity(DAMAGED_ID, rec);
+  }
+
+  /* A bucket of the damaged account's. */
+  static constexpr const char* DOLLARS_ID = "6560e1f1c0ffee00000000ab";
+  void add_dollars() {
+    const sf::path at = bp / "root" / "dollars";
+    sf::create_directories(at);
+    write_file(conf_root() / "buckets" / "dollars.json",
+	       std::string(R"({"_id":")") + DOLLARS_ID +
+	       R"(","name":"dollars","owner_account":")" + DAMAGED_ID +
+	       R"(","versioning":"DISABLED","path":")" + at.string() +
+	       R"(","should_create_underlying_storage":true,)"
+	       R"("creation_date":"2026-01-02T03:04:05.000Z"})");
+  }
+
+  int load(const std::string& name, std::unique_ptr<rgw::sal::Bucket>& b) {
+    return driver->load_bucket(env->dpp, rgw_bucket{"", name}, &b,
+			       null_yield);
+  }
+
+  bool adopted(const std::string& name) {
+    std::unique_ptr<rgw::sal::Bucket> b;
+    return (load(name, b) == 0) &&
+      std::strcmp(static_cast<rgw::sal::NSFSBucket*>(b.get())->profile_name(),
+		  "base");
+  }
 };
 
 /* What abandoning rejects:  no reason, an `_id` the store does not
@@ -18309,6 +18403,8 @@ TEST_F(NooBaaAbandonTest, AbandoningARoleThatCannotBeWrittenLetsAdoptionComplete
 	     nb_role("r3", "6560e1f1c0ffee00000000ee", "orphan", "x"));
   EXPECT_LT(run(), 0) << "the control:  the orphan role blocks it";
   EXPECT_FALSE(driver->adoption_complete());
+  /* and stops nothing else:  the bucket is adopted all the same */
+  EXPECT_TRUE(adopted(testname));
 
   nsfs::AbandonedRecord r;
   ASSERT_EQ(abandon("r3", "its account was deleted in NooBaa", &r), 0);
@@ -18318,6 +18414,114 @@ TEST_F(NooBaaAbandonTest, AbandoningARoleThatCannotBeWrittenLetsAdoptionComplete
 
   ASSERT_EQ(run(), 0);
   EXPECT_TRUE(driver->adoption_complete());
+}
+
+/* An identity the plan fails stops nothing else (DECISIONS.md
+ * 2026-11-02).  The rest of the store is adopted;  the failed account's
+ * bucket is blocked, neither failed nor served, since its owner does not
+ * translate.  Abandoning the account leaves the bucket an owner nobody
+ * will write, so it fails;  abandoning it too lets adoption complete. */
+TEST_F(NooBaaAbandonTest, AFailedIdentityStopsNothingElse)
+{
+  add_damaged_account();
+  add_dollars();
+  EXPECT_LT(run(), 0);
+  EXPECT_FALSE(driver->adoption_complete());
+
+  EXPECT_TRUE(adopted(testname)) << "an identity failure stopped the pass";
+  std::string owner;
+  EXPECT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+	      env->dpp, DAMAGED_ID, owner), -ENOENT);
+
+  EXPECT_FALSE(driver->adoption_failed("dollars"))
+      << "a bucket blocked by its owner was recorded as failed";
+  std::unique_ptr<rgw::sal::Bucket> b;
+  EXPECT_EQ(load("dollars", b), -ERR_INVALID_BUCKET_STATE)
+      << "a bucket whose owner did not import was served";
+
+  ASSERT_EQ(abandon(DAMAGED_ID, "renamed in NooBaa"), 0);
+  EXPECT_LT(run(), 0);
+  EXPECT_TRUE(driver->adoption_failed("dollars"));
+  EXPECT_FALSE(driver->adoption_complete());
+
+  ASSERT_EQ(abandon(DOLLARS_ID, "its owner is abandoned"), 0);
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+}
+
+/* A bucket whose policy names an identity that did not import is
+ * blocked by it:  a
+ * policy written now would name nobody, and a denial in it would not
+ * apply to the identity once it imports.  Until it is adopted it is not
+ * served, since its policy does not translate.  Abandoning the identity
+ * is the operator's choice to adopt it without the policy. */
+TEST_F(NooBaaAbandonTest, APolicyNamingAFailedIdentityBlocksItsBucket)
+{
+  remove_rgw_bucket_info();
+  add_damaged_account();
+  write_nb_record("ENABLED",
+	       R"(,"s3_policy":{"Version":"2012-10-17","Statement":[)"
+	       R"({"Effect":"Allow","Principal":{"AWS":["has$dollar"]},)"
+	       R"("Action":["s3:GetObject"],)"
+	       R"("Resource":["arn:aws:s3:::)" + std::string(testname) +
+	       R"(/*"]}]})");
+  EXPECT_LT(run(), 0);
+  EXPECT_FALSE(adopted(testname));
+  EXPECT_FALSE(driver->adoption_failed(testname));
+  std::unique_ptr<rgw::sal::Bucket> b;
+  EXPECT_EQ(load(testname, b), -ERR_INVALID_BUCKET_STATE)
+      << "a bucket whose policy did not translate was served";
+
+  ASSERT_EQ(abandon(DAMAGED_ID, "renamed in NooBaa"), 0);
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+  ASSERT_EQ(load(testname, b), 0);
+  EXPECT_EQ(b->get_attrs().count(RGW_ATTR_IAM_POLICY), 0u)
+      << "a policy naming an abandoned identity was written";
+}
+
+/* A preview reports what a pass would do and writes nothing:  no
+ * identity, no bucket row, no conversion.  Its report is the pass's, as
+ * predictions. */
+TEST_F(NooBaaAbandonTest, APreviewWritesNothing)
+{
+  add_damaged_account();
+  add_dollars();
+  auto pv = ask({{"preview", "true"}});
+  EXPECT_EQ(pv["accounts"], "1");
+  EXPECT_EQ(pv["identities_failed"], "1");
+  EXPECT_EQ(pv["buckets_adopted"], "1");
+  EXPECT_EQ(pv["buckets_blocked"], "1");
+  EXPECT_EQ(pv["buckets_failed"], "0");
+
+  std::string owner;
+  EXPECT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+	      env->dpp, NB_OWNER_ID, owner), -ENOENT);
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+	      env->dpp, testname, "", row), -ENOENT);
+  EXPECT_FALSE(adopted(testname));
+  EXPECT_FALSE(driver->adoption_complete());
+
+  const auto r = reports();
+  ASSERT_EQ(r.size(), 1u);
+  JSONParser p;
+  const auto found = report_findings(r[0], p);
+  std::string pass;
+  JSONDecoder::decode_json("pass", pass, &p);
+  EXPECT_EQ(pass, "preview");
+  auto named = [&](const char* kind, const char* what) {
+    auto f = found.equal_range(kind);
+    return std::any_of(f.first, f.second, [&](const auto& x) {
+      return x.second[0].find(what) != std::string::npos;
+    });
+  };
+  EXPECT_TRUE(named("identity_failed", "has$dollar"));
+  EXPECT_TRUE(named("bucket_failed", "dollars: its owner_account"));
+
+  /* the control:  the pass it predicted */
+  EXPECT_LT(run(), 0);
+  EXPECT_TRUE(adopted(testname));
 }
 
 /* A record that can never be adopted keeps adoption incomplete until it
@@ -18481,7 +18685,7 @@ TEST_F(NooBaaAbandonTest, AnAbandonedIdentityDoesNotStopTheBuckets)
   add_nb_identity(ORPHAN_ID, std::string(R"({"_id":")") + ORPHAN_ID +
 		  R"(","name":"orphan","email":"orphan",)"
 		  R"("owner":"6560e1f1c0ffee00000000ee"})");
-  EXPECT_LT(run(), 0) << "the control:  the orphan stops the import";
+  EXPECT_LT(run(), 0) << "the control:  the orphan keeps it incomplete";
 
   ASSERT_EQ(abandon(ORPHAN_ID, "its owner was deleted in NooBaa"), 0);
   ASSERT_EQ(run(), 0);
@@ -18489,15 +18693,18 @@ TEST_F(NooBaaAbandonTest, AnAbandonedIdentityDoesNotStopTheBuckets)
 }
 
 /* Under `automatic`, an identity import that fails leaves no queue,
- * and abandoning the identity that failed it starts one;  the queue
- * adopts, observes completion, and completion stops it
+ * and abandoning the record that failed it starts one;  the queue
+ * adopts, observes completion, and completion stops it.  Two records of
+ * one `_id` are what still fail the import whole (DECISIONS.md
+ * 2026-11-02), and abandoning the `_id` leaves out both
  * (DECISIONS.md 2026-10-31). */
 TEST_F(NooBaaAbandonTest, AbandoningWhatStoppedTheIdentitiesStartsTheQueue)
 {
-  static constexpr const char* ORPHAN_ID = "6560e1f1c0ffee00000000aa";
-  add_nb_identity(ORPHAN_ID, std::string(R"({"_id":")") + ORPHAN_ID +
-		  R"(","name":"orphan","email":"orphan",)"
-		  R"("owner":"6560e1f1c0ffee00000000ee"})");
+  static constexpr const char* TWICE_ID = "6560e1f1c0ffee00000000aa";
+  for (const char* dir : {"twice-one", "twice-two"}) {
+    add_nb_identity(dir, std::string(R"({"_id":")") + TWICE_ID +
+		    R"(","name":")" + dir + R"(","email":")" + dir + R"("})");
+  }
 
   boost::asio::io_context io;
   auto guard = boost::asio::make_work_guard(io);
@@ -18511,7 +18718,7 @@ TEST_F(NooBaaAbandonTest, AbandoningWhatStoppedTheIdentitiesStartsTheQueue)
   driver->set_background_tasks(true);
   ASSERT_EQ(driver->init(env->dpp), 0);
 
-  /* the control:  the import fails on the orphan, so nothing adopts */
+  /* the control:  the import fails on the `_id`, so nothing adopts */
   std::map<std::string, std::string> out;
   EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
 				{{"mode", "automatic"}}, &out), -EAGAIN);
@@ -18528,11 +18735,11 @@ TEST_F(NooBaaAbandonTest, AbandoningWhatStoppedTheIdentitiesStartsTheQueue)
     EXPECT_EQ(pass, "queue");
     auto c = found.equal_range("collision");
     EXPECT_TRUE(std::any_of(c.first, c.second, [](const auto& f) {
-      return f.second[0].find("orphan") != std::string::npos;
-    })) << "no collision names the orphan";
+      return f.second[0].find(TWICE_ID) != std::string::npos;
+    })) << "no collision names the _id";
   }
 
-  ASSERT_EQ(abandon(ORPHAN_ID, "its owner was deleted in NooBaa"), 0);
+  ASSERT_EQ(abandon(TWICE_ID, "two records claim it"), 0);
   EXPECT_NE(driver->adoption_queue_workers_for_test(), std::nullopt)
       << "the abandonment did not start the queue";
 
@@ -20515,6 +20722,26 @@ public:
       ",\"creation_date\":\"2026-01-02T03:04:05.000Z\"}";
     write_file(conf_root() / "buckets" / (testname + ".json"), doc);
   }
+
+  /* The account record_at()'s bucket is owned by, imported:  a bucket
+   * not yet adopted is served only once its owner translates
+   * (DECISIONS.md 2026-11-02). */
+  void import_owner() {
+    std::string rec{NB_ACCOUNT_PLAIN};
+    const std::string from = "6ac7cb27fd4af356919110a3";
+    for (auto at = rec.find(from); at != std::string::npos;
+	 at = rec.find(from)) {
+      rec.replace(at, from.size(), "6560e1f1c0ffee0000000002");
+    }
+    const auto dir = conf_root() / "identities" / "6560e1f1c0ffee0000000002";
+    sf::create_directories(dir);
+    write_file(dir / "identity.json", rec);
+    write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+    std::map<std::string, std::string> out;
+    ASSERT_EQ(driver->driver_hint(env->dpp, "adoption",
+				  {{"identities", "true"}}, &out), 0);
+    ASSERT_EQ(out["ran"], "true") << out["error"];
+  }
 };
 
 /* NooBaa's recorded path is where the bucket is served from.
@@ -20528,6 +20755,10 @@ TEST_F(NSFSRecordedPathTest, ABaseBucketIsServedAtNooBaaRecordedPath)
   record_at(at, "ENABLED");
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
+  EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), -ERR_INVALID_BUCKET_STATE)
+      << "the control:  a bucket whose owner is not imported was served";
+  import_owner();
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
 				&loaded, null_yield), 0)
       << "a bucket at the path their record names did not load";
@@ -20563,6 +20794,7 @@ TEST_F(NSFSRecordedPathTest, ResolvingNooBaaPathDoesNotAdoptTheBucket)
     return m;
   };
 
+  import_owner();
   const auto before = snapshot();
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
@@ -20598,6 +20830,7 @@ TEST_F(NSFSRecordedPathTest, PlacementRowWinsOverNooBaaRecord)
   sf::create_directories(recorded);
   sf::create_directories(placed);
   record_at(recorded);
+  import_owner();
 
   nsfs::BucketPlacement row;
 

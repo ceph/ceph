@@ -6421,6 +6421,25 @@ int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, 
       return refuse();
     }
   }
+
+  /* Served as found only when NooBaa's record translates whole:  what is
+   * served is what NooBaa served, or nothing (DECISIONS.md 2026-11-02).
+   * Refused as a client write to it is, retryably while the queue may
+   * yet adopt it. */
+  if (ret == 0) {
+    if (const auto& why =
+	  static_cast<NSFSBucket*>(bucket->get())->untranslated_by();
+	!why.empty()) {
+      ldpp_dout(dpp, 4) << "nsfs: bucket " << b.name << " is not served:  "
+	<< why << dendl;
+      bucket->reset();
+      if (adoption_queue.load(std::memory_order_acquire) &&
+	  !adoption_complete()) {
+	return -ERR_SERVICE_UNAVAILABLE;
+      }
+      return -ERR_INVALID_BUCKET_STATE;
+    }
+  }
   return ret;
 }
 
@@ -10367,9 +10386,15 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
     ret = nb_state ? nb_state->load(dpp, dir->get_fd(), get_name(), attrs, info)
 		 : -ENOENT;
     /* NooBaa's record names principals as NooBaa does;  served here as
-     * adoption will write them */
+     * adoption will write them.  Its owner_account, which NooBaa
+     * requires, translates only once that account is imported. */
+    untranslated.clear();
+    if ((ret == 0) && to_string(info.owner).empty()) {
+      untranslated = "its owner_account is not an imported account";
+    }
     if (ret == 0) {
-      ret = driver->rewrite_unadopted_policy(dpp, get_name(), attrs);
+      ret = driver->rewrite_unadopted_policy(dpp, get_name(), attrs,
+					     untranslated);
     }
   }
   if (ret == -ENOENT) {
@@ -18302,7 +18327,8 @@ int NSFSDriver::start_adoption(const DoutPrefixProvider* dpp)
  * re-running is the recovery, keyed on NooBaa's `_id` (§6.2). */
 int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
 				 optional_yield y,
-				 std::map<std::string, std::string>* report)
+				 std::map<std::string, std::string>* report,
+				 bool preview)
 {
   auto put_report = [report](const char* k, const std::string& v) {
     if (report) {
@@ -18398,21 +18424,23 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
     put_report("collisions", std::to_string(plan.collisions.size()));
     return ret;
   }
-  std::vector<std::string> collisions;
-  ret = nsfs::check_rgw_state(dpp, y, this, plan, collisions);
+  /* each collision with RGW's state fails its identity, as the plan's
+   * do (DECISIONS.md 2026-11-02) */
+  ret = nsfs::check_rgw_state(dpp, y, this, plan);
   if (ret < 0) {
-    adoption_findings.add(nsfs::FindingKind::collision, collisions);
     put_report("ran", "false");
-    put_report("collisions", std::to_string(collisions.size()));
+    put_report("error", cpp_strerror(-ret));
     return ret;
   }
 
   /* ---- phase 1:  identities ---- */
 
   nsfs::ImportResult ir;
-  ret = nsfs::import_identities(dpp, y, this, contents, plan, ir);
-  /* the principals an unadopted bucket's policy maps to have changed */
-  invalidate_unadopted_mapping();
+  ret = nsfs::import_identities(dpp, y, this, contents, plan, ir, preview);
+  if (!preview) {
+    /* the principals an unadopted bucket's policy maps to have changed */
+    invalidate_unadopted_mapping();
+  }
   adoption_findings.add(nsfs::FindingKind::identity_failed, ir.failures);
   adoption_findings.add(nsfs::FindingKind::unresolved_name, ir.unresolved_names);
   adoption_findings.add(nsfs::FindingKind::unresolved_uid, ir.unresolved_uids);
@@ -18430,6 +18458,11 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   put_report("anonymous", ir.anonymous_imported ? "true" : "false");
   put_report("anonymous_present", ir.anonymous_present ? "true" : "false");
   put_report("roles", std::to_string(ir.roles_created));
+  put_report("identities_failed", std::to_string(ir.failed_ids.size()));
+  if (!preview) {
+    std::lock_guard l{adoption_failures_mtx};
+    identity_failures = ir.failed_ids;
+  }
   put_report("role_rights", ir.role_rights);
   put_report("role_policies", std::to_string(ir.role_policies_written));
   put_report("unresolved_names", std::to_string(ir.unresolved_names.size()));
@@ -18456,8 +18489,16 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 0) << "WARNING: adoption:  a trust policy now matches an "
       "ARN NooBaa never matched:  " << a << dendl;
   }
-  if (ret < 0) {
+  /* -EIO is some identities written and some not:  the rest of the pass
+   * goes on, and adoption does not complete until each failure is fixed
+   * or abandoned.  Anything else wrote nothing. */
+  if (ret == -EIO) {
     put_report("ran", "partial");
+    return ret;
+  }
+  if (ret < 0) {
+    put_report("ran", "false");
+    put_report("error", cpp_strerror(-ret));
     return ret;
   }
 
@@ -18508,10 +18549,12 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
 			     optional_yield y,
 			     std::map<std::string, std::string>* report)
 {
-  int ret = adopt_identities(dpp, y, report);
-  if (ret < 0) {
-    return ret;
+  /* identities that failed stop nothing else (DECISIONS.md 2026-11-02) */
+  const int iret = adopt_identities(dpp, y, report);
+  if ((iret < 0) && (iret != -EIO)) {
+    return iret;
   }
+  int ret;
 
   const auto& root =
     g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
@@ -18521,7 +18564,7 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     return ret;
   }
-  size_t adopted = 0, failed = 0, abandoned = 0;
+  size_t adopted = 0, failed = 0, abandoned = 0, blocked = 0;
   for (const auto& b : contents.buckets) {
     nsfs::AbandonedRecord ab;
     if (userDB->get_abandoned(dpp, b.id, ab) == 0) {
@@ -18530,6 +18573,10 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
     }
     std::map<std::string, std::string> one;
     if (adopt_one_bucket(dpp, y, b.name, &one) < 0) {
+      if (one["blocked"] == "true") {
+	++blocked;
+	continue;
+      }
       ++failed;
       ldpp_dout(dpp, 0) << "ERROR: adoption: bucket " << b.name << ": "
 	<< (one.count("error") ? one["error"] : one["why"]) << dendl;
@@ -18541,13 +18588,109 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
     (*report)["buckets_adopted"] = std::to_string(adopted);
     (*report)["buckets_abandoned"] = std::to_string(abandoned);
     (*report)["buckets_failed"] = std::to_string(failed);
+    (*report)["buckets_blocked"] = std::to_string(blocked);
   }
   ldpp_dout(dpp, 1) << "nsfs: adopted " << root << ": " << adopted
-    << " buckets, " << failed << " failed" << dendl;
-  if (failed) {
+    << " buckets, " << failed << " failed, " << blocked
+    << " blocked by an identity" << dendl;
+  if (failed || blocked || (iret < 0)) {
     return -EIO;
   }
   return observe_adoption_completion(dpp, y, root, contents, report);
+}
+
+/* What run_adoption() would do, with nothing written (DECISIONS.md
+ * 2026-11-02):  the identities as adopt_identities() would import them,
+ * then each bucket's record up to its first write, against the mapping
+ * that import would leave.  Not while the queue runs, whose findings it
+ * would share. */
+int NSFSDriver::preview_adoption(const DoutPrefixProvider* dpp,
+				 optional_yield y,
+				 std::map<std::string, std::string>* report)
+{
+  std::map<std::string, std::string> counts;
+  auto done = [&](int ret) {
+    if (report) {
+      *report = counts;
+    }
+    return ret;
+  };
+  if (!adoption_configured()) {
+    counts["why"] = "no NooBaa configuration store is configured";
+    return done(-ENOENT);
+  }
+  if (adoption_queue.load(std::memory_order_acquire)) {
+    counts["why"] = "the adoption queue is running";
+    return done(-EBUSY);
+  }
+
+  nsfs::AdoptionFindings::Gathering gathering;
+  int ret = adopt_identities(dpp, y, &counts, true);
+  if ((ret < 0) && (ret != -EIO)) {
+    write_adoption_report(dpp, "preview", counts);
+    return done(0);
+  }
+
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  ret = store.read(dpp, contents);
+  if (ret < 0) {
+    return done(ret);
+  }
+  nsfs::IdentityMapping mapping;
+  ret = imported_identity_mapping(dpp, contents, mapping, true);
+  if (ret < 0) {
+    return done(ret);
+  }
+  if (!contents.connections.empty()) {
+    nsfs::NooBaaMasterKeys keys;
+    std::vector<std::string> failures;
+    if ((keys.load(dpp, contents.settings, root) < 0) ||
+	(nsfs::decrypt_store_secrets(dpp, keys, contents, failures) < 0)) {
+      /* adopt_identities() has reported it */
+      write_adoption_report(dpp, "preview", counts);
+      return done(0);
+    }
+  }
+
+  /* the buckets a pass would adopt:  not abandoned, and not imported */
+  size_t abandoned = 0, present = 0;
+  std::erase_if(contents.buckets, [&](const nsfs::NooBaaBucketRecord& b) {
+    nsfs::AbandonedRecord ab;
+    if (userDB->get_abandoned(dpp, b.id, ab) == 0) {
+      ++abandoned;
+      return true;
+    }
+    nsfs::BucketPlacement row;
+    if (userDB->get_bucket_placement(dpp, b.name, "", row) == 0) {
+      ++present;
+      return true;
+    }
+    return false;
+  });
+  nsfs::BucketImportResult br;
+  nsfs::import_bucket_state(dpp, y, this, root, contents, mapping, br, true);
+  adoption_findings.add(nsfs::FindingKind::policy_refused, br.policies_refused);
+  adoption_findings.add(nsfs::FindingKind::arn_matched, br.arns_matched);
+  adoption_findings.add(nsfs::FindingKind::notification_not_carried,
+			br.notifications_reported);
+  adoption_findings.add(nsfs::FindingKind::notification_needs_operator,
+			br.notifications_need_operator);
+  adoption_findings.add(nsfs::FindingKind::bucket_failed, br.failures);
+  adoption_findings.add(nsfs::FindingKind::bucket_failed, br.blocked);
+  counts["buckets_adopted"] = std::to_string(br.buckets_written);
+  counts["buckets_blocked"] = std::to_string(br.blocked.size());
+  counts["buckets_failed"] = std::to_string(br.failures.size());
+  counts["buckets_abandoned"] = std::to_string(abandoned);
+  counts["buckets_present"] = std::to_string(present);
+  counts["topics"] = std::to_string(br.topics_written);
+  counts["notifications"] = std::to_string(br.notifications_carried);
+  counts["why_not_complete"] = "a preview:  nothing was written, and a "
+    "tree's conversion is not predicted";
+  write_adoption_report(dpp, "preview", counts);
+  return done(0);
 }
 
 /* Abandon one NooBaa record (DECISIONS.md 2026-10-13):  find it by
@@ -18799,6 +18942,20 @@ int NSFSDriver::observe_adoption_completion(
     nsfs::AbandonedRecord r;
     return userDB->get_abandoned(dpp, id, r) == 0;
   };
+  /* what the identity pass did not write, roles included, which have no
+   * record of their own to look for */
+  {
+    std::set<std::string> failed;
+    {
+      std::lock_guard l{adoption_failures_mtx};
+      failed = identity_failures;
+    }
+    for (const auto& id : failed) {
+      if (!abandoned(id)) {
+	return not_yet("NooBaa record " + id + " did not import");
+      }
+    }
+  }
   for (const auto& id : contents.identities) {
     std::string owner;
     if (abandoned(id.id)) {
@@ -18979,7 +19136,19 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
   adoption_findings.add(nsfs::FindingKind::notification_needs_operator,
 			br.notifications_need_operator);
   adoption_findings.add(nsfs::FindingKind::bucket_failed, br.failures);
+  adoption_findings.add(nsfs::FindingKind::bucket_failed, br.blocked);
+  {
+    std::lock_guard l{adoption_failures_mtx};
+    if (br.blocked.empty()) {
+      adoption_blocked.erase(bucket_name);
+    } else {
+      adoption_blocked.insert(bucket_name);
+    }
+  }
   put_report("configured", (ret == 0) ? "true" : "false");
+  if (!br.blocked.empty()) {
+    put_report("blocked", br.blocked.front());
+  }
   put_report("buckets", std::to_string(br.buckets_written));
   put_report("policies", std::to_string(br.policies_rewritten));
   put_report("policies_refused", std::to_string(br.policies_refused.size()));
@@ -19017,24 +19186,37 @@ size_t NSFSDriver::drop_abandoned_identities(
 
 int NSFSDriver::imported_identity_mapping(const DoutPrefixProvider* dpp,
 					  const nsfs::NooBaaStoreContents& contents,
-					  nsfs::IdentityMapping& out)
+					  nsfs::IdentityMapping& out,
+					  bool preview)
 {
-  /* planned as the identity import was, or an abandoned identity's
-   * collision fails every bucket's mapping */
+  /* planned as the identity import was, so an abandoned identity is
+   * neither written nor planned */
   nsfs::NooBaaStoreContents planned = contents;
   drop_abandoned_identities(dpp, planned);
   nsfs::ImportPlan plan;
-  const int ret = nsfs::build_import_plan(dpp, ctx(), planned, plan,
-					  get_identity_db());
+  int ret = nsfs::build_import_plan(dpp, ctx(), planned, plan,
+				    get_identity_db());
   if (ret < 0) {
     return ret;
   }
-  std::erase_if(plan.entries, [this, dpp](const nsfs::ImportEntry& e) {
-    std::string owner;
-    return get_identity_db()->get_owner_by_noobaa_id(dpp, e.noobaa_id,
-						     owner) < 0;
-  });
+  auto whole = std::make_shared<nsfs::IdentityMapping>(nsfs::mapping_from(plan));
+  if (preview) {
+    ret = nsfs::check_rgw_state(dpp, null_yield, this, plan);
+    if (ret < 0) {
+      return ret;
+    }
+    std::erase_if(plan.entries, [](const nsfs::ImportEntry& e) {
+      return !e.failed.empty();
+    });
+  } else {
+    std::erase_if(plan.entries, [this, dpp](const nsfs::ImportEntry& e) {
+      std::string owner;
+      return get_identity_db()->get_owner_by_noobaa_id(dpp, e.noobaa_id,
+						       owner) < 0;
+    });
+  }
   out = nsfs::mapping_from(plan);
+  out.planned = std::move(whole);
   return 0;
 }
 
@@ -19046,7 +19228,8 @@ void NSFSDriver::invalidate_unadopted_mapping()
 
 int NSFSDriver::rewrite_unadopted_policy(const DoutPrefixProvider* dpp,
 					 const std::string& bucket,
-					 Attrs& attrs)
+					 Attrs& attrs,
+					 std::string& untranslated)
 {
   auto i = attrs.find(RGW_ATTR_IAM_POLICY);
   if (i == attrs.end()) {
@@ -19082,11 +19265,14 @@ int NSFSDriver::rewrite_unadopted_policy(const DoutPrefixProvider* dpp,
   std::string rewritten;
   if (nsfs::rewrite_policy_principals(dpp, i->second.to_str(), *m,
 				      rewritten, unresolved) < 0) {
-    ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket << "'s policy names "
-      "principals the import has not written ("
-      << nsfs::describe_unresolved(*m, unresolved) << ");  it is not "
-      "served until it can be rewritten, as the import would not write it"
-      << dendl;
+    const std::string why = unresolved.empty()
+      ? std::string("its policy does not parse")
+      : "its policy names principals the import has not written (" +
+	nsfs::describe_unresolved(*m, unresolved) + ")";
+    ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket << ":  " << why << dendl;
+    if (untranslated.empty()) {
+      untranslated = why;
+    }
     attrs.erase(i);
     return 0;
   }
@@ -19147,9 +19333,15 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   /* Every adoption path comes here, so a failure is recorded once, the
    * same for the command, the full pass and the queue.  A walk stopped
    * by shutdown has not failed;  its marker stands for the next start. */
+  bool blocked = false;
   {
     std::lock_guard l{adoption_failures_mtx};
-    if ((ret < 0) ? (ret != -ECANCELED) : !prog.complete) {
+    blocked = (ret < 0) && adoption_blocked.contains(bucket_name);
+    if (blocked) {
+      /* not failed:  served as its translation allows, and adopted once
+       * the identity that blocks it is fixed or abandoned */
+      adoption_failures.erase(bucket_name);
+    } else if ((ret < 0) ? (ret != -ECANCELED) : !prog.complete) {
       adoption_failures[bucket_name] = (ret < 0) ? ret : -EAGAIN;
       /* the import's own finding names the cause, where it found one */
       if (!adoption_findings.contains(nsfs::FindingKind::bucket_failed,
@@ -19189,6 +19381,12 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   put_report("links_loop", std::to_string(prog.links.loop));
   put_report("profile_set", prog.profile_set ? "true" : "false");
   put_report("profile", static_cast<NSFSBucket*>(b.get())->profile_name());
+  if (blocked) {
+    put_report("adopted", "false");
+    put_report("blocked", "true");
+    put_report("why", "blocked by an identity that did not import");
+    return -EAGAIN;
+  }
   if (ret < 0) {
     put_report("adopted", "false");
     put_report("error", cpp_strerror(-ret));
@@ -19218,8 +19416,10 @@ int NSFSDriver::start_adoption_queue(const DoutPrefixProvider* dpp,
   }
   nsfs::AdoptionFindings::Gathering gathering;
   if (std::map<std::string, std::string> counts;
-      adopt_identities(dpp, null_yield, &counts) < 0) {
-    /* the queue's pass ends before it begins */
+      adopt_identities(dpp, null_yield, &counts) < 0 &&
+      counts["ran"] != "partial") {
+    /* the queue's pass ends before it begins;  identities that failed
+     * stop nothing else (DECISIONS.md 2026-11-02) */
     write_adoption_report(dpp, "queue", counts);
     return -EAGAIN;
   }
@@ -19258,6 +19458,11 @@ int NSFSDriver::start_adoption_queue(const DoutPrefixProvider* dpp,
     std::map<std::string, std::string> one;
     const int ret = adopt_one_bucket(&driver_prefix, null_yield, bucket,
 				     &one, &cb);
+    if ((ret < 0) && (one["blocked"] == "true")) {
+      ldpp_dout(&driver_prefix, 1) << "nsfs: bucket " << bucket << " is "
+	"blocked by an identity that did not import" << dendl;
+      return ret;
+    }
     if (ret < 0) {
       ldpp_dout(&driver_prefix, 0) << "ERROR: adoption: bucket " << bucket
 	<< ": " << (one.count("error") ? one["error"] : one["why"]) << dendl;
@@ -19285,6 +19490,10 @@ int NSFSDriver::start_adoption_queue(const DoutPrefixProvider* dpp,
       const auto st = q->stats();
       counts["buckets_adopted"] = std::to_string(st.adopted);
       counts["buckets_failed"] = std::to_string(st.failed);
+    }
+    {
+      std::lock_guard l{adoption_failures_mtx};
+      counts["buckets_blocked"] = std::to_string(adoption_blocked.size());
     }
     write_adoption_report(&driver_prefix, "queue", counts);
   };
@@ -19557,7 +19766,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       (*out)["queue_waits_timed_out"] = std::to_string(s.waits_timed_out);
     }
     if (done) {
-      for (const char* cmd : {"identities", "bucket", "run"}) {
+      for (const char* cmd : {"identities", "bucket", "run", "preview"}) {
 	if (params.count(cmd)) {
 	  if (out) {
 	    (*out)["why"] = "adoption is complete";
@@ -19572,7 +19781,12 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      * bucket -- writes its state from NooBaa's configuration store, marks
      * it, converts its tree -- against identities already imported;
      * `run=true` runs what `automatic` runs at startup -- the
-     * identities, then every bucket. */
+     * identities, then every bucket;  `preview=true` reports what `run`
+     * would do, writing nothing (DECISIONS.md 2026-11-02). */
+    if (auto pv = params.find("preview");
+	(pv != params.end()) && (pv->second == "true")) {
+      return preview_adoption(dpp, null_yield, out);
+    }
     auto ids = params.find("identities");
     if ((ids != params.end()) && (ids->second == "true")) {
       return adopt_identities(dpp, null_yield, out);

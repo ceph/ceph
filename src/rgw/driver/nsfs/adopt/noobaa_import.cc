@@ -263,15 +263,14 @@ int add_access_key(const DoutPrefixProvider* dpp, optional_yield y,
 } // namespace
 
 int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
-		    NSFSDriver* driver, const ImportPlan& plan,
-		    std::vector<std::string>& collisions)
+		    NSFSDriver* driver, ImportPlan& plan)
 {
   IdentityDB* db = driver->get_identity_db();
   if (!db) {
     return -ENOENT;
   }
 
-  for (const auto& e : plan.entries) {
+  for (auto& e : plan.entries) {
     /* Already imported is not a collision.  Recognised by NooBaa's id,
      * which is the whole reason the column exists -- a name-keyed
      * check would report every renamed account as a conflict with
@@ -293,7 +292,7 @@ int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
     if (!e.iam_user) {
       if (driver->load_account_by_name(dpp, y, e.tenant, e.name,
 				       info, attrs, objv) == 0) {
-	collisions.push_back(
+	e.failed.push_back(
 	    "an RGW account named " + e.name + " already exists, and it is "
 	    "not the one _id " + e.noobaa_id + " was imported as");
       }
@@ -301,7 +300,7 @@ int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
       if (!e.email.empty() &&
 	  driver->load_account_by_email(dpp, y, e.email,
 					info, attrs, objv) == 0) {
-	collisions.push_back(
+	e.failed.push_back(
 	    "the email \"" + e.email + "\" is already in RGW's index, "
 	    "which is shared across users and accounts, so _id " +
 	    e.noobaa_id + " cannot take it");
@@ -314,24 +313,23 @@ int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
     for (const auto& k : e.access_key_ids) {
       std::unique_ptr<User> holder;
       if (driver->get_user_by_access_key(dpp, k, y, &holder) == 0) {
-	collisions.push_back(
+	e.failed.push_back(
 	    "the access key " + k + " of _id " + e.noobaa_id + " is already "
 	    "held by RGW user " + holder->get_id().to_str());
       }
     }
   }
 
-  for (const auto& c : collisions) {
-    ldpp_dout(dpp, 0) << "ERROR: import: " << c << dendl;
-  }
-  return collisions.empty() ? 0 : -EEXIST;
+  fail_users_of_failed_accounts(plan);
+  return 0;
 }
 
 int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 		      NSFSDriver* driver,
 		      const NooBaaStoreContents& contents,
 		      const ImportPlan& plan,
-		      ImportResult& result)
+		      ImportResult& result,
+		      bool preview)
 {
   IdentityDB* db = driver->get_identity_db();
   if (!db) {
@@ -394,7 +392,14 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 
   /* ---- pass one:  identities ---- */
 
+  for (const auto& f : plan.failures()) {
+    result.failures.push_back(f);
+  }
+
   for (const auto& e : plan.entries) {
+    if (!e.failed.empty()) {
+      continue;
+    }
     const NooBaaIdentity* src = find_source(contents, e.noobaa_id);
     if (!src) {
       fail(e.noobaa_name, "no source record, which cannot happen unless the "
@@ -420,6 +425,43 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 	++result.accounts_skipped;
 	++result.users_skipped;
       }
+      continue;
+    }
+
+    /* What would be written, and what the rows would find, with nothing
+     * written:  the owner is a stand-in, enough for the mapping below. */
+    if (preview) {
+      bool usable = true;
+      for (const auto& ak : src->access_keys) {
+	if (ak.secret_key.empty()) {
+	  fail(e.name, "access key " + ak.access_key + " has no decrypted "
+	       "secret;  run the master-key step first");
+	  usable = false;
+	}
+      }
+      if (!usable) {
+	continue;
+      }
+      Identity row;
+      row.key = e.anonymous ? RGW_USER_ANON_ID
+	: e.iam_user ? "preview:" + e.noobaa_id : e.account_id;
+      fill_posix(*src, row);
+      check_name(row);
+      check_uid(row);
+      if (e.anonymous) {
+	result.anonymous_imported = true;
+      } else if (e.iam_user) {
+	++result.users_created;
+	++result.user_rows;
+      } else {
+	++result.accounts_created;
+	++result.users_created;
+	++result.identity_rows;
+	if (e.max_users || e.max_access_keys) {
+	  ++result.limits_raised;
+	}
+      }
+      owner_by_noobaa_id[e.noobaa_id] = row.key;
       continue;
     }
 
@@ -623,6 +665,12 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     owner_by_noobaa_id[e.noobaa_id] = owner_key;
   }
 
+  for (const auto& e : plan.entries) {
+    if (!owner_by_noobaa_id.contains(e.noobaa_id)) {
+      result.failed_ids.insert(e.noobaa_id);
+    }
+  }
+
   /* ---- pass two:  the policies that need the finished mapping ---- */
 
   /* The principals a role's trust policy may name:  identities this run
@@ -657,6 +705,10 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
        * role to;  the failure is already recorded */
       continue;
     }
+    auto fail_rc = [&](const std::string& why) {
+      fail(e.noobaa_name, why);
+      result.failed_ids.insert(e.noobaa_id);
+    };
 
     /* NooBaa's `role_config` carries a role name and an assume-role
      * policy (`{role_name, assume_role_policy}` at the pin).  Its
@@ -667,18 +719,18 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
      * access-key one (DECISIONS.md 2026-10-26). */
     JSONParser p;
     if (!p.parse(src->role_config.data(), src->role_config.size())) {
-      fail(e.noobaa_name, "role_config is not JSON");
+      fail_rc("role_config is not JSON");
       continue;
     }
     std::string role_name;
     try {
       JSONDecoder::decode_json("role_name", role_name, &p);
     } catch (const JSONDecoder::err& e2) {
-      fail(e.noobaa_name, std::string("role_config: ") + e2.what());
+      fail_rc(std::string("role_config: ") + e2.what());
       continue;
     }
     if (role_name.empty()) {
-      fail(e.noobaa_name, "role_config names no role");
+      fail_rc("role_config names no role");
       continue;
     }
     if (auto r = role_by_name.find({e.noobaa_id, role_name});
@@ -691,12 +743,12 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
 
     JSONObj* arp = p.find_obj("assume_role_policy");
     if (!arp) {
-      fail(e.noobaa_name, "role_config has no assume_role_policy");
+      fail_rc("role_config has no assume_role_policy");
       continue;
     }
     std::string trust, why;
     if (trust_policy_from(arp, trust, why) < 0) {
-      fail(e.noobaa_name, why);
+      fail_rc(why);
       continue;
     }
     std::string rewritten;
@@ -704,7 +756,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     if (int r = rewrite_policy_principals(dpp, trust, mapping, rewritten,
 					  unresolved, &also_users, &arns);
 	r < 0) {
-      fail(e.noobaa_name, (r == -ENOENT)
+      fail_rc((r == -ENOENT)
 	   ? "the trust policy names principals that resolve to nothing: " +
 	     describe_unresolved(mapping, unresolved)
 	   : "the trust policy will not translate: " + cpp_strerror(-r));
@@ -729,9 +781,9 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     /* create(), as IAM CreateRole does:  it gives the role its id, its
      * creation date and the ARN clients assume it by, and stores it
      * exclusively */
-    int ret = role->create(dpp, "", y);
+    int ret = preview ? 0 : role->create(dpp, "", y);
     if (ret < 0 && ret != -EEXIST) {
-      fail(e.noobaa_name, std::string("create: ") + cpp_strerror(-ret));
+      fail_rc(std::string("create: ") + cpp_strerror(-ret));
       continue;
     }
     for (const auto& a : also_users) {
@@ -765,6 +817,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     const std::string label = "role " + r.name + " (_id " + r.id + ")";
     auto fail_role = [&](const std::string& why) {
       result.failures.push_back(label + ": " + why);
+      result.failed_ids.insert(r.id);
     };
     auto owner = std::find_if(plan.entries.begin(), plan.entries.end(),
 			      [&](const ImportEntry& w) {
@@ -828,7 +881,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     }
 
     std::unique_ptr<RGWRole> role = driver->get_role(ri);
-    int ret = role->create(dpp, "", y);
+    int ret = preview ? 0 : role->create(dpp, "", y);
     if (ret == -EINVAL) {
       fail_role("RGW will not accept its name, its path " + ri.path +
 		" or its max_session_duration " +

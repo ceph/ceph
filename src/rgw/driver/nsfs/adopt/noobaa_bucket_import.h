@@ -53,7 +53,11 @@
  * The bucket's other state is correct and worth having;  the policy
  * is not, and writing a policy whose principals point at nothing is
  * worse than writing none and saying so (§6.1a).  Reported either way
- * -- §6.1 phase 3 makes this the report an operator must read.
+ * -- §6.1 phase 3 makes this the report an operator must read.  A
+ * principal naming an identity the plan holds and the import did not
+ * write is different:  it will name someone once that identity is
+ * fixed, so the bucket is not attempted:  it is blocked by that identity
+ * (DECISIONS.md 2026-11-02), as one whose owner did not import is.
  *
  * WHAT WAITS FOR ANOTHER STAGE.  `path` and
  * `should_create_underlying_storage` are **P6's**:  the placement
@@ -67,6 +71,7 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -121,6 +126,15 @@ struct IdentityMapping {
 
   /* A principal that resolves to nothing and is an IAM user's name. */
   bool names_only_users(const std::string& principal) const;
+
+  /* The whole plan's mapping, abandoned identities aside, when this one
+   * holds only the identities written:  what a principal would name had
+   * every identity imported. */
+  std::shared_ptr<const IdentityMapping> planned;
+
+  /* A principal that resolves to nothing here and to an identity in
+   * `planned`:  one the plan holds and the import did not write. */
+  bool names_unwritten(const std::string& principal) const;
 };
 
 IdentityMapping mapping_from(const ImportPlan& plan);
@@ -176,6 +190,11 @@ struct BucketImportResult {
   std::vector<std::string> notifications_reported;
   /* A notification carried and needing the operator. */
   std::vector<std::string> notifications_need_operator;
+  /* A bucket not attempted because an identity it needs did not
+   * import:  its owner, or a principal of its policy.  Not its failure:
+   * it is adopted on the run after the identity is fixed or abandoned
+   * (DECISIONS.md 2026-11-02). */
+  std::vector<std::string> blocked;
   std::vector<std::string> failures;
 };
 
@@ -195,7 +214,8 @@ int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 		      const std::string& bucket_name,
 		      const NooBaaStoreContents& contents,
 		      const IdentityMapping& mapping,
-		      BucketImportResult& result);
+		      BucketImportResult& result,
+		      bool preview = false);
 
 /* Write every bucket's state.
  *
@@ -206,12 +226,17 @@ int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
  *
  * `mapping` comes from the identities this run imported.  Returns 0
  * when every bucket's state was written -- a rejected policy is not a
- * failure of the bucket -- and -EIO otherwise. */
+ * failure of the bucket -- -EAGAIN when one is blocked by an identity
+ * and none failed, and -EIO otherwise.
+ *
+ * `preview` writes nothing:  each bucket stops before its first write,
+ * and is counted in `buckets_written` as one that would be. */
 int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 			NSFSDriver* driver,
 			const std::string& config_root,
 			const NooBaaStoreContents& contents,
 			const IdentityMapping& mapping,
-			BucketImportResult& result);
+			BucketImportResult& result,
+			bool preview = false);
 
 }}} // namespace rgw::sal::nsfs

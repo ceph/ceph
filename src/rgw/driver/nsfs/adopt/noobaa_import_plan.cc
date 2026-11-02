@@ -51,6 +51,36 @@ size_t ImportPlan::iam_users() const
   return n;
 }
 
+std::vector<std::string> ImportPlan::failures() const
+{
+  std::vector<std::string> out;
+  for (const auto& e : entries) {
+    for (const auto& f : e.failed) {
+      if (std::find(out.begin(), out.end(), f) == out.end()) {
+	out.push_back(f);
+      }
+    }
+  }
+  return out;
+}
+
+void fail_users_of_failed_accounts(ImportPlan& plan)
+{
+  for (auto& u : plan.entries) {
+    if (!u.iam_user || !u.failed.empty() || u.account_id.empty()) {
+      continue;
+    }
+    auto a = std::find_if(plan.entries.begin(), plan.entries.end(),
+			  [&](const ImportEntry& e) {
+			    return !e.iam_user && e.account_id == u.account_id;
+			  });
+    if ((a != plan.entries.end()) && !a->failed.empty()) {
+      u.failed.push_back(u.noobaa_name + " is an IAM user of the account " +
+			 a->noobaa_name + ", which is not imported");
+    }
+  }
+}
+
 namespace {
 
 /* `<name>` or, for an identity we can only name by its id, the id.
@@ -183,21 +213,18 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
     auto owner = account_id_by_noobaa_id.find(id.owner);
     std::string why;
     if (!id.iam_path.empty() && !validate_iam_path(id.iam_path, why)) {
-      plan.collisions.push_back(
+      e.failed.push_back(
 	  label(id) + " has an IAM path RGW will not accept (" + id.iam_path +
 	  "): " + why);
-      ret = -EINVAL;
     }
 
     if (owner == account_id_by_noobaa_id.end()) {
       /* A user whose account is not in the store cannot be placed.
        * Reported rather than guessed:  there is no correct account to
-       * invent, and an orphan user is a store we should not import
-       * from. */
-      plan.collisions.push_back(
+       * invent. */
+      e.failed.push_back(
 	  label(id) + " is an IAM user whose owner " + id.owner +
 	  " is not an account in this store");
-      ret = -EINVAL;
     } else {
       e.account_id = owner->second;
       for (const auto& root : contents.identities) {
@@ -277,47 +304,50 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
    * invalidates every name-form principal referring to it (§6.6).
    * Reported, not rewritten:  rewriting silently breaks
    * authorization. */
-  for (const auto& e : plan.entries) {
+  for (auto& e : plan.entries) {
     std::string why;
     if (!rgw::account::validate_name(e.name, &why)) {
-      plan.collisions.push_back(e.noobaa_name.empty()
-	  ? std::string("an identity has a name RGW will not accept: ") + why
+      e.failed.push_back(e.noobaa_name.empty()
+	  ? "_id " + e.noobaa_id + " has a name RGW will not accept: " + why
 	  : e.noobaa_name + " has a name RGW will not accept: " + why);
-      ret = -EINVAL;
     }
     /* An account user's display_name must be non-empty
      * (`svc_user_rados.cc`), and it is the NooBaa name. */
     if (e.display_name.empty()) {
-      plan.collisions.push_back(
+      e.failed.push_back(
 	  std::string("_id ") + e.noobaa_id + " has no name, so it has no "
 	  "display_name, which RGW requires");
-      ret = -EINVAL;
     } else if (!e.anonymous && !validate_iam_user_name(e.display_name, why)) {
       /* RGW's user-add path holds every account user's display_name,
        * the root's included, to the IAM UserName rules */
-      plan.collisions.push_back(
+      e.failed.push_back(
 	  e.noobaa_name + " has a name RGW will not accept as an account "
 	  "user's: " + why);
-      ret = -EINVAL;
     }
   }
+
+  /* Each constraint below fails both records it names. */
+  auto fail_both = [&plan](size_t a, size_t b, const std::string& why) {
+    plan.entries[a].failed.push_back(why);
+    plan.entries[b].failed.push_back(why);
+  };
 
   /* Account name, unique per tenant -- and every tenant here is the
    * same one, so globally unique. */
   {
-    std::map<std::string, std::string> seen;
-    for (const auto& e : plan.entries) {
+    std::map<std::string, size_t> seen;
+    for (size_t n = 0; n < plan.entries.size(); ++n) {
+      const auto& e = plan.entries[n];
       if (e.iam_user) {
 	continue;
       }
       const std::string key = e.tenant + "$" + e.name;
-      auto [i, fresh] = seen.emplace(key, e.noobaa_id);
+      auto [i, fresh] = seen.emplace(key, n);
       if (!fresh) {
-	plan.collisions.push_back(
-	    "two accounts are named " + e.name + " (_id " + i->second +
-	    " and _id " + e.noobaa_id + "), and RGW requires an account "
-	    "name to be unique");
-	ret = -EEXIST;
+	fail_both(i->second, n,
+	    "two accounts are named " + e.name + " (_id " +
+	    plan.entries[i->second].noobaa_id + " and _id " + e.noobaa_id +
+	    "), and RGW requires an account name to be unique");
       }
     }
   }
@@ -327,34 +357,34 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
    * AWS IAM user has none, so two users of one name under different
    * accounts -- legal in NooBaa and in AWS -- do not collide. */
   {
-    std::map<std::string, std::string> seen;
-    for (const auto& e : plan.entries) {
+    std::map<std::string, size_t> seen;
+    for (size_t n = 0; n < plan.entries.size(); ++n) {
+      const auto& e = plan.entries[n];
       if (e.iam_user || e.email.empty()) {
 	continue;
       }
-      auto [i, fresh] = seen.emplace(e.email, e.noobaa_id);
+      auto [i, fresh] = seen.emplace(e.email, n);
       if (!fresh) {
-	plan.collisions.push_back(
-	    "_id " + i->second + " and _id " + e.noobaa_id +
-	    " both carry the email \"" + e.email + "\", and RGW's email "
-	    "index is shared across users and accounts");
-	ret = -EEXIST;
+	fail_both(i->second, n,
+	    "_id " + plan.entries[i->second].noobaa_id + " and _id " +
+	    e.noobaa_id + " both carry the email \"" + e.email + "\", and "
+	    "RGW's email index is shared across users and accounts");
       }
     }
   }
 
   /* Access key id, globally unique. */
   {
-    std::map<std::string, std::string> seen;
-    for (const auto& e : plan.entries) {
+    std::map<std::string, size_t> seen;
+    for (size_t n = 0; n < plan.entries.size(); ++n) {
+      const auto& e = plan.entries[n];
       for (const auto& k : e.access_key_ids) {
-	auto [i, fresh] = seen.emplace(k, e.noobaa_id);
+	auto [i, fresh] = seen.emplace(k, n);
 	if (!fresh) {
-	  plan.collisions.push_back(
-	      "_id " + i->second + " and _id " + e.noobaa_id +
-	      " both carry the access key " + k +
+	  fail_both(i->second, n,
+	      "_id " + plan.entries[i->second].noobaa_id + " and _id " +
+	      e.noobaa_id + " both carry the access key " + k +
 	      ", which RGW requires to be unique");
-	  ret = -EEXIST;
 	}
       }
     }
@@ -362,17 +392,19 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
 
   /* An account user's display_name, unique within its account. */
   {
-    std::set<std::pair<std::string, std::string>> seen;
-    for (const auto& e : plan.entries) {
+    std::map<std::pair<std::string, std::string>, size_t> seen;
+    for (size_t n = 0; n < plan.entries.size(); ++n) {
+      const auto& e = plan.entries[n];
       if (e.account_id.empty()) {
 	continue;
       }
-      if (!seen.emplace(e.account_id, e.display_name).second) {
-	plan.collisions.push_back(
+      auto [i, fresh] = seen.emplace(std::pair{e.account_id, e.display_name}, n);
+      if (!fresh) {
+	fail_both(i->second, n,
 	    "account " + e.account_id + " has two users whose display_name "
-	    "is \"" + e.display_name + "\", which RGW requires to be unique "
-	    "within an account");
-	ret = -EEXIST;
+	    "is \"" + e.display_name + "\" (_id " +
+	    plan.entries[i->second].noobaa_id + " and _id " + e.noobaa_id +
+	    "), which RGW requires to be unique within an account");
       }
     }
   }
@@ -394,11 +426,29 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
     }
   }
 
+  /* An identity already imported stays imported:  a collision with a
+   * record added since fails only the newcomer. */
+  if (stored) {
+    for (auto& e : plan.entries) {
+      std::string owner;
+      if (!e.failed.empty() &&
+	  (stored->get_owner_by_noobaa_id(dpp, e.noobaa_id, owner) == 0)) {
+	e.failed.clear();
+      }
+    }
+  }
+  fail_users_of_failed_accounts(plan);
+
+  const auto failures = plan.failures();
   ldpp_dout(dpp, 4) << "nsfs: import plan: " << plan.accounts()
     << " accounts, " << plan.iam_users() << " IAM users, "
+    << failures.size() << " failures, "
     << plan.collisions.size() << " collisions, " << plan.drift.size()
     << " drifted, " << plan.raised.size() << " limits raised, "
     << plan.widened.size() << " roots widened" << dendl;
+  for (const auto& f : failures) {
+    ldpp_dout(dpp, 0) << "ERROR: import: " << f << dendl;
+  }
   for (const auto& c : plan.collisions) {
     ldpp_dout(dpp, 0) << "ERROR: import: " << c << dendl;
   }
