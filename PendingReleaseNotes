@@ -29,6 +29,8 @@
 
 * RGW: The admin API can now return account storage stats with
   ``GET /admin/account?stats``, like ``radosgw-admin account stats``.
+  ``radosgw-admin account list --stats`` lists the info, including quotas,
+  and storage stats of all accounts.
 
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
