@@ -3362,9 +3362,31 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   }
   bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0)) && (!target->state->fake_tag);
   bool set_attr_id_tag = guard && target->obj.key.instance.empty() && (meta.if_nomatch == nullptr || meta.if_nomatch != "*"sv);
-  r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.modify_tail, set_attr_id_tag, rctx.y);
+  r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, set_attr_id_tag, rctx.y);
   if (r < 0)
     return r;
+
+  if (meta.data) {
+    /* if we want to overwrite the data, we also want to overwrite the
+       xattrs, so just remove the object */
+    // add it before the setxattr ops: the OSD gets the input of all ops in
+    // one page aligned buffer, in op order, and copies data that does not
+    // start page aligned there before writing it
+    op.write_full(*meta.data);
+    if (state->compressed) {
+      uint32_t alloc_hint_flags = librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
+      op.set_alloc_hint2(0, 0, alloc_hint_flags);
+    }
+  }
+
+  if (state->is_atomic) {
+    bufferlist bl;
+    bl.append(state->write_tag.c_str(), state->write_tag.size() + 1);
+    op.setxattr(RGW_ATTR_ID_TAG, bl);
+    if (meta.modify_tail) {
+      op.setxattr(RGW_ATTR_TAIL_TAG, bl);
+    }
+  }
 
   if (real_clock::is_zero(meta.set_mtime)) {
     meta.set_mtime = real_clock::now();
@@ -3388,16 +3410,6 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   struct timespec mtime_ts = real_clock::to_timespec(meta.set_mtime);
   op.mtime2(&mtime_ts);
-
-  if (meta.data) {
-    /* if we want to overwrite the data, we also want to overwrite the
-       xattrs, so just remove the object */
-    op.write_full(*meta.data);
-    if (state->compressed) {
-      uint32_t alloc_hint_flags = librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
-      op.set_alloc_hint2(0, 0, alloc_hint_flags);
-    }
-  }
 
   string etag;
   string content_type;
@@ -7701,7 +7713,7 @@ int RGWRados::Object::check_preconditions(const DoutPrefixProvider *dpp, std::op
 }
 
 int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp, ObjectWriteOperation& op, bool reset_obj,
-                                                  const string *ptag, bool modify_tail, bool set_attr_id_tag, optional_yield y)
+                                                  const string *ptag, bool set_attr_id_tag, optional_yield y)
 {
   if (!state->is_atomic) {
     ldpp_dout(dpp, 20) << "prepare_atomic_modification: state is not atomic. state=" << (void *) state << dendl;
@@ -7734,15 +7746,8 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
   } else {
     append_rand_alpha(store->ctx(), state->write_tag, state->write_tag, 32);
   }
-  bufferlist bl;
-  bl.append(state->write_tag.c_str(), state->write_tag.size() + 1);
-
+  // the caller sets it as RGW_ATTR_ID_TAG, after the data
   ldpp_dout(dpp, 10) << "setting object write_tag=" << state->write_tag << dendl;
-
-  op.setxattr(RGW_ATTR_ID_TAG, bl);
-  if (modify_tail) {
-    op.setxattr(RGW_ATTR_TAIL_TAG, bl);
-  }
 
   return 0;
 }
