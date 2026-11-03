@@ -612,6 +612,16 @@ You may set values for the following keys:
    :Default: ``0``
 
 
+.. _pct_update_delay:
+
+.. describe:: pct_update_delay
+
+   :Description: How long (in seconds) a primary OSD waits, after the last write to a PG completes, before telling the replicas how far that PG has committed.
+
+   :Type: Integer
+   :Default: unset (no such update is sent)
+
+
 Getting Pool Values
 ===================
 
