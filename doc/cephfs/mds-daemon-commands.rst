@@ -238,6 +238,8 @@ Journal and Cache
     waits until the MDS has that OSD map. See
     :ref:`background_blocklisting_and_osd_epoch_barrier`.
 
+.. _cephfs-mds-daemon-commands-dirfrags:
+
 Subtrees and Directory Fragments
 ================================
 
