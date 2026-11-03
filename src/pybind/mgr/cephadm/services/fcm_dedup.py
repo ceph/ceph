@@ -1,6 +1,6 @@
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, cast
 
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import FcmDedupSpec, ServiceSpec
 from .service_registry import register_cephadm_service
 from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext
 from ..schedule import DaemonPlacement
@@ -15,15 +15,23 @@ class FcmDedupService(CephService):
         spec: ServiceSpec,
         candidates: Iterable[DaemonPlacement],
     ) -> List[DaemonPlacement]:
-        """One fcm-dedup daemon per 'in' OSD, placed on the host that
-        runs the OSD. The daemon id is the OSD id.
+        """One fcm-dedup daemon per 'in' OSD listed in spec.osd_ids,
+        placed on the host that runs the OSD. The daemon id is the OSD id.
         """
+        fcm_spec = cast(FcmDedupSpec, spec)
+        if not fcm_spec.osd_ids:
+            return []
+
+        target_osds = {str(i) for i in fcm_spec.osd_ids}
+
         osd_ids_by_host: Dict[str, List[str]] = {}
         osd_metadata = self.mgr.get('osd_metadata')
         for osd in self.mgr.get('osd_map')['osds']:
             if osd.get('in') != 1:
                 continue
             osd_id = str(osd['osd'])
+            if osd_id not in target_osds:
+                continue
             hostname = osd_metadata.get(osd_id, {}).get('hostname', '')
             if hostname:
                 osd_ids_by_host.setdefault(hostname.split('.')[0], []).append(osd_id)

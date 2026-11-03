@@ -3944,6 +3944,7 @@ class FcmDedupSpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 osd_ids: Optional[List[int]] = None,
                  ):
         assert service_type == 'fcm-dedup'
 
@@ -3956,6 +3957,8 @@ class FcmDedupSpec(ServiceSpec):
             config=config,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args)
+
+        self.osd_ids = osd_ids
 
 
 yaml.add_representer(FcmDedupSpec, ServiceSpec.yaml_representer)
