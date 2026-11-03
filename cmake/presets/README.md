@@ -68,7 +68,6 @@ cmake/presets/
   generate_host.sh         # Writes host.json from detect_host.sh
   base.json                # Composes debug/release from defaults + host + user
   client.json              # Client component presets
-  rgw.json                 # RGW component presets
 ```
 
 Inheritance flows like this:
@@ -82,7 +81,7 @@ user.json     (_user-debug, _user-release)   ← manual overrides
        ↓
 base.json     (debug, release)
        ↓
-client.json / rgw.json  (component presets)
+client.json   (component presets)
 ```
 
 ## Host detection (`host.json`)
@@ -156,7 +155,7 @@ CMake also supports a root-level `CMakeUserPresets.json` for per-user settings. 
 
 ## Creating a new component preset
 
-Follow the pattern used by `client.json` and `rgw.json`:
+Follow the pattern used by `client.json`:
 
 1. **Create a new file** in this directory, e.g. `mycomponent.json`.
 
@@ -204,7 +203,6 @@ Follow the pattern used by `client.json` and `rgw.json`:
      "include": [
        "cmake/presets/base.json",
        "cmake/presets/client.json",
-       "cmake/presets/rgw.json",
        "cmake/presets/mycomponent.json"
      ]
    }
