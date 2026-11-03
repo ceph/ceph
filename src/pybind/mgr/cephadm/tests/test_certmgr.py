@@ -2167,6 +2167,29 @@ class TestTLSObjectStore(unittest.TestCase):
         assert {h: o.data for h, o in store.objects_by_name["per_host1"].items()} == {
             "host-a": "cert-a", "host-b": "cert-b", "host-c": "cert-c"}
 
+    def test_load_does_not_replay_moved_targets_kept_with_undecodable_ones(self):
+        """
+        A per-name entry with a target that cannot be decoded keeps only that
+        target once the others are moved. Otherwise the moved targets would be
+        applied again on every load, over any newer per-target entry.
+        """
+        bad_payload = {"no-data": True}
+        old_layout = {
+            "host-a": MockTLSObject.to_json(MockTLSObject("cert-a")),
+            "host-bad": bad_payload,
+        }
+        self.mgr.set_store(f"{self.store.store_prefix}per_host1", json.dumps(old_layout))
+
+        store = self._reloaded_store()
+        assert store.get_tlsobject("per_host1", host="host-a").data == "cert-a"
+        assert store.get_tlsobject("per_host1", host="host-bad") is None
+        assert json.loads(self.mgr.store[f"{self.store.store_prefix}per_host1"]) == {"host-bad": bad_payload}
+
+        store.save_tlsobject("per_host1", "renewed-cert-a", host="host-a")
+        store = self._reloaded_store()
+        assert store.get_tlsobject("per_host1", host="host-a").data == "renewed-cert-a"
+        assert json.loads(self.mgr.store[f"{self.store.store_prefix}per_host1"]) == {"host-bad": bad_payload}
+
     def test_many_targets_survive_a_reload(self):
         """
         One entry for every host's copy of a cephadm-signed key outgrew the

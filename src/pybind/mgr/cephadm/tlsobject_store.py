@@ -275,10 +275,10 @@ class TLSObjectStore():
     def load(self) -> None:
         # Scoped names whose objects were reset by this load
         loaded: Set[str] = set()
-        # Targets found in a per-name entry, and the names with a target that
-        # could not be decoded there; see _move_legacy_targets()
+        # Targets found in a per-name entry, and the raw payloads of those that
+        # could not be decoded there, by name; see _move_legacy_targets()
         legacy_targets: Dict[str, Dict[str, TLSObjectProtocol]] = {}
-        undecodable: Set[str] = set()
+        undecodable: Dict[str, Dict[str, Any]] = {}
 
         for k, v in self.mgr.get_store_prefix(self.store_prefix).items():
             obj_name = k[len(self.store_prefix):]
@@ -327,7 +327,7 @@ class TLSObjectStore():
                         else:
                             logger.debug("TLSObjectStore: Skipping tombstone for %r (target %r)", obj_name, target)
                     except Exception as e:
-                        undecodable.add(obj_name)
+                        undecodable.setdefault(obj_name, {})[target] = payload
                         key_preview, vlen, vstart = _kv_preview(k, str(payload))
                         logger.warning(
                             "TLSObjectStore: Failed to decode scoped TLS object %r (target %r): %r. "
@@ -381,21 +381,21 @@ class TLSObjectStore():
                 self.objects_by_name[obj_name][target] = tlsobject
 
     def _move_legacy_targets(self, legacy_targets: Dict[str, Dict[str, TLSObjectProtocol]],
-                             undecodable: Set[str]) -> None:
+                             undecodable: Dict[str, Dict[str, Any]]) -> None:
         """
         Move targets found in per-name entries to entries of their own.
 
         Per-name entries held every target until targets got entries of their
         own, and an older mgr may have written one since. Either way such an
         entry is newer than any per-target entry for the same name, so its
-        targets win. Once moved, the per-name entry is reset to an empty map,
-        unless a target in it could not be decoded.
+        targets win. Once moved, the per-name entry keeps only the targets that
+        could not be decoded (left for inspection), so moved targets are never
+        applied again on a later load.
         """
         for obj_name, targets in legacy_targets.items():
             self.objects_by_name[obj_name].update(targets)
             for target, tlsobject in targets.items():
                 self._set_target_store(obj_name, target, tlsobject)
-            if obj_name not in undecodable:
-                self._set_store(obj_name, {})
+            self._set_store(obj_name, undecodable.get(obj_name, {}))
             logger.info("TLSObjectStore: Moved %d target(s) of %r to per-target entries",
                         len(targets), obj_name)
