@@ -1753,13 +1753,13 @@ class HostCache():
         return True
 
     def all_host_metadata_up_to_date(self) -> bool:
-        if [h for h in self.get_hosts() if (not self.host_metadata_up_to_date(h) and not self.is_host_unreachable(h))]:
-            # this function is primarily for telling if it's safe to try and apply a service
-            # spec. Since offline/maintenance hosts aren't considered in that process anyway
-            # we don't want to return False if the host without up-to-date metadata is in one
-            # of those two categories.
-            return False
-        return True
+        # this function is primarily for telling if it's safe to try and apply a service
+        # spec. Since offline/maintenance hosts aren't considered in that process anyway
+        # we don't want to return False if the host without up-to-date metadata is in one
+        # of those two categories.
+        unreachable = {spec.hostname for spec in self.get_unreachable_hosts()}
+        return all(self.host_metadata_up_to_date(h)
+                   for h in self.get_hosts() if h not in unreachable)
 
     def add_daemon(self, host, dd):
         # type: (str, orchestrator.DaemonDescription) -> None
