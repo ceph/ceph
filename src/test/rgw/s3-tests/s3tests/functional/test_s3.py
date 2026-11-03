@@ -3944,16 +3944,20 @@ def test_bucket_create_naming_dns_dash_dot():
 def test_bucket_create_exists():
     # aws-s3 default region allows recreation of buckets
     # but all other regions fail with BucketAlreadyOwnedByYou.
+    # rgw follows the default region unless rgw_bucket_eexist_override is true:
+    # - rgw_bucket_eexist_override false: 200 (OK)
+    # - rgw_bucket_eexist_override true: 409 (BucketAlreadyOwnedByYou)
     bucket_name = get_new_bucket_name()
     client = get_client()
 
     client.create_bucket(Bucket=bucket_name)
     try:
         response = client.create_bucket(Bucket=bucket_name)
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 200
     except ClientError as e:
         status, error_code = _get_status_and_error_code(e.response)
-        assert e.status == 409
-        assert e.error_code == 'BucketAlreadyOwnedByYou'
+        assert status == 409
+        assert error_code == 'BucketAlreadyOwnedByYou'
 
 @pytest.mark.fails_on_dbstore
 def test_bucket_get_location():
@@ -3986,7 +3990,24 @@ def test_bucket_create_exists_nonowner():
     assert error_code == 'BucketAlreadyExists'
 
 @pytest.mark.fails_on_dbstore
+def test_bucket_create_exists_nonowner_new_acl():
+    # a non-owner gets BucketAlreadyExists without any detail about the
+    # existing bucket's configuration
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    alt_client = get_alt_client()
+
+    client.create_bucket(Bucket=bucket_name)
+    e = assert_raises(ClientError, alt_client.create_bucket, Bucket=bucket_name, ACL='public-read')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 409
+    assert error_code == 'BucketAlreadyExists'
+    assert 'Cannot modify' not in e.response['Error'].get('Message', '')
+
+@pytest.mark.fails_on_dbstore
 def test_bucket_recreate_overwrite_acl():
+    # the owner gets BucketAlreadyOwnedByYou whether or not
+    # rgw_bucket_eexist_override is set: rgw does not reset the acl
     bucket_name = get_new_bucket_name()
     client = get_client()
 
@@ -3994,10 +4015,12 @@ def test_bucket_recreate_overwrite_acl():
     e = assert_raises(ClientError, client.create_bucket, Bucket=bucket_name)
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 409
-    assert error_code == 'BucketAlreadyExists'
+    assert error_code == 'BucketAlreadyOwnedByYou'
 
 @pytest.mark.fails_on_dbstore
 def test_bucket_recreate_new_acl():
+    # the owner gets BucketAlreadyOwnedByYou whether or not
+    # rgw_bucket_eexist_override is set: rgw does not change the acl
     bucket_name = get_new_bucket_name()
     client = get_client()
 
@@ -4005,7 +4028,21 @@ def test_bucket_recreate_new_acl():
     e = assert_raises(ClientError, client.create_bucket, Bucket=bucket_name, ACL='public-read')
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 409
-    assert error_code == 'BucketAlreadyExists'
+    assert error_code == 'BucketAlreadyOwnedByYou'
+
+@pytest.mark.fails_on_dbstore
+@pytest.mark.object_lock
+def test_bucket_recreate_new_object_lock():
+    # the owner can't change object lock by re-creating the bucket
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+
+    client.create_bucket(Bucket=bucket_name)
+    e = assert_raises(ClientError, client.create_bucket, Bucket=bucket_name,
+                      ObjectLockEnabledForBucket=True)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 409
+    assert error_code == 'BucketAlreadyOwnedByYou'
 
 def check_access_denied(fn, *args, **kwargs):
     e = assert_raises(ClientError, fn, *args, **kwargs)

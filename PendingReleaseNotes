@@ -70,6 +70,19 @@
   evaluation rules. They had previously only consulted the role's trust policy.
   This means that account users will now require an Allow from identity policy
   to assume roles in other accounts.
+* RGW: S3 CreateBucket on an existing bucket now returns AWS-compatible error
+  codes. The bucket owner gets ``409 BucketAlreadyOwnedByYou`` (previously
+  ``409 BucketAlreadyExists``) when ``rgw_bucket_eexist_override`` is ``true``,
+  or when the request asks for a different zonegroup, placement, index type or
+  shard count, object lock setting or ACL than the existing bucket. Other users
+  still get ``409 BucketAlreadyExists``, now without details about the existing
+  bucket; a creation that races with another user's now fails with that error
+  instead of returning ``200 OK``. Re-creating an owned bucket without changes
+  still returns ``200 OK`` by default.
+* RGW: Swift container PUT on an existing container is now idempotent and updates
+  its metadata, including ACLs, instead of failing with ``409`` when the ACL or
+  object lock setting differs. Changing the zonegroup or storage policy of an
+  existing container is still rejected.
 
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
