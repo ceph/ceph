@@ -999,6 +999,126 @@ Special Error Responses
 
 None.
 
+Get Account Stats
+=================
+.. versionadded:: Vampire
+
+Get the storage stats of an account, aggregated over all of the buckets it
+owns. Either an ``id`` or a ``name`` must be provided.
+
+These are the stats that the account quota is enforced against. They are
+not updated on every write: changes to the account's buckets are added to
+them every ``rgw_user_quota_bucket_sync_interval``, and they are fully
+recalculated every ``rgw_user_quota_sync_interval``. ``last_updated`` and
+``last_synced`` indicate when these last happened.
+
+:caps: accounts=read
+
+Syntax
+~~~~~~
+
+::
+
+	GET /{admin}/account?stats&format=json HTTP/1.1
+	Host: {fqdn}
+
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``id``
+
+:Description: The ID of the account to get stats for.
+:Type: String
+:Example: ``RGW00000000000000001``
+:Required: No
+
+``tenant``
+
+:Description: The Tenant under which the account exists.
+:Type: String
+:Example: ``tenant``
+:Required: No
+
+``name``
+
+:Description: The name of the account to get stats for.
+:Type: String
+:Example: ``account_name``
+:Required: No
+
+``sync-stats``
+
+:Description: Recalculate the account stats from all of its buckets before
+              returning them. This reads the index of every bucket owned by
+              the account, so it can be expensive for large accounts.
+:Type: Boolean
+:Example: True [False]
+:Required: No
+
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+If successful, the response contains the following account stats.
+
+``stats``
+
+:Description: A container for the account storage stats.
+:Type: Container
+
+``size``
+
+:Description: The total size of the account's objects, in bytes.
+:Type: Integer
+:Parent: ``stats``
+
+``size_actual``
+
+:Description: The total size of the account's objects in bytes, with each
+              object rounded up to 4 KiB. Unless ``check_on_raw`` is set, this
+              is the size that the account quota is checked against.
+:Type: Integer
+:Parent: ``stats``
+
+``size_kb``
+
+:Description: ``size`` in kilobytes.
+:Type: Integer
+:Parent: ``stats``
+
+``size_kb_actual``
+
+:Description: ``size_actual`` in kilobytes.
+:Type: Integer
+:Parent: ``stats``
+
+``num_objects``
+
+:Description: The total number of objects owned by the account.
+:Type: Integer
+:Parent: ``stats``
+
+The ``size_utilized`` and ``size_kb_utilized`` fields are also present, but
+utilized size isn't tracked at the account level, so they are always 0.
+
+``last_synced``
+
+:Description: The last time the stats were fully recalculated from the
+              account's buckets.
+:Type: Timestamp
+
+``last_updated``
+
+:Description: The last time the stats were updated.
+:Type: Timestamp
+
+
+Special Error Responses
+~~~~~~~~~~~~~~~~~~~~~~~
+
+None.
+
 Remove Account
 ==============
 .. versionadded:: Squid
