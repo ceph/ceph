@@ -23,6 +23,7 @@
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <set>
@@ -52,7 +53,8 @@ private:
   std::unique_ptr<StandbyPyModules> standby_modules;
   std::unique_ptr<ThreadMonitor> thread_monitor;
 
-  PyThreadState *pMainThreadState;
+  PyThreadState *pMainThreadState = nullptr;
+  std::atomic<bool> python_ready{false};
 
   // We have our own copy of MgrMap, because we are constructed
   // before ClusterState exists.
@@ -134,6 +136,13 @@ public:
   }
 
   void init();
+
+  /**
+   * Run an admin socket "py ..." debug command in the main interpreter
+   * (see mgr_debug.py).  Safe to call from any thread.
+   */
+  int handle_py_debug(const cmdmap_t& cmdmap, std::ostream& errss,
+                      ceph::buffer::list& outbl);
 
   void upgrade_config(
       MonClient *monc,
