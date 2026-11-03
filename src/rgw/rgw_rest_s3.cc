@@ -3219,7 +3219,7 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
 
       for (const auto& pair : part.fields) {
         ldpp_dout(this, 20) << "field.name=" << pair.first << dendl;
-        ldpp_dout(this, 20) << "field.val=" << pair.second.val << dendl;
+        // Form fields may contain signatures, policy proofs or session tokens.
         ldpp_dout(this, 20) << "field.params:" << dendl;
 
         for (const auto& param_pair : pair.second.params) {
@@ -3500,7 +3500,7 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
     }
 
     decoded_policy.append('\0'); // NULL terminate
-    ldpp_dout(this, 20) << "POST policy: " << decoded_policy.c_str() << dendl;
+    ldpp_dout(this, 20) << "POST policy decoded" << dendl;
 
 
     int r = post_policy.from_json(decoded_policy, err_msg);
@@ -6601,9 +6601,7 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
   std::string canonical_headers = \
     gen_v4_canonical_headers(info, extra_headers, &signed_hdrs);
 
-  using sanitize = rgw::crypt_sanitize::log_content;
-  ldpp_dout(dpp, 10) << "canonical headers format = "
-                     << sanitize{canonical_headers} << dendl;
+  ldpp_dout(dpp, 10) << "canonical headers constructed" << dendl;
 
   bool is_non_s3_op = !s3_op;
 
@@ -6735,9 +6733,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   boost::optional<std::string> canonical_headers = \
     get_v4_canonical_headers(s->info, signed_hdrs, using_qs);
   if (canonical_headers) {
-    using sanitize = rgw::crypt_sanitize::log_content;
-    ldpp_dout(s, 10) << "canonical headers format = "
-                      << sanitize{*canonical_headers} << dendl;
+    ldpp_dout(s, 10) << "canonical headers constructed" << dendl;
   } else {
     throw -EPERM;
   }
@@ -6783,12 +6779,23 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                          std::move(canonical_req_hash),
                                          s);
 
-  const auto sig_factory = std::bind(rgw::auth::s3::get_v4_signature,
-                                     credential_scope,
-                                     std::placeholders::_1,
-                                     std::placeholders::_2,
-                                     std::placeholders::_3,
-                                     s);
+  const auto sig_factory = [scope = std::string(credential_scope), s](
+    CephContext* cct, const std::string& root, const string_to_sign_t& proof) {
+    return rgw::auth::s3::get_v4_signature(scope, cct, root, proof, s);
+  };
+
+  DerivedKeyAuth derived;
+  derived.credential_scope = credential_scope;
+  derived.request_date = date;
+  const auto first_slash = credential_scope.find('/');
+  const auto second_slash = credential_scope.find('/', first_slash + 1);
+  const auto third_slash = credential_scope.find('/', second_slash + 1);
+  derived.date = credential_scope.substr(0, first_slash);
+  derived.region = credential_scope.substr(first_slash + 1,
+                                          second_slash - first_slash - 1);
+  derived.service = credential_scope.substr(second_slash + 1,
+                                           third_slash - second_slash - 1);
+  derived.signature_factory = get_v4_signature_from_signing_key;
 
   // some ops don't expect a request body at all, so never call complete() to
   // validate the payload hash. check empty signed payloads now and return a
@@ -6819,13 +6826,18 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       is_v4_payload_empty(s) ||
       is_non_s3_op) {
     ldpp_dout(s, 10) << __func__ << ": UNSIGNED-PAYLOAD or other v4 no-completer case" << dendl;
+    derived.completer_factory = [](const sha256_digest_t&) {
+      return rgw::auth::Completer::cmplptr_t{};
+    };
     return {
       access_key_id,
       client_signature,
       session_token,
       std::move(string_to_sign),
       sig_factory,
-      null_completer_factory
+      null_completer_factory,
+      ProofKind::s3_v4,
+      std::move(derived)
     };
   } else {
     /* We're going to handle a signed payload. Be aware that even empty HTTP
@@ -6908,13 +6920,18 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       const auto cmpl_factory = std::bind(AWSv4ComplSingle::create,
                                           s,
                                           std::placeholders::_1);
+      derived.completer_factory = [s](const sha256_digest_t&) {
+        return AWSv4ComplSingle::create(s, boost::none);
+      };
       return {
         access_key_id,
         client_signature,
         session_token,
         std::move(string_to_sign),
         sig_factory,
-        cmpl_factory
+        cmpl_factory,
+        ProofKind::s3_v4,
+        std::move(derived)
       };
     } else {
       ldpp_dout(s, 10) << "body content detected in multiple chunks" << dendl;
@@ -6963,18 +6980,28 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 
       const auto cmpl_factory = std::bind(AWSv4ComplMulti::create,
                                           s,
-                                          date,
-                                          credential_scope,
-                                          client_signature,
-					  flags,
+                                          std::string(date),
+                                          std::string(credential_scope),
+                                          std::string(client_signature),
+                                          flags,
                                           std::placeholders::_1);
+      derived.completer_factory =
+        [s, request_date = std::string(date),
+         scope = std::string(credential_scope),
+         seed = std::string(client_signature), flags](
+           const sha256_digest_t& signing_key) {
+          return AWSv4ComplMulti::create_from_signing_key(
+            s, request_date, scope, seed, flags, signing_key);
+        };
       return {
         access_key_id,
         client_signature,
         session_token,
         std::move(string_to_sign),
         sig_factory,
-        cmpl_factory
+        cmpl_factory,
+        ProofKind::s3_v4,
+        std::move(derived)
       };
     }
   }
@@ -7052,13 +7079,9 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   utime_t header_time;
   if (! rgw_create_s3_canonical_header(s, s->op_type, s->info, &header_time, string_to_sign,
         qsr)) {
-    ldpp_dout(s, 10) << "failed to create the canonized auth header\n"
-                   << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
+    ldpp_dout(s, 10) << "failed to create the canonized auth header" << dendl;
     throw -EPERM;
   }
-
-  ldpp_dout(s, 10) << "string_to_sign:\n"
-                 << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
 
   if (!qsr && !is_time_skew_ok(header_time)) {
     throw -ERR_REQUEST_TIME_SKEWED;
@@ -7070,7 +7093,9 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     std::move(session_token),
     std::move(string_to_sign),
     rgw::auth::s3::get_v2_signature,
-    null_completer_factory
+    null_completer_factory,
+    ProofKind::s3_v2,
+    boost::none
   };
 }
 
@@ -7084,7 +7109,9 @@ AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
     s->auth.s3_postobj_creds.x_amz_security_token,
     s->auth.s3_postobj_creds.encoded_policy.to_str(),
     rgw::auth::s3::get_v2_signature,
-    null_completer_factory
+    null_completer_factory,
+    ProofKind::browser_v2,
+    boost::none
   };
 }
 
@@ -7100,14 +7127,11 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
 
   /* grab credential scope */
   const std::string_view credential_scope = credential.substr(pos + 1);
-  ldpp_dout(s, 10) << "credential scope = " << credential_scope << dendl;
 
-  const auto sig_factory = std::bind(rgw::auth::s3::get_v4_signature,
-                                     credential_scope,
-                                     std::placeholders::_1,
-                                     std::placeholders::_2,
-                                     std::placeholders::_3,
-                                     s);
+  const auto sig_factory = [scope = std::string(credential_scope), s](
+    CephContext* cct, const std::string& root, const string_to_sign_t& proof) {
+    return rgw::auth::s3::get_v4_signature(scope, cct, root, proof, s);
+  };
 
   return {
     access_key_id,
@@ -7115,7 +7139,9 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
     s->auth.s3_postobj_creds.x_amz_security_token,
     s->auth.s3_postobj_creds.encoded_policy.to_str(),
     sig_factory,
-    null_completer_factory
+    null_completer_factory,
+    ProofKind::browser_v4,
+    boost::none
   };
 }
 
@@ -7141,15 +7167,23 @@ AWSEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s,
   if (auth_data.access_key_id.empty() || auth_data.client_signature.empty()) {
     return result_t::deny(-EINVAL);
   } else {
-    return authenticate(dpp,
-                        auth_data.access_key_id,
-		        auth_data.client_signature,
-			auth_data.session_token,
-			auth_data.string_to_sign,
-                        auth_data.signature_factory,
-			auth_data.completer_factory,
-			s, y);
+    return authenticate(dpp, auth_data, s, y);
   }
+}
+
+AWSEngine::result_t
+AWSEngine::authenticate(const DoutPrefixProvider* dpp,
+                        const VersionAbstractor::auth_data_t& auth_data,
+                        const req_state* s, optional_yield y) const
+{
+  return authenticate(dpp,
+                      auth_data.access_key_id,
+                      auth_data.client_signature,
+                      auth_data.session_token,
+                      auth_data.string_to_sign,
+                      auth_data.signature_factory,
+                      auth_data.completer_factory,
+                      s, y);
 }
 
 } // namespace rgw::auth::s3
@@ -7326,12 +7360,7 @@ rgw::auth::s3::LocalEngine::authenticate(
     signature_factory(cct, k.key, string_to_sign);
   auto compare = signature.compare(server_signature);
 
-  ldpp_dout(dpp, 15) << "string_to_sign="
-                 << rgw::crypt_sanitize::log_content{string_to_sign}
-                 << dendl;
-  ldpp_dout(dpp, 15) << "server signature=" << server_signature << dendl;
-  ldpp_dout(dpp, 15) << "client signature=" << signature << dendl;
-  ldpp_dout(dpp, 15) << "compare=" << compare << dendl;
+  ldpp_dout(dpp, 15) << "signature matched=" << (compare == 0) << dendl;
 
   if (compare != 0) {
     return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
@@ -7520,12 +7549,7 @@ rgw::auth::s3::STSEngine::authenticate(
     signature_factory(cct, secret_access_key, string_to_sign);
   auto compare = signature.compare(server_signature);
 
-  ldpp_dout(dpp, 15) << "string_to_sign="
-                 << rgw::crypt_sanitize::log_content{string_to_sign}
-                 << dendl;
-  ldpp_dout(dpp, 15) << "server signature=" << server_signature << dendl;
-  ldpp_dout(dpp, 15) << "client signature=" << signature << dendl;
-  ldpp_dout(dpp, 15) << "compare=" << compare << dendl;
+  ldpp_dout(dpp, 15) << "signature matched=" << (compare == 0) << dendl;
 
   if (compare != 0) {
     return result_t::reject(-ERR_SIGNATURE_NO_MATCH);

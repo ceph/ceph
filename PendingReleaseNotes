@@ -70,6 +70,7 @@
   evaluation rules. They had previously only consulted the role's trust policy.
   This means that account users will now require an Allow from identity policy
   to assume roles in other accounts.
+* RGW: Added opt-in support for OpenStack Keystone scoped S3 signing-key exchange (``rgw_keystone_s3_auth_mode = signing_key``), replacing legacy root-secret retrieval with date- and service-scoped derived keys for AWS SigV4 authentication.
 
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a

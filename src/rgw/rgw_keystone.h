@@ -83,6 +83,13 @@ public:
 class TokenEnvelope;
 class TokenCache;
 
+// Per-request overrides; existing callers retain the HTTP client's defaults.
+struct RequestOptions {
+  long connect_timeout = 0;
+  long timeout = 0;
+  bool sensitive = false;
+};
+
 class Service {
 public:
   class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
@@ -114,11 +121,13 @@ public:
                              const Config& config,
                              optional_yield y,
                              std::string& token,
-                             bool& token_cached);
+                             bool& token_cached,
+                             RequestOptions options = {});
   static int issue_admin_token_request(const DoutPrefixProvider *dpp,
                                        const Config& config,
                                        optional_yield y,
-                                       TokenEnvelope& token);
+                                       TokenEnvelope& token,
+                                       RequestOptions options = {});
   static int get_keystone_barbican_token(const DoutPrefixProvider *dpp,
                                          optional_yield y,
                                          std::string& token);
@@ -198,6 +207,12 @@ public:
   std::optional<ApplicationCredential> app_cred;
 
   void decode(JSONObj* obj);
+
+  // Strict identity-only response, not a bearer token. Returns 0 or -EINVAL;
+  // failure clears this envelope and credential_id_out. The caller enforces
+  // expiry and role admission before granting or caching this identity.
+  int decode_s3_authentication(JSONObj* authentication,
+                               std::string& credential_id_out);
 
 public:
   /* We really need the default ctor because of the internals of TokenCache. */
