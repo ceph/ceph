@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - FS_DEGRADED
+      - MDS_UP_LESS_THAN_MAX
+      - MDS_ESTIMATED_REPLAY_TIME
+      - MDS_SLOW_REQUEST
+      - MDS_CLIENTS_LAGGY
+      - slow request
+      - evicting unresponsive client
+tasks:
+- cephfs_test_runner:
+    fail_on_skip: false
+    modules:
+      - tasks.cephfs.test_rejoin
