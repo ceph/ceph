@@ -283,6 +283,12 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
       ocs = o->c->get_onode_cache();
       ocs->lock.lock();
     }
+    if (ocs != this) {
+      // the onode is in another shard's lists now: that shard does the work
+      ocs->lock.unlock();
+      ocs->maybe_unpin(o);
+      return;
+    }
     if (o->is_cached() && o->pin_nref == 1) {
       if(!o->lru_item.is_linked()) {
         if (o->exists) {
