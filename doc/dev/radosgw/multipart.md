@@ -16,17 +16,17 @@ The missing piece of this design is crash recovery. Once a Complete request ente
 
 To complete this design for recovery, we need two additional building blocks:
 
-#### 1. Detecting Liveness
+#### 1. Enforcing Mutual Exclusion
 
 When a Complete or Abort request finds the upload in this pending state, it cannot attempt recovery unless it can prove that the original operation will not eventually succeed.
 
-This can be accomplished with the Watch/Notify primitive: if the exclusive writer holds a Watch on the multipart meta object, other candidate writers can send a Notify to check whether they're still watching.
+Complete can address this by guarding its head object write with an assertion that the lock has not expired. As long as the osd rejects the write after its lease has expired, mutual exclusion is preserved.
 
-Before trying to enter this pending state, candidate writers establish a watch on the multipart meta object. If they fail to acquire exclusive access to the upload by setting this pending state (another writer already has exclusive access), they send a notify message.
+The assert_locked() method from cls_lock can't be used for this, because the lock is held on a different rados object. What we can do is pass the lock's current expiration timestamp with the request, and have the osd check that before applying the write. This involves comparing a timestamp generated on radosgw against the osd's current time, so is subject to clock skew. We'll want to set some reasonable limit on acceptable skew (10 seconds?), and subtract that from the expiration values we send.
 
-If any watcher fails to respond before timeout, the result is inconclusive so we assume they're still working. If the exclusive writer responds, they're still working. Otherwise, the exclusive writer is no longer watcher watching so we can attempt to take over exclusive access by atomically changing their ID_TAG/VersionId to our own.
+Rados doesn't provide an existing primitive for current time comparisons, so we'll need to introduce a new cls method for this. cls_rgw_obj_check_mtime() from cls_rgw is a good example to copy. Until osds upgrade to a release that supports this new method, calls will fail with EOPNOTSUPP errors. Radosgw should handle these errors by retrying the head object write without this guard.
 
-If we instead tried to establish the watch only after successfully acquiring exclusive access, racing notify messages would assume that we've crashed. So we must establish the watch first, meaning that the object will have watchers that aren't exclusive writers. To disambiguate these, each watcher replies to these notify messages with their own ID_TAG and the notifier compares that against what it read from the multipart meta object.
+By rejecting this head object write that commits the multipart upload, we can guarantee that other requests that successfully acquire the lock will be able to detect its completion. Abort should use the same guard for its write operations, at least on the first part objects consulted for completion.
 
 #### 2. Detecting Completion
 
@@ -40,7 +40,3 @@ Handling the other cases involves looking for evidence of garbage collection. Fo
 - the part object is present in the corresponding gc queue, with a tag that qualifies as the wildcard (it should either match the stored ID_TAG, or the multipart upload id)
 
 Scanning the gc queue is potentially expensive, especially after moving to unbounded fifo queues. We select the corresponding gc queue using a hash of its gc tag, so changes to rgw_gc_max_objs would make this check unreliable.
-
-### Rolling Upgrade
-
-Before upgrade, old radosgw instances still rely on cls_lock so upgraded radosgws have to continue taking it. We can remove the use of cls lock (MPSerializer) after two major releases. After the upgrade completes, the admin can safely disable this lock by setting rgw_mp_lock_max_time=0.
