@@ -538,6 +538,67 @@ describe('NvmeofGroupFormComponent', () => {
       expect(component.groupForm.controls.enableMtls.value).toBe(false);
     });
 
+    it('should keep an added gateway when editing an mTLS group', () => {
+      spyOn(cephServiceService, 'update').and.returnValue(of({}));
+      spyOn(router, 'navigateByUrl');
+
+      component.preSelectedHostnames = ['ceph-node-01', 'ceph-node-02'];
+      component.gatewayNodeComponent = {
+        hosts: [
+          { hostname: 'ceph-node-01' },
+          { hostname: 'ceph-node-02' },
+          { hostname: 'ceph-node-03' }
+        ],
+        getSelectedHostnames: (): string[] => ['ceph-node-01', 'ceph-node-02', 'ceph-node-03']
+      } as any;
+
+      component.onSubmit();
+
+      expect(cephServiceService.update).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          service_id: 'Test1',
+          pool: 'rbd',
+          placement: { hosts: ['ceph-node-01', 'ceph-node-02', 'ceph-node-03'] },
+          ssl: true,
+          enable_auth: true,
+          certificate_source: 'cephadm-signed'
+        })
+      );
+    });
+
+    it('should keep gateways that are not listed yet when a new node is selected', () => {
+      spyOn(cephServiceService, 'update').and.returnValue(of({}));
+      spyOn(router, 'navigateByUrl');
+
+      component.preSelectedHostnames = ['ceph-node-01', 'ceph-node-02'];
+      component.gatewayNodeComponent = {
+        hosts: [{ hostname: 'ceph-node-03' }],
+        getSelectedHostnames: (): string[] => ['ceph-node-03']
+      } as any;
+
+      component.onSubmit();
+
+      expect(cephServiceService.update).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          placement: { hosts: ['ceph-node-01', 'ceph-node-02', 'ceph-node-03'] }
+        })
+      );
+    });
+
+    it('should not save the original gateways when a loaded selection is cleared', () => {
+      spyOn(cephServiceService, 'update').and.returnValue(of({}));
+
+      component.preSelectedHostnames = ['ceph-node-01', 'ceph-node-02'];
+      component.gatewayNodeComponent = {
+        hosts: [{ hostname: 'ceph-node-01' }, { hostname: 'ceph-node-02' }],
+        getSelectedHostnames: (): string[] => []
+      } as any;
+
+      component.onSubmit();
+
+      expect(cephServiceService.update).not.toHaveBeenCalled();
+    });
+
     it('should update service on submit in edit mode using existing service_id', () => {
       spyOn(cephServiceService, 'update').and.returnValue(of({}));
       // Edit path bypasses taskWrapperService to avoid the async task poller

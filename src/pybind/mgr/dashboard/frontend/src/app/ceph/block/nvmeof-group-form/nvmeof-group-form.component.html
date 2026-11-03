@@ -91,6 +91,7 @@
           class="cds-pt-3 cds-pb-3"
         >
           <cd-nvmeof-gateway-node
+            [groupName]="gatewayGroupName"
             [preSelectedHostnames]="preSelectedHostnames"
             (hostsLoaded)="onHostsLoaded($event)"
           ></cd-nvmeof-gateway-node>
