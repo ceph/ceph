@@ -885,6 +885,7 @@ public:
         bool keep_tail;
         bool completeMultipart;
         bool appendable;
+        std::optional<ceph::real_time> expires_at;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),

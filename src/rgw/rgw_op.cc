@@ -7912,7 +7912,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 
   op_ret =
-    upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
+    upload->complete(this, y, s->cct, *locked_until, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
                      s->object.get(), processed_prefixes, if_match, if_nomatch);
 

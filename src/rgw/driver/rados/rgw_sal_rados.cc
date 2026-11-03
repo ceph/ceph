@@ -4581,6 +4581,7 @@ int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
 
 int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				   optional_yield y, CephContext* cct,
+				   ceph::real_time meta_locked_until,
 				   map<int, string>& part_etags,
 				   list<rgw_obj_index_key>& remove_objs,
 				   uint64_t& accounted_size, bool& compressed,
@@ -4818,11 +4819,20 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.if_match = if_match;
   obj_op.meta.if_nomatch = if_nomatch;
+  // prevent the write if it gets delayed past our lock expiration. this
+  // comparison is subject to clock skew between the client and osd, so add a
+  // small fudge factor
+  obj_op.meta.expires_at = meta_locked_until - std::chrono::seconds(5);
 
   const req_context rctx{dpp, y, nullptr};
   ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
-  if (ret < 0)
-    return ret;
+
+  if (ret == -EOPNOTSUPP) {
+    // the osd hasn't upgraded yet, retry without cls_rgw_obj_check_expiry().
+    // this fallback was added for the V release, so can be removed for X
+    obj_op.meta.expires_at = std::nullopt;
+    ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
+  }
 
   return ret;
 }
@@ -4962,7 +4972,7 @@ MPRadosSerializer::~MPRadosSerializer()
 }
 
 static void renewal(const DoutPrefixProvider* dpp,
-                    rgw::sal::MPSerializer& serializer,
+                    rgw::sal::MPRadosSerializer& serializer,
                     librados::IoCtx& ioctx,
                     const std::string& oid,
                     rados::cls::lock::Lock lock,
@@ -5058,6 +5068,7 @@ void MPRadosSerializer::stop_renewal()
 
 int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
 {
+  const auto requested_at = ceph::real_clock::now();
   librados::ObjectWriteOperation op;
   op.assert_exists();
   lock_state.set_duration(dur);
@@ -5065,7 +5076,8 @@ int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan du
   lock_state.lock_exclusive(&op);
   int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
   if (! ret) {
-    locked = true;
+    // update lock expiration time
+    set_locked_until(requested_at + dur);
 
     start_renewal(dur);
 

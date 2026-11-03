@@ -1342,6 +1342,7 @@ int FilterMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct
 
 int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    optional_yield y, CephContext* cct,
+				    ceph::real_time meta_locked_until,
 				    std::map<int, std::string>& part_etags,
 				    std::list<rgw_obj_index_key>& remove_objs,
 				    uint64_t& accounted_size, bool& compressed,
@@ -1353,7 +1354,7 @@ int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
             const char *if_match,
             const char *if_nomatch)
 {
-  return next->complete(dpp, y, cct, part_etags, remove_objs, accounted_size,
+  return next->complete(dpp, y, cct, meta_locked_until, part_etags, remove_objs, accounted_size,
 			compressed, cs_info, ofs, tag, owner, olh_epoch,
 			nextObject(target_obj), processed_prefixes);
 }

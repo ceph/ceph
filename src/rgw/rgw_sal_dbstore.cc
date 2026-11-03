@@ -942,6 +942,7 @@ namespace rgw::sal {
 
   int DBMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				   optional_yield y, CephContext* cct,
+				   ceph::real_time meta_locked_until,
 				   map<int, string>& part_etags,
 				   list<rgw_obj_index_key>& remove_objs,
 				   uint64_t& accounted_size, bool& compressed,

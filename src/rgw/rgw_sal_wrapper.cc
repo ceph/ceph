@@ -1402,7 +1402,7 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   }
 
   ret = upload->complete(
-    dpp, y, g_ceph_context, part_etags, remove_objs,
+    dpp, y, g_ceph_context, *locked_until, part_etags, remove_objs,
     accounted_size, compressed, cs_info, ofs, tag, owner,
     0, target_obj.get(), processed_prefixes, nullptr, nullptr);
 
