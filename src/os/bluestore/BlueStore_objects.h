@@ -895,6 +895,12 @@ namespace bluestore {
     bool cached;              ///< Onode is logically in the cache
                               /// (it can be pinned and hence physically out
                               /// of it at the moment though)
+    bool cache_promoted = false; ///< in the cache's main LRU, not on probation
+                                 /// (protected by the cache shard's lock)
+    bool cache_later_hit = false; ///< on probation, and used once in an age bin
+                                  /// later than the one it came in
+    bool cache_popped = false;    ///< unlinked by a trim while pinned: it returns
+                                  /// to its list when the use ends, no arrival
     uint16_t prev_spanning_cnt = 0; /// spanning blobs count
     ExtentMap extent_map;
     BlueStore::BufferSpace bc;             ///< buffer cache

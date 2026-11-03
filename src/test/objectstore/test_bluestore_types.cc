@@ -4747,19 +4747,21 @@ TEST(OnodeCache, maybe_unpin_works_on_the_shard_that_holds_the_onode) {
     BlueStore::OnodeRef o = coll->onode_space.lookup(oid);
     ASSERT_TRUE(o);
   }
-  uint64_t onodes = 0, pinned = 0;
-  new_shard->add_stats(&onodes, &pinned);
+  uint64_t onodes = 0, pinned = 0, probation = 0;
+  new_shard->add_stats(&onodes, &pinned, &probation);
   ASSERT_EQ(1u, onodes);
+  ASSERT_EQ(0u, probation);
 
   // as if the caller had read the collection's shard before the split
   old_shard->maybe_unpin(raw);
 
-  onodes = pinned = 0;
-  old_shard->add_stats(&onodes, &pinned);
+  onodes = pinned = probation = 0;
+  old_shard->add_stats(&onodes, &pinned, &probation);
   EXPECT_EQ(0u, onodes);
   EXPECT_EQ(0u, pinned);
-  onodes = pinned = 0;
-  new_shard->add_stats(&onodes, &pinned);
+  EXPECT_EQ(0u, probation);
+  onodes = pinned = probation = 0;
+  new_shard->add_stats(&onodes, &pinned, &probation);
   EXPECT_EQ(1u, onodes);
   EXPECT_EQ(0u, pinned);
   // the touch stamps the onode into the age bin of the shard whose lists
@@ -4773,8 +4775,8 @@ TEST(OnodeCache, maybe_unpin_works_on_the_shard_that_holds_the_onode) {
   EXPECT_TRUE(coll->onode_space.lookup(oid));
   new_shard->flush();
   EXPECT_FALSE(coll->onode_space.lookup(oid));
-  onodes = pinned = 0;
-  new_shard->add_stats(&onodes, &pinned);
+  onodes = pinned = probation = 0;
+  new_shard->add_stats(&onodes, &pinned, &probation);
   EXPECT_EQ(0u, onodes);
 }
 
