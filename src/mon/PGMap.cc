@@ -3484,6 +3484,40 @@ void PGMap::get_health_checks(
     }
   }
 
+  // POOL_CRUSH_NO_ELIGIBLE_OSDS
+  {
+    list<string> detail;
+    for (auto& it : pools) {
+      const string& pool_name = osdmap.get_pool_name(it.first);
+      int crush_rule = it.second.get_crush_rule();
+      map<int,float> weight_map;
+      int r = osdmap.crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+      if (r < 0)
+        continue;
+      bool has_eligible_osd = false;
+      for (auto& w : weight_map) {
+        if (w.second > 0) {
+          has_eligible_osd = true;
+          break;
+        }
+      }
+      if (!has_eligible_osd) {
+        ostringstream ss;
+        ss << "pool '" << pool_name << "' crush rule '"
+           << osdmap.crush->get_rule_name(crush_rule)
+           << "' has no eligible OSDs (all weights are 0)";
+        detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pool(s) have crush rules with no eligible OSDs";
+      auto& d = checks->add("POOL_CRUSH_NO_ELIGIBLE_OSDS",
+                            HEALTH_WARN, ss.str(), detail.size());
+      d.detail.swap(detail);
+    }
+  }
+
   // PG_SLOW_SNAP_TRIMMING
   if (!pg_stat.empty() && cct->_conf->mon_osd_snap_trim_queue_warn_on > 0) {
     uint32_t snapthreshold = cct->_conf->mon_osd_snap_trim_queue_warn_on;

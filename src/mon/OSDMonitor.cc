@@ -9132,6 +9132,34 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "crush rule " << id << " type does not match pool";
       return -EINVAL;
     }
+    {
+      map<int,float> weight_map;
+      int r = osdmap.crush->get_rule_weight_osd_map(id, &weight_map);
+      if (r >= 0) {
+        bool has_eligible_osd = false;
+        for (auto& w : weight_map) {
+          if (w.second > 0) {
+            has_eligible_osd = true;
+            break;
+          }
+        }
+        if (!has_eligible_osd) {
+          bool sure = false;
+          cmd_getval(cmdmap, "yes_i_really_really_mean_it", sure);
+          if (!sure) {
+            ss << "WARNING: crush rule '" << val << "' has no eligible OSDs "
+               << "(all weights are 0), applying this rule may make data in "
+               << "pool '" << poolstr << "' unavailable.  If you are "
+               << "*ABSOLUTELY CERTAIN* that is what you want, re-run the "
+               << "command followed by --yes-i-really-really-mean-it.";
+            return -EPERM;
+          }
+          // Flag was passed. Rule will be applied but since OSDs still
+          // have weight 0, POOL_CRUSH_NO_ELIGIBLE_OSDS health warning
+          // will appear in 'ceph health detail' until OSDs are reweighted.
+        }
+      }
+    }
     p.crush_rule = id;
   } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
