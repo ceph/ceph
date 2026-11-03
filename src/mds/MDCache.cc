@@ -4531,8 +4531,7 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
     }
     auto st = mds->mdsmap->get_state(from);
     // OP_WEAK is sent by a recovering peer. A newly active survivor may
-    // not have that peer in rejoin_gather yet; add and continue. Anything
-    // else is a duplicate or stray message.
+    // not have that peer in rejoin_gather yet; add and continue.
     if (st >= MDSMap::STATE_REPLAY && st <= MDSMap::STATE_REJOIN) {
       dout(7) << "handle_cache_rejoin_weak from mds." << from
 	      << " not in rejoin_gather " << rejoin_gather
@@ -4540,9 +4539,13 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
       rejoin_gather.insert(from);
       recovery_set.insert(from);
     } else {
-      dout(7) << "handle_cache_rejoin_weak ignoring from mds." << from
+      // The sender will not retry (rejoin_sent). The local map may still
+      // show an earlier state; apply the message once it catches up.
+      dout(7) << "handle_cache_rejoin_weak deferring from mds." << from
 	      << " (not in rejoin_gather " << rejoin_gather
 	      << ", state " << ceph_mds_state_name(st) << ")" << dendl;
+      mds->wait_for_mdsmap(mds->mdsmap->get_epoch() + 1,
+			   new C_MDS_RetryMessage(mds, weak));
       return;
     }
   }
@@ -4876,17 +4879,23 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
 
   if (!rejoin_gather.count(from)) {
     // A survivor that appeared after rejoin_start() (e.g. max_mds scale-up)
-    // was never inserted into rejoin_gather.
-    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(from) ||
-	mds->mdsmap->is_rejoin(from)) {
+    // was never inserted into rejoin_gather. OP_STRONG is sent only by a
+    // clientreplay, active, or stopping rank.
+    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(from)) {
       dout(7) << "handle_cache_rejoin_strong from mds." << from
 	      << " not in rejoin_gather " << rejoin_gather
 	      << ", adding" << dendl;
       rejoin_gather.insert(from);
       recovery_set.insert(from);
     } else {
-      dout(7) << "handle_cache_rejoin_strong ignoring from mds." << from
-	      << " (not in rejoin_gather " << rejoin_gather << ")" << dendl;
+      // The sender will not retry (rejoin_sent). The local map may still
+      // show an earlier state; apply the message once it catches up.
+      dout(7) << "handle_cache_rejoin_strong deferring from mds." << from
+	      << " (not in rejoin_gather " << rejoin_gather
+	      << ", state " << ceph_mds_state_name(mds->mdsmap->get_state(from))
+	      << ")" << dendl;
+      mds->wait_for_mdsmap(mds->mdsmap->get_epoch() + 1,
+			   new C_MDS_RetryMessage(mds, strong));
       return;
     }
   }
