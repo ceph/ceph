@@ -39,7 +39,9 @@ import {
   ButtonModule,
   GridModule,
   MenuButtonModule,
-  ContextMenuModule
+  ContextMenuModule,
+  ToggleModule,
+  DialogModule
 } from 'carbon-components-angular';
 import HelpIcon from '@carbon/icons/es/help/16';
 import UnlockedIcon from '@carbon/icons/es/unlocked/16';
@@ -55,6 +57,7 @@ import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
 import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
+import SettingsIcon from '@carbon/icons/es/settings/16';
 
 @NgModule({
   imports: [
@@ -85,6 +88,8 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     GridModule,
     MenuButtonModule,
     ContextMenuModule,
+    ToggleModule,
+    DialogModule,
     AreaChartComponent
   ],
   exports: [PoolListComponent, PoolFormComponent],
@@ -117,7 +122,8 @@ export class PoolModule {
       ToolsIcon,
       UserAccessLocked,
       LockedIcon,
-      UnlockedIcon
+      UnlockedIcon,
+      SettingsIcon
     ]);
   }
 }

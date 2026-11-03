@@ -19,6 +19,7 @@ export enum Icons {
   stop = 'stop--filled--alt', // Disable
   analyse = 'stethoscope', // Scrub
   deepCheck = 'settings', // Deep Scrub, Setting, Configuration
+  settings = 'settings', // Settings
   cogs = 'settings--adjust', // Multiple Settings, Configurations
   reweight = 'scales', // Reweight
   up = 'arrow--up', // Up
@@ -192,7 +193,8 @@ export const ICON_TYPE = {
   pendingFilled: 'pending--filled',
   chevronDown: 'chevron--down',
   chevronUp: 'chevron--up',
-  folder: 'folder'
+  folder: 'folder',
+  settings: 'settings'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {

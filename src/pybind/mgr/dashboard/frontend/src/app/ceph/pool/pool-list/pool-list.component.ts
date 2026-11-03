@@ -36,6 +36,7 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 
 const BASE_URL = 'pool';
 const POOL_CONFIG = 'mon_allow_pool_delete';
+const SHOW_INTERNAL_POOLS_KEY = 'dashboard_show_internal_pools';
 
 interface PoolTaskMetadata {
   pool_name: string;
@@ -66,7 +67,10 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   @ViewChild('poolNoPermsTpl', { static: true })
   poolNoPermsTpl!: TemplateRef<any>;
 
+  allPools: Pool[] = [];
   pools: Pool[] = [];
+  showInternalPools = localStorage.getItem(SHOW_INTERNAL_POOLS_KEY) === 'true';
+  icons = Icons;
   columns: CdTableColumn[] = [];
   selection = new CdTableSelection();
   executingTasks: ExecutingTask[] = [];
@@ -157,7 +161,8 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       {
         prop: 'pg_status',
         name: $localize`PG Status`,
-        flexGrow: 1.2,
+        flexGrow: 3,
+        className: 'pool-pg-status-col',
         cellClass: ({ row, column, value }): any => {
           return this.getPgStatusCellClass(row, column, value);
         }
@@ -174,7 +179,8 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         ),
       (resp: Pool[]) => resp,
       (pools: Pool[]) => {
-        this.pools = this.transformPoolsData(pools);
+        this.allPools = this.transformPoolsData(pools);
+        this.filterPools();
         this.tableStatus = new TableStatusViewCache();
       },
       () => {
@@ -239,8 +245,21 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   getPgStatusCellClass(_row: any, _column: any, value: string): object {
     return {
       'text-right': true,
+      'pool-pg-status-col': true,
       [`pg-${this.pgCategoryService.getTypeByStates(value)}`]: true
     };
+  }
+
+  filterPools() {
+    this.pools = this.showInternalPools
+      ? [...this.allPools]
+      : this.allPools.filter((pool) => !pool.pool_name.startsWith('.'));
+  }
+
+  onToggleInternalPools(checked: boolean) {
+    this.showInternalPools = checked;
+    localStorage.setItem(SHOW_INTERNAL_POOLS_KEY, String(checked));
+    this.filterPools();
   }
 
   getErasureCodeProfile(erasureCodeProfile: string) {

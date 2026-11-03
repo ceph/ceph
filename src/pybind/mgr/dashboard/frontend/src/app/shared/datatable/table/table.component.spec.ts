@@ -874,6 +874,29 @@ describe('TableComponent', () => {
     });
   });
 
+  describe('table settings button', () => {
+    const getTableSettingsButton = () =>
+      fixture.debugElement.query(By.css('[data-testid="table-settings-button"]'));
+
+    it('should hide the table settings button by default', () => {
+      expect(getTableSettingsButton()).toBeNull();
+    });
+
+    it('should show the table settings button when settingsTemplate is provided', () => {
+      const mockTemplate = {} as any;
+      fixture.componentRef.setInput('settingsTemplate', mockTemplate);
+      fixture.detectChanges();
+      expect(getTableSettingsButton()).not.toBeNull();
+    });
+
+    it('should be a native button so the overflow menu receives the click', () => {
+      // cds-icon-button stops click propagation, which would prevent cdsOverflowMenu from opening.
+      fixture.componentRef.setInput('settingsTemplate', {} as any);
+      fixture.detectChanges();
+      expect(getTableSettingsButton().nativeElement.tagName).toBe('BUTTON');
+    });
+  });
+
   describe('useCustomClass', () => {
     beforeEach(() => {
       component.customCss = {

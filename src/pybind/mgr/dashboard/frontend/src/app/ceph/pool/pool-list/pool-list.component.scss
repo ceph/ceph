@@ -1,6 +1,10 @@
 @use './src/styles/vendor/variables' as vv;
 
 ::ng-deep cd-pool-list {
+  .pool-pg-status-col {
+    min-width: 20rem;
+  }
+
   .pg-clean {
     color: vv.$success;
   }

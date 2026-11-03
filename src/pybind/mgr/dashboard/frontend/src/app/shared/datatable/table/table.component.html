@@ -335,6 +335,36 @@
           </ng-template>
         }
         <!-- end show hide columns -->
+        <!-- table settings -->
+        @if (settingsTemplate || tableSettingsTpl) {
+          <button
+            cdsButton="ghost"
+            class="toolbar-action"
+            type="button"
+            data-testid="table-settings-button"
+            title="Table settings"
+            i18n-title
+            aria-label="Table settings"
+            i18n-aria-label
+            [cdsOverflowMenu]="tableSettingsMenuRef"
+            placement="bottom"
+            [flip]="true"
+            [offset]="{ x: 3, y: 0 }"
+          >
+            <cd-icon
+              type="settings"
+              customClass="cds--toolbar-action__icon"
+            ></cd-icon>
+          </button>
+          <ng-template #tableSettingsMenuRef>
+            <div [cdsTheme]="theme">
+              <ng-container
+                *ngTemplateOutlet="(settingsTemplate || tableSettingsTpl)!"
+              ></ng-container>
+            </div>
+          </ng-template>
+        }
+        <!-- end table settings -->
         <!-- actions -->
         <ng-content select=".table-actions"></ng-content>
         <!-- end actions -->
