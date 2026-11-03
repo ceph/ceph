@@ -441,7 +441,7 @@ TEST_P(KVTest, RocksDBColumnFamilyTest) {
   fini();
 
   init();
-  ASSERT_EQ(0, db->open(cout, cfs));
+  ASSERT_EQ(0, db->open(cout));
   {
     bufferlist v1, v2, v3;
     cout << "reopen db and read those keys" << std::endl;
@@ -462,7 +462,7 @@ TEST_P(KVTest, RocksDBColumnFamilyTest) {
   fini();
 
   init();
-  ASSERT_EQ(0, db->open(cout, cfs));
+  ASSERT_EQ(0, db->open(cout));
   {
     cout << "reopen db and read keys again." << std::endl;
     bufferlist v1, v2, v3;
