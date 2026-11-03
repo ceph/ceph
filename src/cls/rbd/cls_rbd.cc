@@ -8264,7 +8264,7 @@ int sparsify(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
 CLS_INIT(rbd)
 {
-  CLS_LOG(20, "Loaded rbd class!");
+  CLS_LOG(0, "Loaded rbd class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_create;

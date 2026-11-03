@@ -305,7 +305,7 @@ static int cls_log_info(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
 CLS_INIT(log)
 {
-  CLS_LOG(1, "Loaded log class!");
+  CLS_LOG(0, "Loaded log class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_log_add;

@@ -704,7 +704,7 @@ static int cls_2pc_queue_remove_entries(cls_method_context_t hctx, bufferlist *i
 
 CLS_INIT(2pc_queue)
 {
-  CLS_LOG(1, "Loaded 2pc queue class!");
+  CLS_LOG(0, "Loaded 2pc queue class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_2pc_queue_init;

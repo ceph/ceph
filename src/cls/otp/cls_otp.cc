@@ -539,7 +539,7 @@ static int otp_get_current_time_op(cls_method_context_t hctx,
 
 CLS_INIT(otp)
 {
-  CLS_LOG(20, "Loaded otp class!");
+  CLS_LOG(0, "Loaded otp class!");
 
   oath_init();
 

@@ -215,7 +215,7 @@ static int cls_version_read(cls_method_context_t hctx, bufferlist *in, bufferlis
 
 CLS_INIT(version)
 {
-  CLS_LOG(1, "Loaded version class!");
+  CLS_LOG(0, "Loaded version class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_version_set;

@@ -1038,7 +1038,7 @@ static int eval_bufferlist(cls_method_context_t hctx, bufferlist *in, bufferlist
 
 CLS_INIT(lua)
 {
-  CLS_LOG(20, "Loaded lua class!");
+  CLS_LOG(0, "Loaded lua class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_eval_json;
