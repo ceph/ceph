@@ -157,6 +157,34 @@ debugging performance issues or memory leaks. The ``notify_avg_usec`` and
 the CPU and memory counters monitor resource consumption. The default monitoring
 interval is 2 seconds.
 
+Debugging Python Modules
+------------------------
+
+The Manager's admin socket can inspect the Python interpreter directly. These
+commands cost nothing until they are run, and they work on standby Managers
+and while a module's command queue is stuck.
+
+- ``ceph daemon mgr.${MGRNAME} py stacks`` prints the stack of every Python
+  thread, labelled with the module it belongs to.
+- ``ceph daemon mgr.${MGRNAME} py stacks --duration 10 --rate 100`` samples
+  the stacks for up to 60 seconds and prints collapsed stacks, suitable as
+  input to ``flamegraph.pl``.
+- ``ceph daemon mgr.${MGRNAME} py mem start --nframes 10`` starts tracing
+  Python allocations with ``tracemalloc`` and records a baseline. Use
+  ``py mem diff`` to show memory growth since the baseline per module and per
+  source line, ``py mem top`` to show all live memory allocated since tracing
+  started, ``py mem snapshot`` to reset the baseline, ``py mem status`` to
+  show traced memory, and ``py mem stop`` to stop tracing. Tracing slows down
+  allocations, so stop it when done. A larger ``--nframes`` attributes
+  allocations made in shared code to the module that called it.
+- Setting ``PYTHONTRACEMALLOC=30`` in the Manager's environment starts tracing
+  at startup, so ``py mem top`` also covers memory allocated while modules
+  load. Imports have deep stacks, so fewer frames charge most of that memory
+  to ``<other>``.
+- Sampling and memory reports on a large heap can take longer than the admin
+  socket client waits. In that case the command reports that it is still
+  running: repeat the same command to get the result.
+
 
 Automatic Stats Period Tuning
 ------------------------------
