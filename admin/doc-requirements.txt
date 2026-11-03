@@ -2,6 +2,8 @@ Sphinx >= 8
 sphinx-ditaa@git+https://github.com/ceph/sphinx-ditaa.git@py3
 funcparserlib@git+https://github.com/vlasovskikh/funcparserlib.git
 breathe >= 4.20.0,!=4.33
+# autodoc needs the real cherrypy decorators on the cephadm.agent endpoints
+cherrypy
 cryptography
 Jinja2
 pyyaml >= 5.1.2

@@ -23,6 +23,8 @@ import jinja2
 import jinja2.filters
 import yaml
 
+from ceph_commands import unload_mgr_modules
+
 logger = logging.getLogger(__name__)
 
 
@@ -315,6 +317,7 @@ class CephOption(ObjectDescription):
         mock_imports += ['numpy',
                          'scipy']
 
+        imported = set(sys.modules)
         for m in mock_imports:
             args = {}
             parts = m.split('=', 1)
@@ -329,6 +332,7 @@ class CephOption(ObjectDescription):
             for m in mock_imports:
                 mocked = m.split('=', 1)[0]
                 sys.modules.pop(mocked)
+            unload_mgr_modules(imported)
 
     def _collect_options_from_module(self, name):
         with self.mocked_modules():
