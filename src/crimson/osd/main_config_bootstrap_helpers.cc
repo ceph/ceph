@@ -3,6 +3,9 @@
 
 #include "crimson/osd/main_config_bootstrap_helpers.h"
 
+#include <fcntl.h>
+#include <fmt/ranges.h>
+#include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/prometheus.hh>
 #include <seastar/core/thread.hh>
@@ -11,7 +14,7 @@
 #include <seastar/util/closeable.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/std-compat.hh>
-#include <seastar/core/app-template.hh>
+#include <sys/wait.h>
 
 #include "common/ceph_argparse.h"
 #include "common/config_tracker.h"
@@ -21,9 +24,6 @@
 #include "crimson/common/perf_counters_collection.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
-
-#include <fcntl.h>
-#include <sys/wait.h>
 
 using namespace std::literals;
 using crimson::common::local_conf;
@@ -134,14 +134,18 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
       break;
     }
     default:
-      logger().warn("get_option_value: {} has unknown type", option.option_name);
+      logger().warn("get_option_value: {} has unknown type {}", option.option_name,
+                    static_cast<int>(option.value_type));
       return std::nullopt;
   }
   return std::nullopt;
 }
 
 static tl::expected<early_config_t, int>
-_get_early_config(int argc, const char *argv[])
+_get_early_config(
+  int argc,
+  const char *argv[],
+  std::vector<const char *> &extra_args)
 {
   early_config_t ret;
 
@@ -150,6 +154,7 @@ _get_early_config(int argc, const char *argv[])
   early_args.insert(
     std::end(early_args),
     argv, argv + argc);
+  early_args.insert(std::end(early_args), extra_args.begin(), extra_args.end());
 
   ret.init_params = ceph_argparse_early_args(
     early_args,
@@ -178,7 +183,16 @@ _get_early_config(int argc, const char *argv[])
 	auto stop_perf_coll = seastar::deferred_stop(sharded_perf_coll());
 
 	local_conf().parse_env().get();
-	local_conf().parse_argv(early_args).get();
+	auto remaining_args = local_conf().parse_argv(
+	  std::vector<std::string>(early_args.begin(), early_args.end())).get();
+	auto next = remaining_args.begin();
+	std::erase_if(early_args, [&next, &remaining_args](const char* arg) {
+	  if (next != remaining_args.end() && *next == arg) {
+	    ++next;
+	    return false;
+	  }
+	  return true;
+	});
 	local_conf().parse_config_files(ret.conf_file_list).get();
 
 	if (local_conf()->no_mon_config) {
@@ -200,7 +214,14 @@ _get_early_config(int argc, const char *argv[])
 	  std::end(early_args));
 
         for (const auto& option : seastar_options) {
-          auto option_value = get_option_value(option);
+          std::optional<std::string> option_value;
+          try {
+            option_value = get_option_value(option);
+          } catch (const std::exception& e) {
+            logger().error("get_option_value failed for {} (config_key={}): {}",
+                           option.option_name, option.config_key, e.what());
+            throw;
+          }
           if (option_value) {
             logger().info("configure {} with value: {}", option.option_name, option_value);
             ret.early_args.emplace_back(option.option_name);
@@ -245,10 +266,13 @@ _get_early_config(int argc, const char *argv[])
 	                 "set only using crimson_cpu_set");
 	  ceph_abort();
 	}
+	logger().info("get_early_config: early_args: {}",
+	              fmt::join(ret.early_args, " "));
 	return 0;
       });
     });
-  if (r < 0) {
+  if (r != 0) {
+    logger().error("get_early_config: bootstrap app.run() returned {}", r);
     return tl::unexpected(r);
   }
   return ret;
@@ -282,7 +306,10 @@ _get_early_config(int argc, const char *argv[])
  * and send it back to the parent process.
  */
 tl::expected<early_config_t, int>
-get_early_config(int argc, const char *argv[])
+get_early_config(
+  int argc,
+  const char *argv[],
+  std::vector<const char*> extra_args)
 {
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
@@ -310,7 +337,7 @@ get_early_config(int argc, const char *argv[])
     return tl::unexpected(-errno);
   } else if (worker == 0) { // child
     close(pipes[0]);
-    auto ret = _get_early_config(argc, argv);
+    auto ret = _get_early_config(argc, argv, extra_args);
     if (ret.has_value()) {
       bufferlist bl;
       ::encode(ret.value(), bl);

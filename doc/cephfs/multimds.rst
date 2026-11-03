@@ -14,7 +14,9 @@ When should I use multiple active MDS daemons?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You should configure multiple active MDS daemons when your metadata performance
-is bottlenecked on the single MDS that runs by default.
+is bottlenecked on the single MDS that runs by default. To tell whether that is
+in fact the bottleneck, see :doc:`/cephfs/mds-phase-times`, which reports how
+much of the wall clock a rank spends holding ``mds_lock`` and on what.
 
 Adding more daemons may not increase performance on all workloads.  Typically,
 a single application running on a single client will not benefit from an
@@ -42,12 +44,19 @@ result of commands.
 
 ::
 
-    # fsmap e5: 1/1/1 up {0=a=up:active}, 2 up:standby
-
-    ceph fs set <fs_name> max_mds 2
-
-    # fsmap e8: 2/2/2 up {0=a=up:active,1=c=up:creating}, 1 up:standby
-    # fsmap e9: 2/2/2 up {0=a=up:active,1=c=up:active}, 1 up:standby
+  <fsname> - 0 clients
+  ====
+  RANK  STATE          MDS            ACTIVITY     DNS    INOS   DIRS   CAPS
+   0    active      <mds1>          Reqs:    0 /s  5398   5399     92      0
+    
+  
+  ceph fs set <fs_name> max_mds 2
+  
+  <fsname> - 0 clients
+  ====
+  RANK  STATE          MDS            ACTIVITY     DNS    INOS   DIRS   CAPS
+   0    active      <mds1>          Reqs:    0 /s  5398   5399     92      0
+   1    active      <mds2>          Reqs:    0 /s    10     13     11      0
 
 The newly created rank (1) will pass through the 'creating' state
 and then enter this 'active state'.
@@ -73,12 +82,19 @@ Reducing the number of ranks is as simple as reducing ``max_mds``:
 
 ::
     
-    # fsmap e9: 2/2/2 up {0=a=up:active,1=c=up:active}, 1 up:standby
-    ceph fs set <fs_name> max_mds 1
-    # fsmap e10: 2/2/1 up {0=a=up:active,1=c=up:stopping}, 1 up:standby
-    # fsmap e10: 2/2/1 up {0=a=up:active,1=c=up:stopping}, 1 up:standby
-    ...
-    # fsmap e10: 1/1/1 up {0=a=up:active}, 2 up:standby
+  <fsname> - 0 clients
+  ====
+  RANK  STATE          MDS            ACTIVITY     DNS    INOS   DIRS   CAPS
+   0    active      <mds1>          Reqs:    0 /s  5398   5399     92      0
+   1    active      <mds2>          Reqs:    0 /s    10     13     11      0
+  
+  ceph fs set <fs_name> max_mds 1
+  
+  
+  <fsname> - 0 clients
+  ====
+  RANK  STATE          MDS            ACTIVITY     DNS    INOS   DIRS   CAPS
+   0    active      <mds1>          Reqs:    0 /s  5398   5399     92      0
 
 The cluster will automatically stop extra ranks incrementally until ``max_mds``
 is reached.
@@ -185,16 +201,24 @@ that should be pinned. For example:
 
 .. prompt:: bash #
 
-    setfattr -n ceph.dir.pin.random -v 0.5 /cephfs/tmp
+    setfattr -n ceph.dir.pin.random -v 0.01 /cephfs/tmp
 
 Would cause any directory loaded into cache or created under ``/tmp`` to be
-ephemerally pinned 50 percent of the time.
+ephemerally pinned 1 percent of the time.
 
 It is recommended to only set this to small values, like ``.001`` or ``0.1%``.
 Having too many subtrees may degrade performance. For this reason, the config
 ``mds_export_ephemeral_random_max`` enforces a cap on the maximum of this
 percentage (default: ``.01``). The MDS returns ``EINVAL`` when attempting to
 set a value beyond this config.
+
+The number of directories actually pinned is the probability multiplied by the
+number of sub-directories, so this policy is only useful where there are many
+of them. At the default cap of ``.01``, a tree of twenty sub-directories pins
+0.2 of them on average -- in practice none, leaving the whole tree on one rank
+with nothing to indicate that the setting had no effect. Thousands of
+sub-directories are needed before ``.01`` pins a useful number. For smaller
+trees, prefer a distributed ephemeral pin or an explicit pin.
 
 Both random and distributed ephemeral pin policies are off by default in
 Octopus. The features may be enabled via the

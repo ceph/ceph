@@ -160,7 +160,8 @@ public:
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats,
     bool whiteout,
-    int num_bytes);
+    int num_bytes,
+    ObjectContext::attr_cache_t& attr_cache);
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
@@ -214,7 +215,9 @@ public:
     object_stat_sum_t& delta_stats,
     crimson::osd::ObjectContextRef head,
     crimson::osd::ObjectContextLoader& obc_loader,
-    const SnapContext &snapc);
+    const SnapContext &snapc,
+    ObjectContext::attr_cache_t& attr_cache,
+    crimson::osd::ObjectContextRef& rollback_to);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -281,6 +284,11 @@ public:
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
       get_attr_errorator>;
+  /// xattr reads of an obc use its attr_cache, not the store
+  get_attr_ierrorator::future<ceph::bufferlist> get_xattr_from_cache(
+    const ObjectState& os,
+    const ObjectContext::attr_cache_t& attr_cache,
+    std::string&& name) const;
   get_attr_ierrorator::future<> getxattr(
     const ObjectState& os,
     const ObjectContext::attr_cache_t& attr_cache,
@@ -303,6 +311,7 @@ public:
       cmp_xattr_errorator>;
   cmp_xattr_ierrorator::future<> cmp_xattr(
     const ObjectState& os,
+    const ObjectContext::attr_cache_t& attr_cache,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
   using rm_xattr_ertr = crimson::errorator<crimson::ct_error::enoent>;
@@ -419,12 +428,15 @@ public:
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
 
-  /// sets oi and (for head) ss attrs
+  /// sets oi and (for head) ss attrs in the store, and in attr_cache
+  /// on replicated pools
+  /// (on EC pools, ECTransaction updates attr_cache)
   void set_metadata(
     const hobject_t &obj,
     object_info_t &oi,
     const SnapSet *ss /* non-null iff head */,
-    ceph::os::Transaction& trans);
+    ceph::os::Transaction& trans,
+    ObjectContext::attr_cache_t& attr_cache);
 
   /// clone from->to and clear ss attribute on to
   void clone_for_write(
@@ -436,6 +448,7 @@ public:
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
        crimson::osd::ObjectContextRef&& obc,
        crimson::osd::ObjectContextRef&& new_clone,
+       crimson::osd::ObjectContextRef&& rollback_to,
        ceph::os::Transaction&& txn,
        osd_op_params_t&& osd_op_p,
        epoch_t min_epoch, epoch_t max_epoch,

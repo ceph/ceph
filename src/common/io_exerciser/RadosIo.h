@@ -81,6 +81,7 @@ class RadosIo : public Model {
 
  private:
   void applyReadWriteOp(IoOp& op);
+  void applyTruncateWriteOp(IoOp& op);
   void applyInjectOp(IoOp& op);
 };
 }  // namespace io_exerciser

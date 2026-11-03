@@ -104,12 +104,11 @@ class Module(MgrModule):
                 and 'archived' not in crash)
         }
 
-        def prune_detail(ls: List[str]) -> int:
+        def prune_detail(ls: List[str]) -> Tuple[List[str], int]:
             num = len(ls)
             if num > 30:
-                ls = ls[0:30]
-                ls.append('and %d more' % (num - 30))
-            return num
+                ls = ls[0:30] + ['and %d more' % (num - 30)]
+            return ls, num
 
         daemon_crashes = []
         module_crashes = []
@@ -131,8 +130,8 @@ class Module(MgrModule):
                 crash.get('utsname_hostname', '(unknown)'),
                 crash.get('timestamp', 'unknown time'))
             for crash in module_crashes]
-        daemon_num = prune_detail(daemon_detail)
-        module_num = prune_detail(module_detail)
+        daemon_detail, daemon_num = prune_detail(daemon_detail)
+        module_detail, module_num = prune_detail(module_detail)
 
         health_checks: Dict[str, Dict[str, Union[int, str, List[str]]]] = {}
         if daemon_detail:
@@ -233,6 +232,7 @@ class Module(MgrModule):
         return 0, val, ''
 
     @CrashCLICommand('crash post')
+    @with_crashes
     def do_post(self, inbuf: str) -> Tuple[int, str, str]:
         """
         Add a crash dump (use -i <jsonfile>)
@@ -255,8 +255,6 @@ class Module(MgrModule):
         return 0, '', ''
 
     def ls(self) -> Tuple[int, str, str]:
-        if not self.crashes:
-            self._load_crashes()
         return self.do_ls_all('')
 
     def _do_ls(self, t: Iterable[CrashT], format: Optional[str]) -> Tuple[int, str, str]:

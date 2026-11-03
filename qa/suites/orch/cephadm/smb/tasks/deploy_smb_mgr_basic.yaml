@@ -29,8 +29,8 @@ tasks:
     host.a:
       # add subvolgroup & subvolumes for test
       - cmd: ceph fs subvolumegroup create cephfs smb
-      - cmd: ceph fs subvolume create cephfs sv1 --group-name=smb --mode=0777
-      - cmd: ceph fs subvolume create cephfs sv2 --group-name=smb --mode=0777
+      - cmd: ceph fs subvolume create cephfs sv1 --group-name=smb --protocols=smb
+      - cmd: ceph fs subvolume create cephfs sv2 --group-name=smb --protocols=smb
       # set up smb cluster and shares
       - cmd: ceph mgr module enable smb
       # TODO: replace sleep with poll of mgr state?
@@ -45,6 +45,10 @@ tasks:
 # Wait for the smb service to start
 - cephadm.wait_for_service:
     service: smb.modusr1
+
+- cephadm.shell:
+    host.a:
+      - cmd: 'ceph config-key ls | grep -q "ceph.smb.resources.*modusr1"'
 # Check if shares exist
 - template.exec:
     host.b:
@@ -66,7 +70,7 @@ tasks:
     timeout: 1h
     clients:
       client.0:
-        - [default, hosts_access]
+        - [default, hosts_access, acl_support]
 
 - cephadm.shell:
     host.a:
@@ -76,3 +80,7 @@ tasks:
 # Wait for the smb service to be removed
 - cephadm.wait_for_service_not_present:
     service: smb.modusr1
+# Removing the cluster should clean that mirror entry too
+- cephadm.shell:
+    host.a:
+      - cmd: '! ceph config-key ls | grep -q "ceph.smb.resources.*modusr1"'

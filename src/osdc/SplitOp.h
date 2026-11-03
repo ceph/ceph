@@ -300,17 +300,25 @@ class SplitOp {
     }
   };
 
+  enum class InternalVersionStrategy {
+    FromPrimaryShard,
+    FromParticipatingShards,
+    Unknown
+  };
+
   int assemble_rc() const;
   virtual std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) const = 0;
   virtual void assemble_buffer_read(bufferlist &bl_out, int ops_index) const = 0;
-  virtual void init_read(OSDOp &op, bool sparse, int ops_index) = 0;
-  virtual bool version_mismatch() const = 0;
+  virtual void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) = 0;
+  virtual bool legacy_version_mismatch() const = 0;
+  virtual bool version_mismatch_v2() const = 0;
   virtual void init_reference_sub_read() = 0;
-  void init(OSDOp &op, int ops_index);
+  void init(OSDOp &op, int ops_index, bool single_op);
 
   Objecter::Op *orig_op;
   Objecter &objecter;
   mini_flat_map<int, SubRead> sub_reads;
+  InternalVersionStrategy strategy = InternalVersionStrategy::Unknown;
   CephContext *cct;
   
   /**
@@ -344,7 +352,12 @@ class SplitOp {
   int reference_sub_read = -1;
   std::map<int, std::vector<int>> op_offset_map;
 
+private:
+  bool version_mismatch() const;
+
  public:
+ static inline constexpr uint64_t REPLICA_MIN_SPLIT_SIZE = 4096;
+
  /**
   * @brief Construct a SplitOp.
   * @param op Original operation to be split
@@ -352,7 +365,8 @@ class SplitOp {
   * @param cct CephContext for logging and configuration
   * @param count Number of sub-operations to create
   */
- SplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) : orig_op(op), objecter(objecter), sub_reads(count), cct(cct) {}
+ SplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) : 
+    orig_op(op), objecter(objecter), sub_reads(count), cct(cct) {}
  
  virtual ~SplitOp() = default;
  
@@ -470,19 +484,33 @@ class ECSplitOp : public SplitOp{
    * @param op Operation descriptor
    * @param sparse Whether this is a sparse read
    * @param ops_index Index of the operation in the operation list
+   * @param single_op True if the whole op will be sent as a single op
    */
-  void init_read(OSDOp &op, bool sparse, int ops_index) override;
-  
+  void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) override;
+
   /**
    * @brief Check for version mismatches across EC shards.
    *
    * Compares the internal versions returned by each shard to ensure all
    * sub-operations read the same object version. Returns true if any
-   * mismatch is detected.
+   * mismatch is detected. This is the legacy method that requires the
+   * primary shard to be included in the shards queried for an internal version.
    *
    * @return true if versions mismatch, false if consistent
    */
-  bool version_mismatch() const override;
+  bool legacy_version_mismatch() const override;
+
+  /**
+   * @brief Check for version mismatches across EC shards.
+   *
+   * Compares the internal versions returned by each shard to ensure all
+   * sub-operations read the same object version. Returns true if any
+   * mismatch is detected. This is the v2 method that does not require the
+   * primary shard to be included in the shards queried for an internal version.
+   *
+   * @return true if versions mismatch, false if consistent
+   */
+  bool version_mismatch_v2() const override;
   
   ~ECSplitOp() {
     complete();
@@ -542,22 +570,44 @@ class ReplicaSplitOp : public SplitOp {
    * @param op Operation descriptor
    * @param sparse Whether this is a sparse read
    * @param ops_index Index of the operation in the operation list
+   * @param single_op True if the whole op will be sent as a single op
    */
-  void init_read(OSDOp &op, bool sparse, int ops_index) override;
+  void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) override;
   
   /**
    * @brief Check for version mismatches across replicas.
    *
-   * Compares the versions returned by each replica to ensure all
+   * Compares the internal versions returned by each replica to ensure all
    * sub-operations read the same object version. Returns true if any
-   * mismatch is detected.
+   * mismatch is detected. This is the legacy method that requires uses
+   * the old format for returning data.
    *
    * @return true if versions mismatch, false if consistent
    */
-  bool version_mismatch() const override;
+  bool legacy_version_mismatch() const override;
+
+  /**
+   * @brief Check for version mismatches across replicas.
+   *
+   * Compares the internal versions returned by each replica to ensure all
+   * sub-operations read the same object version. Returns true if any
+   * mismatch is detected. This is the v2 method that uses the new format for
+   * returning data.
+   *
+   * @return true if versions mismatch, false if consistent
+   */
+  bool version_mismatch_v2() const override;
   
   void init_reference_sub_read() override;
-  
+
+  /**
+   * Acting indices that map to an existing OSD, in ascending order.
+   * Populated by init_reference_sub_read(), consumed by init_read().
+   */
+  std::vector<int> valid_indices;
+
+  size_t reference_valid_index = 0;
+
   /**
    * @brief Construct a ReplicaSplitOp.
    * @param op Original operation to be split
@@ -573,3 +623,9 @@ class ReplicaSplitOp : public SplitOp {
   }
 };
 
+#ifdef UNIT_TESTS_BUILT
+bool test_validate_operations(Objecter::Op *op, const pg_pool_t *pi,
+                              bool is_erasure, uint64_t replica_min_read_size,
+                              CephContext *cct, bool &has_primary_ops,
+                              bool &single_direct_op);
+#endif

@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, SecurityContext, ViewChild } from '@angular/core';
+import { Component, DestroyRef, OnInit, ViewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
@@ -19,7 +19,6 @@ import { from, Observable, of } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { catchError, concatMap, map, tap } from 'rxjs/operators';
-import { DomSanitizer } from '@angular/platform-browser';
 
 export type SubsystemPayload = {
   nqn: string;
@@ -92,8 +91,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     private destroyRef: DestroyRef,
     private nvmeofService: NvmeofService,
     private notificationService: NotificationService,
-    private router: Router,
-    private sanitizer: DomSanitizer
+    private router: Router
   ) {}
 
   ngOnInit() {
@@ -265,22 +263,19 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   private showFinalNotification(stepResults: StepResult[]) {
     this.isSubmitLoading = false;
 
-    const messageLines = stepResults.map((stepResult) =>
-      stepResult.success
-        ? $localize`<div>${stepResult.step} step created successfully</div><br/>`
-        : $localize`<div>${stepResult.step} step failed: <code>${stepResult.error}</code></div><br/>`
-    );
-
-    const rawHtml = messageLines.join('<br/>');
-    const sanitizedHtml = this.sanitizer.sanitize(SecurityContext.HTML, rawHtml) ?? '';
-
     const hasFailure = stepResults.some((r) => !r.success);
     const type = hasFailure ? NotificationType.error : NotificationType.success;
     const title = hasFailure
       ? $localize`Subsystem created (with errors)`
       : $localize`Subsystem created`;
 
-    this.notificationService.show(type, title, sanitizedHtml);
+    const messageLines = stepResults.map((stepResult) =>
+      stepResult.success
+        ? $localize`${stepResult.step}:step: created successfully`
+        : $localize`${stepResult.step}:step: failed (${stepResult.error}:error:)`
+    );
+
+    this.notificationService.show(type, title, messageLines.join('<br>'));
     this.router.navigate(['block/nvmeof/subsystems'], {
       queryParams: {
         group: this.group,

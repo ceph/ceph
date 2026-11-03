@@ -1,3 +1,5 @@
+set(CMAKE_JOB_POOL_LINK heavy_link_job_pool)
+
 #
 # Helper for adding RGW tests built with Catch2:
 # Note: to define a test that does not use Catch2::main(), use:
@@ -21,14 +23,14 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
 endif()
 
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  # kafka stub library
-  set(kafka_stub_src
-    kafka_stub.cc)
-  add_library(kafka_stub STATIC ${kafka_stub_src})
-endif()
-
-if(WITH_RADOSGW_LUA_PACKAGES)
-  list(APPEND rgw_libs Boost::filesystem)
+  # kafka stub library — built whenever RGW links against a dynamic
+  # system librdkafka (WITH_SYSTEM_RDKAFKA=ON, or the fallback path
+  # when the bundled submodule is not checked out).
+  if(WITH_SYSTEM_RDKAFKA OR NOT EXISTS "${CMAKE_SOURCE_DIR}/src/librdkafka/CMakeLists.txt")
+    set(kafka_stub_src
+      kafka_stub.cc)
+    add_library(kafka_stub STATIC ${kafka_stub_src})
+  endif()
 endif()
 
 if(WITH_JAEGER)
@@ -125,6 +127,14 @@ add_ceph_unittest(unittest_rgw_cors)
 target_link_libraries(unittest_rgw_cors ${rgw_libs})
 
 
+# unittest_rgw_frontend_type
+add_executable(unittest_rgw_frontend_type
+  test_rgw_frontend_type.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_frontend_type)
+target_link_libraries(unittest_rgw_frontend_type ${rgw_libs} heap_profiler)
+
+
 # unittest_rgw_bucket_sync_cache
 add_executable(unittest_rgw_bucket_sync_cache test_rgw_bucket_sync_cache.cc)
 add_ceph_unittest(unittest_rgw_bucket_sync_cache)
@@ -135,6 +145,11 @@ add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history)
 target_link_libraries(unittest_rgw_period_history ${rgw_libs})
 
+# unittest_rgw_zone
+add_executable(unittest_rgw_zone test_rgw_zone.cc)
+add_ceph_unittest(unittest_rgw_zone)
+target_link_libraries(unittest_rgw_zone ${rgw_libs})
+
 # unittest_rgw_compression
 add_executable(unittest_rgw_compression
   test_rgw_compression.cc
@@ -142,12 +157,24 @@ add_executable(unittest_rgw_compression
 add_ceph_unittest(unittest_rgw_compression)
 target_link_libraries(unittest_rgw_compression ${rgw_libs})
 
+# unittest_rgw_cache
+add_executable(unittest_rgw_cache
+  test_rgw_cache.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_cache)
+target_link_libraries(unittest_rgw_cache ${rgw_libs})
+
 # unittest_http_manager
 add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
 target_link_libraries(unittest_http_manager ${rgw_libs})
 
 if(WITH_RADOSGW_RADOS)
+# unittest_rgw_bucket_metadata
+add_executable(unittest_rgw_bucket_metadata test_rgw_bucket_metadata.cc)
+add_ceph_unittest(unittest_rgw_bucket_metadata)
+target_link_libraries(unittest_rgw_bucket_metadata unit-main ${rgw_libs})
+
 # unittest_rgw_reshard_wait
 add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
 add_ceph_unittest(unittest_rgw_reshard_wait)
@@ -298,12 +325,22 @@ target_link_libraries(unittest_rgw_iam_policy
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
+
+add_executable(unittest_rgw_keystone test_rgw_keystone.cc)
+add_ceph_unittest(unittest_rgw_keystone)
+target_link_libraries(unittest_rgw_keystone ${rgw_libs})
 endif()
 
 add_executable(unittest_rgw_string test_rgw_string.cc)
 add_ceph_unittest(unittest_rgw_string)
 target_include_directories(unittest_rgw_string
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+
+add_executable(unittest_rgw_http_errors test_rgw_http_errors.cc)
+add_ceph_unittest(unittest_rgw_http_errors)
+target_include_directories(unittest_rgw_http_errors
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_http_errors rgw_common ${UNITTEST_LIBS})
 
 # unittest_rgw_dmclock_queue
 add_executable(unittest_rgw_dmclock_scheduler test_rgw_dmclock_scheduler.cc $<TARGET_OBJECTS:unit-main>)
@@ -383,7 +420,7 @@ if(WITH_RADOSGW_RADOS)
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
 target_include_directories(ceph_test_rgw_gc_log
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
-target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
+target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} rgw radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -458,8 +495,10 @@ target_compile_definitions(unittest_rgw_posix_driver PUBLIC LMDB_SAFE_NO_CPP_UTI
 target_include_directories(unittest_rgw_posix_driver
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
-target_link_libraries(unittest_rgw_posix_driver  ${UNITTEST_LIBS}
-  ${rgw_libs} ${LMDB_LIBRARIES})
+target_link_libraries(unittest_rgw_posix_driver
+  ${UNITTEST_LIBS}
+  ${rgw_libs}
+  ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
 
 if(WITH_RADOSGW_RADOS)
@@ -476,6 +515,20 @@ target_link_libraries(ceph_test_datalog
 install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+if(WITH_RADOSGW_RADOS)
+# ceph_test_bilog
+add_executable(ceph_test_bilog test_bilog.cc)
+target_include_directories(ceph_test_bilog
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/services")
+target_link_libraries(ceph_test_bilog
+  libneorados
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  ${rgw_libs})
+install(TARGETS ceph_test_bilog DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 add_executable(unittest_rgw_async_utils test_rgw_async_utils.cc)
 add_ceph_unittest(unittest_rgw_async_utils)
 target_link_libraries(unittest_rgw_async_utils ${rgw_libs} ${UNITTEST_LIBS})
@@ -488,15 +541,85 @@ add_executable(unittest_rgw_tag test_rgw_tag.cc)
 add_ceph_unittest(unittest_rgw_tag)
 target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})
 
+# unittest_rgw_auth_sigv4
+add_executable(unittest_rgw_auth_sigv4 test_rgw_auth_sigv4.cc)
+add_ceph_unittest(unittest_rgw_auth_sigv4)
+target_link_libraries(unittest_rgw_auth_sigv4 ${rgw_libs} ${UNITTEST_LIBS})
+
 # unittest_rgw_http_client
 add_executable(unittest_rgw_http_client test_rgw_http_client.cc)
 add_ceph_unittest(unittest_rgw_http_client)
 target_link_libraries(unittest_rgw_http_client
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
+
+# unittest_rgw_rest_conn
+add_executable(unittest_rgw_rest_conn test_rgw_rest_conn.cc)
+add_ceph_unittest(unittest_rgw_rest_conn)
+target_link_libraries(unittest_rgw_rest_conn
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
+
+# unittest_yield_completion
+add_executable(unittest_yield_completion test_yield_completion.cc)
+add_ceph_unittest(unittest_yield_completion)
+target_link_libraries(unittest_yield_completion
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
+
 if(WITH_RADOSGW_FDB)
  list(APPEND rgw_incs "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
  add_catch2_test_rgw(rgw_hex)
  add_catch2_test_rgw(fdb NO_CATCH2_MAIN)
+ add_catch2_test_rgw(fdb_query)
  add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
+ add_catch2_test_rgw(fdb_content)
+endif()
+
+if(WITH_RADOSGW_LANCEDB)
+add_executable(unittest_rgw_s3vector test_rgw_s3vector.cc)
+add_ceph_unittest(unittest_rgw_s3vector)
+target_link_libraries(unittest_rgw_s3vector ${rgw_libs} ${UNITTEST_LIBS})
+if(WITH_SYSTEM_ARROW)
+  target_include_directories(unittest_rgw_s3vector PRIVATE ${ARROW_INCLUDE_DIR})
+else()
+  target_include_directories(unittest_rgw_s3vector PRIVATE ${CMAKE_BINARY_DIR}/src/arrow/include)
+endif()
+
+add_executable(ceph_test_rgw_sal_wrapper test_rgw_sal_wrapper.cc)
+target_link_libraries(ceph_test_rgw_sal_wrapper
+  rgw_common
+  ${rgw_libs}
+  ${UNITTEST_LIBS})
+install(TARGETS ceph_test_rgw_sal_wrapper DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# libtest (used by the LanceDB ObjectStore cargo tests) owns main(), so the
+# ceph context and SAL driver are brought up in this shared library instead.
+# Linking rgw_common also makes it re-export the rgw_sal_wrapper API, so the
+# cargo test binary links this one .so rather than the full RGW link line.
+add_library(ceph_rgw_sal_test_env SHARED rgw_sal_test_env.cc)
+target_link_libraries(ceph_rgw_sal_test_env
+  rgw_common
+  ${rgw_libs})
+target_include_directories(ceph_rgw_sal_test_env PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/rgw)
+install(TARGETS ceph_rgw_sal_test_env DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# The LanceDB ObjectStore tests are Rust `cargo test` functions
+# (lancedb-rgw-store/tests/object_store.rs).  They link against
+# libceph_rgw_sal_test_env.so for driver bring-up and the rgw_sal_wrapper API.
+include(${CMAKE_CURRENT_SOURCE_DIR}/cargo_test_binary.cmake)
+add_rgw_cargo_test_binary(
+  NAME    ceph_test_rgw_lancedb_object_store
+  PACKAGE lancedb-rgw-store
+  TEST    object_store
+  DEPENDS ceph_rgw_sal_test_env)
+
+# The crate's own #[cfg(test)] unit tests (errno mapping in store.rs, FFI struct
+# defaults in ffi.rs).  They need no cluster, so they run under `make check`
+# rather than being installed.  They still link libceph_rgw_sal_test_env.so,
+# since the FFI reaches through it to rgw_sal_wrapper_version().
+add_rgw_cargo_test_binary(
+  NAME      unittest_rgw_lancedb_store
+  PACKAGE   lancedb-rgw-store
+  UNIT_TEST
+  DEPENDS   ceph_rgw_sal_test_env)
 endif()

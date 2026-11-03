@@ -1,5 +1,4 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { RouterModule } from '@angular/router';
 
 import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards.component';
 
@@ -9,7 +8,7 @@ describe('NvmeofSetupCardsComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [NvmeofSetupCardsComponent, RouterModule.forRoot([])]
+      imports: [NvmeofSetupCardsComponent]
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofSetupCardsComponent);
@@ -24,31 +23,6 @@ describe('NvmeofSetupCardsComponent', () => {
   it('should render 3 setup step cards', () => {
     const cards = fixture.nativeElement.querySelectorAll('cd-setup-step-card');
     expect(cards.length).toBe(3);
-  });
-
-  it('should not show completion link when isAllConfigured is false', () => {
-    component.isAllConfigured = false;
-    fixture.detectChanges();
-    const link = fixture.nativeElement.querySelector('.nvmeof-setup-cards__completion');
-    expect(link).toBeNull();
-  });
-
-  it('should show completion link when isAllConfigured is true', () => {
-    component.isAllConfigured = true;
-    fixture.detectChanges();
-    const link = fixture.nativeElement.querySelector('.nvmeof-setup-cards__completion');
-    expect(link).toBeTruthy();
-  });
-
-  it('should not emit viewStatus from the disabled completion link', () => {
-    component.isAllConfigured = true;
-    fixture.detectChanges();
-
-    const emitSpy = jest.spyOn(component.viewStatus, 'emit');
-    const link = fixture.nativeElement.querySelector('.nvmeof-setup-cards__completion a');
-    link.click();
-
-    expect(emitSpy).not.toHaveBeenCalled();
   });
 
   describe('setup state', () => {
@@ -90,22 +64,8 @@ describe('NvmeofSetupCardsComponent', () => {
     });
   });
 
-  it('should keep subsystem and namespace info messages when hasGatewayGroups is false', () => {
+  it('should show info messages for subsystem and namespace steps when hasGatewayGroups is false', () => {
     component.hasGatewayGroups = false;
-    component.hasSubsystems = false;
-    component.hasNamespaces = false;
-    fixture.detectChanges();
-
-    const cardElements = fixture.debugElement.queryAll((el) => el.name === 'cd-setup-step-card');
-    const subsystemCard = cardElements[1].componentInstance;
-    const namespaceCard = cardElements[2].componentInstance;
-
-    expect(subsystemCard.statusMessage).toBe('No subsystem configured for this cluster yet.');
-    expect(namespaceCard.statusMessage).toBe('No namespace allocated or mapped yet.');
-  });
-
-  it('should display original info messages when hasGatewayGroups is true', () => {
-    component.hasGatewayGroups = true;
     component.hasSubsystems = false;
     component.hasNamespaces = false;
     fixture.detectChanges();

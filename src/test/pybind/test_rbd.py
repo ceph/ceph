@@ -1369,7 +1369,8 @@ class TestImage(object):
         self.image.unlock('')
 
     def test_list_lockers(self):
-        eq([], self.image.list_lockers())
+        eq({'tag': '', 'exclusive': False, 'lockers': []},
+           self.image.list_lockers())
         self.image.lock_exclusive('test')
         lockers = self.image.list_lockers()
         eq(1, len(lockers['lockers']))
@@ -1378,7 +1379,8 @@ class TestImage(object):
         eq('', lockers['tag'])
         assert lockers['exclusive']
         self.image.unlock('test')
-        eq([], self.image.list_lockers())
+        eq({'tag': '', 'exclusive': True, 'lockers': []},
+           self.image.list_lockers())
 
         num_shared = 10
         for i in range(num_shared):
@@ -1391,7 +1393,8 @@ class TestImage(object):
         for i in range(num_shared):
             eq(str(i), cookies[i])
             self.image.unlock(str(i))
-        eq([], self.image.list_lockers())
+        eq({'tag': 'tag', 'exclusive': False, 'lockers': []},
+           self.image.list_lockers())
 
     def test_diff_iterate(self):
         def cb(offset, length, exists):
@@ -2299,31 +2302,56 @@ class TestClone(object):
 
     @require_linux()
     @blocklist_features([RBD_FEATURE_JOURNALING])
-    def test_encryption_luks1(self):
+    @pytest.mark.parametrize("format, header_size", [
+        pytest.param(RBD_ENCRYPTION_FORMAT_LUKS1, 4 << 20, id="luks1"),
+        pytest.param(RBD_ENCRYPTION_FORMAT_LUKS2, 16 << 20, id="luks2"),
+    ])
+    def test_encryption(self, format, header_size):
         data = b'hello world'
-        offset = 16<<20
-        image_size = 32<<20
 
-        self.clone.resize(image_size)
-        self.clone.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
-        self.clone.encryption_load2(
-            ((RBD_ENCRYPTION_FORMAT_LUKS1, "password"),))
-        self.clone.write(data, offset)
-        eq(self.clone.read(0, 16), self.image.read(0, 16))
+        self.image.resize(header_size + IMG_SIZE)
+        self.image.create_snap('snap2')
+        self.image.protect_snap('snap2')
+        self.image.resize(IMG_SIZE)
+        clone_name2 = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, 'snap2', ioctx, clone_name2, features)
 
-    @require_linux()
-    @blocklist_features([RBD_FEATURE_JOURNALING])
-    def test_encryption_luks2(self):
-        data = b'hello world'
-        offset = 16<<20
-        image_size = 64<<20
+        clone2 = Image(ioctx, clone_name2)
+        clone2.encryption_format(format, "password2")
+        clone2.encryption_load2([(format, "password2")])
+        eq(clone2.size(), self.image.size())
+        eq(clone2.read(0, 256), self.image.read(0, 256))
+        eq(clone2.read(IMG_SIZE // 2, 256), self.image.read(IMG_SIZE // 2, 256))
+        clone2.write(data, 0)
+        assert_not_equal(clone2.read(0, 256), self.image.read(0, 256))
+        eq(clone2.read(IMG_SIZE // 2, 256), self.image.read(IMG_SIZE // 2, 256))
+        clone2.create_snap('snap1')
+        clone2.protect_snap('snap1')
+        clone_name3 = get_temp_image_name()
+        self.rbd.clone(ioctx, clone_name2, 'snap1', ioctx, clone_name3,
+                       features)
 
-        self.clone.resize(image_size)
-        self.clone.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
-        self.clone.encryption_load2(
-            ((RBD_ENCRYPTION_FORMAT_LUKS2, "password"),))
-        self.clone.write(data, offset)
-        eq(self.clone.read(0, 16), self.image.read(0, 16))
+        clone3 = Image(ioctx, clone_name3)
+        clone3.encryption_format(format, "password3")
+        assert_raises(PermissionError, clone3.encryption_load2,
+                      [(format, "password3")])
+        clone3.encryption_load2([(format, "password3"), (format, "password2")])
+        eq(clone3.size(), clone2.size())
+        eq(clone3.read(0, 256), clone2.read(0, 256))
+        eq(clone3.read(IMG_SIZE // 2, 256), clone2.read(IMG_SIZE // 2, 256))
+        clone3.write(data, IMG_SIZE // 2)
+        eq(clone3.read(0, 256), clone2.read(0, 256))
+        assert_not_equal(clone3.read(IMG_SIZE // 2, 256),
+                         clone2.read(IMG_SIZE // 2, 256))
+
+        clone3.close()
+        self.rbd.remove(ioctx, clone_name3)
+        clone2.unprotect_snap('snap1')
+        clone2.remove_snap('snap1')
+        clone2.close()
+        self.rbd.remove(ioctx, clone_name2)
+        self.image.unprotect_snap('snap2')
+        self.image.remove_snap('snap2')
 
 class TestExclusiveLock(object):
 
@@ -3087,12 +3115,11 @@ class TestGroups(object):
             RBD().remove(ioctx, name)
 
     def test_group_image_add(self):
+        assert_raises(ObjectNotFound, self.dne_group.add_image, ioctx, image_name)
         self.group.add_image(ioctx, image_name)
 
-    def test_group_image_list_empty(self):
-        eq([], list(self.group.list_images()))
-
     def test_group_image_list(self):
+        assert_raises(ObjectNotFound, self.dne_group.list_images)
         eq([], list(self.group.list_images()))
         self.group.add_image(ioctx, image_name)
         eq([image_name], [img['name'] for img in self.group.list_images()])
@@ -3114,6 +3141,7 @@ class TestGroups(object):
         eq([image_name], [img['name'] for img in self.group.list_images()])
 
     def test_group_get_id(self):
+        assert_raises(ObjectNotFound, self.dne_group.id)
         id = self.group.id()
         assert isinstance(id, str)
         assert len(id) > 0
@@ -3142,6 +3170,7 @@ class TestGroups(object):
             eq(group_name, group['name'])
 
         eq([image_name], [img['name'] for img in self.group.list_images()])
+        assert_raises(ObjectNotFound, self.dne_group.remove_image, ioctx, image_name)
         self.group.remove_image(ioctx, image_name)
         eq([], list(self.group.list_images()))
         with Image(ioctx, image_name) as image:
@@ -3157,6 +3186,7 @@ class TestGroups(object):
         assert_raises(ObjectNotFound, self.group.get_snap_info, "")
 
         self.group.create_snap(snap_name)
+        assert_raises(ObjectNotFound, self.dne_group.get_snap_info, snap_name)
         snap_info_dict = self.group.get_snap_info(snap_name)
         image_names = []
         assert sorted(snap_info_dict.keys()) == self.gp_snap_keys
@@ -3194,6 +3224,7 @@ class TestGroups(object):
         global snap_name
         assert_raises(ObjectNotFound, self.dne_group.list_snaps)
         eq([], list(self.group.list_snaps()))
+        assert_raises(ObjectNotFound, self.dne_group.create_snap, snap_name)
         self.group.create_snap(snap_name)
         eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
 
@@ -3203,6 +3234,7 @@ class TestGroups(object):
             eq(group_name, info['group_name'])
             eq(snap_name, info['group_snap_name'])
 
+        assert_raises(ObjectNotFound, self.dne_group.remove_snap, snap_name)
         self.group.remove_snap(snap_name)
         eq([], list(self.group.list_snaps()))
 
@@ -3270,6 +3302,7 @@ class TestGroups(object):
         eq([], list(self.group.list_snaps()))
         self.group.create_snap(snap_name)
         eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        assert_raises(ObjectNotFound, self.dne_group.rename_snap, snap_name, new_snap_name)
         self.group.rename_snap(snap_name, new_snap_name)
         eq([new_snap_name], [snap['name'] for snap in self.group.list_snaps()])
         self.group.remove_snap(new_snap_name)
@@ -3464,6 +3497,9 @@ class TestGroups(object):
         with Image(ioctx, self.image_names[2]) as image:
             image_snaps = list(image.list_snaps())
             assert [s['namespace'] for s in image_snaps] == [RBD_SNAP_NAMESPACE_TYPE_GROUP]
+
+        # no group exists
+        assert_raises(ObjectNotFound, self.dne_group.rollback_to_snap, snap_name1)
 
         # group = []
         assert_raises(InvalidArgument, self.group.rollback_to_snap, snap_name1)

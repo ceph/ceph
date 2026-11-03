@@ -16,6 +16,7 @@ from typing import (
     Union,
 )
 from orchestrator import OrchestratorError
+from functools import lru_cache
 import hashlib
 
 if TYPE_CHECKING:
@@ -36,12 +37,23 @@ class CephadmNoImage(Enum):
 CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw',
               'rbd-mirror', 'cephfs-mirror', 'ceph-exporter']
 GATEWAY_TYPES = ['iscsi', 'nfs', 'nvmeof', 'smb']
+# rgw is a gateway too, but it uses the ceph container image and is therefore
+# listed in CEPH_TYPES, which also places it in the upgrade order. Use this
+# when you mean every gateway daemon type regardless of the image it uses.
+ALL_GATEWAY_TYPES = GATEWAY_TYPES + ['rgw']
 MONITORING_STACK_TYPES = ['node-exporter', 'prometheus',
-                          'alertmanager', 'grafana', 'loki', 'promtail', 'alloy']
+                          'alertmanager', 'grafana', 'loki', 'promtail', 'alloy',
+                          'pushgateway']
 MGMT_GATEWAY_STACK_TYPES = ['mgmt-gateway', 'oauth2-proxy']
-RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs', 'keepalived']
+INGRESS_TYPES = ['haproxy', 'keepalived']
+RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs', 'keepalived', 'smb']
 
-CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES + MGMT_GATEWAY_STACK_TYPES
+# Daemon types that must be upgraded one at a time (serially).
+# osd/mds/mon use the mon ok-to-stop gate; ingress daemons have no
+# such gate but must still be rolled one-at-a-time to preserve HA.
+SERIAL_UPGRADE_DAEMON_TYPES = ['osd', 'mds', 'mon'] + INGRESS_TYPES
+
+CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + INGRESS_TYPES + MONITORING_STACK_TYPES + MGMT_GATEWAY_STACK_TYPES
 
 # these daemon types use the ceph container image
 CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs', 'node-proxy']
@@ -49,10 +61,67 @@ CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs', 'node-proxy']
 # these daemons do not use the ceph image. There are other daemons
 # that also don't use the ceph image, but we only care about those
 # that are part of the upgrade order here
-NON_CEPH_IMAGE_TYPES = MONITORING_STACK_TYPES + ['nvmeof', 'smb'] + MGMT_GATEWAY_STACK_TYPES
+NON_CEPH_IMAGE_TYPES = MONITORING_STACK_TYPES + ['nvmeof', 'smb'] + MGMT_GATEWAY_STACK_TYPES + INGRESS_TYPES
 
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter
 cephadmNoImage = CephadmNoImage.token
+
+# allowed ciphers for cephx keyrings in this version.
+# We do not set preferred ciphers as we may potentially
+# brake clusters on upgrade
+ALLOWED_CIPHERS = ['aes', 'aes256k']
+# ROTATION_CIPHER is the cipher the new keys will be set
+# up with after we rotate them
+ROTATION_CIPHER = 'aes256k'
+# cipher mons should use by default for service requests
+# Do not set the service cipher until all core (mon/mgr/osd/mds)
+# daemons have been upgraded
+SERVICE_CIPHER = 'aes256k'
+
+
+def auth_allowed_cipher_names_from_mon_map(mon_map: Any) -> List[str]:
+    """Return auth_allowed_ciphers names from a MonMap dump (mgr get('mon_map')).
+    """
+    if not isinstance(mon_map, dict):
+        return []
+    raw = mon_map.get('auth_allowed_ciphers')
+    if not isinstance(raw, list):
+        return []
+    names: List[str] = []
+    for item in raw:
+        name = item.get('name') if isinstance(item, dict) else None
+        if name:
+            names.append(str(name))
+    return names
+
+
+def allowed_ciphers_are_aes256k_only(cipher_names: List[str]) -> bool:
+    """True when allowed ciphers are already restricted to aes256k (no legacy aes)."""
+    names = {name.strip() for name in cipher_names if name and name.strip()}
+    return names == {ROTATION_CIPHER}
+
+
+def auth_service_cipher_name_from_mon_map(mon_map: Any) -> Optional[str]:
+    """Return the auth_service_cipher name from a MonMap dump (mgr get('mon_map')).
+    """
+    if not isinstance(mon_map, dict):
+        return None
+    raw = mon_map.get('auth_service_cipher')
+    if not isinstance(raw, dict):
+        return None
+    name = raw.get('name')
+    return str(name) if name else None
+
+
+DEFAULT_SSH_CONFIG = """
+Host *
+  User root
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+  ConnectTimeout=30
+"""
+
+FIPS_SSH_CIPHERS = 'aes256-ctr,aes128-ctr'
 
 
 class ContainerInspectInfo(NamedTuple):
@@ -217,3 +286,76 @@ def get_node_proxy_status_value(data: Any, key: str, lower: bool = False) -> str
     if not isinstance(value, str):
         return ''
     return value.lower() if lower else value
+
+
+def get_config_option_meta(
+    mgr: 'CephadmOrchestrator',
+    key: str,
+    cache: Optional[dict[str, Optional[dict[str, Any]]]] = None,
+) -> Optional[dict[str, Any]]:
+    if cache is not None and key in cache:
+        return cache[key]
+
+    try:
+        ret, out, err = mgr.check_mon_command({
+            'prefix': 'config help',
+            'key': key,
+            'format': 'json',
+        })
+        meta = json.loads(out) if out else None
+    except Exception:
+        logger.exception("Failed to fetch config metadata for key %s", key)
+        meta = None
+
+    if cache is not None:
+        cache[key] = meta
+    return meta
+
+
+def can_apply_post_create(
+    mgr: 'CephadmOrchestrator',
+    key: str,
+    cache: Optional[dict[str, Optional[dict[str, Any]]]] = None,
+) -> bool:
+    meta = get_config_option_meta(mgr, key, cache)
+    if not meta:
+        return False
+    return bool(meta.get('can_update_at_runtime', False))
+
+
+@lru_cache(maxsize=1)
+def is_fips_enabled() -> bool:
+    try:
+        with open('/proc/sys/crypto/fips_enabled', 'r') as f:
+            return f.read().strip() == '1'
+    except OSError as error:
+        logger.debug(
+            'Unable to read /proc/sys/crypto/fips_enabled: %s',
+            error,
+        )
+        return False
+
+
+def get_default_ssh_config() -> str:
+    """Return the default cephadm SSH config for the local environment."""
+    ssh_config = DEFAULT_SSH_CONFIG
+
+    if is_fips_enabled():
+        ssh_config += f'  Ciphers {FIPS_SSH_CIPHERS}\n'
+
+    return ssh_config
+
+
+def build_ceph_volume_cmd(
+    log_level: str,
+    command: List[str],
+    prefix: Optional[List[str]] = None,
+) -> List[str]:
+    """Build ceph-volume argv after cephadm's '--' separator.
+
+    prefix is for flags that must appear before '--' (e.g. --config-json).
+    """
+    cmd: List[str] = list(prefix or [])
+    cmd.extend(['--', '--log-level', log_level])
+    cmd.extend(command)
+    return cmd

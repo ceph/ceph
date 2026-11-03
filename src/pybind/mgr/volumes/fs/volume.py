@@ -21,7 +21,7 @@ from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
 from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
-    get_pending_subvol_deletions_count, get_all_pending_clones_count
+    get_pending_subvol_deletions_count, get_all_pending_clones_count, get_mds_map
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone, open_subvol_in_group, open_subvol_in_vol
 
@@ -56,6 +56,26 @@ def name_to_json(names):
     for i in range(len(names)):
         namedict.append({'name': names[i].decode('utf-8')})
     return json.dumps(namedict, indent=4, sort_keys=True)
+
+
+def _normalize_volume_create_options(kwargs):
+    out = dict(kwargs)  # copy kwargs to avoid mutating input dict
+    if out.get('protocols') == 'smb':
+        # set defaults that are preferred for smb unless manually given.
+        # protocols itself just chooses better defaults for real attributes
+        casesensitive = out['casesensitive']
+        out['casesensitive'] = False if casesensitive is None else casesensitive
+        earmark = out['earmark']
+        out['earmark'] = 'smb' if earmark is None else earmark
+        mode = out['mode']
+        out['mode'] = '777' if mode is None else mode
+    # if not set, default to 755
+    out['mode'] = out.get('mode') or '755'
+    # if not set, default to empty string --> no earmark
+    out['earmark'] = out.get('earmark') or ''
+    # if not set, default to empty string --> no encryption tag
+    out['enctag'] = out.get('enctag') or ''
+    return out
 
 
 class VolumeClient(CephfsClient["Module"]):
@@ -232,10 +252,25 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
-        earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
+        earmark    = kwargs['earmark']
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
-        enctag = kwargs['enctag'] or '' # if not set, default to empty string
+        enctag = kwargs['enctag']
+
+        # inherit namespace isolation from group if not explicitly specified.
+        # Every group directory has an explicit pool layout, so reading its
+        # pool_namespace succeeds with an empty value when the group is not
+        # namespace isolated. The default group directory does not exist
+        # until its first subvolume is created.
+        if not isolate_nspace:
+            try:
+                group_nspace = fs_handle.getxattr(group.path,
+                                                  'ceph.dir.layout.pool_namespace')
+                isolate_nspace = bool(group_nspace)
+            except (cephfs.NoData, cephfs.ObjectNotFound):
+                pass
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
 
         oct_mode = octal_str_to_decimal_int(mode)
 
@@ -249,6 +284,7 @@ class VolumeClient(CephfsClient["Module"]):
             raise ve
 
     def create_subvolume(self, **kwargs):
+        kwargs = _normalize_volume_create_options(kwargs)
         ret        = 0, "", ""
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
@@ -259,10 +295,10 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
-        earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
+        earmark    = kwargs['earmark']
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
-        enctag    = kwargs['enctag'] or ''  # if not set, default to empty string --> no encryption tag
+        enctag    = kwargs['enctag']
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -520,9 +556,18 @@ class VolumeClient(CephfsClient["Module"]):
                         subvol_info_dict = subvolume.info()
                         subvol_info_dict["mon_addrs"] = mon_addr_lst
                         subvol_info_dict["flavor"] = subvolume.VERSION
+                        subvol_info_dict["quarantine"] = "disabled"
                         ret = 0, json.dumps(subvol_info_dict, indent=4, sort_keys=True), ""
         except VolumeException as ve:
-            ret = self.volume_exception_to_retval(ve)
+            if ve.errno == -errno.EACCES:
+                subvol_info_dict = {
+                    "name": subvolname,
+                    "group": groupname if groupname else "_nogroup",
+                    "quarantine": "enabled",
+                }
+                ret = 0, json.dumps(subvol_info_dict, indent=4, sort_keys=True), ""
+            else:
+                ret = self.volume_exception_to_retval(ve)
         return ret
 
     @volume_exception_to_retval
@@ -797,6 +842,65 @@ class VolumeClient(CephfsClient["Module"]):
             log.error(f"EncryptionTag error occurred: {ee}")
             ret = ee.to_tuple()  # type: ignore
         return ret
+
+    ### subvolume quarantine
+
+    def quarantine_subvolume(self, **kwargs):
+        """
+        Enable or disable quarantine on a subvolume by sending command to MDS.
+        Quarantine blocks normal client access while allowing recovery clients
+        with 'rwq' capabilities to access the data.
+
+        The subvolume root path is constructed directly from the volume spec
+        without opening the subvolume via CephFS, because the mgr's CephFS
+        client does not have quarantine access and would be blocked.
+        """
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname  = kwargs['group_name']
+        cmd_prefix = "quarantine enable" if kwargs['enable'] else "quarantine disable"
+
+        try:
+            group_name = groupname if groupname else "_nogroup"
+            path = "{base_dir}/{group}/{subvol}".format(
+                base_dir=self.volspec.base_dir,
+                group=group_name,
+                subvol=subvolname)
+            log.info("Sending %s for subvolume root path %s", cmd_prefix, path)
+
+            mds_map = get_mds_map(self.mgr, volname)
+            if mds_map is None:
+                raise VolumeException(-errno.ENOENT, f"Volume '{volname}' not found")
+
+            ret = self._send_quarantine_command(mds_map, cmd_prefix, path)
+            if not kwargs['enable'] and ret[0] == 0:
+                # clones and purges blocked by the quarantine can make
+                # progress now -- no need to wait for their backoff to expire.
+                self.cloner.clear_deferred(volname)
+                self.purge_queue.clear_deferred(volname)
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def _send_quarantine_command(self, mds_map, cmd_prefix, path):
+        """
+        Send quarantine command to any active MDS. The MDS will forward the
+        request to the authoritative rank via rdlock_path_pin_ref() if needed.
+        """
+        for rank_name, gid in sorted(mds_map.get('up', {}).items()):
+            info = mds_map['info'].get(f"gid_{gid}")
+            if info and info['state'] in ('up:active', 'up:clientreplay'):
+                cmd_dict = {"prefix": cmd_prefix, "path": path}
+                log.debug("Sending %s to MDS gid %s (%s)", cmd_prefix, gid, rank_name)
+                # one_shot: fail with EPIPE (and let the caller retry) should
+                # the MDS connection reset, rather than waiting forever for a
+                # reply to a command the MDS may have dropped -- that would
+                # block all mgr/volumes commands, as they are handled serially.
+                return self.mgr.tell_command("mds", str(gid), cmd_dict,
+                                             one_shot=True)
+
+        raise VolumeException(-errno.ENOENT, "No active MDS found")
 
     ### subvolume snapshot
 
@@ -1156,6 +1260,8 @@ class VolumeClient(CephfsClient["Module"]):
         mode      = kwargs['mode']
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
+        namespace_isolated = kwargs.get('namespace_isolated', False)
+        pool_namespace = kwargs.get('pool_namespace', None)
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -1171,11 +1277,13 @@ class VolumeClient(CephfsClient["Module"]):
                             'normalization': normalization,
                             'casesensitive': casesensitive,
                         }
+                        if namespace_isolated:
+                            attrs['pool_namespace'] = pool_namespace or f'{self.volspec.fs_namespace}_{groupname}'
                         set_group_attrs(fs_handle, group.path, attrs)
                 except VolumeException as ve:
                     if ve.errno == -errno.ENOENT:
                         oct_mode = octal_str_to_decimal_int(mode)
-                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid, normalization, casesensitive)
+                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid, normalization, casesensitive, namespace_isolated, pool_namespace)
                     else:
                         raise
         except VolumeException as ve:

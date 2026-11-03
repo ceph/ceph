@@ -12,7 +12,6 @@ import { TableActionsComponent } from '~/app/shared/datatable/table-actions/tabl
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
-import { MgrModuleDetailsComponent } from '../mgr-module-details/mgr-module-details.component';
 import { MgrModuleListComponent } from './mgr-module-list.component';
 import { SummaryService } from '~/app/shared/services/summary.service';
 
@@ -22,7 +21,7 @@ describe('MgrModuleListComponent', () => {
   let mgrModuleService: MgrModuleService;
 
   configureTestBed({
-    declarations: [MgrModuleListComponent, MgrModuleDetailsComponent],
+    declarations: [MgrModuleListComponent],
     imports: [
       BrowserAnimationsModule,
       RouterTestingModule,

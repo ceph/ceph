@@ -183,6 +183,7 @@ class StoreUser : public User {
     virtual void set_attrs(Attrs& _attrs) override { attrs = _attrs; }
     virtual bool empty() const override { return info.user_id.id.empty(); }
     virtual RGWUserInfo& get_info() override { return info; }
+    virtual const RGWUserInfo& get_info() const override { return info; }
     virtual void set_info(RGWQuotaInfo& _quota) override {
       info.quota.user_quota.max_size = _quota.max_size;
       info.quota.user_quota.max_objects = _quota.max_objects;
@@ -272,6 +273,7 @@ class StoreBucket : public Bucket {
     int write_logging_object(const std::string& obj_name, const std::string& record, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
       return 0;
     }
+    virtual void set_cache_request() override {};
 
     friend class BucketList;
 };
@@ -378,6 +380,10 @@ class StoreObject : public Object {
 			   optional_yield y) override {
       return -1;
     }
+    virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y,
+                           uint32_t flags) override {
+      return 0;
+    }
     jspan_context& get_trace() override { return trace_ctx; }
     void set_trace (jspan_context&& _trace_ctx) override { trace_ctx = std::move(_trace_ctx); }
 
@@ -392,6 +398,8 @@ class StoreObject : public Object {
     }
 
     virtual RGWObjVersionTracker& get_version_tracker() override { return state.objv_tracker; }
+
+    virtual void set_cache_request() override {};
 
     virtual void print(std::ostream& out) const override {
       if (bucket)

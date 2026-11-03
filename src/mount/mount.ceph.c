@@ -41,6 +41,7 @@ static const char * const EMPTY_STRING = "";
 #define CEPH_V2_MOUNT_SUPPORT_PATH CEPH_SYS_FS_PARAM_PATH"/mount_syntax_v2"
 
 #define CEPH_DEFAULT_V2_MS_MODE "prefer-crc"
+#define CEPH_ENOTSUPP 524	/* kernel-internal, not in errno.h */
 
 #include "mtab.c"
 
@@ -449,6 +450,8 @@ static int fetch_config_info(struct ceph_mount_info *cmi)
 				memcpy(cmi->cmi_secret, cci->cci_secret, len + 1);
 			} else {
 				mount_ceph_debug("secret is too long (len=%zu max=%zu)!\n", len, SECRET_BUFSIZE);
+        ret = EX_SYSERR;
+        goto out;
 			}
 		}
 		if (!cmi->cmi_mons && cci->cci_mons[0]) {
@@ -569,8 +572,12 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi,
 			}
 
 			len = strnlen(value, sizeof(cmi->cmi_secret)) + 1;
-			if (len <= sizeof(cmi->cmi_secret))
+			if (len <= sizeof(cmi->cmi_secret)) {
 				memcpy(cmi->cmi_secret, value, len);
+      } else {
+				fprintf(stderr, "mount option secret is too long.\n");
+				return -EINVAL;
+      }
 		} else if (strcmp(data, "conf") == 0) {
 			if (!value || !*value) {
 				fprintf(stderr, "mount option conf requires a value.\n");
@@ -952,6 +959,8 @@ static int append_key_or_secret_option(struct ceph_mount_info *cmi)
 				return 0;
 			}
 			fprintf(stderr, "adding ceph secret key to kernel failed: %s\n",
+				ret == -CEPH_ENOTSUPP ?
+				"key type not supported (aes256k needs Linux 7.0)" :
 				strerror(-ret));
 			return ret;
 		}

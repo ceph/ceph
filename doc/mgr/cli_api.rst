@@ -54,9 +54,14 @@ For example, run the following command to benchmark the command to get
    ceph mgr cli_benchmark 100 10 get osd_map
 
 
-Flush the saved cache map for the Ceph Manager CLI. Use this command to refresh the cache
-and ensure the most up-to-date information is used:
+In Umbrella and later releases, you can flush one entry of the Manager's
+map cache by running a command of the following form:
 
 .. prompt:: bash #
 
-   ceph mgr cli cache flush <map-name>
+   ceph mgr cli cache flush <name>
+
+``<name>`` is one of ``osd_map``, ``pg_dump``, ``pg_stats``, ``mon_status``,
+``mgr_map``, ``osd_metadata``, ``mds_metadata`` or ``config``. For how the
+cache works, see "Performance and Scalability" in
+:ref:`mgr-administrator-guide`.

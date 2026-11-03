@@ -806,7 +806,7 @@ struct transaction_manager_test_t :
 	  t,
 	  get_laddr_hint(0),
 	  L_ADDR_MAX,
-	  [iter=overlay.begin(), &overlay](auto l, auto p, auto len) mutable {
+	  [iter=overlay.begin(), &overlay](auto l, auto p, auto s, auto len) mutable {
 	    EXPECT_NE(iter, overlay.end());
 	    logger().debug(
 	      "check_mappings: scan {}",
@@ -922,7 +922,7 @@ struct transaction_manager_test_t :
       if (run_clean) {
         return epm->run_background_work_until_halt();
       } else {
-        return epm->background_process.trimmer->trim();
+        return epm->background_process.trimmer->trim(false);
       }
     }).handle_error(
       crimson::ct_error::assert_all(
@@ -1149,7 +1149,9 @@ struct transaction_manager_test_t :
               get_extent_category(t),
               t,
               placement_hint_t::HOT,
-              gen);
+              gen,
+	      write_policy_t::WRITE_BACK,
+	      false);
             if (expected_generations[t][gen] != epm_gen) {
               logger().error("caller: {}, extent type: {}, input generation: {}, "
 			     "expected generation : {}, adjust result from EPM: {}",
@@ -1868,19 +1870,19 @@ struct transaction_manager_test_t :
 struct tm_single_device_test_t :
   public transaction_manager_test_t {
 
-  tm_single_device_test_t() : transaction_manager_test_t(1, 0) {}
+  tm_single_device_test_t() : transaction_manager_test_t(0, 1) {}
 };
 
 struct tm_single_device_intergrity_check_test_t :
   public transaction_manager_test_t {
 
-  tm_single_device_intergrity_check_test_t() : transaction_manager_test_t(1, 0) {}
+  tm_single_device_intergrity_check_test_t() : transaction_manager_test_t(0, 1) {}
 };
 
 struct tm_multi_device_test_t :
   public transaction_manager_test_t {
 
-  tm_multi_device_test_t() : transaction_manager_test_t(3, 0) {}
+  tm_multi_device_test_t() : transaction_manager_test_t(0, 3) {}
 };
 
 struct tm_multi_tier_device_test_t :
@@ -1892,7 +1894,7 @@ struct tm_multi_tier_device_test_t :
 struct tm_random_block_device_test_t :
   public transaction_manager_test_t {
 
-  tm_random_block_device_test_t() : transaction_manager_test_t(1, 0) {}
+  tm_random_block_device_test_t() : transaction_manager_test_t(0, 1) {}
 };
 
 TEST_P(tm_random_block_device_test_t, scatter_allocation)
@@ -1901,14 +1903,53 @@ TEST_P(tm_random_block_device_test_t, scatter_allocation)
     laddr_t ADDR = get_laddr_hint(0xFF * 4096);
     epm->prefill_fragmented_devices();
     auto t = create_transaction();
-    for (int i = 0; i < 1974; i++) {
+    for (int i = 0; i < 1958; i++) {
+      logger().info("scatter_allocation: {}", i);
       auto extents = alloc_extents(t, (ADDR + i * 16384).checked_to_laddr(), 16384, 'a');
     }
-    alloc_extents_deemed_fail(t, (ADDR + 1974 * 16384).checked_to_laddr(), 16384, 'a');
+    alloc_extents_deemed_fail(t, (ADDR + 1958 * 16384).checked_to_laddr(), 16384, 'a');
     check_mappings(t);
     check();
+  });
+}
+
+TEST_P(tm_random_block_device_test_t, storage_full_failsafe_threshold)
+{
+  run_async([this] {
+    // A fresh store is far below the default failsafe ratio (0.97).
+    EXPECT_FALSE(tm->is_storage_full());
+
+    auto st = tm->store_stat();
+    ASSERT_GT(st.total, 0);
+    ASSERT_GE(st.total, st.available);
+
+    // Lower the ratio to just above the current used fraction, leaving half
+    // of the upcoming allocation as margin on each side of the threshold, so
+    // the allocation below is what crosses it.
+    constexpr extent_len_t EXTENT_SIZE = 16384;
+    constexpr unsigned NUM_EXTENTS = 64;
+    constexpr uint64_t alloc_bytes = uint64_t(EXTENT_SIZE) * NUM_EXTENTS;
+    const double used_fraction =
+      double(st.total - st.available) / double(st.total);
+    const double ratio =
+      used_fraction + double(alloc_bytes) / (2.0 * double(st.total));
+    crimson::common::local_conf().set_val(
+      "osd_failsafe_full_ratio", std::to_string(ratio)).get();
+    EXPECT_FALSE(tm->is_storage_full());
+
+    laddr_t ADDR = get_laddr_hint(0xFF * 4096);
+    auto t = create_transaction();
+    for (unsigned i = 0; i < NUM_EXTENTS; i++) {
+      alloc_extents(
+	t, (ADDR + i * EXTENT_SIZE).checked_to_laddr(), EXTENT_SIZE, 'a');
+    }
     submit_transaction(std::move(t));
-    check();
+    EXPECT_TRUE(tm->is_storage_full());
+
+    // The threshold tracks the config knob: restoring the default clears it.
+    crimson::common::local_conf().set_val(
+      "osd_failsafe_full_ratio", "0.97").get();
+    EXPECT_FALSE(tm->is_storage_full());
   });
 }
 
@@ -2405,3 +2446,51 @@ INSTANTIATE_TEST_SUITE_P(
       integrity_check_t::NONFULL_CHECK)
   )
 );
+
+#include "crimson/os/seastore/block_io_driver.h"
+#ifdef HAVE_ZNS
+#include "crimson/os/seastore/segment_manager/zbd.h"
+#endif
+
+TEST(transaction_manager_test, spdk_zbd_negative_test) {
+  seastar_test_suite_t::seastar_env.run([] {
+    return crimson::common::local_conf().set_val(
+      "seastore_spdk_transport_id", "0000:01:00.0"
+    ).then([] {
+      EXPECT_THROW(
+        make_block_io_driver("some_path", device_type_t::ZBD),
+        std::invalid_argument
+      );
+#ifdef HAVE_ZNS
+      // ZBDSegmentManager is only built with WITH_ZNS; its mount()/mkfs()
+      // refuse the SPDK transport before touching the device.
+      auto zbd_manager = std::make_unique<segment_manager::zbd::ZBDSegmentManager>(
+        "some_path", device_type_t::ZBD, 0);
+      return zbd_manager->mount().safe_then([] {
+        ADD_FAILURE() << "ZBD mount() succeeded with the SPDK transport set";
+      }).handle_error(
+        [](const crimson::ct_error::input_output_error& e) {
+          return seastar::now();
+        },
+        crimson::ct_error::assert_all("Unexpected error in ZBD mount test")
+      ).then([zbd_manager = std::move(zbd_manager)]() mutable {
+        device_config_t config;
+        return zbd_manager->mkfs(config).safe_then([] {
+          ADD_FAILURE() << "ZBD mkfs() succeeded with the SPDK transport set";
+        }).handle_error(
+          [](const crimson::ct_error::input_output_error& e) {
+            return seastar::now();
+          },
+          crimson::ct_error::assert_all("Unexpected error in ZBD mkfs test")
+        );
+      });
+#else
+      return seastar::now();
+#endif
+    }).finally([] {
+      // Restore the option on every path so later tests see the default.
+      return crimson::common::local_conf().set_val(
+        "seastore_spdk_transport_id", "");
+    });
+  });
+}

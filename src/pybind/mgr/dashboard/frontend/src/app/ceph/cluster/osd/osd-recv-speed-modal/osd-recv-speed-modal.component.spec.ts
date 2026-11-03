@@ -258,7 +258,7 @@ describe('OsdRecvSpeedModalComponent', () => {
     it('should return nothing if neither value nor default value is given', () => {
       configOptions[0].default = null;
       const currentValues = component.getCurrentValues(configOptions);
-      expect(currentValues.values).not.toContain('osd_max_backfills');
+      expect(currentValues.values).not.toHaveProperty('osd_max_backfills');
     });
   });
 

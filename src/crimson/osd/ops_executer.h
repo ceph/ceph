@@ -197,6 +197,10 @@ private:
   size_t num_read = 0;    ///< count read ops
   size_t num_write = 0;   ///< count update ops
 
+  /// obc->attr_cache as it was before the first op of this request
+  /// modified it. Used to revert the cache if a later op fails.
+  std::optional<ObjectContext::attr_cache_t> attr_cache_backup;
+
   SnapContext snapc; // writer snap context
   struct CloningContext {
     /// id of new clone, populated in prepare_cloning_ctx
@@ -207,6 +211,10 @@ private:
     ObjectContextRef clone_obc;
   };
   std::unique_ptr<CloningContext> cloning_ctx;
+
+  /// the clone that a ROLLBACK op copies to the head, populated in
+  /// PGBackend::rollback()
+  ObjectContextRef rollback_to;
 
   /**
    * prepare_cloning_ctx
@@ -466,6 +474,13 @@ public:
 
   void reset_cloning_ctx() {
     cloning_ctx.reset();
+  }
+
+  void rollback_attr_cache() {
+    if (attr_cache_backup) {
+      obc->attr_cache = std::move(*attr_cache_backup);
+      attr_cache_backup.reset();
+    }
   }
 
   ObjectContextRef prepare_clone(

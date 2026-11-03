@@ -1,4 +1,4 @@
-import { Component, ViewChild } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -18,7 +18,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
   styleUrls: ['./mgr-module-list.component.scss'],
   standalone: false
 })
-export class MgrModuleListComponent extends ListWithDetails {
+export class MgrModuleListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
 
@@ -27,6 +27,7 @@ export class MgrModuleListComponent extends ListWithDetails {
   columns: CdTableColumn[] = [];
   modules: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
+  viewUrl = '/mgr-modules';
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -34,27 +35,6 @@ export class MgrModuleListComponent extends ListWithDetails {
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().configOpt;
-    this.columns = [
-      {
-        name: $localize`Name`,
-        prop: 'name',
-        flexGrow: 1
-      },
-      {
-        name: $localize`Enabled`,
-        prop: 'enabled',
-        flexGrow: 1,
-        cellClass: 'text-center',
-        cellTransformation: CellTemplate.checkIcon
-      },
-      {
-        name: $localize`Always-On`,
-        prop: 'always_on',
-        flexGrow: 1,
-        cellClass: 'text-center',
-        cellTransformation: CellTemplate.checkIcon
-      }
-    ];
     const getModuleUri = () =>
       this.selection.first() && encodeURIComponent(this.selection.first().name);
     this.tableActions = [
@@ -88,10 +68,38 @@ export class MgrModuleListComponent extends ListWithDetails {
     ];
   }
 
+  ngOnInit() {
+    this.columns = [
+      {
+        name: $localize`Name`,
+        prop: 'name',
+        flexGrow: 1,
+        cellTransformation: CellTemplate.routerLink
+      },
+      {
+        name: $localize`Enabled`,
+        prop: 'enabled',
+        flexGrow: 1,
+        cellClass: 'text-center',
+        cellTransformation: CellTemplate.checkIcon
+      },
+      {
+        name: $localize`Always-On`,
+        prop: 'always_on',
+        flexGrow: 1,
+        cellClass: 'text-center',
+        cellTransformation: CellTemplate.checkIcon
+      }
+    ];
+  }
+
   getModuleList(context: CdTableFetchDataContext) {
     this.mgrModuleService.list().subscribe(
       (resp: object[]) => {
-        this.modules = resp;
+        this.modules = resp.map((module: any) => ({
+          ...module,
+          cdLink: `${this.viewUrl}/${encodeURIComponent(module.name)}/overview`
+        }));
       },
       () => {
         context.error();

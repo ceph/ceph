@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      global:
-        mon pg warn min per osd: 0

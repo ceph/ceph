@@ -57,7 +57,7 @@ export class DateTimePickerComponent implements OnInit {
 
     let mom = moment(this.control?.value, this.format);
 
-    if (!mom.isValid() || mom.isBefore(moment())) {
+    if (!mom.isValid() || (!this.disabled && mom.isBefore(moment()))) {
       mom = moment();
     }
     if (this.defaultDate) {

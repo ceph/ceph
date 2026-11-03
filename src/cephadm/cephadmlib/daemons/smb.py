@@ -1,5 +1,6 @@
 import dataclasses
 import enum
+import hashlib
 import json
 import logging
 import pathlib
@@ -51,6 +52,7 @@ _NODES_SUBCMD = [_SCC, 'ctdb-list-nodes']
 _MUTEX_SUBCMD = [_SCC, 'ctdb-rados-mutex']  # requires rados uri
 _ETC_SAMBA_TLS = '/etc/samba/tls'
 _WANT_SIGNAL_DIR = '/run/want_update_signal'
+_MAX_HOSTNAME_LEN = 64  # Linux HOST_NAME_MAX
 
 
 class Features(enum.Enum):
@@ -276,6 +278,19 @@ class Config:
         return uris
 
 
+def _truncated_vhostname(instance_id: str, hname: str) -> str:
+    """Join instance_id and hname, shortening if needed so the result
+    fits Linux's HOST_NAME_MAX.
+    """
+    raw = f'{instance_id}-{hname}'
+    if len(raw) <= _MAX_HOSTNAME_LEN:
+        return raw
+    digest = hashlib.sha1(hname.encode()).hexdigest()[:8]
+    cut = len(raw) - _MAX_HOSTNAME_LEN + len(digest)
+    mangled = f'{instance_id}-{digest}{hname[cut:]}'
+    return mangled[:_MAX_HOSTNAME_LEN]
+
+
 def _container_dns_args(cfg: Config) -> List[str]:
     cargs = []
     for dns in cfg.custom_dns:
@@ -327,6 +342,12 @@ class SambaContainerCommon(ContainerCommon):
         # variable. This can be dropped once sambacc no longer needs it,
         # possibly after the next sambacc release.
         environ['SAMBACC_CTDB'] = 'ctdb-is-experimental'
+        environ[
+            'SAMBACC_PASSWD_LOCATION'
+        ] = '/etc/passwd:/var/lib/samba/passwd:/lib/passwd'
+        environ[
+            'SAMBACC_GROUP_LOCATION'
+        ] = '/etc/group:/var/lib/samba/group:/lib/group'
         if self.cfg.ceph_config_entity:
             environ['SAMBACC_CEPH_ID'] = f'name={self.cfg.ceph_config_entity}'
         if self.cfg.rank >= 0:
@@ -368,8 +389,11 @@ class SMBDContainer(SambaContainerCommon):
         args = super().args()
         args.append('run')
         if self.cfg.clustered:
-            auth_kind = 'nsswitch' if self.cfg.domain_member else 'users'
-            args.append(f'--setup={auth_kind}')
+            if self.cfg.domain_member:
+                args.append('--setup=nsswitch')
+            else:
+                args.append('--setup=nsswitch_auto')
+                args.append('--setup=users')
             args.append('--setup=smb_ctdb')
             args.append('--wait-for=ctdb')
         args.append('smbd')
@@ -445,11 +469,17 @@ class ConfigWatchContainer(SambaContainerCommon):
         return 'configwatch'
 
     def args(self) -> List[str]:
-        return super().args() + [
-            'update-config',
-            '--watch',
-            f'--signal-pids-dir={_WANT_SIGNAL_DIR}',
-        ]
+        args = super().args()
+        args.append('run')
+        if self.cfg.clustered:
+            if self.cfg.domain_member:
+                args.append('--setup=nsswitch')
+            else:
+                args.append('--setup=nsswitch_auto')
+            args.append('--wait-for=ctdb')
+        args.append(f'--config-watch-signal-pids-dir={_WANT_SIGNAL_DIR}')
+        args.append('configwatch')
+        return args
 
 
 class SMBMetricsContainer(ContainerCommon):
@@ -733,7 +763,7 @@ class SMB(ContainerDaemonForm):
             # if a virtual hostname is not provided, generate one by prefixing
             # the cluster/instanced id to the system hostname
             hname = socket.getfqdn()
-            vhostname = f'{instance_id}-{hname}'
+            vhostname = _truncated_vhostname(instance_id, hname)
         # if the proxy is not to be deployed don't set the image
         # if the proxy is to be deployed use the supplied image or
         # the default ceph image
@@ -972,6 +1002,7 @@ class SMB(ContainerDaemonForm):
     def customize_container_args(
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
+        args.append(ctx.container_engine.unlimited_pids_option)
         args.extend(self._layout().primary.container_args())
 
     def customize_container_mounts(

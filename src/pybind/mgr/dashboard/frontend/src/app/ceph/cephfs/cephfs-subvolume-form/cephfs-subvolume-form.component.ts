@@ -65,14 +65,15 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
     @Optional() @Inject('subVolumeName') public subVolumeName: string,
     @Optional() @Inject('subVolumeGroupName') public subVolumeGroupName: string,
     @Optional() @Inject('pools') public pools: Pool[],
-    @Optional() @Inject('isEdit') public isEdit = false
+    @Optional() @Inject('isEdit') public isEdit = false,
+    @Optional() @Inject('isRecreate') public isRecreate = false
   ) {
     super();
     this.resource = $localize`Subvolume`;
   }
 
   ngOnInit(): void {
-    this.action = this.actionLabels.CREATE;
+    this.action = this.isRecreate ? this.actionLabels.RECREATE : this.actionLabels.CREATE;
     this.columns = [
       {
         prop: 'scope',
@@ -104,8 +105,24 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
     this.createForm();
 
     this.loadSnapshotVisibilityConfig().subscribe(() => {
-      this.isEdit ? this.populateForm() : this.loadingReady();
+      if (this.isEdit) {
+        this.populateForm();
+      } else {
+        if (this.isRecreate) {
+          this.prepareRecreateForm();
+        }
+        this.loadingReady();
+      }
     });
+  }
+
+  private prepareRecreateForm() {
+    const nameControl = this.subvolumeForm.get('subvolumeName');
+    nameControl.setValue(this.subVolumeName);
+    nameControl.disable();
+    nameControl.clearAsyncValidators();
+    nameControl.updateValueAndValidity();
+    this.subvolumeForm.get('subvolumeGroupName').disable();
   }
 
   private loadSnapshotVisibilityConfig(): Observable<void> {

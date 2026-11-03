@@ -12,6 +12,7 @@
 #include <vector>
 #include <chrono>
 #include <stdexcept>
+#include <fmt/chrono.h>
 
 static const char* xmldoc_1 =
 R"(<Filter>

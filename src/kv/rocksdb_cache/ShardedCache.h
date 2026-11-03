@@ -16,6 +16,10 @@
 
 #include "rocksdb/version.h"
 #include "rocksdb/cache.h"
+#if __has_include("rocksdb/advanced_cache.h")
+// since RocksDB v8, rocksdb/cache.h only forward-declares rocksdb::Cache
+#include "rocksdb/advanced_cache.h"
+#endif
 #include "include/ceph_hash.h"
 #include "common/PriorityCache.h"
 //#include "hash.h"
@@ -23,6 +27,14 @@
 #ifndef CACHE_LINE_SIZE
 #define CACHE_LINE_SIZE 64 // XXX arch-specific define 
 #endif
+
+// RocksDB reworked rocksdb::Cache one piece at a time, so each override has
+// its own cut-off: v8.1 dropped "wait" from Lookup() and added
+// CreateStandalone(), v8.7 gave Insert() its compressed/type parameters, and
+// v9.7 added ApplyToHandle().
+#define CEPH_ROCKSDB_SINCE(major, minor) \
+  (ROCKSDB_MAJOR > (major) || \
+   (ROCKSDB_MAJOR == (major) && ROCKSDB_MINOR >= (minor)))
 
 namespace rocksdb_cache {
 
@@ -38,6 +50,14 @@ class CacheShard {
                                  size_t charge,
                                  rocksdb::Cache::Handle** handle,
                                  rocksdb::Cache::Priority priority) = 0;
+#if CEPH_ROCKSDB_SINCE(8, 1)
+  // backs rocksdb::Cache::CreateStandalone()
+  virtual rocksdb::Cache::Handle* CreateStandalone(
+      const rocksdb::Slice& key, uint32_t hash,
+      rocksdb::Cache::ObjectPtr value,
+      const rocksdb::Cache::CacheItemHelper* helper,
+      size_t charge, bool allow_uncharged) = 0;
+#endif
   virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key, uint32_t hash) = 0;
   virtual bool Ref(rocksdb::Cache::Handle* handle) = 0;
   virtual bool Release(rocksdb::Cache::Handle* handle, bool force_erase = false) = 0;
@@ -68,18 +88,47 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
   // rocksdb::Cache
   virtual const char* Name() const override = 0;
   using rocksdb::Cache::Insert;
+  // these must match the base declarations exactly, or they stop overriding
+  // and ShardedCache stays abstract
+#if CEPH_ROCKSDB_SINCE(8, 7)
+  virtual rocksdb::Status Insert(const rocksdb::Slice& key,
+                                 rocksdb::Cache::ObjectPtr value,
+                                 const rocksdb::Cache::CacheItemHelper* helper,
+                                 size_t charge,
+                                 rocksdb::Cache::Handle** handle,
+                                 Priority priority,
+                                 const rocksdb::Slice& compressed = rocksdb::Slice(),
+                                 rocksdb::CompressionType type =
+                                   rocksdb::CompressionType::kNoCompression) override;
+#else
   virtual rocksdb::Status Insert(const rocksdb::Slice& key,
                                  rocksdb::Cache::ObjectPtr value,
                                  const rocksdb::Cache::CacheItemHelper* helper,
                                  size_t charge,
                                  rocksdb::Cache::Handle** handle,
                                  Priority priority) override;
+#endif
+#if CEPH_ROCKSDB_SINCE(8, 1)
+  // creates an entry Lookup() cannot find, used for charging memory
+  virtual rocksdb::Cache::Handle* CreateStandalone(
+      const rocksdb::Slice& key, rocksdb::Cache::ObjectPtr value,
+      const rocksdb::Cache::CacheItemHelper* helper,
+      size_t charge, bool allow_uncharged) override;
+#endif
   using rocksdb::Cache::Lookup;
+#if CEPH_ROCKSDB_SINCE(8, 1)
+  virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key,
+                                         const rocksdb::Cache::CacheItemHelper* helper,
+                                         rocksdb::Cache::CreateContext* create_context,
+                                         Priority priority,
+                                         rocksdb::Statistics* stats) override;
+#else
   virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key,
                                          const rocksdb::Cache::CacheItemHelper* helper,
                                          rocksdb::Cache::CreateContext* create_context,
                                          Priority priority, bool wait,
                                          rocksdb::Statistics* stats) override;
+#endif
   virtual bool Ref(rocksdb::Cache::Handle* handle) override;
   using rocksdb::Cache::Release;
   virtual bool Release(rocksdb::Cache::Handle* handle, bool force_erase = false) override;

@@ -1,4 +1,4 @@
-:orphan:
+.. _install-windows-troubleshooting:
 
 ===============================
 Troubleshooting Ceph on Windows
@@ -68,10 +68,10 @@ using:
 
     ceph daemon /mnt/c/ProgramData/ceph/out/ceph-client.admin.61436.1209215304.asok help
 
-IO counters
-~~~~~~~~~~~
+I/O counters
+~~~~~~~~~~~~
 
-Along with the standard RBD perf counters, the ``libwnbd`` IO counters may be
+Along with the standard RBD perf counters, the ``libwnbd`` I/O counters may be
 retrieved using:
 
 .. code:: PowerShell

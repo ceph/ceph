@@ -174,6 +174,43 @@ TEST(Transaction, GetNumBytes)
 
   a.touch(acid, oid);
   ASSERT_TRUE(a.get_encoded_bytes() == a.get_encoded_bytes_test());
+
+  // the fast path must size the legacy (version 9) encoding exactly
+  bufferlist legacy_bl;
+  a.encode(legacy_bl);
+  ASSERT_EQ(a.get_encoded_bytes(), legacy_bl.length());
+}
+
+TEST(Transaction, GetNumBytesAligned)
+{
+  auto a = ObjectStore::Transaction{CEPH_FEATUREMASK_SERVER_TENTACLE};
+
+  coll_t cid;
+  object_t obj("test_name");
+  snapid_t snap(0);
+  hobject_t hoid(obj, "key", snap, 0, 0, "nspace");
+  ghobject_t oid(hoid);
+
+  bufferlist bl;
+  bl.append_zero(3 * CEPH_PAGE_SIZE);
+
+  // page-aligned write: the whole payload lands in data_aligned_bl
+  a.write(cid, oid, 0, bl.length(), bl, 0);
+  ASSERT_EQ(a.get_encoded_bytes(), a.get_encoded_bytes_test());
+  ASSERT_GE(a.get_encoded_bytes(), bl.length());
+
+  // misaligned write: prefix and suffix in data_misaligned_bl, the pages
+  // in between in data_aligned_bl
+  a.write(cid, oid, 1, bl.length(), bl, 0);
+  ASSERT_EQ(a.get_encoded_bytes(), a.get_encoded_bytes_test());
+  ASSERT_GE(a.get_encoded_bytes(), 2 * bl.length());
+
+  a.touch(cid, oid);
+
+  // the fast path must size the version 10 encoding exactly
+  bufferlist p_bl, d_bl;
+  a.encode(p_bl, d_bl, CEPH_FEATUREMASK_SERVER_TENTACLE);
+  ASSERT_EQ(a.get_encoded_bytes(), p_bl.length() + d_bl.length());
 }
 
 void bench_num_bytes(bool legacy)

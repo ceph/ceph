@@ -376,7 +376,7 @@ values until the new owning daemon writes an updated entry.
    * - ``metrics_updated_at``
      - Yes
      - No
-     - Wall-clock time of the last omap write; exposed only by
+     - Wall-clock time of the last omap write (ISO-8601 in mgr CLI); exposed only by
        ``ceph fs snapshot mirror status`` (not ``fs mirror peer status``)
 
 **Omap cleanup**
@@ -640,6 +640,18 @@ This command currently provides minimal information regarding mirror status::
     }
   }
 
+When the mirror daemon fails, ``fs mirror status`` displays::
+
+  {
+    "state": "failed"
+  }
+
+When the mirror daemon is blocklisted, ``fs mirror status`` displays::
+
+  {
+    "state": "blocklisted"
+  }
+
 The ``peers`` section in the command output above shows the peer information including the unique
 peer-id (UUID) and specification. The peer-id is required when removing an existing peer
 as mentioned in the *Mirroring Module* section.
@@ -660,7 +672,7 @@ command parameter is of format ``filesystem-name@filesystem-id peer-uuid``::
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "33s",
-                        "sync_time_stamp": "274900.558797s",
+                        "sync_time_stamp": "2026-07-15T12:00:00.558797+0530",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
@@ -750,11 +762,14 @@ Plain unsigned integers with no unit suffix.
 Timestamp
 ---------
 
-Field: ``sync_time_stamp``.
+Field: ``sync_time_stamp`` (and ``metrics_updated_at`` in mgr status).
 
-Monotonic clock time in seconds (since daemon startup) when the snapshot sync finished,
-printed with sub-second precision and an ``s`` suffix (for example, ``274900.558797s``). This
-is not a wall-clock or epoch timestamp.
+Wall-clock time printed as an ISO-8601 local timestamp with sub-second precision
+and timezone offset (for example, ``2026-07-15T12:00:00.558797+0530``).
+``sync_time_stamp`` is when the snapshot sync finished;
+``metrics_updated_at`` is when omap was last written for that directory and peer.
+Omap persistence and ``counter dump`` (``last_sync_timestamp``) still store Unix
+epoch seconds.
 
 ``snaps_synced``, ``snaps_deleted``, and ``snaps_renamed`` are
 :ref:`per-session counters<cephfs_mirroring_sync_metric_fields>`: they count
@@ -923,7 +938,7 @@ E.g., adding a regular file for synchronization would result in failed status::
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "44s",
-                        "sync_time_stamp": "500900.600797s",
+                        "sync_time_stamp": "2026-07-15T12:05:33.600797+0530",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
@@ -972,7 +987,7 @@ In the remote filesystem::
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "33s",
-                        "sync_time_stamp": "274900.558797s",
+                        "sync_time_stamp": "2026-07-15T12:00:00.558797+0530",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
@@ -1227,7 +1242,7 @@ Counters are not updated on every file read or write. Behavior differs by field 
      - Durations in seconds; bytes are raw counts
    * - ``last_sync_timestamp``
      - ``last_synced_snap.sync_time_stamp``
-     - ``utime_t`` (seconds since epoch), not the monotonic string shown in admin JSON
+     - Perf counter is Unix epoch seconds; admin/mgr JSON show ISO-8601 local time
    * - ``snaps_synced`` / ``snaps_deleted`` / ``snaps_renamed``
      - Same field names at directory level
      - Reset on daemon restart or directory reassignment (same as admin socket)
@@ -1424,7 +1439,10 @@ manages snapshot crawl and a data synchronization thread pool, which handles con
 transfers. Users can fine-tune these operations using configuration parameters:
 - ``cephfs_mirror_max_concurrent_directory_syncs``: controls the number of concurrent snapshots being crawled.
 - ``cephfs_mirror_max_datasync_threads``: controls the total threads available for data sync.
-For more information, see https://tracker.ceph.com/issues/73452
+
+Separating crawling from data transfer allows snapshot discovery and
+progress reporting to continue even while large file transfers are in
+flight.
 
 
 Snapshot Mirroring Checkpoints
@@ -1457,4 +1475,307 @@ synchronized to the remote site, providing visibility into disaster recovery rea
     ceph fs snapshot mirror checkpoint now <fs_name> <dir_path>
 
 For detailed information about checkpoint commands, lifecycle, and best practices, see
+:doc:`cephfs-mirroring-checkpoints`.
+
+.. _cephfs_mirroring_disaster_recovery:
+
+Disaster recovery and failover
+------------------------------
+
+CephFS snapshot mirroring replicates data asynchronously from a primary cluster to a
+remote (secondary) cluster. When the primary site fails or you need to switch production
+to the remote site, there is **no promote command** (unlike RBD mirroring). Failover is
+a **manual cutover**: stop replication from the primary, verify the recovery point on
+the remote site, redirect clients to the remote cluster, and optionally restore live
+data from a snapshot in ``.snap/``.
+
+Only directories configured with ``ceph fs snapshot mirror add`` are replicated. The
+remote live directory is updated incrementally as each snapshot synchronizes; after a
+successful sync it reflects that snapshot's contents. Remote snapshots are created under
+``<mirrored_dir>/.snap/<snap_name>`` with ``primary_snap_id`` metadata linking them to
+the primary snapshot.
+
+Overview
+~~~~~~~~
+
+CephFS mirroring is push-based: ``cephfs-mirror`` runs on the primary cluster and writes
+to the remote file system. Promoting the remote site therefore means:
+
+#. Quiescing or losing the primary site and stopping mirroring.
+#. Choosing a recovery point (the latest completed sync or a specific snapshot).
+#. Opening the remote file system to clients and redirecting applications.
+
+There is no automatic failover and no single CLI command to reverse primary/secondary
+roles. Treat the remote file system as read-only while mirroring is active (see the note
+in :ref:`Mirroring Status<cephfs_mirroring_mirroring_status>`).
+
+Prerequisites, limitations, and data-loss considerations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Prerequisites**
+
+Before attempting failover, ensure:
+
+- Mirroring is enabled, a peer is configured, and the directories you need are added
+  for mirroring (``ceph fs snapshot mirror ls <fs_name>``).
+- You have administrative access to both clusters (or to the remote cluster, for
+  unplanned failover).
+- Applications can be stopped or redirected on the primary site (planned failover) or
+  are already unavailable (unplanned failover).
+
+**Limitations and data-loss considerations**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Consideration
+     - Detail
+   * - Recovery scope
+     - Only mirrored directory paths are recoverable. Data outside those paths is not
+       on the remote site unless separately replicated.
+   * - Recovery point objective (RPO)
+     - Mirroring is asynchronous. Writes after the last **fully synchronized** snapshot
+       are lost. Use :doc:`cephfs-mirroring-checkpoints` and
+       ``ceph fs snapshot mirror status`` to identify the last good recovery point.
+   * - In-progress synchronization
+     - If failover occurs while ``state`` is ``syncing``, the remote live directory may
+       be partially updated (the ``ceph.mirror.dirty_snap_id`` extended attribute marks
+       an incomplete sync). Prefer a completed snapshot in ``.snap/`` rather than the
+       live directory in that case.
+   * - Split-brain
+     - If both sites accept writes after cutover, data diverges with no automatic merge.
+       Only one site should be writable after promotion.
+   * - Hard links
+     - Hard-linked files are synchronized as separate files.
+   * - No automatic failover
+     - The entire procedure is manual. Plan and test failover before you need it.
+   * - Remote snapshots
+     - Manually created snapshots on remote mirrored directories can cause
+       synchronization failures. Do not run snap-schedule on remote mirrored paths.
+
+Planned failover
+~~~~~~~~~~~~~~~~
+
+Use planned failover when the primary site is healthy and you are switching production
+to the remote site in a controlled way.
+
+#. **Quiesce the primary.** Pause applications writing to mirrored paths.
+   Optionally, refuse new client sessions on the primary file system::
+
+     ceph fs set <primary_fs> refuse_client_session true
+
+#. **Take a final snapshot.** Mirroring replicates snapshots, not the live
+   directory, so writes made after the latest snapshot reach the remote site
+   only in a new snapshot. On a client mount of the primary file system, create
+   one in each mirrored directory::
+
+     mkdir <mount_point>/<mirrored_dir>/.snap/<final_snap_name>
+
+#. **Confirm synchronization is complete.** On the primary cluster, check per-directory
+   status (see :ref:`Directory snapshot sync metrics
+   <cephfs_mirroring_mgr_snapshot_status>`)::
+
+     ceph fs snapshot mirror status <primary_fs> [<mirrored_dir_path>]
+
+   For each mirrored directory, verify:
+
+   - ``state`` is ``idle`` (not ``syncing``, ``failed``, or ``stale``).
+   - ``current_syncing_snap`` is absent.
+   - ``last_synced_snap.name`` is the final snapshot. Note it and
+     ``last_synced_snap.sync_time_stamp``: they are the recovery point.
+
+   If you set checkpoints, optionally confirm that they show ``complete``::
+
+     ceph fs snapshot mirror checkpoint ls <primary_fs> <mirrored_dir_path>
+
+#. **Stop mirroring.** Do this only after the final snapshot has synchronized,
+   because disabling mirroring stops synchronization. Disable mirroring on the
+   primary file system::
+
+     ceph fs snapshot mirror disable <primary_fs>
+
+   Then stop the mirror daemons. On a cluster managed by cephadm, run::
+
+     ceph orch stop cephfs-mirror
+
+   On a cluster that is not managed by cephadm, run::
+
+     systemctl stop 'cephfs-mirror@*'
+
+#. **Promote the remote site.** If ``refuse_client_session`` is set on the remote
+   file system, clear it so that clients can connect::
+
+     ceph fs set <remote_fs> refuse_client_session false
+
+   Redirect applications, DNS, Kubernetes PVs, or NFS exports to the remote cluster's
+   Monitors and file system.
+
+#. **Recover data.** If the last sync completed cleanly, the live mirrored directories
+   already reflect ``last_synced_snap`` (see `Recover to the latest synchronized
+   snapshot`_). Run the
+   :ref:`verification checklist <cephfs_mirroring_failover_verification>` before
+   resuming production traffic.
+
+Unplanned failover
+~~~~~~~~~~~~~~~~~~
+
+Use unplanned failover when the primary site is unavailable and you must cut over
+immediately.
+
+#. **Promote the remote site.** If ``refuse_client_session`` is set on the remote
+   file system, clear it so that clients can connect::
+
+     ceph fs set <remote_fs> refuse_client_session false
+
+   Redirect clients to the remote cluster as soon as possible.
+
+#. **Choose a recovery point.**
+
+   - If the primary was reachable recently and ``ceph fs snapshot mirror status`` showed
+     ``state: idle`` for all mirrored directories, the live directory likely reflects
+     the latest synchronized snapshot.
+   - If a sync was in progress at failure time, or you are unsure, **do not trust the
+     live directory**. Restore from a known-good snapshot in ``.snap/`` (see
+     :ref:`Recover to a user-selected snapshot
+     <cephfs_mirroring_failover_selected_snap>`).
+
+#. **Verify before resuming production.** Follow the :ref:`verification checklist
+   <cephfs_mirroring_failover_verification>`.
+
+Recover to the latest synchronized snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When the last snapshot synchronization completed successfully (``state: idle`` and no
+``current_syncing_snap``), the **live mirrored directory on the remote site already
+matches** ``last_synced_snap``. No additional restore step is required to recover to
+that point.
+
+Verify on the remote cluster from a client mount::
+
+  ls <mount_point>/<mirrored_dir>/.snap/
+
+The newest snapshot name should match ``last_synced_snap.name`` reported on the primary
+before failover. Spot-check file counts, sizes, or application-level consistency before
+allowing writes.
+
+.. note:: The live directory is only guaranteed to match the latest sync when that sync
+          finished cleanly. After an unplanned failover with a sync in progress, use
+          :ref:`Recover to a user-selected snapshot
+          <cephfs_mirroring_failover_selected_snap>` instead.
+
+.. _cephfs_mirroring_failover_selected_snap:
+
+Recover to a user-selected snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use this procedure when you need an older recovery point (for example a checkpointed
+end-of-day snapshot) or when the live directory may be inconsistent.
+
+#. **Identify the target snapshot** on a client mount of the remote file system::
+
+     ls <mount_point>/<mirrored_dir>/.snap/
+
+   Pick ``<target_snap_name>``. If mirroring is still enabled on the primary and you
+   set checkpoints, confirm that the snapshot was replicated::
+
+     ceph fs snapshot mirror checkpoint ls <primary_fs> <mirrored_dir_path>
+
+   Checkpoints with status ``complete`` identify snapshots known to have reached the
+   remote site. See :doc:`cephfs-mirroring-checkpoints`.
+
+#. **Quiesce writes.** Stop all writes to the affected mirrored paths on the remote
+   site.
+
+#. **Restore live data from the snapshot.** CephFS does not provide an in-place
+   directory rollback for generic paths. Copy from the snapshot view into the live
+   directory.
+
+   Partial restore (specific files or directories)::
+
+     cp -a <mount_point>/<mirrored_dir>/.snap/<target_snap_name>/<path> \
+           <mount_point>/<mirrored_dir>/<path>
+
+   Full directory restore (**destructive** — replaces live content with snapshot
+   content)::
+
+     rsync -a --delete \
+       <mount_point>/<mirrored_dir>/.snap/<target_snap_name>/ \
+       <mount_point>/<mirrored_dir>/
+
+   Repeat for each mirrored directory that requires rollback.
+
+   After the copy completes, resume writes on the restored paths.
+
+.. warning:: ``rsync --delete`` removes files present in the live directory but absent
+             from the selected snapshot. Test restore procedures in a non-production
+             environment when possible.
+
+.. _cephfs_mirroring_failover_verification:
+
+Verification checklist
+~~~~~~~~~~~~~~~~~~~~~~
+
+After promotion, verify the following before resuming production traffic:
+
+**Recovery point**
+
+- Planned failover: the newest snapshot in each mirrored directory on the remote site
+  is the ``last_synced_snap.name`` that you noted before you disabled mirroring.
+- Unplanned failover: the snapshot that you chose as the recovery point exists on the
+  remote site.
+
+**Remote file system health**
+
+::
+
+  ceph fs status <remote_fs>
+  ceph health detail
+
+**Snapshot inventory**
+
+For each mirrored directory on a client mount::
+
+  ls <mount_point>/<mirrored_dir>/.snap/
+
+Confirm ``<target_snap_name>`` exists and content looks correct when restoring from a
+specific snapshot.
+
+**Data validation**
+
+- Compare file counts and sizes against known-good baselines.
+- Run application-level consistency checks (database integrity, checksums, and so on).
+- Confirm that ``refuse_client_session`` is not among the flags that
+  ``ceph fs get <remote_fs>`` reports, and that clients can mount the file system,
+  read, and write.
+
+Failback
+~~~~~~~~
+
+CephFS mirroring does not provide automatic failback. After the original primary site
+recovers:
+
+#. Do **not** allow writes on both sites at the same time.
+#. Decide whether to re-establish mirroring from the new primary (former remote) back to
+   the old site, or to perform a one-time bulk copy.
+#. When re-adding a peer or reversing roles, stop all mirror daemons first and consider
+   purging synchronized directories on the re-added peer as described in
+   `Re-adding Peers`_.
+#. Cut clients back to the original primary only after synchronization is verified.
+
+RPO/RTO planning
+~~~~~~~~~~~~~~~~
+
+Use :doc:`snapshot mirroring checkpoints <cephfs-mirroring-checkpoints>` to mark
+critical snapshots (for example application-consistent or end-of-day snapshots) and
+monitor whether they reach the remote site before you rely on them for failover.
+
+- **RPO**: Determined by the last fully synchronized snapshot (``last_synced_snap`` in
+  ``ceph fs snapshot mirror status``). Mark important snapshots as checkpoints and
+  confirm they reach status ``complete`` before a disaster.
+- **RTO**: Depends on how quickly you can quiesce the primary (planned failover),
+  redirect clients, and optionally restore from ``.snap/``. Test the full procedure
+  periodically.
+
+For checkpoint commands, lifecycle, and best practices, see
 :doc:`cephfs-mirroring-checkpoints`.

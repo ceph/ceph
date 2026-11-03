@@ -78,6 +78,18 @@ And('I click on submit button', () => {
 });
 
 /**
+ * Clicks a button in the carbon modal and waits for the modal to close.
+ * The form must be done validating before the click: the submit button
+ * silently ignores clicks while the form is invalid or has pending
+ * validators, which leaves the modal open and fails every later step.
+ */
+And('I submit the carbon modal with {string}', (button: string) => {
+  cy.get('cds-modal form').should('have.class', 'ng-valid');
+  cy.get(`cds-modal button[aria-label="${button}"]`).should('be.enabled').click();
+  cy.get('cds-modal').should('not.exist');
+});
+
+/**
  * Some modals have an additional confirmation to be provided
  * by ticking the 'Are you sure?' box.
  */

@@ -41,19 +41,13 @@ CloudStack integrates with Ceph's block devices to provide CloudStack with a
 back end for CloudStack's Primary Storage. The instructions below detail the
 setup for CloudStack Primary Storage.
 
-.. note:: We recommend installing with Ubuntu 14.04 or later so that 
-   you can use package installation instead of having to compile 
-   libvirt from source.
-
 Installing and configuring QEMU for use with CloudStack doesn't require any
 special handling. Ensure that you have a running Ceph Storage Cluster. Install
-QEMU and configure it for use with Ceph; then, install ``libvirt`` version
-0.9.13 or higher (you may need to compile from source) and ensure it is running
-with Ceph.
+QEMU and configure it for use with Ceph; then, install ``libvirt`` and ensure
+it is running with Ceph.
 
-
-.. note:: Ubuntu 14.04 and CentOS 7.2 will have ``libvirt`` with RBD storage
-   pool support enabled by default.
+.. note:: All currently supported distributions ship ``libvirt`` with RBD
+   storage pool support enabled by default.
 
 .. index:: pools; CloudStack
 
@@ -151,7 +145,7 @@ Limitations
 .. _Placement Groups: ../../rados/operations/placement-groups
 .. _Install and Configure QEMU: ../qemu-rbd
 .. _Install and Configure libvirt: ../libvirt
-.. _KVM Hypervisor Host Installation: http://docs.cloudstack.apache.org/en/latest/installguide/hypervisor/kvm.html
-.. _Storage Tags: http://docs.cloudstack.apache.org/en/latest/adminguide/storage.html#storage-tags
-.. _Create a New Disk Offering: http://docs.cloudstack.apache.org/en/latest/adminguide/service_offerings.html#creating-a-new-disk-offering
+.. _KVM Hypervisor Host Installation: https://docs.cloudstack.apache.org/en/latest/installguide/hypervisor/kvm.html
+.. _Storage Tags: https://docs.cloudstack.apache.org/en/latest/adminguide/storage.html#storage-tags
+.. _Create a New Disk Offering: https://docs.cloudstack.apache.org/en/latest/adminguide/service_offerings.html#creating-a-new-disk-offering
 .. _User Management: ../../rados/operations/user-management

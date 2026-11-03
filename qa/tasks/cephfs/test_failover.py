@@ -131,6 +131,7 @@ class TestClusterAffinity(CephFSTestCase):
         log.info(f'assigning affinity to cephfs2 for active mds (mds.{active2})')
         self.config_set(f'mds.{active2}', 'mds_join_fs', 'cephfs2')
         self._change_target_state(target, active2, {'join_fscid': fs2.id})
+        self._reach_target(target)
         self.fs.rank_fail()
         self._change_target_state(target, victim, {'state': 'up:active'})
         self._reach_target(target)
@@ -258,14 +259,10 @@ class TestClusterResize(CephFSTestCase):
         """
 
         self.fs.set_down()
-        try:
-            self.wait_for_health("", 30)
-            raise RuntimeError("got health warning?")
-        except RuntimeError as e:
-            if "Timed out after" in str(e):
-                pass
-            else:
-                raise
+
+        # Transient warnings (FS_DEGRADED, MDS_ALL_DOWN) can briefly appear
+        # while monitors process the down state. We wait for them to clear.
+        self.wait_for_health_clear(timeout=30)
 
     def test_down_twice(self):
         """

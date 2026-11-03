@@ -28,6 +28,8 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_op_thread_timeout
 .. confval:: rgw_op_thread_suicide_timeout
 .. confval:: rgw_thread_pool_size
+.. confval:: rgw_heap_release_interval
+.. confval:: rgw_heap_release_bytes
 .. confval:: rgw_num_control_oids
 .. confval:: rgw_init_timeout
 .. confval:: rgw_mime_types_file
@@ -62,6 +64,13 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_rest_conn_ip_fail_timeout_secs
 .. confval:: rgw_max_chunk_size
 .. confval:: rgw_multi_obj_del_max_aio
+.. confval:: rgw_smb_frontends
+.. confval:: rgw_smb_run_dedup_threads
+.. confval:: rgw_smb_run_quota_threads
+.. confval:: rgw_smb_run_restore_threads
+.. confval:: rgw_smb_run_gc_threads
+.. confval:: rgw_smb_run_lc_threads
+.. confval:: rgw_smb_run_sync_thread
 
 Lifecycle Settings
 ==================
@@ -94,6 +103,20 @@ The lifecycle maintenance thread must also be enabled on at least one RGW
 daemon for each zone. 
 
 .. confval:: rgw_enable_lc_threads
+
+Each Ceph Object Gateway that runs lifecycle threads starts a lifecycle run
+once a day, at the start of the window set by
+:confval:`rgw_lifecycle_work_time`, in the host's local time. A run that is
+still going at the end of that window continues until it has processed every
+bucket.
+
+.. confval:: rgw_lifecycle_work_time
+
+In multisite deployments, beginning with the Quincy 17.2.8 and Reef releases,
+every zone processes lifecycle for the buckets that it holds. A zone adds a
+bucket to its lifecycle list when the bucket's lifecycle configuration syncs to
+it, so a zone that is promoted to master keeps processing. To check, run
+``radosgw-admin lc list`` in each zone.
 
 Garbage Collection Settings
 ===========================
@@ -152,10 +175,16 @@ thread running:
 
 .. confval:: rgw_enable_gc_threads
 
+Dedup Settings
+==============
+
+At least one RGW in each zone must have the dedup background thread running
+for dedup operations to function:
+
+.. confval:: rgw_enable_dedup_threads
+
 Multisite Settings
 ==================
-
-.. versionadded:: Jewel
 
 You may include the following settings in your Ceph configuration
 file under each ``[client.radosgw.{instance-name}]`` instance.
@@ -287,8 +316,6 @@ KMS Secrets Cache Settings
 QoS Settings
 ============
 
-.. versionadded:: Nautilus
-
 The older and now non-default ``civetweb`` frontend has a threading model that uses a thread per
 connection and hence is automatically throttled by :confval:`rgw_thread_pool_size`
 when accepting connections. The newer and default ``beast`` frontend is
@@ -318,7 +345,7 @@ implementation of the *dmclock_client* op queue divides RGW ops into admin, auth
 .. confval:: rgw_dmclock_metadata_wgt
 .. confval:: rgw_dmclock_metadata_lim
 
-.. _Architecture: ../../architecture#data-striping
+.. _Architecture: ../../architecture/ceph-protocol#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Cluster Pools: ../../rados/operations/pools
 .. _Rados cluster handles: ../../rados/api/librados-intro/#step-2-configuring-a-cluster-handle
@@ -341,10 +368,42 @@ below.
 .. confval:: rgw_d4n_l1_datacache_disk_reserve
 .. confval:: rgw_d4n_l1_evict_cache_on_start
 .. confval:: rgw_d4n_l1_fadvise
-.. confval:: rgw_d4n_libaio_aio_threads
-.. confval:: rgw_d4n_libaio_aio_num
 .. confval:: rgw_lfuda_sync_frequency
 .. confval:: rgw_d4n_l1_datacache_address
+
+D4N Asynchronous I/O Backend Settings
+--------------------------------------
+
+D4N supports two asynchronous I/O backends for cache read/write
+operations: ``libaio`` (POSIX AIO, the default) and ``liburing`` (io_uring).
+The active backend is selected at startup via :confval:`rgw_d4n_io_backend_type`.
+
+.. confval:: rgw_d4n_io_backend_type
+
+If the ``liburing`` backend is selected but liburing is unavailable or
+initialization fails, the gateway automatically falls back to ``libaio``.
+The ``liburing`` backend requires Linux kernel 5.1 or later.
+
+.. note:: The ``liburing`` backend and all ``rgw_d4n_io_uring_*`` options are *experimental*.
+
+liburing Settings
+~~~~~~~~~~~~~~~~~
+
+The following options apply only when :confval:`rgw_d4n_io_backend_type` is set to ``liburing``.
+
+.. confval:: rgw_d4n_io_uring_queue_depth
+.. confval:: rgw_d4n_io_uring_direct_io
+.. confval:: rgw_d4n_io_uring_sqpoll
+.. confval:: rgw_d4n_io_uring_sq_thread_idle_ms
+.. confval:: rgw_d4n_io_uring_iopoll
+
+libaio Settings
+~~~~~~~~~~~~~~~~~
+
+The following options apply only when :confval:`rgw_d4n_io_backend_type` is set to ``libaio``.
+
+.. confval:: rgw_d4n_libaio_aio_threads
+.. confval:: rgw_d4n_libaio_aio_num
 
 Topic Persistency Settings
 ==========================

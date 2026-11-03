@@ -49,24 +49,27 @@
             />
           </cds-text-label>
           <ng-template #subvolumegroupNameError>
-            <span
-              class="invalid-feedback"
-              *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'notUnique')"
-              i18n
-              >The subvolume group already exists.</span
-            >
-            <span
-              *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'pattern')"
-              class="invalid-feedback"
-              i18n
-              >Subvolume name can only contain letters, numbers, '.', '-' or '_'</span
-            >
+            @if (subvolumegroupForm.showError('subvolumegroupName', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (subvolumegroupForm.showError('subvolumegroupName', formDir, 'notUnique')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >The subvolume group already exists.</span
+              >
+            }
+            @if (subvolumegroupForm.showError('subvolumegroupName', formDir, 'pattern')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Subvolume name can only contain letters, numbers, '.', '-' or '_'</span
+              >
+            }
           </ng-template>
         </div>
 
@@ -117,12 +120,13 @@
             />
           </cds-text-label>
           <ng-template #sizeError>
-            <span
-              *ngIf="subvolumegroupForm.showError('size', formDir, 'pattern')"
-              class="invalid-feedback"
-              i18n
-              >Size must be a number or in a valid format. eg: 5 GiB</span
-            >
+            @if (subvolumegroupForm.showError('size', formDir, 'pattern')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Size must be a number or in a valid format. eg: 5 GiB</span
+              >
+            }
           </ng-template>
         </div>
 
@@ -137,12 +141,11 @@
             helperText="By default, the data_pool_layout of the parent directory is selected."
             i18n-helperText
           >
-            <option
-              *ngFor="let pool of dataPools"
-              [value]="pool.pool"
-            >
-              {{ pool.pool }}
-            </option>
+            @for (pool of dataPools; track pool) {
+              <option [value]="pool.pool">
+                {{ pool.pool }}
+              </option>
+            }
           </cds-select>
         </div>
 

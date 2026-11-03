@@ -2,6 +2,14 @@
 verify_ceph_hash: false
 tasks:
 - cephadm:
+    client_key_type: aes
+    log-ignorelist:
+      - AUTH_INSECURE_KEYS_CREATABLE
+      - AUTH_INSECURE_CLIENT_KEY_TYPE
+      - AUTH_INSECURE_KEYS_ALLOWED
+      - using insecure key type
+      - insecure cipher aes allowed for auth
+      - Monitors are configured to allow creation of insecure key types
     conf:
       mon:
         auth allow insecure global id reclaim: true

@@ -39,6 +39,16 @@ describe.skip('nfsExport page', () => {
       services.checkServiceStatus('nfs');
     });
 
+    it('should open NFS cluster create form', () => {
+      nfsExport.navigateTo('cephfs_index');
+      nfsExport.expectBreadcrumbText('NFS');
+      nfsExport.navigateTo('cephfs_cluster_create');
+      cy.get('cd-nfs-cluster-form').should('exist');
+      cy.get('#cluster_id').should('exist');
+      cy.get('#protocol_version').should('exist');
+      cy.get('#port').should('exist');
+    });
+
     it('should create a nfs-export with RGW backend', () => {
       buckets.navigateTo('create');
       buckets.create(bucketName, 'dashboard');

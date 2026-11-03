@@ -20,6 +20,9 @@ NFS_CORE_PARAM {
 {% if monitoring_port %}
         Monitoring_Port = {{ monitoring_port }};
 {% endif %}
+{% if enable_nfs_metrics %}
+        Enable_Metrics = true;
+{% endif %}
 {% if bind_addr %}
         Bind_addr = {{ bind_addr }};
 {% endif %}
@@ -29,12 +32,14 @@ NFS_CORE_PARAM {
 {% if cqos_port %}
         Cqos_Port = {{ cqos_port }};
 {% endif %}
+{% if mem_stats_disable %}
+        Mem_Stats_Disable = true;
+{% endif %}
 }
 
 NFSv4 {
         Delegations = false;
         RecoveryBackend = "rados_cluster";
-        Minor_Versions = 1, 2;
         Server_Scope = "{{ cluster_id }}-{{ namespace }}";
 {% if nfs_idmap_conf %}
         IdmapConf = "{{ nfs_idmap_conf }}";
@@ -57,26 +62,51 @@ RADOS_URLS {
         watch_url = "{{ url }}";
 }
 
-CEPH {
-        Ceph_Conf = "/etc/ceph/ceph.conf";
-        umask = 0000;
-        client_oc = false;
-        async = false;
-        zerocopy = false;
-        use_old_uuid = false;
-
-        register_service = true;
-        nodeid = "{{ nodeid }}";
-}
-
 RGW {
         cluster = "ceph";
         name = "client.{{ rgw_user }}";
 }
 
+{% if use_old_nodeid or enable_client_object_cache or clients_per_pool %}
+CEPH {
 {% if use_old_nodeid %}
-Ceph {
-	Use_old_uuid = true;
+        Use_old_uuid = true;
+{% endif %}
+{% if clients_per_pool %}
+        clients_per_pool = {{ clients_per_pool }};
+{% endif %}
+{% if enable_client_object_cache or client_object_cache_size is not none or client_object_cache_max_dirty is not none %}
+        client_oc = {{ enable_client_object_cache | lower }};
+{% if client_object_cache_size is not none %}
+        client_oc_size = {{ client_object_cache_size }};
+{% endif %}
+{% if client_object_cache_max_dirty is not none %}
+        client_oc_max_dirty = {{ client_object_cache_max_dirty }};
+{% endif %}
+{% endif %}
+}
+
+{% endif %}
+{% if kmip_addrs %}
+%plugin ganesha/libkmip_fscrypt.so
+KMIP {
+{% for kmip_addr in kmip_addrs %}
+        HOST {
+                addr = "{{  kmip_addr.get('addr', '') }}";
+{% if kmip_addr.get('port') %}
+                port = {{  kmip_addr.get('port') }};
+{% endif %}
+{% if 'servername' in kmip_addr %}
+                servername = "{{  kmip_addr.get('servername') }}";
+{% endif %}
+{% if 'verify_hostname' in kmip_addr %}
+                verify_hostname = "{{  kmip_addr.get('verify_hostname') }}";
+{% endif %}
+        }
+{% endfor %}
+        cert = /etc/ganesha/kmip/kmip_cert.pem;
+        key = /etc/ganesha/kmip/kmip_key.pem;
+        ca = /etc/ganesha/kmip/kmip_ca_cert.pem;
 }
 
 {% endif %}
@@ -99,5 +129,7 @@ TLS_CONFIG{
         Enable_debug = {{ tls_debug }};
 {% endif %}
 }
+
 {% endif %}
+
 %url    {{ url }}

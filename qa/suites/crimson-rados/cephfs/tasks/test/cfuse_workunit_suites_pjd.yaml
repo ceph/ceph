@@ -14,6 +14,7 @@ overrides:
           fuse set user groups: true
   - ceph-fuse:
   - workunit:
+      watchdog: true
       clients:
         all:
           - suites/pjd.sh

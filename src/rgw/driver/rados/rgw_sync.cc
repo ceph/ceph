@@ -831,6 +831,26 @@ int RGWReadSyncStatusCoroutine::operate(const DoutPrefixProvider *dpp)
   return 0;
 }
 
+int rgw_read_local_meta_sync_status(const DoutPrefixProvider *dpp,
+                                    rgw::sal::RadosStore* store,
+                                    rgw_meta_sync_status *sync_status)
+{
+  RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
+  RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
+  int ret = http_manager.start();
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
+    return ret;
+  }
+  RGWMetaSyncEnv env;
+  env.init(dpp, store->ctx(), store, nullptr /* conn */,
+           store->svc()->async_processor, &http_manager,
+           nullptr, store->getRados()->get_sync_tracer());
+  ret = crs.run(dpp, new RGWReadSyncStatusCoroutine(&env, sync_status));
+  http_manager.stop();
+  return ret;
+}
+
 class RGWFetchAllMetaCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
 
@@ -1360,6 +1380,28 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
     retcode = 0;
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       if (sync_status != -ENOENT) {
+        if (section == "bucket.instance" &&
+            cct->_conf->rgw_inject_delay_sec > 0 &&
+            std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+                "delay_meta_sync_bucket_instance_store") {
+          yield {
+            utime_t dur;
+            dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
+            tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket.instance metadata store"));
+            wait(dur);
+          }
+        }
+        if (section == "bucket" &&
+            cct->_conf->rgw_inject_delay_sec > 0 &&
+            std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+                "delay_meta_sync_bucket_entrypoint_store") {
+          yield {
+            utime_t dur;
+            dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
+            tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket entrypoint metadata store"));
+            wait(dur);
+          }
+        }
         tn->log(10, SSTR("storing local metadata entry: " << section << ":" << key));
         yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
       } else {
@@ -1496,7 +1538,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   bool can_adjust_marker = false;
   bool done_with_period = false;
 
-  int total_entries = 0;
+  uint64_t total_entries = 0;
   string old_mdlog_marker;
 
   RGWSyncTraceNodeRef tn;
@@ -2098,8 +2140,15 @@ public:
 
             std::string period_marker;
             if (next) {
+              const auto& next_sync_status = next.get_period().get_sync_status();
+              if (shard_id >= next_sync_status.size()) {
+                ldpp_dout(dpp, 10) << "RGWMetaSyncCR: skipping shard " << shard_id
+                    << " for period " << next.get_period().get_id()
+                    << " with no sync status entry" << dendl;
+                continue;
+              }
               // read the maximum marker from the next period's sync status
-              period_marker = next.get_period().get_sync_status()[shard_id];
+              period_marker = next_sync_status[shard_id];
               if (period_marker.empty()) {
                 // no metadata changes have occurred on this shard, skip it
                 ldpp_dout(dpp, 10) << "RGWMetaSyncCR: skipping shard " << shard_id

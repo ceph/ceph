@@ -3,11 +3,11 @@
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:main'
 DEFAULT_IMAGE_IS_MAIN = True
-DEFAULT_IMAGE_RELEASE = 'umbrella'
+DEFAULT_IMAGE_RELEASE = 'vampire'
 DEFAULT_REGISTRY = 'quay.io'  # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
-LATEST_STABLE_RELEASE = 'umbrella'
+LATEST_STABLE_RELEASE = 'vampire'
 DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'
@@ -31,6 +31,7 @@ PIDS_LIMIT_UNLIMITED_PODMAN_VERSION = (3, 4, 1)
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT = None  # in seconds
 DEFAULT_RETRY = 15
+BOOTSTRAP_MGR_MODULE_LOAD_RETRY = 45  # 2s between tries -> ~90s max
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 QUIET_LOG_LEVEL = 9  # DEBUG is 10, so using 9 to be lower level than DEBUG
 NO_DEPRECATED = False

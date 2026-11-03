@@ -488,16 +488,66 @@ example, ``osd/rack:foo`` would refer to all OSD daemons under the ``foo`` CRUSH
 When configuration options are displayed, the section name and any mask are presented
 in separate fields or columns to make them more readable.
 
-Commands
---------
+.. _ceph-conf-mgr-module-options:
+
+Manager Module Options
+----------------------
+
+Configuration options for Manager modules have names of the form
+``mgr/<module>/<option>``, for example ``mgr/cephadm/daemon_cache_timeout``.
+Manager modules read their options only from the Monitor configuration
+database, so set them with a command of the following form:
+
+.. prompt:: bash $
+
+   ceph config set mgr mgr/<module>/<option> <value>
+
+A Manager module does not see options of this form in a daemon's local
+``ceph.conf`` file. To copy options from a ``ceph.conf`` file into the
+Monitor configuration database, use ``ceph config assimilate-conf``, which is
+described in :ref:`configuring-ceph-api`. The command copies every option in
+the file that the Monitors can manage, not only Manager module options, and it
+does not change the file. The file passed to ``cephadm bootstrap --config`` is
+handled this way: during bootstrap, cephadm copies its options into the
+Monitor configuration database.
+
+Some Manager modules also keep data, such as keys and credentials, in the
+separate key-value store that ``ceph config-key`` manages, under names that
+also begin with ``mgr/<module>/``. These entries are not configuration
+options: list them with ``ceph config-key ls`` rather than ``ceph config ls``,
+and set them with ``ceph config-key set``.
+
+.. _configuring-ceph-api:
+
+Configuration Commands
+----------------------
 
 The following CLI commands are used to configure the cluster:
 
 * ``ceph config dump`` dumps the entire Monitor central configuration database.
 
+* ``ceph config ls`` lists the names of all configuration options, including
+  Manager module options. Option names do not form a hierarchy, so no command
+  lists the options under a partial name. Filter the list with ``grep``
+  instead:
+
+  .. prompt:: bash $
+
+     ceph config ls | grep ^osd_recovery
+     ceph config ls | grep ^mgr/balancer/
+
+  Only Manager module options contain slashes, in names of the form
+  ``mgr/<module>/<option>``.
+
 * ``ceph config get <who>`` dumps the configuration options stored in
   the Monitor configuration database for a specific daemon or client
-  (for example, ``mds.a``).
+  (for example, ``mds.a``). ``<who>`` names a daemon or client, such as
+  ``osd.1`` or ``client.admin``, or a type of daemon or client, such as
+  ``osd``. ``global`` is a section of the database, not a daemon or client,
+  so ``ceph config get global`` fails with
+  ``unrecognized entity 'global'`` even though ``ceph config set global``
+  works. To see the values stored in ``global``, run ``ceph config dump``
+  and look for ``global`` in the ``WHO`` column.
 
 * ``ceph config get <who> <option>`` shows either a configuration value
   stored in the Monitor configuration database for a specific daemon or client
@@ -523,6 +573,12 @@ The following CLI commands are used to configure the cluster:
 
 * ``ceph config show-with-defaults <who>`` is like the above,
   but also shows all defaults, and for changed values, where they are changed.
+
+* ``ceph config generate-minimal-conf`` generates a minimal ``ceph.conf`` file
+  necessary to bootstrap connections to the cluster. Further configuration
+  can be done via the ``ceph config`` interface.
+
+  .. note:: Some configs only affect startup behavior for clients or daemons. In that case, modifying the local ``ceph.conf`` is required.
 
 * ``ceph config assimilate-conf -i <input_file> -o <output_file>`` ingests a
   configuration file from *input_file* and sets any valid options found into the

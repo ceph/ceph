@@ -172,6 +172,16 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       pg.wait_for_active_blocker,
       &decltype(pg.wait_for_active_blocker)::wait));
 
+  int cost  = std::max<int>(m->get_cost(), 1);
+  unsigned prio  = m->get_priority();
+  uint64_t owner = m->get_source().num();
+
+  // admit in QoS order, then HOLD the slot for the op's lifetime
+  // (its destructor == mClock RequestCompletion).
+  auto throttle = co_await interruptor::make_interruptible(
+    shard_services->get_throttle(
+      scheduler::params_t{cost, prio, owner, SchedulerClass::client}));
+
   DEBUGDPP("{}.{}: waited for active, entering get_obc stage ",
            pg, *this, this_instance_id);
 
@@ -209,6 +219,13 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       pg.get_perf_logger().inc(l_osd_replica_read_redirect_conflict);
       co_await reply_op_error(pgref, -EAGAIN);
       co_return;
+    } else if (op_info.is_primary_only()) {
+      // some requests such as watch/notify/notify_ack can only be handled by the primary,
+      // fail these with EAGAIN to get the client to retry against the primary.
+      DEBUGDPP("{}.{}: op must be processed by primary, bouncing to primary",
+	       pg, *this, this_instance_id);
+      co_await reply_op_error(pgref, -EAGAIN);
+      co_return;
     } else {
       DEBUGDPP("{}.{}: serving replica read on oid {}",
 	       pg, *this, this_instance_id, m->get_hobj());
@@ -225,6 +242,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{}.{}: process[_pg]_op complete, completing handle",
 	   *pgref, *this, this_instance_id);
   co_await interruptor::make_interruptible(ihref.handle.complete());
+  // `throttle` destructs here -> release_throttle()
 }
 
 seastar::future<> ClientRequest::with_pg_process(

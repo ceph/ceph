@@ -45,7 +45,7 @@ cloud solutions like OpenStack, OpenNebula or CloudStack. The cloud solution use
 ``libvirt`` to  interact with QEMU/KVM, and QEMU/KVM interacts with Ceph block
 devices via  ``librbd``. See `Block Devices and OpenStack`_,
 `Block Devices and OpenNebula`_ and `Block Devices and CloudStack`_ for details.
-See :ref:`install-overview` for installation details.
+See :doc:`/install/install-vm-cloud` for installation details.
 
 You can also use Ceph block devices with ``libvirt``, ``virsh`` and the
 ``libvirt`` API. See `libvirt Virtualization API`_ for details.
@@ -111,7 +111,7 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 	log file = /var/log/ceph/qemu-guest-$pid.log
 	admin socket = /var/run/ceph/$cluster-$type.$id.$pid.$cctid.asok
 
-   The ``client.libvirt`` section name should match the cephx user you created
+   The ``client.libvirt`` section name should match the CephX user you created
    above.
    If SELinux or AppArmor is enabled, note that this could prevent the client
    process (qemu via libvirt) from doing some operations, such as writing logs
@@ -307,14 +307,14 @@ If everything looks okay, you may begin using the Ceph block device
 within your VM.
 
 
-.. _libvirt Virtualization API: http://www.libvirt.org
+.. _libvirt Virtualization API: https://www.libvirt.org
 .. _Block Devices and OpenStack: ../rbd-openstack
 .. _Block Devices and OpenNebula: https://docs.opennebula.io/stable/open_cluster_deployment/storage_setup/ceph_ds.html#datastore-internals
 .. _Block Devices and CloudStack: ../rbd-cloudstack
 .. _create an image: ../qemu-rbd#creating-images-with-qemu
-.. _Virsh Command Reference: http://www.libvirt.org/virshcmdref.html
+.. _Virsh Command Reference: https://libvirt.org/manpages/virsh.html
 .. _KVM/VirtManager: https://help.ubuntu.com/community/KVM/VirtManager
-.. _Disks: http://www.libvirt.org/formatdomain.html#elementsDisks
+.. _Disks: https://www.libvirt.org/formatdomain.html#elementsDisks
 .. _rbd create: ../rados-rbd-cmds#creating-a-block-device-image
 .. _User Management - CLI: ../../rados/operations/user-management#command-line-usage
-.. _Virtio: http://www.linux-kvm.org/page/Virtio
+.. _Virtio: https://www.linux-kvm.org/page/Virtio

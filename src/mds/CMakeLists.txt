@@ -20,6 +20,7 @@ set(mds_srcs
   CDir.cc
   CInode.cc
   LogEvent.cc
+  LogSegment.cc
   MDSTable.cc
   InoTable.cc
   JournalPointer.cc
@@ -39,14 +40,15 @@ set(mds_srcs
   Mantle.cc
   Anchor.cc
   OpenFileTable.cc
+  MDSPhaseTracker.cc
   MDSPinger.cc
   MetricAggregator.cc
   MetricsHandler.cc
   QuiesceDbManager.cc
   QuiesceAgent.cc
   MDSRankQuiesce.cc
-  MDSDmclockScheduler.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
+  MDSRankQuarantine.cc
+  MDSDmclockScheduler.cc  ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc)

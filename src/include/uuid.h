@@ -14,11 +14,6 @@
 #include <boost/uuid/nil_generator.hpp>
 #include <boost/version.hpp>
 
-#include <fmt/core.h> // for FMT_VERSION
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
-
 namespace ceph {
   class Formatter;
 }
@@ -86,9 +81,5 @@ inline bool operator<(const uuid_d& l, const uuid_d& r) {
 inline bool operator>(const uuid_d& l, const uuid_d& r) {
   return l.to_string() > r.to_string();
 }
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<uuid_d> : fmt::ostream_formatter {};
-#endif
 
 #endif

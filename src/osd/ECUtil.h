@@ -99,7 +99,8 @@ class slice_iterator {
       uint64_t off = 0;
       char *c_str = bp.c_str();
       // Skip any non-aligned chunk.
-      uint64_t analysed = p2roundup((uintptr_t)c_str, EC_ALIGN_SIZE) - (uintptr_t)c_str;
+      const uint64_t c_addr = (uintptr_t)c_str;
+      uint64_t analysed = p2roundup(c_addr, EC_ALIGN_SIZE) - c_addr;
 
       while (off + analysed <= bp_len) {
         bool new_is_zeros;
@@ -572,7 +573,8 @@ public:
       chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)),
+      all_shards(calc_all_shards(k + m)) {
     ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
@@ -589,7 +591,8 @@ public:
       chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)),
+      all_shards(calc_all_shards(k + m)) {
     ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
@@ -606,7 +609,8 @@ public:
       chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)),
+      all_shards(calc_all_shards(k + m)) {
     ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
@@ -719,6 +723,12 @@ public:
   /* Return a "span" - which can be iterated over */
   auto get_data_shards() const {
     return data_shards;
+  }
+
+  // CRCs only survive XOR, so they can be checked through the code only
+  // with every data shard and the first parity shard, which is their XOR.
+  bool can_check_crcs(const shard_id_set &shards) const {
+    return shards.includes(data_shards) && shards.contains(shard_id_t(k));
   }
 
   auto get_parity_shards() const {

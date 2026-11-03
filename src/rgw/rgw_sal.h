@@ -622,7 +622,8 @@ class Driver {
     /** Get default quota info.  Used as fallback if a user or bucket has no quota set*/
     virtual void get_quota(RGWQuota& quota) = 0;
     /** Get global rate limit configuration*/
-    virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) = 0;
+    virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit,
+      RGWRateLimitInfo& account_ratelimit, RGWRateLimitInfo& anon_ratelimit) = 0;
     /** Enable or disable a set of bucket.  e.g. if a User is suspended */
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled, optional_yield y) = 0;
     /** Get a new request ID */
@@ -729,6 +730,19 @@ class Driver {
     /** Check to see if this placement rule is valid */
     virtual bool valid_placement(const rgw_placement_rule& rule) = 0;
 
+    /** Load a VectorBucket by key.  Queries driver for vector bucket info.  On -ENOENT, the
+     * bucket must still be allocated to support bucket->create(). */
+    virtual int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                            std::unique_ptr<VectorBucket>* bucket, optional_yield y) = 0;
+    /** List the vector buckets of a given owner. "ns" is the namespace of the vector
+     * buckets: the ID of the account when the owner is an account, and the tenant
+     * of the owner otherwise */
+    virtual int list_vector_buckets(const DoutPrefixProvider* dpp,
+			     const rgw_owner& owner, const std::string& ns,
+			     const std::string& marker, const std::string& end_marker,
+			     uint64_t max, BucketList& buckets,
+			     optional_yield y) = 0;
+
     /** Shut down background tasks, to be called while Asio is running. */
     virtual void shutdown(void) { };
 
@@ -831,6 +845,7 @@ class User {
 
     /* dang temporary; will be removed when User is complete */
     virtual RGWUserInfo& get_info() = 0;
+    virtual const RGWUserInfo& get_info() const = 0;
 
     /** Print the User to @a out */
     virtual void print(std::ostream& out) const = 0;
@@ -1099,6 +1114,8 @@ class Bucket {
     virtual int remove_logging_object(const std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) = 0;
     /** Write a record to the pending bucket logging object */
     virtual int write_logging_object(const std::string& obj_name, const std::string& record, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) = 0;
+    /** Mark this as a cache request */
+    virtual void set_cache_request() = 0;
 
     /* dang - This is temporary, until the API is completed */
     virtual rgw_bucket& get_key() = 0;
@@ -1288,6 +1305,8 @@ class Object {
 
     /** Load the object state for this object. */
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;
+    /** Apply pending olh log entries left by deletes with FLAG_SKIP_UPDATE_OLH */
+    virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
      * deleted.  @note the attribute APIs may be revisited in the future. */
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;
@@ -1444,7 +1463,10 @@ class Object {
     virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
 				    bool must_exist, optional_yield y) = 0;
     /** Change the ownership of this object */
-    virtual int chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    virtual int chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y) = 0;
 
     /** Check to see if the given object pointer is uninitialized */
     static bool empty(const Object* o) { return (!o || o->empty()); }
@@ -1467,6 +1489,8 @@ class Object {
     virtual bool have_instance(void) = 0;
     /** Clear the instance on this object */
     virtual void clear_instance() = 0;
+    /** Mark this as a cache request */
+    virtual void set_cache_request() = 0;
 
     /** Print the User to @a out */
     virtual void print(std::ostream& out) const = 0;
@@ -1844,6 +1868,8 @@ public:
   virtual const std::string& get_storage_class() = 0;
   /** Should we retain the head object when transitioning */
   virtual bool retain_head_object() = 0;
+  /** Should we retain versioned objects without creating a delete marker */
+  virtual bool retain_current_version() = 0;
   /** Is read_through allowed */
   virtual bool allow_read_through() = 0;
   /** Get read_through restore_days */
@@ -1963,6 +1989,9 @@ public:
   virtual void set_lua_background(rgw::lua::Background* background) = 0;
 };
 
+// VectorBucket aliases Bucket (rgw_sal_fwd.h). Use Driver::load_vector_bucket()
+// to resolve its entrypoint before using the common object interface.
+
 /** @} namespace rgw::sal in group RGWSAL */
 } } // namespace rgw::sal
 
@@ -2069,7 +2098,10 @@ public:
 
 #ifdef WITH_RADOSGW_RADOS
 std::optional<neorados::RADOS>
-make_neorados(CephContext* cct, boost::asio::io_context& io_context);
+make_neorados(
+    CephContext* cct,
+    boost::asio::io_context& io_context,
+    std::optional<std::string> objecter_admin_socket_name = std::nullopt);
 #endif
 
 /** @} */

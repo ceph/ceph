@@ -72,8 +72,7 @@ public:
   }
 
   int minimum_to_decode(const shard_id_set &want_to_read, const shard_id_set &available,
-                        shard_id_set &minimum_set,
-		shard_id_map<std::vector<std::pair<int, int>>> *minimum_sub_chunks) override {
+                        shard_id_set &minimum_set) override {
     bool recover = false;
     for (shard_id_t shard : want_to_read) {
       if (available.contains(shard)) {
@@ -102,11 +101,6 @@ public:
       }
     }
 
-    if (minimum_sub_chunks) {
-      for (auto &&shard : minimum_set) {
-        minimum_sub_chunks->emplace(shard, default_sub_chunk);
-      }
-    }
     return 0;
   }
 
@@ -232,8 +226,6 @@ public:
   
   void apply_delta(const shard_id_map<bufferptr> &in
     , shard_id_map<bufferptr> &out) override {}
-
-  std::vector<std::pair<int, int>> default_sub_chunk = {std::pair(0,1)};
 
 private:
   ErasureCodeProfile _profile;

@@ -1,5 +1,11 @@
 #!/bin/bash
 
+set -e
+
+if [[ -n "$1" ]]; then
+  cd "$1"
+fi
+
 printf 'Commit is:\n' >&2
 git log -1 >&2
 

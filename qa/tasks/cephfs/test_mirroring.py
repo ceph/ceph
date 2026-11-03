@@ -9,8 +9,9 @@ import signal
 import time
 import functools
 
-from io import StringIO
+from io import BytesIO, StringIO
 from collections import deque
+from datetime import datetime
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
@@ -18,6 +19,16 @@ from teuthology.contextutil import safe_while
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
+
+# ISO-8601 local time with offset, as dumped by peer_status / mgr status
+# (e.g. 2026-07-15T12:00:00.558797+0530)
+SYNC_TIME_STAMP_RE = re.compile(
+    r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}[+-]\d{4}$')
+
+
+def parse_sync_time_stamp(ts):
+    """Parse sync_time_stamp / metrics_updated_at ISO-8601 display strings."""
+    return datetime.strptime(ts, '%Y-%m-%dT%H:%M:%S.%f%z')
 
 
 # Exceptions to retry in test assertions
@@ -253,7 +264,7 @@ class TestMirroring(CephFSTestCase):
             vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
             self.assertGreater(vafter["counters"]["mirroring_peers"], vbefore["counters"]["mirroring_peers"])
 
-    def peer_remove(self, fs_name, fs_id, peer_spec):
+    def peer_remove(self, fs_name, fs_id, peer_spec, verify_dircount=True):
         res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
         vbefore = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
 
@@ -261,9 +272,10 @@ class TestMirroring(CephFSTestCase):
         self.run_ceph_cmd("fs", "snapshot", "mirror", "peer_remove", fs_name, peer_uuid)
         time.sleep(10)
         # verify via asok
-        res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
-                                         'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
-        self.assertTrue(res['peers'] == {} and res['snap_dirs']['dir_count'] == 0)
+        if verify_dircount:
+            res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
+                                             'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
+            self.assertTrue(res['peers'] == {} and res['snap_dirs']['dir_count'] == 0)
 
         res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
         vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
@@ -410,6 +422,7 @@ class TestMirroring(CephFSTestCase):
         self.assertRegex(
             last_synced_snap['sync_bytes'],
             r'^\d+(\.\d+)?\s+(B|KiB|MiB|GiB|TiB|PiB)$')
+        self.assertRegex(last_synced_snap['sync_time_stamp'], SYNC_TIME_STAMP_RE)
         self.assertIsInstance(last_synced_snap['sync_files'], int)
         self.assertGreaterEqual(last_synced_snap['sync_files'], 0)
 
@@ -514,7 +527,7 @@ class TestMirroring(CephFSTestCase):
                 if p.returncode != 0:
                     return
 
-    def restart_mirror_daemon(self):
+    def restart_mirror_daemon(self, sig=signal.SIGTERM):
         # daemon.start() always calls restart(), which skips stop() once proc
         # is cleared.  Stop the real cephfs-mirror via its pid file first so
         # the new instance can take the pidfile lock.
@@ -526,13 +539,23 @@ class TestMirroring(CephFSTestCase):
             self.primary_fs_name, self.primary_fs_id)
         pid = self.get_mirror_daemon_pid()
 
-        log.debug(f'SIGTERM to cephfs-mirror pid {pid}')
+        if sig == signal.SIGKILL:
+            sig_arg = '-KILL'
+            sig_name = 'SIGKILL'
+        elif sig == signal.SIGTERM:
+            sig_arg = '-TERM'
+            sig_name = 'SIGTERM'
+        else:
+            sig_arg = f'-{sig}'
+            sig_name = str(sig)
+
+        log.debug(f'{sig_name} to cephfs-mirror pid {pid}')
         if daemon.running():
             try:
-                daemon.signal(signal.SIGTERM, silent=True)
+                daemon.signal(sig, silent=True)
             except Exception as e:
                 log.debug(f'failed to signal cephfs-mirror via teuthology: {e}')
-        self.mount_a.run_shell(['kill', '-TERM', pid])
+        self.mount_a.run_shell(['kill', sig_arg, pid], check_status=False)
         self.wait_for_mirror_daemon_stop(pid)
 
         if daemon.running():
@@ -556,6 +579,30 @@ class TestMirroring(CephFSTestCase):
                         break
                 except CommandFailedError:
                     pass
+
+    def get_mirror_daemon_log_path(self):
+        pid = self.get_mirror_daemon_pid()
+        cluster = self.mount_a.cluster_name
+        candidates = [
+            f'/var/log/ceph/{cluster}-client.mirror.{pid}.log',
+            f'/var/log/ceph/ceph-client.mirror.{pid}.log',
+        ]
+        for path in candidates:
+            p = self.mount_a.run_shell(['test', '-f', path], check_status=False)
+            if p.returncode == 0:
+                return path
+        self.fail(f'cephfs-mirror log for pid {pid} not found')
+
+    def assert_mirror_log_lacks_pattern(self, pattern):
+        log_path = self.get_mirror_daemon_log_path()
+        p = self.mount_a.run_shell(
+            ['grep', '-qE', pattern, log_path], check_status=False)
+        if p.returncode == 0:
+            self.fail(f'found unexpected pattern {pattern!r} in cephfs-mirror log')
+        # grep exits 1 when the pattern is not found, which is what we want.
+        self.assertEqual(
+            p.returncode, 1,
+            f'failed to search cephfs-mirror log {log_path}')
 
     def wait_for_mirror_daemon_recovery(self, fs_name, fs_id, dir_name, peer_uuid):
         # A new rados_inst alone does not mean mirroring is ready: wait until the
@@ -669,6 +716,23 @@ class TestMirroring(CephFSTestCase):
             dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
             self.assertTrue(dir_stat['last_synced_snap']['name'] == expected_snap_name)
             self.assertTrue(dir_stat['snaps_synced'] == expected_snap_count)
+        except RETRY_EXCEPTIONS as e:
+            e.res = res
+            raise
+
+    @retry_assert(timeout=1800, interval=10)
+    def check_peer_status_after_sigkill_recovery(self, fs_name, fs_id, peer_spec,
+                                                 dir_name, expected_snap_name,
+                                                 expected_snap_count):
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        res = self.mirror_daemon_command(f'peer status for fs: {fs_name}',
+                                         'fs', 'mirror', 'peer', 'status',
+                                         f'{fs_name}@{fs_id}', peer_uuid)
+        try:
+            dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
+            self.assertEqual(dir_stat['state'], 'idle')
+            self.assertEqual(dir_stat['last_synced_snap']['name'], expected_snap_name)
+            self.assertEqual(dir_stat['snaps_synced'], expected_snap_count)
         except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
@@ -799,6 +863,56 @@ class TestMirroring(CephFSTestCase):
             if peer_spec == remote_peer_spec:
                 return peer_uuid
         return None
+
+    def sync_stat_omap_key(self, fs_name, peer_uuid, dir_path):
+        dir_rel = dir_path.lstrip('/')
+        return f'sync_stat/{fs_name}/{peer_uuid}/{dir_rel}'
+
+    def list_sync_stat_omap_keys(self, fs_name, peer_uuid=None):
+        p = self.mount_a.client_remote.run(
+            args=['rados', '-p', self.fs.metadata_pool_name,
+                  'listomapvals', 'cephfs_mirror'],
+            stdout=StringIO(), stderr=StringIO(), timeout=30,
+            check_status=True, label='list sync stat omap keys')
+        p.wait()
+        prefix = f'sync_stat/{fs_name}/'
+        if peer_uuid:
+            prefix = f'{prefix}{peer_uuid}/'
+        keys = []
+        for line in p.stdout.getvalue().splitlines():
+            stripped = line.strip()
+            if stripped.startswith(prefix):
+                keys.append(stripped)
+        return keys
+
+    @retry_assert(timeout=60, interval=2)
+    def wait_sync_stat_omap_key(self, fs_name, peer_uuid, dir_path):
+        expected = self.sync_stat_omap_key(fs_name, peer_uuid, dir_path)
+        keys = self.list_sync_stat_omap_keys(fs_name, peer_uuid)
+        self.assertIn(expected, keys, msg=f'expected omap key {expected}, got {keys}')
+
+    @retry_assert(timeout=60, interval=2)
+    def assert_sync_stat_omap_keys_removed(self, fs_name, peer_uuid=None):
+        keys = self.list_sync_stat_omap_keys(fs_name, peer_uuid)
+        self.assertEqual(keys, [], msg=f'stale sync stat omap keys: {keys}')
+
+    def setup_sync_stat_omap(self, dir_name='sync_stat_omap_dir'):
+        self.setup_mount_b(mds_perm='rw')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.mount_a.create_n_files(f'{dir_name}/file', 10, sync=True)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        snap_name = 'snap0'
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap_name}'])
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    peer_spec, f'/{dir_name}', snap_name, 1)
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        self.wait_sync_stat_omap_key(
+            self.primary_fs_name, peer_uuid, f'/{dir_name}')
+        return peer_spec, peer_uuid, f'/{dir_name}'
 
     def get_daemon_admin_socket(self):
         """overloaded by teuthology override (fs/mirror/clients/mirror.yaml)"""
@@ -949,6 +1063,13 @@ class TestMirroring(CephFSTestCase):
     def check_checkpoint_statuses(self, fs_name, dir_path, snap_names, expected_status):
         for snap_name in snap_names:
             self.check_checkpoint_status(fs_name, dir_path, snap_name, expected_status)
+
+    @retry_assert(timeout=300, interval=5)
+    def check_checkpoint_list_snap_names(self, fs_name, dir_path, expected_names):
+        res = self.checkpoint_list(fs_name, dir_path)
+        names = [cp['snap_name'] for cp in res['checkpoints']]
+        self.assertEqual(sorted(names), sorted(expected_names),
+                         f'expected checkpoints {expected_names}, got {names}')
 
     def setup_mount_b(self, mds_perm):
         log.debug('reconfigure client auth caps')
@@ -1400,12 +1521,205 @@ class TestMirroring(CephFSTestCase):
 
         self._teardown_mirroring(dir_path, peer_spec)
 
+    def test_checkpoint_auto_prune_old_complete(self):
+        """Old COMPLETE checkpoints are pruned down to keep_count on initialize.
+
+        Sync more than keep_count COMPLETE checkpoints first (prune does not run
+        on the sync path). Restarting the mirror daemon re-acquires the directory
+        and runs initialize_checkpoints(), which prunes the oldest already-COMPLETE
+        checkpoints. Snapshots themselves must remain.
+
+        Also verifies that updating cephfs_mirror_checkpoint_keep_count is honored
+        by the daemon (override below; restored via addCleanup).
+        """
+        keep_count = 3
+        dir_path = '/cp_prune'
+        dir_name = dir_path.lstrip('/')
+        peer_spec = "client.mirror_remote@ceph"
+        snap_names = [f'snap{i}' for i in range(keep_count + 2)]
+        expected_kept = snap_names[-keep_count:]
+        expected_pruned = snap_names[:-keep_count]
+
+        # Override keep_count so this test also covers config update pickup
+        self.config_set('client.mirror', 'cephfs_mirror_checkpoint_keep_count',
+                        keep_count)
+        self.addCleanup(self.config_rm, 'client.mirror',
+                        'cephfs_mirror_checkpoint_keep_count')
+
+        self._setup_mirrored_directory(dir_path, peer_spec=peer_spec, mount_b=True)
+
+        for snap_name in snap_names:
+            self._add_checkpoint_snapshot(dir_path, snap_name)
+
+        # Wait until all snapshots have been synced.  Do not assert all
+        # checkpoints are COMPLETE or count them before the restart: each
+        # checkpoint_add sends an acquire notification that can trigger
+        # initialize_checkpoints() and prune older already-COMPLETE entries
+        # before the loop finishes.
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, snap_names[-1], len(snap_names))
+
+        # Re-acquire directories so initialize_checkpoints() prunes already-COMPLETE
+        self.restart_mirror_daemon()
+
+        self.check_checkpoint_list_snap_names(
+            self.primary_fs_name, dir_path, expected_kept)
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, expected_kept, 'complete')
+        for snap_name in expected_pruned:
+            self.assert_checkpoint_not_listed(
+                self.primary_fs_name, dir_path, snap_name)
+
+        # Prune removes checkpoint metadata only; snapshots remain
+        snap_list = self.mount_a.ls(path=f'{dir_name}/.snap')
+        for snap_name in snap_names:
+            self.assertIn(snap_name, snap_list)
+
+        self._teardown_mirroring(dir_path, peer_spec)
+
+    def test_checkpoint_auto_prune_on_checkpoint_add(self):
+        """checkpoint add triggers initialize_checkpoints() and prunes old COMPLETE.
+
+        After more than keep_count COMPLETE checkpoints exist, adding a
+        checkpoint on a newly synced snapshot sends an acquire notify. The new
+        checkpoint is marked COMPLETE in that pass (so it is not pruned), while
+        older already-COMPLETE checkpoints are removed down to keep_count.
+        keep_count is set to 3.
+        """
+        keep_count = 3
+        dir_path = '/cp_prune_add'
+        dir_name = dir_path.lstrip('/')
+        peer_spec = "client.mirror_remote@ceph"
+        existing = [f'snap{i}' for i in range(keep_count + 2)]
+        new_snap = f'snap{len(existing)}'
+        # already-COMPLETE after prune: newest (keep_count - 1), plus the new one
+        expected_kept = existing[-(keep_count - 1):] + [new_snap]
+        expected_pruned = existing[:-(keep_count - 1)]
+
+        self.config_set('client.mirror', 'cephfs_mirror_checkpoint_keep_count',
+                        keep_count)
+        self.addCleanup(self.config_rm, 'client.mirror',
+                        'cephfs_mirror_checkpoint_keep_count')
+
+        self._setup_mirrored_directory(dir_path, peer_spec=peer_spec, mount_b=True)
+
+        for snap_name in existing:
+            self._add_checkpoint_snapshot(dir_path, snap_name)
+
+        # Wait until all existing snapshots have been synced.  Do not assert
+        # all existing checkpoints are COMPLETE here: each checkpoint_add
+        # sends an acquire notification that can trigger initialize_checkpoints()
+        # and prune older already-COMPLETE entries before the loop finishes.
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, existing[-1], len(existing))
+
+        # Sync one more snapshot, then checkpoint it to trigger initialize/prune
+        self.mount_a.run_shell(["mkdir", f"{dir_name}/.snap/{new_snap}"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, new_snap, len(existing) + 1)
+        self.checkpoint_add(self.primary_fs_name, dir_path, new_snap)
+
+        self.check_checkpoint_list_snap_names(
+            self.primary_fs_name, dir_path, expected_kept)
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, expected_kept, 'complete')
+        for snap_name in expected_pruned:
+            self.assert_checkpoint_not_listed(
+                self.primary_fs_name, dir_path, snap_name)
+
+        snap_list = self.mount_a.ls(path=f'{dir_name}/.snap')
+        for snap_name in existing + [new_snap]:
+            self.assertIn(snap_name, snap_list)
+
+        self._teardown_mirroring(dir_path, peer_spec)
+
+    def test_checkpoint_created_and_failed_not_auto_pruned(self):
+        """CREATED and FAILED checkpoints stay listed when COMPLETE ones are pruned.
+
+        Auto prune removes only checkpoints that are already COMPLETE. A
+        checkpoint whose snapshot has not been synced stays CREATED, and a
+        checkpoint whose sync failed stays FAILED. Snapshots themselves remain.
+        """
+        keep_count = 3
+        dir_path = '/cp_prune_non_complete'
+        dir_name = dir_path.lstrip('/')
+        peer_spec = "client.mirror_remote@ceph"
+        complete = [f'snap{i}' for i in range(keep_count + 2)]
+        snap_failed = 'snap_failed'
+        snap_created = 'snap_created'
+        expected_kept_complete = complete[-keep_count:]
+        expected_pruned = complete[:-keep_count]
+        expected_listed = expected_kept_complete + [snap_failed, snap_created]
+
+        self.config_set('client.mirror', 'cephfs_mirror_checkpoint_keep_count',
+                        keep_count)
+        self.addCleanup(self.config_rm, 'client.mirror',
+                        'cephfs_mirror_checkpoint_keep_count')
+        self.addCleanup(self._restore_mirror_remote_caps)
+
+        self._setup_mirrored_directory(dir_path, peer_spec=peer_spec, mount_b=True)
+
+        for snap_name in complete:
+            self._add_checkpoint_snapshot(dir_path, snap_name)
+
+        # Wait until all complete snapshots have been synced.  Do not assert
+        # all complete checkpoints are COMPLETE here: each checkpoint_add
+        # sends an acquire notification that can trigger initialize_checkpoints()
+        # and prune older already-COMPLETE entries before the loop finishes.
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, complete[-1], len(complete))
+
+        # Publish read-only remote caps before the daemon stops, so a respawn
+        # picks them up. Create snap_failed first: sync walks snapshots in
+        # snap-id order and returns on the first failure, leaving snap_created
+        # unsynced.
+        self._restrict_mirror_remote_caps()
+        self.stop_mirror_daemon()
+        self.mount_a.write_n_mb(f'{dir_name}/data', 1)
+        self.mount_a.run_shell(["mkdir", f"{dir_name}/.snap/{snap_failed}"])
+        self.checkpoint_add(self.primary_fs_name, dir_path, snap_failed)
+        self.mount_a.run_shell(["mkdir", f"{dir_name}/.snap/{snap_created}"])
+        self.checkpoint_add(self.primary_fs_name, dir_path, snap_created)
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, [snap_failed, snap_created], 'created')
+
+        self.start_mirror_daemon()
+
+        self.check_checkpoint_status(
+            self.primary_fs_name, dir_path, snap_failed, 'failed')
+        self.check_checkpoint_status(
+            self.primary_fs_name, dir_path, snap_created, 'created')
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, expected_kept_complete, 'complete')
+        self.check_checkpoint_list_snap_names(
+            self.primary_fs_name, dir_path, expected_listed)
+        for snap_name in expected_pruned:
+            self.assert_checkpoint_not_listed(
+                self.primary_fs_name, dir_path, snap_name)
+
+        snap_list = self.mount_a.ls(path=f'{dir_name}/.snap')
+        for snap_name in complete + [snap_failed, snap_created]:
+            self.assertIn(snap_name, snap_list)
+
+        self._restore_mirror_remote_caps()
+        self._teardown_mirroring(dir_path, peer_spec)
+
     def test_checkpoint_add_directory_notify_perf_counter(self):
         """Each checkpoint add must notify the mirror daemon via add_directory()."""
         snap_count = 100
         dir_path = '/cp_add_dir_notify'
         dir_name = dir_path.lstrip('/')
         peer_spec = "client.mirror_remote@ceph"
+
+        # Raise keep_count to snap_count so pruning does not interfere: this
+        # test creates snap_count checkpoints and asserts all snap_count are
+        # listed.  The default keep_count (10) would prune old COMPLETE
+        # checkpoints as sync progresses, leaving far fewer than snap_count
+        # entries by the time checkpoint_list is called.
+        self.config_set('client.mirror', 'cephfs_mirror_checkpoint_keep_count',
+                        snap_count)
+        self.addCleanup(self.config_rm, 'client.mirror',
+                        'cephfs_mirror_checkpoint_keep_count')
 
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
@@ -1757,6 +2071,45 @@ class TestMirroring(CephFSTestCase):
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def test_cephfs_mirror_sigkill_during_sync_recovers(self):
+        """Mirror recovers after SIGKILL during snapshot sync without EBADF."""
+        self.setup_mount_b(mds_perm='rw')
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = 'd0'
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+
+        log.debug('writing 10 x 1GB files on primary')
+        for i in range(10):
+            self.mount_a.write_n_mb(os.path.join(dir_name, f'file.{i}'), 1024)
+
+        snap_name = 'snap0'
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap_name}'])
+
+        self.check_peer_snap_in_progress(
+            self.primary_fs_name, self.primary_fs_id, peer_spec,
+            f'/{dir_name}', snap_name)
+
+        self.restart_mirror_daemon(sig=signal.SIGKILL)
+
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        self.wait_for_mirror_daemon_recovery(
+            self.primary_fs_name, self.primary_fs_id, f'/{dir_name}', peer_uuid)
+
+        self.check_peer_status_after_sigkill_recovery(
+            self.primary_fs_name, self.primary_fs_id, peer_spec,
+            f'/{dir_name}', snap_name, expected_snap_count=1)
+        self.verify_snapshot(dir_name, snap_name)
+
+        self.assert_mirror_log_lacks_pattern(r'Bad file descriptor')
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
     def test_cephfs_mirror_failed_sync_with_correction(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
@@ -1847,10 +2200,10 @@ class TestMirroring(CephFSTestCase):
                     # verify via asok
                     res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
                                                      'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
-                    if not 'state' in res:
-                        return
+                    if 'state' not in res:
+                        continue
                     self.assertTrue(res['state'] == "failed")
-                    return True
+                    break
                 except:
                     pass
 
@@ -1885,10 +2238,10 @@ class TestMirroring(CephFSTestCase):
                     # verify via asok
                     res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
                                                      'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
-                    if not 'state' in res:
-                        return
+                    if 'state' not in res:
+                        continue
                     self.assertTrue(res['state'] == "failed")
-                    return True
+                    break
                 except:
                     pass
 
@@ -1969,6 +2322,70 @@ class TestMirroring(CephFSTestCase):
         res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
         vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         self.assertGreater(vafter["counters"]["snaps_synced"], vbefore["counters"]["snaps_synced"])
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_sparse_file_sync(self):
+        """Test snapshot sync of a sparse file with hole (absent) objects.
+
+        A sparse file has objects that were never written.  LIST_SNAPS on
+        such an absent object fails at the request level with -ENOENT while
+        the per-op rval is 0 with an empty payload, and Objecter's per-op
+        decoder turns that into -EIO.  blockdiff used to fail the whole
+        incremental sync with -EIO instead of treating the object as a
+        hole; this test guards against regressions of that bug.
+
+        The mtime of each snapshot version of the file is pinned explicitly.
+        The snap diff the MDS computes for an incremental sync drops a file
+        whose two snapshot versions carry the same mtime, and the mtime it
+        compares is the one cached on its own inode, which lags behind the
+        client for as long as the writer still holds unflushed write caps --
+        so a write followed straight away by a snapshot can leave both
+        versions reporting the mtime from before the write (tracker #74984).
+        Leaving the mtimes to chance would make it a coin flip whether the
+        file reaches file_blockdiff() at all, which is what this test needs
+        to exercise.  Pinning an mtime is a setattr, so the MDS picks the
+        value up right away and it writes to no object -- the clone lists
+        the block diff is computed from are left undisturbed.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.mount_a.run_shell(["mkdir", "d0"])
+
+        # 64MB sparse file with 1MB of data at offsets 0, 32MB and 60MB.
+        # All other objects (4MB each) are holes and do not exist on the OSD.
+        self.mount_a.run_shell(["truncate", "-s", "64M", "d0/sparse"])
+        self.mount_a.run_shell(["dd", "if=/dev/zero", "of=d0/sparse", "bs=1M",
+                                "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["dd", "if=/dev/zero", "of=d0/sparse", "bs=1M",
+                                "seek=32", "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["dd", "if=/dev/zero", "of=d0/sparse", "bs=1M",
+                                "seek=60", "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:00 UTC",
+                                "d0/sparse"])
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        # snapshot 1: full sync
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_a"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap_a', 1)
+        self.verify_snapshot('d0', 'snap_a')
+
+        # rewrite 1MB @ 32MB with different content, then snapshot again:
+        # the incremental sync must compute a blockdiff over the sparse
+        # file, which includes many hole objects.
+        self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=d0/sparse", "bs=1M",
+                                "seek=32", "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:02 UTC",
+                                "d0/sparse"])
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_b"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap_b', 2)
+        self.verify_snapshot('d0', 'snap_b')
+
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
@@ -2089,8 +2506,6 @@ class TestMirroring(CephFSTestCase):
     def test_cephfs_mirror_incremental_sync(self):
         """ Test incremental snapshot synchronization (based on mtime differences)."""
 
-        self.skipTest("temporarily disable test: snapdiff bug - see https://tracker.ceph.com/issues/74984")
-
         self.setup_mount_b(mds_perm='rw')
         repo = 'ceph-qa-suite'
         repo_dir = 'ceph_repo'
@@ -2140,7 +2555,9 @@ class TestMirroring(CephFSTestCase):
         vthird = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         self.assertGreater(vthird["counters"]["snaps_synced"], vsecond["counters"]["snaps_synced"])
         inc_sync_duration1 = vthird["counters"]["last_synced_duration"]
-        self.assertGreaterEqual(float(full_sync_duration), float(inc_sync_duration1))
+        # For small number of files, incremental sync mostly takes more time because of snapdiff.
+        # This has become obvious after a separate crawler thread with multi-threaded mirroring
+        log.debug(f'full_sync_duration - {full_sync_duration}, inc_sync_duration1 - {inc_sync_duration1}')
 
         # diff again, this time back to HEAD
         log.debug('resetting to HEAD')
@@ -2155,8 +2572,363 @@ class TestMirroring(CephFSTestCase):
         vfourth = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         self.assertGreater(vfourth["counters"]["snaps_synced"], vthird["counters"]["snaps_synced"])
         inc_sync_duration2 = vfourth["counters"]["last_synced_duration"]
-        self.assertGreaterEqual(float(full_sync_duration), float(inc_sync_duration2))
+        # For small number of files, incremental sync mostly takes more time because of snapdiff.
+        # This has become obvious after a separate crawler thread with multi-threaded mirroring
+        log.debug(f'full_sync_duration - {full_sync_duration}, inc_sync_duration2 - {inc_sync_duration2}')
 
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_hardlink_snapdiff_visibility(self):
+        """Verify snapdiff reports every path of a multiversion hardlink.
+
+        The shared inode is multiversion because nlink is greater than one.
+        Updating it COWs the inode without necessarily COWing either
+        hardlink dentry. Snapdiff must therefore report both paths by
+        considering the inode version as well as the dentry version. Keep
+        blockdiff disabled so this test isolates dentry visibility from
+        changed-block calculation.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.config_set(
+            'client.mirror',
+            'cephfs_mirror_blockdiff_min_file_size', 134217728)
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = 'd0'
+        file_names = ('file', 'link')
+
+        def snapshot_file_state(mount, snap_name, file_name):
+            path = f'{dir_name}/.snap/{snap_name}/{file_name}'
+            stat = mount.run_shell(
+                ['stat', '-c', '%F:%s:%i:%h', path]
+            ).stdout.getvalue().strip()
+            file_type, size, inode, nlink = stat.rsplit(':', 3)
+            digest = mount.run_shell(
+                ['sha256sum', path]
+            ).stdout.getvalue().split()[0]
+            return file_type, int(size), digest, int(inode), int(nlink)
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      peer_spec, self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.mount_a.run_shell([
+            'dd', 'if=/dev/zero', f'of={dir_name}/{file_names[0]}',
+            'bs=1M', 'count=64', 'conv=fsync'
+        ])
+        self.mount_a.run_shell([
+            'ln', f'{dir_name}/{file_names[0]}',
+            f'{dir_name}/{file_names[1]}'
+        ])
+        self.mount_a.run_shell([
+            'touch', '-m', '-d', '2020-01-01 00:00:00 UTC',
+            f'{dir_name}/{file_names[0]}'
+        ])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id,
+                           f'/{dir_name}')
+
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_a'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_a', 1)
+        self.verify_snapshot(dir_name, 'snap_a')
+        initial_states = {
+            name: snapshot_file_state(self.mount_a, 'snap_a', name)
+            for name in file_names
+        }
+        self.assertEqual(initial_states['file'][3],
+                         initial_states['link'][3])
+        self.assertEqual(2, initial_states['file'][4])
+
+        self.mount_a.run_shell([
+            'dd', 'if=/dev/urandom', f'of={dir_name}/{file_names[0]}',
+            'bs=1M', 'count=1', 'seek=32', 'conv=notrunc,fsync'
+        ])
+        # Pin distinct mtimes so this test isolates the unchanged-hardlink
+        # dentry bug rather than the separate pending-snapflush/mtime issue.
+        self.mount_a.run_shell([
+            'touch', '-m', '-d', '2020-01-01 00:00:02 UTC',
+            f'{dir_name}/{file_names[0]}'
+        ])
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_b'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_b', 2)
+        self.assertIn('snap_b', self.mount_b.ls(path=f'{dir_name}/.snap'))
+
+        source_states = {
+            name: snapshot_file_state(self.mount_a, 'snap_b', name)
+            for name in file_names
+        }
+        destination_states = {
+            name: snapshot_file_state(self.mount_b, 'snap_b', name)
+            for name in file_names
+        }
+        log.info('hardlink snapdiff visibility: source=%s destination=%s',
+                 source_states, destination_states)
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id,
+                              f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+        self.assertNotEqual(initial_states['file'][2],
+                            source_states['file'][2])
+        self.assertEqual(source_states['file'][:3],
+                         source_states['link'][:3])
+        self.assertEqual(source_states['file'][3],
+                         source_states['link'][3])
+        self.assertEqual(2, source_states['file'][4])
+        for name in file_names:
+            self.assertEqual(source_states[name][:3],
+                             destination_states[name][:3])
+
+    def test_cephfs_mirror_hardlink_snapdiff_replica_inode(self):
+        """Verify snapdiff reports a hardlink through an inode replica.
+
+        Pin the hardlink's primary dentry and remote dentry to different
+        active MDS ranks. The rank serving the remote dentry has only an
+        inode replica, whose snap range is not authoritative. Snapdiff must
+        report the remote dentry conservatively even if the replica's
+        ``first`` value appears to span both snapshots.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+        self.config_set(
+            'client.mirror',
+            'cephfs_mirror_blockdiff_min_file_size', 134217728)
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = 'd0'
+        file_paths = ('file', 'replica/link')
+
+        def snapshot_file_state(mount, snap_name, file_path):
+            path = f'{dir_name}/.snap/{snap_name}/{file_path}'
+            stat = mount.run_shell(
+                ['stat', '-c', '%F:%s:%i:%h', path]
+            ).stdout.getvalue().strip()
+            file_type, size, inode, nlink = stat.rsplit(':', 3)
+            digest = mount.run_shell(
+                ['sha256sum', path]
+            ).stdout.getvalue().split()[0]
+            return file_type, int(size), digest, int(inode), int(nlink)
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      peer_spec, self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', '-p', f'{dir_name}/replica/empty'])
+        self.mount_a.setfattr(dir_name, 'ceph.dir.pin', '0')
+        self.mount_a.setfattr(f'{dir_name}/replica', 'ceph.dir.pin', '1')
+        self._wait_subtrees(
+            [(f'/{dir_name}', 0), (f'/{dir_name}/replica', 1)],
+            rank='all', status=status, path=f'/{dir_name}')
+
+        self.mount_a.run_shell([
+            'dd', 'if=/dev/zero', f'of={dir_name}/{file_paths[0]}',
+            'bs=1M', 'count=64', 'conv=fsync'
+        ])
+        self.mount_a.run_shell([
+            'ln', f'{dir_name}/{file_paths[0]}',
+            f'{dir_name}/{file_paths[1]}'
+        ])
+        self.mount_a.run_shell([
+            'touch', '-m', '-d', '2020-01-01 00:00:00 UTC',
+            f'{dir_name}/{file_paths[0]}'
+        ])
+        # Populate rank 1's remote-dentry linkage and inode replica before
+        # the first snapshot.
+        self.mount_a.run_shell(['stat', f'{dir_name}/{file_paths[1]}'])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id,
+                           f'/{dir_name}')
+
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_a'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_a', 1)
+        self.verify_snapshot(dir_name, 'snap_a')
+        initial_states = {
+            path: snapshot_file_state(self.mount_a, 'snap_a', path)
+            for path in file_paths
+        }
+        self.assertEqual(initial_states[file_paths[0]][3],
+                         initial_states[file_paths[1]][3])
+        self.assertEqual(2, initial_states[file_paths[0]][4])
+
+        self.mount_a.run_shell([
+            'dd', 'if=/dev/urandom', f'of={dir_name}/{file_paths[0]}',
+            'bs=1M', 'count=1', 'seek=32', 'conv=notrunc,fsync'
+        ])
+        self.mount_a.run_shell([
+            'touch', '-m', '-d', '2020-01-01 00:00:02 UTC',
+            f'{dir_name}/{file_paths[0]}'
+        ])
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_b'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_b', 2)
+        self.assertIn('snap_b', self.mount_b.ls(path=f'{dir_name}/.snap'))
+
+        source_states = {
+            path: snapshot_file_state(self.mount_a, 'snap_b', path)
+            for path in file_paths
+        }
+        destination_states = {
+            path: snapshot_file_state(self.mount_b, 'snap_b', path)
+            for path in file_paths
+        }
+        log.info('replica inode hardlink snapdiff: source=%s destination=%s',
+                 source_states, destination_states)
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id,
+                              f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+        self.assertNotEqual(initial_states[file_paths[0]][2],
+                            source_states[file_paths[0]][2])
+        self.assertEqual(source_states[file_paths[0]][:3],
+                         source_states[file_paths[1]][:3])
+        self.assertEqual(source_states[file_paths[0]][3],
+                         source_states[file_paths[1]][3])
+        self.assertEqual(2, source_states[file_paths[0]][4])
+        for path in file_paths:
+            self.assertEqual(source_states[path][:3],
+                             destination_states[path][:3])
+
+    def test_cephfs_mirror_blockdiff_pure_truncate(self):
+        """Verify incremental sync when only the file size changes."""
+
+        self.setup_mount_b(mds_perm='rw')
+        self.config_set(
+            'client.mirror',
+            'cephfs_mirror_blockdiff_min_file_size', 16777216)
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = 'd0'
+        cases = [
+            ('object_boundary_shrink', 64, 32),
+            ('partial_object_shrink', 64, 33),
+            ('same_object_shrink', 19, 18),
+            ('sparse_grow', 20, 40),
+        ]
+
+        def snapshot_file_state(mount, snap_name, file_name):
+            path = f'{dir_name}/.snap/{snap_name}/{file_name}'
+            stat = mount.run_shell(
+                ['stat', '-c', '%F:%s', path]
+            ).stdout.getvalue().strip()
+            file_type, size = stat.rsplit(':', 1)
+            digest = mount.run_shell(
+                ['sha256sum', path]
+            ).stdout.getvalue().split()[0]
+            return file_type, int(size), digest
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      peer_spec, self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id,
+                           f'/{dir_name}')
+
+        for file_name, initial_size_mb, _ in cases:
+            self.mount_a.run_shell([
+                'dd', 'if=/dev/zero', f'of={dir_name}/{file_name}',
+                'bs=1M', f'count={initial_size_mb}', 'conv=fsync'
+            ])
+
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_a'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_a', 1)
+        self.verify_snapshot(dir_name, 'snap_a')
+
+        for file_name, initial_size_mb, final_size_mb in cases:
+            self.mount_a.run_shell([
+                'truncate', '-s', f'{final_size_mb}M',
+                f'{dir_name}/{file_name}'
+            ])
+            if final_size_mb > initial_size_mb:
+                # Ensure snapdiff reports sparse growth without writing data.
+                self.mount_a.run_shell([
+                    'touch', '-m', f'{dir_name}/{file_name}'
+                ])
+
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_b'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_b', 2)
+        self.assertIn('snap_b', self.mount_b.ls(path=f'{dir_name}/.snap'))
+
+        mismatches = []
+        for file_name, _, _ in cases:
+            source_state = snapshot_file_state(
+                self.mount_a, 'snap_b', file_name)
+            destination_state = snapshot_file_state(
+                self.mount_b, 'snap_b', file_name)
+            log.info('pure truncate case %s: source=%s destination=%s',
+                     file_name, source_state, destination_state)
+            if source_state != destination_state:
+                mismatches.append((file_name, source_state, destination_state))
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id,
+                              f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.assertEqual([], mismatches)
+
+    def test_cephfs_mirror_incremental_sync_with_directory_rename(self):
+        """Unchanged descendants survive directory renames and replacements."""
+        self.setup_mount_b(mds_perm='rw')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+
+        dir_name = 'directory_rename'
+        old_dir = f'{dir_name}/dirB'
+        new_dir = f'{dir_name}/dirB-renamed'
+        renamed_file = 'sub/deeper/unchanged'
+        renamed_contents = 'unchanged across directory rename'
+        cross_old = f'{dir_name}/d1/X'
+        cross_new = f'{dir_name}/d2/Y'
+        cross_file = 'sub/deeper/unchanged'
+        cross_contents = 'unchanged across parent directory rename'
+        replacement_src = f'{dir_name}/replace/A'
+        replacement_dst = f'{dir_name}/replace/B'
+        replacement_file = 'sub/deeper/unchanged'
+        replacement_contents = 'unchanged across same-name directory replacement'
+
+        self.mount_a.run_shell([
+            'mkdir', '-p', f'{old_dir}/sub/deeper', f'{cross_old}/sub/deeper',
+            f'{dir_name}/d2', f'{replacement_src}/sub/deeper', replacement_dst])
+        self.mount_a.write_file(f'{old_dir}/{renamed_file}', data=renamed_contents)
+        self.mount_a.write_file(f'{cross_old}/{cross_file}', data=cross_contents)
+        self.mount_a.write_file(f'{replacement_src}/{replacement_file}',
+                                data=replacement_contents)
+        self.mount_a.write_file(f'{replacement_dst}/old-only', data='stale data')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+
+        def sync_and_verify(snap_name, snap_count):
+            self.mount_a.run_shell(['sync'])
+            self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap_name}'])
+            self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                        peer_spec, f'/{dir_name}', snap_name, snap_count)
+            self.verify_snapshot(dir_name, snap_name)
+
+        sync_and_verify('snap0', 1)
+
+        self.mount_a.run_shell(['mv', old_dir, new_dir])
+        sync_and_verify('snap1', 2)
+        remote_snap = f'{dir_name}/.snap/snap1'
+        self.assertNotIn('dirB', self.mount_b.ls(path=remote_snap))
+        self.assertEqual(renamed_contents,
+                         self.mount_b.read_file(f'{remote_snap}/dirB-renamed/{renamed_file}'))
+
+        self.mount_a.run_shell(['mv', cross_old, cross_new])
+        sync_and_verify('snap2', 3)
+        self.assertEqual(cross_contents,
+                         self.mount_b.read_file(
+                             f'{dir_name}/.snap/snap2/d2/Y/{cross_file}'))
+
+        self.mount_a.run_shell(['rm', '-rf', replacement_dst])
+        self.mount_a.run_shell(['mv', replacement_src, replacement_dst])
+        sync_and_verify('snap3', 4)
+        remote_replacement = f'{dir_name}/.snap/snap3/replace/B'
+        self.assertNotIn('old-only', self.mount_b.ls(path=remote_replacement))
+        self.assertEqual(replacement_contents,
+                         self.mount_b.read_file(
+                             f'{remote_replacement}/{replacement_file}'))
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
     def test_cephfs_mirror_incremental_sync_with_type_mixup(self):
@@ -2240,8 +3012,6 @@ class TestMirroring(CephFSTestCase):
         mirror daemon should identify the purge and switch to using remote
         comparison to sync the snapshot (in the next iteration of course).
         """
-
-        self.skipTest("temporarily disable test: snapdiff bug - see https://tracker.ceph.com/issues/74984")
 
         self.setup_mount_b(mds_perm='rw')
         repo = 'ceph-qa-suite'
@@ -2482,7 +3252,7 @@ class TestMirroring(CephFSTestCase):
 
         remote_snap_name = 'snap_b'
         remote_snap_path = f'{dir_name}/.snap/{remote_snap_name}'
-        failure_reason = f"snapshot '{remote_snap_name}' has invalid metadata"
+        failure_reason = f"remote fs snapshot '{remote_snap_name}' has invalid metadata"
         dir_name = f'/{dir_name}'
 
         # create a directory in the remote fs and check status 'failed'
@@ -2765,12 +3535,12 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{self.primary_fs_name}@{self.primary_fs_id}',
                                          peer_uuid)
-        d0_sync_time_stamp = float(self.peer_dir_status(res, '/d0', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
-        d1_sync_time_stamp = float(self.peer_dir_status(res, '/d1', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
-        d2_sync_time_stamp = float(self.peer_dir_status(res, '/d2', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
+        d0_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d0', peer_uuid)['last_synced_snap']['sync_time_stamp'])
+        d1_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d1', peer_uuid)['last_synced_snap']['sync_time_stamp'])
+        d2_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d2', peer_uuid)['last_synced_snap']['sync_time_stamp'])
 
         self.assertGreaterEqual(d1_sync_time_stamp, d0_sync_time_stamp)
         self.assertGreaterEqual(d2_sync_time_stamp, d0_sync_time_stamp)
@@ -2837,12 +3607,12 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{self.primary_fs_name}@{self.primary_fs_id}',
                                          peer_uuid)
-        d0_sync_time_stamp = float(self.peer_dir_status(res, '/d0', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
-        d1_sync_time_stamp = float(self.peer_dir_status(res, '/d1', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
-        d2_sync_time_stamp = float(self.peer_dir_status(res, '/d2', peer_uuid)
-                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
+        d0_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d0', peer_uuid)['last_synced_snap']['sync_time_stamp'])
+        d1_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d1', peer_uuid)['last_synced_snap']['sync_time_stamp'])
+        d2_sync_time_stamp = parse_sync_time_stamp(
+            self.peer_dir_status(res, '/d2', peer_uuid)['last_synced_snap']['sync_time_stamp'])
 
         self.assertLess(d1_sync_time_stamp, d0_sync_time_stamp)
         self.assertLess(d2_sync_time_stamp, d0_sync_time_stamp)
@@ -3052,6 +3822,43 @@ class TestMirroring(CephFSTestCase):
         self.assertEqual(res, {'metrics': {}})
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def test_cephfs_mirror_sync_stat_omap_removed_on_peer_remove(self):
+        """peer_remove purges persisted sync-stat omap entries for the peer."""
+        peer_spec, peer_uuid, _dir_path = self.setup_sync_stat_omap(
+            dir_name='sync_stat_omap_peer_remove')
+        self.peer_remove(self.primary_fs_name, self.primary_fs_id, peer_spec, False)
+        self.assert_sync_stat_omap_keys_removed(
+            self.primary_fs_name, peer_uuid)
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_sync_stat_omap_removed_on_disable(self):
+        """mirror disable purges persisted sync-stat omap entries."""
+        _peer_spec, peer_uuid, _dir_path = self.setup_sync_stat_omap(
+            dir_name='sync_stat_omap_disable')
+        keys_before = self.list_sync_stat_omap_keys(
+            self.primary_fs_name, peer_uuid)
+        self.assertTrue(keys_before)
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.assert_sync_stat_omap_keys_removed(self.primary_fs_name)
+
+    def test_cephfs_mirror_sync_stat_omap_preserved_on_restart(self):
+        """Daemon restart preserves persisted sync-stat omap entries."""
+        peer_spec, peer_uuid, dir_path = self.setup_sync_stat_omap(
+            dir_name='sync_stat_omap_restart')
+        keys_before = self.list_sync_stat_omap_keys(
+            self.primary_fs_name, peer_uuid)
+        self.assertTrue(keys_before)
+        self.restart_mirror_daemon()
+        self.wait_sync_stat_omap_key(
+            self.primary_fs_name, peer_uuid, dir_path)
+        keys_after = self.list_sync_stat_omap_keys(
+            self.primary_fs_name, peer_uuid)
+        self.assertEqual(set(keys_before), set(keys_after))
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id,
+                              dir_path)
+        self.peer_remove(self.primary_fs_name, self.primary_fs_id, peer_spec)
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
     def test_mgr_snapshot_mirror_status_errors(self):
         """Mgr status returns expected errors for invalid inputs."""
         self.setup_mount_b(mds_perm='rw')
@@ -3209,6 +4016,78 @@ class TestMirroring(CephFSTestCase):
                          before['last_synced_snap']['name'])
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def _sync_stat_omap_key(self, fs_name, peer_uuid, dir_path):
+        return f'sync_stat/{fs_name}/{peer_uuid}/{dir_path.lstrip("/")}'
+
+    def _get_sync_stat_omap(self, peer_uuid, dir_path):
+        key = self._sync_stat_omap_key(self.primary_fs_name, peer_uuid, dir_path)
+        raw = self.fs.radosmo(['getomapval', 'cephfs_mirror', key, '-'])
+        return key, json.loads(raw)
+
+    def _set_sync_stat_omap(self, key, stat):
+        payload = json.dumps(stat).encode('utf-8')
+        self.fs.radosm(['setomapval', 'cephfs_mirror', key],
+                       stdin=BytesIO(payload))
+
+    def test_cephfs_mirror_survives_corrupt_sync_stat_omap(self):
+        """Mirror daemon must not crash when loading corrupt sync-stat omap.
+
+        Stop the daemon, rewrite last_synced_snap with bad types/values
+        (strings, negative ints, out-of-range timestamp) that must be
+        ignored rather than restoring bogus stats or aborting, then
+        restart. The daemon should come back and keep syncing.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+
+        dir_name = 'corrupt_sync_stat_dir'
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.mount_a.create_n_files(f'{dir_name}/file', 50, sync=True)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+
+        snap0 = 'snap0'
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap0}'])
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    peer_spec, f'/{dir_name}', snap0, 1)
+
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        key, stat = self._get_sync_stat_omap(peer_uuid, f'/{dir_name}')
+        self.assertIn('last_synced_snap', stat)
+        self.assertEqual(stat['last_synced_snap']['name'], snap0)
+
+        self.stop_mirror_daemon()
+
+        # Intentionally corrupt last_synced_snap. Pre-fix, bad string
+        # types could abort; negatives must not become huge uint64 values;
+        # out-of-range timestamps must not reach utime_t::set_from_double().
+        last = dict(stat['last_synced_snap'])
+        last['id'] = -1
+        last['sync_bytes'] = -1
+        last['sync_files'] = -1
+        last['sync_duration'] = '59s'
+        last['sync_time_stamp'] = 1e100
+        last['crawl_duration'] = '1m 30s'
+        stat['last_synced_snap'] = last
+        log.debug(f'corrupting sync-stat omap key={key} value={stat}')
+        self._set_sync_stat_omap(key, stat)
+
+        self.start_mirror_daemon()
+        self.wait_for_mirror_daemon_recovery(
+            self.primary_fs_name, self.primary_fs_id, f'/{dir_name}', peer_uuid)
+
+        # Daemon stayed up through acquire + apply_persisted_dir_sync_stat.
+        # Sync a new snap to prove replayer is healthy after ignoring bad fields.
+        # snaps_synced starts at 0 after restart (omap load only restores
+        # last_synced_snap fields), so the new snap is session count 1.
+        snap1 = 'snap1'
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap1}'])
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    peer_spec, f'/{dir_name}', snap1, 1)
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
     def test_mgr_snapshot_mirror_status_after_directory_remove(self):
         """Mgr status for a removed directory returns ENOENT."""
         self.setup_mount_b(mds_perm='rw')
@@ -3280,18 +4159,34 @@ class TestMirroring(CephFSTestCase):
         self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
                                     peer_spec, f'/{dir_name}', snap0, 1)
 
-        res1 = self.mgr_mirror_status(self.primary_fs_name)
-        res2 = self.mgr_mirror_status(self.primary_fs_name)
-        self.assertEqual(res1, res2)
+        # TTL is bucketed via int(monotonic()/ttl); adjacent calls can straddle
+        # a bucket boundary and both miss, so retry until we see a cache hit.
+        with safe_while(sleep=0.1, tries=30,
+                        action='mgr metrics cache hit') as proceed:
+            while proceed():
+                res1 = self.mgr_mirror_status(self.primary_fs_name)
+                res2 = self.mgr_mirror_status(self.primary_fs_name)
+                if res1 == res2:
+                    break
 
         snap1 = 'snap1'
         self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap1}'])
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                peer_spec, f'/{dir_name}', snap1, 2)
 
-        time.sleep(self.MGR_METRICS_CACHE_TTL + 1)
-        res3 = self.mgr_mirror_status(self.primary_fs_name)
+        # persist_dir_sync_stat() is an async AIO write; under valgrind the omap
+        # write may not have landed by the time check_peer_status() returns.
+        # Retry: sleep TTL+1 each iteration to ensure a fresh cache load, then
+        # assert the omap-persisted value has caught up with the in-memory count.
         peer_uuid = self.get_peer_uuid(peer_spec)
+        with safe_while(sleep=self.MGR_METRICS_CACHE_TTL + 1, tries=10,
+                        action='wait for mgr snaps_synced=2') as proceed:
+            while proceed():
+                res3 = self.mgr_mirror_status(self.primary_fs_name)
+                if (res3['metrics'].get(f'/{dir_name}', {})
+                        .get('peer', {}).get(peer_uuid, {})
+                        .get('snaps_synced') == 2):
+                    break
         self.assertEqual(
             res3['metrics'][f'/{dir_name}']['peer'][peer_uuid]['snaps_synced'], 2)
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)

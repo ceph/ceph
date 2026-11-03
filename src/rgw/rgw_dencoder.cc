@@ -42,6 +42,9 @@ std::list<RGWBucketEncryptionConfig> RGWBucketEncryptionConfig::generate_test_in
   bc = RGWBucketEncryptionConfig("AES256");
   o.push_back(std::move(bc));
 
+  bc = RGWBucketEncryptionConfig(std::vector<std::string>{"SSE-C"});
+  o.push_back(std::move(bc));
+
   o.emplace_back();
   return o;
 }

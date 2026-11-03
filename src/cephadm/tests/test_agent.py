@@ -39,6 +39,119 @@ def _check_file(path, content):
         assert fcontent == content
 
 
+def test_agent_write_required_files(cephadm_fs):
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        cephadm_fs.create_dir(AGENT_DIR)
+
+        with pytest.raises(_cephadm.Error, match='Agent needs a config'):
+            agent.write_required_files({})
+
+        incomplete = {
+            s: 'text' for s in agent.required_files if s != 'agent.json'
+        }
+        with pytest.raises(
+                _cephadm.Error,
+                match='required file missing from config: agent.json'):
+            agent.write_required_files(incomplete)
+
+        config = {s: f'content-{s}' for s in agent.required_files}
+        config['extra.txt'] = 'do-not-write'
+        agent.write_required_files(config)
+
+        for fname in agent.required_files:
+            _check_file(f'{AGENT_DIR}/{fname}', f'content-{fname}')
+        assert not os.path.exists(f'{AGENT_DIR}/extra.txt')
+
+        # overwrite agent.json with a new target_ip (mgr failover style update)
+        new_agent_json = json.dumps({
+            'target_ip': '192.168.100.101',
+            'target_port': 7150,
+            'host': AGENT_ID,
+        })
+        config['agent.json'] = new_agent_json
+        agent.write_required_files(config)
+        _check_file(f'{AGENT_DIR}/agent.json', new_agent_json)
+
+
+@mock.patch('cephadm.call_throws')
+@mock.patch('cephadm.update_firewalld')
+def test_agent_reconfig_writes_required_files(_update_firewalld, _call_throws, cephadm_fs):
+    """SSH agent reconfig must rewrite required_files (e.g. target_ip), not only restart."""
+    _call_throws.return_value = ('', '', 0)
+
+    old_agent_json = json.dumps({
+        'target_ip': '192.168.100.100',
+        'target_port': 7150,
+        'refresh_period': 20,
+        'listener_port': 4721,
+        'host': AGENT_ID,
+        'device_enhanced_scan': 'False',
+    })
+    new_agent_json = json.dumps({
+        'target_ip': '192.168.100.101',
+        'target_port': 7150,
+        'refresh_period': 20,
+        'listener_port': 4721,
+        'host': AGENT_ID,
+        'device_enhanced_scan': 'False',
+    })
+    old_unit_run = 'OLD UNIT RUN - should not be rewritten on reconfig\n'
+
+    with with_cephadm_ctx([]) as ctx:
+        ctx.fsid = FSID
+        ctx.name = f'agent.{AGENT_ID}'
+        ctx.skip_firewalld = True
+        ctx.skip_restart_for_reconfig = False
+        ctx.config_blobs = {
+            'agent.json': new_agent_json,
+            'keyring': 'new-keyring',
+            'root_cert.pem': 'new-ca',
+            'listener.crt': 'new-crt',
+            'listener.key': 'new-key',
+            'not-required-file.txt': 'should-not-be-written',
+        }
+
+        cephadm_fs.create_dir(AGENT_DIR)
+        with open(f'{AGENT_DIR}/agent.json', 'w') as f:
+            f.write(old_agent_json)
+        with open(f'{AGENT_DIR}/keyring', 'w') as f:
+            f.write('old-keyring')
+        with open(f'{AGENT_DIR}/root_cert.pem', 'w') as f:
+            f.write('old-ca')
+        with open(f'{AGENT_DIR}/listener.crt', 'w') as f:
+            f.write('old-crt')
+        with open(f'{AGENT_DIR}/listener.key', 'w') as f:
+            f.write('old-key')
+        with open(f'{AGENT_DIR}/unit.run', 'w') as f:
+            f.write(old_unit_run)
+
+        ident = _cephadm.DaemonIdentity.from_name(FSID, f'agent.{AGENT_ID}')
+        _cephadm.deploy_daemon(
+            ctx,
+            ident,
+            None,
+            os.getuid(),
+            os.getgid(),
+            deployment_type=_cephadm.DeploymentType.RECONFIG,
+            endpoints=[],
+        )
+
+        _check_file(f'{AGENT_DIR}/agent.json', new_agent_json)
+        _check_file(f'{AGENT_DIR}/keyring', 'new-keyring')
+        _check_file(f'{AGENT_DIR}/root_cert.pem', 'new-ca')
+        _check_file(f'{AGENT_DIR}/listener.crt', 'new-crt')
+        _check_file(f'{AGENT_DIR}/listener.key', 'new-key')
+        # reconfig must not rewrite unit.run (unlike full deploy_daemon_unit)
+        _check_file(f'{AGENT_DIR}/unit.run', old_unit_run)
+        assert not os.path.exists(f'{AGENT_DIR}/not-required-file.txt')
+
+        _call_throws.assert_has_calls([
+            mock.call(ctx, ['systemctl', 'reset-failed', ident.unit_name]),
+            mock.call(ctx, ['systemctl', 'restart', ident.unit_name]),
+        ])
+
+
 # FIXME(refactor): call is handled by with_cephadm_ctx but not call_throws
 # this leaves the test somewhat inconsistent and slightly confusing but we
 # are not going to change this while we break cephadm up into multiple files.
@@ -99,11 +212,25 @@ def test_agent_shutdown(_is_alive):
         assert agent.mgr_listener.stop == False
         assert agent.ls_gatherer.stop == False
         assert agent.volume_gatherer.stop == False
+        assert agent.event.is_set() == False
         agent.shutdown()
         assert agent.stop == True
         assert agent.mgr_listener.stop == True
         assert agent.ls_gatherer.stop == True
         assert agent.volume_gatherer.stop == True
+        assert agent.event.is_set() == True
+
+
+def test_agent_unit_is_type_simple():
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        unit = agent.unit_file()
+        assert 'Type=simple' in unit
+        assert 'Type=forking' not in unit
+        assert 'KillMode=control-group' in unit
+        unit_run = agent.unit_run()
+        assert 'exec ' in unit_run
+        assert not unit_run.rstrip().endswith('&')
 
 
 def test_agent_wakeup():
@@ -573,18 +700,22 @@ def test_mgr_listener_handle_json_payload(_agent_wakeup, _pull_conf_settings, ce
         _pull_conf_settings.assert_not_called()
         assert not any(os.path.exists(os.path.join(AGENT_DIR, s)) for s in agent.required_files)
 
+        # Production HTTP config push always includes the full required_files set
+        # (from prepare_create / generate_config). Also include an unrequired key
+        # to verify it is ignored.
         data_with_config = {
             'counter': 7,
             'config': {
-                'unrequired-file': 'unrequired-text'
+                'unrequired-file': 'unrequired-text',
             }
         }
-        data_with_config['config'].update({s: f'{s} text' for s in agent.required_files if s != agent.required_files[2]})
+        data_with_config['config'].update({s: f'{s} text' for s in agent.required_files})
         agent.mgr_listener.handle_json_payload(data_with_config)
         _agent_wakeup.assert_called()
         _pull_conf_settings.assert_called()
-        assert all(os.path.exists(os.path.join(AGENT_DIR, s)) for s in agent.required_files if s != agent.required_files[2])
-        assert not os.path.exists(os.path.join(AGENT_DIR, agent.required_files[2]))
+        assert all(os.path.exists(os.path.join(AGENT_DIR, s)) for s in agent.required_files)
+        for fname in agent.required_files:
+            _check_file(os.path.join(AGENT_DIR, fname), f'{fname} text')
         assert not os.path.exists(os.path.join(AGENT_DIR, 'unrequired-file'))
 
 
@@ -610,6 +741,9 @@ def test_mgr_listener_run(_load_cert_chain, _load_verify_locations, _handle_json
                 self.family = family
                 self.type = type
 
+            def setsockopt(*args, **kwargs):
+                return
+
             def bind(*args, **kwargs):
                 return
 
@@ -617,6 +751,9 @@ def test_mgr_listener_run(_load_cert_chain, _load_verify_locations, _handle_json
                 return
 
             def listen(*args, **kwargs):
+                return
+
+            def close(*args, **kwargs):
                 return
 
         class FakeSecureSocket:
@@ -808,3 +945,146 @@ def test_command_agent(_agent_run, cephadm_fs):
         cephadm_fs.create_dir(AGENT_DIR)
         _cephadm.command_agent(ctx)
         _agent_run.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests for get_agent_version() and the VersionStatusUpdater agent path
+# ---------------------------------------------------------------------------
+
+class TestGetAgentVersion:
+    """Unit tests for cephadmlib.agent.get_agent_version()."""
+
+    def test_primary_module_used(self):
+        """Returns CEPH_GIT_NICE_VER from _cephadmmeta.version when available."""
+        from cephadmlib.agent import get_agent_version
+
+        fake_vmod = mock.MagicMock()
+        fake_vmod.CEPH_GIT_NICE_VER = 'v19.2.0'
+
+        with mock.patch('cephadmlib.agent.importlib.import_module',
+                        return_value=fake_vmod) as _imp:
+            result = get_agent_version()
+
+        _imp.assert_called_once_with('_cephadmmeta.version')
+        assert result == 'v19.2.0'
+
+    def test_fallback_to_legacy_module(self):
+        """Falls back to _version when _cephadmmeta.version is not importable."""
+        from cephadmlib.agent import get_agent_version
+
+        fake_vmod = mock.MagicMock()
+        fake_vmod.CEPH_GIT_NICE_VER = 'v18.2.4'
+
+        def _side_effect(name):
+            if name == '_cephadmmeta.version':
+                raise ImportError('no _cephadmmeta')
+            return fake_vmod
+
+        with mock.patch('cephadmlib.agent.importlib.import_module',
+                        side_effect=_side_effect):
+            result = get_agent_version()
+
+        assert result == 'v18.2.4'
+
+    def test_returns_none_when_no_module(self):
+        """Returns None when neither version module is importable."""
+        from cephadmlib.agent import get_agent_version
+
+        with mock.patch('cephadmlib.agent.importlib.import_module',
+                        side_effect=ImportError('nothing here')):
+            result = get_agent_version()
+
+        assert result is None
+
+    def test_returns_none_when_attribute_missing(self):
+        """Returns None when the version module lacks CEPH_GIT_NICE_VER."""
+        from cephadmlib.agent import get_agent_version
+
+        fake_vmod = mock.MagicMock(spec=[])  # no attributes
+
+        with mock.patch('cephadmlib.agent.importlib.import_module',
+                        return_value=fake_vmod):
+            result = get_agent_version()
+
+        assert result is None
+
+
+class TestVersionStatusUpdaterAgent:
+    """Unit tests for the agent code-path in VersionStatusUpdater."""
+
+    def _make_updater(self):
+        from cephadmlib.listing_updaters import VersionStatusUpdater
+        return VersionStatusUpdater()
+
+    def _make_val(self, version=None, container_id='', image_id=None):
+        return {
+            'container_id': container_id,
+            'container_image_id': image_id,
+            'version': version,
+        }
+
+    def _make_identity(self, daemon_type='agent'):
+        identity = mock.MagicMock()
+        identity.daemon_type = daemon_type
+        return identity
+
+    def test_agent_version_populated(self):
+        """val['version'] is set for the agent daemon type."""
+        from cephadmlib.listing_updaters import VersionStatusUpdater
+
+        updater = self._make_updater()
+        val = self._make_val()
+        identity = self._make_identity('agent')
+
+        with mock.patch('cephadmlib.listing_updaters.get_agent_version',
+                        return_value='v19.2.0'):
+            with with_cephadm_ctx([]) as ctx:
+                updater.update(val, ctx, identity, '/data')
+
+        assert val['version'] == 'v19.2.0'
+
+    def test_agent_version_cached(self):
+        """get_agent_version() is only called once; subsequent calls use the cache."""
+        from cephadmlib.listing_updaters import VersionStatusUpdater
+
+        updater = self._make_updater()
+        identity = self._make_identity('agent')
+
+        with mock.patch('cephadmlib.listing_updaters.get_agent_version',
+                        return_value='v19.2.0') as _gav:
+            with with_cephadm_ctx([]) as ctx:
+                updater.update(self._make_val(), ctx, identity, '/data')
+                updater.update(self._make_val(), ctx, identity, '/data')
+
+        # second call must use the cache, not re-import
+        _gav.assert_called_once()
+
+    def test_agent_version_none_when_unavailable(self):
+        """val['version'] remains None when get_agent_version() returns None."""
+        from cephadmlib.listing_updaters import VersionStatusUpdater
+
+        updater = self._make_updater()
+        val = self._make_val()
+        identity = self._make_identity('agent')
+
+        with mock.patch('cephadmlib.listing_updaters.get_agent_version',
+                        return_value=None):
+            with with_cephadm_ctx([]) as ctx:
+                updater.update(val, ctx, identity, '/data')
+
+        assert val['version'] is None
+
+    def test_non_agent_without_image_id_returns_early(self):
+        """Non-agent daemon with no image_id and no version still returns early."""
+        from cephadmlib.listing_updaters import VersionStatusUpdater
+
+        updater = self._make_updater()
+        val = self._make_val()  # no image_id, no version
+        identity = self._make_identity('mon')
+
+        with mock.patch('cephadmlib.listing_updaters.get_agent_version') as _gav:
+            with with_cephadm_ctx([]) as ctx:
+                updater.update(val, ctx, identity, '/data')
+
+        _gav.assert_not_called()
+        assert val.get('version') is None

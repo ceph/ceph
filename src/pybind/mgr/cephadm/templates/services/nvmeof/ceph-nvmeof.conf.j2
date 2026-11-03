@@ -9,7 +9,9 @@ state_update_notify = {{ spec.state_update_notify }}
 state_update_interval_sec = {{ spec.state_update_interval_sec }}
 break_update_interval_sec = {{ spec.break_update_interval_sec }}
 enable_spdk_discovery_controller = {{ spec.enable_spdk_discovery_controller }}
-encryption_key = /encryption.key
+{% if encryption_key_path %}
+encryption_key = {{ encryption_key_path }}
+{% endif %}
 rebalance_period_sec = {{ spec.rebalance_period_sec }}
 max_gws_in_grp = {{ spec.max_gws_in_grp }}
 max_ns_to_change_lb_grp = {{ spec.max_ns_to_change_lb_grp }}
@@ -24,6 +26,9 @@ prometheus_connection_list_cache_expiration = {{ spec.prometheus_connection_list
 verify_nqns = {{ spec.verify_nqns }}
 verify_keys = {{ spec.verify_keys }}
 verify_listener_ip = {{ spec.verify_listener_ip }}
+{% if spec.listener_network_masks %}
+listener_network_masks = {{ spec.listener_network_masks | join(',') }}
+{% endif %}
 # This is a development flag, do not change it
 abort_on_errors = {{ spec.abort_on_errors }}
 # This is a development flag, do not change it
@@ -54,6 +59,13 @@ force_tls = {{ spec.force_tls }}
 max_message_length_in_mb = {{ spec.max_message_length_in_mb }}
 io_stats_enabled = {{ spec.io_stats_enabled }}
 degrade_namespace_on_kmip_error = {{ spec.degrade_namespace_on_kmip_error }}
+fail_io_for_degraded_namespace = {{ spec.fail_io_for_degraded_namespace }}
+resize_degraded_namespace = {{ spec.resize_degraded_namespace }}
+verify_image_encryption_settings = {{ spec.verify_image_encryption_settings }}
+verify_pool_applications = {{ spec.verify_pool_applications }}
+{% if spec.allowed_pool_applications %}
+allowed_pool_applications = {{ spec.allowed_pool_applications | join(',') }}
+{% endif %}
 
 [gateway-logs]
 log_level = {{ spec.log_level }}
@@ -79,11 +91,11 @@ config_file = /etc/ceph/ceph.conf
 id = {{ rados_id }}
 
 [mtls]
-server_key = /server.key
-client_key = /client.key
-server_cert = /server.cert
-client_cert = /client.cert
-root_ca_cert = /root.ca.cert
+server_key = /certs/mtls/server.key
+client_key = /certs/mtls/client.key
+server_cert = /certs/mtls/server.cert
+client_cert = /certs/mtls/client.cert
+root_ca_cert = /certs/mtls/root.ca.cert
 
 {% if spec.kmip_cert_dir %}
 [kmip]
@@ -133,8 +145,15 @@ tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 {% if iobuf_options %}
 iobuf_options = {{ iobuf_options }}
 {% endif %}
+{% if sock_impl_options %}
+sock_impl_options = {{ sock_impl_options }}
+{% endif %}
 qos_timeslice_in_usecs = {{ spec.qos_timeslice_in_usecs }}
 notifications_interval = {{ spec.notifications_interval }}
+cnc_enable = {{ spec.cnc_enable }}
+cnc_rate_limiter_bytes = {{ spec.cnc_rate_limiter_bytes }}
+cnc_chunk_blocks = {{ spec.cnc_chunk_blocks }}
+cnc_parallel_chunks = {{ spec.cnc_parallel_chunks }}
 
 [monitor]
 timeout = {{ spec.monitor_timeout }}

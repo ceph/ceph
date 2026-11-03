@@ -69,6 +69,7 @@ private:
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
        crimson::osd::ObjectContextRef&& obc,
        crimson::osd::ObjectContextRef&& new_clone,
+       crimson::osd::ObjectContextRef&& rollback_to,
        ceph::os::Transaction&& txn,
        osd_op_params_t&& req,
        epoch_t min_epoch, epoch_t max_epoch,
@@ -95,8 +96,6 @@ private:
     pg_shard_t from,
     ECSubRead &op,
     const ZTracer::Trace &trace) override;
-
-  bool is_single_chunk(const hobject_t& obj, const ECSubRead& op);
 
   ll_read_errorator::future<ceph::bufferlist> maybe_chunked_read(
     const hobject_t& obj,

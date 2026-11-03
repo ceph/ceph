@@ -58,17 +58,17 @@ Formatting an image is a necessary pre-requisite for enabling encryption.
 However, formatted images will still be treated as raw unencrypted images by
 all of the RBD APIs. In particular, an encrypted RBD image can be opened
 by the same APIs as any other image, and raw unencrypted data can be
-read / written. Such raw IOs may risk the integrity of the encryption format,
+read / written. Such raw I/Os may risk the integrity of the encryption format,
 for example by overriding encryption metadata located at the beginning of the
 image.
 
-In order to safely perform encrypted IO on the formatted image, an additional
+In order to safely perform encrypted I/O on the formatted image, an additional
 *encryption load* operation should be applied after opening the image. The
 encryption load operation requires supplying the encryption format and a secret
 for unlocking the encryption key for the image itself and each of its explicitly
 formatted ancestor images. Following a successful encryption load operation,
-all IOs for the opened image will be encrypted / decrypted. For a cloned
-image, this includes IOs for ancestor images as well. The encryption keys will
+all I/Os for the opened image will be encrypted / decrypted. For a cloned
+image, this includes I/Os for ancestor images as well. The encryption keys will
 be stored in-memory by the RBD client until the image is closed.
 
 .. note::
@@ -159,7 +159,7 @@ bytes. LUKS2 supports larger sectors, and for better performance we set
 the default sector size to the maximum of 4KiB. Writes which are either smaller
 than a sector, or are not aligned to a sector start, will trigger a guarded
 read-modify-write chain on the client, with a considerable latency penalty.
-A batch of such unaligned writes can lead to IO races which will further
+A batch of such unaligned writes can lead to I/O races which will further
 deteriorate performance. Thus it is advisable to avoid using RBD encryption
 in cases where incoming writes cannot be guaranteed to be sector-aligned.
 
@@ -171,7 +171,7 @@ To map a LUKS-formatted image run:
 
 Note that for security reasons, both the encryption format and encryption load
 operations are CPU-intensive, and may take a few seconds to complete. For the
-encryption operations of actual image IO, assuming AES-NI is enabled,
+encryption operations of actual image I/O, assuming AES-NI is enabled,
 a relative small microseconds latency should be added, as well as a small
 increase in CPU utilization.
 

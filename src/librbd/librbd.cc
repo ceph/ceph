@@ -5697,13 +5697,12 @@ extern "C" int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
     return -EINVAL;
   }
   // FIPS zeroization audit 20191117: this memset is not security related.
+  // rbd_snap_list_end() walks the array until it encounters a NULL name.
+  // Zero-initializing the array ensures cleanup is safe even if this function
+  // returns an error before all entries are initialized.
   memset(snaps, 0, sizeof(*snaps) * *max_snaps);
 
   int r = librbd::api::Snapshot<>::list(ictx, cpp_snaps);
-  if (r == -ENOENT) {
-    tracepoint(librbd, snap_list_exit, 0, *max_snaps);
-    return 0;
-  }
   if (r < 0) {
     tracepoint(librbd, snap_list_exit, r, *max_snaps);
     return r;
@@ -7266,12 +7265,6 @@ extern "C" int rbd_group_image_list(rados_ioctx_t group_p,
   int r = librbd::api::Group<>::image_list(group_ioctx, group_name,
                                            &cpp_images);
 
-  if (r == -ENOENT) {
-    tracepoint(librbd, group_image_list_exit, 0);
-    *image_size = 0;
-    return 0;
-  }
-
   if (r < 0) {
     tracepoint(librbd, group_image_list_exit, r);
     return r;
@@ -7446,12 +7439,6 @@ extern "C" int rbd_group_snap_list(rados_ioctx_t group_p,
   std::vector<librbd::group_snap_info2_t> cpp_snaps;
   int r = librbd::api::Group<>::snap_list(group_ioctx, group_name, true, false,
                                           &cpp_snaps);
-
-  if (r == -ENOENT) {
-    *snaps_size = 0;
-    tracepoint(librbd, group_snap_list_exit, 0);
-    return 0;
-  }
 
   if (r < 0) {
     tracepoint(librbd, group_snap_list_exit, r);

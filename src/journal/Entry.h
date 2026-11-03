@@ -48,7 +48,7 @@ public:
   static std::list<Entry> generate_test_instances();
 
 private:
-  static const uint64_t preamble = 0x3141592653589793;
+  static constexpr uint64_t preamble = 0x3141592653589793;
 
   uint64_t m_tag_tid;
   uint64_t m_entry_tid;

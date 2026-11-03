@@ -7559,6 +7559,17 @@ int group_snap_set(cls_method_context_t hctx,
               cpp_strerror(r).c_str());
       return r;
     }
+  } else {
+    bufferlist snap_bl;
+    r = cls_cxx_map_get_val(hctx, key, &snap_bl);
+    if (r == -ENOENT) {
+      CLS_ERR("snap key does not exist : %s", key.c_str());
+      return -EINVAL;
+    } else if (r < 0) {
+      CLS_ERR("error reading key: %s : %s", key.c_str(),
+              cpp_strerror(r).c_str());
+      return r;
+    }
   }
 
   bufferlist obl;

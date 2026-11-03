@@ -16,6 +16,7 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
+#include <deque>
 #include <list>
 #include <map>
 #include <mutex>
@@ -40,6 +41,7 @@
 #include "include/ceph_assert.h"
 #include "include/ceph_fs.h"
 #include "include/common_fwd.h"
+#include "include/Context.h"
 #include "include/expected.hpp"
 #include "include/types.h"
 #include "include/rados/rados_types.hpp"
@@ -66,7 +68,6 @@
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
 
-class Context;
 class Messenger;
 class MonClient;
 class Message;
@@ -325,7 +326,6 @@ struct ObjectOperation {
     else
       add_pgls_filter(CEPH_OSD_OP_PGLS_FILTER, count, filter, cookie,
 		      start_epoch);
-    flags |= CEPH_OSD_FLAG_PGOP;
   }
 
   void pg_nls(uint64_t count, const ceph::buffer::list& filter,
@@ -335,7 +335,6 @@ struct ObjectOperation {
     else
       add_pgls_filter(CEPH_OSD_OP_PGNLS_FILTER, count, filter, cookie,
 		      start_epoch);
-    flags |= CEPH_OSD_FLAG_PGOP;
   }
 
   void scrub_ls(const librados::object_id_t& start_after,
@@ -1511,9 +1510,15 @@ struct ObjectOperation {
   }
 
   void get_internal_versions(boost::system::error_code* ec,
-		buffer::list *pbl) {
-  	ceph::buffer::list bl;
+                             buffer::list *pbl) {
   	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS);
+  	out_bl.back() = pbl;
+  	out_ec.back() = ec;
+  }
+
+  void get_internal_versions_v2(boost::system::error_code* ec,
+                                buffer::list *pbl) {
+  	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS_V2);
   	out_bl.back() = pbl;
   	out_ec.back() = ec;
   }
@@ -1840,8 +1845,14 @@ private:
   void update_crush_location();
 
   class RequestStateHook;
+  class SessionStrandHook;
 
   RequestStateHook *m_request_state_hook = nullptr;
+  std::string m_admin_socket_name;
+  SessionStrandHook *m_session_strand_hook = nullptr;
+
+public:
+  void dump_session_strands(ceph::Formatter *f);
 
 public:
   /*** track pending operations ***/
@@ -2033,6 +2044,16 @@ public:
     std::variant<OpComp, fu2::unique_function<OpSig>,
 		 Context*> onfinish;
     uint64_t ontimeout = 0;
+    // The tid 'ontimeout' was armed for.  A resubmitted op may be given a new
+    // tid, which leaves the pending event naming a tid that op_cancel() can no
+    // longer look up; _maybe_arm_op_timeout() compares against this to detect
+    // that and re-point the event at the current tid.
+    ceph_tid_t timeout_tid = 0;
+    // Deadline captured when the op enters op_submit(); the timer event is
+    // only registered once tid has been assigned, under the session lock.
+    // The deadline is per op, not per attempt: it is an absolute point in
+    // time, so re-pointing the event at a new tid does not restart the clock.
+    std::optional<ceph::coarse_mono_time> timeout_deadline;
 
     ceph_tid_t tid = 0;
     std::unique_ptr<std::vector<ceph_tid_t>> split_op_tids;
@@ -2046,6 +2067,11 @@ public:
     epoch_t map_dne_bound = 0;
 
     int budget = -1;
+
+    /// true once the op has been counted in inflight_ops and op_active (by
+    /// _send_op_account() or add_op_to_splitop_session()); an op retired
+    /// before that point must not be un-counted
+    bool inflight_accounted = false;
 
     /// true if we should resend this message on failure
     bool should_resend = true;
@@ -2369,7 +2395,7 @@ public:
 			boost::system::error_code ec);
   void _finish_command(CommandOp *c, boost::system::error_code ec,
 		       std::string&& rs, ceph::buffer::list&& bl);
-  void handle_command_reply(MCommandReply *m);
+  void handle_command_reply(cref_t<MCommandReply> m);
 
   // -- lingering ops --
 
@@ -2507,14 +2533,33 @@ public:
     // lockdep (using std::sharedMutex) because lockdep doesn't know
     // that.
     std::shared_mutex lock;
+    boost::asio::strand<boost::asio::io_context::executor_type> strand;
+
+    std::mutex strand_track_lock;
+    std::deque<MessageRef> queued_messages;
+
+    template <typename Callable>
+    void track_enqueue(const MessageRef& m, Callable&& f) {
+      std::lock_guard l(strand_track_lock);
+      queued_messages.push_back(m);
+      boost::asio::post(strand, std::forward<Callable>(f));
+    }
+
+    void track_dequeue(const MessageRef& m) {
+      std::lock_guard l(strand_track_lock);
+      ceph_assert(!queued_messages.empty());
+      auto const& _m = queued_messages.front();
+      ceph_assert(_m == m);
+      queued_messages.pop_front();
+    }
 
     int incarnation;
     ConnectionRef con;
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
 
-    OSDSession(CephContext *cct, int o) :
-      osd(o), incarnation(0), con(NULL),
+    OSDSession(CephContext *cct, int o, boost::asio::io_context::executor_type ex) :
+      osd(o), strand(ex), incarnation(0), con(NULL),
       num_locks(cct->_conf->objecter_completion_locks_per_session),
       completion_locks(new std::mutex[num_locks]) {}
 
@@ -2553,9 +2598,8 @@ public:
   std::map<ceph_tid_t,PoolOp*> pool_ops;
   std::atomic<unsigned> num_homeless_ops{0};
 
-  OSDSession* homeless_session = new OSDSession(cct, -1);
-  OSDSession* splitop_session = new OSDSession(cct, -2); // -2 to differentiate from homeless
-
+  OSDSession* homeless_session;
+  OSDSession* splitop_session;
 
   // ops waiting for an osdmap with a new pool or confirmation that
   // the pool does not exist (may be expanded to other uses later)
@@ -2577,10 +2621,20 @@ public:
 
   MOSDOp *_prepare_osd_op(Op *op);
   void _send_op(Op *op);
+  // Count the op as in-flight: both the Objecter's own counter and the
+  // op_active gauge, plus the per-op marker that tells _finish_unsent_op()
+  // the slot was taken.  Undone by _finish_op() / _finish_unsent_op().
+  void _take_inflight_slot(Op *op);
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void _finish_op(Op *op, int r);
-  boost::system::error_code process_op_reply_handlers(Op *op, std::vector<OSDOp> &out_ops);
+  // Retire an op that _op_submit() rejects before assigning it to a session
+  // (pool EIO).  Releases what _finish_op() would have: the throttle budget,
+  // any timeout event (a resubmitted op may still have one armed for its
+  // previous tid), the in-flight count if one was taken on an earlier pass,
+  // and the Objecter's reference.  The completion must already have been run.
+  void _finish_unsent_op(Op *op);
+  boost::system::error_code process_op_reply_handlers(Op *op, const std::vector<OSDOp>& out_ops);
   void complete_op_reply(Op *op, boost::system::error_code handler_error, OSDSession *s, std::unique_lock<std::shared_mutex> &sl, int rc);
   static bool is_pg_changed(
     int oldprimary,
@@ -2711,8 +2765,12 @@ private:
 			   static_cast<int64_t>(
 			     cct->_conf->objecter_inflight_ops)};
  public:
+  /// @param admin_socket_name Optional name for the admin socket command.
+  ///        If empty (default), registers as "objecter_requests".
+  ///        If non-empty, registers as "objecter_requests.<name>".
   Objecter(CephContext *cct, Messenger *m, MonClient *mc,
-	   boost::asio::io_context& service);
+	   boost::asio::io_context& service,
+	   std::string_view admin_socket_name = {});
   ~Objecter() override;
 
   void init();
@@ -2782,13 +2840,11 @@ private:
       return false;
     }
   }
-  void ms_fast_dispatch2(const MessageRef& m) override {
-    [[maybe_unused]] auto s = ms_dispatch2(m);
-  }
+  void ms_fast_dispatch2(const MessageRef& m) override;
 
-  void handle_osd_op_reply(class MOSDOpReply *m);
-  void handle_osd_backoff(class MOSDBackoff *m);
-  void handle_watch_notify(class MWatchNotify *m);
+  void handle_osd_op_reply(cref_t<MOSDOpReply> m);
+  void handle_osd_backoff(cref_t<MOSDBackoff> m);
+  void handle_watch_notify(cref_t<MWatchNotify> m);
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map(epoch_t e=0);
 
@@ -2845,6 +2901,7 @@ private:
   // low-level
   void _op_submit(Op *op, ceph::shunique_lock<ceph::shared_mutex>& lc,
 		  ceph_tid_t *ptid);
+  void _maybe_arm_op_timeout(Op *op);
   void add_op_to_splitop_session(Op *op);
   void _op_submit_with_budget(Op *op,
 			      ceph::shunique_lock<ceph::shared_mutex>& lc,
@@ -2997,8 +3054,9 @@ private:
               extra_read_flags.load(std::memory_order_relaxed) |
               CEPH_OSD_FLAG_READ;
 
-    // If the op is rwordered, strip out the balanced and localized flags.
-    if (flags & CEPH_OSD_FLAG_RWORDERED) {
+    // If the op is rwordered or a PG op, strip out the balanced and localized
+    // flags since those ops must be handled by the primary OSD.
+    if (flags & (CEPH_OSD_FLAG_RWORDERED | CEPH_OSD_FLAG_PGOP)) {
       ret &= ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
     }
     return ret;
@@ -3157,8 +3215,9 @@ public:
     snapid_t snapid, ceph::buffer::list *pbl, int flags,
     Context *onack, version_t *objver = NULL,
     int *data_offset = NULL,
-    uint64_t features = 0) {
-    Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, -1, onack, objver,
+    uint64_t features = 0,
+    int mask = ~0) {
+    Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, mask, onack, objver,
 			    data_offset);
     if (features)
       o->features = features;
@@ -3167,13 +3226,26 @@ public:
     return tid;
   }
 
+  ceph_tid_t read_primary(
+    const object_t& oid, const object_locator_t& oloc,
+    ObjectOperation& op,
+    snapid_t snapid, ceph::buffer::list *pbl, int flags,
+    Context *onack, version_t *objver = NULL,
+    int *data_offset = NULL,
+    uint64_t features = 0) {
+    int mask = ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
+    return read(oid, oloc, op, snapid, pbl, flags, onack, objver,
+                data_offset, features, mask);
+  }
+
   void read(const object_t& oid, const object_locator_t& oloc,
 	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
 	    int flags, Op::OpComp onack,
 	    version_t *objver = nullptr, int *data_offset = nullptr,
 	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr,
-	    uint64_t subsystem = 0) {
-    Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags),
+	    uint64_t subsystem = 0,
+	    int mask = ~0) {
+    Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags) & mask,
 		   std::move(onack), objver,
 		   data_offset, parent_trace, subsystem);
     o->priority = op.priority;
@@ -3192,16 +3264,26 @@ public:
     op.clear();
     op_submit(o);
   }
+  void read_primary(const object_t& oid, const object_locator_t& oloc,
+	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
+	    int flags, Op::OpComp onack,
+	    version_t *objver = nullptr, int *data_offset = nullptr,
+	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr,
+	    uint64_t subsystem = 0) {
+    int mask = ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
+    read(oid, oloc, std::move(op), snapid, pbl, flags, std::move(onack),
+         objver, data_offset, features, parent_trace, subsystem, mask);
+  }
 
   Op *prepare_pg_read_op(
     uint32_t hash, object_locator_t oloc,
     ObjectOperation& op, ceph::buffer::list *pbl, int flags,
     Context *onack, epoch_t *reply_epoch,
     int *ctx_budget) {
+    flags |= CEPH_OSD_FLAG_PGOP | CEPH_OSD_FLAG_IGNORE_OVERLAY;
     Op *o = new Op(object_t(), oloc,
 		   std::move(op.ops),
-		   get_read_flags(flags) |
-		   CEPH_OSD_FLAG_IGNORE_OVERLAY,
+		   get_read_flags(flags),
 		   onack, NULL);
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
@@ -3237,10 +3319,10 @@ public:
     ObjectOperation& op, ceph::buffer::list *pbl, int flags,
     Op::OpComp onack, epoch_t *reply_epoch, int *ctx_budget) {
     ceph_tid_t tid;
+    flags |= CEPH_OSD_FLAG_PGOP | CEPH_OSD_FLAG_IGNORE_OVERLAY;
     Op *o = new Op(object_t(), oloc,
 		   std::move(op.ops),
-		   flags | global_op_flags | CEPH_OSD_FLAG_READ |
-		   CEPH_OSD_FLAG_IGNORE_OVERLAY,
+		   get_read_flags(flags),
 		   std::move(onack), nullptr);
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
@@ -3309,7 +3391,7 @@ public:
  public:
 
   void _do_watch_notify(boost::intrusive_ptr<LingerOp> info,
-                        boost::intrusive_ptr<MWatchNotify> m);
+                        cref_t<MWatchNotify> m);
 
   /**
    * set up initial ops in the op std::vector, and allocate a final op slot.
@@ -4079,6 +4161,8 @@ private:
   epoch_t epoch_barrier = 0;
   bool retry_writes_after_first_reply =
     cct->_conf->objecter_retry_writes_after_first_reply;
+
+  bool dispatch_to_session_strand = false;
 
 public:
   void set_epoch_barrier(epoch_t epoch);

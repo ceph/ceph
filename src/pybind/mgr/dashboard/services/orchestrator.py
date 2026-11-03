@@ -5,11 +5,13 @@ from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple
 
 from ceph.deployment.service_spec import ServiceSpec
-from orchestrator import DaemonDescription, DeviceLightLoc, HostSpec, \
-    InventoryFilter, OrchestratorClientMixin, OrchestratorError, OrchResult, \
+from orchestrator import NODE_PROXY_REPORT_KEYS, DaemonDescription, \
+    DeviceLightLoc, HardwareNoReport, HostSpec, InventoryFilter, \
+    OrchestratorClientMixin, OrchestratorError, OrchResult, \
     ServiceDescription, raise_if_exception
 
 from .. import mgr
+from ..model.hardware import NodeProxyRawData, RawHostReport
 from ._paginate import ListPaginator
 
 logger = logging.getLogger(__name__)
@@ -202,6 +204,27 @@ class UpgradeManager(ResourceManager):
 
 
 class HardwareManager(ResourceManager):
+
+    @wait_api_result
+    def list_hosts(self) -> List[str]:
+        return self.api.node_proxy_list_hosts()
+
+    def fullreport(self, hostname: str) -> RawHostReport:
+        """
+        Return this host's node-proxy report.
+
+        :raises HardwareNoReport: the host has no node-proxy data, or its
+            report lacks host, sn or status.
+        """
+        # node_proxy_fullreport() returns {hostname: report}; unwrap it here.
+        report = self._fullreport(hostname)[hostname]
+        if not all(key in report for key in NODE_PROXY_REPORT_KEYS):
+            raise HardwareNoReport(f"Host '{hostname}' has an incomplete node-proxy report.")
+        return report
+
+    @wait_api_result
+    def _fullreport(self, hostname: str) -> NodeProxyRawData:
+        return self.api.node_proxy_fullreport(hostname=hostname)
 
     @wait_api_result
     def common(self, category: str, hostname: Optional[List[str]] = None) -> str:

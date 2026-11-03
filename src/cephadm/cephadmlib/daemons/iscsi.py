@@ -173,6 +173,14 @@ class CephIscsi(ContainerDaemonForm):
             cname = '%s-%s' % (cname, desc)
         return cname
 
+    @staticmethod
+    def shell_load_target_core_user() -> str:
+        """Host shell: ensure target_core_user is loaded if missing."""
+        return (
+            'if ! [ -d /sys/module/target_core_user ]; then '
+            'modprobe target_core_user; fi'
+        )
+
     def create_daemon_dirs(self, data_dir, uid, gid):
         # type: (str, int, int) -> None
         """Create files under the container data dir"""
@@ -275,6 +283,7 @@ done
     def sidecar_containers(
         self, ctx: CephadmContext
     ) -> List[SidecarContainer]:
+        data_dir = self.identity.data_dir(ctx.data_dir)
         tcmu_sidecar = SidecarContainer.from_primary_and_values(
             ctx,
             self.container(ctx),
@@ -284,5 +293,10 @@ done
             # releases and should eventually be removed in at least squid
             # onward
             entrypoint='/usr/local/scripts/tcmu-runner-entrypoint.sh',
+            pre_start_shell=(
+                CephIscsi.shell_load_target_core_user()
+                + '\n'
+                + CephIscsi.configfs_mount_umount(data_dir, mount=True)
+            ),
         )
         return [tcmu_sidecar]

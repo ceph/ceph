@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include "crimson/common/coroutine.h"
 #include "crimson/os/seastore/backref/btree_backref_manager.h"
 
 SET_SUBSYS(seastore_backref);
@@ -71,16 +72,16 @@ BtreeBackrefManager::mkfs(
 {
   LOG_PREFIX(BtreeBackrefManager::mkfs);
   INFOT("start", t);
-  return cache.get_root(t).si_then([this, &t](auto croot) {
-    assert(croot->is_mutation_pending());
-    croot->get_root().backref_root = BackrefBtree::mkfs(croot, get_context(t));
-    return mkfs_iertr::now();
-  }).handle_error_interruptible(
-    mkfs_iertr::pass_further{},
-    crimson::ct_error::assert_all(
-      "Invalid error in BtreeBackrefManager::mkfs"
-    )
-  );
+
+  auto croot = co_await cache.get_root(t);
+  croot->get_root().backref_root =
+    co_await BackrefBtree::mkfs(croot, get_context(t)
+    ).handle_error_interruptible(
+      mkfs_iertr::pass_further{},
+      crimson::ct_error::assert_all(
+        "Invalid error in BtreeBackrefManager::mkfs"
+      )
+    );
 }
 
 BtreeBackrefManager::get_mapping_ret
@@ -454,6 +455,50 @@ BtreeBackrefManager::scan_mapped_space(
       });
     });
   });
+}
+
+BtreeBackrefManager::scan_device_ret
+BtreeBackrefManager::scan_device(
+  Transaction &t,
+  paddr_t paddr,
+  scan_device_func_t &f)
+{
+  LOG_PREFIX(BtreeBackrefManager::scan_device);
+  auto c = get_context(t);
+  auto croot = co_await cache.get_root(t);
+  auto btree = BackrefBtree(croot);
+  auto iter = co_await btree.lower_bound(c, paddr);
+  while (!iter.is_end()) {
+    auto key = iter.get_key();
+    auto bentry = cache.get_cached_backref_entry(key);
+    if (bentry) {
+      assert(bentry->paddr == key);
+      DEBUGT("found in cache: {} {}", t, bentry->paddr, bentry->laddr);
+    }
+    if (bentry && bentry->laddr == L_ADDR_NULL) {
+      DEBUGT("{} is removed", t, bentry->paddr);
+      iter = co_await iter.next(c);
+      continue;
+    }
+    if (key.get_device_id() == paddr.get_device_id()) {
+      auto val = iter.get_val();
+      if (bentry && bentry->laddr != val.laddr) {
+        DEBUGT("{} changed from {} to {}",
+          t, bentry->paddr, val.laddr, bentry->laddr);
+        iter = co_await iter.next(c);
+        continue;
+      }
+      DEBUGT("scanned {}, {}", t, key, val.laddr);
+      auto ret = co_await f(key, val.len, val.type, val.laddr);
+      if (ret == seastar::stop_iteration::yes) {
+	break;
+      }
+    } else if (key.get_device_id() > paddr.get_device_id()) {
+      break;
+    }
+    iter = co_await iter.next(c);
+  }
+  co_return;
 }
 
 base_iertr::future<> _init_cached_extent(

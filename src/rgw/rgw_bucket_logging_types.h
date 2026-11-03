@@ -48,7 +48,6 @@ struct record_input {
   std::string auth_type;     // written by get_aws_version_and_auth_type
   int http_ret{0};
   std::string_view err_code;
-  size_t content_length{0};
   bool granted_by_acl{false};
 
   // For COPY operations (used only with log_source_bucket=true, Standard mode).

@@ -28,7 +28,7 @@
 #include "common/compiler_extensions.h"
 #include "include/common_fwd.h"
 #include "include/cephfs/ceph_ll_client.h"
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "include/interval_set.h"
 #include "include/lru.h"
 #include "include/types.h"
@@ -42,6 +42,7 @@
 #include "osdc/ObjectCacher.h"
 
 #include "RWRef.h"
+#include "Dentry.h"
 #include "DentryRef.h"
 #include "InodeRef.h"
 #include "MetaSession.h"
@@ -56,6 +57,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -83,6 +85,7 @@ class WritebackHandler;
 
 class MDSMap;
 class Message;
+class MQuarantineDisable;
 class destructive_lock_ref_t;
 
 enum {
@@ -144,7 +147,6 @@ struct DirEntry {
 
 struct Cap;
 class Dir;
-class Dentry;
 struct SnapRealm;
 struct Fh;
 struct CapSnap;
@@ -443,6 +445,7 @@ public:
    *
    */
   int readdir_snapdiff(dir_result_t* dir1, snapid_t snap2,
+    unsigned diff_mask,
     struct dirent* out_de, snapid_t* out_snap);
 
   int getdir(const char *relpath, std::list<std::string>& names,
@@ -857,6 +860,7 @@ public:
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater,
 			      std::vector<snapid_t>& snaps);
 
+  void handle_quarantine_disable(const MConstRef<MQuarantineDisable>& m);
   void handle_quota(const MConstRef<MClientQuota>& m);
   void handle_snap(const MConstRef<MClientSnap>& m);
   void handle_caps(const MConstRef<MClientCaps>& m);
@@ -1244,6 +1248,21 @@ protected:
   void trim_cache(bool trim_kernel_dcache=false);
   void trim_cache_for_reconnect(MetaSession *s);
   void trim_dentry(Dentry *dn);
+  void assert_lru_num_pinned_sane(const char *where, const Dentry *dn = nullptr) {
+    if (lru.lru_get_num_pinned() <= lru.lru_get_size())
+      return;
+    std::ostringstream oss;
+    oss << where << " LRU num_pinned drift: pinned="
+	<< lru.lru_get_num_pinned() << " size=" << lru.lru_get_size()
+	<< " (top=" << lru.lru_get_top() << " bot=" << lru.lru_get_bot()
+	<< " pintail=" << lru.lru_get_pintail() << ")";
+    if (dn)
+      oss << " dentry '" << dn->name << "' dn " << dn
+	  << " ref=" << dn->ref
+	  << " expireable=" << dn->lru_is_expireable();
+    lderr(cct) << oss.str() << dendl;
+    ceph_assert(lru.lru_get_num_pinned() <= lru.lru_get_size());
+  }
   void trim_caps(MetaSession *s, uint64_t max);
   void _invalidate_kernel_dcache();
   void _trim_negative_child_dentries(const InodeRef& in);
@@ -1297,6 +1316,7 @@ protected:
    */
   void _finish_init();
 
+
   // global client lock
   //  - protects Client and buffer cache both!
   ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
@@ -1319,6 +1339,7 @@ protected:
   Objecter  *objecter;
 
   client_t whoami;
+
 
   /* The state migration mechanism */
   enum _state {
@@ -2408,6 +2429,7 @@ private:
   bool respect_subvolume_snapshot_visibility;
 
   std::locale m_locale;
+
 };
 
 /**

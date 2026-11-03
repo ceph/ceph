@@ -12,6 +12,8 @@
 
 #include "crimson/common/layout.h"
 
+#include "crimson/os/seastore/block_io_driver.h"
+#include "crimson/os/seastore/seastore_dma_alloc.h"
 #include "crimson/os/seastore/segment_manager.h"
 
 namespace crimson::os::seastore::segment_manager::block {
@@ -41,8 +43,7 @@ public:
   }
 
   SegmentStateTracker(size_t segments, size_t block_size)
-    : bptr(ceph::buffer::create_page_aligned(
-	     get_raw_size(segments, block_size))),
+    : bptr(alloc_dma_or_page_aligned(get_raw_size(segments, block_size))),
       layout(bptr.length())
   {
     ::memset(
@@ -74,12 +75,12 @@ public:
 
   write_ertr::future<> write_out(
     device_id_t device_id,
-    seastar::file &device,
+    BlockIODriver &driver,
     uint64_t offset);
 
   read_ertr::future<> read_in(
     device_id_t device_id,
-    seastar::file &device,
+    BlockIODriver &driver,
     uint64_t offset);
 };
 
@@ -128,14 +129,19 @@ public:
   BlockSegmentManager(
     const std::string &path,
     device_type_t dtype,
+    device_id_t id,
     store_index_t store_index = 0)
-  : device_path(path),
+  : SegmentManager(path, dtype, id),
     store_index(store_index) {
-    ceph_assert(get_device_type() == device_type_t::NONE);
     superblock.config.spec.dtype = dtype;
   }
 
   ~BlockSegmentManager();
+
+  ceph::unique_leakable_ptr<ceph::buffer::raw> alloc_io_buffer(
+    size_t len) final {
+    return driver ? driver->alloc_io_buffer(len) : ceph::buffer::create_page_aligned(len);
+  }
 
   open_ertr::future<SegmentRef> open(segment_id_t id) override;
 
@@ -151,9 +157,6 @@ public:
 
   read_ertr::future<uint32_t> get_shard_nums() override;
 
-  device_type_t get_device_type() const override {
-    return superblock.config.spec.dtype;
-  }
   size_t get_available_size() const override {
     return shard_info.size;
   }
@@ -164,12 +167,11 @@ public:
     return superblock.segment_size;
   }
 
-  device_id_t get_device_id() const override {
-    assert(device_id <= DEVICE_ID_MAX_VALID);
-    return device_id;
+  device_set_t& get_cache_devices() override {
+    return superblock.config.cache_devices;
   }
-  secondary_device_set_t& get_secondary_devices() override {
-    return superblock.config.secondary_devices;
+  device_set_t& get_data_devices() override {
+    return superblock.config.data_devices;
   }
   // public so tests can bypass segment interface when simpler
   Segment::write_ertr::future<> segment_write(
@@ -218,19 +220,10 @@ private:
   void register_metrics(store_index_t store_index);
   seastar::metrics::metric_group metrics;
 
-  std::string device_path;
   std::unique_ptr<SegmentStateTracker> tracker;
   device_shard_info_t shard_info;
   device_superblock_t superblock;
-  seastar::file device;
-
-  void set_device_id(device_id_t id) {
-    assert(id <= DEVICE_ID_MAX_VALID);
-    assert(device_id == DEVICE_ID_NULL ||
-           device_id == id);
-    device_id = id;
-  }
-  device_id_t device_id = DEVICE_ID_NULL;
+  BlockIODriverRef driver;
 
   size_t get_offset(paddr_t addr) {
     auto& seg_addr = addr.as_seg_paddr();
@@ -251,6 +244,10 @@ private:
       segment_id_t id, segment_off_t write_pointer);
 
 private:
+  // create the I/O driver for this shard and open the underlying device,
+  // returning its detected {size, block_size}. Stores the driver in `driver`.
+  access_ertr::future<seastar::stat_data> open_driver();
+
   // shard 0 mkfs
   mkfs_ret primary_mkfs(device_config_t);
   // all shards mkfs
@@ -262,26 +259,7 @@ private:
   store_index_t store_index = 0;
   bool shard_status = true;
 
-  class MultiShardDevices {
-    public:
-      std::vector<std::unique_ptr<BlockSegmentManager>> mshard_devices;
-
-    public:
-    MultiShardDevices(size_t count,
-                      const std::string path,
-                      device_type_t dtype)
-    : mshard_devices() {
-      mshard_devices.reserve(count);
-      for (size_t store_index = 0; store_index < count; ++store_index) {
-        mshard_devices.emplace_back(std::make_unique<BlockSegmentManager>(
-          path, dtype, store_index));
-      }
-    }
-    ~MultiShardDevices() {
-     mshard_devices.clear();
-    }
-  };
-  seastar::sharded<MultiShardDevices> shard_devices;
+  seastar::sharded<MultiShardDevices<BlockSegmentManager>> shard_devices;
 };
 
 }

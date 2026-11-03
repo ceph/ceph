@@ -17,8 +17,15 @@
 #ifndef CEPH_DOUT_H
 #define CEPH_DOUT_H
 
+#include <fmt/core.h> // for FMT_VERSION
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
+
+#include <ostream>
 #include <type_traits>
 
+#include "common/CanHasPrint.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 #ifdef WITH_CRIMSON
@@ -41,18 +48,6 @@ class _bad_endl_use_dendl_t { public: _bad_endl_use_dendl_t(int) {} };
 static const _bad_endl_use_dendl_t endl = 0;
 inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
   ceph_abort_msg("you are using the wrong endl.. use std::endl or dendl");
-  return out;
-}
-
-template<typename T>
-concept HasPrint = requires(T t, std::ostream& u) {
-  { t.print(u) } -> std::same_as<void>;
-};
-
-template<typename T> requires HasPrint<T>
-static inline std::ostream& operator<<(std::ostream& out, T&& t)
-{
-  t.print(out);
   return out;
 }
 

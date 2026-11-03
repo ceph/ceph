@@ -906,8 +906,8 @@ Required Settings
 
 To enable the new features, the following OSDMap pool settings are required:
 
-- ``allows_ec_overwrites = true``
-- ``allows_ec_optimizations = true``
+- ``allows_ec_overwrites`` set to ``true``
+- ``allows_ec_optimizations`` set to ``true``
 
 These settings can be configured per-pool. The cluster will enforce that all
 OSDs are at the Umbrella release before allowing omap support to be enabled.

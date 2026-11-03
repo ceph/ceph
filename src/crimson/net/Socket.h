@@ -161,6 +161,7 @@ public:
   ShardedServerSocket(
       seastar::shard_id sid,
       bool dispatch_only_on_primary_sid,
+      bool listen_on_primary_only,
       construct_tag);
 
   ~ShardedServerSocket();
@@ -183,12 +184,16 @@ public:
   seastar::future<> shutdown_destroy();
 
   static seastar::future<ShardedServerSocket*> create(
-      bool dispatch_only_on_this_shard);
+      bool dispatch_only_on_this_shard,
+      bool listen_on_primary_only = false);
 
 private:
   const seastar::shard_id primary_sid;
   /// XXX: Remove once all infrastructure uses multi-core messenger
   const bool dispatch_only_on_primary_sid;
+  // Bind and accept on primary_sid only. Used by per-reactor messengers so
+  // each one takes a single port instead of listening on every reactor.
+  const bool listen_on_primary_only;
   entity_addr_t listen_addr;
   std::optional<seastar::server_socket> listener;
   seastar::gate shutdown_gate;

@@ -2,19 +2,37 @@ import errno
 import json
 import logging
 import time
+import datetime
 import uuid
 from dataclasses import dataclass, field, asdict
-from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast, Set
+from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast, Set, Union
 from cephadm.services.service_registry import service_registry
 
 import orchestrator
 from cephadm.registry import Registry
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, \
-    CEPH_TYPES, CEPH_IMAGE_TYPES, NON_CEPH_IMAGE_TYPES, MONITORING_STACK_TYPES, GATEWAY_TYPES
+from cephadm.utils import (
+    ceph_release_to_major,
+    name_to_config_section,
+    CEPH_UPGRADE_ORDER,
+    CEPH_TYPES,
+    CEPH_IMAGE_TYPES,
+    INGRESS_TYPES,
+    NON_CEPH_IMAGE_TYPES,
+    MONITORING_STACK_TYPES,
+    GATEWAY_TYPES,
+    SERIAL_UPGRADE_DAEMON_TYPES,
+    ALL_GATEWAY_TYPES,
+    ALLOWED_CIPHERS,
+    SERVICE_CIPHER,
+    allowed_ciphers_are_aes256k_only,
+    auth_allowed_cipher_names_from_mon_map,
+    auth_service_cipher_name_from_mon_map,
+)
 from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
+from ceph.cephadm.version_entry import UpgradeStatus
 
 from mgr_module import MonCommandFailed
 
@@ -31,6 +49,47 @@ CEPH_ORCH_VALID_OSD_UPGRADE_CRUSH_BUCKETS = frozenset({'rack', 'chassis', 'host'
 # from ceph_fs.h
 CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1 << 5)
 CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
+
+# Health warnings to mute when upgrade starts and unmute
+# when upgrade completes as they could be handled by the
+# upgrade process.
+#
+# TODO: need a better way to handle these for staggered upgrades
+# currently they just disappear and re-appear as each bit of the
+# staggered upgrade starts and stops
+MID_UPGRADE_MUTED_WARNINGS = [
+    'AUTH_INSECURE_KEYS_ALLOWED',
+    'AUTH_INSECURE_KEYS_CREATABLE',
+    'AUTH_INSECURE_SERVICE_TICKETS',
+    'AUTH_INSECURE_CLIENT_KEY_TYPE',
+    'AUTH_INSECURE_SERVICE_KEY_TYPE',
+    'AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE'
+]
+
+# Minimum x86-64 microarchitecture level required to run the official builds
+# of a given major release. Hosts whose CPUs do not support that level will
+# crash with SIGILL when running the release's binaries, so upgrades to it
+# are blocked while any such host is present. Later majors inherit the
+# highest requirement of all earlier entries. Levels are compared against
+# the 'cpu_isa_level' host fact gathered by cephadm (e.g. 'x86-64-v2').
+UPGRADE_MIN_X86_64_ISA_LEVEL: Dict[int, int] = {
+    21: 3,  # umbrella containers/packages are built for x86-64-v3
+}
+
+
+def x86_64_isa_level_to_int(level: Optional[str]) -> Optional[int]:
+    """Parse an x86-64 microarchitecture level string (e.g. 'x86-64-v3')
+    into its numeric level; return None if missing or unparseable.
+    """
+    if not isinstance(level, str):
+        return None
+    prefix = 'x86-64-v'
+    if not level.startswith(prefix):
+        return None
+    try:
+        return int(level[len(prefix):])
+    except ValueError:
+        return None
 
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
@@ -204,6 +263,10 @@ class UpgradeState:
                  crush_bucket_name: Optional[str] = None,
                  noautoscale_set: Optional[bool] = False,
                  prior_autoscale: Optional[bool] = True,
+                 rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
+                 has_set_cephx_allowed_ciphers: Optional[bool] = False,
+                 health_warnings_muted: Optional[bool] = False,
+                 health_warnings_mute_skipped: Optional[bool] = False,
                  ):
 
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -226,6 +289,12 @@ class UpgradeState:
         self.crush_bucket_name = crush_bucket_name
         self.noautoscale_set = noautoscale_set
         self.prior_autoscale = prior_autoscale
+        self.rotated_mgr_mon_auth_key_daemons = rotated_mgr_mon_auth_key_daemons
+        self.has_set_cephx_allowed_ciphers = has_set_cephx_allowed_ciphers
+        self.health_warnings_muted = health_warnings_muted
+        # set when the mutes were deliberately not applied, so the decision is
+        # made once per upgrade rather than on every _do_upgrade pass
+        self.health_warnings_mute_skipped = health_warnings_mute_skipped
 
     def to_json(self) -> dict:
         return {
@@ -248,6 +317,10 @@ class UpgradeState:
             'crush_bucket_name': self.crush_bucket_name,
             'noautoscale_set': self.noautoscale_set,
             'prior_autoscale': self.prior_autoscale,
+            'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
+            'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
+            'health_warnings_muted': self.health_warnings_muted,
+            'health_warnings_mute_skipped': self.health_warnings_mute_skipped,
         }
 
     @classmethod
@@ -272,6 +345,8 @@ class CephadmUpgrade:
         'UPGRADE_OFFLINE_HOST',
         'UPGRADE_INVALID_CRUSH_BUCKET',
         'UPGRADE_OSD_NO_VERSION',
+        'UPGRADE_KEY_ROTATION',
+        'UPGRADE_INCOMPATIBLE_HOST_CPU'
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -359,8 +434,17 @@ class CephadmUpgrade:
         if any(not d.container_image_digests for d in daemons if d.daemon_type == 'mgr'):
             return '', []
 
-        completed_daemons = [(d.daemon_type, any(d in self.upgrade_state.target_digests for d in (
-            d.container_image_digests or []))) for d in daemons if d.daemon_type]
+        completed_daemons = []
+        for d in daemons:
+            if not d.daemon_type:
+                continue
+            if d.daemon_type in INGRESS_TYPES:
+                completed = any(dig in self.upgrade_state.target_digests
+                                for dig in (d.deployed_by or []))
+            else:
+                completed = any(dig in self.upgrade_state.target_digests
+                                for dig in (d.container_image_digests or []))
+            completed_daemons.append((d.daemon_type, completed))
 
         done = len([True for completion in completed_daemons if completion[1]])
 
@@ -374,10 +458,20 @@ class CephadmUpgrade:
         # filtering parameters (or all daemons in upgrade order if no filtering
         # parameter are set).
         assert self.upgrade_state is not None
-        if self.upgrade_state.daemon_types is not None:
+        if self._upgrade_uses_ok_to_upgrade_for_osds():
+            logger.debug(
+                f'Filtering OSD daemons to upgrade in CRUSH bucket '
+                f'{self.upgrade_state.crush_bucket_type}='
+                f'{self.upgrade_state.crush_bucket_name!r}')
+            daemons = self._get_bucket_scoped_osd_daemons()
+        elif self.upgrade_state.daemon_types is not None:
+            logger.debug(
+                f'Filtering daemons to upgrade by daemon types: {self.upgrade_state.daemon_types}')
             daemons = [d for d in self.mgr.cache.get_daemons(
             ) if d.daemon_type in self.upgrade_state.daemon_types]
         elif self.upgrade_state.services is not None:
+            logger.debug(
+                f'Filtering daemons to upgrade by services: {self.upgrade_state.services}')
             daemons = []
             for service in self.upgrade_state.services:
                 daemons += self.mgr.cache.get_daemons_by_service(service)
@@ -385,8 +479,75 @@ class CephadmUpgrade:
             daemons = [d for d in self.mgr.cache.get_daemons(
             ) if d.daemon_type in CEPH_UPGRADE_ORDER]
         if self.upgrade_state.hosts is not None:
+            logger.debug(
+                f'Filtering daemons to upgrade by hosts: {self.upgrade_state.hosts}')
             daemons = [d for d in daemons if d.hostname in self.upgrade_state.hosts]
         return daemons
+
+    def _get_bucket_scoped_osd_daemons(self) -> List[DaemonDescription]:
+        assert self.upgrade_state is not None
+        bset = self._get_osds_in_crush_bucket_names()
+
+        if bset is None:
+            logger.warning(
+                'Upgrade: could not determine OSDs in CRUSH bucket %r, '
+                'returning empty daemon list',
+                self.upgrade_state.crush_bucket_name)
+            return []
+
+        if not bset:
+            logger.info(
+                'Upgrade: CRUSH bucket %r contains no OSDs',
+                self.upgrade_state.crush_bucket_name)
+            return []
+
+        return [
+            d for d in self.mgr.cache.get_daemons()
+            if d.daemon_type == 'osd' and d.name() in bset]
+
+    def _get_osds_in_crush_bucket_names(self) -> Optional[Set[str]]:
+        """
+        Return ``osd.<id>`` names for OSDs under the upgrade CRUSH bucket.
+        """
+        # Return the cached value if it exists from an earlier ok-to-upgrade batch
+        if self._ok_to_upgrade_osds_in_crush_bucket is not None:
+            return self._ok_to_upgrade_osds_in_crush_bucket
+
+        # Otherwise, refresh the cache using ok-to-upgrade with max_osds=0
+        if self._refresh_osds_in_crush_bucket_for_upgrade_status():
+            return self._ok_to_upgrade_osds_in_crush_bucket
+        return None
+
+    def _refresh_osds_in_crush_bucket_for_upgrade_status(self) -> bool:
+        """
+        Populate bucket OSD cache for upgrade status using ``osd ok-to-upgrade``
+        with max_osds=0.
+        """
+        assert self.upgrade_state is not None
+
+        if not self._upgrade_uses_ok_to_upgrade_for_osds():
+            return False
+
+        crush_bucket_name = self.upgrade_state.crush_bucket_name
+        target_version_short = self.upgrade_state.target_version
+
+        if not crush_bucket_name or not target_version_short:
+            return False
+        try:
+            ok_to_upgrade_report = request_osd_ok_to_upgrade_report(
+                self.mgr,
+                crush_bucket_name,
+                target_version_short,
+                max_osds=0,
+            )
+        except (json.JSONDecodeError, MonCommandFailed) as err:
+            logger.debug(
+                'Upgrade: could not refresh osds_in_crush_bucket for upgrade status: %s',
+                err)
+            return False
+        self._cache_osds_in_crush_bucket_from_ok_to_upgrade_report(
+            ok_to_upgrade_report)
+        return self._ok_to_upgrade_osds_in_crush_bucket is not None
 
     def _get_current_version(self) -> Tuple[int, int, str]:
         current_version = self.mgr.version.split('ceph version ')[1]
@@ -428,6 +589,50 @@ class CephadmUpgrade:
             return f'require_osd_release ({osd_min_name} or {osd_min}) < target {major} - 2; first complete an upgrade to an earlier release'
 
         return None
+
+    def check_host_cpu_isa_level(self, target_version: str,
+                                 hosts: Optional[List[str]] = None) -> List[str]:
+        """Verify host CPUs can run the binaries of the target release.
+
+        Returns one error string per host whose CPU does not support the
+        x86-64 microarchitecture level the target release's official builds
+        are compiled for. Hosts whose ISA level is unknown (no facts yet,
+        non-x86 architecture, or a pre-existing cephadm that does not gather
+        the 'cpu_isa_level' fact) are skipped. An empty list means no
+        incompatibility was detected.
+        """
+        if not self.mgr.upgrade_cpu_isa_check:
+            return []
+        try:
+            target_major = int(target_version.split('.', 1)[0])
+        except ValueError:
+            return []
+        required = max((level for major, level in UPGRADE_MIN_X86_64_ISA_LEVEL.items()
+                        if target_major >= major), default=None)
+        if required is None:
+            return []
+        errors: List[str] = []
+        for host in sorted(self.mgr.inventory.keys()):
+            if hosts is not None and host not in hosts:
+                continue
+            facts = self.mgr.cache.get_facts(host)
+            host_level = x86_64_isa_level_to_int(facts.get('cpu_isa_level'))
+            if host_level is not None and host_level < required:
+                cpu_model = facts.get('cpu_model', 'unknown CPU')
+                errors.append(
+                    f'host {host} ({cpu_model}) only supports '
+                    f'{facts.get("cpu_isa_level")}, but ceph {target_major}.x '
+                    f'requires a CPU supporting x86-64-v{required}')
+        return errors
+
+    def _host_cpu_isa_error_detail(self, errors: List[str]) -> List[str]:
+        return errors + [
+            'Running ceph on these hosts would crash with an illegal '
+            'instruction (SIGILL) error. Replace or remove the hosts before '
+            'upgrading, or, if you are using custom-built images targeting '
+            'an older CPU generation, disable this check with '
+            "'ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false'"
+        ]
 
     def upgrade_ls(self, image: Optional[str], tags: bool, show_all_versions: Optional[bool]) -> Dict:
         if not image:
@@ -520,6 +725,64 @@ class CephadmUpgrade:
         """
         return f'retval: {-errno.ENOENT}' in str(err)
 
+    def _should_skip_cephx_health_mutes(self) -> bool:
+        """Checked before muting: on a cluster that is already fully on aes256k the
+        upgrade has no insecure auth state to fix, so muting only produces a
+        misleading '(muted: AUTH_INSECURE_*)' line in ceph -s. Note the mutes are
+        sticky, so they are listed whether or not the alert is actually raised.
+        """
+        mon_map = self.mgr.get('mon_map')
+        # mons predating the cephx cipher settings report neither field, which
+        # leaves no names to compare and correctly reads as 'not secure yet'
+        if not allowed_ciphers_are_aes256k_only(auth_allowed_cipher_names_from_mon_map(mon_map)):
+            return False
+        # mons issuing service tickets under an insecure cipher raise
+        # AUTH_INSECURE_SERVICE_TICKETS, so read the setting rather than
+        # relying on the mons having already published that check
+        if auth_service_cipher_name_from_mon_map(mon_map) != SERVICE_CIPHER:
+            return False
+        try:
+            health_checks = json.loads(self.mgr.get('health')['json']).get('checks', {})
+        except Exception as e:
+            logger.error('Upgrade: could not read health checks (%s), assuming insecure cephx state', e)
+            return False
+        # ciphers are secure but an entity may still hold an insecure key that
+        # the upgrade is going to rotate for us
+        return not any(w in health_checks for w in MID_UPGRADE_MUTED_WARNINGS)
+
+    def _mute_upgrade_related_health_warnings(self) -> bool:
+        if self._should_skip_cephx_health_mutes():
+            logger.info(
+                'Upgrade: cephx keys and ciphers are already secure, not muting auth health warnings'
+            )
+            return False
+        for health_warning_name in MID_UPGRADE_MUTED_WARNINGS:
+            try:
+                self.mgr.log.info('Muting %s warning for the duration of the upgrade', health_warning_name)
+                self.mgr.check_mon_command({
+                    'prefix': 'health mute',
+                    'code': health_warning_name,
+                    'sticky': True,
+                })
+            except Exception as e:
+                self.mgr.log.error(
+                    f'Failed to mute health warning {health_warning_name} during upgrade: {str(e)}'
+                )
+        return True
+
+    def _unmute_upgrade_related_health_warnings(self) -> None:
+        for health_warning_name in MID_UPGRADE_MUTED_WARNINGS:
+            try:
+                self.mgr.log.info('Unmuting %s warning as upgrade is completed or has been stopped', health_warning_name)
+                self.mgr.check_mon_command({
+                    'prefix': 'health unmute',
+                    'code': health_warning_name,
+                })
+            except Exception as e:
+                self.mgr.log.error(
+                    f'Failed to unmute health warning {health_warning_name} after upgrade: {str(e)}'
+                )
+
     def _hosts_include_osds(self, hosts: List[str]) -> bool:
         """Return True if any OSD daemon is on one of the given hosts."""
         osds = self.mgr.cache.get_daemons_by_type('osd')
@@ -554,6 +817,9 @@ class CephadmUpgrade:
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
                       hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, limit: Optional[int] = None,
                       bucket_type: Optional[str] = None, bucket_name: Optional[str] = None) -> str:
+        # params variable needs to be at the top to only capture the parameters
+        params = locals()
+
         fail_fs_value = cast(bool, self.mgr.get_module_option_ex(
             'orchestrator', 'fail_fs', False))
         if self.mgr.mode != 'root':
@@ -563,6 +829,12 @@ class CephadmUpgrade:
             version_error = self._check_target_version(version)
             if version_error:
                 raise OrchestratorError(version_error)
+            isa_errors = self.check_host_cpu_isa_level(version, hosts=hosts)
+            if isa_errors:
+                raise OrchestratorError(
+                    'Cannot start upgrade. Found host(s) with a CPU that '
+                    f'cannot run ceph version {version}:\n'
+                    + '\n'.join(self._host_cpu_isa_error_detail(isa_errors)))
             target_name = self.mgr.container_image_base + ':v' + version
         elif image:
             target_name = normalize_image_digest(image, self.mgr.default_registry)
@@ -632,6 +904,13 @@ class CephadmUpgrade:
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
         self.mgr.event.set()
+        # Stores upgrade attempt in version tracker
+        self.mgr.version_tracker.add_cluster_version(
+            version=target_name,
+            time=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+            status=UpgradeStatus.STARTED,
+            params={k: v for k, v in params.items() if k != 'self'}
+        )
         return 'Initiating upgrade to %s' % (target_name)
 
     def _validate_upgrade_filters(self, target_name: str, daemon_types: Optional[List[str]] = None, hosts: Optional[List[str]] = None, services: Optional[List[str]] = None) -> None:
@@ -761,8 +1040,13 @@ class CephadmUpgrade:
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
+
+        if self.upgrade_state.health_warnings_muted:
+            self._unmute_upgrade_related_health_warnings()
+
         target_image = self.target_image
         self.mgr.log.info('Upgrade: Stopped')
+        self.mgr.version_tracker.update_cluster_version_status(upgrade_state=self.upgrade_state, status=UpgradeStatus.STOPPED)
         self.upgrade_state = None
         self._ok_to_upgrade_osds_in_crush_bucket = None
         self._save_upgrade_state()
@@ -802,7 +1086,8 @@ class CephadmUpgrade:
                 })
                 return False
             except Exception as e:
-                logger.exception('Upgrade: unexpected exception during _do_upgrade')
+                logger.exception(f'Upgrade: unexpected exception during _do_upgrade: {str(e)}')
+                logger.error(e.__traceback__)
                 self._fail_upgrade('UPGRADE_EXCEPTION', {
                     'severity': 'error',
                     'summary': 'Upgrade: failed due to an unexpected exception',
@@ -860,6 +1145,10 @@ class CephadmUpgrade:
     def _cache_osds_in_crush_bucket_from_ok_to_upgrade_report(
             self, report: OkToUpgradeMonReport) -> None:
         ids = report.osds_in_crush_bucket
+        if not ids:
+            # set empty set to indicate no OSDs in CRUSH bucket
+            self._ok_to_upgrade_osds_in_crush_bucket = set()
+            return
         self._ok_to_upgrade_osds_in_crush_bucket = {
             f'osd.{osd_id}' for osd_id in ids
         }
@@ -1136,6 +1425,14 @@ class CephadmUpgrade:
             return
         self.mgr.set_store('upgrade_state', json.dumps(self.upgrade_state.to_json()))
 
+    def _clear_rotated_daemon_entry(self) -> None:
+        # this is only on clusters that upgraded to a specific set of
+        # releases just where OSD/MDS key rotation had to be done
+        # after all OSD/MDS daemons were upgraded and should be
+        # removed at some point. For the meantime it's inexpensive
+        # and safe to always do it.
+        self.mgr.set_store('rotated_osd_mds_daemons', None)
+
     def get_distinct_container_image_settings(self) -> Dict[str, str]:
         # get all distinct container_image settings
         image_settings = {}
@@ -1148,6 +1445,39 @@ class CephadmUpgrade:
             if opt['name'] == 'container_image':
                 image_settings[opt['section']] = opt['value']
         return image_settings
+
+    def _mds_in_rank_active(
+        self,
+        mdsmap: Dict[str, Any],
+        fs_name: Optional[str] = None,
+    ) -> bool:
+        for rank in mdsmap.get('in', []):
+            gid = mdsmap['up'].get(f'mds_{rank}')
+            if gid is None:
+                return False
+            mds = mdsmap['info'].get(f'gid_{gid}')
+            if mds is None or mds['state'] != 'up:active':
+                if fs_name and mds:
+                    self.mgr.log.info(
+                        'Upgrade: Waiting for fs %s mds.%s to be up:active (currently %s)',
+                        fs_name, mds['name'], mds['state'])
+                return False
+        return True
+
+    def _wait_for_fs_mdss_active(self, fs_name: str, timeout: int = 600) -> bool:
+        elapsed = 0
+        while elapsed < timeout:
+            fsmap = self.mgr.get("fs_map")
+            for fs in fsmap.get('filesystems', []):
+                mdsmap = fs['mdsmap']
+                if mdsmap['fs_name'] != fs_name:
+                    continue
+                if self._mds_in_rank_active(mdsmap, fs_name):
+                    return True
+                break
+            time.sleep(10)
+            elapsed += 10
+        return False
 
     def _prepare_for_mds_upgrade(
         self,
@@ -1196,8 +1526,13 @@ class CephadmUpgrade:
                             'fs_name': fs_name
                         })
                         if ret != 0:
+                            self.mgr.log.error(
+                                'Upgrade: fs fail for %s failed: %s', fs_name, err)
                             continue_upgrade = False
-                    continue
+                            continue
+                        continue_upgrade = False
+                        continue
+                    # fs already failed: fall through to wait for in-rank active
                 else:
                     self.mgr.log.info('Upgrade: Scaling down filesystem %s' % (
                         fs_name
@@ -1231,17 +1566,23 @@ class CephadmUpgrade:
                 # incompatible compatsets; the mons will not do any promotions.
                 # We must upgrade to continue.
             elif len(mdsmap['up']) > 0:
-                mdss = list(mdsmap['info'].values())
-                assert len(mdss) == 1
-                lone_mds = mdss[0]
-                if lone_mds['state'] != 'up:active':
-                    self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
-                        lone_mds['name'],
-                        lone_mds['state'],
-                    ))
-                    time.sleep(10)
-                    continue_upgrade = False
-                    continue
+                if self.upgrade_state.fail_fs and mdsmap['max_mds'] > 1:
+                    if not self._mds_in_rank_active(mdsmap, fs_name):
+                        time.sleep(10)
+                        continue_upgrade = False
+                        continue
+                else:
+                    mdss = list(mdsmap['info'].values())
+                    assert len(mdss) == 1
+                    lone_mds = mdss[0]
+                    if lone_mds['state'] != 'up:active':
+                        self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
+                            lone_mds['name'],
+                            lone_mds['state'],
+                        ))
+                        time.sleep(10)
+                        continue_upgrade = False
+                        continue
             else:
                 assert False
 
@@ -1333,6 +1674,10 @@ class CephadmUpgrade:
                     continue
 
             if self.mgr.daemon_is_self(d.daemon_type, d.daemon_id):
+                if correct_image:
+                    logger.debug('daemon %s.%s already on target image', d.daemon_type, d.daemon_id)
+                    done += 1
+                    continue
                 logger.info('Upgrade: Need to upgrade myself (mgr.%s)' %
                             self.mgr.get_mgr_id())
                 need_upgrade_self = True
@@ -1353,10 +1698,58 @@ class CephadmUpgrade:
 
         return (need_upgrade_self, need_upgrade, need_upgrade_deployer, done)
 
+    def _limit_gateway_upgrade_batch(
+        self, to_upgrade: List[Tuple[DaemonDescription, bool]]
+    ) -> List[Tuple[DaemonDescription, bool]]:
+        # Cap the batch at mgr/cephadm/max_gateway_upgrades_per_pass;
+        # the rest is picked up by the following upgrade passes.
+        max_batch = self.mgr.max_gateway_upgrades_per_pass
+        if max_batch <= 0 or len(to_upgrade) <= max_batch:
+            return to_upgrade
+        daemon_types = {str(d_entry[0].daemon_type) for d_entry in to_upgrade}
+        if not daemon_types.issubset(ALL_GATEWAY_TYPES):
+            return to_upgrade
+
+        batch: List[Tuple[DaemonDescription, bool]] = []
+        if daemon_types == {'nfs'}:
+            # The first service is always included, even when it alone is
+            # larger than the limit, otherwise the upgrade would not progress.
+            by_service: Dict[str, List[Tuple[DaemonDescription, bool]]] = {}
+            for d_entry in to_upgrade:
+                by_service.setdefault(d_entry[0].service_name(), []).append(d_entry)
+
+            for service_name, entries in by_service.items():
+                if batch and len(batch) + len(entries) > max_batch:
+                    break
+                if not batch and len(entries) > max_batch:
+                    logger.warning(
+                        'Upgrade: Service %s has %d daemons, more than '
+                        'max_gateway_upgrades_per_pass (%d). All of its daemons are '
+                        'upgraded in this pass, as an nfs service is never split '
+                        'across passes.',
+                        service_name, len(entries), max_batch)
+                batch.extend(entries)
+        else:
+            batch = to_upgrade[:max_batch]
+
+        logger.info(
+            'Upgrade: Upgrading %d of %d %s daemons in this pass '
+            '(service(s) %s, max_gateway_upgrades_per_pass %d)',
+            len(batch), len(to_upgrade), ','.join(sorted(daemon_types)),
+            ','.join(dict.fromkeys(d_entry[0].service_name() for d_entry in batch)),
+            max_batch)
+        return batch
+
     # return True if the upgrade is safe to proceed, False otherwise
     # to_upgrade is a list of daemons that need to be upgraded
     def _to_upgrade(self, need_upgrade: List[Tuple[DaemonDescription, bool]], target_image: str) -> Tuple[bool, List[Tuple[DaemonDescription, bool]]]:
         to_upgrade: List[Tuple[DaemonDescription, bool]] = []
+
+        # Track RGWs already selected on each host so that daemons with
+        # overlapping listeners are not restarted in the same batch.
+        # RGWs using the same port on different explicit IPs are independent
+        # listeners and may be upgraded together.
+        selected_rgws_by_host: Dict[str, List[DaemonDescription]] = {}
         known_ok_to_stop: List[str] = []
         known_ok_to_upgrade: List[str] = []
         self._ok_to_upgrade_all_osds_upgraded = False
@@ -1437,12 +1830,11 @@ class CephadmUpgrade:
                     return False, to_upgrade
 
             if d.daemon_type == 'mds' and self._enough_mds_for_ok_to_stop(d):
-                # when fail_fs is set to true, all MDS daemons will be moved to
-                # up:standby state, so Cephadm won't be able to upgrade due to
-                # this check and and will warn with "It is NOT safe to stop
-                # mds.<daemon_name> at this time: one or more filesystems is
-                # currently degraded", therefore we bypass this check for that
-                # case.
+                # When fail_fs is set to true, all MDS daemons will be moved to
+                # up:standby state. ok-to-stop would then warn with "It is NOT
+                # safe to stop mds.<daemon_name> at this time: one or more
+                # filesystems is currently degraded", so we bypass this check
+                # when fail_fs is set (via `not self.upgrade_state.fail_fs`).
                 assert self.upgrade_state is not None
                 if not self.upgrade_state.fail_fs \
                         and not self._wait_for_ok_to_stop(d, known_ok_to_stop):
@@ -1455,6 +1847,40 @@ class CephadmUpgrade:
             ):
                 continue
 
+            if d.daemon_type == 'rgw' and d.ports:
+                selected_rgws = selected_rgws_by_host.setdefault(d.hostname, [])
+
+                conflicting_rgw = None
+                shared_ports: Set[int] = set()
+
+                for selected in selected_rgws:
+                    ports = set(d.ports) & set(selected.ports or [])
+                    if not ports:
+                        continue
+
+                    # Different explicit bind IPs are independent listeners.
+                    # If either IP is unset, treat it as a wildcard listener
+                    # which conflicts with every address on the shared port.
+                    if d.ip and selected.ip and d.ip != selected.ip:
+                        continue
+
+                    conflicting_rgw = selected
+                    shared_ports = ports
+                    break
+
+                if conflicting_rgw:
+                    logger.info(
+                        'Upgrade: Deferring %s to a later pass because %s on host %s '
+                        'has an overlapping listener on port(s) %s',
+                        d.name(),
+                        conflicting_rgw.name(),
+                        d.hostname,
+                        sorted(shared_ports),
+                    )
+                    continue
+
+                selected_rgws.append(d)
+
             to_upgrade.append(d_entry)
 
             # ok-to-stop did not add peer names to known_ok_to_stop.
@@ -1463,20 +1889,129 @@ class CephadmUpgrade:
             # 1. Limit how many core daemons get queued in a single pass without
             #    a mon-supplied peer batch in known_ok_to_stop.
             # 2. Yield between batches of core daemons to allow the mon to catch up.
-            if d.daemon_type in ['osd', 'mds', 'mon'] and not known_ok_to_stop:
+            # Ingress daemons (haproxy, keepalived) are also rate-limited to
+            # one-at-a-time to preserve HA during upgrade: redeploying all
+            # instances simultaneously would take down the VIP and all client
+            # connections.  There is no ceph ok-to-stop for these types, so
+            # known_ok_to_stop is always empty and the break always fires.
+            if d.daemon_type in SERIAL_UPGRADE_DAEMON_TYPES and not known_ok_to_stop:
                 # osd ok-to-upgrade batch is not empty, so keep looping to
                 # add more OSDs to the batch
                 if d.daemon_type == 'osd' and self._upgrade_uses_ok_to_upgrade_for_osds() and (len(known_ok_to_upgrade) > 0):
                     continue  # do not break
+                # fail_fs already took the filesystem down; upgrade all MDS
+                # in one pass rather than one daemon per upgrade cycle.
+                if (d.daemon_type == 'mds'
+                        and self.upgrade_state is not None
+                        and self.upgrade_state.fail_fs):
+                    continue  # do not break
                 break
 
-        return True, to_upgrade
+        return True, self._limit_gateway_upgrade_batch(to_upgrade)
+
+    def _maybe_set_cephx_allowed_ciphers(self) -> None:
+        """Set auth_allowed_ciphers for mixed-version upgrade, unless already aes256k-only."""
+        assert self.upgrade_state
+        current = auth_allowed_cipher_names_from_mon_map(self.mgr.get('mon_map'))
+        if allowed_ciphers_are_aes256k_only(current):
+            logger.info(
+                'Upgrade: auth_allowed_ciphers is already aes256k-only; skipping set'
+            )
+        else:
+            ret, image, err = self.mgr.check_mon_command({
+                'prefix': 'mon set',
+                'name': 'auth_allowed_ciphers',
+                'value': ','.join(ALLOWED_CIPHERS),
+            })
+        self.upgrade_state.has_set_cephx_allowed_ciphers = True
+        self._save_upgrade_state()
+
+    def _rotate_mgr_mon_auth_keys(self, target_image: str, target_digests: Optional[List[str]] = None) -> None:
+        if self.upgrade_state:
+            if self.upgrade_state.rotated_mgr_mon_auth_key_daemons is None:
+                self.upgrade_state.rotated_mgr_mon_auth_key_daemons = []
+            # do mgr and mon keyrings as one off after mons have been upgraded
+            mon_daemons = self.mgr.cache.get_daemons_by_service('mon')
+            if not mon_daemons:
+                # Without any mon daemons in the cache we cannot tell whether
+                # the mons have been upgraded, and there is no mon keyring to
+                # rotate either.  Try again on the next upgrade pass.
+                self.mgr.log.debug('Skipping mgr/mon key rotation, no mon daemons known')
+                return
+            _, mons_needing_upgrade, __, ___ = self._detect_need_upgrade(mon_daemons, target_digests, target_image)
+            need_rotate_self = False
+            if not mons_needing_upgrade:
+                if not self.upgrade_state.has_set_cephx_allowed_ciphers:
+                    # all mons have been upgraded if we get here so keyrings can be rotated
+                    # start by setting the allowed ciphers. Preferred ciphers should be left
+                    # to the user to not potentially brake clusters and the service cipher
+                    # cannot be set until after all keyrings have been rotated.
+                    # If the cluster already allows only aes256k, skip so we do
+                    # not re-enable the weaker aes cipher.
+                    self._maybe_set_cephx_allowed_ciphers()
+                for dd in self.mgr.cache.get_daemons_by_service('mgr'):
+                    if dd.name() in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
+                        continue
+                    assert dd.daemon_type is not None
+                    assert dd.daemon_id is not None
+                    if self.mgr.daemon_is_self(dd.daemon_type, dd.daemon_id):
+                        logger.info('Delaying rotation of %s, cannot rotate self', dd.name())
+                        need_rotate_self = True
+                        continue
+                    daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
+                    logger.info('Rotating keyring for %s', dd.name())
+                    self.mgr.key_rotate(daemon_spec)
+                    assert dd.daemon_type is not None
+                    assert dd.daemon_id is not None
+                    self.mgr._daemon_action_set_image(
+                        'redeploy',
+                        target_image,
+                        dd.daemon_type,
+                        dd.daemon_id
+                    )
+                    logger.info('Redeploying %s with new keyring', dd.name())
+                    self.mgr._daemon_action(daemon_spec, action='redeploy')
+                    self.upgrade_state.rotated_mgr_mon_auth_key_daemons.append(daemon_spec.name())
+                    self._save_upgrade_state()
+                # mon daemons share a key, only do one key rotation
+                # but still trigger redeploy for each mon
+                if 'mon' not in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
+                    logger.info('Rotating mon keyring')
+                    self.mgr.key_rotate(
+                        CephadmDaemonDeploySpec.from_daemon_description(
+                            mon_daemons[0]
+                        )
+                    )
+                    self.upgrade_state.rotated_mgr_mon_auth_key_daemons.append('mon')
+                    self._save_upgrade_state()
+                for dd in mon_daemons:
+                    if dd.name() in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
+                        continue
+                    assert dd.daemon_type is not None
+                    assert dd.daemon_id is not None
+                    logger.info('Redeploying %s with new keyring', dd.name())
+                    self.mgr._daemon_action_set_image(
+                        'redeploy',
+                        target_image,
+                        dd.daemon_type,
+                        dd.daemon_id
+                    )
+                    daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
+                    self.mgr._daemon_action(daemon_spec, action='redeploy')
+                    self.upgrade_state.rotated_mgr_mon_auth_key_daemons.append(daemon_spec.name())
+                    self._save_upgrade_state()
+            else:
+                self.mgr.log.debug('Skipping mgr/mon key rotation, mons not upgraded')
+            if need_rotate_self:
+                logger.info('Failing over to standby mgr to handle key rotation of current active mgr')
+                self.mgr.mgr_service.fail_over()
 
     def _upgrade_daemons(self, to_upgrade: List[Tuple[DaemonDescription, bool]], target_image: str, target_digests: Optional[List[str]] = None) -> None:
         assert self.upgrade_state is not None
         num = 1
         if target_digests is None:
             target_digests = []
+        self._rotate_mgr_mon_auth_keys(target_image, target_digests)
         for d_entry in to_upgrade:
             if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0 and not d_entry[1]:
                 self.mgr.log.info(
@@ -1529,27 +2064,88 @@ class CephadmUpgrade:
             else:
                 logger.info('Upgrade: Updating %s.%s' %
                             (d.daemon_type, d.daemon_id))
+
+        def _rotate_key(dspec: CephadmDaemonDeploySpec) -> bool:
+            # attempts to rotate keyring. Returns boolean marking if rotation succeeded
+            try:
+                dspec.keyring = None
+                logger.info('Rotating keyring for %s', dspec.name())
+                self.mgr.key_rotate(dspec)
+            except Exception as e:
+                self._fail_upgrade('UPGRADE_KEY_ROTATION', {
+                    'severity': 'warning',
+                    'summary': f'Rotation of cephx key for daemon {dspec.name()} on host {dspec.host} failed.',
+                    'count': 1,
+                    'detail': [
+                        f'Upgrade daemon key rotation: {dspec.name()}: {e}'
+                    ],
+                })
+                logger.error(f'Exception during rotation of osd/mds keyrings: {str(e)}')
+                return False
+            return True
+
+        insecure_key_daemons: List[str] = []
+        if to_upgrade and to_upgrade[0][0].daemon_type in ['osd', 'mds']:
+            # for tracking if we need to rotate the keyring of an OSD/MDS daemon
+            # Since https://github.com/ceph/ceph/commit/63839dc9960fdf069c2032eb1a0df9c9540005b2
+            # this can be done at upgrade time. Check if the health warning mentions the
+            # OSD/MDS we're upgrading should also get a key rotation first
+            # this could be done in less lines but I like keeping a note
+            # of what we expect the types to be at each level since it comes
+            # in as an unstructured dict we have minimal control over
+            health_checks: Dict[str, Any] = json.loads(self.mgr.get('health')['json']).get('checks')
+            insecure_service_key_warnings: Dict[str, Union[Dict[str, str], List[Dict[str, str]]]] = \
+                health_checks.get('AUTH_INSECURE_SERVICE_KEY_TYPE', {})
+            # ignoring type on this next line as mypy will complain that
+            # List[Dict[str, str]] != Union[Dict[str, str], List[Dict[str, str]]]
+            # but we're expecting this entry in the dict to be List[Dict[str, str]]
+            insecure_key_details: List[Dict[str, str]] = insecure_service_key_warnings.get('detail', [])  # type: ignore
+            for detail in insecure_key_details:
+                msg: str = detail.get('message', '')
+                # expected format of this error message is
+                # "entity <daemon-name> using insecure key type: <key-type>"
+                # for example: "entity osd.0 using insecure key type: aes"
+                # If this format changes in the future this will need to
+                # be updated
+                if msg and 'using insecure key' in msg:
+                    try:
+                        dname = msg.split(' ')[1]
+                        insecure_key_daemons.append(dname)
+                    except Exception as e:
+                        logger.error(
+                            'Failed to get daemon name from insecure key warning %s: %s',
+                            msg, str(e)
+                        )
+
+        for d_entry in to_upgrade:
+            daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d_entry[0])
+
+            if daemon_spec.daemon_type in ['osd', 'mds'] and daemon_spec.name() in insecure_key_daemons:
+                # if _rotate_key fails fails it will mark the upgrade as
+                # failed and return False. Otherwise returns True
+                if not _rotate_key(daemon_spec):
+                    return
+
             action = 'Upgrading' if not d_entry[1] else 'Redeploying'
             try:
-                daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d)
                 self.mgr._daemon_action(
                     daemon_spec,
                     'redeploy',
                     image=target_image if not d_entry[1] else None
                 )
-                self.mgr.cache.metadata_up_to_date[d.hostname] = False
+                self.mgr.cache.metadata_up_to_date[daemon_spec.host] = False
             except Exception as e:
                 logger.exception(
                     'Upgrade: %s daemon %s on host %s failed',
                     action.lower(),
-                    d.name(),
-                    d.hostname)
+                    daemon_spec.name(),
+                    daemon_spec.host)
                 self._fail_upgrade('UPGRADE_REDEPLOY_DAEMON', {
                     'severity': 'warning',
-                    'summary': f'{action} daemon {d.name()} on host {d.hostname} failed.',
+                    'summary': f'{action} daemon {daemon_spec.name()} on host {daemon_spec.host} failed.',
                     'count': 1,
                     'detail': [
-                        f'Upgrade daemon: {d.name()}: {e}'
+                        f'Upgrade daemon: {daemon_spec.name()}: {e}'
                     ],
                 })
                 return
@@ -1655,6 +2251,10 @@ class CephadmUpgrade:
                     raise OrchestratorError("Failed to set"
                                             "fs joinable true"
                                             f"due to {e}")
+                if not self._wait_for_fs_mdss_active(fs_name):
+                    raise OrchestratorError(
+                        f'MDS daemons for filesystem {fs_name} did not become '
+                        f'up:active after fail_fs upgrade')
         elif self.upgrade_state.fs_original_max_mds:
             for fs in self.mgr.get("fs_map")['filesystems']:
                 fscid = fs["id"]
@@ -1732,14 +2332,44 @@ class CephadmUpgrade:
             return False
         return True
 
-    def _mark_upgrade_complete(self) -> None:
+    def _mark_upgrade_complete(self, target_digests: Optional[List[str]], target_image: str) -> None:
         if not self.upgrade_state:
             logger.debug('_mark_upgrade_complete upgrade already marked complete, exiting')
             return
+
+        logger.info('Upgrade: checking if all mon, mgr, OSD, mds daemons upgraded before changing service cipher')
+        daemons_to_check = (
+            self.mgr.cache.get_daemons_by_service('mon')
+            + self.mgr.cache.get_daemons_by_service('mgr')
+            + self.mgr.cache.get_daemons_by_type('osd')
+            + self.mgr.cache.get_daemons_by_type('mds')
+        )
+        assert target_digests is not None
+        _, still_needing_upgrade, __, ___ = self._detect_need_upgrade(daemons_to_check, target_digests, target_image)
+        if not still_needing_upgrade:
+            # set the default service cipher to whatever
+            # the preference is this release
+            ret, image, err = self.mgr.check_mon_command({
+                'prefix': 'mon set',
+                'name': 'auth_service_cipher',
+                'value': SERVICE_CIPHER,
+            })
+        else:
+            logger.info('Found mon/mgr/OSD/mds daemons still needing upgrade. Service cipher not set')
+
+        # TODO: remove me when we're sure the entry this removes can't be
+        # present. I think that's N+2 for the latest version we did an initial
+        # release for for the CVE that required updating the keys to aes256k
+        self._clear_rotated_daemon_entry()
+
+        if self.upgrade_state.health_warnings_muted:
+            self._unmute_upgrade_related_health_warnings()
+
         if getattr(self.upgrade_state, 'noautoscale_set', False):
             self._unset_noautoscale()
             self.upgrade_state.noautoscale_set = False
         logger.info('Upgrade: Complete!')
+        self.mgr.version_tracker.update_cluster_version_status(upgrade_state=self.upgrade_state, status=UpgradeStatus.COMPLETE)
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
@@ -1830,25 +2460,29 @@ class CephadmUpgrade:
             })
             return
 
+        isa_errors = self.check_host_cpu_isa_level(
+            target_version, hosts=self.upgrade_state.hosts)
+        if isa_errors:
+            self._fail_upgrade('UPGRADE_INCOMPATIBLE_HOST_CPU', {
+                'severity': 'error',
+                'summary': f'Upgrade: {len(isa_errors)} host(s) have a CPU '
+                           f'that cannot run ceph version {target_version}',
+                'count': len(isa_errors),
+                'detail': self._host_cpu_isa_error_detail(isa_errors),
+            })
+            return
+
         image_settings = self.get_distinct_container_image_settings()
 
-        if self.upgrade_state.daemon_types is not None:
-            logger.debug(
-                f'Filtering daemons to upgrade by daemon types: {self.upgrade_state.daemon_types}')
-            daemons = [d for d in self.mgr.cache.get_daemons(
-            ) if d.daemon_type in self.upgrade_state.daemon_types]
-        elif self.upgrade_state.services is not None:
-            logger.debug(
-                f'Filtering daemons to upgrade by services: {self.upgrade_state.daemon_types}')
-            daemons = []
-            for service in self.upgrade_state.services:
-                daemons += self.mgr.cache.get_daemons_by_service(service)
-        else:
-            daemons = [d for d in self.mgr.cache.get_daemons(
-            ) if d.daemon_type in CEPH_UPGRADE_ORDER]
-        if self.upgrade_state.hosts is not None:
-            logger.debug(f'Filtering daemons to upgrade by hosts: {self.upgrade_state.hosts}')
-            daemons = [d for d in daemons if d.hostname in self.upgrade_state.hosts]
+        if not (self.upgrade_state.health_warnings_muted
+                or self.upgrade_state.health_warnings_mute_skipped):
+            if self._mute_upgrade_related_health_warnings():
+                self.upgrade_state.health_warnings_muted = True
+            else:
+                self.upgrade_state.health_warnings_mute_skipped = True
+            self._save_upgrade_state()
+        daemons = self._get_filtered_daemons()
+
         upgraded_daemon_count: int = 0
         for daemon_type in CEPH_UPGRADE_ORDER:
             if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0:
@@ -1861,7 +2495,7 @@ class CephadmUpgrade:
                     if daemon_type not in NON_CEPH_IMAGE_TYPES and daemon_type != 'mgr':
                         continue
                 else:
-                    self._mark_upgrade_complete()
+                    self._mark_upgrade_complete(target_digests, target_image)
                     return
             logger.debug('Upgrade: Checking %s daemons' % daemon_type)
             daemons_of_type = [d for d in daemons if d.daemon_type == daemon_type]
@@ -1873,7 +2507,8 @@ class CephadmUpgrade:
             need_upgrade_self, need_upgrade, need_upgrade_deployer, done = self._detect_need_upgrade(
                 daemons_of_type, target_digests, target_image)
             upgraded_daemon_count += done
-            self._update_upgrade_progress(upgraded_daemon_count / len(daemons))
+            progress = upgraded_daemon_count / len(daemons) if len(daemons) > 0 else 0.0
+            self._update_upgrade_progress(progress)
 
             # make sure mgr and monitoring stack daemons are properly redeployed in staggered upgrade scenarios
             # The idea here is to upgrade the mointoring daemons after the mgr is done upgrading as
@@ -1902,10 +2537,15 @@ class CephadmUpgrade:
                     _, n1, n2, __ = self._detect_need_upgrade(ceph_daemons, target_digests, target_image)
                     if not n1 and not n2:
                         # no ceph daemons need upgrade
-                        dds = [d for d in self.mgr.cache.get_daemons_by_type(
+                        need_upgrade_names = [d[0].name() for d in need_upgrade] + \
+                            [d[0].name() for d in need_upgrade_deployer]
+                        dds = [d for d in self.mgr.cache.get_daemons_by_daemon_type(
                             daemon_type) if d.name() not in need_upgrade_names]
                         _, ___, n2, ____ = self._detect_need_upgrade(dds, target_digests, target_image)
                         need_upgrade_deployer += n2
+                    else:
+                        # don't upgrade if ceph image daemons are not yet fully upgraded.
+                        need_upgrade_deployer = []
 
             if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
                 # only after the mgr itself is upgraded can we expect daemons to have
@@ -1936,7 +2576,7 @@ class CephadmUpgrade:
             # types. If we haven't actually finished upgrading all the daemons
             # of this type, we should exit the loop here
             _, n1, n2, _ = self._detect_need_upgrade(
-                self.mgr.cache.get_daemons_by_type(daemon_type), target_digests, target_image)
+                self.mgr.cache.get_daemons_by_daemon_type(daemon_type), target_digests, target_image)
             if n1 or n2:
                 continue
 
@@ -1994,11 +2634,11 @@ class CephadmUpgrade:
             self.upgrade_state.remaining_count is not None
             and self.upgrade_state.remaining_count <= 0
         ):
-            self._mark_upgrade_complete()
+            self._mark_upgrade_complete(target_digests, target_image)
             return
         if not self._filtered_scope_up_to_date(
             target_digests, self.upgrade_state._target_name,
         ):
             return
-        self._mark_upgrade_complete()
+        self._mark_upgrade_complete(target_digests, target_image)
         return

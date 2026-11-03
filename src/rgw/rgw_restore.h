@@ -19,7 +19,6 @@
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_sal.h"
-#include "rgw_notify.h"
 #include "rgw_restore_waiter.h"
 
 #include <atomic>

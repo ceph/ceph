@@ -131,18 +131,19 @@ struct btree_test_base :
 
   virtual LBAManager::mkfs_ret test_structure_setup(Transaction &t) = 0;
   seastar::future<> set_up_fut() final {
-    segment_manager = segment_manager::create_test_ephemeral();
+    segment_manager = segment_manager::create_test_ephemeral(0, device_type_t::EPHEMERAL_MAIN);
     return segment_manager->init(
     ).safe_then([this] {
       return segment_manager->mkfs(
-        segment_manager::get_ephemeral_device_config(0, 1, 0));
+        segment_manager::get_ephemeral_device_config(
+          0, device_set_t{}, device_set_t{}, true));
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
-      journal = journal::make_segmented(0, *this, *this);
+      journal = journal::make_segmented(0, *this, *this, false);
       rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
-	"seastore_hot_tier_generations");
+	"seastore_cache_device_generations");
       rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
-	"seastore_cold_tier_generations");
+	"seastore_data_device_generations");
       epm.reset(new ExtentPlacementManager(
 	hot_tier_generations, cold_tier_generations, 0));
       cache.reset(new Cache(*epm, 0));
@@ -231,12 +232,12 @@ struct lba_btree_test : btree_test_base {
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
     return cache->get_root(
       t
-    ).si_then([this, &t](RootBlockRef croot) {
+    ).si_then([this, &t](RootBlockRef croot) -> LBAManager::mkfs_ret {
       auto mut_croot = cache->duplicate_for_write(
 	t, croot
       )->cast<RootBlock>();
       mut_croot->root.lba_root =
-	LBABtree::mkfs(mut_croot, get_op_context(t));
+	co_await LBABtree::mkfs(mut_croot, get_op_context(t));
     });
   }
 
@@ -313,7 +314,7 @@ struct lba_btree_test : btree_test_base {
   }
 
   static auto get_map_val(extent_len_t len, extent_types_t type) {
-    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, len, 0, type};
+    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, P_ADDR_NULL, len, 0, type};
   }
 
   device_off_t next_off = 0;
@@ -327,11 +328,9 @@ struct lba_btree_test : btree_test_base {
     check.emplace(addr, get_map_val(len, TestBlock::TYPE));
     lba_btree_update([=, this](auto &btree, auto &t) {
       auto extents = cache->alloc_new_data_extents<TestBlock>(
-	  t,
-	  TestBlock::SIZE,
-	  placement_hint_t::HOT,
-	  0,
-	  get_paddr());
+	  t, TestBlock::SIZE,
+	  {placement_hint_t::HOT, 0, false, P_ADDR_NULL,
+	   write_policy_t::WRITE_BACK, get_paddr()});
       return seastar::do_with(
 	std::move(extents),
 	[this, addr, &t, len, &btree](auto &extents) {
@@ -454,8 +453,7 @@ struct btree_lba_manager_test : btree_test_base {
       cache->alloc_new_non_data_extent<TestBlockPhysical>(
           *t.t,
           TestBlockPhysical::SIZE,
-          placement_hint_t::HOT,
-          0);
+          {placement_hint_t::HOT, 0});
     };
     return t;
   }
@@ -550,11 +548,9 @@ struct btree_lba_manager_test : btree_test_base {
       *t.t,
       [=, this](auto &t) {
 	auto extents = cache->alloc_new_data_extents<TestBlock>(
-	    t,
-	    TestBlock::SIZE,
-	    placement_hint_t::HOT,
-	    0,
-	    get_paddr());
+	    t, TestBlock::SIZE,
+	    {placement_hint_t::HOT, 0, false, P_ADDR_NULL,
+	     write_policy_t::WRITE_BACK, get_paddr()});
 	return seastar::do_with(
 	  std::vector<LogicalChildNodeRef>(
 	    extents.begin(), extents.end()),
@@ -716,7 +712,7 @@ struct btree_lba_manager_test : btree_test_base {
 	  *t.t,
 	  L_ADDR_MIN,
 	  L_ADDR_MAX,
-	  [iter=t.mappings.begin(), &t](auto l, auto p, auto len) mutable {
+	  [iter=t.mappings.begin(), &t](auto l, auto p, auto s, auto len) mutable {
 	    EXPECT_NE(iter, t.mappings.end());
 	    EXPECT_EQ(l, iter->first);
 	    EXPECT_EQ(p, iter->second.addr);

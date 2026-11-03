@@ -22,10 +22,12 @@ import re
 import signal
 import sys
 import textwrap
+import time
 import traceback
 
 from datetime import datetime, timedelta, timezone
 from getpass import getuser
+from graphlib import TopologicalSorter
 from os.path import expanduser
 
 import git # https://github.com/gitpython-developers/gitpython
@@ -53,6 +55,7 @@ REDMINE_CUSTOM_FIELD_ID_BACKPORT = 2
 REDMINE_CUSTOM_FIELD_ID_RELEASE = 16
 REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID = 21
 REDMINE_CUSTOM_FIELD_ID_TAGS = 31
+REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS = 48
 REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT = 33
 REDMINE_CUSTOM_FIELD_ID_FIXED_IN = 34
 REDMINE_CUSTOM_FIELD_ID_RELEASED_IN = 35
@@ -64,7 +67,6 @@ REDMINE_STATUS_ID_INPROGRESS = 2
 REDMINE_STATUS_ID_TRIAGED = 18
 REDMINE_STATUS_ID_NEEDINFO = 11
 REDMINE_STATUS_ID_FIX_UNDER_REVIEW = 13
-REDMINE_STATUS_ID_PENDING_BACKPORT = 14
 
 # Closed
 REDMINE_STATUS_ID_RESOLVED = 3
@@ -73,12 +75,11 @@ REDMINE_STATUS_ID_REJECTED = 6
 REDMINE_STATUS_ID_WONTFIX = 8
 REDMINE_STATUS_ID_CANTREPRODUCE = 9
 REDMINE_STATUS_ID_DUPLICATE = 10
+REDMINE_STATUS_ID_PENDING_BACKPORT = 14
 REDMINE_STATUS_ID_WONTFIX_EOL = 19
+REDMINE_STATUS_ID_BACKPORTING = 40
 
 REDMINE_TRACKER_ID_BACKPORT = 9
-
-REDMINE_STATUS_ID_PENDING_BACKPORT = 14
-REDMINE_STATUS_ID_RESOLVED = 3
 
 REDMINE_ENDPOINT = "https://tracker.ceph.com"
 REDMINE_API_KEY = None
@@ -158,6 +159,20 @@ class UpkeepException(Exception):
     def comment(self):
         raise NotImplementedError()
 
+class PRMissingException(UpkeepException):
+    def __init__(self, issue_update, **kwargs):
+        super().__init__(issue_update, **kwargs)
+
+    def __str__(self):
+        return "PR is missing"
+
+    def comment(self):
+        return f"""
+Issue #{self.issue_update.issue.id} with status {self.issue_update.issue.status.name} is missing a Pull Request ID.
+
+A Pull Request ID is required to create backports. Please set the "Pull Request ID" custom field to the appropriate GitHub PR number.
+"""
+
 class PRInvalidException(UpkeepException):
     def __init__(self, issue_update, pr_id, **kwargs):
         super().__init__(issue_update, **kwargs)
@@ -193,6 +208,24 @@ Possible resolutions:
 * **If the issue was fixed through other means (e.g. in the kernel or Rook), please remove the PR id.**
 * **If the PR is already merged through other means (erroneous backport), mark the issue state as "Rejected".**
 * **Do nothing. This script will ignore this issue while the upkeep-failed tag is applied.**
+"""
+
+class BaseCommitMissingException(UpkeepException):
+    def __init__(self, issue_update, pr_id, base_ref, **kwargs):
+        super().__init__(issue_update, **kwargs)
+        self.pr_id = pr_id
+        self.base_ref = base_ref
+
+    def __str__(self):
+        return "Base commit could not be fetched"
+
+    def comment(self):
+        return f"""
+Issue #{self.issue_update.issue.id} references "PR #{self.pr_id}":https://github.com/ceph/ceph/pull/{self.pr_id}. The base branch `{self.base_ref}` or its commit could not be resolved locally.
+
+<pre>
+{self.traceback.strip()}
+</pre>
 """
 
 class RedmineUpdateException(UpkeepException):
@@ -238,6 +271,10 @@ class IssueUpdate:
         except redminelib.exceptions.ResourceAttrError:
             return None
 
+    def get_current_status_id(self):
+        """Get the current status ID, prioritizing in-memory payload over the database state."""
+        return self.update_payload.get('status_id', self.issue.status.id)
+
     def get_custom_field(self, field_id):
         """ Get the custom field, first from update_payload otherwise issue """
         custom_fields = self.update_payload.setdefault("custom_fields", [])
@@ -245,6 +282,17 @@ class IssueUpdate:
             if field.get('id') == field_id:
                 return field['value']
         return self.get_raw_custom_field(field_id)
+
+    def get_list_custom_field(self, field_id, raw=False):
+        """ Helper to safely get a list custom field, handling strings and None """
+        val = self.get_raw_custom_field(field_id) if raw else self.get_custom_field(field_id)
+        if not val:
+            return []
+        if isinstance(val, list):
+            return val.copy()
+        if isinstance(val, str):
+            return [v.strip() for v in val.split(',') if v.strip()]
+        return []
 
     def add_or_update_custom_field(self, field_id, value):
         """Helper to add or update a custom field in the payload."""
@@ -278,20 +326,16 @@ class IssueUpdate:
             return True
 
     def add_tag(self, tag):
-        current_tags_str = self.get_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
-        current_tags = []
-        if current_tags_str:
-            current_tags = [current_tag.strip() for current_tag in current_tags_str.split(',') if current_tag.strip()]
+        current_flags = self.get_list_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS)
 
-        if tag in current_tags:
-            self.logger.debug(f"tag '{tag}' already in tags")
+        if tag in current_flags:
+            self.logger.debug(f"flag '{tag}' already in flags")
             return
         else:
-            current_tags.append(tag)
-            self.logger.info(f"Adding '{tag}' tag.")
+            current_flags.append(tag)
+            self.logger.info(f"Adding '{tag}' flag.")
 
-        new_tags = ", ".join(current_tags)
-        self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS, new_tags)
+        self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS, current_flags)
 
     def has_open_subtasks(self):
         """
@@ -320,18 +364,20 @@ class IssueUpdate:
             self.logger.debug("Issue has no subtasks (ResourceAttrError on 'children' attribute).")
             return False
 
-    def get_update_payload(self, suppress_mail=True): # Added suppress_mail parameter
+    def get_update_payload(self, suppress_mail=True, keep_failure_flag=False): # Added suppress_mail parameter
         today = datetime.now(timezone.utc).isoformat(timespec='seconds')
         self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP, today)
 
-        current_tags_str = self.get_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
-        current_tags = []
-        if current_tags_str:
-            current_tags = [tag.strip() for tag in current_tags_str.split(',') if tag.strip()]
-            if "upkeep-failed" in current_tags:
-                self.logger.info(f"'upkeep-failed' tag found in '{current_tags_str}'. Removing for update.")
-                current_tags.remove("upkeep-failed")
-                self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS, ", ".join(current_tags))
+        if not keep_failure_flag:
+            # Cleanup new flags field
+            current_flags = self.get_list_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS)
+            modified_flags = False
+            if "upkeep-failed" in current_flags:
+                self.logger.info(f"'upkeep-failed' flag found. Removing for update.")
+                current_flags.remove("upkeep-failed")
+                modified_flags = True
+            if modified_flags:
+                self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS, current_flags)
 
         payload = {
             'issue': self.update_payload,
@@ -430,6 +476,10 @@ class RedmineUpkeep:
         NAME = "undefined"
 
         @staticmethod
+        def disabled():
+            return False
+
+        @staticmethod
         def get_filters():
             raise NotImplementedError("NI")
 
@@ -437,10 +487,11 @@ class RedmineUpkeep:
         def requires_github_api():
             raise NotImplementedError("NI")
 
-    def transformation(priority):
-        """A decorator to assign a priority to a transformation method."""
+    def transformation(priority=0, depends_on=None):
+        """A decorator to assign a priority and dependencies to a transformation method."""
         def decorator(func):
             func._priority = priority
+            func._depends_on = depends_on or []
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
@@ -456,6 +507,7 @@ class RedmineUpkeep:
         self.revision_range = args.revision_range
         self.pull_request_id = args.pull_request
         self.merge_commit = args.merge_commit
+        self.filter_name = args.filter
 
         self.remote_url = f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}"
         self.upkeep_failures = 0
@@ -474,22 +526,42 @@ class RedmineUpkeep:
             sys.exit(1)
 
         # Discover transformation methods based on prefix
-        self.transform_methods = []
+        transforms_by_name = {}
         for name in dir(self):
             if name.startswith('_transform_') and callable(getattr(self, name)):
-                self.transform_methods.append(getattr(self, name))
-        log.debug(f"Discovered transformation methods: {[m.__name__ for m in self.transform_methods]}")
+                transforms_by_name[name] = getattr(self, name)
+        log.debug(f"Discovered transformation methods: {list(transforms_by_name.keys())}")
 
-        # Sort transformations for consistent order if needed, e.g., by name
-        self.transform_methods.sort(key=lambda f: f._priority, reverse=True)
-        log.debug(f"Sorted transformation methods: {[m.__name__ for m in self.transform_methods]}")
+        # Build DAG using TopologicalSorter and resolve dependencies with priority tie-breaking
+        ts = TopologicalSorter()
+        for name, func in transforms_by_name.items():
+            deps = getattr(func, '_depends_on', [])
+            resolved_deps = [d if d.startswith('_transform_') else f'_transform_{d}' for d in deps]
+            ts.add(name, *resolved_deps)
+
+        ts.prepare()
+        ordered_names = []
+        while ts.is_active():
+            ready = ts.get_ready()
+            ready_sorted = sorted(
+                ready,
+                key=lambda n: (getattr(transforms_by_name[n], '_priority', 0), n),
+                reverse=True
+            )
+            for name in ready_sorted:
+                ordered_names.append(name)
+                ts.done(name)
+
+        self.transform_methods = [transforms_by_name[name] for name in ordered_names]
+        log.debug(f"Sorted transformation methods via DAG: {[m.__name__ for m in self.transform_methods]}")
 
         # Discover filters based on prefix
         self.filters = []
         for name, v in RedmineUpkeep.__dict__.items():
             if inspect.isclass(v) and issubclass(v, self.Filter) and v != self.Filter:
                 log.debug("discovered filter %s", v.NAME)
-                self.filters.append(v)
+                if not v.disabled():
+                    self.filters.append(v)
         random.shuffle(self.filters) # to shuffle equivalent PRIORITY
         self.filters.sort(key = lambda filter: filter.PRIORITY, reverse=True)
         log.debug(f"Discovered filters: {[f.__name__ for f in self.filters]}")
@@ -523,6 +595,111 @@ class RedmineUpkeep:
         log.info("Successfully connected to Redmine.")
         return R
 
+    class FilterClearDuplicate(Filter):
+        """
+        Filter for Duplicate issues that still have PR/Merge/Release fields set.
+        """
+        PRIORITY = 2000000
+        NAME = "ClearDuplicate"
+
+        @staticmethod
+        def get_filters():
+            for field_id in [
+                REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID,
+                REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT,
+                REDMINE_CUSTOM_FIELD_ID_FIXED_IN,
+                REDMINE_CUSTOM_FIELD_ID_RELEASED_IN,
+            ]:
+                yield {
+                    f"cf_{field_id}": "*",
+                    "status_id": str(REDMINE_STATUS_ID_DUPLICATE),
+                }
+
+        @staticmethod
+        def requires_github_api():
+            return False
+
+    @transformation(2000000)
+    def _transform_clear_duplicate_fields(self, issue_update):
+        """
+        Transformation: Strips Pull Request ID, Merge Commit, Fixed In, and Released In
+        from issues that are marked as Duplicate.
+        """
+        if issue_update.get_current_status_id() != REDMINE_STATUS_ID_DUPLICATE:
+            return False
+
+        issue_update.logger.debug("Running _transform_clear_duplicate_fields")
+        changed = False
+
+        for field_id, name in [
+            (REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID, "Pull Request ID"),
+            (REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT, "Merge Commit"),
+            (REDMINE_CUSTOM_FIELD_ID_FIXED_IN, "Fixed In"),
+            (REDMINE_CUSTOM_FIELD_ID_RELEASED_IN, "Released In"),
+        ]:
+            if issue_update.get_custom_field(field_id):
+                issue_update.logger.info(f"Clearing '{name}' because issue is a Duplicate.")
+                changed |= issue_update.add_or_update_custom_field(field_id, "")
+
+        return changed
+
+    class FilterMigrateLegacyTags(Filter):
+        """
+        Filter to find issues that still have the legacy text-based tags so they can be migrated.
+        """
+        PRIORITY = 1000000
+        NAME = "MigrateLegacyTags"
+
+        @staticmethod
+        def disabled():
+            return True
+
+        @staticmethod
+        def get_filters():
+            yield {f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "~upkeep-"}
+            yield {f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "~backport_processed"}
+
+        @staticmethod
+        def requires_github_api():
+            return False
+
+    @transformation(1000000)
+    def _transform_migrate_legacy_tags(self, issue_update):
+        """
+        Transformation: Migrates old text-based tags to the new Upkeep Flags list field.
+        """
+        issue_update.logger.debug("Running _transform_migrate_legacy_tags")
+        current_tags_str = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
+        if not current_tags_str:
+            return False
+
+        current_tags = [tag.strip() for tag in re.split(r'[, ]', current_tags_str) if tag.strip()]
+        log.debug(f"current_tags: {current_tags}")
+        if not current_tags:
+            return False
+
+        changed = False
+        if "upkeep-failed" in current_tags:
+            issue_update.logger.info("Migrating legacy 'upkeep-failed' tag.")
+            current_tags.remove("upkeep-failed")
+            issue_update.add_tag("upkeep-failed")
+            changed = True
+        if "upkeep-bad-parentage" in current_tags:
+            issue_update.logger.info("Migrating legacy 'upkeep-bad-parentage' tag.")
+            current_tags.remove("upkeep-bad-parentage")
+            issue_update.add_tag("upkeep-bad-parentage")
+            changed = True
+        if "backport_processed" in current_tags:
+            issue_update.logger.info("Removing obsolete 'backport_processed' tag.")
+            current_tags.remove("backport_processed")
+            changed = True
+
+        if changed:
+            new_tags_str = ", ".join(current_tags)
+            issue_update.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS, new_tags_str)
+
+        return changed
+
     class FilterMergedBug1(Filter):
         """
         Filter issues with erroneous merge commits.
@@ -533,12 +710,11 @@ class RedmineUpkeep:
 
         @staticmethod
         def get_filters():
-            filter_set = {
+            yield {
                 f"cf_{REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID}": '>=0',
                 f"cf_{REDMINE_CUSTOM_FIELD_ID_RELEASED_IN}": '~^',
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS}": "!upkeep-bad-parentage"
             }
-            yield {**filter_set, **{f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!*"}}
-            yield {**filter_set, **{f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!~upkeep-bad-parentage"}}
 
         @staticmethod
         def requires_github_api():
@@ -582,6 +758,16 @@ class RedmineUpkeep:
         issue_update.logger.debug(f"Last PR ID change: {last_pr_id_change}, Last Merge Commit set: {last_merge_commit_set}")
 
         if last_pr_id_change > last_merge_commit_set:
+            recorded_commit = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT)
+            if recorded_commit:
+                current_merge = self._get_merge_commit(issue_update)
+                if current_merge and str(current_merge).lower() == str(recorded_commit).lower():
+                    issue_update.logger.info(
+                        f"Recorded merge commit ({recorded_commit}) matches current PR merge commit. "
+                        "Skipping stale clear."
+                    )
+                    return False
+
             issue_update.logger.info("The 'Pull Request ID' was changed after the 'Merge Commit SHA' was set. Clearing the stale merge commit.")
             # Clear the merge commit field and also the 'Fixed In' field which depends on it.
             changed = False
@@ -604,6 +790,7 @@ class RedmineUpkeep:
         def get_filters():
             statuses = [
                 REDMINE_STATUS_ID_PENDING_BACKPORT,
+                REDMINE_STATUS_ID_BACKPORTING,
                 REDMINE_STATUS_ID_RESOLVED,
             ]
             for status in statuses:
@@ -687,6 +874,9 @@ class RedmineUpkeep:
         """
         pr_id = issue_update.get_pr_id()
 
+        if not pr_id:
+            return None
+
         ref = f"refs/pull/{pr_id}/head"
 
         try:
@@ -729,10 +919,13 @@ class RedmineUpkeep:
 
         try:
             BASE = self.G.commit(base['sha'])
-        except git.exc.GitCommandError as e:
+        except (git.exc.GitCommandError, ValueError) as e:
             issue_update.logger.debug(f"Fetching {base['ref']}")
-            self.G.git.fetch(self.remote_url, base['ref'])
-            BASE = self.G.commit('FETCH_HEAD')
+            try:
+                self.G.git.fetch(self.remote_url, base['ref'])
+                BASE = self.G.commit('FETCH_HEAD')
+            except (git.exc.GitCommandError, ValueError) as e2:
+                raise BaseCommitMissingException(issue_update, pr_id, base['ref'], exception=e2, traceback=traceback.format_exc())
 
         m = self._find_merge_commit(issue_update, HEAD, BASE)
         if m:
@@ -742,12 +935,15 @@ class RedmineUpkeep:
         return None
 
 
-    @transformation(1000)
+    @transformation(depends_on=['clear_stale_merge_commit'])
     def _transform_merged(self, issue_update):
         """
         Transformation: Checks if a PR associated with an issue has been merged
         and updates the merge commit and fixed_in fields in the payload.
         """
+        if issue_update.get_current_status_id() == REDMINE_STATUS_ID_DUPLICATE:
+            return False
+
         issue_update.logger.debug("Running _transform_merged")
 
         commit = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT)
@@ -784,7 +980,7 @@ class RedmineUpkeep:
             issue_update.logger.warning(f"Could not get git describe for commit {commit}: {e}")
         return False
 
-    @transformation(10)
+    @transformation(depends_on=['merged'])
     def _transform_backport_resolved(self, issue_update):
         """
         Transformation: Changes backport trackers to "Resolved" if the associated PR is merged.
@@ -803,10 +999,11 @@ class RedmineUpkeep:
            return False
 
         # If PR is merged and it's a backport tracker with 'Pending Backport' status, update to 'Resolved'
-        if issue_update.issue.status.id != REDMINE_STATUS_ID_RESOLVED:
+        current_status_id = issue_update.get_current_status_id()
+        if current_status_id != REDMINE_STATUS_ID_RESOLVED:
             if issue_update.has_open_subtasks():
                 return False
-            issue_update.logger.info(f"Issue status is '{issue_update.issue.status.name}', which is not 'Resolved'.")
+            issue_update.logger.info(f"Issue status is currently '{current_status_id}', which is not 'Resolved'.")
             issue_update.logger.info("Updating status to 'Resolved' because its PR is merged.")
             changed = issue_update.change_field('status_id', REDMINE_STATUS_ID_RESOLVED)
             return changed
@@ -834,7 +1031,7 @@ class RedmineUpkeep:
         def requires_github_api():
             return False
 
-    @transformation(10)
+    @transformation(depends_on=['merged'])
     def _transform_released(self, issue_update):
         """
         Transformation: Checks if a merged issue has been released and updates
@@ -867,20 +1064,40 @@ class RedmineUpkeep:
         return False
 
 
-    class FilterPendingBackport(Filter):
+    class FilterBackportStatus(Filter):
         """
-        Filter for issues that are in 'Pending Backport' status.  The
-        transformation will then check if they are non-backport trackers and if
-        all their 'Copied to' backports are resolved.
+        Filter for issues that are in 'Backporting' status.
+
+        The transformations will check if all their 'Copied to' backports are
+        resolved.
         """
 
         PRIORITY = 10
-        NAME = "Pending Backport"
+        NAME = "Backporting"
 
         @staticmethod
         def get_filters():
             yield {
                 f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}": '*',
+                "status_id": str(REDMINE_STATUS_ID_BACKPORTING),
+            }
+
+        @staticmethod
+        def requires_github_api():
+            return False
+
+    class FilterPendingBackportStatus(Filter):
+        """
+        Filter for issues that are in 'Pending Backport'.
+        The transformations will check if they need backport tickets created.
+        """
+
+        PRIORITY = 100000
+        NAME = "Pending Backport"
+
+        @staticmethod
+        def get_filters():
+            yield {
                 "status_id": str(REDMINE_STATUS_ID_PENDING_BACKPORT),
             }
 
@@ -889,7 +1106,96 @@ class RedmineUpkeep:
             return False
 
 
-    @transformation(10)
+    @transformation(depends_on=['set_status_on_merge'])
+    def _transform_create_backports(self, issue_update):
+        """
+        Transformation: Creates missing backport issues when the main issue is in
+        'Pending Backport' state. Moves the issue to 'Backporting' state once
+        all necessary backport tickets exist.
+        """
+        issue_update.logger.debug("Running _transform_create_backports")
+
+        if issue_update.issue.tracker.id == REDMINE_TRACKER_ID_BACKPORT:
+            return False
+
+        current_status_id = issue_update.get_current_status_id()
+        if current_status_id != REDMINE_STATUS_ID_PENDING_BACKPORT:
+            return False
+
+        pr_id = issue_update.get_pr_id()
+        if not pr_id:
+            raise PRMissingException(issue_update)
+
+        backports_str = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_BACKPORT)
+        if not backports_str:
+            issue_update.logger.info("No backports requested. Setting status to 'Resolved'.")
+            return issue_update.change_field('status_id', REDMINE_STATUS_ID_RESOLVED)
+
+        expected_releases = set(re.findall(r'\w+', backports_str))
+        if not expected_releases:
+            issue_update.logger.info("No valid backports extracted. Setting status to 'Resolved'.")
+            return issue_update.change_field('status_id', REDMINE_STATUS_ID_RESOLVED)
+
+        existing_releases = set()
+        for relation in issue_update.issue.relations:
+            if relation.relation_type == 'copied_to':
+                try:
+                    other = self.R.issue.get(relation.issue_to_id)
+                    if other.tracker.id == REDMINE_TRACKER_ID_BACKPORT:
+                        cf = other.custom_fields.get(REDMINE_CUSTOM_FIELD_ID_RELEASE)
+                        if cf and cf.value:
+                            existing_releases.add(cf.value)
+                except redminelib.exceptions.ResourceAttrError:
+                    pass
+                except redminelib.exceptions.ResourceNotFoundError:
+                    pass
+
+        missing_releases = expected_releases - existing_releases
+        for release in missing_releases:
+            subject = f"{release}: {issue_update.issue.subject}"[:255]
+            assigned_to_id = None
+            try:
+                assigned_to_id = issue_update.issue.assigned_to.id
+            except redminelib.exceptions.ResourceAttrError:
+                pass
+
+            create_args = {
+                "project_id": issue_update.issue.project.id,
+                "tracker_id": REDMINE_TRACKER_ID_BACKPORT,
+                "subject": subject,
+                "priority_id": issue_update.issue.priority.id,
+                "custom_fields": [{"id": REDMINE_CUSTOM_FIELD_ID_RELEASE, "value": release}]
+            }
+            if assigned_to_id:
+                create_args["assigned_to_id"] = assigned_to_id
+
+            try:
+                other = self.R.issue.create(**create_args)
+            except redminelib.exceptions.ValidationError as e:
+                issue_update.logger.info(f"Retrying backport creation to {release} without assignee due to failure: {e}")
+                if "assigned_to_id" in create_args:
+                    del create_args["assigned_to_id"]
+                    try:
+                        other = self.R.issue.create(**create_args)
+                    except redminelib.exceptions.ValidationError as e2:
+                        raise RedmineUpdateException(issue_update, exception=e2, traceback=traceback.format_exc())
+                else:
+                    raise RedmineUpdateException(issue_update, exception=e, traceback=traceback.format_exc())
+
+            self.R.issue_relation.create(
+                issue_id=issue_update.issue.id,
+                issue_to_id=other.id,
+                relation_type='copied_to'
+            )
+            issue_update.logger.info(f"Created backport to {release}: {REDMINE_ENDPOINT}/issues/{other.id}")
+            time.sleep(1) # Rate-limiting to avoid seeming like a spammer
+
+        # Once backports are created (or if they already existed), transition to Backporting state.
+        issue_update.logger.info("All backports created. Changing status to 'Backporting'.")
+        return issue_update.change_field('status_id', REDMINE_STATUS_ID_BACKPORTING)
+
+
+    @transformation(depends_on=['create_backports'])
     def _transform_resolve_main_issue_from_backports(self, issue_update):
         """
         Transformation: Resolves a main issue if all its "Copied to" backport
@@ -902,20 +1208,19 @@ class RedmineUpkeep:
             issue_update.logger.info("Is a backport tracker. Skipping this transformation.")
             return False
 
-        if issue_update.issue.status.id != REDMINE_STATUS_ID_PENDING_BACKPORT:
-            issue_update.logger.info(f"Not in 'Pending Backport' status ({issue_update.issue.status.name}). Skipping.")
+        current_status_id = issue_update.get_current_status_id()
+        if current_status_id != REDMINE_STATUS_ID_BACKPORTING:
+            issue_update.logger.info(f"Not in 'Backporting' status (current: {current_status_id}). Skipping.")
             return False
 
         if issue_update.has_open_subtasks():
             return False
 
-        issue_update.logger.info("Issue is a main tracker in 'Pending Backport' status. Checking related backports.")
+        issue_update.logger.info("Issue is a main tracker in 'Backporting' status. Checking related backports.")
 
         expected_backport_releases_str = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_BACKPORT)
         if expected_backport_releases_str:
-            expected_backport_releases = set(
-                rel.strip() for rel in expected_backport_releases_str.split(',') if rel.strip()
-            )
+            expected_backport_releases = set(re.findall(r'\w+', expected_backport_releases_str))
             issue_update.logger.info(f"Expecting backports for releases: {expected_backport_releases}")
         else:
             expected_backport_releases = set()
@@ -966,14 +1271,11 @@ class RedmineUpkeep:
                     all_backports_resolved_and_matched = False
                     break
 
-                if backport_issue.status.id == REDMINE_STATUS_ID_RESOLVED:
-                    issue_update.logger.info(f"Backport issue #{backport_id} is resolved and matches expected release '{backport_release}'.")
-                    resolved_and_matched_backports.add(backport_release)
-                elif backport_issue.status.id == REDMINE_STATUS_ID_REJECTED:
-                    issue_update.logger.info(f"Backport issue #{backport_id} is rejected and matches expected release '{backport_release}'.")
+                if getattr(backport_issue.status, 'is_closed', False):
+                    issue_update.logger.info(f"Backport issue #{backport_id} is closed (status: {backport_issue.status.name}) and matches expected release '{backport_release}'.")
                     resolved_and_matched_backports.add(backport_release)
                 else:
-                    issue_update.logger.info(f"Backport issue #{backport_id} is not resolved or rejected (status: {backport_issue.status.name}). Main issue cannot be resolved yet.")
+                    issue_update.logger.info(f"Backport issue #{backport_id} is not closed (status: {backport_issue.status.name}). Main issue cannot be resolved yet.")
                     all_backports_resolved_and_matched = False
                     break
             except redminelib.exceptions.ResourceNotFoundError:
@@ -991,7 +1293,7 @@ class RedmineUpkeep:
             issue_update.change_field('status_id', REDMINE_STATUS_ID_RESOLVED)
             return True
         else:
-            issue_update.logger.info("Not all expected backports are resolved and/or correctly tagged. Main issue status remains 'Pending Backport'.")
+            issue_update.logger.info("Not all expected backports are resolved and/or correctly tagged. Main issue status remains 'Backporting'.")
             issue_update.logger.info(f"Expected backports: {expected_backport_releases}")
             issue_update.logger.info(f"Resolved and matched backports found: {resolved_and_matched_backports}")
         return False
@@ -1025,7 +1327,7 @@ class RedmineUpkeep:
         def requires_github_api():
             return False
 
-    @transformation(100)
+    @transformation(depends_on=['merged'])
     def _transform_set_status_on_merge(self, issue_update):
         """
         Transformation: Updates the status of an issue after its associated PR is merged.
@@ -1034,21 +1336,21 @@ class RedmineUpkeep:
         """
         issue_update.logger.debug("Running _transform_set_status_on_merge")
 
-        current_status_id = issue_update.issue.status.id
+        current_status_id = issue_update.get_current_status_id()
         merge_commit = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT)
         if not merge_commit:
             issue_update.logger.info("No merge commit found. Skipping status update.")
             return False
 
-        # Only proceed if the issue is not already in a final or pending backport state
-        if issue_update.issue.status.is_closed or issue_update.issue.status.id == REDMINE_STATUS_ID_PENDING_BACKPORT:
-            issue_update.logger.info(f"Issue is already closed or 'Pending Backport'. Skipping status update on merge.")
+        # Only proceed if the issue is not already in a final or backport state
+        if current_status_id in (REDMINE_STATUS_ID_PENDING_BACKPORT, REDMINE_STATUS_ID_BACKPORTING, REDMINE_STATUS_ID_RESOLVED, REDMINE_STATUS_ID_REJECTED, REDMINE_STATUS_ID_CLOSED):
+            issue_update.logger.info(f"Issue is already in a terminal or backporting state ({current_status_id}). Skipping status update on merge.")
             return False
 
         if issue_update.has_open_subtasks():
             return False
 
-        issue_update.logger.info(f"Issue has a merge commit ({merge_commit}) and current status is '{issue_update.issue.status.name}'.")
+        issue_update.logger.info(f"Issue has a merge commit ({merge_commit}) and current status is '{current_status_id}'.")
 
         backports_field_value = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_BACKPORT)
         backports_list = [bp.strip() for bp in (backports_field_value or "").split(',') if bp.strip()]
@@ -1121,6 +1423,9 @@ class RedmineUpkeep:
                 if transform_method(issue_update):
                     issue_update.logger.info(f"Transformation {transform_method.__name__} resulted in a change.")
                     applied_transformations.append(transform_method.__name__)
+                    if transform_name == "migrate_legacy_tags":
+                        issue_update.logger.info("Short-circuiting remaining transformations to isolate tag migration.")
+                        break
 
             issue_update.set_transform(None)
             if issue_update.has_changes:
@@ -1128,7 +1433,8 @@ class RedmineUpkeep:
                 try:
                     # We cannot put top-level changes in the PUT request against
                     # the redmine API via redminelib. So we send it manually.
-                    payload = issue_update.get_update_payload()
+                    keep_failure = "_transform_migrate_legacy_tags" in applied_transformations
+                    payload = issue_update.get_update_payload(keep_failure_flag=keep_failure)
                     issue_update.logger.debug("PUT payload:\n%s", json.dumps(payload, indent=4))
                     headers = {
                         'Content-Type': 'application/json',
@@ -1179,9 +1485,9 @@ class RedmineUpkeep:
         comment = f"""
 h1. Redmine Upkeep failure
 
-The "redmine-upkeep.py script":https://github.com/ceph/ceph/blob/main/src/script/redmine-upkeep.py failed to update this issue. I have added the tag "upkeep-failed" to avoid looking at this issue again.
+The "redmine-upkeep.py script":https://github.com/ceph/ceph/blob/main/src/script/redmine-upkeep.py failed to update this issue. I have added the flag "upkeep-failed" to avoid looking at this issue again.
 
-**Please manually fix the issue and remove "upkeep-failed" tag to allow future upkeep operations.**
+**Please manually fix the issue and remove "upkeep-failed" flag to allow future upkeep operations.**
 
 h2. Transformation
 
@@ -1209,24 +1515,21 @@ h2. Update Payload
         issue_update.logger.debug("Created update failure comment:\n%s", comment)
         failure_payload['issue']['notes'] = comment
 
-        # Get existing tags or initialize if none
-        current_tags_str = issue_update.get_raw_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
-        current_tags = []
-        if current_tags_str:
-            current_tags = [tag.strip() for tag in current_tags_str.split(',') if tag.strip()]
+        # Get existing flags directly from the raw issue (ignoring pending payload)
+        current_flags = issue_update.get_list_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS, raw=True)
 
         new_tag = "upkeep-failed"
-        if new_tag in current_tags:
-            issue_update.logger.warning(f"'upkeep-failed' tag is already present")
+        if new_tag in current_flags:
+            issue_update.logger.warning(f"'upkeep-failed' flag is already present")
             return
         else:
-            current_tags.append(new_tag)
-            issue_update.logger.info(f"Adding '{new_tag}' tag.")
+            current_flags.append(new_tag)
+            issue_update.logger.info(f"Adding '{new_tag}' flag.")
 
-        # Update custom field for tags in the failure payload
+        # Update custom field for flags in the failure payload
         custom_fields_payload = failure_payload['issue'].setdefault('custom_fields', [])
         custom_fields_payload.append(
-            {'id': REDMINE_CUSTOM_FIELD_ID_TAGS, 'value': ", ".join(current_tags)}
+            {'id': REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS, 'value': current_flags}
         )
 
         try:
@@ -1240,7 +1543,7 @@ h2. Update Payload
             response.raise_for_status()
             issue_update.logger.info(f"Successfully added 'upkeep-failed' tag and comment to Redmine issue.")
         except requests.exceptions.HTTPError as err:
-            issue_update.logger.fatal(f"Could not update Redmine issue with failure tag/comment: {err} - Response: {response.text}")
+            issue_update.logger.critical(f"Could not update Redmine issue with failure tag/comment: {err} - Response: {response.text}")
             sys.exit(1)
 
     def filter_and_process_issues(self):
@@ -1417,8 +1720,9 @@ h2. Update Payload
             "status_id": "*",
         }
         upkeep_failed_filters = [
-            {f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!*",},
-            {f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!~upkeep-failed",}
+            {
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS}": "!upkeep-failed",
+            }
         ]
         #f"cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP}": f"<={cutoff_date}", # Not updated recently
 
@@ -1427,9 +1731,20 @@ h2. Update Payload
             if limit <= 0:
                 log.info("Issue processing limit reached. Stopping filter execution.")
                 break
+            if self.filter_name:
+                f_name_norm = f.NAME.lower().replace(" ", "").replace("_", "")
+                f_class_norm = f.__name__.lower().replace(" ", "").replace("_", "")
+                arg_norm = self.filter_name.lower().replace(" ", "").replace("_", "")
+                if arg_norm not in (f_name_norm, f_class_norm):
+                    log.debug(f"Skipping filter {f.NAME} (does not match --filter '{self.filter_name}')")
+                    continue
             for filter_set in f.get_filters():
+                if limit <= 0:
+                    break
                 log.debug(f"Generated filter set: {filter_set}")
                 for upkeep_failed_filter in upkeep_failed_filters:
+                    if limit <= 0:
+                        break
                     issue_filter = {**common_filters, **upkeep_failed_filter, **filter_set}
                     issue_filter['limit'] = limit
                     needs_github_api = f.requires_github_api()
@@ -1448,14 +1763,13 @@ h2. Update Payload
                                 break
                     except redminelib.exceptions.ResourceAttrError as e:
                         log.warning(f"Redmine API error with filter {issue_filter}: {e}")
-                    if limit <= 0:
-                        break
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph redmine upkeep tool")
     parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
     parser.add_argument('--github-action', default=GITHUB_ACTIONS, dest='gha', action='store_true', help='github action output')
     parser.add_argument('--limit', dest='limit', action='store', type=int, default=200, help='limit processed issues')
+    parser.add_argument('--filter', dest='filter', action='store', help='filter by specific filter name (e.g. "Pending Backport")')
     parser.add_argument('--git-dir', dest='git', action='store', default=".", help='git directory')
 
     # Mutually exclusive group for different modes of operation
@@ -1496,15 +1810,15 @@ def main():
     log.debug(f"Parsed arguments: {args}")
 
     if not REDMINE_API_KEY:
-        log.fatal("REDMINE_API_KEY not found! Please set REDMINE_API_KEY environment variable or ~/.redmine_key.")
+        log.critical("REDMINE_API_KEY not found! Please set REDMINE_API_KEY environment variable or ~/.redmine_key.")
         sys.exit(1)
 
     if GITHUB_TOKEN is None:
-        log.fatal("GITHUB_TOKEN not found! Please set GITHUB_TOKEN environment variable or ~/.github_token.")
+        log.critical("GITHUB_TOKEN not found! Please set GITHUB_TOKEN environment variable or ~/.github_token.")
         sys.exit(1)
 
     if IS_GITHUB_ACTION and GITHUB_REPOSITORY != "ceph/ceph":
-        log.fatal("refusing to run ceph/ceph.git github action for repository {GITHUB_REPOSITORY}")
+        log.critical(f"refusing to run ceph/ceph.git github action for repository {GITHUB_REPOSITORY}")
         sys.exit(0)
 
     RU = None
@@ -1512,7 +1826,7 @@ def main():
         RU = RedmineUpkeep(args)
         RU.filter_and_process_issues() # No arguments needed here anymore
     except Exception as e:
-        log.fatal(f"An unhandled error occurred during Redmine upkeep: {e}", exc_info=True)
+        log.critical(f"An unhandled error occurred during Redmine upkeep: {e}", exc_info=True)
         if IS_GITHUB_ACTION:
              print(f"::error::An unhandled error occurred: {e}", file=sys.stderr)
         sys.exit(1)

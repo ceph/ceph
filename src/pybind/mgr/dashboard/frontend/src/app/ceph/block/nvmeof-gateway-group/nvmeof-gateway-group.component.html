@@ -1,4 +1,4 @@
-<ng-container *ngIf="gatewayGroup$ | async as gateways">
+@if (gatewayGroup$ | async; as gateways) {
   <cd-table
     #table
     [data]="gateways"
@@ -23,13 +23,15 @@
       </cd-table-actions>
     </div>
   </cd-table>
-</ng-container>
+}
 
 <ng-template
   #dateTpl
   let-created="data.value"
 >
-  <span *ngIf="created">{{ created | date: 'EEE d MMM, yyyy' }}</span>
+  @if (created) {
+    <span>{{ created | date: 'EEE d MMM, yyyy' }}</span>
+  }
 </ng-template>
 
 <ng-template

@@ -22,6 +22,17 @@ def cluster_placeholder_key(cluster_id: str) -> EntryKey:
     return (cluster_id, 'cluster-info')
 
 
+def cluster_orchestration_submitted(
+    store: ConfigStore, cluster_id: str
+) -> bool:
+    """Treat unknown orchestration history as submitted."""
+    try:
+        info = store[cluster_placeholder_key(cluster_id)].get()
+    except KeyError:
+        return True
+    return info.get('orch_submitted') is not False
+
+
 def join_source_key(cluster_id: str, name: str) -> EntryKey:
     """Return key identifying a join source object in an external store."""
     # don't feed "keys" back into this function, it's only for

@@ -34,7 +34,7 @@ describe('MotdNotificationService', () => {
       'info:acbd18db4cc2f85cedef654fccc4a4d8'
     );
     expect(sessionStorage.getItem('dashboard_motd_hidden')).toBeNull();
-    expect(service.motdSource.next).toBeCalledWith(null);
+    expect(service.motdSource.next).toHaveBeenCalledWith(null);
   });
 
   it('should hide [2]', () => {
@@ -60,7 +60,7 @@ describe('MotdNotificationService', () => {
     };
     spyOn(service.motdSource, 'next');
     service.processResponse(motd);
-    expect(service.motdSource.next).toBeCalledWith(motd);
+    expect(service.motdSource.next).toHaveBeenCalledWith(motd);
   });
 
   it('should process response [2]', () => {
@@ -86,7 +86,7 @@ describe('MotdNotificationService', () => {
     spyOn(service.motdSource, 'next');
     localStorage.setItem('dashboard_motd_hidden', 'info:acbd18db4cc2f85cedef654fccc4a4d8');
     service.processResponse(motd);
-    expect(service.motdSource.next).not.toBeCalled();
+    expect(service.motdSource.next).not.toHaveBeenCalled();
   });
 
   it('should process response [4]', () => {
@@ -99,7 +99,7 @@ describe('MotdNotificationService', () => {
     spyOn(service.motdSource, 'next');
     localStorage.setItem('dashboard_motd_hidden', 'info:37b51d194a7513e45b56f6524f2d51f2');
     service.processResponse(motd);
-    expect(service.motdSource.next).toBeCalled();
+    expect(service.motdSource.next).toHaveBeenCalled();
   });
 
   it('should process response [5]', () => {
@@ -112,6 +112,6 @@ describe('MotdNotificationService', () => {
     spyOn(service.motdSource, 'next');
     localStorage.setItem('dashboard_motd_hidden', 'danger:acbd18db4cc2f85cedef654fccc4a4d8');
     service.processResponse(motd);
-    expect(service.motdSource.next).toBeCalled();
+    expect(service.motdSource.next).toHaveBeenCalled();
   });
 });

@@ -109,6 +109,8 @@ struct TestMockCacheSSDWriteLog : public TestMockFixture {
 };
 
 TEST_F(TestMockCacheSSDWriteLog, init_state_write) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -131,6 +133,8 @@ TEST_F(TestMockCacheSSDWriteLog, init_state_write) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, init_state_json_write) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -157,6 +161,8 @@ TEST_F(TestMockCacheSSDWriteLog, init_state_json_write) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, init_shutdown) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -181,6 +187,8 @@ TEST_F(TestMockCacheSSDWriteLog, init_shutdown) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, write) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -214,6 +222,8 @@ TEST_F(TestMockCacheSSDWriteLog, write) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, read_hit_ssd_cache) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -259,6 +269,8 @@ TEST_F(TestMockCacheSSDWriteLog, read_hit_ssd_cache) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, read_hit_part_ssd_cache) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -308,6 +320,8 @@ TEST_F(TestMockCacheSSDWriteLog, read_hit_part_ssd_cache) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, read_miss_ssd_cache) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -352,6 +366,8 @@ TEST_F(TestMockCacheSSDWriteLog, read_miss_ssd_cache) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, compare_and_write_compare_matched) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -406,6 +422,8 @@ TEST_F(TestMockCacheSSDWriteLog, compare_and_write_compare_matched) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, compare_and_write_compare_failed) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -459,6 +477,8 @@ TEST_F(TestMockCacheSSDWriteLog, compare_and_write_compare_failed) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, writesame) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -501,6 +521,8 @@ TEST_F(TestMockCacheSSDWriteLog, writesame) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, discard) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -549,6 +571,8 @@ TEST_F(TestMockCacheSSDWriteLog, discard) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, invalidate) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -589,6 +613,8 @@ TEST_F(TestMockCacheSSDWriteLog, invalidate) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, flush) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -630,6 +656,8 @@ TEST_F(TestMockCacheSSDWriteLog, flush) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, flush_source_shutdown) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -670,6 +698,8 @@ TEST_F(TestMockCacheSSDWriteLog, flush_source_shutdown) {
 
 
 TEST_F(TestMockCacheSSDWriteLog, flush_source_internal) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -709,6 +739,8 @@ TEST_F(TestMockCacheSSDWriteLog, flush_source_internal) {
 }
 
 TEST_F(TestMockCacheSSDWriteLog, flush_source_user) {
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 

@@ -146,11 +146,15 @@ void TMDriver::init()
 {
   shard_stats = {};
 
-  std::vector<Device*> sec_devices;
+  std::vector<Device*> cache_devices;
+  std::vector<Device*> data_devices;
+  data_devices.emplace_back(device.get());
 #ifndef NDEBUG
-  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, 0, true);
+  tm = make_transaction_manager(
+    device.get(), cache_devices, data_devices, shard_stats, 0, true);
 #else
-  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, 0, false);
+  tm = make_transaction_manager(
+    device.get(), cache_devices, data_devices, shard_stats, 0, false);
 #endif
 }
 
@@ -168,7 +172,11 @@ seastar::future<> TMDriver::mkfs()
 {
   assert(config.path);
   logger().debug("mkfs");
-  return Device::make_device(*config.path, device_type_t::SSD
+  return Device::make_device(
+    *config.path,
+    device_type_t::SSD,
+    backend_type_t::SEGMENTED,
+    0
   ).then([this](DeviceRef dev) {
     device = std::move(dev);
     seastore_meta_t meta;
@@ -176,11 +184,14 @@ seastar::future<> TMDriver::mkfs()
     return device->mkfs(
       device_config_t{
         true,
-        (magic_t)std::rand(),
-        device_type_t::SSD,
-        0,
+        device_spec_t{
+	  (magic_t)std::rand(),
+	  device_type_t::SSD,
+	  backend_type_t::SEGMENTED,
+	  0
+	},
         meta,
-        secondary_device_set_t()});
+        device_set_t()});
   }).safe_then([this] {
     logger().debug("device mkfs done");
     return device->mount();
@@ -210,7 +221,11 @@ seastar::future<> TMDriver::mount()
 {
   return (config.mkfs ? mkfs() : seastar::now()
   ).then([this] {
-    return Device::make_device(*config.path, device_type_t::SSD);
+    return Device::make_device(
+      *config.path,
+      device_type_t::SSD,
+      backend_type_t::SEGMENTED,
+      0);
   }).then([this](DeviceRef dev) {
     device = std::move(dev);
     return device->mount();

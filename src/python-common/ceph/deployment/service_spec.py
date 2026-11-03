@@ -42,7 +42,9 @@ from ceph.deployment.hostspec import (
 from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_int
 from ceph.deployment.utils import verify_positive_int, verify_non_negative_number
 from ceph.deployment.utils import verify_boolean, verify_enum, verify_int, verify_non_empty_string
-from ceph.deployment.utils import parse_combined_pem_file, validate_port, validate_unique_ports
+from ceph.deployment.utils import verify_size_with_units, validate_port, validate_unique_ports, \
+    validate_ip
+from ceph.deployment.utils import verify_dir_path
 from ceph.cephadm.d3n_types import D3NCacheSpec, D3NCacheError
 from ceph.utils import is_hex
 from ceph.smb import constants as smbconst
@@ -229,6 +231,8 @@ class HostPattern():
     def __init__(self,
                  pattern: Optional[str] = None,
                  pattern_type: PatternType = PatternType.fnmatch) -> None:
+        if pattern and pattern_type == PatternType.fnmatch:
+            pattern = pattern.lower()
         self.pattern: Optional[str] = pattern
         self.pattern_type: PatternType = pattern_type
         self.compiled_regex = None
@@ -874,6 +878,7 @@ class ServiceSpec(object):
         'osd',
         'prometheus',
         'promtail',
+        'pushgateway',
         'alloy',
         'rbd-mirror',
         'rgw',
@@ -915,6 +920,7 @@ class ServiceSpec(object):
         'alertmanager': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
         'ceph-exporter': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
         'node-exporter': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
+        'pushgateway': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
         'node-proxy': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
         # 'loki'        : {'user_cert_allowed': False, 'scope': 'host'},
         # 'promtail'    : {'user_cert_allowed': False, 'scope': 'host'},
@@ -949,6 +955,7 @@ class ServiceSpec(object):
             'loki': MonitoringSpec,
             'promtail': MonitoringSpec,
             'alloy': MonitoringSpec,
+            'pushgateway': MonitoringSpec,
             'snmp-gateway': SNMPGatewaySpec,
             'elasticsearch': TracingSpec,
             'jaeger-agent': TracingSpec,
@@ -1388,6 +1395,7 @@ class NFSServiceSpec(ServiceSpec):
         'cluster_qos_port',
         'rdma_port'
     ]
+    MAX_CLIENTS_PER_POOL = 64
 
     def __init__(self,
                  service_type: str = 'nfs',
@@ -1413,6 +1421,10 @@ class NFSServiceSpec(ServiceSpec):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  cluster_qos_config: Optional[Dict[str, Union[str, bool, int]]] = None,
                  cluster_qos_port: Optional[int] = None,
+                 kmip_cert: Optional[str] = None,
+                 kmip_key: Optional[str] = None,
+                 kmip_ca_cert: Optional[str] = None,
+                 kmip_host_list: Optional[List[Union[str, Dict[str, Union[str, int]]]]] = None,
                  ssl: bool = False,
                  ssl_cert: Optional[str] = None,
                  ssl_key: Optional[str] = None,
@@ -1425,6 +1437,16 @@ class NFSServiceSpec(ServiceSpec):
                  tls_ciphers: Optional[str] = None,
                  colocation_ports: Optional[List[Dict[str, int]]] = None,
                  enable_nfsv3: bool = False,
+                 enable_nfs_metrics: bool = False,
+                 enable_client_object_cache: bool = False,
+                 client_object_cache_size: Optional[Union[str, int]] = None,
+                 client_object_cache_max_dirty: Optional[Union[str, int]] = None,
+                 enable_cephfs_client_log: bool = False,
+                 objecter_dispatch_to_session_strand: bool = True,
+                 cephfs_client_log_level: Optional[int] = None,
+                 cephfs_client_log_dir: Optional[str] = None,
+                 mem_stats_disable: bool = False,
+                 clients_per_pool: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1454,12 +1476,49 @@ class NFSServiceSpec(ServiceSpec):
         self.cluster_qos_config = cluster_qos_config
         self.cluster_qos_port = cluster_qos_port
         self.enable_nfsv3 = enable_nfsv3
+        self.enable_nfs_metrics = enable_nfs_metrics
+
+        # Ceph client object cache settings written to ganesha.conf CEPH block.
+        # Disabled by default; enabling it increases Ganesha memory use.
+        # Size fields accept int bytes or strings like "512KiB", "100MB", "1GiB".
+        self.enable_client_object_cache = enable_client_object_cache
+        self.client_object_cache_size = client_object_cache_size
+        self.client_object_cache_max_dirty = client_object_cache_max_dirty
+
+        self.enable_cephfs_client_log = enable_cephfs_client_log
+        self.objecter_dispatch_to_session_strand = objecter_dispatch_to_session_strand
+        self.cephfs_client_log_level = cephfs_client_log_level
+        self.cephfs_client_log_dir = cephfs_client_log_dir
+        # Disables per-component memory-statistics capture in NFS_CORE_PARAM.
+        # Applied at daemon startup only; requires daemon restart to take effect.
+        self.mem_stats_disable = mem_stats_disable
+
+        # Max independent CephFS client handles Ganesha may use per filesystem.
+        self.clients_per_pool = clients_per_pool
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec
         # Format: [{'data_port': 1234, 'monitoring_port': 5678}, ...]
         self.colocation_ports = colocation_ports
 
+        self.kmip_cert = kmip_cert
+        self.kmip_key = kmip_key
+        self.kmip_ca_cert = kmip_ca_cert
+        self.kmip_host_list: list[Dict[str, Union[str, int]]] = []
+        if kmip_host_list is not None:
+            if not isinstance(kmip_host_list, list):
+                raise SpecValidationError(
+                    f'kmip_host_list must be a list, got: {kmip_host_list}.'
+                )
+            for host_obj in kmip_host_list:
+                if isinstance(host_obj, str):
+                    self.kmip_host_list.append({'addr': host_obj})
+                elif isinstance(host_obj, dict):
+                    self.kmip_host_list.append(host_obj)
+                else:
+                    raise SpecValidationError(
+                        f'kmip_host_list contains an invalid element: {host_obj}.'
+                    )
         # TLS fields
         self.tls_ciphers = tls_ciphers
         self.tls_ktls = tls_ktls
@@ -1544,6 +1603,58 @@ class NFSServiceSpec(ServiceSpec):
         if self.virtual_ip and (self.ip_addrs or self.networks):
             raise SpecValidationError("Invalid NFS spec: Cannot set virtual_ip and "
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
+        kmip_field_names = [
+            'kmip_cert',
+            'kmip_key',
+            'kmip_ca_cert',
+            'kmip_host_list'
+        ]
+        kmip_fields = [getattr(self, kmip_field) for kmip_field in kmip_field_names]
+        if any(kmip_fields) and not all(kmip_fields):
+            raise SpecValidationError(
+                f'Either none or all of {kmip_field_names} attributes must be set'
+            )
+        for kmip_host in self.kmip_host_list:
+            if 'addr' not in kmip_host:
+                raise SpecValidationError(
+                    "Each dictionary in kmip_host_list must include the 'addr' key."
+                    f"{kmip_host} is missing 'addr'."
+                )
+            if 'port' in kmip_host:
+                port = kmip_host['port']
+                # bool is a subclass of int, so reject it explicitly
+                if isinstance(port, bool) or not isinstance(port, int):
+                    raise SpecValidationError(
+                        f'Provided port is not valid for {kmip_host} in kmip_host_list.'
+                    )
+                validate_port(port, f'port for {kmip_host} in kmip_host_list')
+
+        verify_boolean(self.enable_client_object_cache, "enable_client_object_cache")
+        verify_boolean(self.mem_stats_disable, "mem_stats_disable")
+        if self.clients_per_pool is not None:
+            verify_int(self.clients_per_pool, "clients_per_pool")
+            if not 2 <= self.clients_per_pool <= self.MAX_CLIENTS_PER_POOL:
+                raise SpecValidationError(
+                    "Invalid NFS spec: clients_per_pool must be an integer between 2 "
+                    f"and {self.MAX_CLIENTS_PER_POOL} (NFS-Ganesha rejects a larger "
+                    "pool). Once an NFS cluster uses a pool this field can only "
+                    "be raised."
+                )
+        cache_size = verify_size_with_units(
+            self.client_object_cache_size, "client_object_cache_size"
+        )
+        cache_max_dirty = verify_size_with_units(
+            self.client_object_cache_max_dirty, "client_object_cache_max_dirty"
+        )
+        if (
+            cache_size is not None
+            and cache_max_dirty is not None
+            and cache_size <= cache_max_dirty
+        ):
+            raise SpecValidationError(
+                "Invalid NFS spec: client_object_cache_size must be greater than "
+                "client_object_cache_max_dirty"
+            )
 
         # Validate colocation_ports
         self.validate_colocation_ports()
@@ -1585,6 +1696,12 @@ class NFSServiceSpec(ServiceSpec):
                     raise SpecValidationError(
                         f"Invalid NFS spec: IOPS '{key}' should be an integer")
 
+        if self.enable_cephfs_client_log:
+            if self.cephfs_client_log_level is not None:
+                verify_non_negative_int(
+                    self.cephfs_client_log_level, "cephfs_client_log_level")
+            verify_dir_path(self.cephfs_client_log_dir, "cephfs_client_log_dir")
+
         # TLS certificate validation
         if self.ssl and not self.certificate_source:
             raise SpecValidationError('If SSL is enabled, a certificate source must be provided.')
@@ -1618,6 +1735,7 @@ class RGWSpec(ServiceSpec):
             rgw_zone: myzone
             ssl: true
             rgw_frontend_port: 1234
+            rgw_frontend_http_port: 4321
             rgw_frontend_type: beast
             rgw_frontend_ssl_certificate: ...
             # Optional: enable D3N (L1 datacache) for RGW
@@ -1649,6 +1767,7 @@ class RGWSpec(ServiceSpec):
                  rgw_zonegroup: Optional[str] = None,
                  rgw_zone: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
+                 rgw_frontend_http_port: Optional[int] = None,
                  rgw_frontend_ssl_certificate: Optional[Union[str, List[str]]] = None,
                  rgw_frontend_type: Optional[str] = None,
                  rgw_frontend_extra_args: Optional[List[str]] = None,
@@ -1714,6 +1833,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_zone: Optional[str] = rgw_zone
         #: Port of the RGW daemons
         self.rgw_frontend_port: Optional[int] = rgw_frontend_port
+        #: Secondary RGW frontend port, intended for HTTP (unencrypted) traffic only.
+        self.rgw_frontend_http_port: Optional[int] = rgw_frontend_http_port
         #: List of SSL certificates
         self.rgw_frontend_ssl_certificate: Optional[Union[str, List[str]]] \
             = rgw_frontend_ssl_certificate
@@ -1755,39 +1876,174 @@ class RGWSpec(ServiceSpec):
         ports = self.get_port()
         return ports
 
-    def get_port(self) -> List[int]:
-        ports = []
-        if self.rgw_frontend_port:
-            ports.append(self.rgw_frontend_port)
+    def get_http_port(self) -> Optional[int]:
+        """Secondary (plain HTTP) port. Only honoured when SSL is enabled."""
+        if self.ssl and self.rgw_frontend_http_port:
+            return self.rgw_frontend_http_port
+        return None
 
+    def get_port(self) -> List[int]:
+        # Layout: [primary, HTTP port (only if set), extra ssl_port (only if set)].
+        # With SSL enabled the primary port is always present (defaulting to
+        # 443) as soon as another port is declared, either through
+        # rgw_frontend_http_port or an "ssl_port=" extra argument, so those
+        # ports are added to the primary one instead of replacing it.
+        ports = []
+        http_port = self.get_http_port()
+
+        # Best effort: accept "ssl_port=444" as well as "ssl_port=<ip>:444".
+        # Values that do not end in a port number are ignored here, never
+        # raised on: get_port() runs on scheduling and listing paths.
         ssl_port = next(
             (
-                int(arg.split('=')[1])
-                for arg in (self.rgw_frontend_extra_args or [])
-                if arg.startswith("ssl_port=")
+                int(m.group(1))
+                for m in (
+                    re.search(r'(\d+)$', arg.split('=', 1)[1].strip())
+                    for arg in (self.rgw_frontend_extra_args or [])
+                    if arg.startswith("ssl_port=")
+                )
+                if m
             ),
             None,
         )
+        if not self.ssl:
+            ssl_port = None
 
-        if self.ssl and ssl_port:
+        if self.rgw_frontend_port:
+            ports.append(self.rgw_frontend_port)
+        elif http_port is not None or ssl_port is not None:
+            ports.append(443)
+
+        if http_port is not None:
+            ports.append(http_port)
+        if ssl_port is not None and ssl_port not in ports:
             ports.append(ssl_port)
         if not ports:
             ports.append(443 if self.ssl else 80)
 
         return ports
 
+    def _migrate_legacy_rgw_frontend_ssl_certificate(self) -> None:
+
+        if self.rgw_frontend_ssl_certificate is None:
+            return
+
+        from ceph.deployment.tls_utils import SSLConfigException, parse_tls_pem_bundle
+
+        combined_cert = self.rgw_frontend_ssl_certificate
+        if isinstance(combined_cert, list):
+            combined_cert = '\n'.join(combined_cert)
+
+        try:
+            ssl_cert, ssl_key = parse_tls_pem_bundle(combined_cert)
+        except SSLConfigException:
+            # Could not migrate legacy rgw_frontend_ssl_certificate field. Leaving field unchanged.
+            return
+
+        if not (ssl_cert and ssl_key):
+            # Could not migrate legacy rgw_frontend_ssl_certificate field
+            # for service. We expect a PEM bundle containing both an
+            # unencrypted private key and at least one certificate. Leaving
+            # field unchanged.
+            return
+
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+        self.certificate_source = CertificateSource.INLINE.value
+        self.rgw_frontend_ssl_certificate = None
+
+    # rgw_frontend_extra_args options that bind a fixed port
+    _FIXED_PORT_KEYS = ('port', 'ssl_port', 'endpoint', 'ssl_endpoint')
+
+    @staticmethod
+    def _ports_in_extra_arg(arg: str) -> List[int]:
+        """Port numbers named by a port/endpoint style frontend option.
+
+        Understands "port=8080", "port=<ip>:8080", "endpoint=[::1]:8080" and
+        the civetweb form "port=8080+8443s". Best effort: anything that
+        does not look like a port is ignored and nothing is ever raised.
+        """
+        key, _, value = arg.partition('=')
+        if key not in RGWSpec._FIXED_PORT_KEYS:
+            return []
+        found = []
+        for token in value.split('+'):
+            m = re.search(r'(?:^|:)(\d+)s?$', token.strip())
+            if m:
+                found.append(int(m.group(1)))
+        return found
+
+    def _validate_http_port(self) -> None:
+        secondary = self.rgw_frontend_http_port
+        if not secondary:
+            return
+        if not self.ssl:
+            raise SpecValidationError(
+                'Invalid rgw_frontend_http_port: Only can be enabled with SSL'
+            )
+        if not 1 <= secondary <= 65535:
+            raise SpecValidationError(
+                'Invalid rgw_frontend_http_port: must be in the range 1-65535'
+            )
+        primary = self.rgw_frontend_port or 443
+        if primary == secondary:
+            if self.rgw_frontend_port:
+                same_as = 'rgw_frontend_port'
+            else:
+                same_as = ('rgw_frontend_port, which defaults to 443 when ssl is '
+                           'enabled and it is not set')
+            raise SpecValidationError(
+                f'Invalid rgw_frontend_http_port: {secondary} is the same port as '
+                f'{same_as}. The two ports must be different.'
+            )
+        # with count_per_host=N the i-th daemon on a host uses
+        # (primary + i, secondary + i): the two ranges must not overlap
+        count = (self.placement.count_per_host if self.placement else None) or 1
+        if abs(secondary - primary) < count:
+            raise SpecValidationError(
+                f'Invalid rgw_frontend_http_port: ports {primary} and {secondary} '
+                f'overlap when count_per_host is {count}'
+            )
+        if max(primary, secondary) + count - 1 > 65535:
+            raise SpecValidationError(
+                'Invalid rgw_frontend_http_port: port range exceeds 65535 '
+                f'with count_per_host {count}'
+            )
+
+        # A fixed port in rgw_frontend_extra_args must not repeat a port that
+        # is already bound, or the radosgw would try to listen on it twice.
+        used = {primary: 'rgw_frontend_port', secondary: 'rgw_frontend_http_port'}
+        for arg in (self.rgw_frontend_extra_args or []):
+            for extra_port in self._ports_in_extra_arg(arg):
+                if extra_port in used:
+                    raise SpecValidationError(
+                        f'Invalid rgw_frontend_extra_args: "{arg}" uses port {extra_port}, '
+                        f'which is already used by {used[extra_port]}'
+                    )
+                used[extra_port] = f'"{arg}"'
+
+        if count > 1:
+            # Every daemon gets the same rgw_frontend_extra_args, so a fixed
+            # port in there would be bound by all the daemons on the host.
+            # Only the key is inspected, the value is never parsed.
+            offending = sorted({
+                arg.split('=', 1)[0]
+                for arg in (self.rgw_frontend_extra_args or [])
+                if arg.split('=', 1)[0] in self._FIXED_PORT_KEYS
+            })
+            if offending:
+                raise SpecValidationError(
+                    f'Invalid rgw_frontend_extra_args: {", ".join(offending)} cannot be '
+                    'used together with rgw_frontend_http_port when count_per_host '
+                    f'is {count}: every daemon on a host would bind the same fixed port'
+                )
+
     def validate(self) -> None:
 
-        if self.ssl:
-            if not self.ssl_cert and self.rgw_frontend_ssl_certificate:
-                combined_cert = self.rgw_frontend_ssl_certificate
-                if isinstance(combined_cert, list):
-                    combined_cert = '\n'.join(combined_cert)
-                self.certificate_source = CertificateSource.INLINE.value
-                self.ssl_cert, self.ssl_key = parse_combined_pem_file(combined_cert)
-                self.rgw_frontend_ssl_certificate = None
-                if not (self.ssl_cert and self.ssl_key):
-                    raise SpecValidationError("Failed to parse rgw_frontend_ssl_certificate field.")
+        if self.ssl and not self.ssl_cert and self.rgw_frontend_ssl_certificate:
+            self._migrate_legacy_rgw_frontend_ssl_certificate()
+
+        self._validate_http_port()
 
         # This validation is done after adjusting the SSL field so when
         # RGW Spec is updated with the right fields before validation
@@ -1855,6 +2111,8 @@ class NvmeofServiceSpec(ServiceSpec):
                  port: Optional[int] = None,
                  pool: Optional[str] = None,
                  enable_auth: bool = False,
+                 enable_encryption: bool = False,
+                 encryption_key_path: Optional[str] = None,
                  ssl: Optional[bool] = False,
                  certificate_source: Optional[str] = None,
                  custom_sans: Optional[List[str]] = None,
@@ -1890,6 +2148,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  verify_nqns: Optional[bool] = True,
                  verify_keys: Optional[bool] = True,
                  verify_listener_ip: Optional[bool] = True,
+                 listener_network_masks: Optional[List[str]] = None,
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
                  ping_spdk_under_lock: Optional[bool] = False,
@@ -1905,6 +2164,11 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_message_length_in_mb: Optional[int] = 4,
                  io_stats_enabled: Optional[bool] = True,
                  degrade_namespace_on_kmip_error: Optional[bool] = True,
+                 fail_io_for_degraded_namespace: Optional[bool] = True,
+                 resize_degraded_namespace: Optional[bool] = True,
+                 verify_image_encryption_settings: Optional[bool] = True,
+                 verify_pool_applications: Optional[bool] = True,
+                 allowed_pool_applications: Optional[List[str]] = [],
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1929,8 +2193,13 @@ class NvmeofServiceSpec(ServiceSpec):
                  rbd_with_crc32c: bool = True,
                  tgt_cmd_extra_args: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
+                 sock_impl_options: Optional[Dict[str, Dict[str, int]]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
                  notifications_interval: Optional[int] = 60,
+                 cnc_enable: bool = False,
+                 cnc_rate_limiter_bytes: Optional[int] = 100000000,
+                 cnc_chunk_blocks: Optional[int] = 512,
+                 cnc_parallel_chunks: Optional[int] = 8,
                  discovery_addr: Optional[str] = None,
                  discovery_addr_map: Optional[Dict[str, str]] = None,
                  discovery_port: Optional[int] = None,
@@ -1986,6 +2255,13 @@ class NvmeofServiceSpec(ServiceSpec):
         self.group = group or ''
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
+
+        #: ``enable_encryption`` enables encryption for the NVMe-oF gateway
+        self.enable_encryption = enable_encryption
+
+        #: ``encryption_key_path`` is the absolute host-side path to an externally
+        #: managed encryption key file used when ``enable_encryption`` is enabled
+        self.encryption_key_path = encryption_key_path
         self.ssl = ssl or enable_auth  # to force enabling ssl field when auth is enabled
         #: ``state_update_notify`` enables automatic update from OMAP in nvmeof gateway
         self.state_update_notify = state_update_notify
@@ -2024,6 +2300,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_keys = verify_keys
         #: ``verify_listener_ip`` enables verification of listener IP address
         self.verify_listener_ip = verify_listener_ip
+        #: ``listener_network_masks`` subnets for subsystems using use_conf_listener_network_masks
+        self.listener_network_masks = listener_network_masks
         #: ``abort_on_errors`` abort gateway in case of errors
         self.abort_on_errors = abort_on_errors
         #: ``abort_on_update_error`` abort gateway in case of an error during update
@@ -2066,6 +2344,16 @@ class NvmeofServiceSpec(ServiceSpec):
         self.io_stats_enabled = io_stats_enabled
         #: ``degrade_namespace_on_kmip_error`` on a KMIP key error in update, create a degraded ns
         self.degrade_namespace_on_kmip_error = degrade_namespace_on_kmip_error
+        #: ``fail_io_for_degraded_namespace`` fail all IOs done on degraded namespaces
+        self.fail_io_for_degraded_namespace = fail_io_for_degraded_namespace
+        #: ``resize_degraded_namespace`` resize degraded ns to accommodate for encryption tables
+        self.resize_degraded_namespace = resize_degraded_namespace
+        #: ``verify_image_encryption_settings`` verify encryption setting of ns before calling SPDK
+        self.verify_image_encryption_settings = verify_image_encryption_settings
+        #: ``verify_pool_applications`` verify pool only has allowed applications enabled
+        self.verify_pool_applications = verify_pool_applications
+        #: ``allowed_pool_applications`` allowed applications on pool
+        self.allowed_pool_applications = allowed_pool_applications
         #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
@@ -2136,10 +2424,20 @@ class NvmeofServiceSpec(ServiceSpec):
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
         #: List of extra arguments for SPDK iobuf in the form opt=value
         self.iobuf_options: Optional[Dict[str, int]] = iobuf_options
+        #: List of extra arguments for SPDK socket implementation options
+        self.sock_impl_options: Optional[Dict[str, Dict[str, int]]] = sock_impl_options
         #: ``qos_timeslice_in_usecs`` timeslice for QOS code, in micro seconds
         self.qos_timeslice_in_usecs = qos_timeslice_in_usecs
         #: ``notifications_interval`` read SPDK notifications interval, in seconds
         self.notifications_interval = notifications_interval
+        #: ``cnc_enable`` enable CNC feature in SPDK
+        self.cnc_enable = cnc_enable
+        #: ``cnc_rate_limiter_bytes`` CNC rate limiter in bytes
+        self.cnc_rate_limiter_bytes = cnc_rate_limiter_bytes
+        #: ``cnc_chunk_blocks`` CNC chunk blocks
+        self.cnc_chunk_blocks = cnc_chunk_blocks
+        #: ``cnc_parallel_chunks`` CNC parallel chunk
+        self.cnc_parallel_chunks = cnc_parallel_chunks
         #: ``discovery_addr`` address of the discovery service
         self.discovery_addr = discovery_addr
         #: ``discovery_addr_map`` per node address map of the discovery service
@@ -2239,6 +2537,27 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
 
         verify_boolean(self.enable_auth, "Enable authentication")
+        verify_boolean(self.enable_encryption, "Enable encryption")
+
+        if self.encryption_key and self.encryption_key_path:
+            raise SpecValidationError(
+                'encryption_key and encryption_key_path cannot both be set'
+            )
+
+        if self.enable_encryption:
+            if not self.encryption_key_path and not self.encryption_key:
+                raise SpecValidationError(
+                    'enable_encryption=true requires either encryption_key_path or encryption_key'
+                )
+            if self.encryption_key_path and not self.encryption_key_path.startswith('/'):
+                raise SpecValidationError(
+                    'encryption_key_path must be an absolute path'
+                )
+        elif self.encryption_key_path:
+            raise SpecValidationError(
+                'encryption_key_path requires enable_encryption=true'
+            )
+
         if self.enable_auth or self.ssl:
             if self.certificate_source == CertificateSource.INLINE.value:
                 if not all([self.server_key, self.server_cert, self.client_key,
@@ -2263,6 +2582,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_spdk_ceph_connection_allocation()
         verify_non_negative_int(self.qos_timeslice_in_usecs, "QOS timeslice")
         verify_non_negative_int(self.notifications_interval, "SPDK notifications interval")
+        verify_boolean(self.cnc_enable, "Enable CNC")
+        verify_non_negative_int(self.cnc_rate_limiter_bytes, "CNC rate limiter")
+        verify_non_negative_int(self.cnc_chunk_blocks, "CNC chunk blocks")
+        verify_non_negative_int(self.cnc_parallel_chunks, "CNC parallel chunks")
 
         verify_non_negative_number(self.spdk_ping_interval_in_seconds, "SPDK ping interval")
         if (
@@ -2316,6 +2639,12 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_positive_int(self.max_message_length_in_mb, "Max protocol message length")
         verify_boolean(self.io_stats_enabled, "Enable IO statistics")
         verify_boolean(self.degrade_namespace_on_kmip_error, "Degrade namespace on KMIP error")
+        verify_boolean(self.fail_io_for_degraded_namespace, "Fail IOs on degraded namespaces")
+        verify_boolean(self.resize_degraded_namespace,
+                       "Resize degraded namespaces to accommodate for encryption tables")
+        verify_boolean(self.verify_image_encryption_settings,
+                       "Verify namespace encryption settings in the gateway")
+        verify_boolean(self.verify_pool_applications, "Verify pool applications")
         verify_non_negative_number(self.monitor_timeout, "Monitor timeout")
         verify_non_negative_int(self.port, "Port")
         verify_non_negative_int(self.discovery_port, "Discovery port")
@@ -2336,6 +2665,12 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.verify_nqns, "Verify NQNs")
         verify_boolean(self.verify_keys, "Verify Keys")
         verify_boolean(self.verify_listener_ip, "Verify listener IP address")
+        for subnet in (self.listener_network_masks or []):
+            try:
+                ip_network(subnet, strict=False)
+            except ValueError:
+                raise SpecValidationError(
+                    f'Invalid listener_network_masks: "{subnet}"')
         verify_boolean(self.log_files_enabled, "Log files enabled")
         verify_boolean(self.log_files_rotation_enabled, "Log files rotation enabled")
         verify_boolean(self.verbose_log_messages, "Verbose log messages")
@@ -2475,6 +2810,8 @@ class IngressSpec(ServiceSpec):
                  monitor_ip_addrs: Optional[Dict[str, str]] = None,
                  use_tcp_mode_over_rgw: bool = False,
                  haproxy_peer_communication_port: Optional[int] = None,
+                 haproxy_log_target: Optional[str] = 'journald',
+                 haproxy_log_level: Optional[str] = 'info',
                  ):
         assert service_type == 'ingress'
 
@@ -2521,6 +2858,20 @@ class IngressSpec(ServiceSpec):
         self.monitor_ip_addrs = monitor_ip_addrs
         self.use_tcp_mode_over_rgw = use_tcp_mode_over_rgw
         self.haproxy_peer_communication_port = haproxy_peer_communication_port
+        self.haproxy_log_target = self._normalize_log_option(
+            haproxy_log_target, 'journald', 'haproxy_log_target')
+        self.haproxy_log_level = self._normalize_log_option(
+            haproxy_log_level, 'info', 'haproxy_log_level')
+
+    @staticmethod
+    def _normalize_log_option(value: Any, default: str, field_name: str) -> str:
+        # Apply the default only when the value is unset (None, or an empty or
+        # whitespace-only string). A non-string value is a user error.
+        if value is None:
+            return default
+        if not isinstance(value, str):
+            raise SpecValidationError(f'{field_name} must be a string')
+        return value.strip().lower() or default
 
     def get_port_start(self) -> List[int]:
         ports = []
@@ -2591,6 +2942,10 @@ class IngressSpec(ServiceSpec):
                     'To enable monitor_ssl, both monitor_ssl_cert and monitor_ssl_key '
                     'must be provided.'
                 )
+
+        verify_enum(self.haproxy_log_target, 'haproxy_log_target', ['journald', 'none'])
+        verify_enum(self.haproxy_log_level, 'haproxy_log_level',
+                    ['debug', 'info', 'notice', 'warning', 'err'])
 
 
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
@@ -2682,6 +3037,7 @@ class MgmtGatewaySpec(ServiceSpec):
     def validate(self) -> None:
         super(MgmtGatewaySpec, self).validate()
         validate_port(self.port, 'port')
+        validate_ip(self.virtual_ip)
         self._validate_certificate(self.ssl_cert, "ssl_cert")
         self._validate_private_key(self.ssl_key, "ssl_key")
         self._validate_boolean_switch(self.ssl_prefer_server_ciphers, "ssl_prefer_server_ciphers")
@@ -3105,6 +3461,9 @@ class CustomContainerSpec(ServiceSpec):
             data['spec']['init_containers'] = [ic.to_json() for ic in ics]
         return data
 
+    def get_port_start(self) -> List[int]:
+        return list(self.ports) if self.ports else []
+
 
 yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
 
@@ -3129,7 +3488,7 @@ class MonitoringSpec(ServiceSpec):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager',
-                                'loki', 'alloy', 'promtail']
+                                'loki', 'alloy', 'promtail', 'pushgateway']
 
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
@@ -3158,7 +3517,8 @@ class MonitoringSpec(ServiceSpec):
                     'grafana': 3000,
                     'loki': 3100,
                     'alloy': 9080,
-                    'promtail': 9080}[self.service_type]
+                    'promtail': 9080,
+                    'pushgateway': 9091}[self.service_type]
 
 
 yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)

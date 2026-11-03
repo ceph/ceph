@@ -54,7 +54,8 @@ class TestVolumesHelper(CephFSTestCase):
     def _raw_cmd(self, *args):
         return self.get_ceph_cmd_stdout(args)
 
-    def __check_clone_state(self, states, clone, clone_group=None, timo=120):
+    def __check_clone_state(self, states, clone, clone_group=None, timo=120,
+                             sleep=1):
         if isinstance(states, str):
             states = (states, )
 
@@ -66,7 +67,7 @@ class TestVolumesHelper(CephFSTestCase):
         msg = (f'Executed cmd "{args}" {timo} times; clone was never in '
                f'"{states}" state(s).')
 
-        with safe_while(tries=timo, sleep=1, action=msg) as proceed:
+        with safe_while(tries=timo, sleep=sleep, action=msg) as proceed:
             while proceed():
                 result = json.loads(self._fs_cmd(*args))
                 current_state = result["status"]["state"]
@@ -106,11 +107,26 @@ class TestVolumesHelper(CephFSTestCase):
     def _wait_for_clone_to_fail(self, clone, clone_group=None, timo=120):
         self.__check_clone_state("failed", clone, clone_group, timo)
 
-    def _wait_for_clone_to_be_in_progress(self, clone, clone_group=None, timo=120):
-        self.__check_clone_state("in-progress", clone, clone_group, timo)
+    def _wait_for_clone_to_be_in_progress(self, clone, clone_group=None,
+                                          timo=120, sleep=1):
+        self.__check_clone_state("in-progress", clone, clone_group, timo,
+                                 sleep=sleep)
 
     def _check_clone_canceled(self, clone, clone_group=None):
         self.__check_clone_state("canceled", clone, clone_group, timo=1)
+
+    def _wait_for_clone_to_finish_if_exists(self, clone, clone_group=None, timo=120):
+        """
+        Wait for a clone to reach a terminal state before filesystem teardown.
+        Ensures mgr cloner threads release their cephfs connections.
+        """
+        try:
+            self.__check_clone_state(('complete', 'failed', 'canceled'), clone,
+                                     clone_group, timo)
+        except CommandFailedError as ce:
+            if ce.exitstatus == errno.ENOENT:
+                return
+            raise
 
     def _get_subvolume_snapshot_path(self, subvol_name, snap_name, group_name):
         cmd = (f'fs subvolume snapshot getpath {self.volname} {subvol_name} '
@@ -455,6 +471,9 @@ class TestVolumesHelper(CephFSTestCase):
         if root_snapped:
             self.mount_a.run_shell(['sudo', 'rmdir', './.snap/root_s1'])
             self.mount_a.run_shell(['sudo', 'rmdir', './.snap/root_s2'])
+        # Drain trash before tearDown/setUp deletes the FS and restarts MDS;
+        # otherwise mgr purge threads can hang awaiting replies and block later tests.
+        self._wait_for_trash_empty()
 
     def _create_subvolumes_and_snapshots(self, group, subvolname, snapshot, snap_root=False):
         # create group.
@@ -1354,7 +1373,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
         # tests the 'fs subvolumegroup info' command
 
         group_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
-                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "uid"]
+                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "pool_namespace", "uid"]
 
         # create group
         group = self._gen_subvol_grp_name()
@@ -1457,6 +1476,192 @@ class TestSubvolumeGroups(TestVolumesHelper):
             self.assertEqual(int(desired_pool), newid) # old kernel returns id
 
         # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_with_namespace_isolation(self):
+        """
+        Create subvolume group with --namespace-isolated and verify
+        the pool_namespace xattr is set on the group directory.
+        """
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--namespace-isolated")
+
+        # verify group has pool_namespace xattr
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertIn("pool_namespace", group_info)
+        self.assertEqual(group_info["pool_namespace"],
+                         f'fsvolumens__{group}')
+
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_namespace_inheritance_from_group(self):
+        """
+        Create subvolume group with --namespace-isolated, then create
+        a subvolume without --namespace-isolated in that group.
+        Verify the subvolume inherits namespace isolation and gets its
+        own unique namespace.
+        """
+        sv = self._gen_subvol_name()
+        svg = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, svg,
+                     "--namespace-isolated")
+
+        # create subvolume WITHOUT --namespace-isolated
+        self._fs_cmd("subvolume", "create", self.volname, sv, svg)
+
+        # verify subvolume inherits namespace isolation
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, sv, svg))
+        self.assertIn("pool_namespace", subvol_info)
+        expected_ns = f'fsvolumens__{svg}_{sv}'
+        self.assertEqual(subvol_info["pool_namespace"], expected_ns)
+
+        # cleanup
+        self._fs_cmd("subvolume", "rm", self.volname, sv, svg)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, svg)
+        self._wait_for_trash_empty()
+
+    def test_subvolume_explicit_namespace_isolation_in_nonisolated_group(self):
+        """
+        Creating a subvolume with explicit --namespace-isolated should
+        still work in a group that was created without --namespace-isolated.
+        """
+        sv = self._gen_subvol_name()
+        svg = self._gen_subvol_grp_name()
+        # group WITHOUT namespace-isolated
+        self._fs_cmd("subvolumegroup", "create", self.volname, svg)
+
+        # subvolume WITH --namespace-isolated
+        self._fs_cmd("subvolume", "create", self.volname, sv, svg,
+                     "--namespace-isolated")
+
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, sv, svg))
+        expected_ns = f'fsvolumens__{svg}_{sv}'
+        self.assertEqual(subvol_info["pool_namespace"], expected_ns)
+
+        self._fs_cmd("subvolume", "rm", self.volname, sv, svg)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, svg)
+        self._wait_for_trash_empty()
+
+    def test_subvolume_no_namespace_isolation_in_nonisolated_group(self):
+        """
+        A subvolume created without --namespace-isolated in a group that
+        was created without --namespace-isolated must not be namespace
+        isolated, even though the group directory has a pool layout.
+        """
+        sv = self._gen_subvol_name()
+        svg = self._gen_subvol_grp_name()
+        # group WITHOUT namespace-isolated
+        self._fs_cmd("subvolumegroup", "create", self.volname, svg)
+
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, svg))
+        self.assertEqual(group_info["pool_namespace"], "")
+
+        # subvolume WITHOUT --namespace-isolated
+        self._fs_cmd("subvolume", "create", self.volname, sv, svg)
+
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, sv, svg))
+        self.assertEqual(subvol_info["pool_namespace"], "",
+                         "expected pool namespace to be empty")
+
+        self._fs_cmd("subvolume", "rm", self.volname, sv, svg)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, svg)
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_create_idempotence_namespace_isolation(self):
+        """
+        Re-running subvolumegroup create with --namespace-isolated on
+        an existing group (idempotent) should succeed and add the
+        pool_namespace xattr.
+        """
+        group = self._gen_subvol_grp_name()
+        # create without isolation
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # re-create with --namespace-isolated (idempotent)
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--namespace-isolated")
+
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["pool_namespace"],
+                         f'fsvolumens__{group}')
+
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_with_custom_pool_namespace(self):
+        """
+        Create subvolume group with --namespace-isolated and
+        --pool-namespace to specify an explicit RADOS namespace.
+        Verify the custom namespace is used instead of the auto-generated one.
+        """
+        group = self._gen_subvol_grp_name()
+        custom_ns = "my-custom-namespace"
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--namespace-isolated",
+                     "--pool-namespace", custom_ns)
+
+        # verify group has custom pool_namespace, not auto-generated
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["pool_namespace"], custom_ns)
+
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_inherit_from_custom_pool_namespace_group(self):
+        """
+        Create subvolume group with --namespace-isolated and an explicit
+        --pool-namespace. Then create a subvolume in that group. Verify the
+        subvolume inherits namespace isolation (its own namespace is still
+        auto-generated based on group name).
+        """
+        sv = self._gen_subvol_name()
+        svg = self._gen_subvol_grp_name()
+        custom_ns = "my-custom-namespace"
+        self._fs_cmd("subvolumegroup", "create", self.volname, svg,
+                     "--namespace-isolated",
+                     "--pool-namespace", custom_ns)
+
+        # create subvolume WITHOUT --namespace-isolated
+        self._fs_cmd("subvolume", "create", self.volname, sv, svg)
+
+        # verify group has custom pool_namespace
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, svg))
+        self.assertEqual(group_info["pool_namespace"], custom_ns)
+
+        # verify subvolume inherits namespace isolation with auto-generated ns
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, sv, svg))
+        self.assertIn("pool_namespace", subvol_info)
+        expected_ns = f'fsvolumens__{svg}_{sv}'
+        self.assertEqual(subvol_info["pool_namespace"], expected_ns)
+
+        # cleanup
+        self._fs_cmd("subvolume", "rm", self.volname, sv, svg)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, svg)
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_create_idempotence_custom_pool_namespace(self):
+        """
+        Re-running subvolumegroup create with --pool-namespace on an
+        existing group that already has namespace isolation should
+        update the pool_namespace to the new custom value.
+        """
+        group = self._gen_subvol_grp_name()
+        # create with --namespace-isolated (auto-generated namespace)
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--namespace-isolated")
+
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["pool_namespace"],
+                         f'fsvolumens__{group}')
+
+        # re-create with --pool-namespace to override
+        custom_ns = "my-custom-namespace"
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--namespace-isolated",
+                     "--pool-namespace", custom_ns)
+
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["pool_namespace"], custom_ns)
+
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     def test_subvolume_group_create_idempotence_resize(self):
@@ -4431,6 +4636,51 @@ class TestSubvolumes(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_resize_valid_unit(self):
+        """
+        That a subvolume can be resized when provided with valid value
+        (both int and float accepted) and unit.
+        """
+        readable_values = {"10B": 10, "10K": 10240, "200KB": 204800,
+                           "300Ki": 307200, "300KiB": 307200,
+                           "300.67KiB": 307886, "10M": 10485760,
+                           "100MB": 104857600, "100Mi": 104857600,
+                           "100MiB": 104857600, "100.123MiB": 104986574,
+                           "2G": 2147483648, "2GB": 2147483648,
+                           "4Gi": 4294967296, "4GiB": 4294967296,
+                           "4.2GiB": 4509715660, "1T": 1099511627776,
+                           "2TB": 2199023255552, "2Ti": 2199023255552,
+                           "2TiB": 2199023255552, "2.2TiB": 2418925581107}
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        for readable_value in readable_values:
+            self._fs_cmd("subvolume", "resize", self.volname, subvolume,
+                         readable_value)
+            subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
+            self.assertEqual(subvol_info["bytes_quota"], readable_values.get(readable_value))
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._wait_for_trash_empty()
+
+    def test_subvolume_resize_invalid_unit(self):
+        """
+        That a subvolume resize fails when provided with invalid value
+        and/or unit.
+        """
+        invalid_values = ("10A", "1y00Ki", "af00", "G", "", " ", "-1t", "-1",
+                          "1GT", "2MM", "5Di", "8Bi", "i", "7iB", "1.K", ".MB",
+                          ".10.G", "10Ki.B", "1.0.3TiB", "20G/.", "Gi32Ki",
+                          "10.64B", "1.B", ".B", "B.1", "KB1", "GB.1", "TB1.1")
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        for invalid_value in invalid_values:
+            with self.assertRaises(CommandFailedError):
+                self._fs_cmd("subvolume", "resize", self.volname, subvolume,
+                             invalid_value)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._wait_for_trash_empty()
+
     def test_subvolume_rm_force(self):
         # test removing non-existing subvolume with --force
         subvolume = self._gen_subvol_name()
@@ -5070,6 +5320,77 @@ class TestSubvolumes(TestVolumesHelper):
             errmsgs='Error ENAMETOOLONG: use shorter group or subvol name, '
                     'combination of both should be less than 249 characters')
 
+    def _assert_fs_cmd_einval(self, *args):
+        with self.assertRaises(CommandFailedError) as cm:
+            self._fs_cmd(*args)
+        self.assertEqual(cm.exception.exitstatus, errno.EINVAL,
+                         f"expected EINVAL for 'ceph fs {' '.join(args)}'")
+
+    def test_subvolume_invalid_name_rejected(self):
+        """
+        Verify that '', '.', '..' and names containing '/' are rejected with
+        EINVAL, and fail early, across the subvolume commands.
+        """
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        v = self.volname
+        invalid_names = ['', '.', '..', 'sub/vol', '/sub', 'sub/']
+        cmds = [
+            ("create", v, "{n}"),
+            ("info", v, "{n}"),
+            ("getpath", v, "{n}"),
+            ("rm", v, "{n}"),
+            ("resize", v, "{n}", "inf"),
+            ("metadata", "set", v, "{n}", "key", "val"),
+            ("snapshot", "create", v, "{n}", "snap1"),
+            ("snapshot", "rm", v, "{n}", "snap1"),
+            ("authorize", v, "{n}", "client1"),
+        ]
+        for name in invalid_names:
+            for cmd in cmds:
+                args = [a.format(n=name) for a in cmd]
+                self._assert_fs_cmd_einval("subvolume", *args,
+                                           "--group_name", group)
+
+        self._fs_cmd("subvolumegroup", "rm", v, group)
+
+    def test_subvolume_invalid_name_does_not_mark_dirs(self):
+        """
+        Verify that 'fs subvolume info' with '', '.' or '..' does not set
+        'ceph.dir.subvolume=1' on the group directory or on its parent
+        (the volumes base directory), and that the group stays usable.
+        """
+        group = self._gen_subvol_grp_name()
+        subvol = self._gen_subvol_name()
+
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        group_path = self._get_subvolume_group_path(self.volname, group)
+        volumes_path = os.path.dirname(group_path)
+
+        for name in ('', '.', '..'):
+            self._assert_fs_cmd_einval("subvolume", "info", self.volname,
+                                       name, "--group_name", group)
+            for path in (group_path, volumes_path):
+                xattr_val = self.mount_a.getfattr(path, "ceph.dir.subvolume")
+                self.assertNotEqual(
+                    xattr_val, "1",
+                    f"'{path}' was incorrectly marked as a subvolume by "
+                    f"'subvolume info' on '{name}'")
+
+        # the group is still usable: creating a subvolume in it succeeds and
+        # the new subvolume has valid metadata (info reads the .meta file)
+        self._fs_cmd("subvolume", "create", self.volname, subvol,
+                     "--group_name", group)
+        self._fs_cmd("subvolume", "info", self.volname, subvol,
+                     "--group_name", group)
+
+        # Clean up
+        self._fs_cmd("subvolume", "rm", self.volname, subvol,
+                     "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+        self._wait_for_trash_empty()
+
 class TestPausePurging(TestVolumesHelper):
     '''
     Tests related to config "mgr/volumes/pause_purging".
@@ -5276,6 +5597,10 @@ class TestPauseCloning(TestVolumesHelper):
         # tearDown() so that there's zero chance that it interferes with next
         # test.
         self.config_set('mgr', self.CONF_OPT, False)
+
+        # ensure cloner threads finish any in-flight work before the
+        # filesystem is destroyed in CephFSTestCase.tearDown().
+        self._wait_for_clone_to_finish_if_exists('ss1c1')
 
         # ensure purge threads have no jobs left from previous test so that
         # next test doesn't have to face unnecessary complications.
@@ -8115,8 +8440,8 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # create subvolume
         self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
-        # do some IO
-        self._do_subvolume_io(subvolume, number_of_files=200)
+        # do some IO (enough data so in-progress lasts longer than the poll interval)
+        self._do_subvolume_io(subvolume, number_of_files=1000)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
@@ -8136,8 +8461,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         else:
             self.fail("clone status shouldn't show failure for pending clone")
 
-        # check clone1 to be in-progress
-        self._wait_for_clone_to_be_in_progress(clone1)
+        # Poll faster so a short in-progress window is not missed; keep ~120s
+        # wall-clock timeout (timo is try count, not seconds).
+        self._wait_for_clone_to_be_in_progress(clone1, timo=600, sleep=0.2)
 
         # in-progress clone1 shouldn't show failure status
         clone1_result = self._get_clone_status(clone1)
@@ -8271,7 +8597,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
-        self._do_subvolume_io(subvolume, number_of_files=200)
+        self._do_subvolume_io(subvolume, number_of_files=1000)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
@@ -8283,7 +8609,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
 
         # wait for clone1 to be in-progress
-        self._wait_for_clone_to_be_in_progress(clone1)
+        # Poll faster so a short in-progress window is not missed; keep ~120s
+        # wall-clock timeout (timo is try count, not seconds).
+        self._wait_for_clone_to_be_in_progress(clone1, timo=600, sleep=0.2)
 
         # cancel in-progess clone1
         self._fs_cmd("clone", "cancel", self.volname, clone1)
@@ -10245,6 +10573,23 @@ class TestMisc(TestVolumesHelper):
             mgr_sessions = [s for s in all_sessions if s.get('auth_name', {}).get('type') == 16]
             return all_sessions, mgr_sessions
 
+        def session_nonces(sessions):
+            nonces = set()
+            for s in sessions:
+                addr = (s.get('entity') or {}).get('addr') or {}
+                if 'nonce' in addr:
+                    nonces.add(addr['nonce'])
+            return nonces
+
+        def mgr_map_client_nonces():
+            mgr_map = self.mgr_cluster.get_mgr_map()
+            nonces = set()
+            for client in mgr_map.get('active_clients', []):
+                for addr in client.get('addrvec', []):
+                    if 'nonce' in addr:
+                        nonces.add(addr['nonce'])
+            return nonces
+
         # Ensure we start with only mgr sessions (if any)
         all_s, mgr_s = get_mgr_sessions()
         self.assertEqual(len(all_s), len(mgr_s), f"Non-mgr sessions found: {all_s}")
@@ -10261,6 +10606,16 @@ class TestMisc(TestVolumesHelper):
 
         # Store IDs for eviction check
         mgr_session_ids = [s['id'] for s in mgr_sessions]
+
+        # ceph mgr fail blocklists MgrMap.active_clients from the last
+        # beacon. Wait until the mon has learned the current CephFS
+        # client addrs so eviction is not raced by a stale client list.
+        needed_nonces = session_nonces(mgr_sessions)
+        self.assertTrue(needed_nonces,
+                        f"Missing session nonces in: {mgr_sessions}")
+        self.wait_until_true(
+            lambda: needed_nonces.issubset(mgr_map_client_nonces()),
+            timeout=30)
 
         # Fail the mgr
         mgr_id = self.mgr_cluster.get_active_id()

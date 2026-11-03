@@ -1,0 +1,26 @@
+# Three hosts so services can be placed on one host while the others keep
+# quorum, and two mgrs so the tests can fail over the active one.
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - client.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+    # Deliberately empty: a failed or stray daemon during a certificate
+    # change is a regression. Facets that raise certificate health checks
+    # on purpose ignore those in their own overrides.
+    log-ignorelist: []
+tasks:
+- install:
+- cephadm:

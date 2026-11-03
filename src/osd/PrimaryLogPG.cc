@@ -59,6 +59,7 @@
 #include "osd/scrubber/pg_scrubber.h"
 #include "ECInject.h"
 
+#include "BloomHitSet.h"
 #include "OSD.h"
 #include "OpRequest.h"
 #include "PG.h"
@@ -105,7 +106,6 @@ using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
 using ceph::decode;
-using ceph::decode_noclear;
 using ceph::encode;
 using ceph::encode_destructively;
 
@@ -875,6 +875,12 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 
     // go to laggy state
     state_set(PG_STATE_LAGGY);
+    const auto& acting_osds = recovery_state.get_acting();
+    auto msg = fmt::format("PG {} marked LAGGY; acting [{}]",
+                           get_pgid(), fmt::join(acting_osds, ","));
+    dout(0) << __func__ << " " << msg << dendl;
+    osd->clog->warn() << msg;
+
     publish_stats_to_osd();
   }
   dout(10) << __func__ << " not readable" << dendl;
@@ -2070,6 +2076,13 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       osd->handle_misdirected_op(this, op);
       return;
     }
+    // some requests such as watch/notify/notify_ack can only be handled by the primary,
+    // fail these with EAGAIN to get the client to retry against the primary.
+    if (!is_primary() && op->is_primary_only()) {
+      dout(10) << __func__ << " op must be processed by primary, returning EAGAIN" << dendl;
+      osd->reply_op_error(op, -EAGAIN);
+      return;
+    }
   } else {
     // normal case; must be primary
     if (!is_primary()) {
@@ -2250,7 +2263,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       return;
     }
 
-    if (m_scrubber->is_scrub_active() && m_scrubber->write_blocked_by_scrub(head)) {
+    if (m_scrubber->write_blocked_by_scrub(head)) {
       dout(20) << __func__ << ": waiting for scrub" << dendl;
       waiting_for_scrub.push_back(op);
       op->mark_delayed("waiting for scrub");
@@ -2610,16 +2623,15 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     OpRequest* op_raw = op.get();
 
     // Spawn a coroutine to handle the message
-    auto resumer = std::make_unique<resume_token_t>(
+    auto resumer = std::make_shared<resume_token_t>(
       [this, op_raw](yield_token_t& yield) {
-        op_raw->coro_handles.emplace(CoroHandles{ yield, *coro_resumer });
+        op_raw->coro_handles.emplace(CoroHandles{ yield, coro_resumer });
         {
           const OpRequestRef op_ref(op_raw);
           do_op_impl(op_ref);
         }
 
         // Cleanup
-        coro_resumer = nullptr;
         on_coroutine_complete();
       });
 
@@ -2636,6 +2648,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 void PrimaryLogPG::on_coroutine_complete()
 {
   ceph_assert(coro_op_in_flight);
+  coro_resumer = nullptr;
   coro_op_in_flight = false;
   active_coro_op = nullptr;
 
@@ -2724,6 +2737,15 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
       MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
       ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
       hobject_t head = m->get_hobj();
+
+      // Balanced/Localized reads can be sent to a replica shard
+      // which cannot test if an object is degarded or backfilling
+      // redirect these requests to the primary
+      if (!is_primary()) {
+        dout(20) << __func__ << " need to redirect to primary" << dendl;
+        osd->reply_op_error(op, -EAGAIN);
+        return cache_result_t::REPLIED_WITH_EAGAIN;
+      }
 
       if (is_degraded_or_backfilling_object(head)) {
 	dout(20) << __func__ << ": " << head << " is degraded, waiting" << dendl;
@@ -4650,8 +4672,7 @@ void PrimaryLogPG::do_scan(
       auto p = m->get_data().cbegin();
 
       // take care to preserve ordering!
-      bi.clear_objects();
-      decode_noclear(bi.objects, p);
+      decode(bi.objects, p);
       dout(10) << __func__ << " bi.begin=" << bi.begin << " bi.end=" << bi.end
                << " bi.objects.size()=" << bi.objects.size() << dendl;
 
@@ -5986,6 +6007,9 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (ctx->op->ec_direct_read()) {
       int r = pgbackend->objects_read_local(
         soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+      if (r == -EIO) {
+        r = rep_repair_primary_object(soid, ctx);
+      }
       if (r >= 0) {
         bytes_read = r;
         // Don't update op.extent.length - causes issues with recursive
@@ -6680,10 +6704,22 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_GET_INTERNAL_VERSIONS: {
+      ++ctx->num_read;
       std::map<shard_id_t, eversion_t> out;
       result = get_internal_versions(soid, &out);
       if (result >= 0) {
         encode(out, osd_op.outdata);
+      }
+    }
+    break;
+
+    case CEPH_OSD_OP_GET_INTERNAL_VERSIONS_V2: {
+      ++ctx->num_read;
+      std::map<shard_id_t, eversion_t> out;
+      result = get_internal_versions_v2(soid, &out);
+      if (result >= 0) {
+        internal_versions_v2_response_t response{out};
+        encode(response, osd_op.outdata);
       }
     }
     break;
@@ -9194,7 +9230,12 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
     make_writeable(ctx);
 
   int log_op_type;
-  if (ctx->use_replace_op) {
+  // REPLACE (op 11) was added in umbrella. Tentacle is_update() does not
+  // include it, so a mixed-version peer that later becomes primary will
+  // assert in recover_primary. Only use REPLACE once require_osd_release
+  // says every OSD understands it; until then keep the old MODIFY/DELETE.
+  if (ctx->use_replace_op &&
+      get_osdmap()->require_osd_release >= ceph_release_t::umbrella) {
     log_op_type = pg_log_entry_t::REPLACE;
   } else {
     log_op_type = ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
@@ -10305,6 +10346,10 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     dout(20) << __func__ << ": exists, removing" << dendl;
     ctx->op_t->remove(obs.oi.soid);
     ctx->use_replace_op = true;
+    // If the source has no omap, has_omap is false and the omap won't be
+    // marked dirty below. But the existing target's omap was removed with
+    // the object; mark it dirty here so log-based recovery wipes it too.
+    ctx->clean_regions.mark_omap_dirty();
   } else {
     ctx->delta_stats.num_objects++;
     obs.exists = true;
@@ -13330,6 +13375,9 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
 
   if (coro_resumer != nullptr) {
     dout(20) << __func__ << ": Stopping active coroutine" << dendl;
+    coro_resumer = nullptr;
+    coro_op_in_flight = false;
+
     if (active_coro_ctx) {
       dout(20) << __func__ << ": Cleaning up orphaned OpContext from coroutine" << dendl;
       // Remove from in_progress_async_reads if present
@@ -13344,8 +13392,6 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
       close_op_ctx(active_coro_ctx);
       active_coro_ctx = nullptr;
     }
-    coro_resumer = nullptr;
-    coro_op_in_flight = false;
   }
 
   if (hit_set && hit_set->insert_count() == 0) {
@@ -15955,9 +16001,16 @@ bool PrimaryLogPG::_range_available_for_scrub(const hobject_t& begin,
 int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ctx)
 {
   OpRequestRef op = ctx->op;
-  // Only supports replicated pools
-  ceph_assert(!pool.info.is_erasure());
-  ceph_assert(is_primary());
+
+  if (!is_primary() || pool.info.is_erasure()) {
+    // Must be a balanced/localized read that has failed on a replica, or
+    // an EC direct read. Neither can run recovery, so the request needs to be
+    // failed with EAGAIN to the client which will then retry the
+    // request to the primary
+    dout(10) << __func__ << " not primary or EC direct, failing op with EAGAIN" << dendl;
+    osd->reply_op_error(op, -EAGAIN);
+    return -EAGAIN;
+  }
 
   dout(10) << __func__ << " " << soid
 	   << " peers osd.{" << get_acting_recovery_backfill() << "}" << dendl;
@@ -16049,6 +16102,10 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
   if (!pg->is_clean() ||
       pg->snap_trimq.empty()) {
     ldout(pg->cct, 10) << "NotTrimming not clean or nothing to trim" << dendl;
+    return discard_event();
+  }
+  if (pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM)) {
+    ldout(pg->cct, 10) << "NotTrimming as the nosnaptrim flag is set" << dendl;
     return discard_event();
   }
   if (pg->is_scrub_queued_or_active()) {
@@ -16280,6 +16337,27 @@ int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
     }
   } else {
     (*out)[pg_whoami.shard] = obc->obs.oi.version;
+  }
+  return 0;
+}
+
+int PrimaryLogPG::get_internal_versions_v2(const hobject_t& soid,
+                                           std::map<shard_id_t, eversion_t>* out) {
+  ObjectContextRef obc = get_object_context(soid, false);
+
+  if (!obc || !obc->obs.exists) {
+    return -ENOENT;
+  }
+
+  if (pool.info.is_erasure()) {
+    for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
+      (*out)[shard_id_t(i)] = obc->obs.oi.version;
+    }
+    for (const auto& [shard, version] : obc->obs.oi.shard_versions) {
+      out->at(shard) = version;
+    }
+  } else {
+    (*out)[shard_id_t::NO_SHARD] = obc->obs.oi.version;
   }
   return 0;
 }

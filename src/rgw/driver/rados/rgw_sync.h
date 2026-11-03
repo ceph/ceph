@@ -193,6 +193,12 @@ struct RGWMetaSyncEnv {
   std::string status_oid();
 };
 
+// read mdlog.sync-status from the local zone. unlike RGWMetaSyncStatusManager::read_sync_status(),
+// this does not skip the read when the zone is already treated as meta master.
+int rgw_read_local_meta_sync_status(const DoutPrefixProvider *dpp,
+                                    rgw::sal::RadosStore* store,
+                                    rgw_meta_sync_status *sync_status);
+
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
   const DoutPrefixProvider *dpp;
   rgw::sal::RadosStore* store;
@@ -371,7 +377,7 @@ public:
     }
   }
 
-  bool start(const T& pos, int index_pos, const real_time& timestamp) {
+  bool start(const T& pos, uint64_t index_pos, const real_time& timestamp) {
     if (pending.find(pos) != pending.end()) {
       return false;
     }
@@ -379,7 +385,7 @@ public:
     return true;
   }
 
-  void try_update_high_marker(const T& pos, int index_pos, const real_time& timestamp) {
+  void try_update_high_marker(const T& pos, uint64_t index_pos, const real_time& timestamp) {
     finish_markers[pos] = marker_entry(index_pos, timestamp);
   }
 

@@ -26,9 +26,12 @@
 #include "rgw_sal_dbstore.h"
 #include "rgw_bucket.h"
 
-#include "driver/rados/rgw_rados.h" // XXX: for RGW_OBJ_NS_MULTIPART, PUT_OBJ_CREATE, etc
-
 #define dout_subsys ceph_subsys_rgw
+
+/* flags for put_obj_meta() */
+#define PUT_OBJ_CREATE      0x01
+#define PUT_OBJ_EXCL        0x02
+#define PUT_OBJ_CREATE_EXCL (PUT_OBJ_CREATE | PUT_OBJ_EXCL)
 
 using namespace std;
 
@@ -606,7 +609,10 @@ namespace rgw::sal {
     return op_target.obj_omap_set_val_by_key(dpp, key, val, must_exist);
   }
 
-  int DBObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+  int DBObject::chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y)
   {
     return 0;
   }
@@ -2014,7 +2020,11 @@ namespace rgw::sal {
     return 0;
   }
 
-  void DBStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit)
+  void DBStore::get_ratelimit(
+      RGWRateLimitInfo& bucket_ratelimit,
+      RGWRateLimitInfo& user_ratelimit,
+      RGWRateLimitInfo& account_ratelimit,
+      RGWRateLimitInfo& anon_ratelimit)
   {
     return;
   }

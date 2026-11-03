@@ -1,0 +1,14 @@
+@use '@carbon/layout';
+@use '../pool-resource-overview-card' as pool-resource-overview-card;
+
+@include pool-resource-overview-card.base();
+
+.pool-detail-chart {
+  display: flex;
+  flex-direction: column;
+  gap: layout.$spacing-03;
+}
+
+.pool-detail-panel cd-area-chart {
+  display: block;
+}

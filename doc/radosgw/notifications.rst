@@ -4,8 +4,6 @@
 Bucket Notifications
 ====================
 
-.. versionadded:: Nautilus
-
 .. versionchanged:: Squid
    A new "v2" format for Topic and Notification metadata can be enabled with
    the :ref:`feature_notification_v2` zone feature.
@@ -90,6 +88,7 @@ which tells the client that it may retry later.
 Persistent bucket notifications are managed by the following central configuration options:
 
 .. confval:: rgw_bucket_persistent_notif_num_shards
+.. confval:: rgw_topic_ownership_update_period
 
 .. note:: When a topic is created during a Ceph upgrade, per-key reordering of notifications may
    happen on any bucket mapped to that topic.
@@ -130,6 +129,10 @@ the following command:
 .. prompt:: bash #
 
    radosgw-admin topic stats --topic={topic-name} [--tenant={tenant}]
+
+The command also reports, for each queue shard of the topic, the radosgw that
+currently owns it and the time at which that ownership expires. A shard that is
+not owned by any radosgw is reported without an owner.
 
 Dump (in JSON format) all pending bucket notifications of a persistent topic
 by running the following command:
@@ -172,6 +175,10 @@ HTTP
 
 Kafka
 ~~~~~
+
+Supported broker versions: Kafka 3.9 and Kafka 4.x. Both Zookeeper-based
+(3.x) and KRaft (4.x) brokers are supported.
+
 After recovering from a broker failure, a persistent topic will try
 to resend all notifications in batches. If the topic is configured on
 the broker with a segment size smaller than our default (1MB), sending
@@ -246,6 +253,7 @@ and must be between 1 and 256 characters long. To relax these requirements, use:
    [&Attributes.entry.22.key=sasl-kerberos-service-name&Attributes.entry.22.value=<kerberos-service-name>]
    [&Attributes.entry.23.key=sasl-kerberos-principal&Attributes.entry.23.value=<kerberos-principal>]
    [&Attributes.entry.24.key=sasl-kerberos-keytab&Attributes.entry.24.value=<kerberos-keytab-path>]
+   [&Attributes.entry.25.key=ca-cert&Attributes.entry.25.value=<PEM encoded CA certificate>]
 
 Request parameters:
 
@@ -333,6 +341,10 @@ Request parameters:
  - ``ca-location``: If this is provided and a secure connection is used, the
    specified CA will be used instead of the default CA to authenticate the
    broker.
+ - ``ca-cert``: PEM-encoded CA certificate content passed directly as a string.
+   When provided, this takes precedence over ``ca-location`` and avoids the
+   need for a CA file on the RGW host — useful in Rook/Kubernetes deployments
+   where the CA is available as a Secret. Requires ``use-ssl=true``.
  - ``user``/``password``: This should be provided over HTTPS. If not, the
    config parameter ``rgw_allow_notification_secrets_in_cleartext`` must be
    "true" in order to create topics.
@@ -668,6 +680,8 @@ Valid ``AttributeName`` that can be passed:
 - ``ca-location``: If this is provided and a secure connection is used, the
   specified CA will be used instead of the default CA to authenticate the
   broker.
+- ``ca-cert``: PEM-encoded CA certificate content passed directly as a string.
+  Takes precedence over ``ca-location`` when both are set. Requires ``use-ssl=true``.
 - ``mechanism``: May be provided together with ``user``/``password`` (default: ``PLAIN``)
 - ``kafka-ack-level``: No end2end acknowledgement is required. Messages may persist in the
   broker before being delivered to their final destinations.

@@ -30,7 +30,7 @@ public:
   ~FSMirror();
 
   void init(Context *on_finish);
-  void shutdown(Context *on_finish);
+  void shutdown(Context *on_finish, bool purge_persisted_sync_stats=false);
 
   void add_peer(const Peer &peer);
   void remove_peer(const Peer &peer);
@@ -47,14 +47,7 @@ public:
 
   bool is_failed() {
     std::scoped_lock locker(m_lock);
-    bool failed = m_init_failed;
-    if (m_instance_watcher) {
-      failed |= m_instance_watcher->is_failed();
-    }
-    if (m_mirror_watcher) {
-      failed |= m_mirror_watcher->is_failed();
-    }
-    return failed;
+    return is_failed(locker);
   }
 
   monotime get_failed_ts() {
@@ -94,6 +87,17 @@ public:
   void reopen_logs();
 
 private:
+  bool is_failed(const std::scoped_lock<ceph::mutex> &locker) const {
+    bool failed = m_init_failed;
+    if (m_instance_watcher) {
+      failed |= m_instance_watcher->is_failed();
+    }
+    if (m_mirror_watcher) {
+      failed |= m_mirror_watcher->is_failed();
+    }
+    return failed;
+  }
+
   bool is_blocklisted(const std::scoped_lock<ceph::mutex> &locker) const {
     bool blocklisted = false;
     if (m_instance_watcher) {
@@ -160,6 +164,7 @@ private:
 
   int m_retval = 0;
   bool m_stopping = false;
+  bool m_purge_persisted_sync_stats_on_shutdown = false;
   bool m_init_failed = false;
   Context *m_on_init_finish = nullptr;
   Context *m_on_shutdown_finish = nullptr;
@@ -190,6 +195,8 @@ private:
 
   void handle_acquire_directory(std::string_view dir_path);
   void handle_release_directory(std::string_view dir_path, bool purging);
+
+  void remove_persisted_sync_stats_by_prefix(std::string_view prefix);
 };
 
 } // namespace mirror

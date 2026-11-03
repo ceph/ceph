@@ -16,7 +16,7 @@ on `GitHub`_:
 .. _team list: https://ceph.io/en/community/team
 
 Ceph-specific acronyms in the table of leads are explained in
-:doc:`/architecture`.
+:doc:`/architecture/index`.
 
 History
 -------
@@ -63,7 +63,7 @@ which is powered by `Redmine`_.
 
 The tracker has a Ceph project with a number of subprojects loosely
 corresponding to the various architectural components (see
-:doc:`/architecture`).
+:doc:`/architecture/index`).
 
 Mere `registration`_ in the tracker automatically grants permissions
 sufficient to open new issues and comment on existing ones.
@@ -80,6 +80,8 @@ click on `New issue`_.
 
 Slack
 -----
+
+Ceph developers and users chat on `Ceph's Slack`_.
 
 .. _`Ceph's Slack`: https://join.slack.com/t/ceph-storage/shared_invite/zt-32hkefbs5-f6qZDZLd5U8CYj7drBTHFw
 

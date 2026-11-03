@@ -16,34 +16,29 @@ SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore {
 
-device_config_t get_rbm_ephemeral_device_config(
-    std::size_t index, std::size_t num_devices)
+device_spec_t get_rbm_ephemeral_device_spec(
+  device_id_t id)
 {
-  assert(num_devices > index);
   magic_t magic = 0xfffa;
-  auto type = device_type_t::RANDOM_BLOCK_EPHEMERAL;
-  bool is_major_device;
-  secondary_device_set_t secondary_devices;
-  if (index == 0) {
-    is_major_device = true;
-    for (std::size_t secondary_index = index + 1;
-         secondary_index < num_devices;
-         ++secondary_index) {
-      device_id_t secondary_id = static_cast<device_id_t>(secondary_index);
-      secondary_devices.insert({
-        secondary_index, device_spec_t{magic, type, secondary_id}
-      });
-    }
-  } else { // index > 0
-    is_major_device = false;
-  }
+  return device_spec_t{
+    magic,
+    device_type_t::EPHEMERAL_MAIN,
+    backend_type_t::RANDOM_BLOCK,
+    id};
+}
 
-  device_id_t id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN + index);
+device_config_t get_rbm_ephemeral_device_config(
+  device_id_t id,
+  device_set_t cache_devices,
+  device_set_t data_devices,
+  bool is_major_device)
+{
   seastore_meta_t meta = {};
   return {is_major_device,
-          device_spec_t{magic, type, id},
+          get_rbm_ephemeral_device_spec(id),
           meta,
-          secondary_devices};
+          cache_devices,
+          data_devices};
 }
 
 paddr_t BlockRBManager::alloc_extent(size_t size)
@@ -66,11 +61,13 @@ paddr_t BlockRBManager::alloc_extent(size_t size)
 }
 
 BlockRBManager::allocate_ret_bare
-BlockRBManager::alloc_extents(size_t size)
+BlockRBManager::alloc_extents(size_t size, paddr_t hint)
 {
   LOG_PREFIX(BlockRBManager::alloc_extents);
   assert(allocator);
-  auto alloc = allocator->alloc_extents(size);
+  rbm_abs_addr rbm_hint =
+    (hint == P_ADDR_NULL ? 0 : convert_paddr_to_abs_addr(hint));
+  auto alloc = allocator->alloc_extents(size, rbm_hint);
   if (!alloc) {
     return {};
   }
@@ -140,7 +137,7 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
   }
   co_return co_await device->write(
     addr,
-    bptr);
+    std::move(bptr));
 }
 
 BlockRBManager::read_ertr::future<> BlockRBManager::read(
@@ -174,7 +171,7 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
   ceph_assert(device);
   bufferptr bptr;
   try {
-    bptr = bufferptr(ceph::buffer::create_page_aligned(bl.length()));
+    bptr = bufferptr(device->alloc_io_buffer(bl.length()));
     auto iter = bl.cbegin();
     iter.copy(bl.length(), bptr.c_str());
   } catch (const std::exception &e) {

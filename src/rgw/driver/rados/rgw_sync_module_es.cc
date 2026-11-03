@@ -136,8 +136,8 @@ struct es_version_decoder {
   int parse_version(const std::string& s) {
     int major, minor;
     int ret = sscanf(s.c_str(), "%d.%d", &major, &minor);
-    if (ret < 0) {
-      return ret;
+    if (ret < 2) {
+      return -EINVAL;
     }
     version = std::make_pair(major,minor);
     return 0;
@@ -953,6 +953,10 @@ RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMg
 }
 
 int RGWElasticSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+  ldpp_dout(dpp, -1)
+      << "WARNING: The Elasticsearch sync module is "
+         "deprecated in Vampire and will be removed in the X release of Ceph."
+      << dendl;
   string endpoint = config["endpoint"];
   instance->reset(new RGWElasticSyncModuleInstance(dpp, cct, config));
   return 0;

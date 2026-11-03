@@ -5,8 +5,16 @@
   padding: 0;
 }
 
+.cds-p-4 {
+  padding: layout.$spacing-04;
+}
+
 .cds-pl-6 {
   padding-left: layout.$spacing-06;
+}
+
+.cds-pl-5 {
+  padding-left: layout.$spacing-05;
 }
 
 .cds-pl-4 {
@@ -31,6 +39,10 @@
 
 .cds-pt-5 {
   padding-top: layout.$spacing-05;
+}
+
+.cds-pb-5 {
+  padding-bottom: layout.$spacing-05;
 }
 
 .cds-pr-4 {
@@ -114,6 +126,10 @@
   margin-left: layout.$spacing-05;
 }
 
+.cds-ml-10 {
+  margin-left: layout.$spacing-10;
+}
+
 .cds-mr-1 {
   margin-right: layout.$spacing-01;
 }
@@ -134,6 +150,24 @@
   margin-right: layout.$spacing-05;
 }
 
+.cds-mr-12 {
+  margin-right: layout.$spacing-12;
+}
+
 .cds-pt-6 {
   padding-top: layout.$spacing-06;
+}
+
+.cds-text-start {
+  text-align: start;
+}
+
+.cds-center-inline-content {
+  display: flex;
+  justify-content: center;
+
+  > .cds--stack-vertical {
+    width: fit-content;
+    text-align: start;
+  }
 }

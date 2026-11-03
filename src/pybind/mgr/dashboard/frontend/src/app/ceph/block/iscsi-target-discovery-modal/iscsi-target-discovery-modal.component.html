@@ -29,20 +29,22 @@
               type="text"
               autocomplete="off"
             />
-            <span
-              class="invalid-feedback"
-              *ngIf="discoveryForm.showError('user', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (discoveryForm.showError('user', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
 
-            <span
-              class="invalid-feedback"
-              *ngIf="discoveryForm.showError('user', formDir, 'pattern')"
-              i18n
-              >User names must have a length of 8 to 64 characters and can contain alphanumeric
-              characters, '.', '&#64;', '-', '_' or ':'.</span
-            >
+            @if (discoveryForm.showError('user', formDir, 'pattern')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >User names must have a length of 8 to 64 characters and can contain alphanumeric
+                characters, '.', '&#64;', '-', '_' or ':'.</span
+              >
+            }
           </div>
         </div>
 
@@ -73,20 +75,22 @@
               ></button>
               <cd-copy-2-clipboard-button source="password"> </cd-copy-2-clipboard-button>
             </div>
-            <span
-              class="invalid-feedback"
-              *ngIf="discoveryForm.showError('password', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (discoveryForm.showError('password', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
 
-            <span
-              class="invalid-feedback"
-              *ngIf="discoveryForm.showError('password', formDir, 'pattern')"
-              i18n
-              >Passwords must have a length of 12 to 16 characters and can contain alphanumeric
-              characters, '&#64;', '-', '_' or '/'.</span
-            >
+            @if (discoveryForm.showError('password', formDir, 'pattern')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Passwords must have a length of 12 to 16 characters and can contain alphanumeric
+                characters, '&#64;', '-', '_' or '/'.</span
+              >
+            }
           </div>
         </div>
 
@@ -107,20 +111,22 @@
               autocomplete="off"
             />
 
-            <span
-              class="invalid-feedback"
-              *ngIf="discoveryForm.showError('mutual_user', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (discoveryForm.showError('mutual_user', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
 
-            <span
-              class="invalid-feedback"
-              *ngIf="discoveryForm.showError('mutual_user', formDir, 'pattern')"
-              i18n
-              >User names must have a length of 8 to 64 characters and can contain alphanumeric
-              characters, '.', '&#64;', '-', '_' or ':'.</span
-            >
+            @if (discoveryForm.showError('mutual_user', formDir, 'pattern')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >User names must have a length of 8 to 64 characters and can contain alphanumeric
+                characters, '.', '&#64;', '-', '_' or ':'.</span
+              >
+            }
           </div>
         </div>
 
@@ -151,20 +157,22 @@
               ></button>
               <cd-copy-2-clipboard-button source="mutual_password"> </cd-copy-2-clipboard-button>
             </div>
-            <span
-              class="invalid-feedback"
-              *ngIf="discoveryForm.showError('mutual_password', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (discoveryForm.showError('mutual_password', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
 
-            <span
-              class="invalid-feedback"
-              *ngIf="discoveryForm.showError('mutual_password', formDir, 'pattern')"
-              i18n
-              >Passwords must have a length of 12 to 16 characters and can contain alphanumeric
-              characters, '&#64;', '-', '_' or '/'.</span
-            >
+            @if (discoveryForm.showError('mutual_password', formDir, 'pattern')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Passwords must have a length of 12 to 16 characters and can contain alphanumeric
+                characters, '&#64;', '-', '_' or '/'.</span
+              >
+            }
           </div>
         </div>
       </div>

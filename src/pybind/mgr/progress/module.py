@@ -14,6 +14,7 @@ import uuid
 import time
 import logging
 import json
+import math
 
 from .cli import ProgressCLICommand
 
@@ -256,7 +257,10 @@ class RemoteEvent(Event):
 
     def set_progress(self, progress):
         # type: (float) -> None
-        self._progress = progress
+        # Remote modules can report bad fractions; keep the progress bar bounded.
+        if math.isnan(progress):
+            progress = 0.0
+        self._progress = min(max(progress, 0.0), 1.0)
         self._refresh()
 
     def set_failed(self, message):

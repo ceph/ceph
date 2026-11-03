@@ -71,6 +71,10 @@ public:
                                                   RGWSI_BucketIndex* svc_bi,
                                                   RGWDataChangesLog *svc_datalog)
       -> std::unique_ptr<RGWMetadataHandler>;
+  virtual auto alloc_vector_bucket_meta_handler(librados::Rados& rados,
+                                         RGWSI_Bucket* svc_bucket,
+                                         RGWBucketCtl* ctl_bucket)
+      -> std::unique_ptr<RGWMetadataHandler>;
 
   // indication whether the sync module start with full sync (default behavior)
   // incremental sync would follow anyway

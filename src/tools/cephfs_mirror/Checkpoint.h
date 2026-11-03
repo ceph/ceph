@@ -4,8 +4,9 @@
 #ifndef CEPHFS_MIRROR_CHECKPOINT_H
 #define CEPHFS_MIRROR_CHECKPOINT_H
 
-#include <string>
 #include <map>
+#include <set>
+#include <string>
 
 #include "include/utime.h"
 #include "Types.h"
@@ -81,6 +82,15 @@ int write_checkpoint_metadata(CephContext *cct, MountRef mnt,
                               const std::string &snap_name,
                               const std::map<std::string, std::string> &snap_metadata,
                               const CheckpointInfo &info);
+
+// Checkpoint metadata keys from snap_metadata that are currently set.
+std::set<std::string> present_checkpoint_metadata_keys(
+    const std::map<std::string, std::string> &snap_metadata);
+
+// Remove the given checkpoint metadata keys from a snapshot.
+// CHECKPOINT_STATUS_KEY is removed last.
+int remove_checkpoint_metadata(MountRef mnt, const std::string &snap_path,
+                               const std::set<std::string> &metadata_keys);
 
 // Check if checkpoint key exists in snapshot metadata
 inline bool has_checkpoint(const std::map<std::string, std::string> &snap_metadata) {

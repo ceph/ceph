@@ -2,6 +2,7 @@
 upgrade-sequence:
    sequential:
    - print: "**** done start upgrade, wait"
+   - sequential: [ignore-auth-warn-cephadm]
    - cephadm.shell:
        env: [sha1]
        mon.a:
@@ -12,5 +13,6 @@ upgrade-sequence:
          - ceph versions
          - ceph versions | jq -e '.overall | length == 1'
          - ceph versions | jq -e '.overall | keys' | grep $sha1
+         - ceph osd require-osd-release vampire
    - print: "**** done end upgrade, wait..."
 

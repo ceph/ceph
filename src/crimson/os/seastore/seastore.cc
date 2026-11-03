@@ -4,6 +4,7 @@
 #include "seastore.h"
 
 #include <algorithm>
+#include <string_view>
 
 #include <boost/algorithm/string/trim.hpp>
 #include <fmt/format.h>
@@ -18,6 +19,7 @@
 #include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "include/stringify.h"
+#include "include/uuid_fmt.h"
 #include "os/Transaction.h"
 #include "osd/osd_types_fmt.h"
 
@@ -117,7 +119,9 @@ using crimson::common::get_conf;
 
 SeaStore::Shard::Shard(
   std::string root,
-  Device* dev,
+  Device* device,
+  std::vector<Device*> &cache_devs,
+  std::vector<Device*> &data_devs,
   bool is_test,
   uint32_t store_shard_nums,
   store_index_t store_index)
@@ -134,7 +138,14 @@ SeaStore::Shard::Shard(
     INFO("store_index {} is out of range - inactivating this store shard, store_shard_nums {}", store_index, store_shard_nums);
   }
 
-  device = &(dev->get_sharded_device(store_index));
+  ceph_assert(device);
+  primary_device = &(device->get_sharded_device(store_index));
+  for (auto &dev : cache_devs) {
+    cache_devices.emplace_back(&(dev->get_sharded_device(store_index)));
+  }
+  for (auto &dev : data_devs) {
+    data_devices.emplace_back(&(dev->get_sharded_device(store_index)));
+  }
 
   register_metrics(store_index);
 }
@@ -145,7 +156,7 @@ SeaStore::SeaStore(
   : root(root),
     mdstore(std::move(mdstore))
 {
-  store_shard_nums = seastar::smp::count;
+  store_shard_nums = seastar::this_smp_shard_count();
 }
 
 SeaStore::~SeaStore() = default;
@@ -215,8 +226,6 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   );
 
   std::pair<txn_stage_t, sm::label_instance> labels_by_stage[] = {
-    {txn_stage_t::COLLOCK_WAIT,          sm::label_instance("stage", "collock_wait")},
-    {txn_stage_t::COLLOCK_HOLD,          sm::label_instance("stage", "collock_hold")},
     {txn_stage_t::THROTTLER_WAIT,        sm::label_instance("stage", "throttler_wait")},
     {txn_stage_t::BUILD,                 sm::label_instance("stage", "build")},
     {txn_stage_t::BUILD_GET_ONODE,       sm::label_instance("stage", "build_get_onode")},
@@ -329,34 +338,52 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   sm::description("transactions waiting to get "
 		        "through seastore's throttler"),
   {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "attr_inline",
+        [this] { return stats.oi_inline; },
+        sm::description("attributes stored in the onode's inline slot"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index)),
+         sm::label_instance("attr", "oi")}
+      ),
+      sm::make_counter(
+        "attr_overflow",
+        [this] { return stats.oi_overflow; },
+        sm::description("attributes too large for the inline slot, "
+                        "stored in the xattr omap tree"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index)),
+         sm::label_instance("attr", "oi")}
       )
     }
   );
 }
 
-seastar::future<> SeaStore::get_shard_nums()
+seastar::future<> SeaStore::get_shard_nums(Device &device)
 {
   LOG_PREFIX(SeaStore::get_shard_nums);
   auto tuple = co_await read_meta("mkfs_done");
   auto [done, value] = tuple;
   if (done == -1) {
     INFO("seastore not mkfs yet");
-    store_shard_nums = seastar::smp::count;
+    store_shard_nums = seastar::this_smp_shard_count();
     co_return;
   } else {
     INFO("seastore mkfs done");
-    auto shard_nums = co_await device->get_shard_nums(
+    auto shard_nums = co_await device.get_shard_nums(
       ).handle_error(
         crimson::ct_error::assert_all(
-          "Invalid error in device->get_shard_nums"
+          "Invalid error in device.get_shard_nums"
       ));
     INFO("seastore shard nums {}", shard_nums);
     store_shard_nums = shard_nums;
-    if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
+    if (crimson::common::get_conf<bool>(
+      "seastore_require_partition_count_match_reactor_count")) {
       INFO("seastore doesn't allow shard change");
-      if (store_shard_nums != seastar::smp::count) {
-        INFO("seastore shards {} do not match seastar::smp {}", store_shard_nums, seastar::smp::count);
-        ceph_abort_msg("seastore_require_partition_count_match_reactor_count is true, seastore shards do not match seastar::smp");
+      if (store_shard_nums != seastar::this_smp_shard_count()) {
+        INFO("seastore shards {} do not match seastar::smp {}",
+          store_shard_nums, seastar::this_smp_shard_count());
+        ceph_abort_msg("seastore_require_partition_count_match_reactor_count"
+                       " is true, seastore shards do not match seastar::smp");
       }
     }
     co_return;
@@ -366,9 +393,30 @@ seastar::future<> SeaStore::get_shard_nums()
 seastar::future<> SeaStore::shard_stores_start(bool is_test)
 {
   LOG_PREFIX(SeaStore::shard_stores_start);
-  auto num_shard_services = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-  INFO("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::smp::count, num_shard_services);
-  return shard_stores.start(num_shard_services, root, device.get(), is_test, store_shard_nums);
+  auto num_shard_services =
+    (store_shard_nums + seastar::this_smp_shard_count() - 1 ) /
+      seastar::this_smp_shard_count();
+  INFO("store_shard_nums={} seastar::smp={}, num_shard_services={}, "
+    "cache_devices: {}, data_devices: {}",
+    store_shard_nums, seastar::this_smp_shard_count(), num_shard_services,
+    cache_devices.size(), data_devices.size());
+
+  std::vector<Device*> cache_devs;
+  for (auto &dev : cache_devices) {
+    cache_devs.emplace_back(dev.get());
+  }
+  std::vector<Device*> data_devs;
+  for (auto &dev : data_devices) {
+    data_devs.emplace_back(dev.get());
+  }
+  return shard_stores.start(
+    num_shard_services,
+    root,
+    primary_device,
+    cache_devs,
+    data_devs,
+    is_test,
+    store_shard_nums);
 }
 
 seastar::future<> SeaStore::shard_stores_stop()
@@ -376,6 +424,150 @@ seastar::future<> SeaStore::shard_stores_stop()
   LOG_PREFIX(SeaStore::shard_stores_stop);
   INFO("stopping shard stores");
   return shard_stores.stop();
+}
+
+// seastore_spdk_transport_id names a single NVMe namespace and the device
+// factories ignore the device path while it is set, so every device would be
+// opened on that same namespace. Refuse a second device rather than let it
+// alias, and overwrite, the first one.
+static void check_spdk_single_device(std::size_t existing_devices)
+{
+  if (existing_devices > 0 &&
+      !get_conf<std::string>("seastore_spdk_transport_id").empty()) {
+    throw std::invalid_argument(
+      "seastore_spdk_transport_id is set: SPDK supports a single device, "
+      "secondary devices are not supported");
+  }
+}
+
+seastar::future<> SeaStore::create_cache_device(
+  std::string &cache_dev_path,
+  device_type_t dtype,
+  backend_type_t btype)
+{
+  check_spdk_single_device(cache_devices.size() + data_devices.size());
+  co_await seastar::make_directory(cache_dev_path);
+  std::string path = fmt::format("{}/block", cache_dev_path);
+  DeviceRef cache_dev = co_await Device::make_device(path, dtype, btype, 0);
+  ceph_assert(cache_dev);
+  auto *p_cache_dev = cache_dev.get();
+  cache_devices.emplace_back(std::move(cache_dev));
+  co_await get_shard_nums(*p_cache_dev);
+  co_await p_cache_dev->start(store_shard_nums);
+  primary_device = p_cache_dev;
+}
+
+seastar::future<> SeaStore::start_cache_devices()
+{
+  LOG_PREFIX(SeaStore::start_cache_devices);
+  std::string type = get_conf<std::string>("seastore_cache_device_type");
+  device_type_t dtype = string_to_device_type(type);
+  assert(dtype == device_type_t::SSD);
+  type = get_conf<std::string>("seastore_cache_backend_type");
+  auto btype = string_to_backend_type(type);
+  INFO("cache device type: {}, cache backend type: {}", dtype, btype);
+
+  using crimson::common::get_conf;
+  auto cache_dev_path = fmt::format("{}/{}", root, CACHE_DEV_PREFIX);
+  bool cache_exists = co_await seastar::file_exists(cache_dev_path);
+  if (cache_exists) {
+    // initialize cache devices
+    seastar::file rdir = co_await seastar::open_directory(cache_dev_path);
+    auto lister = rdir.experimental_list_directory();
+    while (auto de = co_await lister()) {
+      auto& entry = *de;
+      DEBUG("found for cache devices: {}", entry.name);
+      auto p = parse_device_id(entry.name, 0);
+      if (!p) {
+        continue;
+      }
+      device_id_t id = *p;
+      std::string path = fmt::format("{}/{}", cache_dev_path, entry.name);
+      check_spdk_single_device(cache_devices.size() + data_devices.size());
+      DeviceRef cache_dev = co_await Device::make_device(
+        path, dtype, btype, id);
+      ceph_assert(cache_dev);
+      auto *p_cache_dev = cache_dev.get();
+      cache_devices.emplace_back(std::move(cache_dev));
+      co_await get_shard_nums(*p_cache_dev);
+      co_await p_cache_dev->start(store_shard_nums);
+      if (id == 0) {
+        ceph_assert(!primary_device);
+        primary_device = p_cache_dev;
+      }
+    }
+  }
+  if (!cache_exists && crimson::common::get_conf<bool>(
+        "seastore_lbc_test_stress")) {
+    // lbc test workload enabled while no secondary devices indicated, create one
+    co_await create_cache_device(cache_dev_path, dtype, btype);
+  }
+}
+
+seastar::future<> SeaStore::create_data_device(
+  device_type_t dtype,
+  backend_type_t btype)
+{
+  std::string path = fmt::format("{}/block", root);
+  check_spdk_single_device(cache_devices.size() + data_devices.size());
+  DeviceRef data_dev = co_await Device::make_device(
+    path, dtype, btype, cache_devices.size());
+  ceph_assert(data_dev);
+  auto *p_data_dev = data_dev.get();
+  data_devices.emplace_back(std::move(data_dev));
+  co_await get_shard_nums(*p_data_dev);
+  co_await p_data_dev->start(store_shard_nums);
+  if (cache_devices.empty()) {
+    ceph_assert(!primary_device);
+    primary_device = p_data_dev;
+  }
+}
+
+seastar::future<> SeaStore::start_data_devices()
+{
+  LOG_PREFIX(SeaStore::start_data_devices);
+  auto type = get_conf<std::string>("seastore_data_device_type");
+  auto dtype = string_to_device_type(type);
+  type = get_conf<std::string>("seastore_data_backend_type");
+  auto btype = string_to_backend_type(type);
+  INFO("data device type: {}, data backend type: {}", dtype, btype);
+  seastar::file rdir = co_await seastar::open_directory(root);
+  auto lister = rdir.experimental_list_directory();
+  while (auto de = co_await lister()) {
+    auto& entry = *de;
+    DEBUG("found for data devices: {}", entry.name);
+    std::string path = fmt::format("{}/{}", root, entry.name);
+    auto type = co_await seastar::file_type(path);
+    if (!type ||
+        (type != seastar::directory_entry_type::link &&
+         type != seastar::directory_entry_type::regular)) {
+      continue;
+    }
+    auto p = parse_device_id(entry.name, cache_devices.size());
+    if (!p) {
+      continue;
+    }
+    device_id_t id = *p;
+    check_spdk_single_device(cache_devices.size() + data_devices.size());
+    DeviceRef data_dev = co_await Device::make_device(
+      path, dtype, btype, id);
+    ceph_assert(data_dev);
+    auto *p_data_dev = data_dev.get();
+    data_devices.emplace_back(std::move(data_dev));
+    co_await get_shard_nums(*p_data_dev);
+    co_await p_data_dev->start(store_shard_nums);
+    if (id == 0) {
+      ceph_assert(!primary_device);
+      primary_device = p_data_dev;
+    }
+  }
+  co_await rdir.close();
+
+  if (data_devices.empty()) {
+    WARN("Can't find any data devices, creating one");
+    // no data device is pointed before the OSD boots, create one
+    co_await create_data_device(dtype, btype);
+  }
 }
 
 seastar::future<uint32_t> SeaStore::start()
@@ -389,32 +581,46 @@ seastar::future<uint32_t> SeaStore::start()
 #else
   bool is_test = false;
 #endif
-  using crimson::common::get_conf;
-  std::string type = get_conf<std::string>("seastore_main_device_type");
-  device_type_t d_type = string_to_device_type(type);
-  assert(d_type == device_type_t::SSD ||
-         d_type == device_type_t::RANDOM_BLOCK_SSD);
-
   ceph_assert(root != "");
-  DeviceRef device_obj = co_await Device::make_device(root, d_type);
-  device = std::move(device_obj);
-  co_await get_shard_nums();
-  co_await device->start(store_shard_nums);
-  ceph_assert(device);
+  co_await start_cache_devices();
+  // initialize data devices
+  co_await start_data_devices();
+
   co_await shard_stores_start(is_test);
   INFO("done");
   co_return store_shard_nums;
 }
 
-seastar::future<> SeaStore::test_start(DeviceRef device_obj)
+seastar::future<> SeaStore::test_start(
+  Device* device,
+  std::vector<DeviceRef> &&cdevs,
+  std::vector<DeviceRef> &&ddevs)
 {
   LOG_PREFIX(SeaStore::test_start);
   INFO("...");
 
-  ceph_assert(device_obj);
+  ceph_assert(device);
   ceph_assert(root == "");
-  device = std::move(device_obj);
-  co_await shard_stores.start_single(1, root, device.get(), true, seastar::smp::count);
+  primary_device = device;
+  cache_devices = std::move(cdevs);
+  data_devices = std::move(ddevs);
+
+  std::vector<Device*> cache_devs;
+  for (auto &dev : cache_devices) {
+    cache_devs.emplace_back(dev.get());
+  }
+  std::vector<Device*> data_devs;
+  for (auto &dev : data_devices) {
+    data_devs.emplace_back(dev.get());
+  }
+  co_await shard_stores.start_single(
+    1,
+    root,
+    primary_device,
+    cache_devs,
+    data_devs,
+    true,
+    seastar::this_smp_shard_count());
   INFO("done");
 }
 
@@ -424,12 +630,11 @@ seastar::future<> SeaStore::stop()
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  for (auto& sec_dev : secondaries) {
-    co_await sec_dev->stop();
+  for (auto& cache_dev : cache_devices) {
+    co_await cache_dev->stop();
   }
-  secondaries.clear();
-  if (device) {
-    co_await device->stop();
+  for (auto& data_dev : data_devices) {
+    co_await data_dev->stop();
   }
   co_await shard_stores_stop();
   INFO("done");
@@ -447,42 +652,56 @@ SeaStore::mount_ertr::future<> SeaStore::test_mount()
   INFO("done");
 }
 
+void SeaStore::Shard::validate_devices() {
+  magic_t magic = primary_device->get_magic();
+  auto &cache_dev_specs = data_devices.front()->get_cache_devices();
+  ceph_assert(cache_devices.size() == cache_dev_specs.size());
+  std::set<device_id_t> cid_set;
+  for (auto &dev : cache_devices) {
+    ceph_assert(magic == dev->get_magic());
+    ceph_assert(cache_dev_specs.count(dev->get_device_id()) > 0);
+    cid_set.emplace(dev->get_device_id());
+  }
+  ceph_assert(cid_set.size() == cache_devices.size());
+  std::set<device_id_t> id_set;
+  for (auto &dev : data_devices) {
+    ceph_assert(magic == dev->get_magic());
+    auto &dev_specs = dev->get_data_devices();
+    ceph_assert(data_devices.size() == dev_specs.size());
+    ceph_assert(dev_specs.count(dev->get_device_id()) > 0);
+    id_set.emplace(dev->get_device_id());
+  }
+  ceph_assert(id_set.size() == data_devices.size());
+}
+
 Device::access_ertr::future<> SeaStore::_mount()
 {
   LOG_PREFIX(SeaStore::mount);
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  co_await device->mount();
-  {
+  for (auto &device : data_devices) {
+    co_await device->mount();
+    {
+      auto block_size = device->get_sharded_device(0).get_block_size();
+      ceph_assertf(block_size >= laddr_t::UNIT_SIZE,
+                   "seastore requires a device block size of at least %u bytes, "
+                   "but the primary device at '%s/block' reports block_size=%u; "
+                   "use a device whose logical block size is >= %u bytes",
+                   laddr_t::UNIT_SIZE, root.c_str(), block_size,
+                   laddr_t::UNIT_SIZE);
+    }
+  }
+
+  for (auto& device : cache_devices) {
+    co_await device->mount();
     auto block_size = device->get_sharded_device(0).get_block_size();
     ceph_assertf(block_size >= laddr_t::UNIT_SIZE,
                  "seastore requires a device block size of at least %u bytes, "
-                 "but the primary device at '%s/block' reports block_size=%u; "
-                 "use a device whose logical block size is >= %u bytes",
-                 laddr_t::UNIT_SIZE, root.c_str(), block_size,
-                 laddr_t::UNIT_SIZE);
-  }
-
-  auto &sec_devices = device->get_sharded_device(0).get_secondary_devices();
-  for (auto& device_entry : sec_devices) {
-    device_id_t id = device_entry.first;
-    [[maybe_unused]] magic_t magic = device_entry.second.magic;
-    device_type_t dtype = device_entry.second.dtype;
-    std::string path = fmt::format("{}/block.{}.{}", root, dtype, std::to_string(id));
-    DeviceRef sec_dev = co_await Device::make_device(path, dtype);
-    co_await sec_dev->start(store_shard_nums);
-    co_await sec_dev->mount();
-    auto sec_block_size = sec_dev->get_sharded_device(0).get_block_size();
-    ceph_assertf(sec_block_size >= laddr_t::UNIT_SIZE,
-                 "seastore requires a device block size of at least %u bytes, "
                  "but the secondary device at '%s' reports block_size=%u; "
                  "use a device whose logical block size is >= %u bytes",
-                 laddr_t::UNIT_SIZE, path.c_str(), sec_block_size,
-                 laddr_t::UNIT_SIZE);
-    assert(sec_dev->get_sharded_device(0).get_magic() == magic);
-    secondaries.emplace_back(std::move(sec_dev));
-    co_await set_secondaries();
+                 laddr_t::UNIT_SIZE, device->get_device_path().c_str(),
+                 block_size, laddr_t::UNIT_SIZE);
   }
   co_await shard_stores.invoke_on_all([](auto &local_store) {
     return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
@@ -494,13 +713,14 @@ Device::access_ertr::future<> SeaStore::_mount()
 
 seastar::future<> SeaStore::Shard::mount_managers()
 {
-  if(!store_active) {
-    return seastar::now();
-  }
   LOG_PREFIX(SeaStore::mount_managers);
+  if(!store_active) {
+    co_return;
+  }
   INFO("start");
+  validate_devices();
   init_managers();
-  return transaction_manager->mount(
+  co_await transaction_manager->mount(
   ).handle_error(
     crimson::ct_error::assert_all(
       "Invalid error in mount_managers"
@@ -532,11 +752,12 @@ base_ertr::future<> SeaStore::Shard::umount()
   if (transaction_manager) {
     co_await transaction_manager->close();
   }
-  for (auto& sec_dev : secondaries) {
-   co_await sec_dev->close();
+  for (auto& cache_dev : cache_devices) {
+    co_await cache_dev->close();
   }
-  co_await device->close();
-  secondaries.clear();
+  for (auto &data_dev : data_devices) {
+    co_await data_dev->close();
+  }
   transaction_manager.reset();
   collection_manager.reset();
   onode_manager.reset();
@@ -615,19 +836,6 @@ SeaStore::Shard::mkfs_managers()
   --(shard_stats.processing_postlock_io_num);
 }
 
-seastar::future<> SeaStore::set_secondaries()
-{
-  auto sec_dev_ite = secondaries.rbegin();
-  Device* sec_dev = sec_dev_ite->get();
-
-  return shard_stores.invoke_on_all([sec_dev](auto &local_store) {
-    return seastar::do_for_each(local_store.mshard_stores, [sec_dev](auto& mshard_store) {
-      unsigned int index = mshard_store->get_store_index();
-      mshard_store->set_secondaries(sec_dev->get_sharded_device(index));
-    });
-  });
-}
-
 SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
 {
   LOG_PREFIX(SeaStore::test_mkfs);
@@ -676,57 +884,47 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     co_return;
   }
   DEBUG("mkfs_done does not exist, starting mkfs");
-  secondary_device_set_t sds;
-  if (!root.empty()) {
-    seastar::file rdir = co_await seastar::open_directory(root);
-    // hmm?
-    auto lister = rdir.experimental_list_directory();
-    while (auto de = co_await lister()) {
-      auto& entry = *de;
-      DEBUG("found file: {}", entry.name);
-      if (entry.name.find("block.") == 0 && entry.name.length() > 6 ) {
-      // 6 for "block."
-        std::string entry_name = entry.name;
-        auto dtype_end = entry_name.find_first_of('.', 6);
-        device_type_t dtype =
-          string_to_device_type(
-            entry_name.substr(6, dtype_end - 6));
-        if (dtype == device_type_t::NONE) {
-          // invalid device type
-          co_return;
-        }
-        auto id = std::stoi(entry_name.substr(dtype_end + 1));
-        std::string path = fmt::format("{}/{}", root, entry_name);
-        DeviceRef sec_dev = co_await Device::make_device(path, dtype);
-        auto p_sec_dev = sec_dev.get();
-        secondaries.emplace_back(std::move(sec_dev));
-        co_await p_sec_dev->start(store_shard_nums);
-        magic_t magic = (magic_t)std::rand();
-        sds.emplace((device_id_t)id, device_spec_t{magic, dtype, (device_id_t)id});
-        co_await p_sec_dev->mkfs(
-          device_config_t::create_secondary(new_osd_fsid, id, dtype, magic)
-          ).handle_error(crimson::ct_error::assert_all("not possible"));
-        co_await set_secondaries();
-      }
-    }
-    co_await rdir.close();
+  ceph_assert(!root.empty());
+
+  device_set_t cds;
+  magic_t magic = (magic_t)std::rand();
+  for (auto &dev : cache_devices) {
+    auto dtype = dev->get_device_type();
+    auto btype = dev->get_backend_type();
+    assert(dtype == device_type_t::SSD);
+    auto id = dev->get_device_id();
+    cds.emplace((device_id_t)id,
+                device_spec_t{magic, dtype, btype, (device_id_t)id});
+    co_await dev->mkfs(
+      device_config_t::create_cache(new_osd_fsid, id, dtype, btype, magic));
   }
 
-  device_id_t id = 0;
-  device_type_t d_type = device->get_device_type();
-  assert(d_type == device_type_t::SSD ||
-      d_type == device_type_t::RANDOM_BLOCK_SSD);
-  if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
-      id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
+  device_set_t dds;
+  for (auto &dev : data_devices) {
+    device_id_t id = dev->get_device_id();
+    device_type_t dtype = dev->get_device_type();
+    backend_type_t btype = dev->get_backend_type();
+    dds.emplace(id, device_spec_t{magic, dtype, btype, id});
   }
-  DEBUG("creating primary device");
-  co_await device->mkfs(device_config_t::create_primary(new_osd_fsid, id, d_type, sds));
-  DEBUG("mounting {} secondaries", secondaries.size());
-  for (auto& sec_dev : secondaries) {
-      co_await sec_dev->mount();
+  for (auto &dev : data_devices) {
+    device_id_t id = dev->get_device_id();
+    device_type_t d_type = dev->get_device_type();
+    backend_type_t b_type = dev->get_backend_type();
+    assert(b_type != backend_type_t::NONE);
+    DEBUG("creating primary device");
+    co_await dev->mkfs(
+      device_config_t::create_data(
+        new_osd_fsid, id, d_type, b_type, cds, dds, magic));
   }
-  DEBUG("mounting primary device");
-  co_await device->mount();
+
+  DEBUG("mounting {} cache_devices", cache_devices.size());
+  for (auto& dev : cache_devices) {
+      co_await dev->mount();
+  }
+  DEBUG("mounting {} data_devices", data_devices.size());
+  for (auto &dev : data_devices) {
+    co_await dev->mount();
+  }
   DEBUG("mkfs managers");
   co_await shard_stores.invoke_on_all([] (auto &local_store) {
     return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
@@ -846,11 +1044,11 @@ seastar::future<> SeaStore::report_stats()
         report_detail = true;
         seconds = mshard_store->reset_report_interval();
       }
-      shard_device_stats[seastar::this_shard_id() + seastar::smp::count * mshard_store->get_store_index()] =
+      shard_device_stats[seastar::this_shard_id() + seastar::this_smp_shard_count() * mshard_store->get_store_index()] =
         mshard_store->get_device_stats(report_detail, seconds);
-      shard_io_stats[seastar::this_shard_id() + seastar::smp::count * mshard_store->get_store_index()] =
+      shard_io_stats[seastar::this_shard_id() + seastar::this_smp_shard_count() * mshard_store->get_store_index()] =
         mshard_store->get_io_stats(report_detail, seconds);
-      shard_cache_stats[seastar::this_shard_id() + seastar::smp::count * mshard_store->get_store_index()] =
+      shard_cache_stats[seastar::this_shard_id() + seastar::this_smp_shard_count() * mshard_store->get_store_index()] =
         mshard_store->get_cache_stats(report_detail, seconds);
     });
   }).then([this, FNAME] {
@@ -875,7 +1073,7 @@ seastar::future<> SeaStore::report_stats()
     oss_iops << "device IOPS: "
              << fmt::format(dfmt, iops)
              << " "
-             << fmt::format(dfmt, iops/seastar::smp::count)
+             << fmt::format(dfmt, iops/seastar::this_smp_shard_count())
              << "(";
 
     std::ostringstream oss_bd;
@@ -883,7 +1081,7 @@ seastar::future<> SeaStore::report_stats()
     oss_bd << "device bandwidth(MiB): "
            << fmt::format(dfmt, bd_mb)
            << " "
-           << fmt::format(dfmt, bd_mb/seastar::smp::count)
+           << fmt::format(dfmt, bd_mb/seastar::this_smp_shard_count())
            << "(";
 
     for (const auto &s : shard_device_stats) {
@@ -909,10 +1107,10 @@ seastar::future<> SeaStore::report_stats()
          io_total.read_num/seconds,
          io_total.get_bg_num()/seconds,
          io_total.flush_num/seconds,
-         io_total.io_num/seconds/seastar::smp::count,
-         io_total.read_num/seconds/seastar::smp::count,
-         io_total.get_bg_num()/seconds/seastar::smp::count,
-         io_total.flush_num/seconds/seastar::smp::count);
+         io_total.io_num/seconds/seastar::this_smp_shard_count(),
+         io_total.read_num/seconds/seastar::this_smp_shard_count(),
+         io_total.get_bg_num()/seconds/seastar::this_smp_shard_count(),
+         io_total.flush_num/seconds/seastar::this_smp_shard_count());
     auto calc_conflicts = [](uint64_t ios, uint64_t repeats) {
       return (double)(repeats-ios)/ios;
     };
@@ -921,26 +1119,24 @@ seastar::future<> SeaStore::report_stats()
          calc_conflicts(io_total.read_num, io_total.repeat_read_num),
          calc_conflicts(io_total.get_bg_num(), io_total.get_repeat_bg_num()));
     INFO("trans outstanding: {},{},{},{} "
-         "per-shard: {:.2f}({:.2f},{:.2f},{:.2f},{:.2f},{:.2f}),{:.2f},{:.2f},{:.2f}",
+         "per-shard: {:.2f}({:.2f},{:.2f},{:.2f},{:.2f}),{:.2f},{:.2f},{:.2f}",
          io_total.pending_io_num,
          io_total.pending_read_num,
          io_total.pending_bg_num,
          io_total.pending_flush_num,
-         (double)io_total.pending_io_num/seastar::smp::count,
-         (double)io_total.starting_io_num/seastar::smp::count,
-         (double)io_total.waiting_collock_io_num/seastar::smp::count,
-         (double)io_total.waiting_throttler_io_num/seastar::smp::count,
-         (double)io_total.processing_inlock_io_num/seastar::smp::count,
-         (double)io_total.processing_postlock_io_num/seastar::smp::count,
-         (double)io_total.pending_read_num/seastar::smp::count,
-         (double)io_total.pending_bg_num/seastar::smp::count,
-         (double)io_total.pending_flush_num/seastar::smp::count);
+         (double)io_total.pending_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.starting_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.waiting_throttler_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.processing_inlock_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.processing_postlock_io_num/seastar::this_smp_shard_count(),
+         (double)io_total.pending_read_num/seastar::this_smp_shard_count(),
+         (double)io_total.pending_bg_num/seastar::this_smp_shard_count(),
+         (double)io_total.pending_flush_num/seastar::this_smp_shard_count());
 
     std::ostringstream oss_pending;
     for (const auto &s : shard_io_stats) {
       oss_pending << s.pending_io_num
                  << "(" << s.starting_io_num
-                 << "," << s.waiting_collock_io_num
                  << "," << s.waiting_throttler_io_num
                  << "," << s.processing_inlock_io_num
                  << "," << s.processing_postlock_io_num
@@ -954,9 +1150,9 @@ seastar::future<> SeaStore::report_stats()
     }
 
     cache_size_stats_t queue_sizes_ps = cache_total.pinboard_sizes;
-    queue_sizes_ps.divide_by(seastar::smp::count);
+    queue_sizes_ps.divide_by(seastar::this_smp_shard_count());
     cache_io_stats_t queue_io_ps = cache_total.pinboard_io;
-    queue_io_ps.divide_by(seastar::smp::count);
+    queue_io_ps.divide_by(seastar::this_smp_shard_count());
     INFO("cache pinboard: total{} {}; per-shard: total{} {}",
          cache_total.pinboard_sizes,
          cache_io_stats_printer_t{seconds, cache_total.pinboard_io},
@@ -964,9 +1160,9 @@ seastar::future<> SeaStore::report_stats()
          cache_io_stats_printer_t{seconds, queue_io_ps});
 
     cache_size_stats_t dirty_sizes_ps = cache_total.dirty_sizes;
-    dirty_sizes_ps.divide_by(seastar::smp::count);
+    dirty_sizes_ps.divide_by(seastar::this_smp_shard_count());
     dirty_io_stats_t dirty_io_ps = cache_total.dirty_io;
-    dirty_io_ps.divide_by(seastar::smp::count);
+    dirty_io_ps.divide_by(seastar::this_smp_shard_count());
     INFO("cache dirty: total{} {}; per-shard: total{} {}",
          cache_total.dirty_sizes,
          dirty_io_stats_printer_t{seconds, cache_total.dirty_io},
@@ -974,7 +1170,7 @@ seastar::future<> SeaStore::report_stats()
          dirty_io_stats_printer_t{seconds, dirty_io_ps});
 
     cache_access_stats_t access_ps = cache_total.access;
-    access_ps.divide_by(seastar::smp::count);
+    access_ps.divide_by(seastar::this_smp_shard_count());
     INFO("cache_access: total{}; per-shard{}",
          cache_access_stats_printer_t{seconds, cache_total.access},
          cache_access_stats_printer_t{seconds, access_ps});
@@ -1119,7 +1315,7 @@ SeaStore::Shard::list_objects(CollectionRef ch,
 	    using list_iertr = OnodeManager::list_onodes_iertr;
 	    using repeat_ret = list_iertr::future<seastar::stop_iteration>;
             return trans_intr::repeat(
-              [this, FNAME, &t, &ret, &limit, end,
+              [this, FNAME, &t, &ret, &limit, end, ch,
 	       filter, ranges = get_ranges(ch, start, end, filter)
 	      ]() mutable -> repeat_ret {
 		if (limit == 0 || ranges.empty()) {
@@ -1133,7 +1329,7 @@ SeaStore::Shard::list_objects(CollectionRef ch,
 		ranges.pop_front();
 		DEBUGT("pstart {}, pend {}, limit {} ...", t, pstart, pend, limit);
 		return onode_manager->list_onodes(
-		  t, pstart, pend, limit
+		  t, ch->get_cid(), pstart, pend, limit
 		).si_then([&limit, &ret, pend, &t, last=ranges.empty(), end, FNAME]
 			  (auto &&_ret) mutable {
 		  auto &next_objects = std::get<0>(_ret);
@@ -1521,7 +1717,7 @@ seastar::future<struct stat> SeaStore::Shard::_stat(
   struct stat st;
   auto &olayout = onode.get_layout();
   st.st_size = olayout.size;
-  st.st_blksize = device->get_block_size();
+  st.st_blksize = primary_device->get_block_size();
   st.st_blocks = (st.st_size + st.st_blksize - 1) / st.st_blksize;
   st.st_nlink = 1;
   DEBUGT("oid={}, size=0x{:x}, blksize=0x{:x}",
@@ -1729,13 +1925,104 @@ void SeaStore::Shard::transaction_dump(ceph::os::Transaction &t) {
   ERROR("{}", str.str());
 }
 
+// Whether a client txn may be merged with others into one seastore batch
+// (build_next_batch). Default is yes, specific op patterns opt out and run solo.
+
+// Bathced pg-log trim (OP_OMAP_RMKEYS / OP_OMAP_RMKEYRANGE)
+static bool txn_is_batchable(ceph::os::Transaction& t)
+{
+  using ceph::os::Transaction;
+  auto i = t.begin();
+  while (i.have_op()) {
+    auto op = i.decode_op();
+    if (op->op == Transaction::OP_OMAP_RMKEYS ||
+        op->op == Transaction::OP_OMAP_RMKEYRANGE) {
+      return false;
+    }
+  }
+  return true;
+}
+
 seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
-  assert(store_active);
   LOG_PREFIX(SeaStoreS::do_transaction_no_callbacks);
+  assert(store_active);
   ++(shard_stats.io_num);
+
+  auto& coll = static_cast<SeastoreCollection&>(*_ch);
+  auto& entry = coll.pending_txns.emplace_back();
+  entry.txn = std::move(_t);
+  entry.batchable = txn_is_batchable(entry.txn);
+  auto fut = entry.pr.get_future();
+  DEBUG("enqueue cid={} queue_depth={} in_flight={}",
+        coll.get_cid(), coll.pending_txns.size(), coll.collection_in_flight);
+  if (!coll.collection_in_flight) {
+    coll.collection_in_flight = true;
+    DEBUG("cid={} gate closed, starting dispatch", coll.get_cid());
+    std::ignore = dispatch_collection(_ch);
+  }
+  return fut;
+}
+
+ceph::os::Transaction SeaStore::Shard::build_next_batch(
+  SeastoreCollection& coll,
+  std::vector<seastar::promise<>>& pending_txns_promises)
+{
+  ceph::os::Transaction merged;
+  bool first = true;
+  uint64_t batch_features = 0;
+  while (!coll.pending_txns.empty()) {
+    const bool no_batch = !coll.pending_txns.front().batchable;
+    if (!first &&
+        (no_batch || coll.pending_txns.front().txn.get_data_features() != batch_features)) {
+      // Batch boundary: seal what we have so far in the batch
+      break;
+    }
+    auto e = std::move(coll.pending_txns.front());
+    coll.pending_txns.pop_front();
+    if (first) {
+      batch_features = e.txn.get_data_features();
+      merged = std::move(e.txn);
+      first = false;
+    } else {
+      merged.append(e.txn);
+    }
+    pending_txns_promises.push_back(std::move(e.pr));
+    if (no_batch) {
+      // no_batch runs solo (never is appended)
+      break;
+    }
+  }
+  return merged;
+}
+
+seastar::future<> SeaStore::Shard::dispatch_collection(CollectionRef ch)
+{
+  LOG_PREFIX(SeaStoreS::dispatch_collection);
+  auto& coll = static_cast<SeastoreCollection&>(*ch);
+  while (!coll.pending_txns.empty()) {
+    std::vector<seastar::promise<>> pending_txns_promises;
+    auto merged = build_next_batch(coll, pending_txns_promises);
+    DEBUG("draining {} txns from cid={}, committing batch ({} ops)",
+          pending_txns_promises.size(), coll.get_cid(), merged.get_num_ops());
+    co_await run_one_batch(ch, std::move(merged));
+    DEBUG("committed batch of {} txns for cid={}",
+          pending_txns_promises.size(), coll.get_cid());
+    for (auto& p : pending_txns_promises) {
+      p.set_value();
+    }
+  }
+  DEBUG("cid={} drained, gate open", coll.get_cid());
+  coll.collection_in_flight = false;
+}
+
+seastar::future<> SeaStore::Shard::run_one_batch(
+  CollectionRef _ch,
+  ceph::os::Transaction&& _t)
+{
+  LOG_PREFIX(SeaStoreS::run_one_batch);
   ++(shard_stats.pending_io_num);
   ++(shard_stats.starting_io_num);
 
@@ -1750,18 +2037,6 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 
   assert(shard_stats.starting_io_num);
   --(shard_stats.starting_io_num);
-  ++(shard_stats.waiting_collock_io_num);
-
-  auto t_pre_collock = seastar::lowres_clock::now();
-  co_await ctx.transaction->get_handle().take_collection_lock(
-    static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
-  );
-  auto t_post_collock = seastar::lowres_clock::now();
-  auto collock_wait = t_post_collock - t_pre_collock;
-  ctx.transaction->get_handle().set_lock_acquire_time(t_post_collock);
-
-  assert(shard_stats.waiting_collock_io_num);
-  --(shard_stats.waiting_collock_io_num);
   ++(shard_stats.waiting_throttler_io_num);
 
   auto t_pre_throttler = seastar::lowres_clock::now();
@@ -1841,8 +2116,6 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     const std::array<
       std::pair<txn_stage_t, seastar::lowres_clock::duration>, STAGE_MAX>
       stage_samples = {{
-        {txn_stage_t::COLLOCK_WAIT,          collock_wait},
-        {txn_stage_t::COLLOCK_HOLD,          ctx.transaction->get_handle().get_lock_hold_time()},
         {txn_stage_t::THROTTLER_WAIT,        throttler_wait},
         {txn_stage_t::BUILD,                 ctx.build_time},
         {txn_stage_t::BUILD_GET_ONODE,       ctx.get_onode_time},
@@ -1884,16 +2157,15 @@ seastar::future<> SeaStore::Shard::flush(CollectionRef ch)
   ++(shard_stats.flush_num);
   ++(shard_stats.pending_flush_num);
 
-  return seastar::do_with(
-    get_dummy_ordering_handle(),
-    [this, ch](auto &handle) {
-      return handle.take_collection_lock(
-	static_cast<SeastoreCollection&>(*ch).ordering_lock
-      ).then([this, &handle] {
+  return do_transaction_no_callbacks(
+    ch, ceph::os::Transaction{}
+  ).then([this] {
+    return seastar::do_with(
+      get_dummy_ordering_handle(),
+      [this](auto &handle) {
 	return transaction_manager->flush(handle);
       });
-    }
-  ).finally([this] {
+  }).finally([this] {
     assert(shard_stats.pending_flush_num);
     --(shard_stats.pending_flush_num);
   });
@@ -1938,11 +2210,12 @@ SeaStore::Shard::_do_transaction_step(
     case Transaction::OP_SPLIT_COLLECTION2:
     {
       uint32_t bits = op->split_bits;
+      uint32_t rem = op->split_rem;
       coll_t cid = i.get_cid(op->cid);
       coll_t dest_cid = i.get_cid(op->dest_cid);
-      DEBUGT("op OP_SPLIT_COLLECTION2, cid={}, dest_cid={}, bits={}",
-	*ctx.transaction, cid, dest_cid, bits);
-      return _split_collection(ctx, cid, bits);
+      DEBUGT("op OP_SPLIT_COLLECTION2, cid={}, dest_cid={}, bits={}, rem={}",
+	*ctx.transaction, cid, dest_cid, bits, rem);
+      return _split_collection(ctx, cid, bits, rem, dest_cid);
     }
     case Transaction::OP_MERGE_COLLECTION:
     {
@@ -1952,6 +2225,14 @@ SeaStore::Shard::_do_transaction_step(
       DEBUGT("op OP_MERGE_COLLECTION, cid={}, dest_cid={}, bits={}",
 	*ctx.transaction, cid, dest_cid, bits);
       return _merge_collection(ctx, cid, dest_cid, bits);
+    }
+    case Transaction::OP_COLL_SET_BITS:
+    {
+      uint32_t bits = op->split_bits;
+      coll_t cid = i.get_cid(op->cid);
+      DEBUGT("op OP_COLL_SET_BITS, cid={}, bits={}",
+	*ctx.transaction, cid, bits);
+      return _collection_set_bits(ctx, cid, bits);
     }
   }
 
@@ -1972,11 +2253,12 @@ SeaStore::Shard::_do_transaction_step(
     if (!create) {
       DEBUGT("op {}, get oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
-      fut = onode_manager->get_onode(*ctx.transaction, oid);
+      fut = onode_manager->get_onode(*ctx.transaction, col->get_cid(), oid);
     } else {
       DEBUGT("op {}, get_or_create oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
-      fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
+      fut = onode_manager->get_or_create_onode(
+        *ctx.transaction, col->get_cid(), oid);
     }
     fut = std::move(fut).si_then([&ctx, t0](auto onode) {
       ctx.get_onode_time += seastar::lowres_clock::now() - t0;
@@ -2000,7 +2282,8 @@ SeaStore::Shard::_do_transaction_step(
              *ctx.transaction, (uint32_t)op->op, dest_oid);
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
-      return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
+      return onode_manager->get_or_create_onode(
+        *ctx.transaction, col->get_cid(), dest_oid
       ).si_then([&d_onode](auto dest_onode) {
 	assert(dest_onode);
 	assert(!d_onode);
@@ -2011,7 +2294,8 @@ SeaStore::Shard::_do_transaction_step(
       const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
       DEBUGT("op {}, get_onode dest oid={} ...",
              *ctx.transaction, (uint32_t)op->op, dest_oid);
-      return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
+      return onode_manager->get_or_create_onode(
+        *ctx.transaction, col->get_cid(), dest_oid
       ).si_then([&d_onode](auto target_onode) {
         d_onode = target_onode;
       });
@@ -2188,7 +2472,7 @@ SeaStore::Shard::_do_transaction_step(
 	    [&onode, &ctx, this](auto& mgr) {
 	    return mgr.initialize_omap(
 	      *ctx.transaction, 
-	      onode->get_metadata_hint(device->get_block_size()),
+	      onode->get_metadata_hint(primary_device->get_block_size()),
 	      omap_type_t::LOG
 	    ).si_then([&onode, &ctx](auto new_root) {
 	      onode->update_omap_root(*ctx.transaction, new_root);
@@ -2299,16 +2583,38 @@ SeaStore::Shard::_rename(
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
-  auto prefix = onode->get_clone_prefix();
-  assert(prefix);
-  prefix->set_pool(onode->get_hobj().get_logical_pool());
-  auto object_id = prefix->get_local_object_id();
-  std::ignore = d_onode->maybe_set_sibling_object_id(object_id);
-  auto olayout = onode->get_layout();
+  auto cid = ctx.ch->get_cid();
+  return _migrate_onode(ctx, cid, onode, d_onode);
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_migrate_onode(
+  internal_context_t &ctx,
+  coll_t src_cid,
+  OnodeRef &onode,
+  OnodeRef &d_onode)
+{
+  LOG_PREFIX(SeaStoreS::_migrate_onode);
+  DEBUGT("src_cid={} onode hobj={} need_cow={} data_base={} d_onode hobj={}",
+    *ctx.transaction, src_cid, onode->get_hobj(), onode->need_cow(),
+    onode->get_layout().object_data.get().is_null()
+      ? L_ADDR_NULL
+      : onode->get_layout().object_data.get().get_reserved_data_base(),
+    d_onode->get_hobj());
   ObjectDataHandler objHandler(max_object_size);
-  co_await objHandler.rename(ObjectDataHandler::context_t{
-    *transaction_manager, *ctx.transaction, *onode, d_onode.get()
-  });
+  co_await _maybe_copy_on_write(ctx, *onode, objHandler);
+
+  if (auto prefix = onode->get_clone_prefix(); prefix) {
+    prefix->set_pool(onode->get_hobj().get_logical_pool());
+    auto object_id = prefix->get_local_object_id();
+    std::ignore = d_onode->maybe_set_sibling_object_id(object_id);
+  }
+  auto olayout = onode->get_layout();
+  if (!olayout.object_data.get().is_null()) {
+    co_await objHandler.rename(ObjectDataHandler::context_t{
+      *transaction_manager, *ctx.transaction, *onode, d_onode.get()
+    });
+  }
 
   uint32_t size = olayout.size;
   auto oi_bl = ceph::bufferlist::static_from_mem(
@@ -2323,11 +2629,11 @@ SeaStore::Shard::_rename(
   d_onode->update_snapset(*ctx.transaction, ss_bl);
   rename_onode_omap_metadata(*ctx.transaction, *onode, *d_onode);
   co_await onode_manager->erase_onode(
-    *ctx.transaction, onode
+    *ctx.transaction, src_cid, onode
   ).handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all(
-      "Invalid error in SeaStoreS::_rename"));
+      "Invalid error in SeaStoreS::_migrate_onode"));
 }
 
 SeaStore::Shard::tm_ret
@@ -2358,7 +2664,8 @@ SeaStore::Shard::_remove(
       });
     });
   }).si_then([this, &ctx, &onode] {
-    return onode_manager->erase_onode(*ctx.transaction, onode);
+    return onode_manager->erase_onode(
+      *ctx.transaction, ctx.ch->get_cid(), onode);
   }).handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all(
@@ -2637,7 +2944,7 @@ SeaStore::Shard::_setattrs(
   if (auto it = aset.find(OI_ATTR); it != aset.end()) {
     auto& val = it->second;
     if (likely(val.length() <= onode_layout_t::MAX_OI_LENGTH)) {
-
+      ++stats.oi_inline;
       if (!layout.oi_size) {
 	// if oi was not in the layout, it probably exists in the omap,
 	// need to remove it first
@@ -2651,6 +2958,7 @@ SeaStore::Shard::_setattrs(
       aset.erase(it);
       DEBUGT("set oi in onode layout", *ctx.transaction);
     } else {
+      ++stats.oi_overflow;
       onode.clear_object_info(*ctx.transaction);
     }
   }
@@ -2730,35 +3038,71 @@ SeaStore::Shard::_rmattrs(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_split_collection(
   internal_context_t &ctx,
-  const coll_t &cid,
-  int bits)
+  const coll_t cid,
+  int bits,
+  int rem,
+  const coll_t dest_cid)
 {
-  return transaction_manager->read_collection_root(
-    *ctx.transaction
-  ).si_then([=, this, &ctx](auto _cmroot) {
-    return seastar::do_with(
-      _cmroot,
-      [=, this, &ctx](auto &cmroot) {
-        return collection_manager->update(
-          cmroot,
-          *ctx.transaction,
-          cid,
-          bits
-        ).si_then([this, &ctx, &cmroot] {
-          if (cmroot.must_update()) {
-            transaction_manager->write_collection_root(
-              *ctx.transaction,
-              cmroot);
-          }
-        });
-      }
-    );
-  }).handle_error_interruptible(
+  LOG_PREFIX(SeaStoreS::_split_collection);
+  auto cmroot = co_await transaction_manager->read_collection_root(
+    *ctx.transaction);
+  auto coll_node = co_await collection_manager->get_coll_node(
+    cmroot, *ctx.transaction
+  ).handle_error_interruptible(
     tm_iertr::pass_further{},
     crimson::ct_error::assert_all(
-      "Invalid error in SeaStoreS::_create_collection"
-    )
-  );
+      "Invalid error in SeaStoreS::_split_collection reading collection node"));
+  ceph_assert(coll_node->contains(dest_cid));
+
+  uint64_t moved = 0;
+  ghobject_t next;
+  do {
+    auto [objects, cursor] = co_await onode_manager->list_onodes(
+      *ctx.transaction, cid, next, ghobject_t::get_max(), 4096);
+    for (auto &oid : objects) {
+      if (!oid.match(bits, rem)) {
+        continue;
+      }
+      auto onode = co_await onode_manager->get_onode(*ctx.transaction, cid, oid
+      ).handle_error_interruptible(
+        tm_iertr::pass_further{},
+        crimson::ct_error::assert_all(
+          "Invalid error in SeaStoreS::_split_collection: onode listed but "
+          "not found"));
+      auto d_onode = co_await onode_manager->get_or_create_onode(
+        *ctx.transaction, dest_cid, oid
+      ).handle_error_interruptible(
+        tm_iertr::pass_further{},
+        crimson::ct_error::assert_all(
+          "Invalid error in SeaStoreS::_split_collection: create dest onode"));
+      co_await _migrate_onode(ctx, cid, onode, d_onode);
+      ++moved;
+    }
+    next = cursor;
+  } while (next != ghobject_t::get_max());
+  DEBUGT("split {} -> {} bits={} rem={} moved {} onodes",
+         *ctx.transaction, cid, dest_cid, bits, rem, moved);
+
+  //Re-fetch rather than reuse coll_node from above, since it may have gone through
+  // copy-on-write during the migration loop.
+  coll_node = co_await collection_manager->get_coll_node(
+    cmroot, *ctx.transaction
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_split_collection re-reading collection "
+      "node"));
+  auto cid_info = coll_node->get_value(cid);
+  co_await collection_manager->update(
+    cmroot, *ctx.transaction, cid,
+    coll_info_t{static_cast<unsigned>(bits), cid_info.onode_root}
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_split_collection updating cid bits"));
+  if (cmroot.must_update()) {
+    transaction_manager->write_collection_root(*ctx.transaction, cmroot);
+  }
 }
 
 SeaStore::Shard::tm_ret
@@ -2768,16 +3112,103 @@ SeaStore::Shard::_merge_collection(
   coll_t dest_cid,
   int bits)
 {
+  LOG_PREFIX(SeaStoreS::_merge_collection);
   auto cmroot = co_await transaction_manager->read_collection_root(
     *ctx.transaction);
-  co_await collection_manager->update(cmroot, *ctx.transaction, dest_cid, bits)
-    .handle_error_interruptible(
-      tm_iertr::pass_further{},
-      crimson::ct_error::assert_all("unexpected error from update in _merge_collection"));
-  co_await collection_manager->remove(cmroot, *ctx.transaction, cid)
-    .handle_error_interruptible(
-      tm_iertr::pass_further{},
-      crimson::ct_error::assert_all("unexpected error from remove in _merge_collection"));
+  auto coll_node = co_await collection_manager->get_coll_node(
+    cmroot, *ctx.transaction
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_merge_collection reading collection node"));
+  ceph_assert(coll_node->contains(cid));
+  ceph_assert(coll_node->contains(dest_cid));
+
+  uint64_t moved = 0;
+  ghobject_t next;
+  do {
+    auto [objects, cursor] = co_await onode_manager->list_onodes(
+      *ctx.transaction, cid, next, ghobject_t::get_max(), 4096);
+    for (auto &oid : objects) {
+      auto onode = co_await onode_manager->get_onode(*ctx.transaction, cid, oid
+      ).handle_error_interruptible(
+        tm_iertr::pass_further{},
+        crimson::ct_error::assert_all(
+          "Invalid error in SeaStoreS::_merge_collection: onode listed but "
+          "not found"));
+      auto d_onode = co_await onode_manager->get_or_create_onode(
+        *ctx.transaction, dest_cid, oid
+      ).handle_error_interruptible(
+        tm_iertr::pass_further{},
+        crimson::ct_error::assert_all(
+          "Invalid error in SeaStoreS::_merge_collection: create dest onode"));
+      co_await _migrate_onode(ctx, cid, onode, d_onode);
+      ++moved;
+    }
+    next = cursor;
+  } while (next != ghobject_t::get_max());
+  DEBUGT("merge {} -> {} bits={} moved {} onodes",
+         *ctx.transaction, cid, dest_cid, bits, moved);
+
+  // Re-fetch for the same reason as split: the migration
+  // above may have moved dest_cid's onode_root via ordinary
+  // insert-driven root updates.
+  coll_node = co_await collection_manager->get_coll_node(
+    cmroot, *ctx.transaction
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_merge_collection re-reading collection "
+      "node"));
+  auto dest_info = coll_node->get_value(dest_cid);
+  co_await collection_manager->update(
+    cmroot, *ctx.transaction, dest_cid,
+    coll_info_t{static_cast<unsigned>(bits), dest_info.onode_root}
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_merge_collection updating dest_cid bits"));
+  co_await collection_manager->remove(
+    cmroot, *ctx.transaction, cid
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_merge_collection removing cid"));
+  onode_manager->remove_tree(cid);
+  if (cmroot.must_update()) {
+    transaction_manager->write_collection_root(*ctx.transaction, cmroot);
+  }
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_collection_set_bits(
+  internal_context_t &ctx,
+  const coll_t cid,
+  int bits)
+{
+  LOG_PREFIX(SeaStoreS::_collection_set_bits);
+  auto cmroot = co_await transaction_manager->read_collection_root(
+    *ctx.transaction);
+  auto coll_node = co_await collection_manager->get_coll_node(
+    cmroot, *ctx.transaction
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_collection_set_bits reading collection "
+      "node"));
+  auto cid_info = coll_node->get_value(cid);
+  DEBUGT("cid={} bits={} (was {})",
+         *ctx.transaction, cid, bits, cid_info.bits);
+  co_await collection_manager->update(
+    cmroot, *ctx.transaction, cid,
+    coll_info_t{static_cast<unsigned>(bits), cid_info.onode_root}
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_collection_set_bits updating cid bits"));
+  if (cmroot.must_update()) {
+    transaction_manager->write_collection_root(*ctx.transaction, cmroot);
+  }
 }
 
 SeaStore::Shard::tm_ret
@@ -2795,13 +3226,18 @@ SeaStore::Shard::_create_collection(
           cmroot,
           *ctx.transaction,
           cid,
-          bits
-        ).si_then([this, &ctx, &cmroot] {
+          coll_info_t{static_cast<unsigned>(bits), L_ADDR_NULL}
+        ).si_then([this, &ctx, &cmroot, cid] {
           if (cmroot.must_update()) {
             transaction_manager->write_collection_root(
               *ctx.transaction,
               cmroot);
           }
+          if (cid == coll_t::meta()) {
+            // meta's tree is already created during mkfs_managers()
+            return base_iertr::now();
+          }
+          return onode_manager->create_tree(*ctx.transaction, cid);
         });
       }
     );
@@ -2828,7 +3264,8 @@ SeaStore::Shard::_remove_collection(
           cmroot,
           *ctx.transaction,
           cid
-        ).si_then([this, &ctx, &cmroot] {
+        ).si_then([this, &ctx, &cmroot, cid] {
+          onode_manager->remove_tree(cid);
           // param here denotes whether it already existed, probably error
           if (cmroot.must_update()) {
             transaction_manager->write_collection_root(
@@ -2935,13 +3372,30 @@ SeaStore::read_meta(const std::string& key)
 seastar::future<std::string> SeaStore::get_default_device_class()
 {
   using crimson::common::get_conf;
-  std::string type = get_conf<std::string>("seastore_main_device_type");
+  std::string type = get_conf<std::string>("seastore_data_device_type");
   return seastar::make_ready_future<std::string>(type);
+}
+
+seastar::future<std::string> SeaStore::get_data_backend_type_name()
+{
+  ceph_assert(seastar::this_shard_id() == primary_core);
+  return seastar::make_ready_future<std::string>(
+    fmt::format("{}", data_devices.front()->get_backend_type()));
+}
+
+seastar::future<std::string> SeaStore::get_cache_backend_type_name()
+{
+  ceph_assert(seastar::this_shard_id() == primary_core);
+  if (cache_devices.empty()) {
+    return seastar::make_ready_future<std::string>();
+  }
+  return seastar::make_ready_future<std::string>(
+    fmt::format("{}", cache_devices.front()->get_backend_type()));
 }
 
 uuid_d SeaStore::Shard::get_fsid() const
 {
-  return device->get_meta().seastore_id;
+  return primary_device->get_meta().seastore_id;
 }
 
 void SeaStore::Shard::init_managers()
@@ -2955,11 +3409,16 @@ void SeaStore::Shard::init_managers()
   shard_stats = {};
 
   transaction_manager = make_transaction_manager(
-      device, secondaries, shard_stats, store_index, is_test);
+      primary_device,
+      cache_devices,
+      data_devices,
+      shard_stats,
+      store_index,
+      is_test);
   collection_manager = std::make_unique<collection_manager::FlatCollectionManager>(
       *transaction_manager);
   onode_manager = std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(
-      *transaction_manager);
+      *transaction_manager, *collection_manager);
 }
 
 double SeaStore::Shard::reset_report_interval() const
@@ -3004,7 +3463,7 @@ shard_stats_t SeaStore::Shard::get_io_stats(
     };
     INFO("iops={:.2f},{:.2f},{:.2f}({:.2f},{:.2f},{:.2f},{:.2f}),{:.2f} "
          "conflicts={:.2f},{:.2f},{:.2f}({:.2f},{:.2f},{:.2f},{:.2f}) "
-         "outstanding={}({},{},{},{},{}),{},{},{}",
+         "outstanding={}({},{},{},{}),{},{},{}",
          // iops
          ret.io_num/seconds,
          ret.read_num/seconds,
@@ -3025,7 +3484,6 @@ shard_stats_t SeaStore::Shard::get_io_stats(
          // outstanding
          ret.pending_io_num,
          ret.starting_io_num,
-         ret.waiting_collock_io_num,
          ret.waiting_throttler_io_num,
          ret.processing_inlock_io_num,
          ret.processing_postlock_io_num,
@@ -3405,7 +3863,7 @@ SeaStore::Shard::omaptree_set_keys(
       base_iertr::future<> maybe_create_root = base_iertr::now();
       if (root.is_null()) {
 	maybe_create_root = manager.initialize_omap(t,
-	  onode.get_metadata_hint(device->get_block_size()),
+	  onode.get_metadata_hint(primary_device->get_block_size()),
 	  root.get_type()
 	).si_then([&root](auto new_root) {
 	  root = new_root;

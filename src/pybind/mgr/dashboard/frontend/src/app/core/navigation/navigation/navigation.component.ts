@@ -18,6 +18,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { USER } from '~/app/shared/constants/app.constants';
+import { SMB_BASE_RGW } from '~/app/shared/constants/smb.constant';
 
 @Component({
   selector: 'cd-navigation',
@@ -27,6 +28,7 @@ import { USER } from '~/app/shared/constants/app.constants';
 })
 export class NavigationComponent implements OnInit, OnDestroy {
   clusterDetails: any[] = [];
+  readonly smbRgwRoute = `/${SMB_BASE_RGW}`;
 
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;

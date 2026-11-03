@@ -9,4 +9,9 @@ export class RgwDaemon {
   zone_name: string;
   default: boolean;
   port: number;
+  http_port?: number;
+}
+
+export interface RgwDaemonDetailsResponse {
+  rgw_metadata?: Record<string, string>;
 }

@@ -24,7 +24,7 @@ function run() {
     # Fix port????
     export CEPH_MON="127.0.0.1:7114" # git grep '\<7114\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON --osd_max_backfills=1 --debug_reserver=20 "
     # Set osd op queue = wpq for the tests. Recovery priority is not
     # considered by mclock_scheduler leading to unexpected results.

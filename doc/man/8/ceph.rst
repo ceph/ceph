@@ -84,7 +84,9 @@ file, or random key if no input is given and/or any caps specified in the comman
 
 Usage::
 
-    ceph auth add <entity> {<caps> [<caps>...]}
+	  ceph auth add [--key-type=<cipher>] <entity> {<caps> [<caps>...]}
+
+No key information is output. If ``--key-type`` is omitted, the cluster's preferred cipher is used.
 
 Subcommand ``caps`` updates caps for ``name`` from caps specified in the command.
 
@@ -123,7 +125,9 @@ command.
 
 Usage::
 
-    ceph auth get-or-create <entity> {<caps> [<caps>...]}
+	  ceph auth get-or-create [--key-type=<cipher>] <entity> {<caps> [<caps>...]}
+
+The output is the new key in the ``.ini`` file format. If ``--key-type`` is omitted, the cluster's preferred cipher is used.
 
 Subcommand ``get-or-create-key`` gets or adds key for ``name`` from system/caps
 pairs specified in the command.  If key already exists, any given caps must match
@@ -132,6 +136,8 @@ the existing caps for that key.
 Usage::
 
     ceph auth get-or-create-key <entity> {<caps> [<caps>...]}
+
+The output is the new key in plain text. If ``--key-type`` is omitted, the cluster's preferred cipher is used.
 
 Subcommand ``import`` reads keyring from input file.
 
@@ -155,7 +161,29 @@ Subcommand ``print_key`` displays requested key.
 
 Usage::
 
-    ceph auth print_key <entity>
+	  ceph auth print_key <entity>
+
+Subcommand ``rotate`` rotates the key for the given entity.
+
+Usage::
+
+	ceph auth rotate [--key-type=<cipher>] <entity>
+
+The output is the new key in the ``.ini`` file format. If ``--key-type`` is omitted, the cluster's preferred cipher is used.
+
+Subcommand ``dump-keys`` dumps the entire key database including rotating service keys.
+
+Usage::
+
+	ceph --format=json auth dump-keys
+
+The output format must be ``json`` or ``json-pretty``.
+
+Subcommand ``wipe-rotating-service-keys`` wipes all rotating service keys and forces the Monitors to refresh all keys. **Do not** run this command without understanding its full effects and purpose. Consult the Ceph documentation for more information.
+
+Usage::
+
+	ceph auth wipe-rotating-service-keys
 
 
 config
@@ -373,7 +401,9 @@ capability that client already holds.
 
 Usage::
 
-    ceph fs authorize <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
+    ceph fs authorize [--key-type=<cipher>] <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
+
+The output is the new key in the ``.ini`` file format with caps. If ``--key-type`` is omitted, the cluster's preferred cipher is used.
 
 Subcommand ``dump`` displays the FSMap at the given epoch (default: current).
 This includes all file system settings, MDS daemons and the ranks they hold
@@ -660,6 +690,17 @@ Usage::
 
     ceph mon stat
 
+Subcommand ``set`` sets various Monitor map settings.
+
+Usage::
+
+	ceph mon set <name> <value>
+
+Valid names include ``auth_service_cipher``, ``auth_allowed_ciphers``, and
+``auth_preferred_cipher``. The meaning of these settings and the valid values
+are as described in :manpage:`monmaptool(8)`.
+
+
 mgr
 ---
 
@@ -673,14 +714,16 @@ Usage::
     ceph mgr dump
 
 Subcommand ``fail`` will mark a Manager daemon as failed, removing it
-from the Manager map.  If it is the active Manager daemon a standby
-will take its place.
+from the Manager map. Without a name, it fails the active Manager daemon.
+If the failed daemon is the active Manager daemon, a standby will take its
+place.
 
 Usage::
 
-    ceph mgr fail <name>
+    ceph mgr fail [<name>]
 
-Subcommand ``module ls`` will list currently enabled Manager modules (plugins).
+Subcommand ``module ls`` lists the Manager modules (plugins) and shows which
+are always on, which are enabled, and which are disabled.
 
 Usage::
 
@@ -764,10 +807,10 @@ Usage::
 
 Subcommand ``new`` can be used to create a new OSD or to recreate a previously
 destroyed OSD with a specific *id*. The new OSD will have the specified *uuid*,
-and the command expects a JSON file containing the base64 cephx key for auth
-entity *client.osd.<id>*, as well as optional base64 cephx key for dm-crypt
-lockbox access and a dm-crypt key. Specifying a dm-crypt requires specifying
-the accompanying lockbox cephx key.
+and the command expects a JSON file containing the base64 CephX key for auth
+entity *client.osd.<id>*, as well as optional base64 CephX key for dm-crypt
+lockbox access and a dm-crypt key. Specifying a dm-crypt key requires specifying
+the accompanying lockbox CephX key.
 
 Usage::
 
@@ -1196,7 +1239,8 @@ Subcommand ``get`` gets pool parameter <var>.
 
 Usage::
 
-    ceph osd pool get <poolname> size|min_size|pg_num|pgp_num|crush_rule|write_fadvise_dontneed
+    ceph osd pool get <poolname> size|min_size|pg_num|pgp_num|crush_rule|hashpspool|
+    nodelete|nopgchange|nosizechange|write_fadvise_dontneed
 
 Only for tiered pools::
 
@@ -1223,7 +1267,13 @@ Subcommand ``ls`` list pools
 
 Usage::
 
-    ceph osd pool ls {detail}
+    ceph osd pool ls {detail} {--show-rule-names}
+
+With ``detail``, ``--show-rule-names`` renders each pool's CRUSH rule by name
+instead of by numeric id in the text output. In the JSON output the numeric
+``crush_rule`` field is left as-is and a ``crush_rule_name`` field is added
+next to it. If the referenced rule no longer exists, the text output falls back
+to the numeric id and the JSON output omits ``crush_rule_name``.
 
 Subcommand ``mksnap`` makes snapshot <snap> in <pool>.
 
@@ -1249,7 +1299,7 @@ Usage::
 
     ceph osd pool set <poolname> size|min_size|pg_num|
     pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|
-    hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool|
+    hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|
     target_max_bytes|target_max_objects|cache_target_dirty_ratio|
     cache_target_dirty_high_ratio|
     cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|
@@ -1360,7 +1410,7 @@ Usage::
 
     ceph osd rm <ids> [<ids>...]
 
-Subcommand ``destroy`` marks OSD *id* as *destroyed*, removing its cephx
+Subcommand ``destroy`` marks OSD *id* as *destroyed*, removing its CephX
 entity's keys and all of its dm-crypt and daemon-private config key
 entries.
 
@@ -1405,7 +1455,9 @@ The ``full`` flag is not honored anymore since the Mimic release, and
 
 Usage::
 
-    ceph osd set pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent
+    ceph osd set pause|noup|nodown|noout|noin|nobackfill|norebalance|
+    norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|
+    pglog_hardlimit|noautoscale
 
 Subcommand ``setcrushmap`` sets CRUSH map from input file.
 
@@ -1496,7 +1548,9 @@ Subcommand ``unset`` unsets cluster-wide <flag> by updating OSD map.
 
 Usage::
 
-    ceph osd unset pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent
+    ceph osd unset pause|noup|nodown|noout|noin|nobackfill|norebalance|
+    norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|
+    noautoscale
 
 
 pg

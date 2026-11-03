@@ -69,6 +69,7 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
   int rc;
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
+  io.set_no_version_on_read(true);
   if (!is_replicated_pool) {
     cc = std::make_unique<ConsistencyChecker>(rados, asio, pool);
   }
@@ -199,6 +200,7 @@ void RadosIo::applyIoOp(IoOp& op) {
       }
       ceph_assert(is_consistent);
       finish_io();
+      break;
     }
 
     case OpType::Copy: {
@@ -221,6 +223,8 @@ void RadosIo::applyIoOp(IoOp& op) {
       [[fallthrough]];
     case OpType::Read3:
       [[fallthrough]];
+    case OpType::SparseRead:
+      [[fallthrough]];
     case OpType::Write:
       [[fallthrough]];
     case OpType::Write2:
@@ -235,6 +239,13 @@ void RadosIo::applyIoOp(IoOp& op) {
       [[fallthrough]];
     case OpType::FailedWrite3:
       applyReadWriteOp(op);
+      break;
+    case OpType::TruncateWrite:
+      [[fallthrough]];
+    case OpType::TruncateWrite2:
+      [[fallthrough]];
+    case OpType::TruncateWrite3:
+      applyTruncateWriteOp(op);
       break;
     case OpType::InjectReadError:
       [[fallthrough]];
@@ -287,7 +298,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       uint64_t range = 100;
       uint64_t rand_value = rng();
       int index = rand_value % range;
-      if (index <= balanced_read_percentage) {
+      if (index < balanced_read_percentage) {
         flags = librados::OPERATION_BALANCE_READS;
       }
     }
@@ -356,6 +367,44 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       applyReadOp(readOp);
       break;
     }
+    case OpType::SparseRead: {
+      // Issues CEPH_OSD_OP_SPARSE_READ — the only client op that routes to
+      // PrimaryLogPG::do_sparse_read(). Used to exercise the rep_repair path.
+      start_io();
+      SingleSparseReadOp& sparseOp = static_cast<SingleSparseReadOp&>(op);
+      auto op_info = std::make_shared<AsyncOpInfo<1>>(sparseOp.offset,
+                                                      sparseOp.length);
+      librados::ObjectReadOperation rop;
+      auto extents = std::make_shared<std::map<uint64_t, uint64_t>>();
+      rop.sparse_read(sparseOp.offset[0] * block_size,
+                      sparseOp.length[0] * block_size,
+                      extents.get(),
+                      &op_info->bufferlist[0],
+                      nullptr);
+      int flags = 0;
+      if (sparseOp.balanced_read.has_value() && *sparseOp.balanced_read) {
+        flags = librados::OPERATION_BALANCE_READS;
+      } else if (!sparseOp.balanced_read.has_value()) {
+        // Honour balanced_read_percentage just like normal reads
+        uint64_t rand_value = rng();
+        if ((int)(rand_value % 100) < balanced_read_percentage) {
+          flags = librados::OPERATION_BALANCE_READS;
+        }
+      }
+      auto sparse_read_cb = [this, extents, op_info](boost::system::error_code ec,
+                                                     version_t ver, bufferlist bl) {
+        // The call must succeed (or return EIO/EAGAIN after fix).
+        // A crash on the OSD side would be visible as a connection error.
+        ceph_assert(ec == boost::system::errc::success ||
+                    ec == boost::system::errc::io_error ||
+                    ec.value() == EAGAIN);
+        finish_io();
+      };
+      librados::async_operate(asio.get_executor(), io, primary_oid,
+                              std::move(rop), flags, nullptr, sparse_read_cb);
+      num_io++;
+      break;
+    }
     case OpType::Write: {
       start_io();
       SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);
@@ -404,6 +453,59 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
     default:
       ceph_abort_msg(
           fmt::format("Unsupported Read/Write operation ({})", op.getOpType()));
+      break;
+  }
+}
+
+void RadosIo::applyTruncateWriteOp(IoOp& op) {
+  auto applyTruncateWriteOp = [this]<OpType opType, int N>(
+                                  TruncateWriteOp<opType, N> truncWriteOp) {
+    auto op_info =
+        std::make_shared<AsyncOpInfo<N>>(truncWriteOp.offset, truncWriteOp.length);
+    librados::ObjectWriteOperation wop;
+    
+    // First, add the truncate operation
+    wop.truncate(truncWriteOp.size * block_size);
+    
+    // Then, add the write operations
+    for (int i = 0; i < N; i++) {
+      op_info->bufferlist[i] =
+          db->generate_data(truncWriteOp.offset[i], truncWriteOp.length[i]);
+      wop.write(truncWriteOp.offset[i] * block_size,
+                op_info->bufferlist[i]);
+    }
+    
+    auto write_cb = [this](boost::system::error_code ec, version_t ver) {
+      ceph_assert(ec == boost::system::errc::success);
+      finish_io();
+    };
+    librados::async_operate(asio.get_executor(), io, primary_oid,
+                            std::move(wop), 0, nullptr, write_cb);
+    num_io++;
+  };
+
+  switch (op.getOpType()) {
+    case OpType::TruncateWrite: {
+      start_io();
+      SingleTruncateWriteOp& truncWriteOp = static_cast<SingleTruncateWriteOp&>(op);
+      applyTruncateWriteOp(truncWriteOp);
+      break;
+    }
+    case OpType::TruncateWrite2: {
+      start_io();
+      DoubleTruncateWriteOp& truncWriteOp = static_cast<DoubleTruncateWriteOp&>(op);
+      applyTruncateWriteOp(truncWriteOp);
+      break;
+    }
+    case OpType::TruncateWrite3: {
+      start_io();
+      TripleTruncateWriteOp& truncWriteOp = static_cast<TripleTruncateWriteOp&>(op);
+      applyTruncateWriteOp(truncWriteOp);
+      break;
+    }
+    default:
+      ceph_abort_msg(
+          fmt::format("Unsupported TruncateWrite operation ({})", op.getOpType()));
       break;
   }
 }

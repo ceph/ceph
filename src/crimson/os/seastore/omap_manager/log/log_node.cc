@@ -16,7 +16,7 @@ void delta_t::replay(LogKVNodeLayout &l) {
   } else if (op == op_t::ADD_PREV) {
     l.set_prev_node(prev);
   } else if (op == op_t::ADD_DUP_ADDR) {
-    l.set_dup_tail(prev);
+    l.set_dup_head(prev);
   } else if (op == op_t::INIT) {
     l.set_last_pos(0); 
     l.set_size(0);
@@ -74,13 +74,13 @@ void LogNode::set_prev_addr(laddr_t l) {
   set_prev_node(l);
 }
 
-void LogNode::set_dup_tail_addr(laddr_t l) {
+void LogNode::set_dup_head_addr(laddr_t l) {
   auto p = maybe_get_delta_buffer();
   if (p) {
-    journal_append_dup_tail_addr(l, p);
+    journal_append_dup_head_addr(l, p);
     return;
   }
-  set_dup_tail(l);
+  set_dup_head(l);
 }
 
 void LogNode::set_init_vars() {
@@ -120,32 +120,11 @@ bool LogNode::is_removable() {
 }
 
 void LogNode::set_cur_bitmap(uint32_t begin, uint32_t end) {
-  d_bitmap_t bitmap = get_d_bitmap();
-  auto p = maybe_get_delta_buffer();
-  if (p) {
-    auto ret = p->get_latest_d_bitmap();
-    if (ret) {
-      auto biter = (*ret).cbegin();
-      decode(bitmap, biter);
-    }
-  } 
+  d_bitmap_t bitmap = get_live_bitmap();
   bitmap.set_bitmap_range(begin, end);
   bufferlist bl;
   encode(bitmap, bl);
   append_remove(bl);
-}
-
-d_bitmap_t LogNode::get_cur_bitmap() {
-  d_bitmap_t bitmap = get_d_bitmap();
-  auto p = maybe_get_delta_buffer();
-  if (p) {
-    auto ret = p->get_latest_d_bitmap();
-    if (ret) {
-      auto biter = (*ret).cbegin();
-      decode(bitmap, biter);
-    } 
-  } 
-  return bitmap;
 }
 
 void LogNode::set_bitmap(d_bitmap_t map) {
@@ -154,29 +133,15 @@ void LogNode::set_bitmap(d_bitmap_t map) {
   append_remove(bl);
 }
 
-template <typename F>
-void LogNode::for_each_live_entry(F&& fn) {
-  d_bitmap_t bitmap;
+d_bitmap_t LogNode::get_live_bitmap() const {
+  d_bitmap_t bitmap = get_d_bitmap();
   if (auto p = maybe_get_delta_buffer()) {
     if (auto ret = p->get_latest_d_bitmap()) {
       auto it = (*ret).cbegin();
       decode(bitmap, it);
     }
-  } else {
-    bitmap = get_d_bitmap();
   }
-
-  uint32_t index = 0;
-  auto iter = iter_begin();
-  while (iter != iter_end()) {
-    if (!bitmap.is_set(index)) {
-      if (fn(*iter, index)) {
-	return;
-      }
-    }
-    ++iter;
-    ++index;
-  }
+  return bitmap;
 }
 
 void LogNode::list(const std::optional<std::string> &first,
@@ -208,7 +173,7 @@ LogNode::get_value_ret LogNode::get_value(const std::string &key, copy_t c)
   bufferlist bl;
   bool found = false;
   for_each_live_entry([&](const auto& ent, uint32_t index) -> bool {
-    const auto k = ent.get_key();
+    const auto k = ent.get_key_view();
     if (k == key) {
       if (c == copy_t::SHALLOW) {
 	bl = ent.get_val_shallow();
@@ -236,13 +201,13 @@ LogNode::get_value_ret LogNode::get_value(const std::string &key, copy_t c)
     std::nullopt);
 }
 
-bool LogNode::remove_entry(const std::string key)
+bool LogNode::remove_entry(std::string_view key)
 {
   auto iter = iter_begin();
   uint32_t index = 0;
   bool removed = false;
   while(iter != iter_end()) {
-    if (iter->get_key() == key) {
+    if (iter->get_key_view() == key) {
       set_cur_bitmap(index, index);
       // Duplicate keys may exist if the old entry was removed.
       removed = true;
@@ -253,38 +218,51 @@ bool LogNode::remove_entry(const std::string key)
   return removed;
 }
 
+void LogNode::remove_last_entry()
+{
+  // appends journaled in this transaction are counted in reserved_size,
+  // not in get_size(), until the delta is applied
+  const uint32_t size = get_size() + get_reserved_size();
+  assert(size > 0);
+  set_cur_bitmap(size - 1, size - 1);
+}
+
 bool LogNode::log_less_than(std::string_view str) const
 {
-  std::string last_key = get_last_key();
-  if (is_log_key(last_key)) {
+  if (get_size() == 0) {
+    return false;
+  }
+  // the live log keys of a node are in order, so a live last key is enough
+  d_bitmap_t bitmap = get_live_bitmap();
+  std::string_view last_key = iter_rbegin()->get_key_view();
+  if (!bitmap.is_set(get_size() - 1) && is_log_key(last_key)) {
     return last_key < str;
   }
-  auto iter = iter_begin();
   bool all_less = false;
-  // perform full traversal to figure out last entry < str
-  while(iter != iter_end()) {
-    std::string key = iter->get_key();
-    if (is_log_key(key)) {
-      all_less = key < str;
+  for_each_live_entry([&](const auto &ent, uint32_t index) -> bool {
+    std::string_view key = ent.get_key_view();
+    if (!is_log_key(key)) {
+      return false;
     }
-    iter++;
-  };
+    all_less = key < str;
+    return !all_less;
+  });
   return all_less;
 }
 
 bool LogNode::log_has_larger_than(std::string_view str) const
 {
-  auto iter = iter_begin();
-  // return true if the first log entry > str
-  while(iter != iter_end()) {
-    std::string key = iter->get_key();
+  // return true if the first live log entry > str
+  bool larger = false;
+  for_each_live_entry([&](const auto &ent, uint32_t index) -> bool {
+    std::string_view key = ent.get_key_view();
     if (!is_log_key(key)) {
-      iter++;
-      continue;
+      return false;
     }
-    return key > str;
-  };
-  return false;
+    larger = key > str;
+    return true;
+  });
+  return larger;
 }
 
 bool LogNode::can_ow()
@@ -323,15 +301,10 @@ bool LogNode::expect_overflow(const std::string &key,
   size_t vsize, bool can_ow) {
   size_t ksize = key.size();
   if (can_ow) { 
-    int gap = ow_gap_from_last_entry(key.size(), vsize);
-    uint64_t remain = capacity() - get_last_pos() - reserved_len;
-    if (gap >= 0) {
-      gap += static_cast<uint64_t>(gap);
-    } else {
-      uint64_t d = static_cast<uint64_t>(-gap);
-      gap -= d;
-    }
-    return remain < get_entry_size(ksize, vsize);
+    // Reserve only the additional space required by the overwrite.
+    int gap = ow_gap_from_last_entry(ksize, vsize);
+    return gap > 0 &&
+      free_space() < static_cast<size_t>(gap) + reserved_len;
   } else if (get_size() + reserved_size + 1 > d_bitmap_t::MAX_ENTRY) {
     return true;
   } else if (is_ow_key(key) && !can_ow) {
@@ -351,8 +324,10 @@ int LogNode::ow_gap_from_last_entry(const size_t key, const size_t val) {
   if (p) {
     auto ret = p->get_latest_write_delta();
     if (ret && (*ret).key == get_ow_key()) {
-      if ((*ret).val.length() < val) {
-	gap = val - (*ret).val.length();
+      auto old_size = get_entry_size((*ret).key.size(), (*ret).val.length());
+      auto new_size = get_entry_size(key, val);
+      if (new_size > old_size) {
+        gap = new_size - old_size;
       }
     } else {
       gap = _ow_gap_from_last_entry(key, val);
@@ -361,6 +336,31 @@ int LogNode::ow_gap_from_last_entry(const size_t key, const size_t val) {
     gap = _ow_gap_from_last_entry(key, val);
   }
   return gap;
+}
+
+LogNode::range_t LogNode::has_between(const std::optional<std::string>& start,
+  const std::optional<std::string>& end) {
+  assert(start);
+  if (get_size() == 0) {
+    return range_t::NO_BETWEEN;
+  }
+  std::string_view s(*start);
+  auto in_range = [&](std::string_view k) {
+    return k >= s && (!end || k <= std::string_view(*end));
+  };
+  
+  // The newest entry is the one the loop below reaches last, so test it up
+  // front: trimming the most recent keys is the common case and this answers
+  // it without a scan.
+  if (in_range(get_last_key())) {
+    return range_t::HAS_BETWEEN;
+  }
+  for (auto iter = iter_begin(); iter != iter_end(); ++iter) {
+    if (in_range(iter->get_key())) {
+      return range_t::HAS_BETWEEN;
+    }
+  }
+  return range_t::NO_BETWEEN;
 }
 
 }

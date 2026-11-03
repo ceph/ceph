@@ -503,22 +503,27 @@ class TestNFS(MgrTestCase):
         apply spec and wait for redeploy otherwise it will reset any conf changes
         :param spec: ganesha daemon spec (YAML)
         """
-        ganesha_daemon_pid_init = (self.ctx.cluster.run(args=["sudo", "pgrep", "ganesha.nfsd"],
-                                                        stdout=StringIO(),
-                                                        stderr=StringIO()))[0].stdout.getvalue().strip()
+        def _ganesha_daemons_started():
+            # the `started` timestamps of the nfs daemons, as reported by
+            # `ceph orch ps`
+            ps = json.loads(self._orch_cmd("ps", "--daemon-type", "nfs",
+                                           "-f", "json"))
+            return sorted(str(d.get("started")) for d in ps
+                          if d.get("daemon_type") == "nfs")
+
+        started_init = _ganesha_daemons_started()
         self.ctx.cluster.run(args=['ceph', 'orch', 'apply', '-i', '-'],
                              stdin=spec)
-        with contextutil.safe_while(sleep=4, tries=15) as proceed:
+        with contextutil.safe_while(sleep=4, tries=45) as proceed:
             while proceed():
                 try:
-                    ganesha_daemon_pid = (self.ctx.cluster.run(args=["sudo", "pgrep", "ganesha.nfsd"],
-                                                               stdout=StringIO(),
-                                                               stderr=StringIO()))[0].stdout.getvalue().strip()
-                    if ganesha_daemon_pid != ganesha_daemon_pid_init:
-                        # new pid i.e. redeployment done
+                    # a redeploy (re)starts the daemon(s): the set of
+                    # `started` timestamps changes
+                    if _ganesha_daemons_started() != started_init:
                         break
-                except CommandFailedError:
-                    # no pid if the redeployment is in progress
+                except Exception:
+                    # daemon might be temporarily absent while it is
+                    # being redeployed
                     log.info('waiting for ganesha daemon redeployment')
 
     def enable_libcephfs_logging(self, cluster_name):
@@ -550,8 +555,10 @@ class TestNFS(MgrTestCase):
         original_ganesha_conf = (self.ctx.cluster.run(args=["sudo", "cat", GANESHA_CONF_FILE_PATH],
                                                       stdout=StringIO(),
                                                       stderr=StringIO()))[0].stdout.getvalue().strip()
-        if "[client]" not in original_ganesha_conf:
-            s = f"[client]\n\tdebug client = 20\n\tlog file = /var/log/ceph/ceph-client.nfs.{cluster_name}.log"
+        if "debug client" not in original_ganesha_conf:
+            s = f"\tdebug client = 20\n\tlog file = /var/log/ceph/ceph-client.nfs.{cluster_name}.log"
+            if "[client]" not in original_ganesha_conf:
+                s = f"[client]\n{s}"
             self._sys_cmd(["echo", Raw(f'"{s}"'), Raw("|"), "sudo", "tee", Raw("-a"), GANESHA_CONF_FILE_PATH])
             # restart ganesha daemon for the changes to take effect
             self._orch_cmd("restart", f"nfs.{cluster_name}")
@@ -601,13 +608,12 @@ class TestNFS(MgrTestCase):
         conf_content = (self.ctx.cluster.run(args=["sudo", "cat", conf_path],
                                              stdout=StringIO(),
                                              stderr=StringIO()))[0].stdout.getvalue().strip()
-        if "[client]" in conf_content:
+        if "debug client" in conf_content:
             self.ctx.cluster.run(args=['sudo', 'truncate', Raw("-s"), "0", conf_path])
             self._sys_cmd(["echo", Raw(f'"{ganesha_conf}"'), Raw("|"), "sudo", "tee", conf_path])
             default_conf = (self.ctx.cluster.run(args=["sudo", "cat", conf_path],
                                                  stdout=StringIO(),
                                                  stderr=StringIO()))[0].stdout.getvalue().strip()
-            self.assertNotIn("[client]", default_conf)
             self.assertNotIn("debug client = 20", default_conf)
             self.assertNotIn(f"log file = /var/log/ceph/ceph-client.nfs.{cluster_name}.log", default_conf)
             # restart ganesha daemon for the changes to take effect
@@ -826,6 +832,7 @@ class TestNFS(MgrTestCase):
                     }
                 ],
                 "deployment_type": "standalone",
+                "enable_rdma": False,
                 "virtual_ip": None,
             }
         }

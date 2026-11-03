@@ -221,16 +221,14 @@ export class PrometheusService {
   }
 
   private updateTimeStamp(selectedTime: any): any {
-    let formattedDate = {};
     let secondsAgo = selectedTime['end'] - selectedTime['start'];
     const date: number = moment().unix() - secondsAgo;
     const dateNow: number = moment().unix();
-    formattedDate = {
+    return {
       start: date,
       end: dateNow,
       step: selectedTime['step']
     };
-    return formattedDate;
   }
 
   getMultiClusterData(params: any): any {

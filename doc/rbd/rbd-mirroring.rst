@@ -431,7 +431,7 @@ image name; interval; and optional start time::
 
         rbd mirror snapshot schedule add [--pool {pool-name}] [--image {image-name}] {interval} [{start-time}]
 
-The ``interval`` can be specified in days, hours, or minutes using ``d``, ``h``,
+The ``interval`` can be specified in weeks, days, hours, or minutes using ``w``, ``d``, ``h``,
 ``m`` suffix respectively. The optional ``start-time`` must be specified in
 the ISO 8601 time format. If no UTC offset is provided, UTC is assumed. For
 example::
@@ -465,7 +465,7 @@ image name::
 The next schedule time is always displayed in UTC. For example::
 
         $ rbd --cluster site-a mirror snapshot schedule status
-        SCHEDULE TIME       IMAGE             
+        NEXT SCHEDULED TIME IMAGE             
         2026-01-24 06:00:00 image-pool/image1
 
 
@@ -531,7 +531,7 @@ For example::
         $ rbd --cluster site-a mirror pool promote image-pool
 
 .. tip:: Since the primary / non-primary status is per-image, it is possible to
-   have two clusters split the IO load and stage failover / failback.
+   have two clusters split the I/O load and stage failover / failback.
 
 .. note:: Promotion can be forced using the ``--force`` option. Forced
    promotion is needed when the demotion cannot be propagated to the peer

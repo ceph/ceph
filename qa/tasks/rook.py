@@ -552,6 +552,8 @@ def ceph_config_keyring(ctx, config):
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
 
+    client_key_type = config.get('client_key_type', None)
+
     log.info('Setting up client nodes...')
     clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
     for remote, roles_for_host in clients.remotes.items():
@@ -560,15 +562,19 @@ def ceph_clients(ctx, config):
             name = teuthology.ceph_role(role)
             client_keyring = '/etc/ceph/{0}.{1}.keyring'.format(cluster_name,
                                                                 name)
+
+            args = ['ceph', 'auth', 'get-or-create']
+            if client_key_type is not None:
+                args.append(f'--key-type={client_key_type}')
+            args.extend([
+                name,
+                'mon', 'allow *',
+                'osd', 'allow *',
+                'mds', 'allow *',
+                'mgr', 'allow *',
+            ])
             r = _shell(ctx, config,
-                args=[
-                    'ceph', 'auth',
-                    'get-or-create', name,
-                    'mon', 'allow *',
-                    'osd', 'allow *',
-                    'mds', 'allow *',
-                    'mgr', 'allow *',
-                ],
+                args=args,
                 stdout=BytesIO(),
             )
             keyring = r.stdout.getvalue()

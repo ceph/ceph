@@ -1002,7 +1002,21 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       }
       auto size = sal_obj->get_size();
 
+      // take the completion's lock, as AbortMultipartUpload does. a
+      // completion that holds it may have written a head over these parts
+      auto meta_obj = mpu->get_meta_obj();
+      meta_obj->set_in_extra_data(true);
+      const ceph::timespan dur = std::chrono::seconds(
+        cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time"));
+      auto serializer = meta_obj->get_serializer(this, y, "RGWCompleteMultipart");
+      ret = serializer->try_lock(this, dur, y);
+      if (ret < 0) {
+        ldpp_dout(this, 5) << "not aborting multipart upload " << obj.key
+            << " now, its lock is held or gone, ret=" << ret << dendl;
+        return ret;
+      }
       ret = mpu->abort(this, cct, y);
+      serializer->unlock(this, y);
       if (ret == 0) {
         const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
         send_notification(this, y, driver, sal_obj.get(), target, etag, size,
@@ -1486,6 +1500,7 @@ class LCOpAction_Transition : public LCOpAction {
 protected:
   virtual bool check_current_state(bool is_current) = 0;
   virtual ceph::real_time get_effective_mtime(lc_op_ctx& oc) = 0;
+  virtual int perf_counter() const = 0;
 public:
   LCOpAction_Transition(const transition_action& _transition)
     : transition(_transition) {}
@@ -1570,10 +1585,20 @@ public:
 
   int transition_obj_to_cloud(lc_op_ctx& oc, optional_yield y) {
     int ret{0};
-    /* If CurrentVersion object & bucket has versioning enabled, remove it &
-     * create delete marker */
-    bool delete_object = (!oc.tier->retain_head_object() ||
-                     (oc.o.is_current() && oc.bucket->versioning_enabled()));
+    /* Determine whether to delete the local object after cloud transition.
+     * retain_head_object must be true for any head retention.
+     * retain_current_version additionally controls current versioned objects:
+     * when both are true, current versions are kept as cloud-tiered stubs
+     * instead of being replaced with delete markers.
+     */
+    bool delete_object;
+    if (!oc.tier->retain_head_object()) {
+      delete_object = true;
+    } else if (oc.o.is_current() && oc.bucket->versioning_enabled()) {
+      delete_object = !oc.tier->retain_current_version();
+    } else {
+      delete_object = false;
+    }
 
     /* notifications */
     auto& bucket = oc.bucket;
@@ -1684,9 +1709,11 @@ public:
 
     if (!r && oc.tier->is_tier_type_s3()) {
       ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
-      if (!oc.o.is_current() &&
-          !pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp, y)) {
-        /* Skip objects which has object lock enabled. */
+      /* Skip objects which have an active retention or legal hold, current
+       * versions included: with retain_head_object and retain_current_version
+       * the head is rewritten as a cloud-tier stub, which would leave the
+       * locked data only on the cloud endpoint. */
+      if (!pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp, y)) {
         ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is locked. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
         return 0;
       }
@@ -1714,7 +1741,9 @@ public:
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
 			     << oc.bucket << ":" << o.key 
 			     << " -> " << transition.storage_class 
-			     << " " << cpp_strerror(r) << dendl;
+			     << " " << cpp_strerror(r)
+			     << (r == -ECANCELED ? " (object changed concurrently)" : "")
+			     << dendl;
         return r;
       }
     }
@@ -1731,6 +1760,9 @@ public:
     ldpp_dout(oc.dpp, 2) << "TRANSITIONED:" << oc.bucket
 			 << ":" << o.key << " -> "
 			 << transition.storage_class << dendl;
+    if (perfcounter) {
+      perfcounter->inc(perf_counter(), 1);
+    }
     if (oc.batch_counters) {
       oc.batch_counters->record_transitioned();
     }
@@ -1747,18 +1779,12 @@ protected:
   ceph::real_time get_effective_mtime(lc_op_ctx& oc) override {
     return oc.o.meta.mtime;
   }
+
+  int perf_counter() const override { return l_rgw_lc_transition_current; }
+
 public:
   LCOpAction_CurrentTransition(const transition_action& _transition)
     : LCOpAction_Transition(_transition) {}
-    int process(lc_op_ctx& oc, optional_yield y) override {
-      int r = LCOpAction_Transition::process(oc, y);
-      if (r == 0) {
-        if (perfcounter) {
-          perfcounter->inc(l_rgw_lc_transition_current, 1);
-        }
-      }
-      return r;
-    }
 };
 
 class LCOpAction_NonCurrentTransition : public LCOpAction_Transition {
@@ -1770,20 +1796,14 @@ protected:
   ceph::real_time get_effective_mtime(lc_op_ctx& oc) override {
     return oc.effective_mtime;
   }
+
+  int perf_counter() const override { return l_rgw_lc_transition_noncurrent; }
+
 public:
   LCOpAction_NonCurrentTransition(op_env& env,
 				  const transition_action& _transition)
     : LCOpAction_Transition(_transition)
     {}
-    int process(lc_op_ctx& oc, optional_yield y) override {
-      int r = LCOpAction_Transition::process(oc, y);
-      if (r == 0) {
-        if (perfcounter) {
-          perfcounter->inc(l_rgw_lc_transition_noncurrent, 1);
-        }
-      }
-      return r;
-    }
 };
 
 void LCOpRule::build()
@@ -1891,8 +1911,9 @@ int LCOpRule::execute(LCOpAction& action,
 
   int r = action.process(ctx, y);
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj "
+    ldpp_dout(dpp, 0) << "ERROR: lifecycle action failed on "
 		      << env.bucket << ":" << o.key
+		      << " rule_id=" << env.op.id
 		      << " " << cpp_strerror(r) << dendl;
     return r;
   }
@@ -2244,6 +2265,11 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
                     group[r.ei].rules[r.ri].execute(
                         *r.a, group[r.ei].obj, dpp,
                         &batch_counters, tags[r.ei].ptr, skip_olh, y);
+                  },
+                  [&](const rgw_obj_key& key, boost::asio::yield_context y) {
+                    uint32_t flags = zonegroup_lc_check(dpp, dpp->driver->get_zone())
+                                     ? 0 : rgw::sal::FLAG_LOG_OP;
+                    bucket->get_object(key)->update_olh(dpp, y, flags);
                   });
 
               for (size_t i = 0; i < group.size(); ++i)

@@ -14,7 +14,7 @@ then deploying the needed services.
 Requirements
 ============
 
-- Python 3
+- Python 3.9 or later
 - Systemd
 - Podman or Docker for running containers
 - Time synchronization (such as Chrony or the legacy ``ntpd``)
@@ -25,7 +25,8 @@ are installed automatically by the bootstrap process below.
 
 See `Docker Live Restore <https://docs.docker.com/engine/daemon/live-restore/>`_
 for an optional feature that allows restarting Docker Engine without restarting
-all running containers.
+all running containers. See :ref:`cephadm-docker-live-restore` for details on
+how cephadm integrates with Docker Engine to facilitate the Live Restore feature.
 
 See the section :ref:`Compatibility With Podman
 Versions<cephadm-compatibility-with-podman>` for a table of Ceph versions that
@@ -99,14 +100,15 @@ Using Curl to Install Cephadm
 -----------------------------
 
 #. Determine which version of Ceph you will install. Use the releases page to
-   find the :ref:`active-releases`.  For example,
-   you might find that ``18.2.1`` is the latest active release.
+   find the `latest active releases`_.  For example,
+   you might find that |stable-release| is the latest active release.
 
 #. Use ``curl`` to fetch a build of cephadm for that release.
 
    .. prompt:: bash #
+      :substitutions:
 
-      CEPH_RELEASE=18.2.0 # replace this with the active release
+      CEPH_RELEASE=|stable-release| # replace this with the active release
       curl --silent --remote-name --location https://download.ceph.com/rpm-${CEPH_RELEASE}/el9/noarch/cephadm
 
 #.  Use ``chmod`` to make the ``cephadm`` file executable:
@@ -123,20 +125,23 @@ Using Curl to Install Cephadm
     ./cephadm <arguments...>
 
 
-Cephadm Requires Python 3.6 or Later
+.. _cephadm-requires-python-3-6-or-later:
+
+Cephadm Requires Python 3.9 or Later
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``cephadm`` requires Python 3.6 or later. If you encounter difficulties
-running ``cephadm``, then you may not have Python or the correct version of
-Python installed. This includes any errors that include the message ``bad
-interpreter``.
+Beginning with Umbrella, ``cephadm`` requires Python 3.9 or later. Tentacle
+requires Python 3.8 or later, and Squid Python 3.6 or later. If you encounter
+difficulties running ``cephadm``, then you may not have Python or the correct
+version of Python installed. This includes any errors that include the message
+``bad interpreter`` or ``cannot execute: required file not found``.
 
 You can manually run cephadm with a particular version of Python by prefixing
 the command with your installed Python version. For example:
 
 .. prompt:: bash #
 
-   python3.8 ./cephadm <arguments...>
+   python3.9 ./cephadm <arguments...>
 
 
 Installing Cephadm on the Host
@@ -149,6 +154,7 @@ packages that provide the ``cephadm`` command, run the following commands:
 #. Add the repository:
 
    .. prompt:: bash #
+      :substitutions:
 
       ./cephadm add-repo --release |stable-release|
 
@@ -182,7 +188,7 @@ The first step in creating a new Ceph cluster is running the ``cephadm
 bootstrap`` command on the Ceph cluster's first host. The act of running the
 ``cephadm bootstrap`` command on the Ceph cluster's first host creates the Ceph
 cluster's first Monitor daemon.
-You must pass the IP address of the Ceph cluster's first host to the ``ceph
+You must pass the IP address of the Ceph cluster's first host to the ``cephadm
 bootstrap`` command, so you'll need to know the IP address of that host.
 
 .. important:: ``ssh`` must be installed and running in order for the
@@ -195,7 +201,7 @@ bootstrap`` command, so you'll need to know the IP address of that host.
 Running the Bootstrap Command
 -----------------------------
 
-Run the ``ceph bootstrap`` command:
+Run the ``cephadm bootstrap`` command:
 
 .. prompt:: bash #
 
@@ -277,8 +283,9 @@ available options.
       {"url":"REGISTRY_URL", "username":"REGISTRY_USERNAME", "password":"REGISTRY_PASSWORD"}
 
   Cephadm will attempt to log in to this registry so it can pull your container
-  and then store the login info in its config database. Other hosts added to
-  the cluster will then also be able to make use of the authenticated container registry.
+  and then store the login info in the cluster's config-key store, under
+  ``mgr/cephadm/registry_credentials``. Other hosts added to the cluster will
+  then also be able to make use of the authenticated container registry.
 
 * See :ref:`cephadm-deployment-scenarios` for additional examples for using ``cephadm bootstrap``.
 
@@ -312,9 +319,9 @@ command.  There are several ways to do this:
 
      cephadm shell -- ceph -s
 
-* You can install the ``ceph-common`` package, which contains all of the
-  Ceph tools, including ``ceph``, ``rbd``, ``mount.ceph`` (for mounting
-  CephFS file systems), etc.:
+* You can install the ``ceph-common`` package, which contains the main
+  Ceph command-line tools, including ``ceph``, ``rbd``, ``mount.ceph`` (for
+  mounting CephFS file systems), etc.:
 
   .. prompt:: bash #
      :substitutions:
@@ -386,7 +393,7 @@ Enabling OSD Memory Autotuning
 
 See :ref:`osd_autotune`.
 
-To deploy hyperconverged Ceph with TripleO, please refer to the TripleO documentation: `Scenario: Deploy Hyperconverged Ceph <https://docs.openstack.org/project-deploy-guide/tripleo-docs/latest/features/cephadm.html#scenario-deploy-hyperconverged-ceph>`_
+To deploy hyperconverged Ceph with TripleO, please refer to the TripleO documentation: `Scenario: Deploy Hyperconverged Ceph <https://docs.openstack.org/project-deploy-guide/tripleo-docs/latest/features/deployed_ceph.html#scenario-deploy-hyperconverged-ceph>`_
 
 In other cases where the cluster hardware is not exclusively used by Ceph (converged infrastructure),
 reduce the memory consumption of Ceph like so:
@@ -496,7 +503,7 @@ have access to all hosts that you plan to add to the cluster.
 
    .. prompt:: bash #
 
-      cephadm --image <hostname>:5000/ceph/ceph bootstrap --mon-ip <mon-ip> --conf initial-ceph.conf
+      cephadm --image <hostname>:5000/ceph/ceph bootstrap --mon-ip <mon-ip> --config initial-ceph.conf
 
 
 .. _cephadm-bootstrap-custom-ssh-keys:
@@ -542,7 +549,7 @@ the cluster. For example:
    [root@host1 ~]# ssh-keygen -t rsa -f ca-key -N ""
 
    # make the ca key trusted on the host we've generated it on
-   # this requires adding in a line in our /etc/sshd_config
+   # this requires adding in a line in our /etc/ssh/sshd_config
    # to mark this key as trusted
    [root@host1 ~]# cp ca-key.pub /etc/ssh
    [root@host1 ~]# vi /etc/ssh/sshd_config
@@ -563,7 +570,7 @@ the cluster. For example:
 
 Once the CA key has been installed and marked as a trusted key, you are ready
 to use a private key/CA-signed cert combination for SSH. Continuing with our
-current example, we will create a new key pair for for host access and then
+current example, we will create a new key pair for host access and then
 sign it with our CA key:
 
 .. prompt::
@@ -608,3 +615,8 @@ would simply be a matter of getting another key signed by the same CA and provid
 cephadm with the new private key and the new signed certificate. No additional distribution of
 keys to cluster nodes is needed after the initial setup of the CA key as a trusted key,
 no matter how many new private key/signed cert pairs are rotated in.
+
+
+.. Needs to be an external link because doc/releases/index.rst is not in
+   stable branches and we want to always use the main branch version
+.. _latest active releases: https://docs.ceph.com/en/latest/releases/#active-releases

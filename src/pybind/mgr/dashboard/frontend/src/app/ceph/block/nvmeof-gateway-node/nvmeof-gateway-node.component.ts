@@ -87,6 +87,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
   icons = Icons;
   HostStatus = HostStatus;
   private tableContext: CdTableFetchDataContext | undefined;
+  private selectionInitialized = false;
   count = 0;
   orchStatus: OrchestratorStatus | undefined;
   private destroy$ = new Subject<void>();
@@ -153,6 +154,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       !changes['preSelectedHostnames'].firstChange &&
       changes['preSelectedHostnames'].currentValue?.length > 0
     ) {
+      this.selectionInitialized = false;
       this.table.refreshBtn();
     }
   }
@@ -162,11 +164,16 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       return;
     }
 
+    if (this.selectionInitialized) {
+      return;
+    }
+
     const hostsToSelect = this.hosts.filter((host) =>
       this.preSelectedHostnames.includes(host.hostname)
     );
 
     if (hostsToSelect.length > 0) {
+      this.selectionInitialized = true;
       this.selection.selected = hostsToSelect;
       this.selectionChange.emit(this.selection);
 
@@ -179,6 +186,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
             this.table.model.selectRow(rowIndex, true);
           }
         });
+        // Sync the table's internal selection so toggling a pre-selected row
+        // filters from the correct list instead of an empty one.
+        this.table.selection.selected = hostsToSelect;
         this.table.updateSelection.emit(this.selection);
       });
     }
@@ -224,9 +234,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       actionDescription: $localize`remove`,
       hideDefaultWarning: true,
       impact: DeletionImpact.high,
-      bodyContext: {
-        deletionMessage: $localize`Removing <strong>${hostname}</strong> will detach it from the gateway group and stop handling new I/O requests. Active connections may be disrupted.<br><br>You can re-add this node later if required.`
-      },
+      hasAssociatedResources: true,
       submitActionObservable: () => {
         const updatedSpec = this.buildRemoveGatewaySpecPayload(hostname);
         if (!updatedSpec) {
@@ -454,9 +462,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       },
       {
         label: $localize`Encryption`,
-        value: serviceSpec.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
+        value: serviceSpec.spec?.encryption_key ? $localize`Enabled` : $localize`Disabled`,
         type: 'status',
-        statusIcon: serviceSpec.spec?.enable_auth ? 'success' : 'error'
+        statusIcon: serviceSpec.spec?.encryption_key ? 'success' : 'error'
       },
       {
         label: $localize`mTLS`,

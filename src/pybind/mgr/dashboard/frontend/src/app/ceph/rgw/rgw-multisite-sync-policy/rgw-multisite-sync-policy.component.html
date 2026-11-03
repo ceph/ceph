@@ -16,11 +16,10 @@
   [columns]="columns"
   identifier="uniqueId"
   [forceIdentifier]="true"
-  selectionType="multiClick"
+  selectionType="single"
   [searchableObjects]="true"
-  [hasDetails]="true"
+  [hasDetails]="false"
   [toolHeader]="true"
-  (setExpandedRow)="setExpandedRow($event)"
   (fetchData)="getPolicyList($event)"
   (updateSelection)="updateSelection($event)"
 >
@@ -33,12 +32,6 @@
     >
     </cd-table-actions>
   </div>
-  <cd-rgw-multisite-sync-policy-details
-    *cdTableDetail
-    [expandedRow]="expandedRow"
-    [permission]="permission"
-  >
-  </cd-rgw-multisite-sync-policy-details>
 </cd-table>
 
 <ng-template #deleteTpl>

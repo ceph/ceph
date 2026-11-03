@@ -21,12 +21,10 @@
 #include <string>
 
 #include "include/types.h"
-#include "include/utime_fmt.h"
 #include "osd/osd_types_fmt.h"
 #include "osd/OpRequest.h"
 #include "osd/PG.h"
 #include "osd/PGPeeringEvent.h"
-#include "messages/MOSDOp.h"
 #include "common/mclock_common.h"
 #include "common/WorkQueue.h" // for class ThreadPool
 

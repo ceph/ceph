@@ -264,21 +264,18 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t)
   ceph_assert(get_last_committed() + 1 == pending_map.epoch);
   bufferlist bl;
   uint64_t features = mon.get_quorum_con_features();
-  if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
+  {
     recreate_gw_epoch();
   }
   pending_map.encode(bl, features);
-  dout(10) << " has NVMEOFHA: " << HAVE_FEATURE(features, NVMEOFHA)
-       << " has NVMEOFHAMAP: " <<  HAVE_FEATURE(features, NVMEOFHAMAP)
-       << " has BEACON_DIFF: "
+  dout(10) << " has BEACON_DIFF: "
        <<  mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF) << dendl;
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
 
   //health
-  health_check_map_t checks;
+  auto& checks = get_health_checks_pending_writeable();
   pending_map.get_health_checks(&checks);
-  encode_health(checks, t);
 }
 
 void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
@@ -293,7 +290,6 @@ void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
     bufferlist bl;
     int err = get_version(version, bl);
     ceph_assert(err == 0);
-    load_health();
 
     auto p = bl.cbegin();
     map.decode(p);
@@ -385,10 +381,8 @@ void NVMeofGwMon::check_subs(bool t)
   for (auto sub : *(mon.session_map.subs[type])) {
     dout(10) << " dump subscriber peer_addr : "
        << sub->session->con->get_peer_addr() <<  dendl;
-    if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHAMAP)) {
+    {
       check_sub(sub);
-    } else {
-      check_sub_unconditional(sub);
     }
   }
 }
@@ -452,7 +446,9 @@ bool NVMeofGwMon::nvme_gw_show_command(ceph::Formatter* f, bufferlist &rdata, co
   f->dump_unsigned("epoch", map.epoch);
   f->dump_string("pool", pool);
   f->dump_string("group", group);
-  if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA)) {
+  f->dump_bool("beacon_diff_enabled",
+               map.published_features & NVMeofGwMap::FLAG_BEACONDIFF);
+  {
     f->dump_string("features", "LB");
     if (map.created_gws[group_key].size()) {
       time_t seconds_since_1970 = time(NULL);
@@ -505,13 +501,26 @@ bool NVMeofGwMon::nvme_gw_show_command(ceph::Formatter* f, bufferlist &rdata, co
       f->open_object_section("stat");
       f->dump_string("gw-id", gw_id);
       f->dump_unsigned("anagrp-id",state.ana_grp_id+1);
+      f->dump_string("location", state.location);
+      bool cleanup_in_process;
+      bool is_disaster = map.is_location_in_disaster
+	             (group_key, state.location, cleanup_in_process);
+      if (is_disaster) {
+        std::string disaster_state = (cleanup_in_process) ? "Disaster-cleanup":
+	                              "Disaster";
+        f->dump_string("disaster state", disaster_state);
+      }
+      std::string admin_state = (state.gw_admin_state ==
+	    gw_admin_state_t::GW_ADMIN_ENABLED) ? "ENABLED" : "DISABLED";
+      f->dump_string("admin state", admin_state);
       f->dump_unsigned("num-namespaces", num_ns[state.ana_grp_id+1]);
       f->dump_unsigned("performed-full-startup", state.performed_full_startup);
       std::stringstream  sstrm1;
       sstrm1 << state.availability;
       f->dump_string("Availability", sstrm1.str());
       uint32_t num_listeners = 0;
-      if (state.availability == gw_availability_t::GW_AVAILABLE) {
+      if ((state.availability == gw_availability_t::GW_AVAILABLE) ||
+          (state.availability == gw_availability_t::GW_CREATED)) {
         for (auto &subs: state.subsystems) {
           num_listeners += subs.listeners.size();
         }
@@ -607,6 +616,26 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
       sstrm.str("");
     }
     getline(sstrm, rs);
+    mon.reply_command(op, err, rs, rdata, get_last_committed());
+    return true;
+  } else if (prefix == "nvme-gw ok-to-stop") {
+    std::string  pool, group;
+    if (!f) {
+      f.reset(Formatter::create(format, "json-pretty", "json-pretty"));
+    }
+    cmd_getval(cmdmap, "pool", pool);
+    cmd_getval(cmdmap, "group", group);
+    auto group_key = std::make_pair(pool, group);
+    dout(10) << prefix << " pool " << pool << " group " << group << dendl;
+    f->open_object_section("common");
+    err = map.is_ok_to_stop(group_key);
+    f->dump_bool("result", err == 0);
+    f->close_section();
+    f->flush(rdata);
+    getline(sstrm, rs);
+    if (err < 0 && rs.empty()) {
+      rs = cpp_strerror(err);
+    }
     mon.reply_command(op, err, rs, rdata, get_last_committed());
     return true;
   }
@@ -1069,8 +1098,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   bool correct_sequence = true;
   uint64_t stored_sequence;
   NVMeofGwMap ack_map;
-  bool epoch_filter_enabled = HAVE_FEATURE(mon.get_quorum_con_features(),
-                              NVMEOFHAMAP);
+  bool epoch_filter_enabled = true; // NVMEOFHAMAP
   auto& group_gws = map.created_gws[group_key];
   auto gw = group_gws.find(gw_id);
   auto& pend_gws =  pending_map.created_gws[group_key];

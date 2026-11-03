@@ -16,8 +16,9 @@ import { TaskListService } from '~/app/shared/services/task-list.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
 import { NfsDetailsComponent } from '../nfs-details/nfs-details.component';
-import { NfsListComponent } from './nfs-list.component';
-import { SUPPORTED_FSAL } from '../models/nfs.fsal';
+import { NfsListComponent, RgwExportType } from './nfs-list.component';
+import { RGW_USER_EXPORT_PATH, SUPPORTED_FSAL } from '../models/nfs.fsal';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 describe('NfsListComponent', () => {
   let component: NfsListComponent;
@@ -53,6 +54,53 @@ describe('NfsListComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('edit action routerLink', () => {
+    let editRouterLink: () => string | [string, { rgw_export_type: RgwExportType }];
+
+    beforeEach(() => {
+      editRouterLink = component.tableActions.find((action) => action.permission === 'update')
+        .routerLink as () => string | [string, { rgw_export_type: RgwExportType }];
+    });
+
+    it('should return a plain string for CephFS edit (no route params)', () => {
+      component.fsal = SUPPORTED_FSAL.CEPH;
+      component.selection = new CdTableSelection([
+        { cluster_id: 'mycluster', export_id: '42', path: '/volumes/g1/sv1' }
+      ]);
+
+      const link = editRouterLink();
+
+      expect(typeof link).toBe('string');
+      expect(link).toBe('/cephfs/nfs/edit/mycluster/42');
+    });
+
+    it('should return array with rgw_export_type for RGW bucket edit', () => {
+      component.fsal = SUPPORTED_FSAL.RGW;
+      component.selection = new CdTableSelection([
+        { cluster_id: 'rgw-cluster', export_id: '7', path: '/my-bucket' }
+      ]);
+
+      const link = editRouterLink();
+
+      expect(Array.isArray(link)).toBe(true);
+      expect(link[0]).toBe('/rgw/nfs/edit/rgw-cluster/7');
+      expect(link[1]).toEqual({ rgw_export_type: RgwExportType.BUCKET });
+    });
+
+    it('should return array with rgw_export_type user for RGW user-level edit', () => {
+      component.fsal = SUPPORTED_FSAL.RGW;
+      component.selection = new CdTableSelection([
+        { cluster_id: 'rgw-cluster', export_id: '8', path: RGW_USER_EXPORT_PATH }
+      ]);
+
+      const link = editRouterLink();
+
+      expect(Array.isArray(link)).toBe(true);
+      expect(link[0]).toBe('/rgw/nfs/edit/rgw-cluster/8');
+      expect(link[1]).toEqual({ rgw_export_type: RgwExportType.USER });
+    });
   });
 
   describe('after ngOnInit', () => {

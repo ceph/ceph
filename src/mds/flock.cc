@@ -4,6 +4,8 @@
 #include "mds/flock.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "include/ceph_fs_encoder.h"
+#include "include/container_ios.h"
 #include "mdstypes.h"
 
 #include <iostream>
@@ -98,7 +100,7 @@ std::list<ceph_lock_state_t> ceph_lock_state_t::generate_test_instances() {
 
 bool ceph_lock_state_t::is_waiting(const ceph_filelock &fl) const
 {
-  auto p = waiting_locks.find(fl.start);
+  auto p = waiting_locks.lower_bound(fl.start);
   while (p != waiting_locks.end()) {
     if (p->second.start > fl.start)
       return false;
@@ -112,7 +114,7 @@ bool ceph_lock_state_t::is_waiting(const ceph_filelock &fl) const
 
 void ceph_lock_state_t::remove_waiting(const ceph_filelock& fl)
 {
-  for (auto p = waiting_locks.find(fl.start);
+  for (auto p = waiting_locks.lower_bound(fl.start);
        p != waiting_locks.end(); ) {
     if (p->second.start > fl.start)
       break;
@@ -286,8 +288,7 @@ void ceph_lock_state_t::look_for_lock(ceph_filelock& testing_lock)
   testing_lock.type = CEPH_LOCK_UNLOCK;
 }
 
-void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock,
-                 list<ceph_filelock>& activated_locks)
+void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock)
 {
   list<multimap<uint64_t, ceph_filelock>::iterator> overlapping_locks,
     self_overlapping_locks;

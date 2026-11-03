@@ -74,6 +74,9 @@ service Gateway {
 	// Refresh auto-listeners for all network masks configured on the given subsystem on this gateway
 	rpc gw_refresh_network(gw_refresh_network_req) returns(gw_refresh_network_status) {}
 
+	// Enable or disable the group config network mask for the subsystem
+	rpc set_subsystem_use_group_config_network_masks(set_subsystem_use_group_config_network_masks_req) returns(set_subsystem_use_group_config_network_masks_status) {}
+
 	// Add KMIP server endpoints
 	rpc add_kmip_server_endpoints(add_kmip_server_endpoints_req) returns(req_status) {}
 
@@ -122,6 +125,9 @@ service Gateway {
 	// Deletes a host from a namespace
 	rpc namespace_delete_host(namespace_delete_host_req) returns (req_status) {}
 
+	// Unpins a namespace load balancing group
+	rpc namespace_unpin(namespace_unpin_req) returns (req_status) {}
+
 	// Adds a host to a subsystem
 	rpc add_host(add_host_req) returns (req_status) {}
 
@@ -142,6 +148,9 @@ service Gateway {
 
 	// Gets connection's IO statistics
 	rpc get_connection_io_statistics(get_connection_io_statistics_req) returns (connection_io_statistics) {}
+
+	// Gets connection's extended IO statistics
+	rpc get_connection_extended_io_statistics(get_connection_extended_io_statistics_req) returns (connection_extended_io_statistics) {}
 
 	// Creates a listener for a subsystem at a given IP/Port
 	rpc create_listener(create_listener_req) returns(req_status) {}
@@ -298,6 +307,11 @@ message namespace_delete_host_req {
 	string host_nqn = 3;
 }
 
+message namespace_unpin_req {
+	string subsystem_nqn = 1;
+	uint32 nsid = 2;
+}
+
 message create_subsystem_req {
 	string subsystem_nqn = 1;
 	string serial_number = 2;
@@ -309,6 +323,8 @@ message create_subsystem_req {
 	repeated string network_mask = 8;
 	optional bool secure_listeners = 9;
 	optional uint32 port = 10;
+	optional string model_name = 11;
+	optional bool use_group_config_network_masks = 12;
 }
 
 message delete_subsystem_req {
@@ -343,6 +359,18 @@ message gw_refresh_network_status {
 	repeated string removed = 4;
 }
 
+message set_subsystem_use_group_config_network_masks_status {
+	int32 status = 1;
+	string error_message = 2;
+	repeated string added = 3;
+	repeated string removed = 4;
+}
+
+message set_subsystem_use_group_config_network_masks_req {
+	string subsystem_nqn = 1;
+	bool use_group_config_network_masks = 2;
+}
+
 message kmip_server_endpoint {
 	string address = 1;
 	optional uint32 port = 2;
@@ -365,6 +393,7 @@ message del_kmip_server_endpoints_req {
 	string subsystem_nqn = 1;
 	string server_name = 2;
 	repeated kmip_server_endpoint endpoints = 3;
+	optional bool force = 4;
 }
 
 message list_kmip_server_endpoints_req {
@@ -408,6 +437,13 @@ message get_connection_io_statistics_req {
 	optional bool reset = 3;
 }
 
+message get_connection_extended_io_statistics_req {
+	string subsystem_nqn = 1;
+	string host_nqn = 2;
+	optional bool reset = 3;
+	optional bool verbose = 4;
+}
+
 message remove_host_req {
 	string subsystem_nqn = 1;
 	string host_nqn = 2;
@@ -418,6 +454,7 @@ message remove_host_req {
 message set_keep_host_connected_req {
 	string subsystem_nqn = 1;
 	string host_nqn = 2;
+	optional bool keep_connected = 3;
 }
 
 message list_hosts_req {
@@ -569,6 +606,7 @@ message subsystem {
 	repeated namespace namespaces = 11;
 	optional bool has_dhchap_key = 12;
 	repeated string network_mask = 13;
+	optional bool use_group_config_network_masks = 14;
 }
 
 message listen_address {
@@ -613,6 +651,7 @@ message subsystem_cli {
 	optional bool allow_any_host = 11;
 	optional bool created_without_key = 12;
 	repeated string network_mask = 13;
+	optional bool use_group_config_network_masks = 14;
 }
 
 message gateway_info {
@@ -750,6 +789,20 @@ message connection_io_statistics {
 	repeated bucket_info buckets = 6;
 }
 
+message statistics_entry {
+	optional string subsystem_nqn = 1;
+	optional string host_nqn = 2;
+	uint64 total_num_ios = 3;
+	repeated bucket_info buckets = 4;
+}
+
+message connection_extended_io_statistics {
+	int32 status = 1;
+	string error_message = 2;
+	optional string category = 3;
+	repeated statistics_entry statistics_entries = 4;
+}
+
 message hosts_info {
 	int32 status = 1;
 	string error_message = 2;
@@ -784,6 +837,8 @@ message connections_info {
 }
 
 message namespace_cli {
+	reserved 25;
+	reserved "encryption_algorithm";
 	uint32 nsid = 1;
 	string bdev_name = 2;
 	string rbd_image_name = 3;
@@ -808,8 +863,9 @@ message namespace_cli {
 	optional string rbd_data_pool_name = 22;
 	optional string location = 23;
 	optional string rados_namespace_name = 24;
-	optional EncryptionAlgorithm encryption_algorithm = 25;
 	repeated encryption_entry encryption_entries = 26;
+	optional bool degraded = 27;
+	optional bool pinned = 28;
 }
 
 message namespaces_info {

@@ -1,0 +1,47 @@
+@if (service) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Service details"
+        [columns]="3"
+        [fields]="overviewFields"
+      >
+      </cd-resource-overview-card>
+    }
+
+    @case ('service-instances') {
+      <cd-service-daemon-list
+        [serviceName]="service?.service_name"
+        mode="daemons"
+      >
+      </cd-service-daemon-list>
+    }
+
+    @case ('certificate') {
+      @if (hasCertificate) {
+        <cd-service-certificate-details
+          [certificate]="certificate"
+          [serviceName]="service?.service_name"
+          [serviceType]="service?.service_type"
+          (editService)="onEditService($event)"
+        >
+        </cd-service-certificate-details>
+      }
+    }
+
+    @case ('events') {
+      <cd-service-daemon-list
+        [serviceName]="service?.service_name"
+        mode="events"
+      >
+      </cd-service-daemon-list>
+    }
+  }
+} @else if (notFound) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No service found.</cd-alert-panel
+  >
+}

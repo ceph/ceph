@@ -1,3 +1,5 @@
+.. _radosgw-cloud-transition:
+
 ================
 Cloud Transition
 ================
@@ -55,7 +57,8 @@ Cloud Storage Class Tier Configuration
     "target_storage_class": <target-storage-class>,
     "multipart_sync_threshold": {object_size},
     "multipart_min_part_size": {part_size},
-    "retain_head_object": <true | false>
+    "retain_head_object": <true | false>,
+    "retain_current_version": <true | false>
   }
 
 
@@ -126,6 +129,12 @@ Cloud Transition Specific Configurables
   bucket rather than sharing a common target. Defaults to ``false`` to
   preserve the legacy behavior.
 
+  When RGW creates a destination bucket, the CreateBucket request carries
+  the tags of the source bucket. On AWS this requires ``s3:TagResource``
+  in addition to ``s3:CreateBucket``. If the request with tags fails,
+  RGW retries without tags. A destination bucket that already exists
+  keeps its tags.
+
 * ``target_by_bucket_prefix`` (string)
 
   Optional template used when ``target_by_bucket`` is true to derive the
@@ -166,10 +175,21 @@ For example, to enable per-bucket targeting with a custom prefix:
 
 * ``retain_head_object`` (true | false)
 
-  If ``true``, the metadata of the object transitioned to the cloud service is retained.
-  If ``false`` (default), the object is deleted after the transition.
-  This option is ignored for current-versioned objects. For more details,
-  refer to the :ref:`versioned_objects` section below.
+  If ``true``, the metadata of the object transitioned to the cloud service is retained
+  as a cloud-tiered stub. If ``false`` (default), the object is deleted after the transition.
+  This option applies to non-versioned objects and non-current versions in versioned buckets.
+  For current versions in versioned buckets, see ``retain_current_version``.
+  Setting this to ``false`` also clears ``retain_current_version``.
+
+* ``retain_current_version`` (true | false)
+
+  If ``true``, when transitioning current versions in versioned buckets, the HEAD
+  object is retained as a cloud-tiered stub instead of creating a delete marker.
+  The stub has size=0 and storage class set to the cloud tier name.
+  If ``false`` (default), a delete marker is created and the transitioned version
+  becomes non-current, matching the behavior of LifecycleExpiration.
+  This option only applies to current versions in versioned buckets.
+  Requires ``retain_head_object`` to be ``true``.
 
 
 S3 Specific Configurables
@@ -454,16 +474,35 @@ Below is the object name format::
 
   s3://<target_path>/<source_bucket_name>/<source_object_name>(-<source_object_version_id>)
 
+The version id is appended for non-current versions. The ``null`` version is
+stored under the bare object name, without a suffix.
+
+Null versions transitioned by earlier releases are stored as
+``<source_object_name>-null``. A restore looks for the bare name and will not
+find them, so any such objects have to be copied back from the cloud service
+manually.
+
 .. _versioned_objects:
 
 Versioned Objects
 ~~~~~~~~~~~~~~~~~
 
-For versioned and locked objects, similar semantics as that of LifecycleExpiration are applied as stated below.
+For versioned objects:
 
-* If the object is current, post transitioning to cloud, it is made noncurrent with delete marker created.
+* If both ``retain_head_object`` and ``retain_current_version`` are ``true``,
+  current versions are updated in place to be cloud-tiered stubs (size=0,
+  CloudTiered category). No delete marker is created. The version ID is
+  appended to the cloud object key.
 
-* If the object is noncurrent and is locked, its transition is skipped.
+* If ``retain_current_version`` is ``false`` (default), current versions are made
+  non-current with a delete marker created, matching the behavior of LifecycleExpiration.
+
+* For non-current versions, the ``retain_head_object`` setting applies.
+
+* If a version, current or non-current, is locked (it has an unexpired
+  object lock retention period or a legal hold), its transition is skipped,
+  so its data stays in the cluster. It is transitioned by a later
+  lifecycle run once the lock no longer applies.
 
 
 Restoring Objects

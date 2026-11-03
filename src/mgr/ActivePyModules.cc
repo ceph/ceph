@@ -19,6 +19,7 @@
 
 #include <rocksdb/version.h>
 
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters_key.h"
 #include "crush/CrushWrapper.h"
@@ -167,7 +168,7 @@ PyObject *ActivePyModules::get_metadata_python(
     Py_RETURN_NONE;
   }
   auto l = without_gil([&] {
-    return std::lock_guard(lock);
+    return std::lock_guard(metadata->lock);
   });
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
@@ -188,7 +189,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
     Py_RETURN_NONE;
   }
   auto l = without_gil([&] {
-    return std::lock_guard(lock);
+    return std::lock_guard(metadata->lock);
   });
   PyFormatter f;
   for (const auto &[daemon, status] : metadata->service_status) {
@@ -675,13 +676,14 @@ std::optional<std::vector<std::byte>> ActivePyModules::dispatch_remote(
     const std::string &method,
     std::span<std::byte const> pickled_args,
     std::span<std::byte const> pickled_kwargs,
-    std::string *err)
+    std::string *err,
+    bool *crash_dump)
 {
   auto mod_iter = modules.find(other_module);
   ceph_assert(mod_iter != modules.end());
 
   return mod_iter->second->dispatch_remote(
-    method, pickled_args, pickled_kwargs, err);
+    method, pickled_args, pickled_kwargs, err, crash_dump);
 }
 
 
@@ -758,7 +760,15 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
   PyFormatter f;
   for (auto p = store_cache.lower_bound(global_prefix);
        p != store_cache.end() && p->first.find(global_prefix) == 0; ++p) {
-    f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
+    PyObject *value = PyUnicode_FromStringAndSize(
+      p->second.c_str(), p->second.size());
+    if (!value) {
+      dout(1) << __func__ << " skipping key " << p->first
+              << " due to PyUnicode_FromStringAndSize failure" << dendl;
+      PyErr_Clear();
+      continue;
+    }
+    f.dump_pyobject(p->first.substr(base_prefix.size()).c_str(), value);
   }
   return f.get();
 }
@@ -1107,7 +1117,7 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
     for (auto& [key, state] : daemons) {
       std::lock_guard l(state->lock);
       with_gil(no_gil, [&, key=ceph::to_string(key), state=state] {
-        f.open_object_section(key.c_str());
+        Formatter::ObjectSection daemon_section{f, key};
         for (auto ctr_inst_iter : state->perf_counters.instances) {
           const auto &counter_name = ctr_inst_iter.first;
 
@@ -1119,7 +1129,7 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
 	    continue;
 	  }
 
-	  f.open_object_section(counter_name.c_str());
+	  Formatter::ObjectSection counter_section{f, counter_name};
 	  auto type = state->perf_counters.types[counter_name];
           f.dump_string("description", type.description);
           if (!type.nick.empty()) {
@@ -1128,9 +1138,7 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
           f.dump_unsigned("type", type.type);
           f.dump_unsigned("priority", type.priority);
           f.dump_unsigned("units", type.unit);
-          f.close_section();
         }
-        f.close_section();
       });
     }
   } else {
@@ -1170,7 +1178,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
     // Hence search for the last occurence of "." to get sub counter name
     size_t pos = type.path.rfind('.');
     std::string sub_counter_name = type.path.substr(pos + 1, type.path.length());
-    Formatter::ObjectSection counter_section(*f, sub_counter_name);
+    Formatter::ObjectSection counter_section{*f, sub_counter_name};
     f->dump_string("description", type.description);
     if (!type.nick.empty()) {
       f->dump_string("nick", type.nick);
@@ -1181,19 +1189,20 @@ PyObject* ActivePyModules::get_perf_schema_python(
   };
 
   auto dump_counter_with_labels = [&dump_sub_counter_information](
-				      PyFormatter *f, auto key_labels,
-				      auto type) {
-    f->open_object_section("");	 // counter should be enclosed by array
+  		      PyFormatter *f, auto key_labels,
+  		      auto type,
+  		      std::optional<Formatter::ObjectSection>& counter_object_section,
+  		      std::optional<Formatter::ObjectSection>& counters_section) {
+    counter_object_section.emplace(*f, "");  // counter should be enclosed by array
 
     for (Formatter::ObjectSection labels_section{*f, "labels"};
-	 const auto &label : key_labels) {
+      const auto &label : key_labels) {
       f->dump_string(label.first, label.second);
     }
 
-    f->open_object_section("counters");
+    counters_section.emplace(*f, "counters");
     dump_sub_counter_information(f, type);
   };
-
 
   if (!daemons.empty()) {
     for (auto &[key, state] : daemons) {
@@ -1201,9 +1210,11 @@ PyObject* ActivePyModules::get_perf_schema_python(
       with_gil(no_gil, [&, key = ceph::to_string(key), state = state] {
 	std::string key_name, prev_key_name;
 	perf_counter_label_pairs prev_key_labels;
-	Formatter::ObjectSection counter_section(
-	    f, key.c_str());  // Main Object Section
+	Formatter::ObjectSection counter_section{
+	    f, key.c_str()};  // Main Object Section
 	std::optional<Formatter::ArraySection> array_section;
+	std::optional<Formatter::ObjectSection> counter_object_section;
+	std::optional<Formatter::ObjectSection> counters_section;
 
 	for (const auto &[counter_name_with_labels, _] :
 	     state->perf_counters.instances) {
@@ -1271,22 +1282,20 @@ PyObject* ActivePyModules::get_perf_schema_python(
           */
 
 	  if (prev_key_name != key_name) {
-	    if (!prev_key_name.empty()) {
-	      f.close_section();  // close 'counters'
-	      f.close_section();  // close 'counter object' section
-	    }
+	    counters_section.reset();
+	    counter_object_section.reset();
 	    prev_key_name = key_name;
 	    prev_key_labels = key_labels;
 	    array_section.emplace(f, key_name);
-	    dump_counter_with_labels(&f, key_labels, type);
+	    dump_counter_with_labels(&f, key_labels, type, counter_object_section, counters_section);
 	  } else if (
 	      prev_key_name == key_name && prev_key_labels == key_labels) {
 	    dump_sub_counter_information(&f, type);
 	  } else if (
 	      prev_key_name == key_name && prev_key_labels != key_labels) {
-	    f.close_section();	// close previous 'counters' section
-	    f.close_section();	// close previous counter object section
-	    dump_counter_with_labels(&f, key_labels, type);
+	    counters_section.reset();
+	    counter_object_section.reset();
+	    dump_counter_with_labels(&f, key_labels, type, counter_object_section, counters_section);
 	  } else {
 	    dout(4)
 		<< fmt::format(
@@ -1294,10 +1303,6 @@ PyObject* ActivePyModules::get_perf_schema_python(
 		       __func__)
 		<< dendl;
 	  }
-	}
-	if (!prev_key_name.empty()) {
-	  f.close_section();  // close 'counters'
-	  f.close_section();  // close 'counter object' section
 	}
       });
     }
@@ -1789,14 +1794,15 @@ void ActivePyModules::unregister_client(std::string_view name, std::string addrs
 
 PyObject* ActivePyModules::get_daemon_health_metrics()
 {
+  PyFormatter f;
   without_gil_t no_gil;
-  return daemon_state.with_daemons_by_server([&no_gil]
+  daemon_state.with_daemons_by_server([&no_gil, &f]
       (const std::map<std::string, DaemonStateCollection> &all) {
-      no_gil.acquire_gil();
-      PyFormatter f;
-      for (const auto &[hostname, daemon_state] : all) {
-        for (const auto &[key, state] : daemon_state) {
-          f.open_array_section(ceph::to_string(key));
+    for (const auto &[hostname, daemon_state] : all) {
+      for (const auto &[key, state] : daemon_state) {
+        std::lock_guard l(state->lock);
+        with_gil(no_gil, [&f, key=ceph::to_string(key), state=state] {
+          f.open_array_section(key.c_str());
           for (const auto &metric : state->daemon_health_metrics) {
             f.open_object_section(metric.get_type_name());
             f.dump_int("value", metric.get_n1());
@@ -1804,10 +1810,11 @@ PyObject* ActivePyModules::get_daemon_health_metrics()
             f.close_section();
           }
           f.close_section();
-        }
+        });
       }
-      return f.get();
+    }
   });
+  return f.get();
 }
 
 void ActivePyModules::check_all_modules_started(Context *modules_start_complete) {

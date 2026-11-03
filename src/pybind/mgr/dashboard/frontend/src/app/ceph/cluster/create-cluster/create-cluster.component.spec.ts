@@ -91,7 +91,7 @@ describe('CreateClusterComponent', () => {
     const osdServiceSpy = spyOn(osdService, 'create').and.callThrough();
     component.onSubmit();
     fixture.detectChanges();
-    expect(osdServiceSpy).toBeCalledTimes(0);
+    expect(osdServiceSpy).toHaveBeenCalledTimes(0);
   });
 
   it('should ensure osd creation did happen when devices are selected', () => {
@@ -99,7 +99,7 @@ describe('CreateClusterComponent', () => {
     osdService.osdDevices['totalDevices'] = 1;
     component.onSubmit();
     fixture.detectChanges();
-    expect(osdServiceSpy).toBeCalledTimes(1);
+    expect(osdServiceSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should ensure host list call happened', () => {

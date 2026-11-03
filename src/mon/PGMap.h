@@ -326,6 +326,16 @@ public:
     static std::list<Incremental> generate_test_instances();
 
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0) {}
+
+    bool empty() const {
+      return pg_stat_updates.empty() &&
+        osd_stat_updates.empty() &&
+        osd_stat_rm.empty() &&
+        pg_remove.empty() &&
+        pool_statfs_updates.empty() &&
+        osdmap_epoch == 0 &&
+        pg_scan == 0;
+    }
   };
 
 

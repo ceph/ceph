@@ -42,6 +42,9 @@ class MgrSessionState
 
   // Our connection to the mgr
   ConnectionRef con;
+
+  // When we last sent the mgr a keepalive on this connection
+  ceph::mono_clock::time_point last_keepalive;
 };
 
 class MgrCommand : public CommandOp
@@ -62,6 +65,8 @@ protected:
   MgrMap map;
   Messenger *msgr;
   MonMap *monmap;
+
+  bool dead = false;
 
   std::unique_ptr<MgrSessionState> session;
 

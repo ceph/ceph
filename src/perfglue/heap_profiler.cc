@@ -27,6 +27,7 @@
 #include "common/LogClient.h"
 #include "global/global_context.h"
 #include "common/debug.h"
+#include "include/container_ios.h"
 
 #include <iomanip>
 
@@ -54,6 +55,11 @@ void ceph_heap_profiler_stats(char *buf, int length)
 void ceph_heap_release_free_memory()
 {
   MallocExtension::instance()->ReleaseFreeMemory();
+}
+
+void ceph_heap_release_to_system(size_t bytes)
+{
+  MallocExtension::instance()->ReleaseToSystem(bytes);
 }
 
 double ceph_heap_get_release_rate()
@@ -93,7 +99,7 @@ bool ceph_heap_profiler_running()
 
 static void get_profile_name(char *profile_name, int profile_name_len)
 {
-#if __GNUC__ && __GNUC__ >= 8
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
   // Don't care, it doesn't matter, and we can't do anything about it.
 #pragma GCC diagnostic ignored "-Wformat-truncation"
@@ -112,7 +118,7 @@ static void get_profile_name(char *profile_name, int profile_name_len)
     snprintf(profile_name, profile_name_len, "%s/%s.profile",
 	     path, g_conf()->name.to_cstr());
   }
-#if __GNUC__ && __GNUC__ >= 8
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
 }

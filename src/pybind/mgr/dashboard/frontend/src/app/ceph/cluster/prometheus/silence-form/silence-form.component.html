@@ -4,24 +4,18 @@
   let-index="index"
 >
   <div class="input-group my-2">
-    <ng-container *ngFor="let config of matcherConfig">
-      <span
-        class="input-group-text"
-        *ngIf="config.attribute === 'isRegex'"
-      >
-        <i
-          *ngIf="matcher[config.attribute]"
-          [ngbTooltip]="config.tooltip"
-          >~</i
-        >
-        <i
-          *ngIf="!matcher[config.attribute]"
-          ngbTooltip="Equals"
-          >=</i
-        >
-      </span>
-
-      <ng-container *ngIf="config.attribute !== 'isRegex'">
+    @for (config of matcherConfig; track config) {
+      @if (config.attribute === 'isRegex') {
+        <span class="input-group-text">
+          @if (matcher[config.attribute]) {
+            <i [ngbTooltip]="config.tooltip">~</i>
+          }
+          @if (!matcher[config.attribute]) {
+            <i ngbTooltip="Equals">=</i>
+          }
+        </span>
+      }
+      @if (config.attribute !== 'isRegex') {
         <input
           type="text"
           id="matcher-{{ config.attribute }}-{{ index }}"
@@ -30,8 +24,8 @@
           disabled
           readonly
         />
-      </ng-container>
-    </ng-container>
+      }
+    }
 
     <!-- Matcher actions -->
     <button
@@ -77,11 +71,12 @@
     <div class="card">
       <div class="card-header">
         <span i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
-        <cd-helper
-          *ngIf="edit"
-          i18n
-          >Editing a silence will expire the old silence and recreate it as a new silence</cd-helper
-        >
+        @if (edit) {
+          <cd-helper i18n
+            >Editing a silence will expire the old silence and recreate it as a new
+            silence</cd-helper
+          >
+        }
       </div>
 
       <!-- Creator -->
@@ -101,12 +96,13 @@
               name="created-by"
               type="text"
             />
-            <span
-              *ngIf="form.showError('createdBy', formDir, 'required')"
-              class="invalid-feedback"
-              i18n
-              >This field is required!</span
-            >
+            @if (form.showError('createdBy', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required!</span
+              >
+            }
           </div>
         </div>
 
@@ -127,12 +123,13 @@
               type="text"
             >
             </textarea>
-            <span
-              *ngIf="form.showError('comment', formDir, 'required')"
-              class="invalid-feedback"
-              i18n
-              >This field is required!</span
-            >
+            @if (form.showError('comment', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required!</span
+              >
+            }
           </div>
         </div>
 
@@ -161,12 +158,13 @@
               (click)="ps.open()"
               (keypress)="ps.close()"
             />
-            <span
-              *ngIf="form.showError('startsAt', formDir, 'required')"
-              class="invalid-feedback"
-              i18n
-              >This field is required!</span
-            >
+            @if (form.showError('startsAt', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required!</span
+              >
+            }
           </div>
         </div>
 
@@ -186,12 +184,13 @@
               name="duration"
               type="text"
             />
-            <span
-              *ngIf="form.showError('duration', formDir, 'required')"
-              class="invalid-feedback"
-              i18n
-              >This field is required!</span
-            >
+            @if (form.showError('duration', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required!</span
+              >
+            }
           </div>
         </div>
 
@@ -213,12 +212,13 @@
               (click)="pe.open()"
               (keypress)="pe.close()"
             />
-            <span
-              *ngIf="form.showError('endsAt', formDir, 'required')"
-              class="invalid-feedback"
-              i18n
-              >This field is required!</span
-            >
+            @if (form.showError('endsAt', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required!</span
+              >
+            }
           </div>
         </div>
 
@@ -232,18 +232,21 @@
           </legend>
 
           <div class="cd-col-form-offset">
-            <h5
-              *ngIf="matchers.length === 0"
-              [ngClass]="{ 'text-warning': !formDir.submitted, 'text-danger': formDir.submitted }"
-            >
-              <strong i18n>A silence requires at least one matcher</strong>
-            </h5>
+            @if (matchers.length === 0) {
+              <h5
+                [ngClass]="{ 'text-warning': !formDir.submitted, 'text-danger': formDir.submitted }"
+              >
+                <strong i18n>A silence requires at least one matcher</strong>
+              </h5>
+            }
 
-            <span *ngFor="let matcher of matchers; let i = index">
-              <ng-container
-                *ngTemplateOutlet="matcherTpl; context: { index: i, matcher: matcher }"
-              ></ng-container>
-            </span>
+            @for (matcher of matchers; track matcher; let i = $index) {
+              <span>
+                <ng-container
+                  *ngTemplateOutlet="matcherTpl; context: { index: i, matcher: matcher }"
+                ></ng-container>
+              </span>
+            }
 
             <div class="row">
               <div class="col-12">
@@ -264,15 +267,16 @@
             </div>
           </div>
 
-          <div
-            *ngIf="matchers.length && matcherMatch"
-            class="cd-col-form-offset {{ matcherMatch.cssClass }}"
-            id="match-state"
-          >
-            <span class="text-muted {{ matcherMatch.cssClass }}">
-              {{ matcherMatch.status }}
-            </span>
-          </div>
+          @if (matchers.length && matcherMatch) {
+            <div
+              class="cd-col-form-offset {{ matcherMatch.cssClass }}"
+              id="match-state"
+            >
+              <span class="text-muted {{ matcherMatch.cssClass }}">
+                {{ matcherMatch.status }}
+              </span>
+            </div>
+          }
         </fieldset>
       </div>
 

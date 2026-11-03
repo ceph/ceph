@@ -113,7 +113,7 @@ if(NOT MSVC)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-ignored-qualifiers>)
 endif()
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wsign-compare>)
 endif()
 
@@ -162,7 +162,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
       string(APPEND CMAKE_EXE_LINKER_FLAGS " -pie")
     endif()
   endif()
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16)
     message(FATAL_ERROR "C++20 support requires a minimum Clang version of 16.")
   endif()
@@ -246,7 +246,7 @@ endif()
 
 # Set WITH_EC_ISA_PLUGIN early so it's available when processing common/options
 # This must be set before add_subdirectory(common) is called
-if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD OR HAS_ALTIVEC OR HAVE_RISCV_RVV)
+if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD OR HAS_ALTIVEC OR HAVE_RISCV_RVV OR HAVE_S390X)
   set(WITH_EC_ISA_PLUGIN TRUE CACHE BOOL "")
 endif()
 
@@ -472,7 +472,7 @@ if(WITH_CRIMSON)
       _find_package(${ARGV})
     endif()
   endmacro ()
-  set(Seastar_API_LEVEL "6" CACHE STRING "" FORCE)
+  set(Seastar_API_LEVEL "10" CACHE STRING "" FORCE)
   set(Seastar_IO_URING ${HAVE_LIBURING} CACHE BOOL "" FORCE)
   set(Seastar_DEPRECATED_OSTREAM_FORMATTERS OFF CACHE BOOL "" FORCE)
   if(WITH_ASAN)
@@ -481,7 +481,7 @@ if(WITH_CRIMSON)
     set(Seastar_SANITIZE "OFF" CACHE STRING "" FORCE)
   endif()
   if(Seastar_DPDK)
-    find_package(dpdk QUIET)
+    find_package(DPDK QUIET)
     if(NOT DPDK_FOUND)
       include(BuildDPDK)
       build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
@@ -536,9 +536,11 @@ set(libcommon_files
   ceph_ver.c
   global/global_context.cc
   xxHash/xxhash.c
-  include/filepath.cc
   include/invoke_date.cc
   include/object.cc
+  include/client_t.cc
+  include/errorcode32.cc
+  include/shard_id.cc
   include/types.cc
   include/utime.cc
   include/uuid.cc
@@ -566,6 +568,7 @@ set(libcommon_files
   osd/OpRequest.cc
   osd/ClassHandler.cc
   osd/osd_op_util.cc
+  osd/osd_types.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   osdc/error_code.cc
@@ -616,7 +619,6 @@ set(ceph_common_deps
   Boost::program_options
   Boost::date_time
   Boost::iostreams
-  StdFilesystem::filesystem
   ${FMT_LIB}
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
@@ -652,29 +654,6 @@ endif()
 if(WIN32)
   list(APPEND ceph_common_deps ws2_32 mswsock iphlpapi bcrypt)
   list(APPEND ceph_common_deps dlfcn_win32)
-endif()
-
-if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
-  if(WITH_SYSTEM_PMDK)
-    set(pmdk_COMPONENTS)
-    if(WITH_BLUESTORE_PMEM)
-      list(APPEND pmdk_COMPONENTS pmem)
-    endif()
-    if(WITH_RBD_RWL)
-      list(APPEND pmdk_COMPONENTS pmemobj)
-    endif()
-    find_package(pmdk 1.8 REQUIRED COMPONENTS ${pmdk_COMPONENTS})
-  else()
-    include(Buildpmdk)
-    if(WITH_BLUESTORE_PMEM)
-      set(enable_ndctl ON)
-      find_package(ndctl 63 REQUIRED)
-      find_package(daxctl 63 REQUIRED)
-    else()
-      set(enable_ndctl OFF)
-    endif()
-    build_pmdk(${enable_ndctl})
-  endif()
 endif()
 
 if(WITH_BREAKPAD)
@@ -853,6 +832,8 @@ set(ceph_osd_srcs
   ceph_osd.cc)
 
 add_executable(ceph-osd ${ceph_osd_srcs})
+set_target_properties(ceph-osd PROPERTIES
+  JOB_POOL_LINK heavy_link_job_pool)
 add_dependencies(ceph-osd erasure_code_plugins extblkdev_plugins)
 target_link_libraries(ceph-osd osd os global-static common
   ${ALLOC_LIBS}
@@ -952,6 +933,7 @@ install(FILES
 install(PROGRAMS
   ceph_common.sh
   ceph-osd-prestart.sh
+  block-device-health
   DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/ceph)
 
 install(PROGRAMS

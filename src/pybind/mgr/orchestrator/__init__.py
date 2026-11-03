@@ -8,7 +8,8 @@ from .cli import OrchestratorCLICommandBase
 from ._interface import \
     OrchResult, raise_if_exception, handle_orch_error, \
     Orchestrator, OrchestratorClientMixin, \
-    OrchestratorValidationError, OrchestratorError, NoOrchestrator, \
+    OrchestratorValidationError, OrchestratorError, NoOrchestrator, HardwareNoReport, \
+    NODE_PROXY_REPORT_KEYS, \
     ServiceDescription, InventoryFilter, HostSpec, \
     DaemonDescription, DaemonDescriptionStatus, \
     OrchestratorEvent, set_exception_subject, \

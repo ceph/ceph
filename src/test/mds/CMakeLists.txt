@@ -31,3 +31,11 @@ add_executable(unittest_mds_quiesce_agent
 )
 add_ceph_unittest(unittest_mds_quiesce_agent)
 target_link_libraries(unittest_mds_quiesce_agent ceph-common global)
+
+# unittest_mds_standby_affinity
+add_executable(unittest_mds_standby_affinity
+  TestStandbyAffinity.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_mds_standby_affinity)
+target_link_libraries(unittest_mds_standby_affinity mds ceph-common global ${BLKID_LIBRARIES})

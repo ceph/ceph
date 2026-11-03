@@ -6,6 +6,9 @@ from ceph_node_proxy.fcm_stats import (
     collect_fcm_stats,
     fcm_usage_display,
     is_fcm_device,
+    is_nvme_namespace_block_device,
+    list_nvme_namespace_names,
+    query_nvme_log_page,
     read_fcm_stats,
 )
 
@@ -169,6 +172,81 @@ class TestFCMDisplayFields:
         assert stats["log_usage_display"] == ""
 
 
+class TestQueryNVMeLogPage:
+    def test_open_failure_returns_none(self):
+        with patch(
+            "ceph_node_proxy.fcm_stats.os.open",
+            side_effect=FileNotFoundError("No such file or directory"),
+        ):
+            assert query_nvme_log_page("nvme3n1") is None
+
+
+class TestIsNVMeNamespaceBlockDevice:
+    def test_true_for_whole_namespace_with_dev_node(self):
+        present = {
+            "/sys/block/nvme0n1/dev",
+            "/dev/nvme0n1",
+        }
+        with patch(
+            "ceph_node_proxy.fcm_stats.os.path.exists",
+            side_effect=lambda path: path in present,
+        ):
+            assert is_nvme_namespace_block_device("nvme0n1") is True
+
+    def test_false_when_dev_node_missing(self):
+        present = {"/sys/block/nvme3n1/dev"}
+        with patch(
+            "ceph_node_proxy.fcm_stats.os.path.exists",
+            side_effect=lambda path: path in present,
+        ):
+            assert is_nvme_namespace_block_device("nvme3n1") is False
+
+    def test_false_for_sysfs_alias_without_dev_node(self):
+        present = {"/sys/block/nvme2c2n1/dev"}
+        with patch(
+            "ceph_node_proxy.fcm_stats.os.path.exists",
+            side_effect=lambda path: path in present,
+        ):
+            assert is_nvme_namespace_block_device("nvme2c2n1") is False
+
+    def test_false_for_partition(self):
+        present = {
+            "/sys/block/nvme0n1p1/partition",
+            "/sys/block/nvme0n1p1/dev",
+            "/dev/nvme0n1p1",
+        }
+        with patch(
+            "ceph_node_proxy.fcm_stats.os.path.exists",
+            side_effect=lambda path: path in present,
+        ):
+            assert is_nvme_namespace_block_device("nvme0n1p1") is False
+
+
+class TestListNVMeNamespaceNames:
+    def test_skips_alias_and_missing_dev_node(self):
+        present = {
+            "/sys/block/nvme0n1/dev",
+            "/dev/nvme0n1",
+            "/sys/block/nvme2c2n1/dev",
+            "/sys/block/nvme3n1/dev",
+        }
+        with (
+            patch(
+                "ceph_node_proxy.fcm_stats.glob.glob",
+                return_value=[
+                    "/sys/block/nvme0n1",
+                    "/sys/block/nvme2c2n1",
+                    "/sys/block/nvme3n1",
+                ],
+            ),
+            patch(
+                "ceph_node_proxy.fcm_stats.os.path.exists",
+                side_effect=lambda path: path in present,
+            ),
+        ):
+            assert list_nvme_namespace_names() == ["nvme0n1"]
+
+
 class TestCollectFCMStats:
     def test_collect_fcm_stats_only_fcm_devices(self):
         with (
@@ -194,3 +272,27 @@ class TestCollectFCMStats:
 
         assert set(stats.keys()) == {"nvme2n1"}
         assert stats["nvme2n1"]["compression_ratio_str"] == "2:1"
+
+    def test_collect_fcm_stats_continues_when_one_device_raises(self):
+        def read_stats(device: str):
+            if device == "nvme1n1":
+                raise OSError("device gone")
+            return {"device": device, "valid": True}
+
+        with (
+            patch(
+                "ceph_node_proxy.fcm_stats.list_nvme_namespace_names",
+                return_value=["nvme0n1", "nvme1n1", "nvme2n1"],
+            ),
+            patch(
+                "ceph_node_proxy.fcm_stats.is_fcm_device",
+                return_value=True,
+            ),
+            patch(
+                "ceph_node_proxy.fcm_stats.read_fcm_stats",
+                side_effect=read_stats,
+            ),
+        ):
+            stats = collect_fcm_stats()
+
+        assert set(stats.keys()) == {"nvme0n1", "nvme2n1"}

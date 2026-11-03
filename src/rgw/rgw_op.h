@@ -89,6 +89,11 @@ std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp,
 
 int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s);
 
+int select_bucket_placement(const DoutPrefixProvider* dpp,
+                            const RGWZoneGroup& zonegroup,
+                            const RGWUserInfo& user,
+                            rgw_placement_rule& rule);
+
 int get_owner_quota_info(const DoutPrefixProvider* dpp,
                                 optional_yield y,
                                 rgw::sal::Driver* driver,
@@ -193,9 +198,9 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 //
 // The called function must return an integer, negative on error. In
 // general, they should just return op_ret.
-template<typename F>
+template<typename F, typename B=rgw::sal::Bucket>
 int retry_raced_bucket_write(const DoutPrefixProvider *dpp,
-                             rgw::sal::Bucket *b,
+                             B* b,
                              const F &f,
                              optional_yield y) {
   auto r = f();
@@ -262,6 +267,8 @@ public:
   virtual ~RGWOp() override;
 
   int get_ret() const { return op_ret; }
+  req_state* get_req_state() const { return s; }
+  rgw::sal::User* get_user() const { return s ? s->user.get() : nullptr; }
 
   virtual int init_processing(optional_yield y) {
     if (dialect_handler->supports_quota()) {
@@ -283,6 +290,15 @@ public:
   int read_bucket_cors();
   int read_global_cors();
   bool generate_cors_headers(std::string& origin, std::string& method, std::string& headers, std::string& exp_headers, unsigned *max_age);
+
+  /* Enforce CORS policy for cross-origin non-preflight requests.
+   *
+   * The check is skipped when:
+   *  - no Origin header is present
+   *  - getting a preflight request (handled entirely by RGWOptionsCORS)
+   *  - no bucket/global CORS configuration exists
+   */
+  int verify_cors_match();
 
   virtual int verify_params() { return 0; }
   virtual bool prefetch_data() { return false; }
@@ -455,7 +471,7 @@ protected:
   bool first_data;
   uint64_t cur_ofs;
   bufferlist waiting;
-  uint64_t action = 0;
+  rgw::IAM::action_t action{};
 
   bool get_retention;
   bool get_legal_hold;
@@ -1409,7 +1425,6 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
-  bool always_do_bucket_logging() const override { return false; }
 };
 
 class RGWPostObj : public RGWOp {
@@ -1621,6 +1636,8 @@ protected:
   std::string_view copy_source;
   // Not actually required
   std::optional<std::string_view> md_directive;
+  std::optional<RGWObjTags> obj_tags;
+  bool copy_source_tags = false;
   std::map<std::string, std::string> crypt_http_responses;
 
   off_t ofs;
@@ -2125,12 +2142,13 @@ public:
   void complete() override;
 
   virtual int get_params(optional_yield y) = 0;
+  virtual int verify_encryption(std::map<std::string, bufferlist>& attrs,
+                                rgw::cksum::Type cksum_type) { return 0; }
   void send_response() override = 0;
   const char* name() const override { return "complete_multipart"; }
   std::string canonical_name() const override { return fmt::format("REST.{}.UPLOAD", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_COMPLETE_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  bool always_do_bucket_logging() const override { return false; }
 };
 
 class RGWAbortMultipart : public RGWOp {
@@ -2280,6 +2298,10 @@ class RGWDeleteMultiObj : public RGWOp {
   void handle_objects(const std::vector<RGWMultiDelObject>& objects,
                       uint32_t max_aio, boost::asio::yield_context yield);
 
+  int run_lua_script(rgw::lua::context ctx,
+                     const rgw::sal::Object* multi_delete_obj,
+                     optional_yield y);
+
 protected:
   std::vector<delete_multi_obj_entry> ops_log_entries;
   bufferlist data;
@@ -2411,7 +2433,8 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
       "x-amz-storage-class",
       "x-amz-content-sha256",
       "x-amz-checksum-algorithm",
-      "x-amz-date"
+      "x-amz-date",
+      "x-amz-tagging"
   };
 
   size_t valid_meta_count = 0;

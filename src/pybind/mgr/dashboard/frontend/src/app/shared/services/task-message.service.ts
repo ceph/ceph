@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import _ from 'lodash';
 
+import { SMB_BASE_CEPHFS, SMB_BASE_RGW } from '~/app/shared/constants/smb.constant';
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
 import { ImageSpec } from '../models/image-spec';
@@ -321,6 +322,37 @@ export class TaskMessageService {
       this.rbd_mirroring.pool_peer,
       () => ({})
     ),
+    // CephFS mirroring tasks
+    'cephfs/mirroring/setup': this.newTaskMessage(
+      new TaskMessageOperation(
+        $localize`Setting up`,
+        $localize`set up`,
+        $localize`Successfully set up`
+      ),
+      (metadata) => $localize`filesystem mirroring for '${metadata.fsName}'`
+    ),
+    'cephfs/mirroring/path/remove': this.newTaskMessage(
+      this.commonOperations.remove,
+      (metadata) => $localize`mirror path '${metadata.path}' from '${metadata.fsName}'`
+    ),
+    'cephfs/mirroring/checkpoint/add': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata) =>
+        $localize`checkpoint for snapshot '${metadata.snapName}' on path '${metadata.path}'`
+    ),
+    'cephfs/mirroring/checkpoint/remove': this.newTaskMessage(
+      this.commonOperations.remove,
+      (metadata) =>
+        $localize`checkpoint for snapshot '${metadata.snapName}' on path '${metadata.path}'`
+    ),
+    'cephfs/mirroring/disable': this.newTaskMessage(
+      new TaskMessageOperation(
+        $localize`Disabling`,
+        $localize`disable`,
+        $localize`Successfully disabled`
+      ),
+      (metadata) => $localize`mirroring for '${metadata.fsName}'`
+    ),
     // RGW operations
     'rgw/bucket/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) => {
       return $localize`${metadata.bucket_names[0]}`;
@@ -422,6 +454,12 @@ export class TaskMessageService {
     'nfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nfs(metadata)
     ),
+    'nfs/cluster/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.nfsCluster(metadata)
+    ),
+    'nfs/cluster/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nfsCluster(metadata)
+    ),
     'nfs/edit': this.newTaskMessage(this.commonOperations.update, (metadata) => this.nfs(metadata)),
     'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfs(metadata)
@@ -517,60 +555,40 @@ export class TaskMessageService {
       this.commonOperations.deactivate,
       (metadata) => this.snapshotSchedule(metadata)
     ),
-    // smb
-    'cephfs/smb/cluster/create': this.newTaskMessage(
-      this.commonOperations.create,
-      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
-    ),
-    'cephfs/smb/cluster/edit': this.newTaskMessage(
-      this.commonOperations.update,
-      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
-    ),
-    'cephfs/smb/cluster/delete': this.newTaskMessage(
-      this.commonOperations.delete,
-      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
-    ),
-    'cephfs/smb/share/create': this.newTaskMessage(
-      this.commonOperations.create,
-      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
-    ),
-    'cephfs/smb/share/edit': this.newTaskMessage(
-      this.commonOperations.update,
-      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
-    ),
-    'cephfs/smb/share/delete': this.newTaskMessage(
-      this.commonOperations.delete,
-      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
-    ),
-    'cephfs/smb/active-directory/create': this.newTaskMessage(
-      this.commonOperations.create,
-      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-    ),
-    'cephfs/smb/active-directory/edit': this.newTaskMessage(
-      this.commonOperations.update,
-      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-    ),
-    'cephfs/smb/active-directory/delete': this.newTaskMessage(
-      this.commonOperations.delete,
-      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-    ),
-    'cephfs/smb/standalone/create': this.newTaskMessage(
-      this.commonOperations.create,
-      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-    ),
-    'cephfs/smb/standalone/edit': this.newTaskMessage(
-      this.commonOperations.update,
-      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-    ),
-    'cephfs/smb/standalone/delete': this.newTaskMessage(
-      this.commonOperations.delete,
-      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-    ),
+    // smb (cephfs/smb and rgw/smb)
+    ...this.buildSmbMessages(),
     'ceph-user/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata: { userEntity: string }) => this.cephUser(metadata)
+    ),
+    'mirroring/token/create': this.newTaskMessage(this.commonOperations.create, () =>
+      this.bootstrap()
     )
   };
+
+  private buildSmbMessages(): Record<string, TaskMessage> {
+    const entries: [string, TaskMessageOperation, (metadata: any) => string][] = [
+      ['cluster/create', this.commonOperations.create, (m) => this.smbCluster(m)],
+      ['cluster/edit', this.commonOperations.update, (m) => this.smbCluster(m)],
+      ['cluster/delete', this.commonOperations.delete, (m) => this.smbCluster(m)],
+      ['share/create', this.commonOperations.create, (m) => this.smbShare(m)],
+      ['share/edit', this.commonOperations.update, (m) => this.smbShare(m)],
+      ['share/delete', this.commonOperations.delete, (m) => this.smbShare(m)],
+      ['active-directory/create', this.commonOperations.create, (m) => this.smbJoinAuth(m)],
+      ['active-directory/edit', this.commonOperations.update, (m) => this.smbJoinAuth(m)],
+      ['active-directory/delete', this.commonOperations.delete, (m) => this.smbJoinAuth(m)],
+      ['standalone/create', this.commonOperations.create, (m) => this.smbUsersgroups(m)],
+      ['standalone/edit', this.commonOperations.update, (m) => this.smbUsersgroups(m)],
+      ['standalone/delete', this.commonOperations.delete, (m) => this.smbUsersgroups(m)]
+    ];
+    const messages: Record<string, TaskMessage> = {};
+    for (const base of [SMB_BASE_CEPHFS, SMB_BASE_RGW]) {
+      for (const [path, operation, involves] of entries) {
+        messages[`${base}/${path}`] = this.newTaskMessage(operation, involves);
+      }
+    }
+    return messages;
+  }
 
   newTaskMessage(
     operation: TaskMessageOperation,
@@ -642,8 +660,12 @@ export class TaskMessageService {
     }'`;
   }
 
+  nfsCluster(metadata: { cluster_id: string }) {
+    return $localize`NFS cluster '${metadata.cluster_id}'`;
+  }
+
   smbCluster(metadata: { cluster_id: string }) {
-    return $localize`SMB cluster  '${metadata.cluster_id}'`;
+    return $localize`SMB cluster '${metadata.cluster_id}'`;
   }
 
   smbShare(metadata: Record<'share_id', string>) {
@@ -751,5 +773,9 @@ export class TaskMessageService {
 
   cephUser(metadata: { userEntity: string }) {
     return $localize`Ceph user  '${metadata.userEntity}'`;
+  }
+
+  bootstrap() {
+    return $localize`bootstrap token`;
   }
 }

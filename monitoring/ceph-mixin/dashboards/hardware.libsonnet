@@ -47,7 +47,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addTemplateSchema(
         'hostname',
         '$datasource',
-        'label_values(ceph_hardware_health, hostname)',
+        'label_values(ceph_hardware_status, hostname)',
         1,
         false,
         1,
@@ -78,23 +78,33 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='Health',
           unit='short',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 4, x: 0, y: 1 }
+          gridPosition={ h: 4, w: 4, x: 0, y: 1 },
+          reducerFunction='last',
+          noValue='N/A',
         )
         .addTarget($.addTargetSchema(
-          'max(ceph_hardware_health)',
+          'max(ceph_hardware_status{state="Enabled"})',
           legendFormat='Health'
         ))
         + {
-          description: 'Overall hardware health across all hosts',
+          description: 'Worst health of all Enabled hardware components across all hosts. Components that are not enabled are not included, see "Not Enabled Components". N/A means no enabled components are reporting.',
           fieldConfig: {
             defaults: {
               mappings: [
-                { type: 'value', options: { '0': { color: 'green', index: 0, text: 'OK' } } },
-                { type: 'range', options: { from: 1, to: 999, result: { color: 'semi-dark-red', index: 1, text: 'NOT OK' } } },
+                {
+                  type: 'value',
+                  options: {
+                    '0': { color: 'green', index: 0, text: 'OK' },
+                    '1': { color: 'yellow', index: 1, text: 'WARNING' },
+                    '2': { color: 'red', index: 2, text: 'ERROR' },
+                    '-1': { color: '#808080', index: 3, text: 'UNKNOWN' },
+                  },
+                },
               ],
+              noValue: 'N/A',
               thresholds: {
                 mode: 'absolute',
-                steps: [{ color: 'green' }, { color: 'red', value: 1 }],
+                steps: [{ color: '#808080' }, { color: 'green', value: 0 }, { color: 'yellow', value: 1 }, { color: 'red', value: 2 }],
               },
             },
           },
@@ -219,9 +229,11 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='Hosts',
           unit='short',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 2, x: 0, y: 5 }
+          gridPosition={ h: 4, w: 2, x: 0, y: 5 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
-          'count(count by(hostname) (ceph_hardware_health))',
+          'count(count by(hostname) (ceph_hardware_status))',
           legendFormat='Hosts'
         ))
         + { description: 'Total hosts with hardware monitoring' },
@@ -231,7 +243,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='Drives',
           unit='short',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 2, x: 2, y: 5 }
+          gridPosition={ h: 4, w: 2, x: 2, y: 5 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'count(ceph_hardware_storage_capacity_bytes)',
           legendFormat='Drives'
@@ -266,20 +280,30 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='Power',
           unit='short',
           datasource='$datasource',
-          gridPosition={ h: 3, w: 2, x: 0, y: 2 }
+          gridPosition={ h: 3, w: 2, x: 0, y: 2 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
-          'max(ceph_hardware_health{hostname=~"$hostname",category="power"})',
+          'max(ceph_hardware_status{hostname=~"$hostname",category="power",state="Enabled"})',
           legendFormat='Power'
         ))
         + {
-          description: 'Power supply health status',
+          description: 'Worst health of the Enabled power supply components on this host. Components that are not enabled are not included, see "Not Enabled Components". N/A means no enabled power supply components are reporting.',
           fieldConfig: {
             defaults: {
               mappings: [
-                { type: 'value', options: { '0': { color: 'green', index: 0, text: 'OK' } } },
-                { type: 'range', options: { from: 1, to: 9999, result: { color: 'red', index: 1, text: 'NOT OK' } } },
+                {
+                  type: 'value',
+                  options: {
+                    '0': { color: 'green', index: 0, text: 'OK' },
+                    '1': { color: 'yellow', index: 1, text: 'WARNING' },
+                    '2': { color: 'red', index: 2, text: 'ERROR' },
+                    '-1': { color: '#808080', index: 3, text: 'UNKNOWN' },
+                  },
+                },
               ],
-              thresholds: { mode: 'absolute', steps: [{ color: 'green' }, { color: 'red', value: 1 }] },
+              noValue: 'N/A',
+              thresholds: { mode: 'absolute', steps: [{ color: '#808080' }, { color: 'green', value: 0 }, { color: 'yellow', value: 1 }, { color: 'red', value: 2 }] },
             },
           },
           options+: { colorMode: 'background_solid' },
@@ -290,7 +314,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='MB Temperature (max)',
           unit='celsius',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 3, x: 2, y: 2 }
+          gridPosition={ h: 4, w: 3, x: 2, y: 2 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'max(ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~".*MB_TEMP.*"})',
           legendFormat='Motherboard'
@@ -306,7 +332,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='CPU Temperature',
           unit='celsius',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 3, x: 5, y: 2 }
+          gridPosition={ h: 4, w: 3, x: 5, y: 2 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'avg(ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~".*CPU_TEMP"})',
           legendFormat='CPU'
@@ -322,7 +350,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='DIMM Temperature (max)',
           unit='celsius',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 3, x: 8, y: 2 }
+          gridPosition={ h: 4, w: 3, x: 8, y: 2 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'max(ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~".*DIMM.*_TEMP"})',
           legendFormat='DIMM'
@@ -338,7 +368,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='PSU Fans',
           unit='short',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 3, x: 11, y: 2 }
+          gridPosition={ h: 4, w: 3, x: 11, y: 2 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'count(ceph_hardware_fan_rpm{hostname=~"$hostname", fan_name=~"PSU.*"})',
           legendFormat='PSU Fans'
@@ -353,7 +385,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='AVG PSU Temperature',
           unit='celsius',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 3, x: 14, y: 2 }
+          gridPosition={ h: 4, w: 3, x: 14, y: 2 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'avg(ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~"PSU.*_TEMP.*"})',
           legendFormat='PSU'
@@ -369,7 +403,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='NVMe Drives',
           unit='short',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 3, x: 17, y: 2 }
+          gridPosition={ h: 4, w: 3, x: 17, y: 2 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'count(ceph_hardware_storage_capacity_bytes{hostname=~"$hostname", protocol="NVMe"})',
           legendFormat='NVMe'
@@ -385,7 +421,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='NVMe Temperature (max)',
           unit='celsius',
           datasource='$datasource',
-          gridPosition={ h: 4, w: 3, x: 20, y: 2 }
+          gridPosition={ h: 4, w: 3, x: 20, y: 2 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'max(ceph_hardware_temperature_celsius{hostname=~"$hostname", sensor_name=~"NVME.*"})',
           legendFormat='NVMe'
@@ -401,20 +439,30 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='Network',
           unit='short',
           datasource='$datasource',
-          gridPosition={ h: 3, w: 2, x: 0, y: 5 }
+          gridPosition={ h: 3, w: 2, x: 0, y: 5 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
-          'max(ceph_hardware_health{hostname=~"$hostname",category="network"})',
+          'max(ceph_hardware_status{hostname=~"$hostname",category="network",state="Enabled"})',
           legendFormat='Network'
         ))
         + {
-          description: 'Network adapter health status',
+          description: 'Worst health of the Enabled network components on this host. Components that are not enabled are not included, see "Not Enabled Components". N/A means no enabled network components are reporting.',
           fieldConfig: {
             defaults: {
               mappings: [
-                { type: 'value', options: { '0': { color: 'green', index: 0, text: 'OK' } } },
-                { type: 'range', options: { from: 1, to: 9999, result: { color: 'red', index: 1, text: 'NOT OK' } } },
+                {
+                  type: 'value',
+                  options: {
+                    '0': { color: 'green', index: 0, text: 'OK' },
+                    '1': { color: 'yellow', index: 1, text: 'WARNING' },
+                    '2': { color: 'red', index: 2, text: 'ERROR' },
+                    '-1': { color: '#808080', index: 3, text: 'UNKNOWN' },
+                  },
+                },
               ],
-              thresholds: { mode: 'absolute', steps: [{ color: 'green' }, { color: 'red', value: 1 }] },
+              noValue: 'N/A',
+              thresholds: { mode: 'absolute', steps: [{ color: '#808080' }, { color: 'green', value: 0 }, { color: 'yellow', value: 1 }, { color: 'red', value: 2 }] },
             },
           },
           options+: { colorMode: 'background_solid' },
@@ -425,20 +473,30 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='Cooling',
           unit='short',
           datasource='$datasource',
-          gridPosition={ h: 3, w: 2, x: 0, y: 8 }
+          gridPosition={ h: 3, w: 2, x: 0, y: 8 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
-          'max(ceph_hardware_health{hostname=~"$hostname",category="fans"})',
+          'max(ceph_hardware_status{hostname=~"$hostname",category="fans",state="Enabled"})',
           legendFormat='Cooling'
         ))
         + {
-          description: 'Cooling fans health status',
+          description: 'Worst health of the Enabled fan components on this host. Components that are not enabled are not included, see "Not Enabled Components". N/A means no enabled fan components are reporting.',
           fieldConfig: {
             defaults: {
               mappings: [
-                { type: 'value', options: { '0': { color: 'green', index: 0, text: 'OK' } } },
-                { type: 'range', options: { from: 1, to: 9999, result: { color: 'red', index: 1, text: 'NOT OK' } } },
+                {
+                  type: 'value',
+                  options: {
+                    '0': { color: 'green', index: 0, text: 'OK' },
+                    '1': { color: 'yellow', index: 1, text: 'WARNING' },
+                    '2': { color: 'red', index: 2, text: 'ERROR' },
+                    '-1': { color: '#808080', index: 3, text: 'UNKNOWN' },
+                  },
+                },
               ],
-              thresholds: { mode: 'absolute', steps: [{ color: 'green' }, { color: 'red', value: 1 }] },
+              noValue: 'N/A',
+              thresholds: { mode: 'absolute', steps: [{ color: '#808080' }, { color: 'green', value: 0 }, { color: 'yellow', value: 1 }, { color: 'red', value: 2 }] },
             },
           },
           options+: { colorMode: 'background_solid' },
@@ -449,20 +507,30 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='Drives',
           unit='short',
           datasource='$datasource',
-          gridPosition={ h: 3, w: 2, x: 0, y: 11 }
+          gridPosition={ h: 3, w: 2, x: 0, y: 11 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
-          'max(ceph_hardware_health{hostname=~"$hostname",category="storage"})',
+          'max(ceph_hardware_status{hostname=~"$hostname",category="storage",state="Enabled"})',
           legendFormat='Drives'
         ))
         + {
-          description: 'Storage drives health status',
+          description: 'Worst health of the Enabled storage components on this host. Components that are not enabled are not included, see "Not Enabled Components". N/A means no enabled storage components are reporting.',
           fieldConfig: {
             defaults: {
               mappings: [
-                { type: 'value', options: { '0': { color: 'green', index: 0, text: 'OK' } } },
-                { type: 'range', options: { from: 1, to: 9999, result: { color: 'red', index: 1, text: 'NOT OK' } } },
+                {
+                  type: 'value',
+                  options: {
+                    '0': { color: 'green', index: 0, text: 'OK' },
+                    '1': { color: 'yellow', index: 1, text: 'WARNING' },
+                    '2': { color: 'red', index: 2, text: 'ERROR' },
+                    '-1': { color: '#808080', index: 3, text: 'UNKNOWN' },
+                  },
+                },
               ],
-              thresholds: { mode: 'absolute', steps: [{ color: 'green' }, { color: 'red', value: 1 }] },
+              noValue: 'N/A',
+              thresholds: { mode: 'absolute', steps: [{ color: '#808080' }, { color: 'green', value: 0 }, { color: 'yellow', value: 1 }, { color: 'red', value: 2 }] },
             },
           },
           options+: { colorMode: 'background_solid' },
@@ -550,6 +618,55 @@ local g = import 'grafonnet/grafana.libsonnet';
             },
           },
         ]),
+
+        // Not Enabled Components
+        $.addTableExtended(
+          title='Not Enabled Components',
+          datasource='$datasource',
+          description='Hardware components whose Redfish state is not Enabled (for example Disabled or UnavailableOffline). Their health cannot be read, so they are not included in the health panels. Empty when all components are enabled.',
+          gridPosition={ h: 6, w: 24, x: 0, y: 14 },
+          options={
+            footer: { show: false },
+            showHeader: true,
+          },
+          custom={ align: 'auto', cellOptions: { type: 'auto' }, filterable: true, inspect: false },
+          thresholds={
+            mode: 'absolute',
+            steps: [{ color: 'green', value: null }],
+          },
+        )
+        .addTarget($.addTargetSchema(
+          'ceph_hardware_status{hostname=~"$hostname",state!="Enabled"}',
+          legendFormat='',
+          instant=true
+        ) + { format: 'table' })
+        .addTransformations([
+          {
+            id: 'organize',
+            options: {
+              excludeByName: {
+                Time: true,
+                Value: true,
+                __name__: true,
+                cluster: true,
+                job: true,
+                instance: true,
+              },
+              indexByName: {
+                hostname: 0,
+                category: 1,
+                component: 2,
+                state: 3,
+              },
+              renameByName: {
+                hostname: 'Host',
+                category: 'Category',
+                component: 'Component',
+                state: 'State',
+              },
+            },
+          },
+        ]),
       ] },
 
       // Row 3: FAN Speeds
@@ -559,7 +676,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='FAN: $fan_speeds (RPM)',
           unit='locale',
           datasource='$datasource',
-          gridPosition={ h: 5, w: 4, x: 0, y: 3 }
+          gridPosition={ h: 5, w: 4, x: 0, y: 3 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'ceph_hardware_fan_rpm{hostname=~"$hostname",fan_name=~"$fan_speeds"}',
           legendFormat='{{fan_name}}'
@@ -577,7 +696,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='PSU1 Fan Speed (RPM)',
           unit='locale',
           datasource='$datasource',
-          gridPosition={ h: 5, w: 4, x: 0, y: 8 }
+          gridPosition={ h: 5, w: 4, x: 0, y: 8 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'ceph_hardware_fan_rpm{hostname=~"$hostname",fan_name=~"PSU1.*"}',
           legendFormat='{{fan_name}}'
@@ -592,7 +713,9 @@ local g = import 'grafonnet/grafana.libsonnet';
           title='PSU2 Fan Speed (RPM)',
           unit='locale',
           datasource='$datasource',
-          gridPosition={ h: 5, w: 4, x: 4, y: 8 }
+          gridPosition={ h: 5, w: 4, x: 4, y: 8 },
+          reducerFunction='last',
+          noValue='N/A',
         ).addTarget($.addTargetSchema(
           'ceph_hardware_fan_rpm{hostname=~"$hostname",fan_name=~"PSU2.*"}',
           legendFormat='{{fan_name}}'

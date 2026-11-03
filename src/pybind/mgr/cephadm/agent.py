@@ -10,12 +10,12 @@ from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now, http_req
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, CertificateSource
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from mgr_util import test_port_allocation, PortAlreadyInUse
 from mgr_util import verify_tls_files
 import tempfile
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmAgent
+from cephadm.services.agent import CephadmAgent
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 
@@ -111,6 +111,9 @@ class NodeProxyEndpoint:
         # self.ssl_ctx.load_verify_locations(cadata=self.ssl_root_crt)
         self.redfish_token: str = ''
         self.redfish_session_location: str = ''
+        self._cp_config = {
+            'hooks.before_handler': self._check_get_keyring,
+        }
 
     def _cp_dispatch(self, vpath: List[str]) -> "NodeProxyEndpoint":
         if len(vpath) > 1:  # /{hostname}/<endpoint>
@@ -127,6 +130,22 @@ class NodeProxyEndpoint:
                     cherrypy.request.params['id'] = _id
         # /<endpoint>
         return self
+
+    def _check_get_keyring(self) -> None:
+        """Require a node-proxy keyring on GET requests."""
+        if cherrypy.request.method != 'GET':
+            return
+        cephx: Dict[str, Any] = {}
+        name = cherrypy.request.headers.get('Cephx-Name')
+        secret = cherrypy.request.headers.get('Cephx-Secret')
+        if name is not None:
+            cephx['name'] = name
+        if secret is not None:
+            cephx['secret'] = secret
+        self.validate_node_proxy_data({'cephx': cephx})
+        hostname = cherrypy.request.params.get('hostname')
+        if hostname and cephx['name'][11:] != hostname:
+            raise cherrypy.HTTPError(403, f'Got wrong keyring from agent on host {hostname}.')
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['POST'])
@@ -852,6 +871,9 @@ class AgentMessageThread(threading.Thread):
                 self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
                 if self.daemon_spec:
                     self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
+                    self.mgr.log.info(
+                        f'HTTP config push to agent on {self.host} acknowledged; '
+                        f'agent config deps updated (deps={self.daemon_spec.deps})')
                 self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
             except ConnectionError as e:
@@ -862,10 +884,16 @@ class AgentMessageThread(threading.Thread):
                 time.sleep(retry_wait)
             except Exception as e:
                 # if it's not a connection error, something has gone wrong. Give up.
-                self.mgr.log.error(f'Failed to contact agent on host {self.host}: {e}')
+                # Leave agent config deps unchanged so _check_agent can retry.
+                self.mgr.log.error(
+                    f'Failed to contact agent on host {self.host}: {e}. '
+                    f'Agent config deps left unchanged for retry')
                 self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
-        self.mgr.log.error(f'Could not connect to agent on host {self.host}')
+        # Leave agent config deps unchanged so _check_agent can retry next cycle.
+        self.mgr.log.error(
+            f'Could not connect to agent on host {self.host}. '
+            f'Agent config deps left unchanged for retry')
         self.mgr.agent_cache.sending_agent_message[self.host] = False
         return
 
@@ -1011,21 +1039,40 @@ class CephadmAgentHelpers:
                 except Exception:
                     pass
                 daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
+                has_agent_port = host in self.mgr.agent_cache.agent_ports
                 # we need to know the agent port to try to reconfig w/ http
                 # otherwise there is no choice but a full ssh reconfig
-                if host in self.mgr.agent_cache.agent_ports and root_cert_match and not down:
+                if has_agent_port and root_cert_match and not down:
+                    self.mgr.log.info(
+                        f'Agent config deps changed on {host} '
+                        f'(last_deps={last_deps} -> deps={deps}); '
+                        f'pushing updated config via HTTP')
                     daemon_spec = service_registry.get_service(daemon_type_to_service(
-                        daemon_spec.daemon_type)).prepare_create(daemon_spec)
+                        daemon_spec.daemon_type)).prepare_create(DaemonDeployContext(daemon_spec, spec))
                     self.mgr.agent_helpers._request_agent_acks(
                         hosts={daemon_spec.host},
                         increment=True,
                         daemon_spec=daemon_spec,
                     )
                 else:
-                    self.mgr._daemon_action(daemon_spec, action='reconfig')
+                    self.mgr.log.info(
+                        f'Agent config deps changed on {host} '
+                        f'(last_deps={last_deps} -> deps={deps}); '
+                        f'reconfiguring via SSH '
+                        f'(agent_down={down}, has_agent_port={has_agent_port}, '
+                        f'root_cert_match={root_cert_match})')
+                    try:
+                        self.mgr._daemon_action(daemon_spec, action='reconfig')
+                    except Exception as e:
+                        # Deps are only stamped on successful deploy/reconfig.
+                        # Leaving them unchanged keeps last_deps != deps so we
+                        # retry on the next serve cycle.
+                        self.mgr.log.warning(
+                            f'SSH reconfig of agent on {host} failed: {e}. '
+                            f'Leaving agent config deps unchanged for retry')
                 return down
         except Exception as e:
-            self.mgr.log.debug(
+            self.mgr.log.warning(
                 f'Agent on host {host} not ready to have config and deps checked: {e}')
         action = self.mgr.cache.get_scheduled_daemon_action(agent.hostname, agent.name())
         if action:

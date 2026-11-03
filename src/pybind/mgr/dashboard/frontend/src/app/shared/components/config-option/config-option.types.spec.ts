@@ -114,7 +114,7 @@ describe('ConfigOptionTypes', () => {
     });
 
     it('should throw an error for unknown type', () => {
-      expect(() => ConfigOptionTypes.getType('unknown')).toThrowError(
+      expect(() => ConfigOptionTypes.getType('unknown')).toThrow(
         'Found unknown type "unknown" for config option.'
       );
     });

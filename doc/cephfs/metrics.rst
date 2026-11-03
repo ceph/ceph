@@ -28,13 +28,17 @@ CephFS exports client metrics as :ref:`Labeled Perf Counters`, which could be us
      - Percentage of file capability misses over total number of caps
    * - avg_read_latency
      - Gauge
-     - Mean value of the read latencies
+     - Mean read latency. The counter is a ``PERFCOUNTER_TIME`` value
+       scaled by 100 in the MDS; divide by 100 to get seconds
+       (e.g. ``300.0`` → ``3.0`` seconds).
    * - avg_write_latency
      - Gauge
-     - Mean value of the write latencies
+     - Mean write latency. Same unit/scaling as ``avg_read_latency``
+       (divide by 100 for seconds).
    * - avg_metadata_latency
      - Gauge
-     - Mean value of the metadata latencies
+     - Mean metadata latency. Same unit/scaling as ``avg_read_latency``
+       (divide by 100 for seconds).
    * - dentry_lease_hits
      - Gauge
      - Percentage of dentry lease hits handed out over the total dentry lease requests

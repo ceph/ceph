@@ -2250,17 +2250,19 @@ class CephManager:
             assert pool_name not in self.pools
             self.log("creating pool_name %s" % (pool_name,))
             if erasure_code_profile_name:
-                cmd_args = ['osd', 'pool', 'create', 
-                            pool_name, str(pg_num), 
-                            str(pg_num), 'erasure', 
+                cmd_args = ['osd', 'pool', 'create',
+                            pool_name, str(pg_num),
+                            str(pg_num), 'erasure',
                             erasure_code_profile_name]
 
                 if erasure_code_crush_rule_name:
                     cmd_args.extend([erasure_code_crush_rule_name])
+
                 self.raw_cluster_cmd(*cmd_args)
             else:
-                self.raw_cluster_cmd('osd', 'pool', 'create',
-                                     pool_name, str(pg_num))
+                cmd_args = ['osd', 'pool', 'create',
+                            pool_name, str(pg_num)]
+                self.raw_cluster_cmd(*cmd_args)
             if min_size is not None:
                 self.raw_cluster_cmd(
                     'osd', 'pool', 'set', pool_name,
@@ -3221,8 +3223,9 @@ class CephManager:
         Revive osds by either power cycling (if indicated by the config)
         or by restarting.
         """
-        if self.config.get('powercycle'):
+        if self.config.get('powercycle') or self.cephadm:
             remote = self.find_remote('osd', osd)
+        if self.config.get('powercycle'):
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.
                      format(o=osd, s=remote.name))
             self._assert_ipmi(remote)
@@ -3234,6 +3237,14 @@ class CephManager:
             mount_osd_data(self.ctx, remote, self.cluster, str(osd))
             self.make_admin_daemon_dir(remote)
             self.ctx.daemons.get_daemon('osd', osd, self.cluster).reset()
+        if self.cephadm:
+            # If the OSD was killed hard by the OSD thrasher or a powercycle,
+            # the unit may be left in 'failed' state, which prevents restart.
+            # reset-failed clears that state
+            fsid = self.ctx.ceph[self.cluster].fsid
+            service = 'ceph-{fsid}@osd.{osd}'.format(fsid=fsid, osd=osd)
+            self.log('resetting systemd failed state for %s' % service)
+            remote.run(args=['sudo', 'systemctl', 'reset-failed', service])
         self.ctx.daemons.get_daemon('osd', osd, self.cluster).restart()
 
         if not skip_admin_check:
@@ -3299,7 +3310,22 @@ class CephManager:
             self._assert_ipmi(remote)
             remote.console.power_on()
             self.make_admin_daemon_dir(remote)
-        self.ctx.daemons.get_daemon('mon', mon, self.cluster).restart()
+        daemon = self.ctx.daemons.get_daemon('mon', mon, self.cluster)
+        try:
+            daemon.restart()
+        except CommandFailedError:
+            if not self.cephadm:
+                raise
+            # https://tracker.ceph.com/issues/80583
+            # Reset failed systemd state if mon restart failed during thrashing
+            # before retrying to prevent mon quorum timeout
+            fsid = self.ctx.ceph[self.cluster].fsid
+            service = 'ceph-{fsid}@mon.{mon}'.format(fsid=fsid, mon=mon)
+            self.log('restarting mon.{m} failed, resetting systemd state for '
+                     '{s} and retrying'.format(m=mon, s=service))
+            self.find_remote('mon', mon).run(
+                args=['sudo', 'systemctl', 'reset-failed', service])
+            daemon.restart()
 
     def revive_mgr(self, mgr):
         """
@@ -3393,14 +3419,39 @@ class CephManager:
             self.log('health:\n{h}'.format(h=out))
         return json.loads(out)
 
-    def wait_until_healthy(self, timeout=None):
+    def wait_until_healthy(self, timeout=None, expected_checks=[]):
         self.log("wait_until_healthy")
         start = time.time()
-        while self.get_mon_health()['status'] != 'HEALTH_OK':
+        found = set()
+        while True:
+            health = self.get_mon_health()
+            if health['status'] == 'HEALTH_OK':
+                break
+            found = set()
+            okay = True
+            unhealthy = []
+            for name, check in health['checks'].items():
+                if check['muted']:
+                    log.debug("{} is muted", name)
+                elif name in expected_checks:
+                    log.info("{} in expected_checks", name)
+                    found.add(name)
+                else:
+                    unhealthy.append(name)
+                    okay = False
+            if okay:
+                break
             if timeout is not None:
-                assert time.time() - start < timeout, \
-                    'timeout expired in wait_until_healthy'
+                if timeout < (time.time() - start):
+                    what = ", ".join(unhealthy)
+                    err = f"timeout {timeout}s expired waiting for healthy cluster with these unhealthy checks: {what}"
+                    raise RuntimeError(err)
             time.sleep(3)
+        if found != set(expected_checks):
+            exp = ", ".join(expected_checks)
+            fnd = ", ".join(found)
+            err = f"healthy cluster but expected_checks ({exp}) not equal to {fnd}"
+            raise RuntimeError(err)
         self.log("wait_until_healthy done")
 
     def get_filepath(self):

@@ -2,8 +2,6 @@
 Sync Modules
 ============
 
-.. versionadded:: Kraken
-
 The :ref:`multisite` functionality of RGW introduced in Jewel allowed the ability to
 create multiple zones and mirror data and metadata between them. *Sync Modules*
 are built on top of the multisite framework that allows for forwarding data and
@@ -80,10 +78,6 @@ Finally update the period
    radosgw-admin period update --commit
 
 
-Now start the radosgw in the zone
-
-.. prompt:: bash #
-
-   systemctl start ceph-radosgw@rgw.`hostname -s`
-   systemctl enable ceph-radosgw@rgw.`hostname -s`
+Now start the Ceph Object Gateway in the zone, and enable it to start at boot.
+See :ref:`rados-operating-daemons`.
 

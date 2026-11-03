@@ -547,8 +547,8 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup)
   ASSERT_EQ(fixup_range(&decrypt,513,1024), range_t(512,1024+255));
 }
 
-std::vector<size_t> create_mp_parts(size_t obj_size, size_t mp_part_len){
-  std::vector<size_t> parts_len;
+std::vector<uint64_t> create_mp_parts(size_t obj_size, size_t mp_part_len){
+  std::vector<uint64_t> parts_len;
   size_t part_size;
   size_t ofs=0;
 
@@ -1404,7 +1404,7 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_aad_offset_mismatch)
 
 TEST(TestRGWCrypto, verify_PartLocation_single_part)
 {
-  std::vector<size_t> parts = {10 * 1024 * 1024};
+  std::vector<uint64_t> parts = {10 * 1024 * 1024};
   size_t idx; off_t ofs_in_part, cumulative;
 
   find_part_for_offset(0, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
@@ -1426,7 +1426,7 @@ TEST(TestRGWCrypto, verify_PartLocation_single_part)
 TEST(TestRGWCrypto, verify_PartLocation_multipart_cbc)
 {
   const size_t ps = 5 * 1024 * 1024;
-  std::vector<size_t> parts = {ps, ps, ps};
+  std::vector<uint64_t> parts = {ps, ps, ps};
   size_t idx; off_t ofs_in_part, cumulative;
 
   find_part_for_offset(0, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
@@ -1452,7 +1452,7 @@ TEST(TestRGWCrypto, verify_PartLocation_multipart_aead)
 {
   const size_t pp = 1024 * AEAD_CHUNK_SIZE;  // 4MB plaintext per part
   const size_t ep = aead_plaintext_to_encrypted_size(pp);
-  std::vector<size_t> parts = {ep, ep, ep};
+  std::vector<uint64_t> parts = {ep, ep, ep};
   size_t idx; off_t ofs_in_part, cumulative;
 
   find_part_for_offset(0, parts, 4096, 4112, false, idx, ofs_in_part, cumulative);
@@ -1474,7 +1474,7 @@ TEST(TestRGWCrypto, verify_PartLocation_multipart_aead)
 TEST(TestRGWCrypto, verify_PartLocation_clamp_to_last)
 {
   const size_t ps = 5 * 1024 * 1024;
-  std::vector<size_t> parts = {ps, ps, ps};
+  std::vector<uint64_t> parts = {ps, ps, ps};
   size_t idx; off_t ofs_in_part, cumulative;
 
   find_part_for_offset(2 * ps + 1000, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
@@ -1493,7 +1493,7 @@ TEST(TestRGWCrypto, verify_PartLocation_clamp_to_last)
 TEST(TestRGWCrypto, verify_PartLocation_unequal_parts)
 {
   // CBC parts: 1MB, 3MB, 2MB
-  std::vector<size_t> parts = {1024 * 1024, 3 * 1024 * 1024, 2 * 1024 * 1024};
+  std::vector<uint64_t> parts = {1024 * 1024, 3 * 1024 * 1024, 2 * 1024 * 1024};
   size_t idx; off_t ofs_in_part, cumulative;
 
   find_part_for_offset(500 * 1024, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
@@ -1509,7 +1509,7 @@ TEST(TestRGWCrypto, verify_PartLocation_unequal_parts)
 TEST(TestRGWCrypto, verify_PartLocation_no_manifest)
 {
   // Empty parts = single-part object
-  std::vector<size_t> parts = {};
+  std::vector<uint64_t> parts = {};
   size_t idx; off_t ofs_in_part, cumulative;
 
   find_part_for_offset(0, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
@@ -1564,7 +1564,7 @@ TEST(TestRGWCrypto, verify_transition_encrypt_decrypt_roundtrip)
       RGWGetObj_Filter* filter = &get_sink;
       RGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, filter,
                                      std::move(cbc),
-                                     std::vector<size_t>{}, null_yield);
+                                     std::vector<uint64_t>{}, null_yield);
       filter = &decrypt;
 
       off_t ofs = 0;

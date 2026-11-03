@@ -43,8 +43,15 @@ void EntityAuth::decode(ceph::buffer::list::const_iterator& bl) {
 
 void EntityAuth::dump(ceph::Formatter *f) const {
   f->dump_object("key", key);
-  encode_json("caps", caps, f);
   f->dump_object("pending_key", pending_key);
+  f->open_array_section("caps");
+  for (auto const& [entity, cap] : caps) {
+    f->open_object_section("cap");
+    f->dump_string("service_name", entity);
+    f->dump_string("access_spec", cap.to_str());
+    f->close_section();
+  }
+  f->close_section();
 }
 
 std::list<EntityAuth> EntityAuth::generate_test_instances() {
@@ -119,8 +126,7 @@ void AuthTicket::decode(ceph::buffer::list::const_iterator& bl) {
   decode(name, bl);
   decode(global_id, bl);
   if (struct_v >= 2) {
-    uint64_t old_auid;
-    decode(old_auid, bl);
+    decode(auid, bl);
   }
   decode(created, bl);
   decode(expires, bl);
@@ -186,7 +192,15 @@ void RotatingSecrets::decode(ceph::buffer::list::const_iterator& bl) {
 }
   
 void RotatingSecrets::dump(ceph::Formatter *f) const {
-  encode_json("secrets", secrets, f);
+  f->dump_int("max_ver", max_ver);
+  f->open_array_section("keys");
+  for (const auto& [id, key] : secrets) {
+    f->open_object_section("secret");
+    f->dump_int("id", id);
+    f->dump_object("expiring_key", key);
+    f->close_section();
+  }
+  f->close_section();
 }
 
 std::list<RotatingSecrets> RotatingSecrets::generate_test_instances() {

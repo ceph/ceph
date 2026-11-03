@@ -41,6 +41,7 @@ tasks:
       - \(SLOW_OPS\)
       - overall HEALTH
       - slow request
+      - marked LAGGY
 - workunit:
     clients:
       client.0:

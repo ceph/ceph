@@ -13,54 +13,131 @@ token that Keystone validates will be considered as valid by the gateway.
 The following configuration options are available for Keystone integration::
 
 	[client.radosgw.gateway]
-	rgw keystone api version = {keystone api version}
-	rgw keystone url = {keystone server url:keystone server admin port}
-	rgw keystone admin token = {keystone admin token}
-	rgw keystone admin token path = {path to keystone admin token} #preferred
-	rgw keystone accepted roles = {accepted user roles}
-	rgw keystone token cache size = {number of tokens to cache}
-	rgw keystone implicit tenants = {true for private tenant for each new user}
+        rgw_keystone_api_version = {keystone api version}
+        rgw_keystone_url = {keystone server url:keystone server port}
+        rgw_keystone_accepted_roles = {accepted user roles}
+        rgw_keystone_token_cache_size = {number of tokens to cache}
+        rgw_keystone_implicit_tenants = {true for private tenant for each new user}
+        rgw_keystone_admin_user = {keystone service user name}
+        rgw_keystone_admin_password = {keystone service user password}
+        rgw_keystone_admin_password_path = {keystone service user password path} # preferred
+        rgw_keystone_admin_domain = {keystone service user domain}
+        rgw_keystone_admin_project = {keystone service project name}
 
-It is also possible to configure a Keystone service tenant, user & password for
-Keystone (for v2.0 version of the OpenStack Identity API), similar to the way
-OpenStack services tend to be configured, this avoids the need for setting the
-shared secret ``rgw keystone admin token`` in the configuration file, which is
-recommended to be disabled in production environments. The service tenant
-credentials should have admin privileges, for more details refer the `OpenStack
-Keystone documentation`_, which explains the process in detail. The requisite
-configuration options are::
+You need to configure credentials to use against the Keystone service. You need
+a project (tenant), username, and password credentials to be configured to use
+the Keystone v3 API.
 
-   rgw keystone admin user = {keystone service tenant user name}
-   rgw keystone admin password = {keystone service tenant user password}
-   rgw keystone admin password path = {keystone service tenant user password path} # preferred
-   rgw keystone admin tenant = {keystone service tenant name}
+The service credentials need to have the ``admin`` and ``service`` roles in
+Keystone to allow ``POST /v3/s3tokens`` and
+``GET /v3/users/<user>/OS-EC2/<credential>`` requests. You can lock down the
+service credentials to only need the ``service`` role and avoid granting the
+``admin`` role in Keystone by changing the changing the
+``identity:ec2_get_credential`` policy.
 
+A Ceph Object Gateway user is mapped to a Keystone ``project``. A Keystone
+user may have multiple roles asssigned, possibly for multiple projects.
 
-A Ceph Object Gateway user is mapped into a Keystone ``tenant``. A Keystone user
-has different roles assigned to it on possibly more than a single tenant. When
-the Ceph Object Gateway gets the ticket, it looks at the tenant, and the user
-roles that are assigned to that ticket, and accepts/rejects the request
-according to the ``rgw keystone accepted roles`` configurable.
+When the Ceph Object Gateway processes tokens retrieved from Keystone, it looks
+at the project, and the user roles that are assigned to that token, and
+accepts/rejects the request according to the
+:confval:`rgw_keystone_accepted_roles` configurable.
 
-For a v3 version of the OpenStack Identity API you should replace
-``rgw keystone admin tenant`` with::
-
-   rgw keystone admin domain = {keystone admin domain name}
-   rgw keystone admin project = {keystone admin project name}
-
-For compatibility with previous versions of ceph, it is also
-possible to set ``rgw keystone implicit tenants`` to either
+For compatibility with previous versions of Ceph, it is also
+possible to set :confval:`rgw_keystone_implicit_tenants` to either
 ``s3`` or ``swift``.  This has the effect of splitting
 the identity space such that the indicated protocol will
 only use implicit tenants, and the other protocol will
-never use implicit tenants.  Some older versions of ceph
-only supported implicit tenants with swift.
+never use implicit tenants.  Some older versions of Ceph
+only supported implicit tenants with Swift.
 
-Ocata (and Later)
------------------
+Project-scoped reader role
+--------------------------
 
-Keystone itself needs to be configured to point to the Ceph Object Gateway as an
-object-storage endpoint:
+By default any Keystone user accepted by the gateway is granted full control
+over its project's object storage. ``rgw keystone accepted project reader
+roles`` designates one or more Keystone roles as *project-scoped readers*
+(the Swift ``project_reader_roles`` equivalent)::
+
+   rgw keystone accepted roles = member
+   rgw keystone accepted project reader roles = objectstore_viewer
+
+When the reader role is the only access-granting role a user holds, the user
+is capped to read-only within its Keystone project: it may read objects and
+inspect bucket configuration (ACLs, policy, versioning, location, ...), but
+not write. Every user of a project maps to the same RGW account (the project
+itself), so a reader lists and reads every bucket the project owns through the
+normal owner-scoped paths, and cannot reach another project (a different
+owner). This scoping is by ownership and holds regardless of ``rgw keystone
+implicit tenants``, which only controls the bucket-name namespace: with it
+off, a reader reaching another project's bucket gets ``403`` (the bucket is
+in the shared namespace, visible but not owned); with it on, it gets ``404``
+(the bucket is in a separate namespace and not visible). Either way the
+reader stays confined to its own project.
+
+Note the following:
+
+- **A project reader role admits the user on its own.** It need not also
+  appear in ``rgw keystone accepted roles`` (mirroring Swift's
+  ``project_reader_roles``): a user whose only granting role is a project
+  reader role is admitted and capped to read-only.
+
+- **The cap is a floor, not a hard ceiling.** A bucket policy that names the
+  user (via a ``keystone:userid`` / ``keystone:role`` condition or a principal
+  ARN) can still grant specific actions such as writes on specific buckets;
+  an explicit policy ``Deny`` can likewise remove access. Only bucket creation
+  and Swift account-metadata writes are refused up front regardless of policy.
+
+- **A role that grants more than read overrides the cap.** If the same user
+  also holds ``admin`` or any other role in ``rgw keystone accepted roles``
+  (for example ``member``), that role wins and the user receives full control.
+  To keep a user read-only, assign it *only* the reader role. Roles that are
+  in no accepted list at all are ignored and do not affect the cap.
+
+Implicit-deny roles
+-------------------
+
+``rgw keystone implicit deny roles`` designates Keystone roles
+that authenticate a user without granting any implicit permissions::
+
+   rgw keystone accepted roles = member
+   rgw keystone implicit deny roles = objectstore_authenticated
+
+A user whose only access-granting role is such a role is denied every
+operation by default. Access must be granted explicitly through a bucket
+policy or IAM policy (for example with a ``keystone:userid`` or
+``keystone:role`` condition), and an explicit ``Allow`` then applies only to
+the buckets and objects the policy names. Unlike a project reader, a user
+with only an implicit-deny role cannot list the buckets of its project;
+bucket creation and Swift account-metadata writes are always refused.
+
+The project-reader notes above apply here as well: the role admits the user
+on its own (no co-listing in ``rgw keystone accepted roles`` needed), an
+explicit policy ``Deny`` always wins, and any role granting more (``admin``,
+a project reader role, or another accepted role such as ``member``) takes
+precedence over the implicit-deny cap.
+
+.. note:: These tiers cap what a request may do at authorization time. They
+   apply to the default Keystone mapping, where each project maps to a plain
+   tenant-scoped gateway user reaching the gateway over S3 or Swift. They do
+   **not** apply in the following cases:
+
+   - **The librgw frontend (NFS-Ganesha).** It authorizes every request with
+     full control, so a gateway reached over that path is not capped. Assign
+     these roles only where clients use S3 or Swift.
+   - **Keystone users associated with an** :doc:`RGW account <account>`.
+     Access for an account is governed entirely by IAM policy (evaluated
+     before the permission mask), so the tiers place no cap there. Use them
+     with the default (non-account) mapping.
+   - **The** ``radosgw-admin`` **command and the admin REST API.** These are
+     backend administration paths that do not authenticate a Keystone user,
+     so they are not subject to these roles at all.
+
+Configuring Keystone Service and Endpoints
+------------------------------------------
+
+Keystone itself needs to be configured to point to the Ceph Object Gateway as
+an object storage endpoint:
 
 .. prompt:: bash #
 
@@ -123,32 +200,34 @@ object-storage endpoint:
   | service_type | object-store                             |
   +--------------+------------------------------------------+
 
-.. note:: If your radosgw ``ceph.conf`` sets the configuration option
-	  ``rgw swift account in url = true``, your ``object-store``
+.. note:: If :ref:`ceph-conf-database` sets the configuration option
+	  ``rgw_swift_account_in_url = true``, your ``object-store``
 	  endpoint URLs must be set to include the suffix
 	  ``/v1/AUTH_%(tenant_id)s`` (instead of just ``/v1``).
 
 The Keystone URL is the Keystone admin RESTful API URL. The admin token is the
 token that is configured internally in Keystone for admin requests.
 
-OpenStack Keystone may be terminated with a self-signed SSL certificate, in
-order for radosgw to interact with Keystone in such a case, you could either
-install Keystone's SSL certificate in the node running radosgw. Alternatively
-radosgw could be made to not verify the SSL certificate at all (similar to
+OpenStack Keystone may be terminated with a self-signed SSL certificate. In
+order for Ceph Object Gateway to interact with Keystone in such a case, you could
+install Keystone's SSL certificate in the node running the Ceph Object Gateway instance. Alternatively,
+Ceph Object Gateway could be made to not verify the SSL certificate at all (similar to
 OpenStack clients with a ``--insecure`` switch) by setting the value of the
-configurable ``rgw keystone verify ssl`` to false.
+configurable :confval:`rgw_keystone_verify_ssl` to false.
 
 
-.. _OpenStack Keystone documentation: http://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
+.. _OpenStack Keystone documentation: https://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
 
 Cross-Project (Tenant) Access
 -----------------------------
 
-In order to let a project (earlier called a 'tenant') access buckets belonging to a different project, the following config option needs to be enabled::
+In order to let a project (earlier called a 'tenant') access buckets belonging
+to a different project, the following config option needs to be enabled::
 
-   rgw swift account in url = true
+   rgw_swift_account_in_url = true
 
-The Keystone object-store endpoint must accordingly be configured to include the ``AUTH_%(project_id)s`` suffix:
+The Keystone object store endpoint must accordingly be configured to include
+the ``AUTH_%(project_id)s`` suffix:
 
 .. prompt:: bash #
 
@@ -177,17 +256,17 @@ Keystone Integration with the S3 API
 ------------------------------------
 
 It is possible to use Keystone for authentication even when using the
-S3 API (with AWS-like access and secret keys), if the ``rgw s3 auth
-use keystone`` option is set. For details, see
+S3 API (with AWS-like access and secret keys) if the
+:confval:`rgw_s3_auth_use_keystone` option is set. For details, see
 :doc:`s3/authentication`.
 
 Requests authenticated via Keystone (Swift tokens or S3 with Keystone-managed
-credentials) expose the Keystone idenitity in the IAM policy environment
+credentials) expose the Keystone identity in the IAM policy environment
 as the condition keys: ``keystone:role`` (role names) and
 ``keystone:userid`` (user UUID). These conditions can be used in bucket
 policies and idenitity policies with ``StringEquals``, ``StringNotEquals`` etc.
 
-- **keystone:role** - Allow or deny by *role* (e.g only users with role
+- **keystone:role** - Allow or deny by *role* (e.g. only users with role
   ``reader`` get read access). Use for RBAC.
 - **keystone:userid** - Restrict to specific *user*. Use when policy
   depends on a specific user, not just their role.
@@ -197,18 +276,18 @@ See :doc:`bucketpolicy` for list of supported condition keys.
 Service Token Support
 ---------------------
 
-Service tokens can be enabled to support RadosGW Keystone integration
+Service tokens can be enabled to support Ceph Object Gateway Keystone integration
 to allow expired tokens when coupled with a valid service token in the request.
 
-Enable the support with ``rgw keystone service token enabled`` and use the
-``rgw keystone service token accepted roles`` option to specify which roles are considered
+Enable the support with :confval:`rgw_keystone_service_token_enabled` and use the
+:confval:`rgw_keystone_service_token_accepted_roles` option to specify which roles are considered
 service roles.
 
-The ``rgw keystone expired token cache expiration`` option can be used to tune the cache
-expiration for an expired token allowed with a service token, please note that this must
+The :confval:`rgw_keystone_expired_token_cache_expiration` option can be used to tune the cache
+expiration for an expired token allowed with a service token. Please note that this must
 be lower than the ``[token]/allow_expired_window`` option in the Keystone configuration.
 
 Enabling this will cause an expired token given in the ``X-Auth-Token`` header to be allowed
 if coupled with a ``X-Service-Token`` header that contains a valid token with the accepted
-roles. This can allow long running processes using a user token in ``X-Auth-Token`` to function
+roles. This can allow long-running processes using a user token in ``X-Auth-Token`` to function
 beyond the expiration of the token.

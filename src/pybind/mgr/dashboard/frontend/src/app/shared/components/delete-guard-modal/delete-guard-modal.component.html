@@ -1,0 +1,60 @@
+<cds-modal
+  size="sm"
+  [open]="open"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h2
+      cdsModalHeaderLabel
+      modal-primary-focus
+      i18n
+    >
+      Manage {{ resourceType }}
+    </h2>
+    <span
+      class="cds--type-heading-03"
+      cdsModalHeaderHeading
+      i18n
+      >Can't delete {{ resourceName }}</span
+    >
+  </cds-modal-header>
+  <section cdsModalContent>
+    @if (bodyTemplate) {
+      <ng-container *ngTemplateOutlet="bodyTemplate; context: bodyContext"></ng-container>
+    } @else {
+      <p
+        class="cds--type-body-01 cds--mb-05"
+        i18n
+      >
+        {{ message }}
+      </p>
+      @if (connectedItems.length) {
+        <p
+          class="cds--type-label-01 cds--mb-04"
+          i18n
+        >
+          {{ connectedItemsLabel }}
+        </p>
+        <div>
+          @for (item of connectedItems; track item.name) {
+            <div class="cds--mb-04">
+              @if (item.route?.length) {
+                <a
+                  class="cds--link cds--type-body-01"
+                  tabindex="0"
+                  (click)="navigateToItem(item)"
+                  (keydown.enter)="navigateToItem(item)"
+                >
+                  <span class="cds--mr-03">{{ item.name }}</span>
+                  <cd-icon type="launch"></cd-icon>
+                </a>
+              } @else {
+                <span class="cds--type-body-01">{{ item.name }}</span>
+              }
+            </div>
+          }
+        </div>
+      }
+    }
+  </section>
+</cds-modal>

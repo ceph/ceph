@@ -66,6 +66,19 @@ void BitmapAllocator::release(
 }
 
 
+uint64_t BitmapAllocator::get_free_extents(
+  uint64_t range_begin,
+  uint64_t range_end,
+  size_t max_count,
+  free_extent_vector_t* out)
+{
+  return get_free_extents_internal(
+    range_begin, range_end, max_count,
+    [out](uint64_t offset, uint64_t length) {
+      out->emplace_back(offset, length);
+    });
+}
+
 void BitmapAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length

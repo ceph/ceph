@@ -76,6 +76,7 @@ class MClientReclaim;
 class MLock;
 class MMDSPeerRequest;
 class filepath;
+class QuarantineTracker;
 
 template<template<typename> class Allocator> struct inode_t;
 using mempool_inode = inode_t<mempool::mds_co::pool_allocator>;
@@ -83,6 +84,7 @@ using inode_const_ptr = std::shared_ptr<const mempool_inode>;
 using mempool_xattr_map = xattr_map<mempool::mds_co::pool_allocator>; // FIXME bufferptr not in mempool
 using xattr_map_ptr = std::shared_ptr<mempool_xattr_map>;
 using xattr_map_const_ptr = std::shared_ptr<const mempool_xattr_map>;
+using QtineMgr = std::shared_ptr<QuarantineTracker>;
 
 enum {
   l_mdss_first = 1000,
@@ -122,7 +124,6 @@ enum {
   l_mdss_req_symlink_latency,
   l_mdss_req_unlink_latency,
   l_mdss_cap_revoke_eviction,
-  l_mdss_cache_trim_throttle,
   l_mdss_session_recall_throttle,
   l_mdss_session_recall_throttle2o,
   l_mdss_global_recall_throttle,
@@ -229,6 +230,7 @@ public:
   bool check_fragment_space(const MDRequestRef& mdr, CDir *in);
   bool check_dir_max_entries(const MDRequestRef& mdr, CDir *in);
   bool check_access(const MDRequestRef& mdr, CInode *in, unsigned mask);
+  bool check_quarantine_block(const MDRequestRef& mdr, CInode *in);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDentry *prepare_stray_dentry(const MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
@@ -397,6 +399,9 @@ public:
 
   const bufferlist& get_snap_trace(Session *session, SnapRealm *realm) const;
   const bufferlist& get_snap_trace(client_t client, SnapRealm *realm) const;
+
+  // quarantine
+  void journal_quarantine_inode(MDRequestRef const& mdr, CInode *cur, unsigned qtine_op, QtineMgr qtine_mgr);
 
 private:
   friend class MDSContinuation;
@@ -574,6 +579,7 @@ private:
     const std::string& offset_str,
     uint32_t offset_hash,
     unsigned req_flags,
+    unsigned diff_mask,
     bufferlist& dirbl);
   bool build_snap_diff(
     const MDRequestRef& mdr,
@@ -582,8 +588,10 @@ private:
     dentry_key_t* skip_key,
     snapid_t snapid_before,
     snapid_t snapid,
+    unsigned diff_mask,
     const bufferlist& dnbl,
-    std::function<bool(CDentry*, CInode*, bool)> add_result_cb);
+    std::function<bool(CDentry*, CInode*, bool)> add_result_cb,
+    bool *waiting = nullptr);
 
   MDSRank *mds;
   MDCache *mdcache;

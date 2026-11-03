@@ -19,6 +19,7 @@
 #include "include/scope_guard.h"
 #include "common/errno.h"
 
+#include "libaio_probe.h"
 #include "os/bluestore/Allocator.h"
 #include "os/bluestore/bluestore_common.h"
 #include "os/bluestore/BlueFS.h"
@@ -170,6 +171,7 @@ public:
 
 TEST_F(BlueFS_ex, test_interrupted_compaction)
 {
+  SKIP_IF_NO_LIBAIO();
   for (uint32_t stop_point = 1; stop_point <= 6; stop_point++)
   {
     pid_t fork_for_test = fork();

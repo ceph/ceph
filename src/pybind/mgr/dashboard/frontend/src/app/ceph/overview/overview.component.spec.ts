@@ -5,7 +5,7 @@ import {
   TestBed,
   tick
 } from '@angular/core/testing';
-import { of, Subject, throwError } from 'rxjs';
+import { Observable, of, Subject, Subscription, throwError } from 'rxjs';
 
 import { OverviewComponent } from './overview.component';
 import { HealthService } from '~/app/shared/api/health.service';
@@ -14,12 +14,13 @@ import { HealthSnapshotMap } from '~/app/shared/models/health.interface';
 
 import { provideRouter } from '@angular/router';
 
-import { HealthMap, SeverityIconMap } from '~/app/shared/models/overview';
+import { HealthMap, SavingsCardVM, SeverityIconMap } from '~/app/shared/models/overview';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { OverviewStorageService } from '~/app/shared/api/storage-overview.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { CompressionStats } from '~/app/shared/enum/hardware.enum';
 
 describe('OverviewComponent', () => {
   let component: OverviewComponent;
@@ -36,6 +37,7 @@ describe('OverviewComponent', () => {
     mapStorageChartData: jest.Mock;
     getThresholdStatus: jest.Mock;
     getRawCapacityThresholds: jest.Mock;
+    getSavingsTrend: jest.Mock;
   };
 
   const mockAuthStorageService = {
@@ -48,8 +50,14 @@ describe('OverviewComponent', () => {
     list: jest.fn(() => of([]))
   };
 
+  let hardwareMonitoringEnabled$: Observable<boolean>;
+  const getCompression = jest.fn();
   const mockHardwareService = {
-    getSummary: jest.fn(() => of(null))
+    getSummary: jest.fn(() => of(null)),
+    get isHardwareMonitoringEnabled$() {
+      return hardwareMonitoringEnabled$;
+    },
+    getCompression
   };
 
   let mockPrometheusService: {
@@ -57,6 +65,8 @@ describe('OverviewComponent', () => {
   };
 
   beforeEach(async () => {
+    hardwareMonitoringEnabled$ = of(false);
+    getCompression.mockReset();
     mockPrometheusService = {
       refreshPrometheusUsable: jest.fn().mockReturnValue(of(true))
     };
@@ -96,6 +106,14 @@ describe('OverviewComponent', () => {
         of({
           osdFullRatio: 0.99,
           osdNearfullRatio: 0.85
+        })
+      ),
+      getSavingsTrend: jest.fn().mockReturnValue(
+        of({
+          SAVINGS: [
+            [0, '1'],
+            [60, '2']
+          ]
         })
       )
     };
@@ -242,12 +260,12 @@ describe('OverviewComponent', () => {
   it('healthCardVm$ should not emit if healthService throws (EMPTY)', (done) => {
     mockHealthService.getHealthSnapshot.mockReturnValue(throwError(() => new Error('API Error')));
 
-    let emitted = false;
+    let emittedStates = false;
 
     component.healthCardVm$.subscribe({
-      next: () => (emitted = true),
+      next: () => (emittedStates = true),
       complete: () => {
-        expect(emitted).toBe(false);
+        expect(emittedStates).toBe(false);
         done();
       }
     });
@@ -280,7 +298,7 @@ describe('OverviewComponent', () => {
     mockHealthService.getHealthSnapshot.mockReturnValue(of(mockData));
 
     const sub = component.storageCardVm$.subscribe((vm) => {
-      if (!vm.isBreakdownLoaded || !vm.averageDailyConsumption || !vm.estimatedTimeUntilFull) {
+      if (!vm.isBreakdownLoaded || !vm.consumptionStats[0].value || !vm.consumptionStats[1].value) {
         return;
       }
       expect(vm.totalCapacity).toBe(325343772672);
@@ -300,8 +318,7 @@ describe('OverviewComponent', () => {
           values: { Used: 1024 }
         }
       ]);
-      expect(vm.averageDailyConsumption).toBe('12 GiB/day');
-      expect(vm.estimatedTimeUntilFull).toBe('30 days');
+      expect(vm.consumptionStats.map((stat) => stat.value)).toEqual(['30 days', '12 GiB/day']);
       expect(vm.threshold).toBe(null);
 
       expect(mockOverviewStorageService.formatBytesForChart).toHaveBeenCalledWith(3236978688);
@@ -351,6 +368,103 @@ describe('OverviewComponent', () => {
     });
 
     mockRefreshIntervalService.intervalData$.next();
+  });
+
+  describe('savingsState$', () => {
+    const compressionStats: CompressionStats = {
+      fcm_drive_count: 4,
+      phy_util_percent: 38.5,
+      log_util_percent: 61.2,
+      savings_bytes: 1024,
+      compression_ratio: 2.4,
+      efficiency_percent: 58.3
+    };
+
+    let emittedStates: { isSavingsLoaded: boolean; savings: SavingsCardVM | null }[];
+    let subscription: Subscription;
+
+    const subscribeToSavings = (enabled = true) => {
+      hardwareMonitoringEnabled$ = of(enabled);
+      fixture = TestBed.createComponent(OverviewComponent);
+      emittedStates = [];
+      subscription = fixture.componentInstance.savingsState$.subscribe((state) =>
+        emittedStates.push(state)
+      );
+    };
+    const emitRefreshTick = () => mockRefreshIntervalService.intervalData$.next();
+    const latestState = () => emittedStates[emittedStates.length - 1];
+
+    afterEach(() => subscription?.unsubscribe());
+
+    it('should start as not loaded', () => {
+      subscribeToSavings();
+
+      expect(emittedStates[0]).toEqual({ isSavingsLoaded: false, savings: null });
+    });
+
+    it.each([
+      ['hardware monitoring is disabled', false, { ...compressionStats }],
+      ['no FCM drives are detected', true, { ...compressionStats, fcm_drive_count: 0 }]
+    ])('should be loaded without savings when %s', (_name, enabled, response) => {
+      getCompression.mockReturnValue(of(response));
+
+      subscribeToSavings(enabled);
+      emitRefreshTick();
+
+      expect(latestState()).toEqual({ isSavingsLoaded: true, savings: null });
+      expect(mockOverviewStorageService.getSavingsTrend).not.toHaveBeenCalled();
+    });
+
+    it('should build the savings view model when FCM drives are present', fakeAsync(() => {
+      getCompression.mockReturnValue(of(compressionStats));
+
+      subscribeToSavings();
+      emitRefreshTick();
+      tick();
+
+      const { isSavingsLoaded, savings } = latestState();
+      expect(isSavingsLoaded).toBe(true);
+      expect(savings.total).toBe('3 GiB');
+      expect(savings.stats.map((stat) => stat.value)).toEqual(['2.4', '58.3%', '38.5%']);
+      expect(savings.trendData.map((point) => point.values.Used)).toEqual([1, 2]);
+      expect(savings.isTrendingUp).toBe(true);
+      discardPeriodicTasks();
+    }));
+
+    it('should report no total when savings are not available yet', () => {
+      getCompression.mockReturnValue(of({ ...compressionStats, savings_bytes: null }));
+
+      subscribeToSavings();
+      emitRefreshTick();
+
+      expect(latestState().savings.total).toBeNull();
+    });
+
+    it('should not request the trend while Prometheus is not configured', fakeAsync(() => {
+      mockPrometheusService.refreshPrometheusUsable.mockReturnValue(of(false));
+      getCompression.mockReturnValue(of(compressionStats));
+
+      subscribeToSavings();
+      emitRefreshTick();
+      tick();
+
+      expect(mockOverviewStorageService.getSavingsTrend).not.toHaveBeenCalled();
+      expect(latestState().savings.trendData).toEqual([]);
+      discardPeriodicTasks();
+    }));
+
+    it('should keep the savings and drop the trend when the trend request fails', fakeAsync(() => {
+      mockOverviewStorageService.getSavingsTrend.mockReturnValue(throwError(() => new Error('x')));
+      getCompression.mockReturnValue(of(compressionStats));
+
+      subscribeToSavings();
+      emitRefreshTick();
+      tick();
+
+      expect(latestState().savings.trendData).toEqual([]);
+      expect(latestState().savings.stats[0].value).toBe('2.4');
+      discardPeriodicTasks();
+    }));
   });
 
   it('should toggle panel open/close', () => {

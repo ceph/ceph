@@ -1,3 +1,6 @@
+overrides:
+  kclient:
+    key_type: aes
 os_type: ubuntu
 os_version: "24.04"
 ktype: distro

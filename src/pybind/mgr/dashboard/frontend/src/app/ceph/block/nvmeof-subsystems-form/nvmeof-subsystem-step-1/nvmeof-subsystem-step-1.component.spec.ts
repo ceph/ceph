@@ -71,5 +71,37 @@ describe('NvmeofSubsystemsStepOneComponent', () => {
       formHelper.setValue('nqn', 'nqn:2001-07.com.ceph:');
       formHelper.expectError('nqn', 'nqnPattern');
     });
+
+    it('should require subnet mask when auto-fetch is selected and validated', () => {
+      formHelper.setValue('listenerMode', component.LISTENER_MODE.AUTO_FETCH);
+      formHelper.setValue('subnetMask', '');
+      form.get('subnetMask')?.updateValueAndValidity();
+
+      expect(form.get('subnetMask')?.hasError('required')).toBeTruthy();
+    });
+
+    it('should not require subnet mask when add manually is selected', () => {
+      formHelper.setValue('listenerMode', component.LISTENER_MODE.MANUAL);
+      formHelper.setValue('subnetMask', '');
+      form.get('subnetMask')?.updateValueAndValidity();
+
+      expect(form.get('subnetMask')?.hasError('required')).toBeFalsy();
+    });
+
+    it('should require listeners when add manually is selected and none are chosen', () => {
+      formHelper.setValue('listenerMode', component.LISTENER_MODE.MANUAL);
+      formHelper.setValue('listeners', []);
+      form.get('listeners')?.updateValueAndValidity();
+
+      expect(form.get('listeners')?.hasError('required')).toBeTruthy();
+    });
+
+    it('should not require listeners when auto-fetch is selected', () => {
+      formHelper.setValue('listenerMode', component.LISTENER_MODE.AUTO_FETCH);
+      formHelper.setValue('listeners', []);
+      form.get('listeners')?.updateValueAndValidity();
+
+      expect(form.get('listeners')?.hasError('required')).toBeFalsy();
+    });
   });
 });

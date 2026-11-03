@@ -1,5 +1,11 @@
 @use '@carbon/layout';
 
+.username-cell {
+  display: flex;
+  align-items: center;
+  min-height: layout.$spacing-07;
+}
+
 .account-root-icon {
   margin-left: layout.$spacing-03;
 }

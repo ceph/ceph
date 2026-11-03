@@ -82,7 +82,7 @@ describe('HostSidebarComponent', () => {
       expect(component.sidebarItems.map((item) => item.label)).toEqual([
         'Overview',
         'Storage Devices',
-        'Daemons',
+        'Service instances',
         'Performance'
       ]);
     });

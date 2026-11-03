@@ -2,7 +2,6 @@ import logging
 
 from teuthology import misc as teuthology
 from teuthology.task import Task
-from teuthology.packaging import remove_package
 
 log = logging.getLogger(__name__)
 
@@ -12,7 +11,7 @@ class Redis(Task):
         super(Redis, self).__init__(ctx, config)
         self.log = log
         log.info('Redis Task: __INIT__ ')
-        
+
         clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(self.ctx.cluster, 'client')]
         self.all_clients = []
@@ -42,24 +41,35 @@ class Redis(Task):
 
         self.redis_shutdown()
 
-        for client in self.all_clients:
-            self.remove_redis_package(client)
+    def valkey_service(self, client):
+        # the unit is named after the package: valkey-server on deb,
+        # valkey on rpm
+        (remote,) = self.ctx.cluster.only(client).remotes.keys()
+        if remote.os.package_type == 'deb':
+            return 'valkey-server'
+        return 'valkey'
 
     def redis_startup(self):
         try:
             for client in self.all_clients:
+                # restart rather than start: the deb package's postinst
+                # already started the server, while the rpm package does
+                # not, and either way this leaves us with a fresh one.
+                # the units are Type=notify, so systemd waits for the
+                # server to report ready and this fails if it does not
                 self.ctx.cluster.only(client).run(
                     args=[
                         'sudo',
-                        'redis-server',
-                        '--daemonize',
-                        'yes'
+                        'systemctl',
+                        'restart',
+                        self.valkey_service(client)
                         ],
                     )
-    
+
         except Exception as err:
             log.debug('Redis Task: Error starting up a Redis server')
             log.debug(err)
+            raise
 
     def redis_shutdown(self):
         try:
@@ -67,17 +77,14 @@ class Redis(Task):
                 self.ctx.cluster.only(client).run(
                     args=[
                         'sudo',
-                        'redis-cli',
-                        'shutdown',
+                        'systemctl',
+                        'stop',
+                        self.valkey_service(client)
                         ],
                     )
-    
+
         except Exception as err:
             log.debug('Redis Task: Error shutting down a Redis server')
             log.debug(err)
-
-    def remove_redis_package(self, client):
-        (remote,) = self.ctx.cluster.only(client).remotes.keys()
-        remove_package('redis', remote)
 
 task = Redis

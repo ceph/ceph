@@ -23,7 +23,6 @@
 #include <vector>
 
 #include <fmt/format.h>
-#include <fmt/ostream.h>
 
 #include "include/utime.h"
 #include "include/types.h" // for version_t

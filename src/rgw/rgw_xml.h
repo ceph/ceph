@@ -3,9 +3,11 @@
 
 #pragma once
 
+#include <list>
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include <iosfwd>
 #include "include/buffer_fwd.h"
 #include <include/types.h>

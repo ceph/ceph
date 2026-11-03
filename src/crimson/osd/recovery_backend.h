@@ -10,6 +10,7 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/object_context_loader.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/shard_services.h"
 
@@ -23,56 +24,6 @@ namespace crimson::osd {
 class PG;
 
 class PGRecovery;
-
-/// holds read locks on neighbor clones used for clone overlap recovery
-class RecoveryCloneLockManager {
-  std::map<hobject_t, ObjectContextRef> locks;
-
-  void unlock_all() {
-    for (auto& kv : locks) {
-      kv.second->put_read_lock();
-    }
-    locks.clear();
-  }
-public:
-  RecoveryCloneLockManager() = default;
-  RecoveryCloneLockManager(RecoveryCloneLockManager&& o) noexcept
-    : locks(std::move(o.locks)) {}
-  RecoveryCloneLockManager(const RecoveryCloneLockManager&) = delete;
-  RecoveryCloneLockManager& operator=(RecoveryCloneLockManager&& o) noexcept {
-    if (this != &o) {
-      unlock_all();
-      locks = std::move(o.locks);
-    }
-    return *this;
-  }
-  RecoveryCloneLockManager& operator=(const RecoveryCloneLockManager&) = delete;
-
-  bool try_lock_for_read(
-    const hobject_t& hoid,
-    ObjectContextRegistry& registry) {
-    if (locks.count(hoid)) {
-      return false;
-    }
-    auto obc = registry.maybe_get_cached_obc(hoid);
-    if (!obc || !obc->try_get_read_lock()) {
-      return false;
-    }
-    locks.emplace(hoid, std::move(obc));
-    return true;
-  }
-
-  void release_locks() {
-    unlock_all();
-  }
-
-  ~RecoveryCloneLockManager() {
-    // Safe to unlock from the dtor: unlock_for_read() only decrements
-    // and wakes waiters.  Also covers move-assign replacing a non-empty
-    // target without an explicit release_locks() call.
-    unlock_all();
-  }
-};
 
 class RecoveryBackend {
 public:
@@ -171,6 +122,9 @@ public:
 
   seastar::future<> stop() {
     for (auto& [soid, recovery_waiter] : recovering) {
+      // release now: obc_loader is destroyed before this backend, so
+      // the Manager dtors must not run after it
+      recovery_waiter->drop_clone_locks();
       recovery_waiter->stop();
     }
     for (auto& [soid, promise] : unfound) {
@@ -201,7 +155,8 @@ protected:
     crimson::osd::ObjectContextRef head_ctx;
     crimson::osd::ObjectContextRef obc;
     object_stat_sum_t stat;
-    RecoveryCloneLockManager clone_lock_manager;
+    // locks on neighbor clones used as clone-overlap sources
+    std::vector<ObjectContextLoader::Manager> clone_locks;
     bool is_complete() const {
       return recovery_progress.is_complete(recovery_info);
     }
@@ -212,7 +167,8 @@ protected:
     ObjectRecoveryInfo recovery_info;
     crimson::osd::ObjectContextRef obc;
     object_stat_sum_t stat;
-    RecoveryCloneLockManager clone_lock_manager;
+    // locks on neighbor clones used as clone-overlap sources
+    std::vector<ObjectContextLoader::Manager> clone_locks;
   };
 
 public:
@@ -231,6 +187,18 @@ public:
     crimson::osd::ObjectContextRef obc;
     std::optional<pull_info_t> pull_info;
     std::map<pg_shard_t, push_info_t> pushing;
+
+    // Release the clone-overlap locks now. The Manager dtors would
+    // also release them, but only once every intrusive_ptr ref to this
+    // waiter (e.g. a blocked op) drops, which callers here can't rely on.
+    void drop_clone_locks() {
+      for (auto& [shard, push_info] : pushing) {
+        push_info.clone_locks.clear();
+      }
+      if (pull_info) {
+        pull_info->clone_locks.clear();
+      }
+    }
 
     seastar::future<> wait_for_readable() {
       if (!readable) {

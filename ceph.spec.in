@@ -29,21 +29,7 @@
 %bcond_without tcmalloc
 %endif
 %bcond_without rbd_ssd_cache
-%ifarch x86_64
-%bcond_without rbd_rwl_cache
-%else
-%bcond_with rbd_rwl_cache
-%endif
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler} || 0%{?openruyi}
-%if 0%{?openEuler} || 0%{?openruyi}
-%bcond_with system_pmdk
-%else
-%ifarch s390x aarch64
-%bcond_with system_pmdk
-%else
-%bcond_without system_pmdk
-%endif
-%endif
 %if 0%{?openruyi}
 %bcond_with selinux
 %else
@@ -54,16 +40,16 @@
 %bcond_without lttng
 %bcond_without libradosstriper
 %bcond_without ocf
+%ifarch x86_64 aarch64 loongarch64
+%bcond_without lancedb
+%else
+%bcond_with lancedb
+%endif
 %global luarocks_package_name luarocks
 %bcond_without lua_packages
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
-%ifarch s390x
-%bcond_with system_pmdk
-%else
-%bcond_without system_pmdk
-%endif
 %bcond_with amqp_endpoint
 %bcond_with cephfs_java
 %bcond_with kafka_endpoint
@@ -125,6 +111,7 @@
 # not x86_64
 %bcond_with system_qat
 %endif
+%bcond_with system_rdkafka
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} || 0%{?openEuler}
 %global weak_deps 1
 %endif
@@ -177,18 +164,6 @@
   jobs=$(( $kb_total / $kb_per_job )) \
   [ $jobs -lt 1 ] && jobs=1 \
   echo $jobs )
-
-# $1==1: fresh install; $1==0: removal. Skip try-restart on upgrade ($1>1).
-%define ceph_mgr_module_scripts() \
-%post %1\
-if [ $1 -eq 1 ] ; then\
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :\
-fi\
-\
-%postun %1\
-if [ $1 -eq 1 ] ; then\
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :\
-fi
 
 %if 0%{?_smp_ncpus_max} == 0
 %if 0%{?__isa_bits} == 32
@@ -246,6 +221,7 @@ ExclusiveArch:  x86_64 aarch64 ppc64le s390x riscv64
 Requires:       ceph-osd = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mds = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-modules-standard = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mon = %{_epoch_prefix}%{version}-%{release}
 Requires(post):	binutils
 %if 0%{with cephfs_java}
@@ -338,11 +314,18 @@ BuildRequires:  pkgconfig(yaml-cpp) >= 0.6
 BuildRequires:  pkgconfig(librabbitmq)
 %endif
 %if 0%{with kafka_endpoint}
-BuildRequires:  pkgconfig(rdkafka) >= 1.1.0
+%if 0%{with system_rdkafka}
+BuildRequires:  librdkafka-devel >= 2.11
+%else
+BuildRequires:  cyrus-sasl-devel
+%endif
 %endif
 %if 0%{with lua_packages}
 Requires:  lua-devel
 Requires:  %{luarocks_package_name}
+%endif
+%if 0%{with lancedb}
+BuildRequires:  cargo
 %endif
 %if 0%{with make_check}
 BuildRequires:  hostname
@@ -377,16 +360,6 @@ BuildRequires:  bison
 BuildRequires:  flex
 BuildRequires:	pkgconfig(nlohmann_json)
 BuildRequires:  pkgconfig(libevent)
-%endif
-%if 0%{with system_pmdk}
-%if 0%{?suse_version}
-BuildRequires:  pkgconfig(libndctl) >= 63
-%else
-BuildRequires:  pkgconfig(libndctl) >= 63
-BuildRequires:  pkgconfig(libdaxctl) >= 63
-%endif
-BuildRequires:  pkgconfig(libpmem)
-BuildRequires:  pkgconfig(libpmemobj) >= 1.8
 %endif
 %if 0%{with system_arrow}
 BuildRequires:  pkgconfig(arrow)
@@ -820,6 +793,7 @@ Requires:       python3dist(pyopenssl)
 Requires:       cephadm = %{_epoch_prefix}%{version}-%{release}
 Requires:       python3dist(cherrypy)
 Requires:       python3dist(jinja2)
+Requires:       python3dist(routes)
 %if 0%{?suse_version}
 Requires:       openssh
 %endif
@@ -1163,11 +1137,27 @@ Requires:	mailcap
 %if 0%{?weak_deps}
 Recommends:	gawk
 %endif
+%if 0%{with kafka_endpoint} && !0%{with system_rdkafka}
+Provides:	bundled(librdkafka) = 2.12.1
+%endif
 %description radosgw
 RADOS is a distributed object store used by the Ceph distributed
 storage system.  This package provides a REST gateway to the
 object store that aims to implement a superset of Amazon's S3
 service as well as the OpenStack Object Storage ("Swift") API.
+
+%package rgw-standalone
+Summary:	Rados REST gateway for filesystems
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Conflicts:	ceph-common
+Conflicts:	radosgw
+%description rgw-standalone
+This package provides an Object REST gateway (S3 and Swift) on
+top of a filesystem that aims to implement a superset of Amazon's S3
+service as well as the OpenStack Object Storage ("Swift") API.
+It does not require or provide any of the rest of the Ceph services.
 
 %package -n cephfs-top
 Summary:    top(1) like utility for Ceph Filesystem
@@ -1810,17 +1800,19 @@ cmake .. \
 %if 0%{without lua_packages}
     -DWITH_RADOSGW_LUA_PACKAGES:BOOL=OFF \
 %endif
+%if 0%{with lancedb}
+    -DWITH_RADOSGW_LANCEDB:BOOL=ON \
+%else
+    -DWITH_RADOSGW_LANCEDB:BOOL=OFF \
+%endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
-%endif
-%if 0%{with rbd_rwl_cache}
-    -DWITH_RBD_RWL:BOOL=ON \
 %endif
 %if 0%{with rbd_ssd_cache}
     -DWITH_RBD_SSD_CACHE:BOOL=ON \
 %endif
-%if 0%{with system_pmdk}
-    -DWITH_SYSTEM_PMDK:BOOL=ON \
+%if 0%{with system_rdkafka}
+    -DWITH_SYSTEM_RDKAFKA:BOOL=ON \
 %endif
 %if 0%{without jaeger}
     -DWITH_JAEGER:BOOL=OFF \
@@ -2003,6 +1995,7 @@ rm -rf %{_vpath_builddir}
 %{_sbindir}/ceph-create-keys
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
+%{_libexecdir}/ceph/block-device-health
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/*
 %dir %{_libdir}/ceph
@@ -2018,6 +2011,7 @@ rm -rf %{_vpath_builddir}
 %if %{with lttng}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
+%{_libdir}/libbluestore_tp.so*
 %{_libdir}/libmgr_op_tp.so*
 %endif
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
@@ -2099,6 +2093,7 @@ exit 0
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-conf
 %{_bindir}/ceph-dencoder
+%{_bindir}/ceph-diff-sorted
 %{_bindir}/ceph-rbdnamer
 %{_bindir}/ceph-syn
 %{_bindir}/cephfs-data-scan
@@ -2115,7 +2110,11 @@ exit 0
 %{_bindir}/rgw-gap-list
 %{_bindir}/rgw-gap-list-comparator
 %{_bindir}/rgw-orphan-list
+%{_bindir}/rgw-policy-check
+%{_bindir}/rgw-policy-test
 %{_bindir}/rgw-restore-bucket-index
+%{_bindir}/rgw-export-bucket-usage
+%{_bindir}/rgw-format-bucket-usage
 %{_sbindir}/mount.ceph
 %if 0%{?suse_version} && 0%{?suse_version} < 1550
 /sbin/mount.ceph
@@ -2146,6 +2145,8 @@ exit 0
 %{_mandir}/man8/rbd-replay-prep.8*
 %{_mandir}/man8/rgw-orphan-list.8*
 %{_mandir}/man8/rgw-gap-list.8*
+%{_mandir}/man8/rgw-policy-check.8*
+%{_mandir}/man8/rgw-policy-test.8*
 %{_mandir}/man8/rgw-restore-bucket-index.8*
 %dir %{_datadir}/ceph/
 %{_datadir}/ceph/known_hosts_drop.ceph.com
@@ -2285,12 +2286,8 @@ fi
 %files mgr-dashboard
 %{_datadir}/ceph/mgr/dashboard
 
-%ceph_mgr_module_scripts mgr-dashboard
-
 %files mgr-diskprediction-local
 %{_datadir}/ceph/mgr/diskprediction_local
-
-%ceph_mgr_module_scripts mgr-diskprediction-local
 
 %files mgr-modules-core
 %dir %{_datadir}/ceph/mgr
@@ -2310,117 +2307,71 @@ fi
 %files mgr-alerts
 %{_datadir}/ceph/mgr/alerts
 
-%ceph_mgr_module_scripts mgr-alerts
-
 %files mgr-influx
 %{_datadir}/ceph/mgr/influx
-
-%ceph_mgr_module_scripts mgr-influx
 
 %files mgr-insights
 %{_datadir}/ceph/mgr/insights
 
-%ceph_mgr_module_scripts mgr-insights
-
 %files mgr-iostat
 %{_datadir}/ceph/mgr/iostat
-
-%ceph_mgr_module_scripts mgr-iostat
 
 %files mgr-localpool
 %{_datadir}/ceph/mgr/localpool
 
-%ceph_mgr_module_scripts mgr-localpool
-
 %files mgr-mds-autoscaler
 %{_datadir}/ceph/mgr/mds_autoscaler
-
-%ceph_mgr_module_scripts mgr-mds-autoscaler
 
 %files mgr-mirroring
 %{_datadir}/ceph/mgr/mirroring
 
-%ceph_mgr_module_scripts mgr-mirroring
-
 %files mgr-nfs
 %{_datadir}/ceph/mgr/nfs
-
-%ceph_mgr_module_scripts mgr-nfs
 
 %files mgr-nvmeof
 %{_datadir}/ceph/mgr/nvmeof
 
-%ceph_mgr_module_scripts mgr-nvmeof
-
 %files mgr-osd-perf-query
 %{_datadir}/ceph/mgr/osd_perf_query
-
-%ceph_mgr_module_scripts mgr-osd-perf-query
 
 %files mgr-osd-support
 %{_datadir}/ceph/mgr/osd_support
 
-%ceph_mgr_module_scripts mgr-osd-support
-
 %files mgr-prometheus
 %{_datadir}/ceph/mgr/prometheus
-
-%ceph_mgr_module_scripts mgr-prometheus
 
 %files mgr-rgw
 %{_datadir}/ceph/mgr/rgw
 
-%ceph_mgr_module_scripts mgr-rgw
-
 %files mgr-selftest
 %{_datadir}/ceph/mgr/selftest
-
-%ceph_mgr_module_scripts mgr-selftest
 
 %files mgr-smb
 %{_datadir}/ceph/mgr/smb
 
-%ceph_mgr_module_scripts mgr-smb
-
 %files mgr-snap-schedule
 %{_datadir}/ceph/mgr/snap_schedule
-
-%ceph_mgr_module_scripts mgr-snap-schedule
 
 %files mgr-stats
 %{_datadir}/ceph/mgr/stats
 
-%ceph_mgr_module_scripts mgr-stats
-
 %files mgr-telegraf
 %{_datadir}/ceph/mgr/telegraf
-
-%ceph_mgr_module_scripts mgr-telegraf
 
 %files mgr-test-orchestrator
 %{_datadir}/ceph/mgr/test_orchestrator
 
-%ceph_mgr_module_scripts mgr-test-orchestrator
-
 %files mgr-rook
 %{_datadir}/ceph/mgr/rook
-
-%ceph_mgr_module_scripts mgr-rook
 
 %files mgr-k8sevents
 %{_datadir}/ceph/mgr/k8sevents
 
-%ceph_mgr_module_scripts mgr-k8sevents
-
 %files mgr-cephadm
 %{_datadir}/ceph/mgr/cephadm
 
-%ceph_mgr_module_scripts mgr-cephadm
-
 %files mgr-cli-api
 %{_datadir}/ceph/mgr/cli_api
-
-%ceph_mgr_module_scripts mgr-cli-api
 
 %files mon
 %{_bindir}/ceph-mon
@@ -2614,14 +2565,11 @@ fi
 %{_libexecdir}/rbd-nbd/rbd-nbd_quiesce
 
 %files radosgw
-%{_bindir}/ceph-diff-sorted
 %{_bindir}/radosgw
 %{_bindir}/radosgw-token
 %{_bindir}/radosgw-es
 %{_bindir}/radosgw-object-expirer
-%{_bindir}/rgw-policy-check
 %{_mandir}/man8/radosgw.8*
-%{_mandir}/man8/rgw-policy-check.8*
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
@@ -2660,6 +2608,22 @@ if [ $1 -ge 1 ] ; then
     /usr/bin/systemctl try-restart ceph-radosgw@\*.service > /dev/null 2>&1 || :
   fi
 fi
+
+%files rgw-standalone
+%dir %{_docdir}/ceph
+%doc %{_docdir}/ceph/sample.ceph.conf
+%dir %{_libdir}/ceph
+%{_libdir}/ceph/libceph-common.so.*
+%if 0%{with lancedb}
+%{_libdir}/ceph/librgw_lancedb.so.*
+%endif
+%{_bindir}/rgw-standalone
+%{_bindir}/rgw-standalone-admin
+%dir %{_localstatedir}/lib/ceph/radosgw
+
+%post rgw-standalone -p /sbin/ldconfig
+
+%postun rgw-standalone -p /sbin/ldconfig
 
 %files osd
 %{_bindir}/ceph-clsinfo
@@ -2880,6 +2844,10 @@ fi
 
 %files -n librgw2
 %{_libdir}/librgw.so.*
+%if 0%{with lancedb}
+%dir %{_libdir}/ceph
+%{_libdir}/ceph/librgw_lancedb.so.*
+%endif
 %if %{with lttng}
 %{_libdir}/librgw_op_tp.so.*
 %{_libdir}/librgw_rados_tp.so.*
@@ -2996,6 +2964,9 @@ fi
 %{_mandir}/man8/ceph-debugpack.8*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
+%if 0%{with lancedb}
+%{_libdir}/libceph_rgw_sal_test_env.so
+%endif
 %endif
 
 %if 0%{with cephfs_java}

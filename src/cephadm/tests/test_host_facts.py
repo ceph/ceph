@@ -135,3 +135,56 @@ def test_host_facts_skips_sysfs_only_nvme_alias_entries(cephadm_fs):
 
     hfacts = object.__new__(HostFacts)
     assert hfacts._get_block_devs() == ['nvme2n1']
+
+
+class TestX86_64IsaLevel:
+    """Verify x86-64 microarchitecture level detection from cpu flags"""
+
+    # flag sets modeled on real /proc/cpuinfo output (abbreviated to the
+    # flags relevant for level detection plus a few extras)
+    V1_FLAGS = {'fpu', 'mmx', 'sse', 'sse2', 'ht', 'syscall', 'nx', 'lm'}
+    V2_FLAGS = V1_FLAGS | {
+        'cx16', 'lahf_lm', 'popcnt', 'sse4_1', 'sse4_2', 'ssse3',
+    }
+    V3_FLAGS = V2_FLAGS | {
+        'abm', 'avx', 'avx2', 'bmi1', 'bmi2', 'f16c', 'fma', 'movbe',
+        'xsave',
+    }
+    V4_FLAGS = V3_FLAGS | {
+        'avx512f', 'avx512bw', 'avx512cd', 'avx512dq', 'avx512vl',
+    }
+
+    def test_v1(self):
+        from cephadmlib.host_facts import get_x86_64_isa_level
+
+        assert get_x86_64_isa_level(self.V1_FLAGS) == 'x86-64-v1'
+
+    def test_v2(self):
+        from cephadmlib.host_facts import get_x86_64_isa_level
+
+        assert get_x86_64_isa_level(self.V2_FLAGS) == 'x86-64-v2'
+
+    def test_v2_with_partial_v3_flags(self):
+        from cephadmlib.host_facts import get_x86_64_isa_level
+
+        # e.g. Ivy Bridge: has avx/f16c/xsave but not avx2/bmi/fma/movbe
+        flags = self.V2_FLAGS | {'avx', 'f16c', 'xsave'}
+        assert get_x86_64_isa_level(flags) == 'x86-64-v2'
+
+    def test_v3(self):
+        from cephadmlib.host_facts import get_x86_64_isa_level
+
+        assert get_x86_64_isa_level(self.V3_FLAGS) == 'x86-64-v3'
+
+    def test_v4(self):
+        from cephadmlib.host_facts import get_x86_64_isa_level
+
+        assert get_x86_64_isa_level(self.V4_FLAGS) == 'x86-64-v4'
+
+    def test_v4_flags_without_v3_does_not_skip_levels(self):
+        from cephadmlib.host_facts import get_x86_64_isa_level
+
+        # a (hypothetical) cpu missing a v3 flag caps at v2 even with
+        # avx512 support present
+        flags = (self.V4_FLAGS - {'bmi2'})
+        assert get_x86_64_isa_level(flags) == 'x86-64-v2'

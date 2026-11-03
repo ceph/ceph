@@ -29,8 +29,12 @@ namespace crimson::os::seastore {
 using RBMDevice = random_block_device::RBMDevice;
 using RBMDeviceRef = std::unique_ptr<RBMDevice>;
 
+device_spec_t get_rbm_ephemeral_device_spec(device_id_t);
 device_config_t get_rbm_ephemeral_device_config(
-    std::size_t index, std::size_t num_devices);
+  device_id_t id,
+  device_set_t cache_devices,
+  device_set_t data_devices,
+  bool is_major_device);
 
 class BlockRBManager final : public RandomBlockManager {
 public:
@@ -58,7 +62,8 @@ public:
    */
   paddr_t alloc_extent(size_t size) override; // allocator, return blocks
 
-  allocate_ret_bare alloc_extents(size_t size) override; // allocator, return blocks
+  allocate_ret_bare alloc_extents(
+    size_t size, paddr_t hint) override; // allocator, return blocks
 
   void complete_allocation(paddr_t addr, size_t size) override;
 
@@ -82,10 +87,10 @@ public:
     return device->get_device_id();
   }
 
+  // Allocator view; 0 until the allocator is initialized.
   uint64_t get_free_blocks() const override { 
-    // TODO: return correct free blocks after block allocator is introduced
     assert(device);
-    return get_size() / get_block_size();
+    return allocator ? (allocator->get_available_size() / get_block_size()) : 0;
   }
   const seastore_meta_t &get_meta() const override {
     return device->get_meta();

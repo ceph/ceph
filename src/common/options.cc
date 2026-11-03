@@ -6,6 +6,7 @@
 #include "common/Formatter.h"
 #include "common/options/build_options.h"
 #include "common/strtol.h" // for strict_si_cast()
+#include "include/container_ios.h"
 
 // Helpers for validators
 #include "include/stringify.h"
@@ -333,7 +334,7 @@ void Option::print(ostream *out) const
     *out << "  See also: " << see_also << "\n";
   }
 
-  if (long_desc.size()) {
+  if (*long_desc != '\0') {
     *out << "\n" << long_desc << "\n";
   }
 }

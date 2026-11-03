@@ -15,6 +15,16 @@ counters for all reporting entities are returned in the Prometheus exposition
 format.  (See the Prometheus `documentation
 <https://prometheus.io/docs/instrumenting/exposition_formats/#text-format-details>`_.)
 
+.. note:: Ceph daemon performance counters are no longer exported by
+   this module by default. That job has moved to the ``ceph-exporter``
+   daemon, which cephadm deploys on every host and which reads the
+   counters directly from the local daemon admin sockets. The
+   ``prometheus`` module continues to provide cluster-level metrics,
+   the service discovery endpoint, and RBD image metrics. See
+   :ref:`monitoring` for an overview of the monitoring stack and
+   `Ceph daemon performance counters metrics`_ below for how to
+   re-enable the old behavior.
+
 Enabling Prometheus output
 ==========================
 
@@ -23,6 +33,19 @@ Enable the ``prometheus`` module by running the below command :
 .. prompt:: bash #
 
    ceph mgr module enable prometheus
+
+ceph-exporter
+=============
+
+``ceph-exporter`` works alongside the Prometheus manager module. The two
+components have distinct responsibilities:
+
+- The **Prometheus manager module** exposes all cluster-level metrics by
+  default other than Ceph daemon performance counters. However, these metrics
+  may be exported by the Prometheus manager module by setting the module option
+  :confval:`mgr/prometheus/exclude_perf_counter` to `false`.
+- The **ceph-exporter daemon** exposes only Ceph daemon performance counters
+  as Prometheus metrics, running on each host in the cluster.
 
 Configuration
 -------------
@@ -43,6 +66,10 @@ Configuration
 .. confval:: standby_error_status_code
 .. confval:: exclude_perf_counters
 .. confval:: healthcheck_history_max_entries
+.. confval:: ssl
+.. confval:: ssl_server_port
+.. confval:: crt_file
+.. confval:: key_file
 
 By default the module will accept HTTP requests on port ``9283`` on all IPv4
 and IPv6 addresses on the host.  The port and listen address are
@@ -52,9 +79,86 @@ is registered with Prometheus's `registry
 <https://github.com/prometheus/prometheus/wiki/Default-port-allocations>`_.
 
 .. prompt:: bash #
-   
+
    ceph config set mgr mgr/prometheus/server_addr 0.0.0.0
    ceph config set mgr mgr/prometheus/server_port 9283
+
+SSL/TLS Support
+^^^^^^^^^^^^^^^
+
+.. note::
+
+   For cephadm deployments, TLS for the monitoring stack is managed by
+   cephadm itself. Use the ``secure_monitoring_stack`` option instead of
+   the manual configuration described below. See
+   :ref:`cephadm-monitoring-stack-security` for details.
+
+The Prometheus module can be configured to serve metrics over HTTPS
+(HTTP secured with TLS). This is intended for non-cephadm deployments
+(e.g., Rook or standalone). TLS is disabled by default. To enable it,
+provide a certificate and key, then set the ``ssl`` option to ``true``:
+
+.. prompt:: bash #
+
+   ceph prometheus set-ssl-certificate -i /path/to/cert.pem
+   ceph prometheus set-ssl-certificate-key -i /path/to/key.pem
+   ceph config set mgr mgr/prometheus/ssl true
+
+When TLS is enabled, the module will listen on port ``9284`` by default instead
+of ``9283``. The TLS port is configurable:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/prometheus/ssl_server_port 9284
+
+Alternatively, instead of injecting certificates via the CLI, you can point
+to certificate files on disk:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/prometheus/crt_file /path/to/cert.pem
+   ceph config set mgr mgr/prometheus/key_file /path/to/key.pem
+   ceph config set mgr mgr/prometheus/ssl true
+
+.. note::
+
+   Certificates configured with ``ceph prometheus set-ssl-certificate`` and
+   ``ceph prometheus set-ssl-certificate-key`` take precedence over
+   ``crt_file`` and ``key_file``. To switch to file-based certificates, clear
+   the stored certificate and key first:
+
+   .. prompt:: bash #
+
+      ceph prometheus clear-ssl-certificate
+
+To set a certificate for a specific manager daemon (e.g., ``mgr.a``),
+pass the manager ID:
+
+.. prompt:: bash #
+
+   ceph prometheus set-ssl-certificate mgr.a -i /path/to/cert.pem
+   ceph prometheus set-ssl-certificate-key mgr.a -i /path/to/key.pem
+
+To disable TLS and revert to HTTP:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/prometheus/ssl false
+
+.. note::
+
+   The module must be restarted after changing TLS settings:
+
+   .. prompt:: bash #
+
+      ceph mgr module disable prometheus
+      ceph mgr module enable prometheus
+
+.. note::
+
+   When TLS is enabled, the module listens on a different port (``9284``
+   by default). Update your Prometheus scrape configuration to use
+   ``https`` and the new port.
 
 .. warning::
 
@@ -134,8 +238,6 @@ To switch back to the default behaviour, simply set the config key to ``default`
 
    ceph config set mgr mgr/prometheus/standby_behaviour default
 
-.. _prometheus-rbd-io-statistics:
-
 Ceph Health Checks
 ------------------
 
@@ -183,10 +285,13 @@ encountered since the last ``clear`` command was issued:
     3 health check(s) listed
 
 
-RBD IO statistics
------------------
+.. _prometheus-rbd-io-statistics:
+.. _rbd-io-statistics:
 
-The ``prometheus`` module can optionally collect RBD per-image IO statistics by enabling
+RBD I/O statistics
+------------------
+
+The ``prometheus`` module can optionally collect RBD per-image I/O statistics by enabling
 dynamic OSD performance counters. Statistics are gathered for all images
 in the pools that are specified by the ``mgr/prometheus/rbd_stats_pools``
 configuration parameter. The parameter is a comma or space separated list

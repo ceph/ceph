@@ -3,6 +3,7 @@
 
 #include "crimson/os/seastore/seastore_types.h"
 
+#include <charconv>
 #include <utility>
 
 #include "common/hobject.h"
@@ -816,6 +817,10 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "CLEANER_MAIN";
   case transaction_type_t::CLEANER_COLD:
     return os << "CLEANER_COLD";
+  case transaction_type_t::PROMOTE:
+    return os << "PROMOTE";
+  case transaction_type_t::DEMOTE:
+    return os << "DEMOTE";
   case transaction_type_t::MAX:
     return os << "TRANS_TYPE_NULL";
   default:
@@ -1220,6 +1225,17 @@ std::ostream& operator<<(std::ostream& out, placement_hint_t h)
   }
 }
 
+std::ostream& operator<<(std::ostream& out, write_policy_t w)
+{
+  switch(w) {
+  case write_policy_t::WRITE_BACK:
+    return out << "WRITE_BACK";
+  case write_policy_t::WRITE_THROUGH:
+    return out << "WRITE_THROUGH";
+  }
+  std::unreachable();
+}
+
 bool can_delay_allocation(device_type_t type) {
   // Some types of device may not support delayed allocation, for example PMEM.
   // All types of device currently support delayed allocation.
@@ -1235,9 +1251,6 @@ device_type_t string_to_device_type(std::string type) {
   }
   if (type == "ZBD") {
     return device_type_t::ZBD;
-  }
-  if (type == "RANDOM_BLOCK_SSD") {
-    return device_type_t::RANDOM_BLOCK_SSD;
   }
   return device_type_t::NONE;
 }
@@ -1257,21 +1270,32 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
     return out << "EPHEMERAL_COLD";
   case device_type_t::EPHEMERAL_MAIN:
     return out << "EPHEMERAL_MAIN";
-  case device_type_t::RANDOM_BLOCK_SSD:
-    return out << "RANDOM_BLOCK_SSD";
-  case device_type_t::RANDOM_BLOCK_EPHEMERAL:
-    return out << "RANDOM_BLOCK_EPHEMERAL";
   default:
     return out << "INVALID_DEVICE_TYPE!";
   }
 }
 
-std::ostream& operator<<(std::ostream& out, backend_type_t btype) {
-  if (btype == backend_type_t::SEGMENTED) {
-    return out << "SEGMENTED";
+backend_type_t string_to_backend_type(const std::string &str) {
+  if (str == "SEGMENTED") {
+    return backend_type_t::SEGMENTED;
+  } else if (str == "RANDOM_BLOCK") {
+    return backend_type_t::RANDOM_BLOCK;
   } else {
+    ceph_abort("backend str not valid");
+    return backend_type_t::SEGMENTED;
+  }
+}
+
+std::ostream& operator<<(std::ostream& out, backend_type_t btype) {
+  switch (btype) {
+  case backend_type_t::NONE:
+    return out << "NONE";
+  case backend_type_t::SEGMENTED:
+    return out << "SEGMENTED";
+  case backend_type_t::RANDOM_BLOCK:
     return out << "RANDOM_BLOCK";
   }
+  return out << "INVALID_BACKEND_TYPE(" << static_cast<int>(btype) << ")";
 }
 
 std::ostream& operator<<(std::ostream& out, const write_result_t& w)
@@ -1455,6 +1479,38 @@ std::ostream& operator<<(std::ostream& out, const omap_type_t& t)
   default:
     return out << "INVALID_OMAP_TYPE!";
   }
+}
+
+std::optional<device_id_t> parse_device_id(
+  const seastar::sstring &name,
+  device_id_t base)
+{
+  if (name == "block") {
+    return base;
+  }
+  constexpr std::string_view prefix = "block.";
+  if (!name.starts_with(prefix) || name.size() <= prefix.size()) {
+    return std::nullopt;
+  }
+  // Only accept block.<numeric-id>. Names like block.db / block.wal are
+  // concrete device entries, not SeaStore secondary device directories.
+  std::string_view id_str(name.data() + prefix.size(),
+                          name.size() - prefix.size());
+  unsigned int id = 0;
+  auto [ptr, ec] = std::from_chars(id_str.data(),
+                                   id_str.data() + id_str.size(), id);
+  // Reject non-digits, parse failures, or trailing garbage (e.g. block.1a).
+  if (ec != std::errc() || ptr != id_str.data() + id_str.size()) {
+    return std::nullopt;
+  }
+  if (id == 0 || id >= std::numeric_limits<device_id_t>::max()) {
+    return std::nullopt;
+  }
+  const unsigned sum = static_cast<unsigned>(base) + id;
+  if (sum >= std::numeric_limits<device_id_t>::max()) {
+    return std::nullopt;
+  }
+  return std::make_optional<device_id_t>(static_cast<device_id_t>(sum));
 }
 
 } // namespace crimson::os::seastore

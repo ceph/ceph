@@ -7,6 +7,7 @@ import {
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { map } from 'rxjs/operators';
 import { forkJoin, Observable } from 'rxjs';
+import { TREND_DAYS } from '../constants/query.constants';
 import { CapacityCardQueries } from '../enum/dashboard-promqls.enum';
 import { BreakdownChartData, CapacityThreshold } from '../models/overview';
 
@@ -28,6 +29,9 @@ export class OverviewStorageService {
   private readonly RAW_USED_BY_STORAGE_TYPE_QUERY =
     'sum by (application) (ceph_pool_bytes_used * on(pool_id) group_left(instance, name, application) ceph_pool_metadata{application=~"(.*Block.*)|(.*Filesystem.*)|(.*Object.*)|(..*)"})';
   private readonly FULL_NEARFULL_QUERY = `{__name__=~"${CapacityCardQueries.OSD_FULL}|${CapacityCardQueries.OSD_NEARFULL}"}`;
+  private readonly SAVED_BYTES_QUERY =
+    'sum(ceph_extblkdev_dev_log_util) - sum(ceph_extblkdev_dev_phy_util)';
+  private readonly SAVINGS_TREND_QUERY = `(${this.SAVED_BYTES_QUERY}) - min_over_time((${this.SAVED_BYTES_QUERY})[${TREND_DAYS}d:])`;
 
   getTrendData(start: number, end: number, stepSec: number) {
     const range = {
@@ -122,6 +126,14 @@ export class OverviewStorageService {
 
   getStorageBreakdown(): Observable<PromqlGuageMetric> {
     return this.prom.getGaugeQueryData(this.RAW_USED_BY_STORAGE_TYPE_QUERY);
+  }
+
+  getSavingsTrend(start: number, end: number, stepSec: number) {
+    return this.prom.getRangeQueriesData(
+      { start, end, step: stepSec },
+      { SAVINGS: this.SAVINGS_TREND_QUERY },
+      true
+    );
   }
 
   getThresholdStatus(total, used, nearfull, full): CapacityThreshold {

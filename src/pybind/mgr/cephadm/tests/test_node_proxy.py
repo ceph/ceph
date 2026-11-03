@@ -1,5 +1,6 @@
 import cherrypy
 import json
+import pytest
 import socket
 from _pytest.monkeypatch import MonkeyPatch
 from urllib.error import URLError
@@ -7,7 +8,8 @@ from cherrypy.test import helper
 from cephadm.agent import NodeProxyEndpoint
 from unittest.mock import MagicMock, call, patch
 from cephadm.inventory import AgentCache, NodeProxyCache, Inventory
-from cephadm.ssl_cert_utils import SSLCerts
+from cephadm.ssl_certs import SSLCerts
+from orchestrator import HardwareNoReport
 from . import node_proxy_data
 
 
@@ -77,6 +79,12 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
         self.PORT = PORT
         self.monkeypatch = MonkeyPatch()
 
+    def keyring_headers(self, hostname: str = 'host01', secret: str = 'fake-secret01') -> list:
+        return [
+            ('Cephx-Name', f'node-proxy.{hostname}'),
+            ('Cephx-Secret', secret),
+        ]
+
     def test_oob_data_misses_cephx_field(self):
         data = '{}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
@@ -140,7 +148,7 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
         assert TestNodeProxyEndpoint.mgr.set_health_warning.mock_calls == calls
 
     def test_led_GET_no_hostname(self):
-        self.getPage("/led", method="GET")
+        self.getPage("/led", method="GET", headers=self.keyring_headers())
         self.assertStatus('501 Not Implemented')
 
     def test_led_PATCH_no_hostname(self):
@@ -164,197 +172,339 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
             self.assertStatus('200 OK')
 
     def test_get_led_missing_type(self):
-        self.getPage("/host01/led", method="GET")
+        self.getPage("/host01/led", method="GET", headers=self.keyring_headers())
         self.assertStatus('400 Bad Request')
 
     def test_get_led_no_hostname(self):
-        self.getPage("/led", method="GET")
+        self.getPage("/led", method="GET", headers=self.keyring_headers())
         self.assertStatus('501 Not Implemented')
 
     def test_get_led_type_chassis_no_hostname(self):
-        self.getPage("/led/chassis", method="GET")
+        self.getPage("/led/chassis", method="GET", headers=self.keyring_headers())
         self.assertStatus('404 Not Found')
 
     def test_get_led_type_drive_no_hostname(self):
-        self.getPage("/led/chassis", method="GET")
+        self.getPage("/led/chassis", method="GET", headers=self.keyring_headers())
         self.assertStatus('404 Not Found')
 
     def test_get_led_type_drive_missing_id(self):
-        self.getPage("/host01/led/drive", method="GET")
+        self.getPage("/host01/led/drive", method="GET", headers=self.keyring_headers())
         self.assertStatus('400 Bad Request')
 
     def test_get_led_url_error(self):
         with patch('cephadm.agent.http_req') as p:
             p.side_effect = URLError('fake error')
-            self.getPage("/host02/led/chassis", method="GET")
+            self.getPage("/host02/led/chassis", method="GET",
+                         headers=self.keyring_headers('host02', 'fake-secret02'))
             self.assertStatus('502 Bad Gateway')
 
     def test_get_chassis_led_ok(self):
         with patch('cephadm.agent.http_req', return_value=MagicMock()) as p:
             p.return_value = [], '{}', 200
-            self.getPage("/host01/led/chassis", method="GET")
+            self.getPage("/host01/led/chassis", method="GET", headers=self.keyring_headers())
             self.assertStatus('200 OK')
 
     def test_get_drive_led_without_id(self):
-        self.getPage("/host01/led/drive", method="GET")
+        self.getPage("/host01/led/drive", method="GET", headers=self.keyring_headers())
         self.assertStatus('400 Bad Request')
 
     def test_get_drive_led_with_id(self):
         with patch('cephadm.agent.http_req', return_value=MagicMock()) as p:
             p.return_value = [], '{}', 200
-            self.getPage("/host01/led/drive/123", method="GET")
+            self.getPage("/host01/led/drive/123", method="GET", headers=self.keyring_headers())
             self.assertStatus('200 OK')
 
-    def test_fullreport_with_valid_hostname(self):
-        # data = '{"cephx": {"name": "node-proxy.host01", "secret": "fake-secret01"}}'
-        # self.getPage("/host02/fullreport", method="POST", body=data, headers=[('Content-Type', 'application/json'), ('Content-Length', str(len(data)))])
+    def test_get_missing_keyring(self):
         self.getPage("/host02/fullreport", method="GET")
+        self.assertStatus('400 Bad Request')
+
+    def test_get_missing_keyring_no_hostname(self):
+        self.getPage("/fullreport", method="GET")
+        self.assertStatus('400 Bad Request')
+
+    def test_get_wrong_keyring(self):
+        self.getPage("/host02/fullreport", method="GET",
+                     headers=self.keyring_headers('host02', 'wrong-keyring'))
+        self.assertStatus('403 Forbidden')
+
+    def test_get_keyring_for_other_host(self):
+        self.getPage("/host02/fullreport", method="GET", headers=self.keyring_headers())
+        self.assertStatus('403 Forbidden')
+
+    def test_fullreport_with_valid_hostname(self):
+        self.getPage("/host02/fullreport", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_fullreport_no_hostname(self):
-        # data = '{"cephx": {"name": "node-proxy.host01", "secret": "fake-secret01"}}'
-        # self.getPage("/fullreport", method="POST", body=data, headers=[('Content-Type', 'application/json'), ('Content-Length', str(len(data)))])
-        self.getPage("/fullreport", method="GET")
+        self.getPage("/fullreport", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_fullreport_with_invalid_hostname(self):
-        # data = '{"cephx": {"name": "node-proxy.host03", "secret": "fake-secret03"}}'
-        # self.getPage("/host03/fullreport", method="POST", body=data, headers=[('Content-Type', 'application/json'), ('Content-Length', str(len(data)))])
-        self.getPage("/host03/fullreport", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/fullreport", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_summary_with_valid_hostname(self):
-        self.getPage("/host02/summary", method="GET")
+        self.getPage("/host02/summary", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_summary_no_hostname(self):
-        self.getPage("/summary", method="GET")
+        self.getPage("/summary", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_summary_with_invalid_hostname(self):
-        self.getPage("/host03/summary", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/summary", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_criticals_with_valid_hostname(self):
-        self.getPage("/host02/criticals", method="GET")
+        self.getPage("/host02/criticals", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_criticals_no_hostname(self):
-        self.getPage("/criticals", method="GET")
+        self.getPage("/criticals", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_criticals_with_invalid_hostname(self):
-        self.getPage("/host03/criticals", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/criticals", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_memory_with_valid_hostname(self):
-        self.getPage("/host02/memory", method="GET")
+        self.getPage("/host02/memory", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_memory_no_hostname(self):
-        self.getPage("/memory", method="GET")
+        self.getPage("/memory", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_memory_with_invalid_hostname(self):
-        self.getPage("/host03/memory", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/memory", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_network_with_valid_hostname(self):
-        self.getPage("/host02/network", method="GET")
+        self.getPage("/host02/network", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_network_no_hostname(self):
-        self.getPage("/network", method="GET")
+        self.getPage("/network", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_network_with_invalid_hostname(self):
-        self.getPage("/host03/network", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/network", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_processors_with_valid_hostname(self):
-        self.getPage("/host02/processors", method="GET")
+        self.getPage("/host02/processors", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_processors_no_hostname(self):
-        self.getPage("/processors", method="GET")
+        self.getPage("/processors", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_processors_with_invalid_hostname(self):
-        self.getPage("/host03/processors", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/processors", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_storage_with_valid_hostname(self):
-        self.getPage("/host02/storage", method="GET")
+        self.getPage("/host02/storage", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_storage_no_hostname(self):
-        self.getPage("/storage", method="GET")
+        self.getPage("/storage", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_storage_with_invalid_hostname(self):
-        self.getPage("/host03/storage", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/storage", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_power_with_valid_hostname(self):
-        self.getPage("/host02/power", method="GET")
+        self.getPage("/host02/power", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_power_no_hostname(self):
-        self.getPage("/power", method="GET")
+        self.getPage("/power", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_power_with_invalid_hostname(self):
-        self.getPage("/host03/power", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/power", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_fans_with_valid_hostname(self):
-        self.getPage("/host02/fans", method="GET")
+        self.getPage("/host02/fans", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_fans_no_hostname(self):
-        self.getPage("/fans", method="GET")
+        self.getPage("/fans", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_fans_with_invalid_hostname(self):
-        self.getPage("/host03/fans", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/fans", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_temperatures_with_valid_hostname(self):
-        self.getPage("/host02/temperatures", method="GET")
+        self.getPage("/host02/temperatures", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_temperatures_no_hostname(self):
-        self.getPage("/temperatures", method="GET")
+        self.getPage("/temperatures", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_temperatures_with_invalid_hostname(self):
-        self.getPage("/host03/temperatures", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/temperatures", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_fcm_with_valid_hostname(self):
-        self.getPage("/host02/fcm", method="GET")
+        self.getPage("/host02/fcm", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_fcm_no_hostname(self):
-        self.getPage("/fcm", method="GET")
+        self.getPage("/fcm", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_fcm_with_invalid_hostname(self):
-        self.getPage("/host03/fcm", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/fcm", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_firmware_with_valid_hostname(self):
-        self.getPage("/host02/firmware", method="GET")
+        self.getPage("/host02/firmware", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
 
     def test_firmware_no_hostname(self):
-        self.getPage("/firmware", method="GET")
+        self.getPage("/firmware", method="GET", headers=self.keyring_headers())
         self.assertStatus('200 OK')
 
     def test_firmware_with_invalid_hostname(self):
-        self.getPage("/host03/firmware", method="GET")
-        self.assertStatus('404 Not Found')
+        self.getPage("/host03/firmware", method="GET",
+                     headers=self.keyring_headers('host03', 'fake-secret03'))
+        self.assertStatus('502 Bad Gateway')
 
     def test_firmwares_legacy_endpoint(self):
-        self.getPage("/host02/firmwares", method="GET")
+        self.getPage("/host02/firmwares", method="GET",
+                     headers=self.keyring_headers('host02', 'fake-secret02'))
         self.assertStatus('200 OK')
+
+
+class TestNodeProxyCacheSave:
+    def _make_cache(self) -> NodeProxyCache:
+        mgr = MagicMock()
+        mgr.get_store = MagicMock(return_value='{}')
+        mgr.set_store = MagicMock()
+        mgr.inventory = {}
+        cache = NodeProxyCache(mgr)
+        return cache
+
+    def test_save_updates_in_memory_data(self):
+        cache = self._make_cache()
+        data = {'status': {'storage': {}, 'fans': {}}, 'sn': 'ABC123'}
+        cache.save(host='host01', data=data)
+        assert cache.data['host01'] == data
+
+    def test_save_in_memory_data_includes_new_keys_after_upgrade(self):
+        cache = self._make_cache()
+        # Simulate what load() would have populated from the old KV store
+        cache.data['host01'] = {'status': {'storage': {}, 'fans': {}}, 'sn': 'ABC123'}
+        # Node-proxy POSTs new data with fcm after upgrade
+        new_data = {'status': {'storage': {}, 'fans': {}, 'fcm': {'local': {'nvme0n1': {}}}}, 'sn': 'ABC123'}
+        cache.save(host='host01', data=new_data)
+        assert 'fcm' in cache.data['host01']['status']
+
+    def test_save_normalizes_hostname(self):
+        cache = self._make_cache()
+        data = {'status': {}, 'sn': 'XYZ'}
+        cache.save(host='HOST01', data=data)
+        assert 'host01' in cache.data
+        assert 'HOST01' not in cache.data
+
+    def test_save_writes_to_kv_store(self):
+        cache = self._make_cache()
+        data = {'status': {}, 'sn': 'XYZ'}
+        cache.save(host='host01', data=data)
+        cache.mgr.set_store.assert_called_once()
+        key, value = cache.mgr.set_store.call_args[0]
+        assert 'host01' in key
+        assert json.loads(value) == data
+
+
+class TestNodeProxyCacheCommon:
+    def _make_cache(self) -> NodeProxyCache:
+        mgr = MagicMock()
+        mgr.get_store = MagicMock(return_value='{}')
+        mgr.set_store = MagicMock()
+        mgr.inventory = {}
+        cache = NodeProxyCache(mgr)
+        cache.data = {
+            'at4n1': {'sn': '1', 'status': {'storage': {}, 'fcm': {'local': {'nvme0n1': {}}}}},
+            'at4n2': {'sn': '2', 'status': {'storage': {}, 'fans': {}}},
+        }
+        return cache
+
+    def test_common_includes_hosts_missing_component(self):
+        cache = self._make_cache()
+        result = cache.common('fcm')
+        assert result['at4n1'] == {'local': {'nvme0n1': {}}}
+        assert result['at4n2'] == {}
+
+    def test_common_hostname_without_component_returns_empty(self):
+        cache = self._make_cache()
+        assert cache.common('fcm', hostname='at4n2') == {'at4n2': {}}
+
+    def test_common_hostname_with_component(self):
+        cache = self._make_cache()
+        result = cache.common('fcm', hostname='at4n1')
+        assert result == {'at4n1': {'local': {'nvme0n1': {}}}}
+
+
+def test_node_proxy_get_dependencies():
+    from cephadm.services.node_proxy import NodeProxy
+
+    mgr = MagicMock()
+    mgr.get_mgr_ip.return_value = '10.0.0.1'
+    mgr.http_server.agent.server_port = 7150
+    mgr.cert_mgr.get_root_ca.return_value = 'ROOT-CA'
+    mgr.hw_monitoring_vendor = 'generic'
+
+    assert NodeProxy.get_dependencies(mgr) == sorted([
+        '10.0.0.1',
+        '7150',
+        'ROOT-CA',
+        'generic',
+    ])
+
+
+def test_node_proxy_cache_unknown_host_raises_hardware_no_report():
+    cache = NodeProxyCache(MagicMock())
+    cache.data = {'host01': node_proxy_data.full_set['host01']}
+    with pytest.raises(HardwareNoReport):
+        cache.fullreport(hostname='host02')
+
+
+def test_node_proxy_cache_list_hosts_skips_incomplete_reports():
+    cache = NodeProxyCache(MagicMock())
+    cache.data = {
+        'host02': node_proxy_data.full_set['host02'],
+        'host01': node_proxy_data.full_set['host01'],
+        'host03': {},
+        'host04': {'host': 'host04', 'status': {}},
+    }
+    assert cache.list_hosts() == ['host01', 'host02']

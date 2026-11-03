@@ -245,28 +245,33 @@ void MDSDaemon::dump_status(Formatter *f)
 {
   f->open_object_section("status");
   f->dump_stream("cluster_fsid") << monc->get_fsid();
-  if (mds_rank) {
-    f->dump_int("whoami", mds_rank->get_nodeid());
-  } else {
-    f->dump_int("whoami", MDS_RANK_NONE);
-  }
-
-  f->dump_int("id", monc->get_global_id());
-  f->dump_string("want_state", ceph_mds_state_name(beacon.get_want_state()));
-  f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
-	    monc->get_global_id()))));
-  if (mds_rank) {
+  {
+    // mdsmap is swapped out by handle_mds_map() and mds_rank is
+    // created/destroyed, both under mds_lock -- hold it while
+    // reading either of them.
     std::lock_guard l(mds_lock);
-    mds_rank->dump_status(f);
-  }
+    if (mds_rank) {
+      f->dump_int("whoami", mds_rank->get_nodeid());
+    } else {
+      f->dump_int("whoami", MDS_RANK_NONE);
+    }
 
-  f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
-  if (mds_rank) {
-    f->dump_unsigned("osdmap_epoch", mds_rank->get_osd_epoch());
-    f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
-  } else {
-    f->dump_unsigned("osdmap_epoch", 0);
-    f->dump_unsigned("osdmap_epoch_barrier", 0);
+    f->dump_int("id", monc->get_global_id());
+    f->dump_string("want_state", ceph_mds_state_name(beacon.get_want_state()));
+    f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
+	      monc->get_global_id()))));
+    if (mds_rank) {
+      mds_rank->dump_status(f);
+    }
+
+    f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
+    if (mds_rank) {
+      f->dump_unsigned("osdmap_epoch", mds_rank->get_osd_epoch());
+      f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
+    } else {
+      f->dump_unsigned("osdmap_epoch", 0);
+      f->dump_unsigned("osdmap_epoch_barrier", 0);
+    }
   }
 
   f->dump_float("uptime", get_uptime().count());
@@ -439,6 +444,11 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "dump metadata loads");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("dump phase times",
+                                     asok_hook,
+                                     "dump time spent in each upkeep phase, "
+                                     "and mds_lock utilization");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump snaps name=server,type=CephChoices,strings=--server,req=false",
                                      asok_hook,
                                      "dump snapshots");
@@ -564,6 +574,16 @@ void MDSDaemon::set_up_admin_socket()
                                      "name=cancel,type=CephBool,req=false",
       asok_hook,
       "submit queries to the local QuiesceDbManager");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("quarantine enable "
+                                     "name=path,type=CephString,req=true",
+                                     asok_hook,
+                                     "submit queries to the QuarantineManager");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("quarantine disable "
+                                     "name=path,type=CephString,req=true",
+                                     asok_hook,
+                                     "submit queries to the QuarantineManager");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
     "heap " \
@@ -761,7 +781,19 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 {
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<Session *>(priv.get());
-  ceph_assert(session != NULL);
+  if (!session) {
+    // A closed tell session is cleared by ms_handle_reset() when the
+    // socket faults. That reset is dispatched ahead of an MCommand
+    // already queued on the connection, so priv is gone by the time
+    // we run. The connection is already marked down, so a reply could
+    // not be delivered anyway: drop the command. Clients abort one-shot
+    // commands on the reset (-EPIPE); others have to time out.
+    dout(1) << __func__ << " no session on "
+            << m->get_connection()->get_peer_socket_addr()
+            << ", dropping command tid " << m->get_tid()
+            << " after connection reset" << dendl;
+    return;
+  }
 
   int r = 0;
   cmdmap_t cmdmap;
@@ -805,7 +837,7 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
   auto reply = make_message<MCommandReply>(r, ss.str());
   reply->set_tid(m->get_tid());
   reply->set_data(outbl);
-  m->get_connection()->send_message2(reply);
+  m->get_connection()->send_message2(std::move(reply));
 }
 
 void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
@@ -1289,7 +1321,7 @@ void MDSDaemon::ms_handle_accept(Connection *con)
 
       // send out any queued messages
       while (!s->preopen_out_queue.empty()) {
-	con->send_message2(s->preopen_out_queue.front());
+	con->send_message2(std::move(s->preopen_out_queue.front()));
 	s->preopen_out_queue.pop_front();
       }
     }

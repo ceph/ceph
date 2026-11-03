@@ -36,7 +36,6 @@
 
 // Forward declarations
 class EventLoop;
-class ECPeeringTestFixture;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
@@ -47,51 +46,33 @@ class MockPeeringListener : public PeeringState::PeeringListener {
  public:
   pg_shard_t pg_whoami;
   PeeringState *ps;
+  // PeeringCtx paired with ps; ensures deferred events route to the correct PG
+  // (parent vs split child) when both coexist after split_pg().
+  PeeringCtx *ctx = nullptr;
   std::unique_ptr<MockPGBackendListener> backend_listener;
   coll_t coll;
   ObjectStore::CollectionHandle ch;
   std::unique_ptr<MockPGBackend> backend;
+  // Non-owning; set by ECPeeringTestFixture when a real IO backend exists.
+  PGBackend *pg_backend = nullptr;
   PerfCounters* recoverystate_perf;
   PerfCounters* logger_perf;
   std::vector<int> next_acting;
 
-  // MockMessenger for routing cluster messages (optional - used by ECPeeringTestFixture)
   MockMessenger* messenger = nullptr;
-  
-  // EventLoop for routing events (optional - used by ECPeeringTestFixture)
   class EventLoop* event_loop = nullptr;
-  
-  // Fixture pointer for accessing peering state and context (optional - used by ECPeeringTestFixture)
-  class ECPeeringTestFixture* fixture = nullptr;
 
 #ifdef WITH_CRIMSON
-  // Per OSD state - kept for backward compatibility with TestPeeringState
-  // When messenger is set, messages are routed through it instead
   std::map<int,std::list<MessageURef>> messages;
 #else
-  // Per OSD state - kept for backward compatibility with TestPeeringState
-  // When messenger is set, messages are routed through it instead
   std::map<int,std::list<MessageRef>> messages;
 #endif
   std::vector<HeartbeatStampsRef> hb_stamps;
   std::list<PGPeeringEventRef> events;
   std::list<PGPeeringEventRef> stalled_events;
 
-  // By default MockPeeringListener will add events to the event queue immediately
-  // simulating the responses that PrimaryLogPG normally generates. These inject
-  // booleans can change the behavior to test other code paths
-
-  // If inject_event_stall is true then events are added to the stalled_events list
-  // and the test case must manually dispatch the event
-  bool inject_event_stall = false;
-
-  // If inject_keep_preempt is true then the preempt event for a local/remote
-  // reservation is added to the stalled_events list so the test case can later
-  // dispatch this event to test a preempted reservation
-  bool inject_keep_preempt = false;
-
-  // If inject_fail_reserve_recovery_space is true then reject backfill/pool
-  // migration requests with too full
+  bool inject_event_stall = false;         // route grants to stalled_events
+  bool inject_keep_preempt = false;        // route preempt events to stalled_events
   bool inject_fail_reserve_recovery_space = false;
 
   std::function<int(ObjectStore::Transaction&&)> queue_transaction_callback;
@@ -107,9 +88,6 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     logger_perf = build_osd_logger(g_ceph_context);
     g_ceph_context->get_perfcounters_collection()->add(logger_perf);
   }
-  /// Constructor for ECPeeringTestFixture: accepts a pre-created backend listener
-  /// instead of creating one internally. This avoids the throw-away construction
-  /// pattern where the internally-created listener would be immediately replaced.
   MockPeeringListener(OSDMapRef osdmap,
                       int64_t pool_id,
                       DoutPrefixProvider *dpp,
@@ -133,6 +111,9 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
 
   ~MockPeeringListener() {
+    // Zero ps/ctx before any scheduled lambdas can dereference them.
+    ps  = nullptr;
+    ctx = nullptr;
     if (recoverystate_perf) {
       g_ceph_context->get_perfcounters_collection()->remove(recoverystate_perf);
       delete recoverystate_perf;
@@ -149,7 +130,6 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     return current_epoch;
   }
 
-  // PeeringListener interface
   void prepare_write(
     pg_info_t &info,
     pg_info_t &last_written_info,
@@ -218,10 +198,6 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     event_loop = el;
   }
   
-  void set_fixture(ECPeeringTestFixture* f) {
-    fixture = f;
-  }
-
   void send_pg_created(pg_t pgid) override {
     pg_created_sent = true;
   }
@@ -331,6 +307,10 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
   void publish_stats_to_osd() override {
     stats_published = true;
+    ++publish_stats_call_count;
+    if (!ps->is_dispatching_peering_event()) {
+      saw_publish_stats_outside_dispatch = true;
+    }
   }
 
   void clear_publish_stats() override {
@@ -381,6 +361,9 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   void on_change(ObjectStore::Transaction &t) override {
     first_write_in_interval = true;
     change_called = true;
+    if (pg_backend) {
+      pg_backend->on_change();
+    }
   }
 
   std::pair<ghobject_t, bool> do_delete_work(
@@ -525,6 +508,8 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   bool pg_temp_cleared = false;
   bool pg_migrated_pool_sent = false;
   bool stats_published = false;
+  int publish_stats_call_count = 0;
+  bool saw_publish_stats_outside_dispatch = false;
   bool stats_cleared = false;
   bool recovery_sources_checked = false;
   bool blocklisted_watchers_checked = false;

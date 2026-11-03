@@ -156,6 +156,25 @@ be used: `./src/script/build-with-container.py -d centos9 --base-image
 myreg.example.com/ceph/centos-base:9`
 
 
+### Customizing the build image
+
+Sometimes a downstream consumer of `build-with-container.py` needs to install
+or compile extra dependencies into the build image without carrying a local
+patch on top of `buildcontainer-setup.sh` or `Dockerfile.build`. The
+`--custom-image-build-command` option runs an arbitrary shell command while
+the build image is being constructed, after the normal distro package setup:
+
+```
+./src/script/build-with-container.py -d centos9 --custom-image-build-command 'curl -sSL https://example.com/setup.sh | bash' -e build
+```
+
+The option may be given multiple times; commands run in the order given. Each
+value is passed to `bash -c` as-is - there is no special directory or file
+convention involved, so how (or whether) any referenced content gets into the
+image is entirely up to the command itself (fetch it over the network, invoke
+something already installed by a package manager, etc).
+
+
 ### Controlling where files are written
 
 By default the directory holding the Ceph source tree is mounted at `/ceph`
@@ -177,3 +196,62 @@ The overlay can also be temporary, with no files persisted after the container
 has exited. Pass `--overlay-dir=-` to enable this option. Note that invoking
 `build-with-container.py` default targets may use multiple container instances
 and passing this option will break those targets.
+
+
+### Authenticating GitHub dependency fetches
+
+Ceph builds may fetch dependencies from GitHub during CMake configuration or
+other build steps (for example, via CMake's `FetchContent` or
+`ExternalProject_Add`). When many builds share the same public IP, these
+unauthenticated Git-over-HTTPS requests can be rate limited by GitHub.
+
+To avoid this, provide a GitHub Personal Access Token (PAT) through the
+`GITHUB_TOKEN` environment variable:
+
+```
+GITHUB_TOKEN="$MY_GITHUB_PAT" ./src/script/build-with-container.py -e build
+```
+
+The token can also be supplied via the `--env-file` option instead of the
+process environment:
+
+```
+# in the env file
+GITHUB_TOKEN=ghp_...
+```
+
+```
+./src/script/build-with-container.py --env-file=my.env -e build
+```
+
+There is intentionally no command line option that accepts the token value
+directly (e.g. `--github-token=...`). Putting a secret on the command line
+exposes it through shell history, process listings, and command logging, so
+always use one of the two mechanisms above.
+
+When a token is available, `build-with-container.py` configures Git *inside
+the runtime build container* to authenticate HTTPS requests to
+`github.com`, using `x-access-token` as the username, per GitHub's documented
+convention for token-based HTTPS authentication. This is applied to every
+runtime container the script starts (build, tests, packages, custom commands,
+and interactive mode).
+
+This feature only authenticates Git-over-HTTPS fetches to `github.com` (the
+operations CMake dependency fetches rely on). It does **not**:
+* authenticate arbitrary `curl` requests,
+* authenticate calls to the GitHub API,
+* authenticate pulls from a container image registry (including GitHub
+  Container Registry).
+
+The token is never used when building the build *image* itself (the
+`Dockerfile.build`-based image build only ever uses `--build-arg`, and the
+token is deliberately never passed there, since build arguments can leak
+into image metadata and build history).
+
+Only `GITHUB_TOKEN` is recognized (not `GH_TOKEN`), consistent with the
+variable name already used throughout this repository's own GitHub Actions
+workflows.
+
+We recommend using a minimally scoped, read-only PAT (for example, a
+fine-grained token with only public repository read access) for this
+purpose, and treating it like any other credential.

@@ -23,10 +23,10 @@ map is ``active+clean``.
   A replica with necessary data is down, so the placement group is offline.
 
 *laggy*
-  A replica is not acknowledging new leases from the primary in a timely fashion; IO is temporarily paused.
+  A replica is not acknowledging new leases from the primary in a timely fashion; I/O is temporarily paused.
 
 *wait*
-  The set of OSDs for this PG has just changed and IO is temporarily paused until the previous interval's leases expire.
+  The set of OSDs for this PG has just changed and I/O is temporarily paused until the previous interval's leases expire.
 
 *scrubbing*
   Ceph is checking the placement group metadata for inconsistencies.
@@ -100,7 +100,7 @@ map is ``active+clean``.
   The placement group has fewer copies than the configured pool replication level.
 
 *peered*
-  The placement group has peered, but cannot serve client IO due to not having
+  The placement group has peered, but cannot serve client I/O due to not having
   enough copies to reach the pool's configured min_size parameter.  Recovery
   may occur in this state, so the pg may heal up to min_size eventually.
 

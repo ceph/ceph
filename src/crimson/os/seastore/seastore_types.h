@@ -137,6 +137,12 @@ struct device_id_printer_t {
 
 std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id);
 
+std::optional<device_id_t> parse_device_id(
+  const seastar::sstring &name,
+  device_id_t base);
+
+constexpr std::string CACHE_DEV_PREFIX = "block_cache";
+
 // 1 bit in paddr_t to identify the absolute physical address type
 enum class paddr_types_t {
   SEGMENT = 0,
@@ -964,8 +970,6 @@ enum class device_type_t : uint8_t {
   ZBD,            // ZNS SSD or SMR HDD
   EPHEMERAL_COLD,
   EPHEMERAL_MAIN,
-  RANDOM_BLOCK_SSD,
-  RANDOM_BLOCK_EPHEMERAL,
   NUM_TYPES
 };
 
@@ -974,16 +978,17 @@ std::ostream& operator<<(std::ostream& out, device_type_t t);
 bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
-enum class backend_type_t {
-  SEGMENTED,    // SegmentManager: SSD, ZBD, HDD
-  RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
+enum class backend_type_t : uint8_t {
+  NONE,
+  SEGMENTED,    // SegmentManager: BlockSegmentManager, ZBDSegmentManager
+  RANDOM_BLOCK  // RBMDevice:      NVMeBlockDevice, RotationalDevice
 };
 
 std::ostream& operator<<(std::ostream& out, backend_type_t);
 
 constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
   assert(dtype != device_type_t::NONE &&
-	 dtype != device_type_t::NUM_TYPES);
+        dtype != device_type_t::NUM_TYPES);
   if (dtype >= device_type_t::HDD &&
       dtype <= device_type_t::EPHEMERAL_MAIN) {
     return backend_type_t::SEGMENTED;
@@ -991,6 +996,8 @@ constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
     return backend_type_t::RANDOM_BLOCK;
   }
 }
+
+backend_type_t string_to_backend_type(const std::string &str);
 
 /**
  * Monotonically increasing identifier for the location of a
@@ -2066,6 +2073,13 @@ constexpr bool is_real_type(extent_types_t type) {
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
+enum class write_policy_t {
+  WRITE_BACK,
+  WRITE_THROUGH
+};
+
+std::ostream& operator<<(std::ostream& out, write_policy_t w);
+
 /**
  * rewrite_gen_t
  *
@@ -2536,11 +2550,11 @@ using backref_root_t = phy_tree_root_t;
  * TODO: generalize this to permit more than one lba_manager implementation
  */
 struct __attribute__((packed)) root_t {
-  backref_root_t backref_root;
-  lba_root_t lba_root;
-  laddr_le_t onode_root;
-  coll_root_le_t collection_root;
-  laddr_le_t meta;
+  backref_root_t backref_root;          // Backref tree root
+  lba_root_t lba_root;                  // LBA tree root
+  laddr_le_t meta_onode_root;           // Meta Collection root
+  coll_root_le_t collection_root;       // Collection map extent
+  laddr_le_t meta;                      // RootMetaBlock root
 
   root_t() = default;
 
@@ -2718,6 +2732,8 @@ enum class transaction_type_t : uint8_t {
   TRIM_ALLOC,
   CLEANER_MAIN,
   CLEANER_COLD,
+  PROMOTE,
+  DEMOTE,
   MAX
 };
 
@@ -2744,7 +2760,9 @@ constexpr bool is_background_transaction(transaction_type_t type) {
 constexpr bool is_rewrite_transaction(transaction_type_t type) {
   return type == transaction_type_t::TRIM_DIRTY ||
     type == transaction_type_t::CLEANER_MAIN ||
-    type == transaction_type_t::CLEANER_COLD;
+    type == transaction_type_t::CLEANER_COLD ||
+    type == transaction_type_t::DEMOTE ||
+    type == transaction_type_t::PROMOTE;
 }
 
 constexpr bool is_trim_transaction(transaction_type_t type) {
@@ -3293,7 +3311,6 @@ struct shard_stats_t {
   uint64_t repeat_io_num = 0;
   uint64_t pending_io_num = 0;
   uint64_t starting_io_num = 0;
-  uint64_t waiting_collock_io_num = 0;
   uint64_t waiting_throttler_io_num = 0;
   uint64_t processing_inlock_io_num = 0;
   uint64_t processing_postlock_io_num = 0;
@@ -3336,7 +3353,6 @@ struct shard_stats_t {
     repeat_io_num += o.repeat_io_num;
     pending_io_num += o.pending_io_num;
     starting_io_num += o.starting_io_num;
-    waiting_collock_io_num += o.waiting_collock_io_num;
     waiting_throttler_io_num += o.waiting_throttler_io_num;
     processing_inlock_io_num += o.processing_inlock_io_num;
     processing_postlock_io_num += o.processing_postlock_io_num;
@@ -3650,6 +3666,7 @@ template <> struct fmt::formatter<crimson::os::seastore::transaction_type_t> : f
 template <> struct fmt::formatter<crimson::os::seastore::write_result_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::omap_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ceph::buffer::list> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::write_policy_t> : fmt::ostream_formatter {};
 #endif
 
 namespace fmt {

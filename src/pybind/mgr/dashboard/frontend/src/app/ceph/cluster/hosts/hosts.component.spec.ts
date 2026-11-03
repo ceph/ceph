@@ -11,6 +11,7 @@ import { CephSharedModule } from '~/app/ceph/shared/ceph-shared.module';
 import { CoreModule } from '~/app/core/core.module';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -272,6 +273,21 @@ describe('HostsComponent', () => {
     const errorMsg = 'unsafe to stop osd.0 because of some unknown reason';
     showForceMaintenanceModal.showModalDialog(errorMsg);
     expect(showForceMaintenanceModal.showModal).toBeFalsy();
+  });
+
+  it('should set host edit modal submit label to Save changes', () => {
+    const hostService = TestBed.inject(HostService);
+    const modalService = TestBed.inject(ModalCdsService);
+    spyOn(hostService, 'getLabels').and.returnValue(of([]));
+    const showSpy = spyOn(modalService, 'show').and.stub();
+
+    component.selection = new CdTableSelection();
+    component.selection.selected = [{ hostname: 'host-test', labels: [] }];
+
+    component.editAction();
+
+    expect(showSpy).toHaveBeenCalled();
+    expect(showSpy.calls.mostRecent().args[1].submitButtonText).toBe('Save changes');
   });
 
   describe('table actions', () => {

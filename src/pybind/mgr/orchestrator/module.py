@@ -1,7 +1,9 @@
 import enum
 import errno
 import json
-from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence, Mapping, Tuple
+import os
+import shutil
+from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence, Mapping, Tuple, Type, Callable
 import re
 import datetime
 import math
@@ -26,7 +28,6 @@ from mgr_util import (
     is_valid_container_image_ref,
     to_pretty_timedelta,
     format_bytes,
-    parse_combined_pem_file,
     NvmeofMetadataPoolHelper,
 )
 from mgr_module import MgrModule, HandleCommandResult, Option
@@ -191,6 +192,7 @@ class ServiceType(enum.Enum):
     loki = 'loki'
     promtail = 'promtail'
     alloy = 'alloy'
+    pushgateway = 'pushgateway'
     mds = 'mds'
     rgw = 'rgw'
     nfs = 'nfs'
@@ -209,7 +211,6 @@ class ServiceAction(enum.Enum):
     restart = 'restart'
     redeploy = 'redeploy'
     reconfig = 'reconfig'
-    rotate_key = 'rotate-key'
 
 
 class DaemonAction(enum.Enum):
@@ -217,7 +218,6 @@ class DaemonAction(enum.Enum):
     stop = 'stop'
     restart = 'restart'
     reconfig = 'reconfig'
-    rotate_key = 'rotate-key'
 
 
 class IngressType(enum.Enum):
@@ -345,6 +345,7 @@ def preview_table_services(data: List) -> str:
     table.align = 'l'
     table.left_padding_width = 0
     table.right_padding_width = 2
+    table.max_width = 30
     for item in data:
         if item.get('warning'):
             continue
@@ -505,7 +506,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                   addr: Optional[str] = None,
                   labels: Optional[List[str]] = None,
                   maintenance: Optional[bool] = False) -> HandleCommandResult:
-        """Add a host"""
+        """
+        Add a host. For more than one label, use --labels label1,label2,... or
+        list them after <addr> separated by spaces (without <addr>, the first
+        label is taken as the address).
+        """
         _status = 'maintenance' if maintenance else ''
 
         # split multiple labels passed in with --labels=label1,label2
@@ -636,7 +641,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
         fields = mapping.get(category, ())
         for host in data.keys():
-            for sys_id, details in data[host].items():
+            host_data = data[host] or {}
+            if not any(host_data.values()):
+                # HOST + 'NO DATA' already fill the first two columns...
+                table.add_row([host, 'NO DATA'] + [''] * (len(table.field_names) - 2))
+                continue
+            for sys_id, details in host_data.items():
                 for k, v in details.items():
                     row = []
                     for field in fields:
@@ -1009,15 +1019,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         # Sort the list for display
         services.sort(key=lambda s: (ukn(s.spec.service_name())))
 
-        if len(services) == 0:
-            return HandleCommandResult(stdout="No services reported")
-        elif format != Format.plain:
+        if format != Format.plain:
+            # emit a valid (possibly empty) document, like 'orch ps' does
             with service_spec_allow_invalid_from_json():
                 if export:
                     data = [s.spec for s in services if s.deleted is None]
                     return HandleCommandResult(stdout=to_format(data, format, many=True, cls=ServiceSpec))
                 else:
                     return HandleCommandResult(stdout=to_format(services, format, many=True, cls=ServiceDescription))
+        elif len(services) == 0:
+            return HandleCommandResult(stdout="No services reported")
         else:
             now = datetime_now()
             table = PrettyTable(
@@ -1285,13 +1296,17 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         Sets the cert-key pair from -i <pem-file>, which must be a valid PEM file containing both the certificate and the private key.
         """
         if inbuf:
-            cert_content, key_content = parse_combined_pem_file(inbuf)
-            if not cert_content or not key_content:
-                raise OrchestratorError('Expected a combined PEM file with certificate and key pairs')
+            # inbuf may be a combined cert+key blob, a fullchain PEM (key +
+            # leaf + intermediates), or just a cert chain. Parsing/validating
+            # the PEM content is left entirely to cert_store_set_pair, which
+            # is implemented per-backend (e.g. cephadm) and already knows how
+            # to split and validate TLS PEM bundles — this avoids needing any
+            # PEM-parsing import here.
+            cert_content, key_content = inbuf, ''
         else:
-            cert_content, key_content = cert, key
-            if not cert_content or not key_content:
+            if not cert or not key:
                 raise OrchestratorError('This command requires passing cert/key pair by either using --cert/--key parameters or a combined PEM file using "-i" option.')
+            cert_content, key_content = cert, key
 
         completion = self.cert_store_set_pair(
             cert_content,
@@ -1535,6 +1550,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             dg_specs = []
             for dg in drivegroups:
                 spec = DriveGroupSpec.from_json(dg)
+                # incentivize users to provide a service id for their OSD specs
+                # we can't make this part of the spec validation itself because
+                # it would cause us to drop previously working specs during upgrade,
+                # but we can do it for new specs
+                if not spec.service_id:
+                    raise SpecValidationError(
+                        'OSD spec with no service_id field found. Please provide a service_id for all OSD specs'
+                    )
                 if dry_run:
                     spec.preview_only = True
                 dg_specs.append(spec)
@@ -1579,7 +1602,8 @@ Usage:
         if not svc_arg:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
         try:
-            host_name, raw = svc_arg.split(":")
+            # PCI by-path names contain extra ':' (pci-0000:cd:00.0-nvme-1).
+            host_name, raw = svc_arg.split(":", 1)
             list_drive_group_spec_bool_arg: List[str] = []
             drive_group_spec = {
                 'data_devices': []
@@ -1742,6 +1766,7 @@ Usage:
                  placement: Optional[str] = None,
                  _end_positional_: int = 0,
                  port: Optional[int] = None,
+                 http_port: Optional[int] = None,
                  ssl: bool = False,
                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Start RGW daemon(s)"""
@@ -1751,6 +1776,7 @@ Usage:
         spec = RGWSpec(
             service_id=svc_id,
             rgw_frontend_port=port,
+            rgw_frontend_http_port=http_port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
         )
@@ -1820,7 +1846,7 @@ Usage:
 
     @OrchestratorCLICommand.Write('orch daemon')
     def _daemon_action(self, action: DaemonAction, name: str, force: bool = False) -> HandleCommandResult:
-        """Start, stop, restart, redeploy, reconfig, or rotate-key for a specific daemon"""
+        """Start, stop, restart, redeploy or reconfig for a specific daemon"""
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
         completion = self.daemon_action(action.value, name, force=force)
@@ -1908,7 +1934,15 @@ Usage:
             force_delete_data=force_delete_data,
         )
         raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        result = completion.result_str()
+        if service_name.startswith('nfs.'):
+            cluster_id = service_name[len('nfs.'):]
+            result += (
+                f"\n\nWARNING: 'ceph orch rm {service_name}' only removes the NFS service daemon.\n"
+                f"Associated resources (RADOS config objects, exports, ingress service) will NOT be cleaned up.\n"
+                f"Use 'ceph nfs cluster rm {cluster_id}' for full resource cleanup."
+            )
+        return HandleCommandResult(stdout=result)
 
     @OrchestratorCLICommand.Write('orch apply')
     def apply_misc(self,
@@ -2027,6 +2061,89 @@ Usage:
                 out = to_format(data, format, many=True, cls=None)
         return HandleCommandResult(stdout=out)
 
+    def _get_stored_spec(
+            self,
+            service_name: str,
+            spec_cls: Type[ServiceSpec],
+    ) -> Optional[ServiceSpec]:
+        """
+        Return the active stored spec for service_name, if one exists.
+
+        Ignore placeholder specs for daemons without a stored spec and specs
+        that are pending removal.
+        """
+        service_type = service_name.split('.', 1)[0]
+
+        completion = self.describe_service(
+            service_type=service_type,
+            service_name=service_name,
+            refresh=False,
+        )
+
+        for sd in raise_if_exception(completion):
+            if (
+                sd.spec.service_name() == service_name
+                and isinstance(sd.spec, spec_cls)
+                and sd.created is not None
+                and sd.deleted is None
+            ):
+                return sd.spec
+
+        return None
+
+    def _apply_or_patch(
+            self,
+            service_name: str,
+            spec_cls: Type[ServiceSpec],
+            create: Callable[[], ServiceSpec],
+            placement: Optional[str] = None,
+            unmanaged: Optional[bool] = None,
+            dry_run: bool = False,
+            format: Format = Format.plain,
+            no_overwrite: bool = False,
+    ) -> HandleCommandResult:
+        """
+        Create a service from CLI arguments, or patch an existing stored spec.
+
+        For an existing service, only values explicitly supplied by this CLI
+        path are changed. All other values are preserved.
+        """
+        existing = self._get_stored_spec(service_name, spec_cls)
+
+        if existing is None:
+            self.log.debug(
+                'No stored spec found for %s; creating a new service spec',
+                service_name,
+            )
+            spec = create()
+        else:
+            self.log.debug(
+                'Reusing stored spec for %s and applying CLI updates',
+                service_name,
+            )
+
+            data = existing.to_json()
+
+            if placement is not None:
+                data['placement'] = PlacementSpec.from_string(
+                    placement
+                ).to_json()
+
+            if unmanaged is not None:
+                data['unmanaged'] = unmanaged
+
+            spec = ServiceSpec.from_json(data)
+
+        spec.preview_only = dry_run
+        spec.validate()
+
+        return self._apply_misc(
+            [spec],
+            dry_run,
+            format,
+            no_overwrite,
+        )
+
     @OrchestratorCLICommand.Write('orch apply mds')
     def _apply_mds(self,
                    fs_name: str,
@@ -2061,6 +2178,7 @@ Usage:
                    zone: Optional[str] = None,
                    networks: Optional[List[str]] = None,
                    port: Optional[int] = None,
+                   http_port: Optional[int] = None,
                    ssl: bool = False,
                    dry_run: bool = False,
                    format: Format = Format.plain,
@@ -2085,6 +2203,7 @@ Usage:
             rgw_zone=zone,
             networks=networks,
             rgw_frontend_port=port,
+            rgw_frontend_http_port=http_port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
@@ -2185,6 +2304,10 @@ Usage:
     @OrchestratorCLICommand.Write('orch apply oauth2-proxy')
     def _apply_oauth2_proxy(self,
                             https_address: Optional[str] = None,
+                            provider_display_name: Optional[str] = None,
+                            oidc_issuer_url: Optional[str] = None,
+                            client_id: Optional[str] = None,
+                            client_secret: Optional[str] = None,
                             placement: Optional[str] = None,
                             unmanaged: bool = False,
                             dry_run: bool = False,
@@ -2199,6 +2322,10 @@ Usage:
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             https_address=https_address,
+            provider_display_name=provider_display_name,
+            oidc_issuer_url=oidc_issuer_url,
+            client_id=client_id,
+            client_secret=client_secret,
         )
         spec.preview_only = dry_run
 
@@ -2229,18 +2356,28 @@ Usage:
             nvmeof_pool_helper.create_pool_if_needed()
 
         cleanpool = pool.lstrip('.')
-        spec = NvmeofServiceSpec(
-            service_id=f'{cleanpool}.{group}' if group else cleanpool,
-            pool=pool,
-            group=group,
-            placement=PlacementSpec.from_string(placement),
-            unmanaged=unmanaged,
-            preview_only=dry_run
+        service_id = f'{cleanpool}.{group}' if group else cleanpool
+        service_name = f'nvmeof.{service_id}'
+
+        def create() -> ServiceSpec:
+            return NvmeofServiceSpec(
+                service_id=service_id,
+                pool=pool,
+                group=group,
+                placement=PlacementSpec.from_string(placement),
+                unmanaged=unmanaged,
+            )
+
+        return self._apply_or_patch(
+            service_name=service_name,
+            spec_cls=NvmeofServiceSpec,
+            create=create,
+            placement=placement,
+            unmanaged=True if unmanaged else None,
+            dry_run=dry_run,
+            format=format,
+            no_overwrite=no_overwrite,
         )
-
-        spec.validate()  # force any validation exceptions to be caught correctly
-
-        return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @OrchestratorCLICommand.Write('orch apply snmp-gateway')
     def _apply_snmp_gateway(self,
@@ -2607,6 +2744,76 @@ Usage:
             assert False
         except OrchestratorError as e:
             assert e.args == ('hello, world',)
+
+        self._self_test_no_crash_dump_for_not_implemented_error()
+
+    def _self_test_no_crash_dump_for_not_implemented_error(self) -> None:
+        """
+        Regression test for https://tracker.ceph.com/issues/79106:
+        dispatch_remote() must not generate a crash dump for
+        NotImplementedError, since that's the documented way a module
+        signals an optional method isn't implemented, not a fault. A
+        genuine exception (the RuntimeError control case below) must
+        still be recorded.
+        """
+        crash_dir = cast(str, self.get_ceph_option('crash_dir'))
+
+        def crash_dir_entries() -> Set[str]:
+            try:
+                return set(os.listdir(crash_dir))
+            except FileNotFoundError:
+                return set()
+
+        def new_entries_from_selftest(before: Set[str], method: str) -> Set[str]:
+            # self_test() runs live inside ceph-mgr alongside every other
+            # always-on module, so crash_dir is shared: don't assume every
+            # entry that showed up since 'before' is ours. Only count/clean
+            # up entries whose crash metadata actually names this call, so
+            # an unrelated module crashing elsewhere during this window is
+            # neither mistaken for a test failure nor swept up and deleted.
+            matches = set()
+            for name in crash_dir_entries() - before:
+                try:
+                    with open(os.path.join(crash_dir, name, 'meta')) as f:
+                        meta = json.load(f)
+                except (OSError, ValueError):
+                    continue
+                if (meta.get('mgr_module') == 'selftest'
+                        and method in meta.get('mgr_module_caller', '')):
+                    matches.add(name)
+            return matches
+
+        before = crash_dir_entries()
+
+        # self.remote() converts *any* exception raised by the callee into
+        # a RuntimeError (see MgrModule.remote()'s docstring), so the
+        # NotImplementedError doesn't survive as its own type here -- the
+        # signal we actually care about is whether it produced a crash dump.
+        try:
+            self.remote('selftest', 'remote_raise_not_implemented_error')
+            assert False, 'exception not raised'
+        except RuntimeError:
+            pass
+        not_implemented_dumps = new_entries_from_selftest(
+            before, 'remote_raise_not_implemented_error')
+        assert not not_implemented_dumps, (
+            f'NotImplementedError from dispatch_remote() generated a crash '
+            f'dump: {not_implemented_dumps}')
+
+        try:
+            self.remote('selftest', 'remote_raise_runtime_error')
+            assert False, 'exception not raised'
+        except RuntimeError:
+            pass
+        runtime_error_dumps = new_entries_from_selftest(
+            before, 'remote_raise_runtime_error')
+        assert runtime_error_dumps, (
+            'RuntimeError from dispatch_remote() unexpectedly did not '
+            'generate a crash dump (control case failed)')
+
+        # Don't leave synthetic crash dumps lying around.
+        for name in runtime_error_dumps:
+            shutil.rmtree(os.path.join(crash_dir, name), ignore_errors=True)
 
     @staticmethod
     def _upgrade_check_image_name(image: Optional[str], ceph_version: Optional[str]) -> None:

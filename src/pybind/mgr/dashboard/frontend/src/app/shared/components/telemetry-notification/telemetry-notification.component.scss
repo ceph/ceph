@@ -1,4 +1,5 @@
 @use './src/styles/vendor/variables' as vv;
+@use 'sass:color';
 
 .no-margin-bottom {
   font-size: 0.875rem;
@@ -18,6 +19,6 @@
 }
 
 a {
-  color: darken(vv.$primary, 10);
+  color: color.adjust(vv.$primary, $lightness: -10%);
   font-weight: bold;
 }

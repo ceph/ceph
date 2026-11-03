@@ -119,6 +119,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
 
   action: string;
   resource: string;
+  submitAction: string;
   private rbdImage = new ReplaySubject(1);
   private routerUrl: string;
 
@@ -218,12 +219,12 @@ export class RbdFormComponent extends CdForm implements OnInit {
         mirroring: new UntypedFormControl(false),
         schedule: new UntypedFormControl('', {
           validators: [
-            Validators.pattern(/^([0-9]+)d|([0-9]+)h|([0-9]+)m$/),
+            Validators.pattern(/^[0-9]+[wdhm]$/),
             CdValidators.requiredIf({
               mirroringMode: this.rbdMirrorModes.snapshot,
               mirroring: true
             })
-          ] // check schedule interval to be in format - 1d or 1h or 1m
+          ] // check schedule interval to be in format - 1w or 1d or 1h or 1m
         }),
         mirroringMode: new UntypedFormControl(''),
         stripingUnit: new UntypedFormControl(this.defaultStripingUnit),
@@ -352,17 +353,21 @@ export class RbdFormComponent extends CdForm implements OnInit {
     if (url.startsWith('/block/rbd/edit')) {
       this.mode = this.rbdFormMode.editing;
       this.action = this.actionLabels.EDIT;
+      this.submitAction = this.actionLabels.SAVE_CHANGES;
       this.disableForEdit();
     } else if (url.startsWith('/block/rbd/clone')) {
       this.mode = this.rbdFormMode.cloning;
       this.disableForClone();
       this.action = this.actionLabels.CLONE;
+      this.submitAction = `${this.action} ${this.resource}`;
     } else if (url.startsWith('/block/rbd/copy')) {
       this.mode = this.rbdFormMode.copying;
       this.action = this.actionLabels.COPY;
+      this.submitAction = `${this.action} ${this.resource}`;
       this.disableForCopy();
     } else {
       this.action = this.actionLabels.CREATE;
+      this.submitAction = `${this.action} ${this.resource}`;
     }
     _.each(this.features, (feature) => {
       this.rbdForm

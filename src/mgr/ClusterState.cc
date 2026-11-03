@@ -13,6 +13,7 @@
  */
 
 #include "mgr/ClusterState.h"
+#include "common/debug.h"
 #include "common/JSONFormatter.h"
 #include "messages/MMgrDigest.h"
 #include "messages/MMonMgrReport.h"
@@ -142,16 +143,14 @@ void ClusterState::update_delta_stats()
   pending_inc.version = pg_map.version + 1; // to make apply_incremental happy
   dout(10) << " v" << pending_inc.version << dendl;
 
-  dout(30) << " pg_map before:\n";
-  JSONFormatter jf(true);
-  jf.dump_object("pg_map", pg_map);
-  jf.flush(*_dout);
-  *_dout << dendl;
-  dout(30) << " incremental:\n";
-  JSONFormatter jf(true);
-  jf.dump_object("pending_inc", pending_inc);
-  jf.flush(*_dout);
-  *_dout << dendl;
+  if (!pending_inc.empty()) {
+    dout(30) << " incremental:\n";
+    JSONFormatter jf(true);
+    jf.dump_object("pending_inc", pending_inc);
+    jf.flush(*_dout);
+    *_dout << dendl;
+  }
+
   pg_map.apply_incremental(g_ceph_context, pending_inc);
   pending_inc = PGMap::Incremental();
 }
@@ -179,16 +178,13 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
   PGMapUpdater::check_down_pgs(osd_map, pg_map, true,
 			       need_check_down_pg_osds, &pending_inc);
 
-  dout(30) << " pg_map before:\n";
-  JSONFormatter jf(true);
-  jf.dump_object("pg_map", pg_map);
-  jf.flush(*_dout);
-  *_dout << dendl;
-  dout(30) << " incremental:\n";
-  JSONFormatter jf(true);
-  jf.dump_object("pending_inc", pending_inc);
-  jf.flush(*_dout);
-  *_dout << dendl;
+  if (!pending_inc.empty()) {
+    dout(30) << " incremental:\n";
+    JSONFormatter jf(true);
+    jf.dump_object("pending_inc", pending_inc);
+    jf.flush(*_dout);
+    *_dout << dendl;
+  }
 
   pg_map.apply_incremental(g_ceph_context, pending_inc);
   pending_inc = PGMap::Incremental();

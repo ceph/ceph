@@ -20,20 +20,21 @@
       [tableActions]="tableActions"
     >
     </cd-table-actions>
-    <button
-      cdsButton="tertiary"
-      type="button"
-      (click)="purgeModal()"
-      [disabled]="disablePurgeBtn"
-      *ngIf="permission.delete"
-    >
-      <ng-container i18n>Purge Trash</ng-container>
-      <svg
-        class="cds--btn__icon"
-        cdsIcon="close"
-        size="16"
-      ></svg>
-    </button>
+    @if (permission.delete) {
+      <button
+        cdsButton="tertiary"
+        type="button"
+        (click)="purgeModal()"
+        [disabled]="disablePurgeBtn"
+      >
+        <ng-container i18n>Purge Trash</ng-container>
+        <svg
+          class="cds--btn__icon"
+          cdsIcon="close"
+          size="16"
+        ></svg>
+      </button>
+    }
   </div>
 </cd-table>
 
@@ -42,17 +43,13 @@
   let-row="data.row"
   let-value="data.value"
 >
-  <ng-container
-    *ngIf="row.cdIsExpired"
-    i18n
-    >Expired at</ng-container
-  >
+  @if (row.cdIsExpired) {
+    <ng-container i18n>Expired at</ng-container>
+  }
 
-  <ng-container
-    *ngIf="!row.cdIsExpired"
-    i18n
-    >Protected until</ng-container
-  >
+  @if (!row.cdIsExpired) {
+    <ng-container i18n>Protected until</ng-container>
+  }
 
   {{ value | cdDate }}
 </ng-template>
@@ -62,12 +59,11 @@
   let-expiresAt="expiresAt"
   let-isExpired="isExpired"
 >
-  <p
-    class="text-danger"
-    *ngIf="!isExpired"
-  >
-    <strong>
-      <ng-container i18n>This image is protected until {{ expiresAt | cdDate }}.</ng-container>
-    </strong>
-  </p>
+  @if (!isExpired) {
+    <p class="text-danger">
+      <strong>
+        <ng-container i18n>This image is protected until {{ expiresAt | cdDate }}.</ng-container>
+      </strong>
+    </p>
+  }
 </ng-template>

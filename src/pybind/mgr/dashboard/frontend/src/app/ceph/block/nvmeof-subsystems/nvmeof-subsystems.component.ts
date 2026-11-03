@@ -196,8 +196,8 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
       bodyTemplate: this.deleteTpl,
       itemNames: [subsystem.nqn],
       actionDescription: 'delete',
+      hasAssociatedResources: true,
       bodyContext: {
-        deletionMessage: $localize`Deleting <strong>${subsystem.nqn}</strong> will remove all associated configurations and resources. Dependent services may stop working. This action cannot be undone.`,
         forceDeleteAcknowledgementMessage: $localize`I understand this may remove resources still attached to this subsystem.`
       },
       submitActionObservable: () =>

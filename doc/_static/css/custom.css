@@ -18,6 +18,11 @@ span {
     scroll-margin-top: 2em; 
 }
 
+p.rubric,
+p.rubric > span {
+    scroll-margin-top: 4em;
+}
+
 ul.simple > li > ul > li:last-child {
     margin-block-end : 1em;
 }

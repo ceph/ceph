@@ -3,8 +3,11 @@
 
 #pragma once
 
+#include <atomic>
 #include <vector>
 
+#include <seastar/core/lowres_clock.hh>
+#include <seastar/core/timer.hh>
 #include <seastar/util/later.hh>
 
 #include "crimson/common/gated.h"
@@ -124,7 +127,7 @@ public:
  */
 public:
   seastar::shard_id get_shard_id() const final {
-    return shard_states->get_shard_id();
+    return current_sid;
   }
 
   bool is_connected() const final {
@@ -276,8 +279,22 @@ public:
           ceph_assert_always(!out_exit_dispatching.has_value());
           out_exit_dispatching = seastar::promise<>();
         }
+        ack_timer.cancel();
       }
       io_state = new_state;
+    }
+
+    // Armed only while open, so the timer is idle by the time these states
+    // are replaced (to_new_sid()) or closed. A no-op if already armed: the
+    // callback re-arms if the ack became owed later than it expected.
+    template <typename Func>
+    void arm_ack_timer(seastar::lowres_clock::time_point when, Func &&func) {
+      assert(seastar::this_shard_id() == sid);
+      assert(io_state == io_state_t::open);
+      if (!ack_timer.armed()) {
+        ack_timer.set_callback(std::forward<Func>(func));
+        ack_timer.arm(when);
+      }
     }
 
     seastar::future<> wait_state_change() {
@@ -352,6 +369,7 @@ public:
     seastar::future<> close() {
       assert(seastar::this_shard_id() == sid);
       assert(!gate.is_closed());
+      ack_timer.cancel();
       return gate.close();
     }
 
@@ -386,6 +404,7 @@ public:
     bool out_dispatching = false;
     std::optional<seastar::promise<>> out_exit_dispatching;
     std::optional<seastar::promise<>> in_exit_dispatching;
+    seastar::timer<seastar::lowres_clock> ack_timer;
   };
 
   void do_set_io_state(
@@ -424,7 +443,7 @@ public:
 
   bool is_out_queued() const {
     return (!out_pending_msgs.empty() ||
-            ack_left > 0 ||
+            ack_due ||
             need_keepalive ||
             next_keepalive_ack.has_value());
   }
@@ -469,6 +488,16 @@ public:
 
   void ack_out_sent(seq_num_t seq);
 
+  // a message was read: defer its ack, or make an ack frame due
+  void note_ack_owed(std::size_t msg_size);
+
+  void on_ack_timer();
+
+  void set_ack_due();
+
+  // the ack was written, or is no longer needed
+  void clear_ack_owed();
+
   seastar::future<> read_message(
       shard_states_t &ctx,
       utime_t throttle_stamp,
@@ -480,6 +509,9 @@ public:
 
 private:
   shard_states_ref_t shard_states;
+
+  // the shard of shard_states, which can be read from any core
+  std::atomic<seastar::shard_id> current_sid;
 
   proto_crosscore_ordering_t proto_crosscore;
 
@@ -523,7 +555,19 @@ private:
 
   std::optional<utime_t> next_keepalive_ack = std::nullopt;
 
+  // Every outgoing message carries the ack in its header (ack_seq), so the
+  // messages read since the last write are acked by whatever is written
+  // next. A standalone ack frame becomes due only if nothing is written for
+  // ack_delay, or the unacked messages or bytes reach their limits.
   uint64_t ack_left = 0;
+  uint64_t ack_left_bytes = 0;
+  bool ack_due = false;
+  // when ack_left last became non-zero
+  seastar::lowres_clock::time_point ack_owed_since;
+  // crimson_msgr_ack_*, read when the connection is created
+  const std::chrono::milliseconds ack_delay;
+  const uint64_t ack_max_pending_msgs;
+  const uint64_t ack_max_pending_bytes;
 
   bool need_notify_out = false;
 

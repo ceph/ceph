@@ -15,12 +15,16 @@
   column-gap: layout.$spacing-05;
 }
 
-.cd-overview-heading {
-  padding-inline-start: layout.$spacing-06;
-}
-
 .cd-overview-item {
   min-width: 0;
+}
+
+.cd-overview-skeleton-label {
+  margin-bottom: layout.$spacing-03;
+}
+
+.cd-overview-skeleton-value {
+  max-width: 100%;
 }
 
 .cd-overview-label {
@@ -58,4 +62,19 @@
 
 .cd-status-text--info {
   color: var(--cds-support-info);
+}
+
+:host ::ng-deep .cd-overview-grid.cds--css-grid {
+  padding-inline: 0;
+}
+
+.cd-overview-password {
+  display: block;
+
+  input {
+    border: none;
+    background: transparent;
+    max-width: 10rem;
+    padding: 0;
+  }
 }

@@ -1,3 +1,5 @@
+.. _install-clone-source:
+
 =========================================
  Cloning the Ceph Source Code Repository
 =========================================
@@ -119,9 +121,14 @@ will be on the ``main`` branch by default, which is the unstable
 development branch. You may choose other branches too.
 
 - ``main``: The unstable development branch.
-- ``stable-release-name``: The name of the stable, :ref:`active-releases`. e.g. ``Pacific``
+- ``stable-release-name``: The name of a stable branch, see `Active Releases`_. e.g. ``tentacle``
 - ``next``: The release candidate branch.
 
 ::
 
 	git checkout main
+
+
+.. Needs to be an external link because doc/releases/index.rst is not in
+   stable branches and we want to always use the main branch version
+.. _Active Releases: https://docs.ceph.com/en/latest/releases/#active-releases

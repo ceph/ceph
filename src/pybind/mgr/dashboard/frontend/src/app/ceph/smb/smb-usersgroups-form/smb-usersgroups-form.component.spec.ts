@@ -11,6 +11,7 @@ import { SmbService } from '~/app/shared/api/smb.service';
 import { USERSGROUPS_RESOURCE } from '../smb.model';
 import { of } from 'rxjs';
 import { USER } from '~/app/shared/constants/app.constants';
+import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 
 export const FOO_USERSGROUPS = {
   users_groups_id: 'foo',
@@ -40,7 +41,12 @@ describe('SmbUsersgroupsFormComponent', () => {
     await TestBed.configureTestingModule({
       imports: [SharedModule, ReactiveFormsModule],
       declarations: [SmbUsersgroupsFormComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])]
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: SMB_CONTEXT, useValue: SMB_CEPHFS_CONTEXT }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbUsersgroupsFormComponent);

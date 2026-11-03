@@ -82,6 +82,49 @@ is met, the default binding will happen on all available network interfaces.
 By default, only the NFSv4 protocol is enabled. NFSv3 can be enabled by setting
 ``enable_nfsv3`` to ``true`` in the service specification.
 
+CephFS client logging
+---------------------
+
+When an NFS export uses the CephFS backend, Ganesha acts as a libcephfs client.
+To troubleshoot CephFS client issues, cephadm can mount a host log directory into
+the Ganesha container and add a ``[client]`` section to the daemon ``ceph.conf``.
+
+This is disabled by default. To enable it, set ``enable_cephfs_client_log: true``
+in the NFS service spec.
+
+Example:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+    spec:
+      enable_cephfs_client_log: true
+
+The following optional parameters are also available:
+
+* ``cephfs_client_log_level`` (integer): libcephfs client debug level. Default is
+  ``10`` when logging is enabled.
+* ``cephfs_client_log_dir`` (string): host path to mount into the container at
+  ``/var/log/ceph``. When unset, defaults to ``/var/log/ceph/<cluster-fsid>``.
+
+Example with custom log level and directory:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+    spec:
+      enable_cephfs_client_log: true
+      cephfs_client_log_level: 20
+      cephfs_client_log_dir: /var/log/ceph/<fsid>
+
+Client log files appear under the mounted host log directory.
+
 NFS over RDMA
 -------------
 
@@ -114,6 +157,55 @@ Example with RDMA enabled:
    ``networks``) with ``enable_rdma``, ensure the network interface for that
    address is RDMA-capable. On the host, run ``rdma link show`` and confirm the
    netdev for the interface with the bind IP is listed.
+
+   If the bind IP is on a bond, the RDMA netdevs are usually the bond's member
+   devices rather than the bond itself, so cephadm checks the members instead.
+   Deployment fails if none of them are RDMA-capable, and a warning is logged
+   if only some of them are, since RDMA traffic can then fail whenever it is
+   sent over a member that is not RDMA-capable.
+
+Ceph Client Object Cache
+------------------------
+
+NFS Ganesha's Ceph FSAL supports Ceph client object caching. These settings apply
+only to **CephFS** exports (not RGW exports). Object caching is **disabled by
+default** (``enable_client_object_cache: false``); enabling it increases Ganesha
+memory use. Tune it via the NFS service specification:
+
+* ``enable_client_object_cache`` (bool, default ``false``) — enable Ceph client object caching
+* ``client_object_cache_size`` (int or size string, optional) — maximum size of the object
+  cache. Accepts an integer number of bytes, or a size string with units
+  ``KB``, ``MB``, ``GB``, ``KiB``, ``MiB``, or ``GiB`` (for example,
+  ``512KiB``, ``100MB``, ``1GiB``).
+* ``client_object_cache_max_dirty`` (int or size string, optional) — maximum dirty data in
+  the object cache (same units as above). When both size fields are set,
+  ``client_object_cache_size`` must be greater than ``client_object_cache_max_dirty``.
+
+Example with object caching enabled:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+      hosts: [host1]
+    spec:
+      port: 2049
+      enable_client_object_cache: true
+      client_object_cache_size: 1MiB
+      client_object_cache_max_dirty: 0
+
+These values are converted to bytes when written into a ``CEPH`` block in
+``ganesha.conf`` (as ``client_oc``, ``client_oc_size``, and
+``client_oc_max_dirty``) when object caching is enabled.
+
+Per-component memory-statistics capture is enabled by default. To disable it,
+set ``mem_stats_disable: true`` in the service spec. This writes
+``Mem_Stats_Disable = true;`` into the ``NFS_CORE_PARAM`` block of
+``ganesha.conf`` and triggers a full NFS daemon restart.
+
+.. _cephadm-nfs-colocation:
 
 NFS Daemon Colocation
 ----------------------
@@ -336,6 +428,8 @@ Ingress for NFS can be deployed for an existing NFS service
       monitor_port: 9000
       virtual_ip: 10.0.0.123/24
       haproxy_peer_communication_port: <integer> # optional: NFS ingress only; HAProxy peer TCP port (default 1024)
+      haproxy_log_target: <string> # optional: Default is journald. Use none to disable logging.
+      haproxy_log_level: <string> # optional: Default is info.
 
 A few notes:
 
@@ -367,6 +461,11 @@ A few notes:
     default is *1024*. Cephadm reserves this port alongside other ingress ports when
     scheduling daemons. Set a different value if *1024* is already in use or blocked.
     For RGW backends, HAProxy does not use a peers section, so this field is not applicable.
+
+  * HAProxy request logging is on by default. It is controlled by ``haproxy_log_target``
+    (``journald`` by default, ``none`` to disable) and ``haproxy_log_level`` (``info`` by
+    default). Read the logs with ``cephadm logs --name <haproxy-daemon>`` or
+    ``journalctl``. See the RGW ingress docs for the full field descriptions.
 
   * The backend service (``nfs.mynfs`` in this example) should include
     a *port* property that is not 2049 to avoid conflicting with the

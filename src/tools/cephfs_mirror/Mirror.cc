@@ -112,7 +112,7 @@ struct Mirror::C_DisableMirroring : Context {
   void disable_mirroring() {
     Context *ctx = new C_CallbackAdapter<C_DisableMirroring,
                                          &C_DisableMirroring::handle_disable_mirroring>(this);
-    mirror->disable_mirroring(filesystem, ctx);
+    mirror->disable_mirroring(filesystem, ctx, true);
   }
 
   void handle_disable_mirroring(int r) {
@@ -443,6 +443,7 @@ void Mirror::mirroring_enabled(const Filesystem &filesystem, uint64_t local_pool
 
   auto p = m_mirror_actions.emplace(filesystem, MirrorAction(local_pool_id));
   auto &mirror_action = p.first->second;
+  mirror_action.mirroring_enabled = true;
   mirror_action.action_ctxs.push_back(new C_EnableMirroring(this, filesystem, local_pool_id));
 }
 
@@ -471,7 +472,8 @@ void Mirror::handle_disable_mirroring(const Filesystem &filesystem, int r) {
   }
 }
 
-void Mirror::disable_mirroring(const Filesystem &filesystem, Context *on_finish) {
+void Mirror::disable_mirroring(const Filesystem &filesystem, Context *on_finish,
+                               bool purge_persisted_sync_stats) {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   auto &mirror_action = m_mirror_actions.at(filesystem);
@@ -485,7 +487,9 @@ void Mirror::disable_mirroring(const Filesystem &filesystem, Context *on_finish)
   }
 
   mirror_action.action_in_progress = true;
-  mirror_action.fs_mirror->shutdown(new C_AsyncCallback<ContextWQ>(m_work_queue, on_finish));
+  mirror_action.fs_mirror->shutdown(
+    new C_AsyncCallback<ContextWQ>(m_work_queue, on_finish),
+    purge_persisted_sync_stats);
 }
 
 void Mirror::mirroring_disabled(const Filesystem &filesystem) {
@@ -498,6 +502,7 @@ void Mirror::mirroring_disabled(const Filesystem &filesystem) {
   }
 
   auto &mirror_action = m_mirror_actions.at(filesystem);
+  mirror_action.mirroring_enabled = false;
   mirror_action.action_ctxs.push_back(new C_DisableMirroring(this, filesystem));
 }
 
@@ -558,9 +563,11 @@ void Mirror::update_fs_mirrors() {
   {
     std::scoped_lock locker(m_lock);
     for (auto &[filesystem, mirror_action] : m_mirror_actions) {
-      auto failed_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed() &&
+      auto failed_restart = mirror_action.mirroring_enabled && mirror_action.fs_mirror &&
+        mirror_action.fs_mirror->is_failed() &&
         (failed_interval.count() > 0 && duration_cast<seconds>(clock::now() - mirror_action.fs_mirror->get_failed_ts()).count() > failed_interval.count());
-      auto blocklisted_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted() &&
+      auto blocklisted_restart = mirror_action.mirroring_enabled && mirror_action.fs_mirror &&
+        mirror_action.fs_mirror->is_blocklisted() &&
         (blocklist_interval.count() > 0 && duration_cast<seconds>(clock::now() - mirror_action.fs_mirror->get_blocklisted_ts()).count() > blocklist_interval.count());
 
       if (!mirror_action.action_in_progress && !_is_restarting(filesystem)) {
@@ -575,7 +582,7 @@ void Mirror::update_fs_mirrors() {
       }
 
       if (!failed_restart && !blocklisted_restart && !mirror_action.action_ctxs.empty()
-          && !mirror_action.action_in_progress) {
+          && !mirror_action.action_in_progress && !_is_restarting(filesystem)) {
         auto ctx = std::move(mirror_action.action_ctxs.front());
         mirror_action.action_ctxs.pop_front();
         ctx->complete(0);

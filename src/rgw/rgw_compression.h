@@ -153,7 +153,7 @@ public:
      * Read multipart part lengths (shared logic — both DPFs need this).
      * Hard-fail on decode errors to avoid misdecrypting multipart objects.
      */
-    std::vector<size_t> decrypt_parts;
+    std::vector<uint64_t> decrypt_parts;
     std::vector<std::pair<uint32_t, std::string>> decrypt_part_keys;
     if (decrypt_crypt) {
       auto parts_iter = src_attrs.find(RGW_ATTR_CRYPT_PARTS);
@@ -305,7 +305,7 @@ public:
 
       // write empty CRYPT_PARTS sentinel for re-encrypted objects
       if (decrypt_filter) {
-        std::vector<size_t> empty_parts;
+        std::vector<uint64_t> empty_parts;
         bufferlist parts_bl;
         encode(empty_parts, parts_bl);
         attrs[RGW_ATTR_CRYPT_PARTS] = std::move(parts_bl);

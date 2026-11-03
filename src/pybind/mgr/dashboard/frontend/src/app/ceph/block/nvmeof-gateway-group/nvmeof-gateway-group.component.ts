@@ -31,7 +31,7 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group-delete-guard-modal.component';
+import { DeleteGuardModalComponent } from '~/app/shared/components/delete-guard-modal/delete-guard-modal.component';
 import { NvmeofStateService } from '../nvmeof-state.service';
 
 const BASE_URL = 'block/nvmeof/gateways';
@@ -242,10 +242,13 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
         }
 
         if (subsList.length > 0) {
-          this.modalService.show(NvmeofGatewayGroupDeleteGuardModalComponent, {
-            gatewayName: group,
-            connectedSubsystems: subsList.map((subsystem: NvmeofSubsystem) => ({
-              nqn: subsystem.nqn
+          this.modalService.show(DeleteGuardModalComponent, {
+            resourceName: group,
+            resourceType: $localize`gateway group`,
+            connectedItems: subsList.map((subsystem: NvmeofSubsystem) => ({
+              name: subsystem.nqn,
+              route: ['/block/nvmeof/subsystems', subsystem.nqn, 'overview'],
+              queryParams: { group }
             }))
           });
         } else {
@@ -261,9 +264,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
       itemDescription: $localize`gateway group`,
       bodyTemplate: this.deleteTpl,
       itemNames: [selectedGroup.spec.group],
-      bodyContext: {
-        deletionMessage: $localize`Deleting <strong>${selectedGroup.spec.group}</strong> will remove all associated subsystems and may disrupt traffic routing for services relying on it. This action cannot be undone.`
-      },
+      hasAssociatedResources: true,
       submitActionObservable: () => {
         return this.taskWrapper
           .wrapTaskAroundCall({

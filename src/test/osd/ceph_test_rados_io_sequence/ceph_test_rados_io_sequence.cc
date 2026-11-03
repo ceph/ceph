@@ -44,6 +44,7 @@ using BarrierOp = ceph::io_exerciser::BarrierOp;
 using CreateOp = ceph::io_exerciser::CreateOp;
 using RemoveOp = ceph::io_exerciser::RemoveOp;
 using SingleReadOp = ceph::io_exerciser::SingleReadOp;
+using SingleSparseReadOp = ceph::io_exerciser::SingleSparseReadOp;
 using DoubleReadOp = ceph::io_exerciser::DoubleReadOp;
 using TripleReadOp = ceph::io_exerciser::TripleReadOp;
 using SingleWriteOp = ceph::io_exerciser::SingleWriteOp;
@@ -51,6 +52,9 @@ using DoubleWriteOp = ceph::io_exerciser::DoubleWriteOp;
 using TripleWriteOp = ceph::io_exerciser::TripleWriteOp;
 using SingleAppendOp = ceph::io_exerciser::SingleAppendOp;
 using TruncateOp = ceph::io_exerciser::TruncateOp;
+using SingleTruncateWriteOp = ceph::io_exerciser::SingleTruncateWriteOp;
+using DoubleTruncateWriteOp = ceph::io_exerciser::DoubleTruncateWriteOp;
+using TripleTruncateWriteOp = ceph::io_exerciser::TripleTruncateWriteOp;
 using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
 using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
@@ -167,6 +171,7 @@ constexpr std::string_view usage[] = {
     "\t\t swap",
     "\t\t copy",
     "\t\t read <off> <len> [balanced]",
+    "\t\t sparseread <off> <len> [balanced]",
     "\t\t write|failedwrite <off> <len>",
     "\t\t read2 <off> <len> <off> <len> [balanced]",
     "\t\t write2|failedwrite2 <off> <len> <off> <len>",
@@ -1415,6 +1420,15 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       } else {
         ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length, false);
       }
+    } else if (op == "sparseread") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      std::optional<std::string> token = get_optional_token();
+      if (token.has_value() && (*token == "-b" || *token == "balanced")) {
+        ioop = ceph::io_exerciser::SingleSparseReadOp::generate(offset, length, true);
+      } else {
+        ioop = ceph::io_exerciser::SingleSparseReadOp::generate(offset, length, false);
+      }
     } else if (op == "read2") {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
@@ -1465,6 +1479,28 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       ioop = SingleAppendOp::generate(length);
     } else if (op == "truncate") {
       ioop = TruncateOp::generate(get_numeric_token());
+    } else if (op == "truncatewrite") {
+      uint64_t size = get_numeric_token();
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      ioop = SingleTruncateWriteOp::generate(size, offset, length);
+    } else if (op == "truncatewrite2") {
+      uint64_t size = get_numeric_token();
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      ioop = DoubleTruncateWriteOp::generate(size, offset1, length1, offset2, length2);
+    } else if (op == "truncatewrite3") {
+      uint64_t size = get_numeric_token();
+      uint64_t offset1 = get_numeric_token();
+      uint64_t length1 = get_numeric_token();
+      uint64_t offset2 = get_numeric_token();
+      uint64_t length2 = get_numeric_token();
+      uint64_t offset3 = get_numeric_token();
+      uint64_t length3 = get_numeric_token();
+      ioop = TripleTruncateWriteOp::generate(size, offset1, length1, offset2, length2,
+                                             offset3, length3);
     } else if (op == "failedwrite") {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
@@ -1610,6 +1646,9 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test() {
             break;
           }
         }
+      }
+      if (need_wait) {
+        cond.wait(l);
       }
       need_wait = true;
     }

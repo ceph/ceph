@@ -106,7 +106,8 @@ class CherryPyConfig(object):
             'tools.gzip.on': True,
             'tools.gzip.mime_types': [
                 'text/html', 'text/plain', 'application/json',
-                'application/*+json', 'application/javascript', 'text/css'
+                'application/*+json', 'application/javascript',
+                'text/javascript', 'text/css'
             ],
             'tools.json_in.on': True,
             'tools.json_in.force': True,
@@ -337,14 +338,14 @@ class Module(MgrModule, CherryPyConfig):
     @classmethod
     def get_frontend_path(cls):
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(current_dir, 'frontend/dist')
+        path = os.path.join(current_dir, 'frontend/dist/browser')
         if os.path.exists(path):
             return path
         else:
             path = os.path.join(current_dir,
                                 '../../../../build',
                                 'src/pybind/mgr/dashboard',
-                                'frontend/dist')
+                                'frontend/dist/browser')
             return os.path.abspath(path)
 
     def serve(self):

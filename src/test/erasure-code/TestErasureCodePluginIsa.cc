@@ -53,6 +53,31 @@ TEST(ErasureCodePlugin, factory)
   }
 }
 
+TEST(ErasureCodePlugin, factory_default_technique)
+{
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  {
+    ErasureCodeProfile profile;
+    ErasureCodeInterfaceRef erasure_code;
+    EXPECT_EQ(0, instance.factory("isa",
+				  g_conf().get_val<std::string>("erasure_code_dir"),
+				  profile,
+				  &erasure_code, &cerr));
+    ASSERT_TRUE(erasure_code.get());
+    EXPECT_EQ("reed_sol_van", erasure_code->get_profile().at("technique"));
+  }
+  {
+    ErasureCodeProfile profile;
+    profile["technique"] = "unknown";
+    ErasureCodeInterfaceRef erasure_code;
+    EXPECT_EQ(-ENOENT, instance.factory("isa",
+				        g_conf().get_val<std::string>("erasure_code_dir"),
+				        profile,
+				        &erasure_code, &cerr));
+    EXPECT_FALSE(erasure_code);
+  }
+}
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ; make -j4 &&

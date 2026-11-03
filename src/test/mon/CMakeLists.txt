@@ -17,6 +17,7 @@ add_executable(ceph_test_mon_msg
   test-mon-msg.cc
   )
 target_link_libraries(ceph_test_mon_msg os osdc global ${UNITTEST_LIBS})
+install(TARGETS ceph_test_mon_msg DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # unittest_config_map
 add_executable(unittest_config_map
@@ -38,6 +39,14 @@ add_executable(unittest_mon_monmap
   )
 add_ceph_unittest(unittest_mon_monmap)
 target_link_libraries(unittest_mon_monmap mon global)
+
+# unittest_mon_client_shutdown
+add_executable(unittest_mon_client_shutdown
+  test_mon_client_shutdown.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_mon_client_shutdown)
+target_link_libraries(unittest_mon_client_shutdown global)
 
 # unittest_mon_pgmap
 add_executable(unittest_mon_pgmap
@@ -95,3 +104,10 @@ add_executable(unittest_monmap_monitor
   )
 add_ceph_unittest(unittest_monmap_monitor)
 target_link_libraries(unittest_monmap_monitor mon global)
+
+# unittest_mon_health_monitor
+add_executable(unittest_mon_health_monitor
+  test_health_monitor.cc
+  )
+add_ceph_unittest(unittest_mon_health_monitor)
+target_link_libraries(unittest_mon_health_monitor mon global)

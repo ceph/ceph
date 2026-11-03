@@ -1,10 +1,13 @@
-
 import pytest
 from unittest.mock import patch, MagicMock
 
+from orchestrator import OrchestratorError
+
+from cephadm.services.rgw import RgwService
 from cephadm.services.service_registry import service_registry
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.module import CephadmOrchestrator
-from ceph.deployment.service_spec import RGWSpec, CertificateSource
+from ceph.deployment.service_spec import RGWSpec, CertificateSource, PlacementSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm
 from cephadm.tlsobject_types import TLSCredentials
 
@@ -14,6 +17,8 @@ cephadm_root_ca = """-----BEGIN CERTIFICATE-----\nMIIE7DCCAtSgAwIBAgIUE8b2zZ64ge
 ceph_generated_cert = """-----BEGIN CERTIFICATE-----\nMIICxjCCAa4CEQDIZSujNBlKaLJzmvntjukjMA0GCSqGSIb3DQEBDQUAMCExDTAL\nBgNVBAoMBENlcGgxEDAOBgNVBAMMB2NlcGhhZG0wHhcNMjIwNzEzMTE0NzA3WhcN\nMzIwNzEwMTE0NzA3WjAhMQ0wCwYDVQQKDARDZXBoMRAwDgYDVQQDDAdjZXBoYWRt\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyyMe4DMA+MeYK7BHZMHB\nq7zjliEOcNgxomjU8qbf5USF7Mqrf6+/87XWqj4pCyAW8x0WXEr6A56a+cmBVmt+\nqtWDzl020aoId6lL5EgLLn6/kMDCCJLq++Lg9cEofMSvcZh+lY2f+1p+C+00xent\nrLXvXGOilAZWaQfojT2BpRnNWWIFbpFwlcKrlg2G0cFjV5c1m6a0wpsQ9JHOieq0\nSvwCixajwq3CwAYuuiU1wjI4oJO4Io1+g8yB3nH2Mo/25SApCxMXuXh4kHLQr/T4\n4hqisvG4uJYgKMcSIrWj5o25mclByGi1UI/kZkCUES94i7Z/3ihx4Bad0AMs/9tw\nFwIDAQABMA0GCSqGSIb3DQEBDQUAA4IBAQAf+pwz7Gd7mDwU2LY0TQXsK6/8KGzh\nHuX+ErOb8h5cOAbvCnHjyJFWf6gCITG98k9nxU9NToG0WYuNm/max1y/54f0dtxZ\npUo6KSNl3w6iYCfGOeUIj8isi06xMmeTgMNzv8DYhDt+P2igN6LenqWTVztogkiV\nxQ5ZJFFLEw4sN0CXnrZX3t5ruakxLXLTLKeE0I91YJvjClSBGkVJq26wOKQNHMhx\npWxeydQ5EgPZY+Aviz5Dnxe8aB7oSSovpXByzxURSabOuCK21awW5WJCGNpmqhWK\nZzACBDEstccj57c4OGV0eayHJRsluVr2e9NHRINZA3qdB37e6gsI1xHo\n-----END CERTIFICATE-----\n"""
 
 ceph_generated_key = """-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDLIx7gMwD4x5gr\nsEdkwcGrvOOWIQ5w2DGiaNTypt/lRIXsyqt/r7/ztdaqPikLIBbzHRZcSvoDnpr5\nyYFWa36q1YPOXTbRqgh3qUvkSAsufr+QwMIIkur74uD1wSh8xK9xmH6VjZ/7Wn4L\n7TTF6e2ste9cY6KUBlZpB+iNPYGlGc1ZYgVukXCVwquWDYbRwWNXlzWbprTCmxD0\nkc6J6rRK/AKLFqPCrcLABi66JTXCMjigk7gijX6DzIHecfYyj/blICkLExe5eHiQ\nctCv9PjiGqKy8bi4liAoxxIitaPmjbmZyUHIaLVQj+RmQJQRL3iLtn/eKHHgFp3Q\nAyz/23AXAgMBAAECggEAVoTB3Mm8azlPlaQB9GcV3tiXslSn+uYJ1duCf0sV52dV\nBzKW8s5fGiTjpiTNhGCJhchowqxoaew+o47wmGc2TvqbpeRLuecKrjScD0GkCYyQ\neM2wlshEbz4FhIZdgS6gbuh9WaM1dW/oaZoBNR5aTYo7xYTmNNeyLA/jO2zr7+4W\n5yES1lMSBXpKk7bDGKYY4bsX2b5RLr2Grh2u2bp7hoLABCEvuu8tSQdWXLEXWpXo\njwmV3hc6tabypIa0mj2Dmn2Dmt1ppSO0AZWG/WAizN3f4Z0r/u9HnbVrVmh0IEDw\n3uf2LP5o3msG9qKCbzv3lMgt9mMr70HOKnJ8ohMSKQKBgQDLkNb+0nr152HU9AeJ\nvdz8BeMxcwxCG77iwZphZ1HprmYKvvXgedqWtS6FRU+nV6UuQoPUbQxJBQzrN1Qv\nwKSlOAPCrTJgNgF/RbfxZTrIgCPuK2KM8I89VZv92TSGi362oQA4MazXC8RAWjoJ\nSu1/PHzK3aXOfVNSLrOWvIYeZQKBgQD/dgT6RUXKg0UhmXj7ExevV+c7oOJTDlMl\nvLngrmbjRgPO9VxLnZQGdyaBJeRngU/UXfNgajT/MU8B5fSKInnTMawv/tW7634B\nw3v6n5kNIMIjJmENRsXBVMllDTkT9S7ApV+VoGnXRccbTiDapBThSGd0wri/CuwK\nNWK1YFOeywKBgEDyI/XG114PBUJ43NLQVWm+wx5qszWAPqV/2S5MVXD1qC6zgCSv\nG9NLWN1CIMimCNg6dm7Wn73IM7fzvhNCJgVkWqbItTLG6DFf3/DPODLx1wTMqLOI\nqFqMLqmNm9l1Nec0dKp5BsjRQzq4zp1aX21hsfrTPmwjxeqJZdioqy2VAoGAXR5X\nCCdSHlSlUW8RE2xNOOQw7KJjfWT+WAYoN0c7R+MQplL31rRU7dpm1bLLRBN11vJ8\nMYvlT5RYuVdqQSP6BkrX+hLJNBvOLbRlL+EXOBrVyVxHCkDe+u7+DnC4epbn+N8P\nLYpwqkDMKB7diPVAizIKTBxinXjMu5fkKDs5n+sCgYBbZheYKk5M0sIxiDfZuXGB\nkf4mJdEkTI1KUGRdCwO/O7hXbroGoUVJTwqBLi1tKqLLarwCITje2T200BYOzj82\nqwRkCXGtXPKnxYEEUOiFx9OeDrzsZV00cxsEnX0Zdj+PucQ/J3Cvd0dWUspJfLHJ\n39gnaegswnz9KMQAvzKFdg==\n-----END PRIVATE KEY-----\n"""
+
+RGW_FRONTEND_ENCRYPTED_KEY = """-----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIB\n-----END ENCRYPTED PRIVATE KEY-----\n"""
 
 
 class TestRGWService:
@@ -52,6 +57,181 @@ class TestRGWService:
                 assert f == expected
 
     @pytest.mark.parametrize(
+        "frontend, extra_args, expected",
+        [
+            ('beast', None,
+             'beast ssl_port=443 port=8080 ssl_certificate=config://rgw/cert/rgw.foo'),
+            # an ssl_port in extra args must not be mistaken for the secondary port
+            ('beast', ['ssl_port=8443'],
+             'beast ssl_port=443 port=8080 ssl_certificate=config://rgw/cert/rgw.foo ssl_port=8443'),
+            ('beast', ['tcp_nodelay=1', 'port=8081'],
+             'beast ssl_port=443 port=8080 ssl_certificate=config://rgw/cert/rgw.foo tcp_nodelay=1 port=8081'),
+            ('civetweb', None,
+             'civetweb port=443s+8080 ssl_certificate=config://rgw/cert/rgw.foo'),
+        ]
+    )
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_http_port_frontend(self, frontend, extra_args, expected,
+                                    cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'host1'):
+            extra = list(extra_args) if extra_args else None
+            s = RGWSpec(service_id="foo",
+                        ssl=True,
+                        rgw_frontend_type=frontend,
+                        rgw_frontend_port=443,
+                        rgw_frontend_http_port=8080,
+                        rgw_frontend_extra_args=extra)
+            with with_service(cephadm_module, s) as dds:
+                _, f, _ = cephadm_module.check_mon_command({
+                    'prefix': 'config get',
+                    'who': f'client.{dds[0]}',
+                    'key': 'rgw_frontends',
+                })
+                assert f == expected
+                # the spec's extra args are never rewritten
+                assert s.rgw_frontend_extra_args == extra
+
+    @pytest.mark.parametrize(
+        "frontend, extra_args, expected",
+        [
+            ('beast', ['tcp_nodelay=1', 'max_header_size=65536', 'ssl_port=8443'],
+             'beast ssl_port=443 ssl_certificate=config://rgw/cert/rgw.foo '
+             'tcp_nodelay=1 max_header_size=65536 ssl_port=8443'),
+        ]
+    )
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_extra_ssl_port_keeps_default_primary_port(
+            self, frontend, extra_args, expected, cephadm_module: CephadmOrchestrator):
+        # without rgw_frontend_port, SSL keeps listening on the default 443
+        # and an "ssl_port=" extra argument is an additional port
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(service_id="foo",
+                        ssl=True,
+                        rgw_frontend_type=frontend,
+                        rgw_frontend_extra_args=list(extra_args))
+            with with_service(cephadm_module, s) as dds:
+                _, f, _ = cephadm_module.check_mon_command({
+                    'prefix': 'config get',
+                    'who': f'client.{dds[0]}',
+                    'key': 'rgw_frontends',
+                })
+                assert f == expected
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_http_port_ips_with_explicit_ip(self, cephadm_module: CephadmOrchestrator):
+        ip = '1.2.3.4'
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(
+                service_id='foo',
+                placement=PlacementSpec(hosts=['host1']),
+                ssl=True,
+                rgw_frontend_type='beast',
+                rgw_frontend_port=443,
+                rgw_frontend_http_port=8080,
+            )
+            with with_service(cephadm_module, s) as _:
+                daemon_spec = service_registry.get_service('rgw').prepare_create(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_type='rgw',
+                        daemon_id='foo.host1.0',
+                        service_name=s.service_name(),
+                        ports=[443, 8080],
+                        ip=ip,
+                    )))
+                assert daemon_spec.port_ips == {'443': ip, '8080': ip}
+
+    @pytest.mark.parametrize(
+        "stored_ports, expected_ports, expected_frontend",
+        [
+            # deployed before the HTTP port existed: ssl_port=8443 sits at index 1
+            ([443, 8443], [443, 8080, 8443],
+             'beast ssl_port=443 port=8080 ssl_certificate=config://rgw/cert/rgw.foo '
+             'ssl_port=8443'),
+            # only the primary port was stored
+            ([443], [443, 8080],
+             'beast ssl_port=443 port=8080 ssl_certificate=config://rgw/cert/rgw.foo '
+             'ssl_port=8443'),
+            # second daemon on the host (count_per_host): same offset for every port
+            ([444, 8444], [444, 8081, 8444],
+             'beast ssl_port=444 port=8081 ssl_certificate=config://rgw/cert/rgw.foo '
+             'ssl_port=8443'),
+            # already deployed with the HTTP port: nothing changes
+            ([443, 8080, 8443], [443, 8080, 8443],
+             'beast ssl_port=443 port=8080 ssl_certificate=config://rgw/cert/rgw.foo '
+             'ssl_port=8443'),
+        ]
+    )
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_http_port_added_to_a_running_service(
+            self, stored_ports, expected_ports, expected_frontend,
+            cephadm_module: CephadmOrchestrator):
+        # The service was running with ssl: true and ssl_port=8443 in the
+        # extra args; rgw_frontend_http_port: 8080 is added to the spec. The
+        # stored ports must not make 8443 the HTTP port.
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(
+                service_id='foo',
+                placement=PlacementSpec(hosts=['host1']),
+                ssl=True,
+                rgw_frontend_type='beast',
+                rgw_frontend_port=443,
+                rgw_frontend_http_port=8080,
+                rgw_frontend_extra_args=['ssl_port=8443'],
+            )
+            with with_service(cephadm_module, s) as _:
+                daemon_spec = service_registry.get_service('rgw').prepare_create(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_type='rgw',
+                        daemon_id='foo.host1.0',
+                        service_name=s.service_name(),
+                        ports=list(stored_ports),
+                    )))
+                assert daemon_spec.ports == expected_ports
+                assert len(set(daemon_spec.ports)) == len(daemon_spec.ports)
+                _, f, _ = cephadm_module.check_mon_command({
+                    'prefix': 'config get',
+                    'who': f'client.{daemon_spec.name()}',
+                    'key': 'rgw_frontends',
+                })
+                assert f == expected_frontend
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_port_ips_with_explicit_ip(self, cephadm_module: CephadmOrchestrator):
+        """Explicit placement IP must populate port_ips for the host-side precheck.
+
+        Without this, fetch_endpoints() defaults to 0.0.0.0 and port_in_use()
+        falsely conflicts with unrelated listeners on other addresses.
+        """
+        ip = '1.2.3.4'
+        port = 7480
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(
+                service_id='foo',
+                placement=PlacementSpec(hosts=['host1']),
+                rgw_frontend_type='beast',
+                rgw_frontend_port=port,
+            )
+            with with_service(cephadm_module, s) as _:
+                daemon_spec = service_registry.get_service('rgw').prepare_create(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_type='rgw',
+                        daemon_id='foo.host1.0',
+                        service_name=s.service_name(),
+                        ports=[port],
+                        ip=ip,
+                    )))
+                assert daemon_spec.port_ips == {str(port): ip}
+                _, f, _ = cephadm_module.check_mon_command({
+                    'prefix': 'config get',
+                    'who': f'client.{daemon_spec.name()}',
+                    'key': 'rgw_frontends',
+                })
+                assert f == f'beast endpoint={ip}:{port}'
+
+    @pytest.mark.parametrize(
         "disable_sync_traffic",
         [
             (True),
@@ -70,6 +250,158 @@ class TestRGWService:
                     'key': 'rgw_run_sync_thread',
                 })
                 assert f == ('false' if disable_sync_traffic else 'true')
+
+    @pytest.mark.parametrize(
+        "legacy_pem",
+        [
+            ceph_generated_key + ceph_generated_cert + cephadm_root_ca,
+            [ceph_generated_key, ceph_generated_cert, cephadm_root_ca],
+        ],
+    )
+    def test_check_and_migrate_legacy_rgw_frontend_ssl_field_migrates_valid_pem(
+            self, legacy_pem, cephadm_module: CephadmOrchestrator):
+        spec = RGWSpec(
+            service_id='foo',
+            ssl=True,
+            rgw_frontend_type='beast',
+            rgw_frontend_ssl_certificate=legacy_pem,
+        )
+
+        cephadm_module._check_and_migrate_legacy_rgw_frontend_ssl_field(spec)
+
+        assert spec.rgw_frontend_ssl_certificate is None
+        assert spec.certificate_source == CertificateSource.INLINE.value
+        assert spec.ssl_key == ceph_generated_key
+        assert spec.ssl_cert is not None
+        assert ceph_generated_cert.strip() in spec.ssl_cert
+        assert cephadm_root_ca.strip() in spec.ssl_cert
+
+    @pytest.mark.parametrize(
+        "legacy_pem, expected_error",
+        [
+            (
+                ceph_generated_cert + cephadm_root_ca,
+                'certificate chain without the private key',
+            ),
+            (
+                RGW_FRONTEND_ENCRYPTED_KEY + ceph_generated_cert,
+                'Failed to parse rgw_frontend_ssl_certificate field',
+            ),
+        ],
+    )
+    def test_check_and_migrate_legacy_rgw_frontend_ssl_field_rejects_invalid_pem(
+            self, legacy_pem, expected_error, cephadm_module: CephadmOrchestrator):
+        spec = RGWSpec(
+            service_id='foo',
+            ssl=True,
+            rgw_frontend_type='beast',
+            rgw_frontend_ssl_certificate=legacy_pem,
+        )
+
+        with pytest.raises(OrchestratorError, match=expected_error):
+            cephadm_module._check_and_migrate_legacy_rgw_frontend_ssl_field(spec)
+
+        assert spec.rgw_frontend_ssl_certificate == legacy_pem
+        assert spec.ssl_cert is None
+        assert spec.ssl_key is None
+
+    def test_check_and_migrate_legacy_rgw_frontend_ssl_field_ignores_disabled_ssl(
+            self, cephadm_module: CephadmOrchestrator):
+        legacy_pem = RGW_FRONTEND_ENCRYPTED_KEY + ceph_generated_cert
+
+        spec = RGWSpec(
+            service_id='foo',
+            ssl=False,
+            rgw_frontend_type='beast',
+            rgw_frontend_ssl_certificate=legacy_pem,
+        )
+
+        cephadm_module._check_and_migrate_legacy_rgw_frontend_ssl_field(spec)
+
+        assert spec.rgw_frontend_ssl_certificate == legacy_pem
+        assert spec.ssl_cert is None
+        assert spec.ssl_key is None
+
+    def test_check_and_migrate_legacy_rgw_frontend_ssl_field_ignores_when_ssl_cert_is_set(
+            self, cephadm_module: CephadmOrchestrator):
+        legacy_pem = RGW_FRONTEND_ENCRYPTED_KEY + ceph_generated_cert
+
+        spec = RGWSpec(
+            service_id='foo',
+            ssl=True,
+            ssl_cert=ceph_generated_cert,
+            ssl_key=ceph_generated_key,
+            rgw_frontend_type='beast',
+            rgw_frontend_ssl_certificate=legacy_pem,
+        )
+
+        cephadm_module._check_and_migrate_legacy_rgw_frontend_ssl_field(spec)
+
+        assert spec.rgw_frontend_ssl_certificate == legacy_pem
+        assert spec.ssl_cert == ceph_generated_cert
+        assert spec.ssl_key == ceph_generated_key
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_apply_service_spec_migrates_legacy_rgw_frontend_ssl_before_save(
+            self, cephadm_module: CephadmOrchestrator):
+        legacy_pem = ceph_generated_key + ceph_generated_cert + cephadm_root_ca
+
+        spec = RGWSpec(
+            service_id='foo',
+            ssl=True,
+            placement=PlacementSpec(count=1),
+            rgw_frontend_type='beast',
+            rgw_frontend_ssl_certificate=legacy_pem,
+        )
+
+        cephadm_module.max_count_per_host = 10
+
+        with with_host(cephadm_module, 'host1'):
+            with patch.object(cephadm_module, '_check_cert_source',
+                              return_value='') as check_cert_source_mock, \
+                 patch.object(cephadm_module.spec_store, 'save') as save_mock, \
+                 patch.object(cephadm_module, '_kick_serve_loop') as kick_mock, \
+                 patch('cephadm.module.HostAssignment') as host_assignment_mock:
+                host_assignment_mock.return_value.validate.return_value = None
+
+                result = cephadm_module._apply_service_spec(spec)
+
+        check_cert_source_mock.assert_called_once_with(spec)
+        save_mock.assert_called_once_with(spec)
+        kick_mock.assert_called_once()
+
+        assert result.startswith('Scheduled rgw.foo update')
+        assert spec.rgw_frontend_ssl_certificate is None
+        assert spec.certificate_source == CertificateSource.INLINE.value
+        assert spec.ssl_key == ceph_generated_key
+        assert spec.ssl_cert is not None
+        assert ceph_generated_cert.strip() in spec.ssl_cert
+        assert cephadm_root_ca.strip() in spec.ssl_cert
+
+    def test_apply_service_spec_rejects_bad_legacy_rgw_frontend_ssl_before_save(
+            self, cephadm_module: CephadmOrchestrator):
+        legacy_pem = ceph_generated_cert + cephadm_root_ca
+
+        spec = RGWSpec(
+            service_id='foo',
+            ssl=True,
+            placement=PlacementSpec(count=1),
+            rgw_frontend_type='beast',
+            rgw_frontend_ssl_certificate=legacy_pem,
+        )
+
+        with patch.object(cephadm_module, '_check_cert_source') as check_cert_source_mock, \
+             patch.object(cephadm_module.spec_store, 'save') as save_mock:
+            with pytest.raises(OrchestratorError,
+                               match='certificate chain without the private key'):
+                cephadm_module._apply_service_spec(spec)
+
+        check_cert_source_mock.assert_not_called()
+        save_mock.assert_not_called()
+
+        assert spec.rgw_frontend_ssl_certificate == legacy_pem
+        assert spec.ssl_cert is None
+        assert spec.ssl_key is None
 
     def _make_rgw_post_remove_fixtures(self, cephadm_module, host='host1', ssl=True, certificate_source='inline'):
         """
@@ -102,6 +434,25 @@ class TestRGWService:
         mock_spec_store.__getitem__ = MagicMock(return_value=mock_entry)
 
         return cm, svc_name, spec, daemon, mock_spec_store
+
+    @patch("cephadm.services.cephadmservice.CephadmService.get_keyring_with_caps")
+    def test_rgw_keyring_caps(self, get_keyring_with_caps, cephadm_module: CephadmOrchestrator):
+        get_keyring_with_caps.return_value = ''
+        rgw_svc = service_registry.get_service('rgw')
+
+        rgw_svc.get_keyring('foo.bar')
+        assert get_keyring_with_caps.call_args[0][1] == ['mon', 'profile rgw',
+                                                         'mgr', 'profile rgw',
+                                                         'osd', 'profile rgw']
+
+        cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+            'osds': [],
+            'require_osd_release': 'tentacle',
+        })
+        rgw_svc.get_keyring('foo.bar')
+        assert get_keyring_with_caps.call_args[0][1] == ['mon', 'allow *',
+                                                         'mgr', 'allow rw',
+                                                         'osd', 'allow rwx tag rgw *=*']
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_post_remove_no_op_when_requires_certificates_is_false(
@@ -532,3 +883,217 @@ class TestRGWService:
                         assert kwargs == {
                             'custom_sans': ['s3.example.com', '*.s3.example.com'],
                         }
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_count_per_host_two_daemons_one_uses_defined_ports_other_has_different_ports(
+            self, cephadm_module: CephadmOrchestrator):
+        """
+        Create an RGW service with count_per_host = 2 and explicit
+        rgw_frontend_port / rgw_frontend_http_port. Assert one daemon
+        exposes the configured ports and the other daemon uses distinct ports.
+        """
+        # explicit ports we want the "primary" daemon to use
+        primary_port = 443
+        http_port = 8080
+
+        spec = RGWSpec(
+            service_id="default",
+            placement=PlacementSpec(count_per_host=2, hosts=['host1']),
+            rgw_frontend_type='beast',
+            rgw_frontend_port=primary_port,
+            rgw_frontend_http_port=http_port,
+            ssl=True,
+        )
+
+        with with_host(cephadm_module, 'host1'):
+            with with_service(cephadm_module, spec) as deployed_daemons:
+                # fetch the actual daemon descriptions (they contain ports)
+                dds = cephadm_module.cache.get_daemons_by_service(spec.service_name())
+                # Sanity check: two daemons expected
+                assert len(deployed_daemons) == 2, f"expected 2 daemons, got: {deployed_daemons!r}"
+
+                # convert to sets of ports (defensive for None)
+                daemon_ports = [set(dd.ports or []) for dd in dds]
+
+                # Ensure at least one daemon advertises the configured primary ports
+                found_primary = any({primary_port, http_port}.issubset(p) for p in daemon_ports)
+                assert found_primary, (
+                    f"None of the deployed daemons advertise both configured ports "
+                    f"{primary_port},{http_port}. extracted: {daemon_ports}"
+                )
+
+                # Identify which daemon has the primary ports
+                primary_idx = next(i for i, p in enumerate(daemon_ports)
+                                   if {primary_port, http_port}.issubset(p))
+                other_idx = 1 - primary_idx
+
+                # Ensure the other daemon does not reuse those ports
+                assert ({primary_port, http_port} & daemon_ports[other_idx]) == set(), (
+                    f"Port collision: other daemon shares primary ports: "
+                    f"{daemon_ports[other_idx]} & {{{primary_port},{http_port}}}"
+                )
+
+                # Ensure the two daemons don't share any port at all
+                assert daemon_ports[0].isdisjoint(daemon_ports[1]), (
+                    f"Daemons share ports (collision): {daemon_ports[0] & daemon_ports[1]}"
+
+                )
+
+
+def test_rgw_dependencies_include_legacy_frontend_certificate_hash():
+    from cephadm import utils
+    from cephadm.services.rgw import RgwService
+
+    spec = RGWSpec(
+        service_id='foo',
+        rgw_frontend_ssl_certificate=['CERT', 'CHAIN'],
+    )
+
+    cert = "CERT\nCHAIN"
+
+    deps = RgwService.get_dependencies(MagicMock(), spec, 'rgw')
+    assert any(d.startswith('ssl-cert:') for d in deps)
+    assert f'ssl-cert:{utils.config_hash(cert)}' in deps
+
+
+def test_rgw_deps_change_on_frontend_extra_args():
+    spec_no_reuse = RGWSpec(service_id="foo", rgw_frontend_port=8300)
+    spec_with_reuse = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                              rgw_frontend_extra_args=['so_reuseport=1'])
+
+    deps_before = RgwService.get_dependencies(MagicMock(), spec_no_reuse)
+    deps_after = RgwService.get_dependencies(MagicMock(), spec_with_reuse)
+    assert deps_before != deps_after
+
+
+def test_rgw_deps_change_on_frontend_type():
+    spec_beast = RGWSpec(service_id="foo", rgw_frontend_type='beast')
+    spec_civetweb = RGWSpec(service_id="foo", rgw_frontend_type='civetweb')
+
+    deps_beast = RgwService.get_dependencies(MagicMock(), spec_beast)
+    deps_civetweb = RgwService.get_dependencies(MagicMock(), spec_civetweb)
+    assert deps_beast != deps_civetweb
+
+
+def test_rgw_deps_stable_when_frontend_unchanged():
+    spec = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                   rgw_frontend_extra_args=['so_reuseport=1'])
+
+    deps1 = RgwService.get_dependencies(MagicMock(), spec)
+    deps2 = RgwService.get_dependencies(MagicMock(), spec)
+    assert deps1 == deps2
+
+
+def test_rgw_deps_stable_with_reordered_extra_args():
+    spec_a = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                     rgw_frontend_extra_args=['so_reuseport=1', 'tcp_nodelay=1'])
+    spec_b = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                     rgw_frontend_extra_args=['tcp_nodelay=1', 'so_reuseport=1'])
+
+    deps_a = RgwService.get_dependencies(MagicMock(), spec_a)
+    deps_b = RgwService.get_dependencies(MagicMock(), spec_b)
+    assert deps_a == deps_b
+
+
+def test_rgw_deps_unchanged_without_http_port():
+    # the frontend dep of services that do not use the new field must not move
+    spec = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                   rgw_frontend_extra_args=['port=8080+8443s'])
+    assert not any('http_port' in d for d in RgwService.get_dependencies(MagicMock(), spec))
+
+
+def test_rgw_deps_change_with_http_port():
+    base = dict(service_id="foo", ssl=True, rgw_frontend_port=443)
+    deps_a = RgwService.get_dependencies(MagicMock(), RGWSpec(**base))
+    deps_b = RgwService.get_dependencies(
+        MagicMock(), RGWSpec(rgw_frontend_http_port=8080, **base))
+    assert deps_a != deps_b
+
+
+@pytest.mark.parametrize("frontend, expected", [
+    ('beast port=8080', {8080}),
+    ('beast ssl_port=443 port=8080 ssl_certificate=config://x', {443, 8080}),
+    ('beast ssl_endpoint=10.0.0.1:443 endpoint=10.0.0.1:8080 tcp_nodelay=1 '
+     'port=192.168.104.100:8081 ssl_port=192.168.104.100:444', {443, 8080, 8081, 444}),
+    ('beast port=[fd00::1]:8081 ssl_port=[fd00::1]:444', {8081, 444}),
+    ('civetweb port=8080+8443s', {8080}),
+])
+def test_rgw_extract_ports_from_frontend(frontend, expected):
+    assert RgwService._extract_ports_from_frontend(MagicMock(), frontend) == expected
+
+
+def test_rgw_get_daemon_ports():
+    mgr = MagicMock()
+    mgr.check_mon_command.return_value = (
+        0, 'beast ssl_port=443 port=445 ssl_port=192.168.100.100:444 port=8081 ', '')
+    assert RgwService(mgr).get_daemon_ports('rgw.foo.host1.abc') == {443, 444, 445, 8081}
+    mgr.check_mon_command.assert_called_once_with({
+        'prefix': 'config get',
+        'who': 'client.rgw.foo.host1.abc',
+        'name': 'rgw_frontends',
+    })
+
+
+@pytest.mark.parametrize("result", [(0, '', ''), (1, 'beast port=8080', 'ENOENT')])
+def test_rgw_get_daemon_ports_without_usable_config(result):
+    mgr = MagicMock()
+    mgr.check_mon_command.return_value = result
+    assert RgwService(mgr).get_daemon_ports('rgw.foo.host1.abc') == set()
+
+
+def test_rgw_get_daemon_ports_never_raises():
+    mgr = MagicMock()
+    mgr.check_mon_command.side_effect = Exception('boom')
+    assert RgwService(mgr).get_daemon_ports('rgw.foo.host1.abc') == set()
+
+
+def test_rgw_get_active_ports_is_the_union_of_the_daemon_ports():
+    mgr = MagicMock()
+    d1, d2 = MagicMock(), MagicMock()
+    d1.name.return_value = 'rgw.foo.host1.a'
+    d2.name.return_value = 'rgw.foo.host2.b'
+    mgr.cache.get_daemons_by_service.return_value = [d1, d2]
+    frontends = {
+        'client.rgw.foo.host1.a': 'beast ssl_port=443 port=445 port=8081',
+        'client.rgw.foo.host2.b': 'beast ssl_port=443 port=445 port=8082',
+    }
+    mgr.check_mon_command.side_effect = lambda cmd: (0, frontends[cmd['who']], '')
+    assert RgwService(mgr).get_active_ports('rgw.foo') == [443, 445, 8081, 8082]
+
+
+class TestRGWListDaemonsPorts:
+    @staticmethod
+    def _deployed_ports(cephadm_module: CephadmOrchestrator):
+        # ports cephadm itself deployed, straight from the cache
+        return {d.name(): list(d.ports or [])
+                for d in cephadm_module.cache.get_daemons_by_service('rgw.foo')}
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_orch_ps_shows_the_ports_of_orch_ls(self, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(service_id="foo", ssl=True, rgw_frontend_port=443)
+            with with_service(cephadm_module, s):
+                deployed = self._deployed_ports(cephadm_module)
+                assert deployed
+                ports = {443, 444, 8081}
+                with patch.object(RgwService, 'get_daemon_ports', return_value=ports):
+                    daemons = cephadm_module.list_daemons(daemon_type='rgw').result
+                assert sorted(d.name() for d in daemons) == sorted(deployed)
+                for d in daemons:
+                    assert d.ports == sorted(set(deployed[d.name()]) | ports)
+                    assert {443, 444, 8081} <= set(d.ports)
+                    assert d.get_port_summary().endswith(',8081')
+                # the cache is not altered by what `ceph orch ps` shows
+                assert self._deployed_ports(cephadm_module) == deployed
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_orch_ps_keeps_the_deployed_ports_without_frontend_config(
+            self, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(service_id="foo", ssl=True, rgw_frontend_port=443)
+            with with_service(cephadm_module, s):
+                deployed = self._deployed_ports(cephadm_module)
+                assert deployed
+                with patch.object(RgwService, 'get_daemon_ports', return_value=set()):
+                    daemons = cephadm_module.list_daemons(daemon_type='rgw').result
+                assert {d.name(): d.ports for d in daemons} == deployed

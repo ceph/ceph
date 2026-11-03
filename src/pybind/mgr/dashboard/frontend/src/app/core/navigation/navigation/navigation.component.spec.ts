@@ -252,6 +252,7 @@ describe('NavigationComponent', () => {
         '.tc_submenuitem_rgw_multi-site': 'Multi-site',
         '.tc_submenuitem_rgw_daemons': 'Gateways',
         '.tc_submenuitem_rgw_nfs': 'NFS',
+        '.tc_submenuitem_rgw_smb': 'SMB',
         '.tc_submenuitem_rgw_configuration': 'Configuration',
         '.tc_submenuitem_file_cephfs': 'File systems',
         '.tc_submenuitem_file_nfs': 'NFS'
@@ -262,6 +263,33 @@ describe('NavigationComponent', () => {
         expect(element).toBeTruthy();
         expect(element.nativeElement.textContent.trim()).toBe(expectedText);
       }
+    });
+  });
+
+  describe('Administration settings icon wrapper', () => {
+    it('should hide the wrapper for a read-only user (no write user perms, no configOpt.read)', () => {
+      component.permissions = everythingPermittedExcept(['user', 'configOpt']);
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('.tc_administration'))).toBeFalsy();
+    });
+
+    it('should show the wrapper when user has write permission', () => {
+      const permissions: Permissions = new Permissions({});
+      Object.keys(permissions).forEach((key) => (permissions[key] = new Permission(['read'])));
+      permissions.user = new Permission(['read', 'create']);
+      component.permissions = permissions;
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('.tc_administration'))).toBeTruthy();
+    });
+
+    it('should show the wrapper when configOpt is readable', () => {
+      const permissions: Permissions = new Permissions({});
+      Object.keys(permissions).forEach((key) => (permissions[key] = new Permission(['read'])));
+      permissions.user = new Permission(['read']);
+      permissions.configOpt = new Permission(['read']);
+      component.permissions = permissions;
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('.tc_administration'))).toBeTruthy();
     });
   });
 });

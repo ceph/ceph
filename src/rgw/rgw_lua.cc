@@ -8,6 +8,7 @@
 #include "rgw_lua.h"
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 #include <filesystem>
+#include <boost/system/error_code.hpp>
 #include <boost/process/v1/child.hpp>
 #include <boost/process/v1/env.hpp>
 #include <boost/process/v1/environment.hpp>

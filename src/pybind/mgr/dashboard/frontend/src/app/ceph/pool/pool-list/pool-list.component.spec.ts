@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import { RbdConfigurationListComponent } from '~/app/ceph/block/rbd-configuration-list/rbd-configuration-list.component';
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
@@ -22,8 +22,7 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, Mocks } from '~/testing/unit-test-helper';
-import { Pool } from '../pool';
-import { PoolDetailsComponent } from '../pool-details/pool-details.component';
+import { Pool, transformPgStatus } from '../pool';
 import { PoolListComponent } from './pool-list.component';
 
 describe('PoolListComponent', () => {
@@ -45,7 +44,7 @@ describe('PoolListComponent', () => {
   };
 
   configureTestBed({
-    declarations: [PoolListComponent, PoolDetailsComponent, RbdConfigurationListComponent],
+    declarations: [PoolListComponent, RbdConfigurationListComponent],
     imports: [
       BrowserAnimationsModule,
       SharedModule,
@@ -105,7 +104,7 @@ describe('PoolListComponent', () => {
       spyOn(configurationService, 'get').and.returnValue(of(configOption));
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
-      expect(component.monAllowPoolDelete).toBe(true);
+      expect(component.monAllowPoolDelete$.value).toBe(true);
     });
 
     it('should set value correctly if mon_allow_pool_delete flag is set to false', () => {
@@ -121,7 +120,7 @@ describe('PoolListComponent', () => {
       spyOn(configurationService, 'get').and.returnValue(of(configOption));
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
-      expect(component.monAllowPoolDelete).toBe(false);
+      expect(component.monAllowPoolDelete$.value).toBe(false);
     });
 
     it('should set value correctly if mon_allow_pool_delete flag is not set', () => {
@@ -131,14 +130,14 @@ describe('PoolListComponent', () => {
       spyOn(configurationService, 'get').and.returnValue(of(configOption));
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
-      expect(component.monAllowPoolDelete).toBe(false);
+      expect(component.monAllowPoolDelete$.value).toBe(false);
     });
 
-    it('should set value correctly w/o config-opt read privileges', () => {
+    it('should set value to false w/o config-opt read privileges', () => {
       configOptRead = false;
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
-      expect(component.monAllowPoolDelete).toBe(true);
+      expect(component.monAllowPoolDelete$.value).toBe(false);
     });
   });
 
@@ -282,26 +281,6 @@ describe('PoolListComponent', () => {
     });
   });
 
-  describe('custom row comparators', () => {
-    const expectCorrectComparator = (statsAttribute: string) => {
-      const mockPool = (v: number) => ({ stats: { [statsAttribute]: { latest: v } } });
-      const columnDefinition = _.find(
-        component.columns,
-        (column) => column.prop === `stats.${statsAttribute}.rates`
-      );
-      expect(columnDefinition.comparator(undefined, undefined, mockPool(2), mockPool(1))).toBe(1);
-      expect(columnDefinition.comparator(undefined, undefined, mockPool(1), mockPool(2))).toBe(-1);
-    };
-
-    it('compares read bytes correctly', () => {
-      expectCorrectComparator('rd_bytes');
-    });
-
-    it('compares write bytes correctly', () => {
-      expectCorrectComparator('wr_bytes');
-    });
-  });
-
   describe('transformPoolsData', () => {
     let pool: Pool;
 
@@ -436,28 +415,28 @@ describe('PoolListComponent', () => {
       const pgStatus = { 'active+clean': 8 };
       const expected = '8 active+clean';
 
-      expect(component.transformPgStatus(pgStatus)).toEqual(expected);
+      expect(transformPgStatus(pgStatus)).toEqual(expected);
     });
 
     it('returns separated status groups', () => {
       const pgStatus = { 'active+clean': 8, down: 2 };
       const expected = '8 active+clean, 2 down';
 
-      expect(component.transformPgStatus(pgStatus)).toEqual(expected);
+      expect(transformPgStatus(pgStatus)).toEqual(expected);
     });
 
     it('returns separated statuses correctly', () => {
       const pgStatus = { active: 8, down: 2 };
       const expected = '8 active, 2 down';
 
-      expect(component.transformPgStatus(pgStatus)).toEqual(expected);
+      expect(transformPgStatus(pgStatus)).toEqual(expected);
     });
 
     it('returns empty string', () => {
       const pgStatus: any = undefined;
       const expected = '';
 
-      expect(component.transformPgStatus(pgStatus)).toEqual(expected);
+      expect(transformPgStatus(pgStatus)).toEqual(expected);
     });
   });
 
@@ -501,21 +480,30 @@ describe('PoolListComponent', () => {
     });
   });
 
-  describe('getDisableDesc', () => {
+  describe('enablePoolDeletion', () => {
+    let configurationService: ConfigurationService;
+
     beforeEach(() => {
-      component.selection.selected = [{ pool_name: 'foo' }];
+      configurationService = TestBed.inject(ConfigurationService);
     });
 
-    it('should return message if mon_allow_pool_delete flag is set to false', () => {
-      component.monAllowPoolDelete = false;
-      expect(component.getDisableDesc()).toBe(
-        'Pool deletion is disabled by the mon_allow_pool_delete configuration setting.'
-      );
+    it('should call configurationService.create and update monAllowPoolDelete$', () => {
+      spyOn(configurationService, 'create').and.returnValue(of(null));
+      component.monAllowPoolDelete$.next(false);
+      component.enablePoolDeletion();
+      expect(configurationService.create).toHaveBeenCalledWith({
+        name: 'mon_allow_pool_delete',
+        value: [{ section: 'mon', value: true }],
+        force_update: false
+      });
+      expect(component.monAllowPoolDelete$.value).toBe(true);
     });
 
-    it('should return false if mon_allow_pool_delete flag is set to true', () => {
-      component.monAllowPoolDelete = true;
-      expect(component.getDisableDesc()).toBeFalsy();
+    it('should not update monAllowPoolDelete$ on error', () => {
+      spyOn(configurationService, 'create').and.returnValue(throwError(() => 'fail'));
+      component.monAllowPoolDelete$.next(false);
+      component.enablePoolDeletion();
+      expect(component.monAllowPoolDelete$.value).toBe(false);
     });
   });
 });

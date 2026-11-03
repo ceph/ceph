@@ -245,12 +245,13 @@ export abstract class PageHelper {
     this.clearTableSearchInput();
     cy.wait(1 * 1000);
     this.searchTable(exactContent);
+    const escapedContent = exactContent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (partialMatch) {
       return cy.contains(`[cdstablerow] [cdstabledata]:nth-child(${columnIndex})`, exactContent);
     }
     return cy.contains(
       `[cdstablerow] [cdstabledata]:nth-child(${columnIndex})`,
-      new RegExp(`^${exactContent}$`)
+      new RegExp(`^\\s*${escapedContent}\\s*$`)
     );
   }
 
@@ -273,12 +274,20 @@ export abstract class PageHelper {
   getResourcePage(content?: string) {
     this.waitDataTableToLoad();
     if (content) {
+      const escapedContent = content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       return cy
         .contains('[cdstablerow] [cdstabledata]', content)
-        .parent('[cdstablerow]')
-        .contains('[cdstabledata] a', new RegExp(`^${content}$`));
+        .parent('tr, [cdstablerow]')
+        .contains(
+          '[cdstabledata] a, [cdstabledata] [cdslink]',
+          new RegExp(`^\\s*${escapedContent}\\s*$`)
+        );
     }
-    return cy.get('[cdstablerow] [cdstabledata] a').first();
+    return cy
+      .get(
+        'tr [cdstabledata] a, [cdstablerow] [cdstabledata] a, [cdstablerow] [cdstabledata] [cdslink]'
+      )
+      .first();
   }
 
   /**

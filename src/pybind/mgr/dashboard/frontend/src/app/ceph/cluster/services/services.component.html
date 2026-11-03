@@ -1,5 +1,7 @@
-<cd-orchestrator-doc-panel *ngIf="showDocPanel"></cd-orchestrator-doc-panel>
-<ng-container *ngIf="orchStatus?.available">
+@if (showDocPanel) {
+  <cd-orchestrator-doc-panel></cd-orchestrator-doc-panel>
+}
+@if (orchStatus?.available) {
   <cd-table
     [data]="services"
     [columns]="columns"
@@ -10,11 +12,10 @@
     [autoReload]="5000"
     [autoSave]="false"
     (fetchData)="getServices($event)"
-    [hasDetails]="hasDetails"
+    [hasDetails]="false"
     [serverSide]="true"
     [count]="count"
     updateExpandedOnRefresh="always"
-    (setExpandedRow)="setExpandedRow($event)"
     (updateSelection)="updateSelection($event)"
   >
     <cd-table-actions
@@ -24,15 +25,8 @@
       [tableActions]="tableActions"
     >
     </cd-table-actions>
-    <cd-service-details
-      *cdTableDetail
-      [permissions]="permissions"
-      [selection]="expandedRow"
-      (editService)="openModal(true, $event)"
-    >
-    </cd-service-details>
   </cd-table>
-</ng-container>
+}
 <router-outlet name="modal"></router-outlet>
 
 <ng-template
@@ -42,47 +36,69 @@
   <span ngbTooltip="Service instances running out of the total number of services requested.">
     {{ value.running }} / {{ value.size }}
   </span>
-  <svg
-    *ngIf="value.running == 0 || value.size == 0"
-    [cdsIcon]="icons.warning"
-    [size]="icons.size16"
-    class="cds-warning-color"
-  ></svg>
+  @if (value.running == 0 || value.size == 0) {
+    <svg
+      [cdsIcon]="icons.warning"
+      [size]="icons.size16"
+      class="cds-warning-color"
+    ></svg>
+  }
 </ng-template>
 
 <ng-template
   #urlTpl
   let-row="data.row"
 >
-  <ng-container *ngIf="serviceUrls[row.service_type]; else noUrl">
+  <div class="d-flex align-items-center gap-1">
     <a
-      *ngIf="!isMgmtGateway; else mgmtGateway"
-      target="_blank"
-      [href]="serviceUrls[row.service_type]"
+      cdsLink
+      [routerLink]="[viewUrl, row.service_name | encodeUri, 'overview']"
+      (click)="onServiceLinkClick($event)"
     >
       {{ row.service_name }}
-      <svg
-        [cdsIcon]="icons.launch"
-        [size]="icons.size16"
-        class="cds-info-color"
-      ></svg>
     </a>
 
-    <ng-template #mgmtGateway>
-      <a
-        target="_blank"
-        [href]="row.service_type"
-      >
-        {{ row.service_name }}
-        <svg
-          [cdsIcon]="icons.launch"
-          [size]="icons.size16"
-          class="cds-info-color"
-        ></svg>
-      </a>
-    </ng-template>
-  </ng-container>
-  <ng-template #noUrl>{{ row.service_name }}</ng-template>
+    @if (serviceUrls[row.service_type]) {
+      @if (!isMgmtGateway) {
+        <a
+          target="_blank"
+          [href]="serviceUrls[row.service_type]"
+          (click)="$event.stopPropagation()"
+        >
+          <svg
+            [cdsIcon]="icons.launch"
+            [size]="icons.size16"
+            class="cds-info-color"
+          ></svg>
+        </a>
+      } @else {
+        <a
+          target="_blank"
+          [href]="row.service_type"
+          (click)="$event.stopPropagation()"
+        >
+          <svg
+            [cdsIcon]="icons.launch"
+            [size]="icons.size16"
+            class="cds-info-color"
+          ></svg>
+        </a>
+      }
+      <ng-template #mgmtGateway>
+        <a
+          target="_blank"
+          [href]="row.service_type"
+          (click)="$event.stopPropagation()"
+        >
+          <svg
+            [cdsIcon]="icons.launch"
+            [size]="icons.size16"
+            class="cds-info-color"
+          ></svg>
+        </a>
+      </ng-template>
+    }
+  </div>
 </ng-template>
 
 <ng-template
@@ -96,7 +112,7 @@
   ) {
     <span class="d-flex align-items-center gap-1">
       <cd-icon [type]="statusIconMap[row.certificate.status] || statusIconMap['default']"></cd-icon>
-      {{ formatCertificateStatus(row.certificate) }}
+      {{ row.certificate | serviceCertificateStatus }}
     </span>
   } @else {
     -

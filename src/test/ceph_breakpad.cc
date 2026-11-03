@@ -29,13 +29,35 @@
 #include "global/global_init.h"
 #include "gtest/gtest.h"
 #include "include/ceph_assert.h"
+#include <breakpad/client/linux/handler/exception_handler.h>
 #include <google_breakpad/common/minidump_format.h>
+
+// breakpad writes a minidump from a cloned child process that
+// ptrace-attaches to the crashing process. Sandboxes may block ptrace
+// (e.g. container seccomp or AppArmor profiles without CAP_SYS_PTRACE),
+// in which case no minidump can ever be produced and these tests cannot
+// pass. Probe with the same clone+ptrace machinery the crash handler
+// uses, and skip if it does not work here.
+static bool minidumps_supported() {
+  const auto probe_dir =
+      std::filesystem::temp_directory_path() / "ceph_breakpad_probe";
+  std::filesystem::create_directories(probe_dir);
+  const bool ok = google_breakpad::ExceptionHandler::WriteMinidump(
+      probe_dir.string(), nullptr, nullptr);
+  std::filesystem::remove_all(probe_dir);
+  return ok;
+}
 
 class BreakpadDeathTest : public ::testing::Test {
   const std::filesystem::path crash_dir{
       g_conf().get_val<std::string>("crash_dir")};
 
   void SetUp() override {
+    if (!minidumps_supported()) {
+      GTEST_SKIP() << "cannot write minidumps in this environment (ptrace "
+                      "may be blocked; containers may need "
+                      "--cap-add=SYS_PTRACE)";
+    }
     std::filesystem::create_directories(crash_dir);
     std::cout << "using crash dir: " << crash_dir << std::endl;
   }

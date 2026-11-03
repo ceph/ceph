@@ -88,8 +88,8 @@ def main(args=None):
         raise RuntimeError('no arguments supplied')
     sub_command = parse_subcommand(suffix)
     extra_data = parse_extra_data(suffix)
-    logger.info('raw systemd input received: %s', suffix)
-    logger.info('parsed sub-command: %s, extra data: %s', sub_command, extra_data)
+    logger.debug('raw systemd input received: %s', suffix)
+    logger.debug('parsed sub-command: %s, extra data: %s', sub_command, extra_data)
     command = ['ceph-volume', sub_command, 'trigger', extra_data]
 
     tries = int(os.environ.get('CEPH_VOLUME_SYSTEMD_TRIES', 30))

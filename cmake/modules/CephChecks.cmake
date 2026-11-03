@@ -1,9 +1,3 @@
-if(CMAKE_COMPILER_IS_GNUCXX)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.1)
-    message(FATAL_ERROR "GCC 8.1+ required due to C++17 requirements")
-  endif()
-endif()
-
 #Check Includes
 include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
@@ -55,11 +49,6 @@ if(LINUX)
   CHECK_INCLUDE_FILES("sched.h" HAVE_SCHED)
 endif()
 CHECK_INCLUDE_FILES("valgrind/helgrind.h" HAVE_VALGRIND_HELGRIND_H)
-CHECK_INCLUDE_FILES("openssl/engine.h" HAVE_OPENSSL_ENGINE_H)
-option(WITH_OPENSSL_ENGINE "Build with OpenSSL Engine Support")
-if(WITH_OPENSSL_ENGINE AND NOT HAVE_OPENSSL_ENGINE)
-  message(FATAL_ERROR "Can't find openssl/engine.h")
-endif()
 
 include(CheckTypeSize)
 set(CMAKE_EXTRA_INCLUDE_FILES "linux/types.h" "netinet/in.h")
@@ -86,7 +75,14 @@ check_symbol_exists(res_nquery "resolv.h" HAVE_RES_NQUERY)
 check_symbol_exists(F_SETPIPE_SZ "linux/fcntl.h" CEPH_HAVE_SETPIPE_SZ)
 check_symbol_exists(__func__ "" HAVE_FUNC)
 check_symbol_exists(__PRETTY_FUNCTION__ "" HAVE_PRETTY_FUNC)
-check_symbol_exists(getentropy "unistd.h" HAVE_GETENTROPY)
+CHECK_INCLUDE_FILES("sys/random.h" HAVE_SYS_RANDOM_H)
+check_symbol_exists(getentropy "unistd.h" HAVE_GETENTROPY_UNISTD)
+if(HAVE_SYS_RANDOM_H)
+  check_symbol_exists(getentropy "sys/random.h" HAVE_GETENTROPY_SYS_RANDOM)
+endif()
+if(HAVE_GETENTROPY_UNISTD OR HAVE_GETENTROPY_SYS_RANDOM)
+  set(HAVE_GETENTROPY ON)
+endif()
 
 include(CheckCXXSourceCompiles)
 check_cxx_source_compiles("
@@ -165,7 +161,10 @@ int main() { std::stable_sort((int *)0, (int*)0); }
 cmake_pop_check_state()
 
 set(version_script_source "v1 { }; v2 { } v1;")
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt "${version_script_source}")
+file(CONFIGURE
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt
+  CONTENT "${version_script_source}"
+  @ONLY)
 cmake_push_check_state(RESET)
 set(CMAKE_REQUIRED_FLAGS "-Werror -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt")
 check_c_source_compiles("

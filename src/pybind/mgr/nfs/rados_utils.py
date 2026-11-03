@@ -82,11 +82,22 @@ class NFSRados:
                 _check_rados_notify(ioctx, config_obj)
             log.debug("Object deleted: %s", url)
 
+    def notify_conf(self, config_obj: str) -> None:
+        with self.rados.open_ioctx(self.pool) as ioctx:
+            ioctx.set_namespace(self.namespace)
+            _check_rados_notify(ioctx, config_obj)
+            log.debug("Notified ganesha for %s", config_obj)
+
     def remove_all_obj(self) -> None:
         with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             for obj in ioctx.list_objects():
                 obj.remove()
+
+    def has_objects(self) -> bool:
+        with self.rados.open_ioctx(self.pool) as ioctx:
+            ioctx.set_namespace(self.namespace)
+            return next(ioctx.list_objects(), None) is not None
 
     def check_config(self, config: str = USER_CONF_PREFIX) -> bool:
         with self.rados.open_ioctx(self.pool) as ioctx:

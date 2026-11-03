@@ -43,10 +43,10 @@ setup_minikube_env() {
     rm -rf ~/.minikube
 
     if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
-        sg libvirt -c "minikube start --memory=6144 --disk-size=20g --extra-disks=4 --driver=kvm2 --container-runtime=cri-o"
+        sg libvirt -c "minikube start --memory=6144 --disk-size=40g --extra-disks=4 --driver=kvm2 --container-runtime=cri-o"
         sg libvirt -c "minikube podman-env -p minikube" > /tmp/minikube-env.sh
     else
-        sg libvirt -c "minikube start --memory=6144 --disk-size=20g --extra-disks=4 --driver=kvm2"
+        sg libvirt -c "minikube start --memory=6144 --disk-size=40g --extra-disks=4 --driver=kvm2"
         sg libvirt -c "minikube docker-env -p minikube" > /tmp/minikube-env.sh
     fi
 
@@ -90,7 +90,12 @@ create_rook_cluster() {
     $KUBECTL create -f ${base}/csi-operator.yaml
     $KUBECTL create -f ${base}/operator.yaml
     $KUBECTL create -f $CLUSTER_SPEC
-    $KUBECTL create -f ${base}/toolbox.yaml
+    # Run the toolbox from the image we just built and loaded into the
+    # minikube docker cache: it always matches the cluster's ceph version
+    # and avoids a runtime pull from quay.io, which is flaky on the builders
+    curl -fsSL ${base}/toolbox.yaml | \
+        sed "s|image: .*|image: ${CURR_CEPH_IMG}|" | \
+        $KUBECTL create -f -
 }
 
 is_operator_ready() {
@@ -129,12 +134,26 @@ wait_for_ceph_cluster() {
     local sleep_interval=20
     local attempts=0
     $KUBECTL rollout status deployment rook-ceph-tools -n rook-ceph --timeout=90s
+
+    # Rook bootstraps a monmap that still allows legacy cephx key types, so
+    # ceph main warns AUTH_INSECURE_KEYS_* and the cluster never reaches
+    # HEALTH_OK. Mute the checks like teuthology does
+    # (qa/overrides/upgrade_ignorelist_health.yaml); sticky mutes apply even
+    # before the check is raised.
+    for check in AUTH_INSECURE_KEYS_ALLOWED AUTH_INSECURE_KEYS_CREATABLE; do
+        $KUBECTL -n rook-ceph exec deploy/rook-ceph-tools -- ceph health mute $check --sticky || true
+    done
+
     while ! $KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.ceph.health}' | grep -q "HEALTH_OK"; do
 	echo "Waiting for Ceph cluster to enter HEALTH_OK" state
+	# log the actual health state so failures are debuggable from the console
+	$KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.ceph}' ; echo
+	$KUBECTL -n rook-ceph exec deploy/rook-ceph-tools -- ceph health detail || true
 	sleep $sleep_interval
 	attempts=$((attempts+1))
         if [ $attempts -ge $max_attempts ]; then
             echo "Maximum number of attempts ($max_attempts) reached. Exiting..."
+            $KUBECTL -n rook-ceph exec deploy/rook-ceph-tools -- ceph -s || true
             return 1
         fi
     done

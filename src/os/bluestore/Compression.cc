@@ -13,7 +13,8 @@
  */
 
 #include "Compression.h"
-#include "BlueStore.h"
+#include "BlueStore_components.h"
+#include "BlueStore_inlines.h"
 #include "include/intarith.h"
 #include "common/debug.h" // for dout()
 #include "common/Formatter.h"
@@ -45,8 +46,8 @@ template <> struct fmt::formatter<BlueStore::Extent::printer>
 using Extent = BlueStore::Extent;
 using ExtentMap = BlueStore::ExtentMap;
 using Blob = BlueStore::Blob;
-using exmp_cit = BlueStore::extent_map_t::const_iterator;
-using exmp_it = BlueStore::extent_map_t::iterator;
+using exmp_cit = bluestore::extent_map_t::const_iterator;
+using exmp_it = bluestore::extent_map_t::iterator;
 using Scanner = BlueStore::Scanner;
 using Scan = BlueStore::Scanner::Scan;
 using P = BlueStore::printer;
@@ -652,6 +653,8 @@ void Scan::expand_left(exmp_cit& it)
       ++it; //back out
       break;
     }
+    scanned_left_it = it;
+    scanned_left = it->logical_offset;
     if (estimator->is_worth(&(*it))) {
       dout(20) << "expand_left take " << it->print(mode) << dendl;
       estimator->mark_recompress(&(*it));
@@ -661,8 +664,6 @@ void Scan::expand_left(exmp_cit& it)
       break;
     }
   }
-  scanned_left_it = it;
-  scanned_left = it->logical_offset;
   dout(30) << "expand_left done it=" << lo(it) << dendl;
 }
 

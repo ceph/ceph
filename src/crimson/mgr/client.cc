@@ -3,6 +3,7 @@
 
 #include "client.h"
 
+#include <fmt/chrono.h>
 #include <seastar/core/sleep.hh>
 #include <seastar/util/defer.hh>
 

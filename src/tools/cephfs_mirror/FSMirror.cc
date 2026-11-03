@@ -188,6 +188,7 @@ void FSMirror::init(Context *on_finish) {
                   g_ceph_context->_conf->cluster, &m_cluster, "", "", m_args);
   if (r < 0) {
     m_init_failed = true;
+    set_failed_ts();
     on_finish->complete(r);
     return;
   }
@@ -195,6 +196,7 @@ void FSMirror::init(Context *on_finish) {
   r = m_cluster->ioctx_create2(m_pool_id, m_ioctx);
   if (r < 0) {
     m_init_failed = true;
+    set_failed_ts();
     m_cluster.reset();
     derr << ": error accessing local pool (id=" << m_pool_id << "): "
          << cpp_strerror(r) << dendl;
@@ -205,6 +207,7 @@ void FSMirror::init(Context *on_finish) {
   r = mount(m_cluster, m_filesystem, true, &m_mount);
   if (r < 0) {
     m_init_failed = true;
+    set_failed_ts();
     m_ioctx.close();
     m_cluster.reset();
     on_finish->complete(r);
@@ -217,12 +220,13 @@ void FSMirror::init(Context *on_finish) {
   init_instance_watcher(on_finish);
 }
 
-void FSMirror::shutdown(Context *on_finish) {
+void FSMirror::shutdown(Context *on_finish, bool purge_persisted_sync_stats) {
   dout(20) << dendl;
 
   {
     std::scoped_lock locker(m_lock);
     m_stopping = true;
+    m_purge_persisted_sync_stats_on_shutdown = purge_persisted_sync_stats;
     if (m_on_init_finish != nullptr) {
       dout(10) << ": delaying shutdown -- init in progress" << dendl;
       m_on_shutdown_finish = new LambdaContext([this, on_finish](int r) {
@@ -245,11 +249,21 @@ void FSMirror::shutdown(Context *on_finish) {
 void FSMirror::shutdown_peer_replayers() {
   dout(20) << dendl;
 
+  bool purge_persisted_sync_stats = false;
+  {
+    std::scoped_lock locker(m_lock);
+    purge_persisted_sync_stats = m_purge_persisted_sync_stats_on_shutdown;
+  }
+
   for (auto &[peer, peer_replayer] : m_peer_replayers) {
     dout(5) << ": shutting down replayer for peer=" << peer << dendl;
     shutdown_replayer(peer_replayer.get());
   }
   m_peer_replayers.clear();
+
+  if (purge_persisted_sync_stats) {
+    remove_persisted_sync_stats_by_prefix(PeerReplayer::sync_stat_omap_prefix(m_filesystem));
+  }
 
   shutdown_mirror_watcher();
 }
@@ -262,6 +276,7 @@ void FSMirror::init_instance_watcher(Context *on_finish) {
                                            std::scoped_lock locker(m_lock);
                                            if (r < 0) {
                                              m_init_failed = true;
+                                             set_failed_ts();
                                            }
                                          }
                                          on_finish->complete(r);
@@ -411,6 +426,53 @@ void FSMirror::handle_release_directory(string_view dir_path, bool purging) {
   }
 }
 
+void FSMirror::remove_persisted_sync_stats_by_prefix(std::string_view prefix) {
+  std::string prefix_str(prefix);
+  dout(5) << ": removing persisted sync stats with prefix=" << prefix_str << dendl;
+
+  // PeerReplayer submits persist/remove via a shallow copy of m_ioctx.
+  // Join only stops producer threads; flush outstanding AIOs so a late
+  // omap_set cannot recreate keys after the purge below.
+  int r = m_ioctx.aio_flush();
+  if (r < 0) {
+    derr << ": failed to flush outstanding sync-stat AIOs: "
+         << cpp_strerror(r) << dendl;
+  }
+
+  constexpr uint64_t max_return = 256;
+  std::string start_after;
+  bool more = true;
+
+  while (more) {
+    std::map<std::string, bufferlist> vals;
+    r = m_ioctx.omap_get_vals2(CEPHFS_MIRROR_OBJECT, start_after, prefix_str,
+                               max_return, &vals, &more);
+    if (r == -ENOENT) {
+      return;
+    }
+    if (r < 0) {
+      derr << ": failed to list sync stat omap keys: " << cpp_strerror(r) << dendl;
+      return;
+    }
+    if (vals.empty()) {
+      return;
+    }
+
+    std::set<std::string> keys;
+    for (const auto &[key, _] : vals) {
+      keys.insert(key);
+    }
+
+    r = m_ioctx.omap_rm_keys(CEPHFS_MIRROR_OBJECT, keys);
+    if (r < 0) {
+      derr << ": failed to remove sync stat omap keys: " << cpp_strerror(r) << dendl;
+      return;
+    }
+
+    start_after = vals.rbegin()->first;
+  }
+}
+
 void FSMirror::add_peer(const Peer &peer) {
   dout(10) << ": peer=" << peer << dendl;
 
@@ -452,9 +514,10 @@ void FSMirror::remove_peer(const Peer &peer) {
   }
 
   if (replayer) {
-    dout(5) << ": shutting down replayers for peer=" << peer << dendl;
+    dout(5) << ": shutting down replayer for peer=" << peer << dendl;
     shutdown_replayer(replayer.get());
   }
+  remove_persisted_sync_stats_by_prefix(PeerReplayer::sync_stat_omap_prefix(m_filesystem, peer));
   if (m_perf_counters) {
     m_perf_counters->dec(l_cephfs_mirror_fs_mirror_peers);
   }
@@ -463,7 +526,7 @@ void FSMirror::remove_peer(const Peer &peer) {
 void FSMirror::mirror_status(Formatter *f) {
   std::scoped_lock locker(m_lock);
   f->open_object_section("status");
-  if (m_init_failed) {
+  if (is_failed(locker)) {
     f->dump_string("state", "failed");
   } else if (is_blocklisted(locker)) {
     f->dump_string("state", "blocklisted");

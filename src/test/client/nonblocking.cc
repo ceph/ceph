@@ -13,6 +13,7 @@
  *
  */
 
+#include "include/compat.h"
 #include <errno.h>
 
 #include <iostream>
@@ -779,9 +780,11 @@ TEST_F(TestClient, LlreadvLlwritevLargeBuffers) {
   bytes_written = writefinish.wait();
 
   int maxio_size = INT_MAX;
+#if defined(__linux__)
   if (fse.encrypted) {
     maxio_size = FSCRYPT_MAXIO_SIZE;
   }
+#endif
 
   // total write length is clamped to INT_MAX in write paths
   ASSERT_EQ(bytes_written, maxio_size);
@@ -1201,12 +1204,12 @@ TEST_F(TestClient, LlreadvLlwritevQuotaFull) {
   // set quota.max_bytes
   char xattrk[128];
   sprintf(xattrk, "ceph.quota.max_bytes");
-  char setxattrv[128], getxattrv[128];
+  char setxattrv[128], getxattrv[128]{};
   int32_t len = sprintf(setxattrv, "8388608"); // 8MiB
   int64_t rc = client->ll_setxattr(diri, xattrk, setxattrv, len,
                                    CEPH_XATTR_CREATE, myperm);
   ASSERT_EQ(rc, 0);
-  rc = client->ll_getxattr(diri, xattrk, (void *)getxattrv, len, myperm);
+  rc = client->ll_getxattr(diri, xattrk, getxattrv, len, myperm);
   ASSERT_EQ(rc, 7);
   ASSERT_STREQ(setxattrv, getxattrv);
 

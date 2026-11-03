@@ -148,16 +148,18 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
   SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
 
   seastar::future<> set_up_fut() final {
-    segment_manager = segment_manager::create_test_ephemeral();
+    segment_manager = segment_manager::create_test_ephemeral(
+      0, device_type_t::EPHEMERAL_MAIN);
     return segment_manager->init(
     ).safe_then([this] {
       return segment_manager->mkfs(
-        segment_manager::get_ephemeral_device_config(0, 1, 0));
+        segment_manager::get_ephemeral_device_config(
+          0, device_set_t{}, device_set_t{}, true));
     }).safe_then([this] {
       block_size = segment_manager->get_block_size();
       sms.reset(new SegmentManagerGroup());
       next = segment_id_t(segment_manager->get_device_id(), 0);
-      journal = journal::make_segmented(0, *this, *this);
+      journal = journal::make_segmented(0, *this, *this, false);
       journal->set_write_pipeline(&pipeline);
       sms->add_segment_manager(segment_manager.get());
       return journal->open_for_mkfs();
@@ -182,7 +184,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
   auto replay(T &&f) {
     return journal->close(
     ).safe_then([this, f=std::move(f)]() mutable {
-      journal = journal::make_segmented(0, *this, *this);
+      journal = journal::make_segmented(0, *this, *this, false);
       journal->set_write_pipeline(&pipeline);
       return journal->replay(std::forward<T>(std::move(f)));
     }).safe_then([this] {

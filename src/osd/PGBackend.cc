@@ -772,14 +772,17 @@ void PGBackend::rollback_setattrs(
     }
   }
   if (only_oi) {
+    auto oi_iter = to_set.find(OI_ATTR);
+    ceph_assert(oi_iter != to_set.end());
     object_info_t oi;
-    auto p = to_set[OI_ATTR].cbegin();
+    auto p = oi_iter->second.cbegin();
     decode(oi, p);
 
     shard_id_t my_shard = get_parent()->whoami_shard().shard;
     if (oi.shard_versions.contains(my_shard) && oi.shard_versions.at(my_shard) != oi.version) {
       oi.version = oi.shard_versions.at(my_shard);
-      oi.shard_versions.clear();
+      std::erase_if(oi.shard_versions,
+        [&oi](const auto& kv) { return kv.second >= oi.version; });
       
       bufferlist bl;
       encode(oi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
@@ -794,7 +797,7 @@ void PGBackend::rollback_setattrs(
         coll,
         ghobject_t(hoid, ghobject_t::NO_GEN, my_shard),
         OI_ATTR,
-        to_set[OI_ATTR]);
+        oi_iter->second);
     }
   } else {
     t->setattrs(

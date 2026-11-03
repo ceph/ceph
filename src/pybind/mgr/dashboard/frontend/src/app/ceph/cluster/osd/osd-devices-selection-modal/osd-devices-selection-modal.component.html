@@ -12,22 +12,22 @@
       novalidate
     >
       <div class="modal-body">
-        <cd-alert-panel
-          *ngIf="!canSubmit"
-          type="warning"
-          size="slim"
-          [showTitle]="false"
-        >
-          <ng-container i18n
-            >At least one of these filters must be applied in order to proceed:</ng-container
+        @if (!canSubmit) {
+          <cd-alert-panel
+            type="warning"
+            size="slim"
+            [showTitle]="false"
           >
-          <cds-tag
-            *ngFor="let filter of requiredFilters"
-            class="tag-dark ms-2"
-          >
-            {{ filter }}
-          </cds-tag>
-        </cd-alert-panel>
+            <ng-container i18n
+              >At least one of these filters must be applied in order to proceed:</ng-container
+            >
+            @for (filter of requiredFilters; track filter) {
+              <cds-tag class="tag-dark ms-2">
+                {{ filter }}
+              </cds-tag>
+            }
+          </cd-alert-panel>
+        }
         <cd-inventory-devices
           #inventoryDevices
           [devices]="devices"
@@ -38,14 +38,16 @@
           (filterChange)="onFilterChange($event)"
         >
         </cd-inventory-devices>
-        <div *ngIf="canSubmit">
-          <p class="text-center">
-            <span i18n
-              >Number of devices: {{ filteredDevices.length }}. Raw capacity:
-              {{ capacity | dimlessBinary }}.</span
-            >
-          </p>
-        </div>
+        @if (canSubmit) {
+          <div>
+            <p class="text-center">
+              <span i18n
+                >Number of devices: {{ filteredDevices.length }}. Raw capacity:
+                {{ capacity | dimlessBinary }}.</span
+              >
+            </p>
+          </div>
+        }
       </div>
       <div class="modal-footer">
         <cd-form-button-panel

@@ -59,6 +59,7 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_releases.h"
 #include "common/ceph_time.h"
+#include "common/Cond.h"
 #include "common/debug.h"
 #include "common/version.h"
 #include "common/async/blocked_completion.h"
@@ -1766,10 +1767,6 @@ void OSDService::queue_for_snap_trim(PG *pg, uint64_t cost_per_object)
        */
       return cost_per_object * cct->_conf->osd_pg_max_concurrent_snap_trims;
     } else {
-      /* We retain this legacy behavior for WeightedPriorityQueue.
-       * This branch should be removed after Umbrella (after consulting
-       * dev team)
-       */
       return cct->_conf->osd_snap_trim_cost;
     }
   }();
@@ -6490,6 +6487,7 @@ void OSD::tick_without_osd_lock()
     maybe_send_beacon();
   }
 
+  cct->check_debug_level_guard();
   mgrc.update_daemon_health(get_health_metrics());
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(get_tick_interval(),
@@ -6573,9 +6571,9 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
         }
     } else {
         if ((command == "injectecreaderr") ||
-	    (command == "injecteclearreaderr") ||
+	    (command == "injectecclearreaderr") ||
 	    (command == "injectecwriteerr") ||
-	    (command == "injecteclearwriteerr") ||
+	    (command == "injectecclearwriteerr") ||
             (command == "injectparityread") ||
             (command == "injectclearparityread")) {
             ss << "Only supported on ec pool";
@@ -6980,20 +6978,47 @@ void OSD::_get_purged_snaps()
   // it should be reliable.
   dout(10) << __func__ << " purged_snaps_last " << superblock.purged_snaps_last
 	   << ", newest_map " << superblock.current_epoch << dendl;
-  MMonGetPurgedSnaps *m = new MMonGetPurgedSnaps(
-    superblock.purged_snaps_last + 1,
-    superblock.current_epoch + 1);
+  // The monitor returns the epochs (start, last]. Only ask for the epochs
+  // we have maps for: the maps that follow are recorded as they arrive
+  // (see handle_osd_map()).
+  const epoch_t start = superblock.purged_snaps_last;
+  const epoch_t last = superblock.current_epoch;
+  if (purged_snaps_request && purged_snaps_request->start == start) {
+    // a reply may match either request: assume the narrower range
+    purged_snaps_request->last = std::min(purged_snaps_request->last, last);
+  } else {
+    purged_snaps_request = purged_snaps_request_t{start, last};
+  }
+  MMonGetPurgedSnaps *m =
+    new MMonGetPurgedSnaps(start, purged_snaps_request->last);
   monc->send_mon_message(m);
 }
 
 void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
 {
   dout(10) << __func__ << " " << *m << dendl;
+  auto put_msg = make_scope_guard([m] { m->put(); });
+
+  if (!is_preboot() || !purged_snaps_request ||
+      m->start != purged_snaps_request->start ||
+      m->start != superblock.purged_snaps_last) {
+    dout(10) << __func__ << " not matching the pending request" << dendl;
+    return;
+  }
+  // The reply covers the epochs (start, last] - but its 'last' may be
+  // beyond the requested range: the monitor may report the first epoch
+  // it did not return, or (if it found nothing) the requested 'last'.
+  const epoch_t covered = std::min(m->last, purged_snaps_request->last);
+  if (covered < superblock.purged_snaps_last) {
+    return;
+  }
+  purged_snaps_request.reset();
+  // the rows of the epochs beyond 'covered' are fetched again later
+  m->purged_snaps.erase(
+    m->purged_snaps.upper_bound(covered), m->purged_snaps.end());
+
   ObjectStore::Transaction t;
-  if (!is_preboot() ||
-      m->last < superblock.purged_snaps_last) {
-    goto out;
-  } else {
+  {
     OSDriver osdriver{store.get(), service.meta_ch, make_purged_snaps_oid()};
     SnapMapper::record_purged_snaps(
       cct,
@@ -7001,19 +7026,17 @@ void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
       osdriver.get_transaction(&t),
       m->purged_snaps);
   }
-  superblock.purged_snaps_last = m->last;
+  superblock.purged_snaps_last = covered;
   write_superblock(cct, superblock, t);
   store->queue_transaction(
     service.meta_ch,
     std::move(t));
   service.publish_superblock(superblock);
-  if (m->last < superblock.current_epoch) {
+  if (covered < superblock.current_epoch) {
     _get_purged_snaps();
   } else {
     start_boot();
   }
-out:
-  m->put();
 }
 
 void OSD::send_full_update()
@@ -7815,7 +7838,7 @@ bool OSD::ms_handle_fast_authentication(Connection *con)
 	     << " addr " << con->get_peer_addrs() << dendl;
   }
 
-  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  auto& caps_info = con->get_peer_caps_info();
   if (caps_info.allow_all) {
     s->caps.set_allow_all();
     return true;
@@ -8076,6 +8099,12 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
       }
     }
     metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries);
+  }
+  {
+    auto threshold = cct->_conf.get_val<int64_t>("high_debug_level_threshold");
+    auto [count, max_level] = DebugLevelGuard::count_elevated(
+      cct->_conf->subsys, threshold);
+    metrics.emplace_back(daemon_metric::HIGH_DEBUG_LEVEL, count, max_level);
   }
   return metrics;
 }
@@ -8638,6 +8667,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
   bool do_shutdown = false;
   bool do_restart = false;
   bool network_error = false;
+  bool need_rebind = false;
   OSDMapRef osdmap = get_osdmap();
 
   // advance through the new maps
@@ -8810,22 +8840,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 
 	start_waiting_for_healthy();
 
-	set<int> avoid_ports;
-#if defined(__FreeBSD__)
-        // prevent FreeBSD from grabbing the client_messenger port during
-        // rebinding. In which case a cluster_meesneger will connect also
-	// to the same port
-	client_messenger->get_myaddrs().get_ports(&avoid_ports);
-#endif
-	cluster_messenger->get_myaddrs().get_ports(&avoid_ports);
-
-	int r = cluster_messenger->rebind(avoid_ports);
-	if (r != 0) {
-	  do_shutdown = true;  // FIXME: do_restart?
-          network_error = true;
-          derr << __func__ << " marked down:"
-	       << " rebind cluster_messenger failed" << dendl;
-        }
+	need_rebind = true;
 
 	hb_back_server_messenger->mark_down_all();
 	hb_front_server_messenger->mark_down_all();
@@ -8846,6 +8861,28 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 
   // yay!
   consume_map();
+
+  if (need_rebind) {
+    // Rebind cluster_messenger after consume_map() so that all shards
+    // have the updated OSDMap before peers can reconnect and retransmit
+    // messages. See https://tracker.ceph.com/issues/58417
+    set<int> avoid_ports;
+#if defined(__FreeBSD__)
+    // prevent FreeBSD from grabbing the client_messenger port during
+    // rebinding. In which case a cluster_messenger will connect also
+    // to the same port
+    client_messenger->get_myaddrs().get_ports(&avoid_ports);
+#endif
+    cluster_messenger->get_myaddrs().get_ports(&avoid_ports);
+
+    int r = cluster_messenger->rebind(avoid_ports);
+    if (r != 0) {
+      do_shutdown = true;  // FIXME: do_restart?
+      network_error = true;
+      derr << __func__ << " marked down:"
+	   << " rebind cluster_messenger failed" << dendl;
+    }
+  }
 
   if (is_active() || is_waiting_for_healthy())
     maybe_update_heartbeat_peers();

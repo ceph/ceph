@@ -21,22 +21,32 @@ ARG DISTRO
 ARG CEPH_CTR_SRC=/usr/local/src/ceph
 ARG CLEAN_DNF=yes
 ARG CEPH_BASE_BRANCH=main
+ARG CUSTOM_IMAGE_COMMANDS=
 ARG SCCACHE_VERSION=v0.15.0
 ARG SCCACHE_REPO=https://github.com/mozilla/sccache
 ARG WITH_CRIMSON=true
 ARG FOR_MAKE_CHECK=1
+# Non-empty: fail the image build if the ceph-libboost packages can't be
+# installed, instead of leaving boost to the submodule (see install-deps.sh).
+# Off by default; CI that reuses images across builders turns it on with
+# --build-arg=REQUIRE_BOOST_PKGS=1.
+ARG REQUIRE_BOOST_PKGS=
 COPY --from=bootstrap ${CEPH_CTR_SRC} ${CEPH_CTR_SRC}
 # Note that we do not use ENV for the following. This is because we do not
 # want them permamently stored in the container's layer.
 RUN DISTRO=$DISTRO \
     CEPH_BASE_BRANCH=$CEPH_BASE_BRANCH \
     CLEAN_DNF=$CLEAN_DNF \
+    CUSTOM_IMAGE_COMMANDS=$CUSTOM_IMAGE_COMMANDS \
     CEPH_CTR_SRC=${CEPH_CTR_SRC} \
     WITH_CRIMSON=${WITH_CRIMSON} \
     FOR_MAKE_CHECK=${FOR_MAKE_CHECK} \
+    REQUIRE_BOOST_PKGS=${REQUIRE_BOOST_PKGS} \
     bash -x ${CEPH_CTR_SRC}/buildcontainer-setup.sh
 RUN \
-    if [ $(uname -m) != ppc64le ]; then \
+    if rpm --quiet --query sccache 2>/dev/null || { command -v dnf >/dev/null 2>&1 && dnf install -y sccache 2>/dev/null; }; then \
+    echo "sccache provided by distro packages"; \
+    elif [ $(uname -m) != ppc64le ]; then \
     SCCACHE_ARCH="$(uname -m)"; \
     if [ "$SCCACHE_ARCH" = riscv64 ]; then SCCACHE_ARCH=riscv64gc; fi; \
     SCCACHE_URL="${SCCACHE_REPO}/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-${SCCACHE_ARCH}-unknown-linux-musl.tar.gz"; \

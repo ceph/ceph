@@ -24,7 +24,7 @@ function run() {
 
     export CEPH_MON="127.0.0.1:7112" # git grep '\<7112\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd_mclock_override_recovery_settings=true "
 
@@ -371,6 +371,36 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
     # inject eio on replica OSD (1)
     rados_put_get_data eio $dir $shard_id recovery || return 1
 
+    delete_erasure_coded_pool $poolname
+}
+
+function TEST_ec_direct_read_eio() {
+    local dir=$1
+    setup_osds 3 || return 1
+
+    local poolname=pool-jerasure
+    local objname=obj-direct-read
+    create_erasure_coded_pool $poolname 2 1 || return 1
+    ceph osd pool set $poolname allow_ec_optimizations true || return 1
+    ceph osd pool ls detail | grep "'$poolname'" | grep -q split_reads || return 1
+    wait_for_clean || return 1
+
+    for i in 1 2 3 4 5 ; do
+        printf "%*s" 4096 $i
+    done > $dir/ORIGINAL
+    rados --pool $poolname put $objname $dir/ORIGINAL || return 1
+
+    # A balanced whole-object read is split into direct reads of shards 0
+    # and 1; shard 1 is never the primary.
+    local -a osds=($(get_osds $poolname $objname))
+    inject_eio ec data $poolname $objname $dir 1 || return 1
+    rados --rados-replica-read-policy=balance --pool $poolname \
+        get $objname $dir/COPY || return 1
+    cmp $dir/ORIGINAL $dir/COPY || return 1
+    grep -q "not primary or EC direct, failing op with EAGAIN" \
+        $dir/osd.${osds[1]}.log || return 1
+
+    rm -f $dir/ORIGINAL $dir/COPY
     delete_erasure_coded_pool $poolname
 }
 

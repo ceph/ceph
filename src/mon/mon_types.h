@@ -23,7 +23,7 @@
 #include <string>
 
 #include "include/ceph_features.h" // for CEPH_FEATURE_*
-#include "include/types.h" // for operator<<(std::map)
+#include "include/container_ios.h"
 #include "include/util.h"
 #include "include/utime.h"
 #include "common/Formatter.h"
@@ -333,12 +333,6 @@ namespace ceph {
   }
 }
 
-
-inline const char *ceph_mon_feature_name(uint64_t b)
-{
-  return ceph::features::mon::get_feature_name(b);
-};
-
 class mon_feature_t {
 
   static constexpr int HEAD_VERSION = 1;
@@ -537,9 +531,10 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_SQUID(      (1ULL << 10));
       constexpr mon_feature_t FEATURE_TENTACLE(   (1ULL << 11));
       constexpr mon_feature_t FEATURE_UMBRELLA(   (1ULL << 12));
-
+      constexpr mon_feature_t FEATURE_VAMPIRE(    (1ULL << 13));  
 
       // Release-independent features
+      constexpr mon_feature_t FEATURE_CEPHX_AUTH_AES256K(   (1ULL << 31));
       constexpr mon_feature_t FEATURE_NVMEOF_BEACON_DIFF(   (1ULL << 32));
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
@@ -565,9 +560,11 @@ namespace ceph {
 	  FEATURE_SQUID |
 	  FEATURE_TENTACLE |
 	  FEATURE_UMBRELLA |
+	  FEATURE_VAMPIRE |
 
 	  // Release-independent features
 	  FEATURE_NVMEOF_BEACON_DIFF |
+	  FEATURE_CEPHX_AUTH_AES256K |
 
 	  FEATURE_NONE
 	  );
@@ -597,9 +594,11 @@ namespace ceph {
 	  FEATURE_SQUID |
 	  FEATURE_TENTACLE |
 	  FEATURE_UMBRELLA |
+	  FEATURE_VAMPIRE |
 
 	  // Release-independent features
 	  FEATURE_NVMEOF_BEACON_DIFF |
+	  FEATURE_CEPHX_AUTH_AES256K |
 
 	  FEATURE_NONE
 	  );
@@ -619,6 +618,9 @@ namespace ceph {
 
 static inline ceph_release_t infer_ceph_release_from_mon_features(mon_feature_t f)
 {
+  if (f.contains_all(ceph::features::mon::FEATURE_VAMPIRE)) {
+    return ceph_release_t::vampire;
+  }
   if (f.contains_all(ceph::features::mon::FEATURE_UMBRELLA)) {
     return ceph_release_t::umbrella;
   }
@@ -684,9 +686,13 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "tentacle";
   } else if (f == FEATURE_UMBRELLA) {
     return "umbrella";
+  } else if (f == FEATURE_VAMPIRE) {
+    return "vampire";
   // Release-independent features
   } else if (f == FEATURE_NVMEOF_BEACON_DIFF) {
     return "nvmeof_beacon_diff";
+  } else if (f == FEATURE_CEPHX_AUTH_AES256K) {
+    return "cephx_auth_aes256k";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -721,9 +727,13 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
     return FEATURE_TENTACLE;
   } else if (n == "umbrella") {
     return FEATURE_UMBRELLA;
+  } else if (n == "vampire") {
+    return FEATURE_VAMPIRE;
   // Release-independent features
   } else if (n == "nvmeof_beacon_diff") {
     return FEATURE_NVMEOF_BEACON_DIFF;
+  } else if (n == "cephx_auth_aes256k") {
+    return FEATURE_CEPHX_AUTH_AES256K;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }

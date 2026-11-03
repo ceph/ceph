@@ -155,6 +155,7 @@ class PutObjects {
         .credentialsProvider(StaticCredentialsProvider.create(creds))
         .region(jcksum.region)
         .forcePathStyle(true) /* XXX change in future */
+        .httpClient(apacheHttpClient) /* attach the trust-all client for https endpoints */
         .build();
 		} catch (Exception e) {
       System.err.println(e.getMessage());

@@ -244,9 +244,61 @@ def create_users(ctx, config, s3tests_conf):
         conf['webidentity'].setdefault('thumbprint',os.environ['THUMBPRINT'])
         conf['webidentity'].setdefault('KC_REALM',os.environ['KC_REALM'])
 
+    # Create a global OIDC provider for fallback tests. Global providers are
+    # replicated by metadata sync, so a single creation propagates to all zones
+    # in a multisite configuration.
+    global_oidc_created = False
+    if "TOKEN" in os.environ:
+        for client in config.keys():
+            cluster_name, daemon_type, client_id = teuthology.split_role(client)
+            client_with_id = daemon_type + '.' + client_id
+            realm_name = os.environ.get('KC_REALM', '')
+            thumbprint = os.environ.get('THUMBPRINT', '')
+            aud = os.environ.get('AUD', '')
+            if realm_name and thumbprint:
+                ctx.cluster.only(client).run(
+                    args=[
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        '{tdir}/archive/coverage'.format(tdir=testdir),
+                        'radosgw-admin',
+                        '-n', client_with_id,
+                        '--cluster', cluster_name,
+                        'oidc-provider', 'create',
+                        '--provider-url',
+                        'http://localhost:8080/auth/realms/{}'.format(realm_name),
+                        '--thumbprints', thumbprint,
+                        '--client-ids', aud,
+                    ],
+                )
+                global_oidc_created = True
+            break  # only need to create once on one client
+
     try:
         yield
     finally:
+        # Delete global OIDC provider if we created one
+        if global_oidc_created:
+            for client in config.keys():
+                cluster_name, daemon_type, client_id = teuthology.split_role(client)
+                client_with_id = daemon_type + '.' + client_id
+                realm_name = os.environ.get('KC_REALM', '')
+                if realm_name:
+                    ctx.cluster.only(client).run(
+                        args=[
+                            'adjust-ulimits',
+                            'ceph-coverage',
+                            '{tdir}/archive/coverage'.format(tdir=testdir),
+                            'radosgw-admin',
+                            '-n', client_with_id,
+                            '--cluster', cluster_name,
+                            'oidc-provider', 'delete',
+                            '--provider-url',
+                            'http://localhost:8080/auth/realms/{}'.format(realm_name),
+                        ],
+                        check_status=False,
+                    )
+                break
         for client in config.keys():
             for section, user in users.items():
                 # don't need to delete keystone users
@@ -390,6 +442,9 @@ def configure(ctx, config):
                 s3tests_conf['s3 cloud']['cloud_storage_class'] = client_rgw_config.get('cloud_storage_class')
                 s3tests_conf['s3 cloud']['storage_class'] = client_rgw_config.get('cloud_regular_storage_class')
                 s3tests_conf['s3 cloud']['retain_head_object'] = client_rgw_config.get('cloud_retain_head_object')
+                cloud_retain_current_version = client_rgw_config.get('cloud_retain_current_version')
+                if (cloud_retain_current_version != None):
+                    s3tests_conf['s3 cloud']['retain_current_version'] = cloud_retain_current_version
                 cloud_target_path = client_rgw_config.get('cloud_target_path')
                 cloud_target_storage_class = client_rgw_config.get('cloud_target_storage_class')
                 if (cloud_target_path != None):
@@ -486,8 +541,12 @@ def run_tests(ctx, config):
             attrs += ['not fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
             attrs += ['not sse_s3']
+        if not client_config.get('sse-c-block-by-default'):
+            attrs += ['not sse_c_block_by_default']
         if not client_config.get('s3control', False):
             attrs += ["not s3control"]
+        if not client_config.get('s3select_tests', False):
+            attrs += ["not s3select"]
 
         attrs += client_config.get('extra_attrs', [])
         if 'bucket_logging' not in attrs:

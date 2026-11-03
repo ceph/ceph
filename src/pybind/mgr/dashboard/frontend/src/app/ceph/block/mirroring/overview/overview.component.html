@@ -23,25 +23,29 @@
             [attr.disabled]="!editing ? true : null"
             cdsText
           />
-          <cds-icon-button
-            kind="ghost"
-            size="md"
-            (click)="updateSiteName()"
-            [title]="editing ? 'Save' : 'Edit'"
-          >
-            <svg
-              [cdsIcon]="icons.edit"
-              [size]="icons.size32"
-              class="cds--btn__icon"
-              *ngIf="!editing"
-            ></svg>
-            <svg
-              [cdsIcon]="icons.check"
-              [size]="icons.size32"
-              class="cds--btn__icon"
-              *ngIf="editing"
-            ></svg>
-          </cds-icon-button>
+          @if (permission.update) {
+            <cds-icon-button
+              kind="ghost"
+              size="md"
+              (click)="updateSiteName()"
+              [title]="editing ? 'Save' : 'Edit'"
+              data-testid="site-name-edit-btn"
+            >
+              @if (!editing) {
+                <svg
+                  [cdsIcon]="icons.edit"
+                  [size]="icons.size32"
+                  class="cds--btn__icon"
+                ></svg>
+              } @else {
+                <svg
+                  [cdsIcon]="icons.check"
+                  [size]="icons.size32"
+                  class="cds--btn__icon"
+                ></svg>
+              }
+            </cds-icon-button>
+          }
           <cd-copy-2-clipboard-button
             [source]="siteName"
             [byId]="false"
@@ -52,7 +56,7 @@
     </div>
     <div cdsCol="{md:5}">
       <div class="d-flex flex-row-reverse gap-3">
-        <ng-container *ngFor="let action of tableActions">
+        @for (action of tableActions; track action) {
           @if (!action.visible || action.visible(selection)) {
             <button
               type="button"
@@ -72,7 +76,7 @@
               ></svg>
             </button>
           }
-        </ng-container>
+        }
       </div>
     </div>
   </div>
@@ -80,7 +84,7 @@
 
 <div class="row">
   <div class="col-sm-6">
-    <legend i18n>Daemons</legend>
+    <legend i18n>Service instances</legend>
     <div>
       <cd-mirroring-daemons> </cd-mirroring-daemons>
     </div>

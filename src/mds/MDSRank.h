@@ -26,8 +26,11 @@
 
 #include "include/common_fwd.h"
 
+#include "msg/Connection.h" // for ConnectionRef
+
 #include "DamageTable.h"
 #include "MDSMap.h"
+#include "MDSPhaseTracker.h"
 #include "SessionMap.h"
 #include "PurgeQueue.h"
 #include "MetricsHandler.h"
@@ -56,6 +59,7 @@ enum {
   l_mds_forward,
   l_mds_dir_fetch_complete,
   l_mds_dir_fetch_keys,
+  l_mds_dir_fetch_background,
   l_mds_dir_commit,
   l_mds_dir_split,
   l_mds_dir_merge,
@@ -157,6 +161,7 @@ class C_ExecAndReply;
 class QuiesceDbManager;
 class QuiesceAgent;
 class MDSDmclockScheduler;
+class QuarantineTracker;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -399,6 +404,11 @@ class MDSRank {
     std::string get_path(inodeno_t ino);
     uint64_t get_inode_rbytes(inodeno_t ino);
 
+    // ino should be the subvol root inode number
+    bool register_quarantine_mgr(inodeno_t ino, std::shared_ptr<QuarantineTracker> qtine_op);
+    void unregister_quarantine_mgr(inodeno_t ino);
+    std::shared_ptr<QuarantineTracker> get_quarantine_mgr(inodeno_t ino);
+
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
@@ -437,6 +447,9 @@ class MDSRank {
 
     PerfCounters *logger = nullptr, *mlogger = nullptr;
     OpTracker op_tracker;
+    /* Time accounting for mds_lock, shared with the subsystems (MDCache,
+     * MDLog, ...) that do their upkeep under it. */
+    MDSPhaseTracker phase_tracker;
 
     std::map<ceph_tid_t, std::unique_ptr<MDSMetaRequest>> internal_client_requests;
 
@@ -541,6 +554,7 @@ class MDSRank {
     void command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
     void command_quiesce_db(const cmdmap_t& cmdmap, asok_finisher on_finish);
+    void command_quarantine_dir(const cmdmap_t& cmdmap, asok_finisher on_finish, const unsigned op);
 
     // FIXME the state machine logic should be separable from the dispatch
     // logic that calls it.
@@ -680,6 +694,9 @@ private:
     boost::asio::io_context& ioc;
 
     std::atomic_bool m_is_active = false; /* accessed outside mds_lock */
+
+    mutable std::mutex qtine_mutex;
+    std::unordered_map<inodeno_t, std::shared_ptr<QuarantineTracker>> qtine_ops;
 };
 
 /**

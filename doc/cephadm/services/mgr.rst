@@ -10,9 +10,10 @@ The cephadm MGR service hosts multiple modules. These include the
 .. _cephadm-mgr-networks:
 
 Specifying Networks
--------------------
+===================
 
-The MGR service supports binding only to a specific IP within a network.
+If ``networks`` is set in the MGR service specification, cephadm deploys MGR
+daemons only on hosts that have an IP address in one of the listed networks.
 
 example spec file (leveraging a default placement):
 
@@ -20,7 +21,7 @@ example spec file (leveraging a default placement):
 
     service_type: mgr
     networks:
-    - 192.169.142.0/24
+    - 192.168.142.0/24
 
 .. _cephadm_mgr_co_location:
 

@@ -1,4 +1,11 @@
-import { Component, EventEmitter, Input, Output, ViewEncapsulation } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  Input,
+  Output,
+  ViewEncapsulation,
+  ChangeDetectionStrategy
+} from '@angular/core';
 import {
   NotificationApplication,
   NotificationType
@@ -10,6 +17,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './notification-item.component.html',
   styleUrls: ['./notification-item.component.scss'],
   encapsulation: ViewEncapsulation.None,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
 export class NotificationItemComponent {
@@ -29,6 +37,8 @@ export class NotificationItemComponent {
   @Input() showChevron: boolean = false;
   /* Replace severity icon with unread dot */
   @Input() showUnread: boolean = false;
+  /* Number of deduplicated occurrences */
+  @Input() occurrences: number = 1;
   /* Emitted after notification is deleted via the service */
   @Output() deleted = new EventEmitter<string>();
 
@@ -46,10 +56,7 @@ export class NotificationItemComponent {
 
   onDelete(event: Event): void {
     event.stopPropagation();
-    const notifications = this.notificationService.getNotificationsSnapshot();
-    const index = notifications.findIndex((n) => n.id === this.notificationId);
-    if (index > -1) {
-      this.notificationService.remove(index);
+    if (this.notificationService.removeById(this.notificationId)) {
       this.deleted.emit(this.notificationId);
     }
   }

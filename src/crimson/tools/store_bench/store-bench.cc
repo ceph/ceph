@@ -883,11 +883,8 @@ int main(int argc, char **argv) {
         co_await crimson::common::local_conf().start();
 
         {
-          std::vector<const char *> cav;
-          std::transform(
-              std::begin(unrecognized_options), std::end(unrecognized_options),
-              std::back_inserter(cav), [](auto &s) { return s.c_str(); });
-          co_await crimson::common::local_conf().parse_argv(cav);
+          co_await crimson::common::local_conf().parse_argv(
+            std::move(unrecognized_options));
         }
 
         auto store = crimson::os::FuturizedStore::create(
@@ -932,7 +929,7 @@ int main(int argc, char **argv) {
             co_return results_t{};
           }
         };
-        for (unsigned i = 0; i < seastar::smp::count; ++i) {
+        for (unsigned i = 0; i < seastar::this_smp_shard_count(); ++i) {
           per_shard_futures.push_back(
               seastar::smp::submit_to(i, std::move(named_lambda)));
         }

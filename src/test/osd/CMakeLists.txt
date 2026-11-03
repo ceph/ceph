@@ -122,6 +122,9 @@ target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLK
 # pg_backend_test_fixture: object library for PGBackendTestFixture implementation
 add_library(pg_backend_test_fixture OBJECT
   PGBackendTestFixture.cc
+  MockPGBackendListener.cc
+  MockStore.cc
+  ObjectTracker.cc
 )
 target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
 
@@ -132,6 +135,21 @@ add_library(ec_peering_test_fixture OBJECT
 )
 target_link_libraries(ec_peering_test_fixture osd os global GTest::GTest)
 
+# object_tracker: object library for ObjectTracker implementation
+add_library(object_tracker OBJECT
+  ObjectTracker.cc
+)
+target_link_libraries(object_tracker osd global)
+
+# unittest_object_tracker
+add_executable(unittest_object_tracker
+  TestObjectTracker.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:object_tracker>
+  )
+add_ceph_unittest(unittest_object_tracker)
+target_link_libraries(unittest_object_tracker osd global ${BLKID_LIBRARIES})
+
 # unittest_backend_basics (replaces unittest_ecbasics + unittest_replicatedbasics)
 add_executable(unittest_backend_basics
   TestBackendBasics.cc
@@ -140,7 +158,7 @@ add_executable(unittest_backend_basics
   )
 add_ceph_unittest(unittest_backend_basics)
 target_link_libraries(unittest_backend_basics osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
-add_dependencies(unittest_backend_basics ${EC_ISA_LIB} ec_jerasure)
+add_dependencies(unittest_backend_basics erasure_code_plugins)
 # unittest_ecfailover_with_peering
 add_executable(unittest_ecfailover_with_peering
   TestECFailoverWithPeering.cc
@@ -151,7 +169,25 @@ add_executable(unittest_ecfailover_with_peering
   )
 add_ceph_unittest(unittest_ecfailover_with_peering)
 target_link_libraries(unittest_ecfailover_with_peering osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
-add_dependencies(unittest_ecfailover_with_peering ${EC_ISA_LIB} ec_jerasure)
+add_dependencies(unittest_ecfailover_with_peering erasure_code_plugins)
+
+# ec_crush_test_fixture: object library for ECCrushTestFixture implementation
+add_library(ec_crush_test_fixture OBJECT
+  ECCrushTestFixture.cc
+)
+target_link_libraries(ec_crush_test_fixture osd os global GTest::GTest)
+
+# unittest_ec_with_crush
+add_executable(unittest_ec_with_crush
+  TestECWithCRUSH.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:ec_crush_test_fixture>
+  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  )
+add_ceph_unittest(unittest_ec_with_crush)
+target_link_libraries(unittest_ec_with_crush osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+add_dependencies(unittest_ec_with_crush erasure_code_plugins)
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
@@ -231,6 +267,7 @@ set(OSD_UNITTESTS
   unittest_ec_transaction_l
   unittest_ecbackend
   unittest_ecbackend_l
+  unittest_ec_with_crush
   unittest_ecfailover_with_peering
   unittest_ecutil
   unittest_extent_cache
@@ -240,6 +277,7 @@ set(OSD_UNITTESTS
   unittest_osd_osdcap
   unittest_osd_types
   unittest_osdscrub
+  unittest_object_tracker
   unittest_peeringstate
   unittest_pg_transaction
   unittest_pglog
@@ -265,3 +303,11 @@ add_custom_target(osd_unittests
   COMMENT "Building and running all OSD unit tests via ctest"
   VERBATIM
 )
+
+# unittest_io_sequence
+add_executable(unittest_io_sequence
+  test_io_sequence.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_io_sequence)
+target_link_libraries(unittest_io_sequence object_io_exerciser global)

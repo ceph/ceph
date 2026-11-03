@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from '@jest/globals';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { RouterTestingModule } from '@angular/router/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 import { OverviewComponent } from './resource-overview-card.component';
@@ -13,7 +14,7 @@ describe('OverviewComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [OverviewComponent],
-      imports: [PipesModule],
+      imports: [PipesModule, RouterTestingModule],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
@@ -45,6 +46,24 @@ describe('OverviewComponent', () => {
 
       expect(labelEl.nativeElement.textContent.trim()).toBe('CPU');
       expect(valueEl.nativeElement.textContent.trim()).toBe('Intel');
+    });
+
+    it('should render link values as links', () => {
+      component.fields = [
+        {
+          label: 'Resource',
+          value: 'Resource 42',
+          type: 'link',
+          routerLink: ['/resources', 42]
+        }
+      ];
+      fixture.detectChanges();
+
+      const linkEl = fixture.debugElement.query(By.css('a.cd-overview-value'));
+
+      expect(linkEl).toBeTruthy();
+      expect(linkEl.nativeElement.textContent.trim()).toBe('Resource 42');
+      expect(linkEl.nativeElement.getAttribute('href')).toBe('/resources/42');
     });
 
     it('should render tags correctly', () => {
@@ -110,6 +129,45 @@ describe('OverviewComponent', () => {
         By.css('.cd-overview-status .cd-status-text--info')
       );
       expect(statusText).toBeTruthy();
+    });
+  });
+
+  describe('Loading State', () => {
+    it('should set loading property to true', () => {
+      component.loading = true;
+      fixture.detectChanges();
+
+      expect(component.loading).toBe(true);
+    });
+
+    it('should calculate the correct number of loading placeholders based on columns when fields are empty', () => {
+      component.columns = 4;
+      component.fields = [];
+      component.ngOnChanges();
+
+      expect(component.loadingPlaceholders.length).toBe(4);
+      expect(component.loadingPlaceholders).toEqual([0, 1, 2, 3]);
+    });
+
+    it('should calculate the correct number of loading placeholders based on fields length when fields exist', () => {
+      component.columns = 4;
+      component.fields = [
+        { label: 'Field 1', value: '1' },
+        { label: 'Field 2', value: '2' }
+      ];
+      component.ngOnChanges();
+
+      // Should prefer fields.length (2) over columns (4)
+      expect(component.loadingPlaceholders.length).toBe(2);
+      expect(component.loadingPlaceholders).toEqual([0, 1]);
+    });
+
+    it('should always render at least 1 placeholder if both fields length and columns are 0', () => {
+      component.columns = 0;
+      component.fields = [];
+      component.ngOnChanges();
+
+      expect(component.loadingPlaceholders.length).toBe(1);
     });
   });
 });

@@ -17,6 +17,9 @@
 #define ECBMSGTYPES_H
 
 #include <fmt/format.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 #include "osd_types.h"
 #include "include/buffer.h"

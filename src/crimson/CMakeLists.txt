@@ -1,3 +1,7 @@
+# crimson has no legacy performance baseline to protect: always build it
+# (and all its subdirectories) with frame pointers, for every build type.
+add_compile_options(${FRAME_POINTER_COMPILE_OPTIONS})
+
 add_library(crimson::cflags INTERFACE IMPORTED)
 set(crimson_cflag_definitions "WITH_CRIMSON=1")
 
@@ -41,6 +45,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/ceph_argparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
+  ${PROJECT_SOURCE_DIR}/src/common/debug_level_guard.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_fs.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_hash.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_time.cc
@@ -77,6 +82,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/str_list.cc
   ${PROJECT_SOURCE_DIR}/src/common/str_map.cc
   ${PROJECT_SOURCE_DIR}/src/common/strtol.cc
+  ${PROJECT_SOURCE_DIR}/src/common/tracer.cc
   ${PROJECT_SOURCE_DIR}/src/common/reverse.c
   ${PROJECT_SOURCE_DIR}/src/common/types.cc
   ${PROJECT_SOURCE_DIR}/src/common/utf8.c
@@ -95,10 +101,8 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/LogEntry.cc
   ${PROJECT_SOURCE_DIR}/src/common/TextTable.cc
   ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
-  ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
-  ${PROJECT_SOURCE_DIR}/src/compressor/Compressor.cc
   ${PROJECT_SOURCE_DIR}/src/crush/builder.c
   ${PROJECT_SOURCE_DIR}/src/crush/mapper.c
   ${PROJECT_SOURCE_DIR}/src/crush/crush.c
@@ -108,9 +112,12 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/crush/CrushTester.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
-  ${PROJECT_SOURCE_DIR}/src/include/filepath.cc
+  ${PROJECT_SOURCE_DIR}/src/common/filepath.cc
   ${PROJECT_SOURCE_DIR}/src/include/object.cc
+  ${PROJECT_SOURCE_DIR}/src/include/client_t.cc
   ${PROJECT_SOURCE_DIR}/src/include/types.cc
+  ${PROJECT_SOURCE_DIR}/src/include/errorcode32.cc
+  ${PROJECT_SOURCE_DIR}/src/include/shard_id.cc
   ${PROJECT_SOURCE_DIR}/src/include/utime.cc
   ${PROJECT_SOURCE_DIR}/src/include/uuid.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
@@ -147,6 +154,11 @@ target_compile_definitions(crimson-common PRIVATE
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
+# see src/common/CMakeLists.txt
+set_property(SOURCE ${PROJECT_SOURCE_DIR}/src/common/version.cc
+  APPEND PROPERTY COMPILE_DEFINITIONS
+  "CEPH_VENDOR_RELEASE=\"${CEPH_VENDOR_RELEASE}\"")
+
 target_link_libraries(crimson-common
   PUBLIC
     $<$<BOOL:${WITH_JAEGER}>:jaeger_base>
@@ -181,8 +193,8 @@ set(crimson_mon_srcs
   ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
 set(crimson_net_srcs
   ${PROJECT_SOURCE_DIR}/src/msg/async/crypto_onwire.cc
-  ${PROJECT_SOURCE_DIR}/src/msg/async/compression_onwire.cc
   ${PROJECT_SOURCE_DIR}/src/msg/async/frames_v2.cc
+  net/compression_onwire_stub.cc
   net/Errors.cc
   net/FrameAssemblerV2.cc
   net/io_handler.cc
@@ -209,3 +221,15 @@ add_subdirectory(admin)
 add_subdirectory(os)
 add_subdirectory(osd)
 add_subdirectory(tools)
+
+if(WITH_EC_ISA_PLUGIN)
+  add_library(ec_isa_crimson STATIC
+    ${PROJECT_SOURCE_DIR}/src/erasure-code/isa/ErasureCodeIsa.cc
+    ${PROJECT_SOURCE_DIR}/src/erasure-code/isa/ErasureCodeIsaTableCache.cc
+    ${PROJECT_SOURCE_DIR}/src/erasure-code/isa/ErasureCodePluginIsa.cc
+    $<TARGET_OBJECTS:erasure_code_objs>)
+  target_link_libraries(ec_isa_crimson PUBLIC ISAL::ISAL crimson::cflags)
+  target_compile_definitions(ec_isa_crimson INTERFACE WITH_EC_ISA_PLUGIN)
+  target_link_libraries(crimson-osd
+    -Wl,--whole-archive ec_isa_crimson -Wl,--no-whole-archive)
+endif()

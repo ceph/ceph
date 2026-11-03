@@ -60,6 +60,13 @@ public:
     Transaction &t,
     laddr_t laddr) = 0;
 
+  using upper_bound_right_iertr = base_iertr::extend<
+    crimson::ct_error::enoent>;
+  using upper_bound_right_ret = upper_bound_right_iertr::future<LBACursorRef>;
+  virtual upper_bound_right_ret upper_bound_right(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
 #ifdef UNIT_TESTS_BUILT
   using get_end_mapping_iertr = base_iertr;
   using get_end_mapping_ret = get_end_mapping_iertr::future<LBACursorRef>;
@@ -167,6 +174,20 @@ public:
     LBACursorRef dest,
     LogicalChildNode &extent) = 0;
 
+  using promote_extent_iertr = base_iertr;
+  using promote_extent_ret = promote_extent_iertr::future<>;
+  virtual promote_extent_ret promote_extent(
+    Transaction &t,
+    LBACursor &cursor,
+    std::vector<LogicalChildNodeRef> extents) = 0;
+
+  using demote_extent_iertr = base_iertr;
+  using demote_extent_ret = demote_extent_iertr::future<LBACursorRef>;
+  virtual demote_extent_ret demote_extent(
+    Transaction &t,
+    LBACursor &cursor,
+    LogicalChildNode &extent) = 0;
+
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_hint_t hint,
@@ -253,7 +274,7 @@ public:
   using scan_mappings_iertr = base_iertr;
   using scan_mappings_ret = scan_mappings_iertr::future<>;
   using scan_mappings_func_t = std::function<
-    void(laddr_t, paddr_t, extent_len_t)>;
+    void(laddr_t, paddr_t, paddr_t, extent_len_t)>;
   virtual scan_mappings_ret scan_mappings(
     Transaction &t,
     laddr_t begin,

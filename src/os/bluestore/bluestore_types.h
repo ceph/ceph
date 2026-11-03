@@ -30,9 +30,140 @@
 #include "include/ceph_hash.h"
 #include "include/intarith.h" // for round_up_to()
 
+#include "include/ceph_assert.h"
+
+// Decode-failure tolerance for BlueStore fsck/repair (tracker #77325).
+// Regular I/O still crashes on corrupt decode; a caller can opt in via
+// throwing_guard to get ceph::buffer::malformed_input instead, so it can
+// catch and report the failure rather than aborting.
+namespace bluestore_decode {
+extern thread_local bool throw_on_failure;
+struct throwing_guard {
+  explicit throwing_guard(bool enable = true) : active(enable) {
+    if (active) {
+      ceph_assert(!throw_on_failure);
+      throw_on_failure = true;
+    }
+  }
+  ~throwing_guard() {
+    if (active) {
+      throw_on_failure = false;
+    }
+  }
+private:
+  bool active;
+};
+  void assert_fail(const char* assertion, const char* file,
+                   int line, const char* func);
+} // namespace bluestore_decode
+
+#define ceph_assert_decode(expr)                                           \
+  do {                                                                     \
+    ((expr))                                                               \
+    ? _CEPH_ASSERT_VOID_CAST (0)                                           \
+      : ::bluestore_decode::assert_fail(__STRING(expr), __FILE__,          \
+                                        __LINE__, __CEPH_ASSERT_FUNCTION); \
+  } while (false)
+
 namespace ceph {
   class Formatter;
 }
+
+struct store_statfs_t;
+struct volatile_statfs {
+  enum {
+    STATFS_ALLOCATED = 0,
+    STATFS_STORED,
+    STATFS_COMPRESSED_ORIGINAL,
+    STATFS_COMPRESSED,
+    STATFS_COMPRESSED_ALLOCATED,
+    STATFS_LAST
+  };
+  int64_t values[STATFS_LAST];
+  volatile_statfs() {
+    memset(this, 0, sizeof(volatile_statfs));
+  }
+  void reset() {
+    *this = volatile_statfs();
+  }
+  bool empty() const {
+    for (size_t i = 0; i < STATFS_LAST; ++i) {
+      if (values[i]) {
+	return false;
+      }
+    }
+    return true;
+  }
+  void publish(store_statfs_t* buf) const;
+
+  volatile_statfs& operator+=(const volatile_statfs& other) {
+    for (size_t i = 0; i < STATFS_LAST; ++i) {
+      values[i] += other.values[i];
+    }
+    return *this;
+  }
+  int64_t& allocated() {
+    return values[STATFS_ALLOCATED];
+  }
+  int64_t& stored() {
+    return values[STATFS_STORED];
+  }
+  int64_t& compressed_original() {
+    return values[STATFS_COMPRESSED_ORIGINAL];
+  }
+  int64_t& compressed() {
+    return values[STATFS_COMPRESSED];
+  }
+  int64_t& compressed_allocated() {
+    return values[STATFS_COMPRESSED_ALLOCATED];
+  }
+  int64_t allocated() const {
+    return values[STATFS_ALLOCATED];
+  }
+  int64_t stored() const {
+    return values[STATFS_STORED];
+  }
+  int64_t compressed_original() const {
+    return values[STATFS_COMPRESSED_ORIGINAL];
+  }
+  int64_t compressed() const {
+    return values[STATFS_COMPRESSED];
+  }
+  int64_t compressed_allocated() const {
+    return values[STATFS_COMPRESSED_ALLOCATED];
+  }
+  volatile_statfs& operator=(const store_statfs_t& st);
+  bool operator==(const volatile_statfs& rhs) const {
+    return
+      values[STATFS_ALLOCATED] == rhs.values[STATFS_ALLOCATED] &&
+      values[STATFS_STORED] == rhs.values[STATFS_STORED] &&
+      values[STATFS_COMPRESSED_ORIGINAL] == rhs.values[STATFS_COMPRESSED_ORIGINAL] &&
+      values[STATFS_COMPRESSED] == rhs.values[STATFS_COMPRESSED] &&
+      values[STATFS_COMPRESSED_ALLOCATED] == rhs.values[STATFS_COMPRESSED_ALLOCATED];
+  }
+  bool is_empty() {
+    return values[STATFS_ALLOCATED] == 0 &&
+      values[STATFS_STORED] == 0 &&
+      values[STATFS_COMPRESSED] == 0 &&
+      values[STATFS_COMPRESSED_ORIGINAL] == 0 &&
+      values[STATFS_COMPRESSED_ALLOCATED] == 0;
+  }
+  void decode(ceph::buffer::list::const_iterator& it) {
+    using ceph::decode;
+    for (size_t i = 0; i < STATFS_LAST; i++) {
+      decode(values[i], it);
+    }
+  }
+
+  void encode(ceph::buffer::list& bl) {
+    using ceph::encode;
+    for (size_t i = 0; i < STATFS_LAST; i++) {
+      encode(values[i], bl);
+    }
+  }
+};
+
+std::ostream& operator<<(std::ostream& out, const volatile_statfs& s);
 
 struct bluestore_stats_t
 {
@@ -158,6 +289,7 @@ struct denc_traits<PExtentVector> {
     unsigned num;
     denc_varint(num, p);
     v.clear();
+    ceph_assert_decode(num <= unsigned(p.get_end() - p.get_pos())); 
     v.resize(num);
     for (unsigned i=0; i<num; ++i) {
       denc(v[i], p);
@@ -486,6 +618,7 @@ struct bluestore_blob_use_tracker_t {
         num_au = 0;
         denc_varint(total_bytes, p);
       } else {
+        ceph_assert_decode(_num_au <= size_t(p.get_end() - p.get_pos()));
         allocate(_num_au);
         for (size_t i = 0; i < _num_au; ++i) {
 	  denc_varint(bytes_per_au[i], p);
@@ -1647,5 +1780,22 @@ private:
     return *aux_items.emplace(it, id);
   }
 };
+
+struct  read_alloc_stats_t {
+  uint32_t onode_count             = 0;
+  uint32_t shard_count             = 0;
+
+  uint32_t skipped_illegal_extent  = 0;
+
+  uint64_t shared_blob_count      = 0;
+  uint64_t compressed_blob_count   = 0;
+  uint64_t spanning_blob_count     = 0;
+  uint64_t insert_count            = 0;
+  uint64_t extent_count            = 0;
+
+  std::map<uint64_t, volatile_statfs> actual_pool_vstatfs;
+  volatile_statfs actual_store_vstatfs;
+};
+std::ostream& operator<<(std::ostream& out, const read_alloc_stats_t& stats);
 
 #endif

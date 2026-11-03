@@ -32,6 +32,7 @@ export class DocService {
       iscsi: `${domain}mgr/dashboard/#enabling-iscsi-management`,
       prometheus: `${domain}mgr/dashboard/#enabling-prometheus-alerting`,
       'nfs-ganesha': `${domain}mgr/dashboard/#configuring-nfs-ganesha-in-the-dashboard`,
+      'nfs-cephadm': `${domain}cephadm/services/nfs/`,
       'rgw-nfs': `${domain}radosgw/nfs`,
       rgw: `${domain}mgr/dashboard/#enabling-the-object-gateway-management-frontend`,
       'rgw-multisite': `${domain}/radosgw/multisite/#failover-and-disaster-recovery`,
@@ -50,6 +51,14 @@ export class DocService {
     };
 
     return sections[section];
+  }
+
+  alertDocUrl(alertName: string, releaseVersion = ''): string | null {
+    const baseUrl = this.urlGenerator('managing-alerts', releaseVersion);
+    if (!baseUrl || !alertName) {
+      return null;
+    }
+    return `${baseUrl}#${encodeURIComponent(`managing-alerts__${alertName.toLowerCase()}`)}`;
   }
 
   subscribeOnce(

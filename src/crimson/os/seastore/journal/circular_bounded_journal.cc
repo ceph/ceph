@@ -141,7 +141,7 @@ CircularBoundedJournal::submit_record(
 }
 
 Journal::replay_ret CircularBoundedJournal::replay_segment(
-   cbj_delta_handler_t &handler, scan_valid_records_cursor& cursor)
+   scan_delta_handler_t &handler, scan_valid_records_cursor& cursor)
 {
   LOG_PREFIX(Journal::replay_segment);
   return seastar::do_with(
@@ -232,7 +232,7 @@ Journal::replay_ret CircularBoundedJournal::replay_segment(
 
 
 Journal::replay_ret CircularBoundedJournal::scan_valid_record_delta(
-   cbj_delta_handler_t &&handler, journal_seq_t tail)
+   scan_delta_handler_t &&handler, journal_seq_t tail)
 {
   LOG_PREFIX(Journal::scan_valid_record_delta);
   INFO("starting at {} ", tail);
@@ -267,7 +267,7 @@ RecordScanner::read_ret CircularBoundedJournal::read(paddr_t start, size_t len)
   LOG_PREFIX(CircularBoundedJournal::read);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(start);
   DEBUG("reading data from addr {} read length {}", addr, len);
-  auto bptr = bufferptr(ceph::buffer::create_page_aligned(len));
+  auto bptr = bufferptr(cjs.get_device().alloc_io_buffer(len));
   return cjs.read(addr, bptr 
   ).safe_then([bptr=std::move(bptr)]() {
     return read_ret(
@@ -341,7 +341,6 @@ Journal::replay_ret CircularBoundedJournal::replay(
   cjs.set_cbj_header(head);
   DEBUG("header : {}", cjs.get_cbj_header());
   cjs.set_initialized(true);
-  std::map<paddr_t, journal_seq_t> map;
   std::map<paddr_t, std::pair<CachedExtentRef, uint32_t>> crc_info;
   auto tail = get_dirty_tail() <= get_alloc_tail() ?
     get_dirty_tail() : get_alloc_tail();
@@ -360,27 +359,9 @@ Journal::replay_ret CircularBoundedJournal::replay(
     return replay_ertr::make_ready_future<bool>(true);
   };
   co_await scan_valid_record_delta(std::move(find_tail), tail);
-  tail = get_dirty_tail() <= get_alloc_tail() ?
-    get_dirty_tail() : get_alloc_tail();
-  auto build_paddr_seq_map = [&map](
-    const auto &offsets,
-    const auto &e,
-    sea_time_point modify_time)
-  {
-    if (e.type == extent_types_t::ALLOC_INFO) {
-      alloc_delta_t alloc_delta;
-      decode(alloc_delta, e.bl);
-      if (alloc_delta.op == alloc_delta_t::op_types_t::CLEAR) {
-        for (auto &alloc_blk : alloc_delta.alloc_blk_ranges) {
-          map[alloc_blk.paddr] = offsets.write_result.start_seq;
-        }
-      }
-    }
-    return replay_ertr::make_ready_future<bool>(true);
-  };
   // The second pass to build the paddr->journal_seq_t map
   // from extent allocations
-  co_await scan_valid_record_delta(std::move(build_paddr_seq_map), tail);
+  alloc_map_t map = co_await scan_alloc_map();
   auto call_d_handler_if_valid = [this, &map, &d_handler, &crc_info](
     const auto &offsets,
     const auto &e,
@@ -451,15 +432,17 @@ void CircularBoundedJournal::register_metrics()
       sm::make_gauge(
 	"submit_record_latency_average",
 	[this] {
-	  return stats.submit_record_latency_total.count() /
-	    stats.submit_record_count;
+	  return stats.submit_record_count > 0 ?
+	    stats.submit_record_latency_total.count() /
+	    stats.submit_record_count : 0.0;
 	}
       ),
       sm::make_gauge(
 	"submit_record_size_average",
 	[this] {
-	  return stats.submit_record_size /
-	    stats.submit_record_count;
+	  return stats.submit_record_count > 0 ?
+	    stats.submit_record_size /
+	    stats.submit_record_count : 0;
 	}
       ),
       sm::make_gauge(
@@ -477,8 +460,9 @@ void CircularBoundedJournal::register_metrics()
       sm::make_gauge(
 	"submit_record_roll_latency_average",
 	[this] {
-	  return stats.submit_record_roll_latency_total.count() /
-	    stats.submit_record_roll_count;
+	  return stats.submit_record_roll_count > 0 ?
+	    stats.submit_record_roll_latency_total.count() /
+	    stats.submit_record_roll_count : 0.0;
 	}
       ),
       sm::make_gauge(
@@ -496,8 +480,9 @@ void CircularBoundedJournal::register_metrics()
       sm::make_gauge(
 	"submit_record_wait_latency_average",
 	[this] {
-	  return stats.submit_record_wait_latency_total.count() /
-	    stats.submit_record_wait_count;
+	  return stats.submit_record_wait_count > 0 ?
+	    stats.submit_record_wait_latency_total.count() /
+	    stats.submit_record_wait_count : 0.0;
 	}
       )
     }

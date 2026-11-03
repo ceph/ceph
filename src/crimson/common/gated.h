@@ -85,9 +85,9 @@ class Gated {
 // across shards. ( https://tracker.ceph.com/issues/64332 )
 class gate_per_shard {
  public:
-  gate_per_shard() : gates(seastar::smp::count) {
+  gate_per_shard() : gates(seastar::this_smp_shard_count()) {
     std::vector<seastar::future<>> futures;
-    for (unsigned shard = 0; shard < seastar::smp::count; ++shard) {
+    for (unsigned shard = 0; shard < seastar::this_smp_shard_count(); ++shard) {
       futures.push_back(seastar::smp::submit_to(shard, [this, shard] {
         gates[shard] = std::make_unique<Gated>();
       }));
@@ -121,7 +121,7 @@ class gate_per_shard {
   }
 
   seastar::future<> close_all() {
-    ceph_assert(gates.size() == seastar::smp::count);
+    ceph_assert(gates.size() == seastar::this_smp_shard_count());
     return seastar::parallel_for_each(gates.begin(), gates.end(), [] (std::unique_ptr<Gated>& gate_ptr) {
       return seastar::smp::submit_to(gate_ptr->get_shard_id(), [gate = gate_ptr.get()] {
         return gate->close();

@@ -1,0 +1,4 @@
+tasks:
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:tentacle
+    compiled_cephadm_branch: tentacle

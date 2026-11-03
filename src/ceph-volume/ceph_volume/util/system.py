@@ -60,7 +60,7 @@ def find_executable_on_host(locations=[], executable='', binary_check='/bin/ls')
     stdout = as_string(process.stdout.read())
     if stdout:
         executable_on_host = stdout.split('\n')[0]
-        logger.info('Executable {} found on the host, will use {}'.format(executable, executable_on_host))
+        logger.debug('Executable {} found on the host, will use {}'.format(executable, executable_on_host))
         return executable_on_host
     else:
         logger.warning('Executable {} not found on the host, will return {} as-is'.format(executable, executable))
@@ -216,9 +216,9 @@ def unmount_tmpfs(path):
     """
     _out, _err, rc = process.call(['findmnt', '-t', 'tmpfs', '-M', path])
     if rc != 0:
-        logger.info('{} does not appear to be a tmpfs mount'.format(path))
+        logger.debug('{} does not appear to be a tmpfs mount'.format(path))
     else:
-        logger.info('Unmounting tmpfs path at {}'.format( path))
+        logger.debug('Unmounting tmpfs path at {}'.format( path))
         unmount(path)
 
 
@@ -275,14 +275,14 @@ def device_is_mounted(dev, destination=None):
         if mounts: # we have a matching mount
             if destination:
                 if destination in mounts:
-                    logger.info(
+                    logger.debug(
                         '%s detected as mounted, exists at destination: %s', dev, destination
                     )
                     return True
             else:
-                logger.info('%s was found as mounted', dev)
+                logger.debug('%s was found as mounted', dev)
                 return True
-    logger.info('%s was not found as mounted', dev)
+    logger.debug('%s was not found as mounted', dev)
     return False
 
 class Mounts(object):
@@ -395,7 +395,7 @@ def set_context(path, recursive=False):
     """
     skip = os.environ.get('CEPH_VOLUME_SKIP_RESTORECON', '')
     if skip.lower() in ['1', 'true', 'yes']:
-        logger.info(
+        logger.debug(
             'CEPH_VOLUME_SKIP_RESTORECON environ is set, will not call restorecon'
         )
         return
@@ -404,11 +404,11 @@ def set_context(path, recursive=False):
         stdout, stderr, code = process.call(['selinuxenabled'],
                                             verbose_on_failure=False)
     except FileNotFoundError:
-        logger.info('No SELinux found, skipping call to restorecon')
+        logger.debug('No SELinux found, skipping call to restorecon')
         return
 
     if code != 0:
-        logger.info('SELinux is not enabled, will not call restorecon')
+        logger.debug('SELinux is not enabled, will not call restorecon')
         return
 
     # restore selinux context to default policy values

@@ -20,8 +20,6 @@
 #include <string>
 #include <string_view>
 
-#include "mds/mdstypes.h"
-
 #include "include/encoding.h"
 #include "include/cephfs/types.h" // for fs_cluster_id_t
 #include "include/types.h" // for epoch_t

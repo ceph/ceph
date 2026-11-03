@@ -6,6 +6,9 @@ tasks:
 - cephadm:
 - cephadm.shell:
     host.a:
+    # https://tracker.ceph.com/issues/75452
+    # prevent CEPHADM_REFRESH_FAILED from frequent device cache timeouts
+    - ceph config set mgr mgr/cephadm/device_cache_timeout 86400
     # get state before nvmeof deployment
     - ceph orch status
     - ceph orch ps

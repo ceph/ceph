@@ -4,6 +4,7 @@
 #include "MonMap.h"
 
 #include <algorithm>
+#include <limits>
 #include <sstream>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -18,10 +19,14 @@
 
 #include "common/Formatter.h"
 
+#include "include/ceph_fs.h"
 #include "include/ceph_features.h"
+#include "include/container_ios.h"
 #include "include/addr_parsing.h"
+#include "auth/Crypto.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
+#include "common/ceph_time_fmt.h"
 #include "common/dns_resolve.h"
 #include "common/errno.h"
 #include "common/dout.h"
@@ -185,6 +190,193 @@ void MonMap::calc_legacy_ranks()
   }
 }
 
+void MonMap::calc_addr_mons() {
+  // populate addr_mons
+  addr_mons.clear();
+  for (auto& p : mon_info) {
+    for (auto& a : p.second.public_addrs.v) {
+      addr_mons[a] = p.first;
+    }
+  }
+}
+
+void MonMap::list_addrs(std::list<entity_addr_t>& ls) const {
+  for (auto& i : mon_info) {
+    for (auto& j : i.second.public_addrs.v) {
+      ls.push_back(j);
+    }
+  }
+}
+
+void MonMap::remove(const std::string &name) {
+  // this must match what we do in ConnectionTracker::notify_rank_removed
+  ceph_assert(mon_info.count(name));
+  int rank = get_rank(name);
+  mon_info.erase(name);
+  disallowed_leaders.erase(name);
+  ceph_assert(mon_info.count(name) == 0);
+  if (rank >= 0 ) {
+    removed_ranks.insert(rank);
+  }
+  if (get_required_features().contains_all(
+        ceph::features::mon::FEATURE_NAUTILUS)) {
+    ranks.erase(std::find(ranks.begin(), ranks.end(), name));
+    ceph_assert(ranks.size() == mon_info.size());
+  } else {
+    calc_legacy_ranks();
+  }
+  calc_addr_mons();
+}
+
+void MonMap::rename(std::string oldname, std::string newname) {
+  ceph_assert(contains(oldname));
+  ceph_assert(!contains(newname));
+  mon_info[newname] = mon_info[oldname];
+  mon_info.erase(oldname);
+  mon_info[newname].name = newname;
+  if (get_required_features().contains_all(
+        ceph::features::mon::FEATURE_NAUTILUS)) {
+    *std::find(ranks.begin(), ranks.end(), oldname) = newname;
+    ceph_assert(ranks.size() == mon_info.size());
+  } else {
+    calc_legacy_ranks();
+  }
+  calc_addr_mons();
+}
+
+int MonMap::set_rank(const std::string& name, int rank) {
+  int oldrank = get_rank(name);
+  if (oldrank < 0) {
+    return -ENOENT;
+  }
+  if (rank < 0 || rank >= (int)ranks.size()) {
+    return -EINVAL;
+  }
+  if (oldrank != rank) {
+    ranks.erase(ranks.begin() + oldrank);
+    ranks.insert(ranks.begin() + rank, name);
+  }
+  return 0;
+}
+
+bool MonMap::contains(const std::string& name) const {
+  return mon_info.count(name);
+}
+
+bool MonMap::contains(const entity_addr_t &a, std::string *name) const {
+  for (auto& i : mon_info) {
+    for (auto& j : i.second.public_addrs.v) {
+      if (j == a) {
+        if (name) {
+          *name = i.first;
+        }
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool MonMap::contains(const entity_addrvec_t &av, std::string *name) const {
+  for (auto& i : mon_info) {
+    for (auto& j : i.second.public_addrs.v) {
+      for (auto& k : av.v) {
+        if (j == k) {
+          if (name) {
+            *name = i.first;
+          }
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+std::string MonMap::get_name(const entity_addr_t& a) const {
+  std::map<entity_addr_t, std::string>::const_iterator p = addr_mons.find(a);
+  if (p == addr_mons.end())
+    return std::string();
+  else
+    return p->second;
+}
+
+std::string MonMap::get_name(const entity_addrvec_t& av) const {
+  for (auto& i : av.v) {
+    std::map<entity_addr_t, std::string>::const_iterator p = addr_mons.find(i);
+    if (p != addr_mons.end())
+      return p->second;
+  }
+  return std::string();
+}
+
+int MonMap::get_rank(const std::string& n) const {
+  if (auto found = std::find(ranks.begin(), ranks.end(), n);
+      found != ranks.end()) {
+    return std::distance(ranks.begin(), found);
+  } else {
+    return -1;
+  }
+}
+
+int MonMap::get_rank(const entity_addr_t& a) const {
+  std::string n = get_name(a);
+  if (!n.empty()) {
+    return get_rank(n);
+  }
+  return -1;
+}
+
+int MonMap::get_rank(const entity_addrvec_t& av) const {
+  std::string n = get_name(av);
+  if (!n.empty()) {
+    return get_rank(n);
+  }
+  return -1;
+}
+
+bool MonMap::get_addr_name(const entity_addr_t& a, std::string& name) {
+  if (addr_mons.count(a) == 0)
+    return false;
+  name = addr_mons[a];
+  return true;
+}
+
+const entity_addrvec_t& MonMap::get_addrs(const std::string& n) const {
+  ceph_assert(mon_info.count(n));
+  std::map<std::string,mon_info_t>::const_iterator p = mon_info.find(n);
+  return p->second.public_addrs;
+}
+
+const entity_addrvec_t& MonMap::get_addrs(unsigned m) const {
+  ceph_assert(m < ranks.size());
+  return get_addrs(ranks[m]);
+}
+
+void MonMap::set_addrvec(const std::string& n, const entity_addrvec_t& a) {
+  ceph_assert(mon_info.count(n));
+  mon_info[n].public_addrs = a;
+  calc_addr_mons();
+}
+
+uint16_t MonMap::get_priority(const std::string& n) const {
+  auto it = mon_info.find(n);
+  ceph_assert(it != mon_info.end());
+  return it->second.priority;
+}
+
+uint16_t MonMap::get_weight(const std::string& n) const {
+  auto it = mon_info.find(n);
+  ceph_assert(it != mon_info.end());
+  return it->second.weight;
+}
+
+void MonMap::set_weight(const std::string& n, uint16_t v) {
+  auto it = mon_info.find(n);
+  ceph_assert(it != mon_info.end());
+  it->second.weight = v;
+}
+
 void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
 {
   if ((con_features & CEPH_FEATURE_MONNAMES) == 0) {
@@ -250,7 +442,7 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(9, 6, blist);
+  ENCODE_START(10, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
@@ -267,13 +459,29 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(stretch_mode_enabled, blist);
   encode(tiebreaker_mon, blist);
   encode(stretch_marked_down_mons, blist);
+
+  /*
+   * We do not check quorum features here before encoding v10 fields. Older
+   * monitors will safely skip these with compat_v < 10. Furthermore, if the
+   * AES256K feature is actively configured, the INCOMPAT flag is set, strictly
+   * preventing older monitors from joining the quorum and potentially dropping
+   * these fields if they were to become leader.
+   */
+  encode(auth_epoch, blist);
+  encode(auth_service_cipher, blist);
+  {
+    auto v = auth_allowed_ciphers;
+    std::sort(v.begin(), v.end());
+    encode(v, blist);
+  }
+  encode(auth_preferred_cipher, blist);
   ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(ceph::buffer::list::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
-  DECODE_START_LEGACY_COMPAT_LEN_16(9, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(10, 3, 3, p);
   ceph::decode_raw(fsid, p);
   decode(epoch, p);
   if (struct_v == 1) {
@@ -330,6 +538,20 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
     stretch_mode_enabled = false;
     tiebreaker_mon = "";
     stretch_marked_down_mons.clear();
+  }
+  if (struct_v >= 10) {
+    decode(auth_epoch, p);
+    decode(auth_service_cipher, p);
+    decode(auth_allowed_ciphers, p);
+    decode(auth_preferred_cipher, p);
+  } else {
+    /* When decoding an old MonMap, choose defaults reasonable for an existing
+     * cluster:
+     */
+    auth_epoch = 0;
+    auth_service_cipher = CEPH_CRYPTO_AES;
+    auth_allowed_ciphers = {CEPH_CRYPTO_AES, CEPH_CRYPTO_AES256KRB5};
+    auth_preferred_cipher = CEPH_CRYPTO_AES;
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -474,11 +696,45 @@ void MonMap::print(ostream& out) const
     }
     out << "\n";
   }
+  out << "auth_epoch " << auth_epoch << "\n";
+  out << "auth_service_cipher " << CryptoManager::get_key_type_name(auth_service_cipher) << "\n";
+  {
+    out << "auth_allowed_ciphers ";
+    bool first = true;
+    for (auto& c : auth_allowed_ciphers) {
+      if (!first) out << ", ";
+      out << CryptoManager::get_key_type_name(c);
+      first = false;
+    }
+    out << "\n";
+  }
+  out << "auth_preferred_cipher " << CryptoManager::get_key_type_name(auth_preferred_cipher) << "\n";
 }
 
 void MonMap::dump(Formatter *f) const
 {
   f->dump_unsigned("epoch", epoch);
+  f->dump_unsigned("auth_epoch", auth_epoch);
+
+  f->open_object_section("auth_service_cipher");
+  f->dump_string("name", CryptoManager::get_key_type_name(auth_service_cipher));
+  f->dump_int("value", auth_service_cipher);
+  f->close_section();
+
+  f->open_array_section("auth_allowed_ciphers");
+  for (auto const& k : auth_allowed_ciphers) {
+    f->open_object_section("key_type");
+    f->dump_string("name", CryptoManager::get_key_type_name(k));
+    f->dump_int("value", k);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_object_section("auth_preferred_cipher");
+  f->dump_string("name", CryptoManager::get_key_type_name(auth_preferred_cipher));
+  f->dump_int("value", auth_preferred_cipher);
+  f->close_section();
+
   f->dump_stream("fsid") <<  fsid;
   last_changed.gmtime(f->dump_stream("modified"));
   created.gmtime(f->dump_stream("created"));
@@ -918,8 +1174,29 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
   });
 }
 
+MonMap::MonMap()
+  : auth_service_cipher(CEPH_CRYPTO_NONE)
+  , auth_allowed_ciphers{CEPH_CRYPTO_NONE}
+  , auth_preferred_cipher(CEPH_CRYPTO_NONE)
+{
+}
+
 seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
+  if (for_mkfs) {
+    auth_epoch = 0;
+    auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
+    auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
+    auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
+  } else {
+    /* an invalid epoch so the real monmap doesn't trigger rotation */
+    auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
+    /* wait for real monmap */
+    auth_service_cipher = CEPH_CRYPTO_NONE;
+    auth_allowed_ciphers = {CEPH_CRYPTO_NONE};
+    auth_preferred_cipher = CEPH_CRYPTO_NONE;
+  }
+
   // mon_host_override?
   if (maybe_init_with_mon_host(conf.get_val<std::string>("mon_host_override"),
                                for_mkfs)) {
@@ -945,6 +1222,13 @@ seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf
 }
 
 #else  // WITH_CRIMSON
+
+MonMap::MonMap()
+  : auth_service_cipher(CEPH_CRYPTO_NONE)
+  , auth_allowed_ciphers{CEPH_CRYPTO_NONE}
+  , auth_preferred_cipher(CEPH_CRYPTO_NONE)
+{
+}
 
 int MonMap::init_with_monmap(const std::string& monmap, std::ostream& errout)
 {
@@ -1000,6 +1284,20 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
 {
   lgeneric_dout(cct, 1) << __func__ << " for_mkfs: " << for_mkfs << dendl;
   const auto& conf = cct->_conf;
+
+  if (for_mkfs) {
+    auth_epoch = 0;
+    auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
+    auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
+    auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
+  } else {
+    /* an invalid epoch so the real monmap doesn't trigger rotation */
+    auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
+    /* wait for real monmap */
+    auth_service_cipher = CEPH_CRYPTO_NONE;
+    auth_allowed_ciphers = {CEPH_CRYPTO_NONE};
+    auth_preferred_cipher = CEPH_CRYPTO_NONE;
+  }
 
   // mon_host_override?
   auto mon_host_override = conf.get_val<std::string>("mon_host_override");

@@ -10,7 +10,7 @@ function run() {
     export CEPH_MON_B="127.0.0.1:7141" # git grep '\<7141\>' : there must be only one
     export CEPH_MON_C="127.0.0.1:7142" # git grep '\<7142\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
 
     export BASE_CEPH_ARGS=$CEPH_ARGS
     CEPH_ARGS+="--mon-host=$CEPH_MON_A "

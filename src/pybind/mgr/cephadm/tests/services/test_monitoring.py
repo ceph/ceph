@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch, ANY, MagicMock
 
 from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext, _get_dashboard_server_addr
 from cephadm.services.monitoring import AlertmanagerService, PrometheusService
 from cephadm.services.smb import SMBSpec
 from cephadm.module import CephadmOrchestrator
@@ -163,7 +163,7 @@ class TestMonitoring:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("socket.getfqdn")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
-    @patch("cephadm.services.monitoring.password_hash", lambda password: 'alertmanager_password_hash')
+    @patch("cephadm.services.monitoring.alertmanager.password_hash", lambda password: 'alertmanager_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
@@ -278,7 +278,7 @@ class TestMonitoring:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("socket.getfqdn")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
-    @patch("cephadm.services.monitoring.password_hash", lambda password: 'alertmanager_password_hash')
+    @patch("cephadm.services.monitoring.alertmanager.password_hash", lambda password: 'alertmanager_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
@@ -384,7 +384,7 @@ class TestMonitoring:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("socket.getfqdn")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
-    @patch("cephadm.services.monitoring.password_hash", lambda password: 'alertmanager_password_hash')
+    @patch("cephadm.services.monitoring.alertmanager.password_hash", lambda password: 'alertmanager_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch('cephadm.cert_mgr.CertMgr.generate_cert', lambda instance, fqdn, ip: ('mycert', 'mykey'))
     def test_alertmanager_config_custom_webhook_urls(
@@ -491,7 +491,7 @@ class TestMonitoring:
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
-    @patch('cephadm.services.cephadmservice.CephExporterService.get_keyring_with_caps', Mock(return_value='[client.ceph-exporter.test]\nkey = fake-secret\n'))
+    @patch('cephadm.services.ceph_exporter.CephExporterService.get_keyring_with_caps', Mock(return_value='[client.ceph-exporter.test]\nkey = fake-secret\n'))
     def test_ceph_exporter_config_security_enabled(self, _get_fqdn, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
@@ -652,6 +652,9 @@ class TestMonitoring:
                     'if0': ['1.2.3.1']
                 },
             })
+            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+                'pools': [{'pool': 1, 'pool_name': pool, 'type': 1}]
+            })
             with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
                     with_service(cephadm_module, CephExporterSpec('ceph-exporter')) as _, \
                     with_service(cephadm_module, s) as _, \
@@ -790,7 +793,7 @@ class TestMonitoring:
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator._get_mgr_ips", lambda _: ['::1'])
-    @patch("cephadm.services.monitoring.password_hash", lambda password: 'prometheus_password_hash')
+    @patch("cephadm.services.monitoring.prometheus.password_hash", lambda password: 'prometheus_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None, ca_cert_required=False: TLSCredentials('mycert', 'mykey'))
@@ -815,6 +818,9 @@ class TestMonitoring:
                 '1.2.3.0/24': {
                     'if0': ['1.2.3.1']
                 },
+            })
+            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+                'pools': [{'pool': 1, 'pool_name': pool, 'type': 1}]
             })
             with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
                     with_service(cephadm_module, smb_spec) as _, \
@@ -1280,7 +1286,7 @@ class TestMonitoring:
                  basicAuthUser: admin
                  jsonData:
                     graphiteVersion: "1.1"
-                    tlsAuth: false
+                    tlsAuth: true
                     tlsAuthWithCACert: true
                     tlsSkipVerify: false
                  secureJsonData:
@@ -1448,7 +1454,7 @@ class TestMonitoring:
                  basicAuthUser: admin
                  jsonData:
                     graphiteVersion: "1.1"
-                    tlsAuth: false
+                    tlsAuth: true
                     tlsAuthWithCACert: true
                     tlsSkipVerify: false
                  secureJsonData:
@@ -1687,7 +1693,7 @@ class TestMonitoring:
             with with_service(cephadm_module, ServiceSpec('mgr')) as _, \
                     with_service(cephadm_module, GrafanaSpec(initial_admin_password='secure')):
                 out = service_registry.get_service('grafana').generate_config(
-                    CephadmDaemonDeploySpec('test', 'daemon', 'grafana'))
+                    DaemonDeployContext(CephadmDaemonDeploySpec('test', 'daemon', 'grafana')))
                 assert out == (
                     {
                         'files':
@@ -1787,7 +1793,7 @@ class TestMonitoring:
             with with_service(cephadm_module, ServiceSpec('mgr')) as _, \
                     with_service(cephadm_module, GrafanaSpec(anonymous_access=False, initial_admin_password='secure')):
                 out = service_registry.get_service('grafana').generate_config(
-                    CephadmDaemonDeploySpec('test', 'daemon', 'grafana'))
+                    DaemonDeployContext(CephadmDaemonDeploySpec('test', 'daemon', 'grafana')))
                 assert out == (
                     {
                         'files':
@@ -1924,7 +1930,7 @@ spec:
         }
         cephadm_module.spec_store['prometheus'].spec = PrometheusSpec('prometheus')
 
-        svc.generate_config(daemon_spec)
+        svc.generate_config(DaemonDeployContext(daemon_spec))
 
         cephadm_module.check_mon_command.assert_called_once_with({
             'prefix': 'config-key set',
@@ -1956,6 +1962,263 @@ spec:
         }
         cephadm_module.spec_store['prometheus'].spec = PrometheusSpec('prometheus')
 
-        svc.generate_config(daemon_spec)
+        svc.generate_config(DaemonDeployContext(daemon_spec))
 
         cephadm_module.check_mon_command.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "server_addr,expected",
+        [
+            ('192.168.200.100', '192.168.200.100'),
+            ('::', 'host1.example.com'),
+            ('0.0.0.0', 'host1.example.com'),
+            (None, 'host1.example.com'),
+            ('', 'host1.example.com'),
+        ],
+    )
+    def test_get_dashboard_server_addr(self, server_addr, expected):
+        svc = Mock()
+        svc.mgr._ceph_get_module_option.return_value = server_addr
+        svc.mgr.get_fqdn.return_value = 'host1.example.com'
+        assert _get_dashboard_server_addr(svc, 'mgr.host1.abcdef', 'host1') == expected
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("mgr_module.MgrModule.get")
+    @patch("socket.getfqdn")
+    def test_pushgateway_config_without_mgmt_gw(
+        self,
+        mock_getfqdn,
+        mock_get,
+        _run_cephadm,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
+        mock_getfqdn.return_value = 'host1.test'
+
+        with with_host(cephadm_module, "test"):
+            with with_service(cephadm_module, MonitoringSpec('pushgateway')):
+                _run_cephadm.assert_called_with(
+                    'test',
+                    ANY,
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=ANY,
+                    error_ok=True,
+                    use_current_daemon_image=False,
+                )
+                last_call = _run_cephadm.call_args
+                deploy_data = json.loads(last_call.kwargs.get('stdin', last_call[1][4] if len(last_call[1]) > 4 else '{}'))
+                assert deploy_data['name'].startswith('pushgateway.test')
+                assert deploy_data['params']['tcp_ports'] == [9091]
+                assert deploy_data['meta']['service_name'] == 'pushgateway'
+                assert deploy_data['meta']['ports'] == [9091]
+                assert deploy_data['config_blobs'] == {}
+
+    @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("socket.getfqdn")
+    def test_pushgateway_config_with_mgmt_gw(
+        self,
+        mock_getfqdn,
+        _run_cephadm,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
+        mock_getfqdn.return_value = 'host1.test'
+
+        y = dedent("""
+        tls_server_config:
+          cert_file: pushgateway.crt
+          key_file: pushgateway.key
+          client_auth_type: RequireAndVerifyClientCert
+          client_ca_file: root_cert.pem
+        """).lstrip()
+
+        with with_host(cephadm_module, "test"):
+            with with_service(cephadm_module, MgmtGatewaySpec("mgmt-gateway")) as _, \
+                 with_service(cephadm_module, MonitoringSpec('pushgateway')):
+                _run_cephadm.assert_called_with(
+                    'test',
+                    ANY,
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=ANY,
+                    error_ok=True,
+                    use_current_daemon_image=False,
+                )
+                last_call = _run_cephadm.call_args
+                deploy_data = json.loads(last_call.kwargs.get('stdin', last_call[1][4] if len(last_call[1]) > 4 else '{}'))
+                assert deploy_data['name'].startswith('pushgateway.test')
+                assert deploy_data['params']['tcp_ports'] == [9091]
+                assert deploy_data['meta']['service_name'] == 'pushgateway'
+                assert deploy_data['meta']['ports'] == [9091]
+                config_blobs = deploy_data['config_blobs']
+                assert config_blobs['files']['web.yml'] == y
+                assert config_blobs['files']['root_cert.pem'] == cephadm_root_ca
+                assert config_blobs['files']['pushgateway.crt'] == ceph_generated_cert
+                assert config_blobs['files']['pushgateway.key'] == ceph_generated_key
+                assert config_blobs['web_config'] == '/etc/pushgateway/web.yml'
+
+
+def _dependency_test_mgr():
+    mgr = MagicMock()
+    mgr.cache = MagicMock()
+    mgr.service_discovery_port = 8765
+    mgr.secure_monitoring_stack = False
+    mgr._get_security_config.return_value = (False, False, False)
+    mgr._get_prometheus_credentials.return_value = (None, None)
+    mgr._get_alertmanager_credentials.return_value = (None, None)
+    return mgr
+
+
+def _dependency_test_daemon(name):
+    daemon = MagicMock()
+    daemon.name.return_value = name
+    return daemon
+
+
+def test_ceph_exporter_get_dependencies():
+    from cephadm.services.ceph_exporter import CephExporterService
+
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr.cache.get_daemons_by_types.return_value = ['mgmt-gateway.gw1']
+
+    assert CephExporterService.get_dependencies(mgr) == [
+        'mgmt-gateway.gw1',
+        'secure_monitoring_stack:True',
+    ]
+
+
+def test_grafana_get_dependencies():
+    from cephadm import utils
+    from cephadm.services.monitoring import GrafanaService
+
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr._get_security_config.return_value = (True, True, True)
+    mgr._get_prometheus_credentials.return_value = ('prom-user', 'prom-pass')
+
+    def by_service(service_name):
+        return {
+            'prometheus': [_dependency_test_daemon('prometheus.a')],
+            'loki': [_dependency_test_daemon('loki.a')],
+            'mgmt-gateway': [_dependency_test_daemon('mgmt-gateway.a')],
+            'oauth2-proxy': [_dependency_test_daemon('oauth2-proxy.a')],
+        }.get(service_name, [])
+
+    mgr.cache.get_daemons_by_service.side_effect = by_service
+
+    assert GrafanaService.get_dependencies(mgr) == sorted([
+        'secure_monitoring_stack:True',
+        f'cred:{utils.config_hash("prom-userprom-pass")}',
+        'prometheus.a',
+        'loki.a',
+        'mgmt-gateway.a',
+        'oauth2-proxy.a',
+    ])
+
+
+def test_alertmanager_get_dependencies():
+    from cephadm import utils
+
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr._get_security_config.return_value = (True, False, False)
+    mgr._get_alertmanager_credentials.return_value = ('alert-user', 'alert-pass')
+
+    def by_types(types):
+        if types == ['alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy']:
+            return ['alertmanager.a', 'snmp-gateway.a', 'oauth2-proxy.a']
+        if types == ['mgr']:
+            return ['mgr.a']
+        return []
+
+    mgr.cache.get_daemons_by_types.side_effect = by_types
+
+    assert AlertmanagerService.get_dependencies(mgr) == sorted([
+        'secure_monitoring_stack:True',
+        f'cred:{utils.config_hash("alert-useralert-pass")}',
+        'alertmanager.a',
+        'snmp-gateway.a',
+        'oauth2-proxy.a',
+        'mgr.a',
+    ])
+
+
+def test_prometheus_get_dependencies():
+    from cephadm import utils
+
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr._get_security_config.return_value = (True, False, False)
+    mgr._get_prometheus_credentials.return_value = ('prom-user', 'prom-pass')
+    mgr._get_alertmanager_credentials.return_value = ('alert-user', 'alert-pass')
+    mgr.cache.get_daemons_by_service.side_effect = (
+        lambda service_name: ['alertmanager.a'] if service_name == 'alertmanager' else []
+    )
+    mgr.cache.get_daemons_by_type.side_effect = (
+        lambda service_name: ['oauth2-proxy.a'] if service_name == 'oauth2-proxy' else []
+    )
+    mgr.cache.get_daemons_by_types.side_effect = (
+        lambda types: ['mgr.a'] if types == ['mgr'] else []
+    )
+    spec = PrometheusSpec(
+        'prometheus',
+        remote_write_url='https://remote.example/api/v1/write',
+        remote_write_allowed_metrics=['ceph_health_status'],
+    )
+
+    with patch.object(
+        service_registry,
+        'get_services_requiring_monitoring',
+        return_value=['alertmanager', 'node-exporter'],
+    ):
+        deps = PrometheusService.get_dependencies(mgr, spec, 'prometheus')
+
+    assert deps == sorted([
+        '8765',
+        'secure_monitoring_stack:True',
+        f'prom-cred:{utils.config_hash("prom-userprom-pass")}',
+        f'alert-cred:{utils.config_hash("alert-useralert-pass")}',
+        'alertmanager_configured:True',
+        'node-exporter_configured:False',
+        'mgmt-gateway_configured:False',
+        'oauth2-proxy_configured:True',
+        'mgr.a',
+        'remote_write_url:https://remote.example/api/v1/write',
+        "remote_write_metrics:['ceph_health_status']",
+    ])
+
+
+def test_node_exporter_get_dependencies():
+    from cephadm.services.monitoring import NodeExporterService
+
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr.cache.get_daemons_by_types.return_value = ['mgmt-gateway.a']
+
+    assert NodeExporterService.get_dependencies(mgr) == [
+        'mgmt-gateway.a',
+        'secure_monitoring_stack:True',
+    ]
+
+
+def test_alloy_get_dependencies():
+    from cephadm.services.monitoring import AlloyService
+
+    mgr = _dependency_test_mgr()
+    mgr.cache.get_daemons_by_types.return_value = ['loki.b', 'loki.a']
+
+    assert AlloyService.get_dependencies(mgr) == ['loki.a', 'loki.b']
+
+
+def test_promtail_get_dependencies():
+    from cephadm.services.monitoring import PromtailService
+
+    mgr = _dependency_test_mgr()
+    mgr.cache.get_daemons_by_types.return_value = ['loki.b', 'loki.a']
+
+    assert PromtailService.get_dependencies(mgr) == ['loki.a', 'loki.b']

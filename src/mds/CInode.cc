@@ -28,6 +28,7 @@
 #include "Locker.h"
 #include "Mutation.h"
 #include "MDBalancer.h"
+#include "cephfs_features.h" // for CEPHFS_FEATURE_REPLY_ENCODING
 
 #include "events/EUpdate.h"
 
@@ -44,6 +45,7 @@
 #include "common/errno.h"
 #include "global/global_context.h"
 #include "include/denc.h"
+#include "include/denc_contiguous.h"
 #include "include/ceph_assert.h"
 #include "include/cephfs/json.h"
 #include "include/int_types.h"
@@ -62,6 +64,8 @@
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << ino() << ") "
 
 using namespace std;
+using ceph::encode_contiguous;
+using ceph::raw_bytes;
 
 void CInodeCommitOperation::update(ObjectOperation &op, inode_backtrace_t &bt) {
   using ceph::encode;
@@ -507,6 +511,15 @@ CInode::projected_inode CInode::project_inode(const MutationRef& mut,
     mut->add_projected_node(this);
   dout(15) << __func__ << " " << pi->ino << dendl;
   return projected_inode(std::move(pi), std::move(px), ps);
+}
+
+// for quarantine inode on replica
+void CInode::pop_and_apply_projected_inode(const MutationRef& mut)
+{
+  auto front = std::move(projected_nodes.front());
+  projected_nodes.pop_front();
+  mut->remove_projected_node(this);
+  reset_inode(std::move(front.inode));
 }
 
 void CInode::pop_and_dirty_projected_inode(LogSegmentRef const& ls, const MutationRef& mut)
@@ -2259,6 +2272,7 @@ void CInode::encode_lock_ipolicy(bufferlist& bl)
 void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
 {
   ceph_assert(!is_auth());
+  const bool was_quarantined = get_inode()->has_quarantined();
   auto _inode = allocate_inode(*get_inode());
   DECODE_START(4, p);
   if (is_dir()) {
@@ -2287,11 +2301,18 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
   }
   DECODE_FINISH(p);
 
+  const bool is_quarantined = _inode->has_quarantined();
   bool pin_updated = (get_inode()->export_pin != _inode->export_pin) ||
 		     (get_inode()->get_ephemeral_distributed_pin() !=
 		      _inode->get_ephemeral_distributed_pin());
   reset_inode(std::move(_inode));
   maybe_export_pin(pin_updated);
+
+  if (snaprealm && snaprealm->get_subvolume_ino() == ino() &&
+      was_quarantined != is_quarantined) {
+    mdcache->handle_quarantine_policy_update(this, was_quarantined,
+                                             is_quarantined);
+  }
 }
 
 void CInode::encode_lock_state(int type, bufferlist& bl)
@@ -3460,8 +3481,18 @@ bool CInode::try_drop_loner()
   if (loner_cap < 0)
     return true;
 
-  int other_allowed = get_caps_allowed_by_type(CAP_ANY);
   Capability *cap = get_client_cap(loner_cap);
+  if (!cap) {
+    set_loner_cap(-1);
+    return true;
+  }
+  auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
+  std::string path;
+  make_path_string(path, true);
+  auto session = mdcache->mds->sessionmap.get_session(entity_name_t::CLIENT(cap->get_client().v));
+  bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+
+  int other_allowed = get_caps_allowed_by_type(has_qtine_auth_caps, CAP_ANY);
   if (!cap ||
       (cap->issued() & ~other_allowed) == 0) {
     set_loner_cap(-1);
@@ -3681,6 +3712,20 @@ void CInode::export_client_caps(map<client_t,Capability::Export>& cl)
   }
 }
 
+int CInode::get_caps_quarantine_mask(bool has_qtine_auth_caps) const
+{
+  if (is_under_quarantine()) {
+    // dout(20) << __func__ << "  has_qtine_auth_caps: " << has_qtine_auth_caps << dendl;
+    if (has_qtine_auth_caps) {
+      return CEPH_CAP_ANY;
+    } else {
+      return CEPH_CAP_PIN;
+    }
+  } else {
+    return CEPH_CAP_ANY;
+  }
+}
+
 int CInode::get_caps_quiesce_mask() const
 {
   if (is_quiesced()) {
@@ -3694,12 +3739,17 @@ int CInode::get_caps_quiesce_mask() const
   // caps allowed
 int CInode::get_caps_liked() const
 {
-  if (is_dir())
+  if (is_dir()) {
     return get_caps_quiesce_mask() & (CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED); // but not, say, FILE_RD|WR|WRBUFFER
-  else
+  } else {
     return get_caps_quiesce_mask() & (CEPH_CAP_ANY & ~CEPH_CAP_FILE_LAZYIO);
+  }
 }
 
+/* The cap masks below shift each lock's bits by a constant: the lock types
+ * are fixed when the inode is constructed, and get_cap_shift() would look
+ * each up with an out-of-line call, for every inode a readdir issues caps
+ * on. */
 int CInode::get_caps_allowed_ever() const
 {
   int allowed;
@@ -3709,40 +3759,46 @@ int CInode::get_caps_allowed_ever() const
     allowed = CEPH_CAP_ANY;
   return allowed & 
     (CEPH_CAP_PIN |
-     (filelock.gcaps_allowed_ever() << filelock.get_cap_shift()) |
-     (authlock.gcaps_allowed_ever() << authlock.get_cap_shift()) |
-     (xattrlock.gcaps_allowed_ever() << xattrlock.get_cap_shift()) |
-     (linklock.gcaps_allowed_ever() << linklock.get_cap_shift()));
+     (filelock.gcaps_allowed_ever() << CEPH_CAP_SFILE) |
+     (authlock.gcaps_allowed_ever() << CEPH_CAP_SAUTH) |
+     (xattrlock.gcaps_allowed_ever() << CEPH_CAP_SXATTR) |
+     (linklock.gcaps_allowed_ever() << CEPH_CAP_SLINK));
 }
 
-int CInode::get_caps_allowed_by_type(int type) const
+int CInode::get_caps_allowed_by_type(bool has_qtine_auth_caps, int type) const
 {
-  return get_caps_quiesce_mask() & (
+  return get_caps_quarantine_mask(has_qtine_auth_caps) & get_caps_quiesce_mask() & (
     CEPH_CAP_PIN |
-    (filelock.gcaps_allowed(type) << filelock.get_cap_shift()) |
-    (authlock.gcaps_allowed(type) << authlock.get_cap_shift()) |
-    (xattrlock.gcaps_allowed(type) << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_allowed(type) << linklock.get_cap_shift())
+    (filelock.gcaps_allowed(type) << CEPH_CAP_SFILE) |
+    (authlock.gcaps_allowed(type) << CEPH_CAP_SAUTH) |
+    (xattrlock.gcaps_allowed(type) << CEPH_CAP_SXATTR) |
+    (linklock.gcaps_allowed(type) << CEPH_CAP_SLINK)
   );
 }
 
-int CInode::get_caps_careful() const
+int CInode::get_caps_careful(bool has_qtine_auth_caps) const
 {
-  return get_caps_quiesce_mask() & (
-    (filelock.gcaps_careful() << filelock.get_cap_shift()) |
-    (authlock.gcaps_careful() << authlock.get_cap_shift()) |
-    (xattrlock.gcaps_careful() << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_careful() << linklock.get_cap_shift())
+  return get_caps_quarantine_mask(has_qtine_auth_caps) & get_caps_quiesce_mask() & (
+    (filelock.gcaps_careful() << CEPH_CAP_SFILE) |
+    (authlock.gcaps_careful() << CEPH_CAP_SAUTH) |
+    (xattrlock.gcaps_careful() << CEPH_CAP_SXATTR) |
+    (linklock.gcaps_careful() << CEPH_CAP_SLINK)
   );
 }
 
 int CInode::get_xlocker_mask(client_t client) const
 {
-  return get_caps_quiesce_mask() & (
-    (filelock.gcaps_xlocker_mask(client) << filelock.get_cap_shift()) |
-    (authlock.gcaps_xlocker_mask(client) << authlock.get_cap_shift()) |
-    (xattrlock.gcaps_xlocker_mask(client) << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift())
+  Session *session = mdcache->mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
+  auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
+  std::string path;
+  make_path_string(path, true);
+  bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+
+  return get_caps_quarantine_mask(has_qtine_auth_caps) & get_caps_quiesce_mask() & (
+    (filelock.gcaps_xlocker_mask(client) << CEPH_CAP_SFILE) |
+    (authlock.gcaps_xlocker_mask(client) << CEPH_CAP_SAUTH) |
+    (xattrlock.gcaps_xlocker_mask(client) << CEPH_CAP_SXATTR) |
+    (linklock.gcaps_xlocker_mask(client) << CEPH_CAP_SLINK)
   );
 }
 
@@ -3751,13 +3807,19 @@ int CInode::get_caps_allowed_for_client(Session *session, Capability *cap,
 {
   client_t client = session->get_client();
   int allowed;
+  std::string path;
+
+  make_path_string(path, true);
+  auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
+  bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+
   if (client == get_loner()) {
     // as the loner, we get the loner_caps AND any xlocker_caps for things we have xlocked
     allowed =
-      get_caps_allowed_by_type(CAP_LONER) |
-      (get_caps_allowed_by_type(CAP_XLOCKER) & get_xlocker_mask(client));
+      get_caps_allowed_by_type(has_qtine_auth_caps, CAP_LONER) |
+      (get_caps_allowed_by_type(has_qtine_auth_caps, CAP_XLOCKER) & get_xlocker_mask(client));
   } else {
-    allowed = get_caps_allowed_by_type(CAP_ANY);
+    allowed = get_caps_allowed_by_type(has_qtine_auth_caps, CAP_ANY);
   }
 
   if (is_dir()) {
@@ -4009,12 +4071,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // file
   const mempool_inode *file_i = pfile ? pi:oi;
-  file_layout_t layout;
-  if (is_dir()) {
-    layout = (ppolicy ? pi : oi)->layout;
-  } else {
-    layout = file_i->layout;
-  }
+  // A reference, not a copy: file_layout_t carries the pool namespace as a
+  // std::string, and this runs for every inode a readdir encodes.
+  const file_layout_t& layout = is_dir() ? (ppolicy ? pi : oi)->layout
+                                         : file_i->layout;
 
   // max_size is min of projected, actual
   uint64_t max_size =
@@ -4076,6 +4136,12 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       dout(25) << "cs now " << cs << dendl;
     }
 
+    if (has_quarantined()) {
+      auto& opt = optmetadata.get_or_create_opt(kind_t::QUARANTINE);
+      auto& qs = opt.template get_meta< quarantine_md_t >();
+      dout(25) << "qtine now " << qs << dendl;
+    }
+
     encode(optmetadata, optmdbl);
   }
 
@@ -4132,7 +4198,12 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
      * tracks caps per-snap and the mds does either per-interval or
      * multiversion.
      */
-    ecap.caps = valid ? get_caps_allowed_by_type(CAP_ANY) : CEPH_STAT_CAP_INODE;
+    auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
+    std::string path;
+    make_path_string(path, true);
+    bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+
+    ecap.caps = valid ? get_caps_allowed_by_type(has_qtine_auth_caps, CAP_ANY) : CEPH_STAT_CAP_INODE;
     if (last == CEPH_NOSNAP || is_any_caps())
       ecap.caps = ecap.caps & get_caps_allowed_for_client(session, nullptr, file_i);
     ecap.seq = 0;
@@ -4248,57 +4319,59 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
     ENCODE_START(9, 1, bl);
-    encode(std::tuple{
-      oi->ino,
-      snapid,
-      oi->rdev,
-      version,
-      xattr_version,
-    }, bl, 0);
-    encode(ecap, bl);
-    {
-      ceph_file_layout legacy_layout;
-      layout.to_legacy(&legacy_layout);
-      encode(legacy_layout, bl);
-    }
-    encode(std::tuple{
-      any_i->ctime,
-      file_i->mtime,
-      file_i->atime,
-      file_i->time_warp_seq,
-      file_i->size,
-      max_size,
-      file_i->truncate_size,
-      file_i->truncate_seq,
-      auth_i->mode,
-      (uint32_t)auth_i->uid,
-      (uint32_t)auth_i->gid,
-      link_i->nlink,
-      file_i->dirstat.nfiles,
-      file_i->dirstat.nsubdirs,
-      file_i->rstat.rbytes,
-      file_i->rstat.rfiles,
-      file_i->rstat.rsubdirs,
-      file_i->rstat.rctime,
-    }, bl, 0);
+    ceph_file_layout legacy_layout;
+    layout.to_legacy(&legacy_layout);
+    encode_contiguous(bl,
+      std::tuple{
+        oi->ino,
+        snapid,
+        oi->rdev,
+        version,
+        xattr_version,
+      },
+      raw_bytes(ecap),
+      raw_bytes(legacy_layout),
+      std::tuple{
+        any_i->ctime,
+        file_i->mtime,
+        file_i->atime,
+        file_i->time_warp_seq,
+        file_i->size,
+        max_size,
+        file_i->truncate_size,
+        file_i->truncate_seq,
+        auth_i->mode,
+        (uint32_t)auth_i->uid,
+        (uint32_t)auth_i->gid,
+        link_i->nlink,
+        file_i->dirstat.nfiles,
+        file_i->dirstat.nsubdirs,
+        file_i->rstat.rbytes,
+        file_i->rstat.rfiles,
+        file_i->rstat.rsubdirs,
+        file_i->rstat.rctime,
+      });
     dirfragtree.encode(bl);
-    encode(symlink, bl);
-    encode(file_i->dir_layout, bl);
+    encode_contiguous(bl, symlink, raw_bytes(file_i->dir_layout));
     encode_xattrs();
-    encode(inline_version, bl);
-    encode(inline_data, bl);
+    // encode(inline_data) is its length and then its buffers, shared rather
+    // than copied.
+    encode_contiguous(bl, inline_version, (uint32_t)inline_data.length());
+    if (inline_data.length())
+      bl.append(inline_data);
     const mempool_inode *policy_i = ppolicy ? pi : oi;
     encode(policy_i->quota, bl);
-    encode(layout.pool_ns, bl);
-    encode(any_i->btime, bl);
-    encode(any_i->change_attr, bl);
-    encode(file_i->export_pin, bl);
-    encode(snap_btime, bl);
-    encode(file_i->rstat.rsnaps, bl);
-    encode(snap_metadata, bl);
-    encode(!file_i->fscrypt_auth.empty(), bl);
-    encode(file_i->fscrypt_auth, bl);
-    encode(file_i->fscrypt_file, bl);
+    encode_contiguous(bl,
+      layout.pool_ns,
+      any_i->btime,
+      any_i->change_attr,
+      file_i->export_pin,
+      snap_btime,
+      file_i->rstat.rsnaps,
+      snap_metadata,
+      !file_i->fscrypt_auth.empty(),
+      file_i->fscrypt_auth,
+      file_i->fscrypt_file);
     encode_nohead(optmdbl, bl);
     encode(get_subvolume_id(), bl);
     // encode inodestat
@@ -5842,6 +5915,38 @@ bool CInode::is_quiesced() const {
   auto* mdr = dynamic_cast<MDRequestImpl*>(mut.get());
   ceph_assert(mdr); /* also would be weird */
   return mdr->internal_op == CEPH_MDS_OP_QUIESCE_INODE;
+}
+
+bool CInode::has_quarantined() const { 
+  return get_inode()->has_quarantined();
+}
+
+// return true if the immediate parent snaprealm inode is quarantined
+bool CInode::is_under_quarantine() const {
+  auto snaprealm = find_snaprealm();
+  while (snaprealm) {
+    inodeno_t subvol_ino = snaprealm->get_subvolume_ino();
+    auto *subvol_in = mdcache->get_inode(subvol_ino);
+    if (subvol_in) {
+      if (subvol_in->is_quarantine_being_removed()) {
+        return false;
+      }
+      if (subvol_in->is_being_quarantined() || subvol_in->has_quarantined()) {
+        return true;
+      }
+    } else if (subvol_ino) {
+      // Subvolume root not in cache — return false rather than
+      // fail-closed. Returning true would incorrectly block access to
+      // ALL inodes under ANY uncached subvolume (e.g. breaking
+      // 'subvolume ls' when only one subvolume is quarantined).
+      // Safety is maintained by check_access() fetching the subvolume
+      // root when evaluating client requests, and by the quarantine
+      // cap revocation walk reaching all inodes under the subtree.
+      return false;
+    }
+    snaprealm = snaprealm->parent;
+  }
+  return false;
 }
 
 bool CInode::will_block_for_quiesce(const MDRequestRef& mdr) {

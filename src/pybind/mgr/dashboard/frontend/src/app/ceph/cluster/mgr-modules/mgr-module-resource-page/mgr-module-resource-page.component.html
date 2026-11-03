@@ -1,0 +1,20 @@
+@if (!notFound) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Module details"
+        [columns]="4"
+        [fields]="overviewFields"
+        [loading]="isOverviewLoading"
+      >
+      </cd-resource-overview-card>
+    }
+  }
+} @else {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No Manager module found.</cd-alert-panel
+  >
+}

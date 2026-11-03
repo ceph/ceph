@@ -6,6 +6,8 @@
 #include "common/WorkQueue.h"
 #include "include/scope_guard.h"
 
+#include <iomanip>  // for std::quoted
+#include <string_view>
 #include <utility>
 #include "rgw_auth_registry.h"
 #include "rgw_dmclock_scheduler.h"
@@ -99,10 +101,11 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   std::string userfind;
   RGWRateLimitInfo global_user;
   RGWRateLimitInfo global_bucket;
+  RGWRateLimitInfo account_ratelimit;
   RGWRateLimitInfo global_anon;
   RGWRateLimitInfo* bucket_ratelimit;
   RGWRateLimitInfo* user_ratelimit;
-  driver->get_ratelimit(global_bucket, global_user, global_anon);
+  driver->get_ratelimit(global_bucket, global_user, account_ratelimit, global_anon);
   bucket_ratelimit = &global_bucket;
   user_ratelimit = &global_user;
   s->user->get_id().to_str(userfind);
@@ -111,6 +114,32 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   std::string bucketfind = !rgw::sal::Bucket::empty(s->bucket.get()) ? "b" + s->bucket->get_marker() : "";
   s->ratelimit_bucket_marker = bucketfind;
   const char *method = s->info.method;
+
+  const std::optional<RGWAccountInfo>& account = s->auth.identity->get_account();
+  if (account) {
+    RGWAccountInfo account_info;
+    rgw::sal::Attrs account_attrs;
+    RGWObjVersionTracker tracker;
+    int r = driver->load_account_by_id(s, s->yield, account->id, account_info,
+                                account_attrs, tracker);
+    if (r < 0) {
+      ldpp_dout(s, 0) << "could not get account info for account=" << account->id << ": " << cpp_strerror(-r) << dendl;
+      return -r;
+    }
+    RGWRateLimitInfo account_ratelimit_info;
+    auto iter = account_attrs.find(RGW_ATTR_RATELIMIT);
+    if (iter != account_attrs.end()) {
+      try {
+        bufferlist& bl = iter->second;
+        auto biter = bl.cbegin();
+        decode(account_ratelimit_info, biter);
+      } catch (buffer::error& err) {
+        ldpp_dout(s, 0) << "ERROR: failed to decode rate limit" << dendl;
+        return -EIO;
+      }
+    }
+    account_ratelimit = account_ratelimit_info;
+  }
 
   bool is_sts_user = (s->auth.identity && s->auth.identity->get_identity_type() == TYPE_ROLE);
   if (is_sts_user) {
@@ -140,8 +169,20 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   if (s->user->get_id().id == RGW_USER_ANON_ID && global_anon.enabled) {
     *user_ratelimit = global_anon;
   }
+
+  // Check account-level rate limiting
+  int64_t limit_account = 0;
   int64_t limit_bucket = 0;
-  int64_t limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time, user_ratelimit, s->info.request_params);
+  int64_t limit_user = 0;
+
+  if (account) {
+    limit_account = s->ratelimit_data->should_rate_limit(method, account->id, s->time, &account_ratelimit, s->info.request_params);
+  }
+
+  // Only check user/bucket limits if account limit allows
+  if (!limit_account) {
+    limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time, user_ratelimit, s->info.request_params);
+  }
 
   if(!rgw::sal::Bucket::empty(s->bucket.get()))
   {
@@ -160,20 +201,100 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
         return -EIO;
       }
     }
-    if (!limit_user) {
+    if (!limit_user && !limit_account) {
       limit_bucket = s->ratelimit_data->should_rate_limit(method, s->ratelimit_bucket_marker, s->time, bucket_ratelimit, s->info.request_params);
     }
   }
-  if(limit_bucket && !limit_user) {
+
+  // Token giveback logic: if a lower-level limit blocks, give back tokens to higher levels
+  if (!limit_account && (limit_bucket || limit_user)) {
+    // Give back account tokens
+    std::string account_key = account->id;
+    s->ratelimit_data->giveback_tokens(method, account_key, s->info.request_params, &account_ratelimit);
+  }
+  if (!limit_account && !limit_user && limit_bucket) {
+    // Give back user tokens
     s->ratelimit_data->giveback_tokens(method, s->ratelimit_user_name, s->info.request_params, user_ratelimit);
   }
+
+  s->account_ratelimit = account_ratelimit;
   s->user_ratelimit = *user_ratelimit;
   s->bucket_ratelimit = *bucket_ratelimit;
-  int64_t delay = limit_user ? limit_user : limit_bucket;
+
+  int64_t delay = limit_bucket;
+  if (limit_account) {
+    delay = limit_account;
+  } else if (limit_user) {
+    delay = limit_user;
+  }
+
   if (delay > 0) {
     s->ratelimit_retry_after = delay;
   }
-  return (limit_user || limit_bucket);
+  return (limit_account || limit_user || limit_bucket);
+}
+
+static int execute_request_lua_script(RGWOp * const op,
+                                      req_state * const s,
+                                      const rgw::lua::context ctx,
+                                      const std::string_view read_error,
+                                      const std::string_view execute_error)
+{
+  const auto op_type = op->get_type();
+
+  if (RGW_OP_GET_HEALTH_CHECK == op_type ||
+      RGW_OP_DELETE_MULTI_OBJ == op_type) {
+    return 0;
+  }
+
+  const auto [script, rc] = rgw::lua::read_script_or_bytecode(
+    s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield, ctx);
+
+  if (-ENOENT == rc) {
+    return 0;
+  }
+
+  if (rc < 0) {
+    ldpp_dout(op, 5) << read_error << rc << dendl;
+    return 0;
+  }
+
+  int script_return_code = 0;
+  if (const auto execute_rc = rgw::lua::request::execute(
+        s->penv.rest, s->penv.olog.get(), s, op, script, script_return_code);
+      execute_rc < 0) {
+    ldpp_dout(op, 5) << execute_error << execute_rc << dendl;
+  }
+
+  if (-EPERM == script_return_code) {
+    return script_return_code;
+  }
+
+  return 0;
+}
+
+static int execute_post_auth_lua_script(RGWOp * const op, req_state * const s)
+{
+  constexpr std::string_view error = "WARNING: failed to execute post authorization script. error: ";
+
+  return execute_request_lua_script(
+    op, s, rgw::lua::context::postAuth, error, error);
+}
+
+static int execute_pre_request_lua_script(RGWOp * const op, req_state * const s)
+{
+  constexpr std::string_view error = "WARNING: failed to execute pre request script. error: ";
+
+  return execute_request_lua_script(
+    op, s, rgw::lua::context::preRequest, error, error);
+}
+
+static void execute_post_request_lua_script(RGWOp * const op, req_state * const s)
+{
+  execute_request_lua_script(
+    op, s, rgw::lua::context::postRequest,
+    "WARNING: failed to read post request script. error: ",
+    "WARNING: failed to execute post request script. error: ");
 }
 
 int rgw_process_authenticated(RGWHandler_REST * const handler,
@@ -228,6 +349,12 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     return ret;
   }
 
+  ldpp_dout(op, 2) << "verifying CORS origin matches" << dendl;
+  ret = op->verify_cors_match();
+  if (ret < 0) {
+    return ret;
+  }
+
   /* Check if OPA is used to authorize requests */
   if (s->cct->_conf->rgw_use_opa_authz) {
     ret = rgw_opa_authorize(op, s);
@@ -270,33 +397,11 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     return -ERR_RATE_LIMITED;
   }
 
-  bool is_health_request = (op->get_type() == RGW_OP_GET_HEALTH_CHECK);
-  {
-    if (!is_health_request) {
-      std::string script;
-      auto rc = rgw::lua::read_script(s, s->penv.lua.manager.get(),
-                                      s->bucket_tenant, s->yield,
-                                      rgw::lua::context::postAuth, script);
-      if (rc == -ENOENT) {
-        // no script, nothing to do
-      } else if (rc < 0) {
-        ldpp_dout(op, 5) <<
-          "WARNING: failed to execute post authorization script. "
-          "error: " << rc << dendl;
-      } else {
-        int script_return_code = 0;
-        rc = rgw::lua::request::execute(s->penv.rest, s->penv.olog.get(), s, op, script, script_return_code);
-        if (rc < 0) {
-          ldpp_dout(op, 5) <<
-            "WARNING: failed to execute post authorization script. "
-            "error: " << rc << dendl;
-        }
-        if (script_return_code == -EPERM) {
-          return script_return_code;
-        }
-      }
-    }
+  ret = execute_post_auth_lua_script(op, s);
+  if (ret < 0) {
+    return ret;
   }
+
   ldpp_dout(op, 2) << "executing" << dendl;
   {
     auto span = tracing::rgw::tracer.add_span("execute", s->trace);
@@ -354,7 +459,6 @@ int process_request(const RGWProcessEnv& penv,
   bool should_log = false;
   RGWREST* rest = penv.rest;
   RGWRESTMgr *mgr;
-  bool is_health_request = false;
   RGWHandler_REST *handler = rest->get_handler(driver, s,
                                                *penv.auth_registry,
                                                frontend_prefix,
@@ -422,35 +526,12 @@ int process_request(const RGWProcessEnv& penv,
       goto done;
     }
 
-  is_health_request = (op->get_type() == RGW_OP_GET_HEALTH_CHECK);
-  {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
-    if (!is_health_request) {
-      auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
-                                                  s->bucket_tenant, s->yield,
-                                                  rgw::lua::context::preRequest);
-      if (rc == -ENOENT) {
-        // no script, nothing to do
-      } else if (rc < 0) {
-        ldpp_dout(op, 5) <<
-          "WARNING: failed to execute pre request script. "
-          "error: " << rc << dendl;
-      } else {
-        int script_return_code = 0;
-        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, lua_script, script_return_code);
-
-        if (rc < 0) {
-          ldpp_dout(op, 5) <<
-            "WARNING: failed to execute pre request script. "
-            "error: " << rc << dendl;
-        }
-        if (script_return_code == -EPERM) {
-          abort_early(s, op, script_return_code, handler, yield);
-          goto done;
-        }
-      }
+    ret = execute_pre_request_lua_script(op, s);
+    if (ret < 0) {
+      abort_early(s, op, ret, handler, yield);
+      goto done;
     }
-  }
     s->trace = tracing::rgw::tracer.start_trace(op->name(), s->trace_enabled);
     s->trace->SetAttribute(tracing::rgw::TRANS_ID, s->trans_id);
 
@@ -480,25 +561,7 @@ done:
         s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
       }
     }
-    if (!is_health_request) {
-      auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
-                                                  s->bucket_tenant, s->yield,
-                                                  rgw::lua::context::postRequest);
-      if (rc == -ENOENT) {
-        // no script, nothing to do
-      } else if (rc < 0) {
-        ldpp_dout(op, 5) <<
-          "WARNING: failed to read post request script. "
-          "error: " << rc << dendl;
-      } else {
-        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, lua_script);
-        if (rc < 0) {
-          ldpp_dout(op, 5) <<
-            "WARNING: failed to execute post request script. "
-            "error: " << rc << dendl;
-        }
-      }
-    }
+    execute_post_request_lua_script(op, s);
   }
 
   try {
@@ -520,7 +583,8 @@ done:
         s,
         op->canonical_name(),
         "",
-        (s->src_object ? s->src_object->get_size() : (s->object ? s->object->get_size() : 0)),
+        (s->src_object ? s->src_object->get_size() :
+         (s->object && s->object->get_size() > 0 ? s->object->get_size() : s->obj_size)),
         op,
         yield,
         true,

@@ -2,13 +2,15 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "include/types.h"
-#include "os/bluestore/bluestore_types.h"
 #include "gtest/gtest.h"
 #include "include/stringify.h"
 #include "common/ceph_time.h"
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_objects.h"
+#include "os/bluestore/BlueStore_components.h"
+#include "os/bluestore/BlueStore_inlines.h"
 #include "os/bluestore/simple_bitmap.h"
-#include "os/bluestore/AvlAllocator.h"
+#include "os/bluestore/AvlAllocator.h" // for range_seg_t, FIXME: remove?
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/global_context.h"
@@ -34,8 +36,8 @@ TEST(bluestore, sizeof) {
   P(BlueStore::Blob);
   P(BlueStore::SharedBlob);
   P(BlueStore::ExtentMap);
-  P(BlueStore::extent_map_t);
-  P(BlueStore::blob_map_t);
+  P(bluestore::extent_map_t);
+  P(bluestore::blob_map_t);
   P(BlueStore::BufferSpace);
   P(BlueStore::Buffer);
   P(bluestore_onode_t);
@@ -58,6 +60,40 @@ TEST(bluestore, sizeof) {
   cout << "map<uint64_t,uint64_t>\t" << sizeof(map<uint64_t, uint64_t>)
        << std::endl;
   cout << "map<char,char>\t" << sizeof(map<char, char>) << std::endl;
+}
+
+// Note: Reusable for future bit-flip fuzzing.
+static void expect_decode_tolerated(std::function<void()> decode,
+                                    bool expect_thrown = false) {
+  bool threw_buffer_error = false, escaped_std = false;
+  try {
+    bluestore_decode::throwing_guard g;
+    decode();
+  } catch (const ceph::buffer::error&) { threw_buffer_error = true; }
+    catch (const std::bad_alloc&)      { escaped_std = true; }
+    catch (const std::length_error&)   { escaped_std = true; }
+    EXPECT_FALSE(escaped_std)
+      << "corrupt decode escaped as a std:: allocation exception (uncaught OOM)";
+  if (expect_thrown) {
+    EXPECT_TRUE(threw_buffer_error) << "expected the guard to reject this input";
+  }
+}
+
+TEST(bluestore_blob_use_tracker_t, decode_bogus_au_count_throws_buffer_error) {
+  bufferlist bl;
+  { auto app = bl.get_contiguous_appender(16);
+    denc_varint((uint32_t)0x1000, app);        // au_size != 0 -> array branch
+    denc_varint((uint32_t)0xffffffff, app); }  // num_au straight from disk
+  bluestore_blob_use_tracker_t t;
+  expect_decode_tolerated([&]{ auto p = bl.front().begin_deep(); t.decode(p); }, true);
+}
+
+TEST(PExtentVector, decode_bogus_extent_count_throws_buffer_error) {
+  bufferlist bl;
+  { auto app = bl.get_contiguous_appender(8);
+    denc_varint((uint32_t)0xffffffff, app); }  // no payload
+  PExtentVector v;
+  expect_decode_tolerated([&]{ auto p = bl.front().begin_deep(); denc(v, p); }, true);
 }
 
 void dump_mempools() {
@@ -1822,12 +1858,12 @@ class PunchHoleFixture : public BlueStoreFixture
   interval_set<uint64_t> disk_allocated;
   std::set<BlueStore::BlobRef> blobs_created;
   std::set<BlueStore::SharedBlobRef> blobs_shared_created;
-  BlueStore::volatile_statfs statfs;
+  volatile_statfs statfs;
 
   interval_set<uint64_t> disk_to_free;
   std::set<BlueStore::BlobRef> blobs_to_free;
   std::set<BlueStore::SharedBlobRef> blobs_shared_to_free;
-  BlueStore::volatile_statfs statfs_to_free;
+  volatile_statfs statfs_to_free;
 
   uint32_t allocate_block = 10; //let's not start from 0
   uint32_t allocate_offset = 0;
@@ -2357,6 +2393,103 @@ public:
   }
 };
 
+// https://tracker.ceph.com/issues/72848
+//
+// merge_blob() uses move_data() that moves csum data in whole csum chunks.
+// So, it must be prepared to handle tha case when multiple allocations
+// encoded by pextents are in total a multiply of csum size, but individual
+// allocations are not. This has not been the case and merge_blob()
+// asserted on (len % (1 << csum_chunk_order)) == 0.
+TEST_F(ExtentMapFixture, merge_blob_csum_chunk_unaligned) {
+  constexpr uint32_t csum_chunk_order = 15;               // 32K csum chunks
+  constexpr uint32_t csum_chunk = 1 << csum_chunk_order;
+
+  // Emulates a write of one csum chunk at blob offset 'b_off' of a blob
+  // starting at logical offset 'blob_start'.  'fragments' is how the
+  // allocator split the space; they must add up to csum_chunk.
+  auto write_blob = [&](t_onode& o, uint32_t blob_start, uint32_t b_off,
+                        uint32_t blob_length,
+                        const std::vector<uint32_t>& fragments) {
+    BlueStore::BlobRef b(coll->new_blob());
+    bluestore_blob_t& bb = b->dirty_blob();
+    bb.init_csum(Checksummer::CSUM_CRC32C, csum_chunk_order, blob_length);
+    bb.set_csum_item(b_off / csum_chunk, 0x11111111 + b_off);
+    PExtentVector pex;
+    uint32_t total = 0;
+    for (auto len : fragments) {
+      ceph_assert((len % au_size) == 0);
+      pex.emplace_back(allocate(len / au_size) * au_size, len);
+      total += len;
+    }
+    ceph_assert(total == csum_chunk);
+    bb.allocated(b_off, csum_chunk, pex);
+    auto* e = new BlueStore::Extent(blob_start + b_off, b_off, csum_chunk, b);
+    o.onode->extent_map.extent_map.insert(*e);
+    b->get_ref(coll.get(), b_off, csum_chunk);
+    return b;
+  };
+  auto clone = [&](t_onode& from, t_onode& to, uint64_t len) {
+    BlueStore::TransContext txc(store.cct, coll.get(), nullptr, nullptr);
+    uint64_t off = 0, dstoff = 0;
+    from.onode->extent_map.dup_esb(&store, &txc, coll, from.onode, to.onode,
+                                   off, len, dstoff);
+  };
+  auto blob_at = [&](t_onode& o, uint32_t logical_offset) {
+    return o.onode->extent_map.seek_lextent(logical_offset)->blob.get();
+  };
+
+  // 1. blobs that are csum chunk aligned still do get merged.
+  //    Blob #2 lives at blob offset 32K of a 64K blob that starts at logical
+  //    0 - this is what the 'suggested_boff' logic in _do_alloc_write() does
+  //    to keep blobs aligned with max_blob_size.
+  {
+    t_onode a = create();
+    write_blob(a, 0, 0, csum_chunk, {csum_chunk});
+    t_onode c1 = create();
+    clone(a, c1, csum_chunk);                     // makes blob #1 shared
+    ASSERT_TRUE(blob_at(a, 0)->get_blob().is_shared());
+
+    write_blob(a, 0, csum_chunk, 2 * csum_chunk, {csum_chunk});
+    uint32_t blob_width = 0;
+    ASSERT_NE(blob_at(a, 0), blob_at(a, csum_chunk));
+    ASSERT_TRUE(blob_at(a, 0)->can_merge_blob(blob_at(a, csum_chunk),
+                                              blob_width));
+
+    t_onode c2 = create();
+    clone(a, c2, 2 * csum_chunk);
+    // blob #2 got dissolved into the shared blob #1
+    ASSERT_EQ(blob_at(a, 0), blob_at(a, csum_chunk));
+    ASSERT_TRUE(blob_at(a, csum_chunk)->get_blob().is_shared());
+  }
+
+  // 2. same layout, but blob #2's 32K got allocated as 12K + 20K, so its
+  //    pextents do not align with the 32K csum chunk.  The merge still
+  //    has to complete successfully.
+  {
+    t_onode a = create();
+    write_blob(a, 0, 0, csum_chunk, {csum_chunk});
+    t_onode c1 = create();
+    clone(a, c1, csum_chunk);                     // makes blob #1 shared
+    ASSERT_TRUE(blob_at(a, 0)->get_blob().is_shared());
+
+    write_blob(a, 0, csum_chunk, 2 * csum_chunk, {0x3000, 0x5000});
+    BlueStore::Blob* shared = blob_at(a, 0);
+    BlueStore::Blob* fragmented = blob_at(a, csum_chunk);
+    uint32_t blob_width = 0;
+    ASSERT_TRUE(shared->can_merge_blob(fragmented, blob_width));
+
+    t_onode c2 = create();
+    clone(a, c2, 2 * csum_chunk);
+    // check is blobs are merged
+    shared = blob_at(a, 0);
+    fragmented = blob_at(a, csum_chunk);
+    EXPECT_EQ(shared, fragmented);
+
+   // and its csum data is still where it belongs
+    ASSERT_EQ(fragmented->get_blob().get_csum_item(1), 0x11111111 + csum_chunk);
+  }
+}
+
 TEST_F(ExtentMapFixture, walk) {
   std::vector<t_onode> X;
   for (size_t i = 0; i < 100; i++) {
@@ -2475,7 +2608,7 @@ TEST_P(PunchHoleFixture, selftest)
   PExtentVector released;
   std::vector<BlueStore::BlobRef> pruned_blobs;
   std::set<BlueStore::SharedBlobRef> shared_changed;
-  BlueStore::volatile_statfs statfs_delta;
+  volatile_statfs statfs_delta;
   store->debug_punch_hole_2(coll, onode, 1000, 32000,
     released, pruned_blobs, shared_changed, statfs_delta);
   clear();
@@ -2501,7 +2634,7 @@ TEST_P(PunchHoleFixture, all)
     PExtentVector released;
     std::vector<BlueStore::BlobRef> pruned_blobs;
     std::set<BlueStore::SharedBlobRef> shared_changed;
-    BlueStore::volatile_statfs statfs_delta;
+    volatile_statfs statfs_delta;
     store->debug_punch_hole_2(coll, onode, start, end - start,
                          released, pruned_blobs, shared_changed, statfs_delta);
     EXPECT_EQ(to_iset(released), disk_to_free);
@@ -2540,7 +2673,7 @@ TEST_P(PunchHoleFixture, some)
     PExtentVector released;
     std::vector<BlueStore::BlobRef> pruned_blobs;
     std::set<BlueStore::SharedBlobRef> shared_changed;
-    BlueStore::volatile_statfs statfs_delta;
+    volatile_statfs statfs_delta;
     store->debug_punch_hole_2(coll, onode, hole_start, hole_end - hole_start,
                          released, pruned_blobs, shared_changed, statfs_delta);
     EXPECT_EQ(to_iset(released), disk_to_free);
@@ -2590,7 +2723,7 @@ TEST_P(PunchHoleFixture, multipunch)
     PExtentVector released;
     std::vector<BlueStore::BlobRef> pruned_blobs;
     std::set<BlueStore::SharedBlobRef> shared_changed;
-    BlueStore::volatile_statfs statfs_delta;
+    volatile_statfs statfs_delta;
 
     for (int j = 0; j < 10; j++) {
       uint32_t s = rand() % ((hole_end - hole_start) / 5 + 1);
@@ -2957,7 +3090,7 @@ TEST_P(BlueStoreWriteFixture, statfs_zero)
     w.test_read_divertor = &zr;
     wctx.target_blob_size = blob_size;
 
-    BlueStore::volatile_statfs statfs_delta;
+    volatile_statfs statfs_delta;
     int write_cnt = (rand() % 10) + 1;
     for (int j = 0; j < write_cnt; j++) {
       uint32_t offset = get_offset(rand() % size_range);
@@ -3176,7 +3309,7 @@ TEST(ExtentMap, dup_extent_map)
   }
 }
 
-void clear_and_dispose(BlueStore::old_extent_map_t &old_em) {
+void clear_and_dispose(bluestore::old_extent_map_t &old_em) {
   auto oep = old_em.begin();
   while (oep != old_em.end()) {
     auto &lo = *oep;
@@ -3198,7 +3331,7 @@ TEST(GarbageCollector, BasicTest) {
       &onode,
       g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
-  BlueStore::old_extent_map_t old_extents;
+  bluestore::old_extent_map_t old_extents;
 
   /*
    min_alloc_size = 4096
@@ -3222,7 +3355,7 @@ TEST(GarbageCollector, BasicTest) {
      -> blob3<raw, len_on_disk=4096, llen=4096>
    */
   {
-    BlueStore::GarbageCollector gc(g_ceph_context);
+    bluestore::GarbageCollector gc(g_ceph_context);
     int64_t saving;
     BlueStore::BlobRef b1(coll->new_blob());
     BlueStore::BlobRef b2(coll->new_blob());
@@ -3284,8 +3417,8 @@ TEST(GarbageCollector, BasicTest) {
         &onode,
         g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
-    BlueStore::old_extent_map_t old_extents;
-    BlueStore::GarbageCollector gc(g_ceph_context);
+    bluestore::old_extent_map_t old_extents;
+    bluestore::GarbageCollector gc(g_ceph_context);
     int64_t saving;
     BlueStore::BlobRef b1(coll->new_blob());
     BlueStore::BlobRef b2(coll->new_blob());
@@ -3356,7 +3489,7 @@ TEST(GarbageCollector, BasicTest) {
      -> blob2<compressed, len_on_disk=0x2000, llen=0x4000>
    */
   {
-    BlueStore::GarbageCollector gc(g_ceph_context);
+    bluestore::GarbageCollector gc(g_ceph_context);
     int64_t saving;
     BlueStore::BlobRef b1(coll->new_blob());
     BlueStore::BlobRef b2(coll->new_blob());
@@ -3410,8 +3543,8 @@ TEST(GarbageCollector, BasicTest) {
         &onode,
         g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
-    BlueStore::old_extent_map_t old_extents;
-    BlueStore::GarbageCollector gc(g_ceph_context);
+    bluestore::old_extent_map_t old_extents;
+    bluestore::GarbageCollector gc(g_ceph_context);
     int64_t saving;
     BlueStore::BlobRef b0(coll->new_blob());
     BlueStore::BlobRef b1(coll->new_blob());

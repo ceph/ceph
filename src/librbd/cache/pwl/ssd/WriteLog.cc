@@ -343,26 +343,16 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   uint64_t bytes_allocated = 0;
   uint64_t bytes_cached = 0;
   uint64_t bytes_dirtied = 0;
-  uint64_t num_lanes = 0;
-  uint64_t num_unpublished_reserves = 0;
   uint64_t num_log_entries = 0;
 
   // Setup buffer, and get all the number of required resources
   req->setup_buffer_resources(&bytes_cached, &bytes_dirtied, &bytes_allocated,
-                              &num_lanes, &num_log_entries,
-                              &num_unpublished_reserves);
+                              &num_log_entries);
 
-  ceph_assert(!num_lanes);
-  if (num_log_entries) {
-    bytes_allocated += num_log_entries * MIN_WRITE_ALLOC_SSD_SIZE;
-    num_log_entries = 0;
-  }
-  ceph_assert(!num_unpublished_reserves);
+  bytes_allocated += num_log_entries * MIN_WRITE_ALLOC_SSD_SIZE;
 
   alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied,
-                                          bytes_allocated, num_lanes,
-                                          num_log_entries,
-                                          num_unpublished_reserves);
+                                          bytes_allocated);
   req->set_allocated(alloc_succeeds);
   return alloc_succeeds;
 }
@@ -520,10 +510,6 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
     });
   // Append logs and update first_free_update
   append_ops(ops, append_ctx, new_first_free_entry);
-
-  if (ops.size()) {
-    this->dispatch_deferred_writes();
-  }
 }
 
 template <typename I>
@@ -898,6 +884,7 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
     m_first_free_entry = *new_first_free_entry;
     m_bytes_allocated -= bytes_to_free;
   }
+  this->dispatch_deferred_writes();
 
   bdev->aio_submit(&aio->ioc);
 }

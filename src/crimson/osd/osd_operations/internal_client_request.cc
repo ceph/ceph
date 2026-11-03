@@ -62,6 +62,16 @@ InternalClientRequest::with_interruption()
     *obc_orderer,
     get_target_oid());
 
+  // acquire throttle BEFORE entering exclusive obc_pp.process stage
+  // consistent with ClientRequest pattern -- orderer preserves ordering
+  auto throttle = co_await interruptor::make_interruptible(
+    pg->shard_services.get_throttle(
+      scheduler::params_t{
+        1,
+        0,
+        0,
+        SchedulerClass::client}));
+
   co_await enter_stage<interruptor>(obc_orderer->obc_pp().process);
 
   bool unfound = co_await pg->do_recover_missing(
@@ -112,6 +122,7 @@ InternalClientRequest::with_interruption()
 
   DEBUGDPP("{}: complete", *pg, *this);
   co_await interruptor::make_interruptible(handle.complete());
+  // throttle destructs here
   co_return;
 }
 

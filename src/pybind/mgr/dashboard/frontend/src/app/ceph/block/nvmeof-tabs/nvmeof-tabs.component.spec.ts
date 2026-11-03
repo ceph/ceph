@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ActivatedRoute, Event as RouterEvent, NavigationEnd, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -8,7 +8,7 @@ import { TabsModule } from 'carbon-components-angular';
 
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofStateService } from '../nvmeof-state.service';
-import { NvmeofTabsComponent } from './nvmeof-tabs.component';
+import { NvmeofTabsComponent, SETUP_CARDS_HIDE_DELAY_MS } from './nvmeof-tabs.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSetupCardsComponent } from '../nvmeof-setup-cards/nvmeof-setup-cards.component';
 
@@ -93,6 +93,10 @@ describe('NvmeofTabsComponent', () => {
       configurable: true,
       value: jest.fn().mockResolvedValue(true)
     });
+  });
+
+  afterEach(() => {
+    fixture?.destroy();
   });
 
   it('should create', () => {
@@ -394,25 +398,95 @@ describe('NvmeofTabsComponent', () => {
       );
     });
 
-    it('should render success setup card messages before gateway groups are removed', () => {
+    it('should keep setup cards visible briefly when isAllConfigured becomes true', fakeAsync(() => {
+      setRouterUrl('/block/nvmeof/gateways');
+      setSetupState({ hasGatewayGroups: false, hasSubsystems: false, hasNamespaces: false });
+      component.ngOnInit();
+      fixture.detectChanges();
+
+      setSetupState({ hasGatewayGroups: true, hasSubsystems: true, hasNamespaces: true });
+      emitRefresh();
+      fixture.detectChanges();
+
+      expect(component.isAllConfigured).toBe(true);
+      expect(component.showSetupCards).toBe(true);
+      expect(fixture.debugElement.query((el) => el.name === 'cd-nvmeof-setup-cards')).toBeTruthy();
+
+      tick(SETUP_CARDS_HIDE_DELAY_MS);
+      fixture.detectChanges();
+
+      expect(component.showSetupCards).toBe(false);
+      expect(fixture.debugElement.query((el) => el.name === 'cd-nvmeof-setup-cards')).toBeNull();
+    }));
+
+    it('should hide setup cards after the success delay when already fully configured', fakeAsync(() => {
       setRouterUrl('/block/nvmeof/gateways');
       component.ngOnInit();
       emitRefresh();
       fixture.detectChanges();
-      component.showSetupCards = true;
+
+      expect(component.isAllConfigured).toBe(true);
+      expect(component.showSetupCards).toBe(true);
+
+      tick(SETUP_CARDS_HIDE_DELAY_MS);
       fixture.detectChanges();
 
-      const cardElements = fixture.debugElement.queryAll((el) => el.name === 'cd-setup-step-card');
+      const setupCards = fixture.debugElement.query((el) => el.name === 'cd-nvmeof-setup-cards');
+      expect(setupCards).toBeNull();
+    }));
 
-      expect(cardElements[0].componentInstance.statusMessage).toBe(
-        'Gateway group configured successfully.'
-      );
-      expect(cardElements[1].componentInstance.statusMessage).toBe(
-        'Subsystem configured successfully.'
-      );
-      expect(cardElements[2].componentInstance.statusMessage).toBe(
-        'Namespaces mapped successfully.'
-      );
+    it('should show setup cards when isAllConfigured is false', () => {
+      setRouterUrl('/block/nvmeof/gateways');
+      setSetupState({ hasGatewayGroups: false, hasSubsystems: false, hasNamespaces: false });
+      component.ngOnInit();
+      fixture.detectChanges();
+
+      const setupCards = fixture.debugElement.query((el) => el.name === 'cd-nvmeof-setup-cards');
+      expect(setupCards).toBeTruthy();
     });
+
+    it('should cancel the hide timer and keep setup cards visible when configuration becomes incomplete while timer is pending', fakeAsync(() => {
+      setRouterUrl('/block/nvmeof/gateways');
+      setSetupState({ hasGatewayGroups: false, hasSubsystems: false, hasNamespaces: false });
+      component.ngOnInit();
+      fixture.detectChanges();
+
+      // Transition to fully configured — starts the 5-second hide timer
+      setSetupState({ hasGatewayGroups: true, hasSubsystems: true, hasNamespaces: true });
+      emitRefresh();
+      fixture.detectChanges();
+
+      expect(component.isAllConfigured).toBe(true);
+      expect(component.showSetupCards).toBe(true);
+
+      // Before the timer fires, configuration becomes incomplete again
+      setSetupState({ hasGatewayGroups: true, hasSubsystems: false, hasNamespaces: false });
+      emitRefresh();
+      fixture.detectChanges();
+
+      expect(component.isAllConfigured).toBe(false);
+      // Timer must have been cancelled: cards remain visible for the incomplete state
+      expect(component.showSetupCards).toBe(true);
+
+      // Advance past the original timer deadline — cards must still be visible
+      tick(SETUP_CARDS_HIDE_DELAY_MS);
+      fixture.detectChanges();
+
+      expect(component.showSetupCards).toBe(true);
+    }));
+
+    it('should show setup cards again if configuration becomes incomplete after dismiss', fakeAsync(() => {
+      setRouterUrl('/block/nvmeof/gateways');
+      component.ngOnInit();
+      tick(SETUP_CARDS_HIDE_DELAY_MS);
+      expect(component.showSetupCards).toBe(false);
+
+      setSetupState({ hasGatewayGroups: true, hasSubsystems: false, hasNamespaces: false });
+      emitRefresh();
+      fixture.detectChanges();
+
+      expect(component.showSetupCards).toBe(true);
+      expect(component.isAllConfigured).toBe(false);
+    }));
   });
 });

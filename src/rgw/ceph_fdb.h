@@ -31,20 +31,6 @@ between FDB's types! If you have a user type to add, this is the place!
 
 /*** Conversions: */
 
-namespace ceph::libfdb::detail {
-
-auto as_fdb_span(ceph::buffer::list& bl)
-{
- // c_str() makes the buffer::list contiguous. Use length(), not C-string
- // rules, because buffer::list may contain arbitrary bytes:
- auto p = bl.c_str();
-
- return std::span<const std::uint8_t>(
-          reinterpret_cast<const std::uint8_t *>(p), bl.length());
-}
-
-} // namespace ceph::libfdb::detail
-
 namespace ceph::buffer {
 
 auto serialize(auto& archive, ceph::buffer::list& target)
@@ -86,9 +72,10 @@ auto serialize(auto& archive, const ceph::buffer::list& src)
 // is a non-owning structure. 
 auto serialize(auto& archive, const ceph::buffer::ptr& src)
 {
- std::span<std::uint8_t> src_span((std::uint8_t *)src.c_str(), src.length());
+ const auto bytes = ceph::libfdb::detail::as_byte_view(
+  std::string_view(src.c_str(), src.length()));
 
- return archive(src_span);
+ return archive(bytes);
 }
 
 } // namespace ceph::buffer

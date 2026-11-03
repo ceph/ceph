@@ -138,7 +138,7 @@ describe('DeleteConfirmationModalComponent', () => {
       submitAction: null,
       submitActionObservable: null
     });
-    expect(() => component.ngOnInit()).toThrowError('No submit action defined');
+    expect(() => component.ngOnInit()).toThrow('No submit action defined');
   });
 
   it('should test if the ctrl driven mock is set correctly through mock component', () => {

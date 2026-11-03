@@ -6,7 +6,7 @@ import stat
 import cephfs
 
 from .async_job import AsyncJobs
-from .exception import VolumeException
+from .exception import VolumeException, JobDeferred, is_quarantined_error
 from .operations.resolver import resolve_trash
 from .operations.template import SubvolumeOpType
 from .operations.group import open_group
@@ -78,6 +78,10 @@ def purge_trash_entry_for_volume(fs_client, volspec, volname, purge_entry, shoul
                         except VolumeException as ve:
                             if not ve.errno == -errno.ENOENT:
                                 delink = False
+                                if is_quarantined_error(ve):
+                                    # trash lives inside a quarantined subvolume
+                                    raise JobDeferred(f"trash entry '{purge_entry}' is under a "
+                                                      "quarantined subvolume") from ve
                                 return ve.errno
                         finally:
                             if delink:
@@ -90,6 +94,12 @@ def purge_trash_entry_for_volume(fs_client, volspec, volname, purge_entry, shoul
                 except cephfs.Error as e:
                     log.warn("failed to remove trash entry: {0}".format(e))
     except VolumeException as ve:
+        if is_quarantined_error(ve):
+            # purge() above can succeed without purging anything (errors are
+            # suppressed) if the subvolume got quarantined, in which case
+            # subvolume_purge() fails and the trash link is left in place.
+            raise JobDeferred(f"trash entry '{purge_entry}' is under a "
+                              "quarantined subvolume") from ve
         ret = ve.errno
     return ret
 

@@ -6,6 +6,7 @@
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  */
 #include <iostream>
+#include <vector>
 #include <boost/random/mersenne_twister.hpp> // for boost::mt11213b
 #include <boost/scoped_ptr.hpp>
 #include <gtest/gtest.h>
@@ -15,6 +16,9 @@
 #include "include/stringify.h"
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
+#include "os/bluestore/AvlAllocator.h"
+#include "os/bluestore/BtreeAllocator.h"
+#include "os/bluestore/Btree2Allocator.h"
 
 using namespace std;
 
@@ -795,7 +799,850 @@ TEST_P(AllocTest, test_alloc_spatial_locality)
 }
 
 
+// ====================================================================
+// get_free_extents tests
+// ====================================================================
+
+TEST_P(AllocTest, test_get_free_extents_empty)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+  init_alloc(capacity, block_size);
+
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(0, capacity, 0, &out);
+  EXPECT_GE(cursor, (uint64_t)capacity);
+  EXPECT_TRUE(out.empty());
+  alloc->shutdown();
+}
+
+TEST_P(AllocTest, test_get_free_extents_fully_free)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(0, capacity, 0, &out);
+  EXPECT_GE(cursor, (uint64_t)capacity);
+  uint64_t total = 0;
+  for (auto& e : out) {
+    total += e.length;
+  }
+  EXPECT_EQ((uint64_t)capacity, total);
+  alloc->shutdown();
+}
+
+// A free extent straddling range_end must be clipped to the range boundary.
+TEST_P(AllocTest, test_get_free_extents_clipping_range_end)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  // free [4*block, 6*block), query only [0, 5*block)
+  alloc->init_add_free(4 * block_size, 2 * block_size);
+
+  uint64_t range_end = 5 * block_size;
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(0, range_end, 0, &out);
+  EXPECT_GE(cursor, range_end);
+  for (auto& e : out) {
+    EXPECT_LE(e.offset + e.length, range_end);
+  }
+  uint64_t total = 0;
+  for (auto& e : out) total += e.length;
+  EXPECT_EQ((uint64_t)block_size, total);
+  alloc->shutdown();
+}
+
+// A free extent entirely outside the query range must not be returned.
+TEST_P(AllocTest, test_get_free_extents_outside_range)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(6 * block_size, block_size);
+
+  uint64_t range_end = 4 * block_size;
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(0, range_end, 0, &out);
+  EXPECT_GE(cursor, range_end);
+  EXPECT_TRUE(out.empty());
+  alloc->shutdown();
+}
+
+// range_begin == range_end must return immediately with no extents emitted.
+TEST_P(AllocTest, test_get_free_extents_empty_range)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  free_extent_vector_t out;
+  uint64_t point = 4 * block_size;
+  uint64_t cursor = alloc->get_free_extents(point, point, 0, &out);
+  EXPECT_EQ(point, cursor);
+  EXPECT_TRUE(out.empty());
+  alloc->shutdown();
+}
+
+// get_free_extents must append to out, not clear it — a pre-existing sentinel
+// must survive at index 0.
+TEST_P(AllocTest, test_get_free_extents_appends_to_out)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, block_size);
+
+  free_extent_vector_t out;
+  out.emplace_back(999u, 1u); // sentinel
+  alloc->get_free_extents(0, capacity, 0, &out);
+  ASSERT_EQ(out.size(), 2u);
+  EXPECT_EQ(999u, out[0].offset);
+  EXPECT_EQ(1u, out[0].length);
+  EXPECT_EQ(0u, out[1].offset);
+  EXPECT_EQ(4096u, out[1].length);
+  alloc->shutdown();
+}
+
+// Returned extents must be in strictly ascending offset order.
+TEST_P(AllocTest, test_get_free_extents_ascending_order)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0 * block_size, block_size);
+  alloc->init_add_free(4 * block_size, block_size);
+  alloc->init_add_free(8 * block_size, block_size);
+  alloc->init_add_free(12 * block_size, block_size);
+
+  free_extent_vector_t out;
+  alloc->get_free_extents(0, capacity, 0, &out);
+  ASSERT_EQ(out.size(), 4u);
+  for (size_t i = 1; i < out.size(); ++i) {
+    EXPECT_LT(out[i-1].offset, out[i].offset);
+  }
+  alloc->shutdown();
+}
+
+// max_count limits extents per call; the returned cursor is a valid resume
+// point so driving it in a loop with max_count=2 covers all 4 extents.
+TEST_P(AllocTest, test_get_free_extents_max_count_batching)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0 * block_size, block_size);
+  alloc->init_add_free(2 * block_size, block_size);
+  alloc->init_add_free(4 * block_size, block_size);
+  alloc->init_add_free(6 * block_size, block_size);
+
+  free_extent_vector_t out;
+
+  // First batch must respect max_count and must not exhaust all extents.
+  uint64_t cursor = alloc->get_free_extents(0, capacity, 2, &out);
+  EXPECT_EQ(2u, out.size());
+  EXPECT_LT(cursor, (uint64_t)capacity);
+
+  // Resume from cursor until done; each batch must respect max_count.
+  int calls = 0;
+  while (cursor < (uint64_t)capacity) {
+    size_t before = out.size();
+    cursor = alloc->get_free_extents(cursor, capacity, 2, &out);
+    EXPECT_LE(out.size(), before + 2);
+    if (out.size() == before) break;  // no new extents: enumeration complete
+    ASSERT_LE(++calls, 10) << "cursor walk did not terminate";
+  }
+  EXPECT_EQ(4u, out.size());
+
+  // All four offsets must be distinct (no duplicates across batches).
+  for (size_t i = 1; i < out.size(); ++i) {
+    EXPECT_NE(out[i-1].offset, out[i].offset);
+  }
+  alloc->shutdown();
+}
+
+// Driving get_free_extents in a cursor loop must cover every free byte exactly
+// once.
+TEST_P(AllocTest, test_get_free_extents_cursor_walk)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 200 * block_size;
+  init_alloc(capacity, block_size);
+  for (int i = 0; i < 100; ++i) {
+    alloc->init_add_free(2 * i * block_size, block_size);
+  }
+  uint64_t expected_free = alloc->get_free();
+
+  free_extent_vector_t out;
+  uint64_t cursor = 0;
+  while (cursor < (uint64_t)capacity) {
+    cursor = alloc->get_free_extents(cursor, capacity, 32, &out);
+  }
+  uint64_t total = 0;
+  for (auto& e : out) total += e.length;
+  EXPECT_EQ(expected_free, total);
+  alloc->shutdown();
+}
+
+// max_count=1 walks one extent per call; the walk terminates and yields all
+// extents with no skips.
+TEST_P(AllocTest, test_get_free_extents_max_count_one)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0 * block_size, block_size);
+  alloc->init_add_free(2 * block_size, block_size);
+  alloc->init_add_free(4 * block_size, block_size);
+  alloc->init_add_free(6 * block_size, block_size);
+
+  free_extent_vector_t out;
+  uint64_t cursor = 0;
+  int iterations = 0;
+  while (cursor < (uint64_t)capacity) {
+    size_t prev = out.size();
+    cursor = alloc->get_free_extents(cursor, capacity, 1, &out);
+    EXPECT_LE(out.size(), prev + 1);
+    ASSERT_LE(++iterations, 1000) << "cursor walk did not terminate";
+  }
+  EXPECT_EQ(4u, out.size());
+  alloc->shutdown();
+}
+
+// ====================================================================
+// foreach_interruptible tests
+// ====================================================================
+
+TEST_P(AllocTest, test_foreach_interruptible_empty)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+  init_alloc(capacity, block_size);
+
+  int calls = 0;
+  alloc->foreach_interruptible([&](uint64_t, uint64_t) { ++calls; });
+  EXPECT_EQ(0, calls);
+  alloc->shutdown();
+}
+
+TEST_P(AllocTest, test_foreach_interruptible_fully_free)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  uint64_t total = 0;
+  alloc->foreach_interruptible([&](uint64_t, uint64_t len) { total += len; });
+  EXPECT_EQ(alloc->get_free(), total);
+  alloc->shutdown();
+}
+
+// 50 disjoint free extents: foreach_interruptible must report the correct total.
+TEST_P(AllocTest, test_foreach_interruptible_disjoint_extents)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 100 * block_size;
+  init_alloc(capacity, block_size);
+  for (int i = 0; i < 50; ++i) {
+    alloc->init_add_free(2 * i * block_size, block_size);
+  }
+  uint64_t expected_free = alloc->get_free();
+
+  uint64_t total = 0;
+  alloc->foreach_interruptible([&](uint64_t, uint64_t len) { total += len; });
+  EXPECT_EQ(expected_free, total);
+  alloc->shutdown();
+}
+
+// With no concurrent mutation, foreach_interruptible and foreach must visit the
+// exact same (offset, length) pairs in the same order.
+TEST_P(AllocTest, test_foreach_interruptible_matches_foreach)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 100 * block_size;
+  init_alloc(capacity, block_size);
+  for (int i = 0; i < 50; ++i) {
+    alloc->init_add_free(2 * i * block_size, block_size);
+  }
+
+  std::vector<std::pair<uint64_t, uint64_t>> fe_extents, fi_extents;
+  alloc->foreach([&](uint64_t off, uint64_t len) {
+    fe_extents.emplace_back(off, len);
+  });
+  alloc->foreach_interruptible([&](uint64_t off, uint64_t len) {
+    fi_extents.emplace_back(off, len);
+  });
+  EXPECT_EQ(fe_extents, fi_extents);
+  alloc->shutdown();
+}
+
+// 1500 disjoint free extents forces foreach_interruptible to issue multiple
+// get_free_extents batches (internal batch_size is 1024).
+TEST_P(AllocTest, test_foreach_interruptible_many_extents)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 3000 * block_size;
+  init_alloc(capacity, block_size);
+  for (int i = 0; i < 1500; ++i) {
+    alloc->init_add_free(2 * i * block_size, block_size);
+  }
+  uint64_t expected_free = alloc->get_free();
+
+  uint64_t total = 0;
+  int calls = 0;
+  alloc->foreach_interruptible([&](uint64_t, uint64_t len) {
+    total += len;
+    ++calls;
+  });
+  EXPECT_EQ(expected_free, total);
+  EXPECT_EQ(1500, calls);
+  alloc->shutdown();
+}
+
+// foreach_interruptible must correctly visit a single free block located at the
+// start, middle, and end of the device.
+TEST_P(AllocTest, test_foreach_interruptible_single_block_positions)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 16 * block_size;
+
+  auto run = [&](uint64_t free_offset) {
+    init_alloc(capacity, block_size);
+    alloc->init_add_free(free_offset, block_size);
+
+    struct Seen { uint64_t offset; uint64_t length; };
+    std::vector<Seen> seen;
+    alloc->foreach_interruptible([&](uint64_t off, uint64_t len) {
+      seen.push_back({off, len});
+    });
+    ASSERT_EQ(1u, seen.size());
+    EXPECT_EQ(free_offset, seen[0].offset);
+    EXPECT_EQ((uint64_t)block_size, seen[0].length);
+    alloc->shutdown();
+  };
+
+  run(0);                    // start of device
+  run(8 * block_size);       // middle of device
+  run(15 * block_size);      // last block
+}
+
+// ====================================================================
+// get_free_extents / foreach_interruptible × allocate() / release()
+// ====================================================================
+
+// After allocating space from a full device, get_free_extents must report
+// exactly the remaining free bytes and must not include any allocated region.
+TEST_P(AllocTest, test_get_free_extents_after_allocate)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 32 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  PExtentVector allocated;
+  ASSERT_GT(alloc->allocate(8 * block_size, block_size, 0, (int64_t)-1, &allocated), 0);
+
+  interval_set<uint64_t> alloc_set;
+  for (auto& e : allocated) {
+    alloc_set.insert(e.offset, e.length);
+  }
+
+  free_extent_vector_t out;
+  alloc->get_free_extents(0, capacity, 0, &out);
+
+  uint64_t total = 0;
+  for (auto& e : out) {
+    total += e.length;
+    EXPECT_FALSE(alloc_set.intersects(e.offset, e.length))
+      << "free extent [" << e.offset << ", +" << e.length
+      << ") overlaps an allocated region";
+  }
+  EXPECT_EQ(alloc->get_free(), total);
+  alloc->shutdown();
+}
+
+// After releasing previously allocated extents, get_free_extents must see
+// the released space and return the full device capacity as free.
+TEST_P(AllocTest, test_get_free_extents_after_release)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 32 * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  PExtentVector allocated;
+  ASSERT_GT(alloc->allocate(8 * block_size, block_size, 0, (int64_t)-1, &allocated), 0);
+
+  interval_set<uint64_t> release_set;
+  for (auto& e : allocated) {
+    release_set.insert(e.offset, e.length);
+  }
+  alloc->release(release_set);
+  ASSERT_EQ((uint64_t)capacity, alloc->get_free());
+
+  free_extent_vector_t out;
+  alloc->get_free_extents(0, capacity, 0, &out);
+
+  uint64_t total = 0;
+  for (auto& e : out) total += e.length;
+  EXPECT_EQ((uint64_t)capacity, total);
+
+  // every released byte must be covered by some returned free extent
+  interval_set<uint64_t> free_set;
+  for (auto& e : out) free_set.insert(e.offset, e.length);
+  for (auto [start, len] : release_set) {
+    EXPECT_TRUE(free_set.contains(start, len))
+      << "released region [" << start << ", +" << len
+      << ") not found in free extents";
+  }
+  alloc->shutdown();
+}
+
+// Allocate all blocks one at a time, release every other allocation.
+// get_free_extents must account for exactly the released bytes and each
+// returned extent must lie entirely within the released set.
+TEST_P(AllocTest, test_get_free_extents_fragmented_after_alloc_release)
+{
+  int64_t block_size = 4096;
+  int n_blocks = 32;
+  int64_t capacity = n_blocks * block_size;
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  std::vector<PExtentVector> per_block(n_blocks);
+  for (int i = 0; i < n_blocks; ++i) {
+    int64_t got = alloc->allocate(block_size, block_size, 0, (int64_t)-1, &per_block[i]);
+    ASSERT_EQ(block_size, got) << "failed to allocate block " << i;
+  }
+  ASSERT_EQ(0u, alloc->get_free());
+
+  interval_set<uint64_t> released;
+  for (int i = 0; i < n_blocks; i += 2) {
+    interval_set<uint64_t> rs;
+    for (auto& e : per_block[i]) {
+      rs.insert(e.offset, e.length);
+      released.insert(e.offset, e.length);
+    }
+    alloc->release(rs);
+  }
+  uint64_t expected_free = (uint64_t)(n_blocks / 2) * block_size;
+  ASSERT_EQ(expected_free, alloc->get_free());
+
+  free_extent_vector_t out;
+  alloc->get_free_extents(0, capacity, 0, &out);
+
+  uint64_t total = 0;
+  for (auto& e : out) {
+    total += e.length;
+    EXPECT_TRUE(released.contains(e.offset, e.length))
+      << "free extent [" << e.offset << ", +" << e.length
+      << ") is not fully within the released set";
+  }
+  EXPECT_EQ(expected_free, total);
+  alloc->shutdown();
+}
+
+// ====================================================================
+// Nasty / adversarial cases
+// ====================================================================
+
+// A free extent that starts BEFORE range_begin must be clipped on its left
+// edge so the returned extent begins at range_begin, not at the extent's
+// actual start.  This is the symmetric counterpart of clipping_range_end.
+TEST_P(AllocTest, test_get_free_extents_clipping_range_begin)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 8 * block_size;
+  init_alloc(capacity, block_size);
+  // free [0, 6*block), query only [4*block, capacity)
+  alloc->init_add_free(0, 6 * block_size);
+
+  uint64_t range_begin = 4 * block_size;
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(range_begin, capacity, 0, &out);
+  EXPECT_GE(cursor, (uint64_t)capacity);
+  ASSERT_EQ(1u, out.size());
+  EXPECT_EQ((uint64_t)range_begin, out[0].offset);
+  EXPECT_EQ((uint64_t)(2 * block_size), out[0].length);
+  alloc->shutdown();
+}
+
+// 5000 alternating free/allocated single blocks — maximum fragmentation at
+// scale.  Stresses cursor arithmetic, tree-walk depth, and termination.
+TEST_P(AllocTest, test_get_free_extents_massive_fragmentation)
+{
+  int64_t block_size = 4096;
+  const int n_extents = 5000;
+  int64_t capacity = 2 * n_extents * block_size;
+  init_alloc(capacity, block_size);
+  for (int i = 0; i < n_extents; ++i) {
+    alloc->init_add_free(2 * i * block_size, block_size);
+  }
+  uint64_t expected_free = alloc->get_free();
+
+  free_extent_vector_t out;
+  uint64_t cursor = 0;
+  int batches = 0;
+  while (cursor < (uint64_t)capacity) {
+    cursor = alloc->get_free_extents(cursor, capacity, 256, &out);
+    ASSERT_LE(++batches, n_extents) << "cursor walk did not terminate";
+  }
+
+  ASSERT_EQ((size_t)n_extents, out.size());
+  uint64_t total = 0;
+  for (size_t i = 0; i < out.size(); ++i) {
+    total += out[i].length;
+    if (i > 0) {
+      EXPECT_LT(out[i-1].offset, out[i].offset)
+        << "offsets not strictly ascending at index " << i;
+    }
+  }
+  EXPECT_EQ(expected_free, total);
+  alloc->shutdown();
+}
+
+// Almost-full device: free space exists only at the very last block.  The
+// cursor must skip the entire allocated region to find it.
+TEST_P(AllocTest, test_get_free_extents_needle_at_end)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 10000 * block_size;
+  init_alloc(capacity, block_size);
+  uint64_t free_offset = (uint64_t)(capacity - block_size);
+  alloc->init_add_free(free_offset, block_size);
+
+  free_extent_vector_t out;
+  uint64_t cursor = alloc->get_free_extents(0, capacity, 0, &out);
+  EXPECT_GE(cursor, (uint64_t)capacity);
+  ASSERT_EQ(1u, out.size());
+  EXPECT_EQ(free_offset, out[0].offset);
+  EXPECT_EQ((uint64_t)block_size, out[0].length);
+  alloc->shutdown();
+}
+
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
   ::testing::Values("stupid", "bitmap", "avl", "hybrid", "btree", "hybrid_btree2"));
+
+/*
+ * Regression tests for _try_remove_from_tree() in the AVL / Btree / Btree2
+ * allocators.  See https://tracker.ceph.com/issues/80417.
+ */
+
+namespace {
+
+constexpr uint64_t _64k = 64 * 1024;   // per-run granularity used below
+constexpr uint64_t block_size = 0x1000; // 4 KiB
+constexpr uint64_t device_size = 1ull << 30; // 1 GiB
+constexpr uint64_t max_mem = 64ull << 20; // 64 MiB
+
+// Print [offset, offset + length) in _64k units, e.g. "[5,10)", to match the
+// comments in the tests.  Falls back to hex if not aligned to _64k.
+void print_range(std::ostream& os, uint64_t offset, uint64_t length) {
+  const uint64_t end = offset + length;
+  if (offset % _64k == 0 && end % _64k == 0) {
+    os << "[" << offset / _64k << "," << end / _64k << ")";
+  } else {
+    os << "[0x" << std::hex << offset << ",0x" << end << std::dec << ")";
+  }
+}
+
+struct cb_rec_t {
+  uint64_t offset;
+  uint64_t length;
+  bool found;
+  bool operator==(const cb_rec_t&) const = default;
+};
+
+std::ostream& operator<<(std::ostream& os, const cb_rec_t& r) {
+  os << "{";
+  print_range(os, r.offset, r.length);
+  return os << (r.found ? " found" : " missing") << "}";
+}
+
+struct extent_t {
+  uint64_t offset;
+  uint64_t length;
+  bool operator==(const extent_t&) const = default;
+};
+
+std::ostream& operator<<(std::ostream& os, const extent_t& e) {
+  print_range(os, e.offset, e.length);
+  return os;
+}
+
+// AvlAllocator::_try_remove_from_tree is protected - re-expose it.
+class TestAvlAllocator : public AvlAllocator {
+public:
+  using AvlAllocator::AvlAllocator;
+  using AvlAllocator::_try_remove_from_tree;
+};
+
+// BtreeAllocator::_try_remove_from_tree is protected - re-expose it.
+class TestBtreeAllocator : public BtreeAllocator {
+public:
+  using BtreeAllocator::BtreeAllocator;
+  using BtreeAllocator::_try_remove_from_tree;
+};
+
+// Btree2Allocator::_try_remove_from_tree is protected - re-expose it.
+class TestBtree2Allocator : public Btree2Allocator {
+public:
+  using Btree2Allocator::Btree2Allocator;
+  using Btree2Allocator::_try_remove_from_tree;
+};
+
+// Btree2Allocator with a range count cap low enough to make spillover happen
+// and a _spillover_range() that records what has been spilled over.
+class TestBtree2SpilloverAllocator : public Btree2Allocator {
+public:
+  using Btree2Allocator::Btree2Allocator;
+  using Btree2Allocator::_try_remove_from_tree;
+  std::vector<extent_t> spilled;
+protected:
+  void _spillover_range(uint64_t start, uint64_t end) override {
+    spilled.push_back({start, end - start});
+  }
+};
+
+// Thrown from the callback to abort _try_remove_from_tree().
+struct bad_callback_t {};
+
+// Run _try_remove_from_tree() and record every callback.  A callback that is
+// empty or lies outside the query means the walk has gone wrong - and a buggy
+// walk may never terminate - so stop at the first such record and fail.
+template <class Alloc>
+std::vector<cb_rec_t> collect(Alloc& a, uint64_t start, uint64_t size)
+{
+  const uint64_t end = start + size;
+  std::vector<cb_rec_t> recs;
+  auto cb = [&](uint64_t o, uint64_t l, bool found) {
+    recs.push_back({o, l, found});
+    if (l == 0 || o < start || o + l < o || o + l > end) {
+      throw bad_callback_t{};
+    }
+  };
+  try {
+    a._try_remove_from_tree(start, size, cb);
+  } catch (const bad_callback_t&) {
+    ADD_FAILURE() << "callback " << recs.back() << " is outside query "
+                  << extent_t{start, size};
+  }
+  return recs;
+}
+
+template <class Alloc>
+std::vector<extent_t> extents(Alloc& a)
+{
+  std::vector<extent_t> out;
+  a.foreach([&](uint64_t o, uint64_t l) { out.push_back({o, l}); });
+  return out;
+}
+
+} // namespace
+
+/*
+ * AVL: range_tree uses an overlap comparator, so every free run overlapping
+ * the query compares equal to it.  Check that a query spanning several
+ * disjoint free runs still starts from the leftmost one and visits all of
+ * them in address order: find() is lower_bound() plus an equality check, so
+ * it returns the leftmost overlapping run rather than whichever one a tree
+ * traversal happens to reach first.
+ *
+ * Runs are inserted right-to-left so the run that begins first is not the
+ * root of the tree.
+ */
+TEST(AvlAllocator, try_remove_spanning_disjoint_runs)
+{
+  TestAvlAllocator a(g_ceph_context, device_size, block_size, "avl");
+  a.init_add_free(40 * _64k, 10 * _64k);   // C = [40, 50)
+  a.init_add_free(20 * _64k, 10 * _64k);   // B = [20, 30)
+  a.init_add_free(0 * _64k, 10 * _64k);    // A = [0, 10)
+
+  const uint64_t start = 5 * _64k;
+  const uint64_t size = 40 * _64k;      // query [5, 45): trims A and C, eats B
+  const uint64_t before = a.get_free();
+
+  auto recs = collect(a, start, size);
+  const uint64_t freed = before - a.get_free();
+
+  EXPECT_EQ((std::vector<cb_rec_t>{
+    {5 * _64k, 5 * _64k, true},     // A tail [5, 10)
+    {10 * _64k, 10 * _64k, false},  // gap [10, 20)
+    {20 * _64k, 10 * _64k, true},   // B [20, 30)
+    {30 * _64k, 10 * _64k, false},  // gap [30, 40)
+    {40 * _64k, 5 * _64k, true},    // C head [40, 45)
+  }), recs);
+  EXPECT_EQ(20u * _64k, freed);
+  EXPECT_EQ((std::vector<extent_t>{
+    {0, 5 * _64k}, {45 * _64k, 5 * _64k},
+  }), extents(a));
+}
+
+// A query fully inside a single run must trim it on both sides and touch
+// nothing else.
+TEST(AvlAllocator, try_remove_inside_single_run)
+{
+  TestAvlAllocator a(g_ceph_context, device_size, block_size, "avl");
+  a.init_add_free(0, 10 * _64k);
+  a.init_add_free(20 * _64k, 10 * _64k);
+
+  auto recs = collect(a, 2 * _64k, 5 * _64k);   // [2, 7) inside [0, 10)
+  EXPECT_EQ((std::vector<cb_rec_t>{{2 * _64k, 5 * _64k, true}}), recs);
+  EXPECT_EQ((std::vector<extent_t>{
+    {0, 2 * _64k}, {7 * _64k, 3 * _64k}, {20 * _64k, 10 * _64k},
+  }), extents(a));
+}
+
+/*
+ * Btree (btree_map): _try_remove_from_tree() used range_tree.find(start), an
+ * exact-key lookup that returns end() unless a run begins exactly at 'start'.
+ * A run beginning before 'start' and reaching into the query was missed
+ * entirely and the whole query reported as not-free.
+ *
+ * Runs [100,200) and [300,350); query [150,180) sits wholly inside the first.
+ */
+TEST(BtreeAllocator, try_remove_run_starting_before_query)
+{
+  TestBtreeAllocator a(g_ceph_context, device_size, block_size, "btree");
+  a.init_add_free(100 * _64k, 100 * _64k);
+  a.init_add_free(300 * _64k, 50 * _64k);
+
+  const uint64_t start = 150 * _64k;
+  const uint64_t size = 30 * _64k;          // [150, 180)
+  const uint64_t before = a.get_free();
+
+  auto recs = collect(a, start, size);
+  const uint64_t freed = before - a.get_free();
+
+  EXPECT_EQ((std::vector<cb_rec_t>{{150 * _64k, 30 * _64k, true}}), recs);
+  EXPECT_EQ(30u * _64k, freed);
+  EXPECT_EQ((std::vector<extent_t>{
+    {100 * _64k, 50 * _64k}, {180 * _64k, 20 * _64k}, {300 * _64k, 50 * _64k},
+  }), extents(a));
+}
+
+/*
+ * Btree: the successor iterator was cached before _process_range_removal(),
+ * which can erase from / emplace into range_tree and invalidate it.  The fix
+ * re-acquires the iterator with range_tree.lower_bound(end) after
+ * _process_range_removal() is done with its mutations.
+ *
+ * Runs [0,10),[20,30),[40,50); query [0,45).  The query starts exactly at the
+ * first run, so the lookup is not involved.  [0,10) is erased whole, which
+ * shifts the remaining slots of the btree leaf down by one: a cached
+ * successor iterator would then land on [40,50) and skip [20,30), reporting
+ * it as not free.
+ */
+TEST(BtreeAllocator, try_remove_iterator_stays_valid_across_removal)
+{
+  TestBtreeAllocator a(g_ceph_context, device_size, block_size, "btree");
+  a.init_add_free(0, 10 * _64k);
+  a.init_add_free(20 * _64k, 10 * _64k);
+  a.init_add_free(40 * _64k, 10 * _64k);
+
+  const uint64_t start = 0;
+  const uint64_t size = 45 * _64k;          // [0, 45)
+  const uint64_t before = a.get_free();
+
+  auto recs = collect(a, start, size);
+  const uint64_t freed = before - a.get_free();
+
+  EXPECT_EQ((std::vector<cb_rec_t>{
+    {0, 10 * _64k, true},           // [0, 10)
+    {10 * _64k, 10 * _64k, false},  // gap [10, 20)
+    {20 * _64k, 10 * _64k, true},   // [20, 30)
+    {30 * _64k, 10 * _64k, false},  // gap [30, 40)
+    {40 * _64k, 5 * _64k, true},    // [40, 45)
+  }), recs);
+  EXPECT_EQ(25u * _64k, freed);
+  EXPECT_EQ((std::vector<extent_t>{
+    {45 * _64k, 5 * _64k},
+  }), extents(a));
+}
+
+// Query starting past every free run: single not-found record, tree untouched.
+TEST(BtreeAllocator, try_remove_entirely_past_free_runs)
+{
+  TestBtreeAllocator a(g_ceph_context, device_size, block_size, "btree");
+  a.init_add_free(0, 10 * _64k);
+  a.init_add_free(20 * _64k, 10 * _64k);
+
+  auto recs = collect(a, 30 * _64k, 10 * _64k);   // [30, 40): nothing free
+  EXPECT_EQ((std::vector<cb_rec_t>{{30 * _64k, 10 * _64k, false}}), recs);
+  EXPECT_EQ((std::vector<extent_t>{
+    {0, 10 * _64k}, {20 * _64k, 10 * _64k},
+  }), extents(a));
+}
+
+/*
+ * Btree2 bug 1: lower_bound(start) can land just past the run that straddles
+ * 'start'; the code stepped back one node whenever that predecessor started
+ * before 'start', without checking it also *ends* after 'start'.  A
+ * non-overlapping predecessor was then fed to _remove_from_tree() with
+ * end < start.
+ */
+TEST(Btree2Allocator, try_remove_predecessor_not_overlapping)
+{
+  TestBtree2Allocator a(g_ceph_context, device_size, block_size, max_mem,
+                        1.0, /*with_cache=*/false, "btree2");
+  a.init_add_free(0, 10 * _64k);
+  a.init_add_free(40 * _64k, 10 * _64k);
+
+  const uint64_t start = 20 * _64k;
+  const uint64_t size = 10 * _64k;          // [20, 30)
+  const uint64_t before = a.get_free();
+
+  auto recs = collect(a, start, size);
+  const uint64_t freed = before - a.get_free();
+
+  EXPECT_EQ((std::vector<cb_rec_t>{
+    {20 * _64k, 10 * _64k, false},  // gap [20, 30)
+  }), recs);
+  EXPECT_EQ(0u, freed);
+  EXPECT_EQ((std::vector<extent_t>{
+    {0, 10 * _64k}, {40 * _64k, 10 * _64k},
+  }), extents(a));
+}
+
+/*
+ * Btree2 bug 2: when a run reaches below 'start', _remove_from_tree()
+ * re-inserts the left-over remainder and returns an iterator to it.  The loop
+ * never skipped that remainder, so it re-processed a segment ending at or
+ * below 'start' - another malformed [end < start] removal and no forward
+ * progress.
+ *
+ * Run [0,100) straddles start=50; query [50,200) with another run [150,160).
+ */
+TEST(Btree2Allocator, try_remove_leftover_split_makes_progress)
+{
+  TestBtree2Allocator a(g_ceph_context, device_size, block_size, max_mem,
+                        1.0, /*with_cache=*/false, "btree2");
+  a.init_add_free(0, 100 * _64k);
+  a.init_add_free(150 * _64k, 10 * _64k);
+
+  const uint64_t start = 50 * _64k;
+  const uint64_t size = 150 * _64k;         // [50, 200)
+  const uint64_t before = a.get_free();
+
+  auto recs = collect(a, start, size);
+  const uint64_t freed = before - a.get_free();
+
+  EXPECT_EQ((std::vector<cb_rec_t>{
+    {50 * _64k, 50 * _64k, true},    // [50, 100)
+    {100 * _64k, 50 * _64k, false},  // gap [100, 150)
+    {150 * _64k, 10 * _64k, true},   // [150, 160)
+    {160 * _64k, 40 * _64k, false},  // gap [160, 200)
+  }), recs);
+  EXPECT_EQ(60u * _64k, freed);
+  EXPECT_EQ((std::vector<extent_t>{
+    {0, 50 * _64k},
+  }), extents(a));
+}
+

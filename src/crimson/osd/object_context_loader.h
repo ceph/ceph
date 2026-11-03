@@ -60,6 +60,15 @@ public:
 	state = RWState::RWEXCL;
       }
 
+      bool try_lock_for_read() {
+        assert(state == RWState::RWNONE);
+        if (obc->lock.try_lock_for_read()) {
+          state = RWState::RWREAD;
+          return true;
+        }
+        return false;
+      }
+
       void demote_excl_to(RWState::State lock_type) {
 	assert(state == RWState::RWEXCL);
 	switch (lock_type) {
@@ -214,7 +223,7 @@ public:
   /**
    * create_cached_obc_from_push_data
    *
-   * Creates a fresh cached obc from passed oi and ssc.
+   * Creates a fresh cached obc from passed oi, ssc and attrs.
    * Overwrites any obc already in cache for this object.
    *
    * Note, this interface may be used to create a clone obc
@@ -229,7 +238,8 @@ public:
    */
   ObjectContextRef create_cached_obc_from_push_data(
     const object_info_t &oi,
-    SnapSetContextRef ssc) {
+    SnapSetContextRef ssc,
+    const ObjectContext::attr_cache_t &attrs) {
     auto obc = obc_registry.get_cached_obc(oi.soid).first;
     if (oi.soid.is_head()) {
       ceph_assert(ssc); // head, ssc may not be null
@@ -239,6 +249,7 @@ public:
       obc->set_clone_state(ObjectState(oi, true));
       obc->set_clone_ssc(SnapSetContextRef(ssc));
     }
+    obc->attr_cache = attrs;
     return obc;
   }
 
@@ -259,6 +270,23 @@ public:
     Manager ret = get_obc_manager(obc->obs.oi.soid, false);
     ret.set_state_obc(ret.target_state, obc);
     return ret;
+  }
+
+  // Try a non-blocking read lock on an already-cached obc, without
+  // loading it. Returns nullopt if the obc isn't cached or can't be
+  // locked right now.
+  std::optional<Manager> try_lock_cached_obc_for_read(const hobject_t &oid) {
+    auto obc = obc_registry.maybe_get_cached_obc(oid);
+    if (!obc) {
+      return std::nullopt;
+    }
+    Manager manager(*this, oid);
+    manager.options.resolve_clone = false;
+    manager.set_state_obc(manager.target_state, obc);
+    if (!manager.target_state.try_lock_for_read()) {
+      return std::nullopt;
+    }
+    return manager;
   }
 
   Manager get_obc_manager(

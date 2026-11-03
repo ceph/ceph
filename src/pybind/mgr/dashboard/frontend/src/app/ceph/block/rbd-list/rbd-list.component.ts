@@ -405,8 +405,13 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         nextSnapshotDate = (nextSnapshotDate + Math.abs(offset) * 60000) / 1000;
         scheduling.push(image.mirror_mode, scheduleStatus, nextSnapshotDate);
         image.mirror_mode = scheduling;
-        scheduling = [];
       }
+
+      image.cdLink = `/block/rbd/${new ImageSpec(
+        image.pool_name,
+        image.namespace,
+        image.name
+      ).toStringEncoded()}/overview`;
     });
 
     if (images.length > 0) {

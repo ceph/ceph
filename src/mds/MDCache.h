@@ -26,7 +26,7 @@
 #include "common/admin_finisher.h"
 #include "include/common_fwd.h"
 #include "include/types.h"
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "include/elist.h"
 #include "include/rados/rados_types.hpp"
 
@@ -68,6 +68,7 @@ class Session;
 class Migrator;
 
 class Session;
+class QuarantineTracker;
 
 class ESubtreeMap;
 
@@ -125,6 +126,8 @@ enum {
   l_mdc_uninline_started,
   l_mdc_uninline_succeeded,
   l_mdc_uninline_write_failed,
+
+  l_mdc_cache_trim_throttle,
 
   l_mdc_last,
 };
@@ -614,6 +617,9 @@ private:
       mdr = _mdr;
     }
     void finish(int r) override {
+      if (quarantine && cache && mdr) {
+        cache->schedule_quarantine_cleanup(mdr);
+      }
       if (finisher) {
         finisher->complete(r);
         finisher = nullptr;
@@ -623,6 +629,9 @@ private:
     MDCache *cache;
     MDRequestRef mdr;
     Context* finisher = nullptr;
+    bool quarantine = false;
+    unsigned qtine_op = 0;
+    inodeno_t qtine_root_ino;
   };
   MDRequestRef quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *f = nullptr, std::chrono::milliseconds delay = 0ms);
   MDRequestRef get_quiesce_inode_op(CInode* in) {
@@ -1154,6 +1163,18 @@ private:
 
   void uninline_data_work(MDRequestRef mdr);
 
+  void quarantine_dir_auth(const MDRequestRef& mdr);
+  void quarantine_work(const MDRequestRef& mdr);
+  void quarantine_inode(MDRequestRef const& mdr);
+  void start_quarantine_inode_work(CInode *qtine_root_in, unsigned qtine_op, QtineMgrRef qtine_mgr);
+  bool start_revoke_caps_for_inode(CInode *in, inodeno_t qtine_root_ino, unsigned qtine_op);
+  void schedule_quarantine_cleanup(const MDRequestRef& mdr);
+  void abort_quarantine_op(inodeno_t qtine_root_ino, unsigned qtine_op);
+  void start_quarantine_cap_revocation(CInode *root, unsigned qtine_op,
+                                       Context *on_finish = nullptr);
+  void handle_quarantine_policy_update(CInode *root, bool was_quarantined,
+                                       bool is_quarantined);
+
   // my leader
   MDSRank *mds;
 
@@ -1178,6 +1199,8 @@ private:
 
   // -- client caps --
   uint64_t last_cap_id = 0;
+
+  uint64_t num_backend_fetching = 0;  // count of in-flight background dirfrag fetches
 
   std::map<ceph_tid_t, discover_info_t> discovers;
   ceph_tid_t discover_last_tid = 0;
@@ -1293,7 +1316,8 @@ private:
   void send_subtree_resolves();
   void maybe_finish_peer_resolve();
 
-  void rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin);
+  void rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin,
+                   uint64_t& count);
   void handle_cache_rejoin(const cref_t<MMDSCacheRejoin> &m);
   void handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &m);
   CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last);
@@ -1622,6 +1646,7 @@ private:
   DecayCounter quiesce_counter;
   uint64_t quiesce_threshold;
   std::chrono::milliseconds quiesce_sleep;
+
 };
 
 /**

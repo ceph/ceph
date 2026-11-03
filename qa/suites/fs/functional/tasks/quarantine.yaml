@@ -1,0 +1,17 @@
+# Full quarantine test suite including MDS auth caps (q/Q flags), multi-MDS,
+# and core functionality. The fs/volumes suite runs a subset focused on
+# volumes module integration.
+#
+# test_quarantine requires FUSE client (skips on kclient)
+# test_quarantine_kclient requires kernel client (skips on fuse)
+overrides:
+  ceph:
+    log-ignorelist:
+      - slow request
+      - quarantine
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_quarantine
+        - tasks.cephfs.test_quarantine_kclient

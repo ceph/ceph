@@ -18,6 +18,9 @@
 #include <boost/intrusive/list.hpp>
 #include <utility>
 #include <fmt/format.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
@@ -99,14 +102,12 @@ struct ECCommon {
 
   struct shard_read_t {
     extent_set extents;
-    std::optional<std::vector<std::pair<int, int>>> subchunk;
     pg_shard_t pg_shard;
     bool omap_source = false;
     bool operator==(const shard_read_t &other) const;
 
     void print(std::ostream &os) const {
       os << "shard_read_t(extents=[" << extents << "]"
-          << ", subchunk=" << subchunk
           << ", pg_shard=" << pg_shard
           << ", omap_source=" << omap_source
           << ")";
@@ -209,7 +210,7 @@ struct ECCommon {
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>>> attrs;
     std::optional<ceph::buffer::list> omap_header;
     std::optional<std::map<std::string, ceph::buffer::list>> omap_entries;
-    bool omap_complete;
+    bool omap_complete = false;
     ECUtil::shard_extent_map_t buffers_read;
     ECUtil::shard_extent_set_t processed_read_requests;
     shard_id_set zero_length_reads;
@@ -500,7 +501,7 @@ struct ECCommon {
         bool do_redundant_reads,
         ///< [in] true if we want to issue redundant reads to reduce latency
         read_request_t &read_request,
-        ///< [out] shard_reads, corresponding subchunks / other sub reads to read
+        ///< [out] shard_reads to read
         const std::optional<std::set<pg_shard_t>> &error_shards = std::nullopt
         //< [in] Shards where reads have failed (optional)
       ); ///< @return error code, 0 on success
@@ -665,7 +666,6 @@ struct ECCommon {
     using OpRef = std::shared_ptr<Op>;
 
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
-    std::map<hobject_t, eversion_t> oid_to_version;
 
     std::list<OpRef> waiting_commit;
     eversion_t completed_to;
@@ -729,7 +729,7 @@ struct ECCommon {
     // Set by on_change, forces first write in each interval to be
     // a full write to avoid PWLC spanning intervals. Fixes
     // https://tracker.ceph.com/issues/73891
-    bool first_write_in_interval;
+    bool first_write_in_interval = false;
 
     RMWPipeline(CephContext *cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,

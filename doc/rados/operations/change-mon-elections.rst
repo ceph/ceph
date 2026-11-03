@@ -7,15 +7,22 @@ Configuring Monitor Election Strategies
 By default, the monitors are in ``classic`` mode. We recommend staying in this
 mode unless you have a very specific reason.
 
-If you want to switch modes BEFORE constructing the cluster, change the ``mon
-election default strategy`` option. This option takes an integer value:
+If you want to choose a mode for a new cluster, set the
+``mon_election_default_strategy`` option before the first monitor map is
+created. This option takes an integer value:
 
 * ``1`` for ``classic``
 * ``2`` for ``disallow``
 * ``3`` for ``connectivity``
 
+``cephadm bootstrap`` and the :ref:`manual-deployment` procedure create the
+first monitor map with ``monmaptool --create``, which by default reads no
+configuration file, so their clusters start in ``classic`` mode. Change the
+mode with the command below.
+
 After your cluster has started running, you can change strategies by running a
-command of the following form:
+command of the following form. Stretch mode requires the ``connectivity``
+strategy, so do not change the strategy while stretch mode is enabled:
 
 .. prompt:: bash $
 

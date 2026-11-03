@@ -68,6 +68,7 @@ public:
 #undef OPTION_OPT_U32
 #undef OPTION_OPT_U64
 #undef OPTION_OPT_UUID
+#undef OPTION_OPT_SIZE
 #undef OPTION
 #undef SAFE_OPTION
 

@@ -3,6 +3,7 @@
 
 #include "gtest/gtest.h"
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_objects.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/global_context.h"

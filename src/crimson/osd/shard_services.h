@@ -3,10 +3,12 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
 
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
+#include <seastar/core/metrics.hh>
 
 #include "include/common_fwd.h"
 #include "osd_operation.h"
@@ -26,12 +28,9 @@
 #include "crimson/osd/state.h"
 #include "common/AsyncReserver.h"
 #include "crimson/net/Connection.h"
+#include "crimson/net/Messenger.h"
 #include "mgr/OSDPerfMetricTypes.h"
 #include "osd/ECExtentCache.h"
-
-namespace crimson::net {
-  class Messenger;
-}
 
 namespace crimson::mgr {
   class Client;
@@ -409,6 +408,17 @@ class ShardServices : public OSDMapService,
   PGShardMapping& pg_to_shard_mapping;
   uint32_t store_shard_nums = 0;
 
+  std::array<uint64_t,
+    static_cast<size_t>(OperationTypeCode::last_op)> pg_op_shard_local{};
+  std::array<uint64_t,
+    static_cast<size_t>(OperationTypeCode::last_op)> pg_op_shard_remote{};
+  seastar::metrics::metric_groups metrics;
+  void register_metrics();
+
+  // This reactor's own cluster messenger. send_to_osd() sends on it
+  // instead of on reactor 0's.
+  crimson::net::MessengerRef cluster_lane_msgr;
+
   template <typename F, typename... Args>
   auto with_singleton(F &&f, Args&&... args) {
     return osd_singleton_state.invoke_on(
@@ -523,14 +533,33 @@ public:
     : local_state(std::forward<PSSArgs>(args)...),
       osd_singleton_state(osd_singleton_state),
       pg_to_shard_mapping(pg_to_shard_mapping),
-      store_shard_nums(store_shard_nums) {}
+      store_shard_nums(store_shard_nums) {
+    register_metrics();
+  }
 
-  FORWARD_TO_OSD_SINGLETON(send_to_osd)
+  seastar::future<> send_to_osd(int peer, MessageURef m, epoch_t from_epoch);
+
+  seastar::future<> start_cluster_lane(
+    uint32_t nonce,
+    entity_addrvec_t addrs,
+    uint64_t osd_required,
+    crimson::net::Dispatcher &dispatcher,
+    crimson::auth::AuthClient *auth_client,
+    crimson::auth::AuthServer *auth_server);
+  void stop_cluster_lane();
+  seastar::future<> shutdown_cluster_lane();
+  seastar::future<> mark_down_cluster_lane(entity_addr_t addr);
 
   crimson::os::BackendStore get_store(store_index_t store_index) {
     auto store = local_state.b_store;
     store.store_index = store_index;
     return store;
+  }
+
+  bool is_local_storage_full(store_index_t store_index) const {
+    const auto &shard_store =
+        local_state.b_store.f_store.get_sharded_store(store_index);
+    return shard_store.is_storage_full();
   }
 
   struct shard_stats_t {

@@ -359,9 +359,9 @@ public:
              [io_ctx_impl, default_namespace_enabled](bufferlist* bl) {
                 if (io_ctx_impl->get_namespace().empty() &&
                     *default_namespace_enabled == false) {
-                  encode(cls::rbd::MIRROR_MODE_DISABLED, *bl);
+                  encode(static_cast<uint32_t>(cls::rbd::MIRROR_MODE_DISABLED), *bl);
                 } else {
-                  encode(cls::rbd::MIRROR_MODE_POOL, *bl);
+                  encode(static_cast<uint32_t>(cls::rbd::MIRROR_MODE_POOL), *bl);
                 }
               })),
           Return(r)));

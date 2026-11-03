@@ -186,8 +186,13 @@ public:
   // -- file i/o --
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, const MDRequestRef& mdr, SnapRealm *conrealm);
-  int get_allowed_caps(CInode *in, Capability *cap, int &all_allowed,
-                       int &loner_allowed, int &xlocker_allowed);
+  struct AllowedCapsCache {
+    int all_allowed[2] = {-1, -1};
+    int loner_allowed[2] = {-1, -1};
+    int xlocker_allowed[2] = {-1, -1};
+  };
+  int get_allowed_caps(bool has_qtine_auth_caps, CInode *in, Capability *cap,
+                       AllowedCapsCache& cache);
   int issue_caps(CInode *in, Capability *only_cap=0);
   void issue_caps_set(std::set<CInode*>& inset);
   void issue_truncate(CInode *in);
@@ -210,6 +215,12 @@ public:
   void handle_client_lease(const cref_t<MClientLease> &m);
 
   void issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef &mdr, utime_t now, bufferlist &bl);
+  /// whether the directory lets mdr's client hold dentry leases in it at all
+  bool can_lease_dentries_in(CInode *diri, const MDRequestRef &mdr);
+  /// issue_client_lease() for a caller that has asked can_lease_dentries_in()
+  /// once for all the dentries of a directory
+  void issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef &mdr, utime_t now,
+			  bufferlist &bl, bool dir_leasable);
   void revoke_client_leases(SimpleLock *lock);
   void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 

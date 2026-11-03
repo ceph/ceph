@@ -130,11 +130,13 @@ export class AccountsPageHelper extends PageHelper {
     cy.get('input#max_access_keys').click().clear().type(account.max_access_keys);
 
     cy.get('input#bucket_checkbox_input').should('be.checked');
+    cy.get('input#bucketunlimitedSize_checkbox_input').uncheck({ force: true });
     cy.get('input#bucket_quota_max_size').clear().type('1234');
     cy.get('input#bucketunlimitedObjects_checkbox_input').uncheck({ force: true });
     cy.get('input#bucket_quota_max_objects').clear().type('200');
 
     cy.get('input#account_checkbox_input').should('be.checked');
+    cy.get('input#accountunlimitedSize_checkbox_input').uncheck({ force: true });
     cy.get('input#account_quota_max_size').clear().type('1234');
     cy.get('input#accountunlimitedObjects_checkbox_input').uncheck({ force: true });
     cy.get('input#account_quota_max_objects').clear().type('200');
@@ -289,6 +291,7 @@ export class AccountsPageHelper extends PageHelper {
       .should('have.text', 'Enter number greater than 0');
 
     cy.get('input#bucket_checkbox_input').should('be.checked');
+    cy.get('input#bucketunlimitedSize_checkbox_input').uncheck({ force: true });
     cy.get('input#bucket_quota_max_size').clear().type('0').blur();
     cy.get('label[for=bucket_quota_max_size]')
       .parent()

@@ -29,7 +29,7 @@ def mock_call(monkeypatch):
 class TestCall(object):
 
     def test_stderr_terminal_and_logfile(self, mock_call, caplog, capsys):
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.DEBUG)
         mock_call(stdout='stdout\n', stderr='some stderr message\n')
         process.call(['ls'], terminal_verbose=True)
         out, err = capsys.readouterr()
@@ -40,7 +40,7 @@ class TestCall(object):
         assert 'some stderr message' in err
 
     def test_stderr_terminal_and_logfile_off(self, mock_call, caplog, capsys):
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.DEBUG)
         mock_call(stdout='stdout\n', stderr='some stderr message\n')
         process.call(['ls'], terminal_verbose=False)
         out, err = capsys.readouterr()
@@ -49,6 +49,16 @@ class TestCall(object):
         assert 'ls' in log_lines[0]
         assert 'stderr some stderr message' in log_lines[-1]
         assert out == ''
+
+    def test_success_not_logged_at_info(self, mock_call, caplog):
+        caplog.set_level(logging.INFO)
+        mock_call(stdout='stdout\n', stderr='some stderr message\n')
+        process.call(['ls'], terminal_verbose=False)
+        process_records = [
+            r for r in caplog.records
+            if r.name == 'ceph_volume.process' and r.levelno >= logging.INFO
+        ]
+        assert not process_records
 
     def test_verbose_on_failure(self, mock_call, caplog, capsys):
         caplog.set_level(logging.INFO)

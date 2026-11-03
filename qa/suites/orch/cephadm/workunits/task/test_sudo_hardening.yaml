@@ -1,0 +1,177 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - client.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+  - client.1
+overrides:
+  cephadm:
+    cephadm_mode: cephadm-package
+  install:
+    extra_packages: [cephadm]
+  ceph:
+    log-ignorelist:
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+      # Switching the SSH user resets mgr SSH connections, which can fail a
+      # background refresh that is in flight; it clears on the next refresh.
+      - CEPHADM_REFRESH_FAILED
+    log-only-match:
+      - CEPHADM_
+tasks:
+- install:
+- exec:
+    all-hosts:
+      - |
+        set -ex
+        # The invoker must be root-owned and 0700, otherwise the sudo-allowed
+        # command could be replaced by the unprivileged cephadm user.
+        INVOKER=/usr/libexec/cephadm_invoker.py
+        test -f $INVOKER
+        INVOKER_STAT=$(stat -c '%U:%G %a' $INVOKER)
+        if [ "$INVOKER_STAT" != "root:root 700" ]; then
+          echo "Unexpected owner/mode on $INVOKER: $INVOKER_STAT (expected 'root:root 700')"
+          exit 1
+        fi
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        # Retry "$@" every 5s until it succeeds or $1 seconds have elapsed.
+        wait_until() {
+          local timeout=$1
+          shift
+          local end=$((SECONDS + timeout))
+          until "$@"; do
+            if [ $SECONDS -ge $end ]; then
+              echo "Timed out after ${timeout}s waiting for: $*"
+              return 1
+            fi
+            sleep 5
+          done
+        }
+
+        host_check_ok() {
+          ceph cephadm check-host "$1" 2>&1 | grep -q "Host looks OK"
+        }
+
+        ssh_user_is() {
+          [ "$(ceph cephadm get-user)" == "$1" ]
+        }
+
+        # ---- Step 1: Baseline, hosts are reachable before hardening ----
+        HOSTNAMES=$(ceph orch host ls --format json | jq -r '.[] | .hostname')
+        for host in $HOSTNAMES; do
+          wait_until 120 host_check_ok ${host}
+        done
+
+        # ---- Step 2: Verify sudo hardening is initially disabled ----
+        SUDO_HARDENING=$(ceph config get mgr mgr/cephadm/sudo_hardening)
+        if [ "$SUDO_HARDENING" != "false" ]; then
+          echo "Expected sudo_hardening to be false initially, got: $SUDO_HARDENING"
+          exit 1
+        fi
+
+        # ---- Step 3: Enable sudo hardening ----
+        ceph cephadm prepare-host-and-enable-sudo-hardening cephadm
+
+        # ---- Step 4: Verify sudo hardening and SSH user are set ----
+        SUDO_HARDENING=$(ceph config get mgr mgr/cephadm/sudo_hardening)
+        if [ "$SUDO_HARDENING" != "true" ]; then
+          echo "Expected sudo_hardening to be true after enabling, got: $SUDO_HARDENING"
+          exit 1
+        fi
+        wait_until 120 ssh_user_is cephadm
+
+        # ---- Step 5: Hosts are reachable through the invoker ----
+        for host in $HOSTNAMES; do
+          wait_until 300 host_check_ok ${host}
+        done
+
+        # ---- Step 6: A mutating operation works through the invoker ----
+        # 'ceph orch ps/ls/host ls' are served from the mgr cache and do not
+        # exercise the invoker. Redeploying a daemon makes the mgr run
+        # cephadm on the host via the invoker. Use the standby mgr so the
+        # active mgr is not disrupted.
+        wait_until 120 bash -c "ceph mgr dump -f json | jq -e '.standbys | length > 0'"
+        STANDBY_MGR=$(ceph mgr dump -f json | jq -r '.standbys[0].name')
+        daemon_started() {
+          ceph orch ps --refresh --daemon_type mgr --daemon_id "$STANDBY_MGR" \
+            --format json | jq -r '.[0].started'
+        }
+        daemon_redeployed_and_running() {
+          local started
+          started=$(daemon_started)
+          [ "$started" != "$OLD_STARTED" ] && \
+            ceph orch ps --refresh --daemon_type mgr --daemon_id "$STANDBY_MGR" \
+              --format json | jq -e '.[0].status_desc == "running"' > /dev/null
+        }
+        OLD_STARTED=$(daemon_started)
+        ceph orch daemon redeploy mgr.${STANDBY_MGR}
+        wait_until 300 daemon_redeployed_and_running
+- exec:
+    all-hosts:
+      - |
+        set -ex
+        # ---- Security property: cephadm user may only sudo the invoker ----
+        sudo -l -U cephadm | grep -q /usr/libexec/cephadm_invoker.py
+        if sudo -l -U cephadm | grep -q 'NOPASSWD: ALL'; then
+          echo "cephadm user must not have unrestricted sudo"
+          exit 1
+        fi
+        # 'set -e' ignores a negated command, so check the result explicitly.
+        if sudo -u cephadm sudo -n /usr/sbin/cephadm ls; then
+          echo "cephadm user was able to run /usr/sbin/cephadm via sudo"
+          exit 1
+        fi
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        wait_until() {
+          local timeout=$1
+          shift
+          local end=$((SECONDS + timeout))
+          until "$@"; do
+            if [ $SECONDS -ge $end ]; then
+              echo "Timed out after ${timeout}s waiting for: $*"
+              return 1
+            fi
+            sleep 5
+          done
+        }
+
+        host_check_ok() {
+          ceph cephadm check-host "$1" 2>&1 | grep -q "Host looks OK"
+        }
+
+        sudo_hardening_is() {
+          [ "$(ceph config get mgr mgr/cephadm/sudo_hardening)" == "$1" ]
+        }
+
+        # ---- Step 7: Revert SSH user to root, then disable sudo hardening ----
+        # The 'cephadm' user is only allowed to sudo the invoker, so the SSH
+        # user must be switched back to root before hardening is disabled.
+        # Otherwise the mgr would run plain 'sudo cephadm ...' and be denied.
+        ceph cephadm set-user root
+        SSH_USER=$(ceph cephadm get-user)
+        if [ "$SSH_USER" != "root" ]; then
+          echo "Expected ssh_user to be 'root' after revert, got: $SSH_USER"
+          exit 1
+        fi
+        ceph config set mgr mgr/cephadm/sudo_hardening false
+        wait_until 60 sudo_hardening_is false
+
+        # ---- Step 8: Verify hosts are still manageable with hardening off ----
+        HOSTNAMES=$(ceph orch host ls --format json | jq -r '.[] | .hostname')
+        for host in $HOSTNAMES; do
+          wait_until 300 host_check_ok ${host}
+        done

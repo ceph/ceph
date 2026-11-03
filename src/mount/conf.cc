@@ -89,10 +89,13 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
     mount_ceph_debug("Could not discover monitor addresses\n");
 
 scrape_keyring:
-  err = keyring.from_ceph_context(cct.get());
-  if (err) {
-    mount_ceph_debug("keyring.from_ceph_context failed: %d\n", err);
-    return;
+  {
+    CachedStackStringStream css;
+    int keyload = keyring.from_ceph_context(cct.get(), css.get());
+    if (keyload < 0) {
+      mount_ceph_debug("loading key failed: %s\n", css->strv().data());
+      return;
+    }
   }
 
   if (!keyring.get_secret(conf->name, secret)) {

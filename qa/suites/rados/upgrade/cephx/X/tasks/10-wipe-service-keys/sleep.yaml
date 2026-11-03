@@ -1,0 +1,11 @@
+# Sleep for ticket refresh.
+tasks:
+- exec:
+    mon.a:
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health unmute AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+- ceph.healthy:
+    expected_checks: [AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE]
+- sleep:
+    duration: 720
+- ceph.healthy:

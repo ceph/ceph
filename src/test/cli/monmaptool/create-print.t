@@ -1,7 +1,7 @@
   $ monmaptool --create mymonmap
   monmaptool: monmap file mymonmap
   monmaptool: generated fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
-  setting min_mon_release = umbrella
+  setting min_mon_release = vampire
   monmaptool: writing epoch 0 to mymonmap (0 monitors)
 
   $ monmaptool --print mymonmap
@@ -10,8 +10,12 @@
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   last_changed \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
-  min_mon_release 21 (umbrella)
+  min_mon_release 22 (vampire)
   election_strategy: 1
+  auth_epoch 0
+  auth_service_cipher aes256k
+  auth_allowed_ciphers aes256k
+  auth_preferred_cipher aes256k
 
   $ monmaptool --print -- mymonmap
   monmaptool: monmap file mymonmap
@@ -19,5 +23,9 @@
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   last_changed \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
-  min_mon_release 21 (umbrella)
+  min_mon_release 22 (vampire)
   election_strategy: 1
+  auth_epoch 0
+  auth_service_cipher aes256k
+  auth_allowed_ciphers aes256k
+  auth_preferred_cipher aes256k

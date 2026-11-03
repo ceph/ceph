@@ -13,6 +13,9 @@
 
 #include "gtest/gtest.h"
 #include "osd/HitSet.h"
+#include "osd/BloomHitSet.h"
+#include "osd/ExplicitHashHitSet.h"
+#include "osd/ExplicitObjectHitSet.h"
 #include <iostream>
 
 class HitSetTestStrap {

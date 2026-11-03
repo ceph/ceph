@@ -148,6 +148,14 @@ ScrubScan::ifut<> ScrubScan::run(PG &pg)
   ret.valid_through = pg.get_info().last_update;
 
   DEBUGDPP("begin: {}, end: {}", pg, begin, end);
+  using crimson::common::local_conf;
+  auto throttle = co_await interruptor::make_interruptible(
+    pg.shard_services.get_throttle(
+      scheduler::params_t{
+        static_cast<int>(local_conf()->osd_scrub_event_cost),
+        static_cast<unsigned>(local_conf()->osd_scrub_priority),
+        0,
+        SchedulerClass::background_best_effort}));
   auto [objects, _] = co_await pg.backend->list_objects(begin, end);
 
   DEBUGDPP("listed {} objects", pg, objects);

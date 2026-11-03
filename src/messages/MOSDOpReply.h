@@ -24,6 +24,8 @@
 
 #include "MOSDOp.h"
 #include "common/errno.h"
+#include "include/errorcode32.h"
+#include "include/rados_encoder.h"
 
 /*
  * OSD op reply
@@ -105,6 +107,9 @@ public:
     for (unsigned i = 0; i < o.size(); i++) {
       ops[i].outdata = std::move(o[i].outdata);
     }
+  }
+  auto const& get_ops() const {
+    return ops;
   }
   void claim_ops(std::vector<OSDOp>& o) {
     o.swap(ops);

@@ -1,0 +1,13 @@
+.overview-stats-unavailable {
+  color: var(--cds-text-secondary);
+}
+
+.overview-stats-label {
+  display: inline-flex;
+  width: fit-content;
+
+  cds-tooltip-definition {
+    display: inline-block;
+    width: auto;
+  }
+}

@@ -1,5 +1,6 @@
 #include <common/perf_counters_collection.h>
 
+#include <fmt/format.h>
 #include "test/librados/test_cxx.h"
 #include "test/librados/testcase_cxx.h"
 #include "crimson_utils.h"
@@ -11,48 +12,89 @@ using namespace librados;
 using namespace cls;
 using namespace rados::cls;
 
-typedef RadosTestPP LibRadosSplitOpPP;
+namespace {
+// Misordered reassembly of split reads is invisible with all-zero data,
+// so tests that verify read contents need a patterned buffer.
+bufferlist make_pattern_bl(uint64_t len) {
+  bufferlist bl;
+  std::string s;
+  s.reserve(len);
+  for (uint64_t i = 0; i < len; i++) {
+    s.push_back(static_cast<char>((i * 131) % 251));
+  }
+  bl.append(s);
+  return bl;
+}
+} // namespace
+
+class LibRadosSplitOpPP : public RadosTestPP {
+public:
+  static void SetUpTestCase() {
+    auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
+    pool_name_default = get_temp_pool_name(pool_prefix);
+    std::map<std::string, std::string> config = {{"rados_replica_read_policy", "default"}};
+    ASSERT_EQ("", connect_cluster_pp(s_cluster, config));
+    ASSERT_EQ("", create_pool_pp(pool_name_default, s_cluster, 3));
+    s_cluster.wait_for_latest_osdmap();
+  }
+
+protected:
+  // Write a second object in the same PG; that flushes the commit of the
+  // preceding write, which split reads need. Uses ASSERT_*.
+  void stabilize_pg_log(const bufferlist &bl) {
+    uint32_t hash_position;
+    ASSERT_EQ(0, ioctx.get_object_pg_hash_position2("foo", &hash_position));
+
+    std::string other_object = "other";
+    while (true) {
+      uint32_t hash_position2;
+      ASSERT_EQ(0, ioctx.get_object_pg_hash_position2(other_object, &hash_position2));
+      if (hash_position == hash_position2) {
+        break;
+      }
+      other_object += ".";
+    }
+    ObjectWriteOperation write2;
+    write2.write(0, bl);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, other_object, &write2));
+  }
+
+  // Write num_slices * osd_min_split_replica_read_size + extra_bytes of
+  // patterned data to "foo". Uses ASSERT_*.
+  void write_pattern_object(uint64_t num_slices, uint64_t extra_bytes,
+                            bufferlist *written) {
+    std::string min_split_size_str;
+    ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
+    uint64_t min_split_size = std::stoull(min_split_size_str);
+    // With split ops disabled the option is 0; keep the data non-empty so
+    // the content checks are meaningful in the non-split variant too.
+    if (min_split_size == 0) {
+      min_split_size = 262144;
+    }
+
+    bufferlist bl = make_pattern_bl(num_slices * min_split_size + extra_bytes);
+    ObjectWriteOperation write1;
+    write1.write(0, bl);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
+    ASSERT_NO_FATAL_FAILURE(stabilize_pg_log(bl));
+
+    *written = std::move(bl);
+  }
+};
+
 typedef RadosTestECPP LibRadosSplitOpECPP;
 
-// After a write is committed, it isn't necessarily true that the log is
-// committed. We do a read of the written area, which allows us to be
-// sure that the shards have all received the message that the log can be
-// committed, allowing us to test split ops with certainty that it won't be
-// bounced due to unstability.
-void RadosTestPPBase::ensure_log_committed(const char* oid, uint64_t offset, uint64_t length) {
-  ObjectReadOperation read;
-  read.read(offset, length, NULL, NULL);
-
-  bufferlist bl;
-  int rc = ioctx.operate(oid, &read, &bl);
-  ASSERT_EQ(0, rc);
-}
-
 TEST_P(LibRadosSplitOpPP, BigRead) {
+  SKIP_IF_CRIMSON();
   std::string min_split_size_str;
   ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
   uint64_t min_split_size = std::stoull(min_split_size_str);
   bufferlist bl;
   bl.append_zero(3 * min_split_size);
-  ObjectWriteOperation write1, write2;
+  ObjectWriteOperation write1;
   write1.write(0, bl);
-  uint32_t hash_position;
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
-  ASSERT_EQ(0, ioctx.get_object_pg_hash_position2("foo", &hash_position));
-
-  std::string other_object = "other";
-  while (true) {
-    uint32_t hash_position2;
-    ASSERT_EQ(0, ioctx.get_object_pg_hash_position2(other_object, &hash_position2));
-    if (hash_position == hash_position2) {
-      break;
-    }
-    other_object += ".";
-  }
-  // The second write flushes the commit of the first.
-  write2.write(0, bl);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, other_object, &write2));
-
+  ASSERT_NO_FATAL_FAILURE(stabilize_pg_log(bl));
 
   ObjectReadOperation read;
   read.read(0, bl.length(), NULL, NULL);
@@ -60,6 +102,7 @@ TEST_P(LibRadosSplitOpPP, BigRead) {
 }
 
 TEST_P(LibRadosSplitOpPP, ReadTwoShards) {
+  SKIP_IF_CRIMSON();
   // Read the osd_min_split_replica_read_size config value
   std::string min_split_size_str;
   ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
@@ -68,24 +111,10 @@ TEST_P(LibRadosSplitOpPP, ReadTwoShards) {
   // Write data large enough to cover multiple shards
   bufferlist bl;
   bl.append_zero(min_split_size * 3);
-  ObjectWriteOperation write1, write2;
+  ObjectWriteOperation write1;
   write1.write(0, bl);
-  uint32_t hash_position;
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
-  ASSERT_EQ(0, ioctx.get_object_pg_hash_position2("foo", &hash_position));
-
-  std::string other_object = "other";
-  while (true) {
-    uint32_t hash_position2;
-    ASSERT_EQ(0, ioctx.get_object_pg_hash_position2(other_object, &hash_position2));
-    if (hash_position == hash_position2) {
-      break;
-    }
-    other_object += ".";
-  }
-  // The second write flushes the commit of the first.
-  write2.write(0, bl);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, other_object, &write2));
+  ASSERT_NO_FATAL_FAILURE(stabilize_pg_log(bl));
 
   // Test 1: Read exactly osd_min_split_replica_read_size - should NOT split
   {
@@ -129,6 +158,7 @@ TEST_P(LibRadosSplitOpPP, ReadTwoShards) {
 }
 
 TEST_P(LibRadosSplitOpPP, StatBeforeRead) {
+  SKIP_IF_CRIMSON();
   // Read the osd_min_split_replica_read_size config value
   std::string min_split_size_str;
   ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
@@ -137,24 +167,10 @@ TEST_P(LibRadosSplitOpPP, StatBeforeRead) {
   // Use buffer at least 2x min_split_size to force splitting across replicas
   bufferlist bl;
   bl.append_zero(min_split_size * 2);
-  ObjectWriteOperation write1, write2;
+  ObjectWriteOperation write1;
   write1.write(0, bl);
-  uint32_t hash_position;
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
-  ASSERT_EQ(0, ioctx.get_object_pg_hash_position2("foo", &hash_position));
-
-  std::string other_object = "other";
-  while (true) {
-    uint32_t hash_position2;
-    ASSERT_EQ(0, ioctx.get_object_pg_hash_position2(other_object, &hash_position2));
-    if (hash_position == hash_position2) {
-      break;
-    }
-    other_object += ".";
-  }
-  // The second write flushes the commit of the first.
-  write2.write(0, bl);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, other_object, &write2));
+  ASSERT_NO_FATAL_FAILURE(stabilize_pg_log(bl));
 
   // This test verifies the bug fix: STAT operation comes BEFORE READ
   // In ReplicaSplitOp::init(), when processing ops in order:
@@ -185,6 +201,7 @@ TEST_P(LibRadosSplitOpPP, StatBeforeRead) {
 }
 
 TEST_P(LibRadosSplitOpPP, GetXattrBeforeRead) {
+  SKIP_IF_CRIMSON();
   // Read the osd_min_split_replica_read_size config value
   std::string min_split_size_str;
   ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
@@ -196,26 +213,12 @@ TEST_P(LibRadosSplitOpPP, GetXattrBeforeRead) {
   std::string attr_value = "my_attr";
 
   bl.append_zero(min_split_size * 2);
-  ObjectWriteOperation write1, write2;
+  ObjectWriteOperation write1;
   write1.write(0, bl);
   encode(attr_value, attr_bl);
   write1.setxattr(attr_key.c_str(), attr_bl);
-  uint32_t hash_position;
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
-  ASSERT_EQ(0, ioctx.get_object_pg_hash_position2("foo", &hash_position));
-
-  std::string other_object = "other";
-  while (true) {
-    uint32_t hash_position2;
-    ASSERT_EQ(0, ioctx.get_object_pg_hash_position2(other_object, &hash_position2));
-    if (hash_position == hash_position2) {
-      break;
-    }
-    other_object += ".";
-  }
-  // The second write flushes the commit of the first.
-  write2.write(0, bl);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, other_object, &write2));
+  ASSERT_NO_FATAL_FAILURE(stabilize_pg_log(bl));
 
   // Another variant of the bug: GETXATTR before READ
   // This verifies that init_reference_sub_read() is called before processing GETXATTR
@@ -232,6 +235,88 @@ TEST_P(LibRadosSplitOpPP, GetXattrBeforeRead) {
   ASSERT_EQ(0, getxattr_rval);
   ASSERT_EQ(0, read_rval);
   ASSERT_EQ(min_split_size * 2, read_bl.length());
+}
+
+TEST_P(LibRadosSplitOpPP, BigReadPattern) {
+  SKIP_IF_CRIMSON();
+  bufferlist bl;
+  ASSERT_NO_FATAL_FAILURE(write_pattern_object(3, 0, &bl));
+
+  // The chunk window starts at a random acting index; repeat so that a
+  // wrapped window is exercised.
+  for (int i = 0; i < 8; i++) {
+    ObjectReadOperation read;
+    bufferlist read_bl;
+    read.read(0, bl.length(), NULL, NULL);
+    ASSERT_TRUE(AssertOperateWithSplitOp(0, 3, "foo", &read, &read_bl, balanced_read_flags));
+    ASSERT_EQ(bl.length(), read_bl.length());
+    ASSERT_EQ(0, memcmp(bl.c_str(), read_bl.c_str(), bl.length()));
+  }
+}
+
+TEST_P(LibRadosSplitOpPP, UnalignedBigRead) {
+  SKIP_IF_CRIMSON();
+  // One byte past three slices: a rounded-down chunk size produces a
+  // fourth chunk, which used to wrap the window fully around and attach
+  // two reads with a shared buffer to one sub-read.
+  bufferlist bl;
+  ASSERT_NO_FATAL_FAILURE(write_pattern_object(3, 1, &bl));
+
+  ObjectReadOperation read;
+  bufferlist read_bl;
+  read.read(0, bl.length(), NULL, NULL);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, 3, "foo", &read, &read_bl, balanced_read_flags));
+  ASSERT_EQ(bl.length(), read_bl.length());
+  ASSERT_EQ(0, memcmp(bl.c_str(), read_bl.c_str(), bl.length()));
+}
+
+TEST_P(LibRadosSplitOpPP, ShortReadInMultiOp) {
+  SKIP_IF_CRIMSON();
+  bufferlist bl;
+  ASSERT_NO_FATAL_FAILURE(write_pattern_object(2, 0, &bl));
+
+  // A read shorter than the minimum split size in the same request used
+  // to crash on a division by zero in init_read(), then on
+  // std::out_of_range in buffer assembly.
+  ObjectReadOperation read;
+  bufferlist big_bl, small_bl;
+  int big_rval, small_rval;
+  read.read(0, bl.length(), &big_bl, &big_rval);
+  read.read(0, 16, &small_bl, &small_rval);
+
+  bufferlist result_bl;
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, 2, "foo", &read, &result_bl, balanced_read_flags));
+  ASSERT_EQ(0, big_rval);
+  ASSERT_EQ(0, small_rval);
+  ASSERT_EQ(bl.length(), big_bl.length());
+  ASSERT_EQ(0, memcmp(bl.c_str(), big_bl.c_str(), bl.length()));
+  ASSERT_EQ(16u, small_bl.length());
+  ASSERT_EQ(0, memcmp(bl.c_str(), small_bl.c_str(), 16));
+}
+
+TEST_P(LibRadosSplitOpPP, ShortSparseReadInMultiOp) {
+  SKIP_IF_CRIMSON();
+  bufferlist bl;
+  ASSERT_NO_FATAL_FAILURE(write_pattern_object(2, 0, &bl));
+
+  // Sparse variant of ShortReadInMultiOp: the short op only uses the
+  // reference sub-read, so sparse assembly must skip the others.
+  ObjectReadOperation read;
+  bufferlist big_bl, sparse_bl;
+  int big_rval, sparse_rval;
+  std::map<uint64_t, uint64_t> extents;
+  read.read(0, bl.length(), &big_bl, &big_rval);
+  read.sparse_read(0, 16, &extents, &sparse_bl, &sparse_rval);
+
+  bufferlist result_bl;
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, 2, "foo", &read, &result_bl, balanced_read_flags));
+  ASSERT_EQ(0, big_rval);
+  ASSERT_EQ(0, sparse_rval);
+  ASSERT_EQ(bl.length(), big_bl.length());
+  ASSERT_EQ(0, memcmp(bl.c_str(), big_bl.c_str(), bl.length()));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(16u, sparse_bl.length());
+  ASSERT_EQ(0, memcmp(bl.c_str(), sparse_bl.c_str(), 16));
 }
 
 TEST_P(LibRadosSplitOpECPP, ReadWithVersion) {
@@ -276,7 +361,7 @@ TEST_P(LibRadosSplitOpECPP, SmallRead) {
 TEST_P(LibRadosSplitOpECPP, ReadTwoShards) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
-  bl.append_zero(8*1024);
+  bl.append_zero(2 * get_ec_stripe_unit());
   ObjectWriteOperation write1;
   write1.write(0, bl);
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
@@ -293,7 +378,7 @@ TEST_P(LibRadosSplitOpECPP, ReadTwoShards) {
 TEST_P(LibRadosSplitOpECPP, ReadSecondShard) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
-  bl.append_zero(8*1024);
+  bl.append_zero(2 * get_ec_stripe_unit());
   ObjectWriteOperation write1;
   write1.write(0, bl);
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
@@ -302,7 +387,7 @@ TEST_P(LibRadosSplitOpECPP, ReadSecondShard) {
 
   ioctx.set_no_version_on_read(true);
   ObjectReadOperation read;
-  read.read(4*1024, 4*1024, NULL, NULL);
+  read.read(get_ec_stripe_unit(), get_ec_stripe_unit(), NULL, NULL);
   ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, balanced_read_flags));
   ioctx.set_no_version_on_read(false);
 }
@@ -310,7 +395,7 @@ TEST_P(LibRadosSplitOpECPP, ReadSecondShard) {
 TEST_P(LibRadosSplitOpECPP, ReadSecondShardWithVersion) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
-  bl.append_zero(8*1024);
+  bl.append_zero(2 * get_ec_stripe_unit());
   ObjectWriteOperation write1;
   write1.write(0, bl);
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
@@ -318,7 +403,7 @@ TEST_P(LibRadosSplitOpECPP, ReadSecondShardWithVersion) {
   ensure_log_committed("foo", 0, bl.length());
 
   ObjectReadOperation read;
-  read.read(4*1024, 4*1024, NULL, NULL);
+  read.read(get_ec_stripe_unit(), get_ec_stripe_unit(), NULL, NULL);
   ASSERT_TRUE(AssertOperateWithSplitOp(0, 2, "foo", &read, &bl, balanced_read_flags));
 }
 
@@ -383,9 +468,9 @@ TEST_P(LibRadosSplitOpECPP, Stat) {
 
 TEST_P(LibRadosSplitOpECPP, StatBeforeRead) {
   SKIP_IF_CRIMSON();
-  // Use 8KB buffer to ensure the read spans multiple EC chunks and triggers split op
+  // Read spans multiple EC chunks and triggers split op
   bufferlist bl;
-  bl.append_zero(8*1024);
+  bl.append_zero(2 * get_ec_stripe_unit());
   ObjectWriteOperation write1;
   write1.write(0, bl);
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
@@ -411,25 +496,25 @@ TEST_P(LibRadosSplitOpECPP, StatBeforeRead) {
   int read_rval;
   
   read.stat2(&size, &time, &stat_rval);  // STAT comes FIRST
-  read.read(0, bl.length(), &read_bl, &read_rval);  // READ comes SECOND (8KB, spans multiple chunks)
+  read.read(0, bl.length(), &read_bl, &read_rval);  // READ comes SECOND (spans multiple chunks)
 
   // This operation should fail or demonstrate the bug
   bufferlist result_bl;
   ASSERT_TRUE(AssertOperateWithSplitOp(0, 2, "foo", &read, &result_bl, balanced_read_flags));
   ASSERT_EQ(0, stat_rval);
   ASSERT_EQ(0, read_rval);
-  ASSERT_EQ(8*1024, size);
-  ASSERT_EQ(8*1024, read_bl.length());
+  ASSERT_EQ(2 * get_ec_stripe_unit(), size);
+  ASSERT_EQ(2 * get_ec_stripe_unit(), read_bl.length());
 }
 
 TEST_P(LibRadosSplitOpECPP, GetXattrBeforeRead) {
   SKIP_IF_CRIMSON();
-  // Use 8KB buffer to ensure the read spans multiple EC chunks and triggers split op
+  // Read spans multiple EC chunks and triggers split op
   bufferlist bl, attr_bl, attr_read_bl;
   std::string attr_key = "my_key";
   std::string attr_value = "my_attr";
 
-  bl.append_zero(8*1024);
+  bl.append_zero(2 * get_ec_stripe_unit());
   ObjectWriteOperation write1;
   write1.write(0, bl);
   encode(attr_value, attr_bl);
@@ -445,13 +530,13 @@ TEST_P(LibRadosSplitOpECPP, GetXattrBeforeRead) {
   int read_rval;
   
   read.getxattr(attr_key.c_str(), &attr_read_bl, &getxattr_rval);  // GETXATTR FIRST
-  read.read(0, bl.length(), &read_bl, &read_rval);  // READ SECOND (8KB, spans multiple chunks)
+  read.read(0, bl.length(), &read_bl, &read_rval); // READ SECOND (spans multiple chunks)
 
   bufferlist result_bl;
   ASSERT_TRUE(AssertOperateWithSplitOp(0, 2, "foo", &read, &result_bl, balanced_read_flags));
   ASSERT_EQ(0, getxattr_rval);
   ASSERT_EQ(0, read_rval);
-  ASSERT_EQ(8*1024, read_bl.length());
+  ASSERT_EQ(2 * get_ec_stripe_unit(), read_bl.length());
 }
 
 TEST_P(LibRadosSplitOpPP, CancelReplica)

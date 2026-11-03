@@ -27,7 +27,7 @@ public:
   void decode_plaintext(ceph::buffer::list::const_iterator& bl);
   /* Create a KeyRing from a Ceph context.
    * We will use the configuration stored inside the context. */
-  int from_ceph_context(CephContext *cct);
+  int from_ceph_context(CephContext* cct, std::ostream* os);
 
   std::map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
 

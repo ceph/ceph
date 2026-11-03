@@ -1,13 +1,15 @@
 
+import json
 from unittest.mock import Mock, call, patch
 
 from .. import mgr
-from ..controllers.rgw import Rgw, RgwBucket, RgwDaemon, RgwTopic, RgwUser
+from ..controllers.rgw import Rgw, RgwBucket, RgwBucketUi, RgwDaemon, RgwTopic, RgwUser
 from ..rest_client import RequestException
 from ..services.rgw_client import RgwClient, RgwMultisite
 from ..tests import ControllerTestCase, RgwStub
 
 
+@patch('dashboard.services.rgw_client._is_reachable', Mock(return_value=True))
 class RgwControllerTestCase(ControllerTestCase):
     @classmethod
     def setup_server(cls):
@@ -66,10 +68,14 @@ class RgwControllerTestCase(ControllerTestCase):
         self.assertJsonBody({'available': False, 'message': 'No RGW service is running.'})
 
 
+@patch('dashboard.services.rgw_client._is_reachable', Mock(return_value=True))
 class RgwDaemonControllerTestCase(ControllerTestCase):
     @classmethod
     def setup_server(cls):
         cls.setup_controllers([RgwDaemon], '/test')
+
+    def setUp(self) -> None:
+        RgwClient.drop_instance()
 
     @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
         return_value='dummy_admin'))
@@ -85,7 +91,9 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 {'id': '5356', 'type': 'rgw'},
                 {'id': '5357', 'type': 'rgw'},
                 {'id': '5358', 'type': 'rgw'},
-                {'id': '5359', 'type': 'rgw'}
+                {'id': '5359', 'type': 'rgw'},
+                {'id': '5360', 'type': 'rgw'},
+                {'id': '5361', 'type': 'rgw'}
             ]
         }]
         mgr.get_metadata.side_effect = [
@@ -135,6 +143,28 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 'zone_name': 'zone5',
                 'frontend_config#0':
                     'beast endpoint=0.0.0.0:8445 ssl_certificate=config:/config'
+            },
+            {
+                'ceph_version': 'ceph version master (dev)',
+                'id': 'daemon6',
+                'realm_name': 'realm6',
+                'zonegroup_name': 'zg6',
+                'zonegroup_id': 'zg6-id',
+                'zone_name': 'zone6',
+                'frontend_config#0':
+                    'beast ssl_port=8443 port=8081 ssl_certificate=config:/config'
+            },
+            {
+                'ceph_version': 'ceph version master (dev)',
+                'id': 'daemon7',
+                'realm_name': 'realm7',
+                'zonegroup_name': 'zg7',
+                'zonegroup_id': 'zg7-id',
+                'zone_name': 'zone7',
+                'frontend_config#0':
+                    'beast ssl_endpoint=192.168.104.110:443 endpoint=192.168.104.110:8080 '
+                    'ssl_certificate=config:/config tcp_nodelay=1 '
+                    'port=192.168.104.100:8081 ssl_port=192.168.104.100:444'
             }, ]
         self._get('/test/api/rgw/daemon')
         self.assertStatus(200)
@@ -147,7 +177,9 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zonegroup_name': 'zg1',
             'zonegroup_id': 'zg1-id',
             'zone_name': 'zone1', 'default': True,
-            'port': 80
+            'port': 80,
+            'http_port': None
+
         },
             {
             'id': 'daemon2',
@@ -160,6 +192,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone2',
             'default': False,
             'port': 443,
+            'http_port': None,
         },
             {
             'id': 'daemon3',
@@ -172,6 +205,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone3',
             'default': False,
             'port': 8080,
+            'http_port': None,
         },
             {
             'id': 'daemon4',
@@ -184,6 +218,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone4',
             'default': False,
             'port': None,
+            'http_port': None,
         },
             {
             'id': 'daemon5',
@@ -196,6 +231,33 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone5',
             'default': False,
             'port': 8445,
+            'http_port': None,
+        },
+            {
+            'id': 'daemon6',
+            'service_map_id': '5360',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm6',
+            'zonegroup_name': 'zg6',
+            'zonegroup_id': 'zg6-id',
+            'zone_name': 'zone6',
+            'default': False,
+            'port': 8443,
+            'http_port': 8081,
+        },
+            {
+            'id': 'daemon7',
+            'service_map_id': '5361',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm7',
+            'zonegroup_name': 'zg7',
+            'zonegroup_id': 'zg7-id',
+            'zone_name': 'zone7',
+            'default': False,
+            'port': 443,
+            'http_port': 8080,
         }])
 
     def test_list_empty(self):
@@ -203,6 +265,47 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
         self._get('/test/api/rgw/daemon')
         self.assertStatus(200)
         self.assertJsonBody([])
+
+    @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
+        return_value='dummy_admin'))
+    @patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_list_ignores_options_that_are_not_ports(self, send_command):
+        # An option such as "some_port=5" is not a port option: only port,
+        # endpoint, ssl_port and ssl_endpoint are. Before, "some_port=5" was
+        # reported as the HTTP port.
+        # (frontend_config, port, http_port)
+        cases = [
+            ('beast some_port=5 ssl_port=8443', 8443, None),
+            ('beast ssl_port=8443 some_port=5', 8443, None),
+            ('beast some_port=5 port=8081', 8081, None),
+            ('beast some_port=5', None, None),
+            ('beast ssl_port=443 my_endpoint=10.0.0.1:8080', 443, None),
+            ('beast ssl_port=443 some_ssl_port=444', 443, None),
+        ]
+        send_command.return_value = ''
+        RgwStub.get_daemons()
+        RgwStub.get_settings()
+        for frontend_config, port, http_port in cases:
+            with self.subTest(frontend_config=frontend_config):
+                mgr.list_servers.return_value = [{
+                    'hostname': 'host1',
+                    'services': [{'id': '4832', 'type': 'rgw'}]
+                }]
+                mgr.get_metadata.side_effect = [{
+                    'ceph_version': 'ceph version master (dev)',
+                    'id': 'daemon1',
+                    'realm_name': 'realm1',
+                    'zonegroup_name': 'zg1',
+                    'zonegroup_id': 'zg1-id',
+                    'zone_name': 'zone1',
+                    'frontend_config#0': frontend_config
+                }]
+                self._get('/test/api/rgw/daemon')
+                self.assertStatus(200)
+                daemons = self.json_body()
+                self.assertEqual(len(daemons), 1)
+                self.assertEqual(daemons[0]['port'], port)
+                self.assertEqual(daemons[0]['http_port'], http_port)
 
     @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
         return_value='dummy_admin'))
@@ -256,7 +359,8 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zonegroup_id': 'zg1-id',
             'zone_name': 'zone1',
             'default': False,
-            'port': 80
+            'port': 80,
+            'http_port': None
         },
             {
             'id': 'daemon2',
@@ -269,9 +373,12 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone2',
             'default': True,
             'port': 443,
+            'http_port': None
         }])
 
         # Change the default zonegroup and test if the correct daemon gets picked up
+        # once the cached client is dropped
+        RgwClient.drop_instance()
         RgwMultisite().get_all_zonegroups_info.return_value = {'default_zonegroup': 'zonegroup1-id'}
         mgr.list_servers.return_value = list_servers_return_value
         mgr.get_metadata.side_effect = metadata_return_values
@@ -288,7 +395,8 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zonegroup_id': 'zg1-id',
             'zone_name': 'zone1',
             'default': True,
-            'port': 80
+            'port': 80,
+            'http_port': None
         },
             {
             'id': 'daemon2',
@@ -301,6 +409,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone2',
             'default': False,
             'port': 443,
+            'http_port': None,
         }])
 
 
@@ -481,6 +590,140 @@ class RgwUserControllerTestCase(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody(mock_return_value)
 
+    @patch('dashboard.services.rgw_client.RgwMultisite.get_realm_from_daemon',
+           Mock(return_value='my-realm'))
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_get_rate_limit_with_daemon_name(self, mock_proxy, send_rgwadmin_command):
+        """get_rate_limit resolves the realm via daemon_name and passes --rgw-realm."""
+        mock_proxy.side_effect = [{
+            'count': 3,
+            'keys': ['test1', 'test2', 'test3'],
+            'truncated': False
+        }]
+        expected = {
+            "user_ratelimit": {
+                "max_read_ops": 100,
+                "max_write_ops": 50
+            }
+        }
+        send_rgwadmin_command.return_value = (0, expected, "")
+
+        self._get('/test/api/rgw/user/testuser/ratelimit?daemon_name=rgw.0')
+        self.assertStatus(200)
+        self.assertInJsonBody('user_ratelimit')
+        send_rgwadmin_command.assert_called_once_with(
+            ['ratelimit', 'get', '--ratelimit-scope', 'user',
+             '--rgw-realm', 'my-realm', '--uid', 'testuser']
+        )
+
+    @patch('dashboard.services.rgw_client.RgwMultisite.get_realm_from_daemon',
+           Mock(return_value='my-realm'))
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_get_global_rate_limit_with_daemon_name(self, mock_proxy, send_rgwadmin_command):
+        """get_global_rate_limit resolves the realm via daemon_name and passes --rgw-realm."""
+        mock_proxy.side_effect = [{
+            'count': 3,
+            'keys': ['test1', 'test2', 'test3'],
+            'truncated': False
+        }]
+        expected = {
+            "bucket_ratelimit": {"max_read_ops": 0, "max_write_ops": 0,
+                                 "max_read_bytes": 0, "max_write_bytes": 0, "enabled": False},
+            "user_ratelimit": {"max_read_ops": 0, "max_write_ops": 0,
+                               "max_read_bytes": 0, "max_write_bytes": 0, "enabled": False},
+            "anonymous_ratelimit": {"max_read_ops": 0, "max_write_ops": 0,
+                                    "max_read_bytes": 0, "max_write_bytes": 0, "enabled": False}
+        }
+        send_rgwadmin_command.return_value = (0, expected, "")
+
+        self._get('/test/api/rgw/user/ratelimit?daemon_name=rgw.0')
+        self.assertStatus(200)
+        self.assertJsonBody(expected)
+        send_rgwadmin_command.assert_called_once_with(
+            ['global', 'ratelimit', 'get', '--rgw-realm', 'my-realm']
+        )
+
+    @patch('dashboard.controllers.rgw.RgwAccounts.get_account_user_count')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_create_user_account_limit_reached(self, mock_proxy, mock_count):
+        """Creating a user when the account max_users limit is already reached returns 400."""
+        mock_proxy.return_value = {'max_users': 2}
+        mock_count.return_value = 2
+        self._post('/test/api/rgw/user?daemon_name=dummy-daemon', data={
+            'uid': 'user3',
+            'display_name': 'User Three',
+            'account_id': 'RGW123456789',
+        })
+        self.assertStatus(400)
+        mock_count.assert_called_once_with('RGW123456789')
+
+    @patch('dashboard.controllers.rgw.RgwAccounts.get_account_user_count')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_create_user_account_zero_limit(self, mock_proxy, mock_count):
+        """max_users=0 means no users allowed; creation is rejected even with 0 existing."""
+        mock_proxy.return_value = {'max_users': 0}
+        mock_count.return_value = 0
+        self._post('/test/api/rgw/user?daemon_name=dummy-daemon', data={
+            'uid': 'user1',
+            'display_name': 'User One',
+            'account_id': 'RGW123456789',
+        })
+        self.assertStatus(400)
+        mock_count.assert_called_once_with('RGW123456789')
+
+    @patch('dashboard.controllers.rgw.RgwAccounts.get_account_user_count')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_create_user_account_limit_not_reached(self, mock_proxy, mock_count):
+        """Creating a user when the account user count is below max_users succeeds."""
+        mock_proxy.side_effect = [
+            {'max_users': 2},
+            {'full_user_id': 'user2', 'uid': 'user2', 'keys': [], 'swift_keys': [],
+             'account_id': 'RGW123456789', 'type': 'rgw'},
+        ]
+        mock_count.return_value = 1
+        self._post('/test/api/rgw/user?daemon_name=dummy-daemon', data={
+            'uid': 'user2',
+            'display_name': 'User Two',
+            'account_id': 'RGW123456789',
+        })
+        self.assertStatus(201)
+        mock_count.assert_called_once_with('RGW123456789')
+
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_create_user_account_unlimited(self, mock_proxy):
+        """max_users < 0 means unlimited; user-list is never called."""
+        mock_proxy.side_effect = [
+            {'max_users': -1},
+            {'full_user_id': 'user1', 'uid': 'user1', 'keys': [], 'swift_keys': [],
+             'account_id': 'RGW123456789', 'type': 'rgw'},
+        ]
+        self._post('/test/api/rgw/user?daemon_name=dummy-daemon', data={
+            'uid': 'user1',
+            'display_name': 'User One',
+            'account_id': 'RGW123456789',
+        })
+        self.assertStatus(201)
+
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_create_user_no_account_skips_limit_check(self, mock_proxy):
+        """Creating a user without an account_id skips the limit check entirely."""
+        mock_proxy.return_value = {
+            'full_user_id': 'standalone_user',
+            'uid': 'standalone_user',
+            'keys': [],
+            'swift_keys': [],
+            'account_id': '',
+            'type': 'rgw',
+        }
+        self._post('/test/api/rgw/user?daemon_name=dummy-daemon', data={
+            'uid': 'standalone_user',
+            'display_name': 'Standalone User',
+        })
+        self.assertStatus(201)
+        self.assertEqual(mock_proxy.call_count, 1)
+
 
 class TestRgwTopicController(ControllerTestCase):
 
@@ -648,3 +891,102 @@ class RgwBucketControllerTestCase(ControllerTestCase):
 
         self._get('/test/api/rgw/bucket/i-do-not-exist')
         self.assertStatus(500)
+
+    @patch('dashboard.controllers.rgw.RgwAccounts')
+    @patch.object(RgwBucket, '_delete_lifecycle')
+    @patch.object(RgwBucket, '_get_encryption', return_value={'Status': 'Disabled'})
+    @patch.object(RgwBucket, '_get_locking', return_value={'lock_enabled': False})
+    @patch('dashboard.services.rgw_client.RgwClient.admin_instance')
+    def test_set_bucket_empty_uid_keeps_tenant(self, mock_admin_instance,
+                                               mock_get_locking, _mock_get_encryption,
+                                               _mock_delete_lifecycle, mock_accounts):
+        # Editing a tenant bucket without changing its owner sends an empty uid.
+        # The tenant and the owner must then come from the bucket itself.
+        mock_instance = Mock()
+        mock_admin_instance.return_value = mock_instance
+        # The REST proxy returns the raw JSON text from RGW.
+        mock_instance.proxy.return_value = (
+            '{"bucket": "test-bucket", "tenant": "kenny", "owner": "testuser"}')
+        mock_accounts.return_value.get_accounts.return_value = []
+
+        self._put('/test/api/rgw/bucket/kenny%2Ftest-bucket', {'bucket_id': 'abc123', 'uid': ''})
+
+        self.assertStatus(200)
+        mock_get_locking.assert_called_once_with('testuser', None, 'kenny:test-bucket')
+
+
+class RgwBucketUiControllerTestCase(ControllerTestCase):
+    URL = '/ui-api/rgw/bucket/buckets_and_users_count'
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([RgwBucketUi])
+
+    @patch('dashboard.controllers.rgw.RgwUser.list')
+    @patch('dashboard.controllers.rgw.RgwDaemon')
+    @patch.object(RgwBucketUi, 'proxy')
+    def test_buckets_and_users_count_zero_objects_empty_buckets(
+            self, mock_proxy, mock_daemon_cls, mock_user_list):
+        mock_daemon_cls.return_value.list.return_value = json.dumps([
+            {'id': 'daemon1', 'realm_name': ''}
+        ])
+        mock_proxy.return_value = []
+        mock_user_list.return_value = json.dumps(['user1'])
+
+        self._get(self.URL)
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'buckets_count': 0,
+            'users_count': 1,
+            'objects_count': 0,
+            'objects_size': 0,
+        })
+
+    @patch('dashboard.controllers.rgw.RgwUser.list')
+    @patch('dashboard.controllers.rgw.RgwDaemon')
+    @patch.object(RgwBucketUi, 'proxy')
+    def test_buckets_and_users_count_zero_objects_empty_usage(
+            self, mock_proxy, mock_daemon_cls, mock_user_list):
+        mock_daemon_cls.return_value.list.return_value = json.dumps([
+            {'id': 'daemon1', 'realm_name': ''}
+        ])
+        mock_proxy.return_value = [
+            {'bucket': 'b1'},
+            {'bucket': 'b2', 'usage': {}},
+            {'bucket': 'b3', 'usage': {'rgw.main': {'num_objects': 0, 'size_actual': 0}}},
+        ]
+        mock_user_list.return_value = json.dumps(['user1', 'user2'])
+
+        self._get(self.URL)
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'buckets_count': 3,
+            'users_count': 2,
+            'objects_count': 0,
+            'objects_size': 0,
+        })
+
+    @patch('dashboard.controllers.rgw.RgwUser.list')
+    @patch('dashboard.controllers.rgw.RgwDaemon')
+    @patch.object(RgwBucketUi, 'proxy')
+    def test_buckets_and_users_count_zero_objects_with_realm(
+            self, mock_proxy, mock_daemon_cls, mock_user_list):
+        mock_daemon_cls.return_value.list.return_value = json.dumps([
+            {'id': 'daemon1', 'realm_name': 'realm1'},
+            {'id': 'daemon2', 'realm_name': 'realm1'},
+        ])
+        mock_proxy.return_value = [
+            {'bucket': 'b1', 'usage': {'rgw.main': {'num_objects': 0, 'size_actual': 0}}},
+        ]
+        mock_user_list.return_value = json.dumps([])
+
+        self._get(self.URL)
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'buckets_count': 1,
+            'users_count': 0,
+            'objects_count': 0,
+            'objects_size': 0,
+        })
+        # Same realm must only be accumulated once.
+        mock_proxy.assert_called_once_with('daemon1', 'GET', 'bucket?stats=true')

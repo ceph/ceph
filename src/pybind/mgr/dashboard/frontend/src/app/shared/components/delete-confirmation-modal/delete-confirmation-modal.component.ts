@@ -41,6 +41,7 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
     @Optional()
     @Inject('callBackAtionObservable')
     public callBackAtionObservable?: () => Observable<any>,
+    @Optional() @Inject('hasAssociatedResources') public hasAssociatedResources?: boolean,
     @Optional() @Inject('hideDefaultWarning') public hideDefaultWarning?: boolean,
     @Optional() @Inject('childFormGroup') public childFormGroup?: CdFormGroup,
     @Optional() @Inject('childFormGroupTemplate') public childFormGroupTemplate?: TemplateRef<any>
@@ -86,10 +87,6 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
     this.deletionForm = new CdFormGroup(controls);
     if (!(this.submitAction || this.submitActionObservable)) {
       throw new Error('No submit action defined');
-    }
-    if (this.bodyContext?.disableForm) {
-      this.toggleFormControls(this.bodyContext?.disableForm);
-      return;
     }
 
     if (this.impact === this.impactEnum.high && this.itemNames?.[0]) {
@@ -152,16 +149,5 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
 
   stopLoadingSpinner() {
     this.deletionForm.setErrors({ cdSubmitButton: true });
-  }
-
-  toggleFormControls(disableForm = false) {
-    if (disableForm) {
-      this.deletionForm.disable();
-      this.deletionForm.setErrors({ disabledByContext: true });
-      this.submitDisabled$ = of(true);
-    } else {
-      this.deletionForm.enable();
-      this.deletionForm.setErrors(null);
-    }
   }
 }

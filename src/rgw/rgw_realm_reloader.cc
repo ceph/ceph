@@ -10,7 +10,9 @@
 #include "driver/rados/rgw_user.h"
 #include "rgw_process_env.h"
 #include "rgw_sal.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 
 #include "services/svc_zone.h"
 
@@ -193,6 +195,7 @@ void RGWRealmReloader::reload()
   if (env.lua.manager.get()) {
     env.lua.manager = env.driver->get_lua_manager(
         env.lua.manager->luarocks_path());
+#ifdef WITH_RADOSGW_RADOS
     if (env.driver->get_name() == "rados") {
       static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->watch_reload(&dp);
       if (env.lua.background) {
@@ -200,6 +203,7 @@ void RGWRealmReloader::reload()
         env.lua.manager.get()->set_lua_background(env.lua.background);
       }
     }
+#endif
   }
 
   ldpp_dout(&dp, 1) << "Resuming frontends with new realm configuration." << dendl;

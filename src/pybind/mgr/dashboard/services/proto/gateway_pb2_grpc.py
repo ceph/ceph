@@ -49,6 +49,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_status.FromString,
                 )
+        self.set_subsystem_use_group_config_network_masks = channel.unary_unary(
+                '/Gateway/set_subsystem_use_group_config_network_masks',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_status.FromString,
+                )
         self.add_kmip_server_endpoints = channel.unary_unary(
                 '/Gateway/add_kmip_server_endpoints',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.add_kmip_server_endpoints_req.SerializeToString,
@@ -129,6 +134,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_host_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
+        self.namespace_unpin = channel.unary_unary(
+                '/Gateway/namespace_unpin',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_unpin_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
         self.add_host = channel.unary_unary(
                 '/Gateway/add_host',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.add_host_req.SerializeToString,
@@ -163,6 +173,11 @@ class GatewayStub(object):
                 '/Gateway/get_connection_io_statistics',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_io_statistics_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_io_statistics.FromString,
+                )
+        self.get_connection_extended_io_statistics = channel.unary_unary(
+                '/Gateway/get_connection_extended_io_statistics',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_extended_io_statistics_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_extended_io_statistics.FromString,
                 )
         self.create_listener = channel.unary_unary(
                 '/Gateway/create_listener',
@@ -298,6 +313,13 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def set_subsystem_use_group_config_network_masks(self, request, context):
+        """Enable or disable the group config network mask for the subsystem
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def add_kmip_server_endpoints(self, request, context):
         """Add KMIP server endpoints
         """
@@ -410,6 +432,13 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def namespace_unpin(self, request, context):
+        """Unpins a namespace load balancing group
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def add_host(self, request, context):
         """Adds a host to a subsystem
         """
@@ -454,6 +483,13 @@ class GatewayServicer(object):
 
     def get_connection_io_statistics(self, request, context):
         """Gets connection's IO statistics
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def get_connection_extended_io_statistics(self, request, context):
+        """Gets connection's extended IO statistics
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -609,6 +645,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_status.SerializeToString,
             ),
+            'set_subsystem_use_group_config_network_masks': grpc.unary_unary_rpc_method_handler(
+                    servicer.set_subsystem_use_group_config_network_masks,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_status.SerializeToString,
+            ),
             'add_kmip_server_endpoints': grpc.unary_unary_rpc_method_handler(
                     servicer.add_kmip_server_endpoints,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.add_kmip_server_endpoints_req.FromString,
@@ -689,6 +730,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_host_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
+            'namespace_unpin': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_unpin,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_unpin_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
             'add_host': grpc.unary_unary_rpc_method_handler(
                     servicer.add_host,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.add_host_req.FromString,
@@ -723,6 +769,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     servicer.get_connection_io_statistics,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_io_statistics_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_io_statistics.SerializeToString,
+            ),
+            'get_connection_extended_io_statistics': grpc.unary_unary_rpc_method_handler(
+                    servicer.get_connection_extended_io_statistics,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_extended_io_statistics_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_extended_io_statistics.SerializeToString,
             ),
             'create_listener': grpc.unary_unary_rpc_method_handler(
                     servicer.create_listener,
@@ -930,6 +981,23 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/gw_refresh_network',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def set_subsystem_use_group_config_network_masks(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/set_subsystem_use_group_config_network_masks',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -1206,6 +1274,23 @@ class Gateway(object):
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
+    def namespace_unpin(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_unpin',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_unpin_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
     def add_host(request,
             target,
             options=(),
@@ -1321,6 +1406,23 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/get_connection_io_statistics',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_io_statistics_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_io_statistics.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def get_connection_extended_io_statistics(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/get_connection_extended_io_statistics',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_extended_io_statistics_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_extended_io_statistics.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 

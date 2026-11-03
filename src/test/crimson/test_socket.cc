@@ -2,12 +2,15 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "common/ceph_argparse.h"
+#include <atomic>
 #include <fmt/os.h>
 #include <fmt/std.h>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/gate.hh>
+#include <seastar/core/loop.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/sleep.hh>
+#include <seastar/core/smp.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/util/later.hh>
 
@@ -499,6 +502,109 @@ future<> test_preemptive_down(bool is_fixed_cpu) {
   });
 }
 
+// OSD::start_cluster_lanes binds one dispatch-only socket per reactor at the
+// same time. Reactor 0 owns the kernel socket; the connection is delivered
+// to the reactor that bound the lane. All four lanes must come up, on
+// distinct ports, and each must accept on its own reactor.
+std::atomic<uint16_t> lane_ports[16];
+thread_local ShardedServerSocket* lane_socket = nullptr;
+thread_local bool lane_accepted = false;
+
+future<> test_per_reactor_listen() {
+  logger().info("test_per_reactor_listen()...");
+  const unsigned nshards = seastar::this_smp_shard_count();
+  ceph_assert_always(nshards >= 4 && nshards <= 16);
+  return seastar::do_with(0, [nshards](int& round) {
+    return seastar::do_until([&round] { return round >= 4; }, [&round, nshards] {
+      const uint16_t base = static_cast<uint16_t>(20000 + round * 64);
+      ++round;
+      return seastar::smp::invoke_on_all([base] {
+        lane_socket = nullptr;
+        lane_accepted = false;
+        return ShardedServerSocket::create(true, true).then([base](auto pss) {
+          return seastar::do_with(base, [pss](uint16_t& port) {
+            const uint16_t last = port + 63;
+            return seastar::repeat_until_value([pss, &port, last] {
+              entity_addr_t addr;
+              addr.parse("127.0.0.1", nullptr);
+              addr.set_port(port);
+              return pss->listen(addr).safe_then([&port] {
+                return seastar::make_ready_future<std::optional<uint16_t>>(port);
+              }, listen_ertr::all_same_way([&port, last](const std::error_code& e)
+                                           -> seastar::future<std::optional<uint16_t>> {
+                if (e != std::errc::address_in_use || port == last) {
+                  logger().error("shard {} bind {} failed: {}",
+                                 seastar::this_shard_id(), port, e);
+                  ceph_abort();
+                }
+                ++port;
+                return seastar::make_ready_future<std::optional<uint16_t>>(
+                  std::nullopt);
+              }));
+            }).then([pss](uint16_t bound) {
+              lane_socket = pss;
+              lane_ports[seastar::this_shard_id()].store(
+                bound, std::memory_order_release);
+              logger().info("test_per_reactor_listen() shard {} listening on {}",
+                            seastar::this_shard_id(), bound);
+              return pss->accept([](auto socket, auto) {
+                lane_accepted = true;
+                return socket->close().finally([socket = std::move(socket)] {});
+              });
+            });
+          });
+        });
+      }).then([nshards] {
+        for (unsigned i = 0; i < nshards; ++i) {
+          const auto port = lane_ports[i].load(std::memory_order_acquire);
+          ceph_assert_always(port != 0);
+          for (unsigned j = 0; j < i; ++j) {
+            ceph_assert_always(
+              port != lane_ports[j].load(std::memory_order_acquire));
+          }
+        }
+        return seastar::smp::invoke_on_all([] {
+          entity_addr_t addr;
+          addr.parse("127.0.0.1", nullptr);
+          addr.set_port(lane_ports[seastar::this_shard_id()].load(
+            std::memory_order_acquire));
+          return socket_connect(addr).then([](auto socket) {
+            return socket->close().finally([socket = std::move(socket)] {});
+          }).then([] {
+            return seastar::do_with(0, [](int& spins) {
+              return seastar::repeat([&spins] {
+                if (lane_accepted) {
+                  return seastar::make_ready_future<seastar::stop_iteration>(
+                    seastar::stop_iteration::yes);
+                }
+                if (++spins > 1000) {
+                  logger().error("shard {} accepted nothing",
+                                 seastar::this_shard_id());
+                  ceph_abort();
+                }
+                return seastar::sleep(1ms).then([] {
+                  return seastar::stop_iteration::no;
+                });
+              });
+            });
+          });
+        });
+      }).then([] {
+        return seastar::smp::invoke_on_all([] {
+          auto pss = lane_socket;
+          lane_socket = nullptr;
+          return pss->shutdown_destroy();
+        });
+      });
+    });
+  }).then([] {
+    logger().info("test_per_reactor_listen() ok\n");
+  }).handle_exception([](auto eptr) {
+    logger().error("test_per_reactor_listen() got unexpected exception {}", eptr);
+    ceph_abort();
+  });
+}
+
 future<> do_test_with_type(bool is_fixed_cpu) {
   return test_bind_same(is_fixed_cpu
   ).then([is_fixed_cpu] {
@@ -535,6 +641,8 @@ seastar::future<int> do_test(seastar::app_template& app)
     return local_conf().set_val("ms_inject_internal_delays", "0");
   }).then([] {
     return test_refused();
+  }).then([] {
+    return test_per_reactor_listen();
   }).then([] {
     return do_test_with_type(true);
   }).then([] {

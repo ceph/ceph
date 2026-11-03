@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <fmt/base.h>
+#include <functional>
 #include <optional>
 #include <type_traits>
 
@@ -11,6 +11,7 @@
  * \file default fmtlib formatters for specifically-tagged types
  */
 #include <fmt/compile.h>
+#include <fmt/core.h>
 #include <fmt/format.h>
 
 /**
@@ -24,8 +25,26 @@
 // TODO: drop me once fmt v11 is required
 namespace fmt {
   template <typename T, typename Char = char>
-  concept formattable = is_formattable<std::remove_reference_t<T>, Char>::value>;
+  concept formattable = is_formattable<std::remove_reference_t<T>, Char>::value;
 }
+#endif
+
+#if FMT_VERSION < 110100
+// TODO: drop me once fmt v11.1 is required
+namespace fmt {
+
+template <typename T, typename Char>
+  requires formattable<std::remove_cv_t<T>, Char>
+struct formatter<std::reference_wrapper<T>, Char>
+  : formatter<std::remove_cv_t<T>, Char> {
+  template <typename FormatContext>
+  auto format(std::reference_wrapper<T> ref, FormatContext& ctx) const
+      -> decltype(ctx.out()) {
+    return formatter<std::remove_cv_t<T>, Char>::format(ref.get(), ctx);
+  }
+};
+
+} // namespace fmt
 #endif
 
 /**

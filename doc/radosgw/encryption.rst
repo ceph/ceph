@@ -4,8 +4,6 @@
 Encryption
 ==========
 
-.. versionadded:: Luminous
-
 The Ceph Object Gateway supports server-side encryption of uploaded objects,
 with 3 options for the management of encryption keys. Server-side encryption
 means that the data is sent over HTTP in its unencrypted form, and the Ceph
@@ -17,6 +15,13 @@ Object Gateway stores that data in the Ceph Storage Cluster in encrypted form.
           before forwarded requests will be trusted as secure.
 
 .. note:: Server-side encryption keys must be 256-bit long and base64 encoded.
+
+.. toctree::
+   :maxdepth: 1
+
+   HashiCorp Vault Integration <vault>
+   KMIP Integration <kmip>
+   OpenStack Barbican Integration <barbican>
 
 Encryption Algorithm
 ====================
@@ -96,6 +101,30 @@ This is implemented in S3 according to the `Amazon SSE-C`_ specification.
 As all key management is handled by the client, no special Ceph configuration
 is needed to support this encryption mode.
 
+A bucket can refuse new SSE-C uploads through the ``BlockedEncryptionTypes``
+element of its encryption configuration::
+
+  <ServerSideEncryptionConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Rule>
+      <BlockedEncryptionTypes>
+        <EncryptionType>SSE-C</EncryptionType>
+      </BlockedEncryptionTypes>
+    </Rule>
+  </ServerSideEncryptionConfiguration>
+
+Set :confval:`rgw_s3_block_sse_c_by_default` to ``true`` to apply this
+configuration to all newly created buckets. It defaults to ``false`` and does
+not affect existing buckets. A subsequent ``PutBucketEncryption`` request can
+change the setting for an individual bucket. Configure the option consistently
+on all RGW daemons, including across zones in a multisite deployment.
+
+While SSE-C is blocked, PutObject, CopyObject, PostObject and multipart upload
+requests that ask for SSE-C are rejected with ``403 AccessDenied``. An SSE-C
+multipart upload started before the block can no longer upload parts or
+complete; abort it instead. Objects that were encrypted before the block are
+still readable with their key. Pass ``NONE`` instead of ``SSE-C`` to allow
+SSE-C uploads again.
+
 Key Management Service
 ======================
 
@@ -169,12 +198,11 @@ internal error, and log a failure message.
 
 Three different Cache Time-to-Live (TTL) values can be set:
 
-- **Positive TTL**: How long a successfully retrieved secret remains
-  in the cache.
-- **Negative TTL**: How long to remember that a key does not exist,
-  preventing unnecessary requests to the KMS.
-- **Transient Error TTL**: How long to cache failures due to temporary
-  issues like KMS timeouts.
+- **Positive TTL**: How long a successfully retrieved secret remains in the cache.
+- **Negative TTL**: How long to remember that a key does not exist, preventing
+  unnecessary requests to the KMS.
+- **Transient Error TTL**: How long to cache failures due to temporary issues
+  like KMS timeouts.
 
 Metrics
 ---------
@@ -186,14 +214,13 @@ The cache exports metrics under the ``kms-cache`` collection.
 - ``expired``: Number of TTL expired entries
 - ``size``: Current cache size
 - ``capacity``: Cache maximum size
-- ``clear``: Number of cache clears. Resets ``size``, ``hit``,
-  ``miss``, ``expired``
+- ``clear``: Number of cache clears. Resets ``size``, ``hit``, ``miss``, and
+  ``expired``.
 
 In addition the ``rgw`` collection has:
 
-- ``kms_fetch_lat``: Average KMS fetch latency. Also includes a
-  successful request counter. Each event results in a positive cache
-  entry.
+- ``kms_fetch_lat``: Average KMS fetch latency. Also includes a successful
+  request counter. Each event results in a positive cache entry.
 - ``kms_error_transient``: Transient KMS fetch error counter. Each
   event results in a transient error cache entry.
 - ``kms_error_permanent``: Permanent KMS fetch error counter. Each
@@ -201,11 +228,11 @@ In addition the ``rgw`` collection has:
 
 .. _Linux Kernel Key Retention Service:  https://www.kernel.org/doc/html/latest/security/keys/core.html
 .. _Amazon SSE-C: https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html
-.. _Amazon SSE-KMS: http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
+.. _Amazon SSE-KMS: https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
 .. _Amazon SSE-S3: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingServerSideEncryption.html
 .. _Barbican: https://wiki.openstack.org/wiki/Barbican
 .. _Vault: https://www.vaultproject.io/docs/
-.. _KMIP: http://www.oasis-open.org/committees/kmip/
+.. _KMIP: https://www.oasis-open.org/committees/kmip/
 .. _PutBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html
 .. _GetBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html
 .. _DeleteBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html

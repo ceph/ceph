@@ -46,6 +46,7 @@ public:
   virtual bool is_tier_type_s3() { return (tier.is_tier_type_s3()); }
   virtual const std::string& get_storage_class() { return tier.storage_class; }
   virtual bool retain_head_object() { return tier.retain_head_object; }
+  virtual bool retain_current_version() { return tier.retain_current_version; }
   virtual bool allow_read_through() { return tier.allow_read_through; }
   virtual uint64_t get_read_through_restore_days() { return tier.read_through_restore_days; }
   RGWZoneGroupPlacementTier& get_rt() { return tier; }
@@ -351,7 +352,7 @@ class RadosStore : public StoreDriver {
     virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
 				const std::map<std::string, std::string>& meta) override;
     virtual void get_quota(RGWQuota& quota) override;
-    virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
+    virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& account_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled, optional_yield y) override;
     virtual int get_sync_policy_handler(const DoutPrefixProvider* dpp,
 					std::optional<rgw_zone_id> zone,
@@ -429,6 +430,13 @@ class RadosStore : public StoreDriver {
 				  const std::string& unique_tag) override;
     virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
     virtual bool valid_placement(const rgw_placement_rule& rule) override;
+    int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                            std::unique_ptr<VectorBucket>* bucket, optional_yield y) override;
+    int list_vector_buckets(const DoutPrefixProvider* dpp,
+			     const rgw_owner& owner, const std::string& ns,
+			     const std::string& marker, const std::string& end_marker,
+			     uint64_t max, BucketList& listing,
+			     optional_yield y) override;
 
     virtual void shutdown(void) override;
 
@@ -607,6 +615,7 @@ class RadosObject : public StoreObject {
     /* For rgw_admin.cc */
     RGWObjState& get_state() { return state; }
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
+    virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
 
     /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
     virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
@@ -672,7 +681,10 @@ class RadosObject : public StoreObject {
 			      Attrs* vals) override;
     virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
 				    bool must_exist, optional_yield y) override;
-    virtual int chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) override;
+    virtual int chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y) override;
 
     /* Internal to RadosStore */
     int get_max_chunk_size(const DoutPrefixProvider* dpp,
@@ -700,8 +712,9 @@ class RadosObject : public StoreObject {
 };
 
 class RadosBucket : public StoreBucket {
-  private:
+  protected:
     RadosStore* store;
+  private:
     RGWAccessControlPolicy acls;
     std::string topics_oid() const;
 
@@ -817,6 +830,30 @@ class RadosBucket : public StoreBucket {
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
     int unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, optional_yield y, bool update_entrypoint = true);
     friend class RadosUser;
+};
+
+// Reuse object operations with a separate entrypoint and owner bucket list.
+class RadosVectorBucket : public RadosBucket {
+  public:
+    using RadosBucket::RadosBucket; // inherit RadosBucket's constructors
+    ~RadosVectorBucket() override;
+
+    int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) override;
+    int create(const DoutPrefixProvider* dpp, const CreateParams& params,
+               optional_yield y) override;
+    int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
+    std::unique_ptr<Bucket> clone() override {
+      return std::make_unique<RadosVectorBucket>(*this);
+    }
+    int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
+    int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
+    // Ownership changes must also update the vector entrypoint and owner list.
+    int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
+              const std::string& new_owner_name, optional_yield y) override { return -ENOTSUP; }
+
+  private:
+    int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
+    int unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, optional_yield y, bool update_entrypoint = true);
 };
 
 class RadosMultipartPart : public StoreMultipartPart {
@@ -1276,6 +1313,7 @@ class RadosLuaManager : public StoreLuaManager {
   uint64_t watch_handle = 0;
   std::map<std::string, uint64_t> script_watches;
   std::map<uint64_t, std::string> reverse_script_watches;
+  std::shared_mutex watch_mutex;
 
 public:
   RadosLuaManager(RadosStore* _s, const std::string& _luarocks_path);

@@ -57,6 +57,16 @@ enum {
   l_rgw_kms_error_transient,
   l_rgw_kms_error_permanent,
   l_rgw_kms_error_secret_store,
+
+  l_rgw_bucket_reshard_active,
+  l_rgw_bucket_reshard_active_shard_count,
+  l_rgw_bucket_reshard_ok,
+  l_rgw_bucket_reshard_failed,
+  l_rgw_bucket_reshard_start_time,
+  l_rgw_bucket_reshard_ok_end_time,
+  l_rgw_bucket_reshard_failed_end_time,
+  l_rgw_bucket_reshard_ok_time_avg,
+
   l_rgw_last,
 };
 
@@ -119,6 +129,20 @@ enum {
   l_rgw_lc_per_bucket_last
 };
 
+enum {
+  l_rgw_bucket_reshard_first = 19000,
+
+  l_rgw_bucket_reshard_per_bucket_active_shard_count,
+  l_rgw_bucket_reshard_per_bucket_ok,
+  l_rgw_bucket_reshard_per_bucket_failed,
+  l_rgw_bucket_reshard_per_bucket_start_time,
+  l_rgw_bucket_reshard_per_bucket_ok_end_time,
+  l_rgw_bucket_reshard_per_bucket_failed_end_time,
+  l_rgw_bucket_reshard_per_bucket_ok_time_avg,
+
+  l_rgw_bucket_reshard_last,
+};
+
 namespace rgw::op_counters {
 
 struct CountersContainer {
@@ -159,3 +183,11 @@ std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
                                   const std::string& tenant);
 
 } // namespace rgw::lc_counters
+
+
+namespace rgw::bucket_reshard_counters {
+
+std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
+                                  const std::string& tenant);
+
+} // namespace rgw::bucket_reshard_counters

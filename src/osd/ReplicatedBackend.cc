@@ -609,7 +609,7 @@ void ReplicatedBackend::submit_transaction(
     delta_stats);
 
   vector<pg_log_entry_t> log_entries(_log_entries);
-  ObjectStore::Transaction op_t;
+  ObjectStore::Transaction op_t{get_parent()->min_peer_features()};
   PGTransactionUPtr t(std::move(_t));
   set<hobject_t> added, removed;
   generate_transaction(
@@ -764,7 +764,10 @@ static uint32_t crc32_netstring(const uint32_t orig_crc, std::string_view data)
 {
   // XXX: This function MUST be compliant with the bufferlist marshalling format!
   // Otherwise scrubs-during-upgrade will explode.
-  __u32 len = data.length();
+  // len must use ceph_le32 to guarantee little-endian encoding on all platforms,
+  // matching Ceph's encode() wire format regardless of host byte order.
+  // See test: Crc32c.OmapDigestLengthFieldIsLittleEndian
+  ceph_le32 len{static_cast<uint32_t>(data.length())};
   auto crc = ceph_crc32c(orig_crc, (unsigned char*)&len, sizeof(len));
   crc = ceph_crc32c(crc, (unsigned char*)data.data(), data.length());
 
@@ -988,8 +991,7 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   vector<PushReplyOp> replies;
   ObjectStore::Transaction t{get_parent()->min_peer_features()};
   if (get_parent()->check_failsafe_full()) {
-    dout(10) << __func__ << " Out of space (failsafe) processing push request." << dendl;
-    ceph_abort();
+    ceph_abort_msg("Out of space (failsafe) processing push request");
   }
   for (vector<PushOp>::const_iterator i = m->pushes.begin();
        i != m->pushes.end();
@@ -1067,8 +1069,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 
   vector<PullOp> replies(1);
   if (get_parent()->check_failsafe_full()) {
-    dout(10) << __func__ << " Out of space (failsafe) processing pull response (push)." << dendl;
-    ceph_abort();
+    ceph_abort_msg("Out of space (failsafe) processing pull response (push).");
   }
 
   ObjectStore::Transaction t{get_parent()->min_peer_features()};
@@ -2322,7 +2323,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 	  }
         }
         omap_entries.insert(make_pair(key, to_bufferlist(value)));
-	available -= std::min(available, num_new_bytes);
+	available -= std::min<uint64_t>(available, num_new_bytes);
         return ObjectStore::omap_iter_ret_t::NEXT;
       });
     if (result < 0) {

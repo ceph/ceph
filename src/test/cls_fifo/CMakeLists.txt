@@ -1,5 +1,5 @@
 add_executable(ceph_test_neocls_fifo
-  ceph_test_neocls_fifo.cc
+        test_neocls_fifo.cc
   )
 target_link_libraries(ceph_test_neocls_fifo
   libneorados

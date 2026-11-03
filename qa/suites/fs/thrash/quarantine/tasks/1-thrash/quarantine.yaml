@@ -1,0 +1,31 @@
+# Kernel-client only: kclient I/O blocks while the subvolume is
+# quarantined and resumes after disable. Fuse would get EACCES and
+# fail the workunit, so this sub-suite links only the kclient mount
+# facet (a postmerge reject would let --subset drop every quarantine
+# job). The 2-workunit facet (fsstress, kernel_untar, ...) runs on
+# sv_0 via mount_subvol_num.
+overrides:
+  ceph:
+    subvols:
+      create: 1
+    log-ignorelist:
+      - quarantine
+      - evicting unresponsive client
+      - slow request
+      # quarantine revokes all caps but PIN; releasing Fb needs a
+      # writeback of dirty data, which can outlast session_timeout
+      - responding to mclientcaps\(revoke\)
+      - MDS_CLIENT_LATE_RELEASE
+  kclient:
+    client.0:
+      mount_subvol_num: 0
+
+tasks:
+- quarantine_thrasher:
+    subvolume: sv_0
+    subvolume_group: qa
+    min_hold: 5
+    max_hold: 20
+    min_release: 5
+    max_release: 15
+    initial_delay: 15

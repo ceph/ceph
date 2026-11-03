@@ -87,7 +87,7 @@ public:
     return seastar::do_with(
       std::vector<seastar::foreign_ptr<local_cached_map_t>>(),
       [this, map](auto &fmaps) {
-	fmaps.resize(seastar::smp::count);
+	fmaps.resize(seastar::this_smp_shard_count());
 	for (auto &i: fmaps) {
 	  i = seastar::foreign_ptr(map);
 	}
@@ -188,6 +188,8 @@ public:
       F &&f) {
     ceph_assert(op->use_count() == 1);
     if (seastar::this_shard_id() == core) {
+      ++shard_services.local().pg_op_shard_local[
+        static_cast<size_t>(T::type)];
       auto f_conn = op->prepare_remote_submission();
       op->finish_remote_submission(std::move(f_conn));
       auto &target_shard_services = shard_services.local();
@@ -196,6 +198,8 @@ public:
         target_shard_services,
         std::move(op));
     }
+    ++shard_services.local().pg_op_shard_remote[
+      static_cast<size_t>(T::type)];
     // Note: the ordering in only preserved until f is invoked.
     auto &opref = *op;
     auto &crosscore_ordering = get_osd_priv(

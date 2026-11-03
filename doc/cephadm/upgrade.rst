@@ -15,12 +15,15 @@ The automated upgrade process follows Ceph best practices.  For example:
 .. note::
 
    The Ceph cluster health status is likely to switch to
-   ``HEALTH_WARNING`` during the upgrade.
+   ``HEALTH_WARN`` during the upgrade.
 
 .. note::
 
-   If a cluster host is or becomes unavailable the upgrade will be paused
-   until it is restored.
+   If a host is offline or in maintenance mode, ``ceph orch upgrade start``
+   refuses to start the upgrade. If a host goes offline during the upgrade,
+   cephadm pauses the upgrade and raises the ``UPGRADE_OFFLINE_HOST`` health
+   alert. The upgrade stays paused after the host returns. To continue, run
+   ``ceph orch upgrade resume``.
 
 .. note::
 
@@ -56,9 +59,9 @@ The automated upgrade process follows Ceph best practices.  For example:
 
      ceph config get mgr mgr/cephadm/pg_autoscale_during_upgrade
 
-   If autoscaling was already off before the upgrade, cephadm does not change
-   it unless you have set ``pg_autoscale_during_upgrade`` to ``true`` (opt-in
-   to turn autoscaling on for the duration of the upgrade).
+   If autoscaling was already off before the upgrade, it is still off after
+   the upgrade. Setting ``pg_autoscale_during_upgrade`` to ``true`` tells
+   cephadm to leave the autoscaler as it is. It does not turn autoscaling on.
 
 
 Starting the Upgrade
@@ -101,20 +104,20 @@ To upgrade to a specific release, run a command of the following form:
 
   ceph orch upgrade start --ceph-version <version>
 
-For example, to upgrade to v16.2.6, run the following command:
+For example, to upgrade to v20.2.3, run the following command:
 
 .. prompt:: bash #
 
-  ceph orch upgrade start --ceph-version 16.2.6
+  ceph orch upgrade start --ceph-version 20.2.3
 
 .. note::
 
-    From version v16.2.6 the Docker Hub registry is no longer used, so if you
+    Since version v16.2.6 the Docker Hub registry is no longer used, so if you
     use Docker you have to point it to the image in the quay.io registry:
 
     .. prompt:: bash #
 
-       ceph orch upgrade start --image quay.io/ceph/ceph:v16.2.6
+       ceph orch upgrade start --image quay.io/ceph/ceph:v20.2.3
 
 
 CRUSH bucket-scoped OSD upgrades (``osd ok-to-upgrade``)
@@ -141,7 +144,8 @@ Requirements:
 * Bucket-scope upgrades apply only to OSDs. CRUSH buckets do not influence upgrades
   of other daemon types, for example Monitors, Managers, and MDSes.
 
-Example:
+Example
+-------
 
 .. prompt:: bash #
 
@@ -150,18 +154,49 @@ Example:
     --crush_bucket_type rack --crush_bucket_name rack-a
 
 When performing OSD upgrades within this failure domain, cephadm calls
-ceph ``osd ok-to-upgrade`` with the specified bucket name and type, and max set to
+ceph ``osd ok-to-upgrade`` with the specified bucket name, and max set to
 :confval:`mgr/cephadm/max_parallel_osd_upgrades`
 
 .. warning:: Do not change the cluster's topology during an OSD upgrade phase.
    This includes the name or type of any CRUSH bucket.
 
 
+Limiting the Gateway Upgrade Batch Size
+=======================================
+
+The number of gateway daemons (``rgw``, ``iscsi``, ``nfs``, ``nvmeof`` and
+``smb``) that cephadm upgrades in one pass is controlled by
+:confval:`mgr/cephadm/max_gateway_upgrades_per_pass`. The remaining daemons are
+upgraded by the subsequent passes, so the upgrade still completes without
+operator intervention. Because cephadm returns to the serve loop between passes,
+a lower value keeps the serve loop more responsive while an upgrade is in
+progress, so other work such as deploying new daemons and refreshing host
+metadata is delayed less. Raise the value to upgrade large numbers of gateway
+daemons in fewer passes:
+
+.. prompt:: bash #
+
+  ceph config set mgr mgr/cephadm/max_gateway_upgrades_per_pass 8
+
+For ``rgw``, ``iscsi``, ``nvmeof`` and ``smb`` the value is a plain per-daemon
+cap. A pass upgrades at most that many daemons, and a service with more daemons
+than the limit is split across passes, so the service keeps serving clients
+while it is upgraded.
+
+``nfs`` is the exception: restarting one NFS daemon sends the rest of its
+service into a grace period, so a service that is split across passes pays for
+one grace period per pass instead of one for the whole service. NFS daemons are
+therefore grouped by service and whole services are added to a pass.
+
+Setting the option to ``0`` disables the limit and restores the previous
+behavior of upgrading all daemons of the type in one pass.
+
+
 Monitoring the Upgrade
 ======================
 
-Determine (1) whether an upgrade is in progress and (2) which version the
-cluster is upgrading to by running the following command:
+Determine (1) whether an upgrade is in progress and (2) which container image
+the cluster is upgrading to by running the following command:
 
 .. prompt:: bash #
 
@@ -180,8 +215,8 @@ looks like this:
 
   [...]
     progress:
-      Upgrade to docker.io/ceph/ceph:v15.2.1 (00h 20m 12s)
-        [=======.....................] (time remaining: 01h 43m 31s)
+      Upgrade to 20.2.3 (20m)
+        [=======.....................] (remaining: 60m)
 
 
 Watching the Cephadm Log During an Upgrade
@@ -204,6 +239,34 @@ You can stop the upgrade process at any time by running the following command:
   ceph orch upgrade stop
 
 
+.. _cephadm-downgrading:
+
+Downgrading
+===========
+
+Ceph does not support downgrading a cluster to an earlier major release.
+Cephadm refuses to start such a downgrade, and it also refuses to move a
+cluster from a stable release to a release candidate or a development release.
+When cephadm has upgraded every OSD to a new major release, it raises the
+``require_osd_release`` flag in the OSD map to that release, so no manual step
+is needed. This is a one-way step: the flag can't be lowered again, and OSDs
+from an earlier release can no longer start.
+
+Cephadm does not prevent a downgrade to an earlier point release of the same
+major release, for example from 20.2.1 to 20.2.0, but such downgrades are not
+supported. They may work in some situations and fail in others. They are not
+recommended, and they are done only at the administrator's risk. If you are
+tempted to downgrade to an earlier point release, consider instead a
+configuration workaround, or an upgrade to a later point release or a later
+major release. You can also build a local custom container image of the
+release you are running with the code fixes you need, for example by
+cherry-picking commits from a later release, and upgrade to that image as
+described in `Using Customized Container Images`_.
+
+To return to an earlier major release, deploy a new cluster at that release
+and migrate or restore the data into it.
+
+
 Post-upgrade Actions
 ====================
 
@@ -216,8 +279,8 @@ Potential Problems
 ==================
 
 
-Error: ENOENT: Module not found
--------------------------------
+Error ENOENT: Module not found
+------------------------------
 
 The message ``Error ENOENT: Module not found`` appears in response to the
 command ``ceph orch upgrade status`` if the orchestrator has crashed:
@@ -230,9 +293,13 @@ command ``ceph orch upgrade status`` if the orchestrator has crashed:
 
    Error ENOENT: Module not found
 
-This is possibly caused by invalid JSON in a mgr config-key.
-See `Redmine tracker Issue #67329 <https://tracker.ceph.com/issues/67329>`_
-and `this discussion on the ceph-users mailing list <https://www.spinics.net/lists/ceph-users/msg83667.html>`_.
+This is possibly caused by invalid JSON in a mgr config-key. One known
+cause on releases before the fix: the OSD removal queue stored under
+the ``mgr/cephadm/osd_remove_queue`` config-key could contain a field
+(``original_weight``) that the cephadm module was unable to load back,
+which crashed the module whenever the Manager restarted. The
+workaround was to edit the stored JSON to remove the offending field
+and then restart ``ceph-mgr``.
 
 
 ``UPGRADE_NO_STANDBY_MGR``
@@ -270,8 +337,9 @@ following command:
 
 This alert (``UPGRADE_FAILED_PULL``) means that Ceph was unable to pull the
 container image for the target version. This can happen if you specify a
-version or container image that does not exist (e.g. "1.2.3"), or if the
-container registry cannot be reached by one or more hosts in the cluster.
+version or container image that does not exist (e.g.
+``quay.io/ceph/ceph:v20.2.99``), or if the container registry cannot be
+reached by one or more hosts in the cluster.
 
 To cancel the existing upgrade and to specify a different target version, run
 the following commands:
@@ -282,13 +350,40 @@ the following commands:
   ceph orch upgrade start --ceph-version <version>
 
 
+``UPGRADE_INCOMPATIBLE_HOST_CPU``
+---------------------------------
+
+This alert (``UPGRADE_INCOMPATIBLE_HOST_CPU``) means that one or more hosts
+in the cluster have a CPU that does not support the x86-64
+microarchitecture level that the target release's official builds are
+compiled for. For example, official builds of Umbrella (21.x) and later
+require CPUs that support ``x86-64-v3``. Running the target release's
+binaries on the listed hosts would crash with an illegal instruction error
+(SIGILL), so cephadm refuses to proceed.
+
+A host's detected microarchitecture level can be checked by running the
+following command on the host itself:
+
+.. prompt:: bash #
+
+  cephadm gather-facts | grep cpu_isa_level
+
+To proceed with the upgrade, replace or remove the listed hosts. If you are
+using custom-built container images compiled for an older CPU generation,
+you can disable this check by running the following command:
+
+.. prompt:: bash #
+
+  ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false
+
+
 Using Customized Container Images
 =================================
 
 For most users, upgrading requires nothing more complicated than specifying the
 Ceph version to which to upgrade. In such cases, cephadm locates the specific
 Ceph container image to use by combining the :confval:`container_image_base`
-configuration option (default: ``docker.io/ceph/ceph``) with a tag of
+configuration option (default: ``quay.io/ceph/ceph``) with a tag of
 ``vX.Y.Z``.
 
 But it is possible to upgrade to an arbitrary container image, if that's what
@@ -369,10 +464,14 @@ Example: specifying services and using limit:
    * ``grafana``
    * ``loki``
    * ``promtail``
+   * ``alloy``
+   * ``pushgateway``
+   * ``mgmt-gateway``
+   * ``oauth2-proxy``
 
    If you specify parameters that would upgrade daemons out of order, the
-   upgrade command will block and note which daemons will be missed if
-   you proceed.
+   upgrade command fails with ``Cannot start upgrade.`` and names the daemons
+   that you must upgrade first.
 
 .. note::
 
@@ -456,4 +555,4 @@ For example:
 
 .. prompt:: bash #
 
-  ceph orch update service prometheus quay.io/prometheus/prometheus:v2.55.1
+  ceph orch update service prometheus quay.io/prometheus/prometheus:v3.6.0

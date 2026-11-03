@@ -29,6 +29,8 @@ overrides:
       - POOL_FULL
       - pool full
       - pool\(s\) full
+      - telemetry module includes new collections
+      - but it is still running
 tasks:
 - install:
     branch: tentacle
@@ -62,6 +64,7 @@ tasks:
 - print: "**** done end telemetry tentacle..."
 
 - print: "**** done start upgrade sequence..."
+- sequential: [ignore-auth-warn-cephadm]
 - sequential:
     - print: "**** done start upgrade..."
     - cephadm.shell:
@@ -80,7 +83,7 @@ tasks:
     - cephadm.shell:
         env: [sha1]
         mon.a:
-            - ceph osd require-osd-release umbrella
+            - ceph osd require-osd-release vampire
 
     - print: "**** done start telemetry x..."
     - workunit:

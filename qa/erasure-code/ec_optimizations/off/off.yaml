@@ -1,0 +1,8 @@
+# Disable EC optimizations (legacy EC)
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_pool_default_flag_ec_optimizations: false
+    pool-config:
+      ec_pool: true

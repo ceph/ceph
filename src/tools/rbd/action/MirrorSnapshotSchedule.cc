@@ -89,7 +89,7 @@ public:
     f->open_array_section("scheduled_images");
     for (auto &image : scheduled_images) {
       f->open_object_section("image");
-      f->dump_string("schedule_time", image.first);
+      f->dump_string("next_scheduled_time", image.first);
       f->dump_string("image", image.second);
       f->close_section(); // image
     }
@@ -105,7 +105,7 @@ private:
 
 std::ostream& operator<<(std::ostream& os, ScheduleStatus &s) {
   TextTable tbl;
-  tbl.define_column("SCHEDULE TIME", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("NEXT SCHEDULED TIME", TextTable::LEFT, TextTable::LEFT);
   tbl.define_column("IMAGE", TextTable::LEFT, TextTable::LEFT);
 
   for (auto &[schedule_time, image] : s.scheduled_images) {

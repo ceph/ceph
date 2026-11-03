@@ -19,7 +19,7 @@
 
 #include <boost/tuple/tuple.hpp>
 #include "include/ceph_assert.h"
-#include "include/types.h" // for client_t
+#include "include/client_t.h"
 #include "DynamicPerfStats.h"
 #include "OSD.h"
 #include "PG.h"
@@ -940,7 +940,7 @@ public:
 protected:
 
   OpRequestRef active_coro_op = nullptr;
-  std::unique_ptr<resume_token_t> coro_resumer = nullptr;
+  std::shared_ptr<resume_token_t> coro_resumer = nullptr;
   bool coro_op_in_flight = false;
   std::list<OpRequestRef> waiting_for_coro_op;
   OpContext* active_coro_ctx = nullptr;
@@ -2023,6 +2023,8 @@ public:
     ObjectContextRef obc,
     std::map<std::string, ceph::buffer::list, std::less<>> *out);
   int get_internal_versions(const hobject_t& soid,
+                            std::map<shard_id_t, eversion_t>* out);
+  int get_internal_versions_v2(const hobject_t& soid,
                             std::map<shard_id_t, eversion_t>* out);
 
 public:

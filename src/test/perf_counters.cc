@@ -268,6 +268,88 @@ TEST(PerfCounters, read_avg) {
   t1.join();
 }
 
+enum {
+  TEST_PERFCOUNTERS_MIN_ELEMENT_FIRST = 600,
+  TEST_PERFCOUNTERS_MIN_ELEMENT_U64,
+  TEST_PERFCOUNTERS_MIN_ELEMENT_TIME,
+  TEST_PERFCOUNTERS_MIN_ELEMENT_LAST,
+};
+
+static std::shared_ptr<PerfCounters> setup_test_perfcounter_min(CephContext* cct) {
+  PerfCountersBuilder bld(cct, "test_perfcounter_min",
+      TEST_PERFCOUNTERS_MIN_ELEMENT_FIRST, TEST_PERFCOUNTERS_MIN_ELEMENT_LAST);
+  bld.add_u64(TEST_PERFCOUNTERS_MIN_ELEMENT_U64, "min_u64");
+  bld.add_time(TEST_PERFCOUNTERS_MIN_ELEMENT_TIME, "min_time");
+  std::shared_ptr<PerfCounters> p(bld.create_perf_counters());
+  return p;
+}
+
+TEST(PerfCounters, SetMinNonzero) {
+  std::shared_ptr<PerfCounters> pf = setup_test_perfcounter_min(g_ceph_context);
+
+  // The first call always lands (a current 0 counts as "unset"), after
+  // which the gauge only ever moves downward.
+  pf->set_min_nonzero(TEST_PERFCOUNTERS_MIN_ELEMENT_U64, 5);
+  ASSERT_EQ(pf->get(TEST_PERFCOUNTERS_MIN_ELEMENT_U64), 5u);
+  pf->set_min_nonzero(TEST_PERFCOUNTERS_MIN_ELEMENT_U64, 10);
+  ASSERT_EQ(pf->get(TEST_PERFCOUNTERS_MIN_ELEMENT_U64), 5u);
+  pf->set_min_nonzero(TEST_PERFCOUNTERS_MIN_ELEMENT_U64, 2);
+  ASSERT_EQ(pf->get(TEST_PERFCOUNTERS_MIN_ELEMENT_U64), 2u);
+  // A 0 argument is ignored. It must not clobber the running min.
+  pf->set_min_nonzero(TEST_PERFCOUNTERS_MIN_ELEMENT_U64, 0);
+  ASSERT_EQ(pf->get(TEST_PERFCOUNTERS_MIN_ELEMENT_U64), 2u);
+}
+
+// Test for the pg_rebuild min-duration race: a shared, OSD-wide
+// counter updated by several concurrently-recording PG shards via a
+// caller-side get()+compare+set() sequence could silently lose updates.
+// set_min_nonzero() replaces that sequence with a single atomic
+// compare-exchange, so a concurrent caller can no longer clobber
+// another's lower value.
+static void min_racer(std::shared_ptr<PerfCounters> pf, uint64_t value) {
+  for (int i = 0; i < 1000; ++i) {
+    pf->set_min_nonzero(TEST_PERFCOUNTERS_MIN_ELEMENT_U64, value);
+  }
+}
+
+TEST(PerfCounters, SetMinNonzeroConcurrent) {
+  std::shared_ptr<PerfCounters> pf = setup_test_perfcounter_min(g_ceph_context);
+
+  const std::vector<uint64_t> values = {30, 2, 3, 5, 6, 7, 8, 9};
+  std::vector<std::thread> threads;
+  for (auto v : values) {
+    threads.emplace_back(min_racer, pf, v);
+  }
+  for (auto &t : threads) {
+    t.join();
+  }
+
+  // Regardless of which thread's writes land last, the true minimum across
+  // every value any thread ever submitted must survive.
+  ASSERT_EQ(pf->get(TEST_PERFCOUNTERS_MIN_ELEMENT_U64), 2u);
+}
+
+// set_min_nonzero() also drives a (non-avg) time gauge, whose value is
+// stored in nanoseconds. This is how the OSD's pg_vulnerability_duration_min
+// gauge is fed, so a sub-second window is NOT truncated to zero.
+TEST(PerfCounters, SetMinNonzeroTimeGauge) {
+  std::shared_ptr<PerfCounters> pf = setup_test_perfcounter_min(g_ceph_context);
+
+  const uint64_t ns_250ms = 250'000'000ull;
+  const uint64_t ns_10ms  =  10'000'000ull;
+
+  pf->set_min_nonzero(TEST_PERFCOUNTERS_MIN_ELEMENT_TIME, ns_250ms);
+  ASSERT_EQ(pf->tget(TEST_PERFCOUNTERS_MIN_ELEMENT_TIME).to_nsec(), ns_250ms);
+  // A shorter, still sub-second sample lowers it -- and is not lost to
+  // whole-second truncation.
+  pf->set_min_nonzero(TEST_PERFCOUNTERS_MIN_ELEMENT_TIME, ns_10ms);
+  ASSERT_EQ(pf->tget(TEST_PERFCOUNTERS_MIN_ELEMENT_TIME).to_nsec(), ns_10ms);
+  ASSERT_GT(pf->tget(TEST_PERFCOUNTERS_MIN_ELEMENT_TIME).to_nsec(), 0u);
+  // 0 is ignored.
+  pf->set_min_nonzero(TEST_PERFCOUNTERS_MIN_ELEMENT_TIME, 0);
+  ASSERT_EQ(pf->tget(TEST_PERFCOUNTERS_MIN_ELEMENT_TIME).to_nsec(), ns_10ms);
+}
+
 static PerfCounters* setup_test_perfcounter4(std::string name, CephContext *cct)
 {
   PerfCountersBuilder bld(cct, name,

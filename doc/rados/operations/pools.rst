@@ -20,9 +20,9 @@ Pools provide:
   (for example, ``m = 2`` in the default erasure code profile).
 
 - **Placement Groups**: The :ref:`autoscaler <pg-autoscaler>` sets the number
-  of placement groups (PGs) for the pool. In a typical configuration, the
-  target number of PGs is approximately one-hundred and fifty PGs per OSD. This
-  provides reasonable balancing without consuming excessive computing
+  of placement groups (PGs) for the pool, aiming for the number of PG replicas
+  per OSD set by :confval:`mon_target_pg_per_osd`. This provides reasonable
+  balancing without consuming excessive computing
   resources. When setting up multiple pools, set an appropriate number of PGs
   for each pool and for the cluster as a whole. Each PG belongs to a specific
   pool: when multiple pools use the same OSDs, make sure that the **sum** of PG
@@ -477,7 +477,7 @@ You may set values for the following keys:
    :Description: Sets or unsets the ``NODELETE`` flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
-   :Version: Version ``FIXME``
+   :Version: ``0.93`` and above
 
 .. _nopgchange:
 
@@ -486,7 +486,7 @@ You may set values for the following keys:
    :Description: Sets or unsets the ``NOPGCHANGE`` flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
-   :Version: Version ``FIXME``
+   :Version: ``0.93`` and above
 
 .. _nosizechange:
 
@@ -495,7 +495,7 @@ You may set values for the following keys:
    :Description: Sets or unsets the ``NOSIZECHANGE`` flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
-   :Version: Version ``FIXME``
+   :Version: ``0.93`` and above
 
 .. _bulk:
 
@@ -785,11 +785,15 @@ To set values for a stretch pool, run a command of the following form:
 
    ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} {peering_crush_bucket_target} {peering_crush_bucket_barrier} {crush_rule} {size} {min_size} [--yes-i-really-mean-it]
 
+This command configures an individual stretch pool, which is an alternative to
+stretch mode. It fails while stretch mode is enabled. See :ref:`stretch_mode`.
+
 Here are the breakdowns of the arguments:
 
 .. describe:: {pool-name}
 
-   The name of the pool. It must be an existing pool: this command doesn't create a new pool.
+   The name of the pool. It must be an existing replicated pool: this command
+   doesn't create a new pool, and it refuses erasure-coded pools.
 
    :Type: String
    :Required: Yes.
@@ -821,8 +825,7 @@ Here are the breakdowns of the arguments:
 
 .. describe:: {crush_rule}
       
-   The CRUSH rule to use for the pool. The type of pool must match the type of the CRUSH rule
-   (``replicated`` or ``erasure``).
+   The CRUSH rule to use for the pool. It must be a ``replicated`` rule.
 
    :Type: String
    :Required: Yes.
@@ -836,7 +839,7 @@ Here are the breakdowns of the arguments:
 
 .. describe:: {min_size}
             
-   The minimum number of replicas that must be active for IO operations to be
+   The minimum number of replicas that must be active for I/O operations to be
    serviced.
 
    :Type: Integer
@@ -860,6 +863,8 @@ To move the pool back to non-stretch, run a command of the following form:
 
    ceph osd pool stretch unset {pool-name} {crush_rule} {size} {min_size}
 
+This command fails while stretch mode is enabled.
+
 Here are the breakdowns of the arguments:
 
 .. describe:: {pool-name}
@@ -880,7 +885,9 @@ Here are the breakdowns of the arguments:
 
 .. describe:: {size}
          
-   The number of replicas for objects after exiting stretch pool.
+   The number of replicas for objects after exiting stretch pool. For an
+   erasure-coded pool that an older release made a stretch pool, this must be
+   ``k+m``, and ``min_size`` must be between ``k`` and ``k+m``.
    
    :Type: Integer
    :Required: Yes.

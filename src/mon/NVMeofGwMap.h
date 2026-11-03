@@ -139,6 +139,7 @@ public:
          const NvmeGroupKey& group_key, uint64_t beacon_sequence);
   bool is_location_in_disaster(const NvmeGroupKey& group_key,
              NvmeLocation& location, bool &cleanup_in_process);
+  int is_ok_to_stop(const NvmeGroupKey& group_key);
 private:
   int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   int  do_erase_gw_id(const NvmeGwId &gw_id,
@@ -193,7 +194,7 @@ private:
     NvmeGwId& min_loaded_gw_id, bool ignore_locations);
   bool get_location_in_disaster_cleanup(const NvmeGroupKey& group_key,
              NvmeLocation& returned_location);
-  void disaster_map_remove_location(const NvmeGroupKey& group_key,
+  bool disaster_map_remove_location(const NvmeGroupKey& group_key,
              NvmeLocation& location);
   bool validate_number_locations(int num_gws, int num_locations);
   void check_relocate_ana_groups(const NvmeGroupKey& group_key,

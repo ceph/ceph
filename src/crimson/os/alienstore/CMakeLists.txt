@@ -1,6 +1,7 @@
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
 
 set(crimson_alien_common_srcs
+  ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc
   ${PROJECT_SOURCE_DIR}/src/common/url_escape.cc
   ${PROJECT_SOURCE_DIR}/src/common/blkdev.cc
@@ -17,7 +18,6 @@ set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/Timer.cc
   ${PROJECT_SOURCE_DIR}/src/common/TrackedOp.cc
   ${PROJECT_SOURCE_DIR}/src/common/WorkQueue.cc
-  ${PROJECT_SOURCE_DIR}/src/common/util.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/log/Log.cc
@@ -46,6 +46,8 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/bluefs_types.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueRocksEnv.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore_objects.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore_components.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/simple_bitmap.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/bluestore_types.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/fastbmap_allocator_impl.cc
@@ -60,12 +62,6 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/OnodeScan.cc
   ${PROJECT_SOURCE_DIR}/src/os/memstore/MemStore.cc)
 
-# Merge alienstore + alien-common into a single archive.  The common sources
-# are compiled without WITH_CRIMSON and duplicate symbols in crimson-common.
-# ld.bfd resolves these by archive order; Mold treats them as errors.
-# After building, localize the duplicate symbols so they resolve internally
-# within this archive (for the alien/bluestore thread) while crimson-osd's
-# own references resolve from crimson-common (for seastar threads).
 add_library(crimson-alienstore STATIC
   ${alien_store_srcs}
   ${crimson_alien_common_srcs})
@@ -85,7 +81,6 @@ target_link_libraries(crimson-alienstore
     ${BLKID_LIBRARIES}
     ${UDEV_LIBRARIES}
     blk)
-
-# Mold duplicate-symbol handling is done at the crimson-osd link step
-# (see src/crimson/osd/CMakeLists.txt) by ordering crimson-alienstore
-# before crimson-common with --allow-multiple-definition.
+target_link_libraries(crimson-alienstore
+  INTERFACE
+    $<LINK_ONLY:crimson-common>)

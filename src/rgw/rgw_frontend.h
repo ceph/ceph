@@ -15,7 +15,9 @@
 #include "rgw_realm_reloader.h"
 
 #include "rgw_auth_registry.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 
 #define dout_context g_ceph_context
 

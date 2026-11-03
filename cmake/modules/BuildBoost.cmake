@@ -83,11 +83,12 @@ function(do_build_boost root_dir version)
     endif()
   endforeach()
   list_replace(boost_with_libs "unit_test_framework" "test")
+  list(REMOVE_DUPLICATES boost_with_libs)
   string(REPLACE ";" "," boost_with_libs "${boost_with_libs}")
 
   if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     set(toolset gcc)
-  elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(toolset clang)
   else()
     message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
@@ -112,7 +113,9 @@ function(do_build_boost root_dir version)
   set(user_config ${CMAKE_BINARY_DIR}/user-config.jam)
   # edit the user-config.jam so b2 will be able to use the specified
   # toolset and python
-  file(WRITE ${user_config}
+  # b2 emits paths relative to its working directory; launcher daemons may
+  # not share that directory's mount namespace, so use the compiler directly:
+  string(CONCAT user_config_content
     "using ${toolset}"
     " : "
     " : ${CMAKE_CXX_COMPILER}"
@@ -122,7 +125,7 @@ function(do_build_boost root_dir version)
     find_package(Python3 ${with_python_version} QUIET REQUIRED
       COMPONENTS Development)
     string(REPLACE ";" " " python3_includes "${Python3_INCLUDE_DIRS}")
-    file(APPEND ${user_config}
+    string(APPEND user_config_content
       "using python"
       " : ${with_python_version}"
       " : ${Python3_EXECUTABLE}"
@@ -130,6 +133,10 @@ function(do_build_boost root_dir version)
       " : ${Python3_LIBRARIES}"
       " ;\n")
   endif()
+  file(CONFIGURE
+    OUTPUT ${user_config}
+    CONTENT "${user_config_content}"
+    @ONLY)
   list(APPEND b2 --user-config=${user_config})
 
   list(APPEND b2 toolset=${toolset})
@@ -139,22 +146,29 @@ function(do_build_boost root_dir version)
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|ARM")
     list(APPEND b2 abi=aapcs)
     list(APPEND b2 architecture=arm)
-    list(APPEND b2 binary-format=elf)
+    if(APPLE)
+      list(APPEND b2 binary-format=mach-o)
+    else()
+      list(APPEND b2 binary-format=elf)
+    endif()
   endif()
   if(WITH_BOOST_VALGRIND)
     list(APPEND b2 valgrind=on)
   endif()
-  set(b2_targets headers stage)
+  set(b2_targets stage)
   set(b2_install_targets install)
   if(WITH_ASAN)
-    list(APPEND b2 context-impl=ucontext)
+    # via boost_features, not ${b2}: the `headers` step lacks the
+    # libs/context/build target below
+    list(APPEND boost_features context-impl=ucontext)
     # build the library with the BOOST_USE_ASAN consumers get from Boost::context,
     # so fiber_activation_record has one layout (else heap-buffer-overflow)
-    list(APPEND b2 define=BOOST_USE_ASAN)
-    # `context-impl` is declared in libs/context/build/Jamfile.v2; the headers/stage
-    # and install targets never load it, so b2 aborts with `unknown feature
+    list(APPEND boost_features define=BOOST_USE_ASAN)
+    # `context-impl` is declared in libs/context/build/Jamfile.v2; the stage and
+    # install targets never load it, so b2 aborts with `unknown feature
     # "<context-impl>"`. Name the context project as a target so its Jamfile loads
-    # the feature first.
+    # the feature first. Fixed in Boost 1.88, drop it at that bump:
+    # https://github.com/boostorg/context/commit/12ac945158ae
     list(PREPEND b2_targets libs/context/build)
     list(PREPEND b2_install_targets libs/context/build)
   endif()
@@ -162,8 +176,9 @@ function(do_build_boost root_dir version)
     ${b2} ${b2_targets}
     #"--buildid=ceph" # changes lib names--can omit for static
     ${boost_features})
+  # Stage and install must select identical library variants:
   set(install_command
-    ${b2} ${b2_install_targets})
+    ${b2} ${b2_install_targets} ${boost_features})
   if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
@@ -203,6 +218,13 @@ function(do_build_boost root_dir version)
     DEPENDERS configure
     COMMENT "Building B2 engine.."
     WORKING_DIRECTORY <SOURCE_DIR>)
+  ExternalProject_Add_Step(Boost headers
+    COMMAND ${b2} headers
+    DEPENDEES configure
+    DEPENDERS build
+    COMMENT "Preparing Boost headers"
+    WORKING_DIRECTORY <SOURCE_DIR>)
+  ExternalProject_Add_StepTargets(Boost headers)
 endfunction()
 
 set(Boost_context_DEPENDENCIES thread chrono system date_time)
@@ -217,14 +239,19 @@ macro(build_boost version)
   # target, so we can collect "Boost_LIBRARIES" which is then used by
   # ExternalProject_Add(Boost ...)
   set(install_dir "${CMAKE_BINARY_DIR}/boost")
+  if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
+    set(Boost_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
+  else()
+    set(Boost_SOURCE_DIR "${install_dir}/src/Boost")
+  endif()
   set(BOOST_ROOT ${install_dir})
-  set(Boost_INCLUDE_DIRS ${install_dir}/include)
-  set(Boost_INCLUDE_DIR ${install_dir}/include)
+  set(Boost_INCLUDE_DIRS ${Boost_SOURCE_DIR})
+  set(Boost_INCLUDE_DIR ${Boost_SOURCE_DIR})
   set(Boost_LIBRARY_DIR_RELEASE ${install_dir}/lib)
   set(Boost_VERSION ${version})
   # create the directory so cmake won't complain when looking at the imported
   # target
-  file(MAKE_DIRECTORY ${Boost_INCLUDE_DIRS})
+  file(MAKE_DIRECTORY ${Boost_SOURCE_DIR})
   cmake_parse_arguments(Boost_BUILD "" "" COMPONENTS ${ARGN})
   foreach(c ${Boost_BUILD_COMPONENTS})
     list(APPEND components ${c})
@@ -234,6 +261,7 @@ macro(build_boost version)
     endif()
   endforeach()
   set(Boost_BUILD_COMPONENTS ${components})
+  list(REMOVE_DUPLICATES Boost_BUILD_COMPONENTS)
   # Remove the `headers` from the list of components to build as
   # `headers` is an interface only target we add later.
   list(REMOVE_ITEM Boost_BUILD_COMPONENTS headers)
@@ -274,10 +302,21 @@ macro(build_boost version)
       foreach(dep ${Boost_${c}_DEPENDENCIES})
         list(APPEND dependencies Boost::${dep})
       endforeach()
+    endif()
+    if(c STREQUAL "locale")
+      # Boost.Locale calls iconv_open() and friends, which glibc provides but
+      # Darwin keeps in a separate libiconv.  Boost's own generated config
+      # records the dependency; the targets assembled here have to state it
+      # themselves, or the link fails wherever libc does not carry iconv.
+      # Iconv::Iconv is an empty interface when it is built in.
+      find_package(Iconv REQUIRED)
+      list(APPEND dependencies Iconv::Iconv)
+    endif()
+    if(dependencies)
       set_target_properties(Boost::${c} PROPERTIES
         INTERFACE_LINK_LIBRARIES "${dependencies}")
-      unset(dependencies)
     endif()
+    unset(dependencies)
     set(Boost_${c}_FOUND "TRUE")
   endforeach()
 
@@ -293,7 +332,7 @@ macro(build_boost version)
   add_library(Boost::headers INTERFACE IMPORTED)
   set_target_properties(Boost::headers PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
-  add_dependencies(Boost::headers Boost)
+  add_dependencies(Boost::headers Boost-headers)
   find_package_handle_standard_args(Boost DEFAULT_MSG
     Boost_INCLUDE_DIRS Boost_LIBRARIES)
   mark_as_advanced(Boost_LIBRARIES BOOST_INCLUDE_DIRS)

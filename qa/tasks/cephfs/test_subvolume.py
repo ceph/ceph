@@ -1,3 +1,4 @@
+import json
 import logging
 from time import sleep
 import os
@@ -994,4 +995,167 @@ class TestSubvolumeMetrics(CephFSTestCase):
         self.assertGreater(counters["used_bytes"], 0, "Expected used_bytes to remain tracked")
 
         # Cleanup
+        self.fs.run_ceph_cmd('fs', 'subvolume', 'rm', 'cephfs', subvol_name)
+
+    def test_subvolume_used_bytes_updates_after_quota_reset_to_zero(self):
+        """
+        Verify that used_bytes in subvolume metrics is reported correctly
+        after quota is reset to 0 (unlimited).
+
+        Reproducer for: https://tracker.ceph.com/issues/XXXXX
+        Steps:
+         1. Create subvolume with quota, write data, verify used_bytes in metrics
+         2. Reset quota to 0, wait for metrics window to expire (clean slate)
+         3. Write new data, verify used_bytes > 0 in fresh metrics
+        """
+        # Shrink the metrics window to 30s to speed up eviction
+        original_window = self.fs.get_ceph_cmd_stdout('config', 'get', 'mds',
+                                                      'subv_metrics_window_interval').strip()
+        self.fs.run_ceph_cmd('config', 'set', 'mds', 'subv_metrics_window_interval', '30')
+        self.addCleanup(self.fs.run_ceph_cmd, 'config', 'set', 'mds',
+                        'subv_metrics_window_interval', original_window)
+
+        subvol_name = "quota_zero_subv"
+        quota_2g = 2 * 1024 * 1024 * 1024  # 2 GiB
+        write_size = 100 * 1024 * 1024       # 100 MiB per write
+
+        # Phase 1: Create subvolume with 2G quota and write 100 MiB
+        self.fs.run_ceph_cmd('fs', 'subvolume', 'create', 'cephfs', subvol_name,
+                             "--size", str(quota_2g))
+
+        mount_point = self.mount_a.get_mount_point()
+        subvolume_fs_path = self.fs.get_ceph_cmd_stdout(
+            'fs', 'subvolume', 'getpath', 'cephfs', subvol_name).strip()
+        subvolume_fs_path = os.path.join(mount_point, subvolume_fs_path.strip('/'))
+
+        file1 = os.path.join(subvolume_fs_path, "f1")
+        self.mount_a.run_shell_payload("sudo fio "
+                                       "--name phase1 -rw=write "
+                                       "--bs=1M --numjobs=1 --time_based "
+                                       "--runtime=5s --verify=0 --size=100M "
+                                       f"--filename={file1}", wait=True)
+
+        # Wait for metrics to show quota=2G and used_bytes > 0
+        phase1_metrics = None
+        with safe_while(sleep=1, tries=30, action='wait for phase1 metrics') as proceed:
+            while proceed():
+                self.mount_a.run_shell_payload(
+                    f"sudo dd if=/dev/zero of={subvolume_fs_path}/trigger1 bs=4k count=1 conv=notrunc 2>/dev/null",
+                    wait=True)
+                phase1_metrics = self.get_subvolume_metrics()
+                if phase1_metrics:
+                    c = phase1_metrics[0]["counters"]
+                    if c["quota_bytes"] == quota_2g and c["used_bytes"] >= write_size:
+                        break
+
+        self.assertIsNotNone(phase1_metrics, "Expected metrics after phase 1 write")
+        phase1_used = phase1_metrics[0]["counters"]["used_bytes"]
+        log.info(f"Phase 1: quota={quota_2g}, used_bytes={phase1_used}")
+        self.assertGreaterEqual(phase1_used, write_size)
+
+        # Phase 2: Reset quota to 0, immediately write more data, and verify
+        # that used_bytes updates (doesn't stay frozen at phase1 value).
+        # This is the core bug: the cache retains stale used_bytes from phase1
+        # and the fresh rbytes value is ignored because cache != 0.
+        self.fs.run_ceph_cmd('fs', 'subvolume', 'resize', 'cephfs', subvol_name, 'inf')
+        log.info("Phase 2: quota reset to 0, writing another 100 MiB immediately...")
+
+        file2 = os.path.join(subvolume_fs_path, "f2")
+        self.mount_a.run_shell_payload("sudo fio "
+                                       "--name phase2 -rw=write "
+                                       "--bs=1M --numjobs=1 --time_based "
+                                       "--runtime=5s --verify=0 --size=100M "
+                                       f"--filename={file2}", wait=True)
+
+        # Poll for metrics with quota_bytes=0.
+        # Give extra time for any rstat propagation to complete.
+        # The bug: used_bytes stays frozen at ~phase1_used instead of growing.
+        phase2_metrics = None
+        with safe_while(sleep=2, tries=45,
+                        action='wait for metrics after quota=0 IO') as proceed:
+            while proceed():
+                self.mount_a.run_shell_payload(
+                    f"sudo dd if=/dev/zero of={subvolume_fs_path}/trigger2 bs=4k count=1 conv=notrunc 2>/dev/null",
+                    wait=True)
+                phase2_metrics = self.get_subvolume_metrics()
+                if phase2_metrics:
+                    c = phase2_metrics[0]["counters"]
+                    log.info(f"Phase 2 poll: quota_bytes={c['quota_bytes']}, "
+                             f"used_bytes={c['used_bytes']}")
+                    # Break when we see quota=0 AND either used_bytes updated
+                    # or we've given it enough time (used_bytes stuck = the bug)
+                    if c["quota_bytes"] == 0 and c["used_bytes"] > phase1_used:
+                        break
+                else:
+                    log.info("Phase 2 poll: no metrics returned")
+
+        self.assertIsNotNone(phase2_metrics,
+                             "Expected metrics after writing with quota=0")
+        counters = phase2_metrics[0]["counters"]
+
+        # Get ground truth from subvolume info
+        info_out = self.fs.get_ceph_cmd_stdout(
+            'fs', 'subvolume', 'info', 'cephfs', subvol_name)
+        info = json.loads(info_out)
+        actual_bytes_used = info["bytes_used"]
+        log.info(f"Phase 2 result: quota_bytes={counters['quota_bytes']}, "
+                 f"metrics used_bytes={counters['used_bytes']}, "
+                 f"subvolume info bytes_used={actual_bytes_used}, "
+                 f"phase1_used={phase1_used}")
+
+        self.assertEqual(counters["quota_bytes"], 0,
+                         "Expected quota_bytes=0 for unlimited subvolume")
+
+        # The key assertion: after writing ~200 MiB total, used_bytes must
+        # be greater than what it was after phase1. If it equals phase1_used,
+        # the bug is confirmed (cache is stale).
+        self.assertGreater(counters["used_bytes"], phase1_used,
+                           f"BUG: used_bytes ({counters['used_bytes']}) is frozen at "
+                           f"phase1 value ({phase1_used}) after quota reset to 0 + IO. "
+                           f"subvolume info shows actual bytes_used={actual_bytes_used}.")
+
+        # Phase 3: Change quota to a non-zero value, write more, verify used_bytes
+        # updates. This confirms the issue is specific to quota=0.
+        quota_3g = 3 * 1024 * 1024 * 1024  # 3 GiB
+        self.fs.run_ceph_cmd('fs', 'subvolume', 'resize', 'cephfs', subvol_name,
+                             str(quota_3g))
+        log.info(f"Phase 3: quota changed to {quota_3g}, writing another 100 MiB...")
+
+        phase2_used = counters["used_bytes"]
+        file3 = os.path.join(subvolume_fs_path, "f3")
+        self.mount_a.run_shell_payload("sudo fio "
+                                       "--name phase3 -rw=write "
+                                       "--bs=1M --numjobs=1 --time_based "
+                                       "--runtime=5s --verify=0 --size=100M "
+                                       f"--filename={file3}", wait=True)
+
+        phase3_metrics = None
+        with safe_while(sleep=2, tries=30,
+                        action='wait for metrics after quota=3G IO') as proceed:
+            while proceed():
+                self.mount_a.run_shell_payload(
+                    f"sudo dd if=/dev/zero of={subvolume_fs_path}/trigger3 bs=4k count=1 conv=notrunc 2>/dev/null",
+                    wait=True)
+                phase3_metrics = self.get_subvolume_metrics()
+                if phase3_metrics:
+                    c = phase3_metrics[0]["counters"]
+                    log.info(f"Phase 3 poll: quota_bytes={c['quota_bytes']}, "
+                             f"used_bytes={c['used_bytes']}")
+                    if c["quota_bytes"] == quota_3g and c["used_bytes"] > phase2_used:
+                        break
+                else:
+                    log.info("Phase 3 poll: no metrics returned")
+
+        self.assertIsNotNone(phase3_metrics,
+                             "Expected metrics after writing with quota=3G")
+        phase3_counters = phase3_metrics[0]["counters"]
+        log.info(f"Phase 3 result: quota_bytes={phase3_counters['quota_bytes']}, "
+                 f"used_bytes={phase3_counters['used_bytes']}")
+
+        self.assertEqual(phase3_counters["quota_bytes"], quota_3g)
+        self.assertGreater(phase3_counters["used_bytes"], phase2_used,
+                           f"Phase 3: used_bytes should update when quota is non-zero. "
+                           f"Got {phase3_counters['used_bytes']}, expected > {phase2_used}")
+
+        # cleanup
         self.fs.run_ceph_cmd('fs', 'subvolume', 'rm', 'cephfs', subvol_name)

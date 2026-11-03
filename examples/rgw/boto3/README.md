@@ -3,7 +3,9 @@ This directory contains examples on how to use AWS CLI/boto3 to exercise the Rad
 This is an extension to the [AWS SDK](https://github.com/boto/botocore/blob/develop/botocore/data/s3/2006-03-01/service-2.json).
 
 # Users
-For the standard client to support these extensions, the ``service-2.sdk-extras.json`` file should be added. You can place it under the default folder ``~/.aws/models/s3/2006-03-01/`` or create a custom one ``/path/to/custom/folder/models/s3/2006-03-01/`` and add it to ``AWS_DATA_PATH`` environment variable.
+For the standard client to support S3 extensions, the ``service-2.sdk-extras.json`` file should be used.
+You can place it under the default folder ``~/.aws/models/s3/2006-03-01/`` or create a custom one ``/path/to/custom/folder/models/s3/2006-03-01/`` and add it to ``AWS_DATA_PATH`` environment variable.
+For S3Vectors extensions, the ``s3vectors-service-2.sdk-extras.json`` file should be used, and it should be copied to ``~/.aws/models/s3vectors/2025-07-15/service-2.sdk-extras.json`` or a custom path added to ``AWS_DATA_PATH`` as ``service-2.sdk-extras.json``.
 For more information see [here](https://github.com/boto/botocore/blob/develop/botocore/loaders.py#L33).
 ## Python
 The [boto3 client](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html) could be used with the extensions, code samples exists in this directory.
@@ -95,7 +97,8 @@ Expected output:
 ```
 
 # Developers
-Anyone developing an extension to the S3 API supported by AWS, please modify ``service-2.sdk-extras.json`` (all extensions should go into the same file), so that boto3 could be used to test the new API. 
+Anyone developing an extension to the S3 API supported by AWS, please modify ``service-2.sdk-extras.json`` (all extensions should go into the same file), so that boto3 could be used to test the new API.
+For extensions to the S3 Vectors API, modify ``s3vectors-service-2.sdk-extras.json`` instead.
 In addition, python files with code samples should be added to this directory demonstrating use of the new API.
 When testing you changes please:
 - make sure that the modified file is in the boto3 path as explained above

@@ -127,15 +127,23 @@ except FileNotFoundError:
 REDMINE_API_KEY = os.getenv("PTL_TOOL_REDMINE_API_KEY", REDMINE_API_KEY)
 SPECIAL_BRANCHES = ('main', 'luminous', 'jewel', 'HEAD')
 SUPPORTED_QA_TAGS = {
+    'build/ops',
+    'ceph-volume',
     'cephadm',
     'cephfs',
+    'common',
     'core',
+    'crimson',
     'dashboard',
     'libcephsqlite',
+    'needs-upgrade-testing',
     'nvme',
+    'nvmeof',
     'orch',
+    'orchestrator',
     'rbd',
     'rgw',
+    'tests',
     'upgrades',
 }
 TEST_BRANCH = os.getenv("PTL_TOOL_TEST_BRANCH", "wip-{user}-testing-%Y%m%d.%H%M%S")
@@ -152,6 +160,35 @@ SANDBOX_CFG = [
 log = logging.getLogger(__name__)
 log.addHandler(logging.StreamHandler())
 log.setLevel(logging.INFO)
+
+
+def add_file_log_handler(logger, label=None):
+    """--log support: also write logger's output to <label>.log (or ptl-tool.log
+    when no label is given) in the current working directory, copying the
+    console handler's formatter."""
+    filename = f"{label}.log" if label else "ptl-tool.log"
+    filepath = os.path.join(os.getcwd(), filename)
+    fh = logging.FileHandler(filepath)
+    fh.setLevel(logger.level)
+    for handler in logger.handlers:
+        if handler.formatter:
+            fh.setFormatter(handler.formatter)
+            break
+    logger.addHandler(fh)
+    return os.path.abspath(filepath)
+
+
+def logged_input(prompt=''):
+    response = input(prompt)
+    for handler in log.handlers:
+        if isinstance(handler, logging.FileHandler):
+            handler.acquire()
+            try:
+                handler.stream.write(f"{prompt}{response}\n")
+                handler.flush()
+            finally:
+                handler.release()
+    return response
 
 # find containing git dir
 try:
@@ -516,7 +553,7 @@ def get_credits(session, pr, pr_req):
                     credits.add("Reviewed-by: "+NEW_CONTRIBUTORS[user])
                 except KeyError as e:
                     try:
-                        name = input("Need name for contributor \"%s\" (use ^D to skip); Reviewed-by: " % user)
+                        name = logged_input("Need name for contributor \"%s\" (use ^D to skip); Reviewed-by: " % user)
                         name = name.strip()
                         if len(name) == 0:
                             continue
@@ -528,36 +565,101 @@ def get_credits(session, pr, pr_req):
 
     return "\n".join(credits), new_new_contributors
 
-def format_parity_row(left_sha, left_msg, right_sha, right_msg, is_missing=False, is_extra=False, right_prefix=""):
+def align_bp_src_commits(bp_commits, src_commits):
+    """
+    bp_commits: list of dicts {'sha', 'summary', 'orig_sha'}
+    src_commits: list of dicts {'sha', 'summary'}
+    Returns list of tuples: (bp_dict or None, src_dict or None, rtype)
+    where rtype is one of: 'matched', 'ooo_src_slot', 'ooo_bp_slot', 'missing', 'extra'
+    """
+    src_shas = [s['sha'] for s in src_commits]
+    all_bp_orig_shas = set(b['orig_sha'] for b in bp_commits if b.get('orig_sha'))
+
+    bp_keys = []
+    for i, b in enumerate(bp_commits):
+        o_sha = b.get('orig_sha')
+        if o_sha and o_sha in src_shas:
+            bp_keys.append(o_sha)
+        else:
+            bp_keys.append(f"bp_extra_{i}_{b['sha']}")
+
+    matcher = difflib.SequenceMatcher(None, bp_keys, src_shas)
+
+    rows = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'equal':
+            for b_idx, s_idx in zip(range(i1, i2), range(j1, j2)):
+                rows.append((bp_commits[b_idx], src_commits[s_idx], 'matched'))
+        elif tag in ('replace', 'delete', 'insert'):
+            bp_sub = bp_commits[i1:i2]
+            src_sub = src_commits[j1:j2]
+
+            for s in src_sub:
+                if s['sha'] in all_bp_orig_shas:
+                    rows.append((None, s, 'ooo_src_slot'))
+                else:
+                    rows.append((None, s, 'missing'))
+
+            for b in bp_sub:
+                o_sha = b.get('orig_sha')
+                if o_sha and o_sha in src_shas:
+                    rows.append((b, None, 'ooo_bp_slot'))
+                else:
+                    rows.append((b, None, 'extra'))
+
+    return rows
+
+def format_parity_row(left_sha, left_msg, right_sha, right_msg, is_missing=False, is_extra=False, is_ooo_src=False, is_ooo_bp=False, right_prefix=""):
     """Helper to format visualizer rows."""
     if is_missing:
         left_col = "\033[91m<<<< MISSING IN BACKPORT >>>>\033[0m"
         visible_left_len = 29
-    else:
+    elif is_ooo_src:
+        left_col = "\033[91m<<<< OUT OF ORDER >>>>\033[0m"
+        visible_left_len = 19
+    elif left_sha and left_msg:
         l_msg = (left_msg[:25] + '...') if len(left_msg) > 28 else left_msg
-        left_col = f"[ {left_sha[:8]} ] {l_msg}"
-        visible_left_len = len(left_col)
+        if is_ooo_bp:
+            left_col = f"\033[91m[ {left_sha[:8]} ] {l_msg}\033[0m"
+        else:
+            left_col = f"[ {left_sha[:8]} ] {l_msg}"
+        visible_left_len = len(f"[ {left_sha[:8]} ] {l_msg}")
+    else:
+        left_col = ""
+        visible_left_len = 0
 
     if is_extra:
-        right_col = "\033[93m<<<< EXTRA IN BACKPORT >>>>\033[0m"
-    else:
+        right_col = f"{right_prefix}\033[93m<<<< EXTRA IN BACKPORT >>>>\033[0m"
+    elif is_ooo_bp:
+        right_col = f"{right_prefix}\033[91m<<<< OUT OF ORDER >>>>\033[0m"
+    elif right_sha and right_msg:
         r_msg = (right_msg[:20] + '...') if len(right_msg) > 23 else right_msg
         right_col = f"{right_prefix}[ {right_sha[:8]} ] {r_msg}"
+    else:
+        right_col = ""
 
     padding = max(1, 47 - visible_left_len)
     return f"{left_col}{' ' * padding}{right_col}"
 
-def format_parity_row_md(left_sha, left_msg, right_sha, right_msg, is_missing=False, is_extra=False, right_prefix=""):
+def format_parity_row_md(left_sha, left_msg, right_sha, right_msg, is_missing=False, is_extra=False, is_ooo_src=False, is_ooo_bp=False, right_prefix=""):
     """Helper to format visualizer rows for Markdown tables without truncation."""
     if is_missing:
         left_col = "**<<<< MISSING IN BACKPORT >>>>**"
-    else:
+    elif is_ooo_src:
+        left_col = "**<<<< OUT OF ORDER >>>>**"
+    elif left_sha and left_msg:
         left_col = f"{left_sha} {left_msg}"
+    else:
+        left_col = ""
 
     if is_extra:
         right_col = "**<<<< EXTRA IN BACKPORT >>>>**"
-    else:
+    elif is_ooo_bp:
+        right_col = "**<<<< OUT OF ORDER >>>>**"
+    elif right_sha and right_msg:
         right_col = f"{right_sha} {right_msg}"
+    else:
+        right_col = ""
 
     source_pr = f"**{right_prefix.strip()}**" if right_prefix.strip() else ""
 
@@ -673,13 +775,13 @@ def post_draft_review(session, pr, initial_text, base=None):
             with open(tf_path, 'r', encoding='utf-8') as f_read:
                 final_text = f_read.read().strip()
                 
-            print("\n" + "="*80)
-            print("DRAFT REVIEW PREVIEW:")
+            log.info("\n" + "="*80)
+            log.info("DRAFT REVIEW PREVIEW:")
             print("-" * 80)
-            print(final_text)
-            print("="*80 + "\n")
+            log.info(final_text)
+            log.info("="*80 + "\n")
             
-            confirm = input(f"Post this feedback to PR #{pr}? [r/c/e/m/N] (r=request changes, c=comment, e=edit again, m=skip to merge, n=cancel): ").strip().lower()
+            confirm = logged_input(f"Post this feedback to PR #{pr}? [r/c/e/m/N] (r=request changes, c=comment, e=edit again, m=skip to merge, n=cancel): ").strip().lower()
             if confirm == 'm':
                 raise SkipToMerge()
             elif confirm in ('r', 'c'):
@@ -695,7 +797,7 @@ def post_draft_review(session, pr, initial_text, base=None):
             elif confirm == 'e':
                 continue
             else:
-                print("Review cancelled.")
+                log.info("Review cancelled.")
                 return False
     finally:
         os.unlink(tf_path)
@@ -736,10 +838,11 @@ class CommitParityCheck(BaseAuditCheck):
         bp_commits_mapped = set()
         
         valid_ref = None
-        for ref in ['main', 'origin/main', 'upstream/main']:
+        for ref in ['upstream/heads/main', 'upstream/main', 'origin/heads/main', 'origin/main', 'main']:
             try:
                 G.git.rev_parse('--verify', ref)
                 valid_ref = ref
+                log.debug(f"found main: {valid_ref}")
                 break
             except git.exc.GitCommandError:
                 pass
@@ -748,43 +851,57 @@ class CommitParityCheck(BaseAuditCheck):
             for commit, orig_sha in bp_cherry_picks:
                 try:
                     # Find merge commit using intersection of ancestry-path and first-parent
-                    ancestry = G.git.rev_list(f"{orig_sha}..{valid_ref}", '--ancestry-path').splitlines()
+                    log.debug(f"git rev-list --ancestry-path --topo-order {orig_sha}..{valid_ref}")
+                    ancestry = G.git.rev_list(f"{orig_sha}..{valid_ref}", '--ancestry-path', '--topo-order').splitlines()
+                    log.debug(f"git rev-list --first-parent {orig_sha}..{valid_ref}")
                     first_parent = G.git.rev_list(f"{orig_sha}..{valid_ref}", '--first-parent').splitlines()
                     
                     first_parent_set = set(first_parent)
                     merge_sha = None
                     for c in reversed(ancestry):
+                        log.debug(f"Examining ancestor {c}")
                         if c in first_parent_set:
+                            log.debug(f"Found ancestor in first parents")
                             merge_sha = c
                             break
 
-                    if merge_sha and merge_sha not in analyzed_merges:
-                        analyzed_merges.add(merge_sha)
-                        # Extract the original PR commits using merge parents (merge^1..merge^2)
-                        orig_pr_commits = G.git.rev_list(f"{merge_sha}^1..{merge_sha}^2").splitlines()
-                        orig_pr_commits.reverse() # chronological
-                        
-                        merge_msg = G.commit(merge_sha).summary
-                        m_pr = re.search(r'(?:Merge PR|Merge pull request) #(\d+)', merge_msg, re.IGNORECASE)
-                        pr_name = f"PR #{m_pr.group(1)}" if m_pr else f"Merge {merge_sha[:8]}"
-                        found_prs.add(pr_name)
-                        pr_mapping[pr_name] = []
+                    if merge_sha:
+                        log.info(f"found merge sha: {merge_sha}")
+                        if merge_sha not in analyzed_merges:
+                            analyzed_merges.add(merge_sha)
+                            # Extract the original PR commits using merge parents (merge^1..merge^2)
+                            orig_pr_commits = G.git.rev_list(f"{merge_sha}^1..{merge_sha}^2", "--topo-order", "--reverse").splitlines()
 
-                        for o_commit_sha in orig_pr_commits:
-                            o_summary = G.commit(o_commit_sha).summary
-                            bp_match = next((c for c, o_sha in bp_cherry_picks if o_commit_sha.startswith(o_sha)), None)
-                            
-                            pr_mapping[pr_name].append({
-                                'o_sha': o_commit_sha,
-                                'o_summary': o_summary,
-                                'bp_commit': bp_match,
-                                'm_sha': merge_sha
-                            })
-                            
-                            if bp_match:
-                                bp_commits_mapped.add(bp_match.hexsha)
-                            else:
-                                missing_commits.append((pr_name, o_commit_sha, o_summary, merge_sha))
+                            merge_msg = G.commit(merge_sha).summary
+                            m_pr = re.search(r'(?:Merge PR|Merge pull request) #(\d+)', merge_msg, re.IGNORECASE)
+                            pr_name = f"PR #{m_pr.group(1)}" if m_pr else f"Merge {merge_sha[:8]}"
+                            found_prs.add(pr_name)
+                            pr_mapping[pr_name] = []
+
+                            for o_commit_sha in orig_pr_commits:
+                                o_commit = G.commit(o_commit_sha)
+                                if len(o_commit.parents) > 1:
+                                    # merge commits inside the source PR (e.g. a merge
+                                    # of main done for conflict resolution) are never
+                                    # cherry-picked into a backport; demanding parity
+                                    # for them flags every such backport as missing a
+                                    # commit
+                                    log.debug(f"Skipping source PR merge commit {o_commit_sha} in parity check")
+                                    continue
+                                o_summary = o_commit.summary
+                                bp_match = next((c for c, o_sha in bp_cherry_picks if o_commit_sha.startswith(o_sha)), None)
+
+                                pr_mapping[pr_name].append({
+                                    'o_sha': o_commit_sha,
+                                    'o_summary': o_summary,
+                                    'bp_commit': bp_match,
+                                    'm_sha': merge_sha
+                                })
+
+                                if bp_match:
+                                    bp_commits_mapped.add(bp_match.hexsha)
+                                else:
+                                    missing_commits.append((pr_name, o_commit_sha, o_summary, merge_sha))
                 except git.exc.GitCommandError:
                     log.debug(f"Local DAG traversal skipped/failed for {orig_sha[:8]}")
         else:
@@ -793,11 +910,11 @@ class CommitParityCheck(BaseAuditCheck):
         if found_prs:
             log.info(f"Original PRs identified in this backport: {', '.join(sorted(list(found_prs)))}")
             if len(found_prs) > 1:
-                print("\033[91m" + "="*80)
-                print("WARNING: Multiple original PRs detected in this backport!")
-                print("Normally we expect exactly one main PR per backport.")
-                print("Detected: " + ", ".join(sorted(list(found_prs))))
-                print("="*80 + "\033[0m")
+                log.info("\033[91m" + "="*80)
+                log.info("WARNING: Multiple original PRs detected in this backport!")
+                log.info("Normally we expect exactly one main PR per backport.")
+                log.info("Detected: " + ", ".join(sorted(list(found_prs))))
+                log.info("="*80 + "\033[0m")
 
         return {
             'found_prs': found_prs,
@@ -825,50 +942,81 @@ class CommitParityCheck(BaseAuditCheck):
 
             visualizer_lines.append(f"BACKPORT PR #{pr}".ljust(47) + "SOURCE PR / STATUS")
             visualizer_lines.append("-" * 80)
-            
-            bp_commits_mapped = set()
-            bp_to_source = {}
+
+            all_mapped_bp_shas = set()
             for pr_name, commit_list in pr_mapping.items():
                 for item in commit_list:
                     if item.get('bp_commit'):
-                        bp_to_source[item['bp_commit'].hexsha] = (str(pr_name), item)
-                        bp_commits_mapped.add(item['bp_commit'].hexsha)
+                        all_mapped_bp_shas.add(item['bp_commit'].hexsha)
 
             ordered_prs = []
             for bp_c in pr_commits:
-                if bp_c.hexsha in bp_to_source:
-                    p_name = bp_to_source[bp_c.hexsha]
+                for pr_name, commit_list in pr_mapping.items():
+                    p_name = str(pr_name)
                     if p_name not in ordered_prs:
-                        ordered_prs.append(p_name)
+                        if any(item.get('bp_commit') and item['bp_commit'].hexsha == bp_c.hexsha for item in commit_list):
+                            ordered_prs.append(p_name)
             for pr_name in sorted(list(pr_mapping.keys()), key=lambda x: str(x)):
                 p_name = str(pr_name)
                 if p_name not in ordered_prs:
                     ordered_prs.append(p_name)
-            
+
             first_pr_block = True
             for pr_name_str in ordered_prs:
                 dict_key = next((k for k in pr_mapping.keys() if str(k) == pr_name_str), None)
                 if dict_key is None:
                     continue
-                
+
                 if not first_pr_block:
                     visualizer_lines.append("")
                 first_pr_block = False
 
+                src_commits = [
+                    {'sha': item['o_sha'], 'summary': item['o_summary']}
+                    for item in pr_mapping[dict_key]
+                ]
+
+                bp_commits_for_pr = []
+                for bp_c in pr_commits:
+                    m_item = next((item for item in pr_mapping[dict_key] if item.get('bp_commit') and item['bp_commit'].hexsha == bp_c.hexsha), None)
+                    if m_item:
+                        bp_commits_for_pr.append({
+                            'sha': bp_c.hexsha,
+                            'summary': bp_c.summary,
+                            'orig_sha': m_item['o_sha']
+                        })
+
+                aligned_rows = align_bp_src_commits(bp_commits_for_pr, src_commits)
+
                 first_commit_in_pr = True
-                for item in pr_mapping[dict_key]:
+                for b, s, rtype in aligned_rows:
                     prefix = f"{pr_name_str} " if first_commit_in_pr else " " * (len(pr_name_str) + 1)
                     first_commit_in_pr = False
 
-                    bp_c = item.get('bp_commit')
-                    if bp_c:
-                        visualizer_lines.append(format_parity_row(bp_c.hexsha, bp_c.summary, item['o_sha'], item['o_summary'], right_prefix=prefix))
-                        visualizer_md_lines.append(format_parity_row_md(bp_c.hexsha, bp_c.summary, item['o_sha'], item['o_summary'], right_prefix=prefix))
-                    else:
-                        visualizer_lines.append(format_parity_row(None, None, item['o_sha'], item['o_summary'], is_missing=True, right_prefix=prefix))
-                        visualizer_md_lines.append(format_parity_row_md(None, None, item['o_sha'], item['o_summary'], is_missing=True, right_prefix=prefix))
+                    b_sha = b['sha'] if b else None
+                    b_msg = b['summary'] if b else None
+                    s_sha = s['sha'] if s else None
+                    s_msg = s['summary'] if s else None
 
-            extra_commits = [c for c in pr_commits if c.hexsha not in bp_commits_mapped]
+                    is_missing = (rtype == 'missing')
+                    is_extra = (rtype == 'extra')
+                    is_ooo_src = (rtype == 'ooo_src_slot')
+                    is_ooo_bp = (rtype == 'ooo_bp_slot')
+
+                    visualizer_lines.append(format_parity_row(
+                        b_sha, b_msg, s_sha, s_msg,
+                        is_missing=is_missing, is_extra=is_extra,
+                        is_ooo_src=is_ooo_src, is_ooo_bp=is_ooo_bp,
+                        right_prefix=prefix
+                    ))
+                    visualizer_md_lines.append(format_parity_row_md(
+                        b_sha, b_msg, s_sha, s_msg,
+                        is_missing=is_missing, is_extra=is_extra,
+                        is_ooo_src=is_ooo_src, is_ooo_bp=is_ooo_bp,
+                        right_prefix=prefix
+                    ))
+
+            extra_commits = [c for c in pr_commits if c.hexsha not in all_mapped_bp_shas]
             if extra_commits:
                 if not first_pr_block:
                     visualizer_lines.append("")
@@ -901,11 +1049,11 @@ class CommitParityCheck(BaseAuditCheck):
             md_text += "\n[Be familiar with the rules and guidelines for writing backports.](https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst)\n\n"
             
             while True:
-                ans = input("Do you want to allow these commits anyway? [p/m/r/o/q] (p=proceed, m=skip to merge, r=add to review, o=open PR in browser, q=quit) ").strip().lower()
+                ans = logged_input("Do you want to allow these commits anyway? [p/m/r/o/q] (p=proceed, m=skip to merge, r=add to review, o=open PR in browser, q=quit) ").strip().lower()
                 if ans == 'o':
                     url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{ctx.pr}"
                     open_in_browser([url])
-                    print(f"Opened {url} in browser.")
+                    log.info(f"Opened {url} in browser.")
                 elif ans == 'm':
                     raise SkipToMerge()
                 elif ans == 'r':
@@ -917,7 +1065,7 @@ class CommitParityCheck(BaseAuditCheck):
                 elif ans == 'p':
                     break
                 else:
-                    print("Invalid choice. Please enter p, m, r, o, or q.")
+                    log.info("Invalid choice. Please enter p, m, r, o, or q.")
 
     def _handle_unmerged_commits(self, ctx, unmerged_cps, cp_regex):
         md_text = "### Automated Backport Parity Review - Unmerged Commits Detected\n\n"
@@ -933,7 +1081,7 @@ class CommitParityCheck(BaseAuditCheck):
             ctx.report.add("Unmerged Cherry-Picks", md_text)
         else:
             while True:
-                ans = input("Unmerged cherry-picks detected! [p]roceed, [m] skip to merge, [o]pen browser to investigate, [r]eview PR (add to review), [q]uit: ").strip().lower()
+                ans = logged_input("Unmerged cherry-picks detected! [p]roceed, [m] skip to merge, [o]pen browser to investigate, [r]eview PR (add to review), [q]uit: ").strip().lower()
                 if ans == 'p':
                     break
                 elif ans == 'm':
@@ -953,9 +1101,9 @@ class CommitParityCheck(BaseAuditCheck):
                         urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{orig_sha}")
                         urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{c.hexsha}")
                     open_in_browser(urls_to_open)
-                    print("Opened URLs in browser.")
+                    log.info("Opened URLs in browser.")
                 else:
-                    print("Invalid choice. Please enter p, m, o, r, or q.")
+                    log.info("Invalid choice. Please enter p, m, o, r, or q.")
 
     def _handle_parity_mismatch(self, ctx, missing_commits, extra_commits, found_prs):
         md_text = f"### Automated Backport Parity Review\n\n"
@@ -968,7 +1116,7 @@ class CommitParityCheck(BaseAuditCheck):
             ctx.report.add("Parity Mismatch", md_text)
         else:
             while True:
-                ans = input("Parity mismatch! [p]roceed, [m] skip to merge, [o]pen browser to investigate, [r]eview PR (add to review), [q]uit: ").strip().lower()
+                ans = logged_input("Parity mismatch! [p]roceed, [m] skip to merge, [o]pen browser to investigate, [r]eview PR (add to review), [q]uit: ").strip().lower()
                 if ans == 'p':
                     break
                 elif ans == 'm':
@@ -992,9 +1140,9 @@ class CommitParityCheck(BaseAuditCheck):
                     for c in extra_commits:
                         urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{c.hexsha}")
                     open_in_browser(urls_to_open)
-                    print("Opened URLs in browser.")
+                    log.info("Opened URLs in browser.")
                 else:
-                    print("Invalid choice. Please enter p, m, o, r, or q.")
+                    log.info("Invalid choice. Please enter p, m, o, r, or q.")
 
     def _handle_multiple_prs(self, ctx, found_prs):
         md_text = f"### Automated Backport Parity Review - Multiple PRs Detected\n\n"
@@ -1005,7 +1153,7 @@ class CommitParityCheck(BaseAuditCheck):
             ctx.report.add("Multiple Source PRs", md_text)
         else:
             while True:
-                ans = input("Multiple original PRs detected! Do you want to add a review requesting justification? [p/r/m/o] (p=proceed/ignore, r=add to review, m=skip to merge, o=open PRs in browser): ").strip().lower()
+                ans = logged_input("Multiple original PRs detected! Do you want to add a review requesting justification? [p/r/m/o] (p=proceed/ignore, r=add to review, m=skip to merge, o=open PRs in browser): ").strip().lower()
                 if ans == 'o':
                     url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{ctx.pr}"
                     urls_to_open = [url]
@@ -1014,7 +1162,7 @@ class CommitParityCheck(BaseAuditCheck):
                         if m_pr:
                             urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{m_pr.group(1)}")
                     open_in_browser(urls_to_open)
-                    print("Opened URLs in browser.")
+                    log.info("Opened URLs in browser.")
                 elif ans == 'r':
                     ctx.report.add("Multiple Source PRs", md_text)
                     ctx.report.record_failure()
@@ -1024,7 +1172,7 @@ class CommitParityCheck(BaseAuditCheck):
                 elif ans == 'p':
                     break
                 else:
-                    print("Invalid choice. Please enter p, r, m, or o.")
+                    log.info("Invalid choice. Please enter p, r, m, or o.")
 
     def run(self, ctx: AuditContext) -> None:
         log.info("Verifying commit parity with original PR(s) locally...")
@@ -1036,11 +1184,11 @@ class CommitParityCheck(BaseAuditCheck):
         vis_text, vis_md = self._generate_visualizer(ctx.pr_commits, ctx.pr, mapping['pr_mapping'], mapping['missing_commits'])
         
         if vis_text:
-            print(vis_text)
+            log.info(vis_text)
         if vis_md:
             ctx.report.set_visualizer(vis_md)
 
-        # Check for scrambled commits relative to the original PR chronological sequences
+        # Check for scrambled commits relative to the original PR topological sequences
         bp_to_source = {}
         for pr_name, commit_list in mapping['pr_mapping'].items():
             for item in commit_list:
@@ -1071,25 +1219,25 @@ class CommitParityCheck(BaseAuditCheck):
                 pr_bp_indices = [idx for name, idx in mapped_sequence if name == pr_name_str]
                 if pr_bp_indices != sorted(pr_bp_indices):
                     is_scrambled = True
-                    scramble_reasons.append(f"Commits from {pr_name_str} are applied out of their original chronological order.")
+                    scramble_reasons.append(f"Commits from {pr_name_str} are applied out of their original topological order.")
 
         if is_scrambled:
             scramble_msg = "### Automated Backport Parity Review - Scrambled Commits Detected\n\n"
             scramble_msg += "The backport contains commits that are scrambled or out of order relative to the original PR(s).\n\n"
             for reason in scramble_reasons:
                 scramble_msg += f"* {reason}\n"
-            scramble_msg += "\nBackports should apply cherry-picks in the exact same chronological order as they were merged into the main branch to ensure clean history and avoid subtle regression risks.\n"
+            scramble_msg += "\nBackports should apply cherry-picks in the exact same topological order as they were merged into the main branch to ensure clean history and avoid subtle regression risks.\n"
 
             if ctx.args.ci_mode:
                 ctx.report.add("Scrambled Commits", scramble_msg)
             else:
-                print("\033[91m" + "="*80)
-                print("WARNING: Scrambled commits detected in the backport!")
+                log.info("\033[91m" + "="*80)
+                log.info("WARNING: Scrambled commits detected in the backport!")
                 for reason in scramble_reasons:
-                    print(f"  - {reason}")
-                print("="*80 + "\033[0m")
+                    log.info(f"  - {reason}")
+                log.info("="*80 + "\033[0m")
                 while True:
-                    ans = input("Do you want to request changes for scrambled commits? [p/r/m/q] (p=proceed anyway, r=add to review, m=skip to merge, q=quit): ").strip().lower()
+                    ans = logged_input("Do you want to request changes for scrambled commits? [p/r/m/q] (p=proceed anyway, r=add to review, m=skip to merge, q=quit): ").strip().lower()
                     if ans == 'm':
                         raise SkipToMerge()
                     elif ans == 'r':
@@ -1101,7 +1249,7 @@ class CommitParityCheck(BaseAuditCheck):
                     elif ans == 'p':
                         break
                     else:
-                        print("Invalid choice. Please enter p, r, m, or q.")
+                        log.info("Invalid choice. Please enter p, r, m, or q.")
 
         if invalid_format_commits:
             self._handle_invalid_formats(ctx, invalid_format_commits)
@@ -1115,7 +1263,7 @@ class CommitParityCheck(BaseAuditCheck):
         if mapping['missing_commits'] or extra_commits:
             self._handle_parity_mismatch(ctx, mapping['missing_commits'], extra_commits, mapping['found_prs'])
         elif mapping['analyzed_merges']:
-            print("\033[92mCommit parity check passed! All upstream commits from identified PRs are present.\033[0m")
+            log.info("\033[92mCommit parity check passed! All upstream commits from identified PRs are present.\033[0m")
             if len(mapping['found_prs']) > 1:
                 self._handle_multiple_prs(ctx, mapping['found_prs'])
 
@@ -1192,11 +1340,11 @@ class ConflictSimulationCheck(BaseAuditCheck):
                             raise SkipToMerge()
                             
                         while True:
-                            ans = input("How do you want to handle this? [p/m/r/o/q] (p=proceed simulation anyway, m=skip to merge, r=add to review and skip simulation, o=open PR in browser, q=quit) ").strip().lower()
+                            ans = logged_input("How do you want to handle this? [p/m/r/o/q] (p=proceed simulation anyway, m=skip to merge, r=add to review and skip simulation, o=open PR in browser, q=quit) ").strip().lower()
                             if ans == 'o':
                                 url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
                                 open_in_browser([url])
-                                print(f"Opened {url} in browser.")
+                                log.info(f"Opened {url} in browser.")
                             elif ans == 'm':
                                 raise SkipToMerge()
                             elif ans == 'r':
@@ -1209,7 +1357,7 @@ class ConflictSimulationCheck(BaseAuditCheck):
                             elif ans == 'p':
                                 break
                             else:
-                                print("Invalid choice. Please enter p, m, r, o, or q.")
+                                log.info("Invalid choice. Please enter p, m, r, o, or q.")
                         
                     backport_tree = wt_repo.head.commit.tree.hexsha
     
@@ -1225,16 +1373,16 @@ class ConflictSimulationCheck(BaseAuditCheck):
                                 ans = 'i'
                             else:
                                 while True:
-                                    ans = input(f"Conflict or unapproved deviation detected in {c.hexsha[:8]}. Do you want to interactively review this PR? [i/a/m/o]\n(i = interactively review, a = auto-approve remaining, m = skip to merge, o = open in browser) ").strip().lower()
+                                    ans = logged_input(f"Conflict or unapproved deviation detected in {c.hexsha[:8]}. Do you want to interactively review this PR? [i/a/m/o]\n(i = interactively review, a = auto-approve remaining, m = skip to merge, o = open in browser) ").strip().lower()
                                     if ans == 'o':
                                         bp_pr_url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
                                         commit_url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{c.hexsha}"
                                         open_in_browser([bp_pr_url, commit_url])
-                                        print("Opened PR and commit URLs in browser.")
+                                        log.info("Opened PR and commit URLs in browser.")
                                     elif ans in ['i', 'a', 'm']:
                                         break
                                     else:
-                                        print("Invalid choice. Please enter i, a, m, or o.")
+                                        log.info("Invalid choice. Please enter i, a, m, or o.")
                             first_conflict = False
                             if ans == 'm':
                                 log.info("Skipping ahead to merge.")
@@ -1327,20 +1475,20 @@ class ConflictSimulationCheck(BaseAuditCheck):
                                 ans = 'r'
                                 break
                                 
-                            ans = input(prompt_text).strip().lower()
+                            ans = logged_input(prompt_text).strip().lower()
                             if ans == 'o':
                                 bp_pr_url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
                                 orig_commit_url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{c.hexsha}"
                                 bp_commit_url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{commit.hexsha}"
                                 open_in_browser([bp_pr_url, orig_commit_url, bp_commit_url])
-                                print("Opened relevant URLs in browser.")
+                                log.info("Opened relevant URLs in browser.")
                             elif ans == 'e':
                                 log.info(f"Re-opening {editor} to examine conflicts...")
                                 open_editor = True
                             elif ans in ['p', 'r', 's', 'm']:
                                 break
                             else:
-                                print("Invalid choice. Please enter p, r, s, m, o, or e.")
+                                log.info("Invalid choice. Please enter p, r, s, m, o, or e.")
                         if ans == 'm':
                             log.info("Skipping ahead to merge.")
                             raise SkipToMerge()
@@ -1375,11 +1523,11 @@ class ConflictSimulationCheck(BaseAuditCheck):
                             raise SkipToMerge()
 
                         while True:
-                            ans = input("How do you want to handle this? [p/m/r/o/q] (p=proceed simulation anyway, m=skip to merge, r=add to review and skip simulation, o=open PR in browser, q=quit) ").strip().lower()
+                            ans = logged_input("How do you want to handle this? [p/m/r/o/q] (p=proceed simulation anyway, m=skip to merge, r=add to review and skip simulation, o=open PR in browser, q=quit) ").strip().lower()
                             if ans == 'o':
                                 url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
                                 open_in_browser([url])
-                                print(f"Opened {url} in browser.")
+                                log.info(f"Opened {url} in browser.")
                             elif ans == 'm':
                                 raise SkipToMerge()
                             elif ans == 'r':
@@ -1392,7 +1540,7 @@ class ConflictSimulationCheck(BaseAuditCheck):
                             elif ans == 'p':
                                 break
                             else:
-                                print("Invalid choice. Please enter p, m, r, o, or q.")
+                                log.info("Invalid choice. Please enter p, m, r, o, or q.")
             
             if recorded_deviations:
                 md_text = """
@@ -1514,11 +1662,11 @@ class RedmineLinkageCheck(BaseAuditCheck):
                             if match and int(match.group(1)) == orig_pr:
                                 main_trackers.append(issue)
                                 log.info(f"Found main tracker #{issue.id} ({REDMINE_ENDPOINT}/issues/{issue.id}) via description search.")
-                                print(f"Found PR #{orig_pr} in description of issue #{issue.id}.")
+                                log.info(f"Found PR #{orig_pr} in description of issue #{issue.id}.")
                                 if args.ci_mode:
                                     irregularities.append(f"**Malformed Main Tracker:** Main tracker [#{issue.id}]({REDMINE_ENDPOINT}/issues/{issue.id}) has the PR link in the description rather than the 'Pull Request ID' field. Please fix this.")
                                 else:
-                                    ans = input(f"Fix tracker #{issue.id} by moving PR link from description to 'Pull Request ID' field? [y/N/m]: ").strip().lower()
+                                    ans = logged_input(f"Fix tracker #{issue.id} by moving PR link from description to 'Pull Request ID' field? [y/N/m]: ").strip().lower()
                                     if ans == 'm':
                                         raise SkipToMerge()
                                     elif ans == 'y':
@@ -1569,11 +1717,11 @@ class RedmineLinkageCheck(BaseAuditCheck):
                         if match:
                             found_pr = match.group(1)
                             log.debug(f"Found PR #{found_pr} in description of backport tracker #{bp_tracker.id}")
-                            print(f"Found PR #{found_pr} in description of backport tracker #{bp_tracker.id}.")
+                            log.info(f"Found PR #{found_pr} in description of backport tracker #{bp_tracker.id}.")
                             if args.ci_mode:
                                 irregularities.append(f"**Malformed Backport Tracker:** Backport tracker [#{bp_tracker.id}]({REDMINE_ENDPOINT}/issues/{bp_tracker.id}) has the PR link in the description rather than the 'Pull Request ID' field. Please fix this.")
                             else:
-                                ans = input(f"Fix tracker #{bp_tracker.id} by moving PR link from description to 'Pull Request ID' field? [y/N/m]: ").strip().lower()
+                                ans = logged_input(f"Fix tracker #{bp_tracker.id} by moving PR link from description to 'Pull Request ID' field? [y/N/m]: ").strip().lower()
                                 if ans == 'm':
                                     raise SkipToMerge()
                                 elif ans == 'y':
@@ -1610,15 +1758,15 @@ class RedmineLinkageCheck(BaseAuditCheck):
             if notes:
                 md_text += "\n" + "\n".join([f"* {note}" for note in notes]) + "\n"
             
-            print("\n\033[93m" + "="*80)
-            print("REDMINE LINKAGE IRREGULARITIES DETECTED")
-            print("="*80 + "\033[0m")
+            log.info("\n\033[93m" + "="*80)
+            log.info("REDMINE LINKAGE IRREGULARITIES DETECTED")
+            log.info("="*80 + "\033[0m")
             
             if args.ci_mode:
                 report.add("Redmine Linkage", md_text)
             else:
                 while True:
-                    ans = input("Redmine irregularities detected! [p/r/m] (p=proceed, r=add to review, m=skip to merge): ").strip().lower()
+                    ans = logged_input("Redmine irregularities detected! [p/r/m] (p=proceed, r=add to review, m=skip to merge): ").strip().lower()
                     if ans == 'p':
                         break
                     elif ans == 'm':
@@ -1662,11 +1810,11 @@ class MergeConflictCheck(BaseAuditCheck):
                 report.add("Base Conflicts", md_text)
             else:
                 while True:
-                    ans = input(f"PR #{pr} needs a rebase! Do you want to add a review requesting a rebase? [p/r/m/q/o] (p=proceed/skip check, r=add to review, m=skip to merge, q=abort, o=open PR in browser): ").strip().lower()
+                    ans = logged_input(f"PR #{pr} needs a rebase! Do you want to add a review requesting a rebase? [p/r/m/q/o] (p=proceed/skip check, r=add to review, m=skip to merge, q=abort, o=open PR in browser): ").strip().lower()
                     if ans == 'o':
                         url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
                         open_in_browser([url])
-                        print(f"Opened {url} in browser.")
+                        log.info(f"Opened {url} in browser.")
                     elif ans == 'm':
                         raise SkipToMerge()
                     elif ans == 'p':
@@ -1680,7 +1828,7 @@ class MergeConflictCheck(BaseAuditCheck):
                         log.error(f"Aborting script due to unmergeable PR #{pr}.")
                         sys.exit(1)
                     else:
-                        print("Invalid choice. Please enter p, r, m, q, or o.")
+                        log.info("Invalid choice. Please enter p, r, m, q, or o.")
 
 def write_ci_summary(pr: int, passed: bool, exit_code: int = 1):
     if not passed:
@@ -1947,6 +2095,86 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
                     else:
                         log.error(f"Failed to post comment: {r.status_code} {r.text}")
 
+
+def merge_pr_or_abort(G, tip, message, pr_number):
+    """
+    Attempt to merge a PR's tip commit with the given message.
+    
+    If the merge fails due to conflicts (git.exc.GitCommandError), this function
+    will automatically run 'git merge --abort' to restore a clean working tree/index,
+    log a clear error identifying the PR that failed, and exit via SystemExit.
+    
+    Args:
+        G: git.Repo object (the repository)
+        tip: commit object to merge
+        message: merge commit message
+        pr_number: PR number (for error reporting)
+    
+    Raises:
+        SystemExit: If the merge fails due to conflicts
+    """
+    try:
+        G.git.merge(tip.hexsha, '--no-ff', m=message)
+    except git.exc.GitCommandError as e:
+        log.error(f"Failed to merge PR #{pr_number}: merge conflict detected")
+        log.debug(f"Git error details: {e}")
+        
+        # Attempt to abort the merge to restore a clean state
+        try:
+            G.git.merge('--abort')
+            log.info("Successfully aborted conflicted merge, repository is clean")
+        except git.exc.GitCommandError as abort_error:
+            # If abort fails, log it but don't mask the original error
+            log.warning(f"Failed to abort merge (repository may be in inconsistent state): {abort_error}")
+        
+        raise SystemExit(f"PR #{pr_number} has merge conflicts with previously merged changes. "
+                        f"Please resolve conflicts manually or rebase the PR.")
+
+
+def ensure_clean_checkout(G):
+    """
+    Check for leftover in-progress operations or uncommitted changes.
+    
+    Verifies the repository is in a clean state before any operations begin.
+    If the repository has an unresolved merge, cherry-pick, or uncommitted
+    changes, this function will raise SystemExit with instructions for the
+    operator to manually clean up.
+    
+    This handles the case where a previous run of the tool was interrupted
+    (e.g., Ctrl-C) or crashed mid-operation, or where the operator has
+    uncommitted changes that could interfere with merging.
+    
+    Args:
+        G: git.Repo object (the repository)
+    
+    Raises:
+        SystemExit: If MERGE_HEAD exists, CHERRY_PICK_HEAD exists, or worktree is dirty
+    """
+    merge_head_path = os.path.join(G.git_dir, 'MERGE_HEAD')
+    cherry_pick_head_path = os.path.join(G.git_dir, 'CHERRY_PICK_HEAD')
+    
+    if os.path.exists(merge_head_path):
+        raise SystemExit(
+            "Repository has an in-progress merge. "
+            "Please manually run 'git merge --abort' or 'git reset --hard' to clean up, "
+            "then re-run this tool."
+        )
+    
+    if os.path.exists(cherry_pick_head_path):
+        raise SystemExit(
+            "Repository has an in-progress cherry-pick. "
+            "Please manually run 'git cherry-pick --abort' or 'git reset --hard' to clean up, "
+            "then re-run this tool."
+        )
+    
+    if G.is_dirty():
+        raise SystemExit(
+            "Repository has uncommitted changes. "
+            "Please commit, stash, or run 'git reset --hard' to clean up, "
+            "then re-run this tool."
+        )
+
+
 def build_branch(args):
     base = args.base
     label = args.label
@@ -1973,6 +2201,7 @@ def build_branch(args):
         get(session, endpoint, paging=False)
 
     G = git.Repo(args.git)
+    ensure_clean_checkout(G)
 
     R = None
     if args.create_qa or args.update_qa or args.audit or args.final_merge or args.qe_label:
@@ -2063,10 +2292,10 @@ def build_branch(args):
         elif len(matching_tickets) == 1:
             t = matching_tickets[0]
             t_url = f"{REDMINE_ENDPOINT}/issues/{t.id}"
-            print(f"\nFound existing open QA ticket: #{t.id} - {t.subject}")
-            print(f"Link: {t_url}")
+            log.info(f"\nFound existing open QA ticket: #{t.id} - {t.subject}")
+            log.info(f"Link: {t_url}")
             while True:
-                ans = input("Do you want to update this existing QA ticket? [y/n/o/q] (y=update existing, n=create new, o=open in browser, q=quit): ").strip().lower()
+                ans = logged_input("Do you want to update this existing QA ticket? [y/n/o/q] (y=update existing, n=create new, o=open in browser, q=quit): ").strip().lower()
                 if ans == 'y':
                     args.update_qa = t.id
                     log.info(f"Will update existing QA ticket #{t.id}.")
@@ -2077,14 +2306,14 @@ def build_branch(args):
                     break
                 elif ans == 'o':
                     open_in_browser([t_url])
-                    print(f"Opened {t_url} in browser.")
+                    log.info(f"Opened {t_url} in browser.")
                 elif ans == 'q':
                     log.info("Exiting script.")
                     sys.exit(0)
                 elif ans == '':
                     continue
                 else:
-                    print("Invalid choice. Please enter y, n, o, or q.")
+                    log.info("Invalid choice. Please enter y, n, o, or q.")
         else:
             log.info("No open QA tickets found for this label. Will create a new QA ticket.")
             args.create_qa = True
@@ -2112,6 +2341,9 @@ def build_branch(args):
         branch += f"-{args.branch_append}"
     if args.integration or merge_branch_name is False:
         merge_branch_name = branch
+
+    if args.log and not args.dry_run:
+        add_file_log_handler(log, label=branch)
 
     if base == 'HEAD':
         log.info("Branch base is HEAD; not checking out!")
@@ -2149,8 +2381,8 @@ def build_branch(args):
 
         qa_tracker_description.append(get_pr_tracker_string(session, pr, response))
         message = "Merge PR #%d into %s\n\n* %s:\n" % (pr, merge_branch_name, remote_ref)
-        pr_commits = list(G.iter_commits(rev="HEAD.."+str(tip)))
-        pr_commits.reverse() # chronological order for simulation
+        pr_commits = list(G.iter_commits(rev="HEAD.."+str(tip), topo_order=True))
+        pr_commits.reverse() # topological order for simulation
 
         audit_passed = True
         if args.final_merge or args.audit:
@@ -2160,7 +2392,7 @@ def build_branch(args):
 
         if not audit_passed and args.final_merge:
             log.error(f"Audit of PR #{pr} failed.")
-            ans = input("Do you want to proceed with the final merge anyway? [y/N] ").strip().lower()
+            ans = logged_input("Do you want to proceed with the final merge anyway? [y/N] ").strip().lower()
             if ans != 'y':
                 log.error("Aborting final merge.")
                 sys.exit(1)
@@ -2171,7 +2403,7 @@ def build_branch(args):
             # Skip merge
             continue
 
-        for commit in reversed(pr_commits): # back to reverse-chronological for the message
+        for commit in reversed(pr_commits): # back to reverse-topological for the message
             message = message + ("\t%s\n" % commit.summary)
             # Get tracker issues / bzs cited so the PTL can do updates
             short = commit.hexsha[:8]
@@ -2188,14 +2420,46 @@ def build_branch(args):
         else:
             new_contributors = []
 
-        G.git.merge(tip.hexsha, '--no-ff', m=message)
+        merge_pr_or_abort(G, tip, message, pr)
 
-        if new_contributors:
-            # Check out the PR, add a commit adding to .githubmap
+        if new_contributors and base == 'main':
             log.info("adding new contributors to githubmap in merge commit")
-            with open(git_dir + "/.githubmap", "a") as f:
-                for c in new_contributors:
-                    f.write("%s %s\n" % (c, new_contributors[c]))
+            githubmap_path = os.path.join(git_dir, ".githubmap")
+
+            headers = []
+            entries = []
+
+            # Read existing file and separate headers from data entries
+            with open(githubmap_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("#"):
+                        headers.append(line + "\n")
+                    elif line:
+                        # Read it again because our last read of githubmap may be out-of-date
+                        entries.append(line + "\n")
+
+            # Format and append new contributors
+            for c in new_contributors:
+                new_line = f"{c} {new_contributors[c]}\n"
+                entries.append(new_line)
+
+            # Perform a stable, case-insensitive sort on the data entries.
+            # Empty/whitespace-only lines are pushed to the bottom of the block,
+            # while actual entries are sorted by their first word (the GitHub handle).
+            def sort_key(line):
+                # Sort actual lines first, case-insensitively by the handle (the first word)
+                handle = line.split()[0]
+                handle = "".join(char.lower() for char in handle if char.isalnum())
+                return handle
+
+            entries.sort(key=sort_key)
+
+            # Write back the preserved headers and sorted data entries
+            with open(githubmap_path, "w", encoding="utf-8") as f:
+                f.writelines(headers)
+                f.writelines(entries)
+
             G.index.add([".githubmap"])
             G.git.commit("--amend", "--no-edit")
 
@@ -2338,6 +2602,7 @@ def main():
 
     group = parser.add_argument_group('General Options')
     group.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
+    group.add_argument('--log', dest='log', action='store_true', help='also log to <branch>.log (or ptl-tool.log if no branch) in the current working directory')
     group.add_argument('--dry-run', dest='dry_run', action='store_true', help='print actions without modifying remote state')
     group.add_argument('--examples', dest='examples', action='store_true', help='show extended examples and usage')
     group.add_argument('--git-dir', dest='git', action='store', default=git_dir, help='git directory')

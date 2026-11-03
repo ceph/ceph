@@ -171,7 +171,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         filterable: true
       },
       {
-        name: $localize`Daemon name`,
+        name: $localize`Service instance name`,
         prop: 'daemon_name',
         flexGrow: 1,
         filterable: true
@@ -209,7 +209,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         cellClass: 'text-right'
       },
       {
-        name: $localize`Daemon Events`,
+        name: $localize`Service instance events`,
         prop: 'events',
         flexGrow: 2,
         cellTemplate: this.listTpl
@@ -336,10 +336,10 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     ) {
       this.modalService.show(DeleteConfirmationModalComponent, {
         impact: DeletionImpact.medium,
-        itemDescription: 'daemon',
+        itemDescription: 'service instance',
         itemNames: [daemon.daemon_name],
         actionDescription: actionType,
-        infoMessage: $localize`Stopping or restarting this ${daemon.daemon_type}:daemonType: daemon can disrupt clients or services that depend on it. The orchestrator may require acknowledging risk, confirm only if you accept it. This action uses the orchestrator force option.`,
+        infoMessage: $localize`Stopping or restarting this ${daemon.daemon_type}:daemonType: service instance can disrupt clients or services that depend on it. The orchestrator may require acknowledging risk, confirm only if you accept it. This action uses the orchestrator force option.`,
         submitActionObservable: () =>
           this.executeDaemonActionObservable(daemon.daemon_name, actionType, true)
       });
@@ -363,7 +363,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         next: (resp: HttpResponse<object>) => {
           this.notificationService.show(
             NotificationType.success,
-            `Daemon ${actionType} scheduled`,
+            `Service instance ${actionType} scheduled`,
             resp.body?.toString() ?? ''
           );
         },
@@ -371,7 +371,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
           const err = resp as { body?: { toString?: () => string }; message?: string };
           this.notificationService.show(
             NotificationType.error,
-            'Daemon action failed',
+            'Service instance action failed',
             err?.body?.toString?.() ?? err?.message ?? ''
           );
         }

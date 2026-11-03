@@ -148,10 +148,9 @@ following command:
 
    ceph osd set-group noout prod-ceph-data1701
 
-After the flag is set, stop the OSDs and any other colocated
-Ceph services within the failure domain that requires maintenance work::
-
-   systemctl stop ceph\*.service ceph\*.target
+After the flag is set, stop the OSDs and any other colocated Ceph daemons on
+the hosts in the failure domain that requires maintenance work. See
+:ref:`rados-operating-daemons`.
 
 .. note:: When an OSD is stopped, any placement groups within the OSD are
    marked as ``degraded``.
@@ -159,12 +158,9 @@ Ceph services within the failure domain that requires maintenance work::
 After the maintenance is complete, it will be necessary to restart the OSDs
 and any other daemons that have stopped. However, if the host was rebooted as
 part of the maintenance, they do not need to be restarted and will come back up
-automatically. To restart OSDs or other daemons, use a command of the following
-form:
-
-.. prompt:: bash
-
-   sudo systemctl start ceph.target
+automatically, unless the host is in cephadm maintenance mode: take it out of
+maintenance mode to start them. To start the daemons, see
+:ref:`rados-operating-daemons`.
 
 Finally, unset the ``noout`` flag as needed by running commands like the
 following:
@@ -321,7 +317,7 @@ archives <https://lists.ceph.io/hyperkitty/list/dev@ceph.io/>`_, and the
 `ceph-users mailing list archives
 <https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/>`_.  If there is no
 clear fix or existing bug, then :ref:`report the problem to the ceph-devel
-email list <Get Involved>`.
+email list <get-involved>`.
 
 
 .. _no-free-drive-space:
@@ -461,6 +457,163 @@ To check network statistics, run the following command:
 .. prompt:: bash
 
    netstat -s
+
+Link State and Error Counters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To check the link state, speed, and duplex mode of an interface, run a command
+of the following form:
+
+.. prompt:: bash
+
+   ethtool <interface>
+
+A link that has negotiated a lower speed than expected, or half-duplex mode,
+limits every OSD on the host.
+
+To check the error and drop counters of an interface, run a command of the
+following form:
+
+.. prompt:: bash
+
+   ethtool -S <interface>
+
+Counter names vary by driver. Look for non-zero counters with names that
+contain ``err``, ``drop``, ``crc``, ``discard``, ``miss``, or ``no_buf``. Run
+the command twice, a few seconds apart, to distinguish counters that are
+increasing now from those that reflect old events. ``ip -s link show <interface>``
+shows the kernel's error and drop totals in a form that does not depend on the
+driver. CRC errors are counted at the receiving end, so check the switch port
+as well: a bad cable or transceiver might show errors only on the switch.
+
+Bonded Interfaces
+~~~~~~~~~~~~~~~~~
+
+A bond that has lost a member keeps working at reduced capacity, so the
+failure is easy to miss. The kernel logs link and bond member changes, so
+``dmesg -T`` or ``journalctl -k`` shows when a member went down. To check a
+bond, run a command of the following form:
+
+.. prompt:: bash
+
+   cat /proc/net/bonding/<bond>
+
+Check the following:
+
+- Every member interface shows ``MII Status: up``.
+- ``Bonding Mode`` matches the switch configuration. For example, ``IEEE
+  802.3ad Dynamic link aggregation`` on the host requires an LACP port channel
+  on the switch. If the switch ports are not in an LACP port channel, the bond
+  might use only one link or might drop traffic.
+- In 802.3ad mode, the ``Active Aggregator Info`` section shows a ``Number of
+  ports`` equal to the number of members and a ``Partner Mac Address`` other
+  than ``00:00:00:00:00:00``, and every member shows the same ``Aggregator
+  ID`` as that section. A member with a different aggregator ID is not
+  carrying traffic.
+- ``Transmit Hash Policy``. Bonds sometimes default to ``layer2``, which
+  sends all traffic between two hosts over the same link, when ``layer2+3`` or
+  ``layer3+4`` would spread traffic across the links. Ask your network team
+  which policy is appropriate for your network. The switch has its own hash
+  setting for traffic toward the host.
+
+MTU
+~~~
+
+Every host and switch port on a Ceph network must use the same MTU. When they
+differ, small messages such as heartbeats get through but large packets are
+dropped, which shows up as slow requests and flapping OSDs rather than as a
+clear network failure. To check the MTU of an interface, run a command of the
+following form:
+
+.. prompt:: bash
+
+   ip link show <interface>
+
+To test the path end to end, send packets of the full MTU size with
+fragmentation disabled to every other host, on both the public and the cluster
+network. For an MTU of 9000, run a command of the following form:
+
+.. prompt:: bash
+
+   ping -M do -s 8972 -c 3 <peer-ip>
+
+The payload size is the MTU minus 28 bytes of IP and ICMP headers. If this
+fails while a plain ``ping`` succeeds, a host or switch port on the path uses a
+smaller MTU.
+
+Link Saturation
+~~~~~~~~~~~~~~~
+
+A link that is running at or near its capacity delays every request that
+crosses it. Recovery and backfill can saturate the cluster network, and
+clients can saturate the public network. To watch the throughput of each
+interface, run the following command, which is in the ``sysstat`` package:
+
+.. prompt:: bash
+
+   sar -n DEV 1
+
+``sar`` reports ``rxkB/s`` and ``txkB/s`` in kilobytes per second: multiply by
+8 to compare them with the link speed that ``ethtool`` reports in bits per
+second. To see saturation over time and across hosts, see `Network Metrics in
+Prometheus`_. Check switch uplinks as well as host ports.
+
+Network Metrics in Prometheus
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``node-exporter`` daemons that cephadm deploys collect interface, bond, and
+link metrics on every host, and the Prometheus that cephadm deploys scrapes
+them. The following queries check every host at once. Some virtual interfaces,
+such as the USB network interface of a BMC, report half-duplex mode or no
+speed. Exclude them with a ``device`` label matcher.
+
+Interfaces with errors or drops in the last five minutes:
+
+.. code-block:: promql
+
+   rate(node_network_receive_errs_total[5m]) > 0
+   rate(node_network_transmit_errs_total[5m]) > 0
+   rate(node_network_receive_drop_total[5m]) > 0
+   rate(node_network_transmit_drop_total[5m]) > 0
+
+The kernel also counts frames that it discards on purpose as receive drops,
+for example frames for protocols that the host does not run and duplicate
+frames that a bond discards. A low, steady rate of receive drops is often
+harmless. Look for drops that rise with load or that appear on only some
+hosts.
+
+Interfaces whose link went down or came up in the last hour:
+
+.. code-block:: promql
+
+   increase(node_network_carrier_changes_total[1h]) > 0
+
+Bonds with fewer active members than configured members:
+
+.. code-block:: promql
+
+   node_bonding_active < node_bonding_slaves
+
+Interfaces in half-duplex mode, and the speed of each interface in Gb/s:
+
+.. code-block:: promql
+
+   node_network_info{duplex="half"}
+   node_network_speed_bytes * 8 / 1e9
+
+The number of hosts with each MTU on one interface, here ``bond0``. More than
+one result means that the MTU differs between hosts:
+
+.. code-block:: promql
+
+   count_values("mtu", node_network_mtu_bytes{device="bond0"})
+
+Interfaces receiving or transmitting at more than 80% of their link speed:
+
+.. code-block:: promql
+
+   rate(node_network_receive_bytes_total[1m]) / node_network_speed_bytes > 0.8
+   rate(node_network_transmit_bytes_total[1m]) / node_network_speed_bytes > 0.8
 
 Drive Configuration
 -------------------
@@ -610,7 +763,21 @@ Newer versions of Ceph complain about ``slow requests``::
 
 Possible causes include:
 
-- A failing drive (check ``dmesg`` output)
+- A failing drive. Check the kernel log with ``dmesg -T`` or ``journalctl
+  -k``, check ``/var/log/messages`` or ``/var/log/syslog``, and check the
+  health of the drive with ``smartctl -a <device>`` or, for an NVMe drive,
+  ``nvme smart-log <device>``. See `Bad Sectors / Fragmented Disk`_.
+- A network problem: a failed bond member, a bonding mode or hash policy that
+  uses only one link, an MTU mismatch, interface or switch port errors, or a
+  saturated link. See `Networking Issues`_.
+- Recovery or backfill settings that are too high, for example raised values
+  of :confval:`osd_max_backfills` or :confval:`osd_recovery_max_active` and
+  its ``_hdd`` and ``_ssd`` variants. Recovery and backfill then compete with
+  client I/O for drives and network bandwidth. With the mClock scheduler,
+  these options take effect only when
+  :confval:`osd_mclock_override_recovery_settings` is ``true``, and the
+  ``high_recovery_ops`` :confval:`osd_mclock_profile` also favors recovery
+  over client I/O.
 - A bug in the kernel file system (check ``dmesg`` output)
 - An overloaded cluster (check system load, iostat, etc.)
 - A bug in the ``ceph-osd`` daemon.
@@ -623,61 +790,262 @@ Possible solutions:
 - Upgrade Ceph
 - Restart OSDs
 - Replace failed or failing components
+- Fix network faults and mismatched bond or MTU settings
+- Return recovery and backfill settings to their defaults
 - Override OSD shard configuration (on HDD based cluster with mClock scheduler)
     - See :ref:`mclock-tblshoot-hdd-shard-config` for resolution
+
+.. _rados-slow-requests-debugging:
+
+.. |rarr| unicode:: U+2192 .. RIGHT ARROW
 
 Debugging Slow Requests
 -----------------------
 
-If you run ``ceph daemon osd.<id> dump_historic_ops`` or ``ceph daemon osd.<id>
-dump_ops_in_flight``, you will see a set of operations and a list of events
-each operation went through. These are briefly described below.
+When troubleshooting slow operations, run one of three admin socket
+commands to inspect in-flight or recently completed operations. Each
+reveals different information to pinpoint bottlenecks.
 
-Events from the Messenger layer:
+.. note::
 
-- ``header_read``: The time that the messenger first started reading the message off the wire.
-- ``throttled``: The time that the messenger tried to acquire memory throttle space to read
-  the message into memory.
-- ``all_read``: The time that the messenger finished reading the message off the wire.
-- ``dispatched``: The time that the messenger gave the message to the OSD.
-- ``initiated``: This is identical to ``header_read``. The existence of both is a
-  historical oddity.
+   Operation tracking requires :confval:`osd_enable_op_tracker` set to
+   ``true`` (the default). If disabled, all three commands return an
+   error: "op_tracker tracking is not enabled now, so no ops are
+   tracked currently, even those get stuck. Please enable
+   osd_enable_op_tracker, and the tracker will start to track new
+   ops received afterwards." To enable the tracker at runtime, run:
 
-Events from the OSD as it processes ops:
+   .. prompt:: bash
 
-- ``queued_for_pg``: The op has been put into the queue for processing by its PG.
-- ``reached_pg``: The PG has started performing the op.
-- ``waiting for \*``: The op is waiting for some other work to complete before
-  it can proceed (for example, a new OSDMap; the scrubbing of its object
-  target; the completion of a PG's peering; all as specified in the message).
-- ``started``: The op has been accepted as something the OSD should do and 
-  is now being performed.
-- ``waiting for subops from``: The op has been sent to replica OSDs.
+      ceph config set osd osd_enable_op_tracker true
 
-Events from ``Filestore``:
 
-- ``commit_queued_for_journal_write``: The op has been given to the FileStore.
-- ``write_thread_in_journal_buffer``: The op is in the journal's buffer and is waiting
-  to be persisted (as the next disk write).
-- ``journaled_completion_queued``: The op was journaled to disk and its callback
-  has been queued for invocation.
+The Three Commands
+~~~~~~~~~~~~~~~~~~~
 
-Events from the OSD after data has been given to underlying storage:
+**dump_ops_in_flight**: see operations being processed right now
 
-- ``op_commit``: The op has been committed (that is, written to journal) by the
-  primary OSD.
-- ``op_applied``: The op has been `written with write()
-  <https://www.freebsd.org/cgi/man.cgi?write(2)>`_ to the backing FS (that is,
-  applied in memory but not flushed out to disk) on the primary.
-- ``sub_op_applied``: ``op_applied``, but for a replica's "subop".
-- ``sub_op_committed``: ``op_commit``, but for a replica's subop (only for EC pools).
-- ``sub_op_commit_rec/sub_op_apply_rec from <X>``: The primary marks this when it
-  hears about the above, but for a particular replica (i.e. ``<X>``).
-- ``commit_sent``: We sent a reply back to the client (or primary OSD, for sub ops).
+Run a command of the following form:
 
-Although some of these events may appear redundant, they cross important
-boundaries in the internal code (such as passing data across locks into new
-threads).
+.. prompt:: bash
+
+   ceph daemon osd.<id> dump_ops_in_flight [filterstr]
+
+Issue this ASOK command when an OSD is reporting errors, slow requests,
+or when its latency is high. The top-level ``ops_in_flight`` object
+contains an ``ops`` array and ``num_ops`` count. Each op shows ``age``
+(seconds since initiated) and the current ``flag_point``. If passed,
+the ``filterstr`` argument filters results by client IP address.
+
+**dump_historic_ops_by_duration**: see recently completed operations sorted
+by execution time
+
+Run a command of the following form:
+
+.. prompt:: bash
+
+   ceph daemon osd.<id> dump_historic_ops_by_duration [filterstr]
+
+Use this to identify slow patterns or worst offenders. Returns an array
+of completed operations sorted longest-duration-first. The top-level
+response includes:
+
+- ``size``: maximum ops retained (= :confval:`osd_op_history_size`,
+  default 20)
+- ``duration``: retention window in seconds (=
+  :confval:`osd_op_history_duration`, default 600)
+- ``ops``: array of operation objects
+
+The OSD retains ops from the last 600 seconds or up to 20 operations,
+whichever limit is hit first. If passed, the ``filterstr`` argument
+filters results by client IP address.
+
+**dump_historic_slow_ops**: see operations exceeding the slow threshold
+
+Run a command of the following form:
+
+.. prompt:: bash
+
+   ceph daemon osd.<id> dump_historic_slow_ops [filterstr]
+
+Use this when you want to filter for operations whose ``duration``
+meets or exceeds :confval:`osd_op_history_slow_op_threshold` (default
+10.0 seconds). The OSD retains up to
+:confval:`osd_op_history_slow_op_size` (default 20) such operations.
+If passed, the ``filterstr`` argument filters results by client IP address.
+
+.. note::
+
+   Do not confuse :confval:`osd_op_history_slow_op_threshold` with
+   :confval:`osd_op_complaint_time`. The former filters completed
+   operations by actual duration; the latter triggers log warnings
+   for in-flight operations still running past the threshold.
+
+
+Output field reference
+~~~~~~~~~~~~~~~~~~~~~~
+
+Each operation object contains these fields:
+
+- ``description``: compact string encoding op type, client, PG, object,
+  and flags (see `Decoding the description field`_ below)
+- ``initiated_at``: ISO 8601 UTC timestamp when op was received
+- ``age``: seconds since ``initiated_at`` (in-flight ops only)
+- ``duration``: seconds from initiation to completion (completed ops
+  only)
+- ``type_data.flag_point``: current or last state reached by the op
+- ``type_data.client_info.client``: entity name, format ``client.NUM``
+- ``type_data.client_info.client_addr``: network address, format
+  ``IP:port/nonce`` (or ``[IPv6]:port/nonce`` for IPv6 addresses) where
+  nonce identifies the client process instance
+- ``type_data.client_info.tid``: transaction ID, client-assigned
+  sequential integer unique per session
+- ``type_data.events``: array of state transitions in chronological
+  order
+
+
+Decoding the description field
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``description`` field is a compact summary. Here is a real example:
+
+.. code-block:: text
+
+   osd_op(client.2035306.0:1369555462 7.97 7:e9516884:::.dir.f5083a78-5c53-45e6-a2b7-1e68b9ea0ef2.23165.2.4:head [call rgw.guard_bucket_resharding in=26b,call rgw.bucket_prepare_op in=20b] snapc 0=[] ondisk+write+known_if_redirected e271143)
+
+Components of the description field:
+
+- ``osd_op``: message type (MOSDOp)
+- ``client.2035306``: client entity type and monitor-assigned number
+- ``.0``: client incarnation counter (increments on reconnect)
+- ``:1369555462``: transaction ID (tid)
+- ``7.97``: pool ID (decimal) dot PG seed (hexadecimal)
+- ``7:e9516884``: pool ID colon bitwise hash of object key
+- ``:::``: separators for namespace, key, object (all empty here)
+- ``.dir.f5083a78-...:head``: object name and snapshot (``:head`` =
+  live version, no snapshot)
+- ``[call rgw.METHOD in=Nb]``: OSD class method calls. ``call`` = type,
+  class name, method name, ``in=Nb`` = input data size
+- ``snapc 0=[]``: snap context (0 = no snapshots, empty list)
+- ``ondisk+write+...``: request flags joined by ``+``
+- ``e271143``: OSDMap epoch at time of request
+
+
+Event reference
+~~~~~~~~~~~~~~~
+
+The ``type_data.events`` array records state transitions in order.
+Walk it to find the longest-duration event and diagnose bottleneck
+(see `Identifying the bottleneck`_ below).
+
+**Phase 1: Messenger (message arrival)**
+
+- ``header_read``: first bytes of message read from network
+- ``throttled``: messenger acquiring memory throttle. Duration often
+  shows approximately 4,294,967,295 seconds (unsigned arithmetic wrap). Ignore the
+  duration value for this event.
+- ``all_read``: all message bytes received from network
+- ``dispatched``: message handed to OSD for processing
+
+**Phase 2: OSD core (queuing)**
+
+- ``initiated``: op registered in tracking system (``STATE_LIVE``)
+- ``queued_for_pg``: op enqueued to PG work queue
+- ``reached_pg``: op dequeued, PG lock acquired, entering ``do_request()``.
+  May repeat if op is requeued.
+
+**Phase 3: Blocking conditions (may appear, may repeat)**
+
+- ``waiting for rw locks``: blocked on per-object read/write locks. Long
+  duration = object contention.
+- ``waiting for missing object``: object not yet recovered
+- ``waiting for degraded object``: object in degraded state
+- ``waiting for readable``: PG not yet readable; peering incomplete
+- ``waiting for scrub``: scrub operation locking this object
+- ``waiting for peered``: PG not yet in peered state
+- ``waiting for active``: PG not yet active
+- ``waiting for ondisk``: waiting for prior op to commit to journal
+
+**Phase 4: Execution**
+
+- ``started``: all locks acquired, ``execute_ctx()`` beginning. Long
+  duration = slow backend I/O.
+
+**Phase 5: Replication (replicated pools only)**
+
+- ``waiting for subops from [X,Y]``: sub-ops sent to replica OSDs X and
+  Y. Waiting for commit ACKs. Long duration = slow replicas.
+- ``sub_op_commit_rec``: commit acknowledgment received from one replica.
+  Appears once per replica.
+- ``op_commit``: all replicas committed. Op is durable but client not yet
+  notified.
+
+**Phase 6: Completion**
+
+- ``commit_sent``: reply sent to client with durability guarantee
+  (``CEPH_OSD_FLAG_ONDISK``). Client now knows op is durable.
+- ``done``: op released from tracking. Resources freed.
+
+.. note::
+
+   The ``throttled`` event duration is unreliable. When ``throttle_stamp``
+   is uninitialized (zero) and the previous event has a real timestamp,
+   unsigned subtraction wraps: ``0 - 1718984486 ~= 2^32 - 1``.
+   This does **not** mean the op was throttled for 136 years. Ignore the
+   ``throttled`` event duration. Focus on other events when diagnosing.
+
+
+Identifying the bottleneck
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To find where time is spent in an operation:
+
+#. Run one of the three commands above.
+#. In the ``type_data.events`` array for each op of interest, find the
+   event with the largest ``duration`` value.
+#. That event indicates where time was spent. Interpret by event name:
+
+   - Large duration on ``waiting for rw locks`` |rarr| per-object lock
+     contention. Another op holds the lock on the same object. Reduce
+     concurrent writes to the same object.
+   - Large duration on ``waiting for subops from [X,Y]`` |rarr| replica X or Y
+     is slow. Check replica OSD health, disk I/O, and the network: see
+     `Networking Issues`_.
+   - Large duration on ``started`` (before ``op_commit``) |rarr| slow backend
+     I/O on the primary. Check disk iostat.
+   - Large duration on ``queued_for_pg`` |rarr| PG queue backlog; high
+     concurrent load.
+   - Repeated ``reached_pg`` |rarr| ``waiting for rw locks`` cycles |rarr| lock
+     contention retry loop. Reduce concurrent writes to same object.
+
+
+Related configuration
+~~~~~~~~~~~~~~~~~~~~~
+
+Control op tracking and history retention with these six options. Set
+them in ``ceph.conf`` or via ``ceph config set osd <option> <value>``.
+
+- :confval:`osd_enable_op_tracker`: Enable operation tracking (type:
+  bool, default: true). Must be true for all three commands to work.
+- :confval:`osd_op_history_size`: Max completed ops retained (type: uint,
+  default: 20). Controls ``dump_historic_ops_by_duration``.
+- :confval:`osd_op_history_duration`: Retention window in seconds (type:
+  uint, default: 600). Controls ``dump_historic_ops_by_duration``.
+- :confval:`osd_op_history_slow_op_size`: Max slow ops retained (type:
+  uint, default: 20). Controls ``dump_historic_slow_ops``.
+- :confval:`osd_op_history_slow_op_threshold`: Slow op threshold in
+  seconds (type: float, default: 10.0). Controls
+  ``dump_historic_slow_ops``.
+- :confval:`osd_op_complaint_time`: In-flight complaint threshold in
+  seconds (type: float, default: 30.0). Used for logging and
+  ``dump_blocked_ops``.
+
+To change a setting at runtime, run:
+
+.. prompt:: bash
+
+   ceph config set osd osd_op_history_size 50
+
 
 .. _mclock-tblshoot-hdd-shard-config:
 
@@ -816,7 +1184,7 @@ being marked ``out`` (regardless of the current value of
 
 .. _subscribe to the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
 .. _unsubscribe from the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
-.. _subscribe to the ceph-users email list: mailto:ceph-users-join@lists.ceph.com
-.. _unsubscribe from the ceph-users email list: mailto:ceph-users-leave@lists.ceph.com
+.. _subscribe to the ceph-users email list: mailto:ceph-users-join@ceph.io
+.. _unsubscribe from the ceph-users email list: mailto:ceph-users-leave@ceph.io
 .. _OS recommendations: ../../../start/os-recommendations
 .. _ceph-devel: ceph-devel@vger.kernel.org

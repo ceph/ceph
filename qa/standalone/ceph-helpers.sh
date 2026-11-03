@@ -404,6 +404,10 @@ function get_unused_port() {
 # The remaining arguments are passed verbatim to ceph-mon --mkfs
 # and the ceph-mon daemon.
 #
+# The run_mon function creates the monitor data directory with
+# ceph-mon --mkfs and relies on the activate_mon function to run
+# the daemon.
+#
 # Two mandatory arguments must be provided: --fsid and --mon-host
 # Instead of adding them to every call to run_mon, they can be
 # set in the CEPH_ARGS environment variable to be read implicitly
@@ -449,6 +453,40 @@ function run_mon() {
         --run-dir=$dir \
         "$@" || return 1
 
+    activate_mon $dir $id "$@" || return 1
+
+    cat > $dir/ceph.conf <<EOF
+[global]
+fsid = $(get_config mon $id fsid)
+mon host = $(get_config mon $id mon_host)
+EOF
+}
+
+##
+# Run (activate) a monitor by the name mon.**id** with data in
+# **dir**/**id**, either just created by run_mon or left by a
+# previous run of ceph-mon. The logs can be found in
+# **dir**/mon.**id**.log and the pid file is **dir**/mon.**id**.pid.
+#
+# The remaining arguments are passed verbatim to ceph-mon.
+#
+# Examples:
+#
+# kill_daemons $dir TERM mon.a
+# activate_mon $dir a --public-addr 127.0.0.1:7018 # restart mon.a
+#
+# @param dir path name of the environment
+# @param id mon identifier
+# @param ... can be any option valid for ceph-mon
+# @return 0 on success, 1 on error
+#
+function activate_mon() {
+    local dir=$1
+    shift
+    local id=$1
+    shift
+    local data=$dir/$id
+
     ceph-mon \
         --id $id \
 	--osd-failsafe-full-ratio=.99 \
@@ -474,12 +512,6 @@ function run_mon() {
 	--mon-osd-backfillfull-ratio .99 \
 	--mon-warn-on-insecure-global-id-reclaim-allowed=false \
         "$@" || return 1
-
-    cat > $dir/ceph.conf <<EOF
-[global]
-fsid = $(get_config mon $id fsid)
-mon host = $(get_config mon $id mon_host)
-EOF
 }
 
 function test_run_mon() {
@@ -519,6 +551,23 @@ function test_run_mon() {
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"2"}' || return 1
     kill_daemons $dir || return 1
+
+    teardown $dir || return 1
+}
+
+function test_activate_mon() {
+    local dir=$1
+
+    setup $dir || return 1
+
+    run_mon $dir a || return 1
+    kill_daemons $dir TERM mon || return 1
+
+    activate_mon $dir a --osd_pool_default_size=3 || return 1
+    ceph mon dump | grep "mon.a" || return 1
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
+        config get osd_pool_default_size)
+    test "$size" = '{"osd_pool_default_size":"3"}' || return 1
 
     teardown $dir || return 1
 }
@@ -683,7 +732,7 @@ EOF
 # Create (prepare) and run (activate) a crimson osd by the name osd.**id**
 # with data in **dir**/**id**.
 #
-# The remaining arguments are passed verbatim to crimson-osd.
+# The remaining arguments are passed verbatim to ceph-osd-crimson.
 #
 # Two mandatory arguments must be provided: --fsid and --mon-host
 # Instead of adding them to every call to run_crimson_osd, they can be
@@ -695,7 +744,7 @@ EOF
 #
 # @param dir path name of the environment
 # @param id osd identifier
-# @param ... can be any option valid for crimson-osd
+# @param ... can be any option valid for ceph-osd-crimson
 # @return 0 on success, 1 on error
 #
 function run_crimson_osd() {
@@ -726,14 +775,16 @@ function run_crimson_osd() {
     ceph_args+="$@"
     mkdir -p $osd_data
 
-    # Find crimson-osd binary
+    # Find ceph-osd-crimson binary
     local crimson_osd=""
     if [ -f "./bin/crimson-osd" ]; then
         crimson_osd="./bin/crimson-osd"
     elif [ -f "$CEPH_ROOT/build/bin/crimson-osd" ]; then
         crimson_osd="$CEPH_ROOT/build/bin/crimson-osd"
+    elif command -v ceph-osd-crimson &>/dev/null; then
+        crimson_osd="ceph-osd-crimson"
     else
-        echo "ERROR: crimson-osd binary not found"
+        echo "ERROR: ceph-osd-crimson binary not found"
         return 1
     fi
 
@@ -742,7 +793,7 @@ function run_crimson_osd() {
     ceph osd set-allow-crimson --yes-i-really-mean-it || return 1
 
     # Standalone tests do not set crimson_cpu_set/crimson_cpu_num (vstart.sh does).
-    # Without this, crimson-osd aborts in get_early_config.
+    # Without this, ceph-osd-crimson aborts in get_early_config.
     ceph config set osd.$id crimson_cpu_num 1 || return 1
 
     local uuid=`uuidgen`
@@ -752,10 +803,10 @@ function run_crimson_osd() {
     ceph osd new $uuid -i $osd_data/new.json
     rm $osd_data/new.json
 
-    # Use crimson-osd for mkfs (not ceph-osd!)
-    echo "Running crimson-osd mkfs..."
+    # Use ceph-osd-crimson for mkfs (not ceph-osd!)
+    echo "Running ceph-osd-crimson mkfs..."
     if ! $crimson_osd -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid 2>&1; then
-        echo "ERROR: crimson-osd --mkfs failed"
+        echo "ERROR: ceph-osd-crimson --mkfs failed"
         return 1
     fi
 
@@ -1826,6 +1877,63 @@ function wait_for_pg_clean() {
 }
 
 ##
+# Wait until the mgr's PGMap - what `osd ok-to-stop` and `osd ok-to-upgrade`
+# read, as opposed to the mon's OSDMap that get_osds() reads - reports PG
+# **pgid** with the given **acting** set and a state containing **state**,
+# or until a timeout of $WAIT_FOR_CLEAN_TIMEOUT seconds. On timeout, the
+# acting set and state last reported for the PG are displayed.
+#
+# @param pgid the PG id, e.g. 1.0
+# @param acting the expected acting set, space separated and in order, e.g. "0 1 2"
+# @param state a substring the PG state must contain (default: active)
+# @return 0 if the PG reached the acting set and state, 1 otherwise
+#
+function wait_for_pg_acting() {
+    local pgid=$1
+    local acting="$2"
+    local state=${3:-active}
+    local -a delays=($(get_timeout_delays $WAIT_FOR_CLEAN_TIMEOUT .1))
+    local -i loop=0
+    local last
+
+    flush_pg_stats || return 1
+    while true ; do
+        last=$(ceph --format json pg dump pgs 2>/dev/null | \
+            jq -r --arg pgid "$pgid" \
+               '.pg_stats[] | select(.pgid == $pgid)
+                | "\(.acting | map(tostring) | join(" "))|\(.state)"')
+        if test "${last%%|*}" = "$acting" && [[ "${last#*|}" == *"$state"* ]] ; then
+            return 0
+        fi
+        if (( $loop >= ${#delays[*]} )) ; then
+            echo "PG $pgid: expected acting [$acting] with state containing '$state'," \
+                 "got acting [${last%%|*}] state '${last#*|}'"
+            return 1
+        fi
+        sleep ${delays[$loop]}
+        loop+=1
+    done
+}
+
+function test_wait_for_pg_acting() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_mgr $dir x || return 1
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+    local pgid=$(get_pg rbd SOMETHING)
+    local acting=$(get_osds rbd SOMETHING)
+    wait_for_pg_acting $pgid "$acting" clean || return 1
+    ! WAIT_FOR_CLEAN_TIMEOUT=1 wait_for_pg_acting $pgid "$acting" degraded || return 1
+    ! WAIT_FOR_CLEAN_TIMEOUT=1 wait_for_pg_acting $pgid "9" || return 1
+    teardown $dir || return 1
+}
+
+##
 # Wait for PG data to be available from pg dump
 # Usage: wait_for_pg_data <jq_expression> [timeout]
 # Example: wait_for_pg_data '.pg_stats[0].up[]' 30
@@ -2550,7 +2658,7 @@ function run_tests() {
 
     export CEPH_MON="127.0.0.1:7109" # git grep '\<7109\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+=" --fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+=" --fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     export CEPH_CONF=/dev/null
 

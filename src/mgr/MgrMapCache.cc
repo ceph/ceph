@@ -155,10 +155,23 @@ MgrMapCache<PyObject*>::~MgrMapCache() {
   this->clear();
 }
 
+// Called with the GIL held. erase() runs from notify paths that hold
+// ActivePyModules::lock without the GIL, so it only queues the object.
+void MgrMapCache<PyObject*>::release_pending() {
+  std::vector<PyObject*> objs;
+  {
+    std::lock_guard l(release_lock);
+    objs.swap(to_release);
+  }
+  for (auto* o : objs) Py_DECREF(o);
+}
+
 PyObject* MgrMapCache<PyObject*>::get(std::string_view k) {
+  if (!PyGILState_Check())
+    return nullptr;
+  release_pending();
   if (!this->is_enabled() ||
-      !this->is_cacheable(k) ||
-      !PyGILState_Check())
+      !this->is_cacheable(k))
         return nullptr;
   std::shared_lock l(this->m);
   auto it = this->cache_data.find(k);
@@ -167,14 +180,18 @@ PyObject* MgrMapCache<PyObject*>::get(std::string_view k) {
     return nullptr;
   }
   PyObject* o = it->second.val;
-  Py_INCREF(o);  // INCREF under lock: no window for erase() to drop refcount to zero
+  Py_INCREF(o);  // under the lock, so erase() can't extract and queue o until we hold our ref
   it->second.hits.fetch_add(1, std::memory_order_relaxed);
   this->mark_hit();
   return o;
 }
 
 void MgrMapCache<PyObject*>::insert(std::string_view key, PyObject* value) {
-  if (!this->can_write_cache(key) || !PyGILState_Check()) {
+  if (!PyGILState_Check()) {
+    return;
+  }
+  release_pending();
+  if (!this->can_write_cache(key)) {
     return;
   }
 
@@ -187,16 +204,8 @@ void MgrMapCache<PyObject*>::insert(std::string_view key, PyObject* value) {
     return;
   }
 
-  auto schedule_decref = [](PyObject* obj) {
-    if (!obj) return;
-    if (Py_AddPendingCall(+[](void* p){ Py_DECREF((PyObject*)p); return 0; }, obj) != 0) {
-      PyGILState_STATE st = PyGILState_Ensure();
-      Py_DECREF(obj);
-      PyGILState_Release(st);
-    }
-  };
-  if (res.replaced.has_value()) schedule_decref(res.replaced.value());
-  if (res.evicted.has_value())  schedule_decref(res.evicted.value());
+  if (res.replaced.has_value()) Py_XDECREF(res.replaced.value());
+  if (res.evicted.has_value())  Py_XDECREF(res.evicted.value());
 
   dout(20) << ": inserted key: " << key << " py count: "
            << Py_REFCNT(value) << " hit/miss:"
@@ -209,7 +218,10 @@ void MgrMapCache<PyObject*>::erase(std::string_view key) noexcept {
   PyObject* o = nullptr;
   if (!this->extract(key, &o)) return;
 
-  Py_AddPendingCall(+[](void* p){ Py_DECREF((PyObject*)p); return 0; }, o);
+  {
+    std::lock_guard l(release_lock);
+    to_release.push_back(o);
+  }
   dout(20) << ": erased key: " << key
            << " hit/miss:"
            << CacheImp::get_hits() << "/"
@@ -219,6 +231,11 @@ void MgrMapCache<PyObject*>::erase(std::string_view key) noexcept {
 void MgrMapCache<PyObject*>::clear() noexcept {
   std::vector<PyObject*> to_drop;
   this->drain(to_drop);
+  {
+    std::lock_guard l(release_lock);
+    to_drop.insert(to_drop.end(), to_release.begin(), to_release.end());
+    to_release.clear();
+  }
   if (to_drop.empty()) return;
   PyGILState_STATE st = PyGILState_Ensure();
   for (auto* o : to_drop) Py_DECREF(o);

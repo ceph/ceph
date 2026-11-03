@@ -81,6 +81,8 @@ struct Item {
 using Exec = std::function<void(const Item& item,
                                 bool skip_update_olh,
                                 boost::asio::yield_context yield)>;
+using ApplyOlh = std::function<void(const rgw_obj_key& key,
+                                    boost::asio::yield_context yield)>;
 using OnDispatch = std::function<void()>;
 
 void dispatch(const std::vector<Item>& items,
@@ -88,6 +90,7 @@ void dispatch(const std::vector<Item>& items,
               uint32_t max_aio,
               boost::asio::yield_context yield,
               Exec exec,
+              ApplyOlh apply_olh,
               OnDispatch on_dispatch = {});
 
 } // namespace rgw::multi_delete

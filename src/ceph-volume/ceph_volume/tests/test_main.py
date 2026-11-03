@@ -31,6 +31,8 @@ class TestVolume(object):
         stdout, stderr = capsys.readouterr()
         assert '--cluster' in stdout
         assert '--log-path' in stdout
+        assert '--log-level' in stdout
+        assert 'defaults to info' in stdout
 
     def test_log_ignoring_missing_ceph_conf(self, caplog, fake_filesystem):
         with pytest.raises(SystemExit) as error:

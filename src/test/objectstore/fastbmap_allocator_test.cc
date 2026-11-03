@@ -1252,3 +1252,40 @@ TEST(TestAllocatorLevel02, test_expand_multiple_times)
   uint64_t free_final = al2.debug_get_free();
   ASSERT_EQ(free_final, 28 * 1024 * 1024); // 128MiB - 100MiB
 }
+
+// expand() alone must not make the new space allocatable: callers add the
+// part they can use with init_add_free(), which also accounts for it.
+TEST(TestAllocatorLevel02, test_expand_leaves_new_space_allocated)
+{
+  uint64_t capacity = 64 * 1024 * 1024;
+  uint64_t block_size = 0x1000;
+  // within the L1 aligned capacity, past it, and past the L2 aligned one
+  for (uint64_t new_capacity : {128ull << 20, 1ull << 30, 64ull << 30}) {
+    TestAllocatorLevel02 al2;
+    al2.init(capacity, block_size);
+    al2.expand(new_capacity, capacity);
+    ASSERT_EQ(capacity, al2.debug_get_free());
+    ASSERT_EQ(capacity, al2.get_available());
+
+    interval_vector_t r;
+    uint64_t allocated = 0;
+    al2.allocate_l2(new_capacity, block_size, &allocated, &r);
+    ASSERT_EQ(capacity, allocated);
+    for (const auto& i : r) {
+      ASSERT_LE(i.offset + i.length, capacity);
+    }
+    ASSERT_EQ(0u, al2.debug_get_free());
+
+    al2.mark_free(capacity, new_capacity - capacity);
+    ASSERT_EQ(new_capacity - capacity, al2.debug_get_free());
+    ASSERT_EQ(new_capacity - capacity, al2.get_available());
+    r.clear();
+    allocated = 0;
+    al2.allocate_l2(new_capacity, block_size, &allocated, &r);
+    ASSERT_EQ(new_capacity - capacity, allocated);
+    for (const auto& i : r) {
+      ASSERT_GE(i.offset, capacity);
+      ASSERT_LE(i.offset + i.length, new_capacity);
+    }
+  }
+}

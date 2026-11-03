@@ -36,4 +36,4 @@ tasks:
       ALLOW_TIMEOUTS: "1"
     clients:
       client.0:
-        - rados/test.sh
+        - rados/test.sh --external-error-inject

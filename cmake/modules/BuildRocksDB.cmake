@@ -1,5 +1,6 @@
 function(build_rocksdb)
   set(rocksdb_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
+  list(APPEND rocksdb_CMAKE_ARGS ${CEPH_EXTERNAL_PROJECT_CMAKE_ARGS})
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_GFLAGS=OFF)
 
   # cmake doesn't properly handle arguments containing ";", such as
@@ -49,7 +50,7 @@ function(build_rocksdb)
     list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
   endif()
 
-  list(APPEND rocksdb_CMAKE_ARGS -DPORTABLE=ON)
+  list(APPEND rocksdb_CMAKE_ARGS -DPORTABLE=${ROCKSDB_PORTABLE})
   list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
   list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
   list(APPEND rocksdb_CMAKE_ARGS -DFAIL_ON_WARNINGS=OFF)

@@ -3,14 +3,20 @@
 
 #include "gtest/gtest.h"
 #include <memory>
+#include <filesystem>
 #include "mon/ElectionLogic.h"
 #include "mon/ConnectionTracker.h"
+#include "mon/MonMap.h"
+#include "mon/Monitor.h"
+#include "mon/MonitorDBStore.h"
+#include "msg/Messenger.h"
 #include "common/dout.h"
 
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/common_init.h"
 #include "common/ceph_argparse.h"
+#include "include/container_ios.h"
 
 using namespace std;
 
@@ -38,6 +44,114 @@ int main(int argc, char **argv) {
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
+}
+
+class ElectorPingTest : public ::testing::Test {
+protected:
+  std::string store_path;
+  std::unique_ptr<MonitorDBStore> store;
+  MonMap monmap;
+  std::unique_ptr<Messenger> messenger;
+  std::unique_ptr<Monitor> mon;
+  std::unique_ptr<Elector> elector;
+
+  void SetUp() override {
+    char path[] = "/tmp/ceph-elector-ping-XXXXXX";
+    ASSERT_NE(nullptr, mkdtemp(path));
+    store_path = path;
+    store = std::make_unique<MonitorDBStore>(store_path);
+    std::ostringstream errors;
+    ASSERT_EQ(0, store->create_and_open(errors)) << errors.str();
+
+    entity_addr_t addr;
+    ASSERT_TRUE(addr.parse("v2:127.0.0.1:3300"));
+    entity_addrvec_t addrs;
+    addrs.v.push_back(addr);
+    monmap.add("a", addrs);
+    ASSERT_TRUE(addr.parse("v2:127.0.0.1:3301"));
+    addrs.v[0] = addr;
+    monmap.add("b", addrs);
+
+    messenger.reset(Messenger::create_client_messenger(
+      g_ceph_context, "elector-ping-test"));
+    mon = std::make_unique<Monitor>(
+      g_ceph_context, "a", store.get(), messenger.get(), nullptr, &monmap);
+    mon->rank = 0;
+    messenger->add_dispatcher_head(mon.get());
+    ASSERT_EQ(0, messenger->start());
+    elector = std::make_unique<Elector>(mon.get(), MonMap::CONNECTIVITY);
+    elector->peer_tracker.set_rank(0);
+  }
+
+  void TearDown() override {
+    if (mon) {
+      std::lock_guard lock(mon->lock);
+      mon->timer.cancel_all_events();
+    }
+    if (messenger) {
+      messenger->shutdown();
+      messenger->wait();
+    }
+    elector.reset();
+    mon.reset();
+    messenger.reset();
+    if (store) {
+      store->close();
+      store.reset();
+    }
+    if (!store_path.empty()) {
+      std::filesystem::remove_all(store_path);
+    }
+  }
+
+  void mark_dead(int peer) {
+    elector->dead_pinging.insert(peer);
+    elector->peer_acked_ping[peer] = ceph_clock_now() - utime_t(10, 0);
+    elector->peer_tracker.report_dead_connection(peer, 10);
+  }
+
+  void probe_dead(int peer) {
+    std::lock_guard lock(mon->lock);
+    elector->dead_ping(peer);
+  }
+
+  bool is_dead(int peer) const {
+    return elector->dead_pinging.count(peer);
+  }
+
+  bool peer_is_live(int peer) const {
+    double score;
+    int live_count;
+    elector->peer_tracker.get_total_connection_score(peer, &score, &live_count);
+    return live_count > 0;
+  }
+
+  utime_t last_sent(int peer) const {
+    auto i = elector->peer_sent_ping.find(peer);
+    return i == elector->peer_sent_ping.end() ? utime_t() : i->second;
+  }
+};
+
+TEST_F(ElectorPingTest, RetryLostPingToDeadPeer) {
+  mark_dead(1);
+  EXPECT_TRUE(last_sent(1).is_zero());
+  probe_dead(1);
+  EXPECT_FALSE(last_sent(1).is_zero());
+  EXPECT_TRUE(is_dead(1));
+  EXPECT_FALSE(peer_is_live(1));
+
+  auto previous = last_sent(1);
+  probe_dead(1);
+  EXPECT_GT(last_sent(1), previous);
+  EXPECT_TRUE(is_dead(1));
+  EXPECT_FALSE(peer_is_live(1));
+}
+
+TEST_F(ElectorPingTest, StopProbingRemovedPeer) {
+  mark_dead(2);
+  probe_dead(2);
+  EXPECT_TRUE(last_sent(2).is_zero());
+  EXPECT_FALSE(is_dead(2));
 }
 
 

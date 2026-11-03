@@ -52,6 +52,7 @@ export class CdNotification extends CdNotificationConfig {
   iconClass: string;
   duration: number;
   borderClass: string;
+  occurrences = 1;
   alertSilenced = false;
   silenceId?: string;
 

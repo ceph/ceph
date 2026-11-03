@@ -426,6 +426,57 @@ describe('CdValidators', () => {
     });
   });
 
+  describe('mirroringMdsCaps', () => {
+    let users: { entity?: string; caps?: { mds?: string } }[];
+
+    beforeEach(() => {
+      users = [];
+      form = new CdFormGroup({
+        filesystem: new FormControl(''),
+        username: new FormControl(
+          '',
+          CdValidators.mirroringMdsCaps(() => users)
+        )
+      });
+      formHelper = new FormHelper(form);
+    });
+
+    it('should skip empty username', () => {
+      formHelper.setValue('filesystem', 'myfs');
+      formHelper.expectValid('username');
+    });
+
+    it('should allow unknown users', () => {
+      users = [{ entity: 'client.other', caps: { mds: 'allow r fsname=myfs' } }];
+      formHelper.setValue('filesystem', 'myfs');
+      formHelper.setValue('username', 'new-peer');
+      formHelper.expectValid('username');
+    });
+
+    it('should allow existing users with mirroring caps', () => {
+      users = [{ entity: 'client.mirror', caps: { mds: 'allow rwps fsname=myfs' } }];
+      formHelper.setValue('filesystem', 'myfs');
+      formHelper.setValue('username', 'mirror');
+      formHelper.expectValid('username');
+    });
+
+    it('should error when an existing user has invalid MDS caps', () => {
+      users = [{ entity: 'client.readonly', caps: { mds: 'allow r fsname=myfs' } }];
+      formHelper.setValue('filesystem', 'myfs');
+      formHelper.setValue('username', 'readonly');
+      formHelper.expectError('username', 'invalidMdsCaps');
+    });
+
+    it('should revalidate when the filesystem changes', () => {
+      users = [{ entity: 'client.mirror', caps: { mds: 'allow rwps fsname=myfs' } }];
+      formHelper.setValue('filesystem', 'myfs');
+      formHelper.setValue('username', 'mirror');
+      formHelper.expectValid('username');
+      formHelper.setValue('filesystem', 'otherfs');
+      formHelper.expectError('username', 'invalidMdsCaps');
+    });
+  });
+
   describe('validate if condition', () => {
     beforeEach(() => {
       form = new CdFormGroup({
@@ -523,6 +574,12 @@ describe('CdValidators', () => {
       CdValidators.match('x', 'y')(form);
       formHelper.expectValid('x');
       formHelper.expectError('y', 'notUnique');
+    });
+
+    it('should not error when confirm value is empty', () => {
+      formHelper.setValue('y', '');
+      CdValidators.match('x', 'y')(form);
+      formHelper.expectValid('y');
     });
   });
 
@@ -947,6 +1004,34 @@ describe('CdValidators', () => {
       it('should return null for an empty string', () => {
         const control = new UntypedFormControl('');
         expect(CdValidators.url(control)).toBeNull();
+      });
+    });
+
+    describe('base64Json', () => {
+      it('should return null for an empty value', () => {
+        const control = new UntypedFormControl('');
+        expect(CdValidators.base64Json()(control)).toBeNull();
+      });
+
+      it('should return null for valid base64-encoded JSON', () => {
+        const control = new UntypedFormControl(btoa(JSON.stringify({ key: 'value' })));
+        expect(CdValidators.base64Json()(control)).toBeNull();
+      });
+
+      it('should ignore surrounding whitespace', () => {
+        const token = btoa(JSON.stringify({ key: 'value' }));
+        const control = new UntypedFormControl(`  ${token}  `);
+        expect(CdValidators.base64Json()(control)).toBeNull();
+      });
+
+      it('should return invalidBase64Json for invalid base64', () => {
+        const control = new UntypedFormControl('not-a-valid-token');
+        expect(CdValidators.base64Json()(control)).toEqual({ invalidBase64Json: true });
+      });
+
+      it('should return invalidBase64Json when decoded value is not JSON', () => {
+        const control = new UntypedFormControl(btoa('not-json'));
+        expect(CdValidators.base64Json()(control)).toEqual({ invalidBase64Json: true });
       });
     });
   });

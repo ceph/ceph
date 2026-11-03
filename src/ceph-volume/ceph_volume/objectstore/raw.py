@@ -138,7 +138,7 @@ class Raw(BaseObjectStore):
             try:
                 mappers.refresh()
             except RuntimeError as e:
-                mlogger.info(
+                mlogger.warning(
                     'Failed to refresh dmcrypt mappers for osd.%s uuid %s: %s (is the OSD already running?)',
                     self.osd_id,
                     self.osd_fsid,

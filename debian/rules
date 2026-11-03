@@ -5,6 +5,14 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 include /usr/share/dpkg/default.mk
 
+# gcc 15's fat LTO objects leave std::_Sp_counted_base::_M_release_last_use_cold
+# unresolved when linking our static convenience libraries (first seen on
+# Ubuntu 26.04, whose dpkg enables -flto=auto -ffat-lto-objects by default),
+# so opt deb builds out of LTO on gcc >= 15.
+ifeq ($(shell expr $(shell gcc -dumpversion | cut -d. -f1) \>= 15),1)
+  export DEB_BUILD_MAINT_OPTIONS += optimize=-lto
+endif
+
 ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # dh_auto_build sets LDFLAGS with `dpkg-buildflags --get LDFLAGS` on ubuntu,
   # which makes the application aborts when the shared library throws
@@ -18,6 +26,9 @@ endif
 ifneq ($(filter pkg.ceph.crimson,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_CRIMSON=ON
 endif
+ifneq ($(filter pkg.ceph.system-rdkafka,$(DEB_BUILD_PROFILES)),)
+  extraopts += -DWITH_SYSTEM_RDKAFKA=ON
+endif
 
 extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_JERASURE=ON
@@ -30,12 +41,9 @@ extraopts += -DWITH_CEPHFS_SHELL=ON
 extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 extraopts += -DWITH_GRAFANA=ON
 extraopts += -DCEPHADM_BUNDLED_DEPENDENCIES=deb
-ifeq ($(DEB_HOST_ARCH), amd64)
-  extraopts += -DWITH_RBD_RWL=ON
-else
-  extraopts += -DWITH_RBD_RWL=OFF
-endif
 extraopts += -DWITH_RBD_SSD_CACHE=ON
+# Debian still targets the x86-64 baseline, so give up the hardware CRC32C.
+extraopts += -DROCKSDB_PORTABLE=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/libexec
@@ -46,7 +54,6 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
 endif
 ifneq (,$(filter with_system_libs,$(DEB_BUILD_OPTIONS)))
   extraopts += -DWITH_SYSTEM_BOOST=ON
-  extraopts += -DWITH_SYSTEM_PMDK=ON
 endif
 ifeq ($(SCCACHE), true)
 extraopts += -DWITH_SCCACHE=ON
@@ -163,7 +170,12 @@ override_dh_python3:
 	dh_python3 -p ceph-fuse --shebang=/usr/bin/python3
 	dh_python3 -p ceph-volume --shebang=/usr/bin/python3
 
+# match the RPM's %attr(0700,root,root) for the cephadm invoker
+override_dh_fixperms:
+	dh_fixperms
+	chmod 0700 debian/cephadm/usr/libexec/cephadm_invoker.py
+
 # do not run tests
 override_dh_auto_test:
 
-.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_clean override_dh_auto_install override_dh_installlogrotate override_dh_installinit override_dh_strip override_dh_auto_test
+.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_clean override_dh_auto_install override_dh_installlogrotate override_dh_installinit override_dh_strip override_dh_fixperms override_dh_auto_test

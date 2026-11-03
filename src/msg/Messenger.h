@@ -93,7 +93,11 @@ struct Interceptor {
 
 #endif
 
-class Messenger {
+class Messenger: public md_config_obs_t {
+public:
+  std::vector<std::string> get_tracked_keys() const noexcept final;
+  void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
+
 private:
   struct PriorityDispatcher {
     using priority_t = Dispatcher::priority_t;
@@ -171,7 +175,7 @@ public:
    * or use the create() function.
    */
   Messenger(CephContext *cct_, entity_name_t w);
-  virtual ~Messenger() {}
+  virtual ~Messenger();
 
   /**
    * create a new messenger
@@ -241,6 +245,9 @@ public:
     return my_addrs->as_legacy_addr();
   }
 
+  auto get_shutdown_timeout() const {
+    return shutdown_timeout;
+  }
 
   /**
    * std::set messenger's instance
@@ -705,7 +712,7 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const ceph::cref_t<Message>& m) {
+  bool ms_can_fast_dispatch(const Message& m) {
     for ([[maybe_unused]] const auto& [priority, dispatcher] : fast_dispatchers) {
       if (dispatcher->ms_can_fast_dispatch2(m)) {
         return true;
@@ -723,7 +730,7 @@ public:
   void ms_fast_dispatch(const ceph::ref_t<Message> &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for ([[maybe_unused]] const auto& [priority, dispatcher] : fast_dispatchers) {
-      if (dispatcher->ms_can_fast_dispatch2(m)) {
+      if (dispatcher->ms_can_fast_dispatch2(*m)) {
         dispatcher->ms_fast_dispatch2(m);
         return;
       }
@@ -764,9 +771,6 @@ public:
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
     ceph_assert(!cct->_conf->ms_die_on_unhandled_msg);
-  }
-  void ms_deliver_dispatch(Message *m) {
-    return ms_deliver_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   /**
    * Notify each Dispatcher of a new Connection. Call
@@ -868,6 +872,9 @@ public:
   /**
    * @} // Dispatcher Interfacing
    */
+
+private:
+  std::chrono::milliseconds shutdown_timeout;
 };
 
 

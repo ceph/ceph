@@ -160,7 +160,7 @@ def run_tempest(ctx, config):
                 '--workspace',
                 'rgw',
                 '--regex', '^tempest.api.object_storage',
-                '--black-regex', '|'.join(blocklist)
+                '--exclude-regex', '|'.join(blocklist)
             ])
     try:
         yield

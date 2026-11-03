@@ -182,7 +182,14 @@ class Context:
                 f' {len(matches)} sockets found',
                 hints=['select clusters using the --cluster option'],
             )
-        return matches[0]
+        socket = matches[0]
+        # workaround for socket length issues in gRPC library. Because the path
+        # will typically include a long(ish) UUID and a possibly long service
+        # name we can changedir to the parent and only pass the file name along
+        # to grpc. This should be safe as this tool doesn't do much file system
+        # ops beyond this point.
+        os.chdir(socket.parent)
+        return socket.relative_to(socket.parent)
 
     def _ceph_keyrings(self, searchdir: pathlib.Path) -> list[pathlib.Path]:
         try:
@@ -389,6 +396,45 @@ def ctdb_move_ip(ctx: Context) -> None:
 def _(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("ip_address", help="Public IP Address to move")
     parser.add_argument("node", help="Node number of destination")
+
+
+@commands.register("clusterlevel-show")
+def clusterlevel_show(ctx: Context) -> None:
+    """Show the cluster's active Cluster Functional Level."""
+    result = ctx.client().get_active_cluster_level()
+    write_result_json(result)
+
+
+@commands.register("clusterlevel-showall")
+def clusterlevel_showall(ctx: Context) -> None:
+    """Show Cluster Functional Level details for every node."""
+    result = ctx.client().get_cluster_level_details()
+    write_result_json(result)
+
+
+@commands.register("clusterlevel-upgrade")
+def clusterlevel_upgrade(ctx: Context) -> None:
+    """Upgrade the cluster's active Cluster Functional Level."""
+    result = ctx.client().upgrade_cluster_level(apply=ctx.cli.apply)
+    write_result_json(result)
+    if result.values["status"].name == "CLUSTER_LEVEL_UPGRADE_STATUS_ERROR":
+        sys.exit(1)
+
+
+@clusterlevel_upgrade.cli_arguments
+def _(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Actually commit the upgrade (default is a dry run)",
+    )
+
+
+@commands.register("clusterlevel-features")
+def clusterlevel_features(ctx: Context) -> None:
+    """Show this node's own Cluster Functional Level support."""
+    result = ctx.client().get_cluster_level_features()
+    write_result_json(result)
 
 
 def _cli_config_source(parser: argparse.ArgumentParser) -> None:

@@ -48,6 +48,18 @@ Since RADOS objects are then the only only source of truth regarding underlying 
 the recovery procedure must iterate over all RADOS objects in order to determine used vs
 available device blocks.
 
+Corrupted onodes
+================
+
+Recovery must decode every onode, so a single corrupted encoding would abort it,
+leaving the OSD unable to start and ``fsck`` unable to inspect the store.
+Read-only ``fsck`` now skips such onodes and reports them as errors.
+
+Every other caller still aborts, since a skipped onode makes its blocks appear
+free and those paths persist or act destructively on the reconstructed allocation.
+
+.. confval:: bluestore_accept_corrupted_onode_recovery
+
 Multi-threaded recovery
 =======================
 

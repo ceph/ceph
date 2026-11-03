@@ -57,12 +57,13 @@
           />
         </cds-text-label>
         <ng-template #siteNameError>
-          <span
-            *ngIf="createBootstrapForm.showError('siteName', formDir, 'required')"
-            class="invalid-feedback"
-            i18n
-            >This field is required.</span
-          >
+          @if (createBootstrapForm.showError('siteName', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
 
@@ -77,7 +78,7 @@
             i18n
             >Pools</label
           >
-          <ng-container *ngFor="let pool of pools">
+          @for (pool of pools; track pool) {
             <cds-checkbox
               i18n-label
               [id]="pool.name"
@@ -86,14 +87,15 @@
             >
               {{ pool.name }}
             </cds-checkbox>
-          </ng-container>
+          }
         </fieldset>
-        <span
-          *ngIf="createBootstrapForm.showError('pools', formDir, 'requirePool')"
-          class="invalid-feedback"
-          i18n
-          >At least one pool is required.</span
-        >
+        @if (createBootstrapForm.showError('pools', formDir, 'requirePool')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >At least one pool is required.</span
+          >
+        }
       </div>
 
       <cd-submit-button

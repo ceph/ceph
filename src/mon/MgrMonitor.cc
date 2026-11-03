@@ -102,6 +102,7 @@ static const std::map<uint32_t, std::set<std::string>>& always_on_modules() {
     { CEPH_RELEASE_SQUID, octopus_modules },
     { CEPH_RELEASE_TENTACLE, octopus_modules },
     { CEPH_RELEASE_UMBRELLA, octopus_modules },
+    { CEPH_RELEASE_VAMPIRE, octopus_modules },
   };
   return always_on_modules_map;
 };
@@ -191,7 +192,6 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 
     ever_had_active_mgr = get_value("ever_had_active_mgr");
 
-    load_health();
 
     if (map.available) {
       first_seen_inactive = utime_t();
@@ -354,7 +354,7 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_metadata.clear();
   pending_metadata_rm.clear();
 
-  health_check_map_t next;
+  auto& next = get_health_checks_pending_writeable();
   if (pending_map.active_gid == 0) {
     auto level = should_warn_about_mgr_down();
     if (level != HEALTH_OK) {
@@ -366,7 +366,6 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   } else {
     put_value(t, "ever_had_active_mgr", 1);
   }
-  encode_health(next, t);
 
   if (pending_command_descs.size()) {
     dout(4) << __func__ << " encoding " << pending_command_descs.size()
@@ -1204,18 +1203,21 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     std::string var;
     if (!cmd_getval(cmdmap, "var", var) || var.empty()) {
       ss << "Invalid variable";
-      return -EINVAL;
+      r = -EINVAL;
+      goto out;
     }
     string val;
     if (!cmd_getval(cmdmap, "val", val)) {
-      return -EINVAL;
+      r = -EINVAL;
+      goto out;
     }
 
     if (var == "down") {
       bool enable_down = false;
-      int r = parse_bool(val, &enable_down, ss);
-      if (r != 0) {
-        return r;
+      int ret = parse_bool(val, &enable_down, ss);
+      if (ret != 0) {
+        r = ret;
+        goto out;
       }
       if (enable_down) {
         bool has_active = !!pending_map.active_gid;
@@ -1234,7 +1236,9 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
         }
       }
     } else {
-      return -EINVAL;
+      ss << "Unknown variable '" << var << "'";
+      r = -EINVAL;
+      goto out;
     }
   } else if (prefix == "mgr fail") {
     string who;

@@ -20,19 +20,18 @@
           Changing these parameters from their default values is usually not necessary.
         </p>
 
-        <div
-          class="form-group row"
-          *ngFor="let setting of settingsForm.controls | keyvalue"
-        >
-          <div class="col-sm-12">
-            <cd-iscsi-setting
-              [settingsForm]="settingsForm"
-              [formDir]="formDir"
-              [setting]="setting.key"
-              [limits]="getTargetControlLimits(setting.key)"
-            ></cd-iscsi-setting>
+        @for (setting of settingsForm.controls | keyvalue; track setting) {
+          <div class="form-group row">
+            <div class="col-sm-12">
+              <cd-iscsi-setting
+                [settingsForm]="settingsForm"
+                [formDir]="formDir"
+                [setting]="setting.key"
+                [limits]="getTargetControlLimits(setting.key)"
+              ></cd-iscsi-setting>
+            </div>
           </div>
-        </div>
+        }
       </div>
 
       <div class="modal-footer">

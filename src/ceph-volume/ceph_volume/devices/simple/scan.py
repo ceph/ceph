@@ -103,7 +103,7 @@ class Scan(object):
             file_json_key = file_
             if file_.endswith('_dmcrypt'):
                 file_json_key = file_.rstrip('_dmcrypt')
-                logger.info(
+                logger.debug(
                     'reading file {}, stripping _dmcrypt suffix'.format(file_)
                 )
             if os.path.islink(file_path):
@@ -122,7 +122,7 @@ class Scan(object):
             # contents from actual files later
             try:
                 if system.is_binary(file_path):
-                    logger.info('skipping binary file: %s' % file_path)
+                    logger.debug('skipping binary file: %s' % file_path)
                     continue
             except IOError:
                 logger.exception('skipping due to IOError on file: %s' % file_path)
@@ -217,15 +217,15 @@ class Scan(object):
     def scan(self, args):
         osd_metadata = {'cluster_name': conf.cluster}
         osd_path = None
-        logger.info('detecting if argument is a device or a directory: %s', args.osd_path)
+        logger.debug('detecting if argument is a device or a directory: %s', args.osd_path)
         if os.path.isdir(args.osd_path):
-            logger.info('will scan directly, path is a directory')
+            logger.debug('will scan directly, path is a directory')
             osd_path = args.osd_path
         else:
             # assume this is a device, check if it is mounted and use that path
-            logger.info('path is not a directory, will check if mounted')
+            logger.debug('path is not a directory, will check if mounted')
             if system.device_is_mounted(args.osd_path):
-                logger.info('argument is a device, which is mounted')
+                logger.debug('argument is a device, which is mounted')
                 mounted_osd_paths = self.device_mounts.get(args.osd_path)
                 osd_path = mounted_osd_paths[0] if len(mounted_osd_paths) else None
 
@@ -242,7 +242,7 @@ class Scan(object):
                     )
                 osd_metadata = self.scan_encrypted()
             else:
-                logger.info('device is not mounted, will mount it temporarily to scan')
+                logger.debug('device is not mounted, will mount it temporarily to scan')
                 with system.tmp_mount(args.osd_path) as osd_path:
                     osd_metadata = self.scan_directory(osd_path)
         else:

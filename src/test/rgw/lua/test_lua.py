@@ -44,11 +44,12 @@ def admin(args, **kwargs):
 
 def delete_all_objects(conn, bucket_name):
     objects = []
-    for key in conn.list_objects(Bucket=bucket_name)['Contents']:
+    for key in conn.list_objects(Bucket=bucket_name).get('Contents', []):
         objects.append({'Key': key['Key']})
-    # delete objects from the bucket
-    response = conn.delete_objects(Bucket=bucket_name,
-            Delete={'Objects': objects})
+    if not objects:
+        return
+
+    conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
 
 
 def gen_bucket_name():
@@ -127,6 +128,7 @@ def put_script(script, context, tenant=None):
 
     fp.close()
     return result
+
 
 class UnixSocket:
     def __init__(self, socket_path):
@@ -302,6 +304,143 @@ end
         result = admin(['script', 'rm', '--context', context])
         assert result[1] == 0
 
+@pytest.mark.request_test
+def test_delete_obj():
+    bucket_name = gen_bucket_name()
+    socket_path = '/tmp/'+bucket_name
+
+    script = '''
+if Request.RGWOp == "delete_obj" then
+    local json = require("cjson")
+    local socket = require("socket")
+    local unix = require("socket.unix")
+    local s = unix()
+    E = {{}}
+    msg = {{bucket = (Request.Bucket or (Request.CopyFrom or E).Bucket).Name,
+        object = Request.Object.Name,
+        time = Request.Time,
+        operation = Request.RGWOp,
+        http_status = Request.Response.HTTPStatusCode,
+        error_code = Request.Response.HTTPStatus,
+        object_size = Request.Object.Size,
+        trans_id = Request.TransactionId}}
+    assert(s:connect("{}"))
+    s:send(json.encode(msg).."\\n")
+    s:close()
+end
+'''.format(socket_path)
+
+    result = admin(['script-package', 'add', '--package=lua-cjson', '--allow-compilation'])
+    assert result[1] ==  0
+    result = admin(['script-package', 'add', '--package=luasocket', '--allow-compilation'])
+    assert result[1] == 0 
+    result = admin(['script-package', 'reload'])
+    assert result[1] == 0 
+    result = put_script(script, "postrequest")
+    assert result[1] == 0 
+
+    socket_server = UnixSocket(socket_path)
+    try:
+        conn = connection()
+        # create bucket
+        bucket = conn.create_bucket(Bucket=bucket_name)
+        # create objects in the bucket (async)
+        number_of_objects = 5
+        keys = []
+        for i in range(number_of_objects):
+            content = str(os.urandom(1024*1024)).encode("ascii")
+            key = str(i)
+            conn.put_object(Body=content, Bucket=bucket_name, Key=key)
+            keys.append(key)
+
+        # delete objects
+        for i in range(number_of_objects):
+            conn.delete_object(Bucket=bucket_name, Key=keys[i])
+
+        time.sleep(5)
+        event_keys = []
+        for event in socket_server.get_and_reset_events():
+            assert event['bucket'] == bucket_name
+            event_keys.append(event['object'])
+
+        assert keys == event_keys
+
+    finally:
+        socket_server.shutdown()
+        conn.delete_bucket(Bucket=bucket_name)
+        contexts = ['prerequest', 'postrequest', 'background', 'getdata', 'putdata']
+        for context in contexts:
+            result = admin(['script', 'rm', '--context', context])
+            assert result[1] == 0
+
+@pytest.mark.request_test
+def test_multi_delete_obj():
+    bucket_name = gen_bucket_name()
+    socket_path = '/tmp/'+bucket_name
+
+    script = '''
+if Request.RGWOp == "multi_object_delete" then
+    local json = require("cjson")
+    local socket = require("socket")
+    local unix = require("socket.unix")
+    local s = unix()
+    E = {{}}
+    msg = {{bucket = (Request.Bucket or (Request.CopyFrom or E).Bucket).Name,
+        object = Request.Object.Name,
+        time = Request.Time,
+        operation = Request.RGWOp,
+        http_status = Request.Response.HTTPStatusCode,
+        error_code = Request.Response.HTTPStatus,
+        object_size = Request.Object.Size,
+        trans_id = Request.TransactionId}}
+    assert(s:connect("{}"))
+    s:send(json.encode(msg).."\\n")
+    s:close()
+end
+'''.format(socket_path)
+
+    result = admin(['script-package', 'add', '--package=lua-cjson', '--allow-compilation'])
+    assert result[1] ==  0
+    result = admin(['script-package', 'add', '--package=luasocket', '--allow-compilation'])
+    assert result[1] == 0
+    result = admin(['script-package', 'reload'])
+    assert result[1] == 0
+    result = put_script(script, "postrequest")
+    assert result[1] == 0
+
+    socket_server = UnixSocket(socket_path)
+    try:
+        conn = connection()
+        # create bucket
+        bucket = conn.create_bucket(Bucket=bucket_name)
+        # create objects in the bucket (async)
+        number_of_objects = 5
+        keys = []
+        for i in range(number_of_objects):
+            content = str(os.urandom(1024*1024)).encode("ascii")
+            key = str(i)
+            conn.put_object(Body=content, Bucket=bucket_name, Key=key)
+            keys.append(key)
+
+        # bulk delete objects
+        objs_dict = {'Objects': [{"Key": key["Key"]} for key in conn.list_objects(Bucket=bucket_name)['Contents']]}
+        conn.delete_objects(Bucket=bucket_name, Delete=objs_dict)
+
+        time.sleep(5)
+        event_keys = []
+        for event in socket_server.get_and_reset_events():
+            assert event['bucket'] == bucket_name
+            event_keys += event['object']
+        event_keys.sort()
+        assert keys == event_keys
+
+    finally:
+        socket_server.shutdown()
+        conn.delete_bucket(Bucket=bucket_name)
+        contexts = ['prerequest', 'postrequest', 'background', 'getdata', 'putdata']
+        for context in contexts:
+            result = admin(['script', 'rm', '--context', context])
+            assert result[1] == 0
 
 @pytest.mark.example_test
 def test_copyfrom():
@@ -546,3 +685,62 @@ def test_interrupt_request_postauth():
         log.info("Successfully confirmed that the request was interrupted.")
 
     conn.delete_bucket(Bucket=bucket_name)
+
+
+# the lua background thread compiles scripts into bytecode every 5 seconds
+LUA_BYTECODE_CACHE_SYNC_TIME = 10
+
+
+def put_metadata_script(value):
+    """ install a prerequest script that tags every uploaded object with x-amz-meta-test=<value> """
+    script = '''
+if Request.RGWOp == "put_obj" then
+    Request.HTTP.Metadata["x-amz-meta-test"] = "{}"
+end
+'''.format(value)
+    result = put_script(script, "prerequest")
+    assert result[1] == 0
+
+
+def assert_metadata_script(conn, bucket_name, key, expected):
+    """ upload an object and verify which prerequest script tagged it """
+    conn.put_object(Body="1234567890".encode("ascii"), Bucket=bucket_name, Key=key)
+    result = conn.get_object(Bucket=bucket_name, Key=key)
+    assert result['ResponseMetadata']['HTTPHeaders'].get('x-amz-meta-test') == expected
+
+
+@pytest.mark.example_test
+def test_script_recreated_after_rm():
+    # This test covers the loss of the script watch in the lua bytecode cache.
+    #
+    # When a script is removed, the OSD disconnects the watch on its object, and the
+    # watch cannot be re-established since the object is gone. If the script is then
+    # created again before the background thread evicted the old bytecode, the
+    # background thread compiles the new script without any watch on it. From this
+    # point on, updates to the script are never noticed by the cache.
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    conn.create_bucket(Bucket=bucket_name)
+    key = "hello"
+
+    try:
+        put_metadata_script("original")
+        time.sleep(LUA_BYTECODE_CACHE_SYNC_TIME)
+        # a request reads the script from rados, and starts watching it
+        assert_metadata_script(conn, bucket_name, key, "original")
+
+        # the removal and re-creation of the script must happen within the same
+        # background thread interval, so repeat a few times to make sure it does
+        for i in range(4):
+            value = "recreated-{}".format(i)
+            out, err = admin(['script', 'rm', '--context', 'prerequest'])
+            assert err == 0
+            put_metadata_script(value)
+            time.sleep(LUA_BYTECODE_CACHE_SYNC_TIME)
+            # the re-created script must be executed
+            assert_metadata_script(conn, bucket_name, key, value)
+    finally:
+        out, err = admin(['script', 'rm', '--context', 'prerequest'])
+        assert err == 0
+        conn.delete_object(Bucket=bucket_name, Key=key)
+        conn.delete_bucket(Bucket=bucket_name)

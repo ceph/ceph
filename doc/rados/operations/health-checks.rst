@@ -308,6 +308,327 @@ indefinitely by running the following command:
    ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
 
 
+.. _auth-insecure-keys-creatable:
+
+AUTH_INSECURE_KEYS_CREATABLE
+____________________________
+
+This warning indicates that the Ceph Monitors are configured to allow the
+creation or rotation of keys with insecure ciphers. This is controlled by the
+Monitor configuration ``mon_auth_allow_insecure_key``. By default, this
+configuration is ``false`` unless the cluster health warning
+``AUTH_INSECURE_KEYS_ALLOWED`` is raised. In other words, when the cluster
+allows insecure keys to authenticate, then it will, by default, also permit the
+creation of new insecure keys.
+
+This warning can be resolved by addressing ``AUTH_INSECURE_KEYS_ALLOWED`` or by
+manually setting this configuration to false.
+
+.. warning:: Only do this when you are sure that it is no longer necessary to
+             create or rotate keys for legacy clients.
+
+.. prompt:: bash $
+
+    ceph config set mon mon_auth_allow_insecure_key false
+
+.. note:: cephadm and Rook should automate this process for you.
+
+
+.. _auth-insecure-service-tickets:
+
+AUTH_INSECURE_SERVICE_TICKETS
+_____________________________
+
+The Ceph Monitors are currently configured to generate tickets for service
+daemons (``ceph-mgr``, ``ceph-osd``, and ``ceph-mds``) using an insecure cipher
+type.
+
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [ERR] AUTH_INSECURE_SERVICE_TICKETS: Monitors are configured to issue insecure service tickets
+
+.. warning:: This warning should only be addressed when all service daemons have been upgraded to a version supporting a secure cipher type.
+
+The warning can be resolved by setting:
+
+.. prompt:: bash $
+
+    ceph mon set auth_service_cipher aes256k
+
+The Ceph Monitors will begin issuing tickets using the more secure cipher type.
+
+.. note:: cephadm and Rook should automate this process for you.
+
+
+.. _auth-insecure-service-key-type:
+
+AUTH_INSECURE_SERVICE_KEY_TYPE
+______________________________
+
+The Ceph Monitors have detected that one or more service daemons are still
+using insecure cipher types for authentication with the Monitors.
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [ERR] AUTH_INSECURE_SERVICE_KEY_TYPE: 11 auth service entities with insecure key types
+    entity mds.a using insecure key type: aes
+    entity mds.b using insecure key type: aes
+    entity osd.0 using insecure key type: aes
+    entity osd.1 using insecure key type: aes
+    entity osd.2 using insecure key type: aes
+    entity osd.3 using insecure key type: aes
+    entity osd.4 using insecure key type: aes
+    entity osd.5 using insecure key type: aes
+    entity osd.6 using insecure key type: aes
+    entity osd.7 using insecure key type: aes
+    entity mgr.x using insecure key type: aes
+
+.. warning:: Ensure that the daemon is running a version of Ceph that understands the new cipher type.
+
+Fixing this requires rotating the key for each service daemon. You must save
+the new key in daemon's keyring or it will not be able to authenticate.
+
+.. prompt:: bash $
+
+    ceph auth rotate --key-type=aes256k mds.a > MDS_A_KEYRING
+
+Do this for each daemon.
+
+.. note:: cephadm and Rook should automate this process for you.
+
+
+.. _auth-insecure-rotating-service-key-type:
+
+AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE
+_______________________________________
+
+The Ceph Monitors have detected insecure cipher types for the rotating service
+keys which encrypt tickets for clients to authenticate with service daemons.
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [WRN] AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE: 4 rotating auth service keys using insecure key types
+    rotating service keys for mon using insecure key type: aes
+    rotating service keys for mds using insecure key type: aes
+    rotating service keys for osd using insecure key type: aes
+    rotating service keys for mgr using insecure key type: aes
+
+.. warning:: This warning can only be addressed by first resolving AUTH_INSECURE_SERVICE_TICKETS.
+
+The warning will resolve naturally as the extant rotating service keys eventually expire. This is controlled by
+the ``auth_service_ticket_ttl`` Monitor config:
+
+.. prompt:: bash $
+
+    ceph config get mon auth_service_ticket_ttl
+
+::
+
+    3600.000000
+
+There are three rotating keys by default. The keys have laddered expiration;
+one key will expire every ``auth_service_ticket_ttl`` interval. You can wait for the keys to expire
+naturally or force rotation.
+
+.. warning:: Wiping the service keys invalidates tickets for all existing clients.
+             Only upgraded service daemons understand how to acquire new
+             rotating service keys necessary to decrypt client tickets.  Also,
+             only upgraded clients understand how to acquire new tickets when
+             service keys are wiped. You probably do not want to do this
+             manually!
+
+Forcing rotating can be done by:
+
+.. prompt:: bash $
+
+    ceph auth wipe-rotating-service-keys
+
+outputs
+
+::
+
+    wiped rotating service keys!
+
+
+The warning should resolve immediately.
+
+.. note:: cephadm and Rook should automate this process for you.
+
+
+.. _auth-insecure-client-key-type:
+
+AUTH_INSECURE_CLIENT_KEY_TYPE
+_____________________________
+
+
+The Ceph Monitors have detected that client credentials have keys with insecure
+cipher types.
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [WRN] AUTH_INSECURE_CLIENT_KEY_TYPE: 3 auth client entities with insecure key types
+    entity client.admin using insecure key type: aes
+    entity client.fs using insecure key type: aes
+    entity client.fs_a using insecure key type: aes
+
+
+.. warning:: Resolving this warning may not be immediately possible if there exists legacy clients that do not understand secure cipher types. If this applies to your situation, muting this warning is recommended.
+
+Fixing this requires rotating the key for each affected client. You must save
+the new key on each machine using the client keyring or the client will not be
+able to authenticate.
+
+.. prompt:: bash $
+
+    ceph auth rotate --key-type=aes256k client.X > CLIENT_X_KEYRING
+
+Do this for each client.
+
+
+.. note:: Rook should automate this process for you. cephadm does not generally administer client credentials.
+
+
+.. _auth-insecure-keys-allowed:
+
+AUTH_INSECURE_KEYS_ALLOWED
+__________________________
+
+The Ceph Monitors are currently configured to permit authentication using
+insecure cipher types. This may be necessary to allow authentication
+for legacy clients that cannot use more secure cipher types.
+
+This warning can be addressed by only allowing secure ciphers to be used
+for authentication, like:
+
+.. prompt:: bash $
+
+    ceph mon dump
+
+outputs
+
+::
+
+    epoch 2
+    fsid 75a36aa4-8702-48ca-9138-efff9fabe6a5
+    last_changed 2025-06-17T17:13:13.884177+0000
+    created 2025-06-17T17:13:03.344583+0000
+    min_mon_release 20 (tentacle)
+    election_strategy: 1
+    0: [v2:172.21.10.4:40440/0,v1:172.21.10.4:40441/0] mon.a
+    1: [v2:172.21.10.4:40442/0,v1:172.21.10.4:40443/0] mon.b
+    2: [v2:172.21.10.4:40444/0,v1:172.21.10.4:40445/0] mon.c
+    auth_epoch 0
+    auth_service_cipher aes256k
+    auth_allowed_ciphers aes, aes256k
+    auth_preferred_cipher aes256k
+
+The ``auth_allowed_ciphers`` includes the insecure cipher ``aes`` in ``aes, aes256k``. The ``health detail`` also shows:
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [WRN] AUTH_INSECURE_SERVICE_KEYS_ALLOWED: Monitors are configured to issue insecure service key types
+    insecure cipher aes allowed for auth
+
+
+.. warning:: Changing the allowed ciphers can result in losing administrative
+             access to the cluster (without emergency measures). If your admin
+             key is using an insecure cipher type, then rotate it to a secure
+             key type and save it to your keyring. Check for
+             AUTH_INSECURE_CLIENT_KEY_TYPE and AUTH_INSECURE_SERVICE_KEY_TYPE
+             warnings to learn what clients or daemons will lose the ability
+             to authenticate. Do not try to resolve AUTH_INSECURE_KEYS_ALLOWED
+             before AUTH_INSECURE_SERVICE_KEY_TYPE.
+
+To remove the insecure cipher type, update to ``aes256k``:
+
+.. prompt:: bash $
+
+    ceph mon set auth_allowed_ciphers aes256k
+
+and verify:
+
+.. prompt:: bash $
+
+    ceph mon dump
+
+outputs
+
+::
+
+    epoch 3
+    fsid 75a36aa4-8702-48ca-9138-efff9fabe6a5
+    last_changed 2025-06-17T17:13:56.336336+0000
+    created 2025-06-17T17:13:03.344583+0000
+    min_mon_release 20 (tentacle)
+    election_strategy: 1
+    0: [v2:172.21.10.4:40440/0,v1:172.21.10.4:40441/0] mon.a
+    1: [v2:172.21.10.4:40442/0,v1:172.21.10.4:40443/0] mon.b
+    2: [v2:172.21.10.4:40444/0,v1:172.21.10.4:40445/0] mon.c
+    auth_epoch 0
+    auth_service_cipher aes256k
+    auth_allowed_ciphers aes256k
+    auth_preferred_cipher aes256k
+
+The warning should now be resolved.
+
+.. note:: Rook should automate this process for you. cephadm will not change this as it may adversely affect existing clients.
+
+
+.. _auth-emergency-ciphers-set:
+
+AUTH_EMERGENCY_CIPHERS_SET
+__________________________
+
+The Ceph Monitors are configured to use an set of ciphers to replace the
+``auth_allowed_ciphers`` Monitor setting. This configuration is done on
+an emergency basis and should be temporary.
+
+This configuration is used when the ``auth_allowed_ciphers`` setting prevents
+access to the cluster (due to administrative error). The Monitors can be
+rescued using the ``mon_auth_emergency_allowed_ciphers`` configuration on the
+``ceph-mon`` command-line argument or via its local ``ceph.conf``. The Monitors
+will prefer the ``mon_auth_emergency_allowed_ciphers`` configuration over the
+``mon`` setting when present.
+
+As the warning and configuration name implies, this configuration should only
+be used in an emergency to restore access to other cipher types. The cluster
+will raise ``AUTH_EMERGENCY_CIPHERS_SET`` until that configuration has been
+removed.
+
+
+
+
 Manager
 -------
 
@@ -338,8 +659,9 @@ this case, you should install the required package and restart your Manager
 daemons.
 
 This health check is applied only to enabled modules. If a module is not
-enabled, you can see whether it is reporting dependency issues in the output of
-``ceph module ls``.
+enabled, you can see whether it is reporting dependency issues in the
+``can_run`` and ``error_string`` fields of the output of
+``ceph mgr module ls --format=json-pretty``.
 
 
 MGR_MODULE_ERROR
@@ -813,13 +1135,12 @@ OSDs, the cluster usage statistics reported by ``ceph df`` will be inaccurate.
 
 The old OSDs can be updated to use the new usage-tracking scheme by stopping
 each OSD, running a repair operation, and then restarting the OSD. For example,
-to update ``osd.123``, run the following commands:
+to update ``osd.123``, stop it (see :ref:`rados-operating-daemons`), run the
+following command, and then start it again:
 
 .. prompt:: bash #
 
-   systemctl stop ceph-osd@123
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
-   systemctl start ceph-osd@123
 
 To disable this alert, run the following command:
 
@@ -839,14 +1160,13 @@ cluster will report an approximate value for per-pool omap usage based on the
 most recent deep scrub.
 
 The OSDs can be updated to track by pool by stopping each OSD, running a repair
-operation, and then restarting the OSD. For example, to update ``osd.123``, run
-the following commands:
+operation, and then restarting the OSD. For example, to update ``osd.123``, stop
+it (see :ref:`rados-operating-daemons`), run the following command, and then
+start it again:
 
 .. prompt:: bash #
 
-   systemctl stop ceph-osd@123
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
-   systemctl start ceph-osd@123
 
 To disable this alert, run the following command:
 
@@ -865,13 +1185,12 @@ Per-PG omap allows faster PG removal when PGs migrate.
 
 The older OSDs can be updated to track by PG by stopping each OSD, running a
 repair operation, and then restarting the OSD. For example, to update
-``osd.123``, run the following commands:
+``osd.123``, stop it (see :ref:`rados-operating-daemons`), run the following
+command, and then start it again:
 
 .. prompt:: bash #
 
-   systemctl stop ceph-osd@123
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
-   systemctl start ceph-osd@123
 
 To disable this alert, run the following command:
 
@@ -879,6 +1198,84 @@ To disable this alert, run the following command:
 
    ceph config set global bluestore_warn_on_no_per_pg_omap false
 
+BLUESTORE_NO_DB_SHARDING
+________________________
+
+One or more OSDs have a RocksDB database that does not use column family
+sharding. OSDs created prior to the Pacific release store all of their
+key-value data in a single RocksDB column family, whereas OSDs created in
+Pacific or later releases shard the data across several column families,
+which improves caching and compaction efficiency and reduces the disk space
+that is temporarily required during compaction. See
+:ref:`bluestore-rocksdb-sharding` for more information.
+
+The OSDs can be updated to use sharding by stopping each OSD and resharding
+its RocksDB database. For example, to reshard ``osd.123``, stop it (see
+:ref:`rados-operating-daemons`), run the following command, and then start it
+again:
+
+.. prompt:: bash #
+
+   ceph-bluestore-tool \
+    --path /var/lib/ceph/osd/ceph-123 \
+    --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
+    reshard
+
+To disable this alert, run the following command:
+
+.. prompt:: bash #
+
+   ceph config set global bluestore_warn_on_no_db_sharding false
+
+
+BLUESTORE_LEGACY_MIN_ALLOC_SIZE
+_______________________________
+
+One or more OSDs use a BlueStore allocation unit (``min_alloc_size``) that
+differs from the one a newly deployed OSD would use on the same device.
+This is typically the case for HDD-backed OSDs created prior to the Pacific
+release, which used a 64 KiB allocation unit, whereas the current default is
+4 KiB. OSDs that use a larger allocation unit than necessary suffer from
+increased space usage ("space amplification") when storing small objects,
+erasure-coded chunks, or compressed data. Conversely, OSDs with an
+allocation unit smaller than the one currently configured — for example,
+OSDs deployed before ``bluestore_use_optimal_io_size_for_min_alloc_size``
+was enabled for coarse-IU devices — do not benefit from the intended
+alignment.
+
+The on-disk allocation unit of each OSD is compared against the value that
+a newly created OSD would get on the same device with the current
+configuration. Deliberate choices therefore do not raise this warning: an
+explicitly configured ``bluestore_min_alloc_size`` or a value derived from
+the device's optimal IO size when
+``bluestore_use_optimal_io_size_for_min_alloc_size`` is enabled — for
+example, to align with the coarse indirection unit (IU) of some QLC NVMe
+devices — is considered intentional.
+
+The allocation unit is set when the OSD is created and cannot be changed
+afterwards. To align an OSD with the current configuration, redeploy (destroy
+and re-create) it. Make sure that the cluster is healthy and has enough free
+capacity before doing so, and redeploy only one OSD or failure domain at a
+time. To display the allocation unit of each OSD, run the following command:
+
+.. prompt:: bash #
+
+   ceph osd metadata | jq '.[] | {id, bluestore_min_alloc_size}'
+
+If a large allocation unit is used deliberately without the configuration
+options described above, the alert can be disabled for specific OSDs or
+device classes only, using a configuration mask:
+
+.. prompt:: bash #
+
+   ceph config set osd.123 bluestore_warn_on_legacy_min_alloc_size false
+   ceph config set osd/class:hdd bluestore_warn_on_legacy_min_alloc_size false
+
+To disable this alert entirely, run the following command:
+
+.. prompt:: bash #
+
+   ceph config set global bluestore_warn_on_legacy_min_alloc_size false
 
 BLUESTORE_DISK_SIZE_MISMATCH
 ____________________________
@@ -925,8 +1322,11 @@ One (or more) BlueStore OSDs detects read errors on the main device.
 BlueStore has recovered from these errors by retrying disk reads. This alert
 might indicate issues with underlying hardware, issues with the I/O subsystem,
 or something similar. Such issues can cause permanent data
-corruption. Some observations on the root cause of spurious read errors can be
-found here: https://tracker.ceph.com/issues/22464
+corruption. Root-cause investigations of such reports have generally
+pointed at the underlying hardware or kernel I/O path rather than at
+BlueStore itself. A telltale sign is a reported checksum of
+``0x6706be76``, which is the checksum of an all-zero block: it
+indicates that the read returned zeroes instead of the stored data.
 
 This alert does not require an immediate response, but the affected host might
 need additional attention: for example, upgrading the host to the latest
@@ -957,8 +1357,10 @@ evaluated and possibly removed and replaced.
    read stalled read 0x29f40370000~100000 (buffered) since 63410177.290546s, timeout is 5.000000s
 
 However, this is difficult to spot because there is no discernible warning (a
-health warning or info in ``ceph health detail`` for example). More observations
-can be found here: https://tracker.ceph.com/issues/62500
+health warning or info in ``ceph health detail`` for example). Other
+BlueStore log messages that point at a failing or overloaded drive
+include ``log_latency`` and ``log_latency_fn`` entries reporting slow
+operations with latencies of several seconds.
 
 Also because there can be false positive ``stalled read`` instances, a mechanism
 has been added to increase accuracy. If in the last :confval:`bdev_stalled_read_warn_lifetime`
@@ -1081,7 +1483,7 @@ runs or by an external tool that runs a command the following form:
 
 .. prompt:: bash #
 
-   ceph device set-life-expectancy <device-id> <from> <to>
+   ceph device set-life-expectancy <device-id> <from> [<to>]
 
 You can change the stored life expectancy manually, but such a change usually
 doesn't accomplish anything. The reason for this is that whichever tool
@@ -1257,6 +1659,43 @@ size in bytes, search the cluster log for ``Large omap object found``. This issu
 can be caused by RGW bucket index objects that do not have automatic resharding
 enabled. For more information on resharding, see :ref:`RGW Dynamic Bucket Index
 Resharding <rgw_dynamic_bucket_index_resharding>`.
+
+The pool that holds the object usually shows what it is:
+
+- In an RGW log pool, such as ``default.rgw.log``, the object is usually a log
+  that has not been trimmed:
+
+  - Usage logs (``usage.<n>``) grow until they are trimmed: see
+    :ref:`rgw-trim-usage`.
+  - In multisite deployments, RGW trims the metadata log (``meta.log.*``), the
+    data log, and bucket index logs every
+    :confval:`rgw_sync_log_trim_interval` unless that is set to 0, but it never
+    trims the sync error log (``sync.error-log.<n>``) on its own. See
+    :ref:`rgw-multisite-check-the-logs`, and the ``trim`` commands in
+    :ref:`man-radosgw-admin`.
+
+- In an RGW bucket index pool, such as ``default.rgw.buckets.index``, the
+  object is a bucket index shard, which holds an entry for each object in its
+  part of the bucket:
+
+  - A bucket that has outgrown its shards needs resharding, as described
+    above.
+  - In multisite deployments, the shard also holds the bucket index log
+    (bilog), which RGW trims as the other zones sync it, so the bilog keeps
+    growing while sync is stalled or broken. To trim a bilog by hand, check
+    that sync has caught up, then run ``radosgw-admin bilog trim`` as described
+    in :ref:`man-radosgw-admin`. Beginning with the Vampire release, new
+    buckets keep their bilog in a FIFO in the log pool instead, and existing
+    buckets move it there when they are next resharded.
+
+- In a CephFS metadata pool, the object is usually a directory fragment. See
+  :ref:`cephfs-large-omap-objects`.
+
+Changing the pool's ``pg_num`` does not prevent large omap objects: an object
+and all of its omap are stored in a single placement group, so splitting or
+merging placement groups moves the object without making it smaller. After a
+split or merge, the warning can remain until the placement group that holds
+the object is deep scrubbed again.
 
 To adjust the thresholds mentioned above, run a command of following form:
 
@@ -1695,7 +2134,11 @@ The above procedure was developed by Eugen Block in September of 2024.
 
 See `Eugen Block's blog post <https://heiterbiswolkig.blogs.nde.ag/2024/09/06/pgs-not-deep-scrubbed-in-time/>`_ for much more detail.
 
-See `Redmine tracker issue #44959 <https://tracker.ceph.com/issues/44959>`_.
+This warning can appear even though every PG has been deep scrubbed
+within the configured interval. That happens when
+:confval:`osd_deep_scrub_interval` has been customized only for OSDs:
+the Monitors and Managers that raise the warning still evaluate it
+against the default interval, which the procedure above corrects.
 
 Second Method
 ~~~~~~~~~~~~~
@@ -1740,7 +2183,11 @@ The above procedure was developed by Eugen Block in September of 2024.
 
 See `Eugen Block's blog post <https://heiterbiswolkig.blogs.nde.ag/2024/09/06/pgs-not-deep-scrubbed-in-time/>`_ for much more detail.
 
-See `Redmine tracker issue #44959 <https://tracker.ceph.com/issues/44959>`_.
+This warning can appear even though every PG has been deep scrubbed
+within the configured interval. That happens when
+:confval:`osd_deep_scrub_interval` has been customized only for OSDs:
+the Monitors and Managers that raise the warning still evaluate it
+against the default interval, which the procedure above corrects.
 
 
 
@@ -1882,7 +2329,7 @@ To entirely disable this alert, run the following command:
 
 .. prompt:: bash #
 
-   ceph config set mgr/crash/warn_recent_interval 0
+   ceph config set mgr mgr/crash/warn_recent_interval 0
 
 RECENT_MGR_MODULE_CRASH
 _______________________
@@ -1924,7 +2371,7 @@ To entirely disable this alert, run the following command:
 
 .. prompt:: bash #
 
-   ceph config set mgr/crash/warn_recent_interval 0
+   ceph config set mgr mgr/crash/warn_recent_interval 0
 
 TELEMETRY_CHANGED
 _________________
@@ -1952,7 +2399,7 @@ To re-enable telemetry (and silence the alert), run the following command:
 
 .. prompt:: bash #
 
-   ceph telemetry on
+   ceph telemetry on --license sharing-1-0
 
 To disable telemetry (and silence the alert), run the following command:
 
@@ -2022,6 +2469,34 @@ To disable the debug mode, run the following command:
 .. prompt:: bash #
 
    ceph dashboard debug disable
+
+HIGH_DEBUG_LEVEL
+________________
+
+One or more OSDs or Monitors have a debug subsystem whose log level is at or
+above :confval:`high_debug_level_threshold`. High log levels can produce enough
+log output to saturate the log device and slow the daemon down. This alert is
+raised only if :confval:`high_debug_level_threshold` is set to a non-zero value
+(it is ``0``, disabled, by default).
+
+The alert lists the affected daemons and the highest log level found. To see
+which debug settings of a daemon differ from their defaults, run a command of
+the following form and look for ``debug_`` options:
+
+.. prompt:: bash #
+
+   ceph config show <daemon-name>
+
+Unless :confval:`high_debug_level_reset_timeout` is ``0``, the daemon reverts
+the level automatically once that timeout expires, and the alert clears. To
+clear the alert sooner, lower the level by running a command of the following
+form:
+
+.. prompt:: bash #
+
+   ceph tell <daemon-name> config set debug_<subsystem> <level>
+
+For more information, see :ref:`high-debug-level-guard`.
 
 BLAUM_ROTH_W_IS_NOT_PRIME
 _________________________

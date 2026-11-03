@@ -1,0 +1,45 @@
+<section class="rgw-bucket-tags-section">
+  <cds-tile>
+    <div class="cds-pr-6">
+      <h3
+        class="cds--type-heading-03 rgw-bucket-tags-section__title"
+        i18n
+      >
+        Tags
+      </h3>
+      <p
+        class="cds--type-body-compact-01 rgw-bucket-tags-section__description"
+        i18n
+      >
+        Tags help you organize your buckets, track project costs, and manage team access. Tags do
+        not inherit to objects.
+      </p>
+
+      <cd-table
+        [data]="tags"
+        [columns]="columns"
+        columnMode="flex"
+        [toolHeader]="false"
+        [searchField]="false"
+        [showInlineActions]="false"
+        [limit]="0"
+        identifier="key"
+      >
+      </cd-table>
+    </div>
+  </cds-tile>
+</section>
+
+<ng-template
+  #removeTagTpl
+  let-row="data.row"
+>
+  <a
+    cdsLink
+    href=""
+    i18n
+    (click)="deleteTag(row, $event)"
+  >
+    Remove
+  </a>
+</ng-template>

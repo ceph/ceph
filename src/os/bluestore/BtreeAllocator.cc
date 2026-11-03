@@ -122,7 +122,7 @@ void BtreeAllocator::_add_to_tree(uint64_t start, uint64_t size)
 }
 
 void BtreeAllocator::_process_range_removal(uint64_t start, uint64_t end,
-  BtreeAllocator::range_tree_t::iterator& rs)
+  BtreeAllocator::range_tree_t::iterator rs)
 {
   bool left_over = (rs->first != start);
   bool right_over = (rs->second != end);
@@ -160,7 +160,9 @@ void BtreeAllocator::_process_range_removal(uint64_t start, uint64_t end,
   } else {
     range_tree.erase(rs);
   }
-  num_free -= (end - start);
+  auto length = end - start;
+  ceph_assert(num_free >= length);
+  num_free -= length;
 }
 
 void BtreeAllocator::_remove_from_tree(uint64_t start, uint64_t size)
@@ -189,7 +191,17 @@ void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
 
   ceph_assert(size != 0);
 
-  auto rs = range_tree.find(start);
+  // lower_bound() returns the first range starting at or past 'start', hence
+  // it skips a range which begins before 'start' but reaches into
+  // [start, end). Step back to the preceding range only if it actually does
+  // so - otherwise lower_bound()'s result is already the one we want.
+  auto rs = range_tree.lower_bound(start);
+  if (rs != range_tree.begin()) {
+    auto prev_rs = std::prev(rs);
+    if (prev_rs->second > start) {
+      rs = prev_rs;
+    }
+  }
 
   if (rs == range_tree.end() || rs->first >= end) {
     cb(start, size, false);
@@ -197,25 +209,17 @@ void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
   }
 
   do {
-
-    //FIXME: this is apparently wrong since _process_range_removal might
-    // invalidate existing iterators.
-    // Not a big deal so far since this method is not in use - it's called
-    // when making Hybrid allocator from a regular one. Which isn't an option
-    // for BtreeAllocator for now.
-    auto next_rs = rs;
-    ++next_rs;
-
     if (start < rs->first) {
       cb(start, rs->first - start, false);
       start = rs->first;
     }
     auto range_end = std::min(rs->second, end);
     _process_range_removal(start, range_end, rs);
+    // _process_range_removal() may erase from / emplace into range_tree,
+    // invalidating rs - re-acquire the range following the removed one.
+    rs = range_tree.lower_bound(range_end);
     cb(start, range_end - start, true);
     start = range_end;
-
-    rs = next_rs;
   } while (rs != range_tree.end() && rs->first < end && start < end);
   if (start < end) {
     cb(start, end - start, false);
@@ -464,6 +468,44 @@ void BtreeAllocator::foreach(std::function<void(uint64_t offset, uint64_t length
   for (auto& rs : range_tree) {
     notify(rs.first, rs.second - rs.first);
   }
+}
+
+uint64_t BtreeAllocator::get_free_extents(
+  uint64_t range_begin,
+  uint64_t range_end,
+  size_t max_count,
+  free_extent_vector_t* out)
+{
+  ceph_assert(range_begin <= range_end);
+  if (range_begin == range_end) {
+    return range_end;
+  }
+
+  std::lock_guard l(lock);
+  // lower_bound gives first segment with start >= range_begin.
+  // The previous segment may start before range_begin but extend into the range.
+  auto it = range_tree.lower_bound(range_begin);
+  if (it != range_tree.begin()) {
+    auto prev = std::prev(it);
+    if (prev->second > range_begin) {
+      it = prev;
+    }
+  }
+  size_t n = 0;
+  max_count--;  // if 0, wraps to SIZE_MAX so n <= max_count is always true (unbounded)
+  while (it != range_tree.end() && it->first < range_end &&
+         (n <= max_count)) {
+    uint64_t lo = std::max(it->first, range_begin);
+    uint64_t hi = std::min(it->second, range_end);
+    out->emplace_back(lo, hi - lo);
+    ++it;
+    ++n;
+  }
+  if (it == range_tree.end() || it->first >= range_end) {
+    return range_end;
+  }
+  // Stopped on the count cap: resume from the next, not-yet-emitted extent.
+  return it->first;
 }
 
 void BtreeAllocator::init_add_free(uint64_t offset, uint64_t length)

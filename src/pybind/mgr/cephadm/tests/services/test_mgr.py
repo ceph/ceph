@@ -2,10 +2,8 @@ import json
 from unittest import mock
 
 from cephadm.module import CephadmOrchestrator
-from cephadm.services.cephadmservice import (
-    CephadmDaemonDeploySpec,
-    MgrService,
-)
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
+from cephadm.services.mgr import MgrService
 
 
 class TestMgrService:
@@ -31,7 +29,7 @@ class TestMgrService:
                                return_value='[mgr.ceph-1.xyz]\n\tkey = X\n'), \
              mock.patch.object(svc, 'generate_config',
                                return_value=({}, [])):
-            return svc.prepare_create(daemon_spec)
+            return svc.prepare_create(DaemonDeployContext(daemon_spec))
 
     def test_prepare_create_empty_mgr_services_discards_carryover(
             self, cephadm_module: CephadmOrchestrator):

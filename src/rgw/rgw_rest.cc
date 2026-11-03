@@ -27,9 +27,6 @@
 
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
-#ifdef WITH_RADOSGW_RADOS
-#include "rgw_sal_rados.h"
-#endif
 
 #include "rgw_ratelimit.h"
 #include <numeric>

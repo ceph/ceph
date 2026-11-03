@@ -1,0 +1,5 @@
+# Disable fast_read for EC pools (default)
+overrides:
+  ceph:
+    pool-config:
+      fast_read: false

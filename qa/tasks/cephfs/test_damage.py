@@ -692,3 +692,51 @@ class TestDamage(CephFSTestCase):
             self.assertTrue("Input/output error" in p.stderr.getvalue())
         else:
             self.fail("command should fail")
+
+
+class TestDamageExport(CephFSTestCase):
+    MDSS_REQUIRED = 2
+    CLIENTS_REQUIRED = 1
+
+    def test_export_missing_dirfrag(self):
+        """
+        That a subtree containing a dirfrag whose object is missing on disk
+        can be exported to another rank.
+
+        See: https://tracker.ceph.com/issues/62381
+        """
+
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+
+        self.mount_a.run_shell_payload("mkdir -p dir_x/dir_xx/dir_xxx/")
+        self.mount_a.run_shell_payload("touch dir_x/dir_xx/dir_xxx/file_y")
+        dir_ino = self.mount_a.path_to_ino("dir_x/dir_xx")
+        self.mount_a.umount_wait()
+        self.fs.ranks_tell(["flush", "journal"])
+        time.sleep(5)
+        self.fs.ranks_tell(["flush", "journal"]) # EUpdate scatter_writebehind
+        self.fs.fail()
+        dirfrag_obj = "{0:x}.00000000".format(dir_ino)
+        self.fs.radosm(["rm", dirfrag_obj])
+        self.fs.set_joinable()
+        status = self.fs.wait_for_daemons()
+        self.mount_a.mount_wait()
+
+        # fetch the dirfrag -- it goes bad but stays in cache as complete
+        try:
+            self.mount_a.run_shell_payload("ls dir_x/dir_xx")
+        except CommandFailedError:
+            pass
+        damage = self.fs.rank_tell(["damage", "ls"], rank=0)
+        self.assertTrue(any(d['damage_type'] == "dir_frag" and d['ino'] == dir_ino
+                            for d in damage), f"no dir_frag damage entry: {damage}")
+
+        # export the subtree containing the bad dirfrag
+        rank0 = self.fs.get_rank(rank=0, status=status)
+        self.mount_a.setfattr("dir_x", "ceph.dir.pin", "1")
+        self._wait_subtrees([('/dir_x', 1)], status=status, rank=1)
+
+        # Migrator.cc: FAILED ceph_assert(dir->get_projected_version() == dir->get_version())
+        self.assertEqual(rank0['gid'], self.fs.get_rank(rank=0)['gid'],
+                         "rank 0 restarted while exporting")

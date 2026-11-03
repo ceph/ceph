@@ -46,9 +46,9 @@ export class BreadcrumbsResolver {
 
   public getFullPath(route: ActivatedRouteSnapshot): string {
     const relativePath = (segments: UrlSegment[]) =>
-      segments.reduce((a, v) => (a += '/' + v.path), '');
+      segments.reduce((a, v) => a + '/' + v.path, '');
     const fullPath = (routes: ActivatedRouteSnapshot[]) =>
-      routes.reduce((a, v) => (a += relativePath(v.url)), '');
+      routes.reduce((a, v) => a + relativePath(v.url), '');
 
     return fullPath(route.pathFromRoot);
   }

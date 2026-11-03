@@ -273,8 +273,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         name: $localize`Flags`,
         icon: Icons.flag,
         click: () => this.configureFlagsAction(),
-        permission: 'read',
-        visible: () => this.permissions.osd.read
+        permission: 'update',
+        visible: () => this.permissions.osd.update
       },
       {
         name: $localize`Recovery Priority`,
@@ -483,7 +483,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
           required: true
         }
       ],
-      submitButtonText: $localize`Edit OSD`,
+      submitButtonText: this.actionLabels.SAVE_CHANGES,
       onSubmit: (values: any) => {
         this.osdService.update(selectedOsd.id, values.deviceClass).subscribe(() => {
           this.notificationService.show(

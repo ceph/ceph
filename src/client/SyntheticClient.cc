@@ -20,6 +20,7 @@
 #include <unordered_map>
 
 
+#include "common/Cond.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "SyntheticClient.h"
@@ -27,7 +28,7 @@
 #include "osdc/Filer.h"
 
 
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "common/perf_counters.h"
 
 #include <sys/types.h>

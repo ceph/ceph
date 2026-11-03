@@ -94,7 +94,7 @@ segments as part of ongoing client I/O.
 Metadata Structures
 -------------------
 
-.. Mermaid source of seastore.svg
+.. Mermaid source of seastore_per_coll.svg
 .. flowchart TD
   %% Root
   Root((Root))
@@ -105,9 +105,11 @@ Metadata Structures
   end
   %% Logical
   subgraph Logical["Logically Addressed"]
+    CollNode["CollectionNode"]
+    MetaTree["Meta Onode Tree"]
+    CollNode --> OnodeTree
     OnodeTree["Onode Tree"]
     OnodeN["Onode"]
-    %% Per-Onode structures
     Omap1["OMAP
     B-tree Root
     (LBA)"]
@@ -116,24 +118,26 @@ Metadata Structures
     (LBA)"]
     Extents["Data Extents
     (LBA Range)"]
-    %% Mapping and containment
+
+    %% Onode detail
     OnodeTree -- "map: ghobject_t → Onode" --> OnodeN
     OnodeN --> Omap1
     OnodeN --> Omap2
     OnodeN --> Extents
   end
   %% Top-level links
-  Root --> OnodeTree
+  Root --> MetaTree
+  Root --> CollNode
   Root --> LBABtree
   Root --> BackrefTree
   %% Styling
   classDef logical fill:#e0f7fa,stroke:#333,stroke-width:1px;
   classDef physical fill:#f1f8e9,stroke:#333,stroke-width:1px;
-  class OnodeTree,OnodeN,Omap1,Omap2,Extents logical;
+  class MetaTree,CollNode,CollInfo,OnodeTree,OnodeN,Omap1,Omap2,Extents logical;
   class LBABtree,BackrefTree physical;
 
 
-.. image:: seastore.svg
+.. image:: seastore_per_coll.svg
 
 
 
@@ -204,7 +208,7 @@ Metadata Structures
 Device Types
 ------------
 
-Configured via the ``seastore_main_device_type`` option, the device types are
+Configured via the ``seastore_hot_device_type`` option, the device types are
 separated into **Segmented** and **RBM** backend types as follows:
 
 
@@ -291,7 +295,8 @@ separated into **Segmented** and **RBM** backend types as follows:
 
   Used for:
 
-  * ``device_type_t::RANDOM_BLOCK_SSD``
+  * ``device_type_t::SSD``
+  * ``device_type_t::HDD``
 
   Preferred for fast NVMe devices where overwrites are efficient enough
   that log structured updates aren't worth the overhead.
@@ -302,25 +307,28 @@ separated into **Segmented** and **RBM** backend types as follows:
 Device Hardware
 ---------------
 
-The following table maps each device_type_t enum value to
-the physical hardware it represents and the backend implementation it uses.
+``backend_type_t`` and ``device_type_t`` are independent. The backend is
+configured directly and picks the interface; the device type describes the
+hardware and picks the driver within that backend.
 
 
 +------------------------------------------+---------------------------+------------------------+
-| Device Type                              | Physical Hardware         | Backend                |
+| Device Type                              | Physical Hardware         | Driver                 |
 +==========================================+===========================+========================+
-| ``HDD``                                  | Spinning disk             | **Segmented**          |
+| ``HDD``                                  | Spinning disk             | ``BlockSegmentManager``|
+|                                          |                           | / ``RotationalDevice`` |
 +------------------------------------------+---------------------------+------------------------+
-| ``SSD``                                  | Conventional SSD / NVMe   | **Segmented**          |
+| ``SSD``                                  | Conventional SSD / NVMe   | ``BlockSegmentManager``|
+|                                          |                           | / ``NVMeBlockDevice``  |
 +------------------------------------------+---------------------------+------------------------+
-| ``ZBD``                                  | ZNS SSD or SMR HDD        | **Segmented**          |
+| ``ZBD``                                  | ZNS SSD or SMR HDD        | ``ZBDSegmentManager``  |
 +------------------------------------------+---------------------------+------------------------+
-| ``RANDOM_BLOCK_SSD``                     | NVMe                      | **Random Block (RBM)** |
+| ``EPHEMERAL_COLD`` / ``EPHEMERAL_MAIN``  | In-memory (test)          | ephemeral              |
 +------------------------------------------+---------------------------+------------------------+
-| ``EPHEMERAL_COLD`` / ``EPHEMERAL_MAIN``  | In-memory (test)          | **Segmented**          |
-+------------------------------------------+---------------------------+------------------------+
-| ``RANDOM_BLOCK_EPHEMERAL``               | In-memory (test)          | **Random Block (RBM)** |
-+------------------------------------------+---------------------------+------------------------+
+
+Where two drivers are listed, the first is used under
+``backend_type_t::SEGMENTED`` and the second under
+``backend_type_t::RANDOM_BLOCK``.
 
 
 .. _journal:
@@ -707,7 +715,7 @@ With MultiShardStores, the number of OSD shards could be changed also after mkfs
 Each reactor thread can host multiple store shards. Alternatively, few reactors threads could now share the same store shard. Store shards can forward their I/O requests to another store shard running on a different reactor thread.
 
 For example, for an OSD that had 3 reactor threads (seastar::smp::count: 3) set during mkfs.
-After changing the reactor thread count to 5 and restarting the cluster, the mounted store shards will look like:
+After changing the reactor thread count to 5 and restarting the cluster, the mounted store shards will look like::
 
   Reactors thread 0 -> Store Shard: 0
   Reactors thread 1 -> Store Shard: 1
@@ -715,12 +723,14 @@ After changing the reactor thread count to 5 and restarting the cluster, the mou
   Reactors thread 3 -> Store Shard: 0 (forwarded)
   Reactors thread 4 -> Store Shard: 1 (forwarded)
 
-When changing to seastar::smp::count: 2:
+When changing to seastar::smp::count: 2::
+
   Reactors thread 0 -> Store Shard: 0, 2
   Reactors thread 1 -> Store Shard: 1
 
 using ./bin/ceph daemon osd.0 dump_store_shards to check store assignment.
 See the following example outputs from running dump_store_shards with the above scenarios:
+
 **first start with 3 reactors**::
 
   ./bin/ceph daemon osd.0 dump_store_shards

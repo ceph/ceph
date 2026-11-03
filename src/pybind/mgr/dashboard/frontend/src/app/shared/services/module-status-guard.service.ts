@@ -7,6 +7,7 @@ import { catchError, map } from 'rxjs/operators';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 /**
  * This service checks if a route can be activated by executing a
@@ -43,7 +44,8 @@ export class ModuleStatusGuardService {
   constructor(
     private http: HttpClient,
     private router: Router,
-    private mgrModuleService: MgrModuleService
+    private mgrModuleService: MgrModuleService,
+    private authStorageService: AuthStorageService
   ) {}
 
   canActivate(route: ActivatedRouteSnapshot) {
@@ -60,7 +62,7 @@ export class ModuleStatusGuardService {
     }
     const config = route.data['moduleStatusGuardConfig'];
     let backendCheck = false;
-    if (config.backend) {
+    if (config.backend && this.authStorageService.getPermissions().configOpt?.read) {
       this.mgrModuleService.getConfig('orchestrator').subscribe(
         (resp) => {
           backendCheck = config.backend === resp['orchestrator'];

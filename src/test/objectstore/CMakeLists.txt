@@ -128,6 +128,13 @@ if(WITH_BLUESTORE)
   add_ceph_unittest(unittest_bluefs)
   target_link_libraries(unittest_bluefs os global)
 
+  # unittest_bluerocksenv
+  add_executable(unittest_bluerocksenv
+    test_bluerocksenv.cc
+    )
+  add_ceph_unittest(unittest_bluerocksenv)
+  target_link_libraries(unittest_bluerocksenv os global RocksDB::RocksDB)
+
   # unittest_bluefs_ex
   add_executable(unittest_bluefs_ex
     test_bluefs_ex.cc

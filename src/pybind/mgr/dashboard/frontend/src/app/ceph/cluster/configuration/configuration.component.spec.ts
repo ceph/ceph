@@ -9,7 +9,6 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { ConfigurationDetailsComponent } from './configuration-details/configuration-details.component';
 import { ConfigurationComponent } from './configuration.component';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
@@ -18,7 +17,7 @@ describe('ConfigurationComponent', () => {
   let fixture: ComponentFixture<ConfigurationComponent>;
 
   configureTestBed({
-    declarations: [ConfigurationComponent, ConfigurationDetailsComponent, TableComponent],
+    declarations: [ConfigurationComponent, TableComponent],
     imports: [
       BrowserAnimationsModule,
       SharedModule,

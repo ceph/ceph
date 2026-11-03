@@ -4,6 +4,7 @@
 #include <fmt/format.h>
 
 #include <string>
+#include <string_view>
 
 #include <boost/url/parse.hpp>
 #include <boost/url/url_view.hpp>
@@ -20,7 +21,10 @@ bool parse_url_authority(const std::string& url,
   }
   const auto& v = r.value();
   if (v.has_port()) {
-    host = fmt::format("{}:{}", v.host(), v.port());
+    // port() hands back a boost::core::string_view, whose conversion to
+    // std::string_view is a template operator that fmt's formattable
+    // check does not see through before fmt 11
+    host = fmt::format("{}:{}", v.host(), std::string_view(v.port()));
   } else {
     host = std::string(v.host());
   }

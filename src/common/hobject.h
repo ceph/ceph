@@ -25,13 +25,15 @@
 
 #include "json_spirit/json_spirit_value.h"
 #include "include/ceph_assert.h"   // spirit clobbers it!
+#include "include/encoding.h"
 #include "include/object.h" // for object_t
-#include "include/types.h" // for version_t, shard_id_t
+#include "include/shard_id.h"
+#include "include/types.h" // for version_t
 
 #include "reverse.h"
 
 #include <cstdint>
-#include <iostream>
+#include <iosfwd>
 #include <set>
 #include <string>
 
@@ -59,6 +61,12 @@ public:
   }
   static bool is_meta_pool(int64_t pool) {
     return pool == POOL_META;
+  }
+  static int64_t get_logical_pool(int64_t pool) {
+    if (is_temp_pool(pool))
+      return get_temp_pool(pool);  // it's reversible
+    else
+      return pool;
   }
 
 public:
@@ -114,10 +122,7 @@ public:
     return is_meta_pool(pool);
   }
   int64_t get_logical_pool() const {
-    if (is_temp_pool(pool))
-      return get_temp_pool(pool);  // it's reversible
-    else
-      return pool;
+    return get_logical_pool(pool);
   }
 
   hobject_t() : snap(0), hash(0), max(false), pool(INT64_MIN) {

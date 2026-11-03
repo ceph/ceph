@@ -11,13 +11,13 @@
  * Foundation.  See file COPYING.
  */
 #include "BlueStore.h"
+#include "BlueStore_objects.h"
+#include "BlueStore_inlines.h"
 #include "common/pretty_binary.h"
 #include "simple_bitmap.h"
 #include "common/debug.h"
 using namespace std;
-
-// kv store prefixes, copied from BlueStore.cc
-const string PREFIX_OBJ = "O";         // object name -> onode_t
+using namespace bluestore;
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bs.onode_scan "
@@ -54,8 +54,7 @@ struct bool_vector_t {
   }
 };
 
-class BlueStore::Decoder_AllocationsAndStatFS : public BlueStore::ExtentMap::ExtentDecoder {
-  using Extent = BlueStore::Extent;
+class Decoder_AllocationsAndStatFS : public ExtentMap::ExtentDecoder {
   BlueStore &store;
   read_alloc_stats_t &stats;
   SimpleBitmap &sbmap;
@@ -94,7 +93,7 @@ public:
   void reset_new_shard();
 };
 
-BlueStore::BlobRef BlueStore::Decoder_AllocationsAndStatFS::decode_create_blob(
+BlueStore::BlobRef Decoder_AllocationsAndStatFS::decode_create_blob(
   bptr_c_it_t& p,
   __u8 struct_v,
   uint64_t* sbid,
@@ -105,7 +104,7 @@ BlueStore::BlobRef BlueStore::Decoder_AllocationsAndStatFS::decode_create_blob(
   return blob;
 }
 
-void BlueStore::Decoder_AllocationsAndStatFS::_consume_new_blob(
+void Decoder_AllocationsAndStatFS::_consume_new_blob(
   bool spanning,
   uint64_t extent_no,
   uint64_t sbid,
@@ -148,7 +147,7 @@ void BlueStore::Decoder_AllocationsAndStatFS::_consume_new_blob(
   }
 }
 
-void BlueStore::Decoder_AllocationsAndStatFS::consume_blobid(
+void Decoder_AllocationsAndStatFS::consume_blobid(
   Extent* le, bool spanning, uint64_t blobid)
 {
   [[maybe_unused]] auto cct = store.cct;
@@ -160,7 +159,7 @@ void BlueStore::Decoder_AllocationsAndStatFS::consume_blobid(
   }
 }
 
-void BlueStore::Decoder_AllocationsAndStatFS::consume_blob(
+void Decoder_AllocationsAndStatFS::consume_blob(
   Extent* le, uint64_t extent_no, uint64_t sbid, BlobRef b)
 {
   _consume_new_blob(false, extent_no, sbid, b);
@@ -170,13 +169,13 @@ void BlueStore::Decoder_AllocationsAndStatFS::consume_blob(
   }
 }
 
-void BlueStore::Decoder_AllocationsAndStatFS::consume_spanning_blob(
+void Decoder_AllocationsAndStatFS::consume_spanning_blob(
   uint64_t sbid, BlobRef b)
 {
   _consume_new_blob(true, 0/*doesn't matter*/, sbid, b);
 }
 
-void BlueStore::Decoder_AllocationsAndStatFS::reset(
+void Decoder_AllocationsAndStatFS::reset(
   const ghobject_t _oid, volatile_statfs* _per_pool_statfs)
 {
   oid = _oid;
@@ -185,7 +184,7 @@ void BlueStore::Decoder_AllocationsAndStatFS::reset(
   is_spanning_blob_compressed.reset();
 }
 
-void BlueStore::Decoder_AllocationsAndStatFS::reset_new_shard() {
+void Decoder_AllocationsAndStatFS::reset_new_shard() {
   is_local_blob_compressed.reset();
 }
 
@@ -241,6 +240,10 @@ class BlueStore::OnodeScanMT {
     uint64_t count_interval = 100'000;
     Decoder_AllocationsAndStatFS edecoder(store, stats, *sbmap,
                                           store.min_alloc_size_order);
+    // Same gating as read_allocation_from_onodes: only read-only fsck may
+    // tolerate an undecodable onode here.
+    bool current_onode_valid = false;
+    const bool tolerate = store._alloc_recovery_tolerates_corruption();
     it->lower_bound(start_key);
     // skip to first key that is beginning of Onode
     while (it->valid() && is_extent_shard_key(it->key())) {
@@ -270,25 +273,58 @@ class BlueStore::OnodeScanMT {
         }
         edecoder.reset(oid,
                        &stats.actual_pool_vstatfs[oid.hobj.get_logical_pool()]);
-        Onode dummy_on(cct);
-        Onode::decode_raw(&dummy_on, it->value(), edecoder, store.segment_size != 0);
-        ++stats.onode_count;
+        current_onode_valid = false;
+        try {
+          bluestore_decode::throwing_guard g(tolerate);
+          Onode dummy_on(cct);
+          Onode::decode_raw(
+            &dummy_on,
+            it->value(),
+            edecoder,
+            store.segment_size != 0);
+          current_onode_valid = true;
+          ++stats.onode_count;
+        } catch (const ceph::buffer::error& e) {
+          if (!tolerate) { throw; }
+          ++store.alloc_recovery_skipped_onodes;
+          derr << __func__ << " skipping undecodable onode "
+              << pretty_binary_string(key) << ": " << e.what() << dendl;
+          continue;
+        }
       } else {
         edecoder.reset_new_shard();
         uint32_t offset;
-        get_key_extent_shard(key, &okey, &offset);
-        int r = get_key_object(okey, &oid);
+        int r = get_key_extent_shard(key, &okey, &offset);
         if (r != 0) {
           derr << __func__
-               << " failed to decode onode key= " << pretty_binary_string(okey)
-               << " from extent key= " << pretty_binary_string(key) << dendl;
+              << " failed to decode extent shard key= " << pretty_binary_string(key) << dendl;
           continue;
         }
-        if (oid != edecoder.get_oid()) {
+        r = get_key_object(okey, &oid);
+        if (r != 0) {
+          derr << __func__
+              << " failed to decode onode key= "
+              << pretty_binary_string(okey)
+              << " from extent key= "
+              << pretty_binary_string(key) << dendl;
           continue;
         }
-        edecoder.decode_some(it->value(), nullptr);
-        ++stats.shard_count;
+        if (!current_onode_valid || oid != edecoder.get_oid()) {
+          derr << __func__ << " skipping extent shard "
+              << pretty_binary_string(key)
+              << " without a valid current onode" << dendl;
+          continue;
+        }
+        try {
+          bluestore_decode::throwing_guard g(tolerate);
+          edecoder.decode_some(it->value(), nullptr);
+          ++stats.shard_count;
+        } catch (const ceph::buffer::error& e) {
+          if (!tolerate) { throw; }
+          derr << __func__ << " skipping undecodable extent shard "
+              << pretty_binary_string(key) << ": " << e.what() << dendl;
+          continue;
+        }
       }
     }
     report_progress(0, kv_count - last_completed);

@@ -8,14 +8,20 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import (
     CephadmUpgrade,
+    MID_UPGRADE_MUTED_WARNINGS,
     OkToUpgradeMonReport,
     UpgradeState,
     parse_ok_to_upgrade_mon_json,
     request_osd_ok_to_upgrade_report,
 )
 from cephadm.ssh import HostConnectionError
-from cephadm.utils import ContainerInspectInfo
-from orchestrator import OrchestratorError, DaemonDescription
+from cephadm.utils import (
+    ContainerInspectInfo,
+    allowed_ciphers_are_aes256k_only,
+    auth_allowed_cipher_names_from_mon_map,
+    auth_service_cipher_name_from_mon_map,
+)
+from orchestrator import OrchestratorError, DaemonDescription, HostSpec, daemon_type_to_service
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
 
@@ -82,6 +88,47 @@ def test_upgrade_start_offline_hosts(cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test2'):
             cephadm_module.offline_hosts = set(['test2'])
             with pytest.raises(OrchestratorError, match=r"Upgrade aborted - Some host\(s\) are currently offline: {'test2'}"):
+                cephadm_module.upgrade_start('image_id', None)
+            cephadm_module.offline_hosts = set([])  # so remove_host doesn't fail when leaving the with_host block
+
+
+def _fail_check_valid_addr_and_mark_offline(cephadm_module: CephadmOrchestrator):
+    """Simulate SSH failure in _check_valid_addr that poisons offline_hosts."""
+    def fail_check(host: str, addr: str) -> str:
+        cephadm_module.offline_hosts.add(host)
+        raise OrchestratorError(f"Can't communicate with remote host `{addr}`")
+    return fail_check
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_not_blocked_by_phantom_offline_host_from_failed_add(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                with mock.patch.object(cephadm_module, '_check_valid_addr',
+                                       side_effect=_fail_check_valid_addr_and_mark_offline(cephadm_module)):
+                    with pytest.raises(OrchestratorError, match=r"Can't communicate with remote host"):
+                        cephadm_module._add_host(HostSpec('phantom-node', '192.168.110.113'))
+                assert 'phantom-node' not in cephadm_module.inventory
+                assert 'phantom-node' not in cephadm_module.offline_hosts
+                assert wait(cephadm_module, cephadm_module.upgrade_start(
+                    'image_id', None)) == 'Initiating upgrade to image_id'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_still_blocked_when_existing_host_add_fails(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with mock.patch.object(cephadm_module, '_check_valid_addr',
+                                   side_effect=_fail_check_valid_addr_and_mark_offline(cephadm_module)):
+                # Re-add with a different addr than with_host's default ('1::4')
+                # so addr_changed is True, exercising the ssh.reset_con() branch
+                # in the _add_host except block alongside the offline_hosts logic.
+                with pytest.raises(OrchestratorError, match=r"Can't communicate with remote host"):
+                    cephadm_module._add_host(HostSpec('test2', '2::5'))
+            assert 'test2' in cephadm_module.inventory
+            assert 'test2' in cephadm_module.offline_hosts
+            with pytest.raises(OrchestratorError, match=r"Upgrade aborted - Some host\(s\) are currently offline:"):
                 cephadm_module.upgrade_start('image_id', None)
             cephadm_module.offline_hosts = set([])  # so remove_host doesn't fail when leaving the with_host block
 
@@ -245,6 +292,99 @@ def test_upgrade_state_crush_roundtrip():
     assert restored
     assert restored.crush_bucket_type == 'rack'
     assert restored.crush_bucket_name == 'rack1'
+
+
+def _test_osd_dd(osd_id: int, digests: List[str]) -> DaemonDescription:
+    return DaemonDescription(
+        daemon_type='osd',
+        daemon_id=str(osd_id),
+        hostname=f'host{osd_id}',
+        container_image_digests=digests,
+    )
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_cache_empty_bucket_from_ok_to_upgrade_report(
+        cephadm_module: CephadmOrchestrator):
+    # Empty osds_in_crush_bucket is cached as set(), not None.
+    cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket = None
+    report = OkToUpgradeMonReport(
+        ok_to_upgrade=True,
+        all_osds_upgraded=False,
+        osds_ok_to_upgrade=[],
+        osds_in_crush_bucket=[],
+        osds_upgraded=[],
+        bad_no_version=[],
+    )
+    cephadm_module.upgrade._cache_osds_in_crush_bucket_from_ok_to_upgrade_report(
+        report)
+    assert cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket == set()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_get_upgrade_info_bucket_scope_progress(cephadm_module: CephadmOrchestrator):
+    # Upgrade progress denominator uses bucket OSD count, not cluster-wide total.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target', 'pid',
+        target_digests=['digest1'],
+        target_version='19.2.3',
+        daemon_types=['osd'],
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket = {
+        'osd.0', 'osd.1', 'osd.2',
+    }
+    all_osds = [
+        _test_osd_dd(0, ['digest1']),
+        _test_osd_dd(1, ['digest1']),
+        _test_osd_dd(2, ['old-digest']),
+        _test_osd_dd(3, ['digest1']),
+        _test_osd_dd(4, ['digest1']),
+    ]
+    with mock.patch.object(
+            cephadm_module.cache, 'get_daemons', return_value=all_osds):
+        progress, _ = cephadm_module.upgrade._get_upgrade_info()
+    assert progress == '2/3 daemons upgraded'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_get_upgrade_info_refreshes_bucket_osds_for_upgrade_status(
+        cephadm_module: CephadmOrchestrator):
+    # Status path refreshes cold bucket cache via max_osds=0 before computing progress.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target', 'pid',
+        target_digests=['digest1'],
+        target_version='19.2.3',
+        daemon_types=['osd'],
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    bucket_rep = OkToUpgradeMonReport(
+        ok_to_upgrade=True,
+        all_osds_upgraded=False,
+        osds_ok_to_upgrade=[],
+        osds_in_crush_bucket=[0, 1, 2],
+        osds_upgraded=[0, 1],
+        bad_no_version=[],
+    )
+    all_osds = [
+        _test_osd_dd(0, ['digest1']),
+        _test_osd_dd(1, ['digest1']),
+        _test_osd_dd(2, ['old-digest']),
+        _test_osd_dd(3, ['digest1']),
+        _test_osd_dd(4, ['digest1']),
+    ]
+    with mock.patch(
+            'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+            return_value=bucket_rep,
+    ) as mock_request:
+        with mock.patch.object(
+                cephadm_module.cache, 'get_daemons', return_value=all_osds):
+            progress, _ = cephadm_module.upgrade._get_upgrade_info()
+    mock_request.assert_called_once()
+    assert mock_request.call_args.kwargs['max_osds'] == 0
+    assert progress == '2/3 daemons upgraded'
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -789,6 +929,269 @@ def test_enough_mds_for_ok_to_stop(get, get_daemons_by_service, cephadm_module: 
         DaemonDescription(daemon_type='mds', daemon_id='myfs.test.host1.gfknd', service_name='mds.myfs.test'))
 
 
+def _mds_need_upgrade_entries() -> List[Tuple[DaemonDescription, bool]]:
+    return [
+        (DaemonDescription(
+            daemon_type='mds',
+            daemon_id=f'cephfs.host{i}.abcdef',
+            hostname=f'host{i}',
+            container_image_id='old_digest',
+            service_name='mds.cephfs',
+        ), False)
+        for i in range(1, 4)
+    ]
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch.object(CephadmUpgrade, '_enough_mds_for_ok_to_stop', return_value=True)
+@mock.patch.object(CephadmUpgrade, '_wait_for_ok_to_stop', return_value=True)
+def test_to_upgrade_batches_mds_when_fail_fs(
+        _wait_for_ok_to_stop: mock.MagicMock,
+        _enough_mds_for_ok_to_stop: mock.MagicMock,
+        cephadm_module: CephadmOrchestrator):
+    # https://tracker.ceph.com/issues/78304
+    need_upgrade = _mds_need_upgrade_entries()
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'pid', fail_fs=True)
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 3
+    assert [d[0].name() for d in to_upgrade] == [d[0].name() for d in need_upgrade]
+    _wait_for_ok_to_stop.assert_not_called()
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'pid', fail_fs=False)
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 1
+    assert to_upgrade[0][0].name() == need_upgrade[0][0].name()
+
+
+def _gateway_daemons(
+        daemon_type: str,
+        services: int,
+        daemons_per_service: int,
+        digest: str = 'old_digest') -> List[DaemonDescription]:
+    service = daemon_type_to_service(daemon_type)
+    return [
+        DaemonDescription(
+            daemon_type=daemon_type,
+            daemon_id=f'svc{s}.host{d}.abcdef',
+            hostname=f'host{d}',
+            container_image_id=digest,
+            container_image_digests=[digest],
+            deployed_by=[digest],
+            service_name=f'{service}.svc{s}',
+        )
+        for s in range(1, services + 1)
+        for d in range(1, daemons_per_service + 1)
+    ]
+
+
+def _gateway_need_upgrade_entries(
+        daemon_type: str,
+        services: int,
+        daemons_per_service: int) -> List[Tuple[DaemonDescription, bool]]:
+    return [
+        (d, False)
+        for d in _gateway_daemons(daemon_type, services, daemons_per_service)
+    ]
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_limits_nfs_batch_by_service(cephadm_module: CephadmOrchestrator):
+    # nfs is the one type batched by whole services: restarting one daemon
+    # sends the rest of its service into a grace period, so a service that is
+    # split across passes pays for one grace period per pass
+    # 10 services of 3 daemons each
+    need_upgrade = _gateway_need_upgrade_entries('nfs', 10, 3)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.max_gateway_upgrades_per_pass = 8
+
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    # 2 full services (6 daemons) fit, a third would exceed the limit of 8
+    assert len(to_upgrade) == 6
+    assert [d[0].name() for d in to_upgrade] == [d[0].name() for d in need_upgrade[:6]]
+    assert {d[0].service_name() for d in to_upgrade} == {f'nfs.svc{s}' for s in (1, 2)}
+
+
+@pytest.mark.parametrize("daemon_type", ['smb', 'iscsi', 'nvmeof', 'rgw'])
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_limits_gateway_batch_per_daemon(
+        daemon_type: str, cephadm_module: CephadmOrchestrator):
+    # every gateway type other than nfs is capped per daemon, so that a pass
+    # never restarts all daemons of a service at once
+    # 10 services of 3 daemons each
+    need_upgrade = _gateway_need_upgrade_entries(daemon_type, 10, 3)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.max_gateway_upgrades_per_pass = 8
+
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 8
+    assert [d[0].name() for d in to_upgrade] == [d[0].name() for d in need_upgrade[:8]]
+    # the 8th daemon is the 2nd of the 3rd service, so the cap splits a service
+    service = daemon_type_to_service(daemon_type)
+    assert [d[0].service_name() for d in to_upgrade].count(f'{service}.svc3') == 2
+
+
+@pytest.mark.parametrize("daemon_type", ['smb', 'iscsi', 'nvmeof', 'rgw'])
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_gateway_batch_splits_one_large_service(
+        daemon_type: str, cephadm_module: CephadmOrchestrator):
+    # a single service larger than the limit is split, which is the case the
+    # cap exists for: a 77 daemon service is not restarted in one pass
+    need_upgrade = _gateway_need_upgrade_entries(daemon_type, 1, 77)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.max_gateway_upgrades_per_pass = 16
+
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 16
+    assert [d[0].name() for d in to_upgrade] == [d[0].name() for d in need_upgrade[:16]]
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_nfs_batch_never_splits_a_service(
+        cephadm_module: CephadmOrchestrator, caplog):
+    # a single nfs service with more daemons than the limit is still upgraded
+    # in one pass, otherwise the upgrade would never progress
+    caplog.set_level(logging.WARNING, logger='cephadm.upgrade')
+    need_upgrade = _gateway_need_upgrade_entries('nfs', 1, 5)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.max_gateway_upgrades_per_pass = 2
+
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 5
+    # the oversized service is called out, it is the one case where a pass
+    # upgrades more daemons than max_gateway_upgrades_per_pass
+    assert any(
+        'Service nfs.svc1 has 5 daemons, more than '
+        'max_gateway_upgrades_per_pass (2)' in r.message
+        for r in caplog.records
+    )
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_gateway_batch_limit_disabled(cephadm_module: CephadmOrchestrator):
+    need_upgrade = _gateway_need_upgrade_entries('nfs', 10, 3)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.max_gateway_upgrades_per_pass = 0
+
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 30
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch.object(CephadmUpgrade, '_enough_mds_for_ok_to_stop', return_value=False)
+def test_to_upgrade_gateway_batch_limit_not_applied_to_other_types(
+        _enough_mds_for_ok_to_stop: mock.MagicMock,
+        cephadm_module: CephadmOrchestrator):
+    # non gateway/rgw types keep their ok-to-stop driven batching
+    need_upgrade = _mds_need_upgrade_entries()
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'pid', fail_fs=True)
+    cephadm_module.max_gateway_upgrades_per_pass = 1
+
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 3
+
+
+@pytest.mark.parametrize(
+    "daemon_types,services,hosts,expected",
+    [
+        # no filter beyond the daemon type: whole services from the start of
+        # the list until the limit of 3 is reached
+        (['nfs'], None, None, ['nfs.svc1.host1.abcdef', 'nfs.svc1.host2.abcdef']),
+        # --services: only the filtered services are candidates, and they are
+        # still added to the batch as whole services
+        (None, ['nfs.svc2', 'nfs.svc3'], None,
+         ['nfs.svc2.host1.abcdef', 'nfs.svc2.host2.abcdef']),
+        # --hosts: the batch is limited after the host filter, so it holds 3
+        # daemons from 3 different services rather than 3 whole services
+        (['nfs'], None, ['host1'],
+         ['nfs.svc1.host1.abcdef', 'nfs.svc2.host1.abcdef', 'nfs.svc3.host1.abcdef']),
+    ]
+)
+@mock.patch.object(CephadmUpgrade, '_upgrade_daemons')
+@mock.patch.object(CephadmUpgrade, '_handle_need_upgrade_self')
+@mock.patch.object(CephadmUpgrade, '_set_container_images')
+@mock.patch.object(CephadmUpgrade, '_complete_osd_upgrade')
+@mock.patch.object(CephadmUpgrade, '_complete_mds_upgrade')
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={})
+@mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle')
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', ''))
+@mock.patch("cephadm.module.CephadmOrchestrator.set_container_image")
+@mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests")
+@mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+    'min_mon_release': 19,
+    'require_osd_release': 'tentacle',
+    'have_local_config_map': True,
+})
+@mock.patch(
+    "cephadm.module.CephadmOrchestrator.version",
+    new_callable=mock.PropertyMock,
+    return_value='ceph version 19.3.0-0 (hash)',
+)
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+@mock.patch("cephadm.module.HostCache.get_daemons")
+def test_do_upgrade_gateway_batch_with_upgrade_filters(
+    get_daemons: mock.MagicMock,
+    get_daemons_by_service: mock.MagicMock,
+    _version: mock.MagicMock,
+    _get: mock.MagicMock,
+    get_active_mgr_digests: mock.MagicMock,
+    _set_container_image: mock.MagicMock,
+    _check_mon_command: mock.MagicMock,
+    _lookup_release_name: mock.MagicMock,
+    _get_distinct_container_image_settings: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    _complete_mds_upgrade: mock.MagicMock,
+    _complete_osd_upgrade: mock.MagicMock,
+    _set_container_images: mock.MagicMock,
+    _handle_need_upgrade_self: mock.MagicMock,
+    _upgrade_daemons: mock.MagicMock,
+    daemon_types: Optional[List[str]],
+    services: Optional[List[str]],
+    hosts: Optional[List[str]],
+    expected: List[str],
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    # the batch limit is applied on top of the --daemon-types/--services/--hosts
+    # filters of a staggered upgrade, never outside of them
+    target_digest = 'new_image@repo_digest'
+    get_active_mgr_digests.return_value = [target_digest]
+    # 4 nfs services with one daemon on host1 and one on host2 each
+    daemons = _gateway_daemons('nfs', 4, 2)
+    get_daemons.return_value = daemons
+    get_daemons_by_service.side_effect = \
+        lambda service: [d for d in daemons if d.service_name() == service]
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_id='image_id',
+        target_digests=[target_digest],
+        target_version='19.3.0-0',
+        daemon_types=daemon_types,
+        services=services,
+        hosts=hosts,
+    )
+    cephadm_module.max_gateway_upgrades_per_pass = 3
+
+    cephadm_module.upgrade._do_upgrade()
+
+    batches = [c.args[0] for c in _upgrade_daemons.call_args_list if c.args[0]]
+    assert len(batches) == 1
+    assert [d[0].name() for d in batches[0]] == expected
+
+
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
                          [
                              # several candidate versions (from different major versions)
@@ -1170,3 +1573,434 @@ def test_do_upgrade_limit_exhausted_marks_complete_without_scope_check(
 
     mark_complete.assert_called_once()
     filtered_scope.assert_not_called()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_check_host_cpu_isa_level(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            cephadm_module.cache.update_host_facts('test', {
+                'arch': 'x86_64',
+                'cpu_model': 'Intel(R) Xeon(R) CPU E5-2650 v2 @ 2.60GHz',
+                'cpu_isa_level': 'x86-64-v2',
+            })
+            cephadm_module.cache.update_host_facts('test2', {
+                'arch': 'x86_64',
+                'cpu_model': 'Intel(R) Xeon(R) Gold 6130 CPU @ 2.10GHz',
+                'cpu_isa_level': 'x86-64-v3',
+            })
+
+            # tentacle (20.x) has no ISA requirement
+            assert cephadm_module.upgrade.check_host_cpu_isa_level('20.2.0') == []
+
+            # umbrella (21.x) requires x86-64-v3; only 'test' is flagged
+            errs = cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0')
+            assert len(errs) == 1
+            assert 'test' in errs[0]
+            assert 'x86-64-v2' in errs[0]
+            assert 'x86-64-v3' in errs[0]
+
+            # staggered upgrade restricted to a compatible host passes
+            assert cephadm_module.upgrade.check_host_cpu_isa_level(
+                '21.2.0', hosts=['test2']) == []
+
+            # hosts with unknown ISA level (no facts / non-x86 / older
+            # cephadm) are skipped
+            cephadm_module.cache.update_host_facts('test', {'arch': 'aarch64'})
+            assert cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0') == []
+
+            # disabling the check via config skips it entirely
+            cephadm_module.cache.update_host_facts('test', {
+                'arch': 'x86_64',
+                'cpu_isa_level': 'x86-64-v1',
+            })
+            assert cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0') != []
+            cephadm_module.upgrade_cpu_isa_check = False
+            try:
+                assert cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0') == []
+            finally:
+                cephadm_module.upgrade_cpu_isa_check = True
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_blocks_on_insufficient_cpu_isa_level(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                cephadm_module.cache.update_host_facts('test', {
+                    'arch': 'x86_64',
+                    'cpu_model': 'Intel(R) Xeon(R) CPU E5-2650 v2 @ 2.60GHz',
+                    'cpu_isa_level': 'x86-64-v2',
+                })
+                with mock.patch.object(CephadmUpgrade, '_check_target_version', return_value=None):
+                    with pytest.raises(OrchestratorError) as err:
+                        cephadm_module.upgrade_start('', '21.2.0')
+                    assert 'x86-64-v3' in str(err.value)
+                    assert 'host test' in str(err.value)
+
+                    # excluding the incompatible host allows the upgrade
+                    with mock.patch("cephadm.serve.CephadmServe._get_container_image_info",
+                                    side_effect=async_side_effect(
+                                        ContainerInspectInfo('image_id', '21.2.0', 'digest'))):
+                        assert wait(cephadm_module, cephadm_module.upgrade_start(
+                            '', '21.2.0', host_placement='test2')
+                        ).startswith('Initiating upgrade')
+
+
+def _test_rgw_dd(
+    daemon_id: str,
+    hostname: str,
+    ports: List[int],
+    ip: Optional[str] = None,
+) -> DaemonDescription:
+    return DaemonDescription(
+        daemon_type='rgw',
+        daemon_id=daemon_id,
+        hostname=hostname,
+        ip=ip,
+        ports=ports,
+        container_image_id='old-image-id',
+        container_image_name='old-image',
+    )
+
+
+@pytest.mark.parametrize(
+    'daemons, expected',
+    [
+        # Same host + same wildcard listener: serialize.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500]),
+                _test_rgw_dd('b', 'host1', [8500]),
+            ],
+            ['rgw.a'],
+        ),
+
+        # Same port on different hosts: independent.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500]),
+                _test_rgw_dd('b', 'host2', [8500]),
+            ],
+            ['rgw.a', 'rgw.b'],
+        ),
+
+        # Same host, different ports: independent.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500]),
+                _test_rgw_dd('b', 'host1', [8600]),
+            ],
+            ['rgw.a', 'rgw.b'],
+        ),
+
+        # Same host/port, different explicit IPs: independent.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500], '10.0.0.1'),
+                _test_rgw_dd('b', 'host1', [8500], '10.0.0.2'),
+            ],
+            ['rgw.a', 'rgw.b'],
+        ),
+
+        # Wildcard overlaps an explicit bind.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500]),
+                _test_rgw_dd('b', 'host1', [8500], '10.0.0.2'),
+            ],
+            ['rgw.a'],
+        ),
+
+        # Same explicit IP + same port: serialize.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500], '10.0.0.1'),
+                _test_rgw_dd('b', 'host1', [8500], '10.0.0.1'),
+            ],
+            ['rgw.a'],
+        ),
+
+        # Partial overlap is enough to conflict.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500, 8501]),
+                _test_rgw_dd('b', 'host1', [8501, 8600]),
+            ],
+            ['rgw.a'],
+        ),
+    ],
+)
+def test_to_upgrade_rgw_listener_batching(
+    cephadm_module: CephadmOrchestrator,
+    daemons: List[DaemonDescription],
+    expected: List[str],
+):
+    need_upgrade = [(d, False) for d in daemons]
+
+    proceed, to_upgrade = cephadm_module.upgrade._to_upgrade(
+        need_upgrade,
+        'target-image',
+    )
+
+    assert proceed is True
+    assert [d.name() for d, _ in to_upgrade] == expected
+
+
+@pytest.mark.parametrize(
+    "mon_map,expected_names,expected_aes256k_only",
+    [
+        # the shape mgr actually gets back from MonMap::dump()
+        pytest.param({'auth_allowed_ciphers': [{'name': 'aes256k', 'value': 2}]},
+                     ['aes256k'], True, id='dump-aes256k-only'),
+        pytest.param({'auth_allowed_ciphers': [{'name': 'aes', 'value': 1},
+                                               {'name': 'aes256k', 'value': 2}]},
+                     ['aes', 'aes256k'], False, id='dump-aes-and-aes256k'),
+        # cephx disabled
+        pytest.param({'auth_allowed_ciphers': [{'name': 'none', 'value': 0}]},
+                     ['none'], False, id='cephx-none'),
+        # unreadable input must not raise, or the upgrade dies here. MonMap::dump()
+        # always emits the field, so these only mean 'could not read the setting'
+        # and must never come out as aes256k-only
+        pytest.param(None, [], False, id='mon-map-not-a-dict'),
+        pytest.param({'fsid': 'foobar'}, [], False, id='field-absent'),
+        pytest.param({'auth_allowed_ciphers': []}, [], False, id='field-empty'),
+        pytest.param({'auth_allowed_ciphers': 'aes256k'}, [], False,
+                     id='ciphers-not-a-list'),
+        pytest.param({'auth_allowed_ciphers': [{'value': 2}, {'name': ''},
+                                               {'name': 'aes256k', 'value': 2}]},
+                     ['aes256k'], True, id='skips-nameless-entries'),
+    ],
+)
+def test_auth_allowed_cipher_names_from_mon_map(mon_map, expected_names, expected_aes256k_only):
+    names = auth_allowed_cipher_names_from_mon_map(mon_map)
+    assert names == expected_names
+    assert allowed_ciphers_are_aes256k_only(names) is expected_aes256k_only
+
+
+@pytest.mark.parametrize(
+    "mon_map,expected",
+    [
+        # the shape mgr actually gets back from MonMap::dump()
+        pytest.param({'auth_service_cipher': {'name': 'aes256k', 'value': 2}},
+                     'aes256k', id='dump-aes256k'),
+        pytest.param({'auth_service_cipher': {'name': 'aes', 'value': 1}},
+                     'aes', id='dump-aes'),
+        # unreadable input reads as 'cannot tell', never as the service cipher
+        pytest.param(None, None, id='mon-map-not-a-dict'),
+        pytest.param({'fsid': 'foobar'}, None, id='field-absent'),
+        pytest.param({'auth_service_cipher': 'aes256k'}, None, id='cipher-not-an-object'),
+        pytest.param({'auth_service_cipher': {'value': 2}}, None, id='nameless-entry'),
+    ],
+)
+def test_auth_service_cipher_name_from_mon_map(mon_map, expected):
+    assert auth_service_cipher_name_from_mon_map(mon_map) == expected
+
+
+def _set_mon_map_allowed_ciphers(
+    cephadm_module: CephadmOrchestrator, cipher_names: Optional[List[str]]
+) -> None:
+    """Put an auth_allowed_ciphers entry shaped like MonMap::dump() into mon_map."""
+    mon_map = dict(cephadm_module.get('mon_map'))
+    if cipher_names is not None:
+        mon_map['auth_allowed_ciphers'] = [{'name': c, 'value': 0} for c in cipher_names]
+    cephadm_module.mock_store_set('_ceph_get', 'mon_map', mon_map)
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+def test_maybe_set_cephx_allowed_ciphers_skips_aes256k_only(
+    check_mon_command, cephadm_module: CephadmOrchestrator
+):
+    # a cluster already narrowed down to aes256k (by an operator following the
+    # AUTH_INSECURE_KEYS_ALLOWED docs, or freshly bootstrapped) must not have
+    # the weaker aes cipher re-enabled by the upgrade
+    _set_mon_map_allowed_ciphers(cephadm_module, ['aes256k'])
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0)
+
+    cephadm_module.upgrade._maybe_set_cephx_allowed_ciphers()
+
+    check_mon_command.assert_not_called()
+    # the step is still marked done and persisted, so later upgrade passes
+    # don't keep re-evaluating it
+    assert cephadm_module.upgrade.upgrade_state.has_set_cephx_allowed_ciphers
+    saved = json.loads(cephadm_module.get_store('upgrade_state'))
+    assert saved['has_set_cephx_allowed_ciphers'] is True
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+@pytest.mark.parametrize(
+    "current_ciphers",
+    [
+        pytest.param(['aes'], id='aes-only'),
+        # what a monmap predating the cipher settings decodes to
+        pytest.param(['aes', 'aes256k'], id='aes-and-aes256k'),
+        pytest.param(['none'], id='cephx-none'),
+        # setting unreadable: fall back to the pre-existing behaviour
+        pytest.param(None, id='field-absent'),
+    ],
+)
+def test_maybe_set_cephx_allowed_ciphers_sets_when_not_aes256k_only(
+    check_mon_command, current_ciphers, cephadm_module: CephadmOrchestrator
+):
+    # every other starting state keeps the pre-existing behaviour, so clusters
+    # coming from a release with aes keys can still rotate them
+    check_mon_command.return_value = (0, '', '')
+    _set_mon_map_allowed_ciphers(cephadm_module, current_ciphers)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0)
+
+    cephadm_module.upgrade._maybe_set_cephx_allowed_ciphers()
+
+    check_mon_command.assert_called_once_with({
+        'prefix': 'mon set',
+        'name': 'auth_allowed_ciphers',
+        'value': 'aes,aes256k',
+    })
+    assert cephadm_module.upgrade.upgrade_state.has_set_cephx_allowed_ciphers
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.upgrade.CephadmUpgrade._maybe_set_cephx_allowed_ciphers")
+@mock.patch("cephadm.upgrade.CephadmUpgrade._detect_need_upgrade")
+@mock.patch("cephadm.module.CephadmOrchestrator._daemon_action")
+@mock.patch("cephadm.module.CephadmOrchestrator._daemon_action_set_image")
+@mock.patch("cephadm.module.CephadmOrchestrator.key_rotate")
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+def test_rotate_mgr_mon_auth_keys_goes_through_cipher_check(
+    get_daemons_by_service,
+    key_rotate,
+    _daemon_action_set_image,
+    _daemon_action,
+    _detect_need_upgrade,
+    _maybe_set_cephx_allowed_ciphers,
+    cephadm_module: CephadmOrchestrator,
+):
+    # the key rotation path must reach the guarded helper rather than issuing
+    # the 'mon set auth_allowed_ciphers' command itself
+    mon = DaemonDescription(daemon_type='mon', daemon_id='a', hostname='test')
+    get_daemons_by_service.side_effect = \
+        lambda service_name: [mon] if service_name == 'mon' else []
+    _detect_need_upgrade.return_value = ([], [], 0, 0)  # no mons still need upgrading
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0)
+
+    cephadm_module.upgrade._rotate_mgr_mon_auth_keys('target_image', ['digest1'])
+
+    _maybe_set_cephx_allowed_ciphers.assert_called_once_with()
+
+
+def _set_cephx_health_state(
+    cephadm_module: CephadmOrchestrator,
+    allowed_ciphers: Optional[List[str]] = None,
+    service_cipher: Optional[str] = None,
+    raised_checks: Optional[List[str]] = None,
+) -> None:
+    """Set up mon_map ciphers and raised health checks the way the mons report them."""
+    _set_mon_map_allowed_ciphers(cephadm_module, allowed_ciphers)
+    if service_cipher is not None:
+        mon_map = dict(cephadm_module.get('mon_map'))
+        mon_map['auth_service_cipher'] = {'name': service_cipher, 'value': 0}
+        cephadm_module.mock_store_set('_ceph_get', 'mon_map', mon_map)
+    cephadm_module.mock_store_set('_ceph_get', 'health', {
+        'json': json.dumps({'checks': {c: {'detail': []} for c in (raised_checks or [])}})
+    })
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+def test_mute_upgrade_health_warnings_skipped_when_cephx_secure(
+    check_mon_command, cephadm_module: CephadmOrchestrator
+):
+    # the reported cluster: all keys already aes256k, ciphers already narrowed.
+    # Muting here only produces a misleading '(muted: AUTH_INSECURE_*)' line.
+    _set_cephx_health_state(cephadm_module, allowed_ciphers=['aes256k'],
+                            service_cipher='aes256k', raised_checks=[])
+
+    assert cephadm_module.upgrade._mute_upgrade_related_health_warnings() is False
+    check_mon_command.assert_not_called()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+@pytest.mark.parametrize(
+    "allowed_ciphers,service_cipher,raised_checks",
+    [
+        # insecure cipher still allowed
+        pytest.param(['aes', 'aes256k'], 'aes256k', [], id='insecure-cipher-allowed'),
+        # mons still issue insecure service tickets
+        pytest.param(['aes256k'], 'aes', [], id='insecure-service-cipher'),
+        # ciphers fine, but an entity still holds a key the upgrade will rotate
+        pytest.param(['aes256k'], 'aes256k', ['AUTH_INSECURE_SERVICE_KEY_TYPE'],
+                     id='insecure-key-still-present'),
+        # mons not upgraded yet: their monmap predates the cipher settings and
+        # so decodes to these defaults. Must still mute, since the checks only
+        # start existing once the mons are upgraded
+        pytest.param(['aes', 'aes256k'], 'aes', [], id='mons-not-yet-upgraded'),
+        # setting unreadable: must mute rather than assume a secure cluster
+        pytest.param(None, None, [], id='ciphers-unreadable'),
+    ],
+)
+def test_mute_upgrade_health_warnings_applied_when_cephx_insecure(
+    check_mon_command, allowed_ciphers, service_cipher, raised_checks,
+    cephadm_module: CephadmOrchestrator
+):
+    check_mon_command.return_value = (0, '', '')
+    _set_cephx_health_state(cephadm_module, allowed_ciphers=allowed_ciphers,
+                            service_cipher=service_cipher, raised_checks=raised_checks)
+
+    assert cephadm_module.upgrade._mute_upgrade_related_health_warnings() is True
+    assert check_mon_command.call_count == len(MID_UPGRADE_MUTED_WARNINGS)
+    check_mon_command.assert_has_calls(
+        [mock.call({'prefix': 'health mute', 'code': w, 'sticky': True})
+         for w in MID_UPGRADE_MUTED_WARNINGS],
+        any_order=True,
+    )
+
+
+@mock.patch.object(CephadmUpgrade, '_mark_upgrade_complete')
+@mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={})
+@mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle')
+@mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests", return_value=[])
+@mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+    'min_mon_release': 19,
+    'require_osd_release': 'tentacle',
+    'have_local_config_map': True,
+})
+@mock.patch(
+    "cephadm.module.CephadmOrchestrator.version",
+    new_callable=mock.PropertyMock,
+    return_value='ceph version 19.3.0-0 (hash)',
+)
+@mock.patch.object(CephadmUpgrade, '_mute_upgrade_related_health_warnings', return_value=False)
+def test_do_upgrade_persists_skipped_health_warning_mutes(
+    _mute_upgrade_related_health_warnings: mock.MagicMock,
+    _version: mock.MagicMock,
+    _get: mock.MagicMock,
+    _get_active_mgr_digests: mock.MagicMock,
+    _lookup_release_name: mock.MagicMock,
+    _get_distinct_container_image_settings: mock.MagicMock,
+    _mark_upgrade_complete: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    # the skip re-reads the mon_map and the health report, so it must be
+    # decided (and logged) once, not on every pass through _do_upgrade
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_id='image_id',
+        target_digests=['new_image@repo_digest'],
+        target_version='19.3.0-0',
+        remaining_count=0,
+    )
+
+    cephadm_module.upgrade._do_upgrade()
+
+    assert cephadm_module.upgrade.upgrade_state.health_warnings_mute_skipped is True
+    assert not cephadm_module.upgrade.upgrade_state.health_warnings_muted
+    saved = json.loads(cephadm_module.get_store('upgrade_state'))
+    assert saved['health_warnings_mute_skipped'] is True
+    assert saved['health_warnings_muted'] is False
+
+    cephadm_module.upgrade._do_upgrade()
+
+    _mute_upgrade_related_health_warnings.assert_called_once_with()

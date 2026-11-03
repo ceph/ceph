@@ -833,6 +833,66 @@ TEST_P(LibRadosSnapshotsSelfManagedECPP, Bug11677) {
   delete[] buf;
 }
 
+// Xattrs of a clone made by the first write after a snap, and of the
+// head after a rollback to that clone.
+static void check_snap_xattrs(IoCtx& ioctx)
+{
+  const std::string oid = "snap_xattrs";
+  bufferlist data, v1, v2, got;
+  data.append("ceph");
+  v1.append("value1");
+  v2.append("value2");
+
+  ASSERT_EQ(0, ioctx.write_full(oid, data));
+  ASSERT_EQ(0, ioctx.setxattr(oid, "key", v1));
+
+  uint64_t snap;
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&snap));
+  std::vector<uint64_t> snaps{snap};
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(snap, snaps));
+
+  // the first write after the snap clones the head
+  ASSERT_EQ(0, ioctx.setxattr(oid, "key", v2));
+  ASSERT_EQ(0, ioctx.setxattr(oid, "head_only", v2));
+
+  ioctx.snap_set_read(snap);
+  ASSERT_EQ((int)v1.length(), ioctx.getxattr(oid, "key", got));
+  ASSERT_TRUE(got.contents_equal(v1));
+  got.clear();
+  ASSERT_EQ(-ENODATA, ioctx.getxattr(oid, "head_only", got));
+  std::map<std::string, bufferlist> attrs;
+  ASSERT_EQ(0, ioctx.getxattrs(oid, attrs));
+  ASSERT_EQ(1u, attrs.size());
+  ASSERT_TRUE(attrs["key"].contents_equal(v1));
+
+  ioctx.snap_set_read(LIBRADOS_SNAP_HEAD);
+  got.clear();
+  ASSERT_EQ((int)v2.length(), ioctx.getxattr(oid, "key", got));
+  ASSERT_TRUE(got.contents_equal(v2));
+
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback(oid, snap));
+  got.clear();
+  ASSERT_EQ((int)v1.length(), ioctx.getxattr(oid, "key", got));
+  ASSERT_TRUE(got.contents_equal(v1));
+  got.clear();
+  ASSERT_EQ(-ENODATA, ioctx.getxattr(oid, "head_only", got));
+  attrs.clear();
+  ASSERT_EQ(0, ioctx.getxattrs(oid, attrs));
+  ASSERT_EQ(1u, attrs.size());
+  ASSERT_TRUE(attrs["key"].contents_equal(v1));
+
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(snap));
+}
+
+TEST_P(LibRadosSnapshotsSelfManagedPP, Xattrs) {
+  check_snap_xattrs(ioctx);
+}
+
+TEST_P(LibRadosSnapshotsSelfManagedECPP, Xattrs) {
+  SKIP_IF_CRIMSON();
+  check_snap_xattrs(ioctx);
+}
+
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSnapshotsPP);
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSnapshotsSelfManagedPP);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSnapshotsECPP);

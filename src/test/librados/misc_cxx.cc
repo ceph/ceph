@@ -18,11 +18,11 @@
 #include "include/stringify.h"
 #include "common/Checksummer.h"
 #include "common/config_proxy.h" // for class ConfigProxy
-#include "common/ceph_json.h"
 #include "mds/mdstypes.h"
 #include "global/global_context.h"
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"
+#include "test/librados/test_pool_types.h"
 #include "cls/version/cls_version_ops.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "erasure-code/consistency/RadosCommands.h"
@@ -473,56 +473,6 @@ TEST_P(LibRadosMiscPP, CopyPP) {
   }
 }
 
-// Helper function to check if a pool supports omap operations
-// This function will cause the test to fail if it cannot determine the pool's omap support
-static bool supports_omap(librados::IoCtx& ioctx, librados::Rados& cluster) {
-  std::string pool_name = ioctx.get_pool_name();
-  
-  bufferlist inbl, outbl;
-  std::ostringstream cmd;
-  cmd << "{\"prefix\": \"osd pool get\", "
-      << "\"pool\": \"" << pool_name << "\", "
-      << "\"var\": \"supports_omap\", "
-      << "\"format\": \"json\"}";
-  
-  // Send command to determine omap support for the pool
-  int ret = cluster.mon_command(cmd.str(), std::move(inbl), &outbl, nullptr);
-  EXPECT_EQ(0, ret);
-  if (ret != 0) {
-    return false;
-  }
-  
-  // Parse JSON response safely
-  std::string outstr = outbl.to_str();
-  EXPECT_FALSE(outstr.empty());
-  if (outstr.empty()) {
-    return false;
-  }
-  
-  JSONParser parser;
-  bool parse_success = parser.parse(outstr.c_str(), outstr.length());
-  EXPECT_TRUE(parse_success);
-  if (!parse_success) {
-    return false;
-  }
-  
-  // Extract supports_omap value from JSON
-  bool supports_omap_value = false;
-  bool decode_success = false;
-  try {
-    JSONDecoder::decode_json("supports_omap", supports_omap_value, &parser);
-    decode_success = true;
-  } catch (const JSONDecoder::err& e) {
-    // Will be caught by EXPECT below
-  }
-  EXPECT_TRUE(decode_success);
-  if (!decode_success) {
-    return false;
-  }
-  
-  return supports_omap_value;
-}
-
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
@@ -585,7 +535,9 @@ TEST_P(LibRadosTwoPoolsECPP, CopyFrom) {
   b.append("copyfrom");
 
   // Check if target pool supports omap
-  bool target_supports_omap = supports_omap(ioctx, cluster);
+  bool target_supports_omap = false;
+  ASSERT_EQ(0, ceph::test::get_pool_supports_omap(
+    cluster, ioctx.get_pool_name(), &target_supports_omap));
 
   // create big object w/ omapheader
   {
@@ -934,6 +886,41 @@ TEST_P(LibRadosMiscPP, Applications) {
   expected_meta = {{"key2", "value2"}};
   ASSERT_EQ(0, ioctx.application_metadata_list("app1", &meta));
   ASSERT_EQ(expected_meta, meta);
+}
+
+// An object that is created again must not have the xattrs of the
+// removed object.
+static void check_xattrs_after_recreate(IoCtx& ioctx)
+{
+  const std::string oid = "xattr_recreate";
+  bufferlist data, v1, got;
+  data.append("ceph");
+  v1.append("value1");
+
+  ObjectWriteOperation create;
+  create.write_full(data);
+  create.setxattr("key", v1);
+  ASSERT_EQ(0, ioctx.operate(oid, &create));
+  ASSERT_EQ((int)v1.length(), ioctx.getxattr(oid, "key", got));
+
+  ASSERT_EQ(0, ioctx.remove(oid));
+  got.clear();
+  ASSERT_EQ(-ENOENT, ioctx.getxattr(oid, "key", got));
+
+  ASSERT_EQ(0, ioctx.write_full(oid, data));
+  got.clear();
+  ASSERT_EQ(-ENODATA, ioctx.getxattr(oid, "key", got));
+  std::map<std::string, bufferlist> attrs;
+  ASSERT_EQ(0, ioctx.getxattrs(oid, attrs));
+  ASSERT_TRUE(attrs.empty());
+}
+
+TEST_P(LibRadosMiscPP, XattrsAfterRecreate) {
+  check_xattrs_after_recreate(ioctx);
+}
+
+TEST_P(LibRadosMiscECPP, XattrsAfterRecreate) {
+  check_xattrs_after_recreate(ioctx);
 }
 
 TEST_P(LibRadosMiscECPP, CompareExtentRange) {

@@ -10,6 +10,7 @@
 #include "common/SubProcess.h"
 #include "include/common_fwd.h"
 #include "include/compat.h"
+#include "include/container_ios.h"
 #include "include/str_list.h"
 
 #include <boost/algorithm/string/trim.hpp>

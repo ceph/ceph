@@ -12,6 +12,7 @@
 #include "osd/OpRequest.h"
 
 #include "ScrubStore.h"
+#include "common/ceph_time_fmt.h"
 #include "common/debug.h"
 
 #define dout_context g_ceph_context
@@ -763,7 +764,15 @@ ReplicaActive::ReplicaActive(my_context ctx)
 
 ReplicaActive::~ReplicaActive()
 {
+  DECLARE_LOCALS;
   clear_remote_reservation(false);
+
+  // Guard against replica_scrub_op() having set m_start/m_end/preemption
+  // state directly (ahead of the FSM) and an interval change then taking us
+  // out of ReplicaActive before ReplicaActiveOp was ever entered - in which
+  // case ~ReplicaActiveOp() (and its call to replica_handling_done()) would
+  // never run, leaving that state stale for the next interval.
+  scrbr->replica_handling_done();
 }
 
 void ReplicaActive::exit()
@@ -902,7 +911,7 @@ sc::result ReplicaActive::react(const ReserverGranted& ev)
   // notify the primary
   auto grant_msg = make_message<MOSDScrubReserve>(
       spg_t(pg_id.pgid, m_pg->get_primary().shard), reservation.request_epoch,
-      MOSDScrubReserve::GRANT, m_pg->pg_whoami, pending_reservation_nonce);
+      MOSDScrubReserve::GRANT, m_pg->pg_whoami, reservation.nonce);
   m_pg->send_cluster_message(
       m_pg->get_primary().osd, grant_msg, reservation.request_epoch, false);
   return discard_event();

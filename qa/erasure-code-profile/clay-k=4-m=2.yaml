@@ -1,0 +1,11 @@
+# Clay plugin with k=4, m=2
+overrides:
+  ceph:
+    pool-config:
+      ec_pool: true
+      erasure_code_profile:
+        name: clay42profile
+        plugin: clay
+        k: 4
+        m: 2
+        crush-failure-domain: osd

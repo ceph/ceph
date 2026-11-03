@@ -7,7 +7,8 @@ from unittest.mock import Mock, patch
 from .. import mgr
 from ..exceptions import DashboardException
 from ..services.rgw_client import NoRgwDaemonsException, RgwClient, \
-    RgwMultisite, _determine_rgw_addr, _parse_frontend_config
+    RgwMultisite, _determine_rgw_addr, _parse_frontend_config, \
+    append_rgw_realm_zone
 from ..services.service import NoCredentialsException
 from ..settings import Settings
 from ..tests import CLICommandTestMixin, RgwStub
@@ -17,6 +18,7 @@ from ..tests import CLICommandTestMixin, RgwStub
     return_value='dummy_admin'))
 @patch('dashboard.services.ceph_service.CephService.send_command', Mock(
     return_value=''))
+@patch('dashboard.services.rgw_client._is_reachable', Mock(return_value=True))
 class RgwClientTest(TestCase, CLICommandTestMixin):
     _dashboard_user_realm1_access_key = 'VUOFXZFK24H81ISTVBTR'
     _dashboard_user_realm1_secret_key = '0PGsCvXPGWS3AGgibUZEcd9efLrbbshlUkY3jruR'
@@ -54,6 +56,7 @@ class RgwClientTest(TestCase, CLICommandTestMixin):
 
     def setUp(self):
         RgwStub.get_daemons()
+        RgwClient.drop_instance()
         self.mock_kv_store()
         self.CONFIG_KEY_DICT.update({
             'RGW_API_ACCESS_KEY': 'klausmustermann',
@@ -325,6 +328,53 @@ class RgwClientTest(TestCase, CLICommandTestMixin):
         result = _determine_rgw_addr(daemon_info)
         self.assertEqual(result.host, "192.168.178.3")
 
+    def test_unreachable_daemon_is_skipped(self):
+        with patch('dashboard.services.rgw_client._is_reachable',
+                   side_effect=lambda daemon: daemon.name != 'daemon1'):
+            instance = RgwClient.admin_instance()
+        self.assertEqual(instance.daemon.name, 'daemon2')
+
+    def test_no_reachable_daemon_raises(self):
+        with patch('dashboard.services.rgw_client._is_reachable', return_value=False), \
+                self.assertRaises(DashboardException) as cm:
+            RgwClient.admin_instance()
+        self.assertEqual(cm.exception.status, 503)
+
+    def test_vanished_daemon_is_not_reused(self):
+        RgwClient.admin_instance()
+        del mgr.get('service_map')['services']['rgw']['daemons']['5297']
+        instance = RgwClient.admin_instance()
+        self.assertEqual(instance.daemon.name, 'daemon2')
+
+    @patch.object(RgwMultisite, 'get_all_zonegroups_info',
+                  Mock(return_value={'default_zonegroup': 'zonegroup2-id'}))
+    def test_default_zonegroup_preferred_over_other_zonegroups(self):
+        daemons = mgr.get('service_map')['services']['rgw']['daemons']
+        daemons['5499'] = {'addr': '192.168.178.4:49774/1534999298',
+                           'metadata': dict(daemons['5398']['metadata'], id='daemon3')}
+        with patch('dashboard.services.rgw_client._is_reachable',
+                   side_effect=lambda daemon: daemon.name != 'daemon2'):
+            instance = RgwClient.admin_instance()
+        self.assertEqual(instance.daemon.name, 'daemon3')
+
+    def test_explicitly_selected_unreachable_daemon_raises(self):
+        with patch('dashboard.services.rgw_client._is_reachable', return_value=False), \
+                self.assertRaises(DashboardException) as cm:
+            RgwClient.admin_instance(daemon_name='daemon2')
+        self.assertEqual(cm.exception.status, 503)
+
+    def test_explicitly_selected_daemon_does_not_become_default(self):
+        RgwClient.admin_instance(daemon_name='daemon2')
+        instance = RgwClient.admin_instance()
+        self.assertEqual(instance.daemon.name, 'daemon1')
+
+    def test_cached_daemon_is_not_probed(self):
+        RgwClient.admin_instance()
+        with patch('dashboard.services.rgw_client._is_reachable') as is_reachable:
+            instance = RgwClient.admin_instance()
+        is_reachable.assert_not_called()
+        self.assertEqual(instance.daemon.name, 'daemon1')
+
 
 class RgwClientHelperTest(TestCase):
     def test_parse_frontend_config_1(self):
@@ -408,6 +458,21 @@ class RgwClientHelperTest(TestCase):
         self.assertEqual(str(ctx.exception),
                          'Failed to determine RGW port from "mongoose port=8080"')
 
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_list_roles_includes_realm_zone(self, mock_cmd):
+        mock_cmd.return_value = (0, {'Roles': []}, '')
+        client = RgwClient.admin_instance()
+        client.list_roles(account_id='RGW123')
+
+        cmd = mock_cmd.call_args[0][0]
+        self.assertEqual(cmd[:2], ['role', 'list'])
+        self.assertIn('--account-id', cmd)
+        self.assertIn('RGW123', cmd)
+        self.assertIn('--rgw-realm', cmd)
+        self.assertIn(client.daemon.realm_name, cmd)
+        self.assertIn('--rgw-zone', cmd)
+        self.assertIn(client.daemon.zone_name, cmd)
+
 
 class TestDictToXML(TestCase):
     def test_empty_dict(self):
@@ -451,6 +516,42 @@ class TestDictToXML(TestCase):
         expected_xml = "<name>Foo</name>\n<age>30</age>\n"
         result = RgwClient.dict_to_xml(data)
         self.assertEqual(result, expected_xml)
+
+
+class TestAppendRgwRealmZone(TestCase):
+    def test_append_rgw_realm_zone(self):
+        daemon = Mock()
+        daemon.realm_name = 'test_realm'
+        daemon.zone_name = 'test_zone'
+        cmd = ['role', 'list']
+        append_rgw_realm_zone(cmd, daemon)
+        self.assertEqual(
+            cmd,
+            ['role', 'list', '--rgw-realm', 'test_realm', '--rgw-zone', 'test_zone'])
+
+        cmd = ['role', 'list']
+        append_rgw_realm_zone(cmd, None)
+        self.assertEqual(cmd, ['role', 'list'])
+
+        daemon.realm_name = ''
+        daemon.zone_name = ''
+        cmd = ['role', 'list']
+        append_rgw_realm_zone(cmd, daemon)
+        self.assertEqual(cmd, ['role', 'list'])
+
+    @patch('dashboard.services.rgw_client._get_daemons')
+    def test_append_rgw_realm_zone_by_daemon_name(self, mock_get_daemons):
+        daemon = Mock()
+        daemon.realm_name = 'test_realm'
+        daemon.zone_name = 'test_zone'
+        mock_get_daemons.return_value = {'dummy-daemon': daemon}
+
+        cmd = ['account', 'list']
+        append_rgw_realm_zone(cmd, daemon_name='dummy-daemon')
+        self.assertEqual(
+            cmd,
+            ['account', 'list', '--rgw-realm', 'test_realm', '--rgw-zone', 'test_zone'])
+        mock_get_daemons.assert_called_once_with()
 
 
 class RgwMultisiteTest(TestCase):

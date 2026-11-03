@@ -1,0 +1,79 @@
+@let savingsVm = savings();
+<div
+  cdsRow
+  class="cds-ml-2 cds-mt-4"
+>
+  <div cdsCol>
+    <div class="savings-header">
+      <p class="cds--label">
+        <span i18n>Total savings</span>
+        <cds-tooltip
+          class="cds-ml-3"
+          [caret]="true"
+          description="Amount of physical storage capacity saved through hardware compression. Needs at least 100 GiB of data to be shown."
+          i18n-description
+        >
+          <cd-icon type="help"></cd-icon>
+        </cds-tooltip>
+      </p>
+      @if (savingsVm.total !== null) {
+        <h3 class="cds--type-heading-05">
+          {{ savingsVm.total }}
+          @if (savingsVm.isTrendingUp) {
+            <cd-icon
+              type="growth"
+              i18n-aria-label
+              aria-label="Savings trending up"
+            ></cd-icon>
+          }
+        </h3>
+      } @else {
+        <p
+          class="cds--type-body-02 savings-no-data"
+          i18n
+        >
+          Not available
+        </p>
+      }
+    </div>
+  </div>
+</div>
+
+<div
+  cdsRow
+  class="align-items-center cds-ml-2 cds-mt-4"
+>
+  <div
+    cdsCol
+    [columnNumbers]="{ lg: 14, md: 10, sm: 16 }"
+  >
+    @if (savingsVm.trendData.length) {
+      <cd-area-chart
+        chartTitle="Saving trend"
+        i18n-chartTitle
+        [chartKey]="'Storage saved'"
+        [dataUnit]="'B'"
+        [legendEnabled]="false"
+        [rawData]="savingsVm.trendData"
+        subHeading="Shows last 7 days storage consumption trends based on recent usage."
+        i18n-subHeading
+        [height]="'200px'"
+        [decimals]="2"
+        [chartType]="'area'"
+      ></cd-area-chart>
+    } @else {
+      <p
+        class="cds--type-body-01"
+        i18n
+      >
+        No trend data available.
+      </p>
+    }
+  </div>
+  <div
+    cdsCol
+    [columnNumbers]="{ lg: 2, md: 8, sm: 8 }"
+  >
+    <cd-overview-stats [stats]="savingsVm.stats"></cd-overview-stats>
+  </div>
+</div>

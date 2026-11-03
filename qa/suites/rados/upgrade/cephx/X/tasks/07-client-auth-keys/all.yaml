@@ -1,0 +1,28 @@
+# N.B. we can only rotate all keys if we do not have an existing workload.
+
+teuthology:
+  variables:
+    clients_all_rotated: true
+  postmerge:
+    - | 
+      if yaml.teuthology.variables.workload ~= 'none' then
+        reject()
+      end
+
+tasks:
+  - exec:
+      mon.a:
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health unmute AUTH_INSECURE_CLIENT_KEY_TYPE
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+  - ceph.healthy:
+      expected_checks: [AUTH_INSECURE_CLIENT_KEY_TYPE]
+  - ceph.key_rotate:
+      daemons: []
+      clients: [all]
+      key_type: aes256k
+  - exec:
+      mon.a:
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 auth --format=json-pretty dump-keys
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 auth --format=json dump-keys | jq 'any(.data.secrets[] | select(.entity.type == 8); .auth.key.type == 2)'
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+  - ceph.healthy:

@@ -37,7 +37,6 @@ prun() {
     PATH=$CEPH_BIN:$PATH "$@"
 }
 
-
 if [ -n "$VSTART_DEST" ]; then
     SRC_PATH=`dirname $0`
     SRC_PATH=`(cd $SRC_PATH; pwd)`
@@ -187,7 +186,6 @@ rgw_compression=""
 rgw_store="rados"
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 # disable SPDK by default
-pmem_enabled=0
 io_uring_enabled=0
 with_jaeger=0
 force_addr=0
@@ -205,9 +203,12 @@ fi
 declare -a block_devs
 declare -a bluestore_db_devs
 declare -a bluestore_wal_devs
-declare -a secondary_block_devs
+declare -a cache_block_devs
 declare -a cpu_table
-secondary_block_devs_type="SSD"
+seastore_cache_device_type="SSD"
+seastore_cache_backend_type="SEGMENTED"
+seastore_data_device_type="HDD"
+seastore_data_backend_type="RANDOM_BLOCK"
 
 VSTART_SEC="client.vstart.sh"
 
@@ -259,7 +260,6 @@ options:
 	--multimds <count> allow multimds with maximum active count
 	--without-dashboard: do not run using mgr dashboard
 	--bluestore-spdk: enable SPDK and with a comma-delimited list of PCI-IDs of NVME device (e.g, 0000:81:00.0)
-	--bluestore-pmem: enable PMEM and with path to a file mapped to PMEM
 	--msgr1: use msgr1 only
 	--msgr2: use msgr2 only
 	--msgr21: use msgr2 and msgr1
@@ -277,8 +277,11 @@ options:
 	--jaeger: use jaegertracing for tracing
 	--seastore-device-size: set total size of seastore
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
-	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
-	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
+	--seastore-cache-devs: comma-separated list of cache blockdevs to use for seastore
+	--seastore-cache-device-type: device type of cache blockdevs. (SSD or RANDOM_BLOCK_SSD)
+	--seastore-cache-backend-type: the backend used by the primary blockdev (SEGMENTED or RANDOM_BLOCK)
+	--seastore-data-device-type: device type of all cache blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
+	--seastore-data-backend-type: the backend used by secondary blockdevs (SEGMENTED or RANDOM_BLOCK)
 	--crimson-smp: number of cores to use for crimson
 	--crimson-alien-num-threads: number of alien-tp threads
 	--crimson-reactor-physical-only: use only one cpu per physical core for seastar reactors
@@ -343,14 +346,14 @@ parse_bluestore_wal_devs() {
     done
 }
 
-parse_secondary_devs() {
+parse_cache_devs() {
     local opt_name=$1
     shift
     local devs=$1
     shift
     local dev
-    IFS=',' read -r -a secondary_block_devs <<< "$devs"
-    for dev in "${secondary_block_devs[@]}"; do
+    IFS=',' read -r -a cache_block_devs <<< "$devs"
+    for dev in "${cache_block_devs[@]}"; do
         if [ ! -b $dev ] || [ ! -w $dev ]; then
             echo "All $opt_name must refer to writable block devices, check device: $dev"
             exit 1
@@ -613,12 +616,24 @@ case $1 in
         parse_block_devs --seastore-devs "$2"
         shift
         ;;
-    --seastore-secondary-devs)
-        parse_secondary_devs --seastore-devs "$2"
+    --seastore-cache-device-type)
+        seastore_cache_device_type="$2"
         shift
         ;;
-    --seastore-secondary-devs-type)
-        secondary_block_devs_type="$2"
+    --seastore-cache-backend-type)
+        seastore_cache_backend_type="$2"
+        shift
+        ;;
+    --seastore-cache-devs)
+        parse_cache_devs --seastore-devs "$2"
+        shift
+        ;;
+    --seastore-data-device-type)
+        seastore_data_device_type="$2"
+        shift
+        ;;
+    --seastore-data-backend-type)
+        seastore_data_backend_type="$2"
         shift
         ;;
     --crimson-smp)
@@ -649,18 +664,11 @@ case $1 in
         ;;
     --crimson-poll-mode)
         crimson_poll_mode=true
-        shift
         ;;
     --bluestore-spdk)
         [ -z "$2" ] && usage_exit
         IFS=',' read -r -a bluestore_spdk_dev <<< "$2"
         spdk_enabled=1
-        shift
-        ;;
-    --bluestore-pmem)
-        [ -z "$2" ] && usage_exit
-        bluestore_pmem_file="$2"
-        pmem_enabled=1
         shift
         ;;
     --bluestore-devs)
@@ -911,7 +919,7 @@ EOF
         osd max object namespace len = 64"
     fi
     if [ "$objectstore" == "bluestore" ]; then
-        if [ "$spdk_enabled" -eq 1 ] || [ "$pmem_enabled" -eq 1 ]; then
+        if [ "$spdk_enabled" -eq 1 ]; then
             BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
         bluestore_block_db_size = 0
         bluestore_block_db_create = false
@@ -944,6 +952,11 @@ EOF
         SEASTORE_OPTS="
         seastore device size = $seastore_size"
       fi
+      SEASTORE_OPTS+="
+        seastore_cache_device_type=$seastore_cache_device_type
+        seastore_cache_backend_type=$seastore_cache_backend_type
+        seastore_data_device_type=$seastore_data_device_type
+        seastore_data_backend_type=$seastore_data_backend_type"
     fi
 
     wconf <<EOF
@@ -957,7 +970,7 @@ $CCLIENTDEBUG
         rgw crypt s3 kms backend = testing
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
-        rgw sts key = abcdefghijklmnop
+        rgw sts key = AgCo3Fxp7lWQBiAAyF5iCVd6UAo2c5Q6TROJ6vFMxz3nciCS9pq4Z+EFzak=
         rgw s3 auth use sts = true
         ; uncomment the following to set LC days as the value in seconds;
         ; needed for passing lc time based s3-tests (can be verbose)
@@ -1227,7 +1240,7 @@ do_balance_cpu() {
         $cmd
     else
         echo "No cpu_table entry for osd $osd, setting crimson_seastar_num_reactors"
-        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_cpu_num $crimson_smp"
+        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd crimson_cpu_num $crimson_smp"
         echo $cmd
         $cmd
         return
@@ -1291,10 +1304,6 @@ EOF
                 wconf <<EOF
         bluestore_block_path = spdk:${bluestore_spdk_dev[$osd]}
 EOF
-            elif [ "$pmem_enabled" -eq 1 ]; then
-                wconf <<EOF
-        bluestore_block_path = ${bluestore_pmem_file}
-EOF
             fi
             rm -rf $CEPH_DEV_DIR/osd$osd || true
             if command -v btrfs > /dev/null; then
@@ -1313,10 +1322,10 @@ EOF
                 dd if=/dev/zero of=${bluestore_wal_devs[$osd]} bs=1M count=1
                 ln -s ${bluestore_wal_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.wal
             fi
-            if [ -n "${secondary_block_devs[$osd]}" ]; then
-                dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
-                mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
-                ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
+            if [ -n "${cache_block_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${cache_block_devs[$osd]} bs=1M count=1
+                mkdir -p $CEPH_DEV_DIR/osd$osd/block_cache
+                ln -s ${cache_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block_cache/block
             fi
             if [ "$objectstore" == "bluestore" ]; then
                 wconf <<EOF
@@ -1330,8 +1339,16 @@ EOF
             echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
             rm $CEPH_DEV_DIR/osd$osd/new.json
-            prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args \
-                2>&1 | tee $CEPH_OUT_DIR/osd-mkfs.$osd.log
+            # osd new waits until KeyServer can auth as osd.N. Abort if mkfs
+            # wrote no type file. Replaces the 49e8a07 retry that only hid the
+            # window. mkfs still talks to the mon (classic and Crimson).
+            prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS \
+                --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args \
+                > $CEPH_OUT_DIR/osd-mkfs.$osd.log 2>&1 || exit $?
+            if [ ! -f "$CEPH_DEV_DIR/osd$osd/type" ]; then
+                echo "ERROR: osd.$osd mkfs did not write $CEPH_DEV_DIR/osd$osd/type" >&2
+                exit 1
+            fi
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
             cat > $key_fn<<EOF
@@ -2062,9 +2079,9 @@ do_rgw()
 
         if [ "$CEPH_NUM_MON" -gt 0 ]; then
             ceph_adm auth get-or-create $rgw_name \
-                mon 'allow rw' \
-                osd 'allow rwx' \
-                mgr 'allow rw' \
+                mon 'profile rgw' \
+                osd 'profile rgw' \
+                mgr 'profile rgw' \
                 >> "$keyring_fn"
         fi
 

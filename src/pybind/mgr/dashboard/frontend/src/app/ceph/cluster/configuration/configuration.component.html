@@ -4,8 +4,6 @@
   [columns]="columns"
   [extraFilterableColumns]="filters"
   selectionType="single"
-  [hasDetails]="true"
-  (setExpandedRow)="setExpandedRow($event)"
   (updateSelection)="updateSelection($event)"
 >
   <cd-table-actions
@@ -15,20 +13,17 @@
     [tableActions]="tableActions"
   >
   </cd-table-actions>
-  <cd-configuration-details
-    *cdTableDetail
-    [selection]="expandedRow"
-  >
-  </cd-configuration-details>
 </cd-table>
 
 <ng-template
   #confValTpl
   let-value="data.value"
 >
-  <span *ngIf="value">
-    <span *ngFor="let conf of value; last as isLast">
-      {{ conf.section }}: {{ conf.value }}{{ !isLast ? ',' : '' }}<br />
+  @if (value) {
+    <span>
+      @for (conf of value; track conf; let isLast = $last) {
+        <span> {{ conf.section }}: {{ conf.value }}{{ !isLast ? ',' : '' }}<br /> </span>
+      }
     </span>
-  </span>
+  }
 </ng-template>

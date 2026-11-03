@@ -28,7 +28,7 @@ public:
   }
 
   virtual ~LogicalChildNode() {
-    if (this->is_stable()) {
+    if (this->is_stable() && !is_shadow_extent()) {
       lba_child_node_t::destroy();
     }
   }
@@ -44,6 +44,20 @@ public:
   laddr_t get_end() const {
     return (get_laddr() + get_length()).checked_to_laddr();
   }
+
+  TCachedExtentRef<LogicalChildNode> get_shadow() const {
+    return shadow;
+  }
+
+  void set_shadow(TCachedExtentRef<LogicalChildNode> &s) {
+    assert(!shadow);
+    shadow = s;
+  }
+  
+  void reset_shadow() {
+    shadow.reset();
+  }
+
 protected:
   void on_replace_prior(Transaction &t) final {
     assert(is_seen_by_users());
@@ -56,6 +70,8 @@ protected:
   void on_data_commit() final {
     ceph_abort("impossible");
   }
+private:
+  TCachedExtentRef<LogicalChildNode> shadow;
 };
 using LogicalChildNodeRef = TCachedExtentRef<LogicalChildNode>;
 } // namespace crimson::os::seastore

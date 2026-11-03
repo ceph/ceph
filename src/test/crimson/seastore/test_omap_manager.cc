@@ -9,6 +9,7 @@
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
+#include "crimson/os/seastore/omap_manager/log/log_manager.h"
 
 #include "test/crimson/seastore/test_block.h"
 
@@ -24,6 +25,19 @@ namespace {
 }
 
 const int STR_LEN = 50;
+
+// Depth-driven tests: under ASan a larger value lowers leaf fanout, reaching
+// the same tree depth (same split/merge paths) with far fewer keys. Keep it
+// < leaf capacity()/4 (16KB) to avoid value_too_large (exceeds_max_kv_limit).
+#ifndef __has_feature
+#define __has_feature(x) 0
+#endif
+#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+static constexpr bool omap_under_asan = true;
+#else
+static constexpr bool omap_under_asan = false;
+#endif
+static constexpr int tree_growth_value_size = omap_under_asan ? 8192 : 512;
 
 std::string rand_name(const int len)
 {
@@ -572,7 +586,7 @@ TEST_P(omap_manager_test_t, innernode_split_merge_balancing)
       for (int i = 0; i < 64; i++) {
         // Use large value size to accelerate tree growth.
         auto key = rand_name(STR_LEN);
-        set_key(omap_root, *t, key, rand_buffer(512));
+        set_key(omap_root, *t, key, rand_buffer(tree_growth_value_size));
       }
       submit_transaction(std::move(t));
     }
@@ -586,7 +600,7 @@ TEST_P(omap_manager_test_t, innernode_split_merge_balancing)
     for (unsigned i = 0; i < keys_for_leaf_split; ++i) {
       // Use large value size to accelerate tree growth.
       auto key = rand_name(STR_LEN);
-      set_key(omap_root, *t, key, rand_buffer(512));
+      set_key(omap_root, *t, key, rand_buffer(tree_growth_value_size));
       if (i % 64 == 0) {
         submit_transaction(std::move(t));
         t = create_mutate_transaction();
@@ -613,7 +627,9 @@ TEST_P(omap_manager_test_t, innernode_split_merge_balancing)
                    final_count);
     // Bound derivation: 64 KiB OMAP_LEAF_BLOCK_SIZE / ~580 B entry size (50 B key + 512 B value
     // + overhead) => healthy post-merge leaves hold >=55 entries, so count is <= size / 55 + C.
-    EXPECT_LE(final_count, test_omap_mappings.size() / 40 + 20U);
+    // Scale with the value size; at 512 B this is the original size / 40.
+    const unsigned entries_per_leaf = std::max(40 * 512 / tree_growth_value_size, 1);
+    EXPECT_LE(final_count, test_omap_mappings.size() / entries_per_leaf + 20U);
 
     logger().debug("== clearing entire tree and verifying no leaks");
     auto t_clear = create_mutate_transaction();
@@ -728,7 +744,7 @@ TEST_P(omap_manager_test_t, omap_iterate)
         for (unsigned j = 0; j < 64; ++j) {
 	  // Use large value size to accelerate tree growth.
           auto key = rand_name(STR_LEN);
-          set_key(omap_root, *t, key, rand_buffer(512));
+          set_key(omap_root, *t, key, rand_buffer(tree_growth_value_size));
           if (i == 3) {
             lower_key = key;
           }
@@ -793,7 +809,7 @@ TEST_P(omap_manager_test_t, list)
           // Use large value size to accelerate tree growth.
           auto key = rand_name(STR_LEN);
           generated_keys.push_back(key);
-          set_key(omap_root, *t, key, rand_buffer(512));
+          set_key(omap_root, *t, key, rand_buffer(tree_growth_value_size));
         }
         submit_transaction(std::move(t));
       } while (omap_root.depth < target_depth);
@@ -924,7 +940,7 @@ TEST_P(omap_manager_test_t, monotonic_inc)
       auto t = create_mutate_transaction();
       for (int i = 0; i < 128; i++) {
         auto key = monotonic_inc();
-        auto val = rand_buffer(512);
+        auto val = rand_buffer(tree_growth_value_size);
         set_key(omap_root, *t, key, val);
       }
       submit_transaction(std::move(t));
@@ -942,9 +958,451 @@ TEST_P(omap_manager_test_t, monotonic_inc)
   });
 }
 
+// A LogNode is freed only when all its entries are removed, and only the next
+// pg log write removes the old _fastinfo. If an older _fastinfo is left live
+// anywhere in the log chain, its node is never freed and the chain keeps
+// growing. Each test below takes one path that can leave it live, then checks
+// that the log chain has exactly one live _fastinfo.
+struct log_manager_fastinfo_test_t : omap_manager_test_t {
+  static constexpr epoch_t epoch = 11;
+  // about the sizes of the pg_log_entry_t of a 4 KiB write and of a
+  // pg_fast_info_t
+  static constexpr size_t LOG_VAL = 240;
+  static constexpr size_t FASTINFO_VAL = 160;
+
+  std::optional<log_manager::LogManager> lm;
+  uint64_t head = 0;
+
+  log_manager::LogManager &get_lm() {
+    if (!lm) {
+      lm.emplace(*tm);
+    }
+    return *lm;
+  }
+
+  std::string log_key(uint64_t v) const {
+    return fmt::format("{:010}.{:020}", epoch, v);
+  }
+
+  log_manager::LogNodeRef read_node(Transaction &t, laddr_t addr) {
+    return with_trans_intr(t, [&](auto &t) {
+      return tm->read_extent<log_manager::LogNode>(
+	t, addr, log_manager::LOG_NODE_BLOCK_SIZE);
+    }).unsafe_get().extent;
+  }
+
+  omap_root_t init_root() {
+    auto t = create_mutate_transaction();
+    auto root = with_trans_intr(*t, [&](auto &t) {
+      return get_lm().initialize_omap(
+	t, laddr_hint_t::create_global_md_hint(), omap_type_t::LOG);
+    }).unsafe_get();
+    submit_transaction(std::move(t));
+    return root;
+  }
+
+  // one pg log write: a new log entry and a new _fastinfo
+  void write(Transaction &t, omap_root_t &root, size_t log_len) {
+    std::map<std::string, bufferlist> kvs;
+    kvs[log_key(++head)] = rand_buffer(log_len);
+    kvs[log_manager::get_ow_key()] = rand_buffer(FASTINFO_VAL);
+    with_trans_intr(t, [&](auto &t) {
+      return get_lm().omap_set_keys(root, t, kvs);
+    }).unsafe_get();
+  }
+
+  void write_one(omap_root_t &root, size_t log_len) {
+    auto t = create_mutate_transaction();
+    write(*t, root, log_len);
+    submit_transaction(std::move(t));
+  }
+
+  // SeaStore merges queued transactions of a collection into one
+  // (SeaStore::Shard::build_next_batch). Return a transaction whose first
+  // write moved the head to a new node, so that the head is initial_pending
+  // for the rest of the transaction.
+  TransactionRef txn_with_new_head(omap_root_t &root) {
+    for (int i = 0; i < 1000; ++i) {
+      auto t = create_mutate_transaction();
+      auto old_head_addr = root.addr;
+      write(*t, root, LOG_VAL);
+      if (root.addr != old_head_addr) {
+	return t;
+      }
+      submit_transaction(std::move(t));
+    }
+    ceph_abort_msg("the log head never moved to a new node");
+  }
+
+  void check_one_live_fastinfo(omap_root_t &root) {
+    auto t = create_read_transaction();
+    size_t live_fastinfo = 0;
+    std::ostringstream out;
+    size_t n = 0;
+    for (auto addr = root.addr; addr != L_ADDR_NULL; ++n) {
+      auto node = read_node(*t, addr);
+      auto bitmap = node->get_live_bitmap();
+      size_t live = 0;
+      uint32_t index = 0;
+      out << "  node " << n << ":";
+      for (auto it = node->iter_begin(); it != node->iter_end();
+	   ++it, ++index) {
+	if (bitmap.is_set(index)) {
+	  continue;
+	}
+	live++;
+	if (it->get_key() == log_manager::get_ow_key()) {
+	  live_fastinfo++;
+	  out << " _fastinfo@" << index;
+	}
+      }
+      out << " (" << live << " of " << index << " entries live)\n";
+      addr = node->get_prev_addr();
+    }
+    EXPECT_EQ(live_fastinfo, 1u) << "log chain, newest node first:\n"
+				 << out.str();
+  }
+
+  // nothing is trimmed in these tests, so a removed entry is an old
+  // _fastinfo that still takes space in its node
+  void check_no_removed_entries(omap_root_t &root) {
+    auto t = create_read_transaction();
+    size_t n = 0;
+    for (auto addr = root.addr; addr != L_ADDR_NULL; ++n) {
+      auto node = read_node(*t, addr);
+      auto bitmap = node->get_live_bitmap();
+      for (uint32_t index = 0; index < node->get_size(); ++index) {
+	EXPECT_FALSE(bitmap.is_set(index))
+	  << "node " << n << ": entry " << index << " is removed";
+      }
+      addr = node->get_prev_addr();
+    }
+  }
+
+  size_t chain_length(omap_root_t &root) {
+    auto t = create_read_transaction();
+    size_t n = 0;
+    for (auto addr = root.addr; addr != L_ADDR_NULL; ++n) {
+      addr = read_node(*t, addr)->get_prev_addr();
+    }
+    return n;
+  }
+
+  // a log value that is too large to go over the _fastinfo at the end of
+  // the head, but small enough for one node
+  size_t too_large_for_fastinfo_slot(log_manager::LogNode &node) {
+    return node.free_space() - node.get_reserved_len() +
+      node.get_entry_size(log_manager::get_ow_key().size(), FASTINFO_VAL);
+  }
+
+  // the pg log trim removes a continuous range of log keys
+  void trim(omap_root_t &root, uint64_t first, uint64_t last) {
+    std::set<std::string> keys;
+    for (auto v = first; v <= last; ++v) {
+      keys.insert(log_key(v));
+    }
+    auto t = create_mutate_transaction();
+    with_trans_intr(*t, [&](auto &t) {
+      return get_lm().omap_rm_keys(root, t, keys);
+    }).unsafe_get();
+    submit_transaction(std::move(t));
+  }
+
+  void replay_log() {
+    replay();
+    // the LogManager refers to the TransactionManager that replay() replaced
+    lm.reset();
+  }
+};
+
+// merged writes, the first one moves the head to a new node
+TEST_P(log_manager_fastinfo_test_t, merged_writes_new_head)
+{
+  run_async([this] {
+    auto root = init_root();
+    auto t = txn_with_new_head(root);
+    write(*t, root, LOG_VAL);
+    submit_transaction(std::move(t));
+    check_one_live_fastinfo(root);
+    // the log entry goes over the old _fastinfo, so it leaves no removed
+    // entry behind
+    check_no_removed_entries(root);
+  });
+}
+
+// many merged writes in the new node
+TEST_P(log_manager_fastinfo_test_t, many_merged_writes_new_head)
+{
+  run_async([this] {
+    auto root = init_root();
+    auto t = txn_with_new_head(root);
+    for (int i = 0; i < 32; ++i) {
+      write(*t, root, LOG_VAL);
+    }
+    submit_transaction(std::move(t));
+    check_one_live_fastinfo(root);
+    check_no_removed_entries(root);
+  });
+}
+
+// merged writes, a log entry does not fit over the _fastinfo of the new node
+TEST_P(log_manager_fastinfo_test_t, merged_writes_new_head_overflow)
+{
+  run_async([this] {
+    auto root = init_root();
+    auto t = txn_with_new_head(root);
+    const auto new_head_addr = root.addr;
+    for (;;) {
+      auto node = read_node(*t, root.addr);
+      ASSERT_TRUE(node->is_initial_pending());
+      if (node->free_space() < 1024) {
+	break;
+      }
+      write(*t, root, LOG_VAL);
+      ASSERT_EQ(root.addr, new_head_addr);
+    }
+    auto node = read_node(*t, root.addr);
+    ASSERT_TRUE(node->can_ow());
+    const size_t len = too_large_for_fastinfo_slot(*node);
+    ASSERT_LT(len, node->get_max_val_length(log_key(0).size()));
+    write(*t, root, len);
+    ASSERT_NE(root.addr, new_head_addr);
+    submit_transaction(std::move(t));
+    check_one_live_fastinfo(root);
+  });
+}
+
+// a large log entry overflows a committed head
+TEST_P(log_manager_fastinfo_test_t, large_entry_overflows_head)
+{
+  run_async([this] {
+    auto root = init_root();
+    write_one(root, LOG_VAL);
+    auto t = create_mutate_transaction();
+    auto node = read_node(*t, root.addr);
+    ASSERT_TRUE(node->can_ow());
+    const size_t len = too_large_for_fastinfo_slot(*node);
+    ASSERT_LT(len, node->get_max_val_length(log_key(0).size()));
+    auto old_head_addr = root.addr;
+    write(*t, root, len);
+    ASSERT_NE(root.addr, old_head_addr);
+    submit_transaction(std::move(t));
+    check_one_live_fastinfo(root);
+  });
+}
+
+// merged writes go over the _fastinfo of a committed head, then a large log
+// entry overflows it. The earlier writes are still deltas of the head, not
+// applied to it, when the large entry comes.
+TEST_P(log_manager_fastinfo_test_t, large_entry_after_merged_writes)
+{
+  run_async([this] {
+    auto root = init_root();
+    write_one(root, LOG_VAL);
+    auto t = create_mutate_transaction();
+    const auto old_head_addr = root.addr;
+    for (int i = 0; i < 3; ++i) {
+      write(*t, root, LOG_VAL);
+    }
+    ASSERT_EQ(root.addr, old_head_addr);
+    auto node = read_node(*t, root.addr);
+    ASSERT_TRUE(node->can_ow());
+    const size_t len = too_large_for_fastinfo_slot(*node);
+    ASSERT_LT(len, node->get_max_val_length(log_key(0).size()));
+    write(*t, root, len);
+    ASSERT_NE(root.addr, old_head_addr);
+    submit_transaction(std::move(t));
+    check_one_live_fastinfo(root);
+    replay_log();
+    check_one_live_fastinfo(root);
+  });
+}
+
+// a log entry larger than a node
+TEST_P(log_manager_fastinfo_test_t, entry_larger_than_node)
+{
+  run_async([this] {
+    auto root = init_root();
+    write_one(root, LOG_VAL);
+    auto t = create_mutate_transaction();
+    auto node = read_node(*t, root.addr);
+    ASSERT_TRUE(node->can_ow());
+    write(*t, root, node->get_max_val_length(log_key(0).size()) + 1);
+    submit_transaction(std::move(t));
+    check_one_live_fastinfo(root);
+  });
+}
+
+// a log entry larger than a node, then the trim removes both log entries:
+// only the node with the newest _fastinfo is left
+TEST_P(log_manager_fastinfo_test_t, entry_larger_than_node_trim)
+{
+  run_async([this] {
+    auto root = init_root();
+    write_one(root, LOG_VAL);
+    auto t = create_mutate_transaction();
+    auto node = read_node(*t, root.addr);
+    write(*t, root, node->get_max_val_length(log_key(0).size()) + 1);
+    submit_transaction(std::move(t));
+    trim(root, 1, head);
+    check_one_live_fastinfo(root);
+    EXPECT_EQ(chain_length(root), 1u);
+  });
+}
+
+// On crimson, PGLog::merge_log rewrites the whole pg log: it removes all log
+// keys and writes the log entries again in the same transaction. The removed
+// copies stay in their nodes, so a node can start with removed log keys that
+// are newer than its live ones. The trim must still remove the live ones.
+struct log_manager_trim_test_t : log_manager_fastinfo_test_t {
+  // PGLog::_write_log_and_missing with dirty_to = max, for the log
+  // (tail, head], with tail and head as in pg_log_t
+  void rewrite_log(omap_root_t &root, uint64_t tail) {
+    std::map<std::string, bufferlist> kvs;
+    for (auto v = tail + 1; v <= head; ++v) {
+      kvs[log_key(v)] = rand_buffer(LOG_VAL);
+    }
+    // omap_rm_key_range() keeps references to the keys across suspension
+    // points, so the keys must outlive the call
+    const auto first = log_key(0);
+    const auto last = log_key(std::numeric_limits<uint64_t>::max());
+    auto t = create_mutate_transaction();
+    with_trans_intr(*t, [&](auto &t) {
+      return get_lm().omap_rm_key_range(root, t, first, last);
+    }).unsafe_get();
+    with_trans_intr(*t, [&](auto &t) {
+      return get_lm().omap_set_keys(root, t, kvs);
+    }).unsafe_get();
+    submit_transaction(std::move(t));
+  }
+
+  bool has_key(omap_root_t &root, uint64_t v) {
+    auto t = create_read_transaction();
+    return with_trans_intr(*t, [&](auto &t) {
+      return get_lm().omap_get_value(root, t, log_key(v));
+    }).unsafe_get().has_value();
+  }
+};
+
+// the log is (first - 3, first + 1], where first is the oldest log entry of
+// the head LogNode, then the log is rewritten into the head LogNode and the
+// trim removes first - 2 and first - 1
+TEST_P(log_manager_trim_test_t, trim_after_log_rewrite)
+{
+  run_async([this] {
+    auto root = init_root();
+    for (auto old_head_addr = root.addr; root.addr == old_head_addr; ) {
+      write_one(root, LOG_VAL);
+    }
+    const uint64_t first = head;
+    write_one(root, LOG_VAL);
+    trim(root, 1, first - 3);
+    const auto head_addr = root.addr;
+    rewrite_log(root, first - 3);
+    // the test reads this LogNode, so the rewrite must not leave it
+    ASSERT_EQ(root.addr, head_addr);
+    trim(root, first - 2, first - 1);
+    // the trimmed keys came back when the OSD read the log again
+    replay_log();
+    EXPECT_FALSE(has_key(root, first - 2));
+    EXPECT_FALSE(has_key(root, first - 1));
+    EXPECT_TRUE(has_key(root, first));
+    EXPECT_TRUE(has_key(root, first + 1));
+  });
+}
+
+// after the rewrite, remove the newest log entries first and first + 1, so
+// that the head LogNode starts and ends with removed log keys around the live
+// first - 2 and first - 1
+TEST_P(log_manager_trim_test_t, live_checks_after_log_rewrite)
+{
+  run_async([this] {
+    auto root = init_root();
+    for (auto old_head_addr = root.addr; root.addr == old_head_addr; ) {
+      write_one(root, LOG_VAL);
+    }
+    const uint64_t first = head;
+    write_one(root, LOG_VAL);
+    trim(root, 1, first - 3);
+    const auto head_addr = root.addr;
+    rewrite_log(root, first - 3);
+    // the test reads this LogNode, so the rewrite must not leave it
+    ASSERT_EQ(root.addr, head_addr);
+    trim(root, first, first + 1);
+    auto t = create_read_transaction();
+    auto node = read_node(*t, root.addr);
+    EXPECT_FALSE(node->log_has_larger_than(log_key(first - 1)));
+    EXPECT_TRUE(node->log_has_larger_than(log_key(first - 3)));
+    EXPECT_TRUE(node->log_less_than(log_key(first)));
+    EXPECT_FALSE(node->log_less_than(log_key(first - 1)));
+  });
+}
+
+// SeaStore merges queued transactions, so the trim can find the newest
+// LogNode already changed by a log write in its transaction, with no removal
+// in that transaction yet
+TEST_P(log_manager_trim_test_t, trim_after_log_rewrite_in_merged_txn)
+{
+  run_async([this] {
+    auto root = init_root();
+    for (auto old_head_addr = root.addr; root.addr == old_head_addr; ) {
+      write_one(root, LOG_VAL);
+    }
+    const uint64_t first = head;
+    write_one(root, LOG_VAL);
+    trim(root, 1, first - 3);
+    const auto head_addr = root.addr;
+    rewrite_log(root, first - 3);
+    ASSERT_EQ(root.addr, head_addr);
+    auto t = create_mutate_transaction();
+    std::map<std::string, bufferlist> kvs;
+    kvs[log_key(++head)] = rand_buffer(LOG_VAL);
+    with_trans_intr(*t, [&](auto &t) {
+      return get_lm().omap_set_keys(root, t, kvs);
+    }).unsafe_get();
+    ASSERT_EQ(root.addr, head_addr);
+    const std::set<std::string> keys = {log_key(first - 2), log_key(first - 1)};
+    with_trans_intr(*t, [&](auto &t) {
+      return get_lm().omap_rm_keys(root, t, keys);
+    }).unsafe_get();
+    submit_transaction(std::move(t));
+    replay_log();
+    EXPECT_FALSE(has_key(root, first - 2));
+    EXPECT_FALSE(has_key(root, first - 1));
+    EXPECT_TRUE(has_key(root, first));
+    EXPECT_TRUE(has_key(root, first + 2));
+  });
+}
+
 INSTANTIATE_TEST_SUITE_P(
   omap_manager_test,
   omap_manager_test_t,
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::FULL_CHECK)
+  )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+  log_manager_fastinfo_test,
+  log_manager_fastinfo_test_t,
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::FULL_CHECK)
+  )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+  log_manager_trim_test,
+  log_manager_trim_test_t,
   ::testing::Combine(
     ::testing::Values (
       "segmented",

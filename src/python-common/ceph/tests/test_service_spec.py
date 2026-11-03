@@ -19,10 +19,12 @@ from ceph.deployment.service_spec import (
     OAuth2ProxySpec,
     PlacementSpec,
     PrometheusSpec,
+    CertificateSource,
     RGWSpec,
     ServiceSpec,
     YamlLiteralString,
     TunedProfileSpec,
+    MgmtGatewaySpec,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
@@ -326,6 +328,56 @@ def test_rgw_servicespec_parse(realm, zone, frontend_type, raise_exception, msg)
     else:
         spec.validate()
 
+
+RGW_FRONTEND_TEST_CERT = """-----BEGIN CERTIFICATE-----\nMIICxjCCAa4CEQDIZSujNBlKaLJzmvntjukjMA0GCSqGSIb3DQEBDQUAMCExDTAL\nBgNVBAoMBENlcGgxEDAOBgNVBAMMB2NlcGhhZG0wHhcNMjIwNzEzMTE0NzA3WhcN\nMzIwNzEwMTE0NzA3WjAhMQ0wCwYDVQQKDARDZXBoMRAwDgYDVQQDDAdjZXBoYWRt\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyyMe4DMA+MeYK7BHZMHB\nq7zjliEOcNgxomjU8qbf5USF7Mqrf6+/87XWqj4pCyAW8x0WXEr6A56a+cmBVmt+\nqtWDzl020aoId6lL5EgLLn6/kMDCCJLq++Lg9cEofMSvcZh+lY2f+1p+C+00xent\nrLXvXGOilAZWaQfojT2BpRnNWWIFbpFwlcKrlg2G0cFjV5c1m6a0wpsQ9JHOieq0\nSvwCixajwq3CwAYuuiU1wjI4oJO4Io1+g8yB3nH2Mo/25SApCxMXuXh4kHLQr/T4\n4hqisvG4uJYgKMcSIrWj5o25mclByGi1UI/kZkCUES94i7Z/3ihx4Bad0AMs/9tw\nFwIDAQABMA0GCSqGSIb3DQEBDQUAA4IBAQAf+pwz7Gd7mDwU2LY0TQXsK6/8KGzh\nHuX+ErOb8h5cOAbvCnHjyJFWf6gCITG98k9nxU9NToG0WYuNm/max1y/54f0dtxZ\npUo6KSNl3w6iYCfGOeUIj8isi06xMmeTgMNzv8DYhDt+P2igN6LenqWTVztogkiV\nxQ5ZJFFLEw4sN0CXnrZX3t5ruakxLXLTLKeE0I91YJvjClSBGkVJq26wOKQNHMhx\npWxeydQ5EgPZY+Aviz5Dnxe8aB7oSSovpXByzxURSabOuCK21awW5WJCGNpmqhWK\nZzACBDEstccj57c4OGV0eayHJRsluVr2e9NHRINZA3qdB37e6gsI1xHo\n-----END CERTIFICATE-----\n"""
+
+RGW_FRONTEND_TEST_KEY = """-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDLIx7gMwD4x5gr\nsEdkwcGrvOOWIQ5w2DGiaNTypt/lRIXsyqt/r7/ztdaqPikLIBbzHRZcSvoDnpr5\nyYFWa36q1YPOXTbRqgh3qUvkSAsufr+QwMIIkur74uD1wSh8xK9xmH6VjZ/7Wn4L\n7TTF6e2ste9cY6KUBlZpB+iNPYGlGc1ZYgVukXCVwquWDYbRwWNXlzWbprTCmxD0\nkc6J6rRK/AKLFqPCrcLABi66JTXCMjigk7gijX6DzIHecfYyj/blICkLExe5eHiQ\nctCv9PjiGqKy8bi4liAoxxIitaPmjbmZyUHIaLVQj+RmQJQRL3iLtn/eKHHgFp3Q\nAyz/23AXAgMBAAECggEAVoTB3Mm8azlPlaQB9GcV3tiXslSn+uYJ1duCf0sV52dV\nBzKW8s5fGiTjpiTNhGCJhchowqxoaew+o47wmGc2TvqbpeRLuecKrjScD0GkCYyQ\neM2wlshEbz4FhIZdgS6gbuh9WaM1dW/oaZoBNR5aTYo7xYTmNNeyLA/jO2zr7+4W\n5yES1lMSBXpKk7bDGKYY4bsX2b5RLr2Grh2u2bp7hoLABCEvuu8tSQdWXLEXWpXo\njwmV3hc6tabypIa0mj2Dmn2Dmt1ppSO0AZWG/WAizN3f4Z0r/u9HnbVrVmh0IEDw\n3uf2LP5o3msG9qKCbzv3lMgt9mMr70HOKnJ8ohMSKQKBgQDLkNb+0nr152HU9AeJ\nvdz8BeMxcwxCG77iwZphZ1HprmYKvvXgedqWtS6FRU+nV6UuQoPUbQxJBQzrN1Qv\nwKSlOAPCrTJgNgF/RbfxZTrIgCPuK2KM8I89VZv92TSGi362oQA4MazXC8RAWjoJ\nSu1/PHzK3aXOfVNSLrOWvIYeZQKBgQD/dgT6RUXKg0UhmXj7ExevV+c7oOJTDlMl\nvLngrmbjRgPO9VxLnZQGdyaBJeRngU/UXfNgajT/MU8B5fSKInnTMawv/tW7634B\nw3v6n5kNIMIjJmENRsXBVMllDTkT9S7ApV+VoGnXRccbTiDapBThSGd0wri/CuwK\nNWK1YFOeywKBgEDyI/XG114PBUJ43NLQVWm+wx5qszWAPqV/2S5MVXD1qC6zgCSv\nG9NLWN1CIMimCNg6dm7Wn73IM7fzvhNCJgVkWqbItTLG6DFf3/DPODLx1wTMqLOI\nqFqMLqmNm9l1Nec0dKp5BsjRQzq4zp1aX21hsfrTPmwjxeqJZdioqy2VAoGAXR5X\nCCdSHlSlUW8RE2xNOOQw7KJjfWT+WAYoN0c7R+MQplL31rRU7dpm1bLLRBN11vJ8\nMYvlT5RYuVdqQSP6BkrX+hLJNBvOLbRlL+EXOBrVyVxHCkDe+u7+DnC4epbn+N8P\nLYpwqkDMKB7diPVAizIKTBxinXjMu5fkKDs5n+sCgYBbZheYKk5M0sIxiDfZuXGB\nkf4mJdEkTI1KUGRdCwO/O7hXbroGoUVJTwqBLi1tKqLLarwCITje2T200BYOzj82\nqwRkCXGtXPKnxYEEUOiFx9OeDrzsZV00cxsEnX0Zdj+PucQ/J3Cvd0dWUspJfLHJ\n39gnaegswnz9KMQAvzKFdg==\n-----END PRIVATE KEY-----\n"""
+
+RGW_FRONTEND_ENCRYPTED_KEY = """-----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIB\n-----END ENCRYPTED PRIVATE KEY-----\n"""
+
+
+def _rgw_frontend_ssl_certificate_spec(pem):
+    return {
+        'service_type': 'rgw',
+        'service_id': 'foo',
+        'spec': {
+            'ssl': True,
+            'rgw_frontend_ssl_certificate': pem,
+        },
+    }
+
+
+def test_rgw_frontend_ssl_certificate_combined_pem_is_split_by_validate():
+    spec = ServiceSpec.from_json(_rgw_frontend_ssl_certificate_spec(
+        RGW_FRONTEND_TEST_KEY + RGW_FRONTEND_TEST_CERT
+    ))
+
+    assert spec.certificate_source == CertificateSource.INLINE.value
+    assert spec.rgw_frontend_ssl_certificate is None
+    assert spec.ssl_cert == RGW_FRONTEND_TEST_CERT
+    assert spec.ssl_key == RGW_FRONTEND_TEST_KEY
+
+
+def test_rgw_frontend_ssl_certificate_chain_without_key_is_left_unchanged():
+    pem = RGW_FRONTEND_TEST_CERT + RGW_FRONTEND_TEST_CERT
+
+    spec = ServiceSpec.from_json(_rgw_frontend_ssl_certificate_spec(pem))
+
+    assert spec.rgw_frontend_ssl_certificate == pem
+    assert spec.ssl_cert is None
+    assert spec.ssl_key is None
+
+
+def test_rgw_frontend_ssl_certificate_parser_error_is_left_unchanged():
+    pem = RGW_FRONTEND_ENCRYPTED_KEY + RGW_FRONTEND_TEST_CERT
+
+    spec = ServiceSpec.from_json(_rgw_frontend_ssl_certificate_spec(pem))
+
+    assert spec.rgw_frontend_ssl_certificate == pem
+    assert spec.ssl_cert is None
+    assert spec.ssl_key is None
+
+
 def test_osd_unmanaged():
     osd_spec = {"placement": {"host_pattern": "*"},
                 "service_id": "all-available-devices",
@@ -457,6 +509,8 @@ spec:
   certificate_source: cephadm-signed
   first_virtual_router_id: 50
   frontend_port: 8080
+  haproxy_log_level: info
+  haproxy_log_target: journald
   monitor_cert_source: reuse_service_cert
   monitor_port: 8081
   virtual_ip: 192.168.20.1/24
@@ -471,6 +525,7 @@ spec:
     mapping:
       nobody-group: nfsnobody
       nobody-user: nfsnobody
+  objecter_dispatch_to_session_strand: true
   port: 1234
 ---
 service_type: iscsi
@@ -604,6 +659,65 @@ def test_nfs_spec_rdma_default():
     assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port']
 
 
+def test_nfs_spec_kmip_host_list_normalization():
+    """kmip_host_list accepts strings and dicts, normalizing strings to {'addr': ...}."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        kmip_host_list=['kmip.example.com', {'addr': 'kmip2.example.com', 'port': 5696}],
+    )
+    assert spec.kmip_host_list == [
+        {'addr': 'kmip.example.com'},
+        {'addr': 'kmip2.example.com', 'port': 5696},
+    ]
+
+
+@pytest.mark.parametrize('kmip_host_list', [
+    {'addr': 'kmip.example.com'},  # mapping, not a list
+    'kmip.example.com',            # bare string
+    5696,                          # not iterable at all
+])
+def test_nfs_spec_kmip_host_list_must_be_a_list(kmip_host_list):
+    """Non-list kmip_host_list values are rejected instead of being mangled."""
+    with pytest.raises(SpecValidationError, match='kmip_host_list must be a list'):
+        NFSServiceSpec(service_id='mynfs', kmip_host_list=kmip_host_list)
+
+
+def test_nfs_spec_kmip_host_list_invalid_element():
+    """List elements that are neither a string nor a dict are rejected."""
+    with pytest.raises(SpecValidationError, match='kmip_host_list contains an invalid element'):
+        NFSServiceSpec(service_id='mynfs', kmip_host_list=[5696])
+
+
+def _kmip_spec(kmip_host):
+    return NFSServiceSpec(
+        service_id='mynfs',
+        kmip_cert='cert',
+        kmip_key='key',
+        kmip_ca_cert='ca',
+        kmip_host_list=[kmip_host],
+    )
+
+
+@pytest.mark.parametrize('port', [1, 5696, 65535])
+def test_nfs_spec_kmip_host_port_valid(port):
+    """Ports within the 1..65535 range are accepted."""
+    _kmip_spec({'addr': 'kmip.example.com', 'port': port}).validate()
+
+
+@pytest.mark.parametrize('port,error_match', [
+    (0, 'Must be between 1 and 65535'),
+    (-1, 'Must be between 1 and 65535'),
+    (65536, 'Must be between 1 and 65535'),
+    (True, 'Provided port is not valid'),
+    ('5696', 'Provided port is not valid'),
+    (5696.0, 'Provided port is not valid'),
+])
+def test_nfs_spec_kmip_host_port_invalid(port, error_match):
+    """Out of range ports, booleans and non-int ports are rejected."""
+    with pytest.raises(SpecValidationError, match=error_match):
+        _kmip_spec({'addr': 'kmip.example.com', 'port': port}).validate()
+
+
 def test_nfs_spec_rdma_enabled():
     """NFS spec with enable_rdma: get_port_start returns 3 ports, default rdma_port 20049."""
     spec = NFSServiceSpec(
@@ -649,6 +763,170 @@ def test_nfs_spec_from_json_rdma():
     out = spec.to_json()
     assert out.get('spec', {}).get('enable_rdma') is True
     assert out.get('spec', {}).get('rdma_port') == 1234
+
+
+def test_nfs_spec_client_object_cache_from_json_roundtrip():
+    """Object-cache fields roundtrip via from_json/to_json, preserving size strings."""
+    data = {
+        'service_id': 'mynfs',
+        'service_type': 'nfs',
+        'placement': {'count': 1},
+        'spec': {
+            'enable_client_object_cache': True,
+            'client_object_cache_size': '1MiB',
+            'client_object_cache_max_dirty': '512KiB',
+        },
+    }
+    spec = NFSServiceSpec.from_json(data)
+    assert spec.enable_client_object_cache is True
+    assert spec.client_object_cache_size == '1MiB'
+    assert spec.client_object_cache_max_dirty == '512KiB'
+    out = spec.to_json()
+    assert out.get('spec', {}).get('enable_client_object_cache') is True
+    assert out.get('spec', {}).get('client_object_cache_size') == '1MiB'
+    assert out.get('spec', {}).get('client_object_cache_max_dirty') == '512KiB'
+
+
+def test_nfs_spec_client_object_cache_size_units():
+    """Size fields accept KiB/MB/GiB strings and remain unchanged after validate."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        enable_client_object_cache=True,
+        client_object_cache_size='1MiB',
+        client_object_cache_max_dirty='512KiB',
+    )
+    spec.validate()
+    assert spec.client_object_cache_size == '1MiB'
+    assert spec.client_object_cache_max_dirty == '512KiB'
+
+    data = {
+        'service_id': 'mynfs',
+        'service_type': 'nfs',
+        'placement': {'count': 1},
+        'spec': {
+            'enable_client_object_cache': True,
+            'client_object_cache_size': '100MB',
+            'client_object_cache_max_dirty': '0',
+        },
+    }
+    spec = NFSServiceSpec.from_json(data)
+    assert spec.client_object_cache_size == '100MB'
+    assert spec.client_object_cache_max_dirty == '0'
+
+
+def test_nfs_spec_client_object_cache_validation():
+    """client_object_cache_size/max_dirty must be valid and size > max_dirty."""
+    with pytest.raises(SpecValidationError, match="client_object_cache_size"):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_client_object_cache=True,
+            client_object_cache_size=-1,
+        ).validate()
+
+    with pytest.raises(SpecValidationError, match="client_object_cache_max_dirty"):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_client_object_cache=True,
+            client_object_cache_max_dirty=-5,
+        ).validate()
+
+    with pytest.raises(SpecValidationError, match="client_object_cache_size"):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_client_object_cache=True,
+            client_object_cache_size='not-a-size',
+        ).validate()
+
+    with pytest.raises(SpecValidationError, match="must be greater than"):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_client_object_cache=True,
+            client_object_cache_size='1MiB',
+            client_object_cache_max_dirty='2MiB',
+        ).validate()
+
+    with pytest.raises(SpecValidationError, match="must be greater than"):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_client_object_cache=True,
+            client_object_cache_size='1MiB',
+            client_object_cache_max_dirty='1MiB',
+        ).validate()
+
+    # Valid: size greater than max_dirty
+    NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        enable_client_object_cache=True,
+        client_object_cache_size='1MiB',
+        client_object_cache_max_dirty='512KiB',
+    ).validate()
+
+
+def test_nfs_spec_cephfs_client_log_dir_path():
+    """cephfs_client_log_dir must be an absolute path and not '/' when set."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        enable_cephfs_client_log=True,
+        cephfs_client_log_dir='/var/log/ceph/custom',
+    )
+    spec.validate()
+
+    with pytest.raises(SpecValidationError, match='absolute path'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_cephfs_client_log=True,
+            cephfs_client_log_dir='relative/log/dir',
+        ).validate()
+
+    with pytest.raises(SpecValidationError, match='filesystem root'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_cephfs_client_log=True,
+            cephfs_client_log_dir='/',
+        ).validate()
+
+
+@pytest.mark.parametrize('log_dir', ['//', '/..', '/tmp/..', '/etc', '/var'])
+def test_nfs_spec_cephfs_client_log_dir_rejects_root_aliases(log_dir):
+    """Paths that are, escape to, or name a protected system dir are refused."""
+    with pytest.raises(SpecValidationError):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_cephfs_client_log=True,
+            cephfs_client_log_dir=log_dir,
+        ).validate()
+
+
+@pytest.mark.parametrize('clients_per_pool', [2, 3, 64])
+def test_nfs_spec_clients_per_pool_accepted(clients_per_pool):
+    """Pool sizes within the range NFS-Ganesha supports are accepted."""
+    NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        clients_per_pool=clients_per_pool,
+    ).validate()
+
+
+@pytest.mark.parametrize('clients_per_pool', [-1, 0, 1, 65, 1000])
+def test_nfs_spec_clients_per_pool_out_of_range(clients_per_pool):
+    """Ganesha rejects pools outside 2..64, so the spec must not accept them."""
+    with pytest.raises(SpecValidationError, match='clients_per_pool'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            clients_per_pool=clients_per_pool,
+        ).validate()
 
 
 def test_repr():
@@ -882,6 +1160,84 @@ spec:
     assert isinstance(loaded, IngressSpec)
     assert loaded.haproxy_peer_communication_port == 5000
     assert loaded.get_port_start() == [2049, 9049, 5000]
+
+
+def _make_ingress_spec(**kwargs):
+    base = dict(
+        service_type='ingress',
+        service_id='rgw.foo',
+        backend_service='rgw.foo',
+        frontend_port=8080,
+        monitor_port=8081,
+        virtual_ip='192.168.1.1/24',
+    )
+    base.update(kwargs)
+    return IngressSpec(**base)
+
+
+def test_ingress_haproxy_logging_defaults():
+    """Logging is on by default: journald target, info level."""
+    spec = _make_ingress_spec()
+    spec.validate()
+    assert spec.haproxy_log_target == 'journald'
+    assert spec.haproxy_log_level == 'info'
+
+
+def test_ingress_haproxy_logging_normalizes_case():
+    """Values are lowercased so they are valid HAProxy tokens."""
+    spec = _make_ingress_spec(haproxy_log_target='JournalD', haproxy_log_level='DEBUG')
+    spec.validate()
+    assert spec.haproxy_log_target == 'journald'
+    assert spec.haproxy_log_level == 'debug'
+
+
+@pytest.mark.parametrize("level", ['debug', 'info', 'notice', 'warning', 'err'])
+def test_ingress_haproxy_log_level_accepts_valid(level):
+    spec = _make_ingress_spec(haproxy_log_level=level)
+    spec.validate()
+    assert spec.haproxy_log_level == level
+
+
+@pytest.mark.parametrize("target", ['journald', 'none'])
+def test_ingress_haproxy_log_target_accepts_valid(target):
+    spec = _make_ingress_spec(haproxy_log_target=target)
+    spec.validate()
+    assert spec.haproxy_log_target == target
+
+
+def test_ingress_haproxy_log_level_rejects_invalid():
+    spec = _make_ingress_spec(haproxy_log_level='verbose')
+    with pytest.raises(SpecValidationError, match='haproxy_log_level'):
+        spec.validate()
+
+
+def test_ingress_haproxy_log_target_rejects_invalid():
+    spec = _make_ingress_spec(haproxy_log_target='syslog')
+    with pytest.raises(SpecValidationError, match='haproxy_log_target'):
+        spec.validate()
+
+
+@pytest.mark.parametrize("value", [None, '', '   '])
+def test_ingress_haproxy_logging_unset_uses_default(value):
+    """None and empty/whitespace strings fall back to the defaults."""
+    spec = _make_ingress_spec(haproxy_log_target=value, haproxy_log_level=value)
+    spec.validate()
+    assert spec.haproxy_log_target == 'journald'
+    assert spec.haproxy_log_level == 'info'
+
+
+@pytest.mark.parametrize("bad", [False, 0, [], True, 5, ['journald']])
+def test_ingress_haproxy_log_target_rejects_non_string(bad):
+    """Non-string values are rejected with a clear error, not silently
+    coerced to the default (false/0/[]) nor crashed on .lower() (true/5/list)."""
+    with pytest.raises(SpecValidationError, match='haproxy_log_target must be a string'):
+        _make_ingress_spec(haproxy_log_target=bad)
+
+
+@pytest.mark.parametrize("bad", [False, 0, [], True, 5, ['info']])
+def test_ingress_haproxy_log_level_rejects_non_string(bad):
+    with pytest.raises(SpecValidationError, match='haproxy_log_level must be a string'):
+        _make_ingress_spec(haproxy_log_level=bad)
 
 
 @pytest.mark.parametrize("y, error_match", [
@@ -1476,9 +1832,9 @@ def test_extra_args_handling(y, ec_args, ee_args, ec_final_args, ee_final_args):
         for args in spec_obj.extra_entrypoint_args:
             ee_res.extend(args.to_args())
         assert ee_res == ee_final_args
-  
+
 def test_osd_has_default_termination_grace_when_missing():
-    
+
     spec_data = """
 service_type: osd
 service_id: osd_spec_default
@@ -1652,3 +2008,194 @@ def test_tuned_profile_spec_profile_name_validation(spec_yaml, expect_error, err
         assert spec.placement is not None
         # round-trip
         assert TunedProfileSpec.from_json(spec.to_json()).profile_name == spec.profile_name
+
+@pytest.mark.parametrize(
+    "virtual_ip, valid",
+    [
+        ("10.128.8.255", True),
+        ("2001:db8::1", True),
+        ("[2001:db8::1]", True),
+        ("ceph.example.com", False),
+        ("10.128.8.255/22", False),
+        ("invalid", False),
+    ],
+)
+def test_mgmt_gateway_virtual_ip_validation(virtual_ip, valid):
+    spec = MgmtGatewaySpec(virtual_ip=virtual_ip)
+
+    if valid:
+        spec.validate()
+    else:
+        with pytest.raises(
+            SpecValidationError,
+            match=r"Invalid virtual_ip: .*\. Must be a valid IP address\.",
+        ):
+            spec.validate()
+
+
+@pytest.mark.parametrize("extra_args, ssl", [
+    (['port=8080+8443s'], True),
+    (['port=10.0.0.1:8080'], False),
+    (['port=8080', 'ssl_port=8443'], True),
+])
+def test_rgw_spec_does_not_parse_extra_args(extra_args, ssl):
+    # loading a spec must never fail on / rewrite rgw_frontend_extra_args
+    spec = RGWSpec(service_id='foo', ssl=ssl, rgw_frontend_extra_args=list(extra_args))
+    assert spec.rgw_frontend_extra_args == extra_args
+    assert spec.rgw_frontend_port is None
+    assert 'rgw_frontend_port' not in spec.to_json().get('spec', {})
+    assert 'rgw_frontend_http_port' not in spec.to_json().get('spec', {})
+    spec.validate()
+
+
+def test_rgw_http_port_only_with_ssl():
+    assert RGWSpec(service_id='foo', ssl=True, rgw_frontend_http_port=8080
+                   ).get_port() == [443, 8080]
+    assert RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=8443,
+                   rgw_frontend_http_port=8080).get_port() == [8443, 8080]
+    assert RGWSpec(service_id='foo', rgw_frontend_port=8080).get_port() == [8080]
+
+
+@pytest.mark.parametrize("kwargs, extra_args, expected", [
+    # the default HTTPS port stays the primary one, ssl_port is added to it
+    (dict(ssl=True), ['tcp_nodelay=1', 'max_header_size=65536', 'ssl_port=8443'], [443, 8443]),
+    (dict(ssl=True), ['ssl_port=192.168.104.100:8443'], [443, 8443]),
+    (dict(ssl=True, rgw_frontend_http_port=8080), ['ssl_port=8443'], [443, 8080, 8443]),
+    (dict(ssl=True, rgw_frontend_port=8443), ['ssl_port=9443'], [8443, 9443]),
+    (dict(ssl=True), ['ssl_port=443'], [443]),                  # no duplicates
+    (dict(ssl=True), ['ssl_port=garbage'], [443]),
+    (dict(ssl=False), ['ssl_port=8443'], [80]),                 # ignored without SSL
+])
+def test_rgw_extra_ssl_port_keeps_default_primary_port(kwargs, extra_args, expected):
+    spec = RGWSpec(service_id='foo', rgw_frontend_extra_args=extra_args, **kwargs)
+    assert spec.get_port() == expected
+    assert spec.get_port_start() == expected
+
+
+def test_rgw_extra_ssl_port_is_not_the_http_port():
+    spec = RGWSpec(service_id='foo', ssl=True, rgw_frontend_extra_args=['ssl_port=8443'])
+    assert spec.get_http_port() is None
+    spec.validate()
+
+
+@pytest.mark.parametrize("kwargs, msg", [
+    (dict(ssl=False, rgw_frontend_http_port=8080), 'Only can be enabled with SSL'),
+    (dict(ssl=True, rgw_frontend_http_port=443),
+     'rgw_frontend_http_port: 443 is the same port as rgw_frontend_port, '
+     'which defaults to 443'),
+    (dict(ssl=True, rgw_frontend_port=8443, rgw_frontend_http_port=8443),
+     'same port as rgw_frontend_port'),
+    (dict(ssl=True, rgw_frontend_http_port=70000), 'range'),
+    (dict(ssl=True, rgw_frontend_port=8080, rgw_frontend_http_port=8081,
+          placement=PlacementSpec(label='rgw', count_per_host=2)), 'overlap'),
+])
+def test_rgw_http_port_invalid(kwargs, msg):
+    spec = RGWSpec(service_id='foo', **kwargs)
+    with pytest.raises(SpecValidationError, match=msg):
+        spec.validate()
+
+
+@pytest.mark.parametrize("extra_args", [
+    ['port=8081'],
+    ['ssl_port=444'],
+    ['tcp_nodelay=1', 'port=8081', 'ssl_port=444'],
+    ['endpoint=10.0.0.1:8081'],
+    ['ssl_endpoint=10.0.0.1:444'],
+    ['port=192.168.104.100:8081', 'ssl_port=192.168.104.100:444'],  # IP values
+])
+def test_rgw_http_port_fixed_extra_args_with_count_per_host(extra_args):
+    spec = RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=443,
+                   rgw_frontend_http_port=8080,
+                   rgw_frontend_extra_args=extra_args,
+                   placement=PlacementSpec(label='rgw', count_per_host=2))
+    with pytest.raises(SpecValidationError, match='rgw_frontend_extra_args'):
+        spec.validate()
+
+
+@pytest.mark.parametrize("count_per_host, extra_args", [
+    (1, ['tcp_nodelay=1', 'port=8081', 'ssl_port=444']),  # one daemon per host: fine
+    (2, ['tcp_nodelay=1', 'max_header_size=65536']),      # no fixed ports: fine
+    (2, None),                                            # no extra args at all
+])
+def test_rgw_http_port_extra_args_allowed(count_per_host, extra_args):
+    RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=443,
+            rgw_frontend_http_port=8080,
+            rgw_frontend_extra_args=extra_args,
+            placement=PlacementSpec(label='rgw', count_per_host=count_per_host)).validate()
+
+
+def test_rgw_fixed_extra_args_with_count_per_host_unchanged_without_http_port():
+    # specs that do not use rgw_frontend_http_port keep validating as before
+    RGWSpec(service_id='foo', rgw_frontend_extra_args=['port=8081', 'so_reuseport=1'],
+            placement=PlacementSpec(label='rgw', count_per_host=2)).validate()
+
+
+@pytest.mark.parametrize("arg, expected", [
+    ('ssl_port=444', [443, 8080, 444]),
+    ('ssl_port=192.168.104.100:444', [443, 8080, 444]),
+    ('ssl_port=[fd00::1]:444', [443, 8080, 444]),
+    ('ssl_port=garbage', [443, 8080]),
+])
+def test_rgw_get_port_never_raises_on_extra_ssl_port(arg, expected):
+    spec = RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=443,
+                   rgw_frontend_http_port=8080, rgw_frontend_extra_args=[arg])
+    assert spec.get_port() == expected
+    assert spec.get_port_start() == expected
+
+
+@pytest.mark.parametrize("extra_args, offender", [
+    (['port=8080'], 'port=8080'),                              # == secondary
+    (['endpoint=10.0.0.1:8080'], 'endpoint=10.0.0.1:8080'),    # == secondary
+    (['ssl_port=443'], 'ssl_port=443'),                        # == primary
+    (['ssl_endpoint=[fd00::1]:443'], 'ssl_endpoint=[fd00::1]:443'),
+    (['port=8080+8443s'], 'port=8080+8443s'),                  # civetweb style
+    (['port=8081', 'port=8081'], 'port=8081'),                 # repeated extra
+    (['port=444', 'ssl_port=444'], 'ssl_port=444'),            # http + https
+    (['tcp_nodelay=1', 'max_header_size=65536', 'port=8080', 'ssl_port=444', 'port=8081'],
+     'port=8080'),
+])
+def test_rgw_extra_args_port_already_used(extra_args, offender):
+    spec = RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=443,
+                   rgw_frontend_http_port=8080,
+                   rgw_frontend_extra_args=extra_args,
+                   placement=PlacementSpec(label='rgw', count_per_host=1))
+    with pytest.raises(SpecValidationError, match=r'already used by') as e:
+        spec.validate()
+    assert offender in str(e.value)
+
+
+@pytest.mark.parametrize("arg, expected", [
+    ('port=8080', [8080]),
+    ('ssl_port=192.168.104.100:444', [444]),
+    ('endpoint=[fd00::1]:8081', [8081]),
+    ('port=8080+8443s', [8080, 8443]),
+    ('port=192.168.0.1', []),
+    ('tcp_nodelay=1', []),
+    ('ssl_port=garbage', []),
+])
+def test_rgw_ports_in_extra_arg(arg, expected):
+    assert RGWSpec._ports_in_extra_arg(arg) == expected
+
+
+def test_rgw_extra_args_same_port_unchanged_without_http_port():
+    # specs that do not use rgw_frontend_http_port keep validating as before
+    RGWSpec(service_id='foo', ssl=True, rgw_frontend_port=443,
+            rgw_frontend_extra_args=['ssl_port=443']).validate()
+
+
+@pytest.mark.parametrize("extra_args", [
+    ['ssl_port=8443'],
+    ['tcp_nodelay=1', 'ssl_port=10.0.0.1:8443'],
+    ['ssl_endpoint=10.0.0.1:8443'],
+    ['port=8443s'],                                            # civetweb style
+    ['port=8080+8443s'],
+    ['port=8081', 'tcp_nodelay=1'],
+])
+def test_rgw_ssl_related_extra_args_without_ssl_still_validate(extra_args):
+    # Specs that carry SSL options in rgw_frontend_extra_args while ssl is
+    # false are valid today. Rejecting them would make SpecStore.load() drop
+    # existing services on upgrade, so they must keep loading.
+    spec = RGWSpec(service_id='foo', ssl=False, rgw_frontend_extra_args=extra_args)
+    spec.validate()
+    loaded = ServiceSpec.from_json(spec.to_json())
+    assert loaded.rgw_frontend_extra_args == extra_args

@@ -1,10 +1,12 @@
-<cd-orchestrator-doc-panel *ngIf="showDocPanel"></cd-orchestrator-doc-panel>
+@if (showDocPanel) {
+  <cd-orchestrator-doc-panel></cd-orchestrator-doc-panel>
+}
 
-<div *ngIf="flag === 'hostDetails'; else serviceDetailsTpl">
-  <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
-</div>
-
-<ng-template #serviceDetailsTpl>
+@if (flag === 'hostDetails') {
+  <div>
+    <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
+  </div>
+} @else {
   @switch (mode) {
     @case ('daemons') {
       <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
@@ -22,80 +24,81 @@
       }
     }
   }
-</ng-template>
+}
 
 <ng-template
   #statusTpl
   let-row="data.row"
 >
-  <cds-tag
-    *ngIf="row.status_desc"
-    [class]="row | pipeFunction: getStatusClass"
-  >
-    {{ row.status_desc }}
-  </cds-tag>
+  @if (row.status_desc) {
+    <cds-tag [class]="row | pipeFunction: getStatusClass">
+      {{ row.status_desc }}
+    </cds-tag>
+  }
 </ng-template>
 
 <ng-template
   #listTpl
   let-events="data.value"
 >
-  <ul
-    class="list-group list-group-flush"
-    *ngIf="events?.length; else noEventsAvailable"
-  >
-    <li
-      class="list-group-item"
-      *ngFor="let event of events; trackBy: trackByFn"
-    >
-      <b>{{ event.created | relativeDate }} - </b>
-      <cds-tag class="tag-info">{{ event.subject }}</cds-tag
-      ><br />
-      <span *ngIf="event.level === 'INFO'">
-        <svg
-          [cdsIcon]="icons.infoCircle"
-          [size]="icons.size16"
-          class="cds-info-color"
-        ></svg>
-      </span>
-      <span *ngIf="event.level === 'ERROR'">
-        <svg
-          [cdsIcon]="icons.warning"
-          [size]="icons.size16"
-          class="cds-warning-color"
-        ></svg>
-      </span>
-      {{ event.message }}
-    </li>
-  </ul>
-  <ng-template #noEventsAvailable>
+  @if (events?.length) {
+    <ul class="list-group list-group-flush">
+      @for (event of events; track trackByFn($index, event)) {
+        <li class="list-group-item">
+          <b>{{ event.created | relativeDate }} - </b>
+          <cds-tag class="tag-info">{{ event.subject }}</cds-tag
+          ><br />
+          @if (event.level === 'INFO') {
+            <span>
+              <svg
+                [cdsIcon]="icons.infoCircle"
+                [size]="icons.size16"
+                class="cds-info-color"
+              ></svg>
+            </span>
+          }
+          @if (event.level === 'ERROR') {
+            <span>
+              <svg
+                [cdsIcon]="icons.warning"
+                [size]="icons.size16"
+                class="cds-warning-color"
+              ></svg>
+            </span>
+          }
+          {{ event.message }}
+        </li>
+      }
+    </ul>
+  } @else {
     <div class="list-group-item">
       <span>No data available</span>
     </div>
-  </ng-template>
+  }
 </ng-template>
 
 <ng-template #serviceDaemonDetailsTpl>
-  <cd-table
-    *ngIf="hasOrchestrator"
-    #daemonsTable
-    [data]="daemons"
-    selectionType="single"
-    [columns]="columns"
-    columnMode="flex"
-    identifier="daemon_name"
-    (fetchData)="getDaemons($event)"
-    (updateSelection)="updateSelection($event)"
-  >
-    <cd-table-actions
-      id="service-daemon-list-actions"
-      class="table-actions"
-      [selection]="selection"
-      [permission]="permissions.hosts"
-      [tableActions]="tableActions"
+  @if (hasOrchestrator) {
+    <cd-table
+      #daemonsTable
+      [data]="daemons"
+      selectionType="single"
+      [columns]="columns"
+      columnMode="flex"
+      identifier="daemon_name"
+      (fetchData)="getDaemons($event)"
+      (updateSelection)="updateSelection($event)"
     >
-    </cd-table-actions>
-  </cd-table>
+      <cd-table-actions
+        id="service-daemon-list-actions"
+        class="table-actions"
+        [selection]="selection"
+        [permission]="permissions.hosts"
+        [tableActions]="tableActions"
+      >
+      </cd-table-actions>
+    </cd-table>
+  }
 </ng-template>
 
 <ng-template

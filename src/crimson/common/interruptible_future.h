@@ -1638,16 +1638,16 @@ struct futurize<::crimson::interruptible::interruptible_future_detail<
   using tuple_type = typename type::tuple_type;
 
   static type from_tuple(tuple_type&& value) {
-    return type(ready_future_marker(), std::move(value));
+    return type(set_from_tuple_ready_future_marker(), std::move(value));
   }
   static type from_tuple(const tuple_type& value) {
-    return type(ready_future_marker(), value);
+    return type(set_from_tuple_ready_future_marker(), value);
   }
   static type from_tuple(value_type&& value) {
-    return type(ready_future_marker(), std::move(value));
+    return type(set_ready_future_marker(), std::move(value));
   }
   static type from_tuple(const value_type& value) {
-    return type(ready_future_marker(), value);
+    return type(set_ready_future_marker(), value);
   }
 
   template <typename Func, typename... FuncArgs>

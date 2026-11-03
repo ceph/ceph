@@ -10,10 +10,12 @@ MessengerRef
 Messenger::create(const entity_name_t& name,
                   const std::string& lname,
                   uint64_t nonce,
-                  bool dispatch_only_on_this_shard)
+                  bool dispatch_only_on_this_shard,
+                  bool listen_on_primary_only)
 {
   return seastar::make_shared<SocketMessenger>(
-      name, lname, nonce, dispatch_only_on_this_shard);
+      name, lname, nonce, dispatch_only_on_this_shard,
+      listen_on_primary_only);
 }
 
 } // namespace crimson::net

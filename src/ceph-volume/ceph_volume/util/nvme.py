@@ -30,7 +30,7 @@ def is_namespace(resolved_device: str) -> bool:
         return False
     if not disk.is_device(resolved_device):
         # disk.is_device() already excludes partitions
-        logger.info('Skipping NVMe format for non-whole-disk device %s', resolved_device)
+        logger.debug('Skipping NVMe format for non-whole-disk device %s', resolved_device)
         return False
     return True
 

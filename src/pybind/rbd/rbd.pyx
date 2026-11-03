@@ -955,7 +955,8 @@ class RBD(object):
         if ret != 0:
             raise make_ex(ret, 'error retrieving image from trash')
 
-        __source_string = ['USER', 'MIRRORING', 'MIGRATION', 'REMOVING']
+        __source_string = ['USER', 'MIRRORING', 'MIGRATION', 'REMOVING',
+                           'USER_PARENT']
         info = {
             'id'          : decode_cstr(c_info.id),
             'name'        : decode_cstr(c_info.name),
@@ -4464,7 +4465,11 @@ written." % (self.name, ret, length))
                 elif ret != -errno.ERANGE:
                     raise make_ex(ret, 'error listing images')
             if ret == 0:
-                return []
+                return {
+                    'tag': decode_cstr(c_tag),
+                    'exclusive': exclusive == 1,
+                    'lockers': [],
+                }
             clients = map(decode_cstr, c_clients[:clients_size - 1].split(b'\0'))
             cookies = map(decode_cstr, c_cookies[:cookies_size - 1].split(b'\0'))
             addrs = map(decode_cstr, c_addrs[:addrs_size - 1].split(b'\0'))
@@ -5523,11 +5528,16 @@ written." % (self.name, ret, length))
         if _specs == NULL:
             raise MemoryError("malloc failed")
 
+        passphrases = []
         memset(<void *>_specs, 0, len(specs) * sizeof(rbd_encryption_spec_t))
         try:
             for i in range(len(specs)):
                 format, passphrase = specs[i]
                 passphrase = cstr(passphrase, "specs[%d][1]" % i)
+                # if the passphrase is specified as a string, cstr() converts
+                # it to a bytes object which needs to stay alive for the entire
+                # duration of the call, not just the current loop iteration
+                passphrases.append(passphrase)
                 _specs[i].format = format
                 if (format == RBD_ENCRYPTION_FORMAT_LUKS1):
                     _luks1_opts = <rbd_encryption_luks1_format_options_t *>malloc(
@@ -5562,7 +5572,7 @@ written." % (self.name, ret, length))
                 else:
                     raise make_ex(
                         -errno.ENOTSUP,
-                        'specs[%d][1]: Unsupported encryption format' % i)
+                        'specs[%d][0]: Unsupported encryption format' % i)
             with nogil:
                 ret = rbd_encryption_load2(self.image, _specs, spec_count)
             if ret != 0:
@@ -5603,9 +5613,8 @@ cdef class ImageIterator(object):
                 ret = rbd_list2(self.ioctx, self.images, &self.num_images)
             if ret >= 0:
                 break
-            elif ret == -errno.ERANGE:
-                self.num_images *= 2
-            else:
+            elif ret != -errno.ERANGE:
+                self.num_images = 0
                 raise make_ex(ret, 'error listing images.')
 
     def __iter__(self):
@@ -5660,6 +5669,7 @@ cdef class LockOwnerIterator(object):
                 self.num_lock_owners = 0
                 break
             elif ret != -errno.ERANGE:
+                self.num_lock_owners = 0
                 raise make_ex(ret, 'error listing lock owners for image %s' % image.name)
 
     def __iter__(self):
@@ -5861,12 +5871,13 @@ cdef class TrashIterator(object):
             with nogil:
                 ret = rbd_trash_list(self.ioctx, self.entries, &self.num_entries)
             if ret >= 0:
-                self.num_entries = ret
                 break
             elif ret != -errno.ERANGE:
+                self.num_entries = 0
                 raise make_ex(ret, 'error listing trash entries')
 
-    __source_string = ['USER', 'MIRRORING']
+    __source_string = ['USER', 'MIRRORING', 'MIGRATION', 'REMOVING',
+                       'USER_PARENT']
 
     def __iter__(self):
         for i in range(self.num_entries):
@@ -5881,8 +5892,8 @@ cdef class TrashIterator(object):
                 }
 
     def __dealloc__(self):
-        rbd_trash_list_cleanup(self.entries, self.num_entries)
         if self.entries:
+            rbd_trash_list_cleanup(self.entries, self.num_entries)
             free(self.entries)
 
 cdef class ChildIterator(object):
@@ -5928,6 +5939,7 @@ cdef class ChildIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
+                self.num_children = 0
                 raise make_ex(ret, 'error listing children.')
 
     def __iter__(self):
@@ -5979,6 +5991,7 @@ cdef class WatcherIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
+                self.num_watchers = 0
                 raise make_ex(ret, 'error listing watchers.')
 
     def __iter__(self):
@@ -6080,6 +6093,7 @@ cdef class GroupImageIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
+                self.num_images = 0
                 raise make_ex(ret, 'error listing images for group %s' % group.name, group_errno_to_exception)
 
     def __iter__(self):

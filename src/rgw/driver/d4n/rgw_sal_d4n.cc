@@ -909,6 +909,10 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
       bl_val.append(*version_id);
       baseAttrs[RGW_CACHE_ATTR_VERSION_ID] = std::move(bl_val); //populate destination version id
     }
+    auto titer = attrs.find(RGW_ATTR_TAGS);
+    if (titer != attrs.end()) {
+      baseAttrs[RGW_ATTR_TAGS] = titer->second;
+    }
   }
 
   //ATTRSMOD_MERGE - any conflicting meta keys on the source object's attributes are overwritten by values contained in attrs parameter.
@@ -1198,13 +1202,13 @@ int D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, opt
 int D4NFilterObject::set_attr_crypt_parts(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs)
 {
   if (attrs.count(RGW_ATTR_CRYPT_MODE)) {
-    std::vector<size_t> parts_len;
+    std::vector<uint64_t> parts_len;
     uint64_t obj_size = this->get_size();
     uint64_t obj_max_chunk_size = dpp->get_cct()->_conf->rgw_max_chunk_size;
     uint64_t num_parts = (obj_size%obj_max_chunk_size) == 0 ? obj_size/obj_max_chunk_size : (obj_size/obj_max_chunk_size) + 1;
-    size_t remainder_size = obj_size;
+    uint64_t remainder_size = obj_size;
     for (uint64_t part = 0; part < num_parts; part++) {
-      size_t part_len;
+      uint64_t part_len;
       if (part == (num_parts - 1)) { //last part
         part_len = remainder_size;
       } else {

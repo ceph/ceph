@@ -2,8 +2,6 @@
 NFS
 ===
 
-.. versionadded:: Jewel
-
 .. note:: Only the NFSv4 protocol is supported when using a cephadm or Rook based deployment.
 
 Ceph Object Gateway namespaces can be exported via NFSv4,
@@ -131,6 +129,14 @@ In particular, frontend selection is handled specially by the librgw.so runtime.
 ``rgw-nfs`` frontend is started. Additional frontends (e.g., ``beast``) are enabled via the
 ``rgw nfs frontends`` config option.  Its syntax is identical to the ordinary ``rgw frontends`` option.
 Default options for non-default frontends are specified via ``rgw frontend defaults`` as normal.
+
+.. important::
+   **HTTP and NFS Protocols Can Coexist**
+
+   When RGW is started as a library instance serving NFS protocol, it will **not** start an HTTP listener by default.
+   However, HTTP/S3 and NFS protocols can run together in the same instance. You can enable HTTP/S3
+   access alongside NFS by configuring additional HTTP frontends using the ``rgw_nfs_frontends``
+   configuration option.
 
 ganesha.conf
 ------------
@@ -371,4 +377,4 @@ in the RGW section(s) of the Ceph configuration file.
 References
 ==========
 
-.. [#] http://docs.aws.amazon.com/AmazonS3/latest/dev/ListingKeysHierarchy.html
+.. [#] https://docs.aws.amazon.com/AmazonS3/latest/dev/ListingKeysHierarchy.html

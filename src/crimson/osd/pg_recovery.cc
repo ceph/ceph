@@ -348,7 +348,7 @@ RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_deletes(
       trigger,
       pg->get_recovery_backend()->push_delete(soid, need).then_interruptible(
 	[=, this] {
-        if (pg->get_peering_state().get_pg_log().get_missing().is_missing(soid)) {
+        if (!pg->get_peering_state().get_pg_log().get_missing().is_missing(soid)) {
           object_stat_sum_t stat_diff;
           stat_diff.num_objects_recovered = 1;
           on_global_recover(soid, stat_diff, true);
@@ -754,12 +754,24 @@ void PGRecovery::request_budget_retry()
   std::ignore = do_request_budget_retry();
 }
 
-void PGRecovery::on_pg_clean()
+void PGRecovery::reset_backfill_state()
 {
   replica_scan_throttle_releasers.clear();
   budget_retry_releaser.reset();
   budget_retry_in_flight = false;
   backfill_state.reset();
+}
+
+void PGRecovery::on_pg_clean()
+{
+  reset_backfill_state();
+}
+
+void PGRecovery::cancel_backfill()
+{
+  LOG_PREFIX(PGRecovery::cancel_backfill);
+  DEBUGDPP("cancelling backfill state on interval change", *pg->get_dpp());
+  reset_backfill_state();
 }
 
 // PGListener wrapper to PG::start_peering_event_operation

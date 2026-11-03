@@ -15,6 +15,8 @@
         [data]="image_error.data"
         columnMode="flex"
         [columns]="image_error.columns"
+        identifier="name"
+        forceIdentifier="true"
         [autoReload]="-1"
         (fetchData)="refresh()"
         [status]="tableStatus"
@@ -33,6 +35,8 @@
         [data]="image_syncing.data"
         columnMode="flex"
         [columns]="image_syncing.columns"
+        identifier="name"
+        forceIdentifier="true"
         [autoReload]="-1"
         (fetchData)="refresh()"
         [status]="tableStatus"
@@ -51,6 +55,8 @@
         [data]="image_ready.data"
         columnMode="flex"
         [columns]="image_ready.columns"
+        identifier="name"
+        forceIdentifier="true"
         [autoReload]="-1"
         (fetchData)="refresh()"
         [status]="tableStatus"
@@ -79,15 +85,18 @@
   let-row="data.row"
   let-value="data.value"
 >
-  <div *ngIf="row.state === 'Replaying'"></div>
+  @if (row.state === 'Replaying') {
+    <div></div>
+  }
   <div class="w-100 h-100 d-flex justify-content-center align-items-center">
-    <ngb-progressbar
-      *ngIf="row.state === 'Replaying'"
-      type="info"
-      class="w-100"
-      [value]="value"
-      [showValue]="true"
-    ></ngb-progressbar>
+    @if (row.state === 'Replaying') {
+      <ngb-progressbar
+        type="info"
+        class="w-100"
+        [value]="value"
+        [showValue]="true"
+      ></ngb-progressbar>
+    }
   </div>
 </ng-template>
 
@@ -96,12 +105,12 @@
   let-row="data.row"
   let-value="data.value"
 >
-  <span *ngIf="row.mirror_mode === 'journal'">
-    {{ value }}
-  </span>
-  <span
-    *ngIf="row.mirror_mode === 'snapshot'"
-    ngbTooltip="Not available with mirroring snapshot mode"
-    >-</span
-  >
+  @if (row.mirror_mode === 'journal') {
+    <span>
+      {{ value }}
+    </span>
+  }
+  @if (row.mirror_mode === 'snapshot') {
+    <span ngbTooltip="Not available with mirroring snapshot mode">-</span>
+  }
 </ng-template>

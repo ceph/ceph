@@ -16,7 +16,7 @@ from cherrypy_mgr import CherryPyMgr
 from mgr_util import build_url
 
 from . import mgr
-from .exceptions import ViewCacheNoDataException
+from .exceptions import DashboardException, ViewCacheNoDataException
 from .services.auth import JwtManager
 from .settings import Settings
 
@@ -749,7 +749,7 @@ def str_to_bool(val):
     return bool(strtobool(val))
 
 
-def json_str_to_object(value):  # type: (AnyStr) -> Any
+def json_str_to_object(value: AnyStr, component: Optional[str] = None) -> Any:
     """
     It converts a JSON valid string representation to object.
 
@@ -766,7 +766,13 @@ def json_str_to_object(value):  # type: (AnyStr) -> Any
     except AttributeError:
         pass
 
-    return json.loads(value)
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as e:
+        raise DashboardException(
+            msg=f"Failed to parse JSON response from {component}: {e}",
+            component=component
+        )
 
 
 def partial_dict(orig, keys):  # type: (Dict, List[str]) -> Dict

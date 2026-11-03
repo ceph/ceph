@@ -19,6 +19,7 @@ namespace cephfs {
 namespace mirror {
 
 static const std::string CEPHFS_MIRROR_OBJECT("cephfs_mirror");
+static const std::string CEPHFS_MIRROR_SYNC_STAT_OMAP_PREFIX("sync_stat");
 
 typedef std::variant<bool, uint64_t, std::string> AttributeValue;
 typedef std::map<std::string, AttributeValue> Attributes;
@@ -86,6 +87,9 @@ typedef ceph_mount_info *MountRef;
 
 using clock = ceph::coarse_mono_clock;
 using monotime = ceph::coarse_mono_time;
+
+using SnapMetadata = std::map<std::string, std::string>;
+using SnapMetadataMap = std::map<uint64_t, SnapMetadata>;
 } // namespace mirror
 } // namespace cephfs
 

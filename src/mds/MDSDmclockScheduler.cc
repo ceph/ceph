@@ -44,7 +44,7 @@ const VolumeId MDSDmclockScheduler::convert_subvol_root(const VolumeId &volume_i
   filepath subvol_root_path(volume_id);
 
   if (subvol_root_path.depth() > SUBVOL_ROOT_DEPTH) {
-    return "/" + subvol_root_path.prefixpath(SUBVOL_ROOT_DEPTH).get_path();
+    return "/" + std::string(subvol_root_path.prefixpath(SUBVOL_ROOT_DEPTH).get_path());
   }
 
   return volume_id;

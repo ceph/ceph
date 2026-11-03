@@ -43,12 +43,12 @@ class DispatchQueue {
   ArrivalSet marrival;
 
   class QueueItem {
-    int type;
+    int type = -1;
     ConnectionRef con;
     ceph::ref_t<Message> m;
   public:
-    explicit QueueItem(const ceph::ref_t<Message>& m) : type(-1), con(0), m(m) {}
-    QueueItem(int type, Connection *con) : type(type), con(con), m(0) {}
+    explicit QueueItem(ceph::ref_t<Message>&& m) : m(std::move(m)) {}
+    QueueItem(int type, Connection *con) : type(type), con(con) {}
     bool is_code() const {
       return type != -1;
     }
@@ -127,10 +127,7 @@ class DispatchQueue {
   Throttle dispatch_throttler;
 
   bool stop;
-  void local_delivery(const ceph::ref_t<Message>& m, int priority);
-  void local_delivery(Message* m, int priority) {
-    return local_delivery(ceph::ref_t<Message>(m, false), priority); /* consume ref */
-  }
+  void local_delivery(ceph::ref_t<Message>&& m, int priority);
   void run_local_delivery();
 
   double get_max_age(utime_t now) const;
@@ -198,16 +195,13 @@ class DispatchQueue {
     cond.notify_all();
   }
 
-  bool can_fast_dispatch(const ceph::cref_t<Message> &m) const;
+  bool can_fast_dispatch(const Message& m) const;
   void fast_dispatch(const ceph::ref_t<Message>& m);
   void fast_dispatch(Message* m) {
     return fast_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   void fast_preprocess(const ceph::ref_t<Message>& m);
-  void enqueue(const ceph::ref_t<Message>& m, int priority, uint64_t id);
-  void enqueue(Message* m, int priority, uint64_t id) {
-    return enqueue(ceph::ref_t<Message>(m, false), priority, id); /* consume ref */
-  }
+  void enqueue(ceph::ref_t<Message>&& m, int priority, uint64_t id);
   void discard_queue(uint64_t id);
   void discard_local();
   uint64_t get_id() {

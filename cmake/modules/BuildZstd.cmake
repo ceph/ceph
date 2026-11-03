@@ -7,12 +7,14 @@ function(build_Zstd)
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/zstd/build/cmake
     CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+               ${CEPH_EXTERNAL_PROJECT_CMAKE_ARGS}
                -DCMAKE_C_FLAGS=${ZSTD_C_FLAGS}
                -DCMAKE_AR=${CMAKE_AR}
                -DCMAKE_POSITION_INDEPENDENT_CODE=${ENABLE_SHARED}
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/libzstd
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target libzstd_static
     BUILD_BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/libzstd/lib/libzstd.a"
+    LIST_SEPARATOR !
     INSTALL_COMMAND "")
   add_library(Zstd::Zstd STATIC IMPORTED)
   set_target_properties(Zstd::Zstd PROPERTIES

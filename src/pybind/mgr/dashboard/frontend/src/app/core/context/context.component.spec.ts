@@ -30,8 +30,7 @@ describe('ContextComponent', () => {
   const daemonList = RgwHelper.getDaemonList();
 
   configureTestBed({
-    declarations: [ContextComponent],
-    imports: [HttpClientTestingModule, RouterTestingModule, TagModule]
+    imports: [HttpClientTestingModule, RouterTestingModule, TagModule, ContextComponent]
   });
 
   beforeEach(() => {
@@ -61,6 +60,21 @@ describe('ContextComponent', () => {
     component.isRgwRoute = false;
     expect(fixture.debugElement.nativeElement.textContent).toEqual('');
   });
+
+  it('should show info when forceShow is set even if not in RGW route', fakeAsync(() => {
+    component.isRgwRoute = false;
+    component.forceShow = true;
+    fixture.detectChanges();
+    tick();
+    const req = httpTesting.expectOne('api/rgw/daemon');
+    req.flush(daemonList);
+    fixture.detectChanges();
+    const selectedDaemon = fixture.debugElement.nativeElement.querySelector(
+      '.ctx-bar-selected-rgw-daemon'
+    );
+    expect(selectedDaemon.textContent).toEqual(' daemon2 zonegroup2');
+    component.ngOnDestroy();
+  }));
 
   it('should select the default daemon', fakeAsync(() => {
     component.isRgwRoute = true;
@@ -100,4 +114,36 @@ describe('ContextComponent', () => {
     expect(selectedDaemon.textContent).toEqual(' daemon3 zonegroup3');
     component.ngOnDestroy();
   }));
+
+  it('should show a read-only selected daemon on RGW resource page', fakeAsync(() => {
+    component.isRgwRoute = true;
+    component.isRgwResourcePage = true;
+    fixture.detectChanges();
+    tick();
+    const req = httpTesting.expectOne('api/rgw/daemon');
+    req.flush(daemonList);
+    fixture.detectChanges();
+
+    const selectedDaemon = fixture.debugElement.nativeElement.querySelector(
+      '.ctx-bar-selected-rgw-daemon'
+    );
+    const availableDaemons = fixture.debugElement.nativeElement.querySelectorAll(
+      '.ctx-bar-available-rgw-daemon'
+    );
+
+    expect(selectedDaemon.disabled).toBe(true);
+    expect(availableDaemons.length).toEqual(0);
+    component.ngOnDestroy();
+  }));
+
+  it('should detect a RGW resource page from a hash route on reload', () => {
+    expect(component['getRoutePath']('http://localhost/#/rgw/accounts/test-account/overview')).toBe(
+      '/rgw/accounts/test-account/overview'
+    );
+    expect(
+      component['isRgwAccountsResourcePage'](
+        component['getRoutePath']('http://localhost/#/rgw/accounts/test-account/overview')
+      )
+    ).toBe(true);
+  });
 });

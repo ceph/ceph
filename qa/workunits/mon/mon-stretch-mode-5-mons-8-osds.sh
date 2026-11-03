@@ -70,3 +70,10 @@ crushtool --compile crushmap_modified.txt -o crushmap.bin
 ceph osd setcrushmap -i crushmap.bin
 
 ceph mon enable_stretch_mode e stretch_rule datacenter
+
+# A replay after a lost reply must succeed without proposing a new monmap.
+ceph mon getmap -o monmap.before
+ceph mon enable_stretch_mode e stretch_rule datacenter
+ceph mon getmap -o monmap.after
+cmp monmap.before monmap.after
+rm monmap.before monmap.after

@@ -99,6 +99,7 @@ secret_key = nopqrstuvwxyzabcdefghijklmnabcdefghijklm
 
 ## Above configured cloud storage class config options
 # retain_head_object = false
+# retain_current_version = false    # requires retain_head_object = true; keeps current versioned objects as stubs instead of delete markers
 # allow_read_through = false    # change it to enable read_through
 # read_through_restore_days = 2
 # target_storage_class = Target_SC

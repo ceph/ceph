@@ -19,6 +19,7 @@
 
 #include "include/stringify.h"
 #include "include/str_list.h"
+#include "include/variant_print.h"
 #include "auth/RotatingKeyRing.h"
 #include "json_spirit/json_spirit_writer.h"
 
@@ -44,6 +45,7 @@
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
 #include "common/pick_address.h"
@@ -102,11 +104,11 @@ DaemonServer::DaemonServer(MonClient *monc_,
 				     g_conf().get_val<uint64_t>("mgr_osd_messages"))),
       mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_mds_bytes"))),
-      mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messsages",
+      mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messages",
 				     g_conf().get_val<uint64_t>("mgr_mds_messages"))),
       mon_byte_throttler(new Throttle(g_ceph_context, "mgr_mon_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_mon_bytes"))),
-      mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messsages",
+      mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messages",
 				     g_conf().get_val<uint64_t>("mgr_mon_messages"))),
       msgr(nullptr),
       monc(monc_),
@@ -139,11 +141,6 @@ DaemonServer::DaemonServer(MonClient *monc_,
                                                     cct->_conf->mgr_op_history_slow_op_threshold);
 }
 
-DaemonServer::~DaemonServer() {
-  delete msgr;
-  g_conf().remove_observer(this);
-}
-
 class DaemonServerHook : public AdminSocketHook {
   DaemonServer *daemon_server;
 public:
@@ -166,6 +163,43 @@ public:
     return r;
   }
 };
+
+void DaemonServer::shutdown()
+{
+  bool expected = false;
+  if (!shutting_down.compare_exchange_strong(expected, true)) {
+    return;
+  }
+
+  op_tracker.on_shutdown();
+
+  {
+    std::lock_guard l(lock);
+    timer.shutdown();
+  }
+
+  if (asok_hook) {
+    AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+    admin_socket->unregister_commands(asok_hook);
+    delete asok_hook;
+    asok_hook = nullptr;
+  }
+
+  if (msgr) {
+    msgr->shutdown();
+    msgr->wait();
+    delete msgr;
+    msgr = nullptr;
+  }
+
+  monc->set_handle_authentication_dispatcher(nullptr);
+
+  g_conf().remove_observer(this);
+}
+
+DaemonServer::~DaemonServer() {
+  shutdown();
+}
 
 int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 {
@@ -290,7 +324,7 @@ bool DaemonServer::ms_handle_fast_authentication(Connection *con)
 	   << " addr " << con->get_peer_addrs()
 	   << dendl;
 
-  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  auto& caps_info = con->get_peer_caps_info();
   if (caps_info.allow_all) {
     dout(10) << " session " << s << " " << s->entity_name
 	     << " allow_all" << dendl;
@@ -331,21 +365,27 @@ void DaemonServer::ms_handle_accept(Connection* con)
 
 bool DaemonServer::ms_handle_reset(Connection *con)
 {
+  std::lock_guard l(lock);
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
     auto priv = con->get_priv();
     auto session = static_cast<MgrSession*>(priv.get());
-    if (!session) {
-      return false;
+    if (session) {
+      dout(10) << "unregistering osd." << session->osd_id
+               << "  session " << session << " con " << con << dendl;
+      osd_cons[session->osd_id].erase(con);
     }
-    std::lock_guard l(lock);
-    dout(10) << "unregistering osd." << session->osd_id
-	     << "  session " << session << " con " << con << dendl;
-    osd_cons[session->osd_id].erase(con);
+  }
 
-    auto iter = daemon_connections.find(con);
-    if (iter != daemon_connections.end()) {
-      daemon_connections.erase(iter);
-    }
+  auto iter = daemon_connections.find(con);
+  if (iter != daemon_connections.end()) {
+    dout(10) << "removing daemon connection " << con
+             << " peer " << con->get_peer_addr()
+             << dendl;
+    daemon_connections.erase(iter);
+  } else {
+    dout(10) << "reset for untracked daemon connection " << con
+             << " peer " << con->get_peer_addr()
+             << dendl;
   }
   return false;
 }
@@ -541,7 +581,7 @@ void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
   if (!daemon_state.is_updating(key) &&
       (key.type == "osd" || key.type == "mds" || key.type == "mon")) {
     std::ostringstream oss;
-    auto c = new MetadataUpdate(daemon_state, key);
+    auto c = new MetadataUpdate(daemon_state, cluster_state, key);
     if (key.type == "osd") {
       oss << "{\"prefix\": \"osd metadata\", \"id\": "
 	  << key.name<< "}";
@@ -1056,8 +1096,27 @@ void DaemonServer::_check_offlines_pgs(
   *report = offline_pg_report();
   report->osds = osds;
 
+  // whether one of the OSDs being checked is `osd`
+  auto in_set = [&osds](int osd) -> bool {
+    return std::visit([osd](auto& container) -> bool {
+      using T = std::decay_t<decltype(container)>;
+      if constexpr (std::is_same_v<T, std::set<int>>) {
+        return container.count(osd) > 0;
+      } else if constexpr (std::is_same_v<T, std::vector<int>>) {
+        return std::find(container.begin(), container.end(), osd) !=
+               container.end();
+      } else {
+        return false;
+      }
+    }, osds);
+  };
+
   for (const auto& q : pgmap.pg_stat) {
     std::set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
+    // true once ANY member of the acting set is one of the OSDs being
+    // checked: it must stick for the rest of the loop, not reflect the
+    // last member only, or a PG whose last acting OSD is not in the set
+    // would be skipped altogether.
     bool found = false;
     if (q.second.state == 0) {
       report->unknown.insert(q.first);
@@ -1065,16 +1124,8 @@ void DaemonServer::_check_offlines_pgs(
     }
     if (q.second.state & PG_STATE_DEGRADED) {
       for (auto& anm : q.second.avail_no_missing) {
-        std::visit([anm, &found](auto& container) {
-          using T = std::decay_t<decltype(container)>;
-          if constexpr (std::is_same_v<T, std::set<int>>) {
-            found = container.count(anm.osd);
-          } else if constexpr (std::is_same_v<T, std::vector<int>>) {
-            auto it = std::find(container.begin(), container.end(), anm.osd);
-            found = (it != container.end());
-          }
-        }, osds);
-        if (found) {
+        if (in_set(anm.osd)) {
+          found = true;
           continue;
         }
 	if (anm.osd != CRUSH_ITEM_NONE) {
@@ -1083,16 +1134,8 @@ void DaemonServer::_check_offlines_pgs(
       }
     } else {
       for (auto& a : q.second.acting) {
-        std::visit([a, &found](auto& container) {
-          using T = std::decay_t<decltype(container)>;
-          if constexpr (std::is_same_v<T, std::set<int>>) {
-            found = container.count(a);
-          } else if constexpr (std::is_same_v<T, std::vector<int>>) {
-            auto it = std::find(container.begin(), container.end(), a);
-            found = (it != container.end());
-          }
-        }, osds);
-        if (found) {
+        if (in_set(a)) {
+          found = true;
           continue;
         }
 	if (a != CRUSH_ITEM_NONE) {
@@ -2593,7 +2636,11 @@ bool DaemonServer::_handle_command(
       auto rgw_daemons = daemon_state.get_by_service("rgw");
       for (auto& rgw_daemon : rgw_daemons) {
 	DaemonStatePtr daemon = rgw_daemon.second;
-	string name = daemon->metadata.find("id")->second;
+	string name;
+	{
+	  std::lock_guard l(daemon->lock);
+	  name = daemon->metadata.find("id")->second;
+	}
 	/*
 	 * The id stored in the metadata is the port number
 	 * for the RGW daemon.
@@ -2639,6 +2686,18 @@ bool DaemonServer::_handle_command(
 	auto q = defaults.find(name);
 	if (q != defaults.end()) {
 	  cmdctx->odata.append(q->second + "\n");
+	} else if (key.type == "mgr") {
+	  // check mgr module options (key format: "mgr/<module>/<option>")
+	  // name may already carry the "mgr/" prefix (e.g. "mgr/telemetry/contact")
+	  // or may omit it (e.g. "telemetry/contact"); normalise to the stored form.
+	  std::string lookup_key =
+	    name.starts_with("mgr/") ? name : ("mgr/" + name);
+	  std::string value;
+	  if (py_modules.get_module_option(lookup_key, &value)) {
+	    cmdctx->odata.append(value + "\n");
+	  } else {
+	    r = -ENOENT;
+	  }
 	} else {
 	  r = -ENOENT;
 	}
@@ -2708,6 +2767,22 @@ bool DaemonServer::_handle_command(
 	    tbl << TextTable::endrow;
 	  }
 	}
+	// also show mgr module options that were explicitly set
+	if (key.type == "mgr") {
+	  for (auto& [k, v] : py_modules.get_module_config_snapshot()) {
+	    // keys are "mgr/<module>/<option>"; strip the leading "mgr/"
+	    std::string_view opt = std::string_view(k).substr(4);
+	    if (f) {
+	      f->open_object_section("value");
+	      f->dump_string("name", opt);
+	      f->dump_string("value", v);
+	      f->dump_string("source", "mgr_module");
+	      f->close_section();
+	    } else {
+	      tbl << opt << v << "mgr_module" << "" << "" << TextTable::endrow;
+	    }
+	  }
+	}
       } else {
 	// show-with-defaults
 	auto& defaults = daemon->_get_config_defaults();
@@ -2775,6 +2850,40 @@ bool DaemonServer::_handle_command(
 	      tbl << "";
 	      tbl << "";
 	      tbl << TextTable::endrow;
+	    }
+	  }
+	}
+	// also show mgr module options (set values and defaults) for mgr daemons
+	if (key.type == "mgr") {
+	  auto mod_config_snapshot = py_modules.get_module_config_snapshot();
+	  for (auto& module : py_modules.get_modules()) {
+	    if (!module->is_enabled()) {
+	      continue;
+	    }
+	    const std::string& mod_name = module->get_name();
+	    for (auto& [opt_name, opt] : module->get_options()) {
+	      std::string display_name = mod_name + "/" + opt_name;
+	      std::string config_key = "mgr/" + display_name;
+	      std::string value;
+	      std::string source;
+	      auto it = mod_config_snapshot.find(config_key);
+	      if (it != mod_config_snapshot.end()) {
+		value = it->second;
+		source = "mgr_module";
+	      } else {
+		value = opt.default_value;
+		source = "default";
+	      }
+	      if (f) {
+		f->open_object_section("value");
+		f->dump_string("name", display_name);
+		f->dump_string("value", value);
+		f->dump_string("source", source);
+		f->close_section();
+	      } else {
+		tbl << display_name << value << source << "" << ""
+		    << TextTable::endrow;
+	      }
 	    }
 	  }
 	}
@@ -3302,6 +3411,7 @@ void DaemonServer::adjust_pgs()
   std::map<string,unsigned> pg_num_to_set;
   std::map<string,unsigned> pgp_num_to_set;
   std::set<pg_t> upmaps_to_clear;
+  std::map<uint64_t,string> current_pools; // pid -> pool_name
   cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
       unsigned creating_or_unknown = 0;
       for (auto& i : pg_map.num_pg_by_state) {
@@ -3336,7 +3446,8 @@ void DaemonServer::adjust_pgs()
 
       for (auto& i : osdmap.get_pools()) {
 	const pg_pool_t& p = i.second;
-
+        const auto& pool_name = osdmap.get_pool_name(i.first);
+        current_pools[i.first] = pool_name;
 	// adjust pg_num?
 	if (p.get_pg_num_target() != p.get_pg_num()) {
 	  dout(20) << "pool " << i.first
@@ -3593,7 +3704,9 @@ void DaemonServer::adjust_pgs()
       "}";
     monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
   }
+  std::set<uint64_t> affected_pools;
   for (auto pg : upmaps_to_clear) {
+    affected_pools.emplace(pg.pool());
     const string cmd =
       "{"
       "\"prefix\": \"osd rm-pg-upmap\", "
@@ -3606,6 +3719,20 @@ void DaemonServer::adjust_pgs()
       "\"pgid\": \"" + stringify(pg) + "\"" +
       "}";
     monc->start_mon_command({cmd2}, {}, nullptr, nullptr, nullptr);
+   }
+  // remove all pg_upmap_primary mappings from any pool where pg_num was changed.
+  for (auto pool_id : affected_pools) {
+   std::string pool_name;
+   auto it = current_pools.find(pool_id);
+   if (it != current_pools.end()) {
+     pool_name = it->second;
+     const string cmd =
+       "{"
+       "\"prefix\": \"osd rm-pg-upmap-primary-all\", "
+       "\"pool\": \"" + pool_name + "\"" +
+       "}";
+     monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
+   }
   }
 }
 
@@ -3667,7 +3794,7 @@ void DaemonServer::got_mgr_map()
   cluster_state.with_mgrmap([&](const MgrMap& mgrmap) {
       auto md_update = [&] (DaemonKey key) {
         std::ostringstream oss;
-        auto c = new MetadataUpdate(daemon_state, key);
+        auto c = new MetadataUpdate(daemon_state, cluster_state, key);
 	// FIXME remove post-nautilus: include 'id' for luminous mons
         oss << "{\"prefix\": \"mgr metadata\", \"who\": \""
 	    << key.name << "\", \"id\": \"" << key.name << "\"}";

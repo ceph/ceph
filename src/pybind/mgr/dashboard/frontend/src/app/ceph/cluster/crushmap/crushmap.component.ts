@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { TreeViewComponent } from 'carbon-components-angular';
-import { Node } from 'carbon-components-angular/treeview/tree-node.types';
+import { Node } from '~/app/shared/models/carbon-tree-node';
 import { Observable, Subscription } from 'rxjs';
 
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
@@ -51,6 +51,12 @@ export class CrushmapComponent implements OnDestroy, OnInit {
   metadataTitle: string;
   metadataKeyMap: { [key: number]: any } = {};
   data$: Observable<object>;
+  /**
+   * IDs of nodes the user has collapsed. Kept across background refreshes so
+   * that rebuilding the tree does not reset the expanded/collapsed state.
+   * Unknown/new nodes default to expanded.
+   */
+  private collapsedNodeIds = new Set<number>();
 
   constructor(
     private crushRuleService: CrushRuleService,
@@ -83,22 +89,29 @@ export class CrushmapComponent implements OnDestroy, OnInit {
       ];
     }
 
-    const roots: any[] = [];
-    nodes.reverse().forEach((node: CrushmapNode) => {
-      if (rootNodes.includes(node.id)) {
-        roots.push(node.id);
-      }
-      treeNodeMap[node.id] = this.generateTreeLeaf(node, treeNodeMap);
+    // `nodes` comes from `ceph osd tree` and is already ordered the same way
+    // as the CLI output: buckets by name before devices, devices by class and
+    // then numerically by id. The `children` lists are not (they come reversed),
+    // so order them by their position in `nodes`.
+    const treeOrder = new Map<number, number>(nodes.map((node, index) => [node.id, index]));
+    const byTreeOrder = (a: number, b: number) =>
+      (treeOrder.get(a) ?? Infinity) - (treeOrder.get(b) ?? Infinity);
+
+    // Children have to be built before their parents, so walk the list backwards.
+    [...nodes].reverse().forEach((node: CrushmapNode) => {
+      treeNodeMap[node.id] = this.generateTreeLeaf(node, treeNodeMap, byTreeOrder);
     });
 
-    const children = roots.map((id) => {
-      return treeNodeMap[id];
-    });
-
-    return children;
+    // `roots` (crush.find_roots()) is already sorted by id like the CLI, but
+    // also contains shadow roots, which are not part of `nodes`.
+    return rootNodes.filter((id) => treeNodeMap[id]).map((id) => treeNodeMap[id]);
   }
 
-  private generateTreeLeaf(node: CrushmapNode, treeNodeMap: Record<number, any>) {
+  private generateTreeLeaf(
+    node: CrushmapNode,
+    treeNodeMap: Record<number, any>,
+    compareFn: (a: number, b: number) => number
+  ) {
     const cdId = node.id;
     this.metadataKeyMap[cdId] = node;
 
@@ -111,14 +124,14 @@ export class CrushmapComponent implements OnDestroy, OnInit {
       labelContext: { name, status, type: node?.type },
       value: name,
       id: cdId,
-      expanded: true,
+      expanded: !this.collapsedNodeIds.has(cdId),
       name,
       status,
       cdId,
       type: node.type
     };
     if (node?.children?.length) {
-      node.children.sort().forEach((childId: number) => {
+      [...node.children].sort(compareFn).forEach((childId: number) => {
         children.push(treeNodeMap[childId]);
       });
 
@@ -126,6 +139,18 @@ export class CrushmapComponent implements OnDestroy, OnInit {
     }
 
     return resultNode;
+  }
+
+  onNodeToggle(event: { node: Pick<Node, 'id'> }) {
+    const id = Number(event?.node?.id);
+    if (Number.isNaN(id)) {
+      return;
+    }
+    if (this.collapsedNodeIds.has(id)) {
+      this.collapsedNodeIds.delete(id);
+    } else {
+      this.collapsedNodeIds.add(id);
+    }
   }
 
   onNodeSelected(node: Node) {

@@ -1,9 +1,10 @@
 """Support for working with the internal data store and the strucutured
 resources that the internal store holds.
 """
-from typing import Collection, Tuple, Type, TypeVar, Union
 
-from . import resources
+from typing import Collection, Dict, Tuple, Type, TypeVar, Union
+
+from . import config_store, resources
 from .enums import ConfigNS, State
 from .proto import (
     ConfigEntry,
@@ -172,6 +173,18 @@ class ShareEntry(ResourceEntry):
 
     def get_share(self) -> resources.Share:
         return self.get_resource_type(resources.Share)
+
+    @classmethod
+    def get_cluster_shares(
+        cls, store: ConfigStore, cluster_id: str
+    ) -> Dict[EntryKey, resources.Share]:
+        """Return a cluster's shares keyed by their store entries."""
+        return {
+            entry.full_key: cls(entry.full_key[1], entry).get_share()
+            for entry in config_store.find_in_store(
+                store, str(cls.namespace), {'cluster_id': cluster_id}
+            )
+        }
 
 
 class JoinAuthEntry(CommonResourceEntry):

@@ -1171,7 +1171,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	       __func__,
 	       modify_op_str(op.op).c_str(), op.key.to_string().c_str(),
 	       (unsigned long)op.ver.pool, (unsigned long long)op.ver.epoch,
-	       op.tag.c_str());
+	       op.op_tag.c_str());
 
   rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
@@ -1209,21 +1209,21 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
    * marker */
   entry.flags &= rgw_bucket_dir_entry::FLAG_VER;
 
-  if (op.tag.size()) {
-    auto pinter = entry.pending_map.find(op.tag);
+  if (op.op_tag.size()) {
+    auto pinter = entry.pending_map.find(op.op_tag);
     if (pinter == entry.pending_map.end()) {
       CLS_LOG_BITX(bitx_inst, 1,
 		   "ERROR: %s: couldn't find tag for pending operation with tag %s",
-		   __func__, op.tag.c_str());
+		   __func__, op.op_tag.c_str());
       return -EINVAL;
     }
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: removing tag %s from pending map",
-		   __func__, op.tag.c_str());
+		   __func__, op.op_tag.c_str());
     entry.pending_map.erase(pinter);
   }
 
-  if (op.tag.size() && op.op == CLS_RGW_OP_CANCEL) {
+  if (op.op_tag.size() && op.op == CLS_RGW_OP_CANCEL) {
     CLS_LOG_BITX(bitx_inst, 20, "INFO: %s: op is cancel", __func__);
   } else if (op.ver.pool == entry.ver.pool &&
              op.ver.epoch && op.ver.epoch <= entry.ver.epoch) {
@@ -1237,10 +1237,15 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   // controls whether this operation is logged (depends on op.op and ondisk)
   bool log_op = default_log_op;
 
-  entry.ver = op.ver;
+  // only an applied op moves the entry's version. a cancel, or an op
+  // skipped above as stale, must not lower it: an older completion would
+  // then pass the epoch check and overwrite the newer entry
+  if (op.op != CLS_RGW_OP_CANCEL) {
+    entry.ver = op.ver;
+  }
   if (op.op == CLS_RGW_OP_CANCEL) {
     log_op = false; // don't log cancelation
-    if (op.tag.size()) {
+    if (op.op_tag.size()) {
       if (!entry.exists && entry.pending_map.empty()) {
         // a racing delete succeeded, and we canceled the last pending op
         CLS_LOG_BITX(bitx_inst, 20,
@@ -1321,7 +1326,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     entry.meta = meta;
     entry.key = op.key;
     entry.exists = true;
-    entry.tag = op.tag;
+    entry.tag = op.op_tag;
     // account for new entry
     stats.num_entries++;
     stats.total_size += meta.accounted_size;
@@ -1340,7 +1345,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   } // CLS_RGW_OP_ADD
 
   if (log_op) {
-    rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
+    rc = log_index_operation(hctx, op.key, op.op, op.op_tag, entry.meta.mtime,
 			     entry.ver, CLS_RGW_STATE_COMPLETE, header.ver,
 			     header.max_marker, op.bilog_flags, NULL, NULL,
 			     &op.zones_trace);
@@ -1925,6 +1930,10 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
+
+  encode(candidate_epoch, *out);
+  CLS_LOG(20, "%s: key=%s olh_epoch=%lu candidate_epoch=%lu",
+          __func__, op.key.to_string().c_str(), op.olh_epoch, candidate_epoch);
   if (olh.start_modify(candidate_epoch)) {
     // promote this version to current if it's a newer epoch, or if it matches the
     // current epoch and sorts after the current instance
@@ -2048,6 +2057,73 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   return write_bucket_header(hctx, &header); /* updates header version */
 }
 
+static int rgw_bucket_refresh_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(10, "entered %s", __func__);
+
+  rgw_cls_refresh_instance_op op;
+  auto iter = in->cbegin();
+  try {
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: %s: failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
+    return rc;
+  }
+
+  rc = guard_bucket_resharding(hctx, header);
+  if (rc < 0) {
+    return rc;
+  }
+
+  rgw_bucket_dir_entry entry;
+  string idx;
+  rc = read_key_entry(hctx, op.key, &idx, &entry);
+  if (rc == -ENOENT) {
+    CLS_LOG(10, "%s: no instance entry for key=%s, nothing to refresh",
+            __func__, op.key.to_string().c_str());
+    return 0;
+  }
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s: read_key_entry key=%s rc=%d",
+            __func__, op.key.to_string().c_str(), rc);
+    return rc;
+  }
+
+  /*
+   * Only versioned instances have a separate list entry. complete_op
+   * refreshes this instance's data entry (size/etag/mtime), but the
+   * bucket version listing reads the list entry, so copy the refreshed
+   * data entry into it and leave the data entry untouched. No OLH
+   * change and no stats change; complete_op already accounted the size
+   * delta.
+   */
+  if (!(entry.flags & rgw_bucket_dir_entry::FLAG_VER)) {
+    CLS_LOG(10, "%s: key=%s is not a versioned instance, skipping",
+            __func__, op.key.to_string().c_str());
+    return 0;
+  }
+
+  string list_idx;
+  get_list_index_key(entry, &list_idx);
+  if (idx != list_idx) {
+    rc = write_entry(hctx, entry, list_idx, header);
+    if (rc < 0) {
+      CLS_LOG(0, "ERROR: %s: write_entry key=%s rc=%d",
+              __func__, op.key.to_string().c_str(), rc);
+      return rc;
+    }
+  }
+
+  return write_bucket_header(hctx, &header); /* updates header version */
+}
+
 static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -2101,6 +2177,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
   uint64_t now_epoch = duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
+
+  encode(candidate_epoch, *out);
+  CLS_LOG(20, "%s: key=%s olh_epoch=%lu candidate_epoch=%lu",
+          __func__, op.key.to_string().c_str(), op.olh_epoch, candidate_epoch);
 
   if (!olh_found) {
     bool instance_only = false;
@@ -5311,6 +5391,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_bucket_read_olh_log;
   cls_method_handle_t h_rgw_bucket_trim_olh_log;
   cls_method_handle_t h_rgw_bucket_clear_olh;
+  cls_method_handle_t h_rgw_bucket_refresh_instance;
   cls_method_handle_t h_rgw_obj_remove;
   cls_method_handle_t h_rgw_obj_store_pg_ver;
   cls_method_handle_t h_rgw_obj_check_attrs_prefix;
@@ -5374,6 +5455,7 @@ CLS_INIT(rgw)
   cls.register_cxx_method(bucket_read_olh_log, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
   cls.register_cxx_method(bucket_trim_olh_log, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
   cls.register_cxx_method(bucket_clear_olh, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
+  cls.register_cxx_method(bucket_refresh_instance, rgw_bucket_refresh_instance, &h_rgw_bucket_refresh_instance);
 
   // Object
   cls.register_cxx_method(obj_remove, rgw_obj_remove, &h_rgw_obj_remove);

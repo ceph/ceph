@@ -35,18 +35,20 @@
               name="realmName"
               formControlName="realmName"
             />
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('realmName', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('realmName', formDir, 'uniqueName')"
-              i18n
-              >The chosen realm name is already in use.</span
-            >
+            @if (multisiteMigrateForm.showError('realmName', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (multisiteMigrateForm.showError('realmName', formDir, 'uniqueName')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >The chosen realm name is already in use.</span
+              >
+            }
           </div>
         </div>
         <div class="form-group row">
@@ -65,18 +67,20 @@
               name="zonegroupName"
               formControlName="zonegroupName"
             />
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('zonegroupName', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('zonegroupName', formDir, 'uniqueName')"
-              i18n
-              >The chosen zonegroup name is already in use.</span
-            >
+            @if (multisiteMigrateForm.showError('zonegroupName', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (multisiteMigrateForm.showError('zonegroupName', formDir, 'uniqueName')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >The chosen zonegroup name is already in use.</span
+              >
+            }
           </div>
         </div>
         <div class="form-group row">
@@ -95,18 +99,20 @@
               name="zonegroup_endpoints"
               formControlName="zonegroup_endpoints"
             />
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('zonegroup_endpoints', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('zonegroup_endpoints', formDir, 'invalidURL')"
-              i18n
-              >Please enter a valid URL.</span
-            >
+            @if (multisiteMigrateForm.showError('zonegroup_endpoints', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (multisiteMigrateForm.showError('zonegroup_endpoints', formDir, 'invalidURL')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Please enter a valid URL.</span
+              >
+            }
           </div>
         </div>
         <div class="form-group row">
@@ -125,18 +131,20 @@
               name="zoneName"
               formControlName="zoneName"
             />
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('zoneName', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('zoneName', formDir, 'uniqueName')"
-              i18n
-              >The chosen zone name is already in use.</span
-            >
+            @if (multisiteMigrateForm.showError('zoneName', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (multisiteMigrateForm.showError('zoneName', formDir, 'uniqueName')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >The chosen zone name is already in use.</span
+              >
+            }
           </div>
         </div>
         <div class="form-group row">
@@ -155,18 +163,20 @@
               name="zone_endpoints"
               formControlName="zone_endpoints"
             />
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('zone_endpoints', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('zone_endpoints', formDir, 'invalidURL')"
-              i18n
-              >Please enter a valid URL.</span
-            >
+            @if (multisiteMigrateForm.showError('zone_endpoints', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (multisiteMigrateForm.showError('zone_endpoints', formDir, 'invalidURL')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Please enter a valid URL.</span
+              >
+            }
           </div>
         </div>
         <div class="form-group row">
@@ -191,12 +201,13 @@
                 as part of the process.</span
               >
             </cd-help-text>
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteMigrateForm.showError('username', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (multisiteMigrateForm.showError('username', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </div>
         </div>
       </div>

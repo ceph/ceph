@@ -50,8 +50,9 @@ void LBALeafNode::update(
   modification_t mod)
 {
   LOG_PREFIX(LBALeafNode::update);
+  assert(this->t != nullptr);
   SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}",
-    this->pending_for_transaction,
+    this->t->get_trans_id(),
     iter.get_offset());
   if (likely(mod == modification_t::USER_MODIFY)) {
     this->on_modify();
@@ -71,8 +72,9 @@ LBALeafNode::internal_const_iterator_t LBALeafNode::insert(
   lba_map_val_t val)
 {
   LOG_PREFIX(LBALeafNode::insert);
+  assert(this->t != nullptr);
   SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}",
-    this->pending_for_transaction,
+    this->t->get_trans_id(),
     iter.get_offset(),
     addr);
   this->on_modify();
@@ -117,6 +119,8 @@ base_iertr::future<> LBACursor::refresh()
   if (leaf->is_pending_in_trans(ctx.trans.get_trans_id())) {
     if (leaf->modified_since(modifications)) {
       ctx.trans.cursor_stats.num_refresh_modified_viewable_parent++;
+      SUBTRACET(seastore_lba, "cursor {} pending leaf modified, re-lower_bound",
+        ctx.trans, *this);
     } else {
       // no need to refresh
       co_return;
@@ -138,6 +142,13 @@ base_iertr::future<> LBACursor::refresh()
 
   modifications = leaf->modifications;
   iter = leaf->lower_bound(get_laddr());
+  if (iter == leaf->end()) {
+    SUBTRACET(seastore_lba, "cursor {} lower_bound({}) -> end",
+      ctx.trans, *this, get_laddr());
+  } else {
+    SUBTRACET(seastore_lba, "cursor {} lower_bound({}) -> {}",
+      ctx.trans, *this, get_laddr(), iter.get_key());
+  }
   assert(iter == leaf->end() || iter.get_key() == get_laddr());
   assert(is_viewable());
 }

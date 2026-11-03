@@ -362,15 +362,17 @@ are confident that you can meet these challenges, study this list of
 limitations and pitfalls before attempting disaster recovery:
 
 #. The data-scan commands provide no way of estimating the time to completion
-   of their operation. A feature that will provide such an estimate is under
-   development. See https://tracker.ceph.com/issues/63191 for details.
+   of their operation. The ``scan_extents`` and ``scan_inodes`` steps scale
+   with the number of objects in the data pool, and ``scan_links`` iterates
+   over the metadata pool twice, so these steps can run for a very long time
+   on large file systems without giving any progress indication.
 #. It is important to perform a file system scrub after recovery before CephFS
    clients start using the file system.
 #. In general, we do not recommend that you change any MDS-related settings
    (for example, ``max_mds``) while things are broken.
-#. Disaster recovery is currently a manual process. There is a plan to automate
-   the recovery via the Disaster Recovery Super Tool. See
-   https://tracker.ceph.com/issues/71804 for details.
+#. Disaster recovery is a manual process. Each step must be chosen and run
+   by the operator according to the kind of metadata damage present; no tool
+   currently automates the sequence.
 #. A well-known trick (used by some community users) is to use the disaster
    recovery procedure (especially the ``recover_dentries`` step) when the MDS
    is somewhat stuck in the ``up_replay`` state due to a long journal. Before
@@ -510,9 +512,7 @@ at recovery since the existing metadata pool would not be modified.
 
    .. note::
 
-      The `Symbolic link recovery <https://tracker.ceph.com/issues/46166>`_ is
-      supported starting in the Quincy release.
-
+      Symbolic link recovery is supported starting in the Quincy release.
       Symbolic links were recovered as empty regular files before.
 
    It is recommended that you migrate any data from the recovery file system as
@@ -527,4 +527,3 @@ at recovery since the existing metadata pool would not be modified.
        data pool), the recovered files will contain holes in place of the
        missing data.
 
-.. _Symbolic link recovery: https://tracker.ceph.com/issues/46166

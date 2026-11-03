@@ -8,14 +8,15 @@ import { CephServiceSpec } from '../models/service.interface';
 import {
   AUTHENTICATION,
   ListenerItem,
+  NvmeofInitiatorsResponse,
   NvmeofSubsystem,
   NvmeofSubsystemNamespace
 } from '../models/nvmeof';
-import { HostService } from './host.service';
-import { OrchestratorService } from './orchestrator.service';
 import { HostStatus } from '../enum/host-status.enum';
 import { Host } from '../models/host.interface';
 import { OrchestratorStatus } from '../models/orchestrator.interface';
+import { HostService } from './host.service';
+import { OrchestratorService } from './orchestrator.service';
 
 export type SetupState = {
   hasGatewayGroups: boolean;
@@ -46,6 +47,7 @@ export type ListenerRequest = NvmeofRequest & {
 export type NamespaceCreateRequest = NvmeofRequest & {
   rbd_image_name?: string;
   rbd_pool: string;
+  rados_namespace?: string;
   rbd_image_size?: number;
   no_auto_visible?: boolean;
   block_size?: number;
@@ -295,8 +297,10 @@ export class NvmeofService {
   }
 
   // Initiators
-  getInitiators(subsystemNQN: string, group: string) {
-    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`);
+  getInitiators(subsystemNQN: string, group: string): Observable<NvmeofInitiatorsResponse> {
+    return this.http.get<NvmeofInitiatorsResponse>(
+      `${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`
+    );
   }
 
   addSubsystemInitiators(subsystemNQN: string, request: SubsystemInitiatorRequest) {

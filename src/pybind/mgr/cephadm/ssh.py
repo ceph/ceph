@@ -9,7 +9,9 @@ from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
 from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union, Any
+from ceph.deployment.hostspec import normalize_hostname
 from orchestrator import OrchestratorError
+from .utils import is_fips_enabled, get_default_ssh_config
 
 try:
     import asyncssh
@@ -34,15 +36,6 @@ class HostConnectionError(OrchestratorError):
         super().__init__(message)
         self.hostname = hostname
         self.addr = addr
-
-
-DEFAULT_SSH_CONFIG = """
-Host *
-  User root
-  StrictHostKeyChecking no
-  UserKnownHostsFile /dev/null
-  ConnectTimeout=30
-"""
 
 
 class RemoteExecutable(str):
@@ -191,13 +184,39 @@ class SSHManager:
         if not addr:
             raise OrchestratorError("host address is empty")
 
+        local_fips = is_fips_enabled()
+        target_fips = self.mgr.cache.get_host_fips_enabled(host)
+        logger.debug(
+            'FIPS state for SSH connection to %s: local=%s, target=%s',
+            host,
+            local_fips,
+            target_fips,
+        )
+
+        if local_fips and self.mgr.ssh_pub:
+            key_parts = self.mgr.ssh_pub.strip().split(maxsplit=1)
+
+            if key_parts and key_parts[0] == 'ssh-ed25519':
+                raise HostConnectionError(
+                    'The configured cephadm SSH identity uses ED25519, '
+                    'which is not supported when FIPS mode is enabled. '
+                    'Replace the cephadm SSH identity with an RSA key.',
+                    host,
+                    addr,
+                )
+
         assert self.mgr.ssh_user
         n = self.mgr.ssh_user + '@' + addr
         logger.debug("Opening connection to {} with ssh options '{}'".format(
             n, self.mgr._ssh_options))
 
-        asyncssh.set_log_level('DEBUG')
-        asyncssh.set_debug_level(3)
+        asyncssh.set_log_level(self.mgr.asyncssh_log_level)
+        # asyncssh.set_debug_level() only accepts 1-3, so 0 (the "no extra
+        # verbosity" default) maps to asyncssh's minimum of 1. Debug output
+        # is turned off via asyncssh_log_level (INFO/WARNING/ERROR)
+
+        asyncssh.set_debug_level(self.mgr.asyncssh_debug_level
+                                 if self.mgr.asyncssh_debug_level > 0 else 1)
 
         with self.redirect_log(host, addr):
             try:
@@ -224,13 +243,15 @@ class SSHManager:
     def redirect_log(self, host: str, addr: str) -> Iterator[None]:
         log_string = StringIO()
         ch = logging.StreamHandler(log_string)
-        ch.setLevel(logging.INFO)
+        # No handler-level filter: asyncssh_log_level governs capture via the logger.
+        # Do not add ch.setLevel() here; it would be a second, tighter gate that
+        # silently drops records the logger already allowed.
         asyncssh_logger.addHandler(ch)
 
         try:
             yield
         except OSError as e:
-            self.mgr.offline_hosts.add(host)
+            self.mgr.offline_hosts.add(normalize_hostname(host))
             log_content = log_string.getvalue()
             msg = f"Can't communicate with remote host `{addr}`, possibly because the host is not reachable or python3 is not installed on the host. {str(e)}"
             logger.exception(msg)
@@ -238,7 +259,7 @@ class SSHManager:
                 logger.debug(f'SSH log for {host} ({addr}): {log_content}')
             raise HostConnectionError(msg, host, addr)
         except asyncssh.Error as e:
-            self.mgr.offline_hosts.add(host)
+            self.mgr.offline_hosts.add(normalize_hostname(host))
             log_content = log_string.getvalue()
             msg = f'Failed to connect to {host} ({addr}). {str(e)}'
             logger.exception(msg)
@@ -246,7 +267,7 @@ class SSHManager:
                 logger.debug(f'SSH log for {host} ({addr}): {log_content}')
             raise HostConnectionError(msg, host, addr)
         except Exception as e:
-            self.mgr.offline_hosts.add(host)
+            self.mgr.offline_hosts.add(normalize_hostname(host))
             log_content = log_string.getvalue()
             msg = f'Failed to connect to {host} ({addr}): {repr(e)}'
             logger.exception(msg)
@@ -348,7 +369,7 @@ class SSHManager:
                             f'ChannelOpenError code {error_code} is not recoverable, '
                             f'not retrying for host {host}')
                         await self._reset_con(host)
-                        self.mgr.offline_hosts.add(host)
+                        self.mgr.offline_hosts.add(normalize_hostname(host))
                         raise HostConnectionError(
                             f'Unable to reach remote host {host}. {str(e)}',
                             host, address)
@@ -371,7 +392,7 @@ class SSHManager:
                         continue
                 else:
                     # Last attempt failed, raise the error
-                    self.mgr.offline_hosts.add(host)
+                    self.mgr.offline_hosts.add(normalize_hostname(host))
                     raise HostConnectionError(
                         f'Unable to reach remote host {host} after '
                         f'{self.SSH_RETRY_COUNT} attempts. {str(e)}',
@@ -380,7 +401,7 @@ class SSHManager:
                 msg = f"ProcessError cannot execute the command '{rcmd}' on the {host}. {str(e.stderr)}."
                 logger.exception(msg)
                 await self._reset_con(host)
-                self.mgr.offline_hosts.add(host)
+                self.mgr.offline_hosts.add(normalize_hostname(host))
                 raise HostConnectionError(msg, host, address)
             except Exception as e:
                 error_type = type(e).__name__
@@ -388,7 +409,7 @@ class SSHManager:
                        f"on the host {host}. {str(e)}.")
                 logger.exception(msg)
                 await self._reset_con(host)
-                self.mgr.offline_hosts.add(host)
+                self.mgr.offline_hosts.add(normalize_hostname(host))
                 raise HostConnectionError(msg, host, address)
 
         def _rstrip(v: Union[bytes, str, None]) -> str:
@@ -558,7 +579,7 @@ class SSHManager:
         ssh_config = self.mgr.get_store("ssh_config")
         if ssh_config is not None or self.mgr.ssh_config_fname is None:
             if not ssh_config:
-                ssh_config = DEFAULT_SSH_CONFIG
+                ssh_config = get_default_ssh_config()
             f = NamedTemporaryFile(prefix='cephadm-conf-')
             os.fchmod(f.fileno(), 0o600)
             f.write(ssh_config.encode('utf-8'))

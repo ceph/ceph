@@ -283,6 +283,40 @@ class OsdTest(ControllerTestCase):
             self.assertEqual(len(self.json_body()), 2, 'It should display two OSDs without failure')
             self.assertStatus(200)
 
+    def test_osd_list_host_with_intermediate_crush_bucket(self):
+        osd_ids = [0, 1]
+        tree_nodes = OsdHelper.gen_osdmap_tree_nodes(osd_ids)
+
+        host = next(node for node in tree_nodes if node['type'] == 'host')
+        host['children'] = [-4]
+
+        tree_nodes.insert(2, {
+            'id': -4,
+            'name': 'ceph-1-dg1',
+            'type': 'diskgroup',
+            'type_id': 1,
+            'pool_weights': {},
+            'children': osd_ids
+        })
+
+        osd_map = {
+            int(osd_id): osd
+            for osd_id, osd in OsdHelper.gen_osdmap(osd_ids).items()
+        }
+        with mock.patch.object(OsdHelper, 'gen_osdmap', return_value=osd_map), \
+                mock.patch.object(OsdHelper, 'gen_osdmap_tree_nodes',
+                                  return_value=tree_nodes):
+            with self._mock_osd_list(osd_stat_ids=osd_ids,
+                                     osdmap_tree_node_ids=osd_ids,
+                                     osdmap_ids=osd_ids):
+                self._get('/api/osd', version=APIVersion(1, 1))
+                self.assertStatus(200)
+                result = self.json_body()
+                self.assertEqual(len(result), len(osd_ids))
+                for osd in result:
+                    self.assertEqual(osd['host']['id'], -3)
+                    self.assertEqual(osd['host']['name'], 'ceph-1')
+
     @mock.patch('dashboard.controllers.osd.CephService')
     def test_osd_scrub(self, ceph_service):
         self._task_post('/api/osd/1/scrub', {'deep': True})
@@ -495,3 +529,38 @@ class OsdTest(ControllerTestCase):
         self.assertFalse(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
         self.assertFalse(res['options'][OsdDeploymentOptions.THROUGHPUT]['available'])
         self.assertTrue(res['options'][OsdDeploymentOptions.IOPS]['available'])
+
+    @mock.patch('dashboard.controllers.osd.time.sleep')
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_osd_delete_with_dict_status(self, instance, mock_sleep):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+        fake_client.get_missing_features.return_value = []
+
+        fake_client.osds.removing_status.side_effect = [
+            [{'osd_id': 7, 'started': True, 'draining': False}],
+            []
+        ]
+
+        self._task_delete('/api/osd/7?force=true&preserve_id=true')
+        self.assertStatus(204)
+
+        fake_client.osds.remove.assert_called_once_with(['7'], True)
+        self.assertEqual(fake_client.osds.removing_status.call_count, 2)
+        mock_sleep.assert_called_once_with(60)
+
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_get_removing_osds_with_dict_status(self, instance):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+        fake_client.get_missing_features.return_value = []
+
+        fake_client.osds.removing_status.return_value = [
+            {'osd_id': 7, 'started': True},
+            {'osd_id': 8, 'started': False}
+        ]
+
+        osd = Osd()
+        removing_osds = osd.get_removing_osds()
+
+        self.assertEqual(removing_osds, [7, 8])

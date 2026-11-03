@@ -2,7 +2,7 @@
 
 ceph-volume
 ===========
-Deploy OSDs with different device technologies like LVM or physical disks using
+Deploy OSDs with different device technologies like LVM or physical devices using
 pluggable tools (:doc:`lvm/index` itself is treated like a plugin) and trying to
 follow a predictable and robust way of preparing, activating, and starting OSDs.
 
@@ -12,7 +12,7 @@ follow a predictable and robust way of preparing, activating, and starting OSDs.
 
 **Command Line Subcommands**
 
-There is currently support for ``lvm``, and plain disks (with GPT partitions)
+There is currently support for ``lvm``, and plain devices (with GPT partitions)
 that may have been deployed with ``ceph-disk``.
 
 ``zfs`` support is available for running a FreeBSD cluster.
@@ -24,30 +24,37 @@ that may have been deployed with ``ceph-disk``.
 **Node inventory**
 
 The :ref:`ceph-volume-inventory` subcommand provides information and metadata
-about a node's physical disk inventory.
+about a node's physical device inventory.
 
 
 Migrating
 ---------
-Starting on Ceph version 13.0.0, ``ceph-disk`` is deprecated. Deprecation
-warnings will show up that will link to this page. It is strongly suggested
-that users start consuming ``ceph-volume``. There are two paths for migrating:
+``ceph-disk`` was deprecated in the Mimic release and has since been removed.
+``ceph-volume`` is the supported tool for provisioning and managing OSDs. If
+your cluster still has OSDs that rely on ``ceph-disk``,
+there are two migration paths:
 
-#. Keep OSDs deployed with ``ceph-disk``: The :ref:`ceph-volume-simple` command
-   provides a way to take over the management while disabling ``ceph-disk``
-   triggers.
-#. Redeploy existing OSDs with ``ceph-volume``: This is covered in depth on
-   :ref:`rados-replacing-an-osd`
+#. Keep OSDs deployed with ``ceph-disk``: the :ref:`ceph-volume-simple` command
+   takes over their management and disables the old ``ceph-disk`` triggers.
+#. Redeploy existing OSDs with ``ceph-volume``: this is covered in depth in
+   :ref:`rados-replacing-an-osd`.
 
-For details on why ``ceph-disk`` was removed please see the :ref:`Why was
-ceph-disk replaced? <ceph-disk-replaced>` section.
+.. note::
+
+   Adopted ``ceph-disk`` OSDs continue to run, but the cephadm
+   orchestrator cannot manage them as it does ``ceph-volume`` OSDs.
+   Incremental redeployment with ``ceph-volume`` is therefore
+   preferred.
+
+For background on why ``ceph-disk`` was replaced, see the :ref:`Replacing
+ceph-disk <ceph-disk-replaced>` section.
 
 
 New deployments
 ^^^^^^^^^^^^^^^
 For new deployments, :ref:`ceph-volume-lvm` is recommended. It can use any
-logical volume as input for data OSDs, or it can setup a minimal/naive logical
-volume from a device.
+logical volume for OSDs, or it can set up a minimal logical
+volume on a device.
 
 Existing OSDs
 ^^^^^^^^^^^^^

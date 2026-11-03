@@ -1403,7 +1403,7 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
                                                CephContext* cct,
                                                RGWGetObj_Filter* next,
                                                std::unique_ptr<BlockCrypt> crypt,
-                                               std::vector<size_t> parts_len,
+                                               std::vector<uint64_t> parts_len,
                                                std::vector<std::pair<uint32_t, std::string>> part_keys,
                                                off_t encrypted_total_size,
                                                bool has_compression,
@@ -1462,7 +1462,7 @@ RGWGetObj_BlockDecrypt::~RGWGetObj_BlockDecrypt() {
 
 int RGWGetObj_BlockDecrypt::read_manifest_parts(const DoutPrefixProvider *dpp,
                                                 const bufferlist& manifest_bl,
-                                                std::vector<size_t>& parts_len)
+                                                std::vector<uint64_t>& parts_len)
 {
   RGWObjManifest manifest;
   if (manifest_bl.length()) {
@@ -1562,7 +1562,7 @@ int RGWGetObj_BlockDecrypt::process_part_boundaries(size_t& plain_part_ofs_out) 
   uint32_t part_idx = 0;
   int res = 0;
 
-  for (size_t part : parts_len) {
+  for (uint64_t part : parts_len) {
     // Get actual S3 part number + salt from the attribute (not calculated!)
     uint32_t this_part_num = 0;
     std::string_view this_salt;
@@ -1752,6 +1752,11 @@ struct CryptAttributes {
     } else {
       return std::string_view();
     }
+  }
+
+  bool exists(crypt_option_e option)
+  {
+    return x_meta_map.count(crypt_options[option].post_part_name) > 0;
   }
 };
 
@@ -1963,7 +1968,7 @@ bool rgw_get_aead_decrypted_size(const DoutPrefixProvider* dpp,
 
   /* Try CRYPT_PARTS first (more accurate for multipart) */
   if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
-    std::vector<size_t> parts_len;
+    std::vector<uint64_t> parts_len;
     try {
       auto iter = i->second.cbegin();
       using ceph::decode;
@@ -1976,7 +1981,7 @@ bool rgw_get_aead_decrypted_size(const DoutPrefixProvider* dpp,
     }
     if (!parts_len.empty()) {
       uint64_t total = 0;
-      for (size_t enc_part : parts_len) {
+      for (uint64_t enc_part : parts_len) {
         total += aead_encrypted_to_plaintext_size(enc_part, dpp);
       }
       *decrypted_size = total;
@@ -2013,6 +2018,32 @@ static void maybe_write_prefetch_align(
   }
 }
 
+/*
+ * a bucket can block sse-c writes through its encryption configuration.
+ * reads of objects already encrypted with sse-c are still allowed.
+ */
+int rgw_s3_check_sse_c_blocked(req_state* s)
+{
+  auto aiter = s->bucket_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+  if (aiter == s->bucket_attrs.end()) {
+    return 0;
+  }
+
+  RGWBucketEncryptionConfig conf;
+  if (decode_bl(aiter->second, conf) < 0) {
+    s->err.message = "Server side error - can't decode bucket_encryption_conf";
+    return -EINVAL;
+  }
+
+  if (conf.sse_c_blocked()) {
+    ldpp_dout(s, 5) << "ERROR: sse-c is blocked on bucket " << s->bucket_name << dendl;
+    s->err.message = "Server side encryption with customer provided keys is "
+                     "blocked for this bucket.";
+    return -EACCES;
+  }
+  return 0;
+}
+
 int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
@@ -2028,6 +2059,10 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
     std::string_view req_sse_ca =
         crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM);
     if (! req_sse_ca.empty()) {
+      res = rgw_s3_check_sse_c_blocked(s);
+      if (res < 0) {
+        return res;
+      }
       if (req_sse_ca != "AES256") {
         ldpp_dout(s, 5) << "ERROR: Invalid value for header "
                          << "x-amz-server-side-encryption-customer-algorithm"
@@ -2125,7 +2160,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
           if (!gcm->derive_object_key(
                   reinterpret_cast<const uint8_t*>(key_bin.c_str()),
                   AES_256_KEYSIZE,
-                  s->bucket->get_info().bucket.bucket_id,
+                  s->bucket->get_marker(),
                   s->object->get_name(),
                   part_number)) {
             ldpp_dout(s, 5) << "ERROR: SSE-C-AES256-GCM key derivation failed for "
@@ -2177,7 +2212,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
     /* AMAZON server side encryption with KMS (key management service) */
     std::string_view req_sse =
         crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION);
-    if (! req_sse.empty()) {
+    if (crypt_attributes.exists(X_AMZ_SERVER_SIDE_ENCRYPTION)) {
 
       if (req_sse == "aws:kms") {
         if (s->cct->_conf->rgw_crypt_require_ssl &&
@@ -2249,7 +2284,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
             if (!gcm || !gcm->derive_object_key(
                     reinterpret_cast<const uint8_t*>(actual_key.c_str()),
                     AES_256_KEYSIZE,
-                    s->bucket->get_info().bucket.bucket_id,
+                    s->bucket->get_marker(),
                     s->object->get_name(),
                     part_number,
                     "SSE-KMS-GCM")) {
@@ -2347,7 +2382,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
           if (!gcm || !gcm->derive_object_key(
                   reinterpret_cast<const uint8_t*>(actual_key.c_str()),
                   AES_256_KEYSIZE,
-                  s->bucket->get_info().bucket.bucket_id,
+                  s->bucket->get_marker(),
                   s->object->get_name(),
                   part_number,
                   "AES256-GCM")) {
@@ -2416,7 +2451,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
           if (!gcm->derive_object_key(
                   reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()),
                   AES_256_KEYSIZE,
-                  s->bucket->get_info().bucket.bucket_id,
+                  s->bucket->get_marker(),
                   s->object->get_name(),
                   part_number,
                   "RGW-AUTO-GCM")) {
@@ -2470,12 +2505,12 @@ static void pick_gcm_identity(req_state* s,
       return;
     }
     if (s->src_object && s->src_object->get_bucket()) {
-      bucket_id = s->src_object->get_bucket()->get_info().bucket.bucket_id;
+      bucket_id = s->src_object->get_bucket()->get_marker();
       object_name = s->src_object->get_name();
       return;
     }
   }
-  bucket_id = s->bucket->get_info().bucket.bucket_id;
+  bucket_id = s->bucket->get_marker();
   object_name = s->object->get_name();
 }
 

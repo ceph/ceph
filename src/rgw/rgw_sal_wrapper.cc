@@ -1,0 +1,1590 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright 2026 IBM
+ *
+ * See file COPYING for licensing information.
+ *
+ * This file implements C wrapper functions for RGW SAL.
+ *
+ * These are minimal implementations to enable external applications like
+ * LanceDB to work with RGW's Storage Abstraction Layer (SAL) via FFI.
+ * They provide basic object storage operations (put, get, delete, list, etc.)
+ * without the full complexity of the S3 REST API handlers.
+ */
+
+#include <array>
+#include <fmt/compile.h>
+
+#include "rgw_sal_wrapper.h"
+#include "rgw/rgw_sal.h"
+#include "rgw/rgw_bucket.h"
+#include "rgw/rgw_req_context.h"
+#include "rgw/rgw_obj_types.h"
+#include "rgw/rgw_compression_types.h"
+#include "common/dout.h"
+#include "common/errno.h"
+#include "common/ceph_crypto.h"
+#include "global/global_context.h"
+#include "common/async/yield_context.h"
+
+#include <cstdio>
+#include <cstring>
+#include <fmt/format.h>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+#define dout_subsys ceph_subsys_rgw
+
+static constexpr size_t MAX_ETAG_LEN = 128;
+static constexpr size_t MAX_UPLOAD_ID_LEN = 256;
+
+// Collect data into a bufferlist
+class BufferlistDataCB : public RGWGetDataCB {
+  bufferlist& bl_;
+public:
+  explicit BufferlistDataCB(bufferlist& bl) : bl_(bl) {}
+
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+    if (bl_len > 0 && bl.length() > 0) {
+      bl.begin(bl_ofs).copy(bl_len, bl_);
+    }
+    return 0;
+  }
+};
+
+static inline const DoutPrefixProvider* get_dpp(const CRgwDoutPrefix* dpp) {
+  return reinterpret_cast<const DoutPrefixProvider*>(dpp);
+}
+
+static inline rgw::sal::Driver* get_driver(CRgwDriver* driver) {
+  return reinterpret_cast<rgw::sal::Driver*>(driver);
+}
+
+static inline optional_yield get_yield(CRgwYieldContext* yield_ctx) {
+  if (yield_ctx) {
+    return *reinterpret_cast<optional_yield*>(yield_ctx);
+  }
+  return null_yield;
+}
+
+static int load_bucket( rgw::sal::Driver* driver, const DoutPrefixProvider* dpp,
+        const CRgwBucket* bucket, std::unique_ptr<rgw::sal::Bucket>& bucket_out,
+        optional_yield y) {
+  if (!driver || !bucket || !bucket->name) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: load_bucket: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  rgw_bucket bucket_id;
+  bucket_id.name = bucket->name;
+  if (bucket->tenant) {
+    bucket_id.tenant = bucket->tenant;
+  }
+
+  // Select the entrypoint namespace before using the shared object operations.
+  int ret = bucket->is_vector_bucket
+      ? driver->load_vector_bucket(dpp, bucket_id, &bucket_out, y)
+      : driver->load_bucket(dpp, bucket_id, &bucket_out, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: load_bucket failed for '"
+                      << bucket->name << "' (vector=" << bucket->is_vector_bucket
+                      << ") ret=" << ret << dendl;
+    return ret;
+  }
+
+  // Writers take their owner from the bucket ACL. Loading metadata through SAL
+  // does not populate the in-memory ACL as the S3 frontend normally does.
+  auto& acl = bucket_out->get_acl();
+  const auto& attrs = bucket_out->get_attrs();
+  if (auto it = attrs.find(RGW_ATTR_ACL); it != attrs.end()) {
+    try {
+      auto p = it->second.cbegin();
+      acl.decode(p);
+    } catch (const buffer::error&) {
+      return -EIO;
+    }
+  } else {
+    acl.create_default(bucket_out->get_info().owner, "");
+  }
+
+  return 0;
+}
+
+// Convert CRgwObject to rgw_obj_key, using version_id as instance if provided
+static inline rgw_obj_key make_obj_key(const CRgwObject* obj) {
+  std::string name(obj->key);
+  if (obj->version_id) {
+    return rgw_obj_key(name, std::string(obj->version_id));
+  }
+  return rgw_obj_key(name);
+}
+
+
+// Helper function to convert CRgwObjectMeta to rgw::sal::Attrs
+static void c_meta_to_attrs(const DoutPrefixProvider* dpp,
+                            const CRgwObjectMeta* user_attrs,
+                            rgw::sal::Attrs& attrs) {
+  if (!user_attrs) {
+    return;
+  }
+
+  if (user_attrs->content_type) {
+    bufferlist ct_bl;
+    ct_bl.append(user_attrs->content_type);
+    attrs[RGW_ATTR_CONTENT_TYPE] = std::move(ct_bl);
+  }
+  if (user_attrs->content_encoding) {
+    bufferlist ce_bl;
+    ce_bl.append(user_attrs->content_encoding);
+    attrs[RGW_ATTR_CONTENT_ENC] = std::move(ce_bl);
+  }
+  if (user_attrs->content_disposition) {
+    bufferlist cd_bl;
+    cd_bl.append(user_attrs->content_disposition);
+    attrs[RGW_ATTR_CONTENT_DISP] = std::move(cd_bl);
+  }
+  if (user_attrs->content_language) {
+    bufferlist cl_bl;
+    cl_bl.append(user_attrs->content_language);
+    attrs[RGW_ATTR_CONTENT_LANG] = std::move(cl_bl);
+  }
+  if (user_attrs->cache_control) {
+    bufferlist cc_bl;
+    cc_bl.append(user_attrs->cache_control);
+    attrs[RGW_ATTR_CACHE_CONTROL] = std::move(cc_bl);
+  }
+  // Parse custom metadata from JSON
+  if (user_attrs->metadata) {
+    std::string metadata_json(user_attrs->metadata);
+    try {
+      json_spirit::mValue json_obj;
+      if (json_spirit::read(metadata_json, json_obj) && json_obj.type() == json_spirit::obj_type) {
+        const json_spirit::mObject& obj_map = json_obj.get_obj();
+        for (const auto& [key, value] : obj_map) {
+          if (value.type() == json_spirit::str_type) {
+            std::string attr_name = fmt::format("{}{}", RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX, key);
+            bufferlist meta_bl;
+            meta_bl.append(value.get_str());
+            attrs[attr_name] = std::move(meta_bl);
+          }
+        }
+      }
+    } catch (...) {
+      ldpp_dout(dpp, 5) << "WARNING: sal_wrapper: c_meta_to_attrs: failed to parse metadata JSON" << dendl;
+    }
+  }
+}
+
+
+namespace {
+
+// "<major>.<minor>" formatted at compile time: fmt's FMT_COMPILE formatting of
+// integral arguments is usable in constant expressions, so the string the Rust
+// side reads is a constant and needs no runtime initialization.
+constexpr auto make_sal_wrapper_version_string() {
+  std::array<char, 32> out{};
+  fmt::format_to(out.data(), FMT_COMPILE("{}.{}"),
+                 RGW_SAL_WRAPPER_VERSION_MAJOR, RGW_SAL_WRAPPER_VERSION_MINOR);
+  return out;
+}
+
+constexpr auto sal_wrapper_version_string = make_sal_wrapper_version_string();
+static_assert(sal_wrapper_version_string.front() != '\0' &&
+              sal_wrapper_version_string.back() == '\0');
+
+} // anonymous namespace
+
+extern "C" {
+
+int rgw_put_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
+      const CRgwBuffer* buffer, const CRgwObjectMeta* user_attrs, char* etag_out, size_t etag_len) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (etag_out && etag_len > 0) etag_out[0] = '\0';
+
+  const uint8_t* data = buffer ? buffer->data : nullptr;
+  size_t len = buffer ? buffer->len : 0;
+
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || (!data && len > 0)) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_put_object: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_put_object: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(make_obj_key(obj_id));
+  if (!obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_put_object: failed to allocate object" << dendl;
+    return -ENOMEM;
+  }
+
+  ACLOwner owner = bucket->get_acl().get_owner();
+  const rgw_placement_rule& placement_rule = bucket->get_placement_rule();
+  std::string unique_tag = driver->zone_unique_id(driver->get_new_req_id());
+
+  std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
+    dpp, y, obj.get(), owner, &placement_rule, 0, unique_tag);
+
+  if (!writer) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_put_object: failed to create writer" << dendl;
+    return -ENOMEM;
+  }
+
+  ret = writer->prepare(y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  bufferlist bl;
+  bl.append(reinterpret_cast<const char*>(data), len);
+
+  ret = writer->process(std::move(bl), 0);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = writer->process(bufferlist(), len);
+  if (ret < 0) {
+    return ret;
+  }
+
+  unsigned char md5_digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  ceph::crypto::MD5 md5_hash;
+  md5_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  md5_hash.Update(data, len);
+  md5_hash.Final(md5_digest);
+
+  std::string etag;
+  etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+  buf_to_hex(md5_digest, std::back_inserter(etag));
+
+  rgw::sal::Attrs attrs;
+  bufferlist etag_bl;
+  etag_bl.append(etag);
+  attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
+
+  // Set user-provided attributes if present
+  c_meta_to_attrs(dpp, user_attrs, attrs);
+
+  ceph::real_time mtime = ceph::real_clock::now();
+  req_context rctx{dpp, y, nullptr};
+
+  ret = writer->complete(
+                          len,              /* accounted_size */
+                          etag,             /* etag */
+                          &mtime,           /* mtime (output) */
+                          mtime,            /* set_mtime */
+                          attrs,            /* attrs (includes RGW_ATTR_ETAG) */
+                          std::nullopt,     /* cksum */
+                          ceph::real_time(),/* delete_at (epoch = no expiry) */
+                          nullptr,          /* if_match */
+                          nullptr,          /* if_nomatch */
+                          nullptr,          /* user_data */
+                          nullptr,          /* zones_trace */
+                          nullptr,          /* canceled */
+                          rctx, 0);
+
+  if (ret == 0 && etag_out && etag_len > 0) {
+    std::snprintf(etag_out, etag_len, "%s", etag.c_str());
+  }
+
+  return ret;
+}
+
+int rgw_put_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
+      const CRgwBuffer* buffer,
+      const char* if_match, const char* if_nomatch, int* canceled, const CRgwObjectMeta* user_attrs,
+      char* etag_out, size_t etag_len) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (etag_out && etag_len > 0) etag_out[0] = '\0';
+
+  const uint8_t* data = buffer ? buffer->data : nullptr;
+  size_t len = buffer ? buffer->len : 0;
+
+  if (canceled) *canceled = 0;
+
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || (!data && len > 0)) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_put_object_conditional: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_put_object_conditional: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(make_obj_key(obj_id));
+  if (!obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_put_object_conditional: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ACLOwner owner = bucket->get_acl().get_owner();
+  const rgw_placement_rule& placement_rule = bucket->get_placement_rule();
+  std::string unique_tag = driver->zone_unique_id(driver->get_new_req_id());
+
+  std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
+    dpp, y, obj.get(), owner, &placement_rule, 0, unique_tag);
+
+  if (!writer) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_put_object_conditional: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ret = writer->prepare(y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  bufferlist bl;
+  bl.append(reinterpret_cast<const char*>(data), len);
+  ret = writer->process(std::move(bl), 0);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = writer->process(bufferlist(), len);
+  if (ret < 0) {
+    return ret;
+  }
+
+  unsigned char md5_digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  ceph::crypto::MD5 md5_hash;
+  md5_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  md5_hash.Update(data, len);
+  md5_hash.Final(md5_digest);
+
+  std::string etag;
+  etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+  buf_to_hex(md5_digest, std::back_inserter(etag));
+
+  rgw::sal::Attrs attrs;
+  bufferlist etag_bl;
+  etag_bl.append(etag);
+  attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
+
+  // Set user-provided attributes if present
+  c_meta_to_attrs(dpp, user_attrs, attrs);
+
+  ceph::real_time mtime = ceph::real_clock::now();
+  req_context rctx{dpp, y, nullptr};
+  bool was_canceled = false;
+
+  ret = writer->complete(
+                            len,              /* accounted_size */
+                            etag,             /* etag */
+                            &mtime,           /* mtime (output) */
+                            mtime,            /* set_mtime */
+                            attrs,            /* attrs (includes RGW_ATTR_ETAG and user attrs) */
+                            std::nullopt,     /* cksum */
+                            ceph::real_time(),/* delete_at (epoch = no expiry) */
+                            if_match,         /* if_match */
+                            if_nomatch,       /* if_nomatch */
+                            nullptr,          /* user_data */
+                            nullptr,          /* zones_trace */
+                            &was_canceled,    /* canceled */
+                            rctx, 0);
+
+  // Backend returns ERR_PRECONDITION_FAILED when if_match/if_nomatch fails;
+  // set canceled=1.
+  //
+  // when if_match etag is used the backend reports a missing object as
+  // ENOENT rather than ERR_PRECONDITION_FAILED
+  if (ret == -ERR_PRECONDITION_FAILED || (ret == -ENOENT && if_match)) {
+    if (canceled) *canceled = 1;
+    return 0;
+  }
+
+  if (canceled) *canceled = was_canceled ? 1 : 0;
+
+  if (ret == 0 && !was_canceled && etag_out && etag_len > 0) {
+    std::snprintf(etag_out, etag_len, "%s", etag.c_str());
+  }
+
+  return ret;
+}
+
+// Callers issue ranged reads (offset/length) for large objects.
+// Read length is clamped to min(requested, obj_size - offset).
+// TODO: explore streaming reads via callback-based Rust FFI.
+int rgw_get_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
+      uint64_t offset, uint64_t length, CRgwBuffer* buffer) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !buffer) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_get_object: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_get_object: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
+  buffer->data = nullptr;
+  buffer->len = 0;
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(make_obj_key(obj_id));
+  if (!obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_get_object: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ret = obj->load_obj_state(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (!obj->exists()) {
+    return -ENOENT;
+  }
+
+  uint64_t obj_size = obj->get_size();
+
+  if (offset >= obj_size) {
+    ldpp_dout(dpp, 5) << "sal_wrapper: rgw_get_object: offset "
+        << offset << " >= object size " << obj_size << dendl;
+    return -ERANGE;
+  }
+
+  uint64_t read_len = length;
+  if (length == UINT64_MAX || length > obj_size - offset) {
+    read_len = obj_size - offset;
+  }
+
+  if (read_len == 0) {
+    return 0;
+  }
+
+  buffer->data = static_cast<uint8_t*>(malloc(read_len));
+  if (!buffer->data) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_get_object: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op();
+
+  ret = read_op->prepare(y, dpp);
+  if (ret < 0) {
+    free(buffer->data);
+    buffer->data = nullptr;
+    return ret;
+  }
+
+  bufferlist bl;
+  int64_t end_ofs = offset + read_len - 1;
+  ret = read_op->read(offset, end_ofs, bl, y, dpp);
+  if (ret < 0) {
+    free(buffer->data);
+    buffer->data = nullptr;
+    return ret;
+  }
+
+  size_t actual_len = bl.length();
+  if (actual_len > read_len) {
+    actual_len = read_len;
+  }
+  if (actual_len > 0) {
+    memcpy(buffer->data, bl.c_str(), actual_len);
+  }
+  buffer->len = actual_len;
+
+  return 0;
+}
+
+int rgw_get_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
+      uint64_t offset, uint64_t length,
+      const char* if_match, const char* if_nomatch,
+      const int64_t* if_modified_since, const int64_t* if_unmodified_since,
+      CRgwBuffer* buffer) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !buffer) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_get_object_conditional: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  buffer->data = nullptr;
+  buffer->len = 0;
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(make_obj_key(obj_id));
+  if (!obj) {
+    return -ENOMEM;
+  }
+
+  ret = obj->load_obj_state(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (!obj->exists()) {
+    return -ENOENT;
+  }
+
+  uint64_t obj_size = obj->get_size();
+
+  if (offset >= obj_size) {
+    ldpp_dout(dpp, 5) << "sal_wrapper: rgw_get_object_conditional: offset "
+        << offset << " >= object size " << obj_size << dendl;
+    return -ERANGE;
+  }
+
+  uint64_t read_len = length;
+  if (length == UINT64_MAX || length > obj_size - offset) {
+    read_len = obj_size - offset;
+  }
+
+  if (read_len == 0) {
+    return 0;
+  }
+
+  buffer->data = static_cast<uint8_t*>(malloc(read_len));
+  if (!buffer->data) {
+    return -ENOMEM;
+  }
+
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op();
+
+  // Set conditional parameters
+  ceph::real_time mod_time, unmod_time;
+  if (if_match) {
+    read_op->params.if_match = if_match;
+  }
+  if (if_nomatch) {
+    read_op->params.if_nomatch = if_nomatch;
+  }
+  if (if_modified_since) {
+    mod_time = ceph::real_clock::from_time_t(static_cast<time_t>(*if_modified_since));
+    read_op->params.mod_ptr = &mod_time;
+  }
+  if (if_unmodified_since) {
+    unmod_time = ceph::real_clock::from_time_t(static_cast<time_t>(*if_unmodified_since));
+    read_op->params.unmod_ptr = &unmod_time;
+  }
+
+  ret = read_op->prepare(y, dpp);
+  if (ret < 0) {
+    free(buffer->data);
+    buffer->data = nullptr;
+    return ret;
+  }
+
+  bufferlist bl;
+  int64_t end_ofs = offset + read_len - 1;
+  ret = read_op->read(offset, end_ofs, bl, y, dpp);
+  if (ret < 0) {
+    free(buffer->data);
+    buffer->data = nullptr;
+    return ret;
+  }
+
+  size_t actual_len = bl.length();
+  if (actual_len > read_len) {
+    actual_len = read_len;
+  }
+  if (actual_len > 0) {
+    memcpy(buffer->data, bl.c_str(), actual_len);
+  }
+  buffer->len = actual_len;
+
+  return 0;
+}
+
+int rgw_delete_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+    CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !bucket_id || !obj_id || !obj_id->key) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_delete_object: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_delete_object: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(make_obj_key(obj_id));
+  if (!obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_delete_object: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  ret = del_op->delete_obj(dpp, y, 0);
+
+  if (ret == -ENOENT) {
+    return 0;
+  }
+
+  return ret;
+}
+
+int rgw_head_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
+      CRgwObjectMeta* meta) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !meta) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_head_object: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_head_object: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
+  meta->size = 0;
+  meta->etag = nullptr;
+  meta->content_type = nullptr;
+  meta->last_modified = 0;
+  meta->last_modified_ns = 0;
+  meta->content_encoding = nullptr;
+  meta->content_disposition = nullptr;
+  meta->content_language = nullptr;
+  meta->cache_control = nullptr;
+  meta->metadata = nullptr;
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(make_obj_key(obj_id));
+  if (!obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_head_object: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ret = obj->load_obj_state(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (!obj->exists()) {
+    return -ENOENT;
+  }
+
+  meta->size = obj->get_size();
+  const auto mtime = ceph::real_clock::to_timespec(obj->get_mtime());
+  meta->last_modified = mtime.tv_sec;
+  meta->last_modified_ns = mtime.tv_nsec;
+
+  const rgw::sal::Attrs& attrs = obj->get_attrs();
+
+  auto etag_iter = attrs.find(RGW_ATTR_ETAG);
+  if (etag_iter != attrs.end()) {
+    meta->etag = strndup(etag_iter->second.to_str().c_str(), MAX_ETAG_LEN);
+    if (!meta->etag) {
+      ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_head_object: allocation failed" << dendl;
+      return -ENOMEM;
+    }
+  }
+
+  auto ct_iter = attrs.find(RGW_ATTR_CONTENT_TYPE);
+  if (ct_iter != attrs.end()) {
+    meta->content_type = strdup(ct_iter->second.to_str().c_str());
+    if (!meta->content_type) {
+      free(meta->etag);
+      meta->etag = nullptr;
+      ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_head_object: allocation failed" << dendl;
+      return -ENOMEM;
+    }
+  }
+
+  // Extract additional attributes
+  auto ce_iter = attrs.find(RGW_ATTR_CONTENT_ENC);
+  if (ce_iter != attrs.end()) {
+    meta->content_encoding = strdup(ce_iter->second.to_str().c_str());
+  }
+
+  auto cd_iter = attrs.find(RGW_ATTR_CONTENT_DISP);
+  if (cd_iter != attrs.end()) {
+    meta->content_disposition = strdup(cd_iter->second.to_str().c_str());
+  }
+
+  auto cl_iter = attrs.find(RGW_ATTR_CONTENT_LANG);
+  if (cl_iter != attrs.end()) {
+    meta->content_language = strdup(cl_iter->second.to_str().c_str());
+  }
+
+  auto cc_iter = attrs.find(RGW_ATTR_CACHE_CONTROL);
+  if (cc_iter != attrs.end()) {
+    meta->cache_control = strdup(cc_iter->second.to_str().c_str());
+  }
+
+  // Extract custom metadata (x-amz-meta-*) as JSON
+  json_spirit::mObject metadata_obj;
+  std::string meta_prefix = std::string(RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX);
+  for (const auto& [attr_name, attr_value] : attrs) {
+    if (attr_name.compare(0, meta_prefix.length(), meta_prefix) == 0) {
+      std::string key = attr_name.substr(meta_prefix.length());
+      metadata_obj[key] = attr_value.to_str();
+    }
+  }
+
+  if (!metadata_obj.empty()) {
+    std::string metadata_json = json_spirit::write(metadata_obj);
+    meta->metadata = strdup(metadata_json.c_str());
+  }
+
+  return 0;
+}
+
+int rgw_list_objects( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const char* prefix,
+      const char* delimiter, const char* marker, uint32_t max_keys,
+      CRgwListResult* result) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !bucket_id || !result) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_list_objects: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_list_objects: bucket=" << bucket_id->name
+                     << " prefix='" << (prefix ? prefix : "") << "'"
+                     << " delimiter='" << (delimiter ? delimiter : "") << "'"
+                     << " marker='" << (marker ? marker : "") << "'"
+                     << " max_keys=" << max_keys << dendl;
+
+  result->entries = nullptr;
+  result->count = 0;
+  result->is_truncated = 0;
+  result->next_marker = nullptr;
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  rgw::sal::Bucket::ListParams params;
+  params.prefix = prefix ? prefix : "";
+  params.delim = delimiter ? delimiter : "";
+  params.marker = rgw_obj_key(marker ? marker : "");
+  params.list_versions = false;
+  params.allow_unordered = false;
+
+  rgw::sal::Bucket::ListResults results;
+
+  ret = bucket->list(dpp, params, max_keys, results, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  size_t obj_count = results.objs.size();
+  size_t prefix_count = results.common_prefixes.size();
+  size_t total_count = obj_count + prefix_count;
+
+  ldpp_dout(dpp, 10) << "rgw_list_objects: found " << obj_count << " objects, "
+           << prefix_count << " common_prefixes, "
+           << "is_truncated=" << results.is_truncated << dendl;
+
+  if (total_count > 0) {
+    result->entries = static_cast<CRgwListEntry*>(
+      calloc(total_count, sizeof(CRgwListEntry)));
+    if (!result->entries) {
+      ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_list_objects: allocation failed" << dendl;
+      return -ENOMEM;
+    }
+
+    size_t i = 0;
+    for (const auto& obj : results.objs) {
+      result->entries[i].key = strdup(obj.key.name.c_str());
+      if (!result->entries[i].key) {
+        result->count = i;
+        rgw_free_list_result(result);
+        ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_list_objects: allocation failed" << dendl;
+        return -ENOMEM;
+      }
+      result->entries[i].version_id = obj.key.instance.empty() ?
+        nullptr : strdup(obj.key.instance.c_str());
+      result->entries[i].etag = obj.meta.etag.empty() ?
+        nullptr : strndup(obj.meta.etag.c_str(), MAX_ETAG_LEN);
+      result->entries[i].size = obj.meta.size;
+      const auto mtime = ceph::real_clock::to_timespec(obj.meta.mtime);
+      result->entries[i].last_modified = mtime.tv_sec;
+      result->entries[i].last_modified_ns = mtime.tv_nsec;
+      i++;
+    }
+
+    for (const auto& [prefix_name, _] : results.common_prefixes) {
+      result->entries[i].key = strdup(prefix_name.c_str());
+      if (!result->entries[i].key) {
+        result->count = i;
+        rgw_free_list_result(result);
+        ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_list_objects: allocation failed" << dendl;
+        return -ENOMEM;
+      }
+      result->entries[i].version_id = nullptr;
+      result->entries[i].etag = nullptr;
+      result->entries[i].size = 0;
+      result->entries[i].last_modified = time(nullptr);
+      result->entries[i].last_modified_ns = 0;
+      i++;
+    }
+  }
+
+  result->count = total_count;
+  result->is_truncated = results.is_truncated ? 1 : 0;
+
+  if (results.is_truncated && !results.next_marker.name.empty()) {
+    result->next_marker = strdup(results.next_marker.name.c_str());
+    if (!result->next_marker) {
+      rgw_free_list_result(result);
+      ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_list_objects: allocation failed" << dendl;
+      return -ENOMEM;
+    }
+  }
+
+  return 0;
+}
+
+int rgw_copy_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* src_bucket_id, const CRgwObject* src_obj_id,
+      const CRgwBucket* dst_bucket_id, const CRgwObject* dst_obj_id) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !src_bucket_id || !src_obj_id || !src_obj_id->key ||
+    !dst_bucket_id || !dst_obj_id || !dst_obj_id->key) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_copy_object: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_copy_object: src_bucket=" << src_bucket_id->name
+                     << " src_obj=" << src_obj_id->key
+                     << " dst_bucket=" << dst_bucket_id->name
+                     << " dst_obj=" << dst_obj_id->key << dendl;
+
+  std::unique_ptr<rgw::sal::Bucket> src_bucket;
+  int ret = load_bucket(driver, dpp, src_bucket_id, src_bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::Bucket> dst_bucket;
+  ret = load_bucket(driver, dpp, dst_bucket_id, dst_bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::Object> src_obj =
+    src_bucket->get_object(make_obj_key(src_obj_id));
+  if (!src_obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_copy_object: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ret = src_obj->load_obj_state(dpp, y);
+  if (ret < 0) return ret;
+  if (!src_obj->exists()) return -ENOENT;
+
+  std::unique_ptr<rgw::sal::Object> dst_obj =
+    dst_bucket->get_object(make_obj_key(dst_obj_id));
+  if (!dst_obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_copy_object: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ACLOwner owner = dst_bucket->get_acl().get_owner();
+  rgw_user remote_user;
+  rgw_zone_id source_zone;
+  const rgw_placement_rule& dest_placement = dst_bucket->get_placement_rule();
+  rgw::sal::Attrs attrs;
+
+  ret = src_obj->copy_object(
+                            owner,
+                            remote_user,      /* empty = local copy, not cross-cluster */
+                            nullptr,          /* info */
+                            source_zone,      /* empty = local zone */
+                            dst_obj.get(),
+                            dst_bucket.get(),
+                            src_bucket.get(),
+                            dest_placement,
+                            nullptr,          /* src_mtime */
+                            nullptr,          /* mtime */
+                            nullptr,          /* mod_ptr */
+                            nullptr,          /* unmod_ptr */
+                            false,            /* high_precision_time */
+                            nullptr,          /* if_match */
+                            nullptr,          /* if_nomatch */
+                            rgw::sal::ATTRSMOD_NONE,
+                            false,            /* copy_if_newer */
+                            attrs,
+                            RGWObjCategory::Main,
+                            0,                /* olh_epoch */
+                            boost::none,      /* delete_at */
+                            nullptr,          /* version_id */
+                            nullptr,          /* tag */
+                            nullptr,          /* etag */
+                            nullptr,          /* progress_cb */
+                            nullptr,          /* progress_data */
+                            nullptr,          /* dp_factory */
+                            dpp, y);
+
+  return ret;
+}
+
+int rgw_copy_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* src_bucket_id, const CRgwObject* src_obj_id,
+      const CRgwBucket* dst_bucket_id, const CRgwObject* dst_obj_id, const char* if_match,
+      const char* if_nomatch) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !src_bucket_id || !src_obj_id || !src_obj_id->key ||
+    !dst_bucket_id || !dst_obj_id || !dst_obj_id->key) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_copy_object_conditional: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_copy_object_conditional: src_bucket=" << src_bucket_id->name
+                     << " src_obj=" << src_obj_id->key
+                     << " dst_bucket=" << dst_bucket_id->name
+                     << " dst_obj=" << dst_obj_id->key << dendl;
+
+  // Check source exists before checking destination conditions
+  std::unique_ptr<rgw::sal::Bucket> src_bucket;
+  int ret = load_bucket(driver, dpp, src_bucket_id, src_bucket, y);
+  if (ret < 0) return ret;
+
+  std::unique_ptr<rgw::sal::Object> src_obj =
+    src_bucket->get_object(make_obj_key(src_obj_id));
+  if (!src_obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_copy_object_conditional: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ret = src_obj->load_obj_state(dpp, y);
+  if (ret < 0) return ret;
+  if (!src_obj->exists()) return -ENOENT;
+
+  // XXX: this check-then-copy is not atomic. Another writer could
+  // create the destination between our existence check and the copy_object
+  // call below. RGW's copy_object API only supports source-side preconditions
+  // (if_match/if_nomatch check the source etag), not destination-side
+  // preconditions, so we cannot make this atomic without changes to the
+  // SAL copy_object interface.
+  if (if_nomatch && std::string(if_nomatch) == "*") {
+    std::unique_ptr<rgw::sal::Bucket> check_bucket;
+    ret = load_bucket(driver, dpp, dst_bucket_id, check_bucket, y);
+    if (ret < 0) return ret;
+
+    std::unique_ptr<rgw::sal::Object> check_obj =
+      check_bucket->get_object(make_obj_key(dst_obj_id));
+    if (check_obj) {
+      ret = check_obj->load_obj_state(dpp, y);
+      if (ret == 0 && check_obj->exists()) {
+        return -EEXIST;
+      }
+    }
+  }
+
+  std::unique_ptr<rgw::sal::Bucket> dst_bucket;
+  ret = load_bucket(driver, dpp, dst_bucket_id, dst_bucket, y);
+  if (ret < 0) return ret;
+
+  std::unique_ptr<rgw::sal::Object> dst_obj =
+    dst_bucket->get_object(make_obj_key(dst_obj_id));
+  if (!dst_obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_copy_object_conditional: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ACLOwner owner = dst_bucket->get_acl().get_owner();
+  rgw_user remote_user;
+  rgw_zone_id source_zone;
+  const rgw_placement_rule& dest_placement = dst_bucket->get_placement_rule();
+  rgw::sal::Attrs attrs;
+
+  const char* copy_if_nomatch = nullptr;
+  if (if_nomatch && std::string(if_nomatch) != "*") {
+    copy_if_nomatch = if_nomatch;
+  }
+
+  ret = src_obj->copy_object(
+                            owner,
+                            remote_user,      /* empty = local copy */
+                            nullptr,          /* info */
+                            source_zone,      /* empty = local zone */
+                            dst_obj.get(),
+                            dst_bucket.get(),
+                            src_bucket.get(),
+                            dest_placement,
+                            nullptr,          /* src_mtime */
+                            nullptr,          /* mtime */
+                            nullptr,          /* mod_ptr */
+                            nullptr,          /* unmod_ptr */
+                            false,            /* high_precision_time */
+                            if_match,         /* if_match */
+                            copy_if_nomatch,  /* if_nomatch */
+                            rgw::sal::ATTRSMOD_NONE,
+                            false,            /* copy_if_newer */
+                            attrs,
+                            RGWObjCategory::Main,
+                            0,                /* olh_epoch */
+                            boost::none,      /* delete_at */
+                            nullptr,          /* version_id */
+                            nullptr,          /* tag */
+                            nullptr,          /* etag */
+                            nullptr,          /* progress_cb */
+                            nullptr,          /* progress_data */
+                            nullptr,          /* dp_factory */
+                            dpp, y);
+
+  return ret;
+}
+
+int rgw_delete_objects( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const char* const* keys,
+      size_t count) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !bucket_id || (!keys && count > 0)) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_delete_objects: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_delete_objects: bucket=" << bucket_id->name
+                     << " count=" << count << dendl;
+
+  if (count == 0) {
+    return 0;
+  }
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  int failed = 0;
+  for (size_t i = 0; i < count; i++) {
+    if (!keys[i]) {
+      ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_delete_objects: null key at index " << i << dendl;
+      failed++;
+      continue;
+    }
+
+    std::unique_ptr<rgw::sal::Object> obj =
+      bucket->get_object(rgw_obj_key(keys[i]));
+    if (!obj) {
+      ldpp_dout(dpp, 1) << "rgw_delete_objects: failed to create object for key '"
+               << keys[i] << "'" << dendl;
+      failed++;
+      continue;
+    }
+
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+    int del_ret = del_op->delete_obj(dpp, y, 0);
+    if (del_ret < 0 && del_ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "rgw_delete_objects: failed to delete '"
+               << keys[i] << "': " << del_ret << dendl;
+      failed++;
+    } else {
+      ldpp_dout(dpp, 10) << "rgw_delete_objects: deleted '"
+                << keys[i] << "'" << dendl;
+    }
+  }
+
+  if (failed > 0) {
+    ldpp_dout(dpp, 1) << "rgw_delete_objects: " << failed << " of "
+             << count << " deletes failed" << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int rgw_multipart_init( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
+      const CRgwObjectMeta* meta, char* upload_id_out, size_t upload_id_len) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !upload_id_out || upload_id_len == 0) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_init: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_multipart_init: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
+  upload_id_out[0] = '\0';
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::string initial_upload_id;
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    bucket->get_multipart_upload(obj_id->key, initial_upload_id);
+  if (!upload) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_init: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ACLOwner owner = bucket->get_acl().get_owner();
+  rgw_placement_rule placement = bucket->get_placement_rule();
+  rgw::sal::Attrs attrs;
+
+  // Convert CRgwObjectMeta to rgw::sal::Attrs if provided
+  c_meta_to_attrs(dpp, meta, attrs);
+
+  ret = upload->init(dpp, y, owner, placement, attrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::string id = upload->get_upload_id();
+  std::snprintf(upload_id_out, upload_id_len, "%s", id.c_str());
+
+  return 0;
+}
+
+int rgw_multipart_put_part( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
+      const char* upload_id, uint32_t part_num, const uint8_t* data,
+      size_t len, char* etag_out, size_t etag_len) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !upload_id ||
+    !etag_out || etag_len == 0 || (!data && len > 0)) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_put_part: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_multipart_put_part: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+  etag_out[0] = '\0';
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    bucket->get_multipart_upload(obj_id->key, upload_id);
+  if (!upload) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_put_part: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(make_obj_key(obj_id));
+  if (!obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_put_part: failed to allocate object" << dendl;
+    return -ENOMEM;
+  }
+
+  ACLOwner owner = bucket->get_acl().get_owner();
+  const rgw_placement_rule& placement_rule = bucket->get_placement_rule();
+  std::unique_ptr<rgw::sal::Writer> writer = upload->get_writer(
+    dpp, y, obj.get(), owner, &placement_rule, part_num,
+    std::to_string(part_num));
+
+  if (!writer) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_put_part: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ret = writer->prepare(y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  bufferlist bl;
+  bl.append(reinterpret_cast<const char*>(data), len);
+
+  ret = writer->process(std::move(bl), 0);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = writer->process(bufferlist(), len);
+  if (ret < 0) {
+    return ret;
+  }
+
+  // compute etag before complete() so the backend stores the correct value
+  unsigned char md5_digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  ceph::crypto::MD5 md5_hash;
+  md5_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  md5_hash.Update(data, len);
+  md5_hash.Final(md5_digest);
+
+  std::string md5_hex;
+  md5_hex.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+  buf_to_hex(md5_digest, std::back_inserter(md5_hex));
+
+  rgw::sal::Attrs attrs;
+  bufferlist etag_bl;
+  etag_bl.append(md5_hex);
+  attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
+
+  ceph::real_time mtime = ceph::real_clock::now();
+  req_context rctx{dpp, y, nullptr};
+
+  ret = writer->complete(
+                            len,              /* accounted_size */
+                            md5_hex,          /* etag */
+                            &mtime,           /* mtime (output) */
+                            mtime,            /* set_mtime */
+                            attrs,            /* attrs */
+                            std::nullopt,     /* cksum */
+                            ceph::real_time(),/* delete_at (epoch = no expiry) */
+                            nullptr,          /* if_match */
+                            nullptr,          /* if_nomatch */
+                            nullptr,          /* user_data */
+                            nullptr,          /* zones_trace */
+                            nullptr,          /* canceled */
+                            rctx, 0);
+
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::snprintf(etag_out, etag_len, "%s", md5_hex.c_str());
+
+  return 0;
+}
+
+int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
+      const char* upload_id, const char* const* etags, size_t count) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !upload_id ||
+    (!etags && count > 0)) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_complete: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_multipart_complete: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    bucket->get_multipart_upload(obj_id->key, upload_id);
+  if (!upload) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_complete: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  std::map<int, std::string> part_etags;
+  for (size_t i = 0; i < count; i++) {
+    if (etags[i]) {
+      part_etags[static_cast<int>(i + 1)] = etags[i];
+    }
+  }
+
+  std::list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
+  uint64_t accounted_size = 0;
+  bool compressed = false;
+  RGWCompressionInfo cs_info;
+  off_t ofs = 0;
+  std::string tag;
+  ACLOwner owner = bucket->get_acl().get_owner();
+  rgw::sal::MultipartUpload::prefix_map_t processed_prefixes;
+
+  std::unique_ptr<rgw::sal::Object> target_obj = bucket->get_object(make_obj_key(obj_id));
+  
+  std::unique_ptr<rgw::sal::Object> meta_obj = upload->get_meta_obj();
+  meta_obj->set_in_extra_data(true);
+  meta_obj->set_hash_source(target_obj->get_name());
+  
+  /* Take a cls lock on meta_obj to prevent racing completions (or retries)
+   * from deleting the parts. This matches the behavior in frontend
+   * RGWCompleteMultipart::execute().
+   */
+  int max_lock_secs_mp = g_ceph_context->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
+  const ceph::timespan dur = std::chrono::seconds(max_lock_secs_mp);
+  
+  std::unique_ptr<rgw::sal::MPSerializer> serializer = 
+    meta_obj->get_serializer(dpp, y, "rgw_multipart_complete");
+  ret = serializer->try_lock(dpp, dur, y);
+  if (ret == -ENOENT) {
+    // Multipart upload was already completed or doesn't exist
+    ldpp_dout(dpp, 4) << "NOTICE: Multipart upload already completed or doesn't exist" << dendl;
+    return -ERR_NO_SUCH_UPLOAD;
+  }
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to acquire lock on meta_obj, ret=" << ret << dendl;
+    if (ret == -EBUSY || ret == -EEXIST) {
+      return -ERR_BUSY_RESHARDING;
+    }
+    return ret;
+  }
+   
+  // Get attributes from meta object before completing
+  // This preserves attributes set during init_multipart
+  ret = meta_obj->get_obj_attrs(y, dpp);
+  if (ret == 0) {
+    target_obj->set_attrs(meta_obj->get_attrs());
+  }
+
+  if (!serializer->is_locked()) {
+    // lock renewal failed, it's not safe to commit the head object
+    ret = -ERR_INTERNAL_ERROR;
+    ldpp_dout(dpp, 0) << "This multipart completion is already in progress" << ret << dendl;
+    return ret;
+  }
+
+  ret = upload->complete(
+    dpp, y, g_ceph_context, part_etags, remove_objs,
+    accounted_size, compressed, cs_info, ofs, tag, owner,
+    0, target_obj.get(), processed_prefixes, nullptr, nullptr);
+
+  if (ret < 0) {
+    return ret;
+  }
+  target_obj->set_attrs(meta_obj->get_attrs());
+
+  RGWObjVersionTracker objv_tracker = meta_obj->get_version_tracker();
+  remove_objs.clear();
+  
+  // use cls_version_check() when deleting the meta object to detect part uploads that raced
+  // with upload->complete(). any parts that finish after that won't be part of the final
+  // upload, so they need to be gc'd and removed from the bucket index before retrying
+  // deletion of the multipart meta object
+  static constexpr auto MAX_DELETE_RETRIES = 15u;
+  for (auto i = 0u; i < MAX_DELETE_RETRIES; i++) {
+    // remove the upload meta object ; the meta object is not versioned
+    // when the bucket is, as that would add an unneeded delete marker
+    int del_ret = meta_obj->delete_object(dpp, y, rgw::sal::FLAG_PREVENT_VERSIONING, 
+                                          &remove_objs, &objv_tracker);
+    if (del_ret != -ECANCELED || i == MAX_DELETE_RETRIES - 1) {
+      if (ret >= 0) {
+        /* serializer's exclusive lock is released */
+        serializer->clear_locked();
+      } else {
+        ldpp_dout(dpp, 1) << "WARNING: failed to remove multipart metadata object " << meta_obj << " ret: " << del_ret << dendl;
+        // Don't fail the complete operation if metadata deletion fails
+        // The metadata will be cleaned up during bucket deletion
+      }
+      break;
+    }
+    
+    ldpp_dout(dpp, 20) << "deleting meta_obj is cancelled due to mismatch cls_version: " 
+                       << objv_tracker << dendl;
+    del_ret = meta_obj->get_obj_attrs(y, dpp);
+    if (del_ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to get obj attrs, obj=" << meta_obj
+			 << " del_ret=" << del_ret << dendl;
+
+      if (del_ret != -ENOENT) {
+	ldpp_dout(dpp, 0) << "ERROR: failed to remove object " << meta_obj << dendl;
+      }
+      break;
+    }
+
+    del_ret = upload->cleanup_orphaned_parts(dpp, driver->ctx(), y, meta_obj->get_obj(), remove_objs, processed_prefixes);
+    if (del_ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to cleanup orphaned parts. del_ret=" << del_ret << dendl;
+    }
+
+    objv_tracker.clear();
+    remove_objs.clear();
+  }
+
+  return ret;
+}
+
+int rgw_multipart_abort( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+      CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
+      const char* upload_id) {
+  auto* driver = get_driver(driver_ptr);
+  auto* dpp = get_dpp(dpp_ptr);
+  auto y = get_yield(yield_ctx);
+
+  if (!driver || !bucket_id || !obj_id || !obj_id->key || !upload_id) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_abort: invalid args" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(dpp, 10) << "rgw_multipart_abort: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    bucket->get_multipart_upload(obj_id->key, upload_id);
+  if (!upload) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_abort: allocation failed" << dendl;
+    return -ENOMEM;
+  }
+
+  ret = upload->abort(dpp, nullptr, y);
+
+  return ret;
+}
+
+void rgw_free_buffer(CRgwBuffer* buffer) {
+  if (buffer) {
+    if (buffer->data) {
+      free(buffer->data);
+      buffer->data = nullptr;
+    }
+    buffer->len = 0;
+  }
+}
+
+void rgw_free_object_meta(CRgwObjectMeta* meta) {
+  if (meta) {
+    if (meta->etag) {
+      free(meta->etag);
+      meta->etag = nullptr;
+    }
+    if (meta->content_type) {
+      free(meta->content_type);
+      meta->content_type = nullptr;
+    }
+    if (meta->content_encoding) {
+      free(meta->content_encoding);
+      meta->content_encoding = nullptr;
+    }
+    if (meta->content_disposition) {
+      free(meta->content_disposition);
+      meta->content_disposition = nullptr;
+    }
+    if (meta->content_language) {
+      free(meta->content_language);
+      meta->content_language = nullptr;
+    }
+    if (meta->cache_control) {
+      free(meta->cache_control);
+      meta->cache_control = nullptr;
+    }
+    if (meta->metadata) {
+      free(meta->metadata);
+      meta->metadata = nullptr;
+    }
+    meta->size = 0;
+    meta->last_modified = 0;
+    meta->last_modified_ns = 0;
+  }
+}
+
+void rgw_free_list_result(CRgwListResult* result) {
+  if (result) {
+    if (result->entries) {
+      for (size_t i = 0; i < result->count; i++) {
+        if (result->entries[i].key) {
+          free(result->entries[i].key);
+        }
+        if (result->entries[i].version_id) {
+          free(result->entries[i].version_id);
+        }
+        if (result->entries[i].etag) {
+          free(result->entries[i].etag);
+        }
+      }
+      free(result->entries);
+      result->entries = nullptr;
+    }
+    if (result->next_marker) {
+      free(result->next_marker);
+      result->next_marker = nullptr;
+    }
+    result->count = 0;
+    result->is_truncated = 0;
+  }
+}
+
+size_t rgw_get_max_etag_len(void) {
+  // Buffer size (incl. NUL) a caller must allocate for an ETag out-param.
+  return MAX_ETAG_LEN;
+}
+
+size_t rgw_get_max_upload_id_len(void) {
+  // Buffer size (incl. NUL) a caller must allocate for an upload-id out-param.
+  return MAX_UPLOAD_ID_LEN;
+}
+
+uint64_t rgw_get_max_chunk_size(CRgwDriver* driver_ptr) {
+  auto* driver = get_driver(driver_ptr);
+  if (!driver) {
+    return 4 * 1024 * 1024; // 4 MB fallback
+  }
+  return driver->ctx()->_conf->rgw_max_chunk_size;
+}
+
+const char* rgw_sal_wrapper_version(void) {
+  return sal_wrapper_version_string.data();
+}
+
+} // extern "C"

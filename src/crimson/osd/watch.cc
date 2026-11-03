@@ -1,13 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
-#include <algorithm>
-
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/algorithm_ext/insert.hpp>
 
 #include "crimson/osd/watch.h"
-#include "crimson/osd/osd_operations/internal_client_request.h"
 
 #include "messages/MWatchNotify.h"
 
@@ -21,88 +18,24 @@ namespace {
 }
 
 namespace crimson::osd {
-class WatchTimeoutRequest;
-}
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::osd::WatchTimeoutRequest> : fmt::ostream_formatter {};
-#endif
-
-namespace crimson::osd {
-
-// a watcher can remove itself if it has not seen a notification after a period of time.
-// in the case, we need to drop it also from the persisted `ObjectState` instance.
-// this operation resembles a bit the `_UNWATCH` subop.
-class WatchTimeoutRequest final : public InternalClientRequest {
-public:
-  WatchTimeoutRequest(WatchRef watch, Ref<PG> pg)
-    : InternalClientRequest(std::move(pg)),
-      watch(std::move(watch)) {
-  }
-
-  const hobject_t& get_target_oid() const final;
-  PG::do_osd_ops_params_t get_do_osd_ops_params() const final;
-  std::vector<OSDOp> create_osd_ops() final;
-
-private:
-  WatchRef watch;
-};
-
-const hobject_t& WatchTimeoutRequest::get_target_oid() const
-{
-  assert(watch->obc);
-  return watch->obc->get_oid();
-}
-
-PG::do_osd_ops_params_t
-WatchTimeoutRequest::get_do_osd_ops_params() const
-{
-  osd_reqid_t reqid;
-  reqid.name = watch->entity_name;
-  PG::do_osd_ops_params_t params{
-    watch->conn,
-    reqid,
-    ceph_clock_now(),
-    get_pg().get_osdmap_epoch(),
-    entity_inst_t{ watch->entity_name, watch->winfo.addr },
-    0
-  };
-  logger().debug("{}: params.reqid={}", __func__, params.reqid);
-  return params;
-}
-
-std::vector<OSDOp> WatchTimeoutRequest::create_osd_ops()
-{
-  logger().debug("{}", __func__);
-  assert(watch);
-  OSDOp osd_op;
-  osd_op.op.op = CEPH_OSD_OP_WATCH;
-  osd_op.op.flags = 0;
-  osd_op.op.watch.op = CEPH_OSD_WATCH_OP_UNWATCH;
-  osd_op.op.watch.cookie = watch->winfo.cookie;
-  return std::vector{std::move(osd_op)};
-}
 
 Watch::~Watch()
 {
   logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
 }
 
-seastar::future<> Watch::connect(crimson::net::ConnectionXcoreRef conn, bool)
-{
-  if (this->conn == conn) {
-    logger().debug("conn={} already connected", *conn);
-    return seastar::now();
-  }
-  timeout_timer.cancel();
-  timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
-  this->conn = std::move(conn);
-  return seastar::now();
-}
-
 void Watch::disconnect()
 {
-  ceph_assert(!conn);
+  logger().debug("{} gid={} cookie={} (was {}connected)",
+                 __func__, get_watcher_gid(), get_cookie(),
+                 is_connected() ? "" : "dis");
+  // Drop the (possibly dead) connection and fall back to buffering: subsequent
+  // notifies are recorded in in_progress_notifies and replayed by connect()
+  // once the client reconnects. Mirrors classic Watch::disconnect()
+  // (src/osd/Watch.cc). Called both for watches loaded from disk (already
+  // disconnected - a no-op here) and, on a connection reset, for a currently
+  // connected watch.
+  conn = {};
   timeout_timer.cancel();
   timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
 }
@@ -110,6 +43,19 @@ void Watch::disconnect()
 seastar::future<> Watch::send_notify_msg(NotifyRef notify)
 {
   logger().info("{} for notify(id={})", __func__, notify->ninfo.notify_id);
+  if (!is_connected()) {
+    // The connection may be dropped between iterations of connect()'s buffered-
+    // notify replay: a reset can run during a preceding send's await and call
+    // disconnect(), clearing conn. Guard here so the notify stays in
+    // in_progress_notifies and is replayed on the next reconnect rather than
+    // dereferencing a cleared conn. Safe shard-wise: this only inspects the
+    // local conn handle on the watch's own core. (Unlike send_disconnect_msg(),
+    // which is given the connection to use, this path reads this->conn: it must
+    // observe an in-flight reset so the notify falls back to buffering.)
+    logger().debug("{} not connected, buffering notify(id={})",
+                   __func__, notify->ninfo.notify_id);
+    return seastar::now();
+  }
   return conn->send(crimson::make_message<MWatchNotify>(
     winfo.cookie,
     notify->user_version,
@@ -124,6 +70,19 @@ seastar::future<> Watch::start_notify(NotifyRef notify)
   logger().debug("{} gid={} cookie={} starting notify(id={})",
                  __func__,  get_watcher_gid(), get_cookie(),
                  notify->ninfo.notify_id);
+  if (notify->complete) {
+    // The notify already completed -- in practice because it timed out while
+    // Notify::create_n_propagate() was still walking the watchers and this
+    // watcher had not been reached yet. Do not record or deliver it: emplacing
+    // an already-complete notify would leave a stale in_progress_notifies entry
+    // (the timer has fired, so nothing would later remove it unless the client
+    // acks), and delivering it would push a NOTIFY whose timeout completion was
+    // already sent to the notifier. Same core as do_notify_timeout(), so reading
+    // `complete` here is race-free.
+    logger().debug("{} notify(id={}) already complete, skipping",
+                   __func__, notify->ninfo.notify_id);
+    return seastar::now();
+  }
   auto [ it, emplaced ] = in_progress_notifies.emplace(std::move(notify));
   ceph_assert(emplaced);
   ceph_assert(is_alive());
@@ -138,8 +97,8 @@ seastar::future<> Watch::notify_ack(
                  __func__,  get_watcher_gid(), get_cookie(), notify_id);
   const auto it = in_progress_notifies.find(notify_id);
   if (it == std::end(in_progress_notifies)) {
-    logger().error("{} notify_id={} not found on the in-progess list."
-                   " Supressing but this should not happen.",
+    logger().error("{} notify_id={} not found on the in-progress list."
+                   " Suppressing but this should not happen.",
                    __func__, notify_id);
     return seastar::now();
   }
@@ -154,9 +113,13 @@ seastar::future<> Watch::notify_ack(
   return notify->complete_watcher(shared_from_this(), reply_bl);
 }
 
-seastar::future<> Watch::send_disconnect_msg()
+seastar::future<> Watch::send_disconnect_msg(crimson::net::ConnectionXcoreRef conn)
 {
-  if (!is_connected()) {
+  // `conn` is passed in explicitly (rather than read from this->conn) because
+  // the timeout path tears the watch down -- discard_state() clears this->conn
+  // -- before this runs; see do_watch_timeout(). A null handle means the watch
+  // was already disconnected, so there is nobody to tell.
+  if (!conn) {
     return seastar::now();
   }
   ceph::bufferlist empty;
@@ -168,14 +131,6 @@ seastar::future<> Watch::send_disconnect_msg()
     empty));
 }
 
-void Watch::discard_state()
-{
-  logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
-  ceph_assert(obc);
-  in_progress_notifies.clear();
-  timeout_timer.cancel();
-}
-
 void Watch::got_ping(utime_t)
 {
   if (is_connected()) {
@@ -185,45 +140,25 @@ void Watch::got_ping(utime_t)
   }
 }
 
-seastar::future<> Watch::remove()
-{
-  logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
-  // in contrast to ceph-osd crimson sends CEPH_WATCH_EVENT_DISCONNECT directly
-  // from the timeout handler and _after_ CEPH_WATCH_EVENT_NOTIFY_COMPLETE.
-  // this simplifies the Watch::remove() interface as callers aren't obliged
-  // anymore to decide whether EVENT_DISCONNECT needs to be send or not -- it
-  // becomes an implementation detail of Watch.
-  return seastar::do_for_each(in_progress_notifies,
-    [this_shared=shared_from_this()] (auto notify) {
-      logger().debug("Watch::remove gid={} cookie={} notify(id={})",
-                     this_shared->get_watcher_gid(),
-                     this_shared->get_cookie(),
-                     notify->ninfo.notify_id);
-      return notify->remove_watcher(this_shared);
-    }).then([this] {
-      discard_state();
-      return seastar::now();
-    });
-}
-
 void Watch::cancel_notify(const uint64_t notify_id)
 {
   logger().debug("{} gid={} cookie={} notify(id={})",
                  __func__,  get_watcher_gid(), get_cookie(),
                  notify_id);
   const auto it = in_progress_notifies.find(notify_id);
-  assert(it != std::end(in_progress_notifies));
+  if (it == std::end(in_progress_notifies)) {
+    // A notify timeout can fire while `Notify::create_n_propagate()` is still
+    // walking the watchers: `Notify::watchers` is populated synchronously and
+    // the timer is armed up front, but each watcher only records the notify in
+    // `in_progress_notifies` once its (asynchronous) `start_notify()` runs.
+    // `do_notify_timeout()` then iterates the full watcher set and may reach a
+    // watcher that has not started this notify yet. Treat that as a no-op
+    // rather than dereferencing `end()`. Mirrors `notify_ack()`.
+    logger().debug("{} notify_id={} not on the in-progress list, ignoring",
+                   __func__, notify_id);
+    return;
+  }
   in_progress_notifies.erase(it);
-}
-
-void Watch::do_watch_timeout()
-{
-  assert(pg);
-  auto [op, fut] = pg->get_shard_services().start_operation<WatchTimeoutRequest>(
-    shared_from_this(), pg);
-  std::ignore = std::move(fut).then([op=std::move(op), this] {
-    return send_disconnect_msg();
-  });
 }
 
 bool notify_reply_t::operator<(const notify_reply_t& rhs) const
@@ -346,6 +281,16 @@ void Notify::do_notify_timeout()
   // a watcher stores and which is being removed by `cancel_notify()`.
   // to avoid use-after-free we bump up the ref counter with `guard_ptr`.
   [[maybe_unused]] auto guard_ptr = shared_from_this();
+  // Mark the notify complete before cancelling watchers and sending the timeout
+  // completion. Propagation (Notify::create_n_propagate) may still be walking
+  // the watchers: a watcher whose start_notify() has not run yet is skipped by
+  // cancel_notify() (a no-op for a not-yet-recorded notify) and is still sent a
+  // NOTIFY once propagation resumes. Without `complete` set, that watcher's
+  // later ACK would reach complete_watcher()/remove_watcher() with `watchers`
+  // already emptied here, tripping their asserts (debug) or emitting a second
+  // NOTIFY_COMPLETE (release). Setting `complete` makes the late ACK a no-op via
+  // the guards in those methods.
+  complete = true;
   for (auto& watcher : watchers) {
     logger().debug("canceling watcher cookie={} gid={} use_count={}",
       watcher->get_cookie(),

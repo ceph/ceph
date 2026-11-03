@@ -1,3 +1,5 @@
+#include <iomanip>  // for std::quoted
+
 #include <boost/algorithm/string.hpp>
 #include <boost/redis/src.hpp>
 #include <boost/asio/detached.hpp>

@@ -15,6 +15,18 @@ dnf_clean() {
     fi
 }
 
+run_custom_image_commands() {
+    if [ -z "${CUSTOM_IMAGE_COMMANDS:-}" ]; then
+        return
+    fi
+    local cmd
+    while IFS= read -r cmd; do
+        [ -z "${cmd}" ] && continue
+        echo "Running custom image command: ${cmd}"
+        bash -c "${cmd}"
+    done <<< "${CUSTOM_IMAGE_COMMANDS}"
+}
+
 set -e
 export LOCALE=C
 cd ${CEPH_CTR_SRC}
@@ -41,6 +53,12 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
         install_container_deps
         dnf_clean
     ;;
+    # openRuyi's minimal image lacks tar/gzip needed to unpack build tarballs
+    *~*openruyi*)
+        dnf install -y tar gzip /usr/bin/{rpmbuild,wget,curl}
+        install_container_deps
+        dnf_clean
+    ;;
     *~*ubuntu*|*~*debian*)
         apt-get update
         pkgs=(wget reprepro curl lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev)
@@ -61,3 +79,5 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
         exit 2
     ;;
 esac
+
+run_custom_image_commands

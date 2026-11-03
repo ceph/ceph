@@ -49,6 +49,7 @@ export default tseslint.config(
 
       // @TODO: revisit and remove them by fixing the respective errors in ts files
       '@angular-eslint/prefer-standalone': 'off',
+      '@angular-eslint/prefer-inject': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-unsafe-function-type': 'off',
@@ -92,6 +93,7 @@ export default tseslint.config(
       '@angular-eslint/template/click-events-have-key-events': 'error',
       '@angular-eslint/template/label-has-associated-control': 'error',
       '@angular-eslint/template/elements-content': 'error',
+      '@angular-eslint/template/prefer-control-flow': 'error'
     }
   }
 );

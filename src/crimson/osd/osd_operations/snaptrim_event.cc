@@ -209,6 +209,7 @@ SnapTrimObjSubEvent::remove_clone(
   txn.remove(
     pg->get_collection_ref()->get_cid(),
     ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
+  obc->attr_cache.clear();
   obc->obs.oi = object_info_t(coid);
   return interruptor::now();
 }
@@ -251,6 +252,7 @@ void SnapTrimObjSubEvent::remove_head_whiteout(
   head_obc->obs.oi = object_info_t(head_oid);
   txn.remove(pg->get_collection_ref()->get_cid(),
              ghobject_t{head_oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
+  head_obc->attr_cache.clear();
 }
 
 SnapTrimObjSubEvent::interruptible_future<>
@@ -276,6 +278,10 @@ SnapTrimObjSubEvent::adjust_snaps(
     ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
     OI_ATTR,
     bl);
+  // as PGBackend::set_metadata() does
+  if (!pg->get_pool().is_erasure()) {
+    obc->attr_cache[OI_ATTR] = bl;
+  }
   auto &loge = add_log_entry(
     pg_log_entry_t::MODIFY,
     coid,
@@ -323,6 +329,11 @@ void SnapTrimObjSubEvent::update_head(
     pg->get_collection_ref()->get_cid(),
     ghobject_t{head_oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
     attrs);
+  // as PGBackend::set_metadata() does
+  if (!pg->get_pool().is_erasure()) {
+    head_obc->attr_cache[SS_ATTR] = attrs[SS_ATTR];
+    head_obc->attr_cache[OI_ATTR] = attrs[OI_ATTR];
+  }
 }
 
 SnapTrimObjSubEvent::remove_or_update_iertr::future<ceph::os::Transaction>
@@ -401,6 +412,7 @@ SnapTrimObjSubEvent::remove_or_update(
 SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t
 SnapTrimObjSubEvent::start()
 {
+  using crimson::common::local_conf;
   obc_orderer = pg->obc_loader.get_obc_orderer(
     coid);
 
@@ -412,6 +424,16 @@ SnapTrimObjSubEvent::start()
   });
 
   logger().debug("{}: entering obc pipeline process", *this);
+  // acquire throttle BEFORE entering exclusive obc_pp.process stage
+  // consistent with ClientRequest pattern -- orderer preserves ordering
+  auto throttle = co_await interruptor::make_interruptible(
+    pg->get_shard_services().get_throttle(
+      scheduler::params_t{
+        std::max<int>(pg->get_average_object_size(), 1),
+        static_cast<unsigned>(local_conf()->osd_snap_trim_priority),
+        0,
+        SchedulerClass::background_best_effort}));
+
   co_await enter_stage<interruptor>(
     obc_orderer->obc_pp().process);
 
@@ -455,6 +477,7 @@ SnapTrimObjSubEvent::start()
     std::tie(submitted, all_completed) = co_await pg->submit_transaction(
       ObjectContextRef(obc_manager.get_obc()),
       nullptr,
+      nullptr,
       std::move(txn),
       std::move(osd_op_p),
       std::move(log_entries)
@@ -470,6 +493,7 @@ SnapTrimObjSubEvent::start()
   co_await std::move(all_completed);
 
   logger().debug("{}: completed", *this);
+  // throttle destructs here after all_completed resolves
 }
 
 void SnapTrimObjSubEvent::print(std::ostream &lhs) const

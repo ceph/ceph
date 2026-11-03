@@ -1,11 +1,10 @@
 import logging
 import os
 import re
-
 from typing import Dict, List, Optional, Tuple, Union
 
 from ..call_wrappers import call, CallVerbosity
-from ..constants import DEFAULT_IMAGE, CEPH_DEFAULT_CONF
+from ..constants import DEFAULT_IMAGE, CEPH_DEFAULT_CONF, LOG_DIR_MODE
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_types import CephContainer, extract_uid_gid
 from ..context import CephadmContext
@@ -64,6 +63,12 @@ class NFSGanesha(ContainerDaemonForm):
         self.files = dict_get(config_json, 'files', {})
         self.rgw = dict_get(config_json, 'rgw', {})
         self.enable_rdma = dict_get(config_json, 'enable_rdma', False)
+        self.enable_cephfs_client_log = dict_get(
+            config_json, 'enable_cephfs_client_log', False
+        )
+        self.cephfs_client_log_dir = dict_get(
+            config_json, 'cephfs_client_log_dir', None
+        )
 
         # validate the supplied args
         self.validate()
@@ -101,11 +106,28 @@ class NFSGanesha(ContainerDaemonForm):
             ] = '/var/lib/ceph/radosgw/%s-%s/keyring:z' % (cluster, rgw_user)
         return mounts
 
+    def _get_host_log_dir(self, ctx: CephadmContext) -> str:
+        log_dir = self.cephfs_client_log_dir
+        if not log_dir:
+            return os.path.join(ctx.log_dir, self.identity.fsid)
+
+        resolved = os.path.realpath(log_dir)
+        if not log_dir.startswith('/') or resolved == '/':
+            raise Error('invalid cephfs_client_log_dir: %s' % log_dir)
+        if os.path.exists(resolved) and not os.path.isdir(resolved):
+            raise Error(
+                'cephfs_client_log_dir is not a directory: %s' % log_dir
+            )
+        return resolved
+
     def customize_container_mounts(
         self, ctx: CephadmContext, mounts: Dict[str, str]
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
         mounts.update(self._get_container_mounts(data_dir))
+        if self.enable_cephfs_client_log:
+            host_log_dir = self._get_host_log_dir(ctx)
+            mounts[host_log_dir] = '/var/log/ceph:z'
 
     @staticmethod
     def get_container_envs():
@@ -219,6 +241,11 @@ set -e
 
         # create the ganesha conf dir
         config_dir = os.path.join(data_dir, 'etc/ganesha')
+
+        kmip_dir = os.path.join(data_dir, 'etc/ganesha/kmip')
+        makedirs(config_dir, uid, gid, 0o755)
+        makedirs(kmip_dir, uid, gid, 0o755)
+
         tls_dir = os.path.join(data_dir, 'etc/ganesha/tls')
         makedirs(config_dir, uid, gid, 0o755)
         makedirs(tls_dir, uid, gid, 0o755)
@@ -228,13 +255,20 @@ set -e
             for fname, content in self.files.items()
             if fname in ['ganesha.conf', 'idmap.conf']
         }
+        kmip_files = {
+            fname: content
+            for fname, content in self.files.items()
+            if fname.startswith('kmip')
+        }
         tls_files = {
             fname: content
             for fname, content in self.files.items()
             if fname.startswith('tls')
         }
+
         # populate files from the config-json
         populate_files(config_dir, config_files, uid, gid)
+        populate_files(kmip_dir, kmip_files, uid, gid)
         populate_files(tls_dir, tls_files, uid, gid)
 
         ganesha_conf = self.files.get('ganesha.conf', '')
@@ -243,6 +277,11 @@ set -e
         with write_new(entrypoint_path, owner=(uid, gid)) as f:
             f.write(self.ganesha_entrypoint_script(nfsv3=nfsv3))
         os.chmod(entrypoint_path, 0o700)
+
+        if self.enable_cephfs_client_log:
+            host_log_dir = self._get_host_log_dir(self.ctx)
+            if not os.path.exists(host_log_dir):
+                makedirs(host_log_dir, uid, gid, LOG_DIR_MODE)
 
         # write the RGW keyring
         if self.rgw:

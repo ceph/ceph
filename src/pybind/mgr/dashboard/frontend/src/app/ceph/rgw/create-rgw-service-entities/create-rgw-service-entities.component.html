@@ -50,12 +50,13 @@
           />
         </cds-text-label>
         <ng-template #realmNameError>
-          <span
-            class="invalid-feedback"
-            *ngIf="createMultisiteEntitiesForm.showError('realmName', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (createMultisiteEntitiesForm.showError('realmName', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
 
@@ -83,12 +84,13 @@
           />
         </cds-text-label>
         <ng-template #zoneGroupNameError>
-          <span
-            class="invalid-feedback"
-            *ngIf="createMultisiteEntitiesForm.showError('zonegroupName', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (createMultisiteEntitiesForm.showError('zonegroupName', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
 
@@ -116,12 +118,13 @@
           />
         </cds-text-label>
         <ng-template #zoneNameError>
-          <span
-            class="invalid-feedback"
-            *ngIf="createMultisiteEntitiesForm.showError('zoneName', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (createMultisiteEntitiesForm.showError('zoneName', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
     </div>

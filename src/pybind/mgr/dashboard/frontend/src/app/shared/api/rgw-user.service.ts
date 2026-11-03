@@ -189,13 +189,20 @@ export class RgwUserService {
   }
 
   updateUserRateLimit(uid: string, rateLimitArgs: RgwRateLimitConfig) {
-    return this.http.put(`${this.url}/${uid}/ratelimit`, rateLimitArgs);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.put(`${this.url}/${uid}/ratelimit`, rateLimitArgs, { params });
+    });
   }
 
   getUserRateLimit(uid: string) {
-    return this.http.get(`${this.url}/${uid}/ratelimit`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/${uid}/ratelimit`, { params });
+    });
   }
+
   getGlobalUserRateLimit() {
-    return this.http.get(`${this.url}/ratelimit`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/ratelimit`, { params });
+    });
   }
 }

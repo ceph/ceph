@@ -34,6 +34,7 @@ import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-g
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { RgwExportType } from '../nfs-list/nfs-list.component';
 import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
+import { NFSCluster, NFSClusterOption } from '../models/nfs.model';
 
 @Component({
   selector: 'cd-nfs-form',
@@ -45,6 +46,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
   @ViewChild('nfsClients', { static: true })
   nfsClients: NfsFormClientComponent;
 
+  readonly routes = {
+    RGW_BUCKET_CREATE: '/rgw/bucket/create'
+  };
+
   clients: any[] = [];
 
   permission: Permission;
@@ -54,7 +59,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   cluster_id: string = null;
   export_id: string = null;
 
-  allClusters: { cluster_id: string }[] = null;
+  allClusters: NFSClusterOption[] = null;
   icons = Icons;
 
   allFsNames: any[] = null;
@@ -77,6 +82,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   selectedFsName: string = '';
   selectedSubvolGroup: string = '';
   selectedSubvol: string = '';
+  selectedClusterId: string = '';
   defaultSubVolGroup = DEFAULT_SUBVOLUME_GROUP;
 
   pathDataSource = (text$: Observable<string>) => {
@@ -120,7 +126,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.nfsAccessType = this.nfsService.nfsAccessType;
     this.nfsSquash = Object.keys(this.nfsService.nfsSquash);
     this.createForm();
-    const promises: Observable<any>[] = [this.nfsService.listClusters()];
+    const promises: Observable<any>[] = [this.nfsService.listClusters(true)];
 
     if (this.storageBackend === SUPPORTED_FSAL.RGW) {
       promises.push(this.rgwSiteService.get('realms'));
@@ -138,7 +144,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
         (params: { cluster_id: string; export_id: string; rgw_export_type?: string }) => {
           this.cluster_id = decodeURIComponent(params.cluster_id);
           this.export_id = decodeURIComponent(params.export_id);
-          if (params.rgw_export_type) {
+          if (params.rgw_export_type && this.storageBackend === SUPPORTED_FSAL.RGW) {
             this.nfsForm.get('rgw_export_type').setValue(params.rgw_export_type);
             if (params.rgw_export_type === RgwExportType.BUCKET) {
               this.setBucket();
@@ -156,10 +162,18 @@ export class NfsFormComponent extends CdForm implements OnInit {
     } else {
       this.action = this.actionLabels.CREATE;
       this.route.params.subscribe(
-        (params: { fs_name: string; subvolume_group: string; subvolume?: string }) => {
+        (params: {
+          fs_name: string;
+          subvolume_group: string;
+          subvolume?: string;
+          cluster_id?: string;
+        }) => {
           this.selectedFsName = params.fs_name;
           this.selectedSubvolGroup = params.subvolume_group;
           if (params.subvolume) this.selectedSubvol = params.subvolume;
+          if (params.cluster_id) {
+            this.selectedClusterId = decodeURIComponent(params.cluster_id);
+          }
         }
       );
 
@@ -182,15 +196,31 @@ export class NfsFormComponent extends CdForm implements OnInit {
     });
   }
 
+  isSelectedClusterRdmaEnabled(): boolean {
+    const clusterId = this.nfsForm?.get('cluster_id')?.value;
+    return !!this.allClusters?.find((c: NFSClusterOption) => c.cluster_id === clusterId)
+      ?.enable_rdma;
+  }
+
+  clusterChangeHandler() {
+    this.nfsForm.get('transportRDMA').setValue(this.isSelectedClusterRdmaEnabled());
+  }
+
   volumeChangeHandler() {
     this.isDefaultSubvolumeGroup();
   }
 
-  async getSubVol() {
-    const fs_name = this.nfsForm.getValue('fsal').fs_name;
+  async getSubVol(fsName?: string) {
+    const fs_name = fsName ?? this.nfsForm.getRawValue()?.fsal?.fs_name;
     const subvolgrp = this.nfsForm.getValue('subvolume_group');
 
-    await this.setSubVolGrpPath();
+    if (!fs_name || !subvolgrp) {
+      return;
+    }
+
+    if (!this.isEdit) {
+      await this.setSubVolGrpPath();
+    }
 
     (subvolgrp === this.defaultSubVolGroup
       ? this.subvolService.get(fs_name)
@@ -314,18 +344,25 @@ export class NfsFormComponent extends CdForm implements OnInit {
       squash: new UntypedFormControl(this.nfsSquash[0]),
       transportUDP: new UntypedFormControl(true, {
         validators: [
-          CdValidators.requiredIf({ transportTCP: false }, (value: boolean) => {
-            return !value;
-          })
+          CdValidators.requiredIf(
+            { transportTCP: false, transportRDMA: false },
+            (value: boolean) => {
+              return !value;
+            }
+          )
         ]
       }),
       transportTCP: new UntypedFormControl(true, {
         validators: [
-          CdValidators.requiredIf({ transportUDP: false }, (value: boolean) => {
-            return !value;
-          })
+          CdValidators.requiredIf(
+            { transportUDP: false, transportRDMA: false },
+            (value: boolean) => {
+              return !value;
+            }
+          )
         ]
       }),
+      transportRDMA: new UntypedFormControl(false),
       clients: this.formBuilder.array([]),
       security_label: new UntypedFormControl(false),
 
@@ -381,6 +418,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     res.transportTCP = res.transports.indexOf('TCP') !== -1;
     res.transportUDP = res.transports.indexOf('UDP') !== -1;
+    res.transportRDMA = res.transports.indexOf('RDMA') !== -1;
     delete res.transports;
 
     Object.entries(this.nfsService.nfsSquash).forEach(([key, value]) => {
@@ -422,21 +460,27 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     this.nfsForm.patchValue({
       fsal: {
-        ...this.nfsForm.get('fsal').value,
+        ...this.nfsForm.getRawValue()?.fsal,
         fs_name: fsName
       },
-      subvolumeGroup,
+      subvolume_group: subvolumeGroup,
       subvolume
     });
+    this.setUpVolumeValidation();
+    this.getSubVol(fsName);
   }
 
-  resolveClusters(clusters: string[]) {
-    this.allClusters = [];
-    for (const cluster of clusters) {
-      this.allClusters.push({ cluster_id: cluster });
-    }
-    if (!this.isEdit && this.allClusters.length > 0) {
-      this.nfsForm.get('cluster_id').setValue(this.allClusters[0].cluster_id);
+  resolveClusters(clusters: NFSCluster[]) {
+    this.allClusters = clusters.map((cluster) => ({
+      cluster_id: cluster.name,
+      enable_rdma: cluster.enable_rdma ?? false
+    }));
+    if (!this.isEdit && this.selectedClusterId) {
+      const target = this.allClusters.find((c) => c.cluster_id === this.selectedClusterId);
+      if (target) {
+        this.nfsForm.get('cluster_id').setValue(target.cluster_id);
+        this.nfsForm.get('transportRDMA').setValue(target.enable_rdma);
+      }
     }
   }
 
@@ -614,7 +658,6 @@ export class NfsFormComponent extends CdForm implements OnInit {
         call: this.nfsService.update(this.cluster_id, _.parseInt(this.export_id), requestModel)
       });
     } else {
-      // Create
       action = this.taskWrapper.wrapTaskAroundCall({
         task: new FinishedTask('nfs/create', {
           path: requestModel.path,
@@ -689,6 +732,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
       requestModel.transports.push('UDP');
     }
     delete requestModel.transportUDP;
+    if (requestModel.transportRDMA && this.isSelectedClusterRdmaEnabled()) {
+      requestModel.transports.push('RDMA');
+    }
+    delete requestModel.transportRDMA;
 
     requestModel.clients.forEach((client: any) => {
       if (_.isString(client.addresses)) {
@@ -725,7 +772,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
       if (control.pristine || !control.value) {
         return of({ required: true });
       }
-      const fsName = this.nfsForm.getValue('fsal').fs_name;
+      const fsName = this.nfsForm.getRawValue()?.fsal?.fs_name;
       return this.nfsService.lsDir(fsName, control.value).pipe(
         map((directory: Directory) =>
           directory.paths.includes(control.value) === requiredExistenceResult

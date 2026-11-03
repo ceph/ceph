@@ -9,48 +9,25 @@ ceph-create-keys -- ceph keyring generate tool
 Synopsis
 ========
 
-| **ceph-create-keys** [-h] [-v] [-t seconds] [--cluster *name*] --id *id*
+| **ceph-create-keys**
 
 
 Description
 ===========
 
-:program:`ceph-create-keys` is a utility to generate bootstrap keyrings using
-the given Monitor when it is ready.
+:program:`ceph-create-keys` is obsolete. Since the Nautilus release the
+Monitors create the ``client.admin`` and ``client.bootstrap-*`` keys
+themselves when they form a quorum. This command does nothing except print a
+message that says so. It accepts no options, and it will be removed in a
+future release. Remove any call to it from scripts and tools.
 
-It creates the following auth entities (or users)
-
-``client.admin``
-
-    and its key for your client host.
-
-``client.bootstrap-{osd, rgw, mds}``
-
-    and their keys for bootstrapping corresponding services
-
-To list all users in the cluster::
+To list all users and their keys in the cluster, run::
 
     ceph auth ls
 
+To retrieve a bootstrap key, run a command of the following form::
 
-Options
-=======
-
-.. option:: --cluster
-
-   name of the cluster (default 'ceph').
-
-.. option:: -t
-
-   time out after **seconds** (default: 600) waiting for a response from the Monitor
-
-.. option:: -i, --id
-
-   ID of a ceph-mon that is coming up. **ceph-create-keys** will wait until it joins quorum.
-
-.. option:: -v, --verbose
-
-   be more verbose.
+    ceph auth get client.bootstrap-osd
 
 
 Availability

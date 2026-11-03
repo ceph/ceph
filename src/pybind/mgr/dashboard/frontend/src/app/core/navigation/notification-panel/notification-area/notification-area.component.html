@@ -13,7 +13,7 @@
           <cd-icon type="infoCircle"></cd-icon>
 
           <div class="notification-content">
-            <div class="notification-title">
+            <div class="notification-title cds--type-body-short-01">
               {{ task.description }}
             </div>
 
@@ -27,7 +27,7 @@
             </cds-progress-bar>
 
             <div class="task-row">
-              <span class="notification-timestamp">
+              <span class="notification-timestamp cds--type-label-01">
                 {{ task.begin_time | relativeDate }}
               </span>
 
@@ -48,8 +48,12 @@
   >
     <div class="notification-wrapper">
       <div
-        class="notification-item"
+        class="notification-item notification-item--clickable"
         data-testid="notification-item"
+        role="button"
+        tabindex="0"
+        (click)="navigateToNotification(notification)"
+        (keydown.enter)="navigateToNotification(notification)"
       >
         <cd-notification-item
           [type]="notification.type"
@@ -57,6 +61,7 @@
           [timestamp]="notification.timestamp"
           [message]="notification.message"
           [notificationId]="notification.id"
+          [occurrences]="notification.occurrences"
         >
         </cd-notification-item>
       </div>

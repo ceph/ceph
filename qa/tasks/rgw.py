@@ -334,6 +334,27 @@ def create_realm(ctx, clients):
                       '--master', '--default'],
                  check_status=True)
 
+        # mdlog trim refuses to run when zone/zonegroup lack HTTP endpoints
+        # (see sanity_check_endpoints in rgw_trim_mdlog.cc)
+        endpoint_urls = [ep.url() for _, ep in sorted(
+            ctx.rgw.role_endpoints.items())]
+        endpoints_arg = ','.join(endpoint_urls)
+        log.info('Setting zone/zonegroup endpoints for realm %s: %s',
+                 ctx.rgw.realm, endpoints_arg)
+        rgwadmin(ctx, client,
+                 cmd=['zonegroup', 'modify',
+                      '--rgw-realm', ctx.rgw.realm,
+                      '--rgw-zonegroup', ctx.rgw.zonegroup,
+                      '--endpoints', endpoints_arg],
+                 check_status=True)
+        rgwadmin(ctx, client,
+                 cmd=['zone', 'modify',
+                      '--rgw-realm', ctx.rgw.realm,
+                      '--rgw-zonegroup', ctx.rgw.zonegroup,
+                      '--rgw-zone', ctx.rgw.zone,
+                      '--endpoints', endpoints_arg],
+                 check_status=True)
+
         rgwadmin(ctx, client,
                  cmd=['period', 'update', '--commit',
                       '--rgw-realm', ctx.rgw.realm,

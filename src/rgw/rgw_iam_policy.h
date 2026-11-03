@@ -7,8 +7,10 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <variant>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/container/flat_map.hpp>
@@ -18,9 +20,11 @@
 #include <boost/variant.hpp>
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 #include "common/ceph_time.h"
 #include "common/iso_8601.h"
+#include "log/Log.h"
 
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
@@ -40,7 +44,7 @@ class Identity;
 namespace rgw {
 namespace IAM {
 
-enum {
+enum action_t {
   s3GetObject,
   s3GetObjectVersion,
   s3PutObject,
@@ -216,8 +220,29 @@ enum {
   organizationsListTargetsForPolicy,
   organizationsAll,
 
+  s3vectorsCreateIndex,
+  s3vectorsCreateVectorBucket,
+  s3vectorsDeleteIndex,
+  s3vectorsDeleteVectorBucket,
+  s3vectorsDeleteVectorBucketPolicy,
+  s3vectorsDeleteVectors,
+  s3vectorsGetIndex,
+  s3vectorsGetVectorBucket,
+  s3vectorsGetVectorBucketPolicy,
+  s3vectorsGetVectors,
+  s3vectorsListIndexes,
+  s3vectorsListVectorBuckets,
+  s3vectorsListVectors,
+  s3vectorsPutVectorBucketPolicy,
+  s3vectorsPutVectors,
+  s3vectorsQueryVectors,
+  s3vectorsAll,
+
   allCount
 };
+
+boost::optional<rgw::auth::Principal>
+parse_principal(std::string&& s, std::string* errmsg);
 
 using Action_t = std::bitset<allCount>;
 using NotAction_t = Action_t;
@@ -242,6 +267,7 @@ static const Action_t iamAllValue = set_cont_bits<allCount>(s3objectlambdaAll+1,
 static const Action_t stsAllValue = set_cont_bits<allCount>(iamAll+1,stsAll);
 static const Action_t snsAllValue = set_cont_bits<allCount>(stsAll+1, snsAll);
 static const Action_t organizationsAllValue = set_cont_bits<allCount>(snsAll+1,organizationsAll);
+static const Action_t s3vectorsAllValue = set_cont_bits<allCount>(organizationsAll+1, s3vectorsAll);
 static const Action_t allValue = set_cont_bits<allCount>(0,allCount);
 
 namespace {
@@ -265,6 +291,13 @@ inline int op_to_perm(std::uint64_t op) {
   case s3ListBucketVersions:
   case s3ListMultipartUploadParts:
   case s3GetObjectVersionForReplication:
+  case s3vectorsGetVectors:
+  case s3vectorsGetVectorBucket:
+  case s3vectorsGetIndex:
+  case s3vectorsListVectors:
+  case s3vectorsListVectorBuckets:
+  case s3vectorsListIndexes:
+  case s3vectorsQueryVectors:
     return RGW_PERM_READ;
 
   case s3AbortMultipartUpload:
@@ -284,6 +317,12 @@ inline int op_to_perm(std::uint64_t op) {
   case s3ReplicateDelete:
   case s3ReplicateObject:
   case s3ReplicateTags:
+  case s3vectorsCreateIndex:
+  case s3vectorsCreateVectorBucket:
+  case s3vectorsDeleteIndex:
+  case s3vectorsDeleteVectorBucket:
+  case s3vectorsDeleteVectors:
+  case s3vectorsPutVectors:
     return RGW_PERM_WRITE;
 
   case s3GetAccelerateConfiguration:
@@ -306,6 +345,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetBucketObjectLockConfiguration:
   case s3GetBucketPublicAccessBlock:
   case s3GetBucketOwnershipControls:
+  case s3vectorsGetVectorBucketPolicy:
     return RGW_PERM_READ_ACP;
 
   case s3DeleteBucketPolicy:
@@ -330,22 +370,29 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutBucketObjectLockConfiguration:
   case s3PutBucketPublicAccessBlock:
   case s3PutBucketOwnershipControls:
+  case s3vectorsDeleteVectorBucketPolicy:
+  case s3vectorsPutVectorBucketPolicy:
     return RGW_PERM_WRITE_ACP;
 
+  case snsGetTopicAttributes:
+  case snsListTopics:
+    return RGW_PERM_READ;
+
+  case snsCreateTopic:
+  case snsSetTopicAttributes:
+  case snsDeleteTopic:
+  case snsPublish:
+    return RGW_PERM_WRITE;
+
   case s3All:
+  case s3vectorsAll:
     return RGW_PERM_FULL_CONTROL;
   }
   return RGW_PERM_INVALID;
 }
 }
 
-const char* action_bit_string(uint64_t action);
-
-enum class PolicyPrincipal {
-  Role,
-  Session,
-  Other
-};
+std::string_view action_bit_string(action_t action);
 
 using Environment = std::unordered_multimap<std::string, std::string>;
 
@@ -369,6 +416,61 @@ inline bool operator ==(const MaskedIP& l, const MaskedIP& r) {
   return (l.addr >> shift) == (r.addr >> shift);
 }
 
+class LogOut {
+  template <class... Ts>
+  struct overloaded : Ts... {
+    using Ts::operator()...;
+  };
+
+  mutable std::variant<std::monostate, std::ostream*, const DoutPrefixProvider*> log;
+  std::string prefix;
+
+public:
+  LogOut() : log(std::monostate{}) {}
+  LogOut(std::nullptr_t) : log(std::monostate{}) {}
+  LogOut(std::ostream& m) : log(&m) {}
+  LogOut(const DoutPrefixProvider* dpp)
+    : log(dpp) {
+    if (!dpp || !dpp->get_cct()->_conf->rgw_copious_policy_logging) {
+      log = std::monostate{};
+    } else {
+      std::ostringstream ostr;
+      dpp->gen_prefix(ostr);
+      prefix = std::move(ostr).str();
+    }
+  }
+
+  operator bool() const { return !std::holds_alternative<std::monostate>(log); };
+  void vformat(fmt::string_view fmt, fmt::format_args args) const {
+    std::visit(
+        overloaded{
+            [](std::monostate) {},
+            [&fmt, &args](std::ostream* o) {
+              assert(o); // We're constructing from a reference so `o` can't be null.
+              fmt::vprint(*o, fmt, args);
+              *o << std::endl;
+            },
+            [&fmt, &args, this](const DoutPrefixProvider* dpp) {
+              assert(dpp); // If we're given null, we switch to monostate
+
+              // The user has explicitly turned on policy logging, so
+              // we don't bother with the conditional logging
+              // business.
+              ceph::logging::StringEntry e(0, ceph_subsys_rgw, prefix);
+              fmt::vformat_to(e.get_inserter(), fmt, args);
+              dpp->get_cct()->_log->submit_entry(std::move(e));
+              return;
+            }
+            }, log);
+  }
+  template <typename... Args>
+  void format(fmt::format_string<Args...> fmt, Args&&... args) const
+  {
+    vformat(fmt, fmt::make_format_args(args...));
+  }
+};
+
+
 struct Condition {
   TokenID op;
   // Originally I was going to use a perfect hash table, but Marcus
@@ -387,8 +489,7 @@ struct Condition {
   Condition() = default;
   Condition(TokenID op, const char* s, std::size_t len, bool ifexists)
     : op(op), key(s, len), ifexists(ifexists) {}
-
-  bool eval(const Environment& e) const;
+  bool eval(const Environment& e, const LogOut& eval_log) const;
 
   static boost::optional<double> as_number(const std::string& s) {
     std::size_t p = 0;
@@ -485,89 +586,120 @@ struct Condition {
     }
   };
 
-  using unordered_multimap_it_pair = std::pair <std::unordered_multimap<std::string,std::string>::const_iterator, std::unordered_multimap<std::string,std::string>::const_iterator>;
+  using unordered_multimap_it_pair = std::pair<
+    std::unordered_multimap<std::string, std::string>::const_iterator,
+    std::unordered_multimap<std::string, std::string>::const_iterator>;
 
   template<typename F>
-  static bool multimap_all(F&& f, const unordered_multimap_it_pair& it,
-                           const std::vector<std::string>& v) {
+  static bool multimap_all(F&& f,
+                           const unordered_multimap_it_pair& it,
+                           const std::vector<std::string>& v,
+                           const LogOut& eval_log) {
     for (auto itr = it.first; itr != it.second; itr++) {
       bool matched = false;
+      std::string failmatch;
       for (const auto& d : v) {
         if (f(itr->second, d)) {
-	        matched = true;
+          matched = true;
+        } else if (eval_log && failmatch.empty()) {
+          failmatch = fmt::format("({}, {})", itr->second, d);
+        }
       }
-     }
-     if (!matched)
-      return false;
+      if (!matched) {
+        if (failmatch.empty()) {
+          eval_log.format("Values matched against were empty.");
+        } else {
+          eval_log.format("Predicate false for {}", failmatch);
+        }
+        return false;
+      }
     }
     return true;
   }
 
-  template<typename F>
-  static bool multimap_any(F&& f, const unordered_multimap_it_pair& it,
-                           const std::vector<std::string>& v) {
+  template <typename F>
+  static bool
+  multimap_any(F&& f,
+               const unordered_multimap_it_pair& it,
+               const std::vector<std::string>& v,
+               const LogOut& eval_log) {
     for (auto itr = it.first; itr != it.second; itr++) {
       for (const auto& d : v) {
         if (f(itr->second, d)) {
-	        return true;
+          eval_log.format("Predicate true for ({}, {})", itr->second, d);
+          return true;
+        }
       }
-     }
     }
+    eval_log.format("No predicate true. Returning false.");
     return false;
   }
 
   template<typename F>
   static bool multimap_none(F&& f, const unordered_multimap_it_pair& it,
-                            const std::vector<std::string>& v) {
+                            const std::vector<std::string>& v,
+                            const LogOut& eval_log) {
     for (auto itr = it.first; itr != it.second; itr++) {
       for (const auto& d : v) {
         if (f(itr->second, d)) {
+          eval_log.format("Predicate true for ({}, {})", itr->second, d);
           return false;
         }
       }
     }
+    eval_log.format("No predicate true. Returning true.");
     return true;
   }
 
   template<typename F, typename X>
   static bool typed_any(F&& f, X&& x, const std::string& c,
-                        const std::vector<std::string>& v) {
-    auto xc = std::forward<X>(x)(c);
+                        const std::vector<std::string>& v,
+                        const LogOut& eval_log) {
+    auto xc = x(c);
     if (!xc) {
+      eval_log.format("Failed to convert `{}`. Returning false.", c);
       return false;
     }
 
     for (const auto& d : v) {
       auto xd = x(d);
       if (!xd) {
+        eval_log.format("Failed to convert `{}`. Skipping.", d);
         continue;
       }
 
       if (f(*xc, *xd)) {
+        eval_log.format("Predicate true for ({}, {})", *xc, *xd);
         return true;
       }
     }
+    eval_log.format("No predicate true for `{}`. Returning false.", *xc);
     return false;
   }
 
   template<typename F, typename X>
   static bool typed_none(F&& f, X&& x, const std::string& c,
-                         const std::vector<std::string>& v) {
-    auto xc = std::forward<X>(x)(c);
+                         const std::vector<std::string>& v,
+                         const LogOut& eval_log) {
+    auto xc = x(c);
     if (!xc) {
+      eval_log.format("Failed to convert `{}`. Returning false.", c);
       return false;
     }
 
     for (const auto& d : v) {
       auto xd = x(d);
       if (!xd) {
+        eval_log.format("Failed to convert `{}`. Skipping.", d);
         continue;
       }
 
       if (f(*xc, *xd)) {
+        eval_log.format("Predicate true for ({}, {})", *xc, *xd);
         return false;
       }
     }
+    eval_log.format("No predicate true for `{}`. Returning true.", *xc);
     return true;
   }
 
@@ -607,13 +739,21 @@ struct Statement {
   std::vector<Condition> conditions;
 
   Effect eval(const Environment& e,
-	      boost::optional<const rgw::auth::Identity&> ida,
-	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+              boost::optional<const rgw::auth::Identity&> ida,
+              std::uint64_t action,
+              boost::optional<const ARN&> resource,
+              const LogOut& eval_log,
+              boost::optional<rgw::auth::Principal>& principal) const;
 
-  Effect eval_principal(const Environment& e,
-		       boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+  Effect eval_principal(
+    const Environment& e,
+    boost::optional<const rgw::auth::Identity&> ida,
+    const LogOut& eval_log,
+    boost::optional<rgw::auth::Principal>& principal) const;
 
-  Effect eval_conditions(const Environment& e) const;
+  Effect
+  eval_conditions(const Environment& e,
+                  const LogOut& eval_log) const;
 };
 
 std::ostream& operator <<(std::ostream& m, const Statement& s);
@@ -652,14 +792,39 @@ struct Policy {
 	 std::string text,
 	 bool reject_invalid_principals);
 
+  Effect eval(std::ostream& out, const Environment& e,
+              boost::optional<const rgw::auth::Identity&> ida,
+              std::uint64_t action,
+              boost::optional<const ARN&> resource,
+              boost::optional<rgw::auth::Principal>& principal) const {
+    return eval(e, ida, action, resource, out, principal);
+  }
+
   Effect eval(const Environment& e,
-	      boost::optional<const rgw::auth::Identity&> ida,
-	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+              boost::optional<const rgw::auth::Identity&> ida,
+              std::uint64_t action,
+              boost::optional<const ARN&> resource,
+              boost::optional<rgw::auth::Principal>& principal) const {
+    return eval(e, ida, action, resource, {}, principal);
+  }
 
-  Effect eval_principal(const Environment& e,
-	      boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+  Effect eval(const DoutPrefixProvider* dpp,
+              const Environment& e,
+              boost::optional<const rgw::auth::Identity&> ida,
+              std::uint64_t action,
+              boost::optional<const ARN&> resource,
+              boost::optional<rgw::auth::Principal>& principal) const {
+      return eval(e, ida, action, resource, dpp, principal);
+  }
 
-  Effect eval_conditions(const Environment& e) const;
+  Effect eval_principal(
+      const Environment& e,
+      boost::optional<const rgw::auth::Identity&> ida,
+      const LogOut& eval_log,
+      boost::optional<rgw::auth::Principal>& principal) const;
+
+  Effect eval_conditions(const Environment& e,
+                         const LogOut& eval_log) const;
 
   template <typename F>
   bool has_conditional(const std::string& conditional, F p) const {
@@ -693,10 +858,38 @@ struct Policy {
   bool has_partial_conditional_value(const std::string& c) const {
     return has_conditional_value(c, Condition::ci_starts_with());
   }
+
+private:
+
+  Effect eval(const Environment& e,
+              boost::optional<const rgw::auth::Identity&> ida,
+              std::uint64_t action,
+              boost::optional<const ARN&> resource,
+              const LogOut& eval_log,
+              boost::optional<rgw::auth::Principal>& principal) const;
+
 };
 
 std::ostream& operator <<(std::ostream& m, const Policy& p);
-bool is_public(const Policy& p);
+bool is_public(const Policy& p, const LogOut& eval_log);
 
+inline bool is_public(const DoutPrefixProvider* dpp, const Policy& p)
+{
+  bool b = false;
+  if (dpp) {
+    bool copious_logging = dpp->get_cct()->_conf->rgw_copious_policy_logging;
+    b = is_public(p, {copious_logging ? dpp : nullptr});
+  } else {
+    b = is_public(p, nullptr);
+  }
+  return b;
+}
+
+boost::optional<action_t> parse_action(std::string_view s);
 }
 }
+
+template <> struct fmt::formatter<rgw::IAM::MaskedIP> : ostream_formatter {};
+template <> struct fmt::formatter<rgw::IAM::Condition> : ostream_formatter {};
+template <> struct fmt::formatter<rgw::IAM::Statement> : ostream_formatter {};
+template <> struct fmt::formatter<rgw::IAM::Policy> : ostream_formatter {};

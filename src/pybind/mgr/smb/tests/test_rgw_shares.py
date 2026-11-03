@@ -37,6 +37,114 @@ class _FakeToolExecer:
         return (0, '{}', '')
 
 
+class _InvalidUserFakeToolExecer:
+    """Mock tool executor that simulates an invalid/non-existent user."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec that returns failure for non-existent user."""
+        # Check if this is a radosgw-admin bucket stats command
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_stats = json.dumps(
+                {
+                    'owner': 'nonexistent_user',
+                    'bucket': 'my-bucket',
+                    'usage': {},
+                }
+            )
+            return (0, bucket_stats, '')
+        # User info fails for invalid user
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            return (1, '', 'ERROR: failed to get user info')
+        return (0, '{}', '')
+
+
+class _InvalidAccessKeyFakeToolExecer:
+    """Mock tool executor that has mismatched credentials (invalid access key)."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec with wrong access key."""
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_stats = json.dumps(
+                {'owner': 'testuser', 'bucket': 'my-bucket', 'usage': {}}
+            )
+            return (0, bucket_stats, '')
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            # Return user info but with different access key
+            user_info = json.dumps(
+                {
+                    'user_id': 'testuser',
+                    'keys': [
+                        {
+                            'access_key': 'DIFFERENT_ACCESS_KEY',
+                            'secret_key': 'AUTO_FETCHED_SECRET_KEY',
+                        }
+                    ],
+                }
+            )
+            return (0, user_info, '')
+        return (0, '{}', '')
+
+
+class _SuspendedUserFakeToolExecer:
+    """Mock tool executor that returns a suspended user."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec returning suspended user."""
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_stats = json.dumps(
+                {
+                    'owner': 'suspended_user',
+                    'bucket': 'my-bucket',
+                    'usage': {},
+                }
+            )
+            return (0, bucket_stats, '')
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            # Return user info with suspended flag set
+            user_info = json.dumps(
+                {
+                    'user_id': 'suspended_user',
+                    'suspended': 1,
+                    'keys': [
+                        {
+                            'access_key': 'SUSPENDED_USER_ACCESS_KEY',
+                            'secret_key': 'SUSPENDED_USER_SECRET_KEY',
+                        }
+                    ],
+                }
+            )
+            return (0, user_info, '')
+        return (0, '{}', '')
+
+
+class _InactiveKeyFakeToolExecer:
+    """Mock tool executor that returns user with inactive key."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec returning user with inactive key."""
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_stats = json.dumps(
+                {'owner': 'testuser', 'bucket': 'my-bucket', 'usage': {}}
+            )
+            return (0, bucket_stats, '')
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            # Return user info with inactive key
+            user_info = json.dumps(
+                {
+                    'user_id': 'testuser',
+                    'keys': [
+                        {
+                            'access_key': 'INACTIVE_ACCESS_KEY',
+                            'secret_key': 'INACTIVE_SECRET_KEY',
+                            'active': False,
+                        }
+                    ],
+                }
+            )
+            return (0, user_info, '')
+        return (0, '{}', '')
+
+
 def _cluster(**kwargs):
     """Helper to create cluster with default clustering setting."""
     if 'clustering' not in kwargs:
@@ -67,6 +175,11 @@ def test_internal_apply_cluster_and_rgw_share(thandler):
                 source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
+        share_defaults=smb.resources.ShareDefaults(
+            availability=smb.resources.ShareAvailability(
+                persistent_handles=True
+            )
+        ),
     )
     share = smb.resources.Share(
         cluster_id='rgwtest',
@@ -82,15 +195,31 @@ def test_internal_apply_cluster_and_rgw_share(thandler):
     assert ('clusters', 'rgwtest') in thandler.internal_store.data
     assert ('shares', 'rgwtest.rgwshare1') in thandler.internal_store.data
     # Check that credential was auto-created
-    assert ('rgw_creds', 'testuser') in thandler.internal_store.data
+    creds = [
+        key
+        for key in thandler.internal_store.data.keys()
+        if key[0] == 'rgw_creds'
+    ]
+    assert len(creds) == 1
 
     shares = thandler.share_ids()
     assert len(shares) == 1
     assert ('rgwtest', 'rgwshare1') in shares
 
-    # Verify share uses credential_ref
+    # Verify share uses credential_ref pointing to the auto-created credential
     share_data = thandler.internal_store.data[('shares', 'rgwtest.rgwshare1')]
-    assert share_data['rgw']['credential_ref'] == 'testuser'
+    assert 'availability' not in share_data
+    cfg = thandler.public_store['rgwtest', 'config.smb'].get()
+    assert (
+        'continuous availability' not in cfg['shares'][share.name]['options']
+    )
+    assert cfg['globals']['rgwtest']['options']['persistent handles'] == 'yes'
+    cred_ref = share_data['rgw']['credential_ref']
+    assert ('rgw_creds', cred_ref) in thandler.internal_store.data
+    assert (
+        thandler.internal_store.data[('rgw_creds', cred_ref)]['user_id']
+        == 'testuser'
+    )
 
 
 def test_apply_rgw_share_with_credentials(thandler):
@@ -117,8 +246,13 @@ def test_apply_rgw_share_with_credentials(thandler):
     assert rg.success, rg.to_simplified()
 
     # Verify credential was auto-created with fetched credentials
-    assert ('rgw_creds', 'rgwuser') in thandler.internal_store.data
-    cred_dict = thandler.internal_store.data[('rgw_creds', 'rgwuser')]
+    creds = {
+        key[1]: val
+        for key, val in thandler.internal_store.data.items()
+        if key[0] == 'rgw_creds'
+    }
+    assert len(creds) == 1
+    cred_dict = list(creds.values())[0]
     assert cred_dict['user_id'] == 'rgwuser'
     assert cred_dict['access_key_id'] == 'AUTO_FETCHED_ACCESS_KEY'
     assert cred_dict['secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
@@ -128,7 +262,8 @@ def test_apply_rgw_share_with_credentials(thandler):
         ('shares', 'rgwcluster.s3share')
     ]
     assert share_dict['rgw']['bucket'] == 'test-bucket'
-    assert share_dict['rgw']['credential_ref'] == 'rgwuser'
+    cred_ref = share_dict['rgw']['credential_ref']
+    assert cred_ref in creds
 
 
 def test_rgw_share_auto_fetch_credentials(thandler):
@@ -154,8 +289,13 @@ def test_rgw_share_auto_fetch_credentials(thandler):
     assert rg.success, rg.to_simplified()
 
     # Verify credential was auto-created with fetched credentials
-    assert ('rgw_creds', 'testuser') in thandler.internal_store.data
-    cred_dict = thandler.internal_store.data[('rgw_creds', 'testuser')]
+    creds = {
+        key[1]: val
+        for key, val in thandler.internal_store.data.items()
+        if key[0] == 'rgw_creds'
+    }
+    assert len(creds) == 1
+    cred_dict = list(creds.values())[0]
     assert cred_dict['user_id'] == 'testuser'
     assert cred_dict['access_key_id'] == 'AUTO_FETCHED_ACCESS_KEY'
     assert cred_dict['secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
@@ -165,7 +305,8 @@ def test_rgw_share_auto_fetch_credentials(thandler):
         ('shares', 'autofetch.autoshare')
     ]
     assert share_dict['rgw']['bucket'] == 'my-bucket'
-    assert share_dict['rgw']['credential_ref'] == 'testuser'
+    cred_ref = share_dict['rgw']['credential_ref']
+    assert cred_ref in creds
 
 
 def test_rgw_share_remove(thandler):
@@ -228,18 +369,24 @@ def test_rgw_share_minimal_config(thandler):
     assert rg.success, rg.to_simplified()
 
     # Verify credential was auto-created with fetched credentials
-    assert ('rgw_creds', 'testuser') in thandler.internal_store.data
-    cred_dict = thandler.internal_store.data[('rgw_creds', 'testuser')]
+    # Find the auto-created credential
+    creds = [
+        (key, val)
+        for key, val in thandler.internal_store.data.items()
+        if key[0] == 'rgw_creds'
+    ]
+    assert len(creds) == 1, f"Expected 1 credential, found {len(creds)}"
+    cred_key, cred_dict = creds[0]
     assert cred_dict['user_id'] == 'testuser'
     assert cred_dict['access_key_id'] == 'AUTO_FETCHED_ACCESS_KEY'
     assert cred_dict['secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
 
-    # Verify share uses credential_ref
+    # Verify share uses credential_ref (should match the auto-created credential)
     share_dict = thandler.internal_store.data[
         ('shares', 'minimalrgw.minimal')
     ]
     assert share_dict['rgw']['bucket'] == 'my-bucket'
-    assert share_dict['rgw']['credential_ref'] == 'testuser'
+    assert share_dict['rgw']['credential_ref'] == cred_key[1]
 
 
 def test_multiple_rgw_shares_same_cluster(thandler):
@@ -280,20 +427,27 @@ def test_multiple_rgw_shares_same_cluster(thandler):
     assert ('multirgw', 'share2') in shares
 
     # Verify credentials were auto-created for both users
-    assert ('rgw_creds', 'user1') in thandler.internal_store.data
-    assert ('rgw_creds', 'user2') in thandler.internal_store.data
+    creds = {
+        key[1]: val
+        for key, val in thandler.internal_store.data.items()
+        if key[0] == 'rgw_creds'
+    }
+    assert len(creds) == 2
+    cred_user_ids = {cred['user_id'] for cred in creds.values()}
+    assert 'user1' in cred_user_ids
+    assert 'user2' in cred_user_ids
 
-    # Verify both shares use credential_ref
+    # Verify both shares use credential_ref pointing to valid credentials
     share1_dict = thandler.internal_store.data[('shares', 'multirgw.share1')]
     share2_dict = thandler.internal_store.data[('shares', 'multirgw.share2')]
     assert share1_dict['rgw']['bucket'] == 'bucket1'
-    assert share1_dict['rgw']['credential_ref'] == 'user1'
+    assert share1_dict['rgw']['credential_ref'] in creds
     assert share2_dict['rgw']['bucket'] == 'bucket2'
-    assert share2_dict['rgw']['credential_ref'] == 'user2'
+    assert share2_dict['rgw']['credential_ref'] in creds
 
 
 def test_rgw_credential_reuse_same_user(thandler):
-    """Test that multiple shares with same user_id reuse the same credential."""
+    """Test that shares with same user_id reuse the same credential."""
     cluster = _cluster(
         cluster_id='reusetest',
         auth_mode=smb.enums.AuthMode.USER,
@@ -324,18 +478,26 @@ def test_rgw_credential_reuse_same_user(thandler):
     rg = thandler.apply([cluster, share1, share2])
     assert rg.success, rg.to_simplified()
 
-    # Verify only ONE credential was created for the shared user
+    # Verify ONE credential was created and reused by both shares
+    # Hash-based credential IDs ensure same user gets same credential
     rgw_creds = [
         k for k in thandler.internal_store.data.keys() if k[0] == 'rgw_creds'
     ]
     assert len(rgw_creds) == 1
-    assert ('rgw_creds', 'shareduser') in thandler.internal_store.data
 
     # Verify both shares reference the same credential
     share1_dict = thandler.internal_store.data[('shares', 'reusetest.share1')]
     share2_dict = thandler.internal_store.data[('shares', 'reusetest.share2')]
-    assert share1_dict['rgw']['credential_ref'] == 'shareduser'
-    assert share2_dict['rgw']['credential_ref'] == 'shareduser'
+    cred1_ref = share1_dict['rgw']['credential_ref']
+    cred2_ref = share2_dict['rgw']['credential_ref']
+
+    # Both shares should reference the same credential ID
+    assert cred1_ref == cred2_ref
+    assert ('rgw_creds', cred1_ref) in thandler.internal_store.data
+    assert (
+        thandler.internal_store.data[('rgw_creds', cred1_ref)]['user_id']
+        == 'shareduser'
+    )
 
 
 # ---- priv-store credential isolation tests ----
@@ -392,7 +554,10 @@ def test_rgw_credentials_absent_from_public_config(split_handler):
     assert rg.success, rg.to_simplified()
 
     # Verify credential was auto-created
-    assert ('rgw_creds', 'testuser') in h.internal_store.data
+    creds = [
+        key for key in h.internal_store.data.keys() if key[0] == 'rgw_creds'
+    ]
+    assert len(creds) == 1
 
     pub_cfg = pub['c1', 'config.smb'].get()
     opts = pub_cfg['shares']['mybucket']['options']
@@ -414,8 +579,13 @@ def test_rgw_credential_stub_written_to_priv_store(split_handler):
     assert rg.success, rg.to_simplified()
 
     # Verify credential was auto-created with fetched credentials
-    assert ('rgw_creds', 'testuser') in h.internal_store.data
-    cred_dict = h.internal_store.data[('rgw_creds', 'testuser')]
+    creds = {
+        key[1]: val
+        for key, val in h.internal_store.data.items()
+        if key[0] == 'rgw_creds'
+    }
+    assert len(creds) == 1
+    cred_dict = list(creds.values())[0]
     assert cred_dict['access_key_id'] == 'AUTO_FETCHED_ACCESS_KEY'
     assert cred_dict['secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
 
@@ -425,6 +595,31 @@ def test_rgw_credential_stub_written_to_priv_store(split_handler):
     opts = stub['config:merge']['shares']['mybucket']['options']
     assert opts['ceph_rgw:access_key'] == 'AUTO_FETCHED_ACCESS_KEY'
     assert opts['ceph_rgw:secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
+
+
+def test_rgw_credential_stub_survives_last_share_removal(split_handler):
+    """Deleting the last RGW share in a cluster must not prune the
+    credential stub from the private store.
+    """
+    h, pub, priv = split_handler
+    cluster, share = _rgw_cluster_and_share(
+        'c1',
+        's1',
+        'mybucket',
+        bucket='mybucket',
+        user_id='testuser',
+    )
+    rg = h.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+    assert priv['c1', 'config.smb.rgw'].exists()
+
+    rmshare = smb.resources.RemovedShare(cluster_id='c1', share_id='s1')
+    rg = h.apply([rmshare])
+    assert rg.success, rg.to_simplified()
+
+    stub_entry = priv['c1', 'config.smb.rgw']
+    assert stub_entry.exists()
+    assert stub_entry.get()['config:merge']['shares'] == {}
 
 
 def test_no_priv_store_entry_for_non_rgw_cluster(split_handler):
@@ -488,15 +683,19 @@ def test_multi_share_stub_covers_all_rgw_shares(split_handler):
     rg = h.apply([cluster, share1, share2])
     assert rg.success, rg.to_simplified()
 
-    # Verify credentials were auto-created for both users with fetched credentials
-    assert ('rgw_creds', 'u1') in h.internal_store.data
-    assert ('rgw_creds', 'u2') in h.internal_store.data
-    cred1 = h.internal_store.data[('rgw_creds', 'u1')]
-    cred2 = h.internal_store.data[('rgw_creds', 'u2')]
-    assert cred1['access_key_id'] == 'AUTO_FETCHED_ACCESS_KEY'
-    assert cred1['secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
-    assert cred2['access_key_id'] == 'AUTO_FETCHED_ACCESS_KEY'
-    assert cred2['secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
+    # Verify credentials were auto-created for both users
+    creds = {
+        key[1]: val
+        for key, val in h.internal_store.data.items()
+        if key[0] == 'rgw_creds'
+    }
+    assert len(creds) == 2
+    user_ids = {cred['user_id'] for cred in creds.values()}
+    assert 'u1' in user_ids
+    assert 'u2' in user_ids
+    for cred in creds.values():
+        assert cred['access_key_id'] == 'AUTO_FETCHED_ACCESS_KEY'
+        assert cred['secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
 
     stub = priv['multi', 'config.smb.rgw'].get()
     merge_shares = stub['config:merge']['shares']
@@ -570,7 +769,17 @@ def test_external_cluster_rgw_only(thandler):
     assert ('shares', 'exo-rgw.exo-bucket') in thandler.internal_store.data
 
     # Verify RGW credential was auto-created
-    assert ('rgw_creds', 'exo-user') in thandler.internal_store.data
+    creds = [
+        key
+        for key in thandler.internal_store.data.keys()
+        if key[0] == 'rgw_creds'
+    ]
+    assert len(creds) == 1
+    cred_ref = creds[0][1]
+    assert (
+        thandler.internal_store.data[('rgw_creds', cred_ref)]['user_id']
+        == 'exo-user'
+    )
 
 
 def test_external_cluster_mixed_users(thandler):
@@ -646,7 +855,17 @@ def test_external_cluster_mixed_users(thandler):
     assert ('shares', 'exo-mixed.rgw-share') in thandler.internal_store.data
 
     # Verify RGW credential was auto-created
-    assert ('rgw_creds', 'mixed-user') in thandler.internal_store.data
+    creds = [
+        key
+        for key in thandler.internal_store.data.keys()
+        if key[0] == 'rgw_creds'
+    ]
+    assert len(creds) == 1
+    cred_ref = creds[0][1]
+    assert (
+        thandler.internal_store.data[('rgw_creds', cred_ref)]['user_id']
+        == 'mixed-user'
+    )
 
 
 def test_external_cluster_multiple_rgw_shares(thandler):
@@ -719,9 +938,16 @@ def test_external_cluster_multiple_rgw_shares(thandler):
     assert ('exo-multi', 'bucket1') in shares
     assert ('exo-multi', 'bucket2') in shares
 
-    # Verify credentials were auto-created for both users
-    assert ('rgw_creds', 'exo-user-1') in thandler.internal_store.data
-    assert ('rgw_creds', 'exo-user-2') in thandler.internal_store.data
+    # Verify credentials were created for both users
+    creds = {
+        key[1]: val
+        for key, val in thandler.internal_store.data.items()
+        if key[0] == 'rgw_creds'
+    }
+    assert len(creds) == 2
+    user_ids = {cred['user_id'] for cred in creds.values()}
+    assert 'exo-user-1' in user_ids
+    assert 'exo-user-2' in user_ids
 
 
 def test_external_cluster_rgw_credential_isolation(split_handler):
@@ -863,3 +1089,895 @@ def test_external_cluster_no_user_validation(thandler):
             fsid='12345678-1234-1234-1234-123456789abc',
             mon_host='10.0.1.10:6789',
         )
+
+
+def test_rgw_share_acl_configuration(thandler):
+    """Test that RGW shares include proper ACL configuration."""
+    cluster = _cluster(
+        cluster_id='rgwacl',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    share = smb.resources.Share(
+        cluster_id='rgwacl',
+        share_id='aclshare',
+        name='ACL Test Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='acl-bucket',
+            user_id='acluser',
+        ),
+    )
+    rg = thandler.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+
+    # Verify the share was created
+    assert ('shares', 'rgwacl.aclshare') in thandler.internal_store.data
+
+    # Sync to generate the configuration
+    thandler._sync_clusters(['rgwacl'])
+
+    # Verify ACL configuration in public store
+    cfg = thandler.public_store['rgwacl', 'config.smb'].get()
+    assert cfg
+    assert 'shares' in cfg
+    assert 'ACL Test Share' in cfg['shares']
+
+    share_opts = cfg['shares']['ACL Test Share']['options']
+
+    # Verify ACL-related VFS objects are present
+    assert 'vfs objects' in share_opts
+    assert share_opts['vfs objects'] == 'acl_xattr ceph_rgw'
+
+    # Verify ACL xattr security name is configured
+    assert 'acl_xattr:security_acl_name' in share_opts
+    assert share_opts['acl_xattr:security_acl_name'] == 'user.NTACL'
+
+
+# Tests for tenant-aware RGW operations
+class _TenantAwareFakeToolExecer:
+    """Mock tool executor that handles tenant-aware RGW operations."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec supporting tenant-aware bucket and user operations."""
+        # Check for bucket stats command
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            # Extract bucket name from command
+            bucket_idx = (
+                cmd.index('--bucket') + 1 if '--bucket' in cmd else -1
+            )
+            bucket_name = cmd[bucket_idx] if bucket_idx > 0 else 'my-bucket'
+
+            # Handle tenant-aware bucket names (format: "tenant/bucket")
+            if '/' in bucket_name:
+                tenant, bucket = bucket_name.split('/', 1)
+                owner = f"{tenant}$tenantuser"
+            else:
+                tenant = None
+                bucket = bucket_name
+                owner = 'testuser'
+
+            bucket_stats = json.dumps(
+                {'owner': owner, 'bucket': bucket, 'usage': {}}
+            )
+            return (0, bucket_stats, '')
+
+        # Check for user info command
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            # Extract user_id from command
+            uid_idx = cmd.index('--uid') + 1 if '--uid' in cmd else -1
+            user_id = cmd[uid_idx] if uid_idx > 0 else 'testuser'
+
+            # For tenant-aware users, return credentials
+            user_info = json.dumps(
+                {
+                    'user_id': user_id,
+                    'keys': [
+                        {
+                            'access_key': f'TENANT_ACCESS_KEY_{user_id}',
+                            'secret_key': f'TENANT_SECRET_KEY_{user_id}',
+                        }
+                    ],
+                }
+            )
+            return (0, user_info, '')
+
+        # Default response for other commands
+        return (0, '{}', '')
+
+
+def test_tenant_aware_rgw_share_creation(thandler):
+    """Test creating RGW share with tenant-aware user_id (format: tenant$user)."""
+    cluster = _cluster(
+        cluster_id='tenantcluster',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    # Create share with tenant-aware user_id format
+    share = smb.resources.Share(
+        cluster_id='tenantcluster',
+        share_id='tenantshare',
+        name='Tenant Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='tenant-bucket',
+            user_id='mytenant$tenantuser',
+        ),
+    )
+
+    # Use tenant-aware mock executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_TenantAwareFakeToolExecer(),
+    )
+
+    rg = handler.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+
+    # Verify share was created
+    assert (
+        'shares',
+        'tenantcluster.tenantshare',
+    ) in handler.internal_store.data
+    share_dict = handler.internal_store.data[
+        ('shares', 'tenantcluster.tenantshare')
+    ]
+    cred_ref = share_dict['rgw']['credential_ref']
+    assert share_dict['rgw']['bucket'] == 'tenant-bucket'
+
+    # Verify credential was created with tenant-aware user_id
+    assert ('rgw_creds', cred_ref) in handler.internal_store.data
+    cred_dict = handler.internal_store.data[('rgw_creds', cred_ref)]
+    assert cred_dict['user_id'] == 'mytenant$tenantuser'
+
+
+def test_tenant_user_extraction():
+    """Test that tenant is properly extracted from user_id format."""
+    from smb.rgw import _split_tenant_user_id
+
+    # Test tenant$user format
+    tenant, user = _split_tenant_user_id('mytenant$myuser')
+    assert tenant == 'mytenant'
+    assert user == 'myuser'
+
+    # Test plain user format (no tenant)
+    tenant, user = _split_tenant_user_id('plainuser')
+    assert tenant is None
+    assert user == 'plainuser'
+
+    # Test empty string
+    tenant, user = _split_tenant_user_id('')
+    assert tenant is None
+    assert user == ''
+
+
+def test_tenant_aware_bucket_validation():
+    """Test bucket validation with tenant-aware user_id."""
+    from smb.rgw import validate_rgw_bucket
+
+    executor = _TenantAwareFakeToolExecer()
+
+    # Validate bucket with tenant-aware user_id
+    result = validate_rgw_bucket(
+        executor, 'tenant-bucket', user_id='mytenant$tenantuser'
+    )
+    assert result is True
+
+    # Validate bucket with plain user_id
+    result = validate_rgw_bucket(executor, 'my-bucket', user_id='testuser')
+    assert result is True
+
+
+def test_fetch_rgw_credentials_with_tenant():
+    """Test fetching credentials for tenant-aware user."""
+    from smb.rgw import fetch_rgw_credentials
+
+    executor = _TenantAwareFakeToolExecer()
+
+    # Fetch credentials with tenant-aware user_id
+    user_id, access_key, secret_key = fetch_rgw_credentials(
+        executor, 'tenant-bucket', user_id='mytenant$tenantuser'
+    )
+
+    # Verify user_id is returned in same format as input (with tenant prefix)
+    assert user_id == 'mytenant$tenantuser'
+    assert access_key == 'TENANT_ACCESS_KEY_tenantuser'
+    assert secret_key == 'TENANT_SECRET_KEY_tenantuser'
+
+    # Fetch credentials with plain user_id
+    user_id, access_key, secret_key = fetch_rgw_credentials(
+        executor, 'my-bucket', user_id='testuser'
+    )
+
+    # Verify user_id is returned in same format as input (without tenant)
+    assert user_id == 'testuser'
+    assert access_key == 'TENANT_ACCESS_KEY_testuser'
+    assert secret_key == 'TENANT_SECRET_KEY_testuser'
+
+
+def test_reject_bucket_with_slash_in_name():
+    """Test that bucket names containing "/" are rejected as invalid."""
+    from smb.rgw import fetch_rgw_credentials
+
+    executor = _TenantAwareFakeToolExecer()
+
+    # Test fetch_rgw_credentials rejects bucket with "/"
+    with pytest.raises(ValueError) as exc_info:
+        fetch_rgw_credentials(executor, 'tenantA/bkt1', user_id='testuser')
+    error_msg = str(exc_info.value)
+    assert 'tenantA/bkt1' in error_msg
+    assert 'should not contain' in error_msg
+
+
+def test_tenant_aware_bucket_with_slash_error():
+    """Test error when bucket name includes tenant prefix (e.g., tenantA/bucket)."""
+    # Create RGWStorage with invalid bucket name containing "/"
+    rgw_storage = smb.resources.RGWStorage(
+        bucket='tenantA/bucket',  # Invalid: tenant should not be in bucket name
+        user_id='testuser',
+    )
+
+    # Validation should fail due to "/" in bucket name
+    with pytest.raises(ValueError) as exc_info:
+        rgw_storage.validate()
+    error_msg = str(exc_info.value)
+    assert 'tenantA/bucket' in error_msg
+    assert 'should not contain' in error_msg
+
+
+def test_tenant_option_with_user_id():
+    """Test tenant-aware setup with proper tenant$user format in user_id."""
+    from smb.rgw import fetch_rgw_credentials
+
+    executor = _TenantAwareFakeToolExecer()
+
+    # Test with tenant in user_id (correct format)
+    user_id, access_key, secret_key = fetch_rgw_credentials(
+        executor, 'my-bucket', user_id='prodtenant$produser'
+    )
+
+    # Should return user_id in same format as input
+    assert user_id == 'prodtenant$produser'
+    assert access_key == 'TENANT_ACCESS_KEY_produser'
+    assert secret_key == 'TENANT_SECRET_KEY_produser'
+
+
+def test_tenant_aware_share_creation_with_proper_format():
+    """Test RGW share creation with correct tenant$user format (not in bucket name)."""
+    # Correct: tenant in user_id, not in bucket name
+    share = smb.resources.Share(
+        cluster_id='tenantshare',
+        share_id='s1',
+        name='Tenant Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',  # Plain bucket name
+            user_id='mytenant$myuser',  # Tenant in user_id
+        ),
+    )
+
+    # This should validate successfully
+    share.rgw.validate()
+
+    # Verify the structure is correct
+    assert share.rgw.bucket == 'my-bucket'
+    assert share.rgw.user_id == 'mytenant$myuser'
+
+
+def test_wrong_tenant_format_in_bucket_name():
+    """Test various wrong bucket name formats with "/" character."""
+    executor = _TenantAwareFakeToolExecer()
+
+    # Test various invalid bucket formats
+    invalid_buckets = [
+        'tenantA/bkt1',
+        'tenant/bucket',
+        'prod/photos-bucket',
+        'dev/my_bucket_name',
+    ]
+
+    # fetch_rgw_credentials should raise ValueError for buckets with "/"
+    from smb.rgw import fetch_rgw_credentials
+
+    for invalid_bucket in invalid_buckets:
+        with pytest.raises(ValueError) as exc_info:
+            fetch_rgw_credentials(
+                executor, invalid_bucket, user_id='testuser'
+            )
+        error_msg = str(exc_info.value)
+        assert invalid_bucket in error_msg
+        assert 'should not contain' in error_msg
+
+
+def test_rgw_credential_id_validation():
+    """Test that RGW credential IDs now use standard ID format (no tenant$user)."""
+    import smb.validation as validation
+
+    # Test cases that should PASS (standard ID format)
+    valid_cases = [
+        "testuser",
+        "tenant123user456",
+        "ab",
+        "tenant-name-user",
+    ]
+
+    for test_id in valid_cases:
+        # Should not raise ValueError
+        validation.check_id(test_id)
+
+    # Test cases that should FAIL (including $ which is no longer allowed)
+    invalid_cases = [
+        "",
+        "tenant$user",
+        "tenant-name$user-name",
+        "$tenant",
+        "a" * 20,
+    ]
+
+    for test_id in invalid_cases:
+        with pytest.raises(ValueError):
+            validation.check_id(test_id)
+
+
+def test_regular_id_still_rejects_dollar_sign():
+    """Verify that regular IDs still reject $ character."""
+    import smb.validation as validation
+
+    # Regular IDs should NOT accept $
+    with pytest.raises(ValueError):
+        validation.check_id("tenant$user")
+
+    # Regular IDs should accept normal format
+    validation.check_id("testuser")  # Should not raise
+
+
+class _TenantOnlyFakeToolExecer:
+    """Mock executor where the bucket only exists under a tenant prefix.
+
+    A plain (no-tenant) bucket stats lookup returns an error, simulating
+    a real RGW deployment where the bucket belongs exclusively to a tenant.
+    """
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_idx = (
+                cmd.index('--bucket') + 1 if '--bucket' in cmd else -1
+            )
+            bucket_name = cmd[bucket_idx] if bucket_idx > 0 else ''
+            # Only succeed when bucket is looked up with tenant prefix
+            if '/' in bucket_name:
+                tenant, bucket = bucket_name.split('/', 1)
+                owner = f"{tenant}$tenantuser"
+                return (0, json.dumps({'owner': owner, 'bucket': bucket}), '')
+            # Plain lookup fails — bucket does not exist without tenant
+            return (1, '', f'bucket {bucket_name} not found')
+        raise AssertionError(f"Unexpected command in mock: {cmd}")
+
+
+def test_tenant_bucket_without_user_id_fails():
+    """Test that omitting user_id for a tenant-only bucket raises ValueError."""
+    from smb.rgw import fetch_rgw_credentials
+
+    executor = _TenantOnlyFakeToolExecer()
+
+    with pytest.raises(ValueError):
+        fetch_rgw_credentials(executor, 'tenant-bucket', user_id='')
+
+
+def test_rgw_share_with_invalid_user():
+    """Test that RGW share creation fails when provided user does not exist."""
+    # Use a custom handler with the invalid user executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_InvalidUserFakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='invaliduser',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential with invalid user
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='invalid_cred_1',
+        user_id='nonexistent_user',
+        access_key_id='SOME_ACCESS_KEY',
+        secret_access_key='SOME_SECRET_KEY',
+        linked_to_cluster='invaliduser',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='invaliduser',
+        share_id='invalidshare',
+        name='Invalid User Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='invalid_cred_1',
+        ),
+    )
+
+    # Apply should fail because user does not exist
+    rg = handler.apply([cluster, cred, share])
+    assert not rg.success, 'Expected share creation to fail with invalid user'
+    # Verify share was not created
+    assert (
+        'shares',
+        'invaliduser.invalidshare',
+    ) not in handler.internal_store.data
+
+
+def test_rgw_share_with_invalid_access_key():
+    """Test that RGW share creation fails when provided access key does not match."""
+    # Use a custom handler with the mismatched key executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_InvalidAccessKeyFakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='invalidkey',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential with wrong access key
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='mismatch_cred_1',
+        user_id='testuser',
+        access_key_id='WRONG_ACCESS_KEY',  # This doesn't match what the mock returns
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='invalidkey',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='invalidkey',
+        share_id='mismatchshare',
+        name='Mismatched Key Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='mismatch_cred_1',
+        ),
+    )
+
+    # Apply should fail because access key does not match
+    rg = handler.apply([cluster, cred, share])
+    assert (
+        not rg.success
+    ), 'Expected share creation to fail with mismatched access key'
+    # Verify share was not created
+    assert (
+        'shares',
+        'invalidkey.mismatchshare',
+    ) not in handler.internal_store.data
+
+
+def test_rgw_share_with_suspended_user():
+    """Test that RGW share creation fails when user is suspended."""
+    # Use a custom handler with the suspended user executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_SuspendedUserFakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='suspendeduser',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential with suspended user
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='suspended_cred_1',
+        user_id='suspended_user',
+        access_key_id='SUSPENDED_USER_ACCESS_KEY',
+        secret_access_key='SUSPENDED_USER_SECRET_KEY',
+        linked_to_cluster='suspendeduser',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='suspendeduser',
+        share_id='suspendedshare',
+        name='Suspended User Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='suspended_cred_1',
+        ),
+    )
+
+    # Apply should fail because user is suspended
+    rg = handler.apply([cluster, cred, share])
+    assert (
+        not rg.success
+    ), 'Expected share creation to fail with suspended user'
+    # Verify share was not created
+    assert (
+        'shares',
+        'suspendeduser.suspendedshare',
+    ) not in handler.internal_store.data
+
+
+def test_rgw_share_with_inactive_key():
+    """Test that RGW share creation fails when key is inactive."""
+    # Use a custom handler with the inactive key executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_InactiveKeyFakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='inactivekey',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential with inactive key
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='inactive_cred_1',
+        user_id='testuser',
+        access_key_id='INACTIVE_ACCESS_KEY',
+        secret_access_key='INACTIVE_SECRET_KEY',
+        linked_to_cluster='inactivekey',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='inactivekey',
+        share_id='inactiveshare',
+        name='Inactive Key Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='inactive_cred_1',
+        ),
+    )
+
+    # Apply should fail because key is inactive
+    rg = handler.apply([cluster, cred, share])
+    assert not rg.success, 'Expected share creation to fail with inactive key'
+    # Verify share was not created
+    assert (
+        'shares',
+        'inactivekey.inactiveshare',
+    ) not in handler.internal_store.data
+
+
+def test_credential_only_update_with_invalid_creds():
+    """Test that updating just credentials (without share) still validates them.
+
+    This tests the fix for the reviewer comment: "Updating an RGWCredential
+    without reapplying its share bypasses this check, allowing invalid keys
+    to be saved and potentially breaking existing shares."
+    """
+    # First phase: Create valid cluster, share, and credentials
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_FakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='credupdate',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create valid credential and share
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-1',
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credupdate',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='credupdate',
+        share_id='credshare',
+        name='Credential Update Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='valid-cred-1',
+        ),
+    )
+
+    # Apply initial resources - should succeed
+    rg = handler.apply([cluster, cred, share])
+    assert rg.success, 'Expected initial setup to succeed'
+    assert ('shares', 'credupdate.credshare') in handler.internal_store.data
+
+    # Second phase: Try to update credential to have suspended user
+    # WITHOUT reapplying the share
+    ext_store2 = smb.config_store.MemConfigStore()
+    handler2 = smb.handler.ClusterConfigHandler(
+        internal_store=handler.internal_store,  # Keep same internal store
+        public_store=ext_store2,
+        priv_store=ext_store2,
+        mon_cmd_issuer=None,
+        tool_execer=_SuspendedUserFakeToolExecer(),
+    )
+
+    # Update credential to use suspended user, but don't update the share
+    updated_cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-1',
+        user_id='suspended_user',
+        access_key_id='SUSPENDED_USER_ACCESS_KEY',
+        secret_access_key='SUSPENDED_USER_SECRET_KEY',
+        linked_to_cluster='credupdate',
+    )
+
+    # Apply should fail - credential validation should catch suspended user
+    # even though we're not touching the share
+    rg2 = handler2.apply([updated_cred])
+    assert (
+        not rg2.success
+    ), 'Expected credential-only update to fail with suspended user'
+
+
+def test_credential_only_update_with_inactive_key():
+    """Test that updating just credentials with inactive key is rejected.
+
+    Similar to test_credential_only_update_with_invalid_creds but for
+    inactive keys to ensure credential-only updates are fully validated.
+    """
+    # First phase: Create valid cluster, share, and credentials
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_FakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='credupdate2',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-2',
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credupdate2',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='credupdate2',
+        share_id='credshare2',
+        name='Credential Update Share 2',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='valid-cred-2',
+        ),
+    )
+
+    # Apply initial resources - should succeed
+    rg = handler.apply([cluster, cred, share])
+    assert rg.success, 'Expected initial setup to succeed'
+    assert ('shares', 'credupdate2.credshare2') in handler.internal_store.data
+
+    # Second phase: Try to update credential to have inactive key
+    ext_store2 = smb.config_store.MemConfigStore()
+    handler2 = smb.handler.ClusterConfigHandler(
+        internal_store=handler.internal_store,
+        public_store=ext_store2,
+        priv_store=ext_store2,
+        mon_cmd_issuer=None,
+        tool_execer=_InactiveKeyFakeToolExecer(),
+    )
+
+    # Update credential to use inactive key
+    updated_cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-2',
+        user_id='testuser',
+        access_key_id='INACTIVE_ACCESS_KEY',
+        secret_access_key='INACTIVE_SECRET_KEY',
+        linked_to_cluster='credupdate2',
+    )
+
+    # Apply should fail - credential validation should catch inactive key
+    rg2 = handler2.apply([updated_cred])
+    assert (
+        not rg2.success
+    ), 'Expected credential-only update to fail with inactive key'
+
+
+def test_credential_only_update_with_valid_creds():
+    """Test that updating credentials with valid credentials succeeds.
+
+    Positive counterpart to the invalid-credential update tests — confirms
+    that _check_rgw_credential_present does not block a legitimate update.
+    """
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_FakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='credupdate3',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-3',
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credupdate3',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='credupdate3',
+        share_id='credshare3',
+        name='Credential Update Share 3',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='valid-cred-3',
+        ),
+    )
+
+    # Apply initial resources - should succeed
+    rg = handler.apply([cluster, cred, share])
+    assert rg.success, 'Expected initial setup to succeed'
+    assert ('shares', 'credupdate3.credshare3') in handler.internal_store.data
+
+    # Second phase: update credential with still-valid credentials
+    ext_store2 = smb.config_store.MemConfigStore()
+    handler2 = smb.handler.ClusterConfigHandler(
+        internal_store=handler.internal_store,
+        public_store=ext_store2,
+        priv_store=ext_store2,
+        mon_cmd_issuer=None,
+        tool_execer=_FakeToolExecer(),
+    )
+
+    updated_cred = smb.resources.RGWCredential(
+        rgw_credential_id='valid-cred-3',
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='credupdate3',
+    )
+
+    # Apply should succeed - credentials are still valid
+    rg2 = handler2.apply([updated_cred])
+    assert (
+        rg2.success
+    ), 'Expected credential-only update with valid creds to succeed'
+
+
+def test_share_staged_with_stale_credential():
+    """Test that a share staged against a pre-existing invalid credential is rejected.
+
+    Covers the gap where a credential was stored in a previous transaction and
+    has since become invalid (user suspended, key deactivated, etc.).
+    Staging only the share — without re-staging the credential — must still
+    validate the referenced credential against RGW.
+    """
+    # Phase 1: Create cluster and a valid credential (without a share)
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_FakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='stalecred',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='stale-cred-1',
+        user_id='testuser',
+        access_key_id='AUTO_FETCHED_ACCESS_KEY',
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+        linked_to_cluster='stalecred',
+    )
+
+    # Store cluster and credential — no share yet
+    rg = handler.apply([cluster, cred])
+    assert rg.success, 'Expected initial cluster+credential setup to succeed'
+    assert ('clusters', 'stalecred') in handler.internal_store.data
+    assert ('rgw_creds', 'stale-cred-1') in handler.internal_store.data
+
+    # Phase 2: Credential has become invalid (user suspended) between transactions.
+    # Stage only the share — the credential is NOT re-staged.
+    # The share check must still validate the existing stored credential.
+    ext_store2 = smb.config_store.MemConfigStore()
+    handler2 = smb.handler.ClusterConfigHandler(
+        internal_store=handler.internal_store,
+        public_store=ext_store2,
+        priv_store=ext_store2,
+        mon_cmd_issuer=None,
+        tool_execer=_SuspendedUserFakeToolExecer(),
+    )
+
+    share = smb.resources.Share(
+        cluster_id='stalecred',
+        share_id='staleshare',
+        name='Stale Credential Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='stale-cred-1',
+        ),
+    )
+
+    # Apply only the share — credential is pre-existing but now invalid
+    rg2 = handler2.apply([share])
+    assert (
+        not rg2.success
+    ), 'Expected share creation to fail when referenced credential is invalid'
+    assert (
+        'shares',
+        'stalecred.staleshare',
+    ) not in handler2.internal_store.data

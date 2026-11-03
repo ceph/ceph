@@ -1,0 +1,168 @@
+<cds-tile class="pool-overview-card cds-mt-6">
+  <div class="pool-overview-panels">
+    <section class="pool-detail-panel">
+      <h4
+        class="cds--type-heading-02"
+        i18n
+      >
+        Capacity
+      </h4>
+      <p
+        class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+        i18n
+      >
+        Storage utilization
+      </p>
+
+      <div class="pool-detail-panel__usage-head">
+        <span
+          class="cds--type-label-01"
+          i18n
+          >Usage</span
+        >
+        <span class="cds--type-heading-04">{{ overviewModel.usagePercent | empty }}</span>
+      </div>
+
+      @if (overviewModel.usageTotal > 0 && overviewModel.usageUsed !== null) {
+        <cd-usage-bar
+          [total]="overviewModel.usageTotal"
+          [used]="overviewModel.usageUsed"
+          [title]="overviewModel.name"
+          [width]="'100%'"
+          decimals="2"
+        >
+        </cd-usage-bar>
+      } @else {
+        <span class="cds--type-body-compact-01">-</span>
+      }
+
+      <div class="pool-detail-stats cds-mt-5">
+        <div class="pool-detail-stat-box">
+          <span
+            class="cds--type-label-01"
+            i18n
+            >Used</span
+          >
+          <span class="cds--type-heading-03">{{ overviewModel.usedCapacity | empty }}</span>
+        </div>
+        <div class="pool-detail-stat-box">
+          <span
+            class="cds--type-label-01"
+            i18n
+            >Available</span
+          >
+          <span class="cds--type-heading-03">{{ overviewModel.availableCapacity | empty }}</span>
+        </div>
+        <div class="pool-detail-stat-box">
+          <span
+            class="cds--type-label-01"
+            i18n
+            >Total</span
+          >
+          <span class="cds--type-heading-03">{{ overviewModel.totalCapacity | empty }}</span>
+        </div>
+      </div>
+
+      <div class="pool-detail-row cds-mt-5">
+        <span
+          class="cds--type-label-01"
+          i18n
+          >Quota limit</span
+        >
+        <span class="cds--type-body-compact-01">{{ overviewModel.quotaLimit | empty }}</span>
+      </div>
+    </section>
+
+    <section class="pool-detail-panel">
+      <h4
+        class="cds--type-heading-02"
+        i18n
+      >
+        Data Protection
+      </h4>
+      <p
+        class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+        i18n
+      >
+        Replication and durability
+      </p>
+
+      <div class="pool-detail-row">
+        <span
+          class="cds--type-label-01"
+          i18n
+          >Type</span
+        >
+        <cds-tag type="blue">{{ overviewModel.typeLabel | empty }}</cds-tag>
+      </div>
+
+      @if (overviewModel.isErasure) {
+        <div class="pool-detail-stats pool-detail-stats--triple cds-mt-5">
+          <div class="pool-detail-stat-box">
+            <span class="cds--type-label-01">K (Split)</span>
+            <span class="cds--type-heading-03">{{ overviewModel.erasureK | empty }}</span>
+          </div>
+          <div class="pool-detail-stat-box">
+            <span class="cds--type-label-01">M (Chunks)</span>
+            <span class="cds--type-heading-03">{{ overviewModel.erasureM | empty }}</span>
+          </div>
+          <div class="pool-detail-stat-box">
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Total</span
+            >
+            <span class="cds--type-heading-03">{{ overviewModel.erasureTotal | empty }}</span>
+          </div>
+        </div>
+
+        <div class="pool-detail-row cds-mt-5">
+          <span
+            class="cds--type-label-01"
+            i18n
+            >Plugin</span
+          >
+          <span class="cds--type-body-compact-01">{{ overviewModel.erasurePlugin | empty }}</span>
+        </div>
+      } @else {
+        <div class="pool-detail-stats cds-mt-5">
+          <div class="pool-detail-stat-box">
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Replication size</span
+            >
+            <span class="cds--type-heading-03">{{ overviewModel.replicationSize | empty }}</span>
+          </div>
+          <div class="pool-detail-stat-box">
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Min size</span
+            >
+            <span class="cds--type-heading-03">{{ overviewModel.minSize | empty }}</span>
+          </div>
+        </div>
+      }
+
+      <hr class="pool-detail-divider cds-mt-5 cds-mb-5" />
+
+      <div class="pool-detail-row">
+        <span
+          class="cds--type-label-01"
+          i18n
+          >CRUSH rule</span
+        >
+        <span class="cds--type-body-compact-01">{{ overviewModel.crushRuleset | empty }}</span>
+      </div>
+      <div class="pool-detail-row cds-mt-3">
+        <span
+          class="cds--type-label-01"
+          i18n
+          >Failure domain</span
+        >
+        <span class="cds--type-body-compact-01">{{ overviewModel.failureDomain | empty }}</span>
+      </div>
+    </section>
+  </div>
+</cds-tile>

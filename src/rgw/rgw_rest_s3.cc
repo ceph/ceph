@@ -41,6 +41,9 @@
 #include "rgw_rest_s3control.h"
 #include "rgw_rest_s3website.h"
 #include "rgw_rest_pubsub.h"
+#ifdef WITH_RADOSGW_LANCEDB
+#include "rgw_rest_s3vector.h"
+#endif
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -74,9 +77,6 @@
 #include "rgw_rest_iam.h"
 #include "rgw_rest_bucket_logging.h"
 #include "rgw_sts.h"
-#ifdef WITH_RADOSGW_RADOS
-#include "rgw_sal_rados.h"
-#endif
 #include "rgw_cksum_pipe.h"
 #include "rgw_s3select.h"
 
@@ -199,6 +199,14 @@ int get_encryption_defaults(req_state *s)
     }
   }
   if (meta_sse_group & SSE_C_GROUP) {
+    /*
+     * checked here so part uploads are covered; they never reach the
+     * encrypt path that gates a new object write
+     */
+    int r = rgw_s3_check_sse_c_blocked(s);
+    if (r < 0) {
+      return r;
+    }
     ldpp_dout(s, 20) << "get_encryption_defaults: no defaults cause sse-c forced"
 	<< dendl;
     return 0;			// sse-c: no defaults here
@@ -2832,12 +2840,10 @@ void RGWCreateBucket_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s, this);
 
-  if (op_ret < 0)
-    return;
-
-  if (s->system_request) {
+  if (op_ret == 0 && s->system_request) {
+    s->format = RGWFormat::JSON;
+    end_header(s, this, to_mime_type(s->format));
     JSONFormatter f; /* use json formatter for system requests output */
 
     const RGWBucketInfo& info = s->bucket->get_info();
@@ -2848,7 +2854,9 @@ void RGWCreateBucket_ObjStore_S3::send_response()
     encode_json("bucket_info", info, &f);
     f.close_section();
     rgw_flush_formatter_and_reset(s, &f);
+    return;
   }
+  end_header(s, this);
 }
 
 void RGWDeleteBucket_ObjStore_S3::send_response()
@@ -3100,7 +3108,7 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     bufferlist* manifest_bl)
 {
   static constexpr bool copy_source = true;
-  rgw_crypt_src_identity src_identity{copy_source_bucket_info.bucket.bucket_id, copy_source_bucket_name, copy_source_object_name};
+  rgw_crypt_src_identity src_identity{copy_source_bucket_info.bucket.marker, copy_source_bucket_name, copy_source_object_name};
   // part_num=0 for copy source (full object read)
   return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source,
                               0, 0, &src_identity);
@@ -3807,7 +3815,7 @@ void RGWRestoreObj_ObjStore_S3::send_response()
     } else if (st == rgw::sal::RGWRestoreStatus::CloudRestored) {
       rgw::sal::Attrs attrs;
       ceph::real_time expiration_date;
-      rgw::sal::RGWRestoreType rt;
+      rgw::sal::RGWRestoreType rt = rgw::sal::RGWRestoreType::None;
       attrs = s->object->get_attrs();
       auto expire_iter = attrs.find(RGW_ATTR_RESTORE_EXPIRY_DATE);
       auto type_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
@@ -3975,6 +3983,32 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
       return -EINVAL;
     }
     md_directive = tmp_md_d;
+  }
+
+  copy_source_tags = true;
+
+  auto tagging_directive = s->info.env->get("HTTP_X_AMZ_TAGGING_DIRECTIVE");
+  if (tagging_directive) {
+    if (strcasecmp(tagging_directive, "REPLACE") == 0) {
+      RGWObjTags new_tags;
+      auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
+      if (tag_str) {
+        int r = new_tags.set_from_string(tag_str);
+        if (r < 0) {
+          ldpp_dout(this, 0) << "setting obj tags failed with " << r << dendl;
+          if (r == -ERR_INVALID_TAG) {
+            r = -EINVAL;
+          }
+          return r;
+        }
+      }
+      obj_tags = std::move(new_tags);
+      copy_source_tags = false;
+    } else if (strcasecmp(tagging_directive, "COPY") != 0) {
+      s->err.message = "Unknown tagging directive.";
+      ldpp_dout(this, 0) << s->err.message << dendl;
+      return -EINVAL;
+    }
   }
 
   if (source_zone.empty() &&
@@ -4799,31 +4833,32 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
 
   map_qs_metadata(s, true);
 
-  // get encrypt headers to reflect from multipart upload
-  // mostly to verify sse-c here
-  std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    s->bucket->get_multipart_upload(s->object->get_name(),
-        upload_id);
-  std::unique_ptr<rgw::sal::Object> obj = upload->get_meta_obj();
-  obj->set_in_extra_data(true);
-  int res = obj->get_obj_attrs(s->yield, this);
-  if (res < 0 && res != -ENOENT) {
-    ldpp_dout(this, 0) << "ERROR: " << __func__ << " failed to get object attrs for "
-                      << s->object->get_name() << ": " << cpp_strerror(res) << dendl;
-    return res;
-  }
+  return do_aws4_auth_completion();
+}
 
-  // if we found attrs, populate crypt_http_responses
-  if (res == 0) {
-    static constexpr bool copy_source = false;
-    res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
-                                nullptr, &crypt_http_responses, copy_source);
+int RGWCompleteMultipart_ObjStore_S3::verify_encryption(map<string, bufferlist>& attrs,
+                                                        rgw::cksum::Type cksum_type)
+{
+  // s3 only needs the sse-c key here for checksummed uploads; verify it whenever it's sent
+  const std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
+  if (stored_mode.starts_with("SSE-C")) {
+    /*
+     * an sse-c multipart upload may have started before the bucket
+     * blocked sse-c; refuse to complete it
+     */
+    int res = rgw_s3_check_sse_c_blocked(s);
     if (res < 0) {
       return res;
     }
   }
-
-  return do_aws4_auth_completion();
+  if (stored_mode.starts_with("SSE-C") &&
+      cksum_type == rgw::cksum::Type::none &&
+      !s->info.env->exists_prefix("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_")) {
+    return 0;
+  }
+  static constexpr bool copy_source = false;
+  return rgw_s3_prepare_decrypt(s, s->yield, attrs, nullptr,
+                                &crypt_http_responses, copy_source);
 }
 
 void RGWCompleteMultipart_ObjStore_S3::send_response()
@@ -6053,14 +6088,37 @@ void parse_post_action(const std::string& post_body, req_state* s)
   }
 }
 
+#ifdef WITH_RADOSGW_LANCEDB
+// s3vector requests looks like bucket POST operations
+// where the "bucket name" is the operation name.
+// with JSON payload
+// and no user provided params
+// POST /<op name> HTTP/1.1
+// Content-type: application/json
+bool is_s3vector_op(const req_state* s) {
+  const auto content_type = s->info.env->get_optional("CONTENT_TYPE");
+  const auto& params = s->info.args.get_params();
+  return std::string_view(s->info.method) == "POST" &&
+    std::count_if(params.begin(), params.end(), [](const auto& p) {
+        return !p.first.starts_with(RGW_SYS_PARAM_PREFIX);
+    }) == 0 &&
+    content_type &&
+    *content_type == "application/json";
+}
+#endif // WITH_RADOSGW_LANCEDB
+
 RGWRESTMgr_S3::RGWRESTMgr_S3(bool enable_s3control,
                              bool _enable_s3website,
                              bool _enable_sts,
                              bool _enable_iam,
-                             bool _enable_pubsub)
+                             bool _enable_pubsub,
+                             bool _enable_s3vector)
   : enable_sts(_enable_sts),
     enable_iam(_enable_iam),
     enable_pubsub(_enable_pubsub)
+#ifdef WITH_RADOSGW_LANCEDB
+    , enable_s3vector(_enable_s3vector)
+#endif
 {
   if (enable_s3control) {
     s3control = std::make_unique<RGWRESTMgr_S3Control>();
@@ -6154,6 +6212,13 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
     return nullptr;
   }
   // has bucket
+#ifdef WITH_RADOSGW_LANCEDB
+  if (enable_s3vector && is_s3vector_op(s)) {
+    ldpp_dout(s, 20) << "INFO: s3vector op: " << s->init_state.url_bucket << dendl;
+    // the payload is read when the handler is initialized
+    return new RGWHandler_REST_s3Vector(auth_registry);
+  }
+#endif // WITH_RADOSGW_LANCEDB
   return new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
 }
 
@@ -6488,7 +6553,7 @@ AWSGeneralAbstractor::get_v4_canonical_headers(
   const std::string_view& signedheaders,
   const bool using_qs) const
 {
-  return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
+  return rgw::auth::s3::get_v4_canonical_headers(cct, info, signedheaders,
                                                  using_qs, false);
 }
 
@@ -6818,6 +6883,22 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_GET_BUCKET_LOGGING: 
         case RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS:
         case RGW_OP_PUT_PUBLIC_ACCESS_BLOCK:
+        case RGW_OP_S3VECTOR_CREATE_INDEX:
+        case RGW_OP_S3VECTOR_CREATE_VECTOR_BUCKET:
+        case RGW_OP_S3VECTOR_DELETE_INDEX:
+        case RGW_OP_S3VECTOR_DELETE_VECTOR_BUCKET:
+        case RGW_OP_S3VECTOR_DELETE_VECTOR_BUCKET_POLICY:
+        case RGW_OP_S3VECTOR_DELETE_VECTORS:
+        case RGW_OP_S3VECTOR_GET_INDEX:
+        case RGW_OP_S3VECTOR_GET_VECTOR_BUCKET:
+        case RGW_OP_S3VECTOR_GET_VECTOR_BUCKET_POLICY:
+        case RGW_OP_S3VECTOR_GET_VECTORS:
+        case RGW_OP_S3VECTOR_LIST_INDEXES:
+        case RGW_OP_S3VECTOR_LIST_VECTOR_BUCKETS:
+        case RGW_OP_S3VECTOR_LIST_VECTORS:
+        case RGW_OP_S3VECTOR_PUT_VECTOR_BUCKET_POLICY:
+        case RGW_OP_S3VECTOR_PUT_VECTORS:
+        case RGW_OP_S3VECTOR_QUERY_VECTORS:
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;
@@ -6906,7 +6987,7 @@ AWSGeneralBoto2Abstractor::get_v4_canonical_headers(
   const std::string_view& signedheaders,
   const bool using_qs) const
 {
-  return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
+  return rgw::auth::s3::get_v4_canonical_headers(cct, info, signedheaders,
                                                  using_qs, true);
 }
 
@@ -7329,24 +7410,14 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
     return -EINVAL;
   }
 
-  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
-  if (! cryptohandler) {
-    return -EINVAL;
-  }
-  string secret_s = cct->_conf->rgw_sts_key;
-  if (secret_s.empty()) {
+  if (cct->_conf->rgw_sts_key.empty()) {
     ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
     return -EINVAL;
   }
-  buffer::ptr secret(secret_s.c_str(), secret_s.length());
-  int ret = 0;
-  if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid secret key" << dendl;
-    return -EINVAL;
-  }
   string error;
-  std::unique_ptr<CryptoKeyHandler> keyhandler(cryptohandler->get_key_handler(secret, error));
+  auto keyhandler = STS::secret_to_handler(cct, cct->_conf->rgw_sts_key, error);
   if (! keyhandler) {
+    ldpp_dout(dpp, 0) << "Invalid rgw sts key; " << error << dendl;
     return -EINVAL;
   }
   error.clear();
@@ -7355,7 +7426,7 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
   buffer::list en_input, dec_output;
   en_input = buffer::list::static_from_string(decodedSessionToken);
 
-  ret = keyhandler->decrypt(en_input, dec_output, &error);
+  int ret = keyhandler->decrypt_ext(cct, 14, en_input, dec_output, &error);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: Decryption failed: " << error << dendl;
     return -EPERM;

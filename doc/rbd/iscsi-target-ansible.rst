@@ -11,7 +11,8 @@ install and configure the Ceph iSCSI gateway for basic operation.
 
 -  A running Ceph Luminous (12.2.x) cluster or newer
 
--  Red Hat Enterprise Linux/CentOS 7.5 (or newer); Linux kernel v4.16 (or newer)
+-  Linux kernel v4.16 (or newer), or Enterprise Linux (EL) 7.5 (or
+   newer), in which the required iSCSI support is backported
 
 -  The ``ceph-iscsi`` package installed on all the iSCSI gateway nodes
 
@@ -134,7 +135,7 @@ Perform the following steps on the Ansible installer node.
 The ``ceph-iscsi`` package installs the configuration management
 logic and a Systemd service called ``rbd-target-api``. When the Systemd
 service is enabled, the ``rbd-target-api`` will start at boot time and
-will restore the Linux IO state. The Ansible playbook disables the
+will restore the Linux-IO (LIO) state. The Ansible playbook disables the
 target service during the deployment. Below are the outcomes of when
 interacting with the ``rbd-target-api`` Systemd service.
 

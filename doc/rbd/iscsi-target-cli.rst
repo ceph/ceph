@@ -14,7 +14,8 @@ The following steps install and configure the Ceph iSCSI gateway for basic opera
 
 -  A running Ceph Luminous or later storage cluster
 
--  Red Hat Enterprise Linux/CentOS 7.5 (or newer); Linux kernel v4.16 (or newer)
+-  Linux kernel v4.16 (or newer), or Enterprise Linux (EL) 7.5 (or
+   newer), in which the required iSCSI support is backported
 
 -  The following packages must be installed from your Linux distribution's software repository:
 
@@ -39,7 +40,7 @@ to the *Installing* section:
    The Ceph configuration files must exist on the iSCSI gateway node
    under ``/etc/ceph/``.
 
-#. Install and configure the `Ceph Command-line Interface`_
+#. Install and configure the :ref:`Ceph command-line interface <cephadm-enable-cli>`
 
 #. If needed, open TCP ports 3260 and 5000 on the firewall.
 
@@ -256,10 +257,3 @@ to create a iSCSI target and export a RBD image as LUN 0.
        > /iscsi-target...at:rh7-client> disk add rbd/disk_1
 
 The next step is to configure the iSCSI initiators.
-
-.. _`Ceph Command-line Interface`: ../../start/quick-rbd/#install-ceph
-
-.. toctree::
-   :hidden:
-
-   ../../start/quick-rbd

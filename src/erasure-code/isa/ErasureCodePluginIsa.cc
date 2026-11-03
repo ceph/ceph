@@ -36,9 +36,12 @@ int ErasureCodePluginIsa::factory(const std::string &directory,
                                   std::ostream *ss)
 {
   ErasureCodeIsa *interface;
-    std::string technique;
-    technique = profile.find("technique")->second;
-    std::string _m = profile.find("m")->second;
+    profile.try_emplace("technique", "reed_sol_van");
+    const auto& technique = profile.at("technique");
+    std::string _m = ErasureCodeIsaDefault::DEFAULT_M;
+    if (auto it = profile.find("m"); it != profile.end()) {
+      _m = it->second;
+    }
     if ((technique == "reed_sol_van")) {
       interface = new ErasureCodeIsaDefault(tcache,
                                             technique,
@@ -81,7 +84,13 @@ int __erasure_code_init(char *plugin_name, char *directory)
   auto plugin = std::make_unique<ErasureCodePluginIsa>();
   int r = instance.add(plugin_name, plugin.get());
   if (r == 0) {
-    plugin.release();  
+    plugin.release();
   }
   return r;
 }
+
+#ifdef WITH_CRIMSON
+[[maybe_unused]] static int _isa_builtin =
+  ceph::ErasureCodePluginRegistry::register_builtin(
+    "isa", []{ return new ErasureCodePluginIsa(); });
+#endif

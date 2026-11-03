@@ -40,15 +40,19 @@ namespace rgw { namespace cksum {
 
   enum class Type : uint16_t
   {
-      none = 0,
-      crc32,  /* !cryptographic, but AWS supports */
-      crc32c, /* !cryptographic, but AWS supports */
-      xxh3,   /* !cryptographic, but strong and very fast */
-      sha1,   /* unsafe, but AWS supports */
+      none = 0,  /* must be first for initial loop value */
+      crc32,     /* !cryptographic, but AWS supports */
+      crc32c,    /* !cryptographic, but AWS supports */
+      xxhash3,   /* !cryptographic, but strong and very fast & AWS supports */
+      sha1,      /* unsafe, but AWS supports */
       sha256,
       sha512,
       blake3,
       crc64nvme,
+      md5,       /* unsafe, but AWS supports */
+      xxhash64,  /* unsafe, but AWS supports */
+      xxhash128, /* unsafe, but AWS supports */
+      COUNT      /* must be last for use as a loop condition */
   };
 
   static constexpr uint16_t FLAG_NONE =       0x0000;
@@ -86,17 +90,20 @@ namespace rgw { namespace cksum {
 
   class Cksum {
   public:
-    static constexpr std::array<Desc, 9> checksums =
+    static constexpr std::array<Desc, 12> checksums =
     {
       Desc(Type::none, "none", "NONE", 0, FLAG_NONE),
       Desc(Type::crc32, "crc32", "CRC32", 4, FLAG_AWS_CKSUM|FLAG_CRC),
       Desc(Type::crc32c, "crc32c", "CRC32C", 4, FLAG_AWS_CKSUM|FLAG_CRC),
-      Desc(Type::xxh3, "xxh3", "XXH3", 8, FLAG_NONE),
+      Desc(Type::xxhash3, "xxhash3", "XXHASH3", 8, FLAG_AWS_CKSUM),
       Desc(Type::sha1, "sha1", "SHA1", 20, FLAG_AWS_CKSUM),
       Desc(Type::sha256, "sha256", "SHA256", 32, FLAG_AWS_CKSUM),
-      Desc(Type::sha512, "sha512", "SHA512", 64, FLAG_NONE),
+      Desc(Type::sha512, "sha512", "SHA512", 64, FLAG_AWS_CKSUM),
       Desc(Type::blake3, "blake3", "BLAKE3", 32, FLAG_NONE),
       Desc(Type::crc64nvme, "crc64nvme", "CRC64NVME", 8, FLAG_AWS_CKSUM|FLAG_CRC),
+      Desc(Type::md5, "md5", "MD5", 16, FLAG_AWS_CKSUM),
+      Desc(Type::xxhash64, "xxhash64", "XXHASH64", 8, FLAG_AWS_CKSUM),
+      Desc(Type::xxhash128, "xxhash128", "XXHASH128", 16, FLAG_AWS_CKSUM),
     };
 
     static constexpr uint16_t max_digest_size = 64;

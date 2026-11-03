@@ -70,6 +70,7 @@ export interface CephServiceAdditionalSpec {
   api_port: number;
   api_secure: boolean;
   rgw_frontend_port: number;
+  rgw_frontend_http_port: number;
   trusted_ip_list: string[];
   virtual_ip: string;
   frontend_port: number;
@@ -132,8 +133,26 @@ export enum CertificateType {
   external = 'external'
 }
 
+export enum CertMode {
+  externalOnly = 'externalOnly',
+  both = 'both',
+  internalOnly = 'internalOnly'
+}
+
 export enum QatOptions {
   hw = 'hw',
   sw = 'sw',
   none = 'none'
+}
+
+export function decodeServiceNameFromRoute(serviceNameRoute: string): string {
+  if (!serviceNameRoute) {
+    return '';
+  }
+
+  try {
+    return decodeURIComponent(serviceNameRoute);
+  } catch {
+    return serviceNameRoute;
+  }
 }

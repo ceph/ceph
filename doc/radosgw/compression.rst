@@ -4,8 +4,6 @@
 Compression
 ===========
 
-.. versionadded:: Kraken
-
 The Ceph Object Gateway supports server-side compression of uploaded objects.
 
 .. note:: The Reef release added a :ref:`feature_compress_encrypted` zonegroup
@@ -27,6 +25,13 @@ Supported compression plugins include the following:
    Compressing at the OSD level does mean compressing the same user data more 
    than once since it is post-replication, but in a cluster with far more OSDs 
    than RGWs this strategy may result in better performance.
+
+.. toctree::
+   :maxdepth: 1
+
+   QAT Acceleration for Encryption and Compression <qat-accel>
+   UADK Acceleration for Compression <uadk-accel>
+
 
 Configuration
 =============

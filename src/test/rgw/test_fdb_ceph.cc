@@ -40,6 +40,7 @@
 #include <ranges>
 #include <algorithm>
 #include <execution>
+#include <functional>
 
 using Catch::Matchers::AllMatch;
 
@@ -190,41 +191,6 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
    CHECK(direct == via_serialize);
  }
 
- SECTION("buffer::list key span preserves logical key bytes")
- {
-   ceph::buffer::list key;
-   key.append("buffer-list-key");
-
-   auto key_span = ceph::libfdb::detail::as_fdb_span(key);
-
-   CHECK(key.length() == key_span.size());
-   CHECK(std::ranges::equal(std::span((const char *)key_span.data(), key_span.size()),
-                            std::string_view("buffer-list-key")));
- }
-
- SECTION("empty buffer::list key span is empty")
- {
-   ceph::buffer::list key;
-
-   auto key_span = ceph::libfdb::detail::as_fdb_span(key);
-
-   CHECK(0 == key_span.size());
- }
-
- SECTION("buffer::list key span preserves embedded nulls")
- {
-   constexpr char data[] = { '\0', 'k', 'e', 'y', '\0' };
-
-   ceph::buffer::list key;
-   key.append(data, sizeof(data));
-
-   auto key_span = ceph::libfdb::detail::as_fdb_span(key);
-
-   CHECK(key.length() == key_span.size());
-   CHECK(std::ranges::equal(std::span((const char *)key_span.data(), key_span.size()),
-                            std::string_view(data, sizeof(data))));
- }
-
  SECTION("empty buffer::list round trip through public set/get")
  {
    ceph::buffer::list in;
@@ -293,7 +259,8 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  SECTION("buffer::ptr")
  {
     string_view in("Hello, World!");
-    ceph::buffer::ptr p(ceph::buffer::claim_char(in.length(), const_cast<char *>(in.data())));
+    ceph::buffer::ptr p(ceph::buffer::copy(in.data(), in.size()));
+
     CHECK(in == string_view(p.c_str(), p.length()));
 
     const auto key = test_key("key");
@@ -320,11 +287,11 @@ template <typename AssocT = boost::container::flat_map<std::string, std::string>
 auto tier_generator(ceph::libfdb::database_handle dbh, ceph::libfdb::select selector)
 -> std::generator<AssocT>
 {
- auto split_ranges = plan_split_ranges(dbh, selector);
+ auto plan = detail::plan_range_work(dbh, selector, 4 * 1024 * 1024);
 
  const unsigned local_max_block = 2*2024; // vis-a-vis remote request max
 
- std::transform_reduce(std::begin(split_ranges), std::end(split_ranges),
+ std::transform_reduce(std::begin(plan.ranges), std::end(plan.ranges),
                       AssocT(),
 
                       [](auto&& lhs, auto&& rhs) {
@@ -336,7 +303,7 @@ auto tier_generator(ceph::libfdb::database_handle dbh, ceph::libfdb::select sele
                         auto txn = ceph::libfdb::make_transaction(dbh);
 
                         // ...my libstdc++ lacks std::from_range overloads; the Hard Way(TM) it is:
-                        for(auto&& kvp : ceph::libfdb::pair_generator(txn, selector)) {
+                        for(auto&& kvp : ceph::libfdb::scan(txn, selector)) {
                           out.emplace(kvp);
                         }
 
@@ -378,14 +345,14 @@ exceed the FoundationDB five-second transaction limit: */
 
     auto collect_blocks = [&j](lfdb::select selector) {
       collected_blocks out;
-      const auto requested_stride = selector.options.stride;
+      const auto requested_result_limit = selector.options.result_limit;
 
       std::ranges::for_each(lfdb::block_generator<std::string, ordered_block>(j, selector), [&](const auto& block) {
         ++out.nblocks;
         out.total += block.size();
 
-        if (0 < requested_stride) {
-          CHECK(block.size() <= static_cast<size_t>(requested_stride));
+        if (0 < requested_result_limit) {
+          CHECK(block.size() <= static_cast<size_t>(requested_result_limit));
         }
 
         std::ranges::copy(block, std::back_inserter(out.entries));
@@ -395,7 +362,7 @@ exceed the FoundationDB five-second transaction limit: */
     };
 
     auto check_paged = [nkeys](const collected_blocks& blocks, const lfdb::select& selector) {
-      if (selector.options.stride < static_cast<int>(nkeys)) {
+      if (selector.options.result_limit < static_cast<int>(nkeys)) {
         CHECK(1 < blocks.nblocks);
       }
     };
@@ -426,7 +393,7 @@ exceed the FoundationDB five-second transaction limit: */
 
     SECTION("forward, paged") {
       auto selector = lfdb::select { make_key_prefix() };
-      selector.options.stride = 5;
+      selector.options.result_limit = 5;
       auto blocks = collect_blocks(selector);
 
       CAPTURE(nkeys);
@@ -447,7 +414,7 @@ exceed the FoundationDB five-second transaction limit: */
     SECTION("reverse, paged") {
       auto selector = lfdb::select { make_key_prefix() };
       selector.options.reverse_order = true;
-      selector.options.stride = 5;
+      selector.options.result_limit = 5;
       auto blocks = collect_blocks(selector);
 
       CAPTURE(blocks.nblocks);
@@ -628,19 +595,95 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
     require_expected(read_tally, expected_encoded_bytes);
   };
 
-  BENCHMARK_ADVANCED("pair generator read all")(Catch::Benchmark::Chronometer meter) {
+  BENCHMARK_ADVANCED("scan read all")(Catch::Benchmark::Chronometer meter) {
     meter.measure([&] {
       read_tally.reset();
 
       try {
         auto txn = lfdb::make_transaction(dbh);
-        std::ranges::for_each(lfdb::pair_generator(txn, selector), add_kv);
+        std::ranges::for_each(lfdb::scan(txn, selector), add_kv);
       } catch (const ceph::libfdb::libfdb_exception& e) {
         mark_failure(e);
       }
     });
 
     require_expected(read_tally, expected_decoded_bytes);
+  };
+
+  BENCHMARK_ADVANCED("for_each read all")(Catch::Benchmark::Chronometer meter) {
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        auto txn = lfdb::make_transaction(dbh);
+        lfdb::for_each(txn, selector, add_kv);
+      } catch (const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    require_expected(read_tally, expected_decoded_bytes);
+  };
+
+  auto should_erase = [](const auto&) {
+    return true;
+  };
+
+  auto erase_if_manual_loop = [](auto txn, const auto& selector, auto&& pred) {
+    std::size_t removed = 0;
+
+    for (const auto& row : lfdb::scan(txn, selector)) {
+      if (std::invoke(pred, row)) {
+        lfdb::erase(txn, row.first);
+        ++removed;
+      }
+    }
+
+    return removed;
+  };
+
+  BENCHMARK_ADVANCED("erase_if manual loop queues all")(Catch::Benchmark::Chronometer meter) {
+    std::size_t removed = 0;
+
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        auto txn = lfdb::make_transaction(dbh);
+        removed = erase_if_manual_loop(txn, selector, should_erase);
+      } catch (const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    if (not read_tally.ok) {
+      WARN(read_tally.error);
+    }
+
+    REQUIRE(read_tally.ok);
+    REQUIRE(nkeys == removed);
+  };
+
+  BENCHMARK_ADVANCED("erase_if helper queues all")(Catch::Benchmark::Chronometer meter) {
+    std::size_t removed = 0;
+
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        auto txn = lfdb::make_transaction(dbh);
+        removed = lfdb::erase_if(txn, selector, should_erase);
+      } catch (const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    if (not read_tally.ok) {
+      WARN(read_tally.error);
+    }
+
+    REQUIRE(read_tally.ok);
+    REQUIRE(nkeys == removed);
   };
 
   BENCHMARK_ADVANCED("block generator read all")(Catch::Benchmark::Chronometer meter) {
@@ -661,7 +704,7 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
 }
 
 // Note that these are disabled for regular test runs. Use
-//      unittest_fdb_ceph "simple benchmarks"
+//      unittest_fdb_ceph "[benchmark]"
 // ...to run:
 TEST_CASE("simple benchmarks", "[.benchmark][benchmark]") {
 
@@ -755,11 +798,11 @@ BENCHMARK_ADVANCED("write simple records-- parallel, one transaction per block")
 
 }
 
-#include <catch2/catch_session.hpp>
+#include "test/catch2_compat.h"
 
 int main(int argc, char **argv) 
 {
-  int result = Catch::Session().run(argc, argv);
+  const auto result = ceph::test::run_catch2(argc, argv);
 
   // Make sure that FoundationDB is shut down once and only once:
   ceph::libfdb::shutdown_libfdb(); 

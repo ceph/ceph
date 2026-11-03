@@ -5,6 +5,7 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/rados.h" // for CEPH_NOSNAP
+#include "include/container_ios.h"
 #include "include/stringify.h"
 #include "include/types.h" // for byte_u_t
 #include "common/errno.h"
@@ -309,7 +310,7 @@ int do_purge_snaps(librbd::Image& image, bool no_progress)
         return r;
       } else if (is_protected == true) {
         protect.push_back(it->name.c_str());
-        snaps.erase(it);
+        it = snaps.erase(it);
       } else {
         ++it;
       }

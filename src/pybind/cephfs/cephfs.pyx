@@ -70,6 +70,16 @@ CEPH_SETATTR_SIZE  = 0x20
 CEPH_SETATTR_CTIME = 0x40
 CEPH_SETATTR_BTIME = 0x200
 
+CEPH_SNAPDIFF_MODE = 0x1
+CEPH_SNAPDIFF_UID = 0x2
+CEPH_SNAPDIFF_GID = 0x4
+CEPH_SNAPDIFF_SIZE = 0x8
+CEPH_SNAPDIFF_NLINK = 0x10
+CEPH_SNAPDIFF_MTIME = 0x20
+CEPH_SNAPDIFF_ATIME = 0x40
+CEPH_SNAPDIFF_CTIME = 0x80
+CEPH_SNAPDIFF_BTIME = 0x100
+
 CEPH_NOSNAP = -2
 
 
@@ -405,9 +415,54 @@ cdef class SnapDiffHandle(object):
         self.lib.require_state("mounted")
         with nogil:
             ret = ceph_close_snapdiff(&self.handle)
+        self.opened = 0
         if ret < 0:
             raise make_ex(ret, "closesnapdiff failed")
+
+cdef class SnapDiffHandle2(object):
+    cdef LibCephFS lib
+    cdef ceph_snapdiff_info2 *handle
+    cdef int opened
+
+    def __cinit__(self, _lib):
         self.opened = 0
+        self.lib = _lib
+        self.handle = NULL
+
+    def __dealloc__(self):
+        self.close()
+
+    def readdir(self):
+        self.lib.require_state("mounted")
+
+        cdef:
+            ceph_snapdiff_entry_t difent
+        with nogil:
+            ret = ceph_readdir_snapdiff2(self.handle, &difent)
+        if ret < 0:
+            raise make_ex(ret, "ceph_readdir_snapdiff2 failed, ret {}"
+                .format(ret))
+        if ret == 0:
+            return None
+
+        return DirEntry(d_ino=difent.dir_entry.d_ino,
+                        d_off=DIRENT_D_OFF(&difent.dir_entry),
+                        d_reclen=difent.dir_entry.d_reclen,
+                        d_type=difent.dir_entry.d_type,
+                        d_name=difent.dir_entry.d_name,
+                        d_snapid=difent.snapid)
+
+    def close(self):
+        if (not self.opened):
+            return
+        self.lib.require_state("mounted")
+        with nogil:
+            ret = ceph_close_snapdiff2(self.handle)
+        self.opened = 0
+        self.handle = NULL
+        if ret < 0:
+            raise make_ex(ret, "closesnapdiff2 failed")
+
 
 
 def cstr(val, name, encoding="utf-8", opt=False) -> bytes:
@@ -1102,6 +1157,44 @@ cdef class LibCephFS(object):
             ret = ceph_open_snapdiff(self.cluster, _root, _relp, _snap1, _snap2, &h.handle);
         if ret < 0:
             raise make_ex(ret, "open_snapdiff failed for {} vs. {}"
+                .format(snap1.decode('utf-8'), snap2.decode('utf-8')))
+        h.opened = 1
+        return h
+
+    def opensnapdiff2(self, root_path, rel_path, snap1name, snap2name, diff_mask) -> SnapDiffHandle2:
+        """
+        Open the given directory and initialize a v2 snapdiff stream.
+
+        :param root_path: root path for snapshots-in-question
+        :param rel_path: subpath under the root to build delta for
+        :param snap1name: the first snapshot name
+        :param snap2name: the second snapshot name
+        :param diff_mask: integer mask to modify snapdiff behavior
+        :returns: the open directory stream handle (SnapDiffHandle2)
+        """
+        self.require_state("mounted")
+
+        h = SnapDiffHandle2(self)
+        root = cstr(root_path, 'root')
+        relp = cstr(rel_path, 'relp')
+        snap1 = cstr(snap1name, 'snap1')
+        snap2 = cstr(snap2name, 'snap2')
+
+        if not isinstance(diff_mask, int):
+            raise TypeError('diff_mask must be an int')
+
+        cdef:
+            char* _root = root
+            char* _relp = relp
+            char* _snap1 = snap1
+            char* _snap2 = snap2
+            unsigned _diff_mask = diff_mask
+
+        with nogil:
+            ret = ceph_open_snapdiff2(self.cluster, _root, _relp, _snap1, _snap2, _diff_mask, &h.handle)
+
+        if ret < 0:
+            raise make_ex(ret, "open_snapdiff2 failed for {} vs. {}"
                 .format(snap1.decode('utf-8'), snap2.decode('utf-8')))
         h.opened = 1
         return h

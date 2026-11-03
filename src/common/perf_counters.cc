@@ -272,6 +272,41 @@ uint64_t PerfCounters::get(int idx) const
   return data.u64;
 }
 
+void PerfCounters::set_min_nonzero(int idx, uint64_t amt)
+{
+#ifndef WITH_CRIMSON
+  if (!m_cct->_conf->perf)
+    return;
+#endif
+
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
+  perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
+  // A plain u64 gauge or a (non-avg) time gauge -- both keep the value in
+  // data.u64 (a time gauge as nanoseconds, see: tset()/tget()).
+  if (!(data.type & (PERFCOUNTER_U64 | PERFCOUNTER_TIME)))
+    return;
+  ceph_assert(!(data.type & PERFCOUNTER_LONGRUNAVG));
+
+  // Ignore a 0 argument. This gauge starts at 0, and the loop below reads a
+  // current value of 0 as "no sample yet" so the first real sample always
+  // lands. A 0 argument can't be told apart from that unset state, and
+  // (since 0 < any real minimum) would silently reset an already-populated
+  // min back to 0 - so drop it here.
+  if (amt == 0)
+    return;
+
+  // There is no built-in running *min*, and a caller-side get()+compare+set()
+  // min is not atomic as a whole - two callers can race and lose an update.
+  // This is the missing min: a single compare-exchange loop, in the same style
+  // as inc_with_max()'s. A current value of 0 counts as "unset" so the first
+  // sample always lands, after which it only moves downward.
+  uint64_t cur;
+  do {
+    cur = data.u64.load();
+  } while ((cur == 0 || amt < cur) && !data.u64.compare_exchange_weak(cur, amt));
+}
+
 void PerfCounters::tinc(int idx, utime_t amt)
 {
 #ifndef WITH_CRIMSON

@@ -119,6 +119,17 @@ ENDOFKEY
     fi
 }
 
+function install_recent_cargo_on_ubuntu {
+    local new=$1
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y cargo-$new
+    $SUDO update-alternatives --remove-all cargo || true
+    # later on, Build-Depends: cargo in debian/control will install the cargo package
+    # for /usr/bin/cargo. use update-alternatives to create a symlink at /usr/local/bin/cargo
+    # so that it a) doesn't conflict and b) takes precedence over the default version
+    $SUDO update-alternatives --install /usr/local/bin/cargo cargo /usr/bin/cargo-$new 1
+    $SUDO update-alternatives --auto cargo
+}
+
 function ensure_python3_sphinx_on_ubuntu {
     ci_debug "Running ensure_python3_sphinx_on_ubuntu() in install-deps.sh"
     local sphinx_command=/usr/bin/sphinx-build
@@ -239,7 +250,21 @@ function install_boost_on_ubuntu {
         ceph-libboost-thread${boost_ver}-dev \
         ceph-libboost-timer${boost_ver}-dev \
         ceph-libboost-url${boost_ver}-dev \
-	|| ci_debug "ceph-libboost package unavailable, you can build the submodule"
+	|| {
+        # Normally cmake falls back to building the boost submodule.  Set
+        # REQUIRE_BOOST_PKGS when that fallback would be wrong: a build
+        # environment that is reused elsewhere (CI build-with-container
+        # images are kept for a week, and build trees move between them)
+        # must not quietly end up without /opt/ceph boost, or a tree
+        # configured against it fails there with FindBoost "0.0.0" or a
+        # missing libboost_*.so.  Failing here makes the image build fail
+        # while shaman/chacra is unreachable instead.
+        if [ -n "$REQUIRE_BOOST_PKGS" ]; then
+            echo "ERROR: ceph-libboost${boost_ver} packages unavailable from shaman and REQUIRE_BOOST_PKGS is set" >&2
+            exit 1
+        fi
+        ci_debug "ceph-libboost package unavailable, you can build the submodule"
+    }
 
 }
 
@@ -418,7 +443,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
     exit
 else
     [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
-    [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
@@ -460,6 +484,11 @@ else
                 $SUDO apt-get install -y gcc
 		ensure_decent_gcc_on_ubuntu 12 jammy
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
+                install_recent_cargo_on_ubuntu 1.91
+                ;;
+            *Noble*)
+                $SUDO apt-get install -y gcc
+                install_recent_cargo_on_ubuntu 1.91
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -490,9 +519,6 @@ else
         if $with_crimson; then
             build_profiles+=",pkg.ceph.crimson"
         fi
-        if $with_pmem; then
-            build_profiles+=",pkg.ceph.pmdk"
-        fi
 
         ci_debug "for_make_check=$for_make_check"
         ci_debug "with_crimson=$with_crimson"
@@ -508,12 +534,15 @@ else
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
         if [ "$control" != "debian/control" ] ; then rm $control; fi
         ;;
-    almalinux|rocky|centos|fedora|rhel|ol|virtuozzo)
+    almalinux|rocky|centos|fedora|rhel|ol|virtuozzo|openruyi)
         builddepcmd="dnf -y builddep --allowerasing"
         echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
                 $SUDO dnf install -y dnf-utils
+                ;;
+            openruyi)
+                rpm --quiet --query dnf5-plugins || $SUDO dnf install -y dnf5-plugins
                 ;;
             almalinux|rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"

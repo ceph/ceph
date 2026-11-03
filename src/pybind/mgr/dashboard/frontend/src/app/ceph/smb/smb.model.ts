@@ -11,8 +11,16 @@ export interface SMBCluster {
   placement?: CephServicePlacement;
   clustering?: Clustering;
   public_addrs?: PublicAddress[];
+  client_compat?: ClientCompat;
   count?: number;
 }
+
+export const CLIENT_COMPAT = {
+  Default: 'default',
+  MacOS: 'macos'
+} as const;
+
+export type ClientCompat = (typeof CLIENT_COMPAT)[keyof typeof CLIENT_COMPAT];
 
 export interface ClusterRequestModel {
   cluster_resource: SMBCluster;
@@ -29,6 +37,11 @@ interface SMBCephfs {
   subvolume?: string;
   provider?: string;
   qos?: SMBShareQoS;
+}
+
+export interface SMBRgw {
+  bucket: string;
+  user_id?: string;
 }
 
 interface SMBShareLoginControl {
@@ -91,7 +104,8 @@ export interface SMBShare {
   resource_type: string;
   cluster_id: string;
   share_id: string;
-  cephfs: SMBCephfs;
+  cephfs?: SMBCephfs;
+  rgw?: SMBRgw;
   intent?: string;
   name?: string;
   readonly?: boolean;

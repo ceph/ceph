@@ -1,0 +1,7 @@
+overrides:
+  # Let the DaemonWatchdog tear down a workunit that is still running against
+  # a cluster it has already declared dead. See WorkunitProcess in
+  # qa/tasks/workunit.py. This suite does not use qa/config/rados.yaml, where
+  # the rest of the rados suites pick this up.
+  workunit:
+    watchdog: true

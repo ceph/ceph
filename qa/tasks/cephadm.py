@@ -781,6 +781,10 @@ def ceph_bootstrap(ctx, config):
             cmd += ['--skip-monitoring-stack']
         if config.get('single_host_defaults'):
             cmd += ['--single-host-defaults']
+        if config.get('allow_mismatched_release'):
+            cmd += ['--allow-mismatched-release']
+        if config.get('log_to_file'):
+            cmd += ['--log-to-file']
         if not config.get('avoid_pacific_features', False):
             cmd += ['--skip-admin-label']
         # bootstrap makes the keyring root 0600, so +r it for our purposes
@@ -937,6 +941,7 @@ def ceph_bootstrap(ctx, config):
             args=[
                 'sudo', 'rm', '-f',
                 '/etc/ceph/{}.conf'.format(cluster_name),
+                '/etc/ceph/{}.keyring'.format(cluster_name),
                 '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             ],
             check_status=False,  # rm-cluster above should have cleaned these up
@@ -1484,6 +1489,8 @@ def ceph_iscsi(ctx, config):
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
 
+    client_key_type = config.get('client_key_type', None)
+
     log.info('Setting up client nodes...')
     clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
     for remote, roles_for_host in clients.remotes.items():
@@ -1492,18 +1499,22 @@ def ceph_clients(ctx, config):
             name = teuthology.ceph_role(role)
             client_keyring = '/etc/ceph/{0}.{1}.keyring'.format(cluster_name,
                                                                 name)
+
+            args = ['ceph', 'auth', 'get-or-create']
+            if client_key_type is not None:
+                args.append(f'--key-type={client_key_type}')
+            args.extend([
+                name,
+                'mon', 'allow *',
+                'osd', 'allow *',
+                'mds', 'allow *',
+                'mgr', 'allow *',
+            ])
             r = _shell(
                 ctx=ctx,
                 cluster_name=cluster_name,
                 remote=remote,
-                args=[
-                    'ceph', 'auth',
-                    'get-or-create', name,
-                    'mon', 'allow *',
-                    'osd', 'allow *',
-                    'mds', 'allow *',
-                    'mgr', 'allow *',
-                ],
+                args=args,
                 stdout=StringIO(),
             )
             keyring = r.stdout.getvalue()
@@ -1824,14 +1835,17 @@ def distribute_config_and_admin_keyring(ctx, config):
             path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             data=ctx.ceph[cluster_name].admin_keyring,
             sudo=True)
+        keyring = f"/etc/ceph/{cluster_name}.keyring"
+        remote.write_file(
+            path=keyring,
+            data=ctx.ceph[cluster_name].admin_keyring,
+            sudo=True)
+        ctx.ceph[cluster_name].keyring = keyring
     try:
         yield
     finally:
-        ctx.cluster.run(args=[
-            'sudo', 'rm', '-f',
-            '/etc/ceph/{}.conf'.format(cluster_name),
-            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-        ])
+        # ceph_bootstrap cleans up keys/confs
+        pass
 
 
 @contextlib.contextmanager
@@ -1872,6 +1886,26 @@ def module_setup(ctx, config):
 def conf_setup(ctx, config):
     cluster_name = config['cluster']
     remote = ctx.ceph[cluster_name].bootstrap_remote
+
+    client_key_type = config.get('client_key_type', None)
+
+    if client_key_type is not None:
+        if client_key_type in ('aes',):
+            args = ['ceph', 'config', 'set', 'mon', 'mon_auth_allow_insecure_key', 'true']
+            _shell(ctx, cluster_name, remote, args=args)
+
+            args = ['ceph', 'mon', 'set', 'auth_allowed_ciphers', f'{client_key_type},aes256k']
+            _shell(ctx, cluster_name, remote, args=args)
+
+            auth_warnings = [
+                'AUTH_INSECURE_CLIENT_KEY_TYPE',
+                'AUTH_INSECURE_KEYS_ALLOWED',
+                'AUTH_INSECURE_KEYS_CREATABLE',
+            ]
+            for w in auth_warnings:
+                args = ['ceph', 'health', 'mute', w, '--sticky']
+                _shell(ctx, cluster_name, remote, args=args)
+
 
     configs = config.get('cluster-conf', {})
     procs = []
@@ -1968,7 +2002,18 @@ def initialize_config(ctx, config):
         # mons will be named after hosts
         first_mon = None
         max_mons = config.get('max_mons', 5)
-        for remote, _ in remotes_and_roles:
+        for remote, roles in remotes_and_roles:
+            mon_roles = [r for r in roles
+                         if teuthology.is_type('mon', cluster_name)(r)]
+            if mon_roles:
+                # Fabricated host-named mons would be deployed on top of the
+                # mon roles, and the default mon service placement created by
+                # cephadm bootstrap races with the explicit placement applied
+                # later, deploying host-named mons on ports assigned to the
+                # role-named mons.
+                raise RuntimeError(
+                    'roleless cephadm requires host-only roles; found %s on %s'
+                    % (mon_roles, remote.shortname))
             ctx.cluster.remotes[remote].append('mon.' + remote.shortname)
             if not first_mon:
                 first_mon = remote.shortname
@@ -2155,4 +2200,46 @@ def task(ctx, config):
 
         finally:
             log.info('Teardown begin')
+
+
+            if hasattr(ctx.ceph[cluster_name], 'bootstrap_remote'):
+                log.info('Tearing down any agents...')
+                try:
+                    _shell(
+                        ctx,
+                        cluster_name,
+                        ctx.ceph[cluster_name].bootstrap_remote,
+                        ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/use_agent', 'false'],
+                        check_status=False,
+                    )
+
+                    log.info('Waiting for agent daemons to be removed (up to 5m)...')
+                    with contextutil.safe_while(
+                        sleep=5,
+                        tries=60,
+                        action='waiting for cephadm agent daemons to stop',
+                    ) as proceed:
+                        while proceed():
+                            r = _shell(
+                                ctx,
+                                cluster_name,
+                                ctx.ceph[cluster_name].bootstrap_remote,
+                                ['ceph', 'orch', 'ps', '--daemon_type', 'agent', '--refresh', '-f', 'json'],
+                                stdout=StringIO(),
+                                check_status=False,
+                            )
+                            if r.exitstatus:
+                                log.warning("'ceph orch ps' command failed with error code {}. Stopping test...".format(r))
+                                return
+                            try:
+                                daemons = json.loads(r.stdout.getvalue())
+                                if not daemons:
+                                    log.info('All agent daemons successfully removed.')
+                                    break
+                                log.info(f'Still waiting for {len(daemons)} agent daemon(s) to be removed...')
+                            except (ValueError, json.JSONDecodeError):
+                                log.warning('Failed to parse orch ps output, will retry...')
+                except Exception as e:
+                    log.warning(f'Encountered exception while waiting for agent teardown: {e}')
+
 

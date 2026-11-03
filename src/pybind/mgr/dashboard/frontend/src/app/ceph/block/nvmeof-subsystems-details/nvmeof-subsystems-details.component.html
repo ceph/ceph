@@ -1,4 +1,4 @@
-<ng-container *ngIf="selection">
+@if (selection) {
   <nav
     ngbNav
     #nav="ngbNav"
@@ -15,30 +15,28 @@
         <cd-table-key-value [data]="data"> </cd-table-key-value>
       </ng-template>
     </ng-container>
-    <ng-container
-      ngbNavItem="performance-details"
-      *ngIf="permissions.grafana.read"
-    >
-      <a
-        ngbNavLink
-        i18n
-        >Performance Details</a
-      >
-      <ng-template ngbNavContent>
-        <cd-grafana
-          i18n-title
-          title="Subsystem details"
-          grafanaPath="ceph-nvme-of-gateways-performance?var-group={{ group }}&var-subsystem={{
-            subsystemNQN
-          }}"
-          [type]="'metrics'"
-          uid="feeuv1dno43r4deed"
-          grafanaStyle="three"
+    @if (permissions.grafana.read) {
+      <ng-container ngbNavItem="performance-details">
+        <a
+          ngbNavLink
+          i18n
+          >Performance Details</a
         >
-        </cd-grafana>
-      </ng-template>
-    </ng-container>
+        <ng-template ngbNavContent>
+          <cd-grafana
+            i18n-title
+            title="Subsystem details"
+            grafanaPath="ceph-nvme-of-gateways-performance?var-group={{ group }}&var-subsystem={{
+              subsystemNQN
+            }}"
+            [type]="'metrics'"
+            uid="feeuv1dno43r4deed"
+            grafanaStyle="three"
+          >
+          </cd-grafana>
+        </ng-template>
+      </ng-container>
+    }
   </nav>
-
   <div [ngbNavOutlet]="nav"></div>
-</ng-container>
+}

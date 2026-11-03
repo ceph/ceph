@@ -46,7 +46,6 @@ To optimize the performance of your cluster, refer to the following:
    OSD Settings <osd-config-ref>
    DmClock Settings <mclock-config-ref>
    BlueStore Settings <bluestore-config-ref>
-   FileStore Settings <filestore-config-ref>
    Journal Settings <journal-ref>
    Pool, PG & CRUSH Settings <pool-pg-config-ref.rst>
    General Settings <general-config-ref>

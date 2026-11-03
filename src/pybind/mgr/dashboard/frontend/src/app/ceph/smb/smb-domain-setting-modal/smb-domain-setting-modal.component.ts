@@ -5,6 +5,7 @@ import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 
+import { SMB_BASE_CEPHFS, SMB_CEPHFS_CONTEXT } from '~/app/shared/constants/smb.constant';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { SmbService } from '~/app/shared/api/smb.service';
@@ -12,7 +13,6 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { DomainSettings, JoinSource, SMBJoinAuth } from '../smb.model';
 import { Observable } from 'rxjs';
 import { Router } from '@angular/router';
-import { JOIN_AUTH_PATH } from '../smb-join-auth-list/smb-join-auth-list.component';
 
 @Component({
   selector: 'cd-smb-domain-setting-modal',
@@ -21,9 +21,11 @@ import { JOIN_AUTH_PATH } from '../smb-join-auth-list/smb-join-auth-list.compone
   standalone: false
 })
 export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
+  private readonly joinAuthPath: string;
   domainSettingsForm: CdFormGroup;
   realmNames: string[];
   joinAuths$: Observable<SMBJoinAuth[]>;
+  smbBasePath = SMB_BASE_CEPHFS;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -37,9 +39,11 @@ export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
     @Optional() @Inject('resource') public resource: string,
     @Optional()
     @Inject('domainSettingsObject')
-    public domainSettingsObject?: DomainSettings
+    public domainSettingsObject?: DomainSettings,
+    @Optional() @Inject('smbBasePath') smbBasePath?: string
   ) {
     super();
+    this.joinAuthPath = `${smbBasePath || SMB_CEPHFS_CONTEXT.basePath}/active-directory`;
     this.action = this.actionLabels.UPDATE;
     this.resource = $localize`Active Directory (AD) parameters`;
   }
@@ -100,7 +104,7 @@ export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
 
   navigateCreateJoinSource() {
     this.closeModal();
-    this.router.navigate([`${JOIN_AUTH_PATH}/${URLVerbs.CREATE}`]);
+    this.router.navigate([`${this.joinAuthPath}/${URLVerbs.CREATE}`]);
   }
 
   removeJoinSource(index: number) {

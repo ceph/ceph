@@ -35,9 +35,13 @@ export class RolesPageHelper extends PageHelper {
     cy.get('cds-overflow-menu-option[aria-label="Edit"]').should('exist').click();
     cy.get('cds-modal').should('be.visible');
 
+    // cds-number clear()+type() is flaky and can leave a leftover digit (e.g. 1 + 3 -> 13).
     cy.get('cds-number[formControlName="max_session_duration"] input')
-      .clear()
-      .type(maxSessionDuration.toString());
+      .should('be.visible')
+      .click()
+      .type('{selectall}{backspace}')
+      .type(String(maxSessionDuration))
+      .should('have.value', String(maxSessionDuration));
     cy.get('cds-modal').contains('button', 'Save').click();
     cy.get('cds-modal').should('not.exist');
 

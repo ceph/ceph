@@ -9,7 +9,7 @@ from ceph.deployment.utils import is_ipv6
 from mgr_util import build_url
 from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, CephadmService
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
 from .service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.schedule import get_placement_hosts
@@ -18,6 +18,9 @@ if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
+
+# A dependency diff confined to these prefixes is a log-only change for haproxy.
+HAPROXY_LOG_DEP_PREFIXES = ('haproxy_log_target:', 'haproxy_log_level:')
 
 
 @register_cephadm_service
@@ -38,9 +41,23 @@ class IngressService(CephService):
         return 'haproxy_monitor_ssl_key'
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+    def _include_tls_dependencies(
+        cls,
+        spec: Optional[ServiceSpec],
+        daemon_type: Optional[str] = None,
+    ) -> bool:
+        return (
+            daemon_type == 'haproxy'
+            and super()._include_tls_dependencies(spec, daemon_type)
+        )
+
+    @classmethod
+    def _get_service_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
         if daemon_type == 'haproxy':
             return IngressService.get_haproxy_dependencies(mgr, spec)
         elif daemon_type == 'keepalived':
@@ -70,9 +87,10 @@ class IngressService(CephService):
 
     def prepare_create(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
-        super().prepare_create(daemon_spec)
+        daemon_spec = deploy_ctx.daemon_spec
+        super().prepare_create(deploy_ctx)
         if daemon_spec.daemon_type == 'haproxy':
             return self.haproxy_prepare_create(daemon_spec)
         if daemon_spec.daemon_type == 'keepalived':
@@ -81,8 +99,9 @@ class IngressService(CephService):
 
     def generate_config(
             self,
-            daemon_spec: CephadmDaemonDeploySpec
+            deploy_ctx: DaemonDeployContext,
     ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
         if daemon_spec.daemon_type == 'haproxy':
             return self.haproxy_generate_config(daemon_spec)
         else:
@@ -123,8 +142,26 @@ class IngressService(CephService):
             hosts = get_placement_hosts(spec, mgr.cache.get_schedulable_hosts(), mgr.cache.get_draining_hosts())
             deps.append(f'placement_hosts:{",".join(sorted(h.hostname for h in hosts))}')
 
-        parent_deps = CephadmService.get_dependencies(mgr, spec)
-        return sorted(deps + parent_deps)
+        if ingress_spec.monitor_ssl:
+            deps.append(f'monitor_cert_source: {ingress_spec.monitor_cert_source}')
+            if (
+                ingress_spec.monitor_cert_source != MonitorCertSource.REUSE_SERVICE_CERT.value
+                and ingress_spec.monitor_ssl_cert
+                and ingress_spec.monitor_ssl_key
+            ):
+                deps.append(
+                    f'monitor_ssl_cert: {utils.config_hash(ingress_spec.monitor_ssl_cert)}'
+                )
+                deps.append(
+                    f'monitor_ssl_key: {utils.config_hash(ingress_spec.monitor_ssl_key)}'
+                )
+
+        # A changed spec or an upgrade reconfigures the daemon
+        # with new log config without a manual redeploy.
+        deps.append(f'haproxy_log_target: {ingress_spec.haproxy_log_target}')
+        deps.append(f'haproxy_log_level: {ingress_spec.haproxy_log_level}')
+
+        return sorted(deps)
 
     def haproxy_generate_config(
             self,
@@ -246,12 +283,19 @@ class IngressService(CephService):
         else:
             monitor_ips = [ip, host_ip]
 
+        if spec.virtual_ips_list:
+            cert_ips = [str(v).split('/')[0] for v in spec.virtual_ips_list if v]
+        elif ip and ip != '[::]':
+            cert_ips = [ip]
+        else:
+            cert_ips = [host_ip]
         monitor_ssl_file = None
-        cert_ips = [ip]
         if spec.monitor_ssl:
             if spec.monitor_cert_source == MonitorCertSource.REUSE_SERVICE_CERT.value:
                 monitor_ssl_file = 'haproxy.pem'
-                cert_ips.extend(monitor_ips)
+                for mip in monitor_ips:
+                    if mip and mip not in cert_ips:
+                        cert_ips.append(mip)
             else:
                 monitor_ssl_file = 'stats_haproxy.pem'
 
@@ -283,7 +327,7 @@ class IngressService(CephService):
         }
 
         if spec.ssl:
-            tls_pair = self.get_certificates(daemon_spec)
+            tls_pair = self.get_certificates(daemon_spec, ips=cert_ips)
             combined_pem = tls_pair.cert + '\n' + tls_pair.key
             config_files['files']['haproxy.pem'] = combined_pem
 
@@ -292,7 +336,7 @@ class IngressService(CephService):
             monitor_ssl_cert = [tls_creds.cert, tls_creds.key]
             config_files['files']['stats_haproxy.pem'] = '\n'.join(monitor_ssl_cert)
 
-        return config_files, self.get_haproxy_dependencies(self.mgr, spec)
+        return config_files, self.get_dependencies(self.mgr, spec, 'haproxy')
 
     def get_stats_certs(
         self,
@@ -560,7 +604,7 @@ class IngressService(CephService):
             }
         }
 
-        return config_file, self.get_keepalived_dependencies(self.mgr, spec)
+        return config_file, self.get_dependencies(self.mgr, spec, 'keepalived')
 
     def get_monitoring_details(self, service_name: str, host: str) -> Tuple[Optional[str], Optional[int]]:
         spec = cast(IngressSpec, self.mgr.spec_store[service_name].spec)
@@ -598,6 +642,16 @@ class IngressService(CephService):
             return True
         return False
 
+    @staticmethod
+    def get_haproxy_sighup_reload_step() -> utils.NextDaemonStep:
+        """Return the NextDaemonStep that reloads HAProxy via SIGHUP.
+        """
+        return utils.NextDaemonStep(
+            utils.Action.RECONFIG,
+            skip_restart_for_reconfig=True,
+            send_signal_to_daemon='SIGHUP',
+        )
+
     def choose_next_action(
         self,
         scheduled_action: utils.Action,
@@ -629,6 +683,33 @@ class IngressService(CephService):
             )
             return utils.NextDaemonStep(utils.Action.REDEPLOY)
 
+        # HAProxy logging options can be applied with a graceful SIGHUP reload
+        # Here the master keeps the listening sockets, a new worker is forked
+        # with the new config, and the old worker drains.
+        #
+        # Reload only a running daemon with no pending start/restart, for a
+        # log-only dep change. Any other case (mixed changes, stopped/failed
+        # daemon, queued start/restart, non-haproxy) falls through to the
+        # restart-capable reconfigure/redeploy path.
+        if (
+            daemon_type == 'haproxy'
+            and action is utils.Action.RECONFIG
+            and daemon is not None
+            and daemon.status == DaemonDescriptionStatus.running
+            and scheduled_action in (
+                utils.Action.NO_ACTION, utils.Action.RECONFIG
+            )
+        ):
+            sym_diff = set(curr_deps).symmetric_difference(last_deps)
+            if sym_diff and all(
+                s.startswith(HAPROXY_LOG_DEP_PREFIXES) for s in sym_diff
+            ):
+                logger.debug(
+                    'Reload HAProxy with SIGHUP: logging options changed (%s)',
+                    spec.service_name() if spec else daemon_type,
+                )
+                return self.get_haproxy_sighup_reload_step()
+
         if (
             action is not utils.Action.REDEPLOY
             and daemon_type == 'haproxy'
@@ -653,9 +734,5 @@ class IngressService(CephService):
                         '(%s)',
                         spec.service_name(),
                     )
-                    return utils.NextDaemonStep(
-                        utils.Action.RECONFIG,
-                        skip_restart_for_reconfig=True,
-                        send_signal_to_daemon='SIGHUP',
-                    )
+                    return self.get_haproxy_sighup_reload_step()
         return step

@@ -22,11 +22,13 @@
 #include "include/stringify.h"
 #include "osd/osd_types.h"
 #include "common/errno.h"
+#include "common/Formatter.h"
 #include "common/hostname.h"
 #include "common/dout.h"
 
 #include <fmt/core.h>
 
+#include <iomanip> // for std::quoted
 #include <sstream>
 
 /* Don't use standard Ceph logging in this file.
@@ -708,6 +710,8 @@ int md_config_t::parse_argv(ConfigValues& values,
       if (r >= 0) {
 	string k(bl.c_str(), bl.length());
 	set_val_or_die(values, tracker, "key", k.c_str());
+      } else {
+        std::cerr << "cannot read keyfile: " << cpp_strerror(r) << std::endl;
       }
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyring", "-k", (char*)NULL)) {

@@ -15,6 +15,7 @@
 
 #include <seastar/core/thread.hh>
 
+#include "common/snap_fmt.h"
 #include "crimson/common/log.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg.h"
@@ -489,6 +490,9 @@ template <class Func>
 auto OpsExecuter::do_write_op_attr_cache(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   check_init_op_params(m);
+  if (!attr_cache_backup) {
+    attr_cache_backup = obc->attr_cache;
+  }
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn, obc->attr_cache);
 }
 OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
@@ -609,6 +613,28 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
     "handling op {} on object {}",
     ceph_osd_op_name(osd_op.op.op),
     get_target());
+  // Best-effort capacity gate (failsafe): drop data-allocating ops before a
+  // transaction is created if the local store is full. This is Crimson's
+  // analog to classic's osd_failsafe_full_ratio check (PrimaryLogPG.cc:2162),
+  // preventing allocator exhaustion assert aborts when the local store fills
+  // before the monitor's pool FLAG_FULL has propagated. We reply -EAGAIN so
+  // the client resends, matching both classic's silent drop and Crimson's own
+  // mon-driven full path (PG::run_executer_fut, pg.cc), rather than returning
+  // a result that depends on whether full flags have reached the client yet.
+  switch (osd_op.op.op) {
+  case CEPH_OSD_OP_CREATE:
+  case CEPH_OSD_OP_WRITE:
+  case CEPH_OSD_OP_WRITEFULL:
+  case CEPH_OSD_OP_WRITESAME:
+  case CEPH_OSD_OP_APPEND:
+  case CEPH_OSD_OP_COPY_FROM2:
+    if (pg->is_local_store_full() && !get_message().has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
+      return crimson::ct_error::eagain::make();
+    }
+    break;
+  default:
+    break;
+  }
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
   case CEPH_OSD_OP_SYNC_READ:
     [[fallthrough]];
@@ -641,8 +667,10 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.get_xattrs(os, attr_cache, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_CMPXATTR:
-    return do_read_op([this, &osd_op](auto& backend, const auto& os) {
-      return backend.cmp_xattr(os, osd_op, delta_stats);
+    return do_read_attr_cache([this, &osd_op](auto& backend,
+					      const auto& attr_cache,
+					      const auto& os) {
+      return backend.cmp_xattr(os, attr_cache, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_RMXATTR:
     return do_write_op_attr_cache([&osd_op](auto& backend, auto& os, auto& txn, auto& attr_cache) {
@@ -665,12 +693,13 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.writefull(os, osd_op, txn, *osd_op_params, delta_stats);
     });
   case CEPH_OSD_OP_ROLLBACK:
-    return do_write_op([this, &head=obc,
-                        &osd_op](auto& backend, auto& os, auto& txn) {
+    return do_write_op_attr_cache([this, &head=obc, &osd_op](
+      auto& backend, auto& os, auto& txn, auto& attr_cache) {
       ceph_assert(obc->ssc);
       return backend.rollback(os, obc->ssc->snapset,
 			      osd_op, txn, *osd_op_params, delta_stats,
-                              head, pg->obc_loader, snapc);
+                              head, pg->obc_loader, snapc, attr_cache,
+                              rollback_to);
     });
   case CEPH_OSD_OP_APPEND:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
@@ -702,7 +731,8 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
                      __func__, obc->obs.oi.soid);
       whiteout = true;
     }
-    return do_write_op([this, whiteout](auto& backend, auto& os, auto& txn) {
+    return do_write_op_attr_cache([this, whiteout](
+      auto& backend, auto& os, auto& txn, auto& attr_cache) {
       struct emptyctx_t {};
       return with_effect_on_obc(
 	emptyctx_t{},
@@ -718,7 +748,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
 	    num_bytes = obc->obs.oi.size;
 	  }
 	  return backend.remove(os, txn, *osd_op_params,
-				delta_stats, whiteout, num_bytes);
+				delta_stats, whiteout, num_bytes, attr_cache);
 	},
 	[](auto &&ctx, ObjectContextRef obc, Ref<PG>) {
 	  return seastar::do_for_each(
@@ -774,42 +804,38 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.omap_get_vals_by_keys(os, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_OMAPSETVALS:
-#if 0
-    if (!pg.get_pgpool().info.supports_omap()) {
+    if (!pg->get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }
-#endif
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_set_vals(os, osd_op, txn, *osd_op_params, delta_stats);
     });
   case CEPH_OSD_OP_OMAPSETHEADER:
-#if 0
-    if (!pg.get_pgpool().info.supports_omap()) {
+    if (!pg->get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }
-#endif
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_set_header(os, osd_op, txn, *osd_op_params,
         delta_stats);
     });
   case CEPH_OSD_OP_OMAPRMKEYRANGE:
-#if 0
-    if (!pg.get_pgpool().info.supports_omap()) {
+    if (!pg->get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }
-#endif
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_remove_range(os, osd_op, txn, delta_stats);
     });
   case CEPH_OSD_OP_OMAPRMKEYS:
-    /** TODO: Implement supports_omap()
-    if (!pg.get_pgpool().info.supports_omap()) {
+    if (!pg->get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
-    }*/
+    }
     return do_write_op([&osd_op, this](auto& backend, auto& os, auto& txn) {
       return backend.omap_remove_key(os, osd_op, txn, *osd_op_params, delta_stats);
     });
   case CEPH_OSD_OP_OMAPCLEAR:
+    if (!pg->get_pgpool().info.supports_omap()) {
+      return crimson::ct_error::operation_not_supported::make();
+    }
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_clear(os, osd_op, txn, *osd_op_params, delta_stats);
     });
@@ -886,6 +912,7 @@ OpsExecuter::flush_changes_and_submit(
     auto [_submitted, _all_completed] = co_await pg->submit_transaction(
       std::move(obc),
       cloning_ctx ? std::move(cloning_ctx->clone_obc) : nullptr,
+      std::move(rollback_to),
       std::move(txn),
       std::move(*osd_op_params),
       std::move(log_entries)
@@ -963,7 +990,8 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
       obc->obs.oi.soid,
       obc->obs.oi,
       obc->obs.oi.soid.is_head() ? &(obc->ssc->snapset) : nullptr,
-      txn);
+      txn,
+      obc->attr_cache);
   } else {
     // reset cached ObjectState without enforcing eviction
     obc->obs.oi = object_info_t(obc->obs.oi.soid);
@@ -1054,7 +1082,8 @@ pg_log_entry_t OpsExecuter::complete_cloning_ctx()
     cloning_ctx->coid,
     cloning_ctx->clone_obc->obs.oi,
     nullptr /* snapset */,
-    txn);
+    txn,
+    cloning_ctx->clone_obc->attr_cache);
 
   pg_log_entry_t ret{
     pg_log_entry_t::CLONE,
@@ -1112,6 +1141,11 @@ ObjectContextRef OpsExecuter::prepare_clone(
 
   clone_obc->set_clone_state(std::move(clone_obs));
   clone_obc->ssc = obc->ssc;
+  // No op of this request has run yet, so obc->attr_cache holds the
+  // xattrs that clone_for_write() copies to the clone. The clone does
+  // not get SS_ATTR.
+  clone_obc->attr_cache = obc->attr_cache;
+  clone_obc->attr_cache.erase(SS_ATTR);
   return clone_obc;
 }
 

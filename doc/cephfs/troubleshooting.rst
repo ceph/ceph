@@ -341,7 +341,45 @@ ring buffer, which can be examined by running the following command:
 
    dmesg
 
-Find the relevant kernel state.
+Find the relevant kernel state. Look for the following:
+
+* any traces of kernel oops. Crashes in the form of stack traces that mention
+  faults in execution.
+* evidence of the kernel locking up. Deadlock.
+
+It is possible that there is a stacktrace in the ring buffer that is a long-blocked user-space process. For example::
+
+[Sat Aug 23 01:36:20 2025] INFO: task proc1:123456 blocked for more than 122 seconds.
+[Sat Aug 23 01:36:20 2025]       Tainted: G               X  -------  ---  5.14.0-427.68.1.el9_4.x86_64 #1
+[Sat Aug 23 01:36:20 2025] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+[Sat Aug 23 01:36:20 2025] task:tSA_160386913   state:D stack:0     pid:1820517 ppid:1805428 flags:0x00000002
+[Sat Aug 23 01:36:20 2025] Call Trace:
+[Sat Aug 23 01:36:20 2025]  <TASK>
+[Sat Aug 23 01:36:20 2025]  __schedule+0x21b/0x550
+[Sat Aug 23 01:36:20 2025]  schedule+0x2d/0x70
+[Sat Aug 23 01:36:20 2025]  schedule_preempt_disabled+0x11/0x20
+[Sat Aug 23 01:36:20 2025]  rwsem_down_write_slowpath+0x23d/0x500
+[Sat Aug 23 01:36:20 2025]  down_write+0x58/0x60
+[Sat Aug 23 01:36:20 2025]  open_last_lookups+0x160/0x3d0
+[Sat Aug 23 01:36:20 2025]  ? path_init+0x2c5/0x3f0
+[Sat Aug 23 01:36:20 2025]  path_openat+0x89/0x280
+[Sat Aug 23 01:36:20 2025]  do_filp_open+0xb2/0x160
+[Sat Aug 23 01:36:20 2025]  ? __check_object_size.part.0+0x47/0xd0
+[Sat Aug 23 01:36:20 2025]  do_sys_openat2+0x96/0xd0
+[Sat Aug 23 01:36:20 2025]  __x64_sys_openat+0x53/0xa0
+[Sat Aug 23 01:36:20 2025]  do_syscall_64+0x59/0x90
+[Sat Aug 23 01:36:20 2025]  ? syscall_exit_work+0x103/0x130
+[Sat Aug 23 01:36:20 2025]  ? syscall_exit_to_user_mode+0x19/0x40
+[Sat Aug 23 01:36:20 2025]  ? do_syscall_64+0x69/0x90
+[Sat Aug 23 01:36:20 2025]  ? exc_page_fault+0x62/0x150
+[Sat Aug 23 01:36:20 2025]  entry_SYSCALL_64_after_hwframe+0x77/0xe1
+
+In this example above, the stack trace is hinting that there is a blocked task
+(``proc1``). The underlying reason for this blocked task could be that a
+request has been sent to the Ceph MDS and no response has been received. If so,
+this indicates that the issue is in the Ceph MDS.
+
+
 
 
 Slow requests
@@ -369,7 +407,7 @@ requests are the ``mdsc`` (current requests to the MDS) and the ``osdc``
 * ``mds_sessions``: Dumps the current sessions to MDSes
 * ``monc``: Dumps the current maps from the Monitor, and any "subscriptions" held
 * ``monmap``: Dumps the current monitor map epoch and Monitors
-* ``osdc``: Dumps the current ops in-flight to OSDs (ie, file data IO)
+* ``osdc``: Dumps the current ops in-flight to OSDs (ie, file data I/O)
 * ``osdmap``: Dumps the current OSDMap epoch, pools, and OSDs
 
 If the data pool is in a ``NEARFULL`` condition, then the kernel CephFS client
@@ -593,5 +631,5 @@ If you are satisfied that you have found a bug, please file it on `the bug
 tracker`. For more general queries, please write to the `ceph-users mailing
 list`.
 
-.. _the bug tracker: http://tracker.ceph.com
-.. _ceph-users mailing list:  http://lists.ceph.com/listinfo.cgi/ceph-users-ceph.com/
+.. _the bug tracker: https://tracker.ceph.com
+.. _ceph-users mailing list:  https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/

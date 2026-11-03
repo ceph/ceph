@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/io/FlushTracker.h"
+#include "include/container_ios.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"

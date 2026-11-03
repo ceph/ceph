@@ -13,13 +13,14 @@ from ceph.utils import datetime_to_str, str_to_datetime
 from datetime import datetime
 import orchestrator
 from cephadm.serve import CephadmServe
-from cephadm.utils import SpecialHostLabels
+from cephadm.utils import SpecialHostLabels, can_apply_post_create
 from ceph.utils import datetime_now
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from mgr_module import MonCommandFailed
 
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
 from .service_registry import register_cephadm_service
+from cephadm.utils import build_ceph_volume_cmd
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -31,6 +32,68 @@ logger = logging.getLogger(__name__)
 class OSDService(CephService):
     TYPE = 'osd'
 
+    def validate_encryption(self, spec: DriveGroupSpec) -> None:
+        if spec.method == 'raw' and spec.encrypted and not spec.tpm2:
+            raise OrchestratorError(
+                'Raw encrypted OSD deployment through cephadm requires tpm2: true. '
+                'Use method: lvm for encryption without TPM2.')
+
+    def _apply_osd_config_to_daemon(
+        self,
+        osd_id: str,
+        cfg: dict[str, str],
+    ) -> None:
+        if not cfg:
+            return
+
+        for key, value in cfg.items():
+            logger.info(
+                "Applying OSD spec config %s=%s to osd.%s",
+                key, value, osd_id,
+            )
+
+            self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': f'osd.{osd_id}',
+                'name': key,
+                'value': value,
+            })
+
+    def _get_osd_spec_configs(
+        self,
+        spec: DriveGroupSpec,
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        cfg = getattr(spec, 'config', None) or {}
+        if not cfg:
+            return {}, {}
+
+        meta_cache: dict[str, Optional[dict[str, Any]]] = {}
+        creation_cfg: dict[str, str] = {}
+        post_create_cfg: dict[str, str] = {}
+
+        for key, value in cfg.items():
+            runtime_updatable = can_apply_post_create(
+                self.mgr,
+                key,
+                meta_cache,
+            )
+
+            meta = meta_cache.get(key)
+            if not meta:
+                logger.debug(
+                    "Skipping invalid OSD spec config key %s",
+                    key,
+                )
+                continue
+
+            if key == 'bluestore_min_alloc_size':
+                creation_cfg[key] = str(value)
+
+            if runtime_updatable:
+                post_create_cfg[key] = str(value)
+
+        return creation_cfg, post_create_cfg
+
     def create_from_spec(self, drive_group: DriveGroupSpec, force_apply: bool = False) -> str:
         """
         :param force_apply: If True, do not check osdspec_needs_apply(). Used by
@@ -38,6 +101,8 @@ class OSDService(CephService):
             in inventory timestamps (and the check only compares timestamps, not spec content).
         """
         logger.debug(f"Processing DriveGroup {drive_group}")
+        self.validate_encryption(drive_group)
+        creation_cfg, post_create_cfg = self._get_osd_spec_configs(drive_group)
         osd_id_claims = OsdIdClaims(self.mgr)
         if osd_id_claims.get():
             logger.info(
@@ -69,7 +134,8 @@ class OSDService(CephService):
             env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
             ret_msg = await self.create_single_host(
                 drive_group, host, cmds,
-                replace_osd_ids=osd_id_claims_for_host, env_vars=env_vars
+                replace_osd_ids=osd_id_claims_for_host, env_vars=env_vars,
+                creation_cfg=creation_cfg, post_create_cfg=post_create_cfg
             )
             self.mgr.cache.update_osdspec_last_applied(
                 host, drive_group.service_name(), start_ts
@@ -93,9 +159,11 @@ class OSDService(CephService):
     async def create_single_host(self,
                                  drive_group: DriveGroupSpec,
                                  host: str, cmds: List[str], replace_osd_ids: List[str],
-                                 env_vars: Optional[List[str]] = None) -> str:
+                                 env_vars: Optional[List[str]] = None,
+                                 creation_cfg: Optional[dict[str, str]] = None,
+                                 post_create_cfg: Optional[dict[str, str]] = None) -> str:
         for cmd in cmds:
-            out, err, code = await self._run_ceph_volume_command(host, cmd, env_vars=env_vars)
+            out, err, code = await self._run_ceph_volume_command(host, cmd, env_vars=env_vars, creation_cfg=creation_cfg)
             if code == 1 and ', it is already prepared' in '\n'.join(err):
                 # HACK: when we create against an existing LV, ceph-volume
                 # returns an error and the above message.  To make this
@@ -107,10 +175,11 @@ class OSDService(CephService):
                     'cephadm exited with an error code: %d, stderr:%s' % (
                         code, '\n'.join(err)))
         return await self.deploy_osd_daemons_for_existing_osds(host, drive_group,
-                                                               replace_osd_ids)
+                                                               replace_osd_ids, post_create_cfg=post_create_cfg)
 
     async def deploy_osd_daemons_for_existing_osds(self, host: str, spec: DriveGroupSpec,
-                                                   replace_osd_ids: Optional[List[str]] = None) -> str:
+                                                   replace_osd_ids: Optional[List[str]] = None,
+                                                   post_create_cfg: Optional[dict[str, str]] = None) -> str:
 
         if replace_osd_ids is None:
             replace_osd_ids = OsdIdClaims(self.mgr).filtered_by_host(host)
@@ -128,13 +197,11 @@ class OSDService(CephService):
                 'wait_for_latest_osdmap failed with %d' % ret)
 
         # check result: lvm
-        osds_elems: dict = await CephadmServe(self.mgr)._run_cephadm_json(
+        osds_elems = await CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
-            [
-                '--',
-                'lvm', 'list',
-                '--format', 'json',
-            ])
+            build_ceph_volume_cmd(
+                self.mgr.ceph_volume_log_level,
+                ['lvm', 'list', '--format', 'json']))
         before_osd_uuid_map = self.mgr.get_osd_uuid_map(only_up=True)
         fsid = self.mgr._cluster_fsid
         osd_uuid_map = self.mgr.get_osd_uuid_map()
@@ -174,19 +241,20 @@ class OSDService(CephService):
                     daemon_type='osd',
                     network='',  # required arg but only really needed for mons
                 )
-                daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+                daemon_spec.final_config, daemon_spec.deps = self.generate_config(
+                    DaemonDeployContext(daemon_spec, spec))
+                self._apply_osd_config_to_daemon(str(osd_id), post_create_cfg or {})
+
                 await CephadmServe(self.mgr)._create_daemon(
                     daemon_spec,
                     osd_uuid_map=osd_uuid_map)
 
         # check result: raw
-        raw_elems: dict = await CephadmServe(self.mgr)._run_cephadm_json(
+        raw_elems = await CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
-            [
-                '--',
-                'raw', 'list',
-                '--format', 'json',
-            ])
+            build_ceph_volume_cmd(
+                self.mgr.ceph_volume_log_level,
+                ['raw', 'list', '--format', 'json']))
         for osd_uuid, osd in raw_elems.items():
             if osd.get('ceph_fsid') != fsid:
                 continue
@@ -216,7 +284,9 @@ class OSDService(CephService):
                 daemon_type='osd',
                 network='',  # required arg but only really needed for mons
             )
-            daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+            daemon_spec.final_config, daemon_spec.deps = self.generate_config(
+                DaemonDeployContext(daemon_spec, spec))
+            self._apply_osd_config_to_daemon(osd_id, post_create_cfg or {})
             await CephadmServe(self.mgr)._create_daemon(
                 daemon_spec,
                 osd_uuid_map=osd_uuid_map)
@@ -337,7 +407,7 @@ class OSDService(CephService):
 
                 # get preview data from ceph-volume
                 for cmd in cmds:
-                    with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume -- {cmd}'):
+                    with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume -- --log-level {self.mgr.ceph_volume_log_level} {cmd}'):
                         out, err, code = self.mgr.wait_async(self._run_ceph_volume_command(host, cmd))
                     if out:
                         try:
@@ -387,7 +457,8 @@ class OSDService(CephService):
         return matching_specs
 
     async def _run_ceph_volume_command(self, host: str,
-                                       cmd: str, env_vars: Optional[List[str]] = None
+                                       cmd: str, env_vars: Optional[List[str]] = None,
+                                       creation_cfg: Optional[dict[str, str]] = None
                                        ) -> Tuple[List[str], List[str], int]:
         self.mgr.inventory.assert_host(host)
 
@@ -397,14 +468,21 @@ class OSDService(CephService):
             'entity': 'client.bootstrap-osd',
         })
 
+        ceph_conf = self.mgr.get_minimal_ceph_conf()
+        if creation_cfg:
+            ceph_conf = self._append_osd_creation_config(
+                ceph_conf, creation_cfg)
+
         j = json.dumps({
-            'config': self.mgr.get_minimal_ceph_conf(),
+            'config': ceph_conf,
             'keyring': keyring,
         })
 
         split_cmd = cmd.split(' ')
-        _cmd = ['--config-json', '-', '--']
-        _cmd.extend(split_cmd)
+        _cmd = build_ceph_volume_cmd(
+            self.mgr.ceph_volume_log_level,
+            split_cmd,
+            prefix=['--config-json', '-'])
         out, err, code = await CephadmServe(self.mgr)._run_cephadm(
             host, 'osd', 'ceph-volume',
             _cmd,
@@ -413,6 +491,22 @@ class OSDService(CephService):
             error_ok=True)
         return out, err, code
 
+    @staticmethod
+    def _append_osd_creation_config(
+        ceph_conf: str,
+        cfg: dict[str, str],
+    ) -> str:
+        lines = ['', '[osd]']
+
+        for key, value in cfg.items():
+            if '\n' in value or '\r' in value:
+                raise OrchestratorError(
+                    f'OSD spec config option {key} contains a multiline value'
+                )
+            lines.append(f'{key} = {value}')
+
+        return ceph_conf.rstrip() + '\n' + '\n'.join(lines) + '\n'
+
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         # Do not remove the osd.N keyring, if we failed to deploy the OSD, because
         # we cannot recover from it. The OSD keys are created by ceph-volume and not by
@@ -420,8 +514,12 @@ class OSDService(CephService):
         if not is_failed_deploy:
             super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
-        config, parent_deps = super().generate_config(daemon_spec)
+    def generate_config(
+            self,
+            deploy_ctx: DaemonDeployContext,
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
+        config, parent_deps = super().generate_config(deploy_ctx)
         if daemon_spec.service_name in self.mgr.spec_store:
             svc_spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
@@ -588,7 +686,9 @@ class RemoveUtil(object):
     def zap_osd(self, osd: "OSD") -> str:
         "Zaps all devices that are associated with an OSD"
         if osd.hostname is not None:
-            cmd = ['--', 'lvm', 'zap', '--osd-id', str(osd.osd_id)]
+            cmd = build_ceph_volume_cmd(
+                self.mgr.ceph_volume_log_level,
+                ['lvm', 'zap', '--osd-id', str(osd.osd_id)])
             if osd.replace_block:
                 cmd.append('--replace-block')
             if osd.replace_db:
@@ -740,7 +840,7 @@ class OSD:
             self.rm_util.set_osd_flag([self], 'out')
         else:
             self.rm_util.reweight_osd(self, 0.0)
-        self.drain_started_at = datetime.utcnow()
+        self.drain_started_at = datetime_now()
         self.draining = True
         logger.debug(f"Started draining {self}.")
         return True
@@ -751,7 +851,7 @@ class OSD:
         else:
             if self.original_weight:
                 self.rm_util.reweight_osd(self, self.original_weight)
-        self.drain_stopped_at = datetime.utcnow()
+        self.drain_stopped_at = datetime_now()
         self.draining = False
         logger.debug(f"Stopped draining {self}.")
         return True
@@ -780,13 +880,29 @@ class OSD:
     def is_empty(self) -> bool:
         if self.get_pg_count() == 0:
             if not self.drain_done_at:
-                self.drain_done_at = datetime.utcnow()
+                self.drain_done_at = datetime_now()
                 self.draining = False
             return True
         return False
 
     def safe_to_destroy(self) -> bool:
         return self.rm_util.safe_to_destroy([self.osd_id])
+
+    def daemon_is_error(self) -> bool:
+        try:
+            dd = self.rm_util.mgr.cache.get_daemon(f'osd.{self.osd_id}', self.hostname)
+        except OrchestratorError:
+            return False
+        return dd.status == DaemonDescriptionStatus.error
+
+    def update_from(self, other: "OSD") -> None:
+        self.force = other.force
+        self.zap = other.zap
+        self.replace = other.replace
+        self.replace_block = other.replace_block
+        self.replace_db = other.replace_db
+        self.replace_wal = other.replace_wal
+        self.no_destroy = other.no_destroy
 
     def down(self) -> bool:
         return self.rm_util.set_osd_flag([self], 'down')
@@ -931,63 +1047,65 @@ class OSDRemovalQueue(object):
         # Check all osds for their state and take action (remove, purge etc)
         new_queue: Set[OSD] = set()
         for osd in all_osds:  # type: OSD
-            if not osd.force:
-                # skip criteria
+            # --force, or an already-failed empty daemon, must not wait on
+            # osd safe-to-destroy (it stays false while the cluster is degraded).
+            skip_safety = osd.force or (osd.daemon_is_error() and osd.get_pg_count() <= 0)
+            if not skip_safety:
                 if not osd.is_empty:
                     logger.debug(f"{osd} is not empty yet. Waiting a bit more")
                     new_queue.add(osd)
                     continue
 
-            if not osd.safe_to_destroy():
-                logger.debug(
-                    f"{osd} is not safe-to-destroy yet. Waiting a bit more")
-                new_queue.add(osd)
-                continue
+                if not osd.safe_to_destroy():
+                    logger.debug(
+                        f"{osd} is not safe-to-destroy yet. Waiting a bit more")
+                    new_queue.add(osd)
+                    continue
 
-            # abort criteria
-            if not osd.down():
-                # also remove it from the remove_osd list and set a health_check warning?
-                raise orchestrator.OrchestratorError(
-                    f"Could not mark {osd} down")
-
-            # stop and remove daemon
-            assert osd.hostname is not None
-
-            if self.mgr.cache.has_daemon(f'osd.{osd.osd_id}'):
-                CephadmServe(self.mgr)._remove_daemon(f'osd.{osd.osd_id}', osd.hostname)
-                logger.info(f"Successfully removed {osd} on {osd.hostname}")
-                result = True
-            else:
-                logger.info(f"Daemon {osd} on {osd.hostname} was already removed")
-
-            any_replace_params: bool = any([osd.replace,
-                                            osd.replace_block,
-                                            osd.replace_db,
-                                            osd.replace_wal])
-            if any_replace_params:
-                # mark destroyed in osdmap
-                if not osd.destroy():
+            try:
+                if not osd.down():
                     raise orchestrator.OrchestratorError(
-                        f"Could not destroy {osd}")
-                logger.info(
-                    f"Successfully destroyed old {osd} on {osd.hostname}; ready for replacement")
-                if any_replace_params:
-                    osd.zap = True
-            else:
-                # purge from osdmap
-                if not osd.purge():
-                    raise orchestrator.OrchestratorError(f"Could not purge {osd}")
-                logger.info(f"Successfully purged {osd} on {osd.hostname}")
+                        f"Could not mark {osd} down")
 
-            if osd.zap:
-                try:
-                    logger.info(f"Zapping devices for {osd} on {osd.hostname}")
-                    osd.do_zap()
-                    logger.info(f"Successfully zapped devices for {osd} on {osd.hostname}")
-                except Exception:
-                    logger.exception(f"Failed to zap devices for {osd} on {osd.hostname}")
-            self.mgr.cache.invalidate_host_devices(osd.hostname)
-            logger.debug(f"Removing {osd} from the queue.")
+                assert osd.hostname is not None
+
+                if self.mgr.cache.has_daemon(f'osd.{osd.osd_id}'):
+                    CephadmServe(self.mgr)._remove_daemon(f'osd.{osd.osd_id}', osd.hostname)
+                    logger.info(f"Successfully removed {osd} on {osd.hostname}")
+                    result = True
+                else:
+                    logger.info(f"Daemon {osd} on {osd.hostname} was already removed")
+
+                any_replace_params: bool = any([osd.replace,
+                                                osd.replace_block,
+                                                osd.replace_db,
+                                                osd.replace_wal])
+                if any_replace_params:
+                    if not osd.destroy():
+                        raise orchestrator.OrchestratorError(
+                            f"Could not destroy {osd}")
+                    logger.info(
+                        f"Successfully destroyed old {osd} on {osd.hostname}; ready for replacement")
+                    # device replace needs a zap so ceph-volume can set being_replaced
+                    if any([osd.replace_block, osd.replace_db, osd.replace_wal]):
+                        osd.zap = True
+                else:
+                    if not osd.purge():
+                        raise orchestrator.OrchestratorError(f"Could not purge {osd}")
+                    logger.info(f"Successfully purged {osd} on {osd.hostname}")
+
+                if osd.zap:
+                    try:
+                        logger.info(f"Zapping devices for {osd} on {osd.hostname}")
+                        osd.do_zap()
+                        logger.info(f"Successfully zapped devices for {osd} on {osd.hostname}")
+                    except Exception:
+                        logger.exception(f"Failed to zap devices for {osd} on {osd.hostname}")
+                self.mgr.cache.invalidate_host_devices(osd.hostname)
+                logger.debug(f"Removing {osd} from the queue.")
+            except Exception as e:
+                logger.exception(f"Failed to complete removal of {osd}: {e}")
+                new_queue.add(osd)
 
         # self could change while this is processing (osds get added from the CLI)
         # The new set is: 'an intersection of all osds that are still not empty/removed (new_queue) and
@@ -1063,9 +1181,17 @@ class OSDRemovalQueue(object):
     def enqueue(self, osd: "OSD") -> None:
         if not osd.exists:
             raise NotFoundError()
+        start_new = False
         with self.lock:
-            self.osds.add(osd)
-        osd.start()
+            for queued in self.osds:
+                if queued.osd_id == osd.osd_id:
+                    queued.update_from(osd)
+                    break
+            else:
+                self.osds.add(osd)
+                start_new = True
+        if start_new:
+            osd.start()
 
     def rm_by_osd_id(self, osd_id: int) -> None:
         osd: Optional["OSD"] = None

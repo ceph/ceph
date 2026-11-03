@@ -43,6 +43,7 @@
 #endif
 
 
+#include "common/debug_level_guard.h"
 #include "crush/CrushLocation.h"
 
 #ifdef HAVE_BREAKPAD
@@ -53,8 +54,6 @@ namespace google_breakpad {
 
 class AdminSocket;
 class AdminSocketHook;
-class CryptoHandler;
-class CryptoRandom;
 class MonMap;
 
 namespace ceph::common {
@@ -90,9 +89,6 @@ public:
     // everything crimson is experimental...
     return true;
   }
-  ceph::PluginRegistry* get_plugin_registry() {
-    return _plugin_registry;
-  }
   CryptoRandom* random() const;
   PerfCountersCollectionImpl* get_perfcounters_collection();
   crimson::common::ConfigProxy& _conf;
@@ -102,7 +98,6 @@ public:
 private:
   std::unique_ptr<CryptoRandom> _crypto_random;
   unsigned nref = 1;
-  ceph::PluginRegistry* _plugin_registry;
 };
 }
 #else
@@ -237,7 +232,9 @@ public:
   /**
    * get a crypto handler
    */
-  CryptoHandler *get_crypto_handler(int type);
+  CryptoManager *get_crypto_manager() {
+    return _crypto_mgr.get();
+  }
 
   CryptoRandom* random() const { return _crypto_random.get(); }
 
@@ -379,9 +376,8 @@ private:
   std::vector<ForkWatcher*> _fork_watchers;
 
   // crypto
-  CryptoHandler *_crypto_none;
-  CryptoHandler *_crypto_aes;
   std::unique_ptr<CryptoRandom> _crypto_random;
+  std::unique_ptr<CryptoManager> _crypto_mgr;
 
   // experimental
   CephContextObs *_cct_obs;
@@ -389,6 +385,9 @@ private:
   std::set<std::string> _experimental_features;
 
   ceph::PluginRegistry* _plugin_registry;
+
+  DebugLevelGuard _debug_level_guard;
+
 #ifdef CEPH_DEBUG_MUTEX
   md_config_obs_t *_lockdep_obs;
 #endif
@@ -397,6 +396,11 @@ private:
   ceph::mutex _msgr_hook_lock = ceph::make_mutex("CephContext::msgr_hook");
 public:
   TOPNSPC::crush::CrushLocation crush_location;
+
+  /// Check debug subsystem levels and auto-revert any that have been
+  /// above high_debug_level_threshold for longer than
+  /// high_debug_level_reset_timeout. Called from daemon tick functions.
+  void check_debug_level_guard();
   void modify_msgr_hook(std::function<AdminSocketHook*(void)> create,
 			std::function<void(AdminSocketHook*)> add);
 private:

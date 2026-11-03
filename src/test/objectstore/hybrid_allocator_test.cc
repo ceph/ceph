@@ -24,6 +24,9 @@ public:
   uint64_t get_avl_free() {
     return AvlAllocator::get_free();
   }
+  bool has_bmap() {
+    return get_bmap() != nullptr;
+  }
 };
 
 const uint64_t _1m = 1024 * 1024;
@@ -287,4 +290,54 @@ TEST(HybridAllocator, fragmentation)
     // which results in the following total fragmentation
     ASSERT_EQ(0.5 * 7 / 8 + 1.0 / 8, ha.get_fragmentation());
   }
+}
+
+// Online expand calls expand() followed by init_add_free() for the new range.
+// After the tree has spilled over into the bitmap, the new range must still
+// be free exactly once.
+TEST(HybridAllocator, expand_after_spillover)
+{
+  uint64_t block_size = 0x1000;
+  uint64_t capacity = 0x100 * _1m; // 256MB
+  TestHybridAllocator ha(g_ceph_context, capacity, block_size,
+    4 * sizeof(range_seg_t), "test_hybrid_allocator");
+
+  // fragmented free space to force spillover into the bitmap
+  for (uint64_t o = 0; o < 16 * _1m; o += 2 * block_size) {
+    ha.init_add_free(o, block_size);
+  }
+  ASSERT_TRUE(ha.has_bmap());
+  uint64_t free_before = ha.get_free();
+
+  ha.expand(2 * capacity);
+  ha.init_add_free(capacity, capacity);
+  EXPECT_EQ(free_before + capacity, ha.get_free());
+
+  std::map<uint64_t, uint64_t> seen;
+  uint64_t overlap = 0;
+  ha.foreach([&](uint64_t o, uint64_t l) {
+    for (uint64_t p = o; p < o + l; p += block_size) {
+      if (seen[p]++) {
+        overlap += block_size;
+      }
+    }
+  });
+  ASSERT_EQ(0u, overlap) << "bytes free in both tree and bitmap";
+
+  PExtentVector all;
+  while (ha.allocate(capacity, block_size, capacity, 0, &all) > 0) {
+  }
+  std::map<uint64_t, uint64_t> owned;
+  uint64_t dup = 0, total = 0;
+  for (auto& e : all) {
+    total += e.length;
+    for (uint64_t p = e.offset; p < e.offset + e.length; p += block_size) {
+      if (owned[p]++) {
+        dup += block_size;
+      }
+    }
+  }
+  EXPECT_EQ(0u, dup) << "bytes allocated twice";
+  EXPECT_EQ(free_before + capacity, total);
+  EXPECT_EQ(0u, ha.get_free());
 }

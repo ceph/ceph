@@ -1,3 +1,6 @@
+import dataclasses
+import time
+
 import pytest
 
 import smb
@@ -576,7 +579,7 @@ def test_error_result():
         ),
     )
     err = smb.handler.ErrorResult(share, msg='test error')
-    assert isinstance(err, smb.handler.Result)
+    assert isinstance(err, smb.handler.ResourceResult)
     assert isinstance(err, Exception)
 
     data = err.to_simplified()
@@ -856,6 +859,164 @@ def test_modify_cluster_only_touches_changed_cluster(thandler):
     assert 'join.0.json' in ekeys
 
 
+def test_modify_joinauth_only_touches_referencing_clusters(thandler):
+    # clustera and clusterb both reference the shared (unlinked) join auth
+    # "shared1". clusterc uses its own, separate join auth. A change to
+    # shared1 must regenerate clustera and clusterb but must not touch
+    # clusterc.
+    to_apply = [
+        smb.resources.JoinAuth(
+            auth_id='shared1',
+            auth=smb.resources.JoinAuthValues(
+                username='testadmin',
+                password='Passw0rd',
+            ),
+        ),
+        smb.resources.JoinAuth(
+            auth_id='join2',
+            auth=smb.resources.JoinAuthValues(
+                username='otheradmin',
+                password='Passw0rd2',
+            ),
+        ),
+    ]
+    for cluster_id, ref in (
+        ('clustera', 'shared1'),
+        ('clusterb', 'shared1'),
+        ('clusterc', 'join2'),
+    ):
+        to_apply.append(
+            _cluster(
+                cluster_id=cluster_id,
+                auth_mode=smb.enums.AuthMode.ACTIVE_DIRECTORY,
+                domain_settings=smb.resources.DomainSettings(
+                    realm='MYDOMAIN.EXAMPLE.ORG',
+                    join_sources=[
+                        smb.resources.JoinSource(
+                            source_type=smb.enums.JoinSourceType.RESOURCE,
+                            ref=ref,
+                        ),
+                    ],
+                ),
+            )
+        )
+
+    results = thandler.apply(to_apply)
+    assert results.success, results.to_simplified()
+
+    for cluster_id in ('clustera', 'clusterb', 'clusterc'):
+        assert 'cluster-info' in list(
+            thandler.public_store.contents(cluster_id)
+        )
+        thandler.public_store.remove((cluster_id, 'cluster-info'))
+
+    # only modify the join auth shared by clustera and clusterb
+    results = thandler.apply(
+        [
+            smb.resources.JoinAuth(
+                auth_id='shared1',
+                auth=smb.resources.JoinAuthValues(
+                    username='testadmin',
+                    password='NewPassw0rd!',
+                ),
+            ),
+        ]
+    )
+    assert results.success, results.to_simplified()
+
+    assert 'cluster-info' in list(thandler.public_store.contents('clustera'))
+    assert 'cluster-info' in list(thandler.public_store.contents('clusterb'))
+    # clusterc doesn't reference shared1, so it must be untouched
+    assert 'cluster-info' not in list(
+        thandler.public_store.contents('clusterc')
+    )
+
+
+def test_modify_joinauth_large_cluster_set_performance(thandler):
+    # Ensure the resync loop over 20 clusters completes quickly when a shared
+    # join auth is modified (each cluster is deserialized to check references).
+    total_clusters = 20
+    shared_auth_id = 'shared1'
+    own_auth_id = 'own1'
+
+    # first 15 clusters share an auth; last 5 use their own
+    shared_ids = [f'cluster{i:02d}' for i in range(15)]
+    own_ids = [f'cluster{i:02d}' for i in range(15, total_clusters)]
+
+    def _ad_cluster(cluster_id, ref):
+        return _cluster(
+            cluster_id=cluster_id,
+            auth_mode=smb.enums.AuthMode.ACTIVE_DIRECTORY,
+            domain_settings=smb.resources.DomainSettings(
+                realm='MYDOMAIN.EXAMPLE.ORG',
+                join_sources=[
+                    smb.resources.JoinSource(
+                        source_type=smb.enums.JoinSourceType.RESOURCE,
+                        ref=ref,
+                    ),
+                ],
+            ),
+        )
+
+    to_apply = [
+        smb.resources.JoinAuth(
+            auth_id=shared_auth_id,
+            auth=smb.resources.JoinAuthValues(
+                username='testadmin',
+                password='Passw0rd',
+            ),
+        ),
+        smb.resources.JoinAuth(
+            auth_id=own_auth_id,
+            auth=smb.resources.JoinAuthValues(
+                username='otheradmin',
+                password='Passw0rd2',
+            ),
+        ),
+    ]
+    to_apply += [_ad_cluster(cid, shared_auth_id) for cid in shared_ids]
+    to_apply += [_ad_cluster(cid, own_auth_id) for cid in own_ids]
+
+    results = thandler.apply(to_apply)
+    assert results.success, results.to_simplified()
+
+    # clear cluster-info to detect which clusters get regenerated
+    for cid in shared_ids + own_ids:
+        thandler.public_store.remove((cid, 'cluster-info'))
+
+    # modify the shared join auth and measure how long the apply takes
+    t0 = time.monotonic()
+    results = thandler.apply(
+        [
+            smb.resources.JoinAuth(
+                auth_id=shared_auth_id,
+                auth=smb.resources.JoinAuthValues(
+                    username='testadmin',
+                    password='NewPassw0rd!',
+                ),
+            ),
+        ]
+    )
+    elapsed = time.monotonic() - t0
+
+    assert results.success, results.to_simplified()
+    # must complete quickly even when all 20 clusters are to be deserialized
+    assert (
+        elapsed < 1.0
+    ), f'apply took {elapsed:.3f}s with {total_clusters} clusters'
+
+    # only clusters referencing shared_auth_id must be regenerated
+    for cid in shared_ids:
+        assert 'cluster-info' in list(
+            thandler.public_store.contents(cid)
+        ), f'{cid} should have been regenerated'
+    # clusters using own_auth_id must not be touched
+    for cid in own_ids:
+        assert 'cluster-info' not in list(
+            thandler.public_store.contents(cid)
+        ), f'{cid} should not have been touched'
+
+
 def test_apply_remove_cluster(thandler):
     test_apply_full_cluster_create(thandler)
     assert ('clusters', 'mycluster1') in thandler.internal_store.data
@@ -994,6 +1155,52 @@ def test_apply_remove_all_clusters(thandler):
     all_ns = thandler.public_store.namespaces()
     assert list(all_ns) == []
     assert thandler._orch.deployed == set()
+
+
+def test_orchestration_continues_without_shares(thandler):
+    class FakeOrch:
+        def __init__(self):
+            self.submitted = []
+
+        def submit_smb_spec(self, spec):
+            self.submitted.append(spec)
+
+    thandler._orch = FakeOrch()
+    thandler._earmark_resolver = _FakeEarmarkResolver()
+    cluster = _cluster(
+        cluster_id='foo',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    share = smb.resources.Share(
+        cluster_id='foo',
+        share_id='s1',
+        cephfs=_cephfs(volume='cephfs', path='/'),
+    )
+    results = thandler.apply([cluster, share])
+    assert results.success, results.to_simplified()
+    assert len(thandler._orch.submitted) == 1
+    info = thandler.public_store['foo', 'cluster-info'].get()
+    assert info['orch_submitted'] is True
+
+    results = thandler.apply(
+        [smb.resources.RemovedShare(cluster_id='foo', share_id='s1')]
+    )
+    assert results.success, results.to_simplified()
+    assert len(thandler._orch.submitted) == 2
+
+    # The service is still deployed; updates must reach it.
+    updated = dataclasses.replace(cluster, custom_dns=['192.168.76.204'])
+    results = thandler.apply([updated])
+    assert results.success, results.to_simplified()
+    assert len(thandler._orch.submitted) == 3
+    assert thandler._orch.submitted[-1].custom_dns == ['192.168.76.204']
+    info = thandler.public_store['foo', 'cluster-info'].get()
+    assert info['orch_submitted'] is True
 
 
 def test_all_resources(thandler):
@@ -1912,3 +2119,164 @@ def test_generate_config_default_compat(thandler):
     share_vfs = cfg['shares']['DefaultShare']['options']['vfs objects']
     assert 'fruit' not in share_vfs
     assert 'streams_xattr' not in share_vfs
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        ({}, True),
+        ({'shares.foo.s1': 'default'}, True),
+        ({'clusters.foo': 'default'}, True),
+        ({'shares.foo.s1': 'disabled'}, False),
+        ({'clusters.foo': 'disabled'}, False),
+        ({'clusters.foo': 'disabled', 'shares.foo.s1': 'default'}, True),
+        ({'clusters.foo': 'disabled', 'shares.foo.s1': 'disabled'}, False),
+        ({'clusters.foo': 'default', 'shares.foo.s1': 'default'}, True),
+        ({'clusters.foo': 'default', 'shares.foo.s1': 'disabled'}, False),
+    ],
+)
+def test_generate_config_acl_support(thandler, params):
+    """Test combinations of the acl_support option for cluster and share."""
+    customize, expect_xattr = params
+    internal_config = {
+        'clusters.foo': {
+            'resource_type': 'ceph.smb.cluster',
+            'cluster_id': 'foo',
+            'auth_mode': 'user',
+            'intent': 'present',
+            'user_group_settings': [
+                {
+                    'source_type': 'empty',
+                }
+            ],
+        },
+        'shares.foo.s1': {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': 'foo',
+            'share_id': 's1',
+            'intent': 'present',
+            'readonly': False,
+            'browseable': True,
+            'cephfs': {
+                'volume': 'cephfs',
+                'path': '/',
+                'provider': 'samba-vfs',
+            },
+        },
+    }
+    for key, value in customize.items():
+        sub = internal_config[key]
+        if key.startswith('clusters.'):
+            sd = sub.setdefault('share_defaults', {})
+            sd['acl_support'] = value
+        elif key.startswith('shares.'):
+            sub['acl_support'] = value
+        else:
+            raise KeyError(key)
+
+    thandler.internal_store.overwrite(internal_config)
+
+    thandler._sync_clusters(['foo'])
+    cfg = thandler.public_store['foo', 'config.smb'].get()
+    assert cfg
+    share_opts = cfg['shares']['s1']['options']
+    if expect_xattr:
+        assert 'acl_xattr' in share_opts['vfs objects']
+        assert 'acl_xattr:security_acl_name' in share_opts
+        assert share_opts['acl_xattr:security_acl_name'] == 'user.NTACL'
+    else:
+        assert 'acl_xattr' not in share_opts['vfs objects']
+        assert 'acl_xattr:security_acl_name' not in share_opts
+
+
+def test_acl_support_no_modify(thandler):
+    internal_config = {
+        'clusters.foo': {
+            'resource_type': 'ceph.smb.cluster',
+            'cluster_id': 'foo',
+            'auth_mode': 'user',
+            'intent': 'present',
+            'user_group_settings': [
+                {
+                    'source_type': 'empty',
+                }
+            ],
+        },
+        'shares.foo.s1': {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': 'foo',
+            'share_id': 's1',
+            'intent': 'present',
+            'readonly': False,
+            'browseable': True,
+            'cephfs': {
+                'volume': 'cephfs',
+                'path': '/',
+                'provider': 'samba-vfs',
+            },
+        },
+    }
+
+    thandler.internal_store.overwrite(internal_config)
+    share2 = smb.resources.Share(
+        cluster_id='foo',
+        share_id='s1',
+        readonly=False,
+        browseable=True,
+        acl_support=smb.enums.ACLSupportPolicy.DISABLED,  # changed
+        cephfs=_cephfs(
+            volume='cephfs',
+            provider=smb.enums.CephFSStorageProvider.SAMBA_VFS,
+        ),
+    )
+    rg = thandler.apply([share2])
+    assert not rg.success, rg.to_simplified()
+    rs = rg.to_simplified()
+    assert 'acl_support value may not be changed' in rs['results'][0]['msg']
+
+
+def test_acl_support_no_modify_cluster(thandler):
+    internal_config = {
+        'clusters.foo': {
+            'resource_type': 'ceph.smb.cluster',
+            'cluster_id': 'foo',
+            'auth_mode': 'user',
+            'intent': 'present',
+            'user_group_settings': [
+                {
+                    'source_type': 'empty',
+                }
+            ],
+        },
+        'shares.foo.s1': {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': 'foo',
+            'share_id': 's1',
+            'intent': 'present',
+            'readonly': False,
+            'browseable': True,
+            'cephfs': {
+                'volume': 'cephfs',
+                'path': '/',
+                'provider': 'samba-vfs',
+            },
+        },
+    }
+
+    thandler.internal_store.overwrite(internal_config)
+    share2 = smb.resources.Cluster(
+        cluster_id='foo',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+        share_defaults=smb.resources.ShareDefaults(
+            acl_support=smb.enums.ACLSupportPolicy.DISABLED,  # changed
+        ),
+    )
+    rg = thandler.apply([share2])
+    assert not rg.success, rg.to_simplified()
+    rs = rg.to_simplified()
+    assert 'acl_support value may not be changed' in rs['results'][0]['msg']

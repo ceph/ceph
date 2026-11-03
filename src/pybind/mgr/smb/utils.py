@@ -1,6 +1,8 @@
 """Assorted utility functions for smb mgr module."""
 from typing import List, Optional, TypeVar
 
+import base64
+import hashlib
 import random
 import string
 
@@ -44,3 +46,27 @@ def rand_name(prefix: str, max_len: int = 18, suffix_len: int = 8) -> str:
         random.choice(string.ascii_lowercase) for _ in range(suffix_len)
     )
     return f'{trunc}{suffix}'
+
+
+def compute_credential_hash(cluster_id: str, user_id: str) -> str:
+    """Compute a deterministic hash for RGW credential identity.
+
+    This function creates a stable credential ID based on the cluster and
+    RGW user, enabling credential reuse and in-place updates across multiple
+    shares that access the same RGW user within the same cluster. Keys are
+    stored in the credential and updated when they change.
+
+    Args:
+        cluster_id: SMB cluster ID (ensures isolation across clusters)
+        user_id: RGW user ID (e.g., "tenant$user" or "user")
+
+    Returns:
+        Hash-based credential ID in format "cred-<hash>" where hash is
+        12 base32 characters from SHA256, providing ~60 bits of entropy
+        (equivalent to 16 hex characters).
+    """
+    identity_str = f"{cluster_id}:{user_id}"
+    hash_digest = base64.b32encode(
+        hashlib.sha256(identity_str.encode()).digest()
+    )[:12].decode('ascii')
+    return f"cred-{hash_digest}"

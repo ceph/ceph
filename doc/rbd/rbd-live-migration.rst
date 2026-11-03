@@ -12,7 +12,7 @@ allocation of data where possible.
 
 By default, when live-migrating RBD images within the same Ceph cluster, the
 source image will be marked read-only and all clients will instead redirect
-IOs to the new target image. In addition, this mode can optionally preserve the
+I/Os to the new target image. In addition, this mode can optionally preserve the
 link to the source image's parent to preserve sparseness, or it can flatten the
 image during the migration to remove the dependency on the source image's
 parent.

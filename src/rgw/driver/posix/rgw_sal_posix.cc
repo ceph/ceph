@@ -2089,7 +2089,7 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   }
 
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
-  quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
+  quota_handler = RGWQuotaHandler::generate_handler(this, true);
 
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
   return 0;
@@ -3392,7 +3392,13 @@ int POSIXObject::copy_object(const ACLOwner& owner,
     }
     break;
   case ATTRSMOD_NONE:
-    attrs = src_attrs;
+    {
+      auto tags = attrs.extract(RGW_ATTR_TAGS);
+      attrs = src_attrs;
+      if (!tags.empty()) {
+        attrs[RGW_ATTR_TAGS] = std::move(tags.mapped());
+      }
+    }
     ret = 0;
     break;
   }
@@ -3634,7 +3640,10 @@ int POSIXObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::s
   return 0;
 }
 
-int POSIXObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+int POSIXObject::chown(const DoutPrefixProvider* dpp,
+                       const rgw_owner& new_owner,
+                       const std::string& new_owner_name,
+                       optional_yield y)
 {
   POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
@@ -4713,7 +4722,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (if_nomatch) {
     if (strcmp(if_nomatch, "*") == 0) {
       // test the object is not existing
-      if (!exists) {
+      if (exists) {
 	return -ERR_PRECONDITION_FAILED;
       }
     } else {

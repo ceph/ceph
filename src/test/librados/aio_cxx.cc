@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <deque>
+#include <future>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -2499,13 +2500,56 @@ TEST(LibRadosAio, PoolEIOFlag) {
     t->join();
   }
 
-  std::scoped_lock l(my_lock);
-  if (missed_eio) {
-    GTEST_SKIP() << "eio flag missed all ios that already completed";
+  {
+    std::scoped_lock l(my_lock);
+    if (missed_eio) {
+      GTEST_SKIP() << "eio flag missed all ios that already completed";
+    }
+    cout << "max_success " << max_success << ", min_failed " << min_failed << std::endl;
+    ASSERT_TRUE(min_failed > 0) << "Did not catch any EIO errors";
+    ASSERT_TRUE(max_success + 1 == min_failed);
   }
-  cout << "max_success " << max_success << ", min_failed " << min_failed << std::endl;
-  ASSERT_TRUE(min_failed > 0) << "Did not catch any EIO errors";
-  ASSERT_TRUE(max_success + 1 == min_failed);
+
+  // Ops submitted to a pool already flagged EIO are failed by the Objecter
+  // without being sent.  Each must still give back its throttle budget.  Use
+  // a second client with a small objecter_inflight_ops: if the budget leaked,
+  // the submit loop would block in the throttle once it ran out.
+  static constexpr unsigned throttle_ops = 16;
+  static constexpr unsigned eio_ops = 4 * throttle_ops;
+  // Heap-allocated so that on a hang the client can be abandoned, rather than
+  // shut down under a thread that is still blocked in its throttle.
+  auto eio_cluster = std::make_unique<Rados>();
+  ASSERT_EQ("", connect_cluster_pp(*eio_cluster,
+    {{"objecter_inflight_ops", stringify(throttle_ops)}}));
+  ASSERT_EQ(0, eio_cluster->wait_for_latest_osdmap());
+
+  // The submitter owns everything it touches (the client excepted, which is
+  // leaked on a hang), so that it can be detached if it never returns.
+  auto not_eio = std::make_shared<std::promise<unsigned>>();
+  auto done = not_eio->get_future();
+  std::thread submitter([c = eio_cluster.get(), pool = test_data.m_pool_name,
+			 oid = test_data.m_oid, bl, not_eio]() mutable {
+    IoCtx ioctx;
+    if (c->ioctx_create(pool.c_str(), ioctx) < 0) {
+      not_eio->set_value(eio_ops);
+      return;
+    }
+    unsigned not_eio_count = 0;
+    for (unsigned i = 0; i < eio_ops; ++i) {
+      if (ioctx.write(oid, bl, bl.length(), 0) != -EIO) {
+        ++not_eio_count;
+      }
+    }
+    not_eio->set_value(not_eio_count);
+  });
+  if (done.wait_for(std::chrono::seconds(60)) != std::future_status::ready) {
+    submitter.detach();
+    std::ignore = eio_cluster.release();
+    GTEST_FAIL() << "writes to an EIO pool blocked: objecter throttle budget leaked";
+  }
+  submitter.join();
+  EXPECT_EQ(0u, done.get()) << "writes to an EIO pool did not all fail with EIO";
+  eio_cluster->shutdown();
 }
 
 // This test case reproduces https://tracker.ceph.com/issues/57152

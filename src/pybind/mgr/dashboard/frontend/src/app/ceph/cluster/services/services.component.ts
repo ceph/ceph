@@ -18,8 +18,6 @@ import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permissions } from '~/app/shared/models/permissions';
 import {
-  CephCertificateStatus,
-  CephServiceCertificate,
   CephServiceSpec,
   CERTIFICATE_STATUS_ICON_MAP
 } from '~/app/shared/models/service.interface';
@@ -85,6 +83,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   selection: CdTableSelection = new CdTableSelection();
   icons = Icons;
   serviceUrls = { grafana: '', prometheus: '', alertmanager: '' };
+  viewUrl = '/services';
   isMgmtGateway: boolean = false;
   statusIconMap = CERTIFICATE_STATUS_ICON_MAP;
 
@@ -97,8 +96,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     private taskWrapperService: TaskWrapperService,
     private router: Router,
     private settingsService: SettingsService,
-    private cdsModalService: ModalCdsService,
-    private cdDatePipe: CdDatePipe
+    private cdsModalService: ModalCdsService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -147,19 +145,18 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
           ])
         : this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.CREATE] } }]);
     } else {
-      let initialState = {};
-      edit
-        ? (initialState = {
+      const initialState = edit
+        ? {
             serviceName: targetServiceName,
             serviceType: targetServiceType,
             hiddenServices: this.hiddenServices,
             editing: edit
-          })
-        : (initialState = {
+          }
+        : {
             hiddenServices: this.hiddenServices,
             editing: edit
-          });
-      let modalRef = this.cdsModalService.show(ServiceFormComponent);
+          };
+      const modalRef = this.cdsModalService.show(ServiceFormComponent);
       Object.assign(modalRef, initialState);
       modalRef.serviceUpdated.subscribe(() => {
         this.table?.reloadData();
@@ -232,6 +229,10 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       this.services = [];
       this.table.reloadData();
     }
+  }
+
+  onServiceLinkClick(event: Event) {
+    event.stopPropagation();
   }
 
   getDisable(
@@ -322,31 +323,5 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     this.settingsService.ifSettingConfigured(url, (url) => {
       this.serviceUrls[serviceType] = url;
     });
-  }
-
-  formatCertificateStatus(cert: CephServiceCertificate): string {
-    if (!cert || !cert.requires_certificate || !cert.status) {
-      return '-';
-    }
-
-    const formattedDate = cert.expiry_date
-      ? this.cdDatePipe.transform(cert.expiry_date, 'DD MMM y')
-      : null;
-
-    switch (cert.status) {
-      case CephCertificateStatus.valid:
-        return formattedDate ? $localize`Valid - ${formattedDate}` : $localize`Valid`;
-      case CephCertificateStatus.expiring:
-      case CephCertificateStatus.expiringSoon:
-        return formattedDate
-          ? $localize`Expiring soon - ${formattedDate}`
-          : $localize`Expiring soon`;
-      case CephCertificateStatus.expired:
-        return formattedDate ? $localize`Expired - ${formattedDate}` : $localize`Expired`;
-      case CephCertificateStatus.notConfigured:
-        return '-';
-      default:
-        return formattedDate ? `${cert.status} - ${formattedDate}` : cert.status;
-    }
   }
 }

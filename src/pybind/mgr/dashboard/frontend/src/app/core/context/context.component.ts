@@ -1,6 +1,9 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { AsyncPipe } from '@angular/common';
+import { Component, Input, OnDestroy, OnInit } from '@angular/core';
 import { Event, NavigationEnd, Router } from '@angular/router';
 
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
+import { TagModule } from 'carbon-components-angular';
 import { NEVER, Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 
@@ -18,7 +21,8 @@ import { TimerService } from '~/app/shared/services/timer.service';
   selector: 'cd-context',
   templateUrl: './context.component.html',
   styleUrls: ['./context.component.scss'],
-  standalone: false
+  standalone: true,
+  imports: [AsyncPipe, NgbDropdownModule, TagModule]
 })
 export class ContextComponent implements OnInit, OnDestroy {
   readonly REFRESH_INTERVAL = 5000;
@@ -27,14 +31,21 @@ export class ContextComponent implements OnInit, OnDestroy {
   private rgwUserUrlPrefix = '/rgw/user';
   private rgwBuckerUrlPrefix = '/rgw/bucket';
   private rgwAccountsUrlPrefix = '/rgw/accounts';
+  private rgwAccountsResourcePagePattern = /^\/rgw\/accounts\/[^/]+\/(overview|roles)(?:$|[?#])/;
   private rgwMultisiteSyncPolicyPrefix = '/rgw/multisite/sync-policy';
   permissions: Permissions;
   featureToggleMap$: FeatureTogglesMap$;
+  isRgwResourcePage = this.isRgwAccountsResourcePage(this.getRoutePath(document.location.href));
   isRgwRoute =
     document.location.href.includes(this.rgwUserUrlPrefix) ||
     document.location.href.includes(this.rgwBuckerUrlPrefix) ||
     document.location.href.includes(this.rgwAccountsUrlPrefix) ||
     document.location.href.includes(this.rgwMultisiteSyncPolicyPrefix);
+
+  /**
+   * When true, show the context bar even outside an RGW route.
+   */
+  @Input() forceShow = false;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -51,20 +62,24 @@ export class ContextComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.router.events
         .pipe(filter((event: Event) => event instanceof NavigationEnd))
-        .subscribe(
-          () =>
-            (this.isRgwRoute = [
-              this.rgwBuckerUrlPrefix,
-              this.rgwUserUrlPrefix,
-              this.rgwAccountsUrlPrefix,
-              this.rgwMultisiteSyncPolicyPrefix
-            ].some((urlPrefix) => this.router.url.startsWith(urlPrefix)))
-        )
+        .subscribe(() => {
+          const currentRoute = this.getRoutePath(this.router.url);
+          this.isRgwRoute = [
+            this.rgwBuckerUrlPrefix,
+            this.rgwUserUrlPrefix,
+            this.rgwAccountsUrlPrefix,
+            this.rgwMultisiteSyncPolicyPrefix
+          ].some((urlPrefix) => this.router.url.startsWith(urlPrefix));
+          this.isRgwResourcePage = this.isRgwAccountsResourcePage(currentRoute);
+        })
     );
-    // Set daemon list polling only when in RGW route:
+    // Set daemon list polling only when in RGW route or forced:
     this.subs.add(
       this.timerService
-        .get(() => (this.isRgwRoute ? this.rgwDaemonService.list() : NEVER), this.REFRESH_INTERVAL)
+        .get(
+          () => (this.isRgwRoute || this.forceShow ? this.rgwDaemonService.list() : NEVER),
+          this.REFRESH_INTERVAL
+        )
         .subscribe()
     );
   }
@@ -75,7 +90,10 @@ export class ContextComponent implements OnInit, OnDestroy {
 
   onDaemonSelection(daemon: RgwDaemon) {
     this.rgwDaemonService.selectDaemon(daemon);
-    this.reloadData();
+    // Embedded overview context refreshes via selectedDaemon$ without remounting.
+    if (!this.forceShow) {
+      this.reloadData();
+    }
   }
 
   private reloadData() {
@@ -83,5 +101,14 @@ export class ContextComponent implements OnInit, OnDestroy {
     this.router.navigateByUrl(this.rgwUrlPrefix, { skipLocationChange: true }).finally(() => {
       this.router.navigate([currentUrl]);
     });
+  }
+
+  private isRgwAccountsResourcePage(url: string): boolean {
+    return this.rgwAccountsResourcePagePattern.test(url);
+  }
+
+  private getRoutePath(url: string): string {
+    const hashIndex = url.indexOf('#');
+    return hashIndex === -1 ? url : url.slice(hashIndex + 1);
   }
 }

@@ -525,11 +525,14 @@ void FilterDriver::get_quota(RGWQuota& quota)
   return next->get_quota(quota);
 }
 
-void FilterDriver::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
-				RGWRateLimitInfo& user_ratelimit,
-				RGWRateLimitInfo& anon_ratelimit)
+void FilterDriver::get_ratelimit(
+    RGWRateLimitInfo& bucket_ratelimit,
+    RGWRateLimitInfo& user_ratelimit,
+    RGWRateLimitInfo& account_ratelimit,
+    RGWRateLimitInfo& anon_ratelimit)
 {
-  return next->get_ratelimit(bucket_ratelimit, user_ratelimit, anon_ratelimit);
+  return next->get_ratelimit(
+      bucket_ratelimit, user_ratelimit, account_ratelimit, anon_ratelimit);
 }
 
 int FilterDriver::set_buckets_enabled(const DoutPrefixProvider* dpp,
@@ -1083,6 +1086,12 @@ int FilterObject::load_obj_state(const DoutPrefixProvider *dpp,
   return next->load_obj_state(dpp, y, follow_olh);
 }
 
+int FilterObject::update_olh(const DoutPrefixProvider* dpp, optional_yield y,
+                             uint32_t flags)
+{
+  return next->update_olh(dpp, y, flags);
+}
+
 int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 				Attrs* delattrs, optional_yield y, uint32_t flags)
 {
@@ -1228,9 +1237,12 @@ int FilterObject::omap_set_val_by_key(const DoutPrefixProvider *dpp,
   return next->omap_set_val_by_key(dpp, key, val, must_exist, y);
 }
 
-int FilterObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+int FilterObject::chown(const DoutPrefixProvider* dpp,
+                        const rgw_owner& new_owner,
+                        const std::string& new_owner_name,
+                        optional_yield y)
 {
-  return next->chown(new_user, dpp, y);
+  return next->chown(dpp, new_owner, new_owner_name, y);
 }
 
 int FilterObject::FilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)

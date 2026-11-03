@@ -15,14 +15,8 @@ the startup script is trying to start the process as a
 ``www-data`` or ``apache`` user and an existing ``.asok`` is 
 preventing the script from starting the daemon.
 
-The radosgw init script (/etc/init.d/radosgw) also has a verbose argument that
-can provide some insight as to what could be the issue::
-
-  /etc/init.d/radosgw start -v
-
-or ::
-
-  /etc/init.d radosgw start --verbose
+To see why the gateway did not start, check the status of its service (see
+:ref:`rados-operating-daemons`) and the gateway's log.
 
 HTTP Request Errors
 ===================
@@ -39,7 +33,7 @@ Crashed ``radosgw`` process
 ===========================
 
 If the ``radosgw`` process dies, you will normally see a 500 error
-from the web server (apache, nginx, etc.).  In that situation, simply
+from the web server (Apache, NGINX, etc.).  In that situation, simply
 restarting radosgw will restore service.
 
 To diagnose the cause of the crash, check the log in ``/var/log/ceph``

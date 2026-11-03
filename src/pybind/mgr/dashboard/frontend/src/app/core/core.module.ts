@@ -32,11 +32,11 @@ import { NavigationModule } from './navigation/navigation.module';
     IconModule,
     ThemeModule,
     ButtonModule,
-    TagModule
+    TagModule,
+    ContextComponent
   ],
-  exports: [NavigationModule],
+  exports: [NavigationModule, ContextComponent],
   declarations: [
-    ContextComponent,
     WorkbenchLayoutComponent,
     BlankLayoutComponent,
     LoginLayoutComponent,

@@ -5,6 +5,18 @@ export interface MgrModuleInfo {
   options: Record<string, MgrModuleOption>;
 }
 
+export function decodeModuleName(value: string): string {
+  if (!value) {
+    return '';
+  }
+
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 interface MgrModuleOption {
   name: string;
   type: string;

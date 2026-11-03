@@ -163,6 +163,12 @@ private:
     none,       // protocol should have been aborted or failed
   };
 
+  // AUTH
+  template <typename Func>
+  seastar::future<std::invoke_result_t<Func&, AuthConnectionMeta&>>
+  call_auth(Func func);
+  seastar::future<> finish_remote_auth();
+
   // CONNECTING (client)
   seastar::future<> handle_auth_reply();
   inline seastar::future<> client_auth() {
@@ -269,6 +275,9 @@ private:
   std::optional<seastar::shared_promise<>> pr_exit_io;
 
   AuthConnectionMetaRef auth_meta;
+  // auth_meta's counterpart on the auth reactor, when the auth handlers
+  // live on another reactor, see call_auth()
+  seastar::foreign_ptr<std::unique_ptr<AuthConnectionMeta>> remote_auth_meta;
 
   crimson::common::Gated gate;
 

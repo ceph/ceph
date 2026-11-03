@@ -21,6 +21,7 @@
 #include <iterator>
 #include <vector>
 #include <cstdlib>
+#include "common/Cond.h"
 #include "common/DecayCounter.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -32,12 +33,14 @@
 #include "common/cmdparse.h"
 #include "log/Log.h"
 
+#include "msg/Messenger.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSLoadTargets.h"
 #include "messages/MMDSMap.h"
 #include "messages/MMDSTableRequest.h"
 #include "messages/MMDSMetrics.h"
+#include "msg/Messenger.h"
 
 #include "mgr/MgrClient.h"
 
@@ -482,6 +485,7 @@ MDSRank::MDSRank(
     damage_table(whoami_), sessionmap(this),
     op_tracker(g_ceph_context, g_conf()->mds_enable_op_tracker,
                g_conf()->osd_num_op_tracker_shard),
+    phase_tracker(msgr->cct, mds_lock_),
     progress_thread(this), whoami(whoami_),
     purge_queue(g_ceph_context, whoami_,
       mdsmap_->get_metadata_pool(), objecter,
@@ -510,7 +514,6 @@ MDSRank::MDSRank(
   purge_queue.update_op_limit(*mdsmap);
 
   objecter->unset_honor_pool_full();
-  objecter->set_balanced_budget();
 
   finisher = new Finisher(cct, "MDSRank", "mds-rank-fin");
 
@@ -539,6 +542,8 @@ MDSRank::MDSRank(
                                            cct->_conf->mds_op_history_duration);
   op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->mds_op_history_slow_op_size,
                                                     cct->_conf->mds_op_history_slow_op_threshold);
+
+  phase_tracker.set_enabled(cct->_conf.get_val<bool>("mds_enable_phase_tracker"));
 
   schedule_update_timer_task();
 }
@@ -708,7 +713,13 @@ void MDSRank::set_mdsmap_multimds_snaps_allowed()
 
 void MDSRankDispatcher::tick()
 {
+  MDSPhaseTracker::Timer phase_timer(&phase_tracker, l_mdsp_tick);
+
   heartbeat_reset();
+
+  /* mds_lock accounting is cumulative in the mutex itself; fold it into the
+   * perf counters here rather than on every acquisition. */
+  phase_tracker.update_lock_stats();
 
   if (beacon.is_laggy()) {
     dout(1) << "skipping upkeep work because connection to Monitors appears laggy" << dendl;
@@ -729,6 +740,7 @@ void MDSRankDispatcher::tick()
 
   // ...
   if (is_clientreplay() || is_active() || is_stopping()) {
+    MDSPhaseTracker::Timer locker_timer(&phase_tracker, l_mdsp_locker_tick);
     server->clear_laggy_clients();
     server->find_idle_sessions();
     server->evict_cap_revoke_non_responders();
@@ -745,7 +757,10 @@ void MDSRankDispatcher::tick()
     server->reconnect_tick();
 
   if (is_active()) {
-    balancer->tick();
+    {
+      MDSPhaseTracker::Timer balancer_timer(&phase_tracker, l_mdsp_balancer_tick);
+      balancer->tick();
+    }
     mdcache->find_stale_fragment_freeze();
     mdcache->migrator->find_stale_export_freeze();
 
@@ -1229,6 +1244,9 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
 
 void MDSRank::handle_message(const cref_t<Message> &m)
 {
+  MDSPhaseTracker::Timer phase_timer(
+    &phase_tracker, MDSPhaseTracker::phase_for_message(m->get_type()));
+
   int port = m->get_type() & 0xff00;
 
   switch (port) {
@@ -1321,6 +1339,7 @@ void MDSRank::_advance_queues()
   ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 
   if (!finished_queue.empty()) {
+    MDSPhaseTracker::Timer phase_timer(&phase_tracker, l_mdsp_finished_contexts);
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
     while (!finished_queue.empty()) {
       auto fin = finished_queue.front();
@@ -3120,6 +3139,11 @@ void MDSRankDispatcher::handle_asok_command(
     std::lock_guard l(mds_lock);
     mdcache->stray_status(ctx);
     return;
+  } else if (command == "dump phase times") {
+    /* deliberately without mds_lock: the whole point is to report how busy
+     * the lock is, and taking it here would both perturb that and block on
+     * whatever phase we are trying to measure */
+    phase_tracker.dump(f);
   } else if (command == "dump qos") {
     std::lock_guard l(mds_lock);
     mds_dmclock_scheduler->dump(f);
@@ -3132,6 +3156,12 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "qos get") {
     std::lock_guard l(mds_lock);
     mds_dmclock_scheduler->process_asok_qos_get(cmdmap, *css, f);
+  } else if (command == "quarantine enable") {
+    command_quarantine_dir(cmdmap, std::move(on_finish), QUARANTINE_ADD);
+    return;
+  } else if (command == "quarantine disable") {
+    command_quarantine_dir(cmdmap, std::move(on_finish), QUARANTINE_DEL);
+    return;
   } else {
     r = -ENOSYS;
   }
@@ -3309,8 +3339,9 @@ int MDSRank::_command_export_dir(
     std::string_view path,
     mds_rank_t target)
 {
+  auto fp = filepath(path, {.drop_trailing = true});
+
   std::lock_guard l(mds_lock);
-  filepath fp(path);
 
   if (target == whoami || !mdsmap->is_up(target) || !mdsmap->is_in(target)) {
     derr << "bad MDS target " << target << dendl;
@@ -3347,10 +3378,11 @@ void MDSRank::command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Format
   }
 
   auto dump = [&](Formatter *f) {
+    auto fp = filepath(root, {.drop_trailing = true});
     std::lock_guard l(mds_lock);
-    CInode *in = mdcache->cache_traverse(filepath(root.c_str()));
+    CInode *in = mdcache->cache_traverse(fp);
     if (!in) {
-      ss << "inode for path '" << filepath(root.c_str()) << "' is not in cache";
+      ss << "inode for path '" << fp << "' is not in cache";
       return;
     }
     f->open_array_section("inodes");
@@ -3386,7 +3418,8 @@ CDir *MDSRank::_command_dirfrag_get(
     return NULL;
   }
 
-  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  auto fp = filepath(path, {.drop_trailing = true});
+  CInode *in = mdcache->cache_traverse(fp);
   if (!in) {
     // TODO really we should load something in if it's not in cache,
     // but the infrastructure is harder, and we might still be unable
@@ -3462,7 +3495,8 @@ bool MDSRank::command_dirfrag_merge(
     return false;
   }
 
-  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  auto fp = filepath(path, {.drop_trailing = true});
+  CInode *in = mdcache->cache_traverse(fp);
   if (!in) {
     ss << "directory '" << path << "' inode not in cache";
     return false;
@@ -3492,7 +3526,8 @@ bool MDSRank::command_dirfrag_ls(
     return false;
   }
 
-  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  auto fp = filepath(path, {.drop_trailing = true});
+  CInode *in = mdcache->cache_traverse(fp);
   if (!in) {
     ss << "directory inode not in cache";
     return false;
@@ -3653,7 +3688,8 @@ void MDSRank::command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostrea
   bool dentry_dump = false;
   cmd_getval(cmdmap, "dentry_dump", dentry_dump);
 
-  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  auto fp = filepath(path, {.drop_trailing = true});
+  CInode *in = mdcache->cache_traverse(fp);
   if (!in) {
     ss << "directory inode not in cache";
     return;
@@ -3763,6 +3799,8 @@ void MDSRank::create_logger()
 			    "dir_fetch_complete", "Fetch complete dirfrag");
     mds_plb.add_u64_counter(l_mds_dir_fetch_keys,
 			    "dir_fetch_keys", "Fetch keys from dirfrag");
+    mds_plb.add_u64_counter(l_mds_dir_fetch_background,
+			    "dir_fetch_background", "Background full dirfrag prefetch");
     mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit", "Directory commit");
     mds_plb.add_u64_counter(l_mds_dir_split, "dir_split", "Directory split");
     mds_plb.add_u64_counter(l_mds_dir_merge, "dir_merge", "Directory merge");
@@ -4152,6 +4190,10 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_cap_revoke_eviction_timeout",
     "mds_debug_subtrees",
     "mds_dir_max_entries",
+    "mds_dir_prefetch",
+    "mds_dir_prefetch_backend",
+    "mds_dir_prefetch_backend_hit_threshold",
+    "mds_dir_prefetch_backend_max",
     "mds_dmclock_enable",
     "mds_dmclock_limit",
     "mds_dmclock_reservation",
@@ -4159,6 +4201,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_dump_cache_threshold_file",
     "mds_dump_cache_threshold_formatter",
     "mds_enable_op_tracker",
+    "mds_enable_phase_tracker",
     "mds_export_ephemeral_distributed",
     "mds_export_ephemeral_random",
     "mds_export_ephemeral_random_max",
@@ -4232,6 +4275,9 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
   }
   if (changed.count("mds_enable_op_tracker")) {
     op_tracker.set_tracking(conf->mds_enable_op_tracker);
+  }
+  if (changed.count("mds_enable_phase_tracker")) {
+    phase_tracker.set_enabled(conf.get_val<bool>("mds_enable_phase_tracker"));
   }
   if (changed.count("mds_extraordinary_events_dump_interval")) {
     reset_event_flags();

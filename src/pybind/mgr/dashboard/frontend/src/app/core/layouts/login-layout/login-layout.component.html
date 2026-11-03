@@ -24,17 +24,16 @@
             class="img-fluid pb-3"
           />
           <ul class="list-inline">
-            <li
-              class="list-inline-item p-3"
-              *ngFor="let docItem of docItems"
-            >
-              <cd-doc
-                section="{{ docItem.section }}"
-                docText="{{ docItem.text }}"
-                noSubscribe="true"
-                i18n-docText
-              ></cd-doc>
-            </li>
+            @for (docItem of docItems; track docItem) {
+              <li class="list-inline-item p-3">
+                <cd-doc
+                  section="{{ docItem.section }}"
+                  docText="{{ docItem.text }}"
+                  noSubscribe="true"
+                  i18n-docText
+                ></cd-doc>
+              </li>
+            }
           </ul>
           <cd-custom-login-banner></cd-custom-login-banner>
         </div>

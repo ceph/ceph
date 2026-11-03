@@ -1,0 +1,3645 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "name": "Annotations & Alerts",
+        "type": "dashboard",
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)"
+      },
+      {
+        "name": "Perf tests",
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "iconColor": "orange",
+        "target": {
+          "type": "tags",
+          "tags": [
+            "perf-test"
+          ],
+          "matchAny": true,
+          "limit": 500
+        }
+      }
+    ]
+  },
+  "title": "Crimson OSD",
+  "uid": "crimson-osd",
+  "tags": [
+    "ceph",
+    "crimson"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "DS",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "osd",
+        "label": "OSD",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS}"
+        },
+        "query": {
+          "query": "label_values(osd_reactor_utilization, ceph_daemon)",
+          "refId": "osd"
+        },
+        "definition": "label_values(osd_reactor_utilization, ceph_daemon)",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "sort": 3
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Reactor / CPU",
+      "id": 1,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Reactor utilization per shard (avg over time range)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Rows: OSDs. Columns: reactor shards. Cell: average utilization over the dashboard time range. Select the test window in the time picker to see that run only.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(avg_over_time(osd_reactor_utilization{ceph_daemon=~\"$osd\"}[$__range]), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 6,
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 2,
+      "type": "timeseries",
+      "title": "Reactor utilization per shard: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "One copy of this panel for each OSD selected in the OSD list. One line for each reactor shard of that OSD.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(osd_reactor_utilization{ceph_daemon=~\"$osd\"}, \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}}",
+          "refId": "A"
+        }
+      ],
+      "id": 3,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Reactor utilization (avg of shards)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Seastar reactor utilization, averaged over the shards of each OSD.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "avg by (ceph_daemon) (osd_reactor_utilization{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 4,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Shard imbalance (max - min utilization)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "High value: the load is not balanced between the shards of this OSD.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "max by (ceph_daemon) (osd_reactor_utilization{ceph_daemon=~\"$osd\"}) - min by (ceph_daemon) (osd_reactor_utilization{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 5,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU busy (cores)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Busy reactor time per second = number of cores kept busy.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_reactor_cpu_busy_ms{ceph_daemon=~\"$osd\"}[$__rate_interval])) / 1000",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 6,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Reactor stalls / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_reactor_stalls_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} stalls",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_stall_detector_reported{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} stall reports",
+          "refId": "B"
+        }
+      ],
+      "id": 7,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tasks processed / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_reactor_tasks_processed{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tasks pending",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_reactor_tasks_pending{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      }
+    },
+    {
+      "type": "row",
+      "title": "Network and disk IO",
+      "id": 10,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Network rx per shard (avg over time range)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Rows: OSDs. Columns: reactor shards. Cell: average rate over the dashboard time range. The color scale is shared by all cells.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (ceph_daemon, shard) (rate(osd_network_bytes_received{ceph_daemon=~\"$osd\"}[$__range])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      }
+    },
+    {
+      "type": "table",
+      "title": "Network tx per shard (avg over time range)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Rows: OSDs. Columns: reactor shards. Cell: average rate over the dashboard time range. The color scale is shared by all cells.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (ceph_daemon, shard) (rate(osd_network_bytes_sent{ceph_daemon=~\"$osd\"}[$__range])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 12,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      }
+    },
+    {
+      "type": "table",
+      "title": "Disk read bandwidth per shard (avg over time range)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Rows: OSDs. Columns: reactor shards. Cell: average rate over the dashboard time range. The color scale is shared by all cells.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (ceph_daemon, shard) (rate(osd_io_queue_total_read_bytes{ceph_daemon=~\"$osd\"}[$__range])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 51
+      }
+    },
+    {
+      "type": "table",
+      "title": "Disk write bandwidth per shard (avg over time range)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Rows: OSDs. Columns: reactor shards. Cell: average rate over the dashboard time range. The color scale is shared by all cells.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (ceph_daemon, shard) (rate(osd_io_queue_total_write_bytes{ceph_daemon=~\"$osd\"}[$__range])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 51
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Network throughput",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_network_bytes_received{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} rx",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_network_bytes_sent{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} tx",
+          "refId": "B"
+        }
+      ],
+      "id": 15,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 59
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Disk throughput (io_queue)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_io_queue_total_read_bytes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} read",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_io_queue_total_write_bytes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} write",
+          "refId": "B"
+        }
+      ],
+      "id": 16,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 59
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Disk IOPS (io_queue)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "iops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_io_queue_total_read_ops{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} read",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_io_queue_total_write_ops{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} write",
+          "refId": "B"
+        }
+      ],
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 67
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "io_queue delay and queue length",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "max by (ceph_daemon) (osd_io_queue_delay{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} delay (s)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_io_queue_queue_length{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} queue length",
+          "refId": "B"
+        }
+      ],
+      "id": 18,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 67
+      }
+    },
+    {
+      "type": "row",
+      "title": "mClock scheduler",
+      "id": 19,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 75
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Throttled ops / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Ops that waited 1 ms or more in the mClock scheduler, by op class.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, op_class) (rate(osd_osd_mclock_throttled_ops{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{op_class}}",
+          "refId": "A"
+        }
+      ],
+      "id": 20,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 76
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Avg wait per throttled op",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "total_wait_ms / throttled_ops. Ops that did not wait are not included.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, op_class) (rate(osd_osd_mclock_total_wait_ms{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon, op_class) (rate(osd_osd_mclock_throttled_ops{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{op_class}}",
+          "refId": "A"
+        }
+      ],
+      "id": 21,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 76
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "p99 wait (throttled ops)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "From the throttle_wait_latency histogram. Buckets: 1, 5, 10, 50, 100, 500, 1000 ms, so the value is an estimate between two buckets.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le, ceph_daemon, op_class) (rate(osd_osd_mclock_throttle_wait_latency_bucket{ceph_daemon=~\"$osd\"}[$__rate_interval])))",
+          "legendFormat": "{{ceph_daemon}} {{op_class}}",
+          "refId": "A"
+        }
+      ],
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 84
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Total wait time / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Milliseconds of mClock wait added up over all ops, per second. Shows the total queueing load of each op class.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, op_class) (rate(osd_osd_mclock_total_wait_ms{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{op_class}}",
+          "refId": "A"
+        }
+      ],
+      "id": 23,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 84
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Max wait since OSD start",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Highest wait seen since the OSD started. It never goes down; it resets only when the OSD restarts.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "max by (ceph_daemon, op_class) (osd_osd_mclock_max_wait_ms{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} {{op_class}}",
+          "refId": "A"
+        }
+      ],
+      "id": 24,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 92
+      }
+    },
+    {
+      "type": "table",
+      "title": "Client throttled ops per shard (avg over time range)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Rows: OSDs. Columns: reactor shards. Cell: average rate of client ops that waited in mClock, over the dashboard time range.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (ceph_daemon, shard) (rate(osd_osd_mclock_throttled_ops{ceph_daemon=~\"$osd\", op_class=\"client\"}[$__range])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 25,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 92
+      }
+    },
+    {
+      "type": "row",
+      "title": "SeaStore",
+      "id": 26,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 100
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Avg op latency by op type",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "sum/count of osd_seastore_op_lat (milliseconds).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, latency) (rate(osd_seastore_op_lat_sum{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon, latency) (rate(osd_seastore_op_lat_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{latency}}",
+          "refId": "A"
+        }
+      ],
+      "id": 27,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 101
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Avg do_transaction latency by stage",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "tail=\"all\" samples only (milliseconds).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, stage) (rate(osd_seastore_do_transaction_stage_lat_sum{ceph_daemon=~\"$osd\", tail=\"all\"}[$__rate_interval])) / sum by (ceph_daemon, stage) (rate(osd_seastore_do_transaction_stage_lat_count{ceph_daemon=~\"$osd\", tail=\"all\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{stage}}",
+          "refId": "A"
+        }
+      ],
+      "id": 28,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 101
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Transactions in flight",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_seastore_concurrent_transactions{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} concurrent",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_seastore_pending_transactions{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} pending",
+          "refId": "B"
+        }
+      ],
+      "id": 29,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 109
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Transaction conflicts (invalidated / committed)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_trans_invalidated{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_cache_trans_committed{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 30,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 109
+      }
+    },
+    {
+      "type": "row",
+      "title": "SeaStore cache",
+      "id": 31,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 117
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Cache hit ratio per shard (over time range)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Rows: OSDs. Columns: reactor shards. Cell: cache hits / cache accesses over the dashboard time range.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (ceph_daemon, shard) (increase(osd_cache_cache_hit{ceph_daemon=~\"$osd\"}[$__range])) / sum by (ceph_daemon, shard) (increase(osd_cache_cache_access{ceph_daemon=~\"$osd\"}[$__range])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "min": 0,
+          "max": 1,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 32,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 118
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache hit ratio",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "cache_hit / cache_access: extent lookups found in the cache.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_cache_hit{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_cache_cache_access{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 33,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 126
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache accesses / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_cache_access{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} access",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_cache_hit{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} hit",
+          "refId": "B"
+        }
+      ],
+      "id": 34,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 126
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "LRU hit ratio",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "lru_hit / (lru_hit + lru_miss): touched extents that were already linked in the LRU.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_lru_hit{ceph_daemon=~\"$osd\"}[$__rate_interval])) / (sum by (ceph_daemon) (rate(osd_cache_lru_hit{ceph_daemon=~\"$osd\"}[$__rate_interval])) + sum by (ceph_daemon) (rate(osd_cache_lru_miss{ceph_daemon=~\"$osd\"}[$__rate_interval])))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 35,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 134
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Data read / write hit ratio (LBC)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "hot / (hot + cold). hot = LBC hit, cold = LBC miss, for data reads and data writes.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_read_hit_hot{ceph_daemon=~\"$osd\"}[$__rate_interval])) / (sum by (ceph_daemon) (rate(osd_cache_read_hit_hot{ceph_daemon=~\"$osd\"}[$__rate_interval])) + sum by (ceph_daemon) (rate(osd_cache_read_hit_cold{ceph_daemon=~\"$osd\"}[$__rate_interval])))",
+          "legendFormat": "{{ceph_daemon}} read",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_write_hit_hot{ceph_daemon=~\"$osd\"}[$__rate_interval])) / (sum by (ceph_daemon) (rate(osd_cache_write_hit_hot{ceph_daemon=~\"$osd\"}[$__rate_interval])) + sum by (ceph_daemon) (rate(osd_cache_write_hit_cold{ceph_daemon=~\"$osd\"}[$__rate_interval])))",
+          "legendFormat": "{{ceph_daemon}} write",
+          "refId": "B"
+        }
+      ],
+      "id": 36,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 134
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache size (bytes)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_cache_cached_extent_bytes{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} cached",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_cache_lru_size_bytes{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} LRU",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_cache_dirty_extent_bytes{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} dirty",
+          "refId": "C"
+        }
+      ],
+      "id": 37,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 142
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache size (extents)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_cache_cached_extents{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} cached",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_cache_lru_num_extents{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} LRU",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_cache_dirty_extents{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} dirty",
+          "refId": "C"
+        }
+      ],
+      "id": 38,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 142
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Committed extent bytes / s by effort",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Extent bytes in committed transactions, by effort (READ, MUTATE, RETIRE, FRESH_INVALID, FRESH_INLINE, FRESH_OOL).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, effort) (rate(osd_cache_committed_extent_bytes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{effort}}",
+          "refId": "A"
+        }
+      ],
+      "id": 39,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 150
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Successful read transactions",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_successful_read_extent_bytes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} bytes / s",
+          "refId": "A"
+        }
+      ],
+      "id": 40,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 150
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Transactions created / s by source",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, src) (rate(osd_cache_trans_created{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{src}}",
+          "refId": "A"
+        }
+      ],
+      "id": 41,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 158
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cursor refreshes / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_refresh_parent_total{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} total",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_refresh_invalid_parent{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} invalid parent",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_refresh_unviewable_parent{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} unviewable parent",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_cache_refresh_modified_viewable_parent{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} modified viewable parent",
+          "refId": "D"
+        }
+      ],
+      "id": 42,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 158
+      }
+    },
+    {
+      "type": "row",
+      "title": "Journal and background work (segmented and RBM)",
+      "id": 43,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 166
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Journal records / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_journal_record_num{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 44,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 167
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Journal record group bytes / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_journal_record_group_data_bytes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} data",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_journal_record_group_metadata_bytes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} metadata",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_journal_record_group_padding_bytes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} padding",
+          "refId": "C"
+        }
+      ],
+      "id": 45,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 167
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Journal trimmer: dirty and alloc journal size",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Journal bytes not yet trimmed. Exported as counter, but it is a current size.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_journal_trimmer_dirty_journal_bytes{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} dirty",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_journal_trimmer_alloc_journal_bytes{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} alloc",
+          "refId": "B"
+        }
+      ],
+      "id": 46,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 175
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Background IO blocked / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "User IO blocked by the background cleaner/trimmer.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_background_process_io_blocked_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 47,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 175
+      }
+    },
+    {
+      "type": "row",
+      "title": "Segmented backend (segment cleaner and segment manager)",
+      "id": 48,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 183
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Available space ratio",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "min by (ceph_daemon) (osd_segment_cleaner_available_ratio{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 49,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 184
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Reclaim ratio",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "max by (ceph_daemon) (osd_segment_cleaner_reclaim_ratio{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 50,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 184
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Segment writes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_segment_manager_data_write_bytes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} data",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_segment_manager_metadata_write_bytes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} metadata",
+          "refId": "B"
+        }
+      ],
+      "id": 51,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 192
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Reclaimed bytes / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_segment_cleaner_reclaimed_bytes{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 52,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 192
+      }
+    },
+    {
+      "type": "row",
+      "title": "RBM backend (RBM cleaner and circular bounded journal)",
+      "id": 53,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 200
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "RBM space",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "available = total - journal - used.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_rbm_cleaner_used_bytes{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} used",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_rbm_cleaner_available_bytes{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} available",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_rbm_cleaner_total_bytes{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} total",
+          "refId": "C"
+        }
+      ],
+      "id": 54,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 201
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "RBM used ratio",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Space used by live extents / total space.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_rbm_cleaner_used_bytes{ceph_daemon=~\"$osd\"}) / sum by (ceph_daemon) (osd_rbm_cleaner_total_bytes{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 55,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 201
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CBJ records submitted / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "'had to wait': the record submitter was not available. 'caused a roll': the journal rolled before the submit.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} submitted",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_wait_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} had to wait",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_roll_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} caused a roll",
+          "refId": "C"
+        }
+      ],
+      "id": 56,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 209
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CBJ avg submit latency",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Average over the rate window: rate(latency_total) / rate(count).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_latency_total{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} submit (all records)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_wait_latency_total{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_wait_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} wait (records that waited)",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_roll_latency_total{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_roll_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} roll (records that rolled)",
+          "refId": "C"
+        }
+      ],
+      "id": 57,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 209
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CBJ avg record metadata size",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "submit_record_size counts only the raw metadata length of each record.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_size{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 58,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 217
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CBJ wait time / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Seconds spent waiting per second, added up over all records.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_wait_latency_total{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} waiting for submitter",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_seastore_cbj_submit_record_roll_latency_total{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} rolling",
+          "refId": "B"
+        }
+      ],
+      "id": 59,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 217
+      }
+    },
+    {
+      "type": "row",
+      "title": "Memory",
+      "id": 60,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 225
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Seastar memory",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_memory_allocated_memory{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} allocated",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_memory_free_memory{ceph_daemon=~\"$osd\"})",
+          "legendFormat": "{{ceph_daemon}} free",
+          "refId": "B"
+        }
+      ],
+      "id": 61,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 226
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Malloc failures / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_memory_malloc_failed{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 62,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 226
+      }
+    }
+  ]
+}

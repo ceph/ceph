@@ -40,6 +40,8 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
   table: TableComponent;
   @ViewChild('bucketSizeTpl', { static: true })
   bucketSizeTpl: TemplateRef<any>;
+  @ViewChild('bucketNameTpl', { static: true })
+  bucketNameTpl: TemplateRef<any>;
   @ViewChild('bucketObjectTpl', { static: true })
   bucketObjectTpl: TemplateRef<any>;
   @ViewChild('deleteTpl', { static: true })
@@ -52,6 +54,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
   selection: CdTableSelection = new CdTableSelection();
   declare staleTimeout: number;
   private subs: Subscription = new Subscription();
+  viewUrl = '/rgw/bucket';
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -73,6 +76,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
       {
         name: $localize`Name`,
         prop: 'bid',
+        cellTemplate: this.bucketNameTpl,
         flexGrow: 2
       },
       {

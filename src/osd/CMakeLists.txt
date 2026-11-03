@@ -32,7 +32,6 @@ set(osd_srcs
   Watch.cc
   Session.cc
   SnapMapper.cc
-  osd_types.cc
   scheduler/OpScheduler.cc
   scheduler/OpSchedulerItem.cc
   scheduler/mClockScheduler.cc
@@ -69,7 +68,7 @@ target_link_libraries(osd
   PUBLIC dmclock::dmclock Boost::MPL
   PRIVATE
     legacy-option-headers
-    os heap_profiler cpu_profiler ${FMT_LIB} ${CMAKE_DL_LIBS})
+    os heap_profiler cpu_profiler ${FMT_LIB} ${CRYPTO_LIBS} ${CMAKE_DL_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
 endif()

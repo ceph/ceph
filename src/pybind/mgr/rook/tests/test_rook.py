@@ -1,6 +1,7 @@
 import orchestrator
 from .fixtures import wait
 import pytest
+from types import SimpleNamespace
 from unittest.mock import patch, PropertyMock
 
 from rook.module import RookOrchestrator
@@ -12,6 +13,20 @@ from rook.rook_cluster import RookCluster
 class FakeRookCluster(RookCluster):
     def __init__(self):
         pass
+
+
+def _fake_node(name, addresses, labels=None):
+    """Build a V1Node-like object for get_hosts() tests.
+
+    addresses is a list of (type, address) tuples, mirroring the
+    kubernetes client's V1NodeAddress entries.
+    """
+    return SimpleNamespace(
+        metadata=SimpleNamespace(name=name, labels=labels or {}),
+        status=SimpleNamespace(
+            addresses=[SimpleNamespace(type=t, address=a) for t, a in addresses]
+        ),
+    )
 
 
 class TestRook(object):
@@ -118,3 +133,53 @@ class TestRook(object):
                     assert dds[i].last_deployed == pods[i]['created']
                     assert dds[i].started == pods[i]['started']
                     assert dds[i].last_refresh == pods[i]['refreshed']
+
+    @pytest.mark.parametrize("addresses, expected_addr", [
+        # InternalIP is preferred over the Hostname entry.
+        ([("InternalIP", "10.0.0.1"), ("Hostname", "node-1")], "10.0.0.1"),
+        # InternalIP is preferred regardless of ordering.
+        ([("Hostname", "node-1"), ("InternalIP", "10.0.0.1")], "10.0.0.1"),
+        # No InternalIP: fall back to the first address.
+        ([("ExternalIP", "1.2.3.4"), ("Hostname", "node-1")], "1.2.3.4"),
+        # No addresses at all: get_hosts() passes "" and HostSpec falls
+        # back to the node name (addr = addr or name).
+        ([], "node-1"),
+    ])
+    def test_get_hosts(self, addresses, expected_addr):
+        fake_rook_cluster = FakeRookCluster()
+        node = _fake_node(
+            "node-1",
+            addresses,
+            labels={"ceph-label/mon": "", "kubernetes.io/os": "linux"},
+        )
+        fake_rook_cluster.nodes = SimpleNamespace(items=[node])
+
+        hosts = fake_rook_cluster.get_hosts()
+
+        assert len(hosts) == 1
+        assert hosts[0].hostname == "node-1"
+        assert hosts[0].addr == expected_addr
+        # only ceph-label labels are kept, with the prefix stripped
+        assert hosts[0].labels == ["mon"]
+
+
+class TestFetchK8sItems(object):
+    class FakeResponse:
+        def __init__(self, items):
+            self.items = items
+
+    def test_fetch_spawns_no_watcher_thread(self):
+        from rook.rook_cluster import fetch_k8s_items
+        # one-shot fetches must not spawn watcher threads: a watcher
+        # outlives a short-lived caller and leaks the thread and its
+        # connection. Fail deterministically if a thread is constructed
+        # instead of comparing the process-global active_count(), which
+        # is racy against unrelated threads.
+        def _fail_on_thread(*args, **kwargs):
+            raise AssertionError("fetch_k8s_items must not spawn a thread")
+        with patch('rook.rook_cluster.threading.Thread', _fail_on_thread):
+            items = fetch_k8s_items(lambda: self.FakeResponse(['pod0']))
+            assert items == ['pod0']
+            # the custom-object api returns a plain dict
+            items = fetch_k8s_items(lambda: {'items': ['cr0', 'cr1']})
+            assert items == ['cr0', 'cr1']

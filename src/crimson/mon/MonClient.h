@@ -165,6 +165,8 @@ private:
 			     const std::vector<uint32_t>& allowed_modes) final;
 
 private:
+  seastar::future<> _check_auth_tickets();
+
   void tick();
 
   std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef conn,
@@ -182,9 +184,11 @@ private:
   seastar::future<> handle_config(Ref<MConfig> m);
 
   seastar::future<> on_session_opened();
-private:
+
   seastar::future<> load_keyring();
   seastar::future<> authenticate();
+
+  seastar::future<> _wipe_secrets_and_tickets();
 
   bool is_hunting() const;
   // @param rank, rank of the monitor to be connected, if it is less than 0,

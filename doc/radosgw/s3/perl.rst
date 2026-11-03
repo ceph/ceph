@@ -186,7 +186,7 @@ The output will look something like this::
    http://objects.dreamhost.com:80/my-bucket-name/secret_plans.txt?Signature=XXXXXXXXXXXXXXXXXXXXXXXXXXX&Expires=1316027075&AWSAccessKeyId=XXXXXXXXXXXXXXXXXXX
 
 
-.. _`Amazon::S3`: http://search.cpan.org/~tima/Amazon-S3-0.441/lib/Amazon/S3.pm
-.. _`Amazon::S3::Bucket`: http://search.cpan.org/~tima/Amazon-S3-0.441/lib/Amazon/S3/Bucket.pm
-.. _`Muck::FS::S3`: http://search.cpan.org/~mike/Muck-0.02/
+.. _`Amazon::S3`: https://search.cpan.org/~tima/Amazon-S3-0.441/lib/Amazon/S3.pm
+.. _`Amazon::S3::Bucket`: https://search.cpan.org/~tima/Amazon-S3-0.441/lib/Amazon/S3/Bucket.pm
+.. _`Muck::FS::S3`: https://search.cpan.org/~mike/Muck-0.02/
 

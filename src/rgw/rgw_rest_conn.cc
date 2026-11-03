@@ -130,6 +130,7 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct,
 RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
   : cct(other.cct),
     endpoint_rr_index(other.endpoint_rr_index.load()),
+    in_endpoint_fallback(other.in_endpoint_fallback.load()),
     resolved_endpoints(std::move(other.resolved_endpoints)),
     key(std::move(other.key)),
     self_zone_group(std::move(other.self_zone_group)),
@@ -143,6 +144,7 @@ RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
 {
   cct = other.cct;
   endpoint_rr_index = other.endpoint_rr_index.load();
+  in_endpoint_fallback = other.in_endpoint_fallback.load();
   resolved_endpoints = std::move(other.resolved_endpoints);
   key = std::move(other.key);
   self_zone_group = std::move(other.self_zone_group);
@@ -259,8 +261,21 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
   }
 
   if (num == resolved_endpoints.size()) {
-    ldout(cct, 1) << "ERROR: no valid endpoint (all IPs down for all endpoints)" << dendl;
-    return -EINVAL;
+    // Every tracked IP is down. Return an endpoint without a connect_to hint rather than failing
+    ResolvedEndpoint& res_ep = resolved_endpoints[selected_idx];
+    endpoint.set_url(res_ep.url);
+    if (!in_endpoint_fallback.exchange(true)) {
+      ldout(cct, 1) << "no endpoint has a reachable IP for remote_id=" << remote_id
+        << " (" << resolved_endpoints.size() << " endpoint(s)); returning endpoint "
+        << "URLs without a connect_to hint so libcurl can resolve and connect "
+        << "on its own" << dendl;
+    }
+    return 0;
+  }
+
+  if (in_endpoint_fallback.load() && in_endpoint_fallback.exchange(false)) {
+    ldout(cct, 1) << "remote_id=" << remote_id << " has a reachable endpoint "
+      << "again (" << endpoint.get_url() << "), no longer falling back" << dendl;
   }
 
   populate_connect_to(endpoint, resolved_endpoints[selected_idx]);

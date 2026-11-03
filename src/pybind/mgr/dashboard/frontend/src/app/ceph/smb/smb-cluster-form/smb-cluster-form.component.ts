@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, inject, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -15,9 +15,12 @@ import {
   ClusterRequestModel,
   SMBUsersGroups,
   PublicAddress,
-  SMBCluster
+  SMBCluster,
+  CLIENT_COMPAT,
+  ClientCompat
 } from '../smb.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 import { Icons } from '~/app/shared/enum/icons.enum';
 
 import { FormArray, FormControl, UntypedFormControl, Validators } from '@angular/forms';
@@ -35,8 +38,6 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SmbDomainSettingModalComponent } from '../smb-domain-setting-modal/smb-domain-setting-modal.component';
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
 import { UpperFirstPipe } from '~/app/shared/pipes/upper-first.pipe';
-import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
-import { USERSGROUPS_PATH } from '../smb-usersgroups-list/smb-usersgroups-list.component';
 import { Host } from '~/app/shared/models/host.interface';
 
 @Component({
@@ -46,6 +47,9 @@ import { Host } from '~/app/shared/models/host.interface';
   standalone: false
 })
 export class SmbClusterFormComponent extends CdForm implements OnInit {
+  private readonly ctx = inject(SMB_CONTEXT);
+  private readonly clusterPath = `${this.ctx.basePath}/cluster`;
+  private readonly usersGroupsPath = `${this.ctx.basePath}/standalone`;
   smbForm: CdFormGroup;
   hostsAndLabels$: Observable<{ hosts: any[]; labels: any[] }>;
   hasOrchestrator: boolean;
@@ -86,7 +90,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   ngOnInit() {
     this.action = this.actionLabels.CREATE;
     this.usersGroups$ = this.smbService.listUsersGroups();
-    if (this.router.url.startsWith(`/${CLUSTER_PATH}/${URLVerbs.EDIT}`)) {
+    if (this.route.snapshot.data['editing']) {
       this.isEdit = true;
     }
     this.smbService.modalData$.subscribe((data: DomainSettings) => {
@@ -151,6 +155,9 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         }
         this.smbForm.get('cluster_id').setValue(this.clusterResponse.cluster_id);
         this.smbForm.get('auth_mode').setValue(this.clusterResponse.auth_mode);
+        this.smbForm
+          .get('client_compat')
+          .setValue(this.clusterResponse.client_compat === CLIENT_COMPAT.MacOS);
         if (this.clusterResponse.placement.count) {
           this.smbForm.get('count').setValue(this.clusterResponse.placement.count);
         }
@@ -211,7 +218,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       clustering: new UntypedFormControl(
         CLUSTERING.Default.charAt(0).toUpperCase() + CLUSTERING.Default.slice(1)
       ),
-      public_addrs: new FormArray([])
+      public_addrs: new FormArray([]),
+      client_compat: [false]
     });
 
     this.orchService.status().subscribe((status) => {
@@ -306,12 +314,12 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(`${CLUSTER_PATH}/${urlVerb}`, { cluster_id }),
+        task: new FinishedTask(`${this.clusterPath}/${urlVerb}`, { cluster_id }),
         call: this.smbService.createCluster(requestModel)
       })
       .subscribe({
         complete: () => {
-          this.router.navigate([CLUSTER_PATH]);
+          this.router.navigate([this.clusterPath]);
         },
         error: () => {
           component.smbForm.setErrors({ cdSubmitButton: true });
@@ -383,6 +391,11 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       requestModel.cluster_resource.clustering = rawFormValue.clustering.toLowerCase();
     }
 
+    const clientCompat: ClientCompat = rawFormValue.client_compat
+      ? CLIENT_COMPAT.MacOS
+      : CLIENT_COMPAT.Default;
+    requestModel.cluster_resource.client_compat = clientCompat;
+
     if (rawFormValue.placement?.count) {
       requestModel.cluster_resource.count = rawFormValue.placement.count;
     }
@@ -415,7 +428,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
   editDomainSettingsModal() {
     this.modalService.show(SmbDomainSettingModalComponent, {
-      domainSettingsObject: this.domainSettingsObject
+      domainSettingsObject: this.domainSettingsObject,
+      smbBasePath: this.ctx.basePath
     });
   }
 
@@ -442,7 +456,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   navigateCreateUsersGroups() {
-    this.router.navigate([`${USERSGROUPS_PATH}/${URLVerbs.CREATE}`]);
+    this.router.navigate([`${this.usersGroupsPath}/${URLVerbs.CREATE}`]);
   }
 
   addCustomDns() {

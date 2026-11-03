@@ -181,9 +181,9 @@ describe('SilenceFormComponent', () => {
     const expectError = (action: string, redirected: boolean) => {
       Object.defineProperty(router, 'url', { value: action, configurable: true });
       if (redirected) {
-        expect(() => callInit()).toThrowError(DashboardNotFoundError);
+        expect(() => callInit()).toThrow(DashboardNotFoundError);
       } else {
-        expect(() => callInit()).not.toThrowError();
+        expect(() => callInit()).not.toThrow();
       }
       navigateSpy.calls.reset();
     };

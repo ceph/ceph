@@ -6,7 +6,9 @@ PartOf=ceph-{{agent.fsid}}.target
 Before=ceph-{{agent.fsid}}.target
 
 [Service]
-Type=forking
+Type=simple
+KillMode=control-group
+TimeoutStopSec=30
 ExecStart=/bin/bash {{agent.daemon_dir}}/unit.run
 Restart=on-failure
 RestartSec=10s

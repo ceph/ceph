@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <string>
@@ -184,6 +185,11 @@ public:
     erase(key);
   }
 private:
+  // erased objects waiting for a caller that holds the GIL to drop them
+  std::mutex release_lock;
+  std::vector<PyObject*> to_release;
+  void release_pending();
+
   std::vector<std::string> get_tracked_keys() const noexcept override { return {"mgr_map_cache_enabled"}; }
   void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 };
