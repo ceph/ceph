@@ -6,22 +6,38 @@ import { ServicesPageHelper } from './services.po';
 export class OnboardingHelper extends PageHelper {
   pages = { index: { url: '#/add-storage?welcome=true', id: 'cd-create-cluster' } };
 
+  navigateTo(name: string = null) {
+    name = name || 'index';
+    const page = this.pages[name];
+
+    this.stubOrchestratorEndpoints();
+    cy.visit(page.url);
+    cy.wait(['@orchStatus', '@orchConfig']);
+    cy.get(page.id, { timeout: 60000 });
+  }
+
   onboarding() {
     cy.get('cd-create-cluster').should('contain.text', 'Welcome to Ceph Dashboard');
     cy.get('[aria-label="Add Storage"]').first().click({ force: true });
     cy.get('cd-tearsheet').should('exist');
   }
 
+  /**
+   * Click a step on the outer create-cluster tearsheet only.
+   * Nested forms (e.g. cd-osd-form) also render cds-progress-indicator.
+   */
   selectStep(stepLabel: string) {
-    cy.get('cd-tearsheet cds-progress-indicator').contains(stepLabel).click();
+    cy.get('cd-create-cluster > cd-tearsheet cds-progress-indicator')
+      .contains(stepLabel)
+      .click({ force: true });
   }
 
   clickNext() {
-    cy.get('cd-tearsheet').contains('button', 'Next').click();
+    cy.get('cd-create-cluster > cd-tearsheet').contains('button', 'Next').click();
   }
 
   submitStorage() {
-    cy.get('cd-tearsheet .tearsheet-footer-submit').click();
+    cy.get('cd-create-cluster > cd-tearsheet .tearsheet-footer-submit').click();
   }
 
   doSkip() {
