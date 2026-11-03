@@ -1011,7 +1011,7 @@ int RGWSTSAssumeRoleWithWebIdentity::verify_permission(optional_yield y)
                                       op, *arn, boost::none, owner, p,
                                       s->iam_identity_policies,
                                       s->session_policies)) {
-        ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
+        ldpp_dout(this, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
         return -EPERM;
       }
     }
@@ -1020,7 +1020,7 @@ int RGWSTSAssumeRoleWithWebIdentity::verify_permission(optional_yield y)
                                     op, *arn, boost::none, owner, p,
                                     s->iam_identity_policies,
                                     s->session_policies)) {
-      ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
+      ldpp_dout(this, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
       return -EPERM;
     }
   } catch (rgw::IAM::PolicyParseException& e) {
@@ -1148,7 +1148,7 @@ int RGWSTSAssumeRole::verify_permission(optional_yield y)
                                       op, *arn, boost::none, owner, p,
                                       s->iam_identity_policies,
                                       s->session_policies)) {
-        ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
+        ldpp_dout(this, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
         return -EPERM;
       }
     }
@@ -1157,7 +1157,7 @@ int RGWSTSAssumeRole::verify_permission(optional_yield y)
                                     op, *arn, boost::none, owner, p,
                                     s->iam_identity_policies,
                                     s->session_policies)) {
-      ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
+      ldpp_dout(this, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
       return -EPERM;
     }
   } catch (rgw::IAM::PolicyParseException& e) {
