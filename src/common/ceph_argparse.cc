@@ -577,6 +577,41 @@ static void generic_usage(bool is_server)
   std::cout.flush();
 }
 
+std::vector<std::string> ceph_argparse_drop_unknown_conf_opts(
+  std::vector<const char*>& args)
+{
+  std::vector<std::string> dropped;
+  for (auto i = args.begin(); i != args.end(); ) {
+    const char *arg = *i;
+    if (strcmp(arg, "--") == 0) {
+      // everything past a double dash is for the caller to deal with
+      break;
+    }
+    // "--=bar" has no option name, so it is not one of ours either
+    if (arg[0] != '-' || arg[1] != '-' || arg[2] == '\0' || arg[2] == '=') {
+      ++i;
+      continue;
+    }
+    if (const char *eq = strchr(arg + 2, '='); eq != NULL) {
+      // --foo=bar
+      dropped.emplace_back(arg + 2, eq);
+      i = args.erase(i);
+      continue;
+    }
+    // --foo bar, where the value is a separate argument. Take the next one
+    // only if it is not an option itself, so that a bare flag stays a bare
+    // flag and is left for the caller to reject.
+    auto value = std::next(i);
+    if (value == args.end() || (*value)[0] == '-') {
+      ++i;
+      continue;
+    }
+    dropped.emplace_back(arg + 2);
+    i = args.erase(i, std::next(value));
+  }
+  return dropped;
+}
+
 bool ceph_argparse_need_usage(const std::vector<const char*>& args)
 {
   if (args.empty()) {

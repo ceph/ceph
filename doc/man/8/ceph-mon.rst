@@ -88,6 +88,29 @@ Options
     or the default, to run the daemon.  This will entail providing all
     necessary options to the daemon as arguments.
 
+Configuration Options
+=====================
+
+Any Ceph configuration option may be given on the command line, in either the
+``--name=value`` or the ``--name value`` form.
+
+An option that is not recognized is ignored with a warning rather than treated
+as an error, because a configuration option may have been renamed, retyped or
+removed since the daemon was deployed, and such a daemon should still start.
+The warning naming each ignored option is written to the daemon log. This
+matches how an unknown option is treated when it is read from a configuration
+file or from the Monitor configuration database.
+
+Note that this applies only to options carrying a value. An unrecognized
+argument that takes no value is far more likely to be a mistyped command
+argument than a configuration option, so it is still an error.
+
+Which options are recognized is decided by the version of this daemon's own
+package: the set of known options is compiled in, not retrieved from the
+cluster. In a cluster whose packages are at mixed revisions, as during a
+staggered upgrade, the same option may therefore be applied by one daemon and
+ignored with a warning by another.
+
 Availability
 ============
 
