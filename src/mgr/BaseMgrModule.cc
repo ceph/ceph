@@ -392,7 +392,7 @@ ceph_state_get(BaseMgrModule *self, PyObject *args)
     return NULL;
   }
   dout(10) << __func__ << " what: " << what << " mutable: " << get_mutable << dendl;
-  return self->py_modules->cacheable_get_python(what, (bool)get_mutable);
+  return self->py_modules->cacheable_get_python(what, (bool)get_mutable).into_python();
 }
 
 static PyObject*

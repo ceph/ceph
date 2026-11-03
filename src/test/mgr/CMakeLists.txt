@@ -76,6 +76,7 @@ target_link_libraries(unittest_mgr_servicemap
 # unittest_mgr_map_cache
 add_executable(unittest_mgr_map_cache
   test_mgrmapcache.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyObjectRef.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/MgrMapCache.cc)
 add_ceph_unittest(unittest_mgr_map_cache)
 target_link_libraries(unittest_mgr_map_cache ceph-common global
