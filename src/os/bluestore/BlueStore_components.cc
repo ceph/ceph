@@ -249,14 +249,13 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
 
   explicit LruOnodeCacheShard(CephContext *cct) : bluestore::OnodeCacheShard(cct) {}
 
-  void _add(bluestore::Onode* o, int level) override
+  void _add(bluestore::Onode* o) override
   {
+    // every caller holds a reference besides the onode map's, so the onode
+    // is pinned here; it is linked when that reference is dropped
+    // (maybe_unpin)
+    ceph_assert(o->pin_nref > 1);
     o->set_cached();
-    if (o->pin_nref == 1) {
-      (level > 0) ? lru.push_front(*o) : lru.push_back(*o);
-      o->cache_age_bin = age_bins.front();
-      *(o->cache_age_bin) += 1;
-    }
     ++num; // we count both pinned and unpinned entries
     dout(20) << __func__ << " " << this << " " << o->oid << " added, num="
              << num << dendl;
@@ -356,7 +355,7 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
     }
     _rm(o);
     ceph_assert(o->nref > 1);
-    to->_add(o, 0);
+    to->_add(o);
   }
   void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) override
   {

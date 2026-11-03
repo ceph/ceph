@@ -562,7 +562,7 @@ namespace bluestore {
 
     //The following methods prefixed with '_' to be called under
     // Shard's lock
-    virtual void _add(Onode* o, int level) = 0;
+    virtual void _add(Onode* o) = 0;
     virtual void _rm(Onode* o) = 0;
     virtual void _move_pinned(OnodeCacheShard* to, Onode* o) = 0;
 
