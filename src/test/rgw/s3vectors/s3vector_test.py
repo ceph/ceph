@@ -1,4 +1,5 @@
 import logging
+import math
 import random
 import time
 import threading
@@ -3012,15 +3013,23 @@ def test_query_vectors_with_distance():
     top_k = 5
     for expected_index in [8, 17, 42, 99]:
         query_vector = generate_data(dimension, expected_index)
-        result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k, returnDistance=True)
-        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        query_result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k, returnDistance=True)
+        assert query_result['ResponseMetadata']['HTTPStatusCode'] == 200
         expected_key = 'vec-'+str(expected_index)
-        assert expected_key in [v['key'] for v in result['vectors']]
-        for v in result['vectors']:
+        assert expected_key in [v['key'] for v in query_result['vectors']]
+        for v in query_result['vectors']:
           assert 'distance' in v
-        assert len(result['vectors']) == top_k
-        assert result['distanceMetric'] == 'euclidean'
-        log.info(result['vectors'])
+        assert len(query_result['vectors']) == top_k
+        assert query_result['distanceMetric'] == 'euclidean'
+        log.info(query_result['vectors'])
+        # verify the distance is the euclidean distance (not the squared distance)
+        result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=[v['key'] for v in query_result['vectors']], returnData=True)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        data_by_key = {v['key']: v['data']['float32'] for v in result['vectors']}
+        for v in query_result['vectors']:
+            expected_distance = math.sqrt(sum((a - b) ** 2 for a, b in zip(query_vector['float32'], data_by_key[v['key']])))
+            assert math.isclose(v['distance'], expected_distance, rel_tol=1e-4, abs_tol=1e-5), \
+                f"distance {v['distance']} does not match expected euclidean distance {expected_distance}"
 
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)

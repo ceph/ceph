@@ -2154,6 +2154,7 @@ namespace rgw::s3vector {
       const std::string& index_name,
       bool use_data,
       bool use_distance,
+      bool squared_distance,
       bool vector_query,
       bool use_metadata,
       const bool* matches = nullptr) {
@@ -2211,7 +2212,10 @@ namespace rgw::s3vector {
             if (!use_distance) continue;
             const auto distance_array = std::static_pointer_cast<arrow::FloatArray>(column);
             if (!distance_array->IsNull(row)) {
-              vector_item.distance = distance_array->Value(row);
+              const auto distance = distance_array->Value(row);
+              // for the euclidean metric lancedb returns the squared distance
+              // convert it to the actual distance
+              vector_item.distance = squared_distance ? std::sqrt(distance) : distance;
             } else {
               ldpp_dout(dpp, 5) << "WARNING: s3vector got no distance in record batch for index: " << index_name <<dendl;
             }
@@ -2243,6 +2247,7 @@ namespace rgw::s3vector {
       const std::string& index_name,
       bool use_data,
       bool use_distance,
+      bool squared_distance,
       bool vector_query,
       bool use_metadata) {
     // distance can be used only with vector queries
@@ -2267,7 +2272,7 @@ namespace rgw::s3vector {
       lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
       return 0;
     }
-    return populate_vectors_from_arrow(dpp, c_arrays_ptr, count_out, c_schema_ptr, vectors, index_name, use_data, use_distance, vector_query, use_metadata);
+    return populate_vectors_from_arrow(dpp, c_arrays_ptr, count_out, c_schema_ptr, vectors, index_name, use_data, use_distance, squared_distance, vector_query, use_metadata);
   }
 
   int get_vectors(const VectorBucketConfig<get_vectors_t>& operation, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply) {
@@ -2352,7 +2357,7 @@ namespace rgw::s3vector {
       return -EIO;
     }
 
-    const auto result = populate_vectors_from_query(dpp, query_result, reply.vectors, configuration.index_name, configuration.return_data, false, false, configuration.return_metadata);
+    const auto result = populate_vectors_from_query(dpp, query_result, reply.vectors, configuration.index_name, configuration.return_data, false, false, false, configuration.return_metadata);
     lancedb_table_free(table);
     lancedb_connection_free(conn);
     return result;
@@ -2480,7 +2485,7 @@ namespace rgw::s3vector {
     }
 
     int ret;
-    if (ret = populate_vectors_from_query(dpp, query_result, reply.vectors, configuration.index_name, configuration.return_data, false, false, configuration.return_metadata); ret == 0) {
+    if (ret = populate_vectors_from_query(dpp, query_result, reply.vectors, configuration.index_name, configuration.return_data, false, false, false, configuration.return_metadata); ret == 0) {
       const auto total_row_count = lancedb_table_count_rows(table);
       const auto next_offset = reply.vectors.size() + configuration.offset;
       if (next_offset < total_row_count) {
@@ -2760,6 +2765,9 @@ namespace rgw::s3vector {
       return lancedb_error_to_errno(result);
     }
 
+    // lancedb returns the squared distance for the euclidean metric
+    const bool squared_distance = reply.distance_metric == DistanceMetric::EUCLIDEAN;
+
     const auto effective_top_k = json_filter_expr
         ? static_cast<unsigned int>(std::lround(configuration.top_k * dpp->get_cct()->_conf->rgw_s3vector_topk_post_filter_factor))
         : configuration.top_k;
@@ -2829,7 +2837,7 @@ namespace rgw::s3vector {
       } else {
         const bool need_distance = configuration.return_distance || (effective_top_k > configuration.top_k);
         ret = populate_vectors_from_arrow(dpp, c_arrays_ptr, count_out, c_schema_ptr, reply.vectors, configuration.index_name,
-            false, need_distance, true, configuration.return_metadata, matches);
+            false, need_distance, squared_distance, true, configuration.return_metadata, matches);
         if (ret == 0 && reply.vectors.size() > configuration.top_k) {
           // if we received more than k vectors (due to using the factor when post filtering)
           // we return the top k ones based on distance
@@ -2847,7 +2855,7 @@ namespace rgw::s3vector {
       }
       lancedb_free_json_matches(matches);
     } else {
-      ret = populate_vectors_from_query(dpp, query_result, reply.vectors, configuration.index_name, false, configuration.return_distance, true, configuration.return_metadata);
+      ret = populate_vectors_from_query(dpp, query_result, reply.vectors, configuration.index_name, false, configuration.return_distance, squared_distance, true, configuration.return_metadata);
     }
 
     lancedb_table_free(table);
