@@ -1393,7 +1393,8 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     target_obj->set_attrs(meta_obj->get_attrs());
   }
 
-  if (!serializer->is_locked()) {
+  std::optional locked_until = serializer->is_locked_until();
+  if (!locked_until) {
     // lock renewal failed, it's not safe to commit the head object
     ret = -ERR_INTERNAL_ERROR;
     ldpp_dout(dpp, 0) << "This multipart completion is already in progress" << ret << dendl;

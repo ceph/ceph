@@ -4976,12 +4976,15 @@ static void renewal(const DoutPrefixProvider* dpp,
 
   // run the renewal loop until canceled
   while (yield.get_cancellation_state().cancelled() == boost::asio::cancellation_type::none) {
+    const auto requested_at = ceph::real_clock::now();
     boost::system::error_code ec;
     timer.expires_after(renew_every);
     timer.async_wait(yield[ec]);
     if (ec) {
       break;
     }
+    // update lock expiration time
+    serializer.set_locked_until(requested_at + dur);
 
     // for renewal testing, inject an error from lock renewal
     ceph_assert(dpp->get_cct());

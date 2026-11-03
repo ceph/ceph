@@ -3555,7 +3555,7 @@ int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan du
 
   POSIXBucket* b = static_cast<POSIXBucket*>(obj->get_bucket());
   if (b->get_dir()->get_type() == ObjectType::MULTIPART && b->get_dir_fd(dpp) > 0) {
-    locked = true;
+    locked_until = ceph::real_clock::now() + dur;
     return 0;
   }
 

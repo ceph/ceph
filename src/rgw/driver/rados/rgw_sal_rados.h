@@ -968,6 +968,8 @@ public:
 
   virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
+
+  void set_locked_until(ceph::real_time t) { locked_until = t; }
 };
 
 class LCRadosSerializer : public StoreLCSerializer {

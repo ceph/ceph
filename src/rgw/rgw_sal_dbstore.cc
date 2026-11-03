@@ -619,7 +619,7 @@ namespace rgw::sal {
 
   int MPDBSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
   {
-    locked = true;
+    locked_until = ceph::real_clock::now() + dur;
     return 0;
   }
 

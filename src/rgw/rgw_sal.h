@@ -1679,8 +1679,8 @@ public:
   virtual ~MPSerializer() = default;
 
   virtual void clear_locked() = 0;
-  /** Check to see if locked */
-  virtual bool is_locked() = 0;
+  /** If locked, return the lock's expiration time */
+  virtual std::optional<ceph::real_time> is_locked_until() = 0;
 };
 
 /** @brief Abstraction of a serializer for Lifecycle
