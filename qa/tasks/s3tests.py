@@ -444,7 +444,9 @@ def run_tests(ctx, config):
             attrs += ['not sse_s3']
         if not client_config.get('s3select_tests', False):
             attrs += ["not s3select"]
-       
+        if not client_config.get('sse-c-block-by-default'):
+            attrs += ['not sse_c_block_by_default']
+
         attrs += client_config.get('extra_attrs', [])
         if 'unit_test_scan' in client_config and client_config['unit_test_scan']:
             xmlfile_id = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S--") + str(uuid.uuid4())
