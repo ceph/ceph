@@ -1,0 +1,1442 @@
+<section id="datum-read-plan" aria-labelledby="datum-read-heading">
+<h2 id="datum-read-heading">Choosing the next storage reads</h2>
+<p>Several requests cover overlapping parts of one object, and some requested bytes are already
+cached. We need to read each uncached byte once while limiting how much data we read per batch.
+Datum merges the overlaps, splits requests around cached data, and shortens the last read when
+necessary.</p>
+<style>
+#datum-read-plan {
+  --ink:#203e39; --muted:#566d65; --line:#d7e0d7; --teal:#156958; --pale:#e4eee5;
+  margin:32px 0; scroll-margin-top:60px; color:var(--ink); font:14px/1.6 system-ui,sans-serif;
+}
+#datum-read-plan * { box-sizing:border-box; }
+#datum-read-plan h2, #datum-read-plan h3 {
+  background:transparent; border:0; padding:0; text-transform:none;
+}
+#datum-read-plan > h2 { font:27px/1.25 Georgia,serif; margin:0 0 14px; }
+#datum-read-plan > p { font-size:15px; line-height:1.7; margin:0 0 22px; }
+#datum-read-plan button { cursor:pointer; border:1px solid var(--line); border-radius:6px;
+  background:white; padding:8px 14px; color:var(--ink); white-space:nowrap; font:inherit; }
+#datum-read-plan button:hover { background:var(--pale); border-color:#91ae9b; }
+#datum-read-plan button:focus-visible, #datum-read-plan a:focus-visible,
+#datum-read-plan input:focus-visible, #datum-read-plan summary:focus-visible {
+  outline:3px solid #b87527; outline-offset:4px;
+}
+#datum-read-plan input { font:inherit; }
+#datum-read-plan [hidden] { display:none; }
+
+#datum-read-plan .demo { background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden;
+      box-shadow:0 12px 48px #193d3422; }
+#datum-read-plan .demo-head { display:flex; justify-content:space-between; align-items:center;
+      padding:22px 28px; gap:20px; border-bottom:1px solid var(--line); }
+
+#datum-read-plan .demo-head p { font-size:13px; color:var(--muted); margin:5px 0 0; }
+
+
+#datum-read-plan .reset { font-size:12px; }
+#datum-read-plan .controls { display:grid; grid-template-columns:1fr 1fr 1fr; gap:28px; padding:24px 28px 22px;
+      background:#fbfcf8; border-bottom:1px solid var(--line); }
+#datum-read-plan .control { min-width:0; }
+#datum-read-plan .control label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
+#datum-read-plan .control .value { font-size:22px; font-weight:550; display:flex; align-items:baseline; gap:6px;
+      font-variant-numeric:tabular-nums; }
+#datum-read-plan .control .value small { font-size:12px; color:var(--muted); font-weight:400; }
+#datum-read-plan input[type=range] { display:block; width:100%; height:28px; margin:9px 0 0;
+      accent-color:var(--teal); cursor:pointer; }
+#datum-read-plan .control.budget .value { color:var(--teal); }
+#datum-read-plan .plot { padding:26px 28px 18px; }
+#datum-read-plan .axis { display:grid; grid-template-columns:136px 1fr; font-size:11px; color:var(--muted);
+      padding-bottom:12px; }
+#datum-read-plan .ticks { display:flex; justify-content:space-between; position:relative; }
+#datum-read-plan .ticks span:first-child { transform:translateX(-1px); }
+#datum-read-plan .ticks span:last-child { transform:translateX(2px); }
+#datum-read-plan .lane { display:grid; grid-template-columns:136px 1fr; align-items:center; margin-bottom:16px; }
+#datum-read-plan .lane-label { font-size:13px; font-weight:600; line-height:1.5; }
+#datum-read-plan .lane-label small { display:block; color:var(--muted); font-size:11px; font-weight:400; }
+#datum-read-plan .bars { position:relative; height:28px; border-left:1px solid #c9d6cb;
+      border-right:1px solid #c9d6cb; background-color:#f5f7f2;
+      background-image:repeating-linear-gradient(to right,transparent,transparent calc(12.5% - 1px),
+        #dce5dc calc(12.5% - 1px),#dce5dc 12.5%); }
+#datum-read-plan .bars--requests { height:61px; }
+#datum-read-plan .segment { position:absolute; top:5px; height:18px; border-radius:3px; min-width:1px; }
+#datum-read-plan .segment.request { height:15px; background:#b0cfc3; border:1px solid #78a693; }
+#datum-read-plan .segment.request:nth-child(2) { background:#84b8a5; }
+#datum-read-plan .segment.request:nth-child(3) { background:#529b81; }
+#datum-read-plan .segment.cache { background:repeating-linear-gradient(135deg,#d9ded9,#d9ded9 4px,#edf0e9 4px,#edf0e9 8px);
+      border:1px solid #9aa99e; }
+#datum-read-plan .segment.missing { background:#faebd6; border:1px solid #c69454; }
+#datum-read-plan .segment.batch { background:var(--teal); border:1px solid #07533f;
+      box-shadow:0 2px 4px #15695820; }
+#datum-read-plan .lane--batch .lane-label { color:var(--teal); }
+#datum-read-plan .plot-note { color:var(--muted); font-size:11px; margin:2px 0 0 136px; }
+#datum-read-plan .outcome { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center;
+      gap:16px; margin:4px 28px 24px; padding:19px 22px; background:#edf4eb;
+      border:1px solid #cbdcc9; border-radius:8px; }
+#datum-read-plan .outcome strong { font-size:19px; font-weight:600; }
+#datum-read-plan .outcome p { margin:4px 0 0; font-size:13px; color:var(--muted); }
+#datum-read-plan .jump { background:#fff; border-color:#b5cbb6; font-size:12px; }
+#datum-read-plan .plan { padding:0 28px 26px; }
+#datum-read-plan .plan-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+#datum-read-plan .plan-heading h3 { margin:0; font-size:12px; text-transform:uppercase; letter-spacing:1px; }
+#datum-read-plan .plan-heading span { color:var(--muted); font-size:12px; }
+#datum-read-plan .chips { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+#datum-read-plan .chip { display:inline-flex; gap:10px; align-items:center; border:1px solid var(--line);
+      border-radius:6px; padding:8px 12px; background:#fcfdf9; font:13px/1.5 ui-monospace,monospace; }
+#datum-read-plan .chip small { color:var(--muted); font:11px/1.5 system-ui,sans-serif; }
+#datum-read-plan .empty { color:var(--muted); font-size:13px; margin:0; }
+#datum-read-plan .code-panel { background:#173d34; color:#e3f1e5; padding:22px 28px 26px; }
+#datum-read-plan .code-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
+      gap:12px; margin-bottom:13px; }
+#datum-read-plan .code-head h3 { margin:0; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:#bbd4c5; }
+#datum-read-plan .code-head span { color:#a8c7b5; font-size:11px; }
+#datum-read-plan pre { margin:0; max-width:100%; overflow:auto; }
+#datum-read-plan pre code { font:13px/1.95 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre; }
+#datum-read-plan .syntax-keyword { color:#9cd4be; }
+#datum-read-plan .syntax-number { color:#ffd199; }
+#datum-read-plan .syntax-comment { color:#9bbcad; }
+#datum-read-plan .syntax-string { color:#e4c38e; }
+#datum-read-plan .source-details { margin-top:18px; border-top:1px solid #365b4b; padding-top:14px; }
+#datum-read-plan summary { cursor:pointer; font-size:12px; color:#c9dfce; width:fit-content; }
+#datum-read-plan .source-details pre { margin-top:18px; }
+#datum-read-plan .source-actions { display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin-top:14px; }
+#datum-read-plan .source-actions a { color:#d3e9d7; font-size:12px; }
+#datum-read-plan .source-actions small { color:#a8c7b5; font-size:11px; }
+    @media(max-width:760px) {
+
+
+
+
+
+
+#datum-read-plan .controls { grid-template-columns:1fr 1fr; gap:16px 22px; }
+#datum-read-plan .control.budget { grid-column:1 / -1; }
+#datum-read-plan .control.budget .value { font-size:26px; }
+#datum-read-plan .demo-head,
+#datum-read-plan .controls,
+#datum-read-plan .plot,
+#datum-read-plan .code-panel { padding-left:18px; padding-right:18px; }
+
+#datum-read-plan .demo-head p { font-size:12px; }
+#datum-read-plan .outcome { margin-left:18px; margin-right:18px; padding:16px; }
+#datum-read-plan .plan { padding-left:18px; padding-right:18px; }
+#datum-read-plan .lane { grid-template-columns:1fr; gap:6px; margin-bottom:14px; }
+#datum-read-plan .lane-label { display:flex; align-items:baseline; gap:8px; }
+#datum-read-plan .lane-label small { display:inline; }
+#datum-read-plan .axis { grid-template-columns:1fr; }
+#datum-read-plan .axis > span { margin-bottom:5px; }
+#datum-read-plan .ticks span:nth-child(even) { visibility:hidden; }
+#datum-read-plan .plot-note { margin-left:0; }
+#datum-read-plan .outcome strong { font-size:17px; }
+
+
+#datum-read-plan pre code { font-size:12px; }
+#datum-read-plan .chip { font-size:12px; }
+    }
+    @media(prefers-reduced-motion:reduce) {
+#datum-read-plan html { scroll-behavior:auto; } }
+
+#datum-read-plan .demo { box-shadow:0 4px 20px #193d3412; }
+#datum-read-plan .demo-head p { margin:0; }
+#datum-read-plan pre { padding:0; border:0; background:transparent; }
+#datum-read-plan pre code { display:block; background:transparent; color:inherit; border:0; padding:0; }
+#datum-read-plan .plot-caption { color:var(--muted); font-size:12px; margin:0 0 18px; }
+#datum-read-plan .context { margin:18px 0 0; font-size:12px; color:var(--muted); }
+#datum-read-plan .context summary { color:var(--teal); }
+#datum-read-plan .source-actions a { cursor:pointer; text-decoration:underline; }
+
+</style>
+      <section class="demo" aria-label="Interactive storage read planner">
+        <div class="demo-head">
+          <p>Move a request or cached block, then change the per-batch limit.</p>
+          <button class="reset" id="datum-read-reset" type="button" disabled>Reset</button>
+        </div>
+        <div class="controls">
+          <div class="control">
+            <label for="datum-read-request-start">Second request starts at</label>
+            <div class="value"><output id="datum-read-request-value" for="datum-read-request-start">8</output><small>MiB</small></div>
+            <input id="datum-read-request-start" type="range" min="0" max="48" step="4" value="8" aria-describedby="datum-read-request-help" disabled>
+            <span hidden id="datum-read-request-help">Move the second sixteen MiB request; the other two stay fixed.</span>
+          </div>
+          <div class="control">
+            <label for="datum-read-cache-start">First cached block starts at</label>
+            <div class="value"><output id="datum-read-cache-value" for="datum-read-cache-start">4</output><small>MiB</small></div>
+            <input id="datum-read-cache-start" type="range" min="0" max="56" step="4" value="4" aria-describedby="datum-read-cache-help" disabled>
+            <span hidden id="datum-read-cache-help">Move an eight MiB cached block; the other two stay fixed.</span>
+          </div>
+          <div class="control budget">
+            <label for="datum-read-budget">Maximum data per batch</label>
+            <div class="value"><output id="datum-read-budget-value" for="datum-read-budget">14</output><small>MiB</small></div>
+            <input id="datum-read-budget" type="range" min="0" max="64" step="1" value="14" disabled>
+          </div>
+        </div>
+
+        <div class="plot">
+<p class="plot-caption">The top two rows are the inputs; the bottom two show what Datum calculates.</p>
+          <div class="axis"><span>Object offset / MiB</span><div class="ticks" aria-hidden="true">
+            <span>0</span><span>8</span><span>16</span><span>24</span><span>32</span>
+            <span>40</span><span>48</span><span>56</span><span>64</span>
+          </div></div>
+          <div class="lane">
+            <div class="lane-label">Requested<small id="datum-read-requested-total">40 MiB unique</small></div>
+            <div id="datum-read-requested-bars" class="bars bars--requests" role="img" aria-label="Requested object ranges: [0, 16), [8, 24), [40, 56) MiB"><span class="segment request" style="left:0%;width:25%;top:0px;" title="[0, 16) MiB · 16 MiB" aria-hidden="true"></span><span class="segment request" style="left:12.5%;width:25%;top:22px;" title="[8, 24) MiB · 16 MiB" aria-hidden="true"></span><span class="segment request" style="left:62.5%;width:25%;top:44px;" title="[40, 56) MiB · 16 MiB" aria-hidden="true"></span></div>
+          </div>
+          <div class="lane">
+            <div class="lane-label">Already cached<small id="datum-read-cached-total">20 MiB</small></div>
+            <div id="datum-read-cached-bars" class="bars" role="img" aria-label="Ranges already cached: [4, 12), [20, 24), [44, 52) MiB"><span class="segment cache" style="left:6.25%;width:12.5%;" title="[4, 12) MiB · 8 MiB" aria-hidden="true"></span><span class="segment cache" style="left:31.25%;width:6.25%;" title="[20, 24) MiB · 4 MiB" aria-hidden="true"></span><span class="segment cache" style="left:68.75%;width:12.5%;" title="[44, 52) MiB · 8 MiB" aria-hidden="true"></span></div>
+          </div>
+          <div class="lane">
+            <div class="lane-label">Still needed from storage<small id="datum-read-missing-total">20 MiB</small></div>
+            <div id="datum-read-missing-bars" class="bars" role="img" aria-label="Requested ranges still needed from storage: [0, 4), [12, 20), [40, 44), [52, 56) MiB"><span class="segment missing" style="left:0%;width:6.25%;" title="[0, 4) MiB · 4 MiB" aria-hidden="true"></span><span class="segment missing" style="left:18.75%;width:12.5%;" title="[12, 20) MiB · 8 MiB" aria-hidden="true"></span><span class="segment missing" style="left:62.5%;width:6.25%;" title="[40, 44) MiB · 4 MiB" aria-hidden="true"></span><span class="segment missing" style="left:81.25%;width:6.25%;" title="[52, 56) MiB · 4 MiB" aria-hidden="true"></span></div>
+          </div>
+          <div class="lane lane--batch">
+            <div class="lane-label">Read this batch<small id="datum-read-batch-total">14 MiB</small></div>
+            <div id="datum-read-batch-bars" class="bars" role="img" aria-label="Planned reads for this batch: [0, 4), [12, 20), [40, 42) MiB"><span class="segment batch" style="left:0%;width:6.25%;" title="[0, 4) MiB · 4 MiB" aria-hidden="true"></span><span class="segment batch" style="left:18.75%;width:12.5%;" title="[12, 20) MiB · 8 MiB" aria-hidden="true"></span><span class="segment batch" style="left:62.5%;width:3.125%;" title="[40, 42) MiB · 2 MiB" aria-hidden="true"></span></div>
+          </div>
+          <p class="plot-note">Ranges are half-open: [12, 20) means 8 MiB starting at offset 12 MiB.</p>
+        </div>
+
+        <div class="outcome">
+          <div role="status" aria-live="polite" aria-atomic="true">
+            <strong id="datum-read-outcome-title">14 MiB in 3 reads.</strong><p id="datum-read-outcome-detail">28 MiB between the reads; those gaps add no data.</p>
+          </div>
+          <button class="jump" id="datum-read-jump" type="button" disabled>Watch the gap: 12 → 13 MiB</button>
+        </div>
+        <div class="plan">
+          <div class="plan-heading"><h3>The resulting reads</h3><span id="datum-read-remaining">6 MiB left for later</span></div>
+          <div id="datum-read-plan-chips" class="chips"><span class="chip">[0, 4)<small>4 MiB</small></span><span class="chip">[12, 20)<small>8 MiB</small></span><span class="chip">[40, 42)<small>2 MiB</small></span></div>
+        </div>
+
+        <div class="code-panel">
+          <div class="code-head"><h3>The Datum code behind this selection:</h3><span>C++23</span></div>
+          <pre><code id="datum-read-plan-code">const auto requested = iv::compile_intervals(request_ranges);
+const auto cached = iv::compile_intervals(cache_ranges);
+const auto missing = iv::compile_intervals(iv::difference(requested, cached));
+const auto batch = iv::take(missing, 14 * MiB, iv::bytes);</code></pre>
+          <details class="source-details" id="datum-read-source-details">
+            <summary>See the inputs and complete runnable program</summary>
+            <pre><code id="datum-read-full-code">// Plan storage reads around cached data, with a limit on bytes read in one batch.
+#include &lt;datum/interval/metric.h&gt;
+
+#include &lt;algorithm&gt;
+#include &lt;array&gt;
+#include &lt;cstdint&gt;
+#include &lt;iostream&gt;
+
+namespace datum = ceph::salad::datum;
+namespace iv = datum::interval;
+
+int main()
+{
+    constexpr std::uint64_t MiB = 1024 * 1024;
+    const std::array request_ranges {
+        iv::bounds({0, 16 * MiB}),
+        iv::bounds({8 * MiB, 16 * MiB}),
+        iv::bounds({40 * MiB, 16 * MiB})
+    };
+    const std::array cache_ranges {
+        iv::bounds({4 * MiB, 8 * MiB}),
+        iv::bounds({20 * MiB, 4 * MiB}),
+        iv::bounds({44 * MiB, 8 * MiB})
+    };
+
+    const auto requested = iv::compile_intervals(request_ranges);
+    const auto cached = iv::compile_intervals(cache_ranges);
+    const auto missing = iv::compile_intervals(iv::difference(requested, cached));
+    const auto batch = iv::take(missing, 14 * MiB, iv::bytes);
+
+    std::ranges::for_each(batch, [](const auto&amp; part) {
+        std::cout &lt;&lt; &#x27;[&#x27; &lt;&lt; part.lower().key() / MiB &lt;&lt; &quot;, &quot;
+                  &lt;&lt; part.upper().key() / MiB &lt;&lt; &quot;) MiB\n&quot;;
+    });
+}
+</code></pre>
+          </details>
+          <div class="source-actions">
+            <a id="datum-read-download" hidden download="datum-read-plan.cpp">Download this example</a>
+            <small id="datum-read-code-context">The inputs and per-batch limit follow the controls above.</small>
+          </div>
+        </div>
+      </section>
+<p class="context">The starting selection plans three reads of 4, 8, and 2 MiB.
+The top two rows describe requests and cached data; the planner calculates the ranges to read.
+Applications perform the reads and retain control of locking and buffer ownership.</p>
+<details class="context"><summary>About the interactive example</summary>
+<p>The browser displays results generated by the C++23 Datum core for all 12,675 control settings.
+It replays these results rather than compiling C++ in the browser. The downloadable program
+computes the selection directly. The scenario models the cache-hit and cache-miss planning
+problem found in Ceph's write-log cache, with an added limit on data read per batch.</p></details>
+<noscript><p>The initial read plan and code are shown. Enable JavaScript to adjust the controls;
+a complete program is also available from the Complete examples page.</p></noscript>
+
+<script type="application/json" id="datum-read-plans">{
+"unit":"MiB","width":64,"ranges":[
+[[0,16],[40,56]],
+[[0,8],[20,24],[44,52]],
+[[8,16],[40,44],[52,56]],
+[],
+[[8,9]],
+[[8,10]],
+[[8,11]],
+[[8,12]],
+[[8,13]],
+[[8,14]],
+[[8,15]],
+[[8,16]],
+[[8,16],[40,41]],
+[[8,16],[40,42]],
+[[8,16],[40,43]],
+[[8,16],[40,44]],
+[[8,16],[40,44],[52,53]],
+[[8,16],[40,44],[52,54]],
+[[8,16],[40,44],[52,55]],
+[[4,12],[20,24],[44,52]],
+[[0,4],[12,16],[40,44],[52,56]],
+[[0,1]],
+[[0,2]],
+[[0,3]],
+[[0,4]],
+[[0,4],[12,13]],
+[[0,4],[12,14]],
+[[0,4],[12,15]],
+[[0,4],[12,16]],
+[[0,4],[12,16],[40,41]],
+[[0,4],[12,16],[40,42]],
+[[0,4],[12,16],[40,43]],
+[[0,4],[12,16],[40,44]],
+[[0,4],[12,16],[40,44],[52,53]],
+[[0,4],[12,16],[40,44],[52,54]],
+[[0,4],[12,16],[40,44],[52,55]],
+[[8,16],[20,24],[44,52]],
+[[0,8],[40,44],[52,56]],
+[[0,5]],
+[[0,6]],
+[[0,7]],
+[[0,8]],
+[[0,8],[40,41]],
+[[0,8],[40,42]],
+[[0,8],[40,43]],
+[[0,8],[40,44]],
+[[0,8],[40,44],[52,53]],
+[[0,8],[40,44],[52,54]],
+[[0,8],[40,44],[52,55]],
+[[12,24],[44,52]],
+[[0,12],[40,44],[52,56]],
+[[0,9]],
+[[0,10]],
+[[0,11]],
+[[0,12]],
+[[0,12],[40,41]],
+[[0,12],[40,42]],
+[[0,12],[40,43]],
+[[0,12],[40,44]],
+[[0,12],[40,44],[52,53]],
+[[0,12],[40,44],[52,54]],
+[[0,12],[40,44],[52,55]],
+[[16,24],[44,52]],
+[[0,16],[40,44],[52,56]],
+[[0,13]],
+[[0,14]],
+[[0,15]],
+[[0,16]],
+[[0,16],[40,41]],
+[[0,16],[40,42]],
+[[0,16],[40,43]],
+[[0,16],[40,44]],
+[[0,16],[40,44],[52,53]],
+[[0,16],[40,44],[52,54]],
+[[0,16],[40,44],[52,55]],
+[[20,28],[44,52]],
+[[20,32],[44,52]],
+[[20,24],[28,36],[44,52]],
+[[20,24],[32,40],[44,52]],
+[[20,24],[36,52]],
+[[0,16],[52,56]],
+[[0,16],[52,53]],
+[[0,16],[52,54]],
+[[0,16],[52,55]],
+[[20,24],[40,52]],
+[[20,24],[44,52]],
+[[20,24],[44,56]],
+[[20,24],[44,60]],
+[[20,24],[44,52],[56,64]],
+[[0,20],[40,56]],
+[[8,20],[40,44],[52,56]],
+[[8,17]],
+[[8,18]],
+[[8,19]],
+[[8,20]],
+[[8,20],[40,41]],
+[[8,20],[40,42]],
+[[8,20],[40,43]],
+[[8,20],[40,44]],
+[[8,20],[40,44],[52,53]],
+[[8,20],[40,44],[52,54]],
+[[8,20],[40,44],[52,55]],
+[[0,4],[12,20],[40,44],[52,56]],
+[[0,4],[12,17]],
+[[0,4],[12,18]],
+[[0,4],[12,19]],
+[[0,4],[12,20]],
+[[0,4],[12,20],[40,41]],
+[[0,4],[12,20],[40,42]],
+[[0,4],[12,20],[40,43]],
+[[0,4],[12,20],[40,44]],
+[[0,4],[12,20],[40,44],[52,53]],
+[[0,4],[12,20],[40,44],[52,54]],
+[[0,4],[12,20],[40,44],[52,55]],
+[[0,8],[16,20],[40,44],[52,56]],
+[[0,8],[16,17]],
+[[0,8],[16,18]],
+[[0,8],[16,19]],
+[[0,8],[16,20]],
+[[0,8],[16,20],[40,41]],
+[[0,8],[16,20],[40,42]],
+[[0,8],[16,20],[40,43]],
+[[0,8],[16,20],[40,44]],
+[[0,8],[16,20],[40,44],[52,53]],
+[[0,8],[16,20],[40,44],[52,54]],
+[[0,8],[16,20],[40,44],[52,55]],
+[[0,20],[40,44],[52,56]],
+[[0,17]],
+[[0,18]],
+[[0,19]],
+[[0,20]],
+[[0,20],[40,41]],
+[[0,20],[40,42]],
+[[0,20],[40,43]],
+[[0,20],[40,44]],
+[[0,20],[40,44],[52,53]],
+[[0,20],[40,44],[52,54]],
+[[0,20],[40,44],[52,55]],
+[[0,20],[52,56]],
+[[0,20],[52,53]],
+[[0,20],[52,54]],
+[[0,20],[52,55]],
+[[0,24],[40,56]],
+[[0,28],[40,56]],
+[[8,20],[24,28],[40,44],[52,56]],
+[[8,20],[24,25]],
+[[8,20],[24,26]],
+[[8,20],[24,27]],
+[[8,20],[24,28]],
+[[8,20],[24,28],[40,41]],
+[[8,20],[24,28],[40,42]],
+[[8,20],[24,28],[40,43]],
+[[8,20],[24,28],[40,44]],
+[[8,20],[24,28],[40,44],[52,53]],
+[[8,20],[24,28],[40,44],[52,54]],
+[[8,20],[24,28],[40,44],[52,55]],
+[[0,4],[12,20],[24,28],[40,44],[52,56]],
+[[0,4],[12,20],[24,25]],
+[[0,4],[12,20],[24,26]],
+[[0,4],[12,20],[24,27]],
+[[0,4],[12,20],[24,28]],
+[[0,4],[12,20],[24,28],[40,41]],
+[[0,4],[12,20],[24,28],[40,42]],
+[[0,4],[12,20],[24,28],[40,43]],
+[[0,4],[12,20],[24,28],[40,44]],
+[[0,4],[12,20],[24,28],[40,44],[52,53]],
+[[0,4],[12,20],[24,28],[40,44],[52,54]],
+[[0,4],[12,20],[24,28],[40,44],[52,55]],
+[[0,8],[16,20],[24,28],[40,44],[52,56]],
+[[0,8],[16,20],[24,25]],
+[[0,8],[16,20],[24,26]],
+[[0,8],[16,20],[24,27]],
+[[0,8],[16,20],[24,28]],
+[[0,8],[16,20],[24,28],[40,41]],
+[[0,8],[16,20],[24,28],[40,42]],
+[[0,8],[16,20],[24,28],[40,43]],
+[[0,8],[16,20],[24,28],[40,44]],
+[[0,8],[16,20],[24,28],[40,44],[52,53]],
+[[0,8],[16,20],[24,28],[40,44],[52,54]],
+[[0,8],[16,20],[24,28],[40,44],[52,55]],
+[[0,12],[24,28],[40,44],[52,56]],
+[[0,12],[24,25]],
+[[0,12],[24,26]],
+[[0,12],[24,27]],
+[[0,12],[24,28]],
+[[0,12],[24,28],[40,41]],
+[[0,12],[24,28],[40,42]],
+[[0,12],[24,28],[40,43]],
+[[0,12],[24,28],[40,44]],
+[[0,12],[24,28],[40,44],[52,53]],
+[[0,12],[24,28],[40,44],[52,54]],
+[[0,12],[24,28],[40,44],[52,55]],
+[[0,16],[24,28],[40,44],[52,56]],
+[[0,16],[24,25]],
+[[0,16],[24,26]],
+[[0,16],[24,27]],
+[[0,16],[24,28]],
+[[0,16],[24,28],[40,41]],
+[[0,16],[24,28],[40,42]],
+[[0,16],[24,28],[40,43]],
+[[0,16],[24,28],[40,44]],
+[[0,16],[24,28],[40,44],[52,53]],
+[[0,16],[24,28],[40,44],[52,54]],
+[[0,16],[24,28],[40,44],[52,55]],
+[[0,20],[24,28],[40,44],[52,56]],
+[[0,20],[24,25]],
+[[0,20],[24,26]],
+[[0,20],[24,27]],
+[[0,20],[24,28]],
+[[0,20],[24,28],[40,41]],
+[[0,20],[24,28],[40,42]],
+[[0,20],[24,28],[40,43]],
+[[0,20],[24,28],[40,44]],
+[[0,20],[24,28],[40,44],[52,53]],
+[[0,20],[24,28],[40,44],[52,54]],
+[[0,20],[24,28],[40,44],[52,55]],
+[[0,20],[24,28],[52,56]],
+[[0,20],[24,28],[52,53]],
+[[0,20],[24,28],[52,54]],
+[[0,20],[24,28],[52,55]],
+[[0,32],[40,56]],
+[[8,20],[24,32],[40,44],[52,56]],
+[[8,20],[24,29]],
+[[8,20],[24,30]],
+[[8,20],[24,31]],
+[[8,20],[24,32]],
+[[8,20],[24,32],[40,41]],
+[[8,20],[24,32],[40,42]],
+[[8,20],[24,32],[40,43]],
+[[8,20],[24,32],[40,44]],
+[[8,20],[24,32],[40,44],[52,53]],
+[[8,20],[24,32],[40,44],[52,54]],
+[[8,20],[24,32],[40,44],[52,55]],
+[[0,4],[12,20],[24,32],[40,44],[52,56]],
+[[0,4],[12,20],[24,29]],
+[[0,4],[12,20],[24,30]],
+[[0,4],[12,20],[24,31]],
+[[0,4],[12,20],[24,32]],
+[[0,4],[12,20],[24,32],[40,41]],
+[[0,4],[12,20],[24,32],[40,42]],
+[[0,4],[12,20],[24,32],[40,43]],
+[[0,4],[12,20],[24,32],[40,44]],
+[[0,4],[12,20],[24,32],[40,44],[52,53]],
+[[0,4],[12,20],[24,32],[40,44],[52,54]],
+[[0,4],[12,20],[24,32],[40,44],[52,55]],
+[[0,8],[16,20],[24,32],[40,44],[52,56]],
+[[0,8],[16,20],[24,29]],
+[[0,8],[16,20],[24,30]],
+[[0,8],[16,20],[24,31]],
+[[0,8],[16,20],[24,32]],
+[[0,8],[16,20],[24,32],[40,41]],
+[[0,8],[16,20],[24,32],[40,42]],
+[[0,8],[16,20],[24,32],[40,43]],
+[[0,8],[16,20],[24,32],[40,44]],
+[[0,8],[16,20],[24,32],[40,44],[52,53]],
+[[0,8],[16,20],[24,32],[40,44],[52,54]],
+[[0,8],[16,20],[24,32],[40,44],[52,55]],
+[[0,12],[24,32],[40,44],[52,56]],
+[[0,12],[24,29]],
+[[0,12],[24,30]],
+[[0,12],[24,31]],
+[[0,12],[24,32]],
+[[0,12],[24,32],[40,41]],
+[[0,12],[24,32],[40,42]],
+[[0,12],[24,32],[40,43]],
+[[0,12],[24,32],[40,44]],
+[[0,12],[24,32],[40,44],[52,53]],
+[[0,12],[24,32],[40,44],[52,54]],
+[[0,12],[24,32],[40,44],[52,55]],
+[[0,16],[24,32],[40,44],[52,56]],
+[[0,16],[24,29]],
+[[0,16],[24,30]],
+[[0,16],[24,31]],
+[[0,16],[24,32]],
+[[0,16],[24,32],[40,41]],
+[[0,16],[24,32],[40,42]],
+[[0,16],[24,32],[40,43]],
+[[0,16],[24,32],[40,44]],
+[[0,16],[24,32],[40,44],[52,53]],
+[[0,16],[24,32],[40,44],[52,54]],
+[[0,16],[24,32],[40,44],[52,55]],
+[[0,20],[28,32],[40,44],[52,56]],
+[[0,20],[28,29]],
+[[0,20],[28,30]],
+[[0,20],[28,31]],
+[[0,20],[28,32]],
+[[0,20],[28,32],[40,41]],
+[[0,20],[28,32],[40,42]],
+[[0,20],[28,32],[40,43]],
+[[0,20],[28,32],[40,44]],
+[[0,20],[28,32],[40,44],[52,53]],
+[[0,20],[28,32],[40,44],[52,54]],
+[[0,20],[28,32],[40,44],[52,55]],
+[[0,20],[24,32],[40,44],[52,56]],
+[[0,20],[24,29]],
+[[0,20],[24,30]],
+[[0,20],[24,31]],
+[[0,20],[24,32]],
+[[0,20],[24,32],[40,41]],
+[[0,20],[24,32],[40,42]],
+[[0,20],[24,32],[40,43]],
+[[0,20],[24,32],[40,44]],
+[[0,20],[24,32],[40,44],[52,53]],
+[[0,20],[24,32],[40,44],[52,54]],
+[[0,20],[24,32],[40,44],[52,55]],
+[[0,20],[24,32],[52,56]],
+[[0,20],[24,32],[52,53]],
+[[0,20],[24,32],[52,54]],
+[[0,20],[24,32],[52,55]],
+[[0,16],[20,36],[40,56]],
+[[8,16],[24,36],[40,44],[52,56]],
+[[8,16],[24,25]],
+[[8,16],[24,26]],
+[[8,16],[24,27]],
+[[8,16],[24,28]],
+[[8,16],[24,29]],
+[[8,16],[24,30]],
+[[8,16],[24,31]],
+[[8,16],[24,32]],
+[[8,16],[24,33]],
+[[8,16],[24,34]],
+[[8,16],[24,35]],
+[[8,16],[24,36]],
+[[8,16],[24,36],[40,41]],
+[[8,16],[24,36],[40,42]],
+[[8,16],[24,36],[40,43]],
+[[8,16],[24,36],[40,44]],
+[[8,16],[24,36],[40,44],[52,53]],
+[[8,16],[24,36],[40,44],[52,54]],
+[[8,16],[24,36],[40,44],[52,55]],
+[[0,4],[12,16],[24,36],[40,44],[52,56]],
+[[0,4],[12,16],[24,25]],
+[[0,4],[12,16],[24,26]],
+[[0,4],[12,16],[24,27]],
+[[0,4],[12,16],[24,28]],
+[[0,4],[12,16],[24,29]],
+[[0,4],[12,16],[24,30]],
+[[0,4],[12,16],[24,31]],
+[[0,4],[12,16],[24,32]],
+[[0,4],[12,16],[24,33]],
+[[0,4],[12,16],[24,34]],
+[[0,4],[12,16],[24,35]],
+[[0,4],[12,16],[24,36]],
+[[0,4],[12,16],[24,36],[40,41]],
+[[0,4],[12,16],[24,36],[40,42]],
+[[0,4],[12,16],[24,36],[40,43]],
+[[0,4],[12,16],[24,36],[40,44]],
+[[0,4],[12,16],[24,36],[40,44],[52,53]],
+[[0,4],[12,16],[24,36],[40,44],[52,54]],
+[[0,4],[12,16],[24,36],[40,44],[52,55]],
+[[0,8],[24,36],[40,44],[52,56]],
+[[0,8],[24,25]],
+[[0,8],[24,26]],
+[[0,8],[24,27]],
+[[0,8],[24,28]],
+[[0,8],[24,29]],
+[[0,8],[24,30]],
+[[0,8],[24,31]],
+[[0,8],[24,32]],
+[[0,8],[24,33]],
+[[0,8],[24,34]],
+[[0,8],[24,35]],
+[[0,8],[24,36]],
+[[0,8],[24,36],[40,41]],
+[[0,8],[24,36],[40,42]],
+[[0,8],[24,36],[40,43]],
+[[0,8],[24,36],[40,44]],
+[[0,8],[24,36],[40,44],[52,53]],
+[[0,8],[24,36],[40,44],[52,54]],
+[[0,8],[24,36],[40,44],[52,55]],
+[[0,12],[24,36],[40,44],[52,56]],
+[[0,12],[24,33]],
+[[0,12],[24,34]],
+[[0,12],[24,35]],
+[[0,12],[24,36]],
+[[0,12],[24,36],[40,41]],
+[[0,12],[24,36],[40,42]],
+[[0,12],[24,36],[40,43]],
+[[0,12],[24,36],[40,44]],
+[[0,12],[24,36],[40,44],[52,53]],
+[[0,12],[24,36],[40,44],[52,54]],
+[[0,12],[24,36],[40,44],[52,55]],
+[[0,16],[24,36],[40,44],[52,56]],
+[[0,16],[24,33]],
+[[0,16],[24,34]],
+[[0,16],[24,35]],
+[[0,16],[24,36]],
+[[0,16],[24,36],[40,41]],
+[[0,16],[24,36],[40,42]],
+[[0,16],[24,36],[40,43]],
+[[0,16],[24,36],[40,44]],
+[[0,16],[24,36],[40,44],[52,53]],
+[[0,16],[24,36],[40,44],[52,54]],
+[[0,16],[24,36],[40,44],[52,55]],
+[[0,16],[28,36],[40,44],[52,56]],
+[[0,16],[28,29]],
+[[0,16],[28,30]],
+[[0,16],[28,31]],
+[[0,16],[28,32]],
+[[0,16],[28,33]],
+[[0,16],[28,34]],
+[[0,16],[28,35]],
+[[0,16],[28,36]],
+[[0,16],[28,36],[40,41]],
+[[0,16],[28,36],[40,42]],
+[[0,16],[28,36],[40,43]],
+[[0,16],[28,36],[40,44]],
+[[0,16],[28,36],[40,44],[52,53]],
+[[0,16],[28,36],[40,44],[52,54]],
+[[0,16],[28,36],[40,44],[52,55]],
+[[0,16],[32,36],[40,44],[52,56]],
+[[0,16],[32,33]],
+[[0,16],[32,34]],
+[[0,16],[32,35]],
+[[0,16],[32,36]],
+[[0,16],[32,36],[40,41]],
+[[0,16],[32,36],[40,42]],
+[[0,16],[32,36],[40,43]],
+[[0,16],[32,36],[40,44]],
+[[0,16],[32,36],[40,44],[52,53]],
+[[0,16],[32,36],[40,44],[52,54]],
+[[0,16],[32,36],[40,44],[52,55]],
+[[0,16],[24,36],[52,56]],
+[[0,16],[24,36],[52,53]],
+[[0,16],[24,36],[52,54]],
+[[0,16],[24,36],[52,55]],
+[[0,16],[24,56]],
+[[8,16],[24,44],[52,56]],
+[[8,16],[24,37]],
+[[8,16],[24,38]],
+[[8,16],[24,39]],
+[[8,16],[24,40]],
+[[8,16],[24,41]],
+[[8,16],[24,42]],
+[[8,16],[24,43]],
+[[8,16],[24,44]],
+[[8,16],[24,44],[52,53]],
+[[8,16],[24,44],[52,54]],
+[[8,16],[24,44],[52,55]],
+[[0,4],[12,16],[24,44],[52,56]],
+[[0,4],[12,16],[24,37]],
+[[0,4],[12,16],[24,38]],
+[[0,4],[12,16],[24,39]],
+[[0,4],[12,16],[24,40]],
+[[0,4],[12,16],[24,41]],
+[[0,4],[12,16],[24,42]],
+[[0,4],[12,16],[24,43]],
+[[0,4],[12,16],[24,44]],
+[[0,4],[12,16],[24,44],[52,53]],
+[[0,4],[12,16],[24,44],[52,54]],
+[[0,4],[12,16],[24,44],[52,55]],
+[[0,8],[24,44],[52,56]],
+[[0,8],[24,37]],
+[[0,8],[24,38]],
+[[0,8],[24,39]],
+[[0,8],[24,40]],
+[[0,8],[24,41]],
+[[0,8],[24,42]],
+[[0,8],[24,43]],
+[[0,8],[24,44]],
+[[0,8],[24,44],[52,53]],
+[[0,8],[24,44],[52,54]],
+[[0,8],[24,44],[52,55]],
+[[0,12],[24,44],[52,56]],
+[[0,12],[24,37]],
+[[0,12],[24,38]],
+[[0,12],[24,39]],
+[[0,12],[24,40]],
+[[0,12],[24,41]],
+[[0,12],[24,42]],
+[[0,12],[24,43]],
+[[0,12],[24,44]],
+[[0,12],[24,44],[52,53]],
+[[0,12],[24,44],[52,54]],
+[[0,12],[24,44],[52,55]],
+[[0,16],[24,44],[52,56]],
+[[0,16],[24,37]],
+[[0,16],[24,38]],
+[[0,16],[24,39]],
+[[0,16],[24,40]],
+[[0,16],[24,41]],
+[[0,16],[24,42]],
+[[0,16],[24,43]],
+[[0,16],[24,44]],
+[[0,16],[24,44],[52,53]],
+[[0,16],[24,44],[52,54]],
+[[0,16],[24,44],[52,55]],
+[[0,16],[28,44],[52,56]],
+[[0,16],[28,37]],
+[[0,16],[28,38]],
+[[0,16],[28,39]],
+[[0,16],[28,40]],
+[[0,16],[28,41]],
+[[0,16],[28,42]],
+[[0,16],[28,43]],
+[[0,16],[28,44]],
+[[0,16],[28,44],[52,53]],
+[[0,16],[28,44],[52,54]],
+[[0,16],[28,44],[52,55]],
+[[0,16],[32,44],[52,56]],
+[[0,16],[32,37]],
+[[0,16],[32,38]],
+[[0,16],[32,39]],
+[[0,16],[32,40]],
+[[0,16],[32,41]],
+[[0,16],[32,42]],
+[[0,16],[32,43]],
+[[0,16],[32,44]],
+[[0,16],[32,44],[52,53]],
+[[0,16],[32,44],[52,54]],
+[[0,16],[32,44],[52,55]],
+[[0,16],[24,28],[36,44],[52,56]],
+[[0,16],[24,28],[36,37]],
+[[0,16],[24,28],[36,38]],
+[[0,16],[24,28],[36,39]],
+[[0,16],[24,28],[36,40]],
+[[0,16],[24,28],[36,41]],
+[[0,16],[24,28],[36,42]],
+[[0,16],[24,28],[36,43]],
+[[0,16],[24,28],[36,44]],
+[[0,16],[24,28],[36,44],[52,53]],
+[[0,16],[24,28],[36,44],[52,54]],
+[[0,16],[24,28],[36,44],[52,55]],
+[[0,16],[24,40],[52,56]],
+[[0,16],[24,40],[52,53]],
+[[0,16],[24,40],[52,54]],
+[[0,16],[24,40],[52,55]],
+[[0,16],[28,56]],
+[[8,16],[28,44],[52,56]],
+[[8,16],[28,29]],
+[[8,16],[28,30]],
+[[8,16],[28,31]],
+[[8,16],[28,32]],
+[[8,16],[28,33]],
+[[8,16],[28,34]],
+[[8,16],[28,35]],
+[[8,16],[28,36]],
+[[8,16],[28,37]],
+[[8,16],[28,38]],
+[[8,16],[28,39]],
+[[8,16],[28,40]],
+[[8,16],[28,41]],
+[[8,16],[28,42]],
+[[8,16],[28,43]],
+[[8,16],[28,44]],
+[[8,16],[28,44],[52,53]],
+[[8,16],[28,44],[52,54]],
+[[8,16],[28,44],[52,55]],
+[[0,4],[12,16],[28,44],[52,56]],
+[[0,4],[12,16],[28,29]],
+[[0,4],[12,16],[28,30]],
+[[0,4],[12,16],[28,31]],
+[[0,4],[12,16],[28,32]],
+[[0,4],[12,16],[28,33]],
+[[0,4],[12,16],[28,34]],
+[[0,4],[12,16],[28,35]],
+[[0,4],[12,16],[28,36]],
+[[0,4],[12,16],[28,37]],
+[[0,4],[12,16],[28,38]],
+[[0,4],[12,16],[28,39]],
+[[0,4],[12,16],[28,40]],
+[[0,4],[12,16],[28,41]],
+[[0,4],[12,16],[28,42]],
+[[0,4],[12,16],[28,43]],
+[[0,4],[12,16],[28,44]],
+[[0,4],[12,16],[28,44],[52,53]],
+[[0,4],[12,16],[28,44],[52,54]],
+[[0,4],[12,16],[28,44],[52,55]],
+[[0,8],[28,44],[52,56]],
+[[0,8],[28,29]],
+[[0,8],[28,30]],
+[[0,8],[28,31]],
+[[0,8],[28,32]],
+[[0,8],[28,33]],
+[[0,8],[28,34]],
+[[0,8],[28,35]],
+[[0,8],[28,36]],
+[[0,8],[28,37]],
+[[0,8],[28,38]],
+[[0,8],[28,39]],
+[[0,8],[28,40]],
+[[0,8],[28,41]],
+[[0,8],[28,42]],
+[[0,8],[28,43]],
+[[0,8],[28,44]],
+[[0,8],[28,44],[52,53]],
+[[0,8],[28,44],[52,54]],
+[[0,8],[28,44],[52,55]],
+[[0,12],[28,44],[52,56]],
+[[0,12],[28,29]],
+[[0,12],[28,30]],
+[[0,12],[28,31]],
+[[0,12],[28,32]],
+[[0,12],[28,33]],
+[[0,12],[28,34]],
+[[0,12],[28,35]],
+[[0,12],[28,36]],
+[[0,12],[28,37]],
+[[0,12],[28,38]],
+[[0,12],[28,39]],
+[[0,12],[28,40]],
+[[0,12],[28,41]],
+[[0,12],[28,42]],
+[[0,12],[28,43]],
+[[0,12],[28,44]],
+[[0,12],[28,44],[52,53]],
+[[0,12],[28,44],[52,54]],
+[[0,12],[28,44],[52,55]],
+[[0,16],[36,44],[52,56]],
+[[0,16],[36,37]],
+[[0,16],[36,38]],
+[[0,16],[36,39]],
+[[0,16],[36,40]],
+[[0,16],[36,41]],
+[[0,16],[36,42]],
+[[0,16],[36,43]],
+[[0,16],[36,44]],
+[[0,16],[36,44],[52,53]],
+[[0,16],[36,44],[52,54]],
+[[0,16],[36,44],[52,55]],
+[[0,16],[28,32],[40,44],[52,56]],
+[[0,16],[28,32],[40,41]],
+[[0,16],[28,32],[40,42]],
+[[0,16],[28,32],[40,43]],
+[[0,16],[28,32],[40,44]],
+[[0,16],[28,32],[40,44],[52,53]],
+[[0,16],[28,32],[40,44],[52,54]],
+[[0,16],[28,32],[40,44],[52,55]],
+[[0,16],[28,36],[52,56]],
+[[0,16],[28,36],[52,53]],
+[[0,16],[28,36],[52,54]],
+[[0,16],[28,36],[52,55]],
+[[0,16],[28,40],[52,56]],
+[[0,16],[28,40],[52,53]],
+[[0,16],[28,40],[52,54]],
+[[0,16],[28,40],[52,55]],
+[[0,16],[32,56]],
+[[8,16],[32,44],[52,56]],
+[[8,16],[32,33]],
+[[8,16],[32,34]],
+[[8,16],[32,35]],
+[[8,16],[32,36]],
+[[8,16],[32,37]],
+[[8,16],[32,38]],
+[[8,16],[32,39]],
+[[8,16],[32,40]],
+[[8,16],[32,41]],
+[[8,16],[32,42]],
+[[8,16],[32,43]],
+[[8,16],[32,44]],
+[[8,16],[32,44],[52,53]],
+[[8,16],[32,44],[52,54]],
+[[8,16],[32,44],[52,55]],
+[[0,4],[12,16],[32,44],[52,56]],
+[[0,4],[12,16],[32,33]],
+[[0,4],[12,16],[32,34]],
+[[0,4],[12,16],[32,35]],
+[[0,4],[12,16],[32,36]],
+[[0,4],[12,16],[32,37]],
+[[0,4],[12,16],[32,38]],
+[[0,4],[12,16],[32,39]],
+[[0,4],[12,16],[32,40]],
+[[0,4],[12,16],[32,41]],
+[[0,4],[12,16],[32,42]],
+[[0,4],[12,16],[32,43]],
+[[0,4],[12,16],[32,44]],
+[[0,4],[12,16],[32,44],[52,53]],
+[[0,4],[12,16],[32,44],[52,54]],
+[[0,4],[12,16],[32,44],[52,55]],
+[[0,8],[32,44],[52,56]],
+[[0,8],[32,33]],
+[[0,8],[32,34]],
+[[0,8],[32,35]],
+[[0,8],[32,36]],
+[[0,8],[32,37]],
+[[0,8],[32,38]],
+[[0,8],[32,39]],
+[[0,8],[32,40]],
+[[0,8],[32,41]],
+[[0,8],[32,42]],
+[[0,8],[32,43]],
+[[0,8],[32,44]],
+[[0,8],[32,44],[52,53]],
+[[0,8],[32,44],[52,54]],
+[[0,8],[32,44],[52,55]],
+[[0,12],[32,44],[52,56]],
+[[0,12],[32,33]],
+[[0,12],[32,34]],
+[[0,12],[32,35]],
+[[0,12],[32,36]],
+[[0,12],[32,37]],
+[[0,12],[32,38]],
+[[0,12],[32,39]],
+[[0,12],[32,40]],
+[[0,12],[32,41]],
+[[0,12],[32,42]],
+[[0,12],[32,43]],
+[[0,12],[32,44]],
+[[0,12],[32,44],[52,53]],
+[[0,12],[32,44],[52,54]],
+[[0,12],[32,44],[52,55]],
+[[0,16],[32,36],[52,56]],
+[[0,16],[32,36],[52,53]],
+[[0,16],[32,36],[52,54]],
+[[0,16],[32,36],[52,55]],
+[[0,16],[32,40],[52,56]],
+[[0,16],[32,40],[52,53]],
+[[0,16],[32,40],[52,54]],
+[[0,16],[32,40],[52,55]],
+[[0,16],[36,56]],
+[[8,16],[36,44],[52,56]],
+[[8,16],[36,37]],
+[[8,16],[36,38]],
+[[8,16],[36,39]],
+[[8,16],[36,40]],
+[[8,16],[36,41]],
+[[8,16],[36,42]],
+[[8,16],[36,43]],
+[[8,16],[36,44]],
+[[8,16],[36,44],[52,53]],
+[[8,16],[36,44],[52,54]],
+[[8,16],[36,44],[52,55]],
+[[0,4],[12,16],[36,44],[52,56]],
+[[0,4],[12,16],[36,37]],
+[[0,4],[12,16],[36,38]],
+[[0,4],[12,16],[36,39]],
+[[0,4],[12,16],[36,40]],
+[[0,4],[12,16],[36,41]],
+[[0,4],[12,16],[36,42]],
+[[0,4],[12,16],[36,43]],
+[[0,4],[12,16],[36,44]],
+[[0,4],[12,16],[36,44],[52,53]],
+[[0,4],[12,16],[36,44],[52,54]],
+[[0,4],[12,16],[36,44],[52,55]],
+[[0,8],[36,44],[52,56]],
+[[0,8],[36,37]],
+[[0,8],[36,38]],
+[[0,8],[36,39]],
+[[0,8],[36,40]],
+[[0,8],[36,41]],
+[[0,8],[36,42]],
+[[0,8],[36,43]],
+[[0,8],[36,44]],
+[[0,8],[36,44],[52,53]],
+[[0,8],[36,44],[52,54]],
+[[0,8],[36,44],[52,55]],
+[[0,12],[36,44],[52,56]],
+[[0,12],[36,37]],
+[[0,12],[36,38]],
+[[0,12],[36,39]],
+[[0,12],[36,40]],
+[[0,12],[36,41]],
+[[0,12],[36,42]],
+[[0,12],[36,43]],
+[[0,12],[36,44]],
+[[0,12],[36,44],[52,53]],
+[[0,12],[36,44],[52,54]],
+[[0,12],[36,44],[52,55]],
+[[0,16],[36,40],[52,56]],
+[[0,16],[36,40],[52,53]],
+[[0,16],[36,40],[52,54]],
+[[0,16],[36,40],[52,55]],
+[[0,16],[40,60]],
+[[8,16],[40,44],[52,60]],
+[[8,16],[40,44],[52,57]],
+[[8,16],[40,44],[52,58]],
+[[8,16],[40,44],[52,59]],
+[[0,4],[12,16],[40,44],[52,60]],
+[[0,4],[12,16],[40,44],[52,57]],
+[[0,4],[12,16],[40,44],[52,58]],
+[[0,4],[12,16],[40,44],[52,59]],
+[[0,8],[40,44],[52,60]],
+[[0,8],[40,44],[52,57]],
+[[0,8],[40,44],[52,58]],
+[[0,8],[40,44],[52,59]],
+[[0,12],[40,44],[52,60]],
+[[0,12],[40,44],[52,57]],
+[[0,12],[40,44],[52,58]],
+[[0,12],[40,44],[52,59]],
+[[0,16],[40,44],[52,60]],
+[[0,16],[40,44],[52,57]],
+[[0,16],[40,44],[52,58]],
+[[0,16],[40,44],[52,59]],
+[[0,16],[52,60]],
+[[0,16],[52,57]],
+[[0,16],[52,58]],
+[[0,16],[52,59]],
+[[0,16],[40,44],[56,60]],
+[[0,16],[40,44],[56,57]],
+[[0,16],[40,44],[56,58]],
+[[0,16],[40,44],[56,59]],
+[[0,16],[40,64]],
+[[8,16],[40,44],[52,64]],
+[[8,16],[40,44],[52,61]],
+[[8,16],[40,44],[52,62]],
+[[8,16],[40,44],[52,63]],
+[[0,4],[12,16],[40,44],[52,64]],
+[[0,4],[12,16],[40,44],[52,61]],
+[[0,4],[12,16],[40,44],[52,62]],
+[[0,4],[12,16],[40,44],[52,63]],
+[[0,8],[40,44],[52,64]],
+[[0,8],[40,44],[52,61]],
+[[0,8],[40,44],[52,62]],
+[[0,8],[40,44],[52,63]],
+[[0,12],[40,44],[52,64]],
+[[0,12],[40,44],[52,61]],
+[[0,12],[40,44],[52,62]],
+[[0,12],[40,44],[52,63]],
+[[0,16],[40,44],[52,64]],
+[[0,16],[40,44],[52,61]],
+[[0,16],[40,44],[52,62]],
+[[0,16],[40,44],[52,63]],
+[[0,16],[52,64]],
+[[0,16],[52,61]],
+[[0,16],[52,62]],
+[[0,16],[52,63]],
+[[0,16],[40,44],[56,64]],
+[[0,16],[40,44],[56,61]],
+[[0,16],[40,44],[56,62]],
+[[0,16],[40,44],[56,63]],
+[[0,16],[40,44],[60,64]],
+[[0,16],[40,44],[60,61]],
+[[0,16],[40,44],[60,62]],
+[[0,16],[40,44],[60,63]]
+],"cases":{
+"0:0":{"requested":0,"cached":1,"missing":2,"batches":[3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,2]},
+"0:4":{"requested":0,"cached":19,"missing":20,"batches":[3,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,20]},
+"0:8":{"requested":0,"cached":36,"missing":37,"batches":[3,21,22,23,24,38,39,40,41,42,43,44,45,46,47,48,37]},
+"0:12":{"requested":0,"cached":49,"missing":50,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,55,56,57,58,59,60,61,50]},
+"0:16":{"requested":0,"cached":62,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"0:20":{"requested":0,"cached":75,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"0:24":{"requested":0,"cached":76,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"0:28":{"requested":0,"cached":77,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"0:32":{"requested":0,"cached":78,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"0:36":{"requested":0,"cached":79,"missing":80,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,81,82,83,80]},
+"0:40":{"requested":0,"cached":84,"missing":80,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,81,82,83,80]},
+"0:44":{"requested":0,"cached":85,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"0:48":{"requested":0,"cached":86,"missing":71,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71]},
+"0:52":{"requested":0,"cached":87,"missing":71,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71]},
+"0:56":{"requested":0,"cached":88,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"4:0":{"requested":89,"cached":1,"missing":90,"batches":[3,4,5,6,7,8,9,10,11,91,92,93,94,95,96,97,98,99,100,101,90]},
+"4:4":{"requested":89,"cached":19,"missing":102,"batches":[3,21,22,23,24,25,26,27,28,103,104,105,106,107,108,109,110,111,112,113,102]},
+"4:8":{"requested":89,"cached":36,"missing":114,"batches":[3,21,22,23,24,38,39,40,41,115,116,117,118,119,120,121,122,123,124,125,114]},
+"4:12":{"requested":89,"cached":49,"missing":50,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,55,56,57,58,59,60,61,50]},
+"4:16":{"requested":89,"cached":62,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"4:20":{"requested":89,"cached":75,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"4:24":{"requested":89,"cached":76,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"4:28":{"requested":89,"cached":77,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"4:32":{"requested":89,"cached":78,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"4:36":{"requested":89,"cached":79,"missing":138,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,139,140,141,138]},
+"4:40":{"requested":89,"cached":84,"missing":138,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,139,140,141,138]},
+"4:44":{"requested":89,"cached":85,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"4:48":{"requested":89,"cached":86,"missing":134,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134]},
+"4:52":{"requested":89,"cached":87,"missing":134,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134]},
+"4:56":{"requested":89,"cached":88,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"8:0":{"requested":142,"cached":1,"missing":90,"batches":[3,4,5,6,7,8,9,10,11,91,92,93,94,95,96,97,98,99,100,101,90]},
+"8:4":{"requested":142,"cached":19,"missing":102,"batches":[3,21,22,23,24,25,26,27,28,103,104,105,106,107,108,109,110,111,112,113,102]},
+"8:8":{"requested":142,"cached":36,"missing":114,"batches":[3,21,22,23,24,38,39,40,41,115,116,117,118,119,120,121,122,123,124,125,114]},
+"8:12":{"requested":142,"cached":49,"missing":50,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,55,56,57,58,59,60,61,50]},
+"8:16":{"requested":142,"cached":62,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"8:20":{"requested":142,"cached":75,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"8:24":{"requested":142,"cached":76,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"8:28":{"requested":142,"cached":77,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"8:32":{"requested":142,"cached":78,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"8:36":{"requested":142,"cached":79,"missing":138,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,139,140,141,138]},
+"8:40":{"requested":142,"cached":84,"missing":138,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,139,140,141,138]},
+"8:44":{"requested":142,"cached":85,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"8:48":{"requested":142,"cached":86,"missing":134,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134]},
+"8:52":{"requested":142,"cached":87,"missing":134,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134]},
+"8:56":{"requested":142,"cached":88,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"12:0":{"requested":143,"cached":1,"missing":144,"batches":[3,4,5,6,7,8,9,10,11,91,92,93,94,145,146,147,148,149,150,151,152,153,154,155,144]},
+"12:4":{"requested":143,"cached":19,"missing":156,"batches":[3,21,22,23,24,25,26,27,28,103,104,105,106,157,158,159,160,161,162,163,164,165,166,167,156]},
+"12:8":{"requested":143,"cached":36,"missing":168,"batches":[3,21,22,23,24,38,39,40,41,115,116,117,118,169,170,171,172,173,174,175,176,177,178,179,168]},
+"12:12":{"requested":143,"cached":49,"missing":180,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,181,182,183,184,185,186,187,188,189,190,191,180]},
+"12:16":{"requested":143,"cached":62,"missing":192,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,197,198,199,200,201,202,203,192]},
+"12:20":{"requested":143,"cached":75,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"12:24":{"requested":143,"cached":76,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"12:28":{"requested":143,"cached":77,"missing":204,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,209,210,211,212,213,214,215,204]},
+"12:32":{"requested":143,"cached":78,"missing":204,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,209,210,211,212,213,214,215,204]},
+"12:36":{"requested":143,"cached":79,"missing":216,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,217,218,219,216]},
+"12:40":{"requested":143,"cached":84,"missing":216,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,217,218,219,216]},
+"12:44":{"requested":143,"cached":85,"missing":204,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,209,210,211,212,213,214,215,204]},
+"12:48":{"requested":143,"cached":86,"missing":212,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,209,210,211,212]},
+"12:52":{"requested":143,"cached":87,"missing":212,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,209,210,211,212]},
+"12:56":{"requested":143,"cached":88,"missing":204,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,209,210,211,212,213,214,215,204]},
+"16:0":{"requested":220,"cached":1,"missing":221,"batches":[3,4,5,6,7,8,9,10,11,91,92,93,94,145,146,147,148,222,223,224,225,226,227,228,229,230,231,232,221]},
+"16:4":{"requested":220,"cached":19,"missing":233,"batches":[3,21,22,23,24,25,26,27,28,103,104,105,106,157,158,159,160,234,235,236,237,238,239,240,241,242,243,244,233]},
+"16:8":{"requested":220,"cached":36,"missing":245,"batches":[3,21,22,23,24,38,39,40,41,115,116,117,118,169,170,171,172,246,247,248,249,250,251,252,253,254,255,256,245]},
+"16:12":{"requested":220,"cached":49,"missing":257,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,181,182,183,184,258,259,260,261,262,263,264,265,266,267,268,257]},
+"16:16":{"requested":220,"cached":62,"missing":269,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,274,275,276,277,278,279,280,269]},
+"16:20":{"requested":220,"cached":75,"missing":281,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,282,283,284,285,286,287,288,289,290,291,292,281]},
+"16:24":{"requested":220,"cached":76,"missing":126,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,131,132,133,134,135,136,137,126]},
+"16:28":{"requested":220,"cached":77,"missing":204,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,209,210,211,212,213,214,215,204]},
+"16:32":{"requested":220,"cached":78,"missing":293,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,294,295,296,297,298,299,300,301,302,303,304,293]},
+"16:36":{"requested":220,"cached":79,"missing":305,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,294,295,296,297,306,307,308,305]},
+"16:40":{"requested":220,"cached":84,"missing":305,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,294,295,296,297,306,307,308,305]},
+"16:44":{"requested":220,"cached":85,"missing":293,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,294,295,296,297,298,299,300,301,302,303,304,293]},
+"16:48":{"requested":220,"cached":86,"missing":301,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,294,295,296,297,298,299,300,301]},
+"16:52":{"requested":220,"cached":87,"missing":301,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,294,295,296,297,298,299,300,301]},
+"16:56":{"requested":220,"cached":88,"missing":293,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,127,128,129,130,205,206,207,208,294,295,296,297,298,299,300,301,302,303,304,293]},
+"20:0":{"requested":309,"cached":1,"missing":310,"batches":[3,4,5,6,7,8,9,10,11,311,312,313,314,315,316,317,318,319,320,321,322,323,324,325,326,327,328,329,310]},
+"20:4":{"requested":309,"cached":19,"missing":330,"batches":[3,21,22,23,24,25,26,27,28,331,332,333,334,335,336,337,338,339,340,341,342,343,344,345,346,347,348,349,330]},
+"20:8":{"requested":309,"cached":36,"missing":350,"batches":[3,21,22,23,24,38,39,40,41,351,352,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,368,369,350]},
+"20:12":{"requested":309,"cached":49,"missing":370,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,181,182,183,184,258,259,260,261,371,372,373,374,375,376,377,378,379,380,381,370]},
+"20:16":{"requested":309,"cached":62,"missing":382,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,387,388,389,390,391,392,393,382]},
+"20:20":{"requested":309,"cached":75,"missing":394,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,399,400,401,402,403,404,405,406,407,408,409,394]},
+"20:24":{"requested":309,"cached":76,"missing":410,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,415,416,417,418,419,420,421,410]},
+"20:28":{"requested":309,"cached":77,"missing":192,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,197,198,199,200,201,202,203,192]},
+"20:32":{"requested":309,"cached":78,"missing":269,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,274,275,276,277,278,279,280,269]},
+"20:36":{"requested":309,"cached":79,"missing":422,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,423,424,425,422]},
+"20:40":{"requested":309,"cached":84,"missing":422,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,423,424,425,422]},
+"20:44":{"requested":309,"cached":85,"missing":382,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,387,388,389,390,391,392,393,382]},
+"20:48":{"requested":309,"cached":86,"missing":390,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,387,388,389,390]},
+"20:52":{"requested":309,"cached":87,"missing":390,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,387,388,389,390]},
+"20:56":{"requested":309,"cached":88,"missing":382,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,387,388,389,390,391,392,393,382]},
+"24:0":{"requested":426,"cached":1,"missing":427,"batches":[3,4,5,6,7,8,9,10,11,311,312,313,314,315,316,317,318,319,320,321,322,428,429,430,431,432,433,434,435,436,437,438,427]},
+"24:4":{"requested":426,"cached":19,"missing":439,"batches":[3,21,22,23,24,25,26,27,28,331,332,333,334,335,336,337,338,339,340,341,342,440,441,442,443,444,445,446,447,448,449,450,439]},
+"24:8":{"requested":426,"cached":36,"missing":451,"batches":[3,21,22,23,24,38,39,40,41,351,352,353,354,355,356,357,358,359,360,361,362,452,453,454,455,456,457,458,459,460,461,462,451]},
+"24:12":{"requested":426,"cached":49,"missing":463,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,181,182,183,184,258,259,260,261,371,372,373,374,464,465,466,467,468,469,470,471,472,473,474,463]},
+"24:16":{"requested":426,"cached":62,"missing":475,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,476,477,478,479,480,481,482,483,484,485,486,475]},
+"24:20":{"requested":426,"cached":75,"missing":487,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,399,400,401,402,488,489,490,491,492,493,494,495,496,497,498,487]},
+"24:24":{"requested":426,"cached":76,"missing":499,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,500,501,502,503,504,505,506,507,508,509,510,499]},
+"24:28":{"requested":426,"cached":77,"missing":511,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,512,513,514,515,516,517,518,519,520,521,522,511]},
+"24:32":{"requested":426,"cached":78,"missing":269,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,274,275,276,277,278,279,280,269]},
+"24:36":{"requested":426,"cached":79,"missing":422,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,423,424,425,422]},
+"24:40":{"requested":426,"cached":84,"missing":523,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,476,477,478,479,524,525,526,523]},
+"24:44":{"requested":426,"cached":85,"missing":475,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,476,477,478,479,480,481,482,483,484,485,486,475]},
+"24:48":{"requested":426,"cached":86,"missing":483,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,476,477,478,479,480,481,482,483]},
+"24:52":{"requested":426,"cached":87,"missing":483,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,476,477,478,479,480,481,482,483]},
+"24:56":{"requested":426,"cached":88,"missing":475,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,193,194,195,196,270,271,272,273,383,384,385,386,476,477,478,479,480,481,482,483,484,485,486,475]},
+"28:0":{"requested":527,"cached":1,"missing":528,"batches":[3,4,5,6,7,8,9,10,11,529,530,531,532,533,534,535,536,537,538,539,540,541,542,543,544,545,546,547,528]},
+"28:4":{"requested":527,"cached":19,"missing":548,"batches":[3,21,22,23,24,25,26,27,28,549,550,551,552,553,554,555,556,557,558,559,560,561,562,563,564,565,566,567,548]},
+"28:8":{"requested":527,"cached":36,"missing":568,"batches":[3,21,22,23,24,38,39,40,41,569,570,571,572,573,574,575,576,577,578,579,580,581,582,583,584,585,586,587,568]},
+"28:12":{"requested":527,"cached":49,"missing":588,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,589,590,591,592,593,594,595,596,597,598,599,600,601,602,603,604,605,606,607,588]},
+"28:16":{"requested":527,"cached":62,"missing":487,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,399,400,401,402,488,489,490,491,492,493,494,495,496,497,498,487]},
+"28:20":{"requested":527,"cached":75,"missing":487,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,399,400,401,402,488,489,490,491,492,493,494,495,496,497,498,487]},
+"28:24":{"requested":527,"cached":76,"missing":499,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,500,501,502,503,504,505,506,507,508,509,510,499]},
+"28:28":{"requested":527,"cached":77,"missing":608,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,613,614,615,616,617,618,619,608]},
+"28:32":{"requested":527,"cached":78,"missing":620,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,621,622,623,624,625,626,627,620]},
+"28:36":{"requested":527,"cached":79,"missing":628,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,399,400,401,402,629,630,631,628]},
+"28:40":{"requested":527,"cached":84,"missing":632,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,399,400,401,402,488,489,490,491,633,634,635,632]},
+"28:44":{"requested":527,"cached":85,"missing":487,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,399,400,401,402,488,489,490,491,492,493,494,495,496,497,498,487]},
+"28:48":{"requested":527,"cached":86,"missing":495,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,399,400,401,402,488,489,490,491,492,493,494,495]},
+"28:52":{"requested":527,"cached":87,"missing":495,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,399,400,401,402,488,489,490,491,492,493,494,495]},
+"28:56":{"requested":527,"cached":88,"missing":487,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,395,396,397,398,399,400,401,402,488,489,490,491,492,493,494,495,496,497,498,487]},
+"32:0":{"requested":636,"cached":1,"missing":637,"batches":[3,4,5,6,7,8,9,10,11,638,639,640,641,642,643,644,645,646,647,648,649,650,651,652,637]},
+"32:4":{"requested":636,"cached":19,"missing":653,"batches":[3,21,22,23,24,25,26,27,28,654,655,656,657,658,659,660,661,662,663,664,665,666,667,668,653]},
+"32:8":{"requested":636,"cached":36,"missing":669,"batches":[3,21,22,23,24,38,39,40,41,670,671,672,673,674,675,676,677,678,679,680,681,682,683,684,669]},
+"32:12":{"requested":636,"cached":49,"missing":685,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,686,687,688,689,690,691,692,693,694,695,696,697,698,699,700,685]},
+"32:16":{"requested":636,"cached":62,"missing":499,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,500,501,502,503,504,505,506,507,508,509,510,499]},
+"32:20":{"requested":636,"cached":75,"missing":499,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,500,501,502,503,504,505,506,507,508,509,510,499]},
+"32:24":{"requested":636,"cached":76,"missing":499,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,500,501,502,503,504,505,506,507,508,509,510,499]},
+"32:28":{"requested":636,"cached":77,"missing":608,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,613,614,615,616,617,618,619,608]},
+"32:32":{"requested":636,"cached":78,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"32:36":{"requested":636,"cached":79,"missing":701,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,702,703,704,701]},
+"32:40":{"requested":636,"cached":84,"missing":705,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,500,501,502,503,706,707,708,705]},
+"32:44":{"requested":636,"cached":85,"missing":499,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,500,501,502,503,504,505,506,507,508,509,510,499]},
+"32:48":{"requested":636,"cached":86,"missing":507,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,500,501,502,503,504,505,506,507]},
+"32:52":{"requested":636,"cached":87,"missing":507,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,500,501,502,503,504,505,506,507]},
+"32:56":{"requested":636,"cached":88,"missing":499,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,411,412,413,414,500,501,502,503,504,505,506,507,508,509,510,499]},
+"36:0":{"requested":709,"cached":1,"missing":710,"batches":[3,4,5,6,7,8,9,10,11,711,712,713,714,715,716,717,718,719,720,721,710]},
+"36:4":{"requested":709,"cached":19,"missing":722,"batches":[3,21,22,23,24,25,26,27,28,723,724,725,726,727,728,729,730,731,732,733,722]},
+"36:8":{"requested":709,"cached":36,"missing":734,"batches":[3,21,22,23,24,38,39,40,41,735,736,737,738,739,740,741,742,743,744,745,734]},
+"36:12":{"requested":709,"cached":49,"missing":746,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,747,748,749,750,751,752,753,754,755,756,757,746]},
+"36:16":{"requested":709,"cached":62,"missing":608,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,613,614,615,616,617,618,619,608]},
+"36:20":{"requested":709,"cached":75,"missing":608,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,613,614,615,616,617,618,619,608]},
+"36:24":{"requested":709,"cached":76,"missing":608,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,613,614,615,616,617,618,619,608]},
+"36:28":{"requested":709,"cached":77,"missing":608,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,613,614,615,616,617,618,619,608]},
+"36:32":{"requested":709,"cached":78,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"36:36":{"requested":709,"cached":79,"missing":80,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,81,82,83,80]},
+"36:40":{"requested":709,"cached":84,"missing":758,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,759,760,761,758]},
+"36:44":{"requested":709,"cached":85,"missing":608,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,613,614,615,616,617,618,619,608]},
+"36:48":{"requested":709,"cached":86,"missing":616,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,613,614,615,616]},
+"36:52":{"requested":709,"cached":87,"missing":616,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,613,614,615,616]},
+"36:56":{"requested":709,"cached":88,"missing":608,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,609,610,611,612,613,614,615,616,617,618,619,608]},
+"40:0":{"requested":0,"cached":1,"missing":2,"batches":[3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,2]},
+"40:4":{"requested":0,"cached":19,"missing":20,"batches":[3,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,20]},
+"40:8":{"requested":0,"cached":36,"missing":37,"batches":[3,21,22,23,24,38,39,40,41,42,43,44,45,46,47,48,37]},
+"40:12":{"requested":0,"cached":49,"missing":50,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,55,56,57,58,59,60,61,50]},
+"40:16":{"requested":0,"cached":62,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"40:20":{"requested":0,"cached":75,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"40:24":{"requested":0,"cached":76,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"40:28":{"requested":0,"cached":77,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"40:32":{"requested":0,"cached":78,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"40:36":{"requested":0,"cached":79,"missing":80,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,81,82,83,80]},
+"40:40":{"requested":0,"cached":84,"missing":80,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,81,82,83,80]},
+"40:44":{"requested":0,"cached":85,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"40:48":{"requested":0,"cached":86,"missing":71,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71]},
+"40:52":{"requested":0,"cached":87,"missing":71,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71]},
+"40:56":{"requested":0,"cached":88,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"44:0":{"requested":762,"cached":1,"missing":763,"batches":[3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,2,764,765,766,763]},
+"44:4":{"requested":762,"cached":19,"missing":767,"batches":[3,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,20,768,769,770,767]},
+"44:8":{"requested":762,"cached":36,"missing":771,"batches":[3,21,22,23,24,38,39,40,41,42,43,44,45,46,47,48,37,772,773,774,771]},
+"44:12":{"requested":762,"cached":49,"missing":775,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,55,56,57,58,59,60,61,50,776,777,778,775]},
+"44:16":{"requested":762,"cached":62,"missing":779,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779]},
+"44:20":{"requested":762,"cached":75,"missing":779,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779]},
+"44:24":{"requested":762,"cached":76,"missing":779,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779]},
+"44:28":{"requested":762,"cached":77,"missing":779,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779]},
+"44:32":{"requested":762,"cached":78,"missing":779,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779]},
+"44:36":{"requested":762,"cached":79,"missing":783,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,81,82,83,80,784,785,786,783]},
+"44:40":{"requested":762,"cached":84,"missing":783,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,81,82,83,80,784,785,786,783]},
+"44:44":{"requested":762,"cached":85,"missing":779,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779]},
+"44:48":{"requested":762,"cached":86,"missing":787,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,788,789,790,787]},
+"44:52":{"requested":762,"cached":87,"missing":71,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71]},
+"44:56":{"requested":762,"cached":88,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]},
+"48:0":{"requested":791,"cached":1,"missing":792,"batches":[3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,2,764,765,766,763,793,794,795,792]},
+"48:4":{"requested":791,"cached":19,"missing":796,"batches":[3,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,20,768,769,770,767,797,798,799,796]},
+"48:8":{"requested":791,"cached":36,"missing":800,"batches":[3,21,22,23,24,38,39,40,41,42,43,44,45,46,47,48,37,772,773,774,771,801,802,803,800]},
+"48:12":{"requested":791,"cached":49,"missing":804,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,55,56,57,58,59,60,61,50,776,777,778,775,805,806,807,804]},
+"48:16":{"requested":791,"cached":62,"missing":808,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779,809,810,811,808]},
+"48:20":{"requested":791,"cached":75,"missing":808,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779,809,810,811,808]},
+"48:24":{"requested":791,"cached":76,"missing":808,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779,809,810,811,808]},
+"48:28":{"requested":791,"cached":77,"missing":808,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779,809,810,811,808]},
+"48:32":{"requested":791,"cached":78,"missing":808,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779,809,810,811,808]},
+"48:36":{"requested":791,"cached":79,"missing":812,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,81,82,83,80,784,785,786,783,813,814,815,812]},
+"48:40":{"requested":791,"cached":84,"missing":812,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,81,82,83,80,784,785,786,783,813,814,815,812]},
+"48:44":{"requested":791,"cached":85,"missing":808,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63,780,781,782,779,809,810,811,808]},
+"48:48":{"requested":791,"cached":86,"missing":816,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,788,789,790,787,817,818,819,816]},
+"48:52":{"requested":791,"cached":87,"missing":820,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,821,822,823,820]},
+"48:56":{"requested":791,"cached":88,"missing":63,"batches":[3,21,22,23,24,38,39,40,41,51,52,53,54,64,65,66,67,68,69,70,71,72,73,74,63]}
+}}</script>
+<script type="application/json" id="datum-read-source">__DATUM_READ_PLAN_SOURCE__</script>
+<script>
+(() => {
+    'use strict';
+    const data = JSON.parse(document.getElementById('datum-read-plans').textContent);
+    const root = document.getElementById('datum-read-plan');
+    const byId = id => root.querySelector('#datum-read-' + id);
+    const controls = ['request-start', 'cache-start', 'budget'];
+    const measure = ranges => ranges.reduce((sum, [a, b]) => sum + b - a, 0);
+    const formatRanges = ranges => ranges.map(([a, b]) => `[${a}, ${b})`).join(', ');
+    let animation = null;
+    let downloadUrl = null;
+
+    function highlight(target, text) {
+      const token = /\/\/[^\n]*|"(?:\\.|[^"\\])*"|\b(?:const|auto|constexpr|namespace|int|return)\b|\b\d+\b/g;
+      const result = document.createDocumentFragment();
+      let cursor = 0;
+      for (const match of text.matchAll(token)) {
+        result.append(text.slice(cursor, match.index));
+        const span = document.createElement('span');
+        const value = match[0];
+        span.className = 'syntax-' + (value.startsWith('//') ? 'comment' :
+          value.startsWith('"') ? 'string' : /^\d/.test(value) ? 'number' : 'keyword');
+        span.textContent = value;
+        result.append(span);
+        cursor = match.index + value.length;
+      }
+      result.append(text.slice(cursor));
+      target.replaceChildren(result);
+    }
+
+    function draw(id, ranges, kind, stagger = false) {
+      const track = byId(id);
+      track.replaceChildren();
+      const label = {
+        request: 'Requested object ranges', cache: 'Ranges already cached',
+        missing: 'Requested ranges still needed from storage', batch: 'Planned reads for this batch'
+      }[kind];
+      track.setAttribute('aria-label', ranges.length ? `${label}: ${formatRanges(ranges)} MiB` : `${label}: empty`);
+      for (const [i, [first, last]] of ranges.entries()) {
+        const bar = document.createElement('span');
+        bar.className = `segment ${kind}`;
+        bar.style.left = `${100 * first / data.width}%`;
+        bar.style.width = `${100 * (last - first) / data.width}%`;
+        if (stagger) bar.style.top = `${i * 22}px`;
+        bar.title = `[${first}, ${last}) MiB · ${last - first} MiB`;
+        bar.setAttribute('aria-hidden', 'true');
+        track.append(bar);
+      }
+    }
+
+    const example = JSON.parse(document.getElementById('datum-read-source').textContent);
+
+    function completeCode(request, cache, budget) {
+      return example.replace('iv::bounds({8 * MiB, 16 * MiB})',
+          `iv::bounds({${request} * MiB, 16 * MiB})`)
+        .replace('iv::bounds({4 * MiB, 8 * MiB})', `iv::bounds({${cache} * MiB, 8 * MiB})`)
+        .replace('iv::take(missing, 14 * MiB, iv::bytes)',
+          `iv::take(missing, ${budget} * MiB, iv::bytes)`);
+    }
+
+    function coreCode(source) {
+      return source.match(/    const auto requested = [\s\S]*?    const auto batch[^\n]*;/)[0]
+        .split('\n').map(line => line.slice(4)).join('\n');
+    }
+
+    function update() {
+      const [request, cache, budget] = controls.map(id => Number(byId(id).value));
+      const prepared = data.cases[`${request}:${cache}`];
+      const current = Object.fromEntries(['requested', 'cached', 'missing'].map(
+        name => [name, data.ranges[prepared[name]]]));
+      const batch = data.ranges[prepared.batches[Math.min(budget, prepared.batches.length - 1)]];
+      const requested = measure(current.requested);
+      const missing = measure(current.missing);
+      const selected = measure(batch);
+      const skipped = batch.length ? batch.at(-1)[1] - batch[0][0] - selected : 0;
+      byId('request-value').value = String(request);
+      byId('cache-value').value = String(cache);
+      byId('budget-value').value = String(budget);
+      for (const id of controls) byId(id).setAttribute('aria-valuetext', `${byId(id).value} MiB`);
+      byId('requested-total').textContent = `${requested} MiB unique`;
+      byId('cached-total').textContent = `${measure(current.cached)} MiB`;
+      byId('missing-total').textContent = `${missing} MiB`;
+      byId('batch-total').textContent = `${selected} MiB`;
+      draw('requested-bars', [[0, 16], [request, request + 16], [40, 56]], 'request', true);
+      draw('cached-bars', current.cached, 'cache');
+      draw('missing-bars', current.missing, 'missing');
+      draw('batch-bars', batch, 'batch');
+      byId('outcome-title').textContent = selected ?
+        `${selected} MiB in ${batch.length} ${batch.length === 1 ? 'read' : 'reads'}.` : 'No reads queued.';
+      byId('outcome-detail').textContent = !budget ? 'The per-batch limit is zero.' :
+        selected === missing ? 'All requested bytes not already cached fit in this batch.' :
+        skipped ? `${skipped} MiB between the reads; those gaps add no data.` :
+        'Every selected byte is requested data that is not cached.';
+      byId('remaining').textContent = `${missing - selected} MiB left for later`;
+      const chips = byId('plan-chips');
+      chips.replaceChildren();
+      for (const [a, b] of batch) {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.append(`[${a}, ${b})`);
+        const size = document.createElement('small');
+        size.textContent = `${b - a} MiB`;
+        chip.append(size);
+        chips.append(chip);
+      }
+      if (!batch.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty';
+        empty.textContent = 'The next batch is empty.';
+        chips.append(empty);
+      }
+      const source = completeCode(request, cache, budget);
+      highlight(byId('plan-code'), coreCode(source));
+      highlight(byId('full-code'), source);
+      if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+      downloadUrl = URL.createObjectURL(new Blob([source], {type:'text/plain;charset=utf-8'}));
+      byId('download').href = downloadUrl;
+      byId('download').hidden = false;
+    }
+
+    function stopAnimation() {
+      if (animation !== null) window.clearTimeout(animation);
+      animation = null;
+    }
+
+    function setState(request, cache, budget) {
+      for (const [index, value] of [request, cache, budget].entries()) byId(controls[index]).value = value;
+      update();
+    }
+
+    for (const id of controls) byId(id).addEventListener('input', () => { stopAnimation(); update(); });
+    byId('reset').addEventListener('click', () => { stopAnimation(); setState(8, 4, 14); });
+    byId('jump').addEventListener('click', () => {
+      stopAnimation();
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        setState(8, 4, 13);
+        return;
+      }
+      setState(8, 4, 12);
+      animation = window.setTimeout(() => { animation = null; setState(8, 4, 13); }, 1100);
+    });
+    window.addEventListener('pagehide', stopAnimation);
+    update();
+    for (const control of root.querySelectorAll('input, button')) control.disabled = false;
+
+})();
+</script>
+</section>

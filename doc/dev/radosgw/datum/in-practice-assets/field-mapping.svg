@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 110" role="img" aria-label="Two C++ field layouts map to the same wire order: kind, key, payload">
+<style>text{font-family:Arial,sans-serif;fill:#193441}.label{font-size:14px}.field{font-family:monospace;font-size:16px}.wire{fill:#eaf4ef;stroke:#9ec6b3}.box{fill:#f7f5ef;stroke:#d9d8cf}</style>
+<text x="12" y="22" class="label">MODULE RECORD</text><rect class="box" x="12" y="36" width="285" height="45" rx="5"/><text x="35" y="64" class="field">type · idx · data</text>
+<text x="358" y="22" class="label">SHARED WIRE ORDER</text><rect class="wire" x="358" y="36" width="285" height="45" rx="5"/><text x="380" y="64" class="field">kind · key · payload</text>
+<text x="705" y="22" class="label">ALTERNATE CLIENT RECORD</text><rect class="box" x="705" y="36" width="283" height="45" rx="5"/><text x="723" y="64" class="field">contents · tag · name</text>
+<path d="M307 58h38m-8-5 8 5-8 5M695 58h-38m8-5-8 5 8 5" fill="none" stroke="#217f67" stroke-width="2"/>
+</svg>
