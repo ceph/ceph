@@ -217,18 +217,12 @@ public:
     if (r >= 0) {
 #if defined(__linux__)
       if (fscrypt_denc) {
-        if (read_len > target_len) {
-          clnt->logger->inc(l_c_fscrypt_rd_amp, read_len - target_len);
-        }
         std::vector<FSCryptFDataDenc::Segment> holes;
-        auto dec_start = mono_clock_now();
         r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, pbl);
-        clnt->logger->tinc(l_c_fscrypt_dec_lat, mono_clock_now() - dec_start);
         if (r < 0) {
           goto done;
         }
         bl->claim_append(*pbl);
-        clnt->logger->tinc(l_c_fscrypt_rd_lat, mono_clock_now() - start_time);
       }
 #endif
       // Match C_Read_Sync_NonBlocking: full physical read → report logical len.
@@ -242,8 +236,6 @@ public:
   done:
     fini = true;
     clnt->put_cap_ref(in.get(), CEPH_CAP_FILE_RD);
-    clnt->logger->inc(l_c_aio_completions);
-    clnt->dec_aio_in_flight();
     IoCallback user_cb = std::move(cb);
     bufferlist out;
     if (r >= 0) {
@@ -307,14 +299,11 @@ public:
 #if defined(__linux__)
     if (fscrypt_denc && r > 0) {
       std::vector<FSCryptFDataDenc::Segment> holes;
-      auto dec_start = mono_clock_now();
       int dr = fscrypt_denc->decrypt_bl(off, len, read_start, holes, bl);
-      clnt->logger->tinc(l_c_fscrypt_dec_lat, mono_clock_now() - dec_start);
       if (dr < 0) {
         r = dr;
       } else {
         r = bl->length();
-        clnt->logger->tinc(l_c_fscrypt_rd_lat, mono_clock_now() - start_time);
       }
     }
 #endif
@@ -324,8 +313,6 @@ public:
     }
 
     clnt->put_cap_ref(in.get(), CEPH_CAP_FILE_RD);
-    clnt->logger->inc(l_c_aio_completions);
-    clnt->dec_aio_in_flight();
 
     IoCallback user_cb = std::move(cb);
     bufferlist out;
@@ -356,8 +343,6 @@ public:
     ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
     clnt->put_cap_ref(in.get(), CEPH_CAP_FILE_WR);
     // Match C_Write_Finisher: count the op complete only after optional fsync.
-    clnt->logger->inc(l_c_aio_completions);
-    clnt->dec_aio_in_flight();
     ZeroCopyClient::queue_user_cb(clnt, std::move(cb), r < 0 ? r : io_result,
                                   {});
   }
@@ -417,9 +402,6 @@ public:
     if (r >= 0) {
       result = clnt->_write_success(fh, start, fpos, req_ofs, req_size,
                                     phys_ofs, phys_size, in.get(), encrypted);
-      if (encrypted) {
-        clnt->logger->tinc(l_c_fscrypt_wr_lat, mono_clock_now() - start);
-      }
     }
 
     if (r >= 0 && do_fsync) {
@@ -436,8 +418,6 @@ public:
     }
 
     clnt->put_cap_ref(in.get(), CEPH_CAP_FILE_WR);
-    clnt->logger->inc(l_c_aio_completions);
-    clnt->dec_aio_in_flight();
     ZeroCopyClient::queue_user_cb(clnt, std::move(cb), result, {});
   }
 };
@@ -606,9 +586,6 @@ int ZeroCopyClient::async_read(Fh* fh, uint64_t off, uint64_t len, IoCallback cb
     len = effective_size - off;
   }
 
-  client->logger->inc(l_c_aio_ops);
-  client->inc_aio_in_flight();
-
   const bool use_oc = client->cct->_conf->client_oc &&
                       (have & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO));
 
@@ -636,11 +613,6 @@ int ZeroCopyClient::async_read(Fh* fh, uint64_t off, uint64_t len, IoCallback cb
     r = client->objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
                                            read_start, read_len, bl, 0, &holes,
                                            oc_ctx);
-    if (r > 0) {
-      client->logger->inc(l_c_osdc_hit);
-    } else if (r == 0) {
-      client->logger->inc(l_c_osdc_miss);
-    }
     // Match _read_async: drop CACHE once submitted; finisher owns FILE_RD.
     client->put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     if (r != 0) {
@@ -816,9 +788,6 @@ int ZeroCopyClient::async_write(Fh* fh, uint64_t off, bufferlist data,
                                 &client->objecter_finisher);
   }
 
-  // Match _write / C_Write_Finisher (held through optional fsync).
-  client->logger->inc(l_c_aio_ops);
-  client->inc_aio_in_flight();
 
   // read_modify_write requires client_lock for the encrypted RMW path.
   (void)enc_mgr->read_modify_write(onfinish);
