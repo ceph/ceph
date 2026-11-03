@@ -190,6 +190,53 @@ void RGWOp_Account_Get::execute(optional_yield y)
                               s->err.message, flusher, y);
 }
 
+class RGWOp_Account_Stats : public RGWRESTOp {
+public:
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("accounts", RGW_CAP_READ);
+  }
+
+  void execute(optional_yield y) override;
+
+  const char* name() const override { return "get_account_stats"; }
+};
+
+/**
+ * @brief Gets storage stats for an RGW account
+ *
+ * @param y Optional yield context for coroutine-based async operations
+ *
+ * REST Endpoint:
+ *   GET /admin/account
+ *
+ * Query Parameters:
+ *   - stats: (required) Subresource to trigger the get account stats operation
+ *   - id: Account ID to get stats for
+ *   - name: Account name to get stats for (with optional tenant)
+ *   - tenant: (optional) Tenant of the account name
+ *   - sync-stats: (optional) Recalculate the stats from all of the account's
+ *     buckets before returning them (true/false)
+ *
+ * Example Usage:
+ *   GET /admin/account?stats&id=RGW123
+ *
+ */
+
+void RGWOp_Account_Stats::execute(optional_yield y)
+{
+  rgw::account::AdminOpState op_state;
+  RESTArgs::get_string(s, "id", "", &op_state.account_id);
+  RESTArgs::get_string(s, "tenant", "", &op_state.tenant);
+  RESTArgs::get_string(s, "name", "", &op_state.account_name);
+
+  bool sync_stats = false;
+  RESTArgs::get_bool(s, "sync-stats", false, &sync_stats);
+  constexpr bool reset_stats = false;
+
+  op_ret = rgw::account::stats(this, driver, op_state, sync_stats,
+                               reset_stats, s->err.message, flusher, y);
+}
+
 class RGWOp_Account_Delete : public RGWRESTOp {
 public:
   int check_caps(const RGWUserCaps& caps) override {
@@ -312,6 +359,10 @@ RGWOp* RGWHandler_Account::op_put()
 
 RGWOp* RGWHandler_Account::op_get()
 {
+  // "stats" isn't registered as an admin sub-resource, because the user and
+  // bucket APIs already accept it as a regular parameter
+  if (s->info.args.exists("stats"))
+    return new RGWOp_Account_Stats;
   return new RGWOp_Account_Get;
 }
 
