@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "constants.hpp"
 #include "data_store.hpp"
 #include "err_insertion.hpp"
@@ -79,16 +81,17 @@ struct BatchPutResult {
 struct BatchCommitEntry {
   tenant_id_t tenant_id;
   bucket_id_t bucket_id{};
-  std::string bucket_name;
-  std::string object_name;
+  // Everything below is a view into the caller's buffers: put_object_route
+  // blocks on the future until the entry is done, so they stay alive.
+  std::string_view bucket_name;
+  std::string_view object_name;
   ObjectValue value;
-  std::string data;
+  std::string_view data;   // body for C:D / C:E / storage tier; empty for inline
   ChunkType chunk_type{CHUNK_INLINE};
   PutCondition cond{};
   bool has_cond{false};
-  std::vector<uint8_t> tag_encoded;
-  std::array<uint8_t, MAX_META_FRAME_BYTES> metadata_encoded{};
-  size_t metadata_encoded_size{0};
+  std::span<const uint8_t> tag_encoded;
+  std::span<const uint8_t> metadata_encoded;
   std::chrono::steady_clock::time_point enqueued_at;
   std::promise<BatchPutResult> promise;
 };
@@ -177,13 +180,13 @@ class BatchCommitQueue {
       phase = PHASE_EMPTY;
       step = STEP_WORKING;
       for (int i = 0; i < entry_count; ++i) {
-        entries[i].bucket_name.clear();
-        entries[i].object_name.clear();
-        entries[i].data.clear();
+        entries[i].bucket_name = {};
+        entries[i].object_name = {};
+        entries[i].data = {};
         entries[i].cond = PutCondition{};
         entries[i].has_cond = false;
-        entries[i].tag_encoded.clear();
-        entries[i].metadata_encoded_size = 0;
+        entries[i].tag_encoded = {};
+        entries[i].metadata_encoded = {};
       }
       entry_count = 0;
       phase1_key_count = 0;
@@ -224,6 +227,14 @@ void apply_tags_to_value(ObjectValue& obj, std::span<const uint8_t> encoded,
 void clear_object_tags(ObjectValue& obj, KvTransaction& tr, bucket_id_t bucket_id,
                        std::string_view ref_tag);
 
+// The client's whole-object checksum / type from CompleteMultipartUpload (all
+// optional). Namespace scope: it is used as a default argument of a member.
+struct CompleteCksumReq {
+  CksumAlg alg{CksumAlg::NONE};
+  CksumType type{CksumType::NONE};
+  std::string_view value;  // base64, with "-N" for COMPOSITE
+};
+
 class KvRgwServiceImpl final {
  public:
   KvRgwServiceImpl(KvStore& store, DataStore& data_store, RefTagGenerator& ref_tags,
@@ -233,6 +244,9 @@ class KvRgwServiceImpl final {
   OpsStats& ops_stats() { return ops_stats_; }
   ErrorStats& error_stats() { return *error_stats_; }
   ErrInsertion& err_insertion() { return err_insertion_; }
+  // Runtime minimum size of a non-last multipart part (admin-socket
+  // override for tests; defaults to kMinPartSizeBytes).
+  std::atomic<uint64_t>& min_part_size() { return min_part_size_; }
   KvStore& store() { return store_; }
   TierConfigState& tier_config_state() { return tier_config_state_; }
 
@@ -388,17 +402,24 @@ class KvRgwServiceImpl final {
   InitiateMultipartResult initiate_multipart_upload(
       tenant_id_t tenant_id, std::string_view bucket_name,
       std::string_view object_name, std::string_view content_type,
-      std::span<const TagPair> tags, std::span<const MetaPair> metadata);
+      std::span<const TagPair> tags, std::span<const MetaPair> metadata,
+      CksumAlg cksum_alg = CksumAlg::NONE, CksumType cksum_type = CksumType::NONE);
 
   struct UploadPartResult {
     KvrgwErrorCode error_code{KVRGW_ERR_OK};
     std::string etag;
+    CksumAlg checksum_alg{CksumAlg::NONE};  // the upload's algorithm
+    std::string checksum;  // base64 of the part digest; empty if the upload has no algorithm
   };
 
+  // client_alg/client_cksum: the optional x-amz-checksum-* the client sent
+  // (base64). A mismatch with the data returns KVRGW_ERR_BAD_DIGEST; an
+  // algorithm different from the upload's returns KVRGW_ERR_INVALID_REQUEST.
   UploadPartResult upload_part(
       tenant_id_t tenant_id, std::string_view bucket_name,
       std::string_view object_name, std::string_view upload_id,
-      uint16_t part_number, const uint8_t* data, size_t data_len);
+      uint16_t part_number, const uint8_t* data, size_t data_len,
+      CksumAlg client_alg = CksumAlg::NONE, std::string_view client_cksum = {});
 
   struct PartListEntry {
     uint16_t part_number{};
@@ -440,28 +461,39 @@ class KvRgwServiceImpl final {
   struct CompletedPart {
     uint16_t part_number{};
     std::string etag;  // client-supplied part etag (hex, no dash)
+    // Client-supplied part checksum (base64) for algorithm cksum_alg; empty if
+    // the client sent none. Required when the upload has an algorithm.
+    CksumAlg cksum_alg{CksumAlg::NONE};
+    std::string cksum;
   };
 
   struct CompleteMultipartResult {
     KvrgwErrorCode error_code{KVRGW_ERR_OK};
     std::string etag;  // composite etag ("32hex-N")
     version_id_t version_id{};
+    CksumAlg checksum_alg{CksumAlg::NONE};
+    CksumType checksum_type{CksumType::NONE};
+    std::string checksum;  // S3 rendering of the object checksum; empty if none
   };
 
   CompleteMultipartResult complete_multipart_upload(
       tenant_id_t tenant_id, std::string_view bucket_name,
       std::string_view object_name, std::string_view upload_id,
       std::span<const CompletedPart> client_parts,
-      std::string_view if_match = {}, std::string_view if_none_match = {});
+      std::string_view if_match = {}, std::string_view if_none_match = {},
+      const CompleteCksumReq& cksum_req = CompleteCksumReq());
 
   KvrgwErrorCode abort_multipart_upload(
       tenant_id_t tenant_id, std::string_view bucket_name,
       std::string_view object_name, std::string_view upload_id);
 
   struct GetObjectResult {
-    ObjectValue value;
+    OwnedObjectValue value;
     std::string body;
     std::string error_detail;
+    // PartNumber reads of a checksummed multipart object: the raw digest of
+    // that part (empty otherwise).
+    std::string part_cksum;
   };
 
   // part_number: 0 means "no ?partNumber= requested" (normal whole-object/
@@ -480,7 +512,8 @@ class KvRgwServiceImpl final {
   // only overrides out->hdr.size to the resolved part's size.
   KvrgwErrorCode head_object(tenant_id_t tenant_id, std::string_view bucket_name,
                              std::string_view key, std::optional<version_id_t> version_id,
-                             uint16_t part_number, ObjectValue* out, std::string* error_detail);
+                             uint16_t part_number, OwnedObjectValue* out, std::string* error_detail,
+                             std::string* part_cksum = nullptr);
 
   // GetObjectAttributes -- ETag/size/version_id live on `value` (same
   // convention as head_object's own out-param). ObjectParts is reported
@@ -492,13 +525,16 @@ class KvRgwServiceImpl final {
   // already-sorted included_parts/sizes -- same shape as list_parts'
   // pagination, just over the completed manifest instead of S:U rows.
   struct GetObjectAttributesResult {
-    ObjectValue value;
+    OwnedObjectValue value;
     bool has_parts = false;
     uint32_t total_parts_count = 0;
     std::vector<uint16_t> part_numbers;
     std::vector<uint64_t> part_sizes;
     bool parts_truncated = false;
     uint16_t next_part_number_marker = 0;
+    // Raw per-part digests of the page, concatenated in part order
+    // (part_numbers.size() * digest_len bytes); empty without a checksum.
+    std::string part_cksums;
     std::string error_detail;
   };
 
@@ -558,9 +594,9 @@ class KvRgwServiceImpl final {
 
   struct PutObjectRequest {
     tenant_id_t tenant_id;
-    std::string bucket_name;
-    std::string object_name;
-    ObjectValue value;
+    std::string_view bucket_name;
+    std::string_view object_name;
+    ObjectValue value;   // views into the caller's buffers
     uint64_t estimated_size;
     const PutCondition* cond;
     std::span<const uint8_t> tags;
@@ -588,11 +624,11 @@ class KvRgwServiceImpl final {
 
   struct PutInTxnParams {
     tenant_id_t tenant_id;
-    const std::string& bucket_name;
+    std::string_view bucket_name;
     bucket_id_t bucket_id;
-    const std::string& object_name;
+    std::string_view object_name;
     ObjectValue& value;
-    const std::string* data;
+    std::string_view data;   // C:D body / C:E tail / storage body (may be empty)
     const PutCondition* cond;
     std::span<const uint8_t> tags;
     bool skip_bucket_verify;
@@ -687,7 +723,7 @@ class KvRgwServiceImpl final {
 
   struct VerifiedBucket {
     tenant_id_t tenant_id{};
-    const std::string* bucket_name{nullptr};
+    std::string_view bucket_name;
     BucketState state;
   };
 
@@ -731,27 +767,64 @@ class KvRgwServiceImpl final {
                                       KvrgwErrorCode tentative_err_code);
 
   struct LoadResult {
-    ObjectValue value;
+    OwnedObjectValue value;
     std::string data;
   };
 
-  std::expected<std::optional<ObjectValue>, fdb_error_t>
+  // The :O: value is read through an FdbGetHolder (zero-copy) and parsed in
+  // place; only the <= 1 KB raw value is copied once into the result, so its
+  // views outlive the future.
+  std::expected<std::optional<OwnedObjectValue>, fdb_error_t>
   load_object(bucket_id_t bucket_id, std::string_view object_name);
 
   std::expected<std::optional<LoadResult>, fdb_error_t>
   load_object_with_data(bucket_id_t bucket_id, std::string_view object_name);
 
+  // want_manifest: bind the manifest (local copy, else C:E / C:M per the
+  // location nibbles) into value->manifest_blob.
   KvrgwErrorCode load_object_for_read(
       tenant_id_t tenant_id,
       std::string_view bucket_name,
       std::string_view key,
       std::optional<version_id_t> version_id,
       bool load_kv_data,
-      ObjectValue* value,
+      OwnedObjectValue* value,
       std::string* kv_data,
-      std::string* error_detail);
+      std::string* error_detail,
+      bool want_manifest = false);
+
+  // Reads C:E for an object with kFlagExternalMetadata and binds its
+  // metadata_frame (and, per the flags / manifest_loc, the manifest tail)
+  // into `v`; the bytes live in v.child_e_raw. No-op without the flag.
+  KvrgwErrorCode bind_child_e(bucket_id_t bucket_id, OwnedObjectValue& v,
+                              KvTransaction* tr = nullptr);
+
+  // Multipart child loaders. Read rule: a local copy in :O: is always used;
+  // C:E / C:M / C:S / the checksum file are read only when none is stored.
+  // `tr` null: read through store_ instead.
+  // load_manifest binds the manifest blob (a G:M{FREE_PARTS} value) into
+  // v.manifest_blob (backed by v.child_e_raw).
+  KvrgwErrorCode load_manifest(bucket_id_t bucket_id, OwnedObjectValue& v,
+                               KvTransaction* tr = nullptr);
+  // Per-part digests of entries [first_rank, first_rank + count) of the
+  // object's included parts, concatenated (count * digest_len bytes).
+  KvrgwErrorCode load_checksum_blob(bucket_id_t bucket_id, const ObjectValue& v,
+                                    size_t first_rank, size_t count,
+                                    std::string* out, KvTransaction* tr = nullptr);
+  // Same, into a caller buffer of count * digest_len bytes (no allocation; a
+  // C:S child is read zero-copy and only the slice is copied out).
+  KvrgwErrorCode load_checksum_slice(bucket_id_t bucket_id, const ObjectValue& v,
+                                     size_t first_rank, size_t count, uint8_t* out,
+                                     KvTransaction* tr = nullptr);
 
   bool move_object_to_g(KvTransaction& tr, std::string_view object_key, const ObjectValue& value);
+
+  // Step (a) of move_object_to_g: hands the object's data to the GC domain
+  // (G:O / G:M entry) and clears its own children, but does not delete
+  // `object_key` (an :O: or :V: key). Multipart objects are never freed
+  // inline: every delete path uses this.
+  bool hand_off_object_to_gc(KvTransaction& tr, std::string_view object_key,
+                             std::string_view raw_value);
 
   struct NewVersionIds {
     version_id_t version_id;
@@ -799,9 +872,9 @@ class KvRgwServiceImpl final {
       std::string_view old_raw, const PutCondition* cond,
       ObjectValue& new_value);
 
-  // Serializes `value` (OValueBufMultipart for CHUNK_MULTIPART[_REF], OValueBuf
-  // otherwise) and kv_put()s it at `object_key`. Returns false if the value
-  // does not fit; on success optionally reports the written size.
+  // Serializes `value` into a stack OValueBuf and kv_put()s it at
+  // `object_key`. Returns false if the value is illegal or does not fit
+  // kMaxOValueBytes; on success optionally reports the written size.
   static bool write_o_value(KvTransaction& tr, std::string_view object_key,
                             const ObjectValue& value,
                             size_t* out_size = nullptr);
@@ -827,7 +900,7 @@ class KvRgwServiceImpl final {
     // handed to G:M{MIXED}/P:M. A part can have more than one COMMITTED
     // generation; this is the one whose ETag the client sent (highest
     // generation wins on an ETag tie -- Section 8).
-    std::vector<uint32_t> keep_list;
+    std::vector<uint16_t> keep_list;
     // Size of the chosen generation for each matched part, same order as
     // `included`/`keep_list` -- Knob 3 (size) input for the keep-list's
     // compact encoding (plans/multipart_manifest.md). GC/Sweeper never
@@ -835,12 +908,22 @@ class KvRgwServiceImpl final {
     // still gets encoded for real so the codec stays exercised uniformly
     // ahead of Phase 8's manifest, which will need it for real.
     std::vector<uint64_t> sizes;
+    // Checksums (alg != NONE only): per-part raw digests of the chosen
+    // generations, concatenated in part order (digest_len each), and the
+    // combined object digest (raw). Filled by the scan / step2.
+    CksumAlg cksum_alg{CksumAlg::NONE};
+    CksumType cksum_type{CksumType::NONE};
+    std::string cksum_blob;
+    uint8_t cksum_combined[kCksumMaxDigestBytes]{};
+    FirstPartInfo first_part{};   // lowest-numbered included part
   };
 
   KvrgwErrorCode complete_multipart_upload_step2(std::string_view head_key,
                                                  bucket_id_t bucket_id,
                                                  std::string_view rt_view,
                                                  std::span<const CompletedPart> client_parts,
+                                                 CksumAlg up_alg, CksumType up_type,
+                                                 const CompleteCksumReq& cksum_req,
                                                  ManifestScanResult *scan_result /*OUT*/);
 
   struct Step3Result {
@@ -848,6 +931,7 @@ class KvRgwServiceImpl final {
     std::string etag;
     version_id_t version_id{};
     bucket_id_t bucket_id{};  // may be updated on BUCKET_ID_MISMATCH retry
+    std::string checksum;     // S3 rendering of the object checksum; empty if none
   };
 
   KvrgwErrorCode complete_multipart_upload_step3(tenant_id_t tenant_id,
@@ -864,7 +948,8 @@ class KvRgwServiceImpl final {
 
   std::expected<ManifestScanResult, KvrgwErrorCode> scan_upload_rows(
       KvTransaction& tr, bucket_id_t bucket_id, std::string_view ref_tag,
-      std::span<const CompletedPart> client_parts);
+      std::span<const CompletedPart> client_parts,
+      CksumAlg up_alg = CksumAlg::NONE);
 
   // Batch-level state shared across all keys in a single-bucket delete operation.
   // bucket_name is a reference — caller must ensure the string outlives the batch.
@@ -936,9 +1021,9 @@ class KvRgwServiceImpl final {
 
   KvrgwErrorCode put_object_phase3(
       tenant_id_t tenant_id,
-      const std::string& bucket_name,
+      std::string_view bucket_name,
       bucket_id_t bucket_id,
-      const std::string& object_name,
+      std::string_view object_name,
       ObjectValue& new_value,
       VersioningState* out_versioning_state = nullptr,
       const PutCondition* cond = nullptr,
@@ -947,21 +1032,22 @@ class KvRgwServiceImpl final {
 
   KvrgwErrorCode put_object_single_txn(
       tenant_id_t tenant_id,
-      const std::string& bucket_name,
-      const std::string& object_name,
+      std::string_view bucket_name,
+      std::string_view object_name,
       ObjectValue& new_value,
-      const std::string& data,
+      std::string_view data,
       VersioningState* out_versioning_state = nullptr,
       const PutCondition* cond = nullptr,
       std::span<const uint8_t> tags = {},
       std::span<const uint8_t> metadata = {});
 
-  KvrgwErrorCode select_storage_tier(
+  // Storage tier only: the caller has already chosen the tier.
+  KvrgwErrorCode put_object_storage_tier(
       tenant_id_t tenant_id,
-      const std::string& bucket_name,
-      const std::string& object_name,
+      std::string_view bucket_name,
+      std::string_view object_name,
       ObjectValue& object_value,
-      const std::string& data,
+      std::string_view data,
       uint64_t estimated_size,
       VersioningState* out_versioning_state = nullptr,
       const PutCondition* cond = nullptr,
@@ -991,6 +1077,7 @@ class KvRgwServiceImpl final {
   OpsStats ops_stats_;
   std::unique_ptr<ErrorStats> error_stats_;
   ErrInsertion err_insertion_;
+  std::atomic<uint64_t> min_part_size_{kMinPartSizeBytes};
   bool listing_disable_ryw_{true};
   BatchCommitQueue batch_queue_;
   mutable std::shared_mutex cache_mu_;

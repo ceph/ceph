@@ -92,10 +92,11 @@ object_key = (
 obj_val = raw_get(object_key.hex())
 assert obj_val, f"object {object_name} not found"
 
-ref_tag = obj_val[0:12]
-size = struct.unpack(">Q", obj_val[32:40])[0]
-mtime = struct.unpack(">I", obj_val[40:44])[0]
-chunk_type = chr(obj_val[48])
+# ObjectValueHeader: chunk_type @2, size @8, last_modified_sec @16, ref_tag @32
+ref_tag = obj_val[32:44]
+size = struct.unpack(">Q", obj_val[8:16])[0]
+mtime = struct.unpack(">I", obj_val[16:20])[0]
+chunk_type = chr(obj_val[2])
 
 # Compute D: key fields
 def d_size_tier(s):

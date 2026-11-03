@@ -31,6 +31,7 @@
 #include "kv_store.hpp"
 #include "multipart_value.hpp"
 #include "object_value.hpp"
+#include "tier_config_state.hpp"
 
 #include <algorithm>
 #include <array>
@@ -73,9 +74,26 @@ KvRgwServiceImpl::initiate_multipart_upload(tenant_id_t tenant_id,
                                             std::string_view object_name,
                                             std::string_view content_type,
                                             std::span<const TagPair> tags,
-                                            std::span<const MetaPair> metadata)
+                                            std::span<const MetaPair> metadata,
+                                            CksumAlg cksum_alg,
+                                            CksumType cksum_type)
 {
   InitiateMultipartResult result;
+  if (cksum_alg == CksumAlg::NONE) {
+    if (cksum_type != CksumType::NONE) {
+      result.error_code = KVRGW_ERR_INVALID_REQUEST;
+      return result;
+    }
+  }
+  else {
+    if (cksum_type == CksumType::NONE) {
+      cksum_type = cksum_default_type(cksum_alg);
+    }
+    if (!cksum_type_valid_for_alg(cksum_alg, cksum_type)) {
+      result.error_code = KVRGW_ERR_INVALID_REQUEST;
+      return result;
+    }
+  }
   // TBD: create unified parameters-check for PUT() and initiate_multipart_upload()
   if (object_name.empty() || object_name.size() > AWS_MaxObjectNameLen) {
     result.error_code = KVRGW_ERR_INVALID_ARGUMENT;
@@ -102,25 +120,23 @@ KvRgwServiceImpl::initiate_multipart_upload(tenant_id_t tenant_id,
   const RefTag ref_tag = ref_tags_.next();
   const int64_t initiated_unix_ms = now_unix_ms();
 
-  std::string ct_value;
-  std::vector<uint8_t> tag_buf;
+  std::array<uint8_t, kMaxTagFrameBytes> tag_buf;
+  size_t tag_len = 0;
   uint8_t tags_count = 0;
   if (!tags.empty()) {
-    if (!encode_tags(tags, tag_buf)) {
+    if (!encode_tags(tags, std::span<uint8_t>(tag_buf), tag_len)) {
       result.error_code = KVRGW_ERR_INVALID_TAG;
       return result;
     }
     tags_count = static_cast<uint8_t>(tags.size());
-
-    ChildValueHeader ch{};
-    auto sv = std::string_view(reinterpret_cast<const char *>
-                               (tag_buf.data()), tag_buf.size());
-    ct_value = make_child_value(ch, sv);
   }
+  const ChildValueBuf ct_value(
+      ChildValueHeader{},
+      std::string_view(reinterpret_cast<const char *>(tag_buf.data()), tag_len));
 
   MHeadValueBuf head_buf;
   bool success = make_m_head_value(head_buf, initiated_unix_ms, content_type,
-                                   tags_count, metadata);
+                                   tags_count, metadata, cksum_alg, cksum_type);
   if (!success) {
     result.error_code = KVRGW_ERR_VALUE_TOO_LARGE;
     return result;
@@ -135,7 +151,7 @@ KvRgwServiceImpl::initiate_multipart_upload(tenant_id_t tenant_id,
     KeyBuf head_key;
     make_m_head_key(bucket_id, object_name, ref_tag.view(), head_key);
     KeyBuf ct_key;
-    if (!tag_buf.empty()) {
+    if (tag_len > 0) {
       make_ct_key(bucket_id, ref_tag.view(), ct_key);
     }
 
@@ -144,8 +160,8 @@ KvRgwServiceImpl::initiate_multipart_upload(tenant_id_t tenant_id,
       auto &tr = *tr_result;
       auto f_bkt = issue_bucket_get(*tr, tenant_id, bucket_name);
       tr->kv_put(head_key.view(), head_buf.view());
-      if (!tag_buf.empty()) {
-        tr->kv_put(ct_key.view(), ct_value);
+      if (tag_len > 0) {
+        tr->kv_put(ct_key.view(), ct_value.value());
       }
 
       // Authoritative bucket verification before commit — catches a deleted or
@@ -210,6 +226,7 @@ struct PartRowEntry {
   uint32_t generation{0};
   ETag etag{};
   uint8_t state{M_PART_PENDING};
+  uint8_t cksum[kCksumMaxDigestBytes]{};
 };
 
 //--------------------------------------------------------------------------------
@@ -348,7 +365,8 @@ KvrgwErrorCode upload_part_phase1_attempt(KvStore &store,
                                           bucket_id_t bucket_id,
                                           std::string_view rt_view,
                                           uint16_t part_number,
-                                          uint32_t *out_generation)
+                                          uint32_t *out_generation,
+                                          CksumAlg *out_alg)
 {
   auto tr_result = store.begin_transaction();
   if (!tr_result) [[unlikely]] {
@@ -379,6 +397,12 @@ KvrgwErrorCode upload_part_phase1_attempt(KvStore &store,
 
   if (const fdb_error_t werr = range_holder.wait()) [[unlikely]] {
     return fdb_to_error(werr);
+  }
+
+  // The upload's checksum algorithm lives in the S:M head.
+  *out_alg = CksumAlg::NONE;
+  if (auto hv = view_m_head_value(head_holder.value())) {
+    *out_alg = hv->cksum_alg;
   }
 
   uint32_t my_generation = 0;
@@ -412,7 +436,12 @@ KvrgwErrorCode upload_part_phase1_attempt(KvStore &store,
 //     itself isn't struggling right now, so a subsequent error should
 //     restart from the smallest delay.
 //  A non-retriable error always returns immediately, bypassing the budget entirely.
-std::expected<uint32_t, KvrgwErrorCode> upload_part_phase1(KvStore &store,
+struct Phase1Out {
+  uint32_t generation{0};
+  CksumAlg alg{CksumAlg::NONE};  // the upload's checksum algorithm
+};
+
+std::expected<Phase1Out, KvrgwErrorCode> upload_part_phase1(KvStore &store,
                                                            bucket_id_t bucket_id,
                                                            std::string_view object_name,
                                                            const RefTag &ref_tag,
@@ -428,11 +457,12 @@ std::expected<uint32_t, KvrgwErrorCode> upload_part_phase1(KvStore &store,
   const int64_t poll_start_ms = steady_now_ms();
   int attempt = 0;
   do {
-    uint32_t generation = 0;
+    Phase1Out out;
     const auto ec = upload_part_phase1_attempt(store, head_key.view(), part_prefix.view(),
-                                               scan_end, bucket_id, rt_view, part_number, &generation);
+                                               scan_end, bucket_id, rt_view, part_number,
+                                               &out.generation, &out.alg);
     if (ec == KVRGW_ERR_OK) {
-      return generation;
+      return out;
     }
 
     if (ec == KVRGW_ERR_UPLOAD_IN_PROGRESS) {
@@ -473,7 +503,8 @@ KvrgwErrorCode upload_part_phase3(KvStore &store,
                                   uint16_t part_number,
                                   uint32_t generation,
                                   uint64_t size,
-                                  const ETag &etag)
+                                  const ETag &etag,
+                                  const uint8_t *cksum, size_t cksum_len)
 {
   const std::string_view rt_view = ref_tag.view();
   KeyBuf head_key;
@@ -544,6 +575,9 @@ KvrgwErrorCode upload_part_phase3(KvStore &store,
     updated.etag = etag;
     updated.size = size;
     updated.mtime = static_cast<uint32_t>(now_unix());
+    if (cksum_len > 0) {
+      memcpy(updated.cksum, cksum, std::min(cksum_len, sizeof(updated.cksum)));
+    }
     uint8_t raw_buf[sizeof(MPartValue)];
     make_m_part_value(updated, raw_buf);
     tr->kv_put(own_key.view(),
@@ -572,7 +606,9 @@ KvRgwServiceImpl::upload_part(tenant_id_t tenant_id,
                               std::string_view upload_id,
                               uint16_t part_number,
                               const uint8_t *data,
-                              size_t data_len)
+                              size_t data_len,
+                              CksumAlg client_alg,
+                              std::string_view client_cksum)
 {
   UploadPartResult result;
 
@@ -597,6 +633,20 @@ KvRgwServiceImpl::upload_part(tenant_id_t tenant_id,
     return result;
   }
 
+  // Client-supplied checksum: verified before any KV is touched, so a
+  // BadDigest leaves no PENDING row behind.
+  uint8_t cksum[kCksumMaxDigestBytes]{};
+  size_t cksum_len = 0;
+  if (client_alg != CksumAlg::NONE) {
+    CksumHasher hasher(client_alg);
+    hasher.update(data, data_len);
+    cksum_len = hasher.finalize(cksum);
+    if (base64_encode(cksum, cksum_len) != client_cksum) [[unlikely]] {
+      result.error_code = KVRGW_ERR_BAD_DIGEST;
+      return result;
+    }
+  }
+
   auto cached = get_bucket_id_cached(tenant_id, bucket_name);
   if (!cached) [[unlikely]] {
     result.error_code = fdb_to_error(cached.error());
@@ -616,7 +666,24 @@ KvRgwServiceImpl::upload_part(tenant_id_t tenant_id,
     result.error_code = gen_result.error();
     return result;
   }
-  const uint32_t generation = *gen_result;
+  const uint32_t generation = gen_result->generation;
+  const CksumAlg upload_alg = gen_result->alg;
+
+  // Store a digest only for the upload's algorithm. A client checksum for a
+  // different algorithm is rejected; for an upload without one it was only
+  // verified above.
+  if (upload_alg == CksumAlg::NONE) {
+    cksum_len = 0;
+  }
+  else if (client_alg != upload_alg) {
+    if (client_alg != CksumAlg::NONE) [[unlikely]] {
+      result.error_code = KVRGW_ERR_INVALID_REQUEST;
+      return result;
+    }
+    CksumHasher hasher(upload_alg);
+    hasher.update(data, data_len);
+    cksum_len = hasher.finalize(cksum);
+  }
 
   // Phase 2 — data-tier write, no KV.
   unsigned char digest[16];
@@ -649,9 +716,13 @@ KvRgwServiceImpl::upload_part(tenant_id_t tenant_id,
 
   // Phase 3 (txn).
   auto ec = upload_part_phase3(store_, bucket_id, object_name, ref_tag,
-                               part_number, generation, data_len, etag);
+                               part_number, generation, data_len, etag, cksum, cksum_len);
   if (ec == KVRGW_ERR_OK) {
     result.etag = etag.to_hex();
+    if (cksum_len > 0) {
+      result.checksum_alg = upload_alg;
+      result.checksum = base64_encode(cksum, cksum_len);
+    }
     return result;
   }
   else {
@@ -1087,7 +1158,8 @@ struct RowOutcome {
   bool matched{false};
   ETag etag{};
   uint64_t size{0};
-  uint32_t generation{0};
+  uint16_t generation{0};
+  uint8_t cksum[kCksumMaxDigestBytes]{};
 };
 
 // Processes one part_number's full run of S:U entries (every generation
@@ -1108,7 +1180,9 @@ RowOutcome process_manifest_row(uint16_t part_number,
                                  std::span<const PartRowEntry> row,
                                  std::span<const KvRgwServiceImpl::CompletedPart> client_parts,
                                  bool is_abort,
-                                 size_t &cursor)
+                                 size_t &cursor,
+                                 uint64_t min_part_size,
+                                 CksumAlg up_alg)
 {
   RowOutcome outcome;
   for (const auto &e : row) {
@@ -1158,10 +1232,30 @@ RowOutcome process_manifest_row(uint16_t part_number,
   }
 
   // AWS requires all part except the last one to be >= kMinPartSizeBytes
-  if (part_number != last_client_part && chosen->size < kMinPartSizeBytes) {
+  // (min_part_size: runtime value, kMinPartSizeBytes unless overridden)
+  if (part_number != last_client_part && chosen->size < min_part_size) {
     outcome.abort = true;
     outcome.abort_error = KVRGW_ERR_ENTITY_TOO_SMALL;
     return outcome;
+  }
+
+  // A per-part checksum the client lists must equal the stored one (BadDigest
+  // otherwise); a part listed without one is accepted, as RGW does. Decoded
+  // into a stack buffer, compared in place.
+  if (up_alg != CksumAlg::NONE) {
+    const auto &cp = client_parts[cursor];
+    const size_t dlen = cksum_digest_len(up_alg);
+    if (cp.cksum_alg != CksumAlg::NONE || !cp.cksum.empty()) {
+      uint8_t dec[kCksumMaxDigestBytes + 2];
+      size_t n = 0;
+      if (cp.cksum_alg != up_alg || !base64_decode_to(cp.cksum, dec, sizeof(dec), &n) ||
+          n != dlen || std::memcmp(dec, chosen->cksum, dlen) != 0) [[unlikely]] {
+        outcome.abort = true;
+        outcome.abort_error = KVRGW_ERR_BAD_DIGEST;
+        return outcome;
+      }
+    }
+    std::memcpy(outcome.cksum, chosen->cksum, dlen);
   }
 
   outcome.matched = true;
@@ -1181,9 +1275,15 @@ std::expected<KvRgwServiceImpl::ManifestScanResult, KvrgwErrorCode>
 KvRgwServiceImpl::scan_upload_rows(KvTransaction &tr,
                                    bucket_id_t bucket_id,
                                    std::string_view ref_tag,
-                                   std::span<const CompletedPart> client_parts)
+                                   std::span<const CompletedPart> client_parts,
+                                   CksumAlg up_alg)
 {
   ManifestScanResult result;
+  result.cksum_alg = up_alg;
+  const size_t dlen = cksum_digest_len(up_alg);
+  if (dlen > 0) {
+    result.cksum_blob.reserve(client_parts.size() * dlen);
+  }
   result.included.reserve(client_parts.size());
   result.keep_list.reserve(client_parts.size());
   result.sizes.reserve(client_parts.size());
@@ -1192,6 +1292,7 @@ KvRgwServiceImpl::scan_upload_rows(KvTransaction &tr,
   make_u_prefix(bucket_id, ref_tag, prefix_buf);
   const std::string scan_end = prefix_range_end(prefix_buf.view());
 
+  const uint64_t min_part_size = min_part_size_.load(std::memory_order_relaxed);
   size_t matched_count = 0;
   // Abort always passes an empty client_parts (see abort_multipart_upload)
   // only Complete needs part-matching/selection, Abort only needs has_pending.
@@ -1204,7 +1305,7 @@ KvRgwServiceImpl::scan_upload_rows(KvTransaction &tr,
   // running result/matched_count. "First abort wins" is preserved: once
   // result.abort is set by an earlier row, later rows' abort_error is
   // discarded (matches the original inline-lambda behavior).
-  auto apply = [&](uint16_t /*part_number*/, const RowOutcome &outcome) {
+  auto apply = [&](uint16_t part_number, const RowOutcome &outcome) {
     if (outcome.has_pending) {
       result.has_pending = true;
     }
@@ -1213,11 +1314,20 @@ KvRgwServiceImpl::scan_upload_rows(KvTransaction &tr,
       result.abort_error = outcome.abort_error;
     }
     if (outcome.matched) {
+      if (matched_count == 0) {
+        // Lowest-numbered included part (rows arrive in ascending order).
+        result.first_part.part_number = part_number;
+        result.first_part.generation = static_cast<uint16_t>(outcome.generation);
+        result.first_part.size = outcome.size;
+      }
       ++matched_count;
       result.included.emplace_back(outcome.etag);
       result.total_size += outcome.size;
       result.keep_list.emplace_back(outcome.generation);
       result.sizes.emplace_back(outcome.size);
+      if (dlen > 0) {
+        result.cksum_blob.append(reinterpret_cast<const char *>(outcome.cksum), dlen);
+      }
     }
   };
 
@@ -1251,7 +1361,8 @@ KvRgwServiceImpl::scan_upload_rows(KvTransaction &tr,
       }
       if (open_run && parsed->part_number != curr_part) {
         const auto &outcome = process_manifest_row(curr_part, std::span(row_buf.data(), row_count),
-                                                   client_parts, is_abort, client_cursor);
+                                                   client_parts, is_abort, client_cursor,
+                                                   min_part_size, up_alg);
         apply(curr_part, outcome);
         row_count = 0;
         open_run = false;
@@ -1262,8 +1373,12 @@ KvRgwServiceImpl::scan_upload_rows(KvTransaction &tr,
       }
       curr_part = parsed->part_number;
       if (row_count < row_buf.size()) [[likely]] {
-        row_buf[row_count++] = PartRowEntry{pv->size, parsed->generation, pv->etag,
-                                            pv->state};
+        PartRowEntry &re = row_buf[row_count++];
+        re.size = pv->size;
+        re.generation = parsed->generation;
+        re.etag = pv->etag;
+        re.state = pv->state;
+        std::memcpy(re.cksum, pv->cksum, sizeof(re.cksum));
       }
       open_run = true;
     }
@@ -1274,7 +1389,8 @@ KvRgwServiceImpl::scan_upload_rows(KvTransaction &tr,
   }
   if (open_run) {
     const auto &outcome = process_manifest_row(curr_part, std::span(row_buf.data(), row_count),
-                                               client_parts, is_abort, client_cursor);
+                                               client_parts, is_abort, client_cursor,
+                                               min_part_size, up_alg);
     apply(curr_part, outcome);
   }
 
@@ -1293,7 +1409,8 @@ namespace {
 
 // ---- TXN 1 — verify head is ACTIVE, flip to IN_TRANSIENT. ----
 //--------------------------------------------------------------------------------
-KvrgwErrorCode complete_multipart_upload_step1(KvStore &store, std::string_view head_key)
+KvrgwErrorCode complete_multipart_upload_step1(KvStore &store, std::string_view head_key,
+                                               CksumAlg *up_alg, CksumType *up_type)
 {
   auto tr_result = store.begin_transaction();
   if (!tr_result) [[unlikely]] {
@@ -1320,6 +1437,11 @@ KvrgwErrorCode complete_multipart_upload_step1(KvStore &store, std::string_view 
     return KVRGW_ERR_INTERNAL;
   }
 
+  if (auto hv = view_m_head_value(head_holder.value())) {
+    *up_alg = hv->cksum_alg;
+    *up_type = hv->cksum_type;
+  }
+
   // block the session — zero-allocation: copy the raw value into a stack
   // buffer and patch just the state byte (Section 9/no struct-level parse).
   MHeadValueBuf buf;
@@ -1341,6 +1463,8 @@ KvrgwErrorCode KvRgwServiceImpl::complete_multipart_upload_step2(std::string_vie
                                                                  bucket_id_t bucket_id,
                                                                  std::string_view rt_view,
                                                                  std::span<const CompletedPart> client_parts,
+                                                                 CksumAlg up_alg, CksumType up_type,
+                                                                 const CompleteCksumReq& cksum_req,
                                                                  ManifestScanResult *p_scan_result /*OUT*/)
 {
   auto tr_result = store_.begin_transaction();
@@ -1354,11 +1478,41 @@ KvrgwErrorCode KvRgwServiceImpl::complete_multipart_upload_step2(std::string_vie
   // I/O instead of paying its RTT afterward (Section 9).
   FdbGetHolder head_holder(tr->kv_async_get_holder(head_key));
 
-  auto scan = scan_upload_rows(*tr, bucket_id, rt_view, client_parts);
+  auto scan = scan_upload_rows(*tr, bucket_id, rt_view, client_parts, up_alg);
   if (!scan) {
     return scan.error();
   }
   *p_scan_result = std::move(*scan);
+
+  // Combined checksum + the client's whole-object checksum. All verification
+  // happens here, before anything is written; a mismatch takes the same
+  // IN_TRANSIENT -> ACTIVE revert as a bad part.
+  if (!p_scan_result->abort && up_alg != CksumAlg::NONE) {
+    p_scan_result->cksum_type = up_type;
+    const size_t dlen = cksum_digest_len(up_alg);
+    CombinedCksumBuilder builder(up_alg, up_type);
+    const auto *blob = reinterpret_cast<const uint8_t *>(p_scan_result->cksum_blob.data());
+    for (size_t i = 0; i < p_scan_result->sizes.size(); ++i) {
+      builder.fold(blob + i * dlen, p_scan_result->sizes[i]);
+    }
+    builder.finalize_raw(p_scan_result->cksum_combined);
+
+    const bool want_check = cksum_req.alg != CksumAlg::NONE;
+    if (want_check && cksum_req.type != CksumType::NONE && cksum_req.type != up_type) {
+      p_scan_result->abort = true;
+      p_scan_result->abort_error = KVRGW_ERR_INVALID_REQUEST;
+    }
+    else if (want_check) {
+      char rendered[96];
+      const size_t n = cksum_render(up_type, p_scan_result->cksum_combined, dlen,
+                                    static_cast<uint32_t>(p_scan_result->sizes.size()), rendered);
+      if (cksum_req.alg != up_alg ||
+          std::string_view(rendered, n) != cksum_req.value) {
+        p_scan_result->abort = true;
+        p_scan_result->abort_error = KVRGW_ERR_BAD_DIGEST;
+      }
+    }
+  }
 
   if (!p_scan_result->abort) {
     return KVRGW_ERR_OK;
@@ -1452,6 +1606,9 @@ KvrgwErrorCode KvRgwServiceImpl::complete_multipart_upload_step3(
     return fdb_to_error(werr);
   }
 
+  // TBD:
+  // PRECONDITION should be checked before modiying version state!
+
   // Check condition -> displace -> version. Nothing is written on a failure.
   ObjectValue new_value;
   auto ids = install_object_value(*tr, vb->versioning_state, object_key.view(),
@@ -1472,26 +1629,34 @@ KvrgwErrorCode KvRgwServiceImpl::complete_multipart_upload_step3(
     return ids_ec;
   }
 
+  // TBD:
+  // manifest encoding should be done before starting txn
+
   // Build the manifest once -- its keep-list's part-numbers come from
   // client_parts (scan_upload_rows only reaches this point once every
   // entry has matched, so it's exactly the included set); generations/
-  // sizes come from the scan result, same ascending order. Reused
-  // verbatim below for both the :O: value's tail and the G:M{MIXED}/
-  // P:M{COMMIT} cleanup directive.
-  std::vector<uint16_t> included_part_numbers(client_parts.size());
+  // sizes come from the scan result, same ascending order. The buffer is
+  // [8 B G:M header][manifest]: first a FREE_PARTS blob (stored as is on
+  // the :O: value / S:C:M child), then the header is patched to MIXED and
+  // the Knob 1+2 prefix of the same bytes becomes the G:M / P:M value.
+  std::array<uint16_t, kMaxPartNumber> included_part_numbers;
   for (size_t i = 0; i < client_parts.size(); ++i) {
     included_part_numbers[i] = client_parts[i].part_number;
   }
-  const ManifestInput manifest_in{included_part_numbers, scan_result.keep_list,
-                                  scan_result.sizes};
-  uint8_t manifest_buf[kManifestBodyWorstCase];
-  const size_t manifest_len = encode_manifest_body(manifest_buf, sizeof(manifest_buf),
-                                                   manifest_in);
+  const ManifestInput manifest_in{
+      std::span<const uint16_t>(included_part_numbers.data(), client_parts.size()),
+      scan_result.keep_list, scan_result.sizes};
+  std::array<uint8_t, kGmHeaderSize + manifest_body_bound(kMaxPartNumber)> manifest_buf;
+  size_t keep_len = 0;
+  const size_t manifest_len = encode_manifest_body(manifest_buf.data() + kGmHeaderSize,
+                                                   manifest_buf.size() - kGmHeaderSize,
+                                                   manifest_in, &keep_len);
   if (manifest_len == 0) [[unlikely]] {
     return KVRGW_ERR_INTERNAL;
   }
-  const std::string_view manifest_body(reinterpret_cast<const char*>(manifest_buf),
-                                       manifest_len);
+  write_gm_header(manifest_buf.data(), GM_MODE_FREE_PARTS, 0);
+  const std::string_view manifest_blob(reinterpret_cast<const char*>(manifest_buf.data()),
+                                       kGmHeaderSize + manifest_len);
 
   // Assemble + write the final :O: value.
   new_value.hdr.ref_tag = ref_tag;
@@ -1499,21 +1664,51 @@ KvrgwErrorCode KvRgwServiceImpl::complete_multipart_upload_step3(
   new_value.hdr.size = scan_result.total_size;
   stamp_mtime(new_value.hdr);
   new_value.hdr.chunk_type = CHUNK_MULTIPART;
-  new_value.hdr.part_count = static_cast<uint16_t>(included_part_numbers.size());
   new_value.hdr.flags = 0;
   new_value.hdr.tags_count = head_view->tags_count;
   if (new_value.hdr.tags_count > 0) {
-    new_value.hdr.flags |= ObjectValue::kFlagExternalTags;
+    new_value.hdr.flags |= kFlagExternalTags;
   }
   new_value.hdr.version_id = ids->version_id;
   new_value.hdr.next_vid = ids->next_vid;
-  new_value.content_type.assign(head_view->content_type);
-  if (!head_view->metadata_frame.empty()) {
-    new_value.hdr.metadata_count = head_view->metadata_count;
-    new_value.metadata_frame.assign(head_view->metadata_frame.begin(),
-                                    head_view->metadata_frame.end());
+  new_value.content_type = head_view->content_type;
+  new_value.hdr.metadata_count = head_view->metadata_count;
+  new_value.set_self_chunk(out->bucket_id);
+
+  // Checksum fields, then the two-phase placement (the payloads in `placed`
+  // are views of manifest_buf / scan_result.cksum_blob / the head value).
+  const size_t cdlen = cksum_digest_len(scan_result.cksum_alg);
+  if (scan_result.cksum_alg != CksumAlg::NONE) {
+    new_value.hdr.set_cksum_alg(scan_result.cksum_alg);
+    new_value.set_cksum_combined(
+        std::span<const uint8_t>(scan_result.cksum_combined, cdlen));
   }
-  new_value.manifest_body.assign(manifest_body);
+  MultipartPlacementIn place_in;
+  place_in.metadata_frame = head_view->metadata_frame;
+  place_in.manifest = manifest_blob;
+  place_in.cksum_blob = scan_result.cksum_blob;
+  place_in.first_part = scan_result.first_part;
+  place_in.composite = scan_result.cksum_type == CksumType::COMPOSITE;
+  MultipartPlacementOut placed;
+  if (!place_multipart(new_value, place_in, placed)) [[unlikely]] {
+    return KVRGW_ERR_VALUE_TOO_LARGE;
+  }
+  if (placed.has_child_e) {
+    const ChildValueBuf e_buf(placed.child_e);
+    KeyBuf child_key;
+    make_child_key(out->bucket_id, rt_view, kChildTypeExtended, child_key);
+    tr->kv_put(child_key.view(), e_buf.value());
+  }
+  if (new_value.manifest_loc == kManifestChildM) {
+    KeyBuf child_key;
+    make_child_key(out->bucket_id, rt_view, kChildTypeManifest, child_key);
+    tr->kv_put(child_key.view(), placed.manifest_child);
+  }
+  if (new_value.cksum_loc == kCksumChildS) {
+    KeyBuf child_key;
+    make_child_key(out->bucket_id, rt_view, kChildTypeChecksum, child_key);
+    tr->kv_put(child_key.view(), placed.checksum_child);
+  }
 
   size_t written = 0;
   if (!write_o_value(*tr, object_key.view(), new_value, &written)) [[unlikely]] {
@@ -1522,22 +1717,40 @@ KvrgwErrorCode KvRgwServiceImpl::complete_multipart_upload_step3(
   store_.fdb_put_stats().record_value(written);
 
   tr->kv_del(head_key);
-  if (scan_result.has_pending) {
-    PmValueBuf pm_buf;
-    make_pm_value(pm_buf, PM_STATE_COMMIT, static_cast<uint32_t>(now_unix()), manifest_in);
-    tr->kv_put(pm_key.view(), pm_buf.view());
-  }
-  else {
-    GmValueBuf gm_buf;
-    make_gm_value(gm_buf, GM_MODE_MIXED, manifest_in);
-    tr->kv_put(gm_key.view(), gm_buf.view());
+  // The :O: / S:C:M writes above already copied the FREE_PARTS blob into the
+  // transaction, so the header can now be patched to the cleanup directive.
+  write_gm_header(manifest_buf.data(), GM_MODE_MIXED, static_cast<uint32_t>(now_unix()));
+  tr->kv_put(scan_result.has_pending ? pm_key.view() : gm_key.view(),
+             std::string_view(reinterpret_cast<const char*>(manifest_buf.data()),
+                              kGmHeaderSize + keep_len));
+
+  // Tier 3: the only write outside the transaction. Verification has passed;
+  // a retried Complete overwrites the same file.
+  char cks_name[kRefTagSize * 2 + 16];
+  std::string_view cks_file;
+  if (new_value.cksum_loc == kCksumFile) {
+    cks_file = checksum_filename_buf(ref_tag, cks_name);
+    if (cks_file.empty() || data_store_.write(cks_file, placed.checksum_file)) [[unlikely]] {
+      return KVRGW_ERR_INTERNAL;
+    }
   }
 
   fdb_error_t err = tr->commit();
   if (!err) {
     out->etag = composite_etag.to_hex();
     out->version_id = ids->version_id;
+    if (cdlen > 0) {
+      char rendered[96];
+      const size_t n = cksum_render(scan_result.cksum_type, scan_result.cksum_combined, cdlen,
+                                    static_cast<uint32_t>(scan_result.sizes.size()), rendered);
+      out->checksum.assign(rendered, n);
+    }
     return KVRGW_ERR_OK;
+  }
+  // Remove the file on a definite failure; after an unknown commit outcome it
+  // may belong to the committed object, so it is left in place.
+  if (!cks_file.empty() && fdb_to_error(err) != KVRGW_ERR_FDB_COMMIT_UNKNOWN) {
+    (void)data_store_.remove(cks_file);
   }
   return fdb_to_error(err);
 }
@@ -1547,7 +1760,8 @@ KvRgwServiceImpl::CompleteMultipartResult KvRgwServiceImpl::complete_multipart_u
     tenant_id_t tenant_id, std::string_view bucket_name,
     std::string_view object_name, std::string_view upload_id,
     std::span<const CompletedPart> client_parts,
-    std::string_view if_match, std::string_view if_none_match)
+    std::string_view if_match, std::string_view if_none_match,
+    const CompleteCksumReq& cksum_req)
 {
   CompleteMultipartResult result;
 
@@ -1600,9 +1814,11 @@ KvRgwServiceImpl::CompleteMultipartResult KvRgwServiceImpl::complete_multipart_u
   make_m_head_key(bucket_id, object_name, rt_view, head_key);
 
   KvrgwErrorCode ec = KVRGW_ERR_OK;
+  CksumAlg up_alg = CksumAlg::NONE;
+  CksumType up_type = CksumType::NONE;
   // ---- TXN 1 — verify head is ACTIVE, flip to IN_TRANSIENT. ----
   for (int attempt = 0; attempt < kMaxTxnRetries; ++attempt) {
-    ec = complete_multipart_upload_step1(store_, head_key.view());
+    ec = complete_multipart_upload_step1(store_, head_key.view(), &up_alg, &up_type);
     if (ec == KVRGW_ERR_OK) {
       break;  // proceed to TXN 2
     }
@@ -1624,7 +1840,8 @@ KvRgwServiceImpl::CompleteMultipartResult KvRgwServiceImpl::complete_multipart_u
   ManifestScanResult scan_result;
   for (int attempt = 0; attempt < kMaxTxnRetries; ++attempt) {
     ec = complete_multipart_upload_step2(head_key.view(), bucket_id, rt_view,
-                                         client_parts, &scan_result);
+                                         client_parts, up_alg, up_type, cksum_req,
+                                         &scan_result);
     if (ec == KVRGW_ERR_OK) {
       break;  // scan succeeded (read-only so far) — proceed to TXN 3
     }
@@ -1665,6 +1882,9 @@ KvRgwServiceImpl::CompleteMultipartResult KvRgwServiceImpl::complete_multipart_u
     if (ec == KVRGW_ERR_OK) {
       result.etag = std::move(s3.etag);
       result.version_id = s3.version_id;
+      result.checksum_alg = scan_result.cksum_alg;
+      result.checksum_type = scan_result.cksum_type;
+      result.checksum = std::move(s3.checksum);
       return result;
     }
     // BUCKET_ID_MISMATCH: step3 has already refreshed s3.bucket_id — retry.
@@ -1807,16 +2027,10 @@ KvrgwErrorCode KvRgwServiceImpl::abort_multipart_upload(tenant_id_t tenant_id,
     auto &tr = *tr_result;
 
     tr->kv_del(head_key.view());
-    if (scan_result.has_pending) {
-      PmValueBuf pm_buf;
-      make_pm_value(pm_buf, PM_STATE_ABORT, static_cast<uint32_t>(now_unix()), ManifestInput{});
-      tr->kv_put(pm_key.view(), pm_buf.view());
-    }
-    else {
-      GmValueBuf gm_buf;
-      make_gm_value(gm_buf, GM_MODE_DEEP, ManifestInput{});
-      tr->kv_put(gm_key.view(), gm_buf.view());
-    }
+    uint8_t deep[kGmHeaderSize];
+    write_gm_header(deep, GM_MODE_DEEP, static_cast<uint32_t>(now_unix()));
+    tr->kv_put(scan_result.has_pending ? pm_key.view() : gm_key.view(),
+               std::string_view(reinterpret_cast<const char*>(deep), sizeof(deep)));
 
     fdb_error_t err = tr->commit();
     if (!err) {

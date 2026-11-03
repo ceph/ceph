@@ -38,6 +38,7 @@ const (
 	ErrEntityTooLarge      = int32(C.KVRGW_ERR_ENTITY_TOO_LARGE)
 	ErrUploadPartBusy      = int32(C.KVRGW_ERR_UPLOAD_PART_BUSY)
 	ErrUploadInProgress    = int32(C.KVRGW_ERR_UPLOAD_IN_PROGRESS)
+	ErrBadDigest           = int32(C.KVRGW_ERR_BAD_DIGEST)
 )
 
 const (
@@ -81,6 +82,13 @@ type ObjectMeta struct {
 	// (mirrors AWS's x-amz-mp-parts-count / PartsCount). Callers should
 	// only surface it in the response when PartNumber was requested.
 	PartsCount uint32
+	// Whole-object checksum: CksumAlg/CksumType are the KVRGW_CKSUM_*/
+	// KVRGW_CKSUM_TYPE_* codes (0 = none); Cksum is the S3 rendering.
+	CksumAlg  uint8
+	CksumType uint8
+	Cksum     string
+	// Base64 digest of the addressed part; only set when PartNumber was requested.
+	PartCksum string
 }
 
 type GetObjectResult struct {
@@ -182,6 +190,17 @@ type DeleteMultiOut struct {
 type CompletedPart struct {
 	PartNumber uint16
 	ETag       string
+	CksumAlg   uint8  // algorithm of Cksum; 0 if the client sent none
+	Cksum      string // base64 part checksum
+}
+
+// CompleteResult is what CompleteMultipartUpload returns on success.
+type CompleteResult struct {
+	ETag      string
+	VersionID string
+	CksumAlg  uint8
+	CksumType uint8
+	Cksum     string // S3 rendering of the object checksum; empty if none
 }
 
 type PartEntry struct {
@@ -197,12 +216,13 @@ type ListPartsResult struct {
 	NextPartNumberMarker uint16
 }
 
-// AttrPartEntry is GetObjectAttributes' own, slimmer per-part shape -- just
-// PartNumber/Size (no ETag/LastModified; AWS's own ObjectPart carries
-// per-part checksums too, which this backend doesn't compute yet).
+// AttrPartEntry is GetObjectAttributes' own, slimmer per-part shape --
+// PartNumber/Size/Cksum (no ETag/LastModified). Cksum is the base64 digest of
+// the part, in the object's checksum algorithm; empty when it has none.
 type AttrPartEntry struct {
 	PartNumber uint16
 	Size       uint64
+	Cksum      string
 }
 
 type GetObjectAttributesResult struct {
@@ -331,6 +351,10 @@ func metaFromC(m *C.kvrgw_object_meta) ObjectMeta {
 		TagsCount:        uint32(m.tags_count),
 		ErrorDetail:      goCArr(&m.error_detail[0]),
 		PartsCount:       uint32(m.parts_count),
+		CksumAlg:         uint8(m.cksum_alg),
+		CksumType:        uint8(m.cksum_type),
+		Cksum:            goCArr(&m.cksum[0]),
+		PartCksum:        goCArr(&m.part_cksum[0]),
 	}
 }
 
@@ -629,6 +653,7 @@ func (h *Handle) GetObjectAttributes(tenantID uint32, bucket, key, versionID str
 				result.Parts[i] = AttrPartEntry{
 					PartNumber: uint16(parts[i].part_number),
 					Size:       uint64(parts[i].size),
+					Cksum:      goCArr(&parts[i].cksum[0]),
 				}
 			}
 			result.Truncated = trunc != 0
@@ -1019,7 +1044,7 @@ func (h *Handle) DeleteObjectTagging(tenantID uint32, bucket, key string) int32 
 // --- Multipart upload ---
 
 func (h *Handle) InitiateMultipartUpload(tenantID uint32, bucket, key, contentType string,
-	tags, metadata []KV) (uploadID string, errCode int32) {
+	tags, metadata []KV, cksumAlg, cksumType uint8) (uploadID string, errCode int32) {
 	var pin callPin
 	defer pin.done()
 	b, bn := pin.str(bucket)
@@ -1039,28 +1064,38 @@ func (h *Handle) InitiateMultipartUpload(tenantID uint32, bucket, key, contentTy
 	pin.p.Pin(&idBuf[0])
 	ec := C.kvrgw_initiate_multipart_upload(h.h, C.uint32_t(tenantID), b, bn, k, kn, ct, ctn,
 		tagPtr, C.size_t(len(tags)), metaPtr, C.size_t(len(metadata)),
+		C.uint8_t(cksumAlg), C.uint8_t(cksumType),
 		(*C.char)(unsafe.Pointer(&idBuf[0])), C.size_t(len(idBuf)))
 	return nzterm(idBuf), int32(ec)
 }
 
+// UploadPart stores one part. cksumAlg/cksum are the client's optional
+// x-amz-checksum-<alg> value (base64); the returned checksum is the base64
+// digest stored for the part (empty if the upload has no algorithm).
 func (h *Handle) UploadPart(tenantID uint32, bucket, key, uploadID string, partNumber uint16,
-	data []byte) (etag string, errCode int32) {
+	data []byte, cksumAlg uint8, cksum string) (etag string, alg uint8, checksum string, errCode int32) {
 	var pin callPin
 	defer pin.done()
 	b, bn := pin.str(bucket)
 	k, kn := pin.str(key)
 	u, un := pin.str(uploadID)
 	d, dn := pin.bytes(data)
+	ck, ckn := pin.str(cksum)
 	etagBuf := make([]byte, 48)
+	ckBuf := make([]byte, 48)
 	pin.p.Pin(&etagBuf[0])
+	pin.p.Pin(&ckBuf[0])
+	var algOut C.uint8_t
 	ec := C.kvrgw_upload_part(h.h, C.uint32_t(tenantID), b, bn, k, kn, u, un,
-		C.uint16_t(partNumber), d, dn,
-		(*C.char)(unsafe.Pointer(&etagBuf[0])), C.size_t(len(etagBuf)))
-	return nzterm(etagBuf), int32(ec)
+		C.uint16_t(partNumber), d, dn, C.uint8_t(cksumAlg), ck, ckn,
+		(*C.char)(unsafe.Pointer(&etagBuf[0])), C.size_t(len(etagBuf)), &algOut,
+		(*C.char)(unsafe.Pointer(&ckBuf[0])), C.size_t(len(ckBuf)))
+	return nzterm(etagBuf), uint8(algOut), nzterm(ckBuf), int32(ec)
 }
 
 func (h *Handle) CompleteMultipartUpload(tenantID uint32, bucket, key, uploadID string,
-	parts []CompletedPart, ifMatch, ifNoneMatch string) (etag, versionID string, errCode int32) {
+	parts []CompletedPart, ifMatch, ifNoneMatch string,
+	reqAlg, reqType uint8, reqCksum string) (res CompleteResult, errCode int32) {
 	var pin callPin
 	defer pin.done()
 	b, bn := pin.str(bucket)
@@ -1074,19 +1109,28 @@ func (h *Handle) CompleteMultipartUpload(tenantID uint32, bucket, key, uploadID 
 		for i := range parts {
 			cparts[i].part_number = C.uint16_t(parts[i].PartNumber)
 			cparts[i].etag, cparts[i].etag_len = pin.str(parts[i].ETag)
+			cparts[i].cksum_alg = C.uint8_t(parts[i].CksumAlg)
+			cparts[i].cksum, cparts[i].cksum_len = pin.str(parts[i].Cksum)
 		}
 		pin.p.Pin(&cparts[0])
 		partsPtr = &cparts[0]
 	}
 	etagBuf := make([]byte, 48)
 	vidBuf := make([]byte, 9)
+	ckBuf := make([]byte, 96)
 	pin.p.Pin(&etagBuf[0])
 	pin.p.Pin(&vidBuf[0])
+	pin.p.Pin(&ckBuf[0])
+	rc, rcn := pin.str(reqCksum)
+	var algOut, typeOut C.uint8_t
 	ec := C.kvrgw_complete_multipart_upload(h.h, C.uint32_t(tenantID), b, bn, k, kn, u, un,
 		partsPtr, C.size_t(len(parts)), im, imn, inm, inmn,
+		C.uint8_t(reqAlg), C.uint8_t(reqType), rc, rcn,
 		(*C.char)(unsafe.Pointer(&etagBuf[0])), C.size_t(len(etagBuf)),
-		(*C.char)(unsafe.Pointer(&vidBuf[0])), C.size_t(len(vidBuf)))
-	return nzterm(etagBuf), nzterm(vidBuf), int32(ec)
+		(*C.char)(unsafe.Pointer(&vidBuf[0])), C.size_t(len(vidBuf)),
+		&algOut, &typeOut, (*C.char)(unsafe.Pointer(&ckBuf[0])), C.size_t(len(ckBuf)))
+	return CompleteResult{ETag: nzterm(etagBuf), VersionID: nzterm(vidBuf),
+		CksumAlg: uint8(algOut), CksumType: uint8(typeOut), Cksum: nzterm(ckBuf)}, int32(ec)
 }
 
 func (h *Handle) AbortMultipartUpload(tenantID uint32, bucket, key, uploadID string) int32 {

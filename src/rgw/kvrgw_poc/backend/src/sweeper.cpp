@@ -149,8 +149,9 @@ void Sweeper::process_pm_entry(std::string_view key, std::string_view value,
   if (!parts) {
     return;
   }
-  auto pm = parse_pm_value(value);
-  if (!pm) {
+  // P:M shares G:M's value layout; it only ever holds DEEP or MIXED.
+  auto pm = parse_gm_value(value);
+  if (!pm || pm->mode == GM_MODE_FREE_PARTS) {
     return;
   }
   if (!force && now - static_cast<int64_t>(pm->mtime) < min_age_sec_) {
@@ -236,20 +237,9 @@ void Sweeper::process_pm_entry(std::string_view key, std::string_view value,
   if (!tr) {
     return;
   }
-  // P:M's body and G:M{MIXED}'s body are the identical keep-list shape
-  // (plans/fixing_agent_mess.md Section 4 -- "same shape/meaning"), so
-  // the COMMIT case copies the already-encoded body bytes verbatim
-  // instead of decoding and re-encoding through the codec.
-  GmValueBuf gm_buf;
-  if (pm->state == PM_STATE_COMMIT) {
-    gm_buf.data[0] = static_cast<uint8_t>(GM_MODE_MIXED);
-    std::memcpy(gm_buf.data + 1, pm->body.data(), pm->body.size());
-    gm_buf.len = 1 + pm->body.size();
-  }
-  else {
-    make_gm_value(gm_buf, GM_MODE_DEEP, ManifestInput{});
-  }
-  (*tr)->kv_put(gm_key.view(), gm_buf.view());
+  // P:M and G:M share one value layout (gm_value.hpp), so the pending
+  // entry's bytes are written under the G:M key unchanged.
+  (*tr)->kv_put(gm_key.view(), value);
   (*tr)->kv_del(key);
   if (fdb_error_t err = (*tr)->commit()) {
     std::cerr << "sweeper: P:M commit failed: "

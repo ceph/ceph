@@ -105,8 +105,25 @@ void fill_object_meta(const ObjectValue &v, kvrgw_object_meta *meta)
   meta->tags_count = v.hdr.tags_count;
   if (v.hdr.chunk_type == kvrgw::CHUNK_MULTIPART ||
       v.hdr.chunk_type == kvrgw::CHUNK_MULTIPART_REF) {
-    meta->parts_count = v.hdr.part_count;
+    meta->parts_count = v.part_count();
   }
+  if (v.cksum_alg() != kvrgw::CksumAlg::NONE) {
+    meta->cksum_alg = static_cast<uint8_t>(v.cksum_alg());
+    meta->cksum_type = static_cast<uint8_t>(v.cksum_type());
+    char buf[64];
+    const size_t n = kvrgw::cksum_render(
+        v.cksum_type(), v.cksum_digest().data(), v.cksum_digest().size(),
+        v.part_count(), buf);
+    copy_cstr(meta->cksum, sizeof(meta->cksum), std::string_view(buf, n));
+  }
+}
+
+// Renders `n` raw digest bytes as base64 into a NUL-terminated char[cap].
+void render_b64(const uint8_t *raw, size_t n, char *out, size_t cap)
+{
+  char buf[48];
+  const size_t m = kvrgw::base64_encode_to(raw, n, buf);
+  copy_cstr(out, cap, std::string_view(buf, m));
 }
 
 kvrgw_err_t fill_kv_pairs(std::span<const MetaPair> kvs, uint32_t n,
@@ -586,6 +603,11 @@ kvrgw_err_t kvrgw_get_object(
       return ec;
     }
     fill_object_meta(out.value, meta);
+    if (!out.part_cksum.empty()) {
+      render_b64(reinterpret_cast<const uint8_t *>(out.part_cksum.data()),
+                 out.part_cksum.size(), meta->part_cksum,
+                 sizeof(meta->part_cksum));
+    }
     if (body == nullptr || body_cap < out.body.size()) {
       return KVRGW_ERR_INVALID_ARGUMENT;
     }
@@ -593,7 +615,7 @@ kvrgw_err_t kvrgw_get_object(
       std::memcpy(body, out.body.data(), out.body.size());
     }
     return fill_decoded_metadata(
-        out.value.metadata_frame, out.value.hdr.metadata_count, metadata,
+        out.value.full_metadata(), out.value.hdr.metadata_count, metadata,
         metadata_cap, metadata_count, meta_arena, meta_arena_cap);
   });
 }
@@ -612,11 +634,13 @@ kvrgw_err_t kvrgw_head_object(KvRgwHandle *h, uint32_t tenant_id,
     if (s == nullptr || meta == nullptr) {
       return KVRGW_ERR_INVALID_ARGUMENT;
     }
-    ObjectValue value;
+    kvrgw::OwnedObjectValue value;
     std::string error_detail;
+    std::string part_cksum;
     const auto ec = s->head_object(
         tenant_id, sv(bucket, bucket_len), sv(key, key_len),
-        parse_version(version_id, version_id_len), part_number, &value, &error_detail);
+        parse_version(version_id, version_id_len), part_number, &value, &error_detail,
+        &part_cksum);
     std::memset(meta, 0, sizeof(*meta));
     if (!error_detail.empty()) {
       copy_cstr(meta->error_detail, sizeof(meta->error_detail), error_detail);
@@ -625,7 +649,11 @@ kvrgw_err_t kvrgw_head_object(KvRgwHandle *h, uint32_t tenant_id,
       return ec;
     }
     fill_object_meta(value, meta);
-    return fill_decoded_metadata(value.metadata_frame, value.hdr.metadata_count,
+    if (!part_cksum.empty()) {
+      render_b64(reinterpret_cast<const uint8_t *>(part_cksum.data()),
+                 part_cksum.size(), meta->part_cksum, sizeof(meta->part_cksum));
+    }
+    return fill_decoded_metadata(value.full_metadata(), value.hdr.metadata_count,
                                  metadata, metadata_cap, metadata_count,
                                  meta_arena, meta_arena_cap);
   });
@@ -695,9 +723,16 @@ kvrgw_err_t kvrgw_get_object_attributes(
       *parts_count = static_cast<uint32_t>(out.part_numbers.size());
     }
     if (parts != nullptr) {
+      const size_t dlen = out.value.cksum_combined_len();
       for (size_t i = 0; i < out.part_numbers.size(); ++i) {
         parts[i].part_number = out.part_numbers[i];
         parts[i].size = out.part_sizes[i];
+        parts[i].cksum[0] = '\0';
+        if (dlen != 0 && out.part_cksums.size() >= (i + 1) * dlen) {
+          render_b64(reinterpret_cast<const uint8_t *>(out.part_cksums.data()) +
+                         i * dlen,
+                     dlen, parts[i].cksum, sizeof(parts[i].cksum));
+        }
       }
     }
     if (is_truncated != nullptr) {
@@ -1202,7 +1237,8 @@ kvrgw_err_t kvrgw_initiate_multipart_upload(
     KvRgwHandle *h, uint32_t tenant_id, const char *bucket, size_t bucket_len,
     const char *key, size_t key_len, const char *content_type,
     size_t content_type_len, const kvrgw_kv *tags, size_t tags_count,
-    const kvrgw_kv *metadata, size_t metadata_count, char *upload_id_out,
+    const kvrgw_kv *metadata, size_t metadata_count,
+    uint8_t cksum_alg, uint8_t cksum_type, char *upload_id_out,
     size_t upload_id_cap)
 {
   return abi_guard([&]() -> kvrgw_err_t {
@@ -1246,7 +1282,9 @@ kvrgw_err_t kvrgw_initiate_multipart_upload(
         tenant_id, sv(bucket, bucket_len), sv(key, key_len),
         sv(content_type, content_type_len),
         std::span<const kvrgw::TagPair>(tag_pairs, tags_count),
-        std::span<const kvrgw::MetaPair>(meta_pairs, metadata_count));
+        std::span<const kvrgw::MetaPair>(meta_pairs, metadata_count),
+        static_cast<kvrgw::CksumAlg>(cksum_alg),
+        static_cast<kvrgw::CksumType>(cksum_type));
     if (!ok(result.error_code)) {
       return result.error_code;
     }
@@ -1260,7 +1298,11 @@ kvrgw_err_t kvrgw_upload_part(KvRgwHandle *h, uint32_t tenant_id,
                               const char *key, size_t key_len,
                               const char *upload_id, size_t upload_id_len,
                               uint16_t part_number, const uint8_t *data,
-                              size_t data_len, char *etag_out, size_t etag_cap)
+                              size_t data_len, uint8_t cksum_alg,
+                              const char *cksum, size_t cksum_len,
+                              char *etag_out, size_t etag_cap,
+                              uint8_t *cksum_alg_out,
+                              char *cksum_out, size_t cksum_out_cap)
 {
   return abi_guard([&]() -> kvrgw_err_t {
     auto *s = svc(h);
@@ -1273,11 +1315,17 @@ kvrgw_err_t kvrgw_upload_part(KvRgwHandle *h, uint32_t tenant_id,
     auto result = s->upload_part(tenant_id, sv(bucket, bucket_len),
                                  sv(key, key_len),
                                  sv(upload_id, upload_id_len), part_number,
-                                 data, data_len);
+                                 data, data_len,
+                                 static_cast<kvrgw::CksumAlg>(cksum_alg),
+                                 sv(cksum, cksum_len));
     if (!ok(result.error_code)) {
       return result.error_code;
     }
     copy_cstr(etag_out, etag_cap, result.etag);
+    if (cksum_alg_out != nullptr) {
+      *cksum_alg_out = static_cast<uint8_t>(result.checksum_alg);
+    }
+    copy_cstr(cksum_out, cksum_out_cap, result.checksum);
     return KVRGW_ERR_OK;
   });
 }
@@ -1287,8 +1335,12 @@ kvrgw_err_t kvrgw_complete_multipart_upload(
     const char *key, size_t key_len, const char *upload_id,
     size_t upload_id_len, const kvrgw_mpu_part *parts, size_t parts_count,
     const char *if_match, size_t if_match_len, const char *if_none_match,
-    size_t if_none_match_len, char *etag_out, size_t etag_cap,
-    char *version_id_out, size_t version_id_cap)
+    size_t if_none_match_len,
+    uint8_t cksum_alg, uint8_t cksum_type, const char *cksum, size_t cksum_len,
+    char *etag_out, size_t etag_cap,
+    char *version_id_out, size_t version_id_cap,
+    uint8_t *cksum_alg_out, uint8_t *cksum_type_out,
+    char *cksum_out, size_t cksum_out_cap)
 {
   return abi_guard([&]() -> kvrgw_err_t {
     auto *s = svc(h);
@@ -1302,18 +1354,30 @@ kvrgw_err_t kvrgw_complete_multipart_upload(
     client_parts.reserve(parts_count);
     for (size_t i = 0; i < parts_count; ++i) {
       client_parts.push_back({parts[i].part_number,
-                              std::string(sv(parts[i].etag, parts[i].etag_len))});
+                              std::string(sv(parts[i].etag, parts[i].etag_len)),
+                              static_cast<kvrgw::CksumAlg>(parts[i].cksum_alg),
+                              std::string(sv(parts[i].cksum, parts[i].cksum_len))});
     }
 
     auto result = s->complete_multipart_upload(
         tenant_id, sv(bucket, bucket_len), sv(key, key_len),
         sv(upload_id, upload_id_len),
         std::span<const kvrgw::KvRgwServiceImpl::CompletedPart>(client_parts),
-        sv(if_match, if_match_len), sv(if_none_match, if_none_match_len));
+        sv(if_match, if_match_len), sv(if_none_match, if_none_match_len),
+        kvrgw::CompleteCksumReq{
+            static_cast<kvrgw::CksumAlg>(cksum_alg),
+            static_cast<kvrgw::CksumType>(cksum_type), sv(cksum, cksum_len)});
     if (!ok(result.error_code)) {
       return result.error_code;
     }
     copy_cstr(etag_out, etag_cap, result.etag);
+    if (cksum_alg_out != nullptr) {
+      *cksum_alg_out = static_cast<uint8_t>(result.checksum_alg);
+    }
+    if (cksum_type_out != nullptr) {
+      *cksum_type_out = static_cast<uint8_t>(result.checksum_type);
+    }
+    copy_cstr(cksum_out, cksum_out_cap, result.checksum);
     if (result.version_id.is_valid() && !result.version_id.is_null()) {
       copy_cstr(version_id_out, version_id_cap, result.version_id.to_hex());
     }

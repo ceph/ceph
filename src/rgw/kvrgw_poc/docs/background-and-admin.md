@@ -171,6 +171,15 @@ echo "GET" | socat - UNIX-CONNECT:/tmp/kvrgw-admin-0.sock
 
 **Invariant enforced:** `max_kv_store > max_inline` (unless both are 0). Rejected with `ERROR invariant: ...`
 
+### Min Part Size Commands (tests only)
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `get-min-part-size` | Effective minimum size of a non-last multipart part | `min_part_size=5242880` |
+| `set-min-part-size <bytes\|default>` | Override it at runtime (1..5 MiB); `default` restores 5 MiB | `set-min-part-size 5120` → `OK min_part_size=5120` |
+
+Process-wide, not persisted: a restart returns it to 5 MiB. Used by backend tests that need many parts (the s3-tests never set it; `test_multipart_upload_size_too_small` relies on the real minimum). Values of 0, above 5 MiB, or non-numeric return `ERROR ...`.
+
 ### Double-Buffer Pattern
 
 Both GC policy and tier config use the same state management pattern (`GcConfigState` / `TierConfigState`):

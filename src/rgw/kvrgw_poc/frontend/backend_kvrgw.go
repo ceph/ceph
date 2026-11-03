@@ -356,6 +356,18 @@ func (b *KvRgwBackend) GetObject(ctx context.Context, input *s3.GetObjectInput) 
 		pc := int32(res.Meta.PartsCount)
 		out.PartsCount = &pc
 	}
+	// A PartNumber read always reports that part's checksum (as RGW does);
+	// a whole-object read needs ChecksumMode=ENABLED.
+	if res.Meta.CksumAlg != 0 && (input.ChecksumMode == types.ChecksumModeEnabled ||
+		(partNumberRequested && res.Meta.PartCksum != "")) {
+		v := res.Meta.Cksum
+		if partNumberRequested && res.Meta.PartCksum != "" {
+			v = res.Meta.PartCksum
+		}
+		out.ChecksumCRC32, out.ChecksumCRC32C, out.ChecksumSHA1, out.ChecksumSHA256, out.ChecksumCRC64NVME =
+			splitCksum(res.Meta.CksumAlg, v)
+		out.ChecksumType = cksumTypeFromC(res.Meta.CksumType)
+	}
 
 	if rangeRequested && br != nil {
 		rangeLen := rangeContentLength(br, size)
@@ -419,6 +431,16 @@ func (b *KvRgwBackend) HeadObject(ctx context.Context, input *s3.HeadObjectInput
 		pc := int32(res.Meta.PartsCount)
 		out.PartsCount = &pc
 	}
+	if res.Meta.CksumAlg != 0 && (input.ChecksumMode == types.ChecksumModeEnabled ||
+		(partNumberRequested && res.Meta.PartCksum != "")) {
+		v := res.Meta.Cksum
+		if partNumberRequested && res.Meta.PartCksum != "" {
+			v = res.Meta.PartCksum
+		}
+		out.ChecksumCRC32, out.ChecksumCRC32C, out.ChecksumSHA1, out.ChecksumSHA256, out.ChecksumCRC64NVME =
+			splitCksum(res.Meta.CksumAlg, v)
+		out.ChecksumType = cksumTypeFromC(res.Meta.CksumType)
+	}
 	if m := kvToMap(res.Metadata); len(m) > 0 {
 		out.Metadata = m
 	}
@@ -467,15 +489,21 @@ func (b *KvRgwBackend) GetObjectAttributes(ctx context.Context, input *s3.GetObj
 		extVid := versionIDToExternal(uint32(mustParseUint(vid)))
 		out.VersionId = &extVid
 	}
+	if res.Meta.CksumAlg != 0 {
+		cs := &types.Checksum{ChecksumType: cksumTypeFromC(res.Meta.CksumType)}
+		cs.ChecksumCRC32, cs.ChecksumCRC32C, cs.ChecksumSHA1, cs.ChecksumSHA256, cs.ChecksumCRC64NVME =
+			splitCksum(res.Meta.CksumAlg, res.Meta.Cksum)
+		out.Checksum = cs
+	}
 	if res.HasParts {
 		parts := make([]types.ObjectPart, 0, len(res.Parts))
 		for _, p := range res.Parts {
 			pn := int32(p.PartNumber)
 			sz := int64(p.Size)
-			parts = append(parts, types.ObjectPart{
-				PartNumber: &pn,
-				Size:       &sz,
-			})
+			op := types.ObjectPart{PartNumber: &pn, Size: &sz}
+			op.ChecksumCRC32, op.ChecksumCRC32C, op.ChecksumSHA1, op.ChecksumSHA256, op.ChecksumCRC64NVME =
+				splitCksum(res.Meta.CksumAlg, p.Cksum)
+			parts = append(parts, op)
 		}
 		objParts := &s3response.ObjectParts{
 			PartNumberMarker: int(partNumberMarker),
@@ -942,7 +970,7 @@ func (b *KvRgwBackend) CreateMultipartUpload(ctx context.Context, input s3respon
 	metadata := mapToKV(input.Metadata)
 
 	uploadID, ec := b.handle.InitiateMultipartUpload(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
-		contentType, tags, metadata)
+		contentType, tags, metadata, cksumAlgToC(input.ChecksumAlgorithm), cksumTypeToC(input.ChecksumType))
 	if err := mapErrorCode(ec); err != nil {
 		return s3response.InitiateMultipartUploadResult{}, err
 	}
@@ -967,13 +995,149 @@ func (b *KvRgwBackend) UploadPart(ctx context.Context, input *s3.UploadPartInput
 		partNumber = uint16(*input.PartNumber)
 	}
 
-	etag, ec := b.handle.UploadPart(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
-		deref(input.UploadId), partNumber, data)
+	clientAlg, clientCksum := clientPartChecksum(input)
+	etag, alg, cksum, ec := b.handle.UploadPart(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
+		deref(input.UploadId), partNumber, data, clientAlg, clientCksum)
 	if err := mapErrorCode(ec); err != nil {
 		return nil, err
 	}
 	etag = fmt.Sprintf(`"%s"`, etag)
-	return &s3.UploadPartOutput{ETag: &etag}, nil
+	out := &s3.UploadPartOutput{ETag: &etag}
+	if cksum != "" {
+		switch alg {
+		case cksumCRC32:
+			out.ChecksumCRC32 = &cksum
+		case cksumCRC32C:
+			out.ChecksumCRC32C = &cksum
+		case cksumSHA1:
+			out.ChecksumSHA1 = &cksum
+		case cksumSHA256:
+			out.ChecksumSHA256 = &cksum
+		case cksumCRC64NVME:
+			out.ChecksumCRC64NVME = &cksum
+		}
+	}
+	return out, nil
+}
+
+// Checksum algorithm / type codes shared with the backend (KVRGW_CKSUM_*).
+const (
+	cksumCRC32     uint8 = 1
+	cksumCRC32C    uint8 = 2
+	cksumSHA1      uint8 = 3
+	cksumSHA256    uint8 = 4
+	cksumCRC64NVME uint8 = 5
+)
+
+func cksumAlgToC(a types.ChecksumAlgorithm) uint8 {
+	switch a {
+	case types.ChecksumAlgorithmCrc32:
+		return cksumCRC32
+	case types.ChecksumAlgorithmCrc32c:
+		return cksumCRC32C
+	case types.ChecksumAlgorithmSha1:
+		return cksumSHA1
+	case types.ChecksumAlgorithmSha256:
+		return cksumSHA256
+	case types.ChecksumAlgorithmCrc64nvme:
+		return cksumCRC64NVME
+	}
+	return 0
+}
+
+func cksumTypeToC(t types.ChecksumType) uint8 {
+	switch t {
+	case types.ChecksumTypeComposite:
+		return 1
+	case types.ChecksumTypeFullObject:
+		return 2
+	}
+	return 0
+}
+
+func cksumTypeFromC(t uint8) types.ChecksumType {
+	switch t {
+	case 1:
+		return types.ChecksumTypeComposite
+	case 2:
+		return types.ChecksumTypeFullObject
+	}
+	return ""
+}
+
+// completedPartChecksum returns the algorithm and base64 value of the
+// checksum the client listed for a part in the Complete body, if any.
+func completedPartChecksum(p types.CompletedPart) (uint8, string) {
+	switch {
+	case p.ChecksumCRC32 != nil:
+		return cksumCRC32, *p.ChecksumCRC32
+	case p.ChecksumCRC32C != nil:
+		return cksumCRC32C, *p.ChecksumCRC32C
+	case p.ChecksumSHA1 != nil:
+		return cksumSHA1, *p.ChecksumSHA1
+	case p.ChecksumSHA256 != nil:
+		return cksumSHA256, *p.ChecksumSHA256
+	case p.ChecksumCRC64NVME != nil:
+		return cksumCRC64NVME, *p.ChecksumCRC64NVME
+	}
+	return 0, ""
+}
+
+// completeRequestChecksum returns the algorithm and value of the
+// whole-object x-amz-checksum-* header sent with Complete, if any.
+func completeRequestChecksum(in *s3.CompleteMultipartUploadInput) (uint8, string) {
+	switch {
+	case in.ChecksumCRC32 != nil:
+		return cksumCRC32, *in.ChecksumCRC32
+	case in.ChecksumCRC32C != nil:
+		return cksumCRC32C, *in.ChecksumCRC32C
+	case in.ChecksumSHA1 != nil:
+		return cksumSHA1, *in.ChecksumSHA1
+	case in.ChecksumSHA256 != nil:
+		return cksumSHA256, *in.ChecksumSHA256
+	case in.ChecksumCRC64NVME != nil:
+		return cksumCRC64NVME, *in.ChecksumCRC64NVME
+	}
+	return 0, ""
+}
+
+// clientPartChecksum returns the algorithm and base64 value of the
+// x-amz-checksum-* the client sent with an UploadPart, if any.
+func clientPartChecksum(in *s3.UploadPartInput) (uint8, string) {
+	switch {
+	case in.ChecksumCRC32 != nil:
+		return cksumCRC32, *in.ChecksumCRC32
+	case in.ChecksumCRC32C != nil:
+		return cksumCRC32C, *in.ChecksumCRC32C
+	case in.ChecksumSHA1 != nil:
+		return cksumSHA1, *in.ChecksumSHA1
+	case in.ChecksumSHA256 != nil:
+		return cksumSHA256, *in.ChecksumSHA256
+	case in.ChecksumCRC64NVME != nil:
+		return cksumCRC64NVME, *in.ChecksumCRC64NVME
+	}
+	return 0, ""
+}
+
+// splitCksum routes a base64 checksum value to the per-algorithm pointer
+// selected by alg (KVRGW_CKSUM_* code); the other four stay nil.
+func splitCksum(alg uint8, v string) (crc32, crc32c, sha1, sha256, crc64 *string) {
+	if v == "" {
+		return
+	}
+	switch alg {
+	case cksumCRC32:
+		crc32 = &v
+	case cksumCRC32C:
+		crc32c = &v
+	case cksumSHA1:
+		sha1 = &v
+	case cksumSHA256:
+		sha256 = &v
+	case cksumCRC64NVME:
+		crc64 = &v
+	}
+	return
 }
 
 func (b *KvRgwBackend) CompleteMultipartUpload(ctx context.Context, input *s3.CompleteMultipartUploadInput) (s3response.CompleteMultipartUploadResult, string, error) {
@@ -989,7 +1153,9 @@ func (b *KvRgwBackend) CompleteMultipartUpload(ctx context.Context, input *s3.Co
 			if p.ETag != nil {
 				etag = strings.Trim(*p.ETag, `"`)
 			}
-			parts = append(parts, kvrgwc.CompletedPart{PartNumber: partNumber, ETag: etag})
+			cp := kvrgwc.CompletedPart{PartNumber: partNumber, ETag: etag}
+			cp.CksumAlg, cp.Cksum = completedPartChecksum(p)
+			parts = append(parts, cp)
 		}
 	}
 
@@ -1002,12 +1168,14 @@ func (b *KvRgwBackend) CompleteMultipartUpload(ctx context.Context, input *s3.Co
 		ifNoneMatch = strings.Trim(*input.IfNoneMatch, `"`)
 	}
 
-	etag, versionID, ec := b.handle.CompleteMultipartUpload(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
-		deref(input.UploadId), parts, ifMatch, ifNoneMatch)
+	reqAlg, reqCksum := completeRequestChecksum(input)
+	res, ec := b.handle.CompleteMultipartUpload(b.cachedTenantID(), deref(input.Bucket), deref(input.Key),
+		deref(input.UploadId), parts, ifMatch, ifNoneMatch,
+		reqAlg, cksumTypeToC(input.ChecksumType), reqCksum)
 	if err := mapErrorCode(ec); err != nil {
 		return s3response.CompleteMultipartUploadResult{}, "", err
 	}
-	etag = fmt.Sprintf(`"%s"`, etag)
+	etag := fmt.Sprintf(`"%s"`, res.ETag)
 	bucket := deref(input.Bucket)
 	key := deref(input.Key)
 	result := s3response.CompleteMultipartUploadResult{
@@ -1015,7 +1183,24 @@ func (b *KvRgwBackend) CompleteMultipartUpload(ctx context.Context, input *s3.Co
 		Key:    &key,
 		ETag:   &etag,
 	}
-	return result, versionIDFromProto(versionID), nil
+	if res.Cksum != "" {
+		ck := res.Cksum
+		switch res.CksumAlg {
+		case cksumCRC32:
+			result.ChecksumCRC32 = &ck
+		case cksumCRC32C:
+			result.ChecksumCRC32C = &ck
+		case cksumSHA1:
+			result.ChecksumSHA1 = &ck
+		case cksumSHA256:
+			result.ChecksumSHA256 = &ck
+		case cksumCRC64NVME:
+			result.ChecksumCRC64NVME = &ck
+		}
+		t := cksumTypeFromC(res.CksumType)
+		result.ChecksumType = &t
+	}
+	return result, versionIDFromProto(res.VersionID), nil
 }
 
 func (b *KvRgwBackend) AbortMultipartUpload(ctx context.Context, input *s3.AbortMultipartUploadInput) error {
@@ -1184,6 +1369,8 @@ func mapErrorCode(code int32) error {
 		return s3err.GetAPIError(s3err.ErrEntityTooSmall)
 	case kvrgwc.ErrEntityTooLarge:
 		return s3err.GetAPIError(s3err.ErrEntityTooLarge)
+	case kvrgwc.ErrBadDigest:
+		return s3err.GetAPIError(s3err.ErrBadDigest)
 	case kvrgwc.ErrUploadPartBusy, kvrgwc.ErrUploadInProgress:
 		// Both are "retry shortly" conditions (fixing_agent_mess.md §3/§5) — no
 		// dedicated S3 error code for either, SlowDown/503 is the closest match.

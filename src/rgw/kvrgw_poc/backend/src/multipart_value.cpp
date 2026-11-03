@@ -38,11 +38,201 @@ std::string part_filename(const RefTag& ref_tag, uint16_t part_number,
 }
 
 //--------------------------------------------------------------------------------
+std::string checksum_filename(const RefTag& ref_tag)
+{
+  return ref_tag.filename() + "_checksum";
+}
+
+//--------------------------------------------------------------------------------
+std::string_view checksum_filename_buf(const RefTag& ref_tag, std::span<char> out)
+{
+  constexpr std::string_view kSuffix = "_checksum";
+  const size_t hex_len = kRefTagSize * 2;
+  if (out.size() < hex_len + kSuffix.size()) {
+    return {};
+  }
+  static constexpr char kHex[] = "0123456789abcdef";
+  const std::string_view raw = ref_tag.view();
+  for (size_t i = 0; i < kRefTagSize; ++i) {
+    const auto b = static_cast<uint8_t>(raw[i]);
+    out[2 * i] = kHex[b >> 4];
+    out[2 * i + 1] = kHex[b & 0xF];
+  }
+  std::memcpy(out.data() + hex_len, kSuffix.data(), kSuffix.size());
+  return {out.data(), hex_len + kSuffix.size()};
+}
+
+//--------------------------------------------------------------------------------
+bool place_multipart(ObjectValue& v, const MultipartPlacementIn& in,
+                     MultipartPlacementOut& out)
+{
+  out = {};
+  if (!v.is_multipart() || in.manifest.size() > kMaxChildPayloadBytes ||
+      gm_blob_body(in.manifest).empty() ||
+      (v.hdr.metadata_count > 0) != !in.metadata_frame.empty()) {
+    return false;
+  }
+  const CksumAlg alg = v.cksum_alg();
+  const bool has_cksum = alg != CksumAlg::NONE;
+  if (has_cksum && in.existing_cksum_loc == kCksumInline &&
+      in.cksum_blob.size() != v.cksum_blob_len()) {
+    return false;
+  }
+  const bool shared = (v.hdr.flags & kFlagSharedData) != 0;
+
+  // ---- step 0: forced fields
+  const size_t fixed = sizeof(ObjectValueHeader) + v.content_type.size()
+      + sizeof(ChunkDescriptor) + kMultipartHdrBytes + cksum_digest_len(alg);
+  const size_t meta_len = in.metadata_frame.size();
+  const size_t manifest_len = in.manifest.size();
+
+  // ---- phase 1: inline vs external
+  bool meta_inline;
+  bool manifest_local;     // a local manifest copy is stored in :O:
+  size_t used = fixed;
+  if (fixed + meta_len + manifest_len <= kMaxOValueBytes) {
+    meta_inline = true;
+    manifest_local = true;
+    used += meta_len + manifest_len;
+  } else if (fixed + meta_len + kFirstPartInfoBytes <= kMaxOValueBytes) {
+    meta_inline = true;
+    manifest_local = false;
+    used += meta_len + kFirstPartInfoBytes;
+  } else if (fixed + manifest_len <= kMaxOValueBytes) {
+    meta_inline = false;
+    manifest_local = true;
+    used += manifest_len;
+  } else {
+    meta_inline = false;
+    manifest_local = false;
+    used += kFirstPartInfoBytes;
+  }
+
+  // ---- phase 2: concrete locations
+  v.hdr.flags = static_cast<uint16_t>(v.hdr.flags & ~kFlagExternalMetadata);
+  v.metadata_frame = {};
+  v.manifest_blob = {};
+  v.cksum_blob = {};
+  v.mflags = in.composite && has_cksum ? kMFlagComposite : 0;
+  v.first_part = in.first_part;
+
+  if (meta_inline) {
+    v.metadata_frame = in.metadata_frame;
+  } else {
+    v.hdr.flags |= kFlagExternalMetadata;
+    out.has_child_e = true;
+    out.child_e.metadata_frame = in.metadata_frame;
+  }
+
+  if (shared) {
+    // The authoritative manifest is always C:M; the local copy is a cache.
+    v.manifest_loc = kManifestChildM;
+    out.manifest_child = in.manifest;
+    if (manifest_local) {
+      v.mflags |= kMFlagManifestCached;
+      v.manifest_blob = in.manifest;
+    }
+  } else if (manifest_local) {
+    v.manifest_loc = kManifestInline;
+    v.manifest_blob = in.manifest;
+  } else if (meta_inline) {
+    v.manifest_loc = kManifestChildM;
+    out.manifest_child = in.manifest;
+  } else {
+    v.manifest_loc = kManifestChildE;
+    out.child_e.tail = in.manifest;
+  }
+  if (!manifest_local) {
+    v.mflags |= kMFlagFirstPartInfo;
+  }
+
+  // ---- per-part checksum blob (lowest priority)
+  v.cksum_loc = kCksumInline;
+  if (has_cksum) {
+    const size_t blen = v.cksum_blob_len();
+    const bool fits = used + blen <= kMaxOValueBytes;
+    if (in.existing_cksum_loc != kCksumInline) {
+      // CopyObject of a source whose blob is already external: keep it there.
+      v.cksum_loc = in.existing_cksum_loc;
+      if (fits && in.cksum_blob.size() == blen) {
+        v.mflags |= kMFlagCksumCached;
+        v.cksum_blob = in.cksum_blob;
+      }
+    } else if (!shared && fits) {
+      v.cksum_blob = in.cksum_blob;
+    } else if (blen <= kMaxChildPayloadBytes) {
+      v.cksum_loc = kCksumChildS;
+      out.checksum_child = in.cksum_blob;
+    } else {
+      v.cksum_loc = kCksumFile;
+      out.checksum_file = in.cksum_blob;
+    }
+    if (in.existing_cksum_loc == kCksumInline && shared && fits) {
+      v.mflags |= kMFlagCksumCached;
+      v.cksum_blob = in.cksum_blob;
+    }
+  }
+  return validate_object_layout(v);
+}
+
+//--------------------------------------------------------------------------------
+bool place_single_part(ObjectValue& v, std::span<const uint8_t> metadata_frame,
+                       std::span<const uint8_t> data, uint64_t data_len,
+                       uint32_t max_inline, uint32_t max_kv_store,
+                       SinglePlacementOut& out)
+{
+  out = {};
+  if (v.is_multipart() || (v.hdr.metadata_count > 0) != !metadata_frame.empty() ||
+      (!data.empty() && data.size() != data_len)) {
+    return false;
+  }
+  const size_t fixed = sizeof(ObjectValueHeader) + v.content_type.size()
+      + sizeof(ChunkDescriptor) + v.cksum_combined_len();
+  v.hdr.flags = static_cast<uint16_t>(
+      v.hdr.flags & ~(kFlagExternalMetadata | kFlagDataInChildE));
+  v.hdr.size = data_len;
+  v.metadata_frame = {};
+  v.inline_data = {};
+
+  if (fixed + metadata_frame.size() <= kMaxOValueBytes) {
+    v.metadata_frame = metadata_frame;
+    const size_t remaining = kMaxOValueBytes - fixed - metadata_frame.size();
+    if (data_len <= std::min<uint64_t>(remaining, max_inline)) {
+      out.data = DataPlace::kInline;
+      v.hdr.chunk_type = CHUNK_INLINE;
+      v.inline_data = data;
+    } else if (data_len <= max_kv_store) {
+      out.data = DataPlace::kChildD;
+      v.hdr.chunk_type = CHUNK_CHILD_D;
+    } else {
+      out.data = DataPlace::kStorage;
+      v.hdr.chunk_type = CHUNK_STORAGE;
+    }
+  } else {
+    v.hdr.flags |= kFlagExternalMetadata;
+    out.has_child_e = true;
+    out.child_e.metadata_frame = metadata_frame;
+    if (data_len <= max_kv_store) {
+      out.data = DataPlace::kChildE;
+      v.hdr.flags |= kFlagDataInChildE;
+      v.hdr.chunk_type = CHUNK_INLINE;
+      out.child_e.tail = {reinterpret_cast<const char*>(data.data()), data.size()};
+    } else {
+      out.data = DataPlace::kStorage;
+      v.hdr.chunk_type = CHUNK_STORAGE;
+    }
+  }
+  return validate_object_layout(v);
+}
+
+//--------------------------------------------------------------------------------
 bool make_m_head_value(MHeadValueBuf& buf,
                        int64_t initiated_unix_ms,
                        std::string_view content_type,
                        uint8_t tags_count,
-                       std::span<const MetaPair> metadata)
+                       std::span<const MetaPair> metadata,
+                       CksumAlg cksum_alg,
+                       CksumType cksum_type)
 {
   if (content_type.size() > kMaxContentTypeLen) {
     return false;
@@ -53,6 +243,8 @@ bool make_m_head_value(MHeadValueBuf& buf,
   hdr.metadata_count = htons(static_cast<uint16_t>(metadata.size()));
   hdr.tags_count = tags_count;
   hdr.content_type_len = static_cast<uint8_t>(content_type.size());
+  hdr.cksum_alg = static_cast<uint8_t>(cksum_alg);
+  hdr.cksum_type = static_cast<uint8_t>(cksum_type);
 
   size_t off = 0;
   std::memcpy(buf.data, &hdr, sizeof(hdr));
@@ -119,6 +311,8 @@ std::optional<MHeadValueView> view_m_head_value(std::string_view data)
   }
   MHeadValueView out;
   out.tags_count = hdr.tags_count;
+  out.cksum_alg = static_cast<CksumAlg>(hdr.cksum_alg);
+  out.cksum_type = static_cast<CksumType>(hdr.cksum_type);
   out.content_type = data.substr(off, hdr.content_type_len);
   off += hdr.content_type_len;
 
@@ -149,6 +343,7 @@ void make_m_part_value(const MPartValue& v, uint8_t* dst)
   std::memcpy(dst + offsetof(MPartValue, size), &size_be, sizeof(size_be));
   const uint32_t mtime_be = htonl(v.mtime);
   std::memcpy(dst + offsetof(MPartValue, mtime), &mtime_be, sizeof(mtime_be));
+  std::memcpy(dst + offsetof(MPartValue, cksum), v.cksum, sizeof(v.cksum));
 }
 
 //--------------------------------------------------------------------------------
@@ -168,42 +363,13 @@ std::optional<MPartValue> parse_m_part_value(std::string_view data)
   uint32_t mtime_be{};
   std::memcpy(&mtime_be, src + offsetof(MPartValue, mtime), sizeof(mtime_be));
   v.mtime = ntohl(mtime_be);
+  std::memcpy(v.cksum, src + offsetof(MPartValue, cksum), sizeof(v.cksum));
   if (v.state != M_PART_PENDING && v.state != M_PART_COMMITTED) {
     return std::nullopt;
   }
   return v;
 }
 
-
-//--------------------------------------------------------------------------------
-void make_gm_value(GmValueBuf& buf, GmMode mode, const ManifestInput& in)
-{
-  buf.data[0] = static_cast<uint8_t>(mode);
-  size_t len = 1;
-  if (mode == GM_MODE_MIXED) {
-    len += encode_manifest_body(buf.data + 1, sizeof(buf.data) - 1, in);
-  }
-  buf.len = len;
-}
-
-//--------------------------------------------------------------------------------
-std::optional<GmValue> parse_gm_value(std::string_view data)
-{
-  if (data.empty()) {
-    return std::nullopt;
-  }
-  const uint8_t mode = static_cast<uint8_t>(data[0]);
-  if (mode != GM_MODE_DEEP && mode != GM_MODE_MIXED && mode != GM_MODE_FREE_PARTS) {
-    return std::nullopt;
-  }
-
-  GmValue v;
-  v.mode = mode;
-  if (mode == GM_MODE_MIXED || mode == GM_MODE_FREE_PARTS) {
-    v.body = data.substr(1);
-  }
-  return v;
-}
 
 //--------------------------------------------------------------------------------
 void make_gu_value(GuValueBuf& buf, const GuEntry* entries, uint8_t count,
@@ -254,43 +420,6 @@ std::optional<GuValue> parse_gu_value(std::string_view data)
     val.entries[i].generation = be32toh(gen_be);
   }
   return val;
-}
-
-//--------------------------------------------------------------------------------
-void make_pm_value(PmValueBuf& buf, PmState state, uint32_t mtime, const ManifestInput& in)
-{
-  buf.data[0] = static_cast<uint8_t>(state);
-  std::memset(buf.data + 1, 0, 3);
-  const uint32_t mtime_be = htonl(mtime);
-  std::memcpy(buf.data + 4, &mtime_be, sizeof(mtime_be));
-  size_t len = 8;
-  if (state == PM_STATE_COMMIT) {
-    len += encode_manifest_body(buf.data + 8, sizeof(buf.data) - 8, in);
-  }
-  buf.len = len;
-}
-
-//--------------------------------------------------------------------------------
-std::optional<PmValue> parse_pm_value(std::string_view data)
-{
-  constexpr size_t kFixed = 1 + 3 + sizeof(uint32_t);
-  if (data.size() < kFixed) {
-    return std::nullopt;
-  }
-  const uint8_t state = static_cast<uint8_t>(data[0]);
-  if (state != PM_STATE_COMMIT && state != PM_STATE_ABORT) {
-    return std::nullopt;
-  }
-  uint32_t mtime_be{};
-  std::memcpy(&mtime_be, data.data() + 4, sizeof(mtime_be));
-
-  PmValue v;
-  v.state = state;
-  v.mtime = ntohl(mtime_be);
-  if (state == PM_STATE_COMMIT) {
-    v.body = data.substr(kFixed);
-  }
-  return v;
 }
 
 } // namespace kvrgw

@@ -70,6 +70,8 @@ inline constexpr char kCategoryChild = 'C';
 inline constexpr char kChildTypeTags = 'T';
 inline constexpr char kChildTypeAnnotation = 'A';
 inline constexpr char kChildTypeExtended = 'E';
+inline constexpr char kChildTypeManifest = 'M';   // multipart manifest body
+inline constexpr char kChildTypeChecksum = 'S';   // multipart per-part checksum blob
 
 inline constexpr size_t kMaxTags = 10;
 inline constexpr size_t kMaxTagKeyLen = 128;
@@ -77,7 +79,10 @@ inline constexpr size_t kMaxTagValueLen = 256;
 inline constexpr size_t kMaxTagPayload = 5120;
 inline constexpr size_t kMaxInlineTagPayload = 256;
 inline constexpr size_t kMaxOValueBytes = 1024;
-inline constexpr uint8_t kFlagExternalTags = 0x08;
+// Cap for a multipart manifest (C:M / C:E) and for the per-part checksum blob
+// in C:S (plans/o_value_layout.md); a larger checksum blob goes to the
+// storage-tier file.  Well under FDB's 100,000 B value limit.
+inline constexpr size_t kMaxChildPayloadBytes = 75 * 1024;
 
 inline constexpr std::string_view kLocalCounterTenantId = "tenant_id";
 inline constexpr std::string_view kLocalCounterBucketId = "bucket_id";

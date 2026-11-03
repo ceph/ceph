@@ -54,7 +54,8 @@ class AdminServer {
               ErrorStats* error_stats = nullptr,
               BatchStats* batch_stats = nullptr,
               ErrInsertion* err_insertion = nullptr,
-              OpsStats* ops_stats = nullptr);
+              OpsStats* ops_stats = nullptr,
+              std::atomic<uint64_t>* min_part_size = nullptr);
 
   bool run();
 
@@ -70,6 +71,7 @@ class AdminServer {
   BatchStats* batch_stats_{};
   ErrInsertion* err_insertion_{};
   OpsStats* ops_stats_{};
+  std::atomic<uint64_t>* min_part_size_{};
 
   std::chrono::steady_clock::time_point bs_last_time_{};
   int64_t bs_prev_commits_{};

@@ -123,12 +123,13 @@ AdminServer::AdminServer(GcConfigState &gc_config, TierConfigState &tier_config,
                          std::string socket_path, std::atomic<bool> &stop_flag,
                          LatencyStats *latency_stats, ErrorStats *error_stats,
                          BatchStats *batch_stats, ErrInsertion *err_insertion,
-                         OpsStats *ops_stats)
+                         OpsStats *ops_stats,
+                         std::atomic<uint64_t> *min_part_size)
     : config_(gc_config), tier_config_(tier_config),
       socket_path_(std::move(socket_path)), stop_flag_(stop_flag),
       latency_stats_(latency_stats), error_stats_(error_stats),
       batch_stats_(batch_stats), err_insertion_(err_insertion),
-      ops_stats_(ops_stats)
+      ops_stats_(ops_stats), min_part_size_(min_part_size)
 {
 }
 
@@ -222,6 +223,39 @@ std::string AdminServer::handle_line(const std::string &line)
     }
     tier_config_.maybe_apply_pending();
     return "OK HANDLE=" + std::to_string(*handle);
+  }
+
+  if (cmd == "get-min-part-size") {
+    if (!min_part_size_) {
+      return "ERROR min part size not available";
+    }
+    return "min_part_size=" +
+           std::to_string(min_part_size_->load(std::memory_order_relaxed));
+  }
+
+  if (cmd == "set-min-part-size") {
+    if (!min_part_size_) {
+      return "ERROR min part size not available";
+    }
+    std::istringstream ss(args);
+    std::string val;
+    std::string extra;
+    if (!(ss >> val) || (ss >> extra)) {
+      return "ERROR usage: set-min-part-size <bytes|default>";
+    }
+    uint64_t bytes = kMinPartSizeBytes;
+    if (val != "default") {
+      if (val.find_first_not_of("0123456789") != std::string::npos ||
+          val.size() > 18) {
+        return "ERROR bad value: " + val;
+      }
+      bytes = std::stoull(val);
+      if (bytes == 0 || bytes > kMinPartSizeBytes) {
+        return "ERROR value must be in 1.." + std::to_string(kMinPartSizeBytes);
+      }
+    }
+    min_part_size_->store(bytes, std::memory_order_relaxed);
+    return "OK min_part_size=" + std::to_string(bytes);
   }
 
   if (cmd == "query-tier-config") {

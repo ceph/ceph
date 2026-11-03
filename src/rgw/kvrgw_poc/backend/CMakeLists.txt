@@ -13,6 +13,15 @@ set(FDB_ROOT "${CMAKE_SOURCE_DIR}/../third_party/fdb")
 set(FDB_INCLUDE_DIR "${FDB_ROOT}/usr/include")
 set(FDB_LIB_DIR "${FDB_ROOT}/usr/lib64")
 
+# Header-only xxHash (XXH_INLINE_ALL) for the XXHash3/64/128 checksum algorithms.
+# Prefer a system xxhash.h; otherwise use the copy in the surrounding ceph tree.
+find_path(XXHASH_INCLUDE_DIR xxhash.h
+  HINTS "${CMAKE_SOURCE_DIR}/../../../xxHash")
+if(NOT XXHASH_INCLUDE_DIR)
+  message(FATAL_ERROR "xxhash.h not found; set -DXXHASH_INCLUDE_DIR=<dir>")
+endif()
+include_directories(SYSTEM "${XXHASH_INCLUDE_DIR}")
+
 find_package(OpenSSL REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
@@ -46,6 +55,7 @@ set(KVRGW_LIB_SRCS
   src/err_insertion.cpp
   src/typed_ids.cpp
   src/etag.cpp
+  src/checksum.cpp
   src/admin_server.cpp
 )
 
@@ -105,7 +115,7 @@ set_target_properties(kv-rgw-backend PROPERTIES
   INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
 )
 
-add_executable(object_value_test tests/object_value_test.cpp src/object_value.cpp src/ref_tag.cpp src/tenant_value.cpp src/id_tag.cpp src/id_meta.cpp src/typed_ids.cpp src/etag.cpp src/error_codes.cpp)
+add_executable(object_value_test tests/object_value_test.cpp src/object_value.cpp src/checksum.cpp src/ref_tag.cpp src/tenant_value.cpp src/id_tag.cpp src/id_meta.cpp src/typed_ids.cpp src/etag.cpp src/error_codes.cpp)
 target_include_directories(object_value_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
   "${FDB_INCLUDE_DIR}"
@@ -131,6 +141,7 @@ add_executable(kv_range_test
   src/l_keys.cpp
   src/keys.cpp
   src/object_value.cpp
+  src/checksum.cpp
   src/ref_tag.cpp
   src/id_tag.cpp
   src/id_meta.cpp
@@ -158,6 +169,7 @@ add_executable(gc_ctl
   src/ref_tag.cpp
   src/gc_value.cpp
   src/object_value.cpp
+  src/checksum.cpp
   src/id_tag.cpp
   src/id_meta.cpp
   src/typed_ids.cpp
@@ -175,7 +187,7 @@ target_link_libraries(gc_ctl PRIVATE
 target_compile_definitions(gc_ctl PRIVATE FDB_API_VERSION=730)
 set_target_properties(gc_ctl PROPERTIES BUILD_RPATH "${FDB_LIB_DIR}")
 
-add_executable(multipart_key_test tests/multipart_key_test.cpp src/keys.cpp src/l_keys.cpp src/kv_store.cpp src/object_value.cpp src/gc_value.cpp src/multipart_value.cpp src/multipart_manifest.cpp src/ref_tag.cpp src/id_tag.cpp src/id_meta.cpp src/typed_ids.cpp src/etag.cpp src/error_codes.cpp)
+add_executable(multipart_key_test tests/multipart_key_test.cpp src/keys.cpp src/l_keys.cpp src/kv_store.cpp src/object_value.cpp src/checksum.cpp src/gc_value.cpp src/multipart_value.cpp src/multipart_manifest.cpp src/ref_tag.cpp src/id_tag.cpp src/id_meta.cpp src/typed_ids.cpp src/etag.cpp src/error_codes.cpp)
 target_include_directories(multipart_key_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
   "${FDB_INCLUDE_DIR}"
@@ -190,6 +202,10 @@ target_include_directories(multipart_manifest_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
 )
 target_link_libraries(multipart_manifest_test PRIVATE OpenSSL::Crypto)
+
+add_executable(checksum_test tests/checksum_test.cpp src/checksum.cpp)
+target_include_directories(checksum_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(checksum_test PRIVATE OpenSSL::Crypto)
 
 add_executable(gc_config_state_test tests/gc_config_state_test.cpp src/gc_config_state.cpp)
 target_include_directories(gc_config_state_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
@@ -240,6 +256,21 @@ target_include_directories(batch_mixed_test PRIVATE
 target_link_directories(batch_mixed_test PRIVATE "${FDB_LIB_DIR}")
 target_link_libraries(batch_mixed_test PRIVATE kvrgw)
 set_target_properties(batch_mixed_test PROPERTIES
+  BUILD_RPATH "${FDB_LIB_DIR};$ORIGIN"
+  INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
+)
+
+add_executable(d_write_test
+  tests/d_write_test.cpp
+)
+target_include_directories(d_write_test PRIVATE
+  "${CMAKE_SOURCE_DIR}/src"
+  "${FDB_INCLUDE_DIR}"
+  ${YAML_CPP_INCLUDE_DIRS}
+)
+target_link_directories(d_write_test PRIVATE "${FDB_LIB_DIR}")
+target_link_libraries(d_write_test PRIVATE kvrgw)
+set_target_properties(d_write_test PROPERTIES
   BUILD_RPATH "${FDB_LIB_DIR};$ORIGIN"
   INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
 )
@@ -312,6 +343,71 @@ set_target_properties(multipart_ref_copy_test PROPERTIES
   INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
 )
 
+# Runtime min-part-size override (admin socket) + ListParts pagination over many parts.
+add_executable(multipart_minpart_test
+  tests/multipart_minpart_test.cpp
+)
+target_include_directories(multipart_minpart_test PRIVATE
+  "${CMAKE_SOURCE_DIR}/src"
+  "${FDB_INCLUDE_DIR}"
+  ${YAML_CPP_INCLUDE_DIRS}
+)
+target_link_directories(multipart_minpart_test PRIVATE "${FDB_LIB_DIR}")
+target_link_libraries(multipart_minpart_test PRIVATE kvrgw)
+set_target_properties(multipart_minpart_test PROPERTIES
+  BUILD_RPATH "${FDB_LIB_DIR};$ORIGIN"
+  INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
+)
+
+# Multipart checksums through the service API.
+add_executable(multipart_cksum_test
+  tests/multipart_cksum_test.cpp
+)
+target_include_directories(multipart_cksum_test PRIVATE
+  "${CMAKE_SOURCE_DIR}/src"
+  "${FDB_INCLUDE_DIR}"
+  ${YAML_CPP_INCLUDE_DIRS}
+)
+target_link_directories(multipart_cksum_test PRIVATE "${FDB_LIB_DIR}")
+target_link_libraries(multipart_cksum_test PRIVATE kvrgw)
+set_target_properties(multipart_cksum_test PROPERTIES
+  BUILD_RPATH "${FDB_LIB_DIR};$ORIGIN"
+  INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
+)
+
+# Multipart M / S child KVs and the tier 3 checksum file: placement, delete paths, copy.
+add_executable(multipart_children_test
+  tests/multipart_children_test.cpp
+)
+target_include_directories(multipart_children_test PRIVATE
+  "${CMAKE_SOURCE_DIR}/src"
+  "${FDB_INCLUDE_DIR}"
+  ${YAML_CPP_INCLUDE_DIRS}
+)
+target_link_directories(multipart_children_test PRIVATE "${FDB_LIB_DIR}")
+target_link_libraries(multipart_children_test PRIVATE kvrgw)
+set_target_properties(multipart_children_test PROPERTIES
+  BUILD_RPATH "${FDB_LIB_DIR};$ORIGIN"
+  INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
+)
+# :O: value layout permutations (plans/o_value_layout.md).
+add_executable(o_value_layout_test
+  tests/o_value_layout_test.cpp
+)
+target_include_directories(o_value_layout_test PRIVATE
+  "${CMAKE_SOURCE_DIR}/src"
+  "${FDB_INCLUDE_DIR}"
+  ${YAML_CPP_INCLUDE_DIRS}
+)
+target_link_directories(o_value_layout_test PRIVATE "${FDB_LIB_DIR}")
+target_link_libraries(o_value_layout_test PRIVATE kvrgw)
+set_target_properties(o_value_layout_test PROPERTIES
+  BUILD_RPATH "${FDB_LIB_DIR};$ORIGIN"
+  INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
+)
+
+
+
 add_executable(multipart_goa_test
   tests/multipart_goa_test.cpp
 )
@@ -332,6 +428,7 @@ add_test(NAME object_value_test COMMAND object_value_test)
 add_test(NAME l_key_test COMMAND l_key_test)
 add_test(NAME multipart_key_test COMMAND multipart_key_test)
 add_test(NAME multipart_manifest_test COMMAND multipart_manifest_test)
+add_test(NAME checksum_test COMMAND checksum_test)
 add_test(NAME data_store_test COMMAND data_store_test)
 add_test(NAME kv_range_test COMMAND kv_range_test)
 add_test(NAME gc_config_state_test COMMAND gc_config_state_test)
@@ -339,4 +436,5 @@ add_test(NAME fdb_error_test COMMAND fdb_error_test)
 add_test(NAME data_store_error_test COMMAND data_store_error_test)
 add_test(NAME err_insertion_test COMMAND err_insertion_test)
 add_test(NAME batch_mixed_test COMMAND batch_mixed_test)
+add_test(NAME d_write_test COMMAND d_write_test)
 add_test(NAME put_condition_test COMMAND put_condition_test)

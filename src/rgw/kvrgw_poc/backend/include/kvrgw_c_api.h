@@ -48,7 +48,8 @@ enum {
   KVRGW_ERR_ENTITY_TOO_SMALL = 503,
   KVRGW_ERR_ENTITY_TOO_LARGE = 504,
   KVRGW_ERR_UPLOAD_PART_BUSY = 505,
-  KVRGW_ERR_UPLOAD_IN_PROGRESS = 506
+  KVRGW_ERR_UPLOAD_IN_PROGRESS = 506,
+  KVRGW_ERR_BAD_DIGEST = 507
 };
 
 enum {
@@ -56,6 +57,17 @@ enum {
   KVRGW_VERSIONING_ENABLED = 1,
   KVRGW_VERSIONING_SUSPENDED = 2
 };
+
+enum {
+  KVRGW_CKSUM_NONE = 0,
+  KVRGW_CKSUM_CRC32 = 1,
+  KVRGW_CKSUM_CRC32C = 2,
+  KVRGW_CKSUM_SHA1 = 3,
+  KVRGW_CKSUM_SHA256 = 4,
+  KVRGW_CKSUM_CRC64NVME = 5
+};
+
+enum { KVRGW_CKSUM_TYPE_NONE = 0, KVRGW_CKSUM_TYPE_COMPOSITE = 1, KVRGW_CKSUM_TYPE_FULL_OBJECT = 2 };
 
 enum { KVRGW_MAX_LIST_KEYS = 1000 };
 enum { KVRGW_MAX_LIST_BUCKETS = 10000 };
@@ -94,6 +106,15 @@ typedef struct {
    * x-amz-mp-parts-count / PartsCount: callers should only surface it in
    * the response when the request actually specified a PartNumber. */
   uint32_t parts_count;
+  /* Whole-object checksum (KVRGW_CKSUM_* / KVRGW_CKSUM_TYPE_*); alg 0 when
+   * the object has none. cksum is the S3 rendering (base64, plus "-N" for
+   * COMPOSITE), NUL-terminated. */
+  uint8_t cksum_alg;
+  uint8_t cksum_type;
+  char cksum[96];
+  /* Base64 digest of the addressed part (same algorithm as cksum_alg); only
+   * filled by kvrgw_get_object / kvrgw_head_object with part_number != 0. */
+  char part_cksum[48];
 } kvrgw_object_meta;
 
 typedef struct {
@@ -144,6 +165,9 @@ typedef struct {
   uint16_t part_number;
   const char* etag;
   size_t etag_len;
+  uint8_t cksum_alg;      /* KVRGW_CKSUM_*; 0 = the client sent no part checksum */
+  const char* cksum;      /* base64 */
+  size_t cksum_len;
 } kvrgw_mpu_part;
 
 typedef struct {
@@ -254,6 +278,7 @@ kvrgw_err_t kvrgw_head_object(KvRgwHandle* h, uint32_t tenant_id,
 typedef struct {
   uint16_t part_number;
   uint64_t size;
+  char cksum[48]; /* base64 part digest; empty when the object has no checksum */
 } kvrgw_object_attr_part;
 
 /* GetObjectAttributes. meta->etag/size/version_id are populated the same
@@ -362,15 +387,23 @@ kvrgw_err_t kvrgw_initiate_multipart_upload(KvRgwHandle* h, uint32_t tenant_id,
                                             const char* content_type, size_t content_type_len,
                                             const kvrgw_kv* tags, size_t tags_count,
                                             const kvrgw_kv* metadata, size_t metadata_count,
+                                            uint8_t cksum_alg, uint8_t cksum_type,
                                             char* upload_id_out, size_t upload_id_cap);
 
+/* cksum_alg / cksum_type use the KVRGW_CKSUM_* values (0 = none).
+ * cksum / cksum_len: the client's base64 x-amz-checksum-<alg> for this part
+ * (cksum_alg is then the algorithm it was sent for). cksum_out receives the
+ * base64 digest stored for the part; empty if the upload has no algorithm. */
 kvrgw_err_t kvrgw_upload_part(KvRgwHandle* h, uint32_t tenant_id,
                               const char* bucket, size_t bucket_len,
                               const char* key, size_t key_len,
                               const char* upload_id, size_t upload_id_len,
                               uint16_t part_number,
                               const uint8_t* data, size_t data_len,
-                              char* etag_out, size_t etag_cap);
+                              uint8_t cksum_alg, const char* cksum, size_t cksum_len,
+                              char* etag_out, size_t etag_cap,
+                              uint8_t* cksum_alg_out,
+                              char* cksum_out, size_t cksum_out_cap);
 
 kvrgw_err_t kvrgw_complete_multipart_upload(KvRgwHandle* h, uint32_t tenant_id,
                                             const char* bucket, size_t bucket_len,
@@ -379,8 +412,12 @@ kvrgw_err_t kvrgw_complete_multipart_upload(KvRgwHandle* h, uint32_t tenant_id,
                                             const kvrgw_mpu_part* parts, size_t parts_count,
                                             const char* if_match, size_t if_match_len,
                                             const char* if_none_match, size_t if_none_match_len,
+                                            uint8_t cksum_alg, uint8_t cksum_type,
+                                            const char* cksum, size_t cksum_len,
                                             char* etag_out, size_t etag_cap,
-                                            char* version_id_out, size_t version_id_cap);
+                                            char* version_id_out, size_t version_id_cap,
+                                            uint8_t* cksum_alg_out, uint8_t* cksum_type_out,
+                                            char* cksum_out, size_t cksum_out_cap);
 
 kvrgw_err_t kvrgw_abort_multipart_upload(KvRgwHandle* h, uint32_t tenant_id,
                                          const char* bucket, size_t bucket_len,

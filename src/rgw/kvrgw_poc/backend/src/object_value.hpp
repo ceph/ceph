@@ -14,24 +14,30 @@
 
 #pragma once
 
+#include "checksum.hpp"
 #include "constants.hpp"
 #include "etag.hpp"
+#include "gm_value.hpp"
 #include "id_meta.hpp"
 #include "ref_tag.hpp"
 #include "typed_ids.hpp"
 
+#include <algorithm>
 #include <arpa/inet.h>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <endian.h>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace kvrgw {
+
+// See plans/o_value_layout.md for the full :O: layout.
 
 enum ChunkType : uint8_t {
   CHUNK_EMPTY        = 'E',     // used by delete_markers
@@ -42,23 +48,14 @@ enum ChunkType : uint8_t {
   CHUNK_STORAGE_REF  = 's',
   // A completed multipart object -- data lives in N separate part files
   // (Tier 3, "ref_tag-part_number-generation" each), not one contiguous
-  // blob. hdr.ref_tag is the data's own identity (the upload's ref_tag,
-  // reused as-is), same role it plays for CHUNK_STORAGE -- no extra
-  // ref-tag tail bytes. The manifest (multipart_manifest.hpp's
-  // encode_manifest_body output) describing which parts/generations/
-  // sizes make up the object is carried as this value's own variable-
-  // length tail (see ObjectValue::manifest_body / write_object_value /
-  // parse_object_value) -- always the *last* tail segment, so its length
-  // is implicit ("rest of the value"), no length prefix needed.
+  // blob. The manifest (a ready-made G:M{FREE_PARTS} value, see gm_value.hpp)
+  // describing which parts/generations/sizes make up the object lives where
+  // ObjectValue::manifest_loc says (inline, C:E or C:M).
   CHUNK_MULTIPART    = 'P',
   // Zero-copy-shared copy of a CHUNK_MULTIPART object (server-side copy
   // of a completed multipart upload). hdr.ref_tag is this object's own
-  // identity (tags/metadata namespace); the *shared* part-file identity
-  // lives in chunk.ref_tag (wire tail, identical layout to
-  // CHUNK_STORAGE_REF's -- just a trailing RefTag, no bucket_id, since
-  // part_filename() doesn't take one). manifest_body is this object's
-  // own copy (cheap metadata, no data duplication) and is still the
-  // value's last tail segment, same as plain CHUNK_MULTIPART.
+  // identity (tags/metadata namespace); the *shared* identity lives in
+  // chunk.ref_tag.
   CHUNK_MULTIPART_REF = 'p',
 };
 
@@ -105,15 +102,13 @@ class __attribute__((packed)) ChunkDescriptorFlags {
   uint8_t val_{0};
 };
 static_assert(sizeof(ChunkDescriptorFlags) == 1);
-// Future: constexpr ChunkDescriptorFlags kChunkFlagEncrypted{0x01};
-//         constexpr ChunkDescriptorFlags kChunkFlagCompressed{0x02};
 
 #pragma pack(push, 1)
 
 // Self-sufficient data-location descriptor for one object's data.
 // Carries everything needed to locate, reference-count, and clean up the data,
-// regardless of which tier it lives on. Future fields (encryption_key,
-// compression_alg) will be added in an extended subtype.
+// regardless of which tier it lives on. Present on the wire for every object
+// type (plans/o_value_layout.md).
 //
 // part_count is stored internally as BE to avoid any conversion on serialize.
 class ChunkDescriptor {
@@ -172,40 +167,105 @@ static_assert(sizeof(ChunkDescriptor) == 24);
 
 #pragma pack(pop)
 
+// ObjectValueHeader.flags (uint16_t).  0x0001 is reserved.
+inline constexpr uint16_t kFlagFenced              = 0x0002;  // delete marker
+inline constexpr uint16_t kFlagSharedData          = 0x0004;  // shared ref-counted data
+inline constexpr uint16_t kFlagExternalTags        = 0x0008;  // tags in C:T
+inline constexpr uint16_t kFlagExternalAnnotations = 0x0010;  // annotations in C:A
+inline constexpr uint16_t kFlagDataInChildE        = 0x0020;  // single-part data in C:E
+inline constexpr uint16_t kFlagSharedTags          = 0x0040;  // C:T is shared
+inline constexpr uint16_t kFlagExternalMetadata    = 0x0080;  // metadata_frame in C:E
+inline constexpr uint16_t kFlagReservedMask        =
+    static_cast<uint16_t>(~(kFlagFenced | kFlagSharedData | kFlagExternalTags |
+                            kFlagExternalAnnotations | kFlagDataInChildE |
+                            kFlagSharedTags | kFlagExternalMetadata));
+
+// Multipart header byte 0 high nibble: where the per-part checksum blob lives.
+enum CksumLocation : uint8_t {
+  kCksumInline = 0,  // inline in :O: (only copy), or absent when alg == NONE
+  kCksumChildS = 1,  // authoritative copy in C:S
+  kCksumFile   = 2,  // authoritative copy in <ref_tag>_checksum file
+};
+// Multipart header byte 0 low nibble: where the manifest lives.
+enum ManifestLocation : uint8_t {
+  kManifestInline = 0,  // inline in :O: (only copy)
+  kManifestChildE = 1,  // piggybacked in C:E (unshared only)
+  kManifestChildM = 2,  // authoritative copy in C:M
+};
+
+// Multipart header byte 1: mflags.
+inline constexpr uint8_t kMFlagComposite     = 0x02;
+inline constexpr uint8_t kMFlagFirstPartInfo = 0x04;
+inline constexpr uint8_t kMFlagManifestCached = 0x08;
+inline constexpr uint8_t kMFlagCksumCached   = 0x10;
+inline constexpr uint8_t kMFlagReservedMask  =
+    static_cast<uint8_t>(~(kMFlagComposite | kMFlagFirstPartInfo |
+                           kMFlagManifestCached | kMFlagCksumCached));
+
+// Multipart-only header: [cksum_location:4 | manifest_location:4] + mflags.
+inline constexpr size_t kMultipartHdrBytes = 2;
+
+// Lowest-numbered included part, stored when no local manifest is kept.
+// Wire: part_num 2B BE, gen_id 2B BE, part_size 5B BE.
+inline constexpr size_t kFirstPartInfoBytes = 2 + 2 + 5;
+struct FirstPartInfo {
+  uint16_t part_number{};
+  uint16_t generation{};
+  uint64_t size{};  // < 2^40
+
+  void encode(uint8_t* dst) const {
+    dst[0] = static_cast<uint8_t>(part_number >> 8);
+    dst[1] = static_cast<uint8_t>(part_number);
+    dst[2] = static_cast<uint8_t>(generation >> 8);
+    dst[3] = static_cast<uint8_t>(generation);
+    for (int i = 0; i < 5; ++i) {
+      dst[4 + i] = static_cast<uint8_t>(size >> (8 * (4 - i)));
+    }
+  }
+  static FirstPartInfo decode(const uint8_t* src) {
+    FirstPartInfo f;
+    f.part_number = static_cast<uint16_t>((src[0] << 8) | src[1]);
+    f.generation = static_cast<uint16_t>((src[2] << 8) | src[3]);
+    for (int i = 0; i < 5; ++i) {
+      f.size = (f.size << 8) | src[4 + i];
+    }
+    return f;
+  }
+};
+
 #pragma pack(push, 1)
 
-struct ObjectValue;
+// 64 B. Field order keeps `size` 8-byte aligned (offset 8).
 struct ObjectValueHeader {
-  RefTag ref_tag{};
-  ETag etag{};
-  uint16_t annotations_count{};
+  uint16_t flags{};
+  ChunkType chunk_type{CHUNK_STORAGE};
+  uint8_t content_type_len{};
+  uint8_t tags_count{};
+  uint16_t metadata_count{};
+  uint8_t cksum_alg_byte{};   // cksum_alg:4 (high) | reserved:4 (low)
 
   uint64_t size{};
   uint32_t last_modified_sec{};
   uint32_t last_modified_nsec{};
 
-  ChunkType chunk_type{CHUNK_STORAGE};
-  uint8_t flags{};
-  uint8_t tags_count{};
-  uint8_t content_type_len{};
-
   version_id_t version_id{};
   version_id_t next_vid{};
 
-  uint16_t metadata_count{};
-  // Valid PartNumber range for GetObject/HeadObject's ?partNumber= query
-  // param is uniformly [1, part_count] for *every* chunk type: 1 for
-  // non-multipart objects (so "PartNumber=1" on an ordinary object reads
-  // the whole object, matching AWS), included_parts.size() for
-  // CHUNK_MULTIPART. The PartsCount response header is still gated on
-  // chunk_type == CHUNK_MULTIPART separately (AWS omits it otherwise),
-  // regardless of this stored value.
-  uint16_t part_count{1};
+  RefTag ref_tag{};
+  ETag etag{};
+  uint16_t annotations_count{};
+
+  CksumAlg get_cksum_alg() const {
+    return static_cast<CksumAlg>(cksum_alg_byte >> 4);
+  }
+  void set_cksum_alg(CksumAlg a) {
+    cksum_alg_byte = static_cast<uint8_t>(static_cast<uint8_t>(a) << 4);
+  }
 };
 
 struct GcValueHeader {
   ChunkType chunk_type{CHUNK_STORAGE};
-  uint8_t   flags{};
+  uint8_t   flags{};   // kGcFlag* below (narrowed from ObjectValueHeader.flags)
   uint8_t   pad[2]{};
 };
 
@@ -225,26 +285,25 @@ struct ChildValueHeader {
 #pragma pack(pop)
 
 static_assert(sizeof(ObjectValueHeader) == 64);
+static_assert(offsetof(ObjectValueHeader, cksum_alg_byte) == 7);
+static_assert(offsetof(ObjectValueHeader, size) == 8);
 static_assert(sizeof(GcValueHeader) == 4);
 static_assert(sizeof(BucketValueHeader) == 18);
 static_assert(sizeof(ChildValueHeader) == 8);
 static_assert(kMaxOValueBytes > sizeof(ObjectValueHeader));
+static_assert(kCksumAlgMax <= 15);
 
-// Templated so a second, much larger instantiation (OValueBufMultipart --
-// see multipart_value.hpp) can carry a completed multipart object's
-// manifest tail without inflating the stack footprint of every other
-// object write, which all keep using the original, compact OValueBuf
-// (kMaxOValueBytes == 1024).
-template <size_t N>
-struct OValueBufT {
-  static constexpr size_t kMaxSize = N;
+// GcValueHeader.flags
+inline constexpr uint8_t kGcFlagShared           = 0x01;  // kFlagSharedData
+inline constexpr uint8_t kGcFlagExternalChildren = 0x02;  // object owns C: children
+
+// The single :O: buffer for every object type (hard cap kMaxOValueBytes).
+struct OValueBuf {
+  static constexpr size_t kMaxSize = kMaxOValueBytes;
   uint8_t data[kMaxSize];
   size_t len{};
 
   bool set_header(const ObjectValueHeader& hdr) {
-    if (sizeof(hdr) > kMaxSize) {
-      return false;
-    }
     std::memcpy(data, &hdr, sizeof(hdr));
     len = sizeof(hdr);
     return true;
@@ -254,55 +313,120 @@ struct OValueBufT {
     if (len + n > kMaxSize) {
       return false;
     }
-    std::memcpy(data + len, src, n);
+    if (n) {
+      std::memcpy(data + len, src, n);
+    }
     len += n;
     return true;
   }
 
-  bool append(std::string_view v) {
-    return append(v.data(), v.size());
-  }
+  bool append(std::string_view v) { return append(v.data(), v.size()); }
+  bool append(std::span<const uint8_t> v) { return append(v.data(), v.size()); }
 
   std::string_view view() const {
     return {reinterpret_cast<const char*>(data), len};
   }
 };
 
-using OValueBuf = OValueBufT<kMaxOValueBytes>;
-
+// Non-owning in-memory form of one :O: value. Every variable-length member is
+// a view; whoever builds it (parser: the raw FDB value; writers: their own
+// stack buffers) keeps the bytes alive. hdr is in host byte order.
 struct ObjectValue {
   ObjectValueHeader hdr{};
-  std::string content_type;
-  std::vector<uint8_t> inline_data;
-  std::vector<uint8_t> metadata_frame;
-  // CHUNK_MULTIPART only -- the manifest body (multipart_manifest.hpp's
-  // encode_manifest_body output). Always the value's last tail segment.
-  std::string manifest_body;
+  ChunkDescriptor chunk{};          // on the wire for every type
+  std::string_view content_type;
+  // Inline metadata frame; empty when kFlagExternalMetadata (it is in C:E).
+  std::span<const uint8_t> metadata_frame;
+  // Single-part only: inline data (CHUNK_INLINE, hdr.size bytes).
+  std::span<const uint8_t> inline_data;
 
-  static constexpr uint8_t kFlagExtendedAttrs        = 0x01;
-  static constexpr uint8_t kFlagFenced               = 0x02;
-  static constexpr uint8_t kFlagSharedData           = 0x04;
-  static constexpr uint8_t kFlagExternalTags         = 0x08;
-  static constexpr uint8_t kFlagExternalAnnotations  = 0x10;
+  // Multipart only.
+  uint8_t cksum_loc{kCksumInline};
+  uint8_t manifest_loc{kManifestInline};
+  uint8_t mflags{};
+  FirstPartInfo first_part{};                // valid iff kMFlagFirstPartInfo
+  // Local manifest copy (G:M{FREE_PARTS} value): present when manifest_loc ==
+  // kManifestInline or kMFlagManifestCached; empty otherwise.
+  std::string_view manifest_blob;
+  // Local per-part checksum blob copy: present when cksum_loc == kCksumInline
+  // (and alg != NONE) or kMFlagCksumCached; empty otherwise.
+  std::string_view cksum_blob;
 
-  bool has_extended_attrs() const { return (hdr.flags & kFlagExtendedAttrs) != 0; }
+  // Combined digest, first cksum_digest_len(alg) bytes (all object types).
+  std::array<uint8_t, kCksumMaxDigestBytes> cksum_combined{};
+
+  static constexpr uint16_t kFlagFenced              = kvrgw::kFlagFenced;
+  static constexpr uint16_t kFlagSharedData          = kvrgw::kFlagSharedData;
+  static constexpr uint16_t kFlagExternalTags        = kvrgw::kFlagExternalTags;
+  static constexpr uint16_t kFlagExternalAnnotations = kvrgw::kFlagExternalAnnotations;
+  static constexpr uint16_t kFlagDataInChildE        = kvrgw::kFlagDataInChildE;
+  static constexpr uint16_t kFlagSharedTags          = kvrgw::kFlagSharedTags;
+  static constexpr uint16_t kFlagExternalMetadata    = kvrgw::kFlagExternalMetadata;
+
   bool has_annotations() const { return hdr.annotations_count > 0; }
   bool has_external_annotations() const { return (hdr.flags & kFlagExternalAnnotations) && hdr.annotations_count > 0; }
   bool has_metadata() const { return hdr.metadata_count > 0; }
+  bool has_external_metadata() const { return (hdr.flags & kFlagExternalMetadata) != 0; }
   bool is_delete_marker() const { return (hdr.flags & kFlagFenced) != 0; }
   bool has_shared_data() const { return (hdr.flags & kFlagSharedData) != 0; }
   bool has_external_tags() const { return (hdr.flags & kFlagExternalTags) != 0; }
   bool has_data() const { return hdr.size > 0 || hdr.chunk_type != CHUNK_INLINE; }
 
+  bool is_multipart() const {
+    return hdr.chunk_type == CHUNK_MULTIPART || hdr.chunk_type == CHUNK_MULTIPART_REF;
+  }
+  CksumAlg cksum_alg() const { return hdr.get_cksum_alg(); }
+  // Single-part is always FULL_OBJECT; multipart carries kMFlagComposite.
+  CksumType cksum_type() const {
+    if (cksum_alg() == CksumAlg::NONE) {
+      return CksumType::NONE;
+    }
+    return (is_multipart() && (mflags & kMFlagComposite)) ? CksumType::COMPOSITE
+                                                          : CksumType::FULL_OBJECT;
+  }
+  size_t cksum_combined_len() const { return cksum_digest_len(cksum_alg()); }
+  std::span<const uint8_t> cksum_digest() const {
+    return {cksum_combined.data(), cksum_combined_len()};
+  }
+  uint16_t part_count() const { return hdr.etag.part_count(); }
+  // Valid ?partNumber= range is [1, max(1, part_count())].
+  uint16_t max_part_number() const {
+    const uint16_t pc = part_count();
+    return pc ? pc : 1;
+  }
+  bool has_local_manifest() const {
+    return manifest_loc == kManifestInline || (mflags & kMFlagManifestCached);
+  }
+  bool has_local_cksum_blob() const {
+    return cksum_alg() != CksumAlg::NONE &&
+           (cksum_loc == kCksumInline || (mflags & kMFlagCksumCached));
+  }
+  size_t cksum_blob_len() const {
+    return static_cast<size_t>(part_count()) * cksum_combined_len();
+  }
+
+  bool is_ref() const {
+    return hdr.chunk_type == CHUNK_CHILD_D_REF ||
+           hdr.chunk_type == CHUNK_STORAGE_REF ||
+           hdr.chunk_type == CHUNK_MULTIPART_REF;
+  }
+
   // Returns the ref_tag view for data access:
   // chunk.ref_tag for REF chunk types, hdr.ref_tag otherwise.
   std::string_view data_ref_view() const {
-    if (hdr.chunk_type == CHUNK_CHILD_D_REF ||
-        hdr.chunk_type == CHUNK_STORAGE_REF ||
-        hdr.chunk_type == CHUNK_MULTIPART_REF) {
-      return chunk.ref_tag_view();
-    }
-    return hdr.ref_tag.view();
+    return is_ref() ? chunk.ref_tag_view() : hdr.ref_tag.view();
+  }
+  const RefTag& data_ref_tag() const {
+    return is_ref() ? chunk.get_ref_tag() : hdr.ref_tag;
+  }
+  // Bucket that owns the shared data / C:M / C:S: the chunk's for REF
+  // objects, the object's own bucket otherwise.
+  const bucket_id_t& data_bucket(const bucket_id_t& own) const {
+    return is_ref() ? chunk.get_bucket_id() : own;
+  }
+  // Non-REF objects own their data: the descriptor points at themselves.
+  void set_self_chunk(const bucket_id_t& own) {
+    chunk = ChunkDescriptor(hdr.chunk_type, hdr.ref_tag, own);
   }
 
   const ETag& get_etag() const { return hdr.etag; }
@@ -311,13 +435,53 @@ struct ObjectValue {
     hdr.etag.load_raw(digest, part_count);
   }
 
-  std::string etag_display() const;
+  void set_cksum_combined(std::span<const uint8_t> digest) {
+    cksum_combined = {};
+    std::memcpy(cksum_combined.data(), digest.data(),
+                std::min(digest.size(), cksum_combined.size()));
+  }
 
-  // Full data-location descriptor (in-memory only — not in the packed header).
-  // chunk.type mirrors hdr.chunk_type; chunk.ref_tag and chunk.bucket_id are
-  // populated from the variable-length wire tail for REF chunk types.
-  ChunkDescriptor chunk{};
+  std::string etag_display() const;
 };
+
+// An ObjectValue plus the raw FDB value its views point into. Movable (the
+// raw value is always larger than the SSO capacity, so a move keeps the heap
+// buffer and the views stay valid); not copyable. Copying the ObjectValue
+// base (slicing) gives a non-owning view.
+struct OwnedObjectValue : ObjectValue {
+  std::string raw;
+  // Child values read for this object. The ext_* views point into them and
+  // the base ObjectValue stays exactly the wire form (so it can be rewritten).
+  // (Both are far larger than the SSO capacity whenever they are non-empty.)
+  std::string child_e_raw;   // C:E value
+  std::string child_m_raw;   // C:M value (manifest only)
+  std::span<const uint8_t> ext_metadata;  // metadata frame from C:E
+  std::string_view ext_tail;              // C:E tail: manifest or single-part data
+  std::string_view ext_manifest;          // manifest from C:E tail or C:M
+
+  // Effective metadata frame / manifest blob, wherever they were found.
+  std::span<const uint8_t> full_metadata() const {
+    return has_external_metadata() ? ext_metadata : metadata_frame;
+  }
+  std::string_view full_manifest() const {
+    return manifest_blob.empty() ? ext_manifest : manifest_blob;
+  }
+  // Single-part body when it is held in :O: or C:E (empty otherwise).
+  std::span<const uint8_t> full_inline_data() const {
+    if (hdr.flags & kFlagDataInChildE) {
+      return {reinterpret_cast<const uint8_t*>(ext_tail.data()), ext_tail.size()};
+    }
+    return inline_data;
+  }
+
+  OwnedObjectValue() = default;
+  OwnedObjectValue(const OwnedObjectValue&) = delete;
+  OwnedObjectValue& operator=(const OwnedObjectValue&) = delete;
+  OwnedObjectValue(OwnedObjectValue&&) noexcept = default;
+  OwnedObjectValue& operator=(OwnedObjectValue&&) noexcept = default;
+};
+static_assert(sizeof(ObjectValueHeader) + sizeof(ChunkDescriptor) > 15,
+              "raw :O: values must exceed the std::string SSO capacity");
 
 struct BucketValue {
   bucket_id_t bucket_id{};
@@ -327,7 +491,17 @@ struct BucketValue {
   std::string policy_json;
 };
 
+// Zero-copy parse: the returned ObjectValue's views point into `data`, which
+// must outlive it. Rejects every illegal layout combination
+// (see validate_object_layout).
 std::optional<ObjectValue> parse_object_value(std::string_view data);
+
+// Takes ownership of `raw` and parses it in place.
+std::optional<OwnedObjectValue> parse_owned_object_value(std::string raw);
+
+// Checks the cross-field rules shared by the writer and the parser (reserved
+// bits, location nibbles, Cached bits, first_part_info consistency, ...).
+bool validate_object_layout(const ObjectValue& v);
 
 // Zero-copy: validate and return a pointer directly into the FDB buffer.
 // Returns nullptr if data is too short or chunk type is invalid.
@@ -349,9 +523,13 @@ inline const ObjectValueHeader* ovh_ptr(std::string_view data)
 }
 
 // Accessors that apply byte-swap on the raw big-endian header pointer.
+inline uint16_t ovh_flags(const ObjectValueHeader* h)
+{
+  return be16toh(h->flags);
+}
 inline bool ovh_is_delete_marker(const ObjectValueHeader* h)
 {
-  return (h->flags & ObjectValue::kFlagFenced) != 0;
+  return (ovh_flags(h) & kFlagFenced) != 0;
 }
 inline uint64_t ovh_size(const ObjectValueHeader* h)
 {
@@ -371,67 +549,51 @@ inline version_id_t ovh_next_vid(const ObjectValueHeader* h)
 }
 inline uint16_t ovh_part_count(const ObjectValueHeader* h)
 {
-  return be16toh(h->part_count);
+  return h->etag.part_count();
 }
-// For CHUNK_CHILD_D_REF / CHUNK_STORAGE_REF: extract the extra ref fields
-// that follow the header + content_type in the wire format.
-// Returns false if the buffer is too short.
-struct OvhChunkRef {
-  bucket_id_t bucket_id{};           // only valid for CHUNK_CHILD_D_REF
-  std::string_view ref_tag{};        // points into the raw buffer
-};
-inline bool ovh_chunk_ref(std::string_view raw, const ObjectValueHeader* h,
-                           OvhChunkRef& out)
+inline CksumAlg ovh_cksum_alg(const ObjectValueHeader* h)
 {
-  const size_t base = sizeof(ObjectValueHeader) + h->content_type_len;
-  if (h->chunk_type == CHUNK_CHILD_D_REF) {
-    const size_t need = base + kBucketIdSize + kRefTagSize;
-    if (raw.size() < need) {
-      return false;
-    }
-    out.bucket_id.load(raw.data() + base);
-    out.ref_tag = raw.substr(base + kBucketIdSize, kRefTagSize);
-    return true;
-  }
-  if (h->chunk_type == CHUNK_STORAGE_REF || h->chunk_type == CHUNK_MULTIPART_REF) {
-    const size_t need = base + kRefTagSize;
-    if (raw.size() < need) {
-      return false;
-    }
-    out.ref_tag = raw.substr(base, kRefTagSize);
-    return true;
-  }
-  return false;
+  return h->get_cksum_alg();
+}
+inline uint16_t ovh_metadata_count(const ObjectValueHeader* h)
+{
+  return be16toh(h->metadata_count);
 }
 
-// CHUNK_MULTIPART only -- zero-copy view of the manifest body, which is
-// always the value's last tail segment (content_type, then metadata_frame
-// if present, then the manifest -- see write_object_value/
-// parse_object_value). Used by move_object_to_g to copy the bytes
-// verbatim into a G:M{FREE_PARTS} entry without a full parse. Returns an
-// empty view if `raw`/`h` don't actually carry a metadata frame of the
-// declared size (corrupt value).
-inline std::string_view ovh_multipart_manifest_body(std::string_view raw,
-                                                     const ObjectValueHeader* h)
+// The ChunkDescriptor that follows header + content_type (every chunk type).
+// Returns false if the buffer is too short.
+inline bool ovh_chunk(std::string_view raw, const ObjectValueHeader* h,
+                      ChunkDescriptor& out)
 {
-  size_t off = sizeof(ObjectValueHeader) + h->content_type_len;
-  if (off > raw.size()) {
-    return {};
+  const size_t off = sizeof(ObjectValueHeader) + h->content_type_len;
+  if (raw.size() < off + sizeof(ChunkDescriptor)) {
+    return false;
   }
-  if (h->metadata_count > 0) {
-    const std::span<const uint8_t> rest(
-        reinterpret_cast<const uint8_t*>(raw.data() + off), raw.size() - off);
-    size_t frame_size = 0;
-    if (!encoded_metadata_frame_size(rest, frame_size) || off + frame_size > raw.size()) {
-      return {};
-    }
-    off += frame_size;
-  }
-  return raw.substr(off);
+  out.load(reinterpret_cast<const uint8_t*>(raw.data()) + off);
+  return true;
 }
+
+// Local manifest blob embedded in the :O: value (inline or cached copy);
+// empty if there is none or the value is corrupt. Zero-copy.
+std::string_view ovh_multipart_manifest_blob(std::string_view raw,
+                                             const ObjectValueHeader* h);
 
 std::string ovh_etag_display(const ObjectValueHeader* h);
+// Encoded metadata frame inline in :O:; empty when absent or external.
 std::span<const uint8_t> object_inline_metadata_bytes(std::string_view data);
+
+// Narrows ObjectValueHeader.flags to the 8-bit GcValueHeader.flags.
+inline uint8_t gc_flags_from_o_flags(uint16_t o_flags)
+{
+  uint8_t g = 0;
+  if (o_flags & kFlagSharedData) {
+    g |= kGcFlagShared;
+  }
+  if (o_flags & (kFlagExternalTags | kFlagExternalAnnotations | kFlagExternalMetadata)) {
+    g |= kGcFlagExternalChildren;
+  }
+  return g;
+}
 
 void child_hdr_to_be(ChildValueHeader& hdr);
 void child_hdr_from_be(ChildValueHeader& hdr);
@@ -439,6 +601,70 @@ std::string make_child_value(ChildValueHeader hdr, std::string_view payload);
 bool parse_child_value_header(std::string_view data, ChildValueHeader& out);
 std::string_view child_value_payload(std::string_view data);
 std::string_view child_value_payload(std::string_view data, uint64_t payload_size);
+
+// C:E value: [ChildValueHeader 8 B][metadata_frame][optional manifest or
+// single-part data]. Every part is a view; ChildValueBuf assembles them.
+struct ChildEValue {
+  ChildValueHeader hdr{};
+  std::span<const uint8_t> metadata_frame;
+  std::string_view tail;   // manifest blob or data; empty when none
+
+  size_t size() const { return sizeof(hdr) + metadata_frame.size() + tail.size(); }
+  // Serializes into dst (>= size() bytes).
+  void serialize(uint8_t* dst) const;
+};
+
+// One child value, assembled in a stack buffer big enough for the usual cases
+// (header + metadata frame + a default-sized max_kv_store body); only a larger
+// value (bigger max_kv_store, a manifest or checksum blob up to 75 KB) falls
+// back to a heap allocation. The payload is copied once, straight to its final
+// place. payload() never includes the header; value() is the whole buffer,
+// ready for kv_put. Not copyable or movable (value() may point into *this).
+class ChildValueBuf {
+ public:
+  static constexpr size_t kStackBytes =
+      sizeof(ChildValueHeader) + MAX_META_FRAME_BYTES + kDefaultMaxKvStore;
+
+  // `[ChildValueHeader][payload]`
+  ChildValueBuf(ChildValueHeader hdr, std::string_view payload);
+  // `[payload]` only (no header; e.g. a storage-tier body).
+  explicit ChildValueBuf(std::string_view payload);
+  // `[head][tail]` (e.g. an R: value: 8 B count + descriptor). payload() is the tail.
+  ChildValueBuf(std::string_view head, std::string_view tail);
+  // `[ChildValueHeader][metadata_frame][tail]`
+  explicit ChildValueBuf(const ChildEValue& e);
+
+  ChildValueBuf(const ChildValueBuf&) = delete;
+  ChildValueBuf& operator=(const ChildValueBuf&) = delete;
+
+  std::string_view value() const { return {reinterpret_cast<const char*>(p_), len_}; }
+  std::string_view payload() const { return value().substr(hdr_len_); }
+
+ private:
+  void alloc(size_t n) {
+    len_ = n;
+    if (n > kStackBytes) {
+      heap_ = std::make_unique_for_overwrite<uint8_t[]>(n);
+      p_ = heap_.get();
+    } else {
+      p_ = stack_;
+    }
+  }
+
+  alignas(8) uint8_t stack_[kStackBytes];
+  std::unique_ptr<uint8_t[]> heap_;
+  uint8_t* p_{stack_};
+  size_t len_{0};
+  size_t hdr_len_{0};
+};
+// Parsed C:E value (views into the raw child value).
+struct ChildEParsed {
+  ChildValueHeader hdr{};
+  std::span<const uint8_t> metadata_frame;
+  std::string_view tail;   // everything after the metadata frame
+};
+// `has_metadata` is ObjectValueHeader.metadata_count > 0.
+std::optional<ChildEParsed> parse_child_e_value(std::string_view data, bool has_metadata);
 
 class KvTransaction;
 void decrement_or_del_child_d(KvTransaction& tr, std::string_view d_key,
@@ -491,61 +717,12 @@ inline void stamp_mtime(ObjectValueHeader& hdr) {
   hdr.last_modified_nsec = static_cast<uint32_t>(ns.count());
 }
 
-// Serializes `value` into `buf` (any OValueBufT<N> -- OValueBuf for every
-// ordinary object, OValueBufMultipart for CHUNK_MULTIPART -- see
-// multipart_value.hpp). Templated (not just overloaded) so both
-// instantiations share one body; the two live call sites each already
-// know statically which buffer size they need.
-template <size_t N>
-bool write_object_value(OValueBufT<N>& buf, const ObjectValue& value)
-{
-  ObjectValueHeader wire = value.hdr;
-  wire.content_type_len = static_cast<uint8_t>(value.content_type.size());
-  hdr_to_be(wire);
-  if (!buf.set_header(wire)) {
-    return false;
-  }
-  if (!buf.append(value.content_type)) {
-    return false;
-  }
-  if (value.hdr.chunk_type == CHUNK_INLINE && !value.inline_data.empty()) {
-    if (!buf.append({reinterpret_cast<const char*>(value.inline_data.data()),
-                     value.inline_data.size()})) {
-      return false;
-    }
-  }
-  if (value.hdr.chunk_type == CHUNK_CHILD_D_REF) {
-    if (!buf.append(value.chunk.bucket_id_view())) {
-      return false;
-    }
-    if (!buf.append(value.chunk.ref_tag_view())) {
-      return false;
-    }
-  }
-  else if (value.hdr.chunk_type == CHUNK_STORAGE_REF ||
-           value.hdr.chunk_type == CHUNK_MULTIPART_REF) {
-    if (!buf.append(value.chunk.ref_tag_view())) {
-      return false;
-    }
-  }
-  if (value.hdr.metadata_count > 0) {
-    if (value.metadata_frame.empty()) {
-      return false;
-    }
-    if (!buf.append({reinterpret_cast<const char*>(value.metadata_frame.data()),
-                     value.metadata_frame.size()})) {
-      return false;
-    }
-  }
-  if (value.hdr.chunk_type == CHUNK_MULTIPART ||
-      value.hdr.chunk_type == CHUNK_MULTIPART_REF) {
-    // Always the last tail segment -- no length prefix, decode reads
-    // "rest of the value" (see parse_object_value).
-    if (value.manifest_body.empty() || !buf.append(value.manifest_body)) {
-      return false;
-    }
-  }
-  return true;
-}
+// Serializes `value` into `buf` in the wire order:
+//   header | content_type | ChunkDescriptor | cksum_combined | metadata_frame
+//   | single-part: inline data
+//   | multipart: [loc nibbles][mflags] [first_part_info | manifest] [cksum blob]
+// Returns false when the layout is illegal or does not fit kMaxOValueBytes.
+// For non-REF chunk types the chunk's type/ref_tag are set from the header.
+bool write_object_value(OValueBuf& buf, const ObjectValue& value);
 
 }  // namespace kvrgw

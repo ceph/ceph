@@ -219,7 +219,8 @@ bool KvRgwRuntime::start(const KvRgwStartOptions &opts)
   admin_server_.emplace(*gc_config_, *tier_config_state_, admin_socket, stop_,
                         &service_->latency_stats(), &service_->error_stats(),
                         &service_->batch_queue().stats(),
-                        &service_->err_insertion(), &service_->ops_stats());
+                        &service_->err_insertion(), &service_->ops_stats(),
+                        &service_->min_part_size());
 
   admin_thread_ = std::thread([this]() {
     if (!admin_server_->run()) {

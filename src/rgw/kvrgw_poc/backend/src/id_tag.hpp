@@ -69,8 +69,13 @@ static constexpr size_t MAX_TAG_COUNT = 10;
 static constexpr size_t MAX_KEY_SIZE = 128;
 static constexpr size_t MAX_VALUE_SIZE = 256;
 static constexpr size_t SIZES_PER_TAG_BYTES = sizeof(tag_size_t) * 2;
+// Worst-case encoded tag frame.
+static constexpr size_t kMaxTagFrameBytes =
+    sizeof(tag_count_t) + MAX_TAG_COUNT * (SIZES_PER_TAG_BYTES + MAX_KEY_SIZE + MAX_VALUE_SIZE);
 
 bool encode_tags(std::span<const TagPair> tags, std::vector<uint8_t>& out);
+// Allocation-free: encodes into `out` (use kMaxTagFrameBytes) and reports the size.
+bool encode_tags(std::span<const TagPair> tags, std::span<uint8_t> out, size_t& out_size);
 bool decode_tags(std::span<const uint8_t> input_buffer, std::array<TagPair, MAX_TAG_COUNT>& out_tags);
 bool encoded_tag_frame_size(std::span<const uint8_t> input, size_t& out_size);
 

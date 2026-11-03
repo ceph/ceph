@@ -212,12 +212,14 @@ Last run: 2026-08-20
 | `test_object_copy_replacing_metadata` | metadata |
 | `test_object_copy_to_itself_with_metadata` | metadata |
 
-## Multipart (26 tests, `-c multipart`, now in the default suite)
+## Multipart (33 tests, `-c multipart`, now in the default suite)
 
 Mechanics/metadata-only multipart tests, plus the body-readback tests
 enabled by the CHUNK_MULTIPART manifest (GetObject/Range/Head, including
-PartNumber addressing), plus 10 tests triaged out of `multipart-other`
-below once confirmed passing. All 26 pass and are now part of the
+PartNumber addressing), plus 17 tests triaged out of `multipart-other`
+below once confirmed passing (the last 7 are the multipart checksum tests:
+`test_multipart_checksum_sha256`, `test_multipart_use_cksum_helper_*` and
+`test_get_multipart_checksum_object_attributes`). All 33 pass and are now part of the
 default (no `--category`) run; `-c multipart` still runs just this set.
 
 | Test | Category |
@@ -248,12 +250,19 @@ default (no `--category`) run; `-c multipart` still runs just this set.
 | `test_sse_kms_multipart_invalid_chunks_1` | multipart |
 | `test_sse_kms_multipart_invalid_chunks_2` | multipart |
 | `test_set_multipart_tagging` | multipart |
+| `test_multipart_checksum_sha256` | multipart |
+| `test_multipart_use_cksum_helper_sha256` | multipart |
+| `test_multipart_use_cksum_helper_crc64nvme` | multipart |
+| `test_multipart_use_cksum_helper_crc32` | multipart |
+| `test_multipart_use_cksum_helper_crc32c` | multipart |
+| `test_multipart_use_cksum_helper_sha1` | multipart |
+| `test_get_multipart_checksum_object_attributes` | multipart |
 
-## Multipart-other (36 tests, `-c multipart-other`, not run by default)
+## Multipart-other (20 tests, `-c multipart-other`, not run by default)
 
 Every other test function with "multipart" in its name, not covered by
 the `multipart` category above and not yet triaged. All need a feature
-this POC doesn't implement yet, or are untriaged. Last run: 0 passed, 35
+this POC doesn't implement yet, or are untriaged. Last run: 0 passed, 20
 failed, 1 already in Deselected (`test_bucket_policy_multipart`).
 
 | Test | Reason |
@@ -261,8 +270,8 @@ failed, 1 already in Deselected (`test_bucket_policy_multipart`).
 | `test_multipart_copy_small`, `test_multipart_copy_invalid_range`, `test_multipart_copy_improper_range`, `test_multipart_copy_without_range`, `test_multipart_copy_special_names`, `test_multipart_copy_versioned`, `test_multipart_copy_multiple_sizes` | `UploadPartCopy` unimplemented (needs source-object body read) |
 | `test_encryption_sse_c_multipart_invalid_chunks_1`, `test_encryption_sse_c_multipart_invalid_chunks_2`, `test_encryption_sse_c_multipart_bad_download` | SSE-C unimplemented |
 | `test_sse_s3_default_multipart_upload` | Default bucket encryption (SSE-S3) unimplemented |
-| `test_multipart_checksum_sha256`, `test_multipart_reupload_checksum_and_etag`, `test_multipart_use_cksum_helper_sha256`, `test_multipart_use_cksum_helper_crc64nvme`, `test_multipart_use_cksum_helper_crc32`, `test_multipart_use_cksum_helper_crc32c`, `test_multipart_use_cksum_helper_sha1` | Full-object/part checksum algorithms (`x-amz-checksum-*`) unimplemented |
-| `test_get_multipart_checksum_object_attributes`, `test_get_multipart_object_attributes`, `test_get_paginated_multipart_object_attributes`, `test_get_single_multipart_object_attributes` | `GetObjectAttributes` unimplemented |
+| `test_multipart_reupload_checksum_and_etag` | Idempotent re-Complete of a finished upload: a second Complete returns `NoSuchUpload` by design |
+| `test_get_multipart_object_attributes`, `test_get_paginated_multipart_object_attributes`, `test_get_single_multipart_object_attributes` | `GetObjectAttributes` unimplemented |
 | `test_lifecycle_set_multipart`, `test_lifecycle_multipart_expiration` | Lifecycle rules unimplemented |
 | `test_object_lock_delete_multipart_object_with_retention`, `test_object_lock_delete_multipart_object_with_legal_hold_on` | Object Lock retention/legal-hold unimplemented |
 | `test_multipart_upload_on_a_bucket_with_policy`, `test_bucket_policy_multipart` (already in Deselected) | Bucket policy + multipart interaction gaps |
@@ -333,8 +342,8 @@ None.
 ./scripts/run_ceph_rgw_tests.sh
 ```
 
-Target: **280 passed, 0 failed, 0 errors** (includes the `multipart`
-category — 26 of those 280). `multipart-other` is excluded by default and
+Target: **295 passed, 0 failed, 0 errors** (includes the `multipart`
+category). `multipart-other` is excluded by default and
 not yet triaged — run separately with
 `./scripts/run_ceph_rgw_tests.sh -c multipart-other`
-(last run: 0 passed, 35 failed).
+(last run: 0 passed, 20 failed).

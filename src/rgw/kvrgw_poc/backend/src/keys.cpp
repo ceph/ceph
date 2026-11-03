@@ -514,13 +514,38 @@ KeyBuf make_r_key(std::string_view ref_tag)
   return key;
 }
 
-void make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
+void make_child_key(bucket_id_t bucket_id, std::string_view ref_tag,
+                    char child_type, KeyBuf& out)
 {
   KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryChild);
   out.set_header(hdr);
   out.append(ref_tag.data(), ref_tag.size());
-  const char child_type = kChildTypeTags;
   out.append(&child_type, 1);
+}
+
+void make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
+{
+  make_child_key(bucket_id, ref_tag, kChildTypeTags, out);
+}
+
+std::optional<ChildKeyParts> parse_child_key(std::string_view key)
+{
+  constexpr size_t kChildKeySize = sizeof(KeyHeaderS) + kRefTagSize + 1;
+  if (key.size() != kChildKeySize || key[0] != kNamespaceObject ||
+      key[offsetof(KeyHeaderS, cat)] != kCategoryChild) [[unlikely]] {
+    return std::nullopt;
+  }
+  const char ct = key[kChildKeySize - 1];
+  if (ct != kChildTypeTags && ct != kChildTypeAnnotation &&
+      ct != kChildTypeExtended && ct != kChildTypeManifest &&
+      ct != kChildTypeChecksum) [[unlikely]] {
+    return std::nullopt;
+  }
+  ChildKeyParts parts;
+  parts.bucket_id.load(key.data() + offsetof(KeyHeaderS, bucket_id));
+  parts.ref_tag.load(key.data() + sizeof(KeyHeaderS));
+  parts.child_type = ct;
+  return parts;
 }
 
 void make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)

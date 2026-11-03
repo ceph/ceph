@@ -68,11 +68,14 @@ enum KvrgwErrorCode : int32_t {
   // `SlowDown` at the API layer -- a client-level retriable condition, not
   // auto-retried internally.
   KVRGW_ERR_UPLOAD_IN_PROGRESS = 506,
+  // Client-supplied checksum (x-amz-checksum-*) does not match the data, or a
+  // required per-part checksum is missing at Complete. Maps to HTTP 400 BadDigest.
+  KVRGW_ERR_BAD_DIGEST = 507,
 };
 
-// Was `KvrgwErrorCode_MAX + 1` (protobuf convention); KVRGW_ERR_UPLOAD_IN_PROGRESS=506
+// Was `KvrgwErrorCode_MAX + 1` (protobuf convention); KVRGW_ERR_BAD_DIGEST=507
 // is the highest value.
-inline constexpr int KvrgwErrorCode_ARRAYSIZE = 507;
+inline constexpr int KvrgwErrorCode_ARRAYSIZE = 508;
 
 // Returns the bare enumerator name (e.g. "KVRGW_ERR_OK"), matching protobuf's Name().
 // Implemented in error_codes.cpp (mirrors the existing kvrgw_strerror() switch below it).

@@ -95,6 +95,8 @@ const char *KvrgwErrorCode_Name(KvrgwErrorCode code)
     return "KVRGW_ERR_UPLOAD_PART_BUSY";
   case KVRGW_ERR_UPLOAD_IN_PROGRESS:
     return "KVRGW_ERR_UPLOAD_IN_PROGRESS";
+  case KVRGW_ERR_BAD_DIGEST:
+    return "KVRGW_ERR_BAD_DIGEST";
   default:
     return "UNKNOWN";
   }
@@ -177,6 +179,8 @@ const char *kvrgw_strerror(KvrgwErrorCode code)
     return "Too many concurrent uploads of this part; retry shortly";
   case KVRGW_ERR_UPLOAD_IN_PROGRESS:
     return "The upload is being completed; retry shortly";
+  case KVRGW_ERR_BAD_DIGEST:
+    return "The checksum you specified did not match what we received";
   default:
     return "Unknown error";
   }

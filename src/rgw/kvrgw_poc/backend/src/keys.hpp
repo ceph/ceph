@@ -160,7 +160,17 @@ std::optional<std::string_view> parse_v_key_view(std::string_view key);
 
 KeyBuf make_r_key(std::string_view ref_tag);
 
+// Child KV: [KeyHeaderS cat='C'][ref_tag 12B][child_type 1B].
+void   make_child_key(bucket_id_t bucket_id, std::string_view ref_tag,
+                      char child_type, KeyBuf& out);
 void   make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out);
+
+struct ChildKeyParts {
+  bucket_id_t bucket_id{};
+  RefTag ref_tag{};
+  char child_type{};
+};
+std::optional<ChildKeyParts> parse_child_key(std::string_view key);
 void   make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out);
 
 struct GroupGoKeyParts {

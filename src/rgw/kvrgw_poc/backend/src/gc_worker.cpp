@@ -114,6 +114,8 @@ bool GcWorker::process_gm_entry(const GmKeyParts &parts, std::string_view key,
       }
       (void)data_store_.remove(fname);
     }
+    // Tier 3 per-part checksum blob (idempotent if absent).
+    (void)data_store_.remove(checksum_filename(parts.ref_tag));
     auto tr = store_.begin_transaction();
     if (!tr) {
       return false;
@@ -169,7 +171,8 @@ bool GcWorker::process_gm_entry(const GmKeyParts &parts, std::string_view key,
         continue;
       }
       const bool kept = gm->mode == GM_MODE_MIXED &&
-          keep_cursor.is_kept(u_parts->part_number, u_parts->generation);
+          keep_cursor.is_kept(u_parts->part_number,
+                              static_cast<uint16_t>(u_parts->generation));
       if (kept) {
         continue;
       }
@@ -338,8 +341,8 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
       continue;
     }
     const ChunkType ct         = gc_val.gc.chunk.get_type();
-    const bool shared          = gc_val.hdr.flags & ObjectValue::kFlagSharedData;
-    const bool has_external_children = gc_val.hdr.flags & kFlagExternalTags;
+    const bool shared          = gc_val.hdr.flags & kGcFlagShared;
+    const bool has_external_children = gc_val.hdr.flags & kGcFlagExternalChildren;
     const auto rt_view         = gc_val.gc.chunk.ref_tag_view();
     const auto rt_filename     = gc_val.gc.chunk.ref_tag_filename();
     const auto& bucket_id      = gc_val.gc.chunk.get_bucket_id();
@@ -379,19 +382,21 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
           }
           // Truly last reference.
           if (is_multipart) {
-            // rv->chunk_descriptor holds the manifest body verbatim (see
-            // copy_object's CHUNK_MULTIPART/_REF case) -- hand off to the
-            // existing rate-limited GM_MODE_FREE_PARTS free loop
-            // (process_gm_entry) instead of duplicating a per-part free
-            // loop here.
+            // rv->chunk_descriptor is the manifest blob, a ready-made
+            // G:M{FREE_PARTS} value (see copy_object's CHUNK_MULTIPART/_REF
+            // case) -- hand it to the existing rate-limited FREE_PARTS free
+            // loop (process_gm_entry) as is; it also removes the checksum
+            // file. C:M / C:S (no count of their own) go with the last
+            // reference: every other owner of this ref_tag is gone, so the
+            // remaining C: children under it are exactly the shared ones.
             KeyBuf gm_key;
             make_gm_key(bucket_id, rt_view, gm_key);
-            GmValueBuf gm_buf;
-            gm_buf.data[0] = static_cast<uint8_t>(GM_MODE_FREE_PARTS);
-            std::memcpy(gm_buf.data + 1, rv->chunk_descriptor.data(),
-                       rv->chunk_descriptor.size());
-            gm_buf.len = 1 + rv->chunk_descriptor.size();
-            (*tr)->kv_put(gm_key.view(), gm_buf.view());
+            (*tr)->kv_put(gm_key.view(), rv->chunk_descriptor);
+            KeyBuf c_prefix;
+            make_c_prefix(bucket_id, rt_view, c_prefix);
+            auto c_end = c_prefix;
+            c_end.append_byte(0xFF);
+            (*tr)->kv_range_clear(c_prefix.view(), c_end.view());
             (*tr)->kv_del(r_key.view());
             (*tr)->kv_del(key);
             (*tr)->commit();

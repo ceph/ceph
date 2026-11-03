@@ -297,7 +297,7 @@ int run(KvRgwRuntime &runtime)
     CHECK(cm.etag.size() > 32 && cm.etag.find("-2") != std::string::npos);
     std::cout << "complete etag=" << cm.etag << "\n";
 
-    ObjectValue hv;
+    OwnedObjectValue hv;
     std::string err_detail;
     auto head_ec = svc.head_object(tenant_id, bucket_name, object_name, std::nullopt, 0, &hv,
                                    &err_detail);
@@ -408,7 +408,7 @@ int run(KvRgwRuntime &runtime)
     CHECK(cm.error_code == KVRGW_ERR_OK);
     CHECK(cm.etag.find("-1") != std::string::npos);
 
-    ObjectValue hv;
+    OwnedObjectValue hv;
     std::string err_detail;
     auto head_ec = svc.head_object(tenant_id, bucket_name, object_name6, std::nullopt, 0, &hv,
                                    &err_detail);
@@ -448,7 +448,7 @@ int run(KvRgwRuntime &runtime)
 
     const std::string full = p1 + p2 + p3;
 
-    ObjectValue hv;
+    OwnedObjectValue hv;
     std::string err_detail;
     auto head_ec = svc.head_object(tenant_id, bucket_name, object_name8, std::nullopt, 0, &hv,
                                    &err_detail);
@@ -516,9 +516,9 @@ int run(KvRgwRuntime &runtime)
     }
 
     // PartNumber addressing -- whole-part read, size override, PartsCount.
-    CHECK(hv.hdr.part_count == 3);
+    CHECK(hv.part_count() == 3);
     {
-      ObjectValue hv1;
+      OwnedObjectValue hv1;
       std::string err_detail1;
       auto head_ec1 = svc.head_object(tenant_id, bucket_name, object_name8, std::nullopt,
                                       1, &hv1, &err_detail1);
@@ -526,7 +526,7 @@ int run(KvRgwRuntime &runtime)
       CHECK(hv1.hdr.size == p1.size());
       CHECK(hv1.get_etag().to_hex() == cm.etag);  // whole-object composite ETag
 
-      ObjectValue hv3;
+      OwnedObjectValue hv3;
       std::string err_detail3;
       auto head_ec3 = svc.head_object(tenant_id, bucket_name, object_name8, std::nullopt,
                                       3, &hv3, &err_detail3);
@@ -553,7 +553,7 @@ int run(KvRgwRuntime &runtime)
                                        nullptr, 4, &gr_bad);
       CHECK(get_ec_bad == KVRGW_ERR_INVALID_PART);
 
-      ObjectValue hv_bad;
+      OwnedObjectValue hv_bad;
       std::string err_detail_bad;
       auto head_ec_bad = svc.head_object(tenant_id, bucket_name, object_name8, std::nullopt,
                                          4, &hv_bad, &err_detail_bad);

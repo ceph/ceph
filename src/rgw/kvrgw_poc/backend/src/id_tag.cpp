@@ -58,6 +58,19 @@ bool encoded_tag_frame_size(std::span<const uint8_t> input, size_t &out_size)
 bool encode_tags(std::span<const TagPair> tags_in, std::vector<uint8_t> &out)
 {
   out.clear();
+  std::array<uint8_t, kMaxTagFrameBytes> buf;
+  size_t len = 0;
+  if (!encode_tags(tags_in, std::span<uint8_t>(buf), len)) {
+    return false;
+  }
+  out.assign(buf.begin(), buf.begin() + len);
+  return true;
+}
+
+bool encode_tags(std::span<const TagPair> tags_in, std::span<uint8_t> out,
+                 size_t &out_size)
+{
+  out_size = 0;
 
   if (tags_in.size() > MAX_TAG_COUNT) {
     return false;
@@ -103,7 +116,10 @@ bool encode_tags(std::span<const TagPair> tags_in, std::vector<uint8_t> &out)
   }
 
   const size_t total_required_bytes = metadata_bytes + total_data_bytes;
-  out.resize(total_required_bytes);
+  if (out.size() < total_required_bytes) {
+    return false;
+  }
+  out_size = total_required_bytes;
 
   write_be_field<tag_count_t>(out.data(), tag_count);
 

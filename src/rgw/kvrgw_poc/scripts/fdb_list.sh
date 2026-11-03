@@ -225,20 +225,24 @@ def parse_value(key_raw: bytes, val_raw: bytes) -> str:
         return val_raw.hex()
     ns = chr(key_raw[0])
 
-    # O: value — ObjectValueHeader (52B) + content_type + inline_data
-    if ns == "S" and len(key_raw) >= 14 and chr(key_raw[13]) == "O" and len(val_raw) >= 52:
-        ref_tag = val_raw[0:12].hex()
-        etag_part_count = struct.unpack(">H", val_raw[12:14])[0]
-        annotations_count = struct.unpack(">H", val_raw[14:16])[0]
-        etag = val_raw[16:32].hex()
-        size = struct.unpack(">Q", val_raw[32:40])[0]
-        mtime_sec = struct.unpack(">I", val_raw[40:44])[0]
-        mtime_nsec = struct.unpack(">I", val_raw[44:48])[0]
-        chunk_type = chr(val_raw[48])
-        flags = val_raw[49]
-        tags_count = val_raw[50]
-        ct_len = val_raw[51]
-        content_type = val_raw[52:52+ct_len].decode("utf-8", errors="replace") if ct_len > 0 else ""
+    # O: value — ObjectValueHeader (64B) + chunk descriptor (24B) + content_type + ...
+    # Header: flags u16 @0, chunk_type @2, ct_len @3, tags_count @4, metadata_count u16 @5,
+    # cksum_alg<<4 @7, size @8, mtime_sec @16, mtime_nsec @20, version_id @24, next_vid @28,
+    # ref_tag @32, etag(16 MD5 + part_count u16) @44, annotations_count u16 @62.
+    if ns == "S" and len(key_raw) >= 14 and chr(key_raw[13]) == "O" and len(val_raw) >= 64:
+        flags = struct.unpack(">H", val_raw[0:2])[0]
+        chunk_type = chr(val_raw[2])
+        ct_len = val_raw[3]
+        tags_count = val_raw[4]
+        cksum_alg = val_raw[7] >> 4
+        size = struct.unpack(">Q", val_raw[8:16])[0]
+        mtime_sec = struct.unpack(">I", val_raw[16:20])[0]
+        mtime_nsec = struct.unpack(">I", val_raw[20:24])[0]
+        ref_tag = val_raw[32:44].hex()
+        etag = val_raw[44:60].hex()
+        etag_part_count = struct.unpack(">H", val_raw[60:62])[0]
+        annotations_count = struct.unpack(">H", val_raw[62:64])[0]
+        content_type = val_raw[64:64+ct_len].decode("utf-8", errors="replace") if ct_len > 0 else ""
         parts = f"chunk={chunk_type} size={size} etag={etag}"
         if etag_part_count > 0:
             parts += f"-{etag_part_count}"
@@ -247,11 +251,11 @@ def parse_value(key_raw: bytes, val_raw: bytes) -> str:
             parts += f" tags={tags_count}"
         if annotations_count > 0:
             parts += f" annot={annotations_count}"
+        if cksum_alg:
+            parts += f" cksum_alg={cksum_alg}"
         if flags:
-            parts += f" flags=0x{flags:02x}"
-        inline_len = len(val_raw) - 52 - ct_len
-        if inline_len > 0:
-            parts += f" inline={inline_len}B"
+            parts += f" flags=0x{flags:04x}"
+        parts += f" len={len(val_raw)}B"
         return parts
 
     # G:O value — GcValueHeader (13B)

@@ -58,13 +58,10 @@ void test_ref_tag_zero_base64_roundtrip()
   value.hdr.last_modified_nsec = 123456789;
   value.content_type = "text/plain";
   value.hdr.chunk_type = kvrgw::CHUNK_STORAGE;
+  value.set_self_chunk(kvrgw::kNullBucket);
 
   kvrgw::OValueBuf buf;
-  kvrgw::ObjectValueHeader wire = value.hdr;
-  wire.content_type_len = static_cast<uint8_t>(value.content_type.size());
-  kvrgw::hdr_to_be(wire);
-  assert(buf.set_header(wire));
-  assert(buf.append(value.content_type));
+  assert(kvrgw::write_object_value(buf, value));
   const auto parsed = kvrgw::parse_object_value(buf.view());
   assert(parsed);
   assert(parsed->hdr.ref_tag == value.hdr.ref_tag);
@@ -123,6 +120,7 @@ void test_object_value_header_version_fields()
   value.hdr.last_modified_nsec = 500000000;
   value.hdr.chunk_type = kvrgw::CHUNK_STORAGE;
   value.content_type = "text/html";
+  value.set_self_chunk(kvrgw::kNullBucket);
 
   const kvrgw::version_id_t vids[] = {
     kvrgw::version_id_t{0},
@@ -137,11 +135,7 @@ void test_object_value_header_version_fields()
     value.hdr.next_vid = vid.next_vid();
 
     kvrgw::OValueBuf buf;
-    kvrgw::ObjectValueHeader wire = value.hdr;
-    wire.content_type_len = static_cast<uint8_t>(value.content_type.size());
-    kvrgw::hdr_to_be(wire);
-    assert(buf.set_header(wire));
-    assert(buf.append(value.content_type));
+    assert(kvrgw::write_object_value(buf, value));
 
     const auto parsed = kvrgw::parse_object_value(buf.view());
     assert(parsed);
@@ -158,13 +152,12 @@ void test_is_delete_marker_flag()
   value.hdr.flags = 0;
   assert(!value.is_delete_marker());
 
-  value.hdr.flags = kvrgw::ObjectValue::kFlagFenced;
+  value.hdr.flags = kvrgw::kFlagFenced;
   assert(value.is_delete_marker());
 
-  value.hdr.flags =
-      kvrgw::ObjectValue::kFlagExtendedAttrs | kvrgw::ObjectValue::kFlagFenced;
+  value.hdr.flags = kvrgw::kFlagExternalMetadata | kvrgw::kFlagFenced;
   assert(value.is_delete_marker());
-  assert(value.has_extended_attrs());
+  assert(value.has_external_metadata());
 }
 
 void test_child_value_header_layout()
@@ -185,6 +178,36 @@ void test_child_value_header_layout()
   assert(rest == payload);
   const auto sized = kvrgw::child_value_payload(raw, payload.size());
   assert(sized == payload);
+}
+
+void test_child_value_buf()
+{
+  // Golden: byte-identical to make_child_value for every size around the
+  // D: size-tier boundaries; payload() never includes the header.
+  for (const size_t n : {size_t{0}, size_t{1}, size_t{255}, size_t{256},
+                         size_t{4095}, size_t{4096}, size_t{4097}}) {
+    const std::string payload(n, 'x');
+    kvrgw::ChildValueHeader hdr{};
+    const kvrgw::ChildValueBuf buf(hdr, payload);
+    assert(buf.value() == kvrgw::make_child_value(hdr, payload));
+    assert(buf.value().size() == sizeof(hdr) + n);
+    assert(buf.payload().size() == n);
+    assert(buf.payload() == payload);
+    assert(buf.payload().data() == buf.value().data() + sizeof(hdr));
+  }
+  const kvrgw::ChildValueBuf plain{std::string_view("abc")};
+  assert(plain.value() == "abc");
+  assert(plain.payload() == "abc");
+  const kvrgw::ChildValueBuf empty{std::string_view{}};
+  assert(empty.value().empty() && empty.payload().empty());
+  // Above the stack size the buffer falls back to the heap, same bytes.
+  const std::string big(kvrgw::ChildValueBuf::kStackBytes + 100, 'y');
+  const kvrgw::ChildValueBuf heap(kvrgw::ChildValueHeader{}, big);
+  assert(heap.payload() == big);
+  // [head][tail]
+  const kvrgw::ChildValueBuf two("ab", "cde");
+  assert(two.value() == "abcde");
+  assert(two.payload() == "cde");
 }
 
 void test_tag_encode_exact_size()
@@ -228,16 +251,11 @@ void test_inline_metadata_frame_roundtrip()
   value.hdr.metadata_count = 1;
   value.content_type = "text/plain";
   value.hdr.chunk_type = kvrgw::CHUNK_STORAGE;
-  value.metadata_frame.assign(encoded.data(), encoded.data() + frame_size);
+  value.set_self_chunk(kvrgw::kNullBucket);
+  value.metadata_frame = std::span<const uint8_t>(encoded.data(), frame_size);
 
   kvrgw::OValueBuf buf;
-  kvrgw::ObjectValueHeader wire = value.hdr;
-  wire.content_type_len = static_cast<uint8_t>(value.content_type.size());
-  kvrgw::hdr_to_be(wire);
-  assert(buf.set_header(wire));
-  assert(buf.append(value.content_type));
-  assert(buf.append({reinterpret_cast<const char*>(value.metadata_frame.data()),
-                     value.metadata_frame.size()}));
+  assert(kvrgw::write_object_value(buf, value));
 
   const auto parsed = kvrgw::parse_object_value(buf.view());
   assert(parsed);
@@ -374,6 +392,7 @@ int main(int argc, char** argv)
   RUN(test_object_value_header_version_fields);
   RUN(test_is_delete_marker_flag);
   RUN(test_child_value_header_layout);
+  RUN(test_child_value_buf);
   RUN(test_tag_encode_exact_size);
   RUN(test_inline_metadata_frame_roundtrip);
   RUN(test_child_d_header_then_data);

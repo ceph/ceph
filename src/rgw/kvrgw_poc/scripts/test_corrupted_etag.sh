@@ -161,8 +161,8 @@ def raw_set(key: bytes, value: bytes) -> None:
         raise RuntimeError(f"raw-set failed: {proc.stderr.decode()}")
 
 object_key, obj_val = resolve_object_key(tenant_name, bucket_name, object_name)
-# Binary O: layout: etag is 16 bytes at offset 16
-old_etag = obj_val[16:32]
+# Binary O: layout (ObjectValueHeader): the 16 B MD5 starts at offset 44
+old_etag = obj_val[44:60]
 old_etag_hex = old_etag.hex()
 
 bad_etag = bytearray(old_etag)
@@ -170,7 +170,7 @@ bad_etag[0] = (bad_etag[0] + 1) & 0xFF
 bad_etag_hex = bytes(bad_etag).hex()
 
 new_val = bytearray(obj_val)
-new_val[16:32] = bad_etag
+new_val[44:60] = bad_etag
 raw_set(object_key, bytes(new_val))
 print(f"corrupted etag byte0: {old_etag_hex[:2]} -> {bad_etag_hex[:2]} ({old_etag_hex} -> {bad_etag_hex})")
 PY
@@ -223,8 +223,8 @@ object_key = (
     + object_name.encode("utf-8")
 )
 obj_val = raw_get(object_key)
-# Binary O: layout: ref_tag is 12 bytes at offset 0
-ref_tag = obj_val[0:12]
+# Binary O: layout (ObjectValueHeader): ref_tag is 12 bytes at offset 32
+ref_tag = obj_val[32:44]
 if len(ref_tag) != 12:
     raise RuntimeError(f"unexpected ref_tag length: {len(ref_tag)}")
 
