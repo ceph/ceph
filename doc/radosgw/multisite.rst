@@ -150,6 +150,27 @@ Ceph Object Gateway.
 See :ref:`Sync Policy Config <radosgw-multisite-sync-policy>` for instructions
 on defining fine-grained bucket sync policy rules.
 
+.. _radosgw-multisite-cephadm:
+
+Setting Up Multi-site on Clusters Managed by cephadm
+====================================================
+
+On clusters managed by cephadm, the ``rgw`` Manager module can set up a
+multi-site configuration for you (see :ref:`mgr-rgw-module`):
+
+#. On the cluster that will hold the master zone, ``ceph rgw realm bootstrap``
+   creates the realm, the master zonegroup, the master zone, and a system user
+   for synchronization, and deploys the gateways.
+#. ``ceph rgw realm tokens`` prints a token for the realm. The token contains
+   the endpoint of the master zone and the keys of the system user.
+#. On each other cluster, ``ceph rgw zone create`` uses the token to pull the
+   realm, creates a secondary zone with the keys of the system user, updates
+   the period, and deploys the gateways.
+
+The rest of this guide describes the manual procedure, which uses
+``radosgw-admin`` commands. If you follow it on a cluster managed by cephadm,
+deploy the gateways with ``ceph orch apply rgw`` (see `Starting the Gateway`_).
+
 .. _master-zone-label:
 
 Configuring a Master Zone
