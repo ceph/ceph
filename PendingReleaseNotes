@@ -27,6 +27,9 @@
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
 
+* RGW: The admin API can now return account storage stats with
+  ``GET /admin/account?stats``, like ``radosgw-admin account stats``.
+
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
 
