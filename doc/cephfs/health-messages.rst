@@ -324,7 +324,8 @@ To have the MDS split the fragment, scrub the directory:
 After scrubbing a directory fragment, the MDS splits it if it has more than
 :confval:`mds_bal_split_size` entries. A fragment that is too large only in
 bytes is not split this way. To split it explicitly, list the directory's
-fragments and split the one named in the warning:
+fragments and split the one named in the warning (see
+:ref:`MDS daemon commands <cephfs-mds-daemon-commands-dirfrags>`):
 
 .. prompt:: bash #
 
