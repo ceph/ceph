@@ -4521,6 +4521,14 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
   mds_rank_t from = mds_rank_t(weak->get_source().num());
 
   if (!rejoin_gather.count(from)) {
+    // Already applied. A second OP_WEAK while the sender is still in
+    // replay..rejoin must not import caps or bump replica nonces again.
+    // handle_mds_failure() clears this bit and re-arms rejoin_gather.
+    if (rejoin_weak_applied.count(from)) {
+      dout(7) << "handle_cache_rejoin_weak ignoring already-applied OP_WEAK from mds."
+	      << from << dendl;
+      return;
+    }
     auto st = mds->mdsmap->get_state(from);
     // OP_WEAK is sent by a recovering peer. A newly active survivor may
     // not have that peer in rejoin_gather yet; add and continue. Anything
