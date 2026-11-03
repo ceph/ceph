@@ -2953,6 +2953,26 @@ static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, buffer
   return 0;
 }
 
+static int rgw_obj_check_expiry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(10, "entered %s", __func__);
+  rgw_cls_obj_check_expiry_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s: failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  const auto now = ceph::real_clock::now();
+  if (now >= op.expires_at) {
+    return -op.error_code;
+  }
+
+  return 0;
+}
+
 static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -5396,6 +5416,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_obj_store_pg_ver;
   cls_method_handle_t h_rgw_obj_check_attrs_prefix;
   cls_method_handle_t h_rgw_obj_check_mtime;
+  cls_method_handle_t h_rgw_obj_check_expiry;
   cls_method_handle_t h_rgw_bi_get_op;
   cls_method_handle_t h_rgw_bi_put_op;
   cls_method_handle_t h_rgw_bi_put_entries_op;
@@ -5462,6 +5483,7 @@ CLS_INIT(rgw)
   cls.register_cxx_method(obj_store_pg_ver, rgw_obj_store_pg_ver, &h_rgw_obj_store_pg_ver);
   cls.register_cxx_method(obj_check_attrs_prefix, rgw_obj_check_attrs_prefix, &h_rgw_obj_check_attrs_prefix);
   cls.register_cxx_method(obj_check_mtime, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
+  cls.register_cxx_method(obj_check_expiry, rgw_obj_check_expiry, &h_rgw_obj_check_expiry);
 
   // Bucket Index (BI) / Resharding
   cls.register_cxx_method(bi_get, rgw_bi_get_op, &h_rgw_bi_get_op);
