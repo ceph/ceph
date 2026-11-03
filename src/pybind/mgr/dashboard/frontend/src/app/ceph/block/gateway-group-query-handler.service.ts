@@ -134,6 +134,7 @@ export class GatewayGroupQueryHandlerService implements OnDestroy {
     } else {
       this.gwGroupsEmpty = true;
       this.gwGroupPlaceholder = $localize`No groups available`;
+      this.dataRefresh$.next();
     }
   }
 
@@ -141,6 +142,7 @@ export class GatewayGroupQueryHandlerService implements OnDestroy {
     this.gwGroups = [];
     this.gwGroupsEmpty = true;
     this.gwGroupPlaceholder = $localize`Unable to fetch Gateway groups`;
+    this.dataRefresh$.next();
     if (error?.preventDefault) {
       error?.preventDefault?.();
     }

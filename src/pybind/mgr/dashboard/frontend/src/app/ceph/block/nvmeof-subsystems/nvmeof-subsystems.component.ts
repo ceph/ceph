@@ -23,12 +23,23 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NvmeofStateService } from '../nvmeof-state.service';
 import { GatewayGroupQueryHandlerService } from '../gateway-group-query-handler.service';
-import { BehaviorSubject, forkJoin, Observable, of, Subject } from 'rxjs';
-import { catchError, finalize, map, shareReplay, switchMap, takeUntil, tap } from 'rxjs/operators';
+import { BehaviorSubject, concat, EMPTY, forkJoin, from, Observable, of, Subject } from 'rxjs';
+import {
+  catchError,
+  map,
+  mergeMap,
+  shareReplay,
+  switchMap,
+  takeUntil,
+  tap,
+  toArray
+} from 'rxjs/operators';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 
 const BASE_URL = 'block/nvmeof/subsystems';
+/** How many subsystem host lists to request at once while IO is running. */
+const INITIATOR_FETCH_CONCURRENCY = 4;
 
 @Component({
   selector: 'cd-nvmeof-subsystems',
@@ -53,7 +64,11 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   @ViewChild(TableComponent)
   table: TableComponent;
 
-  subsystems: (NvmeofSubsystem & { gw_group?: string; initiator_count?: number })[] = [];
+  subsystems?: (NvmeofSubsystem & {
+    gw_group?: string;
+    initiator_count?: number;
+    auth?: string;
+  })[];
   pendingNqn: string = null;
   subsystemsColumns: any;
   permissions: Permissions;
@@ -135,35 +150,15 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     ];
 
     this.subsystems$ = this.subsystemSubject.pipe(
-      switchMap(() => {
-        if (!this.groupHandler.group) {
-          if (this.groupHandler.groupSelectionCleared) {
-            return of([]);
-          }
-          return this.fetchAllGroupsSubsystems();
-        }
-        return this.nvmeofService.listSubsystems(this.groupHandler.group).pipe(
-          switchMap((subsystems: any) => {
-            const subs: NvmeofSubsystem[] = Array.isArray(subsystems) ? subsystems : [subsystems];
-            if (subs.length === 0) return of([]);
-            return forkJoin(
-              subs.map((sub) => this.enrichSubsystemForGroup(sub, this.groupHandler.group))
-            );
-          }),
-          catchError((error) => {
-            this.handleError(error);
-            return of([]);
-          })
-        );
-      }),
+      switchMap(() => this.querySubsystems()),
       tap((subs) => {
         this.subsystems = subs;
         this.setTableLoading(false);
       }),
-      finalize(() => this.setTableLoading(false)),
       shareReplay({ bufferSize: 1, refCount: true }),
       takeUntil(this.destroy$)
     );
+    this.subsystems$.subscribe();
     this.nvmeofStateService.refresh$
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.fetchData());
@@ -236,10 +231,34 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     );
   }
 
+  private querySubsystems() {
+    if (!this.groupHandler.group) {
+      if (this.groupHandler.groupSelectionCleared) {
+        return this.fetchAllGroupsSubsystems();
+      }
+      if (this.groupHandler.gwGroupsEmpty) {
+        return of([]);
+      }
+      // Default group is still being resolved. Keep the table in its loading
+      // state instead of flashing "No subsystems".
+      return EMPTY;
+    }
+    return this.fetchSubsystemsForGroup(this.groupHandler.group);
+  }
+
   private fetchAllGroupsSubsystems() {
     return this.nvmeofService.listGatewayGroups().pipe(
       map((gatewayGroups) => this.extractValidGroups(gatewayGroups)),
-      switchMap((groups) => this.fetchSubsystemsForGroups(groups)),
+      switchMap((groups) => {
+        if (groups.length === 0) {
+          return of([]);
+        }
+        return forkJoin(
+          groups.map((group) =>
+            this.listSubsystemsForGroup(group.spec.group).pipe(catchError(() => of([])))
+          )
+        ).pipe(switchMap((results) => this.emitThenEnrich(results.flat())));
+      }),
       catchError(() => of([]))
     );
   }
@@ -250,24 +269,69 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     return groups.filter((g) => g?.spec?.group);
   }
 
-  private fetchSubsystemsForGroups(groups: CephServiceSpec[]): Observable<NvmeofSubsystem[]> {
-    if (groups.length === 0) return of([]);
-    return forkJoin(groups.map((g) => this.fetchSubsystemsForGroup(g.spec.group))).pipe(
-      map((results) => results.flat())
+  private fetchSubsystemsForGroup(groupName: string) {
+    return this.listSubsystemsForGroup(groupName).pipe(
+      switchMap((subs) => this.emitThenEnrich(subs)),
+      catchError((error) => {
+        this.handleError(error);
+        return of([]);
+      })
     );
   }
 
-  private fetchSubsystemsForGroup(groupName: string): Observable<NvmeofSubsystem[]> {
-    return this.nvmeofService.listSubsystems(groupName).pipe(
-      switchMap((subsystems) => this.enrichSubsystems(subsystems, groupName)),
-      catchError(() => of([]))
+  private listSubsystemsForGroup(groupName: string) {
+    return this.nvmeofService
+      .listSubsystems(groupName)
+      .pipe(
+        map((subsystems) => this.withGroup(this.normalizeSubsystemList(subsystems), groupName))
+      );
+  }
+
+  private normalizeSubsystemList(subsystems: any): NvmeofSubsystem[] {
+    if (!subsystems) {
+      return [];
+    }
+    return Array.isArray(subsystems) ? subsystems : [subsystems];
+  }
+
+  private withGroup(subsystems: NvmeofSubsystem[], groupName: string) {
+    return subsystems.map((subsystem) => ({
+      ...subsystem,
+      gw_group: groupName
+    }));
+  }
+
+  /**
+   * Publish subsystem rows as soon as the list returns. Initiator counts are
+   * filled in afterwards so one slow host-list call cannot hide the table.
+   */
+  private emitThenEnrich(
+    subsystems: (NvmeofSubsystem & { gw_group?: string })[]
+  ): Observable<(NvmeofSubsystem & { gw_group?: string; initiator_count?: number })[]> {
+    if (subsystems.length === 0) {
+      return of([]);
+    }
+    return concat(of(subsystems), this.enrichSubsystems(subsystems));
+  }
+
+  private enrichSubsystems(subsystems: (NvmeofSubsystem & { gw_group?: string })[]) {
+    return from(subsystems).pipe(
+      mergeMap(
+        (subsystem) => this.enrichSubsystemForGroup(subsystem, subsystem.gw_group ?? ''),
+        INITIATOR_FETCH_CONCURRENCY
+      ),
+      toArray(),
+      map((enriched) => {
+        const byKey = new Map(
+          enriched.map((subsystem) => [this.subsystemKey(subsystem), subsystem])
+        );
+        return subsystems.map((subsystem) => byKey.get(this.subsystemKey(subsystem)) ?? subsystem);
+      })
     );
   }
 
-  private enrichSubsystems(subsystems: any, groupName: string): Observable<NvmeofSubsystem[]> {
-    const subs = Array.isArray(subsystems) ? subsystems : [subsystems];
-    if (subs.length === 0) return of([]);
-    return forkJoin(subs.map((sub) => this.enrichSubsystemForGroup(sub, groupName)));
+  private subsystemKey(subsystem: NvmeofSubsystem & { gw_group?: string }): string {
+    return `${subsystem.gw_group ?? ''}:${subsystem.nqn}`;
   }
 
   ngOnDestroy() {

@@ -31,7 +31,7 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
   permission: Permission;
-  namespaces: NvmeofSubsystemNamespace[] = [];
+  namespaces?: NvmeofSubsystemNamespace[];
 
   private destroy$ = new Subject<void>();
 
@@ -166,8 +166,6 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
         .subscribe((res: NvmeofSubsystemNamespace[]) => {
           this.namespaces = res || [];
         });
-    } else {
-      this.namespaces = [];
     }
   }
 
