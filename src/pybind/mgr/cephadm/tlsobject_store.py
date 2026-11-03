@@ -70,9 +70,11 @@ class TLSObjectStore():
     def _target_kv_key(self, obj_name: str, target: str) -> str:
         return f'{self.target_prefix}{obj_name}{TLSOBJECT_TARGET_SEPARATOR}{target}'
 
-    def _set_target_store(self, obj_name: str, target: str,
+    def _set_target_store(self, obj_name: str, target: Optional[str],
                           tlsobject: Optional[TLSObjectProtocol]) -> None:
         """Persist (or, with None, remove) the object of one target of a scoped name."""
+        if not target:
+            raise TLSObjectException(f'Need a target to store TLS object {obj_name}')
         key = self._target_kv_key(obj_name, target)
         if tlsobject is None:
             self.mgr.set_store(key, None)
