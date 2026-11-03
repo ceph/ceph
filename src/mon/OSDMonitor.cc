@@ -8557,6 +8557,13 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->opts.set(pool_opts_t::TARGET_SIZE_RATIO, target_size_ratio);
   }
 
+  // Replica reads bounce with EAGAIN until the primary propagates
+  // pg_committed_to, so bound how long a pool can leave them bouncing.
+  if (pool_type == pg_pool_t::TYPE_REPLICATED &&
+      g_conf().get_val<string>("rados_replica_read_policy") != "default") {
+    pi->opts.set(pool_opts_t::PCT_UPDATE_DELAY, static_cast<int64_t>(5));
+  }
+
   pi->cache_target_dirty_ratio_micro =
     g_conf()->osd_pool_default_cache_target_dirty_ratio * 1000000;
   pi->cache_target_dirty_high_ratio_micro =
