@@ -33,6 +33,26 @@ set_property(TARGET datum_reflection APPEND PROPERTY INTERFACE_COMPILE_FEATURES 
 target_compile_options(datum_reflection INTERFACE
   "$<$<CXX_COMPILER_ID:GNU>:-freflection>")
 
+option(DATUM_ENABLE_ZPP "Provide the optional zpp codec adapter" ON)
+
+include(FetchContent)
+if(DATUM_ENABLE_ZPP)
+  if(NOT TARGET zpp_bits)
+    FetchContent_Declare(zpp_bits
+      GIT_REPOSITORY https://github.com/eyalz800/zpp_bits.git
+      GIT_TAG v4.7.6
+      GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(zpp_bits)
+    if(NOT TARGET zpp_bits)
+      add_library(zpp_bits INTERFACE)
+      target_include_directories(zpp_bits SYSTEM INTERFACE "${zpp_bits_SOURCE_DIR}")
+    endif()
+  endif()
+  add_library(datum_zpp INTERFACE)
+  add_library(datum::zpp ALIAS datum_zpp)
+  target_link_libraries(datum_zpp INTERFACE datum::core zpp_bits)
+endif()
+
 add_library(datum_render INTERFACE)
 add_library(datum::render ALIAS datum_render)
 target_link_libraries(datum_render INTERFACE datum::core)
