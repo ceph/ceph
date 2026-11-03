@@ -141,6 +141,7 @@ extensions = [
     'ceph_commands',
     'ceph_releases',
     'ceph_confval',
+    'datum',
     'sphinxcontrib.mermaid',
     'sphinxcontrib.openapi',
 ]
