@@ -31,7 +31,8 @@
     account create                   create a new account
     account modify                   modify an existing account
     account get                      get account info
-    account stats                    dump account storage stats
+    account stats                    dump account storage stats, or the info and
+                                     stats of all accounts if no account is specified
     account rm                       remove an account
     account list                     list all account ids
     bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)

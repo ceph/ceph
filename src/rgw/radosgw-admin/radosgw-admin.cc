@@ -177,7 +177,8 @@ void usage()
   cout << "  account create                   create a new account\n";
   cout << "  account modify                   modify an existing account\n";
   cout << "  account get                      get account info\n";
-  cout << "  account stats                    dump account storage stats\n";
+  cout << "  account stats                    dump account storage stats, or the info and\n";
+  cout << "                                   stats of all accounts if no account is specified\n";
   cout << "  account rm                       remove an account\n";
   cout << "  account list                     list all account ids\n";
   cout << "  bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)\n";
@@ -12708,7 +12709,22 @@ next:
       }
     }
 
-    if (opt_cmd == OPT::ACCOUNT_STATS) {
+    if (opt_cmd == OPT::ACCOUNT_STATS && account_id.empty() &&
+        account_name.empty() && tenant.empty()) {
+      // like 'bucket stats' without --bucket, list the stats of all accounts
+      if (sync_stats || reset_stats) {
+        cerr << "ERROR: --sync-stats and --reset-stats require --account-id "
+            "or --account-name" << std::endl;
+        return EINVAL;
+      }
+      ret = rgw::account::list_stats(dpp(), driver, marker,
+                                     max_entries_specified, max_entries,
+                                     err_msg, stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: " << err_msg << ": " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    } else if (opt_cmd == OPT::ACCOUNT_STATS) {
       ret = rgw::account::stats(dpp(), driver, op_state,
                                 sync_stats, reset_stats, err_msg,
                                 stream_flusher, null_yield);
