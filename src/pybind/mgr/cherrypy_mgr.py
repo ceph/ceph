@@ -19,6 +19,10 @@ Usage:
         ssl_info={'cert': 'path/to/cert.pem', 'key': 'path/to/key.pem', 'context': ssl_context}
         )
 
+    # With 'defer_handshake': True in ssl_info, each connection's TLS handshake
+    # runs on the worker thread that serves it rather than on the accept thread
+    # (see DeferredHandshakeSSLAdapter)
+
     # The adapter can be used to stop the server when needed
     adapter.stop()
 
@@ -34,9 +38,12 @@ Usage:
 import logging
 import cherrypy
 import re
+import socket
+import ssl
 import threading
 import time
 from cherrypy.process.servers import ServerAdapter
+from cheroot.server import HTTPConnection
 from cheroot.wsgi import Server as WSGIServer
 from cheroot.ssl.builtin import BuiltinSSLAdapter
 from cherrypy._cptree import Tree
@@ -94,6 +101,74 @@ class CherryPyErrorFilter(logging.Filter):
         return not any(m in msg for m in blocked)
 
 
+class DeferredHandshakeSSLAdapter(BuiltinSSLAdapter):
+    """
+    A BuiltinSSLAdapter that leaves the TLS handshake to the worker thread
+    serving the connection.
+
+    cheroot accepts every connection and calls wrap() on a single thread,
+    and BuiltinSSLAdapter.wrap() completes the handshake there. A server
+    that gets many new connections, or a few slow clients, then has them
+    wait in line for that thread. Here wrap() only sets up the TLS state,
+    and DeferredHandshakeConnection completes the handshake on the worker
+    thread, before it reads the request.
+
+    The WSGI environ lacks the SSL_* entries describing the negotiated
+    session, which are only known after the handshake.
+    """
+
+    def wrap(self, sock: Any) -> Tuple[Any, Dict[str, str]]:
+        try:
+            s = self.context.wrap_socket(sock, server_side=True,
+                                         do_handshake_on_connect=False)
+        except OSError:
+            # the client is gone already
+            sock.close()
+            return None, {}
+        return s, {'wsgi.url_scheme': 'https', 'HTTPS': 'on'}
+
+
+class DeferredHandshakeConnection(HTTPConnection):
+    """
+    An HTTPConnection that completes the TLS handshake DeferredHandshakeSSLAdapter
+    left undone, on the worker thread, before it reads the first request.
+
+    Like BuiltinSSLAdapter.wrap(), it drops a connection whose handshake
+    fails without logging an error (a client that gave up, or one that
+    speaks some other protocol), and answers a client that sent plain HTTP
+    with a 400.
+    """
+    _handshake_done = False
+
+    def communicate(self) -> bool:
+        if not self._handshake_done:
+            self._handshake_done = True
+            try:
+                self.socket.do_handshake()
+            except ssl.SSLError as e:
+                if getattr(e, 'reason', None) == 'HTTP_REQUEST':
+                    self._reply_plain_http()
+                logger.debug('TLS handshake with %s failed: %s', getattr(self, 'remote_addr', '?'), e)
+                return False
+            except OSError as e:
+                logger.debug('TLS handshake with %s failed: %s', getattr(self, 'remote_addr', '?'), e)
+                return False
+        return bool(super().communicate())
+
+    def _reply_plain_http(self) -> None:
+        # The response BuiltinSSLAdapter's caller sends, in plain text: the
+        # TLS layer never came up, so write past it to the socket itself.
+        msg = 'The client sent a plain HTTP request, but this server only speaks HTTPS on this port.'
+        response = (f'{self.server.protocol} 400 Bad Request\r\n'
+                    f'Content-Length: {len(msg)}\r\n'
+                    'Content-Type: text/plain\r\n\r\n'
+                    f'{msg}')
+        try:
+            socket.socket.sendall(self.socket, response.encode('ISO-8859-1'))
+        except OSError:
+            pass
+
+
 class CherryPyMgr:
     _trees: Dict[str, Tree] = {}
 
@@ -107,7 +182,8 @@ class CherryPyMgr:
     ) -> Tuple[ServerAdapter, Any]:
         """
         :param bind_addr: Tuple (host, port)
-        :param ssl_info: Dict containing {'cert': path, 'key': path, 'context': ssl_context}
+        :param ssl_info: Dict containing {'cert': path, 'key': path, 'context': ssl_context},
+            and optionally 'defer_handshake': True (see DeferredHandshakeSSLAdapter)
         """
         cls._trees[name] = tree
 
@@ -199,7 +275,11 @@ class CherryPyMgr:
         )
 
         if ssl_info:
-            ssl_adapter = BuiltinSSLAdapter(ssl_info['cert'], ssl_info['key'])
+            adapter_class = BuiltinSSLAdapter
+            if ssl_info.get('defer_handshake'):
+                adapter_class = DeferredHandshakeSSLAdapter
+                server.ConnectionClass = DeferredHandshakeConnection
+            ssl_adapter = adapter_class(ssl_info['cert'], ssl_info['key'])
             if ssl_info.get('context'):
                 ssl_adapter.context = ssl_info['context']
             server.ssl_adapter = ssl_adapter
