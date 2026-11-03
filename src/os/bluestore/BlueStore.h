@@ -198,6 +198,7 @@ enum {
   //****************************************
   l_bluestore_onodes,
   l_bluestore_pinned_onodes,
+  l_bluestore_probation_onodes,
   l_bluestore_onode_hits,
   l_bluestore_onode_misses,
   l_bluestore_onode_shard_hits,
@@ -313,6 +314,10 @@ public:
   void _set_compression();
   void _set_throttle_params();
   int _set_cache_sizes();
+  /// cache admission (probation) on only while the mempool thread rotates
+  /// the age bins; applied from that thread, which keeps the DB open
+  double _cache_probation_ratio(const char* option) const;
+  void _apply_cache_probation_ratios();
   void _set_max_defer_interval() {
     max_defer_interval =
 	cct->_conf.get_val<double>("bluestore_max_defer_interval");
@@ -670,7 +675,7 @@ public:
       _trim_to(0);
     }
 
-    void shift_bins() {
+    virtual void shift_bins() {
       std::lock_guard l(lock);
       age_bins.push_front(std::make_shared<int64_t>(0));
     }
@@ -914,6 +919,9 @@ private:
   int path_fd = -1;  ///< open handle to $path
   int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
   bool mounted = false;
+  /// the mempool thread rotates the cache age bins; cache admission is
+  /// on only while it does
+  std::atomic<bool> cache_bins_rotate = {false};
 
   // Whether a caller may tolerate undecodable onodes during allocation recovery
   enum class alloc_recovery_policy_t {
