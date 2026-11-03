@@ -63,6 +63,125 @@ describe('RgwMultisiteDetailsComponent', () => {
     });
   });
 
+  describe('abstractTreeData active node refresh', () => {
+    const realm = { id: 'realm-1', name: 'realm1' };
+    const zoneInZonegroup = {
+      id: 'zone-1',
+      name: 'zone1',
+      endpoints: ['http://a:80'],
+      tier_type: 'cloud'
+    };
+    const zonegroup = {
+      id: 'zg-1',
+      name: 'zg1',
+      realm_id: 'realm-1',
+      is_master: true,
+      master_zone: 'zone-1',
+      endpoints: ['http://a:80'],
+      placement_targets: [],
+      default_placement: 'default-placement',
+      zones: [zoneInZonegroup]
+    };
+    const zone = {
+      id: 'zone-1',
+      name: 'zone1',
+      endpoints: ['http://a:80'],
+      system_key: { access_key: 'ak', secret_key: 'sk' }
+    };
+
+    const buildInfo = (overrides: { realms?: any[]; zonegroups?: any[]; zones?: any[] } = {}) =>
+      [
+        { realms: overrides.realms ?? [realm], default_realm: 'realm-1' },
+        { zonegroups: overrides.zonegroups ?? [zonegroup], default_zonegroup: 'zg-1' },
+        { zones: overrides.zones ?? [zone], default_zone: 'zone-1' }
+      ] as [object, object, object];
+
+    const refresh = (info: [object, object, object]) => component['abstractTreeData'](info);
+
+    it('should not touch metadata when there is no active node', () => {
+      component.metadata = { foo: 'bar' };
+      component.activeNodeId = undefined;
+
+      refresh(buildInfo());
+
+      expect(component.metadata).toEqual({ foo: 'bar' });
+      expect(component.metadataTitle).toBeUndefined();
+    });
+
+    it('should refresh metadata and title of an active realm', () => {
+      component.activeNodeId = 'realm-1';
+      component.metadata = { id: 'realm-1', name: 'old-name' };
+
+      refresh(buildInfo());
+
+      expect(component.metadata).toEqual(realm);
+      expect(component.metadataTitle).toBe('realm1');
+      expect(component.activeNodeId).toBe('realm-1');
+    });
+
+    it('should refresh metadata and title of an active zonegroup', () => {
+      component.activeNodeId = 'zg-1';
+      component.metadata = { id: 'zg-1', name: 'old-name' };
+
+      refresh(buildInfo());
+
+      expect(component.metadata).toEqual(zonegroup);
+      expect(component.metadataTitle).toBe('zg1');
+    });
+
+    it('should prefer the zonegroup zone entry for an active zone', () => {
+      component.activeNodeId = 'zone-1';
+      component.metadata = undefined;
+
+      refresh(buildInfo());
+
+      expect(component.metadata).toEqual(zoneInZonegroup);
+      expect(component.metadataTitle).toBe('zone1');
+    });
+
+    it('should fall back to the standalone zone when no zonegroup lists it', () => {
+      component.activeNodeId = 'zone-1';
+
+      refresh(buildInfo({ realms: [], zonegroups: [], zones: [zone] }));
+
+      expect(component.metadata).toEqual(zone);
+      expect(component.metadataTitle).toBe('zone1');
+    });
+
+    it('should keep the same metadata reference when the content is unchanged', () => {
+      component.activeNodeId = 'zg-1';
+      const existing = { ...zonegroup, zones: [{ ...zoneInZonegroup }] };
+      component.metadata = existing;
+
+      refresh(buildInfo());
+
+      expect(component.metadata).toBe(existing);
+    });
+
+    it('should replace metadata when the entity was updated', () => {
+      component.activeNodeId = 'zg-1';
+      component.metadata = zonegroup;
+      const updated = { ...zonegroup, endpoints: ['http://b:80'] };
+
+      refresh(buildInfo({ zonegroups: [updated] }));
+
+      expect(component.metadata).toEqual(updated);
+      expect(component.metadata).not.toBe(zonegroup);
+    });
+
+    it('should clear metadata and active node when the entity was deleted', () => {
+      component.activeNodeId = 'realm-1';
+      component.metadata = realm;
+      component.metadataTitle = 'realm1';
+
+      refresh(buildInfo({ realms: [] }));
+
+      expect(component.metadata).toBeUndefined();
+      expect(component.metadataTitle).toBeUndefined();
+      expect(component.activeNodeId).toBeUndefined();
+    });
+  });
+
   describe('disableActions', () => {
     it('should return true when rgw.create is false', () => {
       component.permissions = new Permissions({ rgw: ['read'] });
