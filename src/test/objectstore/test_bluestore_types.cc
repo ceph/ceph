@@ -4716,6 +4716,348 @@ TEST(bluestore_blob_use_tracker_t, mempool_stats_test) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// onode cache admission: probation and promotion in LruOnodeCacheShard
+// ---------------------------------------------------------------------------
+
+namespace {
+
+struct OnodeCacheFixture {
+  BlueStore store{g_ceph_context, "", 4096};
+  std::unique_ptr<BlueStore::OnodeCacheShard> oc{
+      BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL)};
+  std::unique_ptr<BlueStore::BufferCacheShard> bc{
+      BlueStore::BufferCacheShard::create(&store, "lru", NULL)};
+  ceph::ref_t<BlueStore::Collection> coll;
+
+  explicit OnodeCacheFixture(double probation_ratio) {
+    coll = ceph::make_ref<BlueStore::Collection>(&store, oc.get(), bc.get(),
+                                                 coll_t());
+    oc->probation_ratio = probation_ratio;
+    oc->set_bin_count(64);    // the OSD's tuner configures many bins; the
+                              // default of one would hide the bins' history
+    oc->set_max(1ull << 40);  // no budget until a test sets one
+  }
+  ~OnodeCacheFixture() {
+    coll->onode_space.clear();
+  }
+  static ghobject_t oid(unsigned i) {
+    return ghobject_t(hobject_t(object_t("o" + std::to_string(i)), "",
+                                CEPH_NOSNAP, i, 0, ""));
+  }
+  /// bring an onode into the cache; its first use ends when the local
+  /// reference is dropped, which is when the cache links it
+  void create(unsigned i) {
+    BlueStore::OnodeRef o = new BlueStore::Onode(coll.get(), oid(i), "");
+    o->exists = true;
+    coll->onode_space.add_onode(oid(i), o);
+  }
+  /// one use of a cached onode: look it up and drop the reference
+  void use(unsigned i) {
+    BlueStore::OnodeRef o = coll->onode_space.lookup(oid(i));
+    ASSERT_TRUE(o);
+  }
+  bool cached(unsigned i) {
+    return (bool)coll->onode_space.lookup(oid(i));
+  }
+  struct counts { uint64_t onodes, pinned, probation; };
+  counts stats() {
+    counts c{0, 0, 0};
+    oc->add_stats(&c.onodes, &c.pinned, &c.probation);
+    return c;
+  }
+};
+
+} // anonymous namespace
+
+TEST(OnodeCache, promoted_after_uses_in_two_later_bins) {
+  OnodeCacheFixture f(0.1);
+  f.create(1);
+  auto c = f.stats();
+  EXPECT_EQ(1u, c.onodes);
+  EXPECT_EQ(0u, c.pinned);
+  EXPECT_EQ(1u, c.probation) << "a new onode goes on probation";
+
+  f.use(1);
+  EXPECT_EQ(1u, f.stats().probation) << "a use in the same bin does not count";
+
+  f.oc->shift_bins();
+  f.use(1);
+  EXPECT_EQ(1u, f.stats().probation) << "one later use is not enough";
+  f.use(1);
+  EXPECT_EQ(1u, f.stats().probation) << "nor a second use in that same bin";
+
+  f.oc->shift_bins();
+  f.use(1);
+  c = f.stats();
+  EXPECT_EQ(1u, c.onodes);
+  EXPECT_EQ(0u, c.probation) << "a use in a second later bin promotes";
+}
+
+// A shard starts with probation off, like the block cache's: only BlueStore,
+// which rotates the age bins the rule needs, turns it on.
+TEST(OnodeCache, shard_starts_with_probation_off) {
+  BlueStore store(g_ceph_context, "", 4096);
+  std::unique_ptr<BlueStore::OnodeCacheShard> oc{
+      BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL)};
+  std::unique_ptr<BlueStore::BufferCacheShard> bc{
+      BlueStore::BufferCacheShard::create(&store, "lru", NULL)};
+  oc->set_max(1ull << 40);
+  auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc.get(), bc.get(),
+                                                    coll_t());
+  ghobject_t oid = OnodeCacheFixture::oid(1);
+  {
+    BlueStore::OnodeRef o = new BlueStore::Onode(coll.get(), oid, "");
+    o->exists = true;
+    coll->onode_space.add_onode(oid, o);
+  }
+  uint64_t onodes = 0, pinned = 0, probation = 0;
+  oc->add_stats(&onodes, &pinned, &probation);
+  EXPECT_EQ(1u, onodes);
+  EXPECT_EQ(0u, probation);
+  coll->onode_space.clear();
+}
+
+TEST(OnodeCache, probation_ratio_zero_admits_at_once) {
+  OnodeCacheFixture f(0);
+  f.create(1);
+  auto c = f.stats();
+  EXPECT_EQ(1u, c.onodes);
+  EXPECT_EQ(0u, c.probation);
+}
+
+// A hot set that is touched every bin while a scan brings in new onodes:
+// probation must be bounded by the scan's arrivals of the last four bins,
+// not by the hot set's touches as well, or the shard lets probation grow by
+// a hot set's worth of scan residue and, once over budget, evicts the hot
+// set to keep it.
+TEST(OnodeCache, scan_beside_hot_set_evicts_the_scan_not_the_hot_set) {
+  const unsigned HOT = 1000;        // per shard, promoted and touched every bin
+  const unsigned PER_BIN = 400;     // scan arrivals per bin
+  const unsigned BINS = 6;          // more than the four probation keeps
+  OnodeCacheFixture f(1e-6);        // ratio term below the floor: the bound
+                                    // is the floor or the recent arrivals
+
+  // promote the hot set: first use, then uses in two later bins
+  for (unsigned i = 0; i < HOT; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  auto c = f.stats();
+  ASSERT_EQ(HOT, c.onodes);
+  ASSERT_EQ(0u, c.probation);
+
+  // the scan, with the hot set touched in every bin
+  unsigned next = HOT;
+  for (unsigned b = 0; b < BINS; b++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < PER_BIN; i++) f.create(next++);
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  c = f.stats();
+  ASSERT_EQ(HOT + BINS * PER_BIN, c.onodes);
+  ASSERT_EQ(BINS * PER_BIN, c.probation) << "nothing trimmed under a huge max";
+
+  // the tuner's budget covers the hot set and the last four bins of arrivals
+  const uint64_t budget = HOT + 4 * PER_BIN;
+  f.oc->set_max(budget);
+  f.oc->trim();
+
+  c = f.stats();
+  EXPECT_EQ(budget, c.onodes);
+  EXPECT_EQ(4 * PER_BIN, c.probation)
+      << "probation keeps the last four bins of arrivals and no more";
+  EXPECT_EQ(HOT, c.onodes - c.probation) << "the hot set is intact";
+  EXPECT_TRUE(f.cached(0));
+  EXPECT_TRUE(f.cached(HOT - 1));
+  EXPECT_FALSE(f.cached(HOT)) << "the oldest scan onode is gone";
+  EXPECT_TRUE(f.cached(next - 1)) << "the newest scan onode is kept";
+}
+
+// The same with a budget short of the hot set plus four bins of arrivals:
+// the promoted set always fits, probation gets what the budget leaves.
+TEST(OnodeCache, short_budget_squeezes_probation_not_the_hot_set) {
+  const unsigned HOT = 1000, PER_BIN = 400, BINS = 6;
+  OnodeCacheFixture f(1e-6);
+  for (unsigned i = 0; i < HOT; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  unsigned next = HOT;
+  for (unsigned b = 0; b < BINS; b++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < PER_BIN; i++) f.create(next++);
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  const uint64_t budget = HOT + 2 * PER_BIN;  // two bins short of the guarantee
+  f.oc->set_max(budget);
+  f.oc->trim();
+  auto c = f.stats();
+  EXPECT_EQ(budget, c.onodes);
+  EXPECT_EQ(2 * PER_BIN, c.probation) << "probation takes the whole shortfall";
+  EXPECT_EQ(HOT, c.onodes - c.probation) << "the hot set is intact";
+  EXPECT_TRUE(f.cached(0));
+  EXPECT_TRUE(f.cached(next - 1));
+}
+
+// The OSD trims a few onodes on every arrival, while the arriving onode is
+// still pinned. With the budget exactly the hot set, arrivals must come and
+// go through probation without taking anything from the promoted LRU.
+TEST(OnodeCache, arrivals_at_budget_do_not_drain_the_hot_set) {
+  const unsigned HOT = 1000;
+  OnodeCacheFixture f(0.1);  // newcomers' reserve: half the share, 50 here
+  for (unsigned i = 0; i < HOT; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  f.oc->set_max(HOT);
+  unsigned next = HOT;
+  for (unsigned b = 0; b < 4; b++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < 200; i++) f.create(next++);
+  }
+  f.oc->trim();
+  auto c = f.stats();
+  // over budget, newcomers keep half of probation's share and no more; the
+  // rest of the promoted LRU is intact
+  EXPECT_EQ(HOT / 20, c.probation);
+  EXPECT_EQ(HOT - HOT / 20, c.onodes - c.probation) << "the LRU lost more";
+  EXPECT_TRUE(f.cached(HOT - 1));
+}
+
+// A working set that shifts after the hot set filled the budget: the new
+// objects must be able to prove themselves and replace the old ones, as a
+// plain LRU would, rather than being evicted before their second use.
+TEST(OnodeCache, shifted_working_set_gets_promoted_at_budget) {
+  const unsigned HOT = 1000, NEW = 40;  // NEW within half the share (50)
+  OnodeCacheFixture f(0.1);
+  for (unsigned i = 0; i < HOT; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  f.oc->set_max(HOT);
+  f.oc->shift_bins();
+  for (unsigned i = HOT; i < HOT + NEW; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = HOT; i < HOT + NEW; i++) f.use(i);
+  }
+  f.oc->trim();  // the last arrival was pinned through its own add's trim
+  auto c = f.stats();
+  EXPECT_EQ(0u, c.probation) << "the new set is promoted";
+  EXPECT_EQ(HOT, c.onodes) << "at budget";
+  EXPECT_TRUE(f.cached(HOT));
+  EXPECT_TRUE(f.cached(HOT + NEW - 1));
+  EXPECT_FALSE(f.cached(0)) << "the least recently used old onodes made room";
+}
+
+TEST(OnodeCache, probation_floor_is_an_option) {
+  OnodeCacheFixture f(1e-6);
+  f.oc->probation_floor = 200;
+  const unsigned HOT = 100;
+  for (unsigned i = 0; i < HOT; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  for (unsigned i = HOT; i < HOT + 1500; i++) f.create(i);
+  for (int b = 0; b < 4; b++) f.oc->shift_bins();
+  f.oc->set_max(HOT + 200);
+  f.oc->trim();
+  auto c = f.stats();
+  EXPECT_EQ(200u, c.probation);
+  EXPECT_EQ(HOT, c.onodes - c.probation);
+}
+
+TEST(OnodeCache, probation_floor_keeps_the_newest_arrivals) {
+  // arrivals older than the four-bin window are still kept up to the floor
+  // (1024 per shard) when the budget covers the hot set and the floor
+  OnodeCacheFixture f(1e-6);
+  const unsigned HOT = 100;
+  for (unsigned i = 0; i < HOT; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  ASSERT_EQ(0u, f.stats().probation);
+  for (unsigned i = HOT; i < HOT + 1500; i++) f.create(i);
+  // let the arrivals fall out of the four-bin window, so only the floor holds
+  for (int b = 0; b < 4; b++) f.oc->shift_bins();
+  f.oc->set_max(HOT + 1024);
+  f.oc->trim();
+  auto c = f.stats();
+  EXPECT_EQ(1024u, c.probation);
+  EXPECT_EQ(HOT, c.onodes - c.probation) << "the hot set is intact";
+  EXPECT_TRUE(f.cached(0));
+  EXPECT_FALSE(f.cached(HOT)) << "the oldest arrival is gone";
+  EXPECT_TRUE(f.cached(HOT + 1499)) << "the newest is kept";
+}
+
+// A trim pops a pinned onode off its list but cannot evict it. When its use
+// ends it re-enters probation as a new arrival: the use that was in progress
+// is not a later use, whatever bins rotated meanwhile.
+TEST(OnodeCache, pinned_onode_popped_by_trim_starts_over) {
+  OnodeCacheFixture f(0.1);
+  f.create(1);
+  ASSERT_EQ(1u, f.stats().probation);
+  {
+    BlueStore::OnodeRef held = f.coll->onode_space.lookup(f.oid(1));  // pinned
+    ASSERT_TRUE(held);
+    f.oc->flush();  // pops it; it stays cached, pinned
+    auto c = f.stats();
+    EXPECT_EQ(1u, c.onodes);
+    EXPECT_EQ(1u, c.pinned);
+    f.oc->shift_bins();
+  }  // the use ends: back on probation, as an arrival
+  EXPECT_EQ(1u, f.stats().probation);
+  f.oc->shift_bins();
+  f.use(1);  // first later use
+  EXPECT_EQ(1u, f.stats().probation) << "one later use must not promote";
+  f.oc->shift_bins();
+  f.use(1);  // second later use
+  EXPECT_EQ(0u, f.stats().probation) << "promoted after two later uses";
+}
+
+// A later use earned before the pop is kept: the onode returns to probation
+// where it was, and one more later use promotes it.
+TEST(OnodeCache, pinned_onode_popped_by_trim_keeps_its_later_use) {
+  OnodeCacheFixture f(0.1);
+  f.create(1);
+  f.oc->shift_bins();
+  f.use(1);  // a later use, earned
+  ASSERT_EQ(1u, f.stats().probation);
+  {
+    BlueStore::OnodeRef held = f.coll->onode_space.lookup(f.oid(1));
+    ASSERT_TRUE(held);
+    f.oc->flush();  // popped while pinned
+    f.oc->shift_bins();
+  }  // back on probation
+  EXPECT_EQ(1u, f.stats().probation);
+  f.oc->shift_bins();
+  f.use(1);  // the second later use
+  EXPECT_EQ(0u, f.stats().probation) << "promoted: the earlier later use counts";
+}
+
+// Turning probation off at run time keeps the onodes on it: under budget
+// nothing is trimmed, and each is promoted on its next use.
+TEST(OnodeCache, ratio_set_to_zero_keeps_probation_onodes) {
+  OnodeCacheFixture f(0.1);
+  for (unsigned i = 0; i < 1500; i++) f.create(i);
+  ASSERT_EQ(1500u, f.stats().probation);
+  f.oc->probation_ratio = 0;
+  f.oc->trim();
+  auto c = f.stats();
+  EXPECT_EQ(1500u, c.onodes) << "nothing evicted under budget";
+  f.use(7);  // admitted at once now
+  c = f.stats();
+  EXPECT_EQ(1500u, c.onodes);
+  EXPECT_EQ(1499u, c.probation);
+}
+
 // maybe_unpin() may be entered through the shard an onode was in before a
 // PG split moved it; the shard that holds it now must do the work, or the
 // caller links the onode into the wrong shard's lists under the wrong lock.
@@ -4733,7 +5075,7 @@ TEST(OnodeCache, maybe_unpin_works_on_the_shard_that_holds_the_onode) {
   }
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, new_shard.get(),
                                                     bc.get(), coll_t());
-  ghobject_t oid(hobject_t(object_t("o1"), "", CEPH_NOSNAP, 1, 0, ""));
+  ghobject_t oid = OnodeCacheFixture::oid(1);
   BlueStore::Onode* raw;
   {
     BlueStore::OnodeRef o = new BlueStore::Onode(coll.get(), oid, "");
