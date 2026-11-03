@@ -488,6 +488,7 @@ void usage()
   cout << "   --sync-stats                      option to 'user stats', update user stats with current\n";
   cout << "                                     stats reported by user's buckets indexes\n";
   cout << "   --reset-stats                     option to 'user stats', reset stats in accordance with user buckets\n";
+  cout << "   --stats                           option to 'account list', include each account's info and storage stats\n";
   cout << "   --show-config                     show configuration\n";
   cout << "   --show-log-entries=<flag>         enable/disable dump of log entries on log show\n";
   cout << "   --show-log-sum=<flag>             enable/disable dump of log summation on log show\n";
@@ -3597,6 +3598,7 @@ int main(int argc, const char **argv)
 
   int sync_stats = false;
   int reset_stats = false;
+  int list_stats = false;
   int bypass_gc = false;
   int warnings_only = false;
   int inconsistent_index = false;
@@ -4060,6 +4062,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &sync_stats, NULL, "--sync-stats", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &reset_stats, NULL, "--reset-stats", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &list_stats, NULL, "--stats", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
      // do nothing
@@ -10186,7 +10190,8 @@ next:
     if (max_entries_specified) {
       formatter->open_object_section("result");
     }
-    formatter->open_array_section("keys");
+    const bool dump_account_stats = opt_cmd == OPT::ACCOUNT_LIST && list_stats;
+    formatter->open_array_section(dump_account_stats ? "accounts" : "keys");
 
     uint64_t left;
     do {
@@ -10198,7 +10203,19 @@ next:
         return -ret;
       } if (ret != -ENOENT) {
 	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-	  formatter->dump_string("key", *iter);
+          if (dump_account_stats) {
+            ret = rgw::account::dump_info_and_stats(dpp(), driver, *iter,
+                                                    formatter.get(), null_yield);
+            if (ret == -ENOENT) {
+              // account was removed since it was listed
+            } else if (ret < 0) {
+              cerr << "ERROR: failed to read account " << *iter
+                  << ": " << cpp_strerror(-ret) << std::endl;
+              return -ret;
+            }
+          } else {
+	    formatter->dump_string("key", *iter);
+          }
           ++count;
 	}
 	formatter->flush(cout);

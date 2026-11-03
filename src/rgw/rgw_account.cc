@@ -600,6 +600,37 @@ int stats(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int dump_info_and_stats(const DoutPrefixProvider* dpp,
+                        rgw::sal::Driver* driver,
+                        std::string_view account_id,
+                        ceph::Formatter* f, optional_yield y)
+{
+  RGWAccountInfo info;
+  rgw::sal::Attrs attrs; // ignored
+  RGWObjVersionTracker objv; // ignored
+  int ret = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+  if (ret < 0) {
+    return ret;
+  }
+
+  RGWStorageStats stats;
+  ceph::real_time last_synced;
+  ceph::real_time last_updated;
+  ret = driver->load_stats(dpp, y, rgw_account_id{info.id}, stats,
+                           last_synced, last_updated);
+  if (ret < 0) {
+    return ret;
+  }
+
+  f->open_object_section("account");
+  encode_json("info", info, f);
+  encode_json("stats", stats, f);
+  encode_json("last_synced", last_synced, f);
+  encode_json("last_updated", last_updated, f);
+  f->close_section(); // account
+  return 0;
+}
+
 int list_users(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
                AdminOpState& op_state, const std::string& path_prefix,
                const std::string& marker, bool max_entries_specified,

@@ -18,11 +18,13 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "include/common_fwd.h"
 
 #include "rgw_sal_fwd.h"
 
+namespace ceph { class Formatter; }
 class DoutPrefixProvider;
 class RGWFormatterFlusher;
 class optional_yield;
@@ -86,6 +88,13 @@ int stats(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
           AdminOpState& op_state, bool sync_stats,
           bool reset_stats, std::string& err_msg,
           RGWFormatterFlusher& flusher, optional_yield y);
+
+/// dump an account's info and storage stats as a single object. returns
+/// -ENOENT if the account doesn't exist
+int dump_info_and_stats(const DoutPrefixProvider* dpp,
+                        rgw::sal::Driver* driver,
+                        std::string_view account_id,
+                        ceph::Formatter* f, optional_yield y);
 
 /// list account users
 int list_users(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,

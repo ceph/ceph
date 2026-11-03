@@ -340,6 +340,7 @@
      --sync-stats                      option to 'user stats', update user stats with current
                                        stats reported by user's buckets indexes
      --reset-stats                     option to 'user stats', reset stats in accordance with user buckets
+     --stats                           option to 'account list', include each account's info and storage stats
      --show-config                     show configuration
      --show-log-entries=<flag>         enable/disable dump of log entries on log show
      --show-log-sum=<flag>             enable/disable dump of log summation on log show
