@@ -1,0 +1,32 @@
+# git stress, as in fs/snaps/snaptest-git-ceph.sh but without snapshots,
+# which NFS does not expose: clone ceph.git onto the NFS mount, check out
+# a series of old releases and verify each checkout byte for byte
+tasks:
+- exec:
+    client.0:
+      - |
+        set -ex
+        MNT=$(findmnt -n -t nfs,nfs4 -o TARGET | head -n 1)
+        test -n "$MNT"
+        DIR=$(mktemp -d -p "$MNT" git-ceph.XXXXXX)
+        cd "$DIR"
+        timeout 3600 git clone -q https://git.ceph.com/ceph.git || {
+            rm -rf ceph
+            timeout 7200 git clone -q https://git.ceph.com/ceph.git
+        }
+        cd ceph
+        for v in $(seq 1 90); do
+            # there is no v0.48 tag
+            if [ $v -eq 48 ]; then
+                continue
+            fi
+            git reset -q --hard v0.$v
+            # rebuild the index without stat data, so that git diff
+            # rereads and hashes every file in the checkout
+            rm -f .git/index
+            git reset -q
+            git diff --exit-code --stat
+        done
+        git fsck --full --no-progress
+        cd /
+        rm -rf "$DIR"
