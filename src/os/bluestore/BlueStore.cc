@@ -1741,11 +1741,15 @@ void *BlueStore::MempoolThread::entry()
       meta_cache->import_bins(store->meta_bins);
       data_cache->import_bins(store->data_bins);
 
-      if (pcm != nullptr) {
-        pcm->shift_bins();
-      } else {
-        // onode cache admission needs the bins to move even without autotune
-        meta_cache->shift_bins();
+      // cache admission needs the bins to move, with or without the
+      // autotuner (whose manager would rotate these same caches)
+      meta_cache->shift_bins();
+      data_cache->shift_bins();
+      if (binned_kv_cache != nullptr) {
+        binned_kv_cache->shift_bins();
+      }
+      if (binned_kv_onode_cache != nullptr) {
+        binned_kv_onode_cache->shift_bins();
       }
       next_bin_rotation = ceph_clock_now();
       next_bin_rotation += age_bin_interval;
@@ -2035,6 +2039,7 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_cache_data_age_bins"s,
     "bluestore_onode_cache_probation_ratio"s,
     "bluestore_onode_cache_probation_floor"s,
+    "rocksdb_cache_probation_ratio"s,
     "bluestore_warn_on_legacy_statfs"s,
     "bluestore_warn_on_no_per_pool_omap"s,
     "bluestore_warn_on_no_per_pg_omap"s,
@@ -2093,8 +2098,9 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
     segment_size = (cct->_conf.get_val<Option::size_t>("bluestore_onode_segment_size"));
   }
   if (changed.count("bluestore_onode_cache_probation_ratio") ||
-      changed.count("bluestore_onode_cache_probation_floor")) {
-    config_changed++;  // the mempool thread applies it
+      changed.count("bluestore_onode_cache_probation_floor") ||
+      changed.count("rocksdb_cache_probation_ratio")) {
+    config_changed++;  // the mempool thread applies it, as it owns the DB
   }
   if (changed.count("bluestore_max_blob_size") ||
       changed.count("bluestore_max_blob_size_ssd") ||
@@ -5756,6 +5762,19 @@ void BlueStore::_apply_cache_probation_ratios()
   for (auto s : onode_cache_shards) {
     s->probation_ratio = r;
     s->probation_floor = floor;
+  }
+  // the block caches' shards start with probation off: only here, where
+  // the bins they need are rotated, is it turned on, and it is turned off
+  // again when the thread stops, before the DB is closed. Called from the
+  // mempool thread only, so the DB is open.
+  if (!db) {
+    return;
+  }
+  double kr = _cache_probation_ratio("rocksdb_cache_probation_ratio");
+  for (auto& c : {db->get_priority_cache(), db->get_priority_cache(PREFIX_OBJ)}) {
+    if (c) {
+      c->set_probation_ratio(kr);
+    }
   }
 }
 
