@@ -122,6 +122,36 @@ struct BinnedLRUHandle : public rocksdb::Cache::Handle {
 
   void SetHit() { flags |= 8; }
 
+  // On probation: not yet used in two later age bins, kept at the tail of the LRU list.
+  bool InProbation() { return flags & 16; }
+  void SetInProbation(bool in_probation) {
+    if (in_probation) {
+      flags |= 16;
+    } else {
+      flags &= ~16;
+    }
+  }
+  // While on probation: already used once in a bin later than the one it came in.
+  // (A block that merely straddles two scan chunks gets exactly one such use.)
+  bool HasLaterHit() { return flags & 32; }
+  void SetLaterHit(bool later_hit) {
+    if (later_hit) {
+      flags |= 32;
+    } else {
+      flags &= ~32;
+    }
+  }
+  // Never in the LRU list yet: inserted, and not yet released by its inserter.
+  // A reader may look it up meanwhile; that does not make it a used block.
+  bool IsNew() { return flags & 64; }
+  void SetNew(bool is_new) {
+    if (is_new) {
+      flags |= 64;
+    } else {
+      flags &= ~64;
+    }
+  }
+
   void Free() {
     ceph_assert((refs == 1 && InCache()) || (refs == 0 && !InCache()));
     if (helper && helper->del_cb) {
@@ -183,6 +213,7 @@ enum stat_e : int {
   l_lookups,      // increased when trying to find element in shard
   l_hits,         // increased when lookup successful
   l_misses,       // calculated from lookups - hits
+  l_probation,    // bytes of entries used only once so far
   stat_cnt
 };
 
@@ -201,6 +232,7 @@ struct ShardStats {
     "lookups",
     "hits",
     "misses",
+    "probation",
   };
   static constexpr char const* stat_descr[stat_cnt] = {
     "capacity assigned",
@@ -211,6 +243,7 @@ struct ShardStats {
     "lookups for an element",
     "lookup successful",
     "lookup failure",
+    "bytes of entries used only once so far",
   };
   void add(const ShardStats& other) {
     for (int j = 0; j < stat_cnt; j++) {
@@ -241,6 +274,10 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
   // Set percentage of capacity reserved for high-pri cache entries.
   void SetHighPriPoolRatio(double high_pri_pool_ratio);
+
+  // Set the share of capacity that blocks used only once may hold
+  // (rocksdb_cache_probation_ratio); probation beyond it is trimmed.
+  void SetProbationRatio(double probation_ratio);
 
   // Like Cache methods, but with an extra "hash" parameter.
   virtual rocksdb::Status Insert(const rocksdb::Slice& key, uint32_t hash,
@@ -330,10 +367,15 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // to hold (usage_ + charge) is freed or the lru list is empty
   // This function is not thread safe - it needs to be executed while
   // holding the mutex_
-  void EvictFromLRU(size_t charge, BinnedLRUHandle*& deleted);
+  // for_probation: the entry the room is made for will go on probation
+  void EvictFromLRU(size_t charge, BinnedLRUHandle*& deleted,
+                    bool for_probation = false);
 
   // Evict one unreferenced entry from the list onto the deleted chain.
   void EvictEntry(BinnedLRUHandle* old, BinnedLRUHandle*& deleted);
+
+  // Trim probation to its share, oldest first.
+  void MaintainProbationSize(BinnedLRUHandle*& deleted);
 
   int FreeDeleted(BinnedLRUHandle* deleted);
 
@@ -360,6 +402,14 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
   // Pointer to head of low-pri pool in LRU list.
   BinnedLRUHandle* lru_low_pri_;
+
+  // Newest entry on probation. Entries used once so far sit at the tail of
+  // the list, below every other low-pri entry, and their total is bounded by
+  // probation_capacity_ (rocksdb_cache_probation_ratio of the capacity).
+  BinnedLRUHandle* lru_probation_;
+  size_t probation_usage_;
+  double probation_ratio_;
+  size_t probation_capacity_;
 
   // Info about the shard
   ShardStats stats;
@@ -420,6 +470,12 @@ class BinnedLRUCache : public ShardedCache {
   size_t TEST_GetLRUSize();
   // Sets the high pri pool ratio
   void SetHighPriPoolRatio(double high_pri_pool_ratio);
+  // Sets the share of each shard that blocks used only once may hold
+  // (rocksdb_cache_probation_ratio); 0 admits every block at once
+  void SetProbationRatio(double probation_ratio);
+  virtual void set_probation_ratio(double ratio) override {
+    SetProbationRatio(ratio);
+  }
   //  Retrieves high pri pool ratio
   double GetHighPriPoolRatio() const;
   // Retrieves high pri pool usage
