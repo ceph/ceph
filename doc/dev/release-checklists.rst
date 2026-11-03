@@ -166,6 +166,9 @@ First stable release
 - [ ] src/ceph_release: change type `stable`
 - [ ] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
 - [ ] src/cephadm/cephadmlib/constants.py: update `LATEST_STABLE_RELEASE`
+- [ ] src/cephadm/cephadmlib/constants.py: set DEFAULT_IMAGE 'quay.io/ceph/ceph:vX' (e.g. v21 for Umbrella)
+- [ ] src/cephadm/cephadmlib/constants.py: set DEFAULT_IMAGE_IS_MAIN to False
+- [ ] src/cephadm/cephadmlib/constants.py: set DEFAULT_IMAGE_RELEASE to 'release' (e.g. 'umbrella')
 - [ ] add release to doc/releases/releases.yml
 - [ ] add release to doc/releases/index.rst
 - [ ] activate latest release in readthedocs, as described in `the readthedocs
