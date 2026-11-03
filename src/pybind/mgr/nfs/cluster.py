@@ -76,6 +76,72 @@ def _is_log_only_config(nfs_config: str) -> bool:
     return all(name == 'LOG' for name in block_names)
 
 
+_VALID_LOG_MATCH_POLICIES = {'MATCH_ANY', 'ANY', 'MATCH_ALL', 'ALL'}
+_VALID_LOG_LEVELS = {
+    'NULL', 'FATAL', 'MAJ', 'CRIT', 'WARN', 'EVENT',
+    'INFO', 'DEBUG', 'MID_DEBUG', 'M_DBG', 'FULL_DEBUG', 'F_DBG',
+}
+
+
+def _validate_log_config(nfs_config: str) -> None:
+    """Validate Match_Policy and Conditional log levels inside any LOG block.
+
+    Raises NFSInvalidOperation with a clear message if invalid so the user
+    gets an error before anything is written to RADOS.
+    Silently ignores configs that cannot be parsed (Ganesha will report those).
+    """
+    # Strip comments before parsing — GaneshaConfParser merges comment
+    # text into the next parameter name, causing false validation errors.
+    cleaned = re.sub(r'/\*.*?\*/', '', nfs_config, flags=re.DOTALL)
+    cleaned = re.sub(r'(#|//).*', '', cleaned)
+    try:
+        blocks = GaneshaConfParser(cleaned).parse()
+    except Exception:
+        return
+    for block in blocks:
+        if block.block_name != 'LOG':
+            continue
+        policy = block.values.get('match_policy')
+        if policy is not None and policy not in _VALID_LOG_MATCH_POLICIES:
+            raise NFSInvalidOperation(
+                f'Invalid Match_Policy "{policy}". '
+                f'Valid values: {", ".join(sorted(_VALID_LOG_MATCH_POLICIES))}.'
+            )
+        for sub in block.blocks:
+            if sub.block_name != 'CONDITIONAL':
+                continue
+            for key, val in sub.values.items():
+                if key == 'clients':
+                    for addr in (val if isinstance(val, list) else [val]):
+                        try:
+                            ipaddress.ip_network(str(addr), strict=False)
+                        except ValueError:
+                            raise NFSInvalidOperation(
+                                f'Invalid client address "{addr}" in Conditional block. '
+                                'Must be a valid IP address or CIDR range '
+                                '(e.g. 10.0.0.1 or 192.168.0.0/24).'
+                            )
+                elif key == 'exports':
+                    for eid in (val if isinstance(val, list) else [val]):
+                        if not isinstance(eid, int) or eid <= 0:
+                            raise NFSInvalidOperation(
+                                f'Invalid export ID "{eid}" in Conditional block. '
+                                'Must be a positive integer.'
+                            )
+                elif not isinstance(val, str) or val not in _VALID_LOG_LEVELS:
+                    raise NFSInvalidOperation(
+                        f'Invalid log level "{val}" for component '
+                        f'"{key.upper()}" in Conditional block. '
+                        f'Valid levels: {", ".join(sorted(_VALID_LOG_LEVELS))}.'
+                    )
+            if policy in ('MATCH_ALL', 'ALL'):
+                if not sub.values.get('clients') or not sub.values.get('exports'):
+                    raise NFSInvalidOperation(
+                        'Match_Policy MATCH_ALL requires both "Clients" and '
+                        '"Exports" to be set in the Conditional block.'
+                    )
+
+
 def resolve_ip(hostname: str) -> str:
     # Tolerate the legacy mgr/rook get_hosts() format ("<ip>/<hostname>"),
     # which older Rook backends may still produce; take just the address.
@@ -816,6 +882,7 @@ class NFSCluster:
                 rados_obj = self._rados(cluster_id)
                 if rados_obj.check_config(USER_CONF_PREFIX):
                     raise NonFatalError("NFS-Ganesha User Config already exists")
+                _validate_log_config(nfs_config)
                 rados_obj.write_obj(nfs_config, user_conf_obj_name(cluster_id),
                                     conf_obj_name(cluster_id))
                 log.debug("Successfully saved %s's user config: \n %s", cluster_id, nfs_config)
