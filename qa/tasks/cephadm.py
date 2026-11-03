@@ -1523,14 +1523,24 @@ def ceph_clients(ctx, config):
 
 @contextlib.contextmanager
 def watchdog_setup(ctx, config):
-    ctx.ceph[config['cluster']].thrashers = []
-    ctx.ceph[config['cluster']].watched_processes = []
-    if 'watchdog_setup' in config:
-        ctx.ceph[config['cluster']].watchdog = DaemonWatchdog(ctx, config)
-        ctx.ceph[config['cluster']].watchdog.start()
-    else:
-        ctx.ceph[config['cluster']].watchdog = None
-    yield
+    cluster = config['cluster']
+    thrashers = []
+    ctx.ceph[cluster].thrashers = thrashers
+    ctx.ceph[cluster].watched_processes = []
+    watchdog = DaemonWatchdog(ctx, config)
+    ctx.ceph[cluster].watchdog = watchdog
+    watchdog.start()
+    try:
+        yield
+    finally:
+        log.info("Tearing down thrashers...")
+        for thrasher in thrashers:
+            thrasher.stop()
+        for thrasher in thrashers:
+            thrasher.join()
+        log.info("Tearing down watchdog...")
+        watchdog.stop()
+        watchdog.join()
 
 @contextlib.contextmanager
 def ceph_initial():
@@ -1572,10 +1582,11 @@ def stop(ctx, config):
         ctx.daemons.get_daemon(type_, id_, cluster).stop()
         clusters.add(cluster)
     
-    if ctx.ceph[cluster].watchdog:
-        for cluster in clusters:
-            ctx.ceph[cluster].watchdog.stop()
-            ctx.ceph[cluster].watchdog.join()
+    for cluster in clusters:
+        watchdog = ctx.ceph[cluster].watchdog
+        if watchdog:
+            watchdog.stop()
+            watchdog.join()
 
     yield
 
@@ -1964,9 +1975,6 @@ def initialize_config(ctx, config):
     cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
 
-    ctx.ceph[cluster_name].thrashers = []
-    # fixme: setup watchdog, ala ceph.py
-
     ctx.ceph[cluster_name].roleless = False  # see below
 
     first_ceph_cluster = False
@@ -2188,8 +2196,8 @@ def task(ctx, config):
             lambda: ceph_monitoring('grafana', ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: create_rbd_pool(ctx=ctx, config=config),
-            lambda: conf_epoch(ctx=ctx, config=config),
             lambda: watchdog_setup(ctx=ctx, config=config),
+            lambda: conf_epoch(ctx=ctx, config=config),
     ):
         try:
             if config.get('wait-for-healthy', True):
