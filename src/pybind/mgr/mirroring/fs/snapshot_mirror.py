@@ -425,16 +425,11 @@ class FSSnapshotMirror:
                                f'cluster_id={local_cluster_id} fs_id={local_fsid}'.encode('utf-8'), os.XATTR_CREATE)
         except cephfs.Error as e:
             if e.errno == errno.EEXIST:
-                try:
-                    mi = FSSnapshotMirror.get_mirror_info(remote_fs)
-                    cluster_id = mi['cluster_id']
-                    fs_id = mi['fs_id']
-                    if not (cluster_id == local_cluster_id and fs_id == local_fsid):
-                        raise MirrorException(-errno.EEXIST, f'peer mirrorred by: (cluster_id: {cluster_id}, fs_id: {fs_id})')
-                except MirrorException:
-                    # if mirror info cannot be fetched for some reason, let's just
-                    # fail.
-                    raise MirrorException(-errno.EEXIST, f'already an active peer')
+                mi = FSSnapshotMirror.get_mirror_info(remote_fs)
+                cluster_id = mi['cluster_id']
+                fs_id = mi['fs_id']
+                if not (cluster_id == local_cluster_id and fs_id == local_fsid):
+                    raise MirrorException(-errno.EEXIST, f'peer mirrored by: (cluster_id: {cluster_id}, fs_id: {fs_id})')
             else:
                 log.error(f'error setting mirrored fsid: {e}')
                 raise Exception(-e.errno)
