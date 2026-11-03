@@ -298,52 +298,14 @@ function setup_lab_extras_repo() {
     # NOTE This repo should be temporary while we work to get the
     # needed deps into EPEL, etc.
     local baseurlprefix="https://apt-mirror.sepia.ceph.com/lab-extras"
-    # RHEL's $releasever includes the minor version (for example, 10.2),
-    # but lab-extras is organized by EL major version.
-    local el_major=$1
     local path="/etc/yum.repos.d/ceph-lab-extras.repo"
     $SUDO tee "${path}" <<EOF
 [ceph-lab-extras]
-name=ceph-lab-extras-${el_major}
-baseurl=${baseurlprefix}/${el_major}
+name=ceph-lab-extras-\$releasever
+baseurl=${baseurlprefix}/\$releasever
 enabled=1
 gpgcheck=0
 EOF
-}
-
-function install_cuobj_runtime() {
-    if ! $install_cuobj; then
-        return
-    fi
-
-    local el_major=${VERSION_ID%%.*}
-    case "${ID}:${el_major}" in
-        rocky:9|centos:9|almalinux:9|rhel:9|rocky:10|centos:10|almalinux:10|rhel:10) ;;
-        fedora:*)
-            echo "Automatic cuObject runtime installation is not supported on Fedora: NVIDIA's Fedora repository does not provide libcuobjserver. Build without INSTALL_CUOBJ_RUNTIME=ON." >&2
-            return 1
-            ;;
-        *)
-            echo "cuObject runtime installation requires an EL9 or EL10 distribution (Rocky, AlmaLinux, RHEL, or CentOS Stream)." >&2
-            return 1
-            ;;
-    esac
-    local cuda_arch
-    case "$ARCH" in
-        x86_64) cuda_arch=x86_64 ;;
-        aarch64) cuda_arch=sbsa ;;
-        *)
-            echo "cuObject runtime installation does not support ${ID} ${VERSION_ID} on ${ARCH}." >&2
-            return 1
-            ;;
-    esac
-
-    # Keep this package version in sync with the ABI used by rgw_cuobj_dl.cc.
-    local cuobj_version=2.0.0.109-1
-    $SUDO dnf install -y dnf-plugins-core || return 1
-    $SUDO dnf config-manager --add-repo \
-        "https://developer.download.nvidia.com/compute/cuda/repos/rhel${el_major}/${cuda_arch}/cuda-rhel${el_major}.repo" || return 1
-    $SUDO dnf install -y "libcuobjserver-${cuobj_version}.${ARCH}"
 }
 
 function populate_wheelhouse() {
@@ -423,21 +385,7 @@ elif tty -s; then
     for_make_check=true
 fi
 
-install_cuobj=false
-case "${INSTALL_CUOBJ_RUNTIME:-OFF}" in
-    ON|on|TRUE|true|YES|yes|1) install_cuobj=true ;;
-    OFF|off|FALSE|false|NO|no|0) ;;
-    *)
-        echo "error: unexpected INSTALL_CUOBJ_RUNTIME value: ${INSTALL_CUOBJ_RUNTIME}" >&2
-        exit 2
-        ;;
-esac
-
 if [ x$(uname)x = xFreeBSDx ]; then
-    if $install_cuobj; then
-        echo "cuObject runtime installation requires an EL9 or EL10 distribution." >&2
-        exit 1
-    fi
     if [ "$INSTALL_EXTRA_PACKAGES" ]; then
         echo "Installing extra packages not supported on FreeBSD" >&2
         exit 1
@@ -496,7 +444,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
 else
     [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
     source /etc/os-release
-    install_cuobj_runtime || exit 1
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
         echo "Using apt-get to install dependencies"
@@ -604,21 +551,11 @@ else
                     $SUDO dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if { [ "$ID" = centos ] || [ "$ID" = rocky ] || [ "$ID" = almalinux ] || [ "$ID" = rhel ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
+                if { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
                     dts_ver=13
-                    if [ "$ID" = rhel ]; then
-                        # UBI provides only a subset of the RHEL build deps.
-                        # Use dnf here: subscription-manager cannot enable
-                        # repositories while operating in container mode.
-                        $SUDO dnf config-manager --set-enabled \
-                            "rhel-${MAJOR_VERSION}-for-${ARCH}-baseos-rpms" \
-                            "rhel-${MAJOR_VERSION}-for-${ARCH}-appstream-rpms" \
-                            "codeready-builder-for-rhel-${MAJOR_VERSION}-${ARCH}-rpms"
-                    else
-                        $SUDO dnf config-manager --set-enabled crb
-                    fi
+                    $SUDO dnf config-manager --set-enabled crb
                     if [ "$MAJOR_VERSION" -eq 10 ]; then
-                        setup_lab_extras_repo "$MAJOR_VERSION"
+                        setup_lab_extras_repo
                     fi
                 fi
                 ;;

@@ -625,24 +625,22 @@ add_rgw_cargo_test_binary(
 endif()
 
 # cuObject tests need no NVIDIA SDK, RDMA hardware or cluster.
-if(WITH_RADOSGW_CUOBJ)
-  add_executable(unittest_rgw_cuobj
-    test_rgw_cuobj.cc
-    $<TARGET_OBJECTS:unit-main>)
-  add_ceph_unittest(unittest_rgw_cuobj --no-config-file)
-  target_link_libraries(unittest_rgw_cuobj rgw_common ${rgw_libs} global)
-  # Inject loader failures without making the production library name configurable.
-  target_link_options(unittest_rgw_cuobj PRIVATE "LINKER:--wrap=dlopen")
+add_executable(unittest_rgw_cuobj
+  test_rgw_cuobj.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_cuobj --no-config-file)
+target_link_libraries(unittest_rgw_cuobj rgw_common ${rgw_libs} global)
+# Inject loader failures without making the production library name configurable.
+target_link_options(unittest_rgw_cuobj PRIVATE "LINKER:--wrap=dlopen")
 
-  if(WITH_RADOSGW_RADOS)
-    # S3 operations use link-time fake transports and in-memory storage writers.
-    foreach(test_name IN ITEMS get put log)
-      add_executable(unittest_rgw_cuobj_${test_name}
-        test_rgw_cuobj_${test_name}.cc
-        $<TARGET_OBJECTS:unit-main>)
-      add_ceph_unittest(unittest_rgw_cuobj_${test_name} --no-config-file)
-      target_link_libraries(unittest_rgw_cuobj_${test_name}
-        rgw_common ${rgw_libs} global)
-    endforeach()
-  endif()
+if(WITH_RADOSGW_RADOS)
+  # S3 operations use link-time fake transports and in-memory storage writers.
+  foreach(test_name IN ITEMS get put log)
+    add_executable(unittest_rgw_cuobj_${test_name}
+      test_rgw_cuobj_${test_name}.cc
+      $<TARGET_OBJECTS:unit-main>)
+    add_ceph_unittest(unittest_rgw_cuobj_${test_name} --no-config-file)
+    target_link_libraries(unittest_rgw_cuobj_${test_name}
+      rgw_common ${rgw_libs} global)
+  endforeach()
 endif()

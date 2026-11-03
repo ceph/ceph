@@ -11,7 +11,7 @@
 Ceph Object Gateway can use NVIDIA cuObject to transfer S3 object data between
 client memory and the RGW daemon over RDMA. S3 requests, authentication,
 metadata, and responses still use the HTTP frontend. Source and RPM builds
-include cuObject support by default. RDMA transfers are disabled at runtime
+include cuObject support. RDMA transfers are disabled at runtime
 until :confval:`rgw_cuobj_enabled` is set to ``true``.
 
 .. warning::
@@ -20,7 +20,7 @@ until :confval:`rgw_cuobj_enabled` is set to ``true``.
    and evaluation. Configuration options and behavior may change between
    releases. Runtime activation requires setting :confval:`rgw_cuobj_enabled`
    to ``true`` and configuring an RDMA interface address. Source and RPM builds
-   include the support by default.
+   include the support.
 
 See `NVIDIA cuObject documentation`_ for the library architecture and
 `cuObject client API`_ for client integration.
@@ -78,12 +78,13 @@ Install the following components in addition to the normal Ceph dependencies:
 
 * On the RGW host, the cuObject server runtime library ``libcuobjserver``
   (the development headers are not needed). The integration requires
-  cuObject server 2.x (tested with RPM version 2.0.0.109-1). Use the
+  cuObject server 2.x (tested with RPM version 2.0.0.109-1). NVIDIA supports
+  the server runtime on x86_64 and ARM64. Use the
   `cuObject server downloads`_ and `cuObject server release notes`_ for
   installation instructions and supported platforms. RGW binds the library's
   entry points at runtime, so a release with an incompatible ABI is rejected
   or may need an RGW update.
-* RDMA drivers, libraries, and development headers, including ``libibverbs``
+* RDMA drivers and runtime libraries, including ``libibverbs``
   and ``librdmacm``, on the RGW host. The client also needs the RDMA runtime.
 * On the client, an S3 application integrated with the cuObject client library,
   together with its CUDA Toolkit and GPUDirect Storage dependencies. See the
@@ -93,32 +94,71 @@ Install the following components in addition to the normal Ceph dependencies:
 Example installation flow
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The following example installs the CUDA, GPUDirect Storage, cuObject, and
-RDMA packages on a Rocky Linux 10 x86_64 host from the NVIDIA network
-repository. Use the `CUDA Toolkit downloads`_ page to select the repository for
-another distribution or architecture, and adjust the ``13-4`` package version
-suffix to the CUDA release you deploy. The cuObject client packages are needed
-only on hosts that run the S3 client application, and the cuObject server
-packages are needed only on the RGW host.
+The following example installs the cuObject server runtime and RDMA libraries
+on a Rocky Linux 10 x86_64 host. Install them where RGW runs, including for a
+local ``vstart.sh`` cluster. Neither ``install-deps.sh`` nor ``vstart.sh``
+installs NVIDIA packages or adds NVIDIA repositories. RGW does not need the
+NVIDIA development headers, CUDA toolkit, or client packages.
 
 .. prompt:: bash $
 
+   sudo dnf install -y dnf-plugins-core
    sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel10/x86_64/cuda-rhel10.repo
-   sudo dnf clean all
-   sudo dnf makecache
+   sudo dnf install -y libcuobjserver-2.0.0.109-1 libibverbs librdmacm numactl-libs
+
+Use the matching RHEL repository for Rocky Linux, AlmaLinux, RHEL, and CentOS
+Stream 9 or 10. For EL9, replace both occurrences of ``rhel10`` in the URL
+with ``rhel9``. For aarch64, replace the URL's ``x86_64`` directory with
+``sbsa``. See the `CUDA Toolkit downloads`_ and `cuObject server release
+notes`_ for other platforms and supported configurations. NVIDIA's Fedora
+repository lacks ``libcuobjserver``; these runtime installation instructions
+do not apply to Fedora. RGW and its hardware-free cuObject unit tests can
+still be built and run on Fedora without the NVIDIA runtime.
+
+On hosts that run the S3 client application, configure the appropriate NVIDIA
+repository and install the CUDA, GPUDirect Storage, and cuObject client
+packages. Adjust the ``13-4`` suffix to the CUDA release you deploy:
+
+.. prompt:: bash $
+
    sudo dnf install cuda-13-4 cuda-toolkit-13-4
    sudo dnf install nvidia-gds-13-4
    sudo dnf install libcuobjclient-13-4 libcuobjclient-devel-13-4
-   sudo dnf install libcuobjserver-2.0.0.109-1
+
+RDMA development and diagnostic tools can also be installed as needed:
+
+.. prompt:: bash $
+
    sudo dnf install -y rdma-core rdma-core-devel libibverbs-utils infiniband-diags perftest iproute
 
-Note
-~~~~
+Running as a non-root user
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Allow the RGW process to register enough host memory for its buffer pool.
-Account for the process's locked-memory limit and, for container deployments,
-access to the RDMA devices and the required libraries inside the container.
-The default pool reserves **1 GiB per RGW daemon**, plus library overhead.
+For running the RGW/cuObject server as a non-root user:
+
+* **Sufficient locked-memory allowance:** use ``ulimit -l unlimited`` before
+  launching RGW, provided the administrator-configured hard limit permits it.
+  For systemd, use ``LimitMEMLOCK=infinity``. A finite limit must cover the
+  configured buffer pool: **1 GiB per RGW daemon by default**, plus library
+  overhead. See the `systemd resource-limit documentation`_.
+* **Access to RDMA devices:** the RGW user needs read/write permission on the
+  required ``/dev/infiniband/uverbs*`` and ``/dev/infiniband/rdma_cm`` devices,
+  granted through appropriate groups, udev rules, or ACLs. Linux supports
+  unprivileged RDMA subject to device permissions and locked-memory limits.
+  See the `Linux RDMA documentation`_.
+* **Devices exposed to the process:** systemd or container isolation must
+  permit access to those RDMA devices. The RGW systemd unit in
+  ``systemd/ceph-radosgw@.service.in`` has ``PrivateDevices=yes``, which needs
+  an appropriate override. Containers must expose and permit access to the
+  required devices.
+* **Runtime libraries and drivers available:** install ``libcuobjserver.so.2``,
+  the appropriate RDMA drivers, and libraries including ``libibverbs`` and
+  ``librdmacm``. The runtime libraries must be accessible to RGW, including
+  inside its container. See the `NVIDIA cuObject server requirements and
+  installation`_.
+
+An administrator may need to configure these prerequisites before RGW runs
+under its service account.
 
 Limitations
 -----------
@@ -139,10 +179,10 @@ S3 RDMA Environment Setup
 Building
 --------
 
-Follow :ref:`build-ceph` to prepare a Ceph source build. The CMake option
-``WITH_RADOSGW_CUOBJ`` is enabled by default. RGW always uses the ABI shim;
-the NVIDIA SDK is **not** needed to build. The shim loads the hardcoded
-runtime library ``libcuobjserver.so.2`` with ``dlopen()`` when
+Follow :ref:`build-ceph` to prepare a Ceph source build. cuObject support is
+always included when building RGW and uses the ABI shim; the NVIDIA SDK is
+**not** needed to build. The shim loads the hardcoded runtime library
+``libcuobjserver.so.2`` with ``dlopen()`` when
 :confval:`rgw_cuobj_enabled` is set, so the same binaries run with or without
 it. If loading or initialization fails, RGW logs the reason and keeps serving
 ordinary HTTP requests; S3 requests carrying an RDMA token fail with HTTP
@@ -153,56 +193,21 @@ ordinary HTTP requests; S3 requests carrying an RDMA token fail with HTTP
    ./do_cmake.sh
    cmake --build build --target radosgw --parallel
 
-If an existing build directory has ``WITH_RADOSGW_CUOBJ`` cached as ``OFF``,
-enable it explicitly:
+RPM builds also include cuObject support, use the ABI shim, and have no
+NVIDIA build or package dependency.
+
+For a container RPM build:
 
 .. prompt:: bash $
 
-   cmake -S . -B build -DWITH_RADOSGW_CUOBJ=ON
-   cmake --build build --target radosgw --parallel
+   ./src/script/build-with-container.py -d rocky10 -e source-rpm -e rpm
 
-To omit cuObject support from a source build, configure with
-``-DWITH_RADOSGW_CUOBJ=OFF``.
-
-RPM builds also include cuObject support by default, use the ABI shim, and
-have no NVIDIA build or package dependency. To omit support, use
-``rpmbuild --rebuild --without cuobj ceph-<version>.src.rpm``, or pass
-``--rpmbuild-arg=--without=cuobj`` to ``build-with-container.py``.
-
-For a container RPM build with the NVIDIA runtime installed in the build
-image, optionally add ``--with-cuobj-runtime``:
-
-.. prompt:: bash $
-
-   ./src/script/build-with-container.py -d rocky10 --with-cuobj-runtime -e source-rpm -e rpm
-
-This option calls ``install-deps.sh`` with ``INSTALL_CUOBJ_RUNTIME=ON`` to add
-NVIDIA's matching RHEL repository and install exactly
-``libcuobjserver-2.0.0.109-1`` and its dependencies. It does not change how RGW
-is built or add dependencies to the resulting Ceph RPMs. The deployed RGW
-host still needs its own runtime installation for RDMA.
-
-Automatic runtime installation supports Rocky Linux, AlmaLinux, RHEL, and
-CentOS Stream 9 and 10 on x86_64 and aarch64. Use ``-d rocky9`` for EL9, or
-override the base image as described in ``ContainerBuild.md`` for AlmaLinux
-and RHEL. Fedora's NVIDIA repository lacks ``libcuobjserver``, so automatic
-installation reports an error there. RGW and its hardware-free unit tests
-can still be built and run on Fedora without the NVIDIA runtime.
-
-To install the same pinned runtime alongside the normal Ceph build
-dependencies outside a container:
-
-.. prompt:: bash $
-
-   env INSTALL_CUOBJ_RUNTIME=ON ./install-deps.sh
-
-Without this opt-in, ``install-deps.sh`` does not add NVIDIA repositories or
-install cuObject packages. No development headers, CUDA toolkit, or client
-packages are needed by RGW.
-
-The explicit ``source-rpm`` step ensures the SRPM contains the updated spec.
-See ``ContainerBuild.md`` for build image options. ``CONFIGURE_ARGS`` is used
-for source builds and does not control RPM builds.
+The explicit ``source-rpm`` step regenerates the SRPM with the updated spec;
+``-e rpm`` alone may reuse an existing SRPM. Commit source and CMake changes
+first: ``make-dist`` archives ``HEAD`` when creating the source tarball.
+See ``ContainerBuild.md`` for general build image options. ``CONFIGURE_ARGS``
+applies to source builds and does not control RPM builds. To pass it into a
+source build container, use ``--extra=-eCONFIGURE_ARGS`` or an ``--env-file``.
 
 The cuObject server library ``libcuobjserver.so.2`` and its runtime
 dependencies must be available to the deployed RGW daemon for RDMA. Its name
@@ -211,6 +216,42 @@ option. Required entry points are resolved by symbol name at runtime, and a
 library missing any required symbol is rejected. The ``WITH_RDMA`` option
 controls Ceph's async messenger; enabling it alone does not enable cuObject
 support in RGW.
+
+Installing the runtime in a development container
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Building Ceph or running the hardware-free cuObject unit tests does not
+require the NVIDIA runtime. To run RGW with RDMA inside a development
+container, install the server library and its dependencies in that image.
+Installing them on the host does not make them available inside a container.
+
+Use the generic ``--custom-image-build-command`` option to add the NVIDIA
+repository and pinned server runtime. For Rocky Linux 10 on x86_64:
+
+.. prompt:: bash $
+
+   ./src/script/build-with-container.py --container-engine=podman \
+     -d rocky10 --tag=+cuobj \
+     --custom-image-build-command='dnf install -y dnf-plugins-core' \
+     --custom-image-build-command='dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel10/x86_64/cuda-rhel10.repo' \
+     --custom-image-build-command='dnf install -y libcuobjserver-2.0.0.109-1 libibverbs librdmacm numactl-libs' \
+     -e build-container
+
+The commands run as root inside the image, after the normal build dependency
+setup. ``--tag=+cuobj`` gives the image a distinct tag; ``-e build-container``
+builds only the image. Reuse the same tag and custom commands on subsequent
+invocations, since custom commands are included in the image cache check.
+Replace ``-e build-container`` with ``-e build`` to build Ceph sources, or
+``-e source-rpm -e rpm`` to build RPMs using this image.
+
+For EL9, use ``-d rocky9`` and the ``rhel9`` repository URL. The repository
+and architecture substitutions described above also apply here. These Rocky
+container commands can also be run on AlmaLinux or RHEL hosts.
+
+These commands do not add NVIDIA dependencies to the Ceph RPMs. The deployed
+RGW host or runtime container needs its own library installation. Running
+RDMA inside a container also requires access to the RDMA devices and sufficient
+locked memory, as described under "Running as a non-root user" above.
 
 Running
 -------
@@ -236,9 +277,9 @@ Restart the RGW daemon after changing cuObject settings. RGW creates the
 cuObject server and registers its buffer pool during startup. These settings
 are not applied to an already initialized server.
 
-If initialization fails, including when the cuObject library is not installed, RGW logs ``cuObj RDMA server init failed`` and continues serving
-HTTP requests with RDMA disabled. Requests that carry an RDMA token fail with
-HTTP ``500``.
+If initialization fails, including when the cuObject library is not installed,
+RGW logs ``cuObj RDMA server init failed`` and continues serving HTTP requests
+with RDMA disabled. Requests that carry an RDMA token fail with HTTP ``500``.
 Check the library installation, RDMA address, device access, and available
 registered memory before restarting.
 
@@ -267,8 +308,8 @@ larger transfers with fewer simultaneous buffer users:
    ceph config set client.rgw.8000 rgw_cuobj_buffer_count 64
 
 Restart the daemon for the new pool to take effect. Configure positive buffer
-sizes and counts within the memory-registration limits of the installed SDK
-and devices.
+sizes and counts within the memory-registration limits of the installed
+cuObject runtime and devices.
 
 When all suitable buffers are busy, or a transfer exceeds the buffer size,
 RGW returns HTTP ``503 ServiceUnavailable``. There is no automatic HTTP retry
@@ -429,9 +470,9 @@ Troubleshooting
        RDMA disabled after this failure, and S3 requests carrying an RDMA
        token return HTTP ``500``.
    * - No ``x-amz-rdma-reply`` header
-     - Check that RGW was built with cuObject support, that runtime enablement
-       and startup succeeded, and that the client sent a token. HEAD requests
-       and error responses also omit this header.
+     - Check that runtime enablement and startup succeeded, and that the
+       client sent a token. HEAD requests and error responses also omit this
+       header.
    * - HTTP ``400 InvalidArgument``
      - Check the SDK-generated descriptor, especially the hexadecimal address
        and the nonzero size for a PUT. Create empty objects through HTTP.
@@ -472,3 +513,6 @@ count.
 .. _cuObject server release notes: https://docs.nvidia.com/gpudirect-storage/cuobject/cuobject-server-release-notes/index.html
 .. _cuObject client release notes: https://docs.nvidia.com/gpudirect-storage/cuobject/cuobject-client-release-notes/index.html
 .. _cuObject client API: https://docs.nvidia.com/gpudirect-storage/cuobject/cuObjClient-api/index.html
+.. _systemd resource-limit documentation: https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#LimitMEMLOCK=
+.. _Linux RDMA documentation: https://docs.kernel.org/infiniband/user_verbs.html
+.. _NVIDIA cuObject server requirements and installation: https://docs.nvidia.com/gpudirect-storage/cuobject/cuobject-server-release-notes/index.html#getting-started

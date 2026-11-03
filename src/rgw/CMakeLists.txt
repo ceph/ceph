@@ -66,6 +66,8 @@ set(librgw_common_srcs
   rgw_compression.cc
   rgw_cors.cc
   rgw_cors_s3.cc
+  rgw_cuobj.cc
+  rgw_cuobj_dl.cc
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
@@ -311,7 +313,7 @@ list(APPEND librgw_d4n_srcs
   driver/d4n/d4n_policy.cc
   driver/d4n/rgw_sal_d4n.cc)
 
-set(rgw_common_libs)
+set(rgw_common_libs ${CMAKE_DL_LIBS})
 
 if(WITH_RADOSGW_RADOS)
   list(APPEND librgw_driver_srcs ${librgw_rados_srcs})
@@ -342,11 +344,6 @@ if(WITH_RADOSGW_STANDALONE)
     ${librgw_posix_srcs}
     driver/posix/rgw_standalone.cc
   )
-endif()
-
-if(WITH_RADOSGW_CUOBJ)
-  list(APPEND librgw_common_srcs rgw_cuobj.cc rgw_cuobj_dl.cc)
-  list(APPEND rgw_common_libs ${CMAKE_DL_LIBS})
 endif()
 
 add_library(rgw_common STATIC

@@ -79,9 +79,7 @@
 #include "rgw_sts.h"
 #include "rgw_cksum_pipe.h"
 #include "rgw_s3select.h"
-#ifdef WITH_RADOSGW_CUOBJ
 #include "rgw_cuobj.h"
-#endif
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -350,7 +348,6 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
     }
   }
 
-#ifdef WITH_RADOSGW_CUOBJ
   if (auto rdma_token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN")) {
     if (!RGWCuObjServer::available()) {
       // The client asked for an out-of-band transfer that cannot be served
@@ -363,14 +360,12 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
     rdma_descriptor = *rdma_token;
     rdma_active = true;
   }
-#endif
 
   return RGWGetObj_ObjStore::get_params(y);
 }
 
 RGWGetObj_ObjStore_S3::~RGWGetObj_ObjStore_S3()
 {
-#ifdef WITH_RADOSGW_CUOBJ
   if (rdma_buf) {
     auto* cuobj = RGWCuObjServer::get_instance();
     if (cuobj) {
@@ -378,12 +373,10 @@ RGWGetObj_ObjStore_S3::~RGWGetObj_ObjStore_S3()
     }
     rdma_buf = nullptr;
   }
-#endif
 }
 
 void RGWGetObj_ObjStore_S3::send_response()
 {
-#ifdef WITH_RADOSGW_CUOBJ
   if (rdma_active && get_data && !sent_header) {
     // complete() runs after all reads and filters, including manifest GETs
     // that do not send an explicit EOF callback.
@@ -395,7 +388,6 @@ void RGWGetObj_ObjStore_S3::send_response()
       send_response_data_error(s->yield);
     }
   }
-#endif
 }
 
 int RGWGetObj_ObjStore_S3::send_response_data_error(optional_yield y)
@@ -457,7 +449,6 @@ static std::string content_encoding_without_aws_chunked(std::string_view value)
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 					      off_t bl_len)
 {
-#ifdef WITH_RADOSGW_CUOBJ
   if (rdma_active && get_data && !sent_header && !op_ret) {
     if (!rdma_complete) {
       // A zero-length callback is not necessarily the end of the operation:
@@ -518,7 +509,6 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     // The synchronous RDMA write has completed. Only now may HTTP success
     // allow the client to consume or reuse its registered buffer.
   }
-#endif
 
   const char *content_type = NULL;
   string content_type_str;
@@ -621,21 +611,18 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   for (auto &it : crypt_http_responses)
     dump_header(s, it.first, it.second);
 
-#ifdef WITH_RADOSGW_CUOBJ
   if (rdma_active && get_data) {
     dump_content_length(s, 0);
     // Match the HTTP status for ordinary and ranged GET responses.
     dump_header(s, "x-amz-rdma-reply",
                 (partial_content && !custom_http_ret) ? "206" : "200");
     dump_header(s, "x-amz-rdma-bytes-transferred", s->rdma_bytes_transferred);
-  } else
-#endif
-  {
+  } else {
     dump_content_length(s, total_len);
   }
   dump_last_modified(s, lastmod);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
-  dump_header_if_nonempty(s, "x-amz-expiration", expires);
+  dump_header_if_nonempty(s, "x-amz-expiration", expires);  
   if (attrs.find(RGW_ATTR_APPEND_PART_NUM) != attrs.end()) {
     dump_header(s, "x-rgw-object-type", "Appendable");
     dump_header(s, "x-rgw-next-append-position", s->obj_size);
@@ -918,11 +905,9 @@ done:
 
 send_data:
   if (get_data && !op_ret) {
-#ifdef WITH_RADOSGW_CUOBJ
     if (rdma_active) {
       return 0;
     }
-#endif
     int r = dump_body(s, bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
       return r;
@@ -3015,7 +3000,6 @@ static inline void map_qs_metadata(req_state* s, bool crypto_too)
 
 int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
 {
-#ifdef WITH_RADOSGW_CUOBJ
   if (s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN")) {
     if (!RGWCuObjServer::available()) {
       ldpp_dout(this, 0) << "rgw_cuobj: ERROR: RDMA token received but cuObject "
@@ -3024,7 +3008,6 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
     }
     rdma_active = true;
   }
-#endif
 
   if (!s->length) {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
@@ -3182,12 +3165,10 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_errno(s);
       dump_etag(s, etag);
       dump_content_length(s, 0);
-#ifdef WITH_RADOSGW_CUOBJ
       if (rdma_active) {
         dump_header(s, "x-amz-rdma-reply", "200");
         dump_header(s, "x-amz-rdma-bytes-transferred", s->obj_size);
       }
-#endif
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       dump_header_if_nonempty(s, "x-amz-expiration", expires);
       if (cksum && cksum->aws()) {

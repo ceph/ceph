@@ -4759,10 +4759,9 @@ options:
   desc: Enable experimental cuObject S3 RDMA server support for PUT/GET operations
   fmt_desc: |
     Enable experimental cuObject RDMA transfers for S3 PUT and GET requests.
-    Requires a build with ``WITH_RADOSGW_CUOBJ=ON`` (the default for CMake
-    source builds and RPM builds) and an RDMA interface address. Disabled at
-    runtime by default. See :ref:`radosgw-s3rdma` for experimental status,
-    prerequisites, and deployment instructions.
+    Requires the cuObject server runtime library and an RDMA interface
+    address. Disabled at runtime by default. See :ref:`radosgw-s3rdma` for
+    experimental status, prerequisites, and deployment instructions.
   default: false
   services:
   - rgw
