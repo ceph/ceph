@@ -82,3 +82,7 @@ endif()
 add_library(datum_std_format INTERFACE)
 add_library(datum::std_format ALIAS datum_std_format)
 target_link_libraries(datum_std_format INTERFACE datum::render)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND DATUM_BUILD_TESTING)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/../../test/rgw/datum.cmake")
+endif()
