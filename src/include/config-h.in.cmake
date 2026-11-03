@@ -148,6 +148,9 @@
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
 
+/* define if Datum is available */
+#cmakedefine HAVE_DATUM
+
 /* define if radosgw has openssl support */
 #cmakedefine WITH_CURL_OPENSSL
 
