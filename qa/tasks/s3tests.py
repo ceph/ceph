@@ -442,6 +442,8 @@ def run_tests(ctx, config):
             attrs += ['not fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
             attrs += ['not sse_s3']
+        if not client_config.get('s3select_tests', False):
+            attrs += ["not s3select"]
        
         attrs += client_config.get('extra_attrs', [])
         if 'unit_test_scan' in client_config and client_config['unit_test_scan']:

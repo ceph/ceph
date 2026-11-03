@@ -2,3 +2,4 @@ tasks:
 - s3tests:
     client.0:
       rgw_server: client.0
+      s3select_tests: True

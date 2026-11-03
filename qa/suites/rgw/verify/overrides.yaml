@@ -15,6 +15,7 @@ overrides:
         rgw lc counters cache: true
         rgw sts key: AQA/3Fxpz2k2AxAAYWJjZGVmZ2hpamtsbW5vcA==
         rgw s3 auth use sts: true
+        rgw disable s3select: false
   rgw:
     compression type: random
     storage classes: LUKEWARM, FROZEN

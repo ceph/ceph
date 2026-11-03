@@ -114,6 +114,8 @@
   opaque IDs are always logged so operators can correlate with Keystone
   without exposing names. Role names can be omitted via
   ``rgw_keystone_scope_include_roles`` (default true).
+* RGW: S3 Select is deprecated. The default value of ``rgw_disable_s3select``
+  changed from ``false`` to ``true``.
 
 
 * DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary
