@@ -311,6 +311,11 @@ int remove(const DoutPrefixProvider* dpp,
     ret = driver->list_vector_buckets(dpp, info.id, info.id,
                                       vector_buckets.next_marker, "",
                                       max_items, vector_buckets, y);
+    if (ret == -ENOTSUP) {
+      // backend has no vector-bucket support
+      break;
+    }
+
     if (ret < 0) {
       err_msg = "Unable to list account vector buckets";
       return ret;
