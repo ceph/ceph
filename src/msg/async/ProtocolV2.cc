@@ -2263,6 +2263,9 @@ CtPtr ProtocolV2::post_server_banner_exchange() {
 CtPtr ProtocolV2::handle_auth_request(ceph::bufferlist &payload) {
   ldout(cct, 20) << __func__ << " payload.length()=" << payload.length()
                  << dendl;
+  if (!messenger->auth_server) {
+    return _fault();
+  }
 
   if (state != AUTH_ACCEPTING) {
     lderr(cct) << __func__ << " not in auth accept state!" << dendl;
