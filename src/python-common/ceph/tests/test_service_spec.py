@@ -7,6 +7,7 @@ import yaml
 import pytest
 
 from ceph.deployment.service_spec import (
+    AgentSpec,
     AlertManagerSpec,
     ArgumentSpec,
     CustomContainerSpec,
@@ -2237,3 +2238,59 @@ def test_rgw_ssl_related_extra_args_without_ssl_still_validate(extra_args):
     spec.validate()
     loaded = ServiceSpec.from_json(spec.to_json())
     assert loaded.rgw_frontend_extra_args == extra_args
+
+
+@pytest.mark.parametrize("spec_json", [
+    # hand-written spec (QE agent.yaml) and specs stored by tentacle
+    {'service_type': 'agent', 'placement': {'host_pattern': '*'}},
+    {'service_type': 'agent', 'placement': {'host_pattern': '*'}, 'spec': {}},
+    # spec stored by cephadm's own _apply_agent()
+    {'service_type': 'agent', 'placement': {'host_pattern': '*'},
+     'spec': {'ssl': True, 'certificate_source': 'cephadm-signed'}},
+    {'service_type': 'agent', 'spec': {'ssl': None}},
+])
+def test_agent_spec_always_uses_cephadm_signed_tls(spec_json):
+    spec = ServiceSpec.from_json(spec_json)
+    assert isinstance(spec, AgentSpec)
+    assert spec.ssl is True
+    assert spec.certificate_source == CertificateSource.CEPHADM_SIGNED.value
+    assert spec.is_using_certificates_source(CertificateSource.CEPHADM_SIGNED)
+    spec.validate()
+    # persisted and exported form carries the TLS settings explicitly
+    out = spec.to_json()
+    assert out['spec']['ssl'] is True
+    assert out['spec']['certificate_source'] == 'cephadm-signed'
+    assert ServiceSpec.from_json(out) == spec
+    assert 'ssl: true' in yaml.dump(spec)
+
+
+def test_agent_spec_constructors():
+    # what cephadm's _apply_agent() and the unit tests build
+    for spec in [ServiceSpec('agent'),
+                 ServiceSpec(service_type='agent',
+                             placement=PlacementSpec(host_pattern='*')),
+                 ServiceSpec(service_type='agent',
+                             placement=PlacementSpec(host_pattern='*'),
+                             ssl=True,
+                             certificate_source='cephadm-signed'),
+                 AgentSpec()]:
+        assert isinstance(spec, AgentSpec)
+        assert spec.ssl is True
+        assert spec.certificate_source == 'cephadm-signed'
+        spec.validate()
+
+
+@pytest.mark.parametrize("spec_json, error_match", [
+    ({'service_type': 'agent', 'spec': {'ssl': False}},
+     'agent service always uses TLS'),
+    ({'service_type': 'agent', 'spec': {'certificate_source': 'inline',
+                                        'ssl_cert': 'c', 'ssl_key': 'k'}},
+     'only supports cephadm-signed'),
+    ({'service_type': 'agent', 'spec': {'certificate_source': 'reference'}},
+     'only supports cephadm-signed'),
+    ({'service_type': 'agent', 'spec': {'ssl_cert': 'c', 'ssl_key': 'k'}},
+     'ssl_cert or ssl_key must not be provided'),
+])
+def test_agent_spec_rejects_other_tls_settings(spec_json, error_match):
+    with pytest.raises(SpecValidationError, match=error_match):
+        ServiceSpec.from_json(spec_json)
