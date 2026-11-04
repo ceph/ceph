@@ -6056,9 +6056,12 @@ bool MDCache::open_undef_inodes_dirfrags()
 
   // dirfrag -> (fetch_complete, keys_to_fetch)
   map<CDir*, pair<bool, std::vector<dentry_key_t> > > fetch_queue;
+  int count = 0;
   for (auto& dir : rejoin_undef_dirfrags) {
     ceph_assert(dir->get_version() == 0);
     fetch_queue.emplace(std::piecewise_construct, std::make_tuple(dir), std::make_tuple());
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
   }
 
   if (g_conf().get_val<bool>("mds_dir_prefetch")) {
@@ -6066,6 +6069,8 @@ bool MDCache::open_undef_inodes_dirfrags()
       ceph_assert(!in->is_base());
       ceph_assert(in->get_parent_dir());
       fetch_queue.emplace(std::piecewise_construct, std::make_tuple(in->get_parent_dir()), std::make_tuple());
+      if (!(++count % mds->heartbeat_reset_grace()))
+        mds->heartbeat_reset();
     }
   } else {
     for (auto& in : rejoin_undef_inodes) {
@@ -6079,6 +6084,8 @@ bool MDCache::open_undef_inodes_dirfrags()
       } else if (!p.first) {
         p.second.push_back(dn->key());
       }
+      if (!(++count % mds->heartbeat_reset_grace()))
+        mds->heartbeat_reset();
     }
   }
 
@@ -6106,6 +6113,8 @@ bool MDCache::open_undef_inodes_dirfrags()
     } else {
       dir->fetch_keys(p.second.second, gather.new_sub());
     }
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
   }
   ceph_assert(gather.has_subs());
   gather.activate();
