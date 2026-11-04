@@ -260,7 +260,10 @@ class UpgradeState:
                  total_count: Optional[int] = None,
                  remaining_count: Optional[int] = None,
                  crush_bucket_type: Optional[str] = None,
+                 # Single bucket name specified with crush bucket type and name.
                  crush_bucket_name: Optional[str] = None,
+                 # Ordered list of bucket names for crush bucket type auto-iterate.
+                 crush_iterative_bucket_names: Optional[List[str]] = None,
                  noautoscale_set: Optional[bool] = False,
                  prior_autoscale: Optional[bool] = True,
                  rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
@@ -286,7 +289,12 @@ class UpgradeState:
         self.total_count = total_count
         self.remaining_count = remaining_count
         self.crush_bucket_type = crush_bucket_type
+        # Current bucket being upgraded (single-bucket or current item in auto-iterate).
         self.crush_bucket_name = crush_bucket_name
+        # Frozen auto-iterate queue for bucket type auto-iterate. None means
+        # single-bucket mode (explicit name) or no CRUSH bucket scope.
+        # Persisted so mgr failover resumes the queue from the last bucket.
+        self.crush_iterative_bucket_names = crush_iterative_bucket_names
         self.noautoscale_set = noautoscale_set
         self.prior_autoscale = prior_autoscale
         self.rotated_mgr_mon_auth_key_daemons = rotated_mgr_mon_auth_key_daemons
@@ -315,6 +323,7 @@ class UpgradeState:
             'remaining_count': self.remaining_count,
             'crush_bucket_type': self.crush_bucket_type,
             'crush_bucket_name': self.crush_bucket_name,
+            'crush_iterative_bucket_names': self.crush_iterative_bucket_names,
             'noautoscale_set': self.noautoscale_set,
             'prior_autoscale': self.prior_autoscale,
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
@@ -678,35 +687,40 @@ class CephadmUpgrade:
             r["tags"] = sorted(ls)
         return r
 
-    def _validate_failure_domain_upgrade_options(
+    def _validate_bucket_upgrade_options(
         self,
         crush_bucket_type: Optional[str],
         crush_bucket_name: Optional[str],
         daemon_types: Optional[List[str]],
     ) -> None:
-        # Validates syntax only. Bucket existence validated by monitor's
-        # osd ok-to-upgrade to avoid duplicate validation across layers.
+        # Validates syntax only. Bucket existence for an explicit name is still
+        # confirmed by the monitor's osd ok-to-upgrade. When only type is given,
+        # bucket names are discovered from osd_map_tree at upgrade_start.
+        if crush_bucket_type is None and crush_bucket_name is None:
+            return
+
         bucket_type = (crush_bucket_type or '').strip().lower()
         bucket_name = (crush_bucket_name or '').strip()
 
-        both_crush_args = bool(bucket_type) and bool(bucket_name)
-        if not both_crush_args:
+        if bucket_name and not bucket_type:
             raise OrchestratorError(
-                'Both --crush_bucket_type and --crush_bucket_name must be specified together')
+                '--crush_bucket_name requires --crush_bucket_type')
 
         if bucket_type not in CEPH_ORCH_VALID_OSD_UPGRADE_CRUSH_BUCKETS:
             allowed = ', '.join(sorted(CEPH_ORCH_VALID_OSD_UPGRADE_CRUSH_BUCKETS))
             raise OrchestratorError(
                 f'Supported bucket types for OSD upgrade are: {allowed} (specified: {crush_bucket_type!r})')
 
-        single_bucket_name = (
-            ',' not in bucket_name
-            and len(bucket_name.split()) == 1
-            and bool(bucket_name)
-        )
-        if not single_bucket_name:
-            raise OrchestratorError(
-                'Invalid --crush_bucket_name: use a single name token without commas')
+        # Name is optional: type-only means auto-iterate all buckets of that type.
+        if bucket_name:
+            single_bucket_name = (
+                ',' not in bucket_name
+                and len(bucket_name.split()) == 1
+                and bool(bucket_name)
+            )
+            if not single_bucket_name:
+                raise OrchestratorError(
+                    'Invalid --crush_bucket_name: use a single name token without commas')
 
         osd_only = (
             daemon_types is not None
@@ -717,13 +731,45 @@ class CephadmUpgrade:
             raise OrchestratorError(
                 'Bucket parameters for OSD upgrade require --daemon-types to be "osd"')
 
+    def _list_crush_bucket_names_of_type(self, bucket_type: str) -> List[str]:
+        """
+        Discover CRUSH bucket names of the given type from osd_map_tree.
+
+        Order follows the CRUSH tree dump (same source as ``ceph osd tree``).
+        """
+        tree = self.mgr.get('osd_map_tree') or {}
+        nodes = tree.get('nodes') or []
+        bucket_names: List[str] = []
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            if node.get('type') != bucket_type:
+                continue
+            name = node.get('name')
+            if isinstance(name, str) and name:
+                bucket_names.append(name)
+        # A bucket can be linked under more than one parent (e.g. the same
+        # host bucket referenced from two roots), so de-duplicate while
+        # preserving first-seen order.
+        bucket_names = list(dict.fromkeys(bucket_names))
+        logger.info(
+            'Upgrade: Found %s CRUSH bucket(s) of type %r: %s',
+            len(bucket_names),
+            bucket_type,
+            bucket_names,
+        )
+        return bucket_names
+
     @staticmethod
-    def is_mon_error_for_invalid_bucket(err: MonCommandFailed) -> bool:
+    def is_mon_error_for_empty_bucket(err: MonCommandFailed) -> bool:
         """
-        CRUSH bucket errors from ``osd ok-to-upgrade`` mon command.
-        Typically ENOENT: unknown bucket name or no OSDs under that bucket.
+        ``osd ok-to-upgrade`` ENOENT: the crush_bucket exists but currently
+        has no OSDs under it.
         """
-        return f'retval: {-errno.ENOENT}' in str(err)
+        msg = str(err)
+        if f'retval: {-errno.ENOENT}' not in msg:
+            return False
+        return 'no osds found in crush bucket' in msg or 'has no children' in msg
 
     def _should_skip_cephx_health_mutes(self) -> bool:
         """Checked before muting: on a cluster that is already fully on aes256k the
@@ -841,12 +887,32 @@ class CephadmUpgrade:
         else:
             raise OrchestratorError('must specify either image or version')
 
-        # Validate the failure domain upgrade options
-        # if the user has provided either or both of the
-        # --crush_bucket_type and --crush_bucket_name arguments.
+        # Validate the crush bucket options if the user has provided just
+        # bucket type or both bucket type and name.
         if bucket_type is not None or bucket_name is not None:
-            self._validate_failure_domain_upgrade_options(
+            self._validate_bucket_upgrade_options(
                 bucket_type, bucket_name, daemon_types)
+
+        # If bucket type is provided, auto-iterate through all buckets of that type.
+        crush_iterative_bucket_names: Optional[List[str]] = None
+        if bucket_type is not None or bucket_name is not None:
+            bucket_type = (bucket_type or '').strip().lower() or None
+            bucket_name = (bucket_name or '').strip() or None
+            if bucket_type and not bucket_name:
+                crush_iterative_bucket_names = self._list_crush_bucket_names_of_type(
+                    bucket_type)
+                if not crush_iterative_bucket_names:
+                    raise OrchestratorError(
+                        f'No CRUSH buckets of type {bucket_type!r} found in '
+                        'osd crush tree; cannot start auto-iterate OSD upgrade')
+                bucket_name = crush_iterative_bucket_names[0]
+                logger.info(
+                    'Upgrade: Auto-iterate mode for crush_bucket_type=%r; '
+                    'starting with crush_bucket_name=%r (%s buckets total)',
+                    bucket_type,
+                    bucket_name,
+                    len(crush_iterative_bucket_names),
+                )
 
         if daemon_types is not None or services is not None or hosts is not None:
             self._validate_upgrade_filters(target_name, daemon_types, hosts, services)
@@ -880,6 +946,7 @@ class CephadmUpgrade:
             remaining_count=limit,
             crush_bucket_type=bucket_type,
             crush_bucket_name=bucket_name,
+            crush_iterative_bucket_names=crush_iterative_bucket_names,
         )
         # One-time PG autoscaling decision when upgrade includes OSDs
         if self._upgrade_includes_osds(daemon_types, hosts, services):
@@ -1223,7 +1290,18 @@ class CephadmUpgrade:
                 })
                 return False
             except MonCommandFailed as err:
-                if self.is_mon_error_for_invalid_bucket(err):
+                if self.is_mon_error_for_empty_bucket(err):
+                    # Bucket exists but has no OSDs right now. Treat the
+                    # bucket as done.
+                    logger.info(
+                        'Upgrade: osd ok-to-upgrade reports no OSDs in crush_bucket=%r; '
+                        'treating bucket as done', bucket_name)
+                    self._ok_to_upgrade_all_osds_upgraded = True
+                    self._ok_to_upgrade_osds_in_crush_bucket = set()
+                    return True
+                if f'retval: {-errno.ENOENT}' in str(err):
+                    # Check for unknown bucket name or any other CRUSH
+                    # bucket ENOENT. Pause the upgrade.
                     st = self.upgrade_state
                     btype = st.crush_bucket_type if st else None
                     logger.error('Upgrade: osd ok-to-upgrade failed (CRUSH bucket): %s', err)
@@ -2118,6 +2196,10 @@ class CephadmUpgrade:
                         )
 
         for d_entry in to_upgrade:
+            if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0 and not d_entry[1]:
+                self.mgr.log.info(
+                    f'Hit upgrade limit of {self.upgrade_state.total_count}. Stopping upgrade')
+                return
             daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d_entry[0])
 
             if daemon_spec.daemon_type in ['osd', 'mds'] and daemon_spec.name() in insecure_key_daemons:
@@ -2292,20 +2374,157 @@ class CephadmUpgrade:
             self.upgrade_state.fs_original_allow_standby_replay = {}
             self._save_upgrade_state()
 
-    def _filtered_scope_up_to_date(
+    def _is_current_crush_bucket_upgrade_done(
         self,
         target_digests: Optional[List[str]],
         target_name: str,
     ) -> bool:
+        """
+        True when every OSD in the current CRUSH bucket matches the target image,
+        confirmed via the mon's ok-to-upgrade state and cached daemon digests.
+        """
+        assert self.upgrade_state is not None
+        bucket_name = self.upgrade_state.crush_bucket_name
+        if not bucket_name:
+            # Not in bucket-scoped mode.
+            return False
+
+        if target_digests is None:
+            target_digests = []
+
+        # Refresh after mgr failover, or until mon reports the bucket is upgraded.
+        if (
+            self._ok_to_upgrade_osds_in_crush_bucket is None
+            or not self._ok_to_upgrade_all_osds_upgraded
+        ):
+            known_ok_to_upgrade: List[str] = []
+            if not self._wait_for_ok_to_upgrade_osd_batch(known_ok_to_upgrade):
+                # Mon call failed or retries exhausted; try again next tick.
+                return False
+            if known_ok_to_upgrade:
+                # Mon still has OSDs in this bucket it would need to approve.
+                return False
+
+        if not self._ok_to_upgrade_all_osds_upgraded:
+            # Mon hasn't confirmed every OSD in this bucket is upgraded yet.
+            return False
+
+        # Cross-check cached daemon digests for this bucket's OSDs against the target image.
+        bucket_osd_names = self._ok_to_upgrade_osds_in_crush_bucket or set()
+        for daemon in self.mgr.cache.get_daemons_by_type('osd'):
+            if daemon.name() not in bucket_osd_names:
+                # Not part of the current bucket.
+                continue
+            if daemon.daemon_type not in CEPH_IMAGE_TYPES:
+                continue
+            matches_target = (
+                (self.mgr.use_repo_digest and daemon.matches_digests(target_digests))
+                or (not self.mgr.use_repo_digest and daemon.matches_image_name(target_name))
+            )
+            if not matches_target:
+                # At least one OSD in the bucket hasn't picked up the new image yet.
+                logger.info(
+                    'Upgrade: Waiting for %s in crush_bucket=%r to match target image',
+                    daemon.name(),
+                    bucket_name,
+                )
+                return False
+
+        # Every OSD in the bucket (per cache) matches the target image.
+        logger.info('Upgrade: All OSDs in crush_bucket=%r match target image', bucket_name)
+        return True
+
+    def _crush_bucket_upgrade_info_str(self, bucket_name: str) -> str:
+        """Status line for bucket-scoped OSD upgrade; adds progress in auto-iterate mode."""
+        msg = f'Currently upgrading osd daemons in {bucket_name}'
+        st = self.upgrade_state
+        if not st or not st.crush_iterative_bucket_names:
+            # Single-bucket mode: no queue, no progress suffix.
+            return msg
+        try:
+            current_index = st.crush_iterative_bucket_names.index(bucket_name)
+        except ValueError:
+            # Bucket not in the frozen queue; fall back to the plain message.
+            return msg
+        # Build the "(N buckets complete, M in progress)" suffix.
+        total = len(st.crush_iterative_bucket_names)
+        complete = current_index
+        in_progress = total - current_index
+        complete_noun = 'bucket' if complete == 1 else 'buckets'
+        return (
+            f'{msg} ({complete} {complete_noun} complete, '
+            f'{in_progress} in progress)'
+        )
+
+    def _advance_to_next_crush_bucket(self) -> bool:
+        """
+        Sets crush_bucket_name to the next entry in crush_iterative_bucket_names,
+        resets the cached ok-to-upgrade state, and persists both so mgr failover
+        resumes auto-iterate from here. Returns False for single-bucket mode or
+        when the queue is exhausted.
+        """
+        st = self.upgrade_state
+        assert st is not None
+        queue = st.crush_iterative_bucket_names
+        if not queue or not st.crush_bucket_name:
+            # Single-bucket mode or no CRUSH bucket scope; nothing to advance.
+            return False
+
+        try:
+            current_index = queue.index(st.crush_bucket_name)
+        except ValueError:
+            # Current bucket dropped from the queue; don't guess, stay put.
+            logger.error(
+                'Upgrade: crush_bucket_name=%r not in queue %s; not advancing',
+                st.crush_bucket_name,
+                queue,
+            )
+            return False
+
+        next_index = current_index + 1
+        if next_index >= len(queue):
+            # Queue exhausted; caller handles final completion.
+            logger.info(
+                'Upgrade: Finished last crush bucket %r (%s/%s)',
+                st.crush_bucket_name,
+                len(queue),
+                len(queue),
+            )
+            return False
+
+        # Advance the cursor and persist immediately so mgr failover resumes from here.
+        next_bucket = queue[next_index]
+        logger.info(
+            'Upgrade: Finished crush_bucket=%r (%s/%s); advancing to %r',
+            st.crush_bucket_name,
+            next_index,
+            len(queue),
+            next_bucket,
+        )
+        st.crush_bucket_name = next_bucket
+        self._ok_to_upgrade_all_osds_upgraded = False
+        self._ok_to_upgrade_osds_in_crush_bucket = None
+        self._save_upgrade_state()
+        self.upgrade_info_str = self._crush_bucket_upgrade_info_str(next_bucket)
+        return True
+
+    def _filtered_scope_up_to_date(
+        self,
+        target_digests: Optional[List[str]],
+        target_name: str,
+        daemons: Optional[List[DaemonDescription]] = None,
+    ) -> bool:
         assert self.upgrade_state is not None
         if target_digests is None:
             target_digests = []
+        if daemons is None:
+            daemons = self._get_filtered_daemons()
 
         if self.mgr.use_agent:
             hosts: Set[str] = set()
             if self.upgrade_state.hosts is not None:
                 hosts.update(self.upgrade_state.hosts)
-            for d in self._get_filtered_daemons():
+            for d in daemons:
                 if d.hostname is not None:
                     hosts.add(d.hostname)
             for hostname in hosts:
@@ -2317,7 +2536,7 @@ class CephadmUpgrade:
                     self.mgr.agent_helpers._request_ack_all_not_up_to_date()
                     return False
 
-        for d in self._get_filtered_daemons():
+        for d in daemons:
             if d.daemon_type not in CEPH_IMAGE_TYPES:
                 continue
             if (
@@ -2562,6 +2781,13 @@ class CephadmUpgrade:
 
             if need_upgrade:
                 self.upgrade_info_str = 'Currently upgrading %s daemons' % (daemon_type)
+                if (
+                    daemon_type == 'osd'
+                    and self._upgrade_uses_ok_to_upgrade_for_osds()
+                    and self.upgrade_state.crush_bucket_name
+                ):
+                    self.upgrade_info_str = self._crush_bucket_upgrade_info_str(
+                        self.upgrade_state.crush_bucket_name)
 
             _continue, to_upgrade = self._to_upgrade(need_upgrade, target_image)
             if not _continue:
@@ -2603,7 +2829,9 @@ class CephadmUpgrade:
             self._set_container_images(daemon_type, target_image, image_settings)
 
             # complete osd upgrade?
-            if daemon_type == 'osd':
+            # Bucket-scoped runs may still have other buckets pending; completion
+            # is handled after the last bucket instead, further down.
+            if daemon_type == 'osd' and not self._upgrade_uses_ok_to_upgrade_for_osds():
                 self._complete_osd_upgrade(target_major, target_major_name)
 
             # complete mds upgrade?
@@ -2616,6 +2844,55 @@ class CephadmUpgrade:
                 return
 
             logger.debug('Upgrade: Upgraded %s daemon(s).' % daemon_type)
+
+        # --limit hit: no more OSDs will be redeployed this round, so stop
+        # here instead of polling osd ok-to-upgrade.
+        if (
+            self._upgrade_uses_ok_to_upgrade_for_osds()
+            and self.upgrade_state.remaining_count is not None
+            and self.upgrade_state.remaining_count <= 0
+        ):
+            self._mark_upgrade_complete(target_digests, target_image)
+            return
+
+        # CRUSH bucket scope only block:
+        # Each tick checks if the current bucket is done.
+        #   if yes, it advances to the next bucket, returns, and waits for the next tick.
+        #   if no, it updates the upgrade info string, returns, and waits for the next tick.
+        #
+        # If there's no next bucket, checks whether every OSD cluster-wide now matches
+        # the target and only then does the real "upgrade complete" cleanup.
+        if self._upgrade_uses_ok_to_upgrade_for_osds():
+            assert self.upgrade_state is not None
+            if not self._is_current_crush_bucket_upgrade_done(
+                    target_digests, self.upgrade_state._target_name):
+                assert self.upgrade_state.crush_bucket_name is not None
+                self.upgrade_info_str = self._crush_bucket_upgrade_info_str(
+                    self.upgrade_state.crush_bucket_name)
+                return
+            if self._advance_to_next_crush_bucket():
+                return
+
+            # Last/only bucket done. Check every OSD cluster-wide, independently
+            # of the bucket filter, before completing the osd upgrade.
+            if self._filtered_scope_up_to_date(
+                    target_digests, self.upgrade_state._target_name,
+                    daemons=self.mgr.cache.get_daemons_by_type('osd')):
+                logger.info('Upgrade: Finalizing container_image settings')
+                self.mgr.set_container_image('global', target_image)
+                for daemon_type in CEPH_UPGRADE_ORDER:
+                    ret, image, err = self.mgr.check_mon_command({
+                        'prefix': 'config rm',
+                        'name': 'container_image',
+                        'who': name_to_config_section(daemon_type),
+                    })
+                self._complete_osd_upgrade(target_major, target_major_name)
+            else:
+                logger.info(
+                    'Upgrade: Crush bucket-scoped run complete; other OSDs remain '
+                    'off-target, skipping osd upgrade completion')
+            self._mark_upgrade_complete(target_digests, target_image)
+            return
 
         # clean up
         logger.info('Upgrade: Finalizing container_image settings')
@@ -2636,6 +2913,7 @@ class CephadmUpgrade:
         ):
             self._mark_upgrade_complete(target_digests, target_image)
             return
+
         if not self._filtered_scope_up_to_date(
             target_digests, self.upgrade_state._target_name,
         ):
