@@ -1726,14 +1726,15 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
       }
 
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
+      int64_t offset;
       if (hash_order) {
 	unsigned hash = ceph_frag_value(effective_diri->hash_dentry_name(dname));
 	if (hash != last_hash)
 	  readdir_offset = 2;
 	last_hash = hash;
-	dn->offset = dir_result_t::make_fpos(hash, readdir_offset++, true);
+	offset = dir_result_t::make_fpos(hash, readdir_offset++, true);
       } else {
-	dn->offset = dir_result_t::make_fpos(fg, readdir_offset++, false);
+	offset = dir_result_t::make_fpos(fg, readdir_offset++, false);
       }
       // add to readdir cache
       if (!snapdiff_req &&
@@ -1745,20 +1746,23 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 	    ceph_assert(!dirp->inode->is_complete_and_ordered());
 	    dir->readdir_cache.reserve(dirp->cache_index + numdn);
 	  }
+	  dn->offset = offset;
           effective_dir->readdir_cache.push_back(dn);
 	} else if (dirp->cache_index < effective_dir->readdir_cache.size()) {
 	  if (dirp->inode->is_complete_and_ordered())
 	    ceph_assert(effective_dir->readdir_cache[dirp->cache_index] == dn);
-	  else
+	  else {
+	    dn->offset = offset;
             effective_dir->readdir_cache[dirp->cache_index] = dn;
+	  }
 	} else {
 	  ceph_abort_msg("unexpected readdir buffer idx");
 	}
 	dirp->cache_index++;
       }
       // add to cached result list
-      dirp->buffer.push_back(dir_result_t::dentry(dn->offset, dname, dn->alternate_name, in));
-      ldout(cct, 15) << __func__ << "  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
+      dirp->buffer.push_back(dir_result_t::dentry(offset, dname, dn->alternate_name, in));
+      ldout(cct, 15) << __func__ << "  " << hex << offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
 
     if (numdn > 0)
