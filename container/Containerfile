@@ -221,9 +221,10 @@ RUN echo "systemd-udev" >> packages.txt
 # Util packages (should be kept to only utils that are truly very useful)
 # 'sgdisk' (from gdisk) is used in docs and scripts for clearing disks (could be a risk? @travisn @guits @ktdreyer ?)
 # 'ps' (from procps-ng) and 'hostname' are very valuable for debugging and CI
+# 'less' is the default pager and makes paged output usable in `cephadm shell`
 # TODO: remove sg3_utils once they are moved to ceph.spec.in with libstoragemgmt
 #       ref: https://github.com/ceph/ceph-container/pull/2013#issuecomment-1248606472
-RUN echo "gdisk hostname procps-ng sg3_utils e2fsprogs lvm2 gcc" >> packages.txt
+RUN echo "gdisk hostname less procps-ng sg3_utils e2fsprogs lvm2 gcc" >> packages.txt
 
 # scikit
 RUN echo "python3-scikit-learn" >> packages.txt
