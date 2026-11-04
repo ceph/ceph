@@ -532,3 +532,8 @@ options:
     NVMe-oF/TCP initiator). Only consulted when seastore_spdk_transport_id is set.
   flags:
   - startup
+- name: seastore_debug_inject_read_err
+  type: bool
+  level: dev
+  default: false
+  desc: Inject read errors for testing scrub and repair functionality
