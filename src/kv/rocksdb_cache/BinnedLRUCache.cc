@@ -140,18 +140,7 @@ void BinnedLRUCacheShard::EraseUnRefEntries() {
   {
     std::lock_guard<std::mutex> l(mutex_);
     while (lru_.next != &lru_) {
-      BinnedLRUHandle* old = lru_.next;
-      ceph_assert(old->InCache());
-      ceph_assert(old->refs ==
-             1);  // LRU list contains elements which may be evicted
-      LRU_Remove(old);
-      table_.Remove(old->key(), old->hash);
-      old->SetInCache(false);
-      Unref(old);
-      usage_ -= old->charge;
-      ceph_assert(!old->next);
-      old->next = deleted;
-      deleted = old;
+      EvictEntry(lru_.next, deleted);
     }
   }
 
@@ -221,6 +210,14 @@ void BinnedLRUCacheShard::LRU_Remove(BinnedLRUHandle* e) {
   }
 }
 
+void BinnedLRUCacheShard::LRU_InsertAfter(BinnedLRUHandle* pos,
+                                          BinnedLRUHandle* e) {
+  e->next = pos->next;
+  e->prev = pos;
+  e->prev->next = e;
+  e->next->prev = e;
+}
+
 void BinnedLRUCacheShard::LRU_Insert(BinnedLRUHandle* e) {
   ceph_assert(e->next == nullptr);
   ceph_assert(e->prev == nullptr);
@@ -228,20 +225,14 @@ void BinnedLRUCacheShard::LRU_Insert(BinnedLRUHandle* e) {
 
   if (high_pri_pool_ratio_ > 0 && e->IsHighPri()) {
     // Inset "e" to head of LRU list.
-    e->next = &lru_;
-    e->prev = lru_.prev;
-    e->prev->next = e;
-    e->next->prev = e;
+    LRU_InsertAfter(lru_.prev, e);
     e->SetInHighPriPool(true);
     high_pri_pool_usage_ += e->charge;
     MaintainPoolSize();
   } else {
     // Insert "e" to the head of low-pri pool. Note that when
     // high_pri_pool_ratio is 0, head of low-pri pool is also head of LRU list.
-    e->next = lru_low_pri_->next;
-    e->prev = lru_low_pri_;
-    e->prev->next = e;
-    e->next->prev = e;
+    LRU_InsertAfter(lru_low_pri_, e);
     e->SetInHighPriPool(false);
     lru_low_pri_ = e;
     *(e->age_bin) += e->charge;
@@ -274,22 +265,26 @@ void BinnedLRUCacheShard::MaintainPoolSize() {
   }
 }
 
+void BinnedLRUCacheShard::EvictEntry(BinnedLRUHandle* old,
+                                     BinnedLRUHandle*& deleted) {
+  ceph_assert(old->InCache());
+  ceph_assert(old->refs == 1);  // LRU list contains elements which may be evicted
+  stats[l_elems]--;
+  LRU_Remove(old);
+  table_.Remove(old->key(), old->hash);
+  old->SetInCache(false);
+  Unref(old);
+  usage_ -= old->charge;
+  ceph_assert(!old->next);
+  old->next = deleted;
+  deleted = old;
+}
+
 void BinnedLRUCacheShard::EvictFromLRU(size_t charge,
                                  BinnedLRUHandle*& deleted) {
 
   while (usage_ + charge > capacity_ && lru_.next != &lru_) {
-    BinnedLRUHandle* old = lru_.next;
-    ceph_assert(old->InCache());
-    ceph_assert(old->refs == 1);  // LRU list contains elements which may be evicted
-    stats[l_elems]--;
-    LRU_Remove(old);
-    table_.Remove(old->key(), old->hash);
-    old->SetInCache(false);
-    Unref(old);
-    usage_ -= old->charge;
-    ceph_assert(!old->next);
-    old->next = deleted;
-    deleted = old;
+    EvictEntry(lru_.next, deleted);
   }
 }
 
