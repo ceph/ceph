@@ -5,7 +5,7 @@ PartOf=ceph-{{ fsid }}.target
 
 [Timer]
 OnActiveSec={{ interval_sec }}s
-OnUnitActiveSec={{ interval_sec }}s
+OnUnitInactiveSec={{ interval_sec }}s
 AccuracySec=1min
 {%- if randomized_delay_sec %}
 RandomizedDelaySec={{ randomized_delay_sec }}s

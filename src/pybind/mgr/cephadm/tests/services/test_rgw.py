@@ -974,6 +974,8 @@ class TestRGWService:
                 assert mp['timeout'] == 120
                 assert mp['zone_name'] == 'zone'
                 assert mp['pushgateway_url'] == 'http://host1:9091'
+                assert daemon_spec.final_config.get('metrics_push_cleanup') is None
+                assert daemon_spec.final_config.get('metrics_push_target') is None
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @patch("cephadm.services.rgw.RgwService._get_pushgateway_url",
@@ -1001,6 +1003,8 @@ class TestRGWService:
                     )))
                 mp = daemon_spec.final_config.get('metrics_push')
                 assert mp is None, "metrics_push should not be set without pushgateway"
+                assert daemon_spec.final_config.get('metrics_push_target') is None
+                assert daemon_spec.final_config.get('metrics_push_cleanup') is None
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @patch("cephadm.services.rgw.RgwService._get_pushgateway_url",
@@ -1053,6 +1057,38 @@ class TestRGWService:
                     mp_other = other_spec.final_config.get('metrics_push')
                     assert mp_other is None, \
                         "non-elected daemon should NOT get metrics_push config"
+                    assert other_spec.final_config.get('metrics_push_target') == {
+                        'pushgateway_url': 'http://host1:9091',
+                        'zone_name': 'zone',
+                    }
+                    assert not other_spec.final_config.get('metrics_push_cleanup')
+                    assert not elected_spec.final_config.get('metrics_push_target')
+                    assert not elected_spec.final_config.get('metrics_push_cleanup')
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_metrics_push_disabled_requests_cleanup(
+        self, cephadm_module: CephadmOrchestrator
+    ):
+        """Disabling the feature asks the host to delete the last group."""
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(service_id='foo',
+                        rgw_realm='realm',
+                        rgw_zone='zone',
+                        metrics_push_enabled=False)
+            with with_service(cephadm_module, s):
+                svc = service_registry.get_service('rgw')
+                daemon_spec = svc.prepare_create(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_type='rgw',
+                        daemon_id='foo.host1.0',
+                        service_name=s.service_name(),
+                        ports=[80],
+                        ip=None,
+                    )))
+                assert daemon_spec.final_config.get('metrics_push') is None
+                assert daemon_spec.final_config.get('metrics_push_target') is None
+                assert daemon_spec.final_config.get('metrics_push_cleanup') is True
 
 
 def test_rgw_metrics_push_elected_name_in_deps():

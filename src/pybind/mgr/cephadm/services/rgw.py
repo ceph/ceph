@@ -468,12 +468,13 @@ class RgwService(CephService):
 
         if spec.metrics_push_enabled:
             elected = self._elected_metrics_push_daemon(self.mgr, spec)
+            pushgateway_url = self._get_pushgateway_url()
+            zone_name = spec.rgw_zone or ''
             if elected and daemon_spec.name() == elected:
-                pushgateway_url = self._get_pushgateway_url()
                 if pushgateway_url:
                     metrics_push_config: Dict[str, Any] = {
                         'pushgateway_url': pushgateway_url,
-                        'zone_name': spec.rgw_zone or '',
+                        'zone_name': zone_name,
                         'interval': spec.metrics_push_interval or 3600,
                         'timeout': spec.metrics_push_timeout or 300,
                     }
@@ -493,10 +494,22 @@ class RgwService(CephService):
                         'pushgateway daemon found, skipping timer setup'
                     )
             elif elected:
+                # This daemon is not the exporter. Give it the desired
+                # target so it can drop a group it pushed for a previous
+                # zone or pushgateway, and keep the group on a handoff.
+                if pushgateway_url:
+                    daemon_spec.final_config['metrics_push_target'] = {
+                        'pushgateway_url': pushgateway_url,
+                        'zone_name': zone_name,
+                    }
                 logger.debug(
                     f'{daemon_spec.name()}: metrics push delegated to '
                     f'{elected}, skipping timer for this daemon'
                 )
+        else:
+            # Feature is off. Ask the host to delete the last pushed
+            # group. A handoff does not land here: the feature stays on.
+            daemon_spec.final_config['metrics_push_cleanup'] = True
 
         return daemon_spec
 
