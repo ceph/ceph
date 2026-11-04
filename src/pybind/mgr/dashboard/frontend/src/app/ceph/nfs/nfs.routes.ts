@@ -20,6 +20,12 @@ export const nfsClusterChildRoutes: Routes = [
     data: { breadcrumbs: ActionLabels.CREATE }
   },
   {
+    // Must stay ahead of :cluster_id so "edit" is not treated as a cluster id.
+    path: `${URLVerbs.EDIT}/:cluster_id`,
+    component: NfsClusterFormComponent,
+    data: { breadcrumbs: ActionLabels.EDIT, editing: true }
+  },
+  {
     path: ':cluster_id',
     component: NfsClusterResourceSidebarComponent,
     data: {
@@ -36,7 +42,6 @@ export const nfsClusterChildRoutes: Routes = [
     ]
   }
 ];
-
 /**
  * Parent NFS route for cephfs (/cephfs/nfs) or rgw (/rgw/nfs).
  * Pass isRgw=true when used under the RGW route tree; this omits the

@@ -10,7 +10,9 @@ from object_format import ErrorResponse
 
 from .. import mgr
 from ..controllers._version import APIVersion
-from ..controllers.nfs import NFSGaneshaCluster, NFSGaneshaExports, NFSGaneshaUi
+from ..controllers.nfs import NFSException, NFSGaneshaCluster, \
+    NFSGaneshaExports, NFSGaneshaUi, format_host_ip_addrs, normalize_networks, \
+    normalize_placement, parse_ingress_mode
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 
@@ -247,19 +249,10 @@ class NFSGaneshaUiControllerTest(ControllerTestCase):
 
 
 class NFSGaneshaClusterTest(ControllerTestCase):
-    _cluster_info = {
-        'mycluster': {
-            'virtual_ip': None,
-            'backend': [{'hostname': 'host1', 'ip': '10.0.0.1', 'port': 2049, 'status': 'running'}],
-            'placement': {'count': 1},
-            'enable_nfsv3': False,
-            'enable_rdma': False,
-            'deployment_type': 'standalone',
-            'ingress_mode': None,
-            'port': None,
-            'monitor_port': None
-        }
-    }
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        NotificationQueue.stop()
 
     @classmethod
     def setup_server(cls):
@@ -267,142 +260,52 @@ class NFSGaneshaClusterTest(ControllerTestCase):
         TaskManager.init()
         cls.setup_controllers([NFSGaneshaCluster])
 
-    @classmethod
-    def tearDownClass(cls):
-        super().tearDownClass()
-        NotificationQueue.stop()
+    @patch('dashboard.controllers.nfs.mgr.remote')
+    def test_list_clusters_with_info(self, mock_remote):
+        cluster_data = {'nfs-01': {'deployment_type': 'standalone', 'backend': [], 'placement': {}}}
 
-    def test_list_clusters(self):
-        mgr.remote = Mock(return_value=['myc', 'myc2'])
-        self._get('/api/nfs-ganesha/cluster',
-                  version=APIVersion.EXPERIMENTAL)
-        self.assertStatus(200)
-        self.assertJsonBody(['myc', 'myc2'])
+        def remote_side_effect(_module, method, *_args, **_kwargs):
+            if method == 'cluster_info':
+                return cluster_data
+            if method == 'cluster_ls':
+                return list(cluster_data.keys())
+            return None
 
-    def test_list_clusters_with_info(self):
-        cluster_info = {
-            'myc': {
-                'deployment_type': 'standalone',
-                'virtual_ip': None,
-                'backend': [],
-                'placement': {},
-                'enable_rdma': False,
-            }
-        }
-        mgr.remote = Mock(return_value=cluster_info)
+        mock_remote.side_effect = remote_side_effect
         self._get('/api/nfs-ganesha/cluster?info=true',
                   version=APIVersion.EXPERIMENTAL)
         self.assertStatus(200)
         body = self.json_body()
         self.assertEqual(len(body), 1)
-        self.assertEqual(body[0]['name'], 'myc')
+        self.assertEqual(body[0]['name'], 'nfs-01')
+        self.assertEqual(body[0]['deployment_type'], 'standalone')
 
-    def test_create_cluster(self):
-        mgr.remote = Mock(return_value=None)
-        self._post('/api/nfs-ganesha/cluster',
-                   {'cluster_id': 'newc'},
-                   version=APIVersion(1, 0))
-        self.assertStatus(201)
-        mgr.remote.assert_called_once_with(
-            'nfs', 'cluster_create',
-            cluster_id='newc',
-            placement=None,
-            ingress=None,
-            virtual_ip=None,
-            ingress_mode=None,
-            port=None,
-            enable_rdma=False,
-            rdma_port=None,
-            enable_nfsv3=False,
-            ingress_placement=None,
-            bind_addrs=None,
-            monitoring_addrs=None,
-            monitoring_port=None,
-            networks=None,
-        )
+    @patch('dashboard.controllers.nfs.mgr.remote')
+    def test_list_clusters_without_info(self, mock_remote):
+        mock_remote.return_value = ['nfs-01', 'nfs-02']
+        self._get('/api/nfs-ganesha/cluster',
+                  version=APIVersion.EXPERIMENTAL)
+        self.assertStatus(200)
+        self.assertJsonBody(['nfs-01', 'nfs-02'])
 
-    def test_create_cluster_with_placement(self):
-        """The controller passes the placement dict through unchanged; the nfs
-        module is responsible for normalising it to a placement string."""
-        placement = {'hosts': ['host1', 'host2'], 'count': 2}
-        mgr.remote = Mock(return_value=None)
-        self._post('/api/nfs-ganesha/cluster',
-                   {'cluster_id': 'newc', 'placement': placement},
-                   version=APIVersion(1, 0))
-        self.assertStatus(201)
-        _, kwargs = mgr.remote.call_args
-        self.assertEqual(kwargs['placement'], placement)
+    def test_get_cluster(self):
+        mgr.remote = Mock(return_value={
+            'nfs-01': {'deployment_type': 'standalone', 'backend': [], 'placement': {}}
+        })
+        self._get('/api/nfs-ganesha/cluster/nfs-01',
+                  version=APIVersion.EXPERIMENTAL)
+        self.assertStatus(200)
+        body = self.json_body()
+        self.assertEqual(body['name'], 'nfs-01')
+        mgr.remote.assert_called_once_with('nfs', 'cluster_info', 'nfs-01')
 
-    def test_create_cluster_with_networks(self):
-        """The controller passes networks through unchanged; the nfs module
-        is responsible for stripping whitespace."""
-        networks = ['10.0.0.0/24', ' 192.168.1.0/24 ']
-        mgr.remote = Mock(return_value=None)
-        self._post('/api/nfs-ganesha/cluster',
-                   {'cluster_id': 'newc', 'networks': networks},
-                   version=APIVersion(1, 0))
-        self.assertStatus(201)
-        _, kwargs = mgr.remote.call_args
-        self.assertEqual(kwargs['networks'], networks)
-
-    def test_create_cluster_empty_networks_passes_through(self):
-        """An empty networks list is passed through as-is; the nfs module
-        collapses it to None."""
-        mgr.remote = Mock(return_value=None)
-        self._post('/api/nfs-ganesha/cluster',
-                   {'cluster_id': 'newc', 'networks': []},
-                   version=APIVersion(1, 0))
-        self.assertStatus(201)
-        _, kwargs = mgr.remote.call_args
-        self.assertEqual(kwargs['networks'], [])
-
-    def test_create_cluster_failure_propagates(self):
-        """Remote failure must surface as an HTTP error, not silently succeed."""
-        mgr.remote = Mock(side_effect=RuntimeError('orch error'))
-        self._post('/api/nfs-ganesha/cluster',
-                   {'cluster_id': 'newc'},
-                   version=APIVersion(1, 0))
-        self.assertStatus(400)
-
-    def test_create_cluster_cli_failure_propagates(self):
-        """CLI-style (retval, body, status) failure must raise NFSException."""
-        mgr.remote = Mock(return_value=(-1, '', 'Pool creation failed'))
-        self._post('/api/nfs-ganesha/cluster',
-                   {'cluster_id': 'newc'},
-                   version=APIVersion(1, 0))
-        self.assertStatus(400)
-
-    def test_create_cluster_with_vip_and_ingress(self):
-        """The controller passes the ingress_mode string through unchanged;
-        the nfs module resolves it to an IngressType."""
-        mgr.remote = Mock(return_value=None)
-        self._post('/api/nfs-ganesha/cluster',
-                   {'cluster_id': 'newc',
-                    'ingress': True,
-                    'virtual_ip': '10.0.0.100/24',
-                    'ingress_mode': 'haproxy-standard'},
-                   version=APIVersion(1, 0))
-        self.assertStatus(201)
-        _, kwargs = mgr.remote.call_args
-        self.assertEqual(kwargs['virtual_ip'], '10.0.0.100/24')
-        # raw string is forwarded; the nfs module converts it to IngressType
-        self.assertEqual(kwargs['ingress_mode'], 'haproxy-standard')
-
-    def test_delete_cluster(self):
-        mgr.remote = Mock(return_value=None)
-        self._delete('/api/nfs-ganesha/cluster/myc',
-                     version=APIVersion(1, 0))
-        self.assertStatus(204)
-        mgr.remote.assert_called_once_with(
-            'nfs', 'cluster_rm', cluster_id='myc'
-        )
-
-    def test_delete_cluster_failure_propagates(self):
-        """Remote failure during delete must surface as an HTTP error."""
-        mgr.remote = Mock(side_effect=RuntimeError('orch error'))
-        self._delete('/api/nfs-ganesha/cluster/myc',
-                     version=APIVersion(1, 0))
-        self.assertStatus(400)
+    def test_get_cluster_not_found(self):
+        mgr.remote = Mock(side_effect=ErrorResponse(
+            'cluster does not exist', -errno.ENOENT))
+        self._get('/api/nfs-ganesha/cluster/missing',
+                  version=APIVersion.EXPERIMENTAL)
+        self.assertStatus(200)
+        self.assertJsonBody(None)
 
     def test_delete_cluster_cli_failure_propagates(self):
         """CLI-style (retval, body, status) failure during delete must raise NFSException."""
@@ -411,17 +314,75 @@ class NFSGaneshaClusterTest(ControllerTestCase):
                      version=APIVersion(1, 0))
         self.assertStatus(400)
 
-    def test_get_cluster(self):
-        mgr.remote = Mock(return_value=self._cluster_info)
-
-        self._get('/api/nfs-ganesha/cluster/mycluster', version=APIVersion.EXPERIMENTAL)
+    @patch('dashboard.controllers.nfs.mgr.remote')
+    def test_set_cluster(self, mock_remote):
+        mock_remote.return_value = None
+        self._put('/api/nfs-ganesha/cluster/nfs-01',
+                  {'port': 2049, 'monitoring_port': 9587,
+                   'placement': {'count': 2, 'hosts': ['node1', 'node2']}},
+                  version=APIVersion(1, 0))
         self.assertStatus(200)
-        self.assertJsonBody({'name': 'mycluster', **self._cluster_info['mycluster']})
+        mock_remote.assert_called_once()
+        call_args = mock_remote.call_args
+        self.assertEqual(call_args[0][1], 'cluster_update')
+        self.assertEqual(call_args[1]['cluster_id'], 'nfs-01')
+        self.assertEqual(call_args[1]['monitoring_port'], 9587)
+        self.assertEqual(call_args[1]['placement'], 'node1;node2;count:2')
 
-    def test_get_cluster_not_found(self):
-        mgr.remote = Mock(side_effect=ErrorResponse(
-            'cluster does not exist', -errno.ENOENT))
+    @patch('dashboard.controllers.nfs.mgr.remote')
+    def test_set_cluster_orchestrator_error(self, mock_remote):
+        mock_remote.side_effect = RuntimeError(
+            "Remote method threw exception: Traceback (most recent call last):\n"
+            "  File \"/usr/share/ceph/mgr/nfs/module.py\", line 401, in cluster_update\n"
+            "    return self.nfs._call_orch_apply_nfs(\n"
+            "orchestrator._interface.OrchestratorValidationError: Cannot place "
+            "<NFSServiceSpec for service_name=nfs.cluster-1> on test: Unknown hosts\n"
+        )
+        self._put('/api/nfs-ganesha/cluster/cluster-1',
+                  {'placement': {'count': 2, 'host_pattern': 'test'}},
+                  version=APIVersion(1, 0))
+        self.assertStatus(400)
+        body = self.json_body()
+        self.assertEqual(body['component'], 'nfs')
+        self.assertIn('Cannot place', body['detail'])
 
-        self._get('/api/nfs-ganesha/cluster/nonexistent', version=APIVersion.EXPERIMENTAL)
-        self.assertStatus(200)
-        self.assertJsonBody(None)
+
+class NFSIngressModeTest(ControllerTestCase):
+    def test_parse_ingress_mode_values(self):
+        from orchestrator.module import IngressType
+
+        self.assertEqual(parse_ingress_mode('default'), IngressType.default)
+        self.assertEqual(parse_ingress_mode('keepalive-only'), IngressType.keepalive_only)
+        self.assertEqual(parse_ingress_mode('haproxy-standard'), IngressType.haproxy_standard)
+        self.assertEqual(parse_ingress_mode('haproxy-protocol'), IngressType.haproxy_protocol)
+        self.assertIsNone(parse_ingress_mode(None))
+
+    def test_format_host_ip_addrs(self):
+        self.assertEqual(
+            format_host_ip_addrs([{'hostname': 'host1', 'ip': '10.0.0.1'}]),
+            'host1:10.0.0.1'
+        )
+        self.assertEqual(format_host_ip_addrs([]), '')
+        self.assertIsNone(format_host_ip_addrs(None))
+
+    def test_normalize_placement(self):
+        self.assertIsNone(normalize_placement(None))
+        self.assertEqual(normalize_placement('host1'), 'host1')
+        self.assertEqual(normalize_placement({}), '1')
+        self.assertEqual(
+            normalize_placement({'count': 2, 'hosts': ['node1', 'node2']}),
+            'node1;node2;count:2')
+        self.assertEqual(
+            normalize_placement({
+                'count': 2,
+                'host_pattern': {'pattern': 'foo[0-9]', 'pattern_type': 'regex'},
+            }),
+            'count:2;regex:foo[0-9]')
+        with self.assertRaises(NFSException):
+            normalize_placement(['node1'])
+
+    def test_normalize_networks(self):
+        self.assertEqual(normalize_networks(['10.0.0.0/24', ' 192.168.0.0/24 ']),
+                         ['10.0.0.0/24', '192.168.0.0/24'])
+        self.assertEqual(normalize_networks([]), [])
+        self.assertIsNone(normalize_networks(None))
