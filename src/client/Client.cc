@@ -1723,14 +1723,19 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
       }
 
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
+      int64_t offset;
       if (hash_order) {
 	unsigned hash = ceph_frag_value(effective_diri->hash_dentry_name(dname));
 	if (hash != last_hash)
 	  readdir_offset = 2;
 	last_hash = hash;
-	dn->offset = dir_result_t::make_fpos(hash, readdir_offset++, true);
+	offset = dir_result_t::make_fpos(hash, readdir_offset++, true);
       } else {
-	dn->offset = dir_result_t::make_fpos(fg, readdir_offset++, false);
+	offset = dir_result_t::make_fpos(fg, readdir_offset++, false);
+      }
+      // Snapdiff positions belong to this stream, not the full directory.
+      if (!snapdiff_req) {
+	dn->offset = offset;
       }
       // add to readdir cache
       if (!snapdiff_req &&
@@ -1754,8 +1759,8 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 	dirp->cache_index++;
       }
       // add to cached result list
-      dirp->buffer.push_back(dir_result_t::dentry(dn->offset, dname, dn->alternate_name, in));
-      ldout(cct, 15) << __func__ << "  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
+      dirp->buffer.push_back(dir_result_t::dentry(offset, dname, dn->alternate_name, in));
+      ldout(cct, 15) << __func__ << "  " << hex << offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
 
     if (numdn > 0)

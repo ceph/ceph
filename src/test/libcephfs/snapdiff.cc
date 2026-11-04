@@ -18,6 +18,7 @@
 #include "include/stat.h"
 #include "include/ceph_assert.h"
 #include "include/object.h"
+#include "include/scope_guard.h"
 #include "include/stringify.h"
 #include "include/utime.h"
 #include "common/Clock.h"
@@ -34,6 +35,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <iterator>
 #include <limits.h>
 #include <dirent.h>
 #include <optional>
@@ -360,6 +362,27 @@ public:
       }
     }
     ceph_assert(0 == ceph_closedir(cmount, ls_dir));
+    return r;
+  }
+  int readdir_with_offsets(const char* relpath,
+                           vector<pair<string, int64_t>>& entries)
+  {
+    entries.clear();
+    auto path = make_file_path(relpath);
+    ceph_dir_result* dir;
+    int r = ceph_opendir(cmount, path.c_str(), &dir);
+    if (r != 0) {
+      return r;
+    }
+    auto close_dir = make_scope_guard([&] {
+      ceph_assert(0 == ceph_closedir(cmount, dir));
+    });
+    struct dirent entry;
+    while ((r = ceph_readdir_r(cmount, dir, &entry)) > 0) {
+      if (strcmp(entry.d_name, ".") && strcmp(entry.d_name, "..")) {
+        entries.emplace_back(entry.d_name, entry.d_off);
+      }
+    }
     return r;
   }
   int readdir_and_compare(const char* relpath,
@@ -2163,6 +2186,189 @@ TEST(LibCephFS, HugeSnapDiffLargeDelta)
   ASSERT_EQ(0, test_mount.purge_dir(""));
   ASSERT_EQ(0, test_mount.rmsnap("snap1"));
   ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffPreservesCachedReaddirOffsets)
+{
+  TestMount test_mount("snapdiff_cached_offsets",
+                       CEPH_SNAPDIFF_MTIME | CEPH_SNAPDIFF_SIZE);
+  auto* cmount = test_mount.get_cmount();
+  ASSERT_EQ(0, test_mount.mkdir("subdir"));
+  for (const char* name : {"collision_2379", "collision_2690", "zz1"}) {
+    auto path = test_mount.make_file_path((string("subdir/") + name).c_str());
+    ASSERT_EQ(0, ceph_mknod(cmount, path.c_str(), S_IFREG | 0600, 0));
+  }
+  auto remove_snaps = make_scope_guard([&] {
+    EXPECT_EQ(0, test_mount.rmsnap("snap2"));
+    EXPECT_EQ(0, test_mount.rmsnap("snap1"));
+  });
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+  ASSERT_EQ(1, test_mount.write_full("subdir/collision_2690", "1"));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // Reading to EOF populates the complete, ordered snapshot directory cache.
+  auto snap_path = test_mount.make_snap_path("snap2", "subdir");
+  vector<pair<string, int64_t>> before;
+  ASSERT_EQ(0, test_mount.readdir_with_offsets(snap_path.c_str(), before));
+  ASSERT_EQ(3U, before.size());
+  auto first = std::find_if(before.begin(), before.end(), [](const auto& entry) {
+    return entry.first == "collision_2379";
+  });
+  ASSERT_NE(before.end(), first);
+  ASSERT_NE(before.end(), std::next(first));
+  ASSERT_EQ("collision_2690", std::next(first)->first);
+  // Both names have to land in the same hash bucket: that is what makes their
+  // positions differ in the ordinal alone, so that the ordinal 2 of a
+  // single-entry snapdiff reply collides with the cached position of
+  // collision_2379. Ordinals restart at 2 per bucket, hence the adjacency
+  // check. With the default rjenkins dir hash both names hash to 0x7f4abf and
+  // d_off (make_fpos() + 1) is 0xff7f4abf0000003 and 0xff7f4abf0000004.
+  ASSERT_EQ(first->second + 1, std::next(first)->second)
+    << std::hex << "collision_2379 (" << first->second << ") and "
+    << "collision_2690 (" << std::next(first)->second << ") do not share a"
+       " hash bucket, this cluster does not use the rjenkins dir hash";
+
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  vector<pair<string, uint64_t>> delta;
+  ASSERT_EQ(0, test_mount.for_each_readdir_snapdiff2(
+    "subdir", "snap1", "snap2", [&](const dirent* entry, uint64_t snapid) {
+      delta.emplace_back(entry->d_name, snapid);
+      return true;
+    }));
+  const vector<pair<string, uint64_t>> expected_delta = {
+    {"collision_2690", snapid2}};
+  EXPECT_EQ(expected_delta, delta);
+
+  // Each readdir call resumes from a cookie, exposing the duplicated ordinal.
+  vector<pair<string, int64_t>> after;
+  ASSERT_EQ(0, test_mount.readdir_with_offsets(snap_path.c_str(), after));
+  EXPECT_EQ(before, after);
+}
+
+TEST(LibCephFS, SnapDiffPreservesReaddirCookieAfterRecreate)
+{
+  TestMount test_mount("snapdiff_readdir_cookie",
+                       CEPH_SNAPDIFF_MTIME | CEPH_SNAPDIFF_SIZE);
+  auto* cmount = test_mount.get_cmount();
+  ASSERT_EQ(0, test_mount.mkdir("subdir"));
+  for (const char* name : {"x", "y"}) {
+    auto path = test_mount.make_file_path((string("subdir/") + name).c_str());
+    ASSERT_EQ(0, ceph_mknod(cmount, path.c_str(), S_IFREG | 0600, 0));
+  }
+  auto remove_snaps = make_scope_guard([&] {
+    EXPECT_EQ(0, test_mount.rmsnap("snap2"));
+    EXPECT_EQ(0, test_mount.rmsnap("snap1"));
+  });
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+  ASSERT_EQ(0, test_mount.unlink("subdir/x"));
+  auto x_path = test_mount.make_file_path("subdir/x");
+  ASSERT_EQ(0, ceph_mknod(cmount, x_path.c_str(), S_IFREG | 0600, 0));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  auto snap_path = test_mount.make_snap_path("snap2", "subdir");
+  vector<pair<string, int64_t>> before;
+  ASSERT_EQ(0, test_mount.readdir_with_offsets(snap_path.c_str(), before));
+  ASSERT_EQ(2U, before.size());
+  ASSERT_EQ("x", before[0].first);
+  ASSERT_EQ("y", before[1].first);
+
+  auto path = test_mount.make_file_path(snap_path.c_str());
+  ceph_dir_result* active_dir;
+  ASSERT_EQ(0, ceph_opendir(cmount, path.c_str(), &active_dir));
+  auto close_active = make_scope_guard([&] { ceph_closedir(cmount, active_dir); });
+  struct dirent entry;
+  for (const char* name : {".", "..", "x"}) {
+    ASSERT_EQ(1, ceph_readdir_r(cmount, active_dir, &entry));
+    ASSERT_STREQ(name, entry.d_name);
+  }
+  int64_t cookie = ceph_telldir(cmount, active_dir);
+  ASSERT_EQ(before[0].second, cookie);
+
+  uint64_t snapid1, snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  vector<pair<string, uint64_t>> delta;
+  ASSERT_EQ(0, test_mount.for_each_readdir_snapdiff2(
+    "subdir", "snap1", "snap2", [&](const dirent* entry, uint64_t snapid) {
+      delta.emplace_back(entry->d_name, snapid);
+      return true;
+    }));
+  std::sort(delta.begin(), delta.end());
+  const vector<pair<string, uint64_t>> expected_delta = {
+    {"x", snapid1}, {"x", snapid2}};
+  EXPECT_EQ(expected_delta, delta);
+
+  // The active stream and a new stream seeking to its cookie must both resume at y.
+  ceph_dir_result* seek_dir;
+  ASSERT_EQ(0, ceph_opendir(cmount, path.c_str(), &seek_dir));
+  auto close_seek = make_scope_guard([&] { ceph_closedir(cmount, seek_dir); });
+  ceph_seekdir(cmount, seek_dir, cookie);
+  for (auto* dir : {active_dir, seek_dir}) {
+    ASSERT_EQ(1, ceph_readdir_r(cmount, dir, &entry));
+    EXPECT_STREQ("y", entry.d_name);
+    EXPECT_EQ(before[1].second, entry.d_off);
+    EXPECT_EQ(0, ceph_readdir_r(cmount, dir, &entry));
+  }
+  vector<pair<string, int64_t>> after;
+  ASSERT_EQ(0, test_mount.readdir_with_offsets(snap_path.c_str(), after));
+  EXPECT_EQ(before, after);
+}
+
+TEST(LibCephFS, SnapDiffPreservesOlderSnapReaddirOffsets)
+{
+  // Same clobber as above, for the entries a snapdiff reply attributes to the
+  // older snapshot: insert_readdir_results() routes those to the stream's own
+  // directory inode rather than to the opponent one.
+  TestMount test_mount("snapdiff_cached_offsets_old",
+                       CEPH_SNAPDIFF_MTIME | CEPH_SNAPDIFF_SIZE);
+  auto* cmount = test_mount.get_cmount();
+  ASSERT_EQ(0, test_mount.mkdir("subdir"));
+  for (const char* name : {"collision_2379", "collision_2690", "zz1"}) {
+    auto path = test_mount.make_file_path((string("subdir/") + name).c_str());
+    ASSERT_EQ(0, ceph_mknod(cmount, path.c_str(), S_IFREG | 0600, 0));
+  }
+  auto remove_snaps = make_scope_guard([&] {
+    EXPECT_EQ(0, test_mount.rmsnap("snap2"));
+    EXPECT_EQ(0, test_mount.rmsnap("snap1"));
+  });
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+  ASSERT_EQ(0, test_mount.unlink("subdir/collision_2690"));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // Reading to EOF populates the complete, ordered snap1 directory cache.
+  auto snap_path = test_mount.make_snap_path("snap1", "subdir");
+  vector<pair<string, int64_t>> before;
+  ASSERT_EQ(0, test_mount.readdir_with_offsets(snap_path.c_str(), before));
+  ASSERT_EQ(3U, before.size());
+  auto first = std::find_if(before.begin(), before.end(), [](const auto& entry) {
+    return entry.first == "collision_2379";
+  });
+  ASSERT_NE(before.end(), first);
+  ASSERT_NE(before.end(), std::next(first));
+  ASSERT_EQ("collision_2690", std::next(first)->first);
+  ASSERT_EQ(first->second + 1, std::next(first)->second)
+    << std::hex << "collision_2379 (" << first->second << ") and "
+    << "collision_2690 (" << std::next(first)->second << ") do not share a"
+       " hash bucket, this cluster does not use the rjenkins dir hash";
+
+  uint64_t snapid1;
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  vector<pair<string, uint64_t>> delta;
+  ASSERT_EQ(0, test_mount.for_each_readdir_snapdiff2(
+    "subdir", "snap1", "snap2", [&](const dirent* entry, uint64_t snapid) {
+      delta.emplace_back(entry->d_name, snapid);
+      return true;
+    }));
+  // The removed entry is reported against snap1, the stream's own snapid.
+  const vector<pair<string, uint64_t>> expected_delta = {
+    {"collision_2690", snapid1}};
+  EXPECT_EQ(expected_delta, delta);
+
+  // Each readdir call resumes from a cookie, exposing the duplicated ordinal.
+  vector<pair<string, int64_t>> after;
+  ASSERT_EQ(0, test_mount.readdir_with_offsets(snap_path.c_str(), after));
+  EXPECT_EQ(before, after);
 }
 
 TEST(LibCephFS, SnapDiffHardlinkReplicaInode)
