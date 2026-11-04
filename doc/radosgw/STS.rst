@@ -88,7 +88,7 @@ allows access only to applications which satisfy the given condition.
 All claims of the JWT are supported in the condition of the role's trust policy.
 An example of a policy that uses the 'aud' claim in the condition is of the form::
 
-    '''{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":["arn:aws:iam:::oidc-provider/<URL of IDP>"]},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringEquals":{"<URL of IDP> :app_id":"<aud>"}}}]}'''
+    '''{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":["arn:aws:iam:::oidc-provider/<URL of IDP>"]},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringEquals":{"<URL of IDP>:app_id":"<aud>"}}}]}'''
 
 The ``app_id`` in the condition above must match the 'aud' claim of the incoming token.
 
