@@ -9795,6 +9795,8 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms, int
   if (!in->is_dir())
     return -ENOTDIR;
   *dirpp = new dir_result_t(in, perms, fd);
+  if (in->snapid != CEPH_NOSNAP)
+    in->make_nosnap_relative_path((*dirpp)->snap_path);
   opened_dirs.insert(*dirpp);
   ldout(cct, 8) << __func__ << "(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
   return 0;
@@ -10127,7 +10129,7 @@ int Client::readdir_r_cb(dir_result_t* d,
 			    InodeRef& diri,
 			    frag_t fg) {
     filepath path;
-    diri->make_nosnap_relative_path(path);
+    dirp->make_request_path(path);
     req->set_filepath(path);
     req->set_inode(diri.get());
     req->head.args.readdir.frag = fg;
@@ -10632,7 +10634,7 @@ int Client::readdir_snapdiff(dir_result_t* d1, snapid_t snap2,
     InodeRef& diri,
     frag_t fg) {
       filepath path;
-      diri->make_nosnap_relative_path(path);
+      dirp->make_request_path(path);
       req->set_filepath(path);
       req->set_inode(diri.get());
       req->head.args.snapdiff.snap_other = snap2;
