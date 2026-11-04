@@ -33,6 +33,7 @@
 #include "rgw_auth_registry.h"
 #include "jwt-cpp/jwt.h"
 #include "rgw_rest_sts.h"
+#include "rgw_sts_jwks.h"
 
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
@@ -653,12 +654,16 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
     if (parser.parse(cert_resp.c_str(), cert_resp.length())) {
       JSONObj* val = parser.find_obj("keys");
       if (val && val->is_array()) {
-        vector<string> keys = val->get_array_elements();
+        std::optional<std::string> token_kid;
+        if (decoded.has_key_id()) {
+          token_kid = decoded.get_key_id();
+        }
+        auto keys = detail::select_jwks_keys(*val, token_kid);
         for (auto &key : keys) {
-          JSONParser k_parser;
+          JSONObj& k_parser = *key;
           vector<string> x5c;
           std::string use, kid;
-          if (k_parser.parse(key.c_str(), key.size())) {
+          if (k_parser.is_object()) {
             if (JSONDecoder::decode_json("kid", kid, &k_parser)) {
               ldpp_dout(dpp, 20) << "Checking key id: " << kid << dendl;
             }
@@ -771,7 +776,7 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
                 ldpp_dout(dpp, 10) << "Bare key parameters (n&e) are not present for key" << dendl;
               }
             }
-          } //end k_parser.parse
+          } //end k_parser.is_object
         } //end for iterate through keys
         ldpp_dout(dpp, 0) << "Signature can not be validated with the JWKS present." << dendl;
         throw std::system_error(EINVAL, std::system_category());

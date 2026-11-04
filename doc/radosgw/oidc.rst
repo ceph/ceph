@@ -19,6 +19,18 @@ with the same URL. Account-level providers always take precedence over global on
    legacy tenant-based namespaces.
 
 
+JWT Signing Key Selection
+=========================
+
+For ``AssumeRoleWithWebIdentity``, RGW uses the JWT header's ``kid`` to select
+verification keys from the provider's JSON Web Key Set (JWKS). If the JWKS
+contains eligible signing keys with a matching ``kid``, RGW tries only those
+keys. If none of them validates the signature, RGW rejects the token without
+trying keys with
+other identifiers. If the token has no ``kid``, or no eligible signing key has a
+matching ``kid``, RGW retains the existing behavior of trying all eligible keys.
+
+
 Global OIDC Providers via radosgw-admin
 =======================================
 
