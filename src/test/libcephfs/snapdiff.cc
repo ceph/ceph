@@ -158,6 +158,27 @@ public:
     return !tell_rank0(prefix, std::move(cmdmap)).is_null();
   }
 
+  uint64_t mds_perf_counter(const std::string& name) {
+    auto dump = tell_rank0("perf dump");
+    if (dump.is_null())
+      return 0;
+    auto& mds = dump.get_obj().at("mds").get_obj();
+    auto it = mds.find(name);
+    return it == mds.end() ? 0 : it->second.get_uint64();
+  }
+
+  // the entries of one snapdiff2 stream, as sorted "name snapid" strings
+  int list_snapdiff2(const char* relpath, const char* snap1, const char* snap2,
+                     vector<string>* out) {
+    int r = for_each_readdir_snapdiff2(relpath, snap1, snap2,
+      [out](const dirent* d, uint64_t snapid) {
+        out->push_back(string(d->d_name) + " " + to_string(snapid));
+        return true;
+      });
+    std::sort(out->begin(), out->end());
+    return r;
+  }
+
   string make_file_path(const char *relpath) {
     char path[PATH_MAX];
     sprintf(path, "%s/%s", dir_path, relpath);
@@ -2446,4 +2467,71 @@ TEST(LibCephFS, SnapDiffStatDelta) {
 
   test_mount.rmsnap("snap1");
   test_mount.rmsnap("snap2");
+}
+
+// A snapdiff of a directory that is not in the MDS cache, loading only the
+// entries that can differ (mds_snapdiff_fetch_changed_only), returns the
+// same delta as one of the directory in cache, and as one loading it whole.
+TEST(LibCephFS, SnapDiffUncachedDir) {
+  TestMount test_mount("/SnapDiffUncachedDir", CEPH_SNAPDIFF_MTIME);
+  char path[PATH_MAX];
+
+  ASSERT_EQ(0, test_mount.mkdir("d"));
+  for (int i = 0; i < 200; i++) {
+    snprintf(path, PATH_MAX, "d/f%d", i);
+    ASSERT_LE(0, test_mount.write_full(path, path));
+  }
+  for (int i = 0; i < 5; i++) {
+    snprintf(path, PATH_MAX, "d/s%d", i);
+    ASSERT_EQ(0, test_mount.mkdir(path));
+  }
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+  sleep(1);  // so that rewritten files get a new mtime
+  for (int i = 0; i < 10; i++) {
+    snprintf(path, PATH_MAX, "d/f%d", i);
+    ASSERT_LE(0, test_mount.write_full(path, "changed"));
+    snprintf(path, PATH_MAX, "d/f%d", 10 + i);
+    ASSERT_EQ(0, test_mount.unlink(path));
+    snprintf(path, PATH_MAX, "d/new%d", i);
+    ASSERT_LE(0, test_mount.write_full(path, path));
+  }
+  ASSERT_EQ(0, test_mount.rmdir("d/s0"));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  vector<string> cached;
+  ASSERT_EQ(0, test_mount.list_snapdiff2("d", "snap1", "snap2", &cached));
+  ASSERT_FALSE(cached.empty());
+
+  auto drop_cache = [&]() {
+    cmdmap_t cmdmap;
+    cmdmap["timeout"] = (int64_t)10;
+    test_mount.tell_rank0("cache drop", std::move(cmdmap));
+  };
+
+  // only the entries that can differ
+  ASSERT_TRUE(test_mount.tell_rank0_config("mds_snapdiff_fetch_changed_only", "true"));
+  ASSERT_TRUE(test_mount.tell_rank0_config("mds_snapdiff_fetch_changed_only_cache_ratio", "0"));
+  uint64_t fetches = test_mount.mds_perf_counter("dir_fetch_snapdiff");
+  drop_cache();
+  vector<string> partial;
+  int r = test_mount.list_snapdiff2("d", "snap1", "snap2", &partial);
+  uint64_t fetched = test_mount.mds_perf_counter("dir_fetch_snapdiff") - fetches;
+
+  // the whole directory
+  ASSERT_TRUE(test_mount.tell_rank0_config("mds_snapdiff_fetch_changed_only", "false"));
+  drop_cache();
+  vector<string> whole;
+  int r2 = test_mount.list_snapdiff2("d", "snap1", "snap2", &whole);
+
+  test_mount.tell_rank0_config("mds_snapdiff_fetch_changed_only");
+  test_mount.tell_rank0_config("mds_snapdiff_fetch_changed_only_cache_ratio");
+
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, r2);
+  ASSERT_LT(0u, fetched);
+  ASSERT_EQ(cached, partial);
+  ASSERT_EQ(cached, whole);
+
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }
