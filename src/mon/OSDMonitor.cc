@@ -5592,7 +5592,7 @@ namespace {
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    SUPPORTS_OMAP };
+    SUPPORTS_OMAP, PRESERVE_ALLOCATION };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6413,6 +6413,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"bulk", BULK},
       {"read_ratio", READ_RATIO},
       {"allow_ec_optimizations", EC_OPTIMIZATIONS},
+      {"preserve_allocation", PRESERVE_ALLOCATION},
       {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
       {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
       {"supports_omap", SUPPORTS_OMAP},
@@ -6431,7 +6432,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     };
     const choices_set_t ONLY_ERASURE_CHOICES = {
       EC_OVERWRITES, ERASURE_CODE_PROFILE, EC_OPTIMIZATIONS,
-      EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT
+      EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT, PRESERVE_ALLOCATION
     };
     const choices_set_t ONLY_REPLICA_CHOICES = {
       READ_RATIO
@@ -6678,8 +6679,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
             break;
 	  case EC_OPTIMIZATIONS:
 	    f->dump_bool("allow_ec_optimizations",
-			 p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS));
-            break;
+	   p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS));
+	           break;
+	  case PRESERVE_ALLOCATION:
+	    f->dump_bool("preserve_allocation",
+	   p->has_flag(pg_pool_t::FLAG_PRESERVE_ALLOCATION));
+	           break;
           case EC_DATA_SHARD_COUNT:
             f->dump_unsigned("ec_data_shard_count",
                              p->ec_data_shard_count.value_or(0));
@@ -6865,6 +6870,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case EC_OPTIMIZATIONS:
 	    ss << "allow_ec_optimizations: " <<
 	      (p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS) ? "true" : "false") <<
+	      "\n";
+	    break;
+	  case PRESERVE_ALLOCATION:
+	    ss << "preserve_allocation: " <<
+	      (p->has_flag(pg_pool_t::FLAG_PRESERVE_ALLOCATION) ? "true" : "false") <<
 	      "\n";
 	    break;
           case EC_DATA_SHARD_COUNT:
@@ -9305,6 +9315,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
     bool enable = (var == "set_pool_flags");
     if (enable) {
+      if ((n & pg_pool_t::FLAG_PRESERVE_ALLOCATION) &&
+          osdmap.require_osd_release < ceph_release_t::vampire) {
+        ss << "FLAG_PRESERVE_ALLOCATION requires require_osd_release >= vampire";
+        return -EPERM;
+      }
+
       p.set_flag(n);
     } else {
       p.unset_flag(n);

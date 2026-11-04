@@ -188,6 +188,12 @@ add_executable(unittest_ec_with_crush
 add_ceph_unittest(unittest_ec_with_crush)
 target_link_libraries(unittest_ec_with_crush osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ec_with_crush erasure_code_plugins)
+# unittest_mosdopreply
+add_executable(unittest_mosdopreply
+  TestMOSDOpReply.cc
+  )
+add_ceph_unittest(unittest_mosdopreply)
+target_link_libraries(unittest_mosdopreply osd global ${BLKID_LIBRARIES})
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
@@ -274,6 +280,7 @@ set(OSD_UNITTESTS
   unittest_extent_cache_l
   unittest_hitset
   unittest_mclock_scheduler
+  unittest_mosdopreply
   unittest_osd_osdcap
   unittest_osd_types
   unittest_osdscrub

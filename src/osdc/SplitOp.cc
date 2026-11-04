@@ -667,8 +667,10 @@ void SplitOp::complete() {
       switch (out_osd_op.op.op) {
         case CEPH_OSD_OP_SPARSE_READ: {
           auto [extents, bl] = assemble_buffer_sparse_read(ops_index);
-          encode(std::move(extents).detach(), out_osd_op.outdata);
-          encode_destructively(bl, out_osd_op.outdata);
+          // Same split format as an OSD reply: the extent map is metadata and
+          // outdata is only the data, so the data buffers stay untouched.
+          encode(std::move(extents).detach(), out_osd_op.outmetadata);
+          out_osd_op.outdata = std::move(bl);
           if (read_bl) {
             read_bl->append(out_osd_op.outdata);
           }

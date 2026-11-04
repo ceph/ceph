@@ -49,6 +49,11 @@ enum class Sequence {
   SEQUENCE_SEQ14,
   SEQUENCE_SEQ15,
   SEQUENCE_SEQ16,
+  SEQUENCE_SEQ17,
+  SEQUENCE_SEQ18,
+  SEQUENCE_SEQ19,
+  SEQUENCE_SEQ20,
+  SEQUENCE_SEQ21,
 
   SEQUENCE_END,
   SEQUENCE_BEGIN = SEQUENCE_SEQ0
@@ -310,12 +315,115 @@ class Seq14 : public IoSequence {
   std::unique_ptr<IoOp> _next() override;
 };
 
-class Seq15 : public IoSequence {
+class Seq17 : public IoSequence {
+ private:
+  uint64_t offset1;
+  uint64_t offset2;
+  uint64_t current_size = 0;
+  bool doneread = true;
+  bool donebarrier = false;
+  bool donerecreate = true;
+
+ public:
+  Seq17(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq18 : public IoSequence {
  private:
   uint64_t offset;
   uint64_t length;
-  uint64_t primary_size;
-  uint64_t secondary_size;
+  uint64_t current_size = 0;
+  bool doneread = true;
+  bool donebarrier = false;
+  bool donerecreate = true;
+
+ public:
+  Seq18(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq19 : public IoSequence {
+ private:
+  uint64_t offset1;
+  uint64_t length1;
+  uint64_t offset2;  // gap: start of region 2 = offset1 + offset2
+  uint64_t length2;
+  uint64_t current_size = 0;
+  bool doneread = true;
+  bool donebarrier = false;
+  bool donerecreate = true;
+
+ public:
+  Seq19(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq20 : public IoSequence {
+ private:
+  uint64_t zero_offset;
+  uint64_t zero_length;
+  uint64_t truncate_size;
+  bool doneread = true;
+  bool donebarrier = false;
+  bool donerecreate = true;
+
+ public:
+  Seq20(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq21 : public IoSequence {
+ private:
+  enum class Phase {
+    BaselineWrite,
+    BarrierBeforeLayout,
+    EmitLayout,
+    BarrierBeforeMapext,
+    EmitMapext,
+    Recreate,
+  };
+
+  enum class Layout {
+    Zero,
+    WriteAndZero,
+    ZeroAndTruncate,
+  };
+
+  Layout layout;
+  uint64_t zero_offset;
+  uint64_t zero_length;
+  uint64_t write_offset;
+  uint64_t write_length;
+  uint64_t truncate_size;
+  uint64_t mapext_length;
+  Phase phase;
+ public:
+  Seq21(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq15 : public IoSequence {
+ private:
+  uint64_t offset = 0;
+  uint64_t length = 0;
+  uint64_t primary_size = 0;
+  uint64_t secondary_size = 0;
   bool doneread = true;
   bool donebarrier = false;
   enum class Stage {
@@ -329,7 +437,7 @@ class Seq15 : public IoSequence {
     READ_PRIMARY,
     DONE
   };
-  Stage stage;
+  Stage stage = Stage::WRITE_PRIMARY;
 
  public:
   Seq15(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
@@ -347,12 +455,12 @@ class Seq16 : public IoSequence {
   int total_operations;
   bool truncate_write_done;
   bool consistency_done;
-  
+
   void setup_next_operation();
 
  public:
   Seq16(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
-  
+
   Sequence get_id() const override;
   std::string get_name() const override;
   std::unique_ptr<IoOp> _next() override;

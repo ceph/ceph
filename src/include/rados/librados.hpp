@@ -292,6 +292,8 @@ inline namespace v14_2_0 {
     OPERATION_ORDERSNAP          = LIBRADOS_OPERATION_ORDERSNAP,
     // enable/allow return value and per-op return code/buffers
     OPERATION_RETURNVEC          = LIBRADOS_OPERATION_RETURNVEC,
+    // enable per-request preserve allocation (zero-block tracking) for EC pools (force_allocated_extents)
+    OPERATION_PRESERVE_ALLOCATION  = LIBRADOS_OPERATION_PRESERVE_ALLOCATION,
   };
 
   /*
@@ -613,6 +615,20 @@ inline namespace v14_2_0 {
                      bufferlist *data_bl, int *prval,
                      uint64_t truncate_size = 0,
                      uint32_t truncate_seq = 0);
+
+    /**
+     * Query the allocated extent map of the object without reading data.
+     * On EC pools with ec_optimizations enabled, returns only the extents
+     * that are allocated (non-sparse). On replicated pools this will
+     * return -EOPNOTSUPP.
+     *
+     * @param off    [in]  byte offset to start querying from
+     * @param len    [in]  byte length of the range to query
+     * @param m      [out] map of allocated extents: byte offset -> byte length
+     * @param prval  [out] return value of the sub-operation
+     */
+    void mapext(uint64_t off, uint64_t len,
+                std::map<uint64_t,uint64_t> *m, int *prval);
 
     /**
      * omap_get_vals: keys and values from the object omap

@@ -464,6 +464,11 @@ You may set values for the following keys:
     :Description: Determines whether omap operations can be performed on a pool. On for replicated and erasure-coded pools with EC optimizations enabled (excluding Crimson pools), off for all other erasure-coded pools.
     :Type: Boolean
 
+.. describe:: preserve_allocation
+
+    :Description: Read-only (``ceph osd pool get``) boolean that reports whether the ``PRESERVE_ALLOCATION`` flag is set on an erasure-coded pool. When set together with ``allow_ec_optimizations``, the OSD tracks zeroed extents, which is required for sparse reads and ``mapext`` on erasure-coded pools. Not available on replicated pools.
+    :Type: Boolean
+
 .. describe:: hashpspool
 
    :Description: Sets or unsets the ``HASHPSPOOL`` flag on a given pool.

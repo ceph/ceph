@@ -442,6 +442,43 @@ function clean_up {
   rbd remove testimg || true
 }
 
+function test_encryption_ec() {
+  # Only run when an EC data pool is configured
+  local ec_pool
+  ec_pool=$(ceph-conf --name client.${CEPH_ID} \
+      --show-config-value rbd_default_data_pool 2>/dev/null || true)
+  if [[ -z "$ec_pool" ]]; then
+    echo "Skipping EC encryption test: no rbd_default_data_pool configured"
+    return 0
+  fi
+
+  # Confirm the pool is actually an EC pool; skip if not.
+  if ! sudo ceph osd pool get "$ec_pool" erasure_code_profile &>/dev/null; then
+    echo "Skipping EC encryption test: $ec_pool is not an EC pool"
+    return 0
+  fi
+
+  local ecimg="testimg_ec_encrypt"
+  rbd create --size=32M "$ecimg"
+
+  # The ec.yaml sets preserve_allocation before this script runs,
+  # so encryption format must succeed on this pool.
+  rbd encryption format "$ecimg" luks2 /tmp/passphrase
+
+  # Map the encrypted image and write/read back to verify it works end-to-end.
+  local ecdev
+  ecdev=$(_sudo rbd map "$ecimg" -t nbd \
+      -o encryption-passphrase-file=/tmp/passphrase)
+
+  dd if=/tmp/testdata1 of="$ecdev" conv=fsync bs=1M
+  drop_caches
+  dd if="$ecdev" of=/tmp/cmpdata iflag=direct bs=4M count=4
+  cmp -n 16MB /tmp/cmpdata /tmp/testdata1
+
+  _sudo rbd device unmap -t nbd "$ecdev"
+  rbd rm "$ecimg"
+}
+
 if [[ $(uname) != "Linux" ]]; then
 	echo "LUKS encryption tests only supported on Linux"
 	exit 0
@@ -495,5 +532,7 @@ rbd create --size 48M testimg
 test_migration_clone luks2
 
 test_migration_open_clone_chain
+
+test_encryption_ec
 
 echo OK
