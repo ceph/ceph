@@ -5,7 +5,7 @@ set -x
 export PATH=/root/bin:$PATH
 mkdir /root/bin
 
-export CEPHADM_IMAGE="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:main}"
+export CEPHADM_IMAGE="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:umbrella}"
 
 CEPHADM="/root/bin/cephadm"
 CEPHADM_SRC="/mnt/{{ ceph_dev_folder }}/src/cephadm/cephadm"
@@ -33,7 +33,7 @@ shell_image=''
 
 quick_install_options=''
 {% if quick_install is defined %}
-  export CEPHADM_IMAGE="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:main}"
+  export CEPHADM_IMAGE="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:umbrella}"
   quick_install_options="--image localhost:5000/ceph" 
   shell_image="--image localhost:5000/ceph"
 
