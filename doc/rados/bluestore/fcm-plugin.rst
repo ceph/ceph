@@ -239,7 +239,7 @@ BlueStore has no visibility of the topology of the backing block devices and can
 For regular drives it does not matter; when the physical:logical ratio is 1:1 BlueStore will eventually run out of logical space on first drive
 and without even noticing start consuming the second drive.
 With FCMs, and any other compressing drives, it is no longer the case. When BlueStore is not running out of logical space on first drive,
-it will keep asking the drive to accomodate more data. The second drive has it, but first does not.
+it will keep asking the drive to accommodate more data. The second drive has it, but first does not.
 BlueStore will eventually fail to allocate space and fail with a hard ``-ENOSPC`` error.
 
 Trying to run BlueStore with compound block device when one of them is an FCM will raise the warning.
