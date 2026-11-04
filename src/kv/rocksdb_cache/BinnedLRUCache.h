@@ -315,6 +315,8 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   CephContext *cct;
   void LRU_Remove(BinnedLRUHandle* e);
   void LRU_Insert(BinnedLRUHandle* e);
+  // Link e right after pos in the list.
+  void LRU_InsertAfter(BinnedLRUHandle* pos, BinnedLRUHandle* e);
 
   // Overflow the last entry in high-pri pool to low-pri pool until size of
   // high-pri pool is no larger than the size specify by high_pri_pool_pct.
@@ -329,6 +331,9 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // This function is not thread safe - it needs to be executed while
   // holding the mutex_
   void EvictFromLRU(size_t charge, BinnedLRUHandle*& deleted);
+
+  // Evict one unreferenced entry from the list onto the deleted chain.
+  void EvictEntry(BinnedLRUHandle* old, BinnedLRUHandle*& deleted);
 
   int FreeDeleted(BinnedLRUHandle* deleted);
 
