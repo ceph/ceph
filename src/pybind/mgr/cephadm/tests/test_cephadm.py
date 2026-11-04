@@ -12,6 +12,7 @@ from cephadm.inventory import (
     HostCacheStatus,
     ClientKeyringSpec,
     SpecDescription,
+    SpecStore,
 )
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 from cephadm.services.nvmeof import NvmeofService
@@ -2063,6 +2064,59 @@ class TestCephadm(object):
             'who': 'client.rgw.foo',
         })
         assert 'rgw.foo' in cephadm_module.spec_store.spec_deleted
+
+    def test_spec_store_undelete(self, cephadm_module: CephadmOrchestrator):
+        store = cephadm_module.spec_store
+        spec = ServiceSpec('crash', placement=PlacementSpec(host_pattern='*'))
+        store.save(spec)
+        assert not store.undelete('crash')
+        assert not store.undelete('not-there')
+
+        store.rm('crash')
+        assert 'crash' not in store.active_specs
+        assert store.undelete('crash')
+        assert 'crash' in store.active_specs
+        assert 'crash' not in store.spec_deleted
+
+        # the cancelled removal is persisted
+        reloaded = SpecStore(cephadm_module)
+        reloaded.load()
+        assert 'crash' in reloaded.active_specs
+        assert 'crash' not in reloaded.spec_deleted
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.module.CephadmOrchestrator._kick_serve_loop")
+    def test_apply_cancels_pending_removal(self, _kick_serve_loop, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test'):
+            store = cephadm_module.spec_store
+            spec = ServiceSpec('crash', placement=PlacementSpec(host_pattern='*'))
+            store.save(spec)
+            store.rm('crash')
+            assert 'crash' in store.spec_deleted
+
+            msg = cephadm_module._apply_service_spec(
+                ServiceSpec('crash', placement=PlacementSpec(host_pattern='*')))
+            assert 'The removal has been cancelled' in msg
+            assert 'crash' in store.active_specs
+            assert 'crash' not in store.spec_deleted
+
+            # a plain apply of an active spec doesn't mention a removal
+            msg = cephadm_module._apply_service_spec(
+                ServiceSpec('crash', placement=PlacementSpec(host_pattern='*')))
+            assert 'removal' not in msg
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.module.CephadmOrchestrator._kick_serve_loop")
+    def test_preview_apply_keeps_pending_removal(self, _kick_serve_loop, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test'):
+            store = cephadm_module.spec_store
+            store.save(ServiceSpec('crash', placement=PlacementSpec(host_pattern='*')))
+            store.rm('crash')
+
+            preview = ServiceSpec('crash', placement=PlacementSpec(host_pattern='*'),
+                                  preview_only=True)
+            cephadm_module._apply_service_spec(preview)
+            assert 'crash' in store.spec_deleted
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
