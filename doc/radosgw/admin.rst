@@ -663,7 +663,7 @@ The default value is 60 seconds.
 (Note: S3 Multi-Object Delete operation are currently not supported by rate limiting)
 
 The configured limits should be divided by the number of active object gateways. For example,
-if "user A" is to be be limited to 10 ops per minute and there are two object gateways in the cluster,
+if "user A" is to be limited to 10 ops per minute and there are two object gateways in the cluster,
 then the limit on "user A" should be 5 (10 ops per minute / 2 RGWs).
 If the requests are not balanced between RGWs, the rate limit might be underutilized.
 For example: if the ops limit is 5 and there are two RGWs,
@@ -680,7 +680,7 @@ How Metrics Work
 Each object gateway tracks per-user metrics separately from bucket metrics.
 These metrics are not shared with other gateways. The configured limits should
 be divided by the number of active object gateways. For example, if "user A" is
-to be be limited to 10 ops per accumulation interval and there are two object gateways in the
+to be limited to 10 ops per accumulation interval and there are two object gateways in the
 cluster, then the limit on "user A" should be ``5`` (10 ops per accumulation interval / 2
 RGWs). If the requests are **not** balanced between RGWs, the rate limit might
 be underutilized. For example: if the ops limit is ``5`` and there are two
