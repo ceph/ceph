@@ -93,7 +93,13 @@ export class NfsClusterResourcePageComponent implements OnInit {
         label: $localize`High availability`,
         value: haEnabled ? $localize`Enabled` : $localize`Disabled`
       },
-      { label: $localize`Monitoring port`, value: cluster.monitor_port ?? '-' },
+      {
+        label: $localize`Monitoring port`,
+        value:
+          cluster.monitoring_port ??
+          cluster.backend?.find((backend) => backend.monitoring_port != null)?.monitoring_port ??
+          '-'
+      },
       {
         label: $localize`Service instances`,
         value: cluster.placement?.count ?? cluster.backend?.length ?? 0

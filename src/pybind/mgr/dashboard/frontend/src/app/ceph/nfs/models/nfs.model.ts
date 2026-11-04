@@ -4,14 +4,18 @@ export interface NFSBackend {
   hostname: string;
   ip: string;
   port?: number;
+  monitoring_port?: number;
+  rdma_port?: number;
   status?: string;
 }
+
+export type NFSHostPattern = string | { pattern: string; pattern_type?: string };
 
 export interface NFSClusterPlacement {
   hosts?: string[];
   count?: number;
   label?: string;
-  host_pattern?: string;
+  host_pattern?: NFSHostPattern;
 }
 
 export interface NFSCluster {
@@ -21,10 +25,15 @@ export interface NFSCluster {
   backend: NFSBackend[];
   enable_nfsv3?: boolean;
   placement: NFSClusterPlacement;
+  networks?: string[];
+  bind_addrs?: NFSBindAddr[];
   enable_rdma?: boolean;
   deployment_type?: string;
   ingress_mode?: IngressMode;
+  ingress_placement?: NFSClusterPlacement;
   monitor_port?: number;
+  monitoring_port?: number;
+  rdma_port?: number;
   error?: string;
 }
 
@@ -52,7 +61,7 @@ export interface NFSClusterPayload {
   ingress?: boolean;
   virtual_ip?: string;
   ingress_mode?: IngressMode;
-  ingress_placement?: { hosts?: string[]; count?: number };
+  ingress_placement?: NFSClusterPlacement;
   enable_nfsv3?: boolean;
   enable_rdma?: boolean;
   rdma_port?: number;
