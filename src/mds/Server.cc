@@ -12722,6 +12722,128 @@ bool Server::build_snap_diff(
   auto it = !skip_key ? dir->begin() : dir->upper_bound(*skip_key);
 
   diff_mask = diff_mask != 0 ? diff_mask : CEPH_SNAPDIFF_MTIME; // to preserve backward compatibility with the original impl.
+
+  // Revoke every pending snapflush in this fragment, then scan once.
+  // Parking the request on the first inode restarts that scan after each
+  // flush, so a directory of newly snapped files is one cap round trip and
+  // one full walk per file.
+  auto await_pending_snapflushes = [&]() -> bool {
+    auto file_rdlock_target = [&](CInode *in) -> SimpleLock* {
+      SimpleLock *lock = &in->filelock;
+      // A snap inode's filelock in LOCK_SNAP_SYNC does not gather client caps.
+      // Kick the head filelock while it still holds them.
+      if (!in->is_head() && in->is_auth() &&
+	  lock->get_state() == LOCK_SNAP_SYNC) {
+	CInode *head = mdcache->get_inode(in->ino());
+	if (head) {
+	  SimpleLock *hlock = &head->filelock;
+	  if (hlock->get_state() != LOCK_SYNC) {
+	    lock = hlock;
+	  }
+	}
+      }
+      return lock;
+    };
+
+    std::set<SimpleLock*> seen;
+    std::vector<SimpleLock*> pending_locks;
+    int visited = 0;
+    const int hb_grace = mds->heartbeat_reset_grace();
+    for (auto jit = it; jit != dir->end(); ++jit) {
+      if (hb_grace > 0 && (++visited % hb_grace) == 0) {
+	mds->heartbeat_reset();
+      }
+
+      CDentry *dn = jit->second;
+      if (dn->state_test(CDentry::STATE_PURGING)) {
+	continue;
+      }
+      if (dn->last < snapid_prev || dn->first > snapid) {
+	continue;
+      }
+
+      bool dnp = dn->use_projected(client, mdr);
+      CDentry::linkage_t *dnl =
+	dnp ? dn->get_projected_linkage() : dn->get_linkage();
+      if (dnl->is_null()) {
+	continue;
+      }
+
+      CInode *in = dnl->get_inode();
+      if (!in && dnl->is_remote()) {
+	in = mdcache->get_inode(dnl->get_remote_ino());
+      }
+      if (!in || in->is_dir() || in->ino() == CEPH_INO_CEPH) {
+	continue;
+      }
+      if (!snapflush_pending(in)) {
+	continue;
+      }
+
+      SimpleLock *lock = file_rdlock_target(in);
+      if (!seen.insert(lock).second) {
+	continue;
+      }
+      pending_locks.push_back(lock);
+    }
+
+    if (pending_locks.empty()) {
+      return true;
+    }
+
+    MDSGatherBuilder gather(g_ceph_context);
+    visited = 0;
+    for (SimpleLock *lock : pending_locks) {
+      if (hb_grace > 0 && (++visited % hb_grace) == 0) {
+	mds->heartbeat_reset();
+      }
+
+      const client_t anon = -1;
+      if (lock->can_rdlock(anon)) {
+	continue;
+      }
+      mds->locker->_rdlock_kick(lock, true);
+      if (lock->can_rdlock(anon)) {
+	continue;
+      }
+
+      const int wait_on =
+	(lock->get_parent()->is_auth() && lock->is_stable()) ?
+	SimpleLock::WAIT_RD :
+	SimpleLock::WAIT_STABLE;
+      lock->add_waiter(wait_on, gather.new_sub());
+      // A lock already unstable and held for a journal flush makes no
+      // progress until the log is flushed. rdlock_start does the same.
+      mds->locker->nudge_log(lock);
+    }
+
+    if (!gather.has_subs()) {
+      return true;
+    }
+
+    if (gather.num_subs_remaining() == 0) {
+      gather.set_finisher(new C_MDSInternalNoop);
+      gather.activate();
+      return true;
+    }
+
+    dout(10) << __func__ << " waiting for " << gather.num_subs_remaining()
+	     << " snapflushes on " << *dir
+	     << " snap " << snapid_prev << " vs. " << snapid << dendl;
+    mds->locker->drop_locks(mdr.get());
+    mdr->drop_local_auth_pins();
+
+    gather.set_finisher(new C_MDS_RetryRequest(mdcache, mdr));
+    gather.activate();
+    if (waiting)
+      *waiting = true;
+    return false;
+  };
+
+  if (!await_pending_snapflushes()) {
+    return false;
+  }
+
   while(it != dir->end()) {
     CDentry* dn = it->second;
     dout(20) << __func__ << " " << it->first << "->" << *dn << dendl;
