@@ -860,6 +860,7 @@ class AgentMessageThread(threading.Thread):
             self.mgr.log.error(f'Failed to get length of json payload: {e}')
             self.mgr.agent_cache.sending_agent_message[self.host] = False
             return
+        last_error = ''
         for retry_wait in [3, 5]:
             try:
                 agent_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -869,6 +870,7 @@ class AgentMessageThread(threading.Thread):
                 secure_agent_socket.sendall(msg.encode('utf-8'))
                 self.agent_response = secure_agent_socket.recv(1024).decode()
                 self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
+                self.mgr.agent_cache.record_agent_message_success(self.host)
                 if self.daemon_spec:
                     self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
                     self.mgr.log.info(
@@ -881,21 +883,24 @@ class AgentMessageThread(threading.Thread):
                 # We could have just deployed agent and it might not be ready
                 self.mgr.log.debug(
                     f'Retrying connection to agent on {self.host} in {str(retry_wait)} seconds. Connection failed with: {e}')
+                last_error = f'connection to {self.addr}:{self.port} failed: {e}'
                 time.sleep(retry_wait)
             except Exception as e:
                 # if it's not a connection error, something has gone wrong. Give up.
                 # Leave agent config deps unchanged so _check_agent can retry.
-                self.mgr.log.error(
-                    f'Failed to contact agent on host {self.host}: {e}. '
-                    f'Agent config deps left unchanged for retry')
-                self.mgr.agent_cache.sending_agent_message[self.host] = False
+                self._failed(f'failed to contact agent at {self.addr}:{self.port}: {e}')
                 return
         # Leave agent config deps unchanged so _check_agent can retry next cycle.
+        self._failed(f'could not connect to agent ({last_error})')
+        return
+
+    def _failed(self, error: str) -> None:
+        failures = self.mgr.agent_cache.record_agent_message_failure(self.host, error)
         self.mgr.log.error(
-            f'Could not connect to agent on host {self.host}. '
+            f'Agent on host {self.host}: {error} '
+            f'({failures} consecutive failure(s)). '
             f'Agent config deps left unchanged for retry')
         self.mgr.agent_cache.sending_agent_message[self.host] = False
-        return
 
     def get_agent_response(self) -> str:
         return self.agent_response
@@ -914,6 +919,12 @@ class CephadmAgentHelpers:
                 self.mgr.agent_cache.agent_counter[host] = 1
             elif increment:
                 self.mgr.agent_cache.agent_counter[host] = self.mgr.agent_cache.agent_counter[host] + 1
+            if not self.mgr.agent_cache.agent_message_allowed(host):
+                # mgr->agent messages to this host have been failing. Don't
+                # start a new message thread for every report the agent
+                # sends; retry once the back-off expires.
+                self.mgr.log.debug(f'Not messaging agent on host {host}: backing off after failed messages')
+                continue
             payload: Dict[str, Any] = {'counter': self.mgr.agent_cache.agent_counter[host]}
             if daemon_spec:
                 payload['config'] = daemon_spec.final_config
@@ -1003,6 +1014,7 @@ class CephadmAgentHelpers:
                 self.mgr.agent_cache.agent_timestamp = {}
                 self.mgr.agent_cache.agent_keys = {}
                 self.mgr.agent_cache.agent_ports = {}
+                self.mgr.agent_cache.reset_agent_reachability()
         return need_apply
 
     def _check_agent(self, host: str) -> bool:
@@ -1042,7 +1054,14 @@ class CephadmAgentHelpers:
                 has_agent_port = host in self.mgr.agent_cache.agent_ports
                 # we need to know the agent port to try to reconfig w/ http
                 # otherwise there is no choice but a full ssh reconfig
-                if has_agent_port and root_cert_match and not down:
+                if (
+                    has_agent_port and root_cert_match and not down
+                    and not self.mgr.agent_cache.agent_message_allowed(host)
+                ):
+                    self.mgr.log.debug(
+                        f'Agent config deps changed on {host}; HTTP push '
+                        f'postponed while backing off after failed messages')
+                elif has_agent_port and root_cert_match and not down:
                     self.mgr.log.info(
                         f'Agent config deps changed on {host} '
                         f'(last_deps={last_deps} -> deps={deps}); '

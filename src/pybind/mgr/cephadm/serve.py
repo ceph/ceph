@@ -1721,6 +1721,7 @@ class CephadmServe:
                     # so _check_agent keeps retrying (last_deps != deps) until the
                     # new MGR endpoint is actually delivered.
                     self.mgr.agent_cache.agent_config_successfully_delivered(daemon_spec)
+                    self.mgr.agent_cache.record_agent_deployed(daemon_spec.host)
                     self.log.info(
                         f"Agent config deps updated on {daemon_spec.host} after successful "
                         f"{'reconfig' if reconfig else 'deploy'} (deps={daemon_spec.deps})")
