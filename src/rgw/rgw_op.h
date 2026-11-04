@@ -2118,7 +2118,7 @@ protected:
   std::string etag;
   std::string version_id;
   bufferlist data;
-  std::unique_ptr<rgw::sal::MPSerializer> serializer;
+  std::unique_ptr<rgw::sal::MultipartUpload> upload;
   jspan_ptr multipart_trace;
   ceph::real_time upload_time;
   std::unique_ptr<rgw::sal::Notification> res;
