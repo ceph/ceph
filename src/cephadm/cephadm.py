@@ -1843,22 +1843,55 @@ class MgrListener(Thread):
         self.agent = agent
         self.stop = False
         self._listen_socket: Optional[ssl.SSLSocket] = None
+        # set if the listener stopped on an unexpected error; the agent
+        # exits when it sees it
+        self.error: Optional[str] = None
         super(MgrListener, self).__init__(target=self.run)
 
-    def run(self) -> None:
+    def setup(self) -> None:
+        """Bind the listen socket and set up TLS.
+
+        Called by the agent before it starts this thread, so that a
+        listener that can't start (bad or empty cert/key, port taken) makes
+        the agent exit instead of running on without a listener: the mgr
+        would then fail to reach it on every message while it keeps getting
+        its reports.
+        """
         listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # Allow rebinding after restart while the prior socket is in TIME_WAIT.
-        # Does not allow stealing a port from a live LISTEN socket.
-        listenSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listenSocket.bind(('0.0.0.0', int(self.agent.listener_port)))
-        listenSocket.settimeout(60)
-        listenSocket.listen(1)
-        ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-        ssl_ctx.load_cert_chain(self.agent.listener_cert_path, self.agent.listener_key_path)
-        ssl_ctx.load_verify_locations(self.agent.ca_path)
-        secureListenSocket = ssl_ctx.wrap_socket(listenSocket, server_side=True)
+        try:
+            # Allow rebinding after restart while the prior socket is in TIME_WAIT.
+            # Does not allow stealing a port from a live LISTEN socket.
+            listenSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listenSocket.bind(('0.0.0.0', int(self.agent.listener_port)))
+            listenSocket.settimeout(60)
+            listenSocket.listen(1)
+            ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+            ssl_ctx.load_cert_chain(self.agent.listener_cert_path, self.agent.listener_key_path)
+            ssl_ctx.load_verify_locations(self.agent.ca_path)
+            secureListenSocket = ssl_ctx.wrap_socket(listenSocket, server_side=True)
+        except Exception as e:
+            listenSocket.close()
+            raise Error(f'Failed to start agent listener on port {self.agent.listener_port}: {e}')
         self._listen_socket = secureListenSocket
+
+    def run(self) -> None:
+        try:
+            self._serve()
+        except Exception as e:
+            if self.stop:
+                return
+            self.error = str(e)
+            logger.error(f'Mgr Listener stopped: {e}')
+            self.agent.wakeup()
+        finally:
+            self._close_listen_socket()
+
+    def _serve(self) -> None:
+        if self._listen_socket is None:
+            self.setup()
+        secureListenSocket = self._listen_socket
+        assert secureListenSocket is not None
         while not self.stop:
             try:
                 try:
@@ -1901,14 +1934,18 @@ class MgrListener(Thread):
                     break
                 logger.error(f'Mgr Listener encountered exception: {e}')
 
-    def shutdown(self) -> None:
-        self.stop = True
-        if self._listen_socket is not None:
+    def _close_listen_socket(self) -> None:
+        sock = self._listen_socket
+        self._listen_socket = None
+        if sock is not None:
             try:
-                self._listen_socket.close()
+                sock.close()
             except Exception:
                 pass
-            self._listen_socket = None
+
+    def shutdown(self) -> None:
+        self.stop = True
+        self._close_listen_socket()
 
     def handle_json_payload(self, data: Dict[Any, Any]) -> None:
         if 'counter' in data:
@@ -2128,6 +2165,9 @@ class CephadmAgent(DaemonForm):
             raise Error(f'Failed to pick port for agent to listen on: {e}')
 
         if not self.mgr_listener.is_alive():
+            # raises if the listener can't start: exit (and let systemd
+            # retry) rather than keep reporting without a listener
+            self.mgr_listener.setup()
             self.mgr_listener.start()
 
         if not self.ls_gatherer.is_alive():
@@ -2137,6 +2177,8 @@ class CephadmAgent(DaemonForm):
             self.volume_gatherer.start()
 
         while not self.stop:
+            if self.mgr_listener.error is not None:
+                raise Error(f'Agent listener stopped: {self.mgr_listener.error}')
             start_time = time.monotonic()
             ack = self.ack
 
