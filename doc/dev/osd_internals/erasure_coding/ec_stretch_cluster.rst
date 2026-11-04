@@ -113,7 +113,7 @@ to the CLIs that control stretch mode.
 The ceph osd pool create command will be extended to become a parameterized command.
 
 For backward compatibility, the positional arguments will be maintained and can be
-specified along side the new paramaters. 
+specified along side the new parameters. 
 
 2.2.1 Full command syntax
 ^^^^^^^^^^^^^^^^^^^^^^^^^

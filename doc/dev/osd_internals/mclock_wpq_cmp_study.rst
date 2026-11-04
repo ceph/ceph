@@ -415,7 +415,7 @@ The recovery bandwidth as expected was the lowest at ~11 MiB/s.
 
 .. image:: ../../images/mclock_wpq_study/Avg_Obj_Rec_Throughput_HDD_WALdB_WPQ_vs_mClock.png
 
-The *balanced* profile as expected provides a decent compromise with an an
+The *balanced* profile as expected provides a decent compromise with an
 average bandwidth of ~16.5 MiB/s and taking an average of ~966 secs at ~4
 Objects/sec to complete the recovery.
 
