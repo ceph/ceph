@@ -129,6 +129,36 @@ describe('CdValidators', () => {
     });
   });
 
+  describe('ipv4CidrOrIp validator', () => {
+    beforeEach(() => {
+      form.get('x').setValidators(CdValidators.ipv4CidrOrIp());
+    });
+
+    it('should not error on empty addresses', () => {
+      expectValid('');
+    });
+
+    it('should accept valid IPv4 address without CIDR prefix', () => {
+      expectValid('19.117.23.141');
+      expectValid('192.100.100.1');
+    });
+
+    it('should accept valid IPv4 address with CIDR prefix', () => {
+      expectValid('10.20.0.100/24');
+      expectValid('192.168.1.1/32');
+    });
+
+    it('should error on invalid IPv4 address', () => {
+      expectPatternError('155.270.133.122');
+      expectPatternError('abc');
+    });
+
+    it('should error on invalid CIDR prefix', () => {
+      expectPatternError('10.20.0.100/33');
+      expectPatternError('10.20.0.100/abc');
+    });
+  });
+
   describe('uuid validator', () => {
     const expectUuidError = (value: string) =>
       formHelper.expectErrorChange('x', value, 'invalidUuid', true);

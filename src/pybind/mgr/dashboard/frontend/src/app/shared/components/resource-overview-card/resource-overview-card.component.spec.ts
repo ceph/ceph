@@ -125,10 +125,11 @@ describe('OverviewComponent', () => {
       ];
       fixture.detectChanges();
 
-      const statusText = fixture.debugElement.query(
-        By.css('.cd-overview-status .cd-status-text--info')
-      );
-      expect(statusText).toBeTruthy();
+      // cd-icon is stubbed via NO_ERRORS_SCHEMA, so assert the bound customClass
+      // instead of a rendered CSS class in the DOM.
+      const icon = fixture.debugElement.query(By.css('.cd-overview-status cd-icon'));
+      expect(icon).toBeTruthy();
+      expect(icon.properties['customClass']).toBe('cd-status-text--info');
     });
   });
 

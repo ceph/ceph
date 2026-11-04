@@ -57,8 +57,11 @@
             @if (field.type === 'status') {
               @let statusMeta = field.status | overviewStatus;
               <span class="cd-overview-status">
-                <cd-icon [type]="statusMeta.icon"></cd-icon>
-                <span [class]="'cds--type-body-compact-01 ' + statusMeta.textClass">
+                <cd-icon
+                  [type]="statusMeta.icon"
+                  [customClass]="statusMeta.textClass"
+                ></cd-icon>
+                <span class="cds--type-body-compact-01">
                   {{ field.value | empty: field.emptyText }}
                 </span>
               </span>

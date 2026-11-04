@@ -62,7 +62,17 @@ describe('PlacementPipe', () => {
           host_pattern: 'abc.ceph.xyz.com'
         }
       })
-    ).toBe('abc.ceph.xyz.com');
+    ).toBe('host_pattern:abc.ceph.xyz.com');
+  });
+
+  it('transforms placement host_pattern object', () => {
+    expect(
+      pipe.transform({
+        placement: {
+          host_pattern: { pattern: 'nfs-.*', pattern_type: 'regex' }
+        }
+      })
+    ).toBe('host_pattern:nfs-.*');
   });
 
   it('transforms placement (6)', () => {

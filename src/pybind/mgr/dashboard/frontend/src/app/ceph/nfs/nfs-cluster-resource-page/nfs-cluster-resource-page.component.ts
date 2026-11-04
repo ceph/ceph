@@ -2,13 +2,14 @@ import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap } from '@angular/router';
 
+import { PlacementPipe } from '~/app/ceph/cluster/services/placement.pipe';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
 import { NfsClusterResourceStateService } from '~/app/shared/services/nfs-cluster-resource-state.service';
 import {
   getClusterStatus,
+  NFS_CLUSTER_STATUS_MAP,
   NFSCluster,
-  NFSClusterPlacement,
-  NFSHostPattern
+  NFSClusterPlacement
 } from '../models/nfs-cluster-config';
 
 @Component({
@@ -19,6 +20,7 @@ import {
 })
 export class NfsClusterResourcePageComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
+  private placementPipe = inject(PlacementPipe);
 
   section = '';
   clusterId = '';
@@ -69,20 +71,13 @@ export class NfsClusterResourcePageComponent implements OnInit {
       !!cluster.ingress_mode ||
       ['active-active', 'active-passive'].includes(cluster.deployment_type || '');
 
-    const statusMap: Record<string, 'success' | 'warning' | 'danger' | 'info-circle'> = {
-      Active: 'success',
-      Degraded: 'warning',
-      Stopped: 'danger',
-      Unknown: 'info-circle'
-    };
-
     return [
       { label: $localize`Name`, value: cluster.name },
       {
         label: $localize`Status`,
         value: clusterStatus,
         type: 'status',
-        status: statusMap[clusterStatus]
+        status: NFS_CLUSTER_STATUS_MAP[clusterStatus].status
       },
       { label: $localize`Protocol`, value: this.formatProtocol(cluster) },
       {
@@ -91,15 +86,35 @@ export class NfsClusterResourcePageComponent implements OnInit {
       },
       {
         label: $localize`High availability`,
-        value: haEnabled ? $localize`Enabled` : $localize`Disabled`
+        value: haEnabled ? $localize`Enabled` : $localize`Disabled`,
+        type: 'status',
+        status: haEnabled ? 'success' : 'danger'
       },
-      { label: $localize`Monitoring port`, value: cluster.monitor_port ?? '-' },
+      {
+        label: $localize`Monitoring port`,
+        value:
+          cluster.monitoring_port ??
+          cluster.backend?.find((backend) => backend.monitoring_port != null)?.monitoring_port ??
+          '-'
+      },
+      ...(cluster.enable_rdma
+        ? [{ label: $localize`RDMA port`, value: cluster.rdma_port ?? '-' }]
+        : []),
       {
         label: $localize`Service instances`,
-        value: cluster.placement?.count ?? cluster.backend?.length ?? 0
+        value: this.serviceInstancesSummary(cluster)
       },
       { label: $localize`Placement`, value: this.formatPlacement(cluster.placement) }
     ];
+  }
+
+  private serviceInstancesSummary(cluster: NFSCluster): string {
+    const total =
+      cluster.placement?.count ?? cluster.placement?.hosts?.length ?? cluster.backend?.length ?? 0;
+    const running = (cluster.backend ?? []).filter(
+      (b) => b.status?.toLowerCase() === 'running'
+    ).length;
+    return total ? `${running} / ${total}` : '-';
   }
 
   private formatProtocol(cluster: NFSCluster): string {
@@ -107,26 +122,10 @@ export class NfsClusterResourcePageComponent implements OnInit {
   }
 
   private formatPlacement(placement?: NFSClusterPlacement): string {
-    if (placement?.label) {
-      return $localize`Label: ${placement.label}`;
+    if (!placement || !Object.keys(placement).length) {
+      return '-';
     }
-    if (placement?.hosts?.length) {
-      return placement.hosts.join(', ');
-    }
-    const hostPattern = this.formatHostPattern(placement?.host_pattern);
-    if (hostPattern) {
-      return hostPattern;
-    }
-    return $localize`Automatic`;
-  }
-
-  private formatHostPattern(hostPattern?: NFSHostPattern): string | null {
-    if (!hostPattern) {
-      return null;
-    }
-    if (typeof hostPattern === 'string') {
-      return hostPattern;
-    }
-    return hostPattern.pattern || null;
+    const display = this.placementPipe.transform({ placement });
+    return display || '-';
   }
 }

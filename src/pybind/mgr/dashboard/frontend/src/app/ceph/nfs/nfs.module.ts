@@ -30,6 +30,7 @@ import {
 import Close from '@carbon/icons/es/close/32';
 import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
 import { ClusterModule } from '../cluster/cluster.module';
+import { PlacementPipe } from '../cluster/services/placement.pipe';
 import { NfsClusterResourcePageComponent } from './nfs-cluster-resource-page/nfs-cluster-resource-page.component';
 import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sidebar/nfs-cluster-resource-sidebar.component';
 
@@ -74,7 +75,8 @@ import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sideb
     NfsClusterFormComponent,
     NfsClusterResourcePageComponent,
     NfsClusterResourceSidebarComponent
-  ]
+  ],
+  providers: [PlacementPipe]
 })
 export class NfsModule {
   constructor(private iconService: IconService) {
