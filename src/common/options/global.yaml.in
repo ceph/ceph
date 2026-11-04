@@ -1457,77 +1457,159 @@ options:
 - name: ms_async_rdma_device_name
   type: str
   level: advanced
+  desc: Name of the RDMA device to use
+  fmt_desc: The name of the RDMA device to use, as listed by ``ibv_devices``, for
+    example ``mlx5_0``. If this is empty, Ceph uses the first RDMA device that it
+    finds.
   with_legacy: true
 - name: ms_async_rdma_enable_hugepage
   type: bool
   level: advanced
+  desc: Allocate RDMA buffers from huge pages
+  fmt_desc: Allocate the RDMA send and receive buffers from 2 MiB huge pages, and
+    set ``RDMAV_HUGEPAGES_SAFE`` for libibverbs. If a huge page allocation fails,
+    Ceph uses ordinary memory for that allocation.
   default: false
   with_legacy: true
 - name: ms_async_rdma_buffer_size
   type: size
   level: advanced
+  desc: Size of each RDMA send and receive buffer
+  fmt_desc: The size of each RDMA send and receive buffer. A message larger than
+    one buffer is sent in several buffers. The send buffers are registered as one
+    memory region, and a daemon aborts when it sets up RDMA if this size times the
+    number of send buffers exceeds the device's maximum memory region size.
   default: 128_K
+  see_also:
+  - ms_async_rdma_send_buffers
   with_legacy: true
 - name: ms_async_rdma_send_buffers
   type: uint
   level: advanced
+  desc: Number of RDMA send buffers
+  fmt_desc: The number of RDMA send buffers, which a daemon registers when it sets
+    up RDMA and shares among all of its RDMA connections. The value also sets the
+    send queue length of each queue pair. If the device allows fewer work requests
+    per queue pair, Ceph lowers the value to fit the device.
   default: 1_K
+  see_also:
+  - ms_async_rdma_buffer_size
   with_legacy: true
-# size of the receive buffer pool, 0 is unlimited
 - name: ms_async_rdma_receive_buffers
   type: uint
   level: advanced
+  desc: Maximum number of RDMA receive buffers, or 0 for no limit
+  fmt_desc: The maximum number of RDMA receive buffers, or ``0`` for no limit.
+    Ceph allocates receive buffers as needed. When a daemon reaches the limit, it
+    logs ``OUT OF RX BUFFERS`` and cannot post more receive buffers until some are
+    freed. A nonzero value smaller than the receive queue length makes a daemon
+    abort when it sets up RDMA.
   default: 32_K
+  see_also:
+  - ms_async_rdma_receive_queue_len
   with_legacy: true
-# max number of wr in srq
 - name: ms_async_rdma_receive_queue_len
   type: uint
   level: advanced
+  desc: Length of the RDMA receive queue
+  fmt_desc: The number of receive buffers that Ceph keeps posted to a receive
+    queue. With :confval:`ms_async_rdma_support_srq`, all connections share one
+    receive queue of this length. Without it, each queue pair has its own receive
+    queue of this length, so receive buffer use grows with the number of
+    connections. If the device allows fewer work requests, Ceph lowers the value
+    to fit the device.
   default: 4_K
+  see_also:
+  - ms_async_rdma_support_srq
+  - ms_async_rdma_receive_buffers
   with_legacy: true
-# support srq
 - name: ms_async_rdma_support_srq
   type: bool
   level: advanced
+  desc: Use one shared receive queue for all RDMA connections
+  fmt_desc: Use one shared receive queue (SRQ) for all RDMA connections. If the
+    device doesn't support shared receive queues, set this to ``false``, or the
+    daemon aborts when it sets up RDMA.
   default: true
   with_legacy: true
 - name: ms_async_rdma_port_num
   type: uint
   level: advanced
+  desc: Port of the RDMA device to use, counting from 1
+  fmt_desc: The port of the RDMA device to use, counting from 1. The port must be
+    active (``PORT_ACTIVE`` in the output of ``ibv_devinfo``), or the daemon
+    aborts when it sets up RDMA.
   default: 1
   with_legacy: true
 - name: ms_async_rdma_polling_us
   type: uint
   level: advanced
+  desc: Microseconds that the RDMA polling thread busy-polls before it sleeps
+  fmt_desc: How long, in microseconds, the RDMA polling thread keeps polling the
+    completion queues after it wakes before it sleeps again to wait for a
+    completion event. A higher value uses more CPU time.
   default: 1000
   with_legacy: true
 - name: ms_async_rdma_gid_idx
   type: int
   level: advanced
-  desc: use gid_idx to select GID for choosing RoCEv1 or RoCEv2
+  desc: Index of the local GID in the port's GID table
+  fmt_desc: The index of the local GID to use in the port's GID table. On a RoCE
+    port, the table has an entry for each IP address and RoCE version, so the
+    index selects both, for example RoCE v1 or RoCE v2. The files
+    ``/sys/class/infiniband/<device>/ports/<port>/gids/<index>`` show each GID,
+    and the files ``/sys/class/infiniband/<device>/ports/<port>/gid_attrs/types/<index>``
+    show its RoCE version. Builds that use the legacy experimental verbs API
+    ignore this option and select the GID by :confval:`ms_async_rdma_local_gid`
+    and :confval:`ms_async_rdma_roce_ver`.
   default: 0
+  see_also:
+  - ms_async_rdma_local_gid
+  - ms_async_rdma_roce_ver
   with_legacy: true
-# GID format: "fe80:0000:0000:0000:7efe:90ff:fe72:6efe", no zero folding
 - name: ms_async_rdma_local_gid
   type: str
   level: advanced
+  desc: Local GID to use, in builds with the legacy experimental verbs API
+  fmt_desc: The local GID to use, in builds against a libibverbs that provides the
+    legacy experimental verbs API (``ibv_exp_query_gid_attr()``). Write all 16
+    bytes as eight groups of four hexadecimal digits without omitting zeros, for
+    example ``fe80:0000:0000:0000:7efe:90ff:fe72:6efe``. If this is empty or
+    malformed, Ceph uses GID index 0. If no GID in the table matches it with the
+    RoCE version :confval:`ms_async_rdma_roce_ver`, the daemon aborts. Other
+    builds, including builds against rdma-core, ignore this option and use
+    :confval:`ms_async_rdma_gid_idx`.
+  see_also:
+  - ms_async_rdma_roce_ver
+  - ms_async_rdma_gid_idx
   with_legacy: true
-# 0=RoCEv1, 1=RoCEv2, 2=RoCEv1.5
 - name: ms_async_rdma_roce_ver
   type: int
   level: advanced
+  desc: RoCE version of ms_async_rdma_local_gid (0 = v1, 1 = v2, 2 = v1.5)
+  fmt_desc: The RoCE version of :confval:`ms_async_rdma_local_gid`. ``0`` is RoCE
+    v1, ``1`` is RoCE v2, and ``2`` is RoCE v1.5. Only builds that use the legacy
+    experimental verbs API read this option.
   default: 1
+  see_also:
+  - ms_async_rdma_local_gid
   with_legacy: true
-# in RoCE, this means PCP
 - name: ms_async_rdma_sl
   type: int
   level: advanced
+  desc: Service level of RDMA connections
+  fmt_desc: The service level (SL) of RDMA connections. On RoCE, it sets the
+    priority code point (PCP) of the VLAN tag.
   default: 3
   with_legacy: true
-# in RoCE, this means DSCP
 - name: ms_async_rdma_dscp
   type: int
   level: advanced
+  desc: Traffic class of RDMA connections
+  fmt_desc: The traffic class that Ceph sets in the global route header of RDMA
+    connections. On RoCE v2, its upper six bits are the IP DSCP, so to mark traffic
+    with DSCP *n*, set this option to 4 times *n*. The default, ``96``, is DSCP 24
+    (CS3).
   default: 96
   with_legacy: true
 # when there are enough accept failures, indicating there are unrecoverable failures,
@@ -1539,16 +1621,30 @@ options:
     the daemon is misconfigured and abort it.
   default: 4
   with_legacy: true
-# rdma connection management
 - name: ms_async_rdma_cm
   type: bool
   level: advanced
+  desc: Use the RDMA connection manager (librdmacm) to set up connections
+  fmt_desc: Use the RDMA connection manager (librdmacm) to set up connections. Only
+    the iWARP transport uses the connection manager, so set this to ``true`` when
+    :confval:`ms_async_rdma_type` is ``iwarp`` and leave it ``false`` otherwise.
+    Any other combination makes RDMA connections fail with ``EOPNOTSUPP``. Without
+    the connection manager, peers exchange queue pair details over a TCP
+    connection to the messenger address.
   default: false
+  see_also:
+  - ms_async_rdma_type
   with_legacy: true
 - name: ms_async_rdma_type
   type: str
   level: advanced
+  desc: RDMA transport, ib (InfiniBand and RoCE) or iwarp
+  fmt_desc: The RDMA transport. ``ib``, the default, covers InfiniBand and RoCE.
+    ``iwarp`` requires :confval:`ms_async_rdma_cm`. Ceph treats any value other
+    than ``iwarp`` as ``ib``.
   default: ib
+  see_also:
+  - ms_async_rdma_cm
   with_legacy: true
 - name: ms_dpdk_port_id
   type: int
