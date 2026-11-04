@@ -27,8 +27,8 @@ def test_mocked_fs_authorizer():
 def test_mocked_fs_path_resolver(monkeypatch):
     # we have to "re-patch" whatever cephfs module gets mocked with because
     # the ObjectNotFound attribute is not an exception in the test environment
-    monkeypatch.setattr('cephfs.ObjectNotFound', KeyError)
-    monkeypatch.setattr('cephfs.NoData', KeyError)
+    monkeypatch.setattr('cephfs.ObjectNotFound', KeyError, raising=False)
+    monkeypatch.setattr('cephfs.NoData', KeyError, raising=False)
 
     def mmcmd(cmd):
         if cmd['prefix'] == 'fs subvolume getpath':
@@ -150,7 +150,7 @@ class TestTTLCache(unittest.TestCase):
 
 
 def test_caching_fs_path_resolver(monkeypatch):
-    monkeypatch.setattr('cephfs.ObjectNotFound', KeyError)
+    monkeypatch.setattr('cephfs.ObjectNotFound', KeyError, raising=False)
 
     def mmcmd(cmd):
         if cmd['prefix'] == 'fs subvolume getpath':
