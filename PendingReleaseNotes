@@ -1,5 +1,20 @@
 >=22.0.0
 
+* RADOS: The OSD keeps data it reads once out of its caches. Recovery reads
+  on the source OSD (replicated pushes and the shard reads of an EC
+  reconstruction) are issued with ``FADVISE_DONTNEED``, as scrub reads were.
+  BlueStore's onode cache and its ``binned_lru`` RocksDB block caches hold a
+  new entry in a bounded probation part and admit it to the main cache only
+  once it is used again in two later cache age bins, so a scrub, backfill or
+  bulk ingest no longer displaces the cached working set or grows the OSD
+  toward ``osd_memory_target``; an onode evicted from the main part and
+  missed again soon after returns to it at once. The new options
+  ``bluestore_onode_cache_probation_ratio``,
+  ``bluestore_onode_cache_probation_floor`` and
+  ``rocksdb_cache_probation_ratio`` size the probation part, 0 restoring the
+  previous behaviour of that cache; the ``onodes_probation`` perf counter
+  reports the onodes on probation.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
