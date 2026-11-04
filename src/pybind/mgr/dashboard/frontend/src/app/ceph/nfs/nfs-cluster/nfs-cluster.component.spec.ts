@@ -5,6 +5,7 @@ import { take } from 'rxjs/operators';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 
@@ -52,10 +53,12 @@ describe('NfsClusterComponent', () => {
   });
 
   describe('columns', () => {
-    it('should configure columns for Name, Status, Shares and Protocol', () => {
+    it('should configure columns for Name, Status, Placement, Ingress mode, Shares and Protocol', () => {
       expect(component.columns.map((column) => column.name)).toEqual([
         'Name',
         'Status',
+        'Placement',
+        'Ingress mode',
         'Shares',
         'Protocol'
       ]);
@@ -64,20 +67,24 @@ describe('NfsClusterComponent', () => {
     it('should bind columns to the expected row properties', () => {
       expect(component.columns.map((column) => column.prop)).toEqual([
         'name',
-        'status',
+        'statuses',
+        'placementDisplay',
+        'ingressModeDisplay',
         'shares',
         'protocol'
       ]);
     });
 
-    it('should render Status with the status class mapping', () => {
-      const statusColumn = component.columns.find((column) => column.prop === 'status');
-      expect(statusColumn.cellTemplate).toBeTruthy();
+    it('should render Status with the shared tag mapping', () => {
+      const statusColumn = component.columns.find((column) => column.prop === 'statuses');
+      expect(statusColumn.cellTransformation).toBe(CellTemplate.tag);
+      expect(statusColumn.customTemplateConfig.class).toBe('tag-dark');
       expect(statusColumn.customTemplateConfig.map).toEqual({
-        Running: { class: 'tag-success' },
-        Degraded: { class: 'tag-warning' },
-        Stopped: { class: 'tag-danger' },
-        Unknown: { class: 'tag-default' }
+        running: { class: 'tag-success' },
+        starting: { class: 'tag-dark' },
+        stopped: { class: 'tag-warning' },
+        error: { class: 'tag-danger' },
+        unknown: { class: 'tag-dark' }
       });
     });
   });
@@ -95,13 +102,16 @@ describe('NfsClusterComponent', () => {
       expect(rows).toEqual(expected.map((row) => jasmine.objectContaining(row)));
     }
 
-    it('should map cluster rows with status, shares and protocol', async () => {
+    it('should map cluster rows with status, placement, ingress mode, shares and protocol', async () => {
       await expectClusterRows(
         [
           {
             name: 'cluster1',
             backend: [{ hostname: 'host1', ip: '1.2.3.4', status: 'running' }],
-            enable_nfsv3: true
+            enable_nfsv3: true,
+            placement: { count: 2, hosts: ['host1', 'host2'] },
+            ingress: true,
+            ingress_mode: 'haproxy-protocol'
           } as NFSCluster
         ],
         [
@@ -111,15 +121,60 @@ describe('NfsClusterComponent', () => {
         [
           {
             name: 'cluster1',
-            status: 'Running',
+            statuses: ['running'],
             shares: 2,
-            protocol: 'NFSv3, NFSv4'
+            protocol: 'NFSv3, NFSv4',
+            placementDisplay: 'host1;host2;count:2',
+            ingressModeDisplay: 'HAProxy protocol'
           }
         ]
       );
     });
 
-    it('should mark status Running when all backends are running', async () => {
+    it('should show a dash for empty placement and disabled ingress', async () => {
+      await expectClusterRows(
+        [
+          {
+            name: 'cluster1',
+            backend: [{ hostname: 'host1', ip: '1.2.3.4', status: 'running' }],
+            placement: {},
+            ingress: false
+          } as NFSCluster
+        ],
+        [],
+        [
+          {
+            name: 'cluster1',
+            placementDisplay: '-',
+            ingressModeDisplay: '-'
+          }
+        ]
+      );
+    });
+
+    it('should format ingress mode labels', async () => {
+      await expectClusterRows(
+        [
+          {
+            name: 'cluster1',
+            backend: [],
+            placement: { label: 'nfs' },
+            ingress: true,
+            ingress_mode: 'keepalive-only'
+          } as NFSCluster
+        ],
+        [],
+        [
+          {
+            name: 'cluster1',
+            placementDisplay: 'label:nfs',
+            ingressModeDisplay: 'Keepalive only'
+          }
+        ]
+      );
+    });
+
+    it('should show each backend status', async () => {
       await expectClusterRows(
         [
           {
@@ -131,11 +186,16 @@ describe('NfsClusterComponent', () => {
           } as NFSCluster
         ],
         [],
-        [{ name: 'cluster1', status: 'Running' }]
+        [
+          {
+            name: 'cluster1',
+            statuses: ['running', 'running']
+          }
+        ]
       );
     });
 
-    it('should mark status Degraded when some backends are running', async () => {
+    it('should show stopped and error statuses directly', async () => {
       await expectClusterRows(
         [
           {
@@ -147,11 +207,16 @@ describe('NfsClusterComponent', () => {
           } as NFSCluster
         ],
         [],
-        [{ name: 'cluster1', status: 'Degraded' }]
+        [
+          {
+            name: 'cluster1',
+            statuses: ['running', 'stopped']
+          }
+        ]
       );
     });
 
-    it('should show a dash when no backends are running', async () => {
+    it('should show stopped and error instead of a dash', async () => {
       await expectClusterRows(
         [
           {
@@ -163,11 +228,16 @@ describe('NfsClusterComponent', () => {
           } as NFSCluster
         ],
         [],
-        [{ name: 'cluster1', status: '-' }]
+        [
+          {
+            name: 'cluster1',
+            statuses: ['stopped', 'error']
+          }
+        ]
       );
     });
 
-    it('should show a dash when backends are missing', async () => {
+    it('should show unknown when backends are missing', async () => {
       await expectClusterRows(
         [
           {
@@ -180,8 +250,14 @@ describe('NfsClusterComponent', () => {
         ],
         [],
         [
-          { name: 'cluster1', status: '-', eventsLink: ['/services', 'nfs.cluster1', 'events'] },
-          { name: 'cluster2', status: '-', eventsLink: ['/services', 'nfs.cluster2', 'events'] }
+          {
+            name: 'cluster1',
+            statuses: ['unknown']
+          },
+          {
+            name: 'cluster2',
+            statuses: ['unknown']
+          }
         ]
       );
     });
@@ -237,11 +313,23 @@ describe('NfsClusterComponent', () => {
       expect(clusters).toEqual([
         jasmine.objectContaining({
           name: 'cluster1',
-          status: 'Running',
+          statuses: ['running'],
           shares: 0,
           protocol: 'NFSv3, NFSv4'
         })
       ]);
     });
+  });
+
+  it('should include edit table action alongside create and delete', () => {
+    expect(component.tableActions.map((action) => action.name)).toEqual([
+      component.actionLabels.CREATE,
+      component.actionLabels.EDIT,
+      component.actionLabels.DELETE
+    ]);
+    const edit = component.tableActions.find((a) => a.name === component.actionLabels.EDIT);
+    expect(edit.permission).toBe('update');
+    expect(edit.disable({ hasSingleSelection: false } as any)).toBe(true);
+    expect(edit.disable({ hasSingleSelection: true } as any)).toBe(false);
   });
 });

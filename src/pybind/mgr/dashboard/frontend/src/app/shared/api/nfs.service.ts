@@ -1,7 +1,8 @@
 import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { NFSCluster, NFSClusterPayload } from '~/app/ceph/nfs/models/nfs.model';
 
 import { NfsFSAbstractionLayer, SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
@@ -87,11 +88,20 @@ export class NfsService extends ApiClient {
     });
   }
 
+  listClusters(info: false): Observable<string[]>;
+  listClusters(info?: true): Observable<NFSCluster[]>;
   listClusters(info = true): Observable<NFSCluster[] | string[]> {
     return this.http.get<NFSCluster[] | string[]>(`${this.apiPath}/cluster`, {
       headers: { Accept: this.getVersionHeaderValue(0, 1) },
       params: { info: String(info) }
     });
+  }
+
+  exists(clusterId: string): Observable<boolean> {
+    return this.listClusters(false).pipe(
+      map((names) => names.includes(clusterId)),
+      catchError(() => of(false))
+    );
   }
 
   lsDir(fs_name: string, root_dir: string): Observable<Directory> {
@@ -109,8 +119,21 @@ export class NfsService extends ApiClient {
     return this.http.get(`${this.uiApiPath}/cephfs/filesystems`);
   }
 
-  createCluster(request: NFSClusterPayload): Observable<HttpResponse<null>> {
-    return this.http.post<null>(`${this.apiPath}/cluster`, request, {
+  getCluster(clusterId: string): Observable<NFSCluster | null> {
+    return this.listClusters(true).pipe(
+      map((clusters) => clusters.find((cluster) => cluster.name === clusterId) ?? null)
+    );
+  }
+
+  createCluster(requestModel: NFSClusterPayload): Observable<HttpResponse<null>> {
+    return this.http.post<null>(`${this.apiPath}/cluster`, requestModel, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
+  updateCluster(clusterId: string, requestModel: any): Observable<HttpResponse<any>> {
+    return this.http.put<any>(`${this.apiPath}/cluster/${clusterId}`, requestModel, {
       headers: { Accept: this.getVersionHeaderValue(1, 0) },
       observe: 'response'
     });
