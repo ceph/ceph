@@ -674,15 +674,12 @@ WebTokenEngine::get_jwks(const DoutPrefixProvider* dpp, const string& iss, const
 {
   const std::chrono::seconds ttl{cct->_conf.get_val<uint64_t>("rgw_sts_jwks_cache_ttl")};
   if (ttl.count() == 0) {
+    jwks_cache.clear();
     return fetch_jwks(dpp, iss, thumbprints, y).document;
   }
 
-  static const vector<string> no_thumbprints;
-  const auto& required_thumbprints =
-      cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification") ? thumbprints : no_thumbprints;
-
   const auto now = detail::JWKSCache::clock::now();
-  if (auto cached = jwks_cache.lookup(iss, required_thumbprints, token_kid, ttl, now)) {
+  if (auto cached = jwks_cache.lookup(iss, thumbprints, token_kid, ttl, now)) {
     ldpp_dout(dpp, 20) << "Using cached JWKS for issuer " << iss << dendl;
     return *cached;
   }
@@ -690,8 +687,15 @@ WebTokenEngine::get_jwks(const DoutPrefixProvider* dpp, const string& iss, const
   // fetched outside the cache lock; concurrent misses may all fetch
   auto fetched = fetch_jwks(dpp, iss, thumbprints, y);
   // don't cache a bad response for the whole TTL
-  if (detail::is_jwks_document(fetched.document)) {
-    jwks_cache.store(iss, std::move(fetched.cert_thumbprint), fetched.document, now);
+  if (detail::is_jwks_document(fetched.document) &&
+      cct->_conf.get_val<uint64_t>("rgw_sts_jwks_cache_ttl") != 0) {
+    detail::cert_digest_fn digest;
+    if (!cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification")) {
+      digest = [this](const std::string& x5c) {
+        return get_cert_thumbprint("-----BEGIN CERTIFICATE-----\n" + x5c + "\n-----END CERTIFICATE-----");
+      };
+    }
+    jwks_cache.store(iss, std::move(fetched.cert_thumbprint), fetched.document, now, digest);
   }
   return fetched.document;
 }

@@ -2,9 +2,9 @@
 #pragma once
 
 #include <chrono>
+#include <functional>
 #include <map>
 #include <optional>
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,25 +25,30 @@ inline bool is_jwks_document(const std::string& jwks)
   return keys && keys->is_array();
 }
 
-inline std::set<std::string> jwks_key_ids(const std::string& jwks)
+using jwks_keys_map = std::map<std::string, std::vector<std::string>>;
+
+inline jwks_keys_map jwks_keys(const std::string& jwks)
 {
-  std::set<std::string> kids;
+  jwks_keys_map result;
   JSONParser parser;
   if (!parser.parse(jwks.c_str(), jwks.size())) {
-    return kids;
+    return result;
   }
   JSONObj* keys = parser.find_obj("keys");
   if (!keys || !keys->is_array()) {
-    return kids;
+    return result;
   }
   for (auto key = keys->find_first(); !key.end(); ++key) {
     std::string kid;
     if ((*key)->is_object() && JSONDecoder::decode_json("kid", kid, *key)) {
-      kids.insert(std::move(kid));
+      auto& x5c = result[std::move(kid)];
+      JSONDecoder::decode_json("x5c", x5c, *key);
     }
   }
-  return kids;
+  return result;
 }
+
+using cert_digest_fn = std::function<std::string(const std::string&)>;
 
 // Per-issuer cache of OIDC provider JWKS documents. Time is passed in by
 // the caller so the policy can be tested without a clock.
@@ -54,10 +59,8 @@ class JWKSCache {
 
   explicit JWKSCache(size_t max_entries = 1024) : max_entries(max_entries) {}
 
-  // the cached document, if it is within ttl, its endpoint certificate is
-  // still registered (when thumbprints are given) and token_kid is in it.
-  // Otherwise the caller fetches as it always did; an unknown or missing kid
-  // may mean the provider rotated keys (OpenID Connect Core 10.1.1).
+  // Reuse only while the endpoint certificate and the token key's stored
+  // x5c thumbprints are still registered, and the entry is within TTL.
   std::optional<std::string> lookup(const std::string& iss,
                                     const std::vector<std::string>& thumbprints,
                                     const std::optional<std::string>& token_kid,
@@ -70,31 +73,56 @@ class JWKSCache {
       return std::nullopt;
     }
     const auto& entry = it->second;
-    if (!thumbprints.empty() &&
+    if (!entry.cert_thumbprint.empty() &&
         !is_registered(entry.cert_thumbprint, thumbprints)) {
       return std::nullopt;
     }
-    if (!token_kid || entry.kids.count(*token_kid) == 0) {
+    if (!token_kid) {
+      return std::nullopt;
+    }
+    auto key = entry.keys.find(*token_kid);
+    if (key == entry.keys.end()) {
+      return std::nullopt;
+    }
+    if (!key->second.empty() && !any_registered(key->second, thumbprints)) {
       return std::nullopt;
     }
     return entry.jwks;
   }
 
   // cert_thumbprint: the endpoint certificate seen at fetch time, empty if
-  // the endpoint was not verified
+  // the endpoint was not verified. digest computes each x5c thumbprint.
   void store(const std::string& iss,
              std::string cert_thumbprint,
              std::string jwks,
-             time_point now)
+             time_point now,
+             const cert_digest_fn& digest = {})
   {
-    auto kids = jwks_key_ids(jwks);
+    jwks_keys_map keys;
+    for (auto& [kid, x5c] : jwks_keys(jwks)) {
+      auto& thumbprints = keys[kid];
+      if (!digest) {
+        continue;
+      }
+      for (const auto& cert : x5c) {
+        if (auto t = digest(cert); !t.empty()) {
+          thumbprints.push_back(std::move(t));
+        }
+      }
+    }
     std::lock_guard l{lock};
     if (entries.size() >= max_entries && entries.find(iss) == entries.end()) {
       // issuers are registered providers, this is not expected in practice
       entries.clear();
     }
-    entries[iss] = Entry{std::move(jwks), std::move(kids),
+    entries[iss] = Entry{std::move(jwks), std::move(keys),
                          std::move(cert_thumbprint), now};
+  }
+
+  void clear()
+  {
+    std::lock_guard l{lock};
+    entries.clear();
   }
 
   size_t size() const
@@ -107,9 +135,6 @@ class JWKSCache {
   static bool is_registered(const std::string& cert_thumbprint,
                             const std::vector<std::string>& thumbprints)
   {
-    if (cert_thumbprint.empty()) {
-      return false;
-    }
     for (const auto& t : thumbprints) {
       if (boost::iequals(t, cert_thumbprint)) {
         return true;
@@ -118,9 +143,20 @@ class JWKSCache {
     return false;
   }
 
+  static bool any_registered(const std::vector<std::string>& cert_thumbprints,
+                             const std::vector<std::string>& thumbprints)
+  {
+    for (const auto& c : cert_thumbprints) {
+      if (is_registered(c, thumbprints)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   struct Entry {
     std::string jwks;
-    std::set<std::string> kids;
+    jwks_keys_map keys;
     std::string cert_thumbprint;
     time_point stored_at;
   };

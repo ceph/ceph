@@ -1,14 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 #include <gtest/gtest.h>
 #include <chrono>
-#include <set>
 #include <string>
 #include <vector>
 #include "rgw_sts_jwks_cache.h"
 
 using rgw::auth::sts::detail::JWKSCache;
 using rgw::auth::sts::detail::is_jwks_document;
-using rgw::auth::sts::detail::jwks_key_ids;
+using rgw::auth::sts::detail::jwks_keys;
+using rgw::auth::sts::detail::jwks_keys_map;
 using namespace std::chrono_literals;
 
 namespace {
@@ -20,6 +20,8 @@ const std::string jwks_a = R"({"keys":[{"kid":"a","kty":"RSA"}]})";
 const std::string jwks_b = R"({"keys":[{"kid":"b","kty":"RSA"}]})";
 const std::string jwks_ab = R"({"keys":[{"kid":"a","kty":"RSA"},{"kid":"b","kty":"RSA"}]})";
 const std::string jwks_c = R"({"keys":[{"kid":"c","kty":"RSA"}]})";
+const std::string jwks_x5c = R"({"keys":[{"kid":"a","kty":"RSA","x5c":["ca","root"]},{"kid":"b","kty":"RSA","x5c":["cb"]},{"kid":"n","kty":"RSA"}]})";
+const auto identity_digest = [](const std::string& cert) { return cert; };
 constexpr auto ttl = 300s;
 const std::optional<std::string> no_kid;
 
@@ -48,13 +50,15 @@ TEST(STSJwksCache, DocumentShape)
   EXPECT_FALSE(is_jwks_document(R"({"keys":"notarray"})"));
 }
 
-TEST(STSJwksCache, KeyIds)
+TEST(STSJwksCache, Keys)
 {
-  EXPECT_EQ((std::set<std::string>{"a", "b"}), jwks_key_ids(jwks_ab));
-  EXPECT_EQ((std::set<std::string>{"only", ""}),
-            jwks_key_ids(R"({"keys":[{"kty":"RSA"},"x",null,{"kid":"only"},{"kid":""}]})"));
-  EXPECT_TRUE(jwks_key_ids("not json").empty());
-  EXPECT_TRUE(jwks_key_ids(R"({"keys":"notarray"})").empty());
+  EXPECT_EQ((jwks_keys_map{{"a", {}}, {"b", {}}}), jwks_keys(jwks_ab));
+  EXPECT_EQ((jwks_keys_map{{"a", {"ca", "root"}}, {"b", {"cb"}}, {"n", {}}}),
+            jwks_keys(jwks_x5c));
+  EXPECT_EQ((jwks_keys_map{{"only", {}}, {"", {}}}),
+            jwks_keys(R"({"keys":[{"kty":"RSA"},"x",null,{"kid":"only"},{"kid":""}]})"));
+  EXPECT_TRUE(jwks_keys("not json").empty());
+  EXPECT_TRUE(jwks_keys(R"({"keys":"notarray"})").empty());
 }
 
 TEST(STSJwksCache, EmptyCacheMisses)
@@ -124,18 +128,46 @@ TEST(STSJwksCache, IssuersAreIndependent)
   EXPECT_EQ(jwks_b, look(cache, "iss2", {"bb"}, "b", t0() + ttl));
 }
 
-TEST(STSJwksCache, ThumbprintCheckedOnlyWhenVerifying)
+TEST(STSJwksCache, EndpointCertificateMustStayRegistered)
 {
   JWKSCache cache;
   cache.store("iss", "aa", jwks_ab, t0());
   EXPECT_EQ(jwks_ab, look(cache, "iss", {"bb", "AA"}, "a", t0() + 1s)); // case-insensitive
   EXPECT_FALSE(look(cache, "iss", {"bb"}, "a", t0() + 1s)); // no longer registered
   EXPECT_FALSE(look(cache, "iss", {"bb"}, "b", t0() + 1s));
-  EXPECT_EQ(jwks_ab, look(cache, "iss", unverified, "a", t0() + 1s));
+  EXPECT_FALSE(look(cache, "iss", unverified, "a", t0() + 1s));
   // fetched without endpoint verification
   cache.store("iss2", "", jwks_ab, t0());
-  EXPECT_FALSE(look(cache, "iss2", registered, "a", t0() + 1s));
+  EXPECT_EQ(jwks_ab, look(cache, "iss2", registered, "a", t0() + 1s));
   EXPECT_EQ(jwks_ab, look(cache, "iss2", unverified, "a", t0() + 1s));
+}
+
+TEST(STSJwksCache, SigningCertificateMustStayRegistered)
+{
+  JWKSCache cache;
+  cache.store("iss", "", jwks_x5c, t0(), identity_digest);
+  EXPECT_EQ(jwks_x5c, look(cache, "iss", {"ca"}, "a", t0() + 1s));
+  EXPECT_EQ(jwks_x5c, look(cache, "iss", {"ROOT"}, "a", t0() + 1s));
+  EXPECT_EQ(jwks_x5c, look(cache, "iss", {"ca", "cb"}, "b", t0() + 1s));
+  EXPECT_FALSE(look(cache, "iss", {"ca"}, "b", t0() + 1s));
+  EXPECT_FALSE(look(cache, "iss", {"cb"}, "a", t0() + 1s));
+  EXPECT_FALSE(look(cache, "iss", unverified, "a", t0() + 1s));
+  EXPECT_EQ(jwks_x5c, look(cache, "iss", {"ca"}, "n", t0() + 1s));
+  EXPECT_EQ(jwks_x5c, look(cache, "iss", unverified, "n", t0() + 1s));
+  cache.store("iss2", "", jwks_x5c, t0());
+  EXPECT_EQ(jwks_x5c, look(cache, "iss2", {"other"}, "a", t0() + 1s));
+}
+
+TEST(STSJwksCache, SigningCertificateRenewalScenario)
+{
+  JWKSCache cache;
+  const std::string before = R"({"keys":[{"kid":"a","x5c":["c1"]}]})";
+  const std::string after = R"({"keys":[{"kid":"a","x5c":["c2"]}]})";
+  cache.store("iss", "", before, t0(), identity_digest);
+  EXPECT_EQ(before, look(cache, "iss", {"c1", "c2"}, "a", t0() + 10s));
+  EXPECT_FALSE(look(cache, "iss", {"c2"}, "a", t0() + 11s));
+  cache.store("iss", "", after, t0() + 11s, identity_digest);
+  EXPECT_EQ(after, look(cache, "iss", {"c2"}, "a", t0() + 12s));
 }
 
 // provider key rotation: publish [a, b], switch issuing to b, retire a
@@ -174,6 +206,19 @@ TEST(STSJwksCache, EndpointCertificateRenewalScenario)
   EXPECT_EQ(jwks_a, look(cache, "iss", {"bb"}, "a", t0() + ttl + 2s));
   cache.store("iss2", "aa", jwks_a, t0());
   EXPECT_FALSE(look(cache, "iss2", {"bb"}, "a", t0() + 1s));
+}
+
+TEST(STSJwksCache, ClearDropsEveryIssuer)
+{
+  JWKSCache cache;
+  cache.store("iss1", "aa", jwks_a, t0());
+  cache.store("iss2", "aa", jwks_b, t0());
+  cache.clear();
+  EXPECT_EQ(0u, cache.size());
+  EXPECT_FALSE(look(cache, "iss1", registered, "a", t0() + 1s));
+  EXPECT_FALSE(look(cache, "iss2", registered, "b", t0() + 1s));
+  cache.store("iss1", "aa", jwks_a, t0() + 2s);
+  EXPECT_EQ(jwks_a, look(cache, "iss1", registered, "a", t0() + 3s));
 }
 
 TEST(STSJwksCache, FullCacheIsClearedForNewIssuer)
