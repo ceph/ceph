@@ -53,6 +53,31 @@ def test_host_cache_load_normalizes_uppercase_keys(cephadm_module: CephadmOrches
     assert 'ceph-node-00' in cache.last_device_update
 
 
+def test_update_host_facts_schedules_registry_login(cephadm_module: CephadmOrchestrator):
+    """
+    If we checked a registry login while gathering facts on a host
+    and saw it not logged in that host should be added to the rgistry login queue
+    """
+    cephadm_module.registry_credential_urls = ['real_registry.really']
+
+    host_facts = {
+        'hostname': 'example_host',
+        'logged_into_all_container_registries': False
+    }
+    cephadm_module.cache.update_host_facts('example_host', host_facts)
+    assert 'example_host' in cephadm_module.cache.registry_login_queue
+
+    # also test it doesn't schedule a login in other cases
+    cephadm_module.cache.registry_login_queue = set()
+    host_facts['logged_into_all_container_registries'] = True
+    cephadm_module.cache.update_host_facts('example_host', host_facts)
+    assert 'example_host' not in cephadm_module.cache.registry_login_queue
+
+    host_facts.pop('logged_into_all_container_registries')
+    cephadm_module.cache.update_host_facts('example_host', host_facts)
+    assert 'example_host' not in cephadm_module.cache.registry_login_queue
+
+
 def test_inventory_load_normalizes_keys(cephadm_module: CephadmOrchestrator):
     """Inventory.__init__ normalizes uppercase persisted keys on load and persists them."""
     import json

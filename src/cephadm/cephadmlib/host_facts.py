@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, cast, Dict, List, Optional, Set, Union
 
 from cephadmlib.call_wrappers import call, call_throws, CallVerbosity
+from cephadmlib.container_engines import check_registry_login
 from cephadmlib.context import CephadmContext
 from ceph.utils import bytes_to_human
 from cephadmlib.exe_utils import find_executable
@@ -839,6 +840,16 @@ class HostFacts:
                 ]
 
         return k_param
+
+    @property
+    def logged_into_all_container_registries(self) -> bool:
+        """Check if host is logged into all container registries if provided to gather-facts command"""
+        if not self.ctx.container_registries_to_check:
+            return True
+        for url in self.ctx.container_registries_to_check.split(','):
+            if not check_registry_login(self.ctx, url):
+                return False
+        return True
 
     @property
     def fips_enabled(self) -> bool:

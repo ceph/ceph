@@ -187,6 +187,20 @@ def registry_login(
         )
 
 
+def check_registry_login(
+    ctx: CephadmContext,
+    url: str,
+) -> bool:
+    # returns True if logged into the registry url
+    # and false otherwise
+    engine = ctx.container_engine
+    cmd = [engine.path, 'login', '--get-login', url]
+    if isinstance(engine, Podman):
+        cmd.append('--authfile=/etc/ceph/podman-auth.json')
+    _, __, ret = call(ctx, cmd)
+    return not ret
+
+
 def pull_command(
     ctx: CephadmContext, image: str, insecure: bool = False
 ) -> List[str]:

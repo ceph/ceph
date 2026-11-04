@@ -315,7 +315,7 @@ class CephadmServe:
                         failures.append(r)
                 self.mgr.cache.metadata_up_to_date[host] = True
 
-            if self.mgr.cache.host_needs_registry_login(host) and self.mgr.get_store('registry_credentials'):
+            if self.mgr.registry_credentials_present and self.mgr.cache.host_needs_registry_login(host):
                 self.log.debug(f"Logging `{host}` into custom registry")
                 with self.mgr.async_timeout_handler(host, 'cephadm registry-login'):
                     r = self.mgr.wait_async(self._registry_login(
@@ -396,8 +396,13 @@ class CephadmServe:
     def _refresh_facts(self, host: str) -> Optional[str]:
         try:
             with self.mgr.async_timeout_handler(host, 'cephadm gather-facts'):
+                args = []
+                if self.mgr.registry_credentials_present and self.mgr.registry_credential_urls:
+                    args.extend(
+                        ['--container-registries-to-check', ','.join(self.mgr.registry_credential_urls)]
+                    )
                 val = self.mgr.wait_async(self._run_cephadm_json(
-                    host, cephadmNoImage, 'gather-facts', [],
+                    host, cephadmNoImage, 'gather-facts', args,
                     no_fsid=True, log_output=self.mgr.log_refresh_metadata))
         except OrchestratorError as e:
             return str(e)
