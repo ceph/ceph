@@ -73,7 +73,7 @@ cluster nodes:
    # echo validate the placement then run
    # ceph orch apply -i /tmp/mds.zac.spec
 
-See also :ref:`orchestrator-cli-cephfs` for more information information
+See also :ref:`orchestrator-cli-cephfs` for more information
 regarding placement.
 
 When the cluster is running Ceph Tentacle (20.2.0) or later, one may condense these
