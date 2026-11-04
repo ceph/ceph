@@ -42,7 +42,7 @@ Options
 
 .. option:: -i ID, --id ID
 
-   Set the ID portion of name for rbd-mirror
+   Set the ID portion of the RADOS user name for rbd-mirror
 
 .. option:: -n TYPE.ID, --name TYPE.ID
 

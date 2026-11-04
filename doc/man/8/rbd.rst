@@ -314,7 +314,7 @@ Commands
 :command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
   Export image to dest path (use - for stdout).
   The --export-format accepts '1' or '2' currently. Format 2 allows us to export not only the content
-  of the image, but also the snapshots and other properties, such as image_order and features.
+  of the image, but also the snapshots and other properties, such as image order and features.
 
 :command:`export-diff` [--from-snap *snap-name*] [--whole-object] (*image-spec* | *snap-spec*) *dest-path*
   Export an incremental diff for an image to dest path (use - for stdout).  If
@@ -402,7 +402,7 @@ Commands
   used together.
 
   The --export-format accepts '1' or '2' currently. Format 2 allows us to import not only the content
-  of image, but also the snapshots and other properties, such as image_order and features.
+  of the image, but also the snapshots and other properties, such as image order and features.
 
 :command:`import-diff` *src-path* *image-spec*
   Import an incremental diff of an image and apply it to the current image.  If the diff
@@ -563,8 +563,8 @@ Commands
 
 :command:`mirror pool peer set` [*pool-name*] *uuid* *key* *value*
   Update mirroring peer settings.
-  The key can be either ``client`` or ``cluster``, and the value
-  corresponds to remote client name or remote cluster name.
+  The key can be either ``client`` or ``cluster``, with the value
+  corresponding to remote client name or remote cluster name.
 
 :command:`mirror pool promote` [--force] [*pool-name*]
   Promote all non-primary images within a pool or namespace to primary.
