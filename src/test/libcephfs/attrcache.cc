@@ -655,3 +655,114 @@ TEST(LibCephFS, AttrCacheSeesOwnLinkCount) {
   ASSERT_EQ(0, ceph_unlink(cmount, b));
   ceph_shutdown(cmount);
 }
+
+/*
+ * What a FUSE file system on libcephfs hands the kernel: with the caches on,
+ * names and attributes the client may serve get a timeout up to the cache
+ * timeout; with them off, or for a name that does not exist, nothing may be
+ * cached.
+ */
+static void check_ttls(const char *timeout, bool cached)
+{
+  struct ceph_mount_info *cmount;
+  mount_ac(&cmount, timeout, timeout);
+  char name[64];
+  sprintf(name, "ttl_api_%d_%s", getpid(), timeout);
+  create_file(cmount, name);
+
+  UserPerm *perms = ceph_mount_perms(cmount);
+  Inode *root, *in;
+  ASSERT_EQ(0, ceph_ll_lookup_root(cmount, &root));
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_ll_lookup(cmount, root, name, &in, &stx,
+			      CEPH_STATX_BASIC_STATS, 0, perms));
+
+  double attr = ceph_ll_attr_ttl(cmount, in);
+  double dentry = ceph_ll_dentry_ttl(cmount, root, name);
+  if (cached) {
+    ASSERT_GT(attr, 0.0);
+    ASSERT_LE(attr, 60.0);
+    ASSERT_GT(dentry, 0.0);
+    ASSERT_LE(dentry, 60.0);
+  } else {
+    ASSERT_EQ(0.0, attr);
+    ASSERT_EQ(0.0, dentry);
+  }
+  ASSERT_EQ(0.0, ceph_ll_dentry_ttl(cmount, root, "no_such_name_here"));
+
+  // without close-to-open an open keeps the page cache and the attributes
+  Fh *fh;
+  ASSERT_EQ(0, ceph_ll_open(cmount, in, O_RDONLY, &fh, perms));
+  ASSERT_EQ(1, ceph_ll_keep_page_cache(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_open_invalidates_attrs(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_flush(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
+
+  ceph_ll_put(cmount, in);
+  ceph_ll_put(cmount, root);
+  ASSERT_EQ(0, ceph_unlink(cmount, name));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, CacheTtlApi) {
+  check_ttls("60", true);
+}
+
+TEST(LibCephFS, CacheTtlApiDisabled) {
+  check_ttls("0", false);
+}
+
+/*
+ * A FUSE file system hands the kernel ceph_ll_dentry_ttl() for every name it
+ * returns, and the kernel asks again about such a name before that runs out
+ * only when it needs the name to be current: for an exclusive create, a
+ * mkdir() and the like.  That lookup must not be answered out of the cache.
+ * An ordinary lookup of a cached name still is.
+ */
+TEST(LibCephFS, DentryCacheKernelRevalidation) {
+  struct ceph_mount_info *ca, *cb;
+  mount_ac(&ca, "60", "60");
+  mount_ac(&cb, "60", "60");
+
+  char dir[32], f[64], g[64];
+  snprintf(dir, sizeof(dir), "acdir9.%d", getpid());
+  snprintf(f, sizeof(f), "%s/f", dir);
+  snprintf(g, sizeof(g), "%s/g", dir);
+  ASSERT_EQ(0, ceph_mkdir(ca, dir, 0755));
+  create_file(ca, f);
+  create_file(ca, g);
+
+  UserPerm *perms = ceph_mount_perms(cb);
+  Inode *root, *diri, *fi, *gi, *in;
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_ll_lookup_root(cb, &root));
+  ASSERT_EQ(0, ceph_ll_lookup(cb, root, dir, &diri, &stx, 0, 0, perms));
+  ASSERT_EQ(0, ceph_ll_lookup(cb, diri, "f", &fi, &stx, CEPH_STATX_MODE, 0, perms));
+  ASSERT_EQ(0, ceph_ll_lookup(cb, diri, "g", &gi, &stx, CEPH_STATX_MODE, 0, perms));
+
+  /* Names no dentry can hold: an empty one used to abort the client. */
+  struct Inode *same;
+  for (const char *name : {"", ".", ".."}) {
+    ASSERT_EQ(0, ceph_ll_lookup(cb, diri, name, &same, &stx, CEPH_STATX_MODE, 0, perms));
+    ceph_ll_put(cb, same);
+  }
+  // the kernel may cache f, not g
+  ASSERT_GT(ceph_ll_dentry_ttl(cb, diri, "f"), 0.0);
+
+  ASSERT_EQ(0, ceph_unlink(ca, f));
+  ASSERT_EQ(0, ceph_unlink(ca, g));
+
+  // the kernel revalidating f is told the truth
+  ASSERT_EQ(-ENOENT, ceph_ll_lookup(cb, diri, "f", &in, &stx, CEPH_STATX_MODE, 0, perms));
+  // a lookup of g is served from the cache, as before
+  ASSERT_EQ(0, ceph_ll_lookup(cb, diri, "g", &in, &stx, CEPH_STATX_MODE, 0, perms));
+  ceph_ll_put(cb, in);
+
+  ceph_ll_put(cb, gi);
+  ceph_ll_put(cb, fi);
+  ceph_ll_put(cb, diri);
+  ceph_ll_put(cb, root);
+  ASSERT_EQ(0, ceph_rmdir(ca, dir));
+  ceph_shutdown(ca);
+  ceph_shutdown(cb);
+}

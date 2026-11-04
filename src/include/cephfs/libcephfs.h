@@ -2302,6 +2302,29 @@ int ceph_ll_flock(struct ceph_mount_info *cmount,
 
 int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
 
+/**
+ * How long a FUSE (or similar) kernel may cache what the client answered.
+ *
+ * These are what ceph-fuse hands to the kernel: the attribute timeout for
+ * an inode, the entry timeout for a name looked up in a directory, whether
+ * an open may keep the kernel page cache, and whether an open must drop
+ * the kernel's cached attributes. With close-to-open and the attribute and
+ * dentry caches off they give 0, 0, true and false, which is what a FUSE
+ * file system that leaves coherence to the client should use.
+ */
+double ceph_ll_attr_ttl(struct ceph_mount_info *cmount, Inode *in);
+double ceph_ll_dentry_ttl(struct ceph_mount_info *cmount, Inode *parent,
+			  const char *name);
+int ceph_ll_keep_page_cache(struct ceph_mount_info *cmount, Fh *fh);
+int ceph_ll_open_invalidates_attrs(struct ceph_mount_info *cmount, Fh *fh);
+
+/**
+ * What a FUSE file system does on FLUSH (every close() of a descriptor):
+ * report a pending write error and, in close-to-open mode, write the
+ * file's dirty data back before close() returns.
+ */
+int ceph_ll_flush(struct ceph_mount_info *cmount, Fh *fh);
+
 int ceph_ll_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
                                Inode *in, const struct fscrypt_policy_v2 *policy);
 
