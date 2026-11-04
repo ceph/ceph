@@ -28,6 +28,16 @@ ObjectContextLoader::load_and_lock_head(Manager &manager, RWState::State lock_ty
 
   if (manager.target_state.obc->loading_started) {
     co_await manager.target_state.lock_to(lock_type);
+    // A prior caller may have held the excl lock while loading failed,
+    // leaving loading_started=true but fully_loaded=false.  Detect this
+    // and propagate object_corrupted so the caller can handle it properly.
+    if (!manager.target_state.obc->is_loaded()) {
+      ERRORDPP("obc {} was previously loaded with an error (loading_started but"
+               " not fully_loaded), returning object_corrupted",
+               dpp, manager.target);
+      co_await load_obc_iertr::future<>(
+        crimson::ct_error::object_corrupted::make());
+    }
   } else {
     manager.target_state.lock_excl_sync();
     manager.target_state.obc->loading_started = true;
@@ -66,6 +76,13 @@ ObjectContextLoader::load_and_lock_clone(
     manager.head_state.demote_excl_to(RWState::RWREAD);
   } else if (lock_head) {
     co_await manager.head_state.lock_to(RWState::RWREAD);
+    // A prior load may have failed; if so the head obc is not fully loaded.
+    if (!manager.head_state.obc->is_loaded()) {
+      ERRORDPP("head obc {} was previously loaded with an error, returning"
+               " object_corrupted", dpp, manager.head_state.obc->get_oid());
+      co_await load_obc_iertr::future<>(
+        crimson::ct_error::object_corrupted::make());
+    }
   }
 
   if (manager.options.resolve_clone) {
@@ -118,11 +135,18 @@ ObjectContextLoader::load_and_lock_clone(
 
     if (manager.target_state.obc->loading_started) {
       co_await manager.target_state.lock_to(RWState::RWREAD);
+      // A prior load may have failed; if so the target obc is not fully loaded.
+      if (!manager.target_state.obc->is_loaded()) {
+        ERRORDPP("clone obc {} was previously loaded with an error, returning"
+                 " object_corrupted", dpp, manager.target);
+        co_await load_obc_iertr::future<>(
+          crimson::ct_error::object_corrupted::make());
+      }
       if (!manager.target_state.obc->ssc) {
-	// A cached clone obc may have a null ssc if created via
-	// create_cached_obc_from_push_data.  This interface
-	// is responsible for fixing that if found.
-	manager.target_state.obc->ssc = manager.head_state.obc->ssc;
+ // A cached clone obc may have a null ssc if created via
+ // create_cached_obc_from_push_data.  This interface
+ // is responsible for fixing that if found.
+ manager.target_state.obc->ssc = manager.head_state.obc->ssc;
       }
     } else {
       manager.target_state.lock_excl_sync();
@@ -133,6 +157,16 @@ ObjectContextLoader::load_and_lock_clone(
       manager.target_state.obc->set_clone_ssc(manager.head_state.obc->ssc);
       manager.target_state.demote_excl_to(RWState::RWREAD);
     }
+  }
+
+  // Check if objects are corrupted (missing snapset)
+  if (!manager.target_state.obc->ssc || !manager.head_state.obc->ssc) {
+    LOG_PREFIX(ObjectContextLoader::load_and_lock_clone);
+    ERRORDPP("object {} or head {} has null ssc - corrupted snapset",
+             dpp, manager.target, manager.head_state.obc->get_oid());
+    co_await load_obc_iertr::future<>(
+      crimson::ct_error::object_corrupted::make()
+    );
   }
 
   ceph_assert(manager.target_state.obc->ssc);
