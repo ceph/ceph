@@ -574,9 +574,9 @@ seastar::future<> OSD::start()
     *monc, *hb_front_msgr, *hb_back_msgr);
   DEBUG("mounting store");
   co_await store.mount().handle_error(
-      crimson::stateful_ec::assert_failure(fmt::format(
+      crimson::stateful_ec::assert_failure(
         "{} error mounting object store in {}",
-        FNAME, local_conf().get_val<std::string>("osd_data")).c_str())
+        FNAME, local_conf().get_val<std::string>("osd_data"))
     );
   auto stats_seconds = local_conf().get_val<int64_t>("crimson_osd_stat_interval");
   if (stats_seconds > 0) {
