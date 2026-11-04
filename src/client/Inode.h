@@ -248,6 +248,8 @@ struct Inode : RefCountedObject {
   std::map<ceph_tid_t, int> flushing_cap_tids;
   int shared_gen = 0;
   int cache_gen = 0;
+  // cache_gen when ceph-fuse last let the kernel keep its page cache
+  int fuse_cache_gen = -1;
   int snap_caps = 0;
   int snap_cap_refs = 0;
   xlist<Inode*>::item delay_cap_item, dirty_cap_item, flushing_cap_item;

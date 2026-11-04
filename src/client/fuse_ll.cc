@@ -355,6 +355,8 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   if (r >= 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
+    fe.attr_timeout = cfuse->client->ll_attr_ttl(i2);
+    fe.entry_timeout = cfuse->client->ll_dentry_ttl(i1, name);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, get_sys_errno(-r));
@@ -402,7 +404,7 @@ static void fuse_ll_getattr(fuse_req_t req, fuse_ino_t ino,
   if (r == 0) {
     stbuf.st_ino = cfuse->make_fake_ino(stbuf.st_ino, stbuf.st_dev);
     stbuf.st_rdev = new_encode_dev(stbuf.st_rdev);
-    fuse_reply_attr(req, &stbuf, 0);
+    fuse_reply_attr(req, &stbuf, cfuse->client->ll_attr_ttl(in));
   } else
     fuse_reply_err(req, get_sys_errno(-r));
 
@@ -865,8 +867,16 @@ static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino,
     if (fuse_disable_pagecache)
       fi->direct_io = 1;
     else if (fuse_use_invalidate_cb)
-      fi->keep_cache = 1;
+      fi->keep_cache = cfuse->client->ll_keep_page_cache(fh);
 #endif
+    // attributes only (offset < 0): takes no inode lock, safe before replying
+    if (cfuse->client->ll_open_invalidates_attrs(fh)) {
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+      fuse_lowlevel_notify_inval_inode(cfuse->se, ino, -1, 0);
+#elif FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
+      fuse_lowlevel_notify_inval_inode(cfuse->ch, ino, -1, 0);
+#endif
+    }
     fuse_reply_open(req, fi);
   } else {
     fuse_reply_err(req, get_sys_errno(-r));
@@ -1299,7 +1309,7 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
     if (fuse_disable_pagecache)
       fi->direct_io = 1;
     else if (fuse_use_invalidate_cb)
-      fi->keep_cache = 1;
+      fi->keep_cache = cfuse->client->ll_keep_page_cache(fh);
 #endif
     fuse_reply_create(req, &fe, fi);
   } else
@@ -1490,6 +1500,19 @@ static void do_init(void *data, fuse_conn_info *conn)
     conn->want |= FUSE_CAP_EXPORT_SUPPORT;
 #endif
 
+#ifdef FUSE_CAP_AUTO_INVAL_DATA
+  /*
+   * Under close-to-open the client decides at every open whether the kernel
+   * may keep its page cache, and invalidates it when that is lost.  With
+   * auto_inval_data (on by default in libfuse 3) the kernel also drops the
+   * pages of any file whose mtime it sees move, which after our own writes
+   * is every one we wrote: the first read after writing a file would go to
+   * the OSDs.
+   */
+  if (client->cct->_conf.get_val<bool>("client_close_to_open"))
+    conn->want &= ~FUSE_CAP_AUTO_INVAL_DATA;
+#endif
+
   if (cfuse->fd_on_success) {
     //cout << "fuse init signaling on fd " << fd_on_success << std::endl;
     // see Preforker::daemonize(), ceph-fuse's parent process expects a `-1`
@@ -1628,6 +1651,21 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     "fuse_allow_other");
   auto fuse_default_permissions = client->cct->_conf.get_val<bool>(
     "fuse_default_permissions");
+  /*
+   * With client_dentry_cache_timeout the kernel resolves cached paths
+   * without asking us, so the search permission checks we would make on
+   * every lookup never happen: have the kernel check permissions itself,
+   * with the attributes it caches, as an NFS client does.  The client then
+   * stops checking them itself (should_check_perms()), as with the option.
+   */
+  if (!fuse_default_permissions &&
+      client->cct->_conf.get_val<std::chrono::seconds>(
+	"client_dentry_cache_timeout") > std::chrono::seconds::zero()) {
+    derr << "fuse_ll: client_dentry_cache_timeout is set, mounting with "
+	 << "fuse_default_permissions" << dendl;
+    client->set_fuse_default_permissions(true);
+    fuse_default_permissions = true;
+  }
 #if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
   auto fuse_big_writes = client->cct->_conf.get_val<bool>(
     "fuse_big_writes");
