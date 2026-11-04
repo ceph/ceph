@@ -894,6 +894,9 @@ class HostCache():
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_change = {}   # type: Dict[str, datetime.datetime]
         self.last_tuned_profile_update = {}  # type: Dict[str, datetime.datetime]
+        # names of the tuned profiles last reconciled on each host; used to
+        # skip listing /etc/sysctl.d for stray profiles when nothing changed
+        self.tuned_profile_names: Dict[str, List[str]] = {}
         self.daemon_refresh_queue = []  # type: List[str]
         self.device_refresh_queue = []  # type: List[str]
         self.network_refresh_queue = []  # type: List[str]
@@ -989,6 +992,8 @@ class HostCache():
                 if 'last_tuned_profile_update' in j:
                     self.last_tuned_profile_update[host] = str_to_datetime(
                         j['last_tuned_profile_update'])
+                if 'tuned_profile_names' in j:
+                    self.tuned_profile_names[host] = j['tuned_profile_names']
                 self.registry_login_queue.add(host)
                 self.scheduled_daemon_actions[host] = j.get('scheduled_daemon_actions', {})
                 self.metadata_up_to_date[host] = j.get('metadata_up_to_date', False)
@@ -1230,6 +1235,8 @@ class HostCache():
             j['last_device_change'] = datetime_to_str(self.last_device_change[host])
         if host in self.last_tuned_profile_update:
             j['last_tuned_profile_update'] = datetime_to_str(self.last_tuned_profile_update[host])
+        if host in self.tuned_profile_names:
+            j['tuned_profile_names'] = self.tuned_profile_names[host]
         if host in self.daemons:
             for name, dd in list(self.daemons[host].items()):
                 j['daemons'][name] = dd.to_json()
@@ -1353,6 +1360,8 @@ class HostCache():
             del self.last_device_change[host]
         if host in self.last_tuned_profile_update:
             del self.last_tuned_profile_update[host]
+        if host in self.tuned_profile_names:
+            del self.tuned_profile_names[host]
         if host in self.daemon_config_deps:
             del self.daemon_config_deps[host]
         if host in self.scheduled_daemon_actions:

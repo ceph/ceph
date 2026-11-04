@@ -105,3 +105,19 @@ def test_inventory_case_insensitive_operations(cephadm_module: CephadmOrchestrat
 
     inv.rm_label('MYHOST-01', 'mon')
     assert inv.has_label('myhost-01', 'mon') is False
+
+
+def test_host_cache_persists_tuned_profile_names(cephadm_module: CephadmOrchestrator):
+    cache = cephadm_module.cache
+    cephadm_module.inventory._inventory['host1'] = {
+        'hostname': 'host1', 'addr': '10.0.0.1', 'labels': [], 'status': '',
+    }
+    cache.tuned_profile_names['host1'] = ['p1', 'p2']
+    cache.save_host('host1')
+
+    cache.tuned_profile_names = {}
+    cache.load()
+    assert cache.tuned_profile_names['host1'] == ['p1', 'p2']
+
+    cache.rm_host('host1')
+    assert 'host1' not in cache.tuned_profile_names
