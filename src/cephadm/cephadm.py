@@ -1180,6 +1180,262 @@ def _avail_bytes(ctx: CephadmContext, path: str) -> int:
     return int(lines[1])
 
 
+def _read_metrics_push_endpoint(path: str) -> Dict[str, str]:
+    saved: Dict[str, str] = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or '=' not in line:
+                    continue
+                key, value = line.split('=', 1)
+                saved[key] = value
+    except FileNotFoundError:
+        return {}
+    return saved
+
+
+def _metrics_push_target_changed(
+    saved: Dict[str, str],
+    pushgateway_url: str,
+    zone_name: str,
+) -> bool:
+    # No saved push means there is nothing to drop. Disable uses
+    # force_delete so it does not depend on this comparison.
+    if not saved.get('endpoint'):
+        return False
+    return (
+        saved.get('pushgateway_url', '') != pushgateway_url
+        or saved.get('zone_name', '') != zone_name
+    )
+
+
+def _delete_pushgateway_group(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    endpoint: str,
+) -> bool:
+    # 404 means the group is already gone. Pushgateway returns 202 on
+    # delete. A failure must not abort reconfig; the caller keeps the
+    # endpoint file so a later reconfig or push can retry.
+    if not endpoint:
+        return True
+    data_dir = ident.data_dir(ctx.data_dir)
+    cert_names = (
+        'metrics-push-ca.pem',
+        'metrics-push.crt',
+        'metrics-push.key',
+    )
+    have_certs = all(
+        os.path.exists(os.path.join(data_dir, name)) for name in cert_names
+    )
+    engine = getattr(getattr(ctx, 'container_engine', None), 'path', '')
+    cid = ''
+    if engine:
+        for name in (ident.container_name, ident.legacy_container_name):
+            out, _, code = call(
+                ctx,
+                [engine, 'ps', '-q', '--filter', f'name={name}'],
+                verbosity=CallVerbosity.DEBUG,
+                timeout=30,
+            )
+            if code != 0:
+                continue
+            ids = [line.strip() for line in out.splitlines() if line.strip()]
+            if ids:
+                cid = ids[0]
+                break
+    cert_dir = (
+        f'/var/lib/ceph/radosgw/ceph-rgw.{ident.daemon_id}' if cid else data_dir
+    )
+    cmd = [
+        'curl', '-sS', '-o', '/dev/null', '-w', '%{http_code}',
+        '-X', 'DELETE',
+    ]
+    if have_certs:
+        cmd.extend([
+            '--cacert', os.path.join(cert_dir, cert_names[0]),
+            '--cert', os.path.join(cert_dir, cert_names[1]),
+            '--key', os.path.join(cert_dir, cert_names[2]),
+        ])
+    cmd.append(endpoint)
+    if cid and engine:
+        cmd = [engine, 'exec', cid, *cmd]
+    out, err, code = call(
+        ctx, cmd, verbosity=CallVerbosity.DEBUG, timeout=30,
+    )
+    http = out.split()[-1] if out.split() else ''
+    if http in ('200', '202', '404'):
+        return True
+    detail = err.strip().replace('\n', ' ')[:200]
+    logger.warning(
+        f'failed to delete pushgateway group {endpoint} for '
+        f'{ident.daemon_name} (http={http!r} rc={code}'
+        f'{": " + detail if detail else ""})'
+    )
+    return False
+
+
+def _retire_metrics_push_timer(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    desired: Optional[Dict[str, Any]],
+    force_delete: bool,
+) -> None:
+    unit_id = f'metrics-push@{ident.daemon_type}.{ident.daemon_id}'
+    # Stop the timer before deleting so an in-flight push cannot
+    # rewrite the group we just removed.
+    systemd_unit.remove_timer_unit(ctx, ident.fsid, unit_id)
+    data_dir = ident.data_dir(ctx.data_dir)
+    path = os.path.join(data_dir, 'metrics-push.endpoint')
+    saved = _read_metrics_push_endpoint(path)
+    if not saved.get('endpoint'):
+        return
+    changed = False
+    if desired is not None:
+        changed = _metrics_push_target_changed(
+            saved,
+            str(desired.get('pushgateway_url', '')),
+            str(desired.get('zone_name', '')),
+        )
+    if force_delete or changed:
+        endpoint = saved.get('endpoint', '')
+        if endpoint and _delete_pushgateway_group(ctx, ident, endpoint):
+            unlink_file(path, missing_ok=True)
+            logger.info(
+                f'Removed pushgateway group {endpoint} for {ident.daemon_name}'
+            )
+        elif endpoint:
+            # Keep the file so the next reconfig or push can retry.
+            logger.warning(
+                f'Leaving {path} in place so the pushgateway group for '
+                f'{ident.daemon_name} can be deleted on a later reconfig'
+            )
+        return
+    if desired is not None:
+        # Same target on a daemon that is no longer elected: handoff.
+        # The new exporter replaces the group on its next push.
+        logger.debug(
+            f'{ident.daemon_name}: keeping pushgateway group across '
+            f'metrics-push handoff'
+        )
+
+
+def _deploy_metrics_push_timer(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    metrics_push: Dict[str, Any],
+) -> None:
+    """Set up a systemd timer that periodically pushes RGW bucket usage
+    metrics to pushgateway via rgw-export-bucket-usage."""
+    pushgateway_url = str(metrics_push.get('pushgateway_url', ''))
+    zone_name = str(metrics_push.get('zone_name', ''))
+    interval = int(metrics_push.get('interval', 3600))
+    timeout = int(metrics_push.get('timeout', 300))
+
+    if not pushgateway_url:
+        logger.warning('metrics_push enabled but no pushgateway_url provided, skipping timer')
+        return
+
+    data_dir = ident.data_dir(ctx.data_dir)
+    unit_id = f'metrics-push@{ident.daemon_type}.{ident.daemon_id}'
+    endpoint_path = os.path.join(data_dir, 'metrics-push.endpoint')
+    saved_endpoint = _read_metrics_push_endpoint(endpoint_path)
+    if _metrics_push_target_changed(saved_endpoint, pushgateway_url, zone_name):
+        systemd_unit.remove_timer_unit(ctx, ident.fsid, unit_id)
+        endpoint = saved_endpoint.get('endpoint', '')
+        if endpoint and _delete_pushgateway_group(ctx, ident, endpoint):
+            unlink_file(endpoint_path, missing_ok=True)
+            logger.info(
+                f'Removed pushgateway group {endpoint} for {ident.daemon_name}'
+            )
+        elif endpoint:
+            logger.warning(
+                f'Leaving {endpoint_path} in place so the pushgateway group '
+                f'for {ident.daemon_name} can be deleted on a later reconfig'
+            )
+
+    # The endpoint URL expected by rgw-export-bucket-usage includes the job path
+    endpoint = f'{pushgateway_url}/metrics/job/rgw-bucket-usage'
+
+    container_name = ident.container_name
+    legacy_container_name = ident.legacy_container_name
+    script_path = os.path.join(data_dir, 'metrics-push.run')
+    status_file = os.path.join(data_dir, 'metrics-push.status')
+
+    # The RGW container only has the daemon keyring, not the admin keyring.
+    # CEPH_ARGS lets radosgw-admin authenticate with the daemon keyring.
+    daemon_name = f'client.rgw.{ident.daemon_id}'
+    keyring_path = f'/var/lib/ceph/radosgw/ceph-rgw.{ident.daemon_id}/keyring'
+    ceph_args = f'-n {daemon_name} -k {keyring_path}'
+
+    # Build the zone-id resolution command.  If a zone name was provided in
+    # the spec, query that specific zone, otherwise query the default zone.
+    if zone_name:
+        zone_get_cmd = f'radosgw-admin zone get --rgw-zone {shlex.quote(zone_name)}'
+    else:
+        zone_get_cmd = 'radosgw-admin zone get'
+
+    # When secure_monitoring_stack is enabled, write TLS certs to the data
+    # directory (which is mounted into the RGW container) so curl can
+    # authenticate with pushgateway.
+    pushgateway_args = ''
+    root_cert = metrics_push.get('root_cert', '')
+    client_cert = metrics_push.get('client_cert', '')
+    client_key = metrics_push.get('client_key', '')
+    if root_cert and client_cert and client_key:
+        for fname, content in [('metrics-push-ca.pem', root_cert),
+                               ('metrics-push.crt', client_cert),
+                               ('metrics-push.key', client_key)]:
+            fpath = os.path.join(data_dir, fname)
+            with write_new(fpath, owner=None, perms=0o600) as f:
+                f.write(content)
+        # cert paths inside the container
+        cdata_dir = f'/var/lib/ceph/radosgw/ceph-rgw.{ident.daemon_id}'
+        pushgateway_args = (
+            f'--cacert {cdata_dir}/metrics-push-ca.pem '
+            f'--cert {cdata_dir}/metrics-push.crt '
+            f'--key {cdata_dir}/metrics-push.key'
+        )
+
+    # generate the bash script that exec's into the RGW container
+    engine = ctx.container_engine.path
+    script = templating.render(
+        ctx,
+        templating.Templates.metrics_push_run,
+        status_file=status_file,
+        engine=engine,
+        container_name=container_name,
+        legacy_container_name=legacy_container_name,
+        ceph_args=ceph_args,
+        zone_get_cmd=zone_get_cmd,
+        endpoint=endpoint,
+        endpoint_file=endpoint_path,
+        pushgateway_url=pushgateway_url,
+        zone_name=zone_name,
+        pushgateway_args=pushgateway_args,
+        timeout=timeout,
+    )
+    with write_new(script_path, owner=None, perms=0o755) as f:
+        f.write(script)
+
+    logger.info(
+        f'Installing metrics push timer for {ident.daemon_name} '
+        f'(interval={interval}s, pushgateway={pushgateway_url})'
+    )
+    # install a systemd timer to run the script periodically
+    systemd_unit.install_timer_unit(
+        ctx,
+        fsid=ident.fsid,
+        unit_id=unit_id,
+        job_description=f'RGW metrics push for {ident.daemon_name}',
+        script_path=script_path,
+        interval_sec=interval,
+        timeout_sec=timeout,
+        randomized_delay_sec=min(60, interval // 10),
+    )
+
+
 def deploy_daemon(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -1266,6 +1522,19 @@ def deploy_daemon(
                     d3n_state(ctx, data_dir, D3NStateAction.WRITE, d3n, uid, gid)
                 except Exception as e:
                     logger.warning(f'[D3N] failed to persist D3N state in {data_dir}: {e}')
+
+            metrics_push = config_json.get('metrics_push')
+            if metrics_push:
+                assert isinstance(metrics_push, dict)
+                _deploy_metrics_push_timer(ctx, ident, metrics_push)
+            else:
+                target = config_json.get('metrics_push_target')
+                _retire_metrics_push_timer(
+                    ctx,
+                    ident,
+                    desired=target if isinstance(target, dict) else None,
+                    force_delete=bool(config_json.get('metrics_push_cleanup')),
+                )
 
     # only write out unit files and start daemon
     # with systemd if this is not a reconfig
@@ -4475,6 +4744,8 @@ def command_rm_daemon(ctx):
 
     if ident.daemon_type == 'rgw':
         d3n_state(ctx, data_dir, action=D3NStateAction.CLEANUP)
+        timer_unit_id = f'metrics-push@{ident.daemon_type}.{ident.daemon_id}'
+        systemd_unit.remove_timer_unit(ctx, ctx.fsid, timer_unit_id)
 
     if ident.daemon_type in ['mon', 'osd', 'prometheus'] and \
        not ctx.force_delete_data:
@@ -4649,6 +4920,14 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
     unlink_file(unit_dir / f'ceph-{ctx.fsid}@.service', missing_ok=True)
     unlink_file(unit_dir / f'ceph-{ctx.fsid}.target', missing_ok=True)
     shutil.rmtree(unit_dir / f'ceph-{ctx.fsid}.target.wants', ignore_errors=True)
+    # `systemctl edit` creates <unit>.d directories that match this glob.
+    # unlink() raises IsADirectoryError on a real directory and would abort
+    # rm-cluster before the cluster data is deleted.
+    for p in unit_dir.glob(f'ceph-{ctx.fsid}-metrics-push@*'):
+        if p.is_dir() and not p.is_symlink():
+            shutil.rmtree(p)
+        else:
+            unlink_file(p, missing_ok=True)
 
     # rm data
     shutil.rmtree(Path(ctx.data_dir) / ctx.fsid, ignore_errors=True)
