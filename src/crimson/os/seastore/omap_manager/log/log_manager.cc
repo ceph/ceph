@@ -138,63 +138,52 @@ LogManager::omap_set_keys(
    * before the entry goes to a new LogNode. Otherwise the old LogNode keeps a
    * live entry and is never freed.
    */
-  bool has_ow_key = false;
-  if (kvs.size() == OW_SIZE) {
-    std::vector<std::pair<std::string, ceph::bufferlist>> kvs_for_ow;
-    kvs_for_ow.reserve(2);
-    for (const auto& [k, v] : kvs) {
-      if (is_log_key(k)) {
-	kvs_for_ow.insert(kvs_for_ow.begin(), {k, v});
-      } else if (is_ow_key(k)) {
-	kvs_for_ow.push_back({k, v});
-	has_ow_key = true;
-      }
-    }
+  if (kvs.size() == OW_SIZE &&
+      is_pg_log_key(kvs.begin()->first) &&
+      is_ow_key(kvs.rbegin()->first)) {
     LogNodeRef cur = ext;
-    if (has_ow_key) {
-      if (!cur->can_ow()) {
-	co_await remove_kv(t, log_root.addr, get_ow_key(), nullptr);
-	CachedExtentRef node = co_await resync_log_node(cur);
-	cur = node->template cast<LogNode>();
-      }
-      for (auto &[key, val] : kvs_for_ow) {
-	const bool ends_with_ow_key = is_log_key(key) &&
-	  cur->get_size() + cur->get_reserved_size() > 0 && cur->can_ow();
-	const bool multi_block =
-	  cur->get_max_val_length(key.size()) < val.length();
-	const bool can_reuse_ow_slot = ends_with_ow_key && !multi_block &&
-	  !cur->expect_overflow(key, val.length(), true);
-	if (ends_with_ow_key && !can_reuse_ow_slot) {
-	  if (!cur->is_initial_pending()) {
-	    cur = tm.get_mutable_extent(t, cur)->template cast<LogNode>();
-	  }
-	  cur->remove_last_entry();
-	}
-	if (multi_block) {
-	  co_await _log_set_multi_block_key(log_root, t, cur, key, val);
-	  cur = co_await log_load_extent<LogNode>(
-	    t, log_root.addr, BEGIN_KEY, END_KEY);
-	  continue;
-	}
-	if (!can_reuse_ow_slot &&
-	    cur->expect_overflow(key, val.length(), false)) {
-	  laddr_t dup_addr = cur->get_dup_head_addr();
-	  cur = co_await alloc_log_node(cur->get_laddr());
-	  cur->set_dup_head_addr(dup_addr);
-	  log_root.update(cur->get_laddr(), log_root.depth,
-	    log_root.hint, log_root.type);
-	}
+    if (!cur->can_ow()) {
+      co_await remove_kv(t, log_root.addr, get_ow_key(), nullptr);
+      CachedExtentRef node = co_await resync_log_node(cur);
+      cur = node->template cast<LogNode>();
+    }
+    for (auto &[key, val] : kvs) {
+      const bool ends_with_ow_key = is_log_key(key) &&
+	cur->get_size() + cur->get_reserved_size() > 0 && cur->can_ow();
+      const bool multi_block =
+	cur->get_max_val_length(key.size()) < val.length();
+      const bool can_reuse_ow_slot = ends_with_ow_key && !multi_block &&
+	!cur->expect_overflow(key, val.length(), true);
+      if (ends_with_ow_key && !can_reuse_ow_slot) {
 	if (!cur->is_initial_pending()) {
 	  cur = tm.get_mutable_extent(t, cur)->template cast<LogNode>();
 	}
-	if (can_reuse_ow_slot) {
-	  cur->overwrite_kv(t, key, val);
-	} else {
-	  cur->append_kv(t, key, val);
-	}
+	cur->remove_last_entry();
       }
-      co_return;
+      if (multi_block) {
+	co_await _log_set_multi_block_key(log_root, t, cur, key, val);
+	cur = co_await log_load_extent<LogNode>(
+	  t, log_root.addr, BEGIN_KEY, END_KEY);
+	continue;
+      }
+      if (!can_reuse_ow_slot &&
+	  cur->expect_overflow(key, val.length(), false)) {
+	laddr_t dup_addr = cur->get_dup_head_addr();
+	cur = co_await alloc_log_node(cur->get_laddr());
+	cur->set_dup_head_addr(dup_addr);
+	log_root.update(cur->get_laddr(), log_root.depth,
+	  log_root.hint, log_root.type);
+      }
+      if (!cur->is_initial_pending()) {
+	cur = tm.get_mutable_extent(t, cur)->template cast<LogNode>();
+      }
+      if (can_reuse_ow_slot) {
+	cur->overwrite_kv(t, key, val);
+      } else {
+	cur->append_kv(t, key, val);
+      }
     }
+    co_return;
   }
 
   /*
