@@ -58,6 +58,9 @@ AGENT_UNREACHABLE_GRACE = 120
 AGENT_FAILURE_SUMMARY_INTERVAL = 60
 # Agent listener states, as reported by the agent with its metadata
 AGENT_LISTENER_FAILED = 'failed'
+# Minimum time the serve loop holds back non-agent specs while waiting for
+# agents to report up-to-date metadata (see CephadmServe._apply_all_services).
+AGENT_METADATA_MAX_WAIT = 300
 
 
 def _monotonic() -> float:
@@ -1779,14 +1782,27 @@ class HostCache():
             return False
         return True
 
+    def hosts_metadata_not_up_to_date(self, skip_unreachable_agents: bool = False) -> List[str]:
+        """
+        Hosts whose metadata is not up to date, other than offline and
+        maintenance hosts. With skip_unreachable_agents, also leave out hosts
+        whose agent the mgr can't reach: their metadata can't be marked up to
+        date until the agent is reachable again.
+        """
+        # this is primarily for telling if it's safe to try and apply a service
+        # spec. Since offline/maintenance hosts aren't considered in that process anyway
+        # we don't want to report a host without up-to-date metadata that is in one
+        # of those two categories.
+        unreachable = {h.hostname for h in self.get_unreachable_hosts()}
+        return [
+            h for h in self.get_hosts()
+            if not self.host_metadata_up_to_date(h)
+            and h not in unreachable
+            and not (skip_unreachable_agents and self.mgr.agent_cache.agent_unreachable(h))
+        ]
+
     def all_host_metadata_up_to_date(self) -> bool:
-        if [h for h in self.get_hosts() if (not self.host_metadata_up_to_date(h) and not self.is_host_unreachable(h))]:
-            # this function is primarily for telling if it's safe to try and apply a service
-            # spec. Since offline/maintenance hosts aren't considered in that process anyway
-            # we don't want to return False if the host without up-to-date metadata is in one
-            # of those two categories.
-            return False
-        return True
+        return not self.hosts_metadata_not_up_to_date()
 
     def add_daemon(self, host, dd):
         # type: (str, orchestrator.DaemonDescription) -> None

@@ -14,6 +14,7 @@ from cephadm.inventory import (
     AGENT_UNREACHABLE_FAILURES,
 )
 from cephadm.module import CephadmOrchestrator
+from cephadm.serve import CephadmServe
 from cephadm.tests.fixtures import _run_cephadm, with_cephadm_module, with_host
 from cephadm.tlsobject_types import TLSCredentials
 
@@ -409,3 +410,56 @@ class TestAgentListenerState:
         self._report(cephadm_module, 'host1')
         assert cephadm_module.agent_cache.get_agent_reachability('host1') is None
         assert cephadm_module.agent_cache.agent_message_allowed('host1')
+
+
+class TestApplyWithUnreachableAgents:
+
+    @pytest.fixture()
+    def hosts(self, cephadm_module: CephadmOrchestrator, clock: _Clock):
+        with mock.patch('cephadm.serve.CephadmServe._run_cephadm', _run_cephadm('[]')), \
+                with_host(cephadm_module, 'host1', refresh_hosts=False), \
+                with_host(cephadm_module, 'host2', refresh_hosts=False):
+            cephadm_module.use_agent = True
+            cephadm_module.cache.metadata_up_to_date = {'host1': True, 'host2': True}
+            yield
+            cephadm_module.use_agent = False
+
+    def test_unreachable_agent_does_not_hold_back_apply(
+            self, cephadm_module: CephadmOrchestrator, hosts: None) -> None:
+        serve = CephadmServe(cephadm_module)
+        assert not serve._wait_for_agent_metadata()
+        cephadm_module.cache.metadata_up_to_date['host1'] = False
+        assert serve._wait_for_agent_metadata()
+        for _ in range(AGENT_UNREACHABLE_FAILURES):
+            cephadm_module.agent_cache.record_agent_message_failure('host1', 'refused')
+        assert not serve._wait_for_agent_metadata()
+        # the upgrade still waits for every host
+        assert not cephadm_module.cache.all_host_metadata_up_to_date()
+
+    def test_wait_is_bounded(self, cephadm_module: CephadmOrchestrator, hosts: None) -> None:
+        serve = CephadmServe(cephadm_module)
+        cephadm_module.cache.metadata_up_to_date['host2'] = False
+        assert serve._wait_for_agent_metadata()
+        assert serve._agent_metadata_wait_start is not None
+        serve._agent_metadata_wait_start -= datetime.timedelta(
+            seconds=serve._max_agent_metadata_wait())
+        with mock.patch.object(serve.log, 'warning') as warning:
+            assert not serve._wait_for_agent_metadata()
+            assert not serve._wait_for_agent_metadata()
+            warning.assert_called_once()
+            assert 'host2' in warning.call_args.args[0]
+        # once metadata is up to date, the next wait starts from scratch
+        cephadm_module.cache.metadata_up_to_date['host2'] = True
+        assert not serve._wait_for_agent_metadata()
+        cephadm_module.cache.metadata_up_to_date['host2'] = False
+        assert serve._wait_for_agent_metadata()
+
+    def test_apply_all_services_skips_non_agent_specs_while_waiting(
+            self, cephadm_module: CephadmOrchestrator, hosts: None) -> None:
+        cephadm_module.cache.metadata_up_to_date['host1'] = False
+        serve = CephadmServe(cephadm_module)
+        with mock.patch.object(serve, '_apply_service', return_value=False) as apply, \
+                mock.patch.object(type(cephadm_module.spec_store), '__getitem__') as getitem:
+            serve._apply_all_services()
+            getitem.assert_called_with('agent')
+            assert apply.call_count == 1

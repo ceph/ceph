@@ -36,6 +36,7 @@ from mgr_util import format_bytes
 from cephadm.services.service_registry import service_registry
 from cephadm.services.nfs import NFSService
 from cephadm.services.ingress import IngressService
+from cephadm.inventory import AGENT_METADATA_MAX_WAIT
 
 from . import utils
 from . import exchange
@@ -69,6 +70,10 @@ class CephadmServe:
         self.mgr: "CephadmOrchestrator" = mgr
         self.log = logger
         self.last_certificates_check: Optional[datetime.datetime] = None
+        # when _apply_all_services() started holding back non-agent specs
+        # while waiting for agent metadata, and whether it gave up waiting
+        self._agent_metadata_wait_start: Optional[datetime.datetime] = None
+        self._agent_metadata_wait_expired = False
 
     def serve(self) -> None:
         """
@@ -666,6 +671,49 @@ class CephadmServe:
                     self.mgr.events.from_orch_error(ex)
                     logger.exception(f'failed to remove duplicated daemon {e}')
 
+    def _max_agent_metadata_wait(self) -> float:
+        down_mult = max(self.mgr.agent_down_multiplier, 1.5)
+        return max(float(AGENT_METADATA_MAX_WAIT), 5 * down_mult * float(self.mgr.agent_refresh_rate))
+
+    def _wait_for_agent_metadata(self) -> bool:
+        """
+        True if non-agent specs should not be applied yet because agents
+        have not reported up-to-date metadata.
+
+        Hosts whose agent the mgr can't reach are not waited for: they can't
+        acknowledge the latest counter, so waiting would hold back every
+        service until the agent is fixed. The wait for the other hosts is
+        bounded too, since each apply that changes a host asks its agent for
+        new metadata again.
+        """
+        if not self.mgr.use_agent:
+            self._agent_metadata_wait_start = None
+            self._agent_metadata_wait_expired = False
+            return False
+        stale = self.mgr.cache.hosts_metadata_not_up_to_date(skip_unreachable_agents=True)
+        if not stale:
+            if self._agent_metadata_wait_start is not None:
+                self.log.debug('Metadata now up to date on all hosts with a reachable agent')
+            self._agent_metadata_wait_start = None
+            self._agent_metadata_wait_expired = False
+            return False
+        now = datetime_now()
+        if self._agent_metadata_wait_start is None:
+            self._agent_metadata_wait_start = now
+        waited = (now - self._agent_metadata_wait_start).total_seconds()
+        hosts = ', '.join(sorted(stale)[:5]) + (', ...' if len(stale) > 5 else '')
+        max_wait = self._max_agent_metadata_wait()
+        if waited < max_wait:
+            self.log.info(f'Metadata not up to date on {len(stale)} host(s) ({hosts}). '
+                          'Skipping non agent specs')
+            return True
+        if not self._agent_metadata_wait_expired:
+            self.log.warning(
+                f'Metadata still not up to date on {len(stale)} host(s) ({hosts}) after '
+                f'{int(waited)}s. Applying all specs without waiting for it')
+        self._agent_metadata_wait_expired = True
+        return False
+
     def _apply_all_services(self) -> bool:
         self.log.debug('_apply_all_services')
         r = False
@@ -674,8 +722,7 @@ class CephadmServe:
         # since the agent is the one who gather the metadata. If we don't we
         # end up stuck between wanting metadata to be up to date to apply specs
         # and needing to apply the agent spec to get up to date metadata
-        if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
-            self.log.info('Metadata not up to date on all hosts. Skipping non agent specs')
+        if self._wait_for_agent_metadata():
             try:
                 specs.append(self.mgr.spec_store['agent'].spec)
             except Exception as e:
