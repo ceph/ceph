@@ -2159,6 +2159,35 @@ class AgentCache():
 
         self.mgr.set_store(AGENT_CACHE_PREFIX + host, json.dumps(j))
 
+    def rm_agent(self, host: str) -> None:
+        """
+        Forget everything about the agent on `host`, in memory and in the
+        store. Called when the agent daemon or the host is removed, so a
+        later agent on that host starts from scratch (keyring, counter,
+        listener port) instead of inheriting stale state.
+        """
+        host = normalize_hostname(host)
+        for d in self._per_host_maps():
+            d.pop(host, None)
+        self.mgr.set_store(AGENT_CACHE_PREFIX + host, None)
+
+    def rm_all_agents(self) -> None:
+        hosts: Set[str] = set()
+        for d in self._per_host_maps():
+            hosts.update(d.keys())
+        for host in hosts:
+            self.rm_agent(host)
+
+    def _per_host_maps(self) -> List[Dict[str, Any]]:
+        return [
+            self.agent_config_deps,
+            self.agent_counter,
+            self.agent_timestamp,
+            self.agent_keys,
+            self.agent_ports,
+            self.sending_agent_message,
+        ]
+
     def update_agent_config_deps(self, host: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.agent_config_deps[host] = {
             'deps': deps,

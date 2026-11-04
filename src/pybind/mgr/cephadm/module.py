@@ -2589,6 +2589,7 @@ Then run the following:
 
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
+        self.agent_cache.rm_agent(host)
         self.ssh.reset_con(host)
         # if host was in offline host list, we should remove it now.
         self.offline_hosts_remove(host)
