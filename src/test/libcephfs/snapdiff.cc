@@ -428,6 +428,57 @@ public:
     }
     return r;
   }
+  // Recursive snapdiff2 walk from relpath, descending as entries arrive.
+  // Subdirectories are opened by path, or with ceph_open_snapdiff2_at() on
+  // the parent stream if 'at' (falling back to the path on -ENOENT).
+  // Appends "path snapid" for every entry.
+  int walk_snapdiff2(const char* relpath, const char* snap1, const char* snap2,
+                     bool at, vector<string>* out)
+  {
+    auto s1 = make_snap_name(snap1);
+    auto s2 = make_snap_name(snap2);
+    std::function<int(ceph_snapdiff_info2*, const string&)> walk =
+      [&](ceph_snapdiff_info2* info, const string& rel) {
+      ceph_snapdiff_entry_t e;
+      int r;
+      while (0 < (r = ceph_readdir_snapdiff2(info, &e))) {
+        string name(e.dir_entry.d_name);
+        if (name == "." || name == "..")
+          continue;
+        string child = rel + "/" + name;
+        out->push_back(child + " " + to_string(e.snapid));
+        if (e.dir_entry.d_type != DT_DIR)
+          continue;
+        ceph_snapdiff_info2* c = nullptr;
+        r = at ? ceph_open_snapdiff2_at(info, name.c_str(), &c) : -ENOENT;
+        if (r == -ENOENT) {
+          r = ceph_open_snapdiff2(cmount, dir_path, child.c_str(), s1.c_str(),
+                                  s2.c_str(), diff_mask, &c);
+        }
+        if (r != 0)
+          return r;
+        r = walk(c, child);
+        ceph_assert(0 == ceph_close_snapdiff2(c));
+        if (r != 0)
+          return r;
+      }
+      return r;
+    };
+    ceph_snapdiff_info2* info;
+    int r = ceph_open_snapdiff2(cmount, dir_path, relpath, s1.c_str(),
+                                s2.c_str(), diff_mask, &info);
+    if (r != 0)
+      return r;
+    r = walk(info, relpath);
+    ceph_assert(0 == ceph_close_snapdiff2(info));
+    return r;
+  }
+  int rename(const char* from, const char* to)
+  {
+    auto f = make_file_path(from);
+    auto t = make_file_path(to);
+    return ceph_rename(cmount, f.c_str(), t.c_str());
+  }
   int for_each_readdir_snapdiff2(const char* relpath,
     const char* snap1,
     const char* snap2,
@@ -2446,4 +2497,58 @@ TEST(LibCephFS, SnapDiffStatDelta) {
 
   test_mount.rmsnap("snap1");
   test_mount.rmsnap("snap2");
+}
+
+// A walk that opens subdirectories with ceph_open_snapdiff2_at() returns
+// the same delta as one that opens them by path, for every kind of change.
+TEST(LibCephFS, SnapDiffOpenAt) {
+  TestMount test_mount("/SnapDiffOpenAt", CEPH_SNAPDIFF_MTIME);
+  char path[PATH_MAX];
+
+  ASSERT_EQ(0, test_mount.mkdir("t"));
+  for (int a = 0; a < 3; a++) {
+    snprintf(path, PATH_MAX, "t/a%d", a);
+    ASSERT_EQ(0, test_mount.mkdir(path));
+    for (int b = 0; b < 3; b++) {
+      snprintf(path, PATH_MAX, "t/a%d/b%d", a, b);
+      ASSERT_EQ(0, test_mount.mkdir(path));
+      for (int i = 0; i < 5; i++) {
+        snprintf(path, PATH_MAX, "t/a%d/b%d/f%d", a, b, i);
+        ASSERT_LE(0, test_mount.write_full(path, path));
+      }
+    }
+  }
+  ASSERT_EQ(0, test_mount.mkdir("t/gone"));
+  ASSERT_EQ(0, test_mount.mkdir("t/gone/deep"));
+  ASSERT_LE(0, test_mount.write_full("t/gone/deep/x", "x"));
+  ASSERT_EQ(0, test_mount.mkdir("t/moved"));
+  ASSERT_EQ(0, test_mount.mkdir("t/moved/inner"));
+  ASSERT_LE(0, test_mount.write_full("t/moved/inner/y", "y"));
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  sleep(1);  // so that rewritten files get a new mtime
+  ASSERT_LE(0, test_mount.write_full("t/a0/b0/f0", "changed"));   // deep change
+  ASSERT_EQ(0, test_mount.unlink("t/a1/b2/f3"));                  // delete file
+  ASSERT_LE(0, test_mount.write_full("t/a1/b2/new", "new"));      // create file
+  ASSERT_EQ(0, test_mount.mkdir("t/a0/b1/newdir"));               // create tree
+  ASSERT_LE(0, test_mount.write_full("t/a0/b1/newdir/z", "z"));
+  ASSERT_EQ(0, test_mount.unlink("t/gone/deep/x"));               // delete tree
+  ASSERT_EQ(0, test_mount.rmdir("t/gone/deep"));
+  ASSERT_EQ(0, test_mount.rmdir("t/gone"));
+  ASSERT_EQ(0, test_mount.rename("t/moved", "t/a2/moved2"));      // move dir
+  ASSERT_EQ(0, test_mount.unlink("t/a1/b0/f1"));                  // file -> dir
+  ASSERT_EQ(0, test_mount.mkdir("t/a1/b0/f1"));
+  ASSERT_LE(0, test_mount.write_full("t/a1/b0/f1/inside", "inside"));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  vector<string> by_path, by_at;
+  ASSERT_EQ(0, test_mount.walk_snapdiff2("t", "snap1", "snap2", false, &by_path));
+  ASSERT_EQ(0, test_mount.walk_snapdiff2("t", "snap1", "snap2", true, &by_at));
+  std::sort(by_path.begin(), by_path.end());
+  std::sort(by_at.begin(), by_at.end());
+  ASSERT_FALSE(by_path.empty());
+  ASSERT_EQ(by_path, by_at);
+
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }
