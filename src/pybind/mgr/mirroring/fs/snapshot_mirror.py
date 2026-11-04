@@ -20,7 +20,8 @@ from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
     AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
-    disconnect_from_filesystem, AuthMode
+    disconnect_from_filesystem, connect_to_cluster, disconnect_from_cluster, \
+    AuthMode, PEER_KEY_PREFIX
 from .metrics.cache import (
     COMPLETE_CACHE_MAX, lru_cache_timeout, PARTIAL_CACHE_MAX,
     metrics_for_dir_and_peers, try_get_from_complete)
@@ -354,6 +355,46 @@ class FSSnapshotMirror:
     def peer_config_key(filesystem, peer_uuid):
         return f'{FSSnapshotMirror.PEER_CONFIG_KEY_PREFIX}/{filesystem}/{peer_uuid}'
 
+    @staticmethod
+    def peer_uuid_from_super_key(client_name):
+        """peer uuid from a super-key name (client.mirror_peer.<peer_uuid>)"""
+        prefix = FSSnapshotMirror.SUPER_KEY_PREFIX
+        if not client_name.startswith(prefix):
+            raise MirrorException(-errno.EINVAL,
+                                  f'super-key must be named {prefix}<peer_uuid>')
+        peer_uuid = client_name[len(prefix):]
+        try:
+            # accept only the canonical form so the name round-trips
+            if str(uuid.UUID(peer_uuid)) != peer_uuid:
+                raise ValueError
+        except ValueError:
+            raise MirrorException(-errno.EINVAL,
+                                  f'invalid peer uuid in super-key name {client_name}')
+        return peer_uuid
+
+    @staticmethod
+    def get_omap_peers(ioctx):
+        """per-share peers stored in the mirror object, keyed by peer uuid"""
+        try:
+            with rados.ReadOpCtx() as read_op:
+                it, _ = ioctx.get_omap_vals(read_op, "", PEER_KEY_PREFIX, 256)
+                ioctx.operate_read_op(read_op, MIRROR_OBJECT_NAME)
+                return {k[len(PEER_KEY_PREFIX):]: json.loads(v) for k, v in it}
+        except rados.Error as e:
+            log.error(f'failed to fetch peers from mirror object: {e}')
+            raise Exception(-e.errno)
+
+    @staticmethod
+    def set_omap_peer(ioctx, peer_uuid, record):
+        try:
+            with rados.WriteOpCtx() as write_op:
+                ioctx.set_omap(write_op, (f'{PEER_KEY_PREFIX}{peer_uuid}',),
+                               (json.dumps(record).encode('utf-8'),))
+                ioctx.operate_write_op(write_op, MIRROR_OBJECT_NAME)
+        except rados.Error as e:
+            log.error(f'failed to store peer {peer_uuid} in mirror object: {e}')
+            raise Exception(-e.errno)
+
     def config_set(self, key, val=None):
         """set or remove a key from mon config store"""
         if val:
@@ -505,6 +546,31 @@ class FSSnapshotMirror:
         finally:
             disconnect_from_filesystem(cluster_name, remote_fs_name, remote_cluster, remote_fs)
 
+    def verify_per_share_peer(self, local_fs_name, client_id, cluster_name, remote_fs_name, remote_conf):
+        # the super-key has only mon caps: check the remote cluster through
+        # its monitors, without mounting the remote file system
+        log.debug(f'local fs={local_fs_name} remote={client_id}@{cluster_name}/{remote_fs_name}')
+
+        _, client_name = client_id.split('.', 1)
+        remote_cluster = connect_to_cluster(client_name, cluster_name, remote_conf, 'remote')
+        try:
+            if remote_cluster.get_fsid() != remote_conf['fsid']:
+                raise MirrorException(-errno.EINVAL, 'FSID mismatch between bootstrap token and remote cluster')
+            r, outbuf, outs = remote_cluster.mon_command(
+                json.dumps({'prefix': 'fs dump', 'format': 'json'}), b'')
+            if r < 0:
+                log.error(f'failed to fetch remote fs map: {outs}')
+                raise MirrorException(r, 'failed to fetch remote fs map')
+            remote_fscid = FSSnapshotMirror.get_filesystem_id(remote_fs_name, json.loads(outbuf))
+            if remote_fscid is None:
+                raise MirrorException(-errno.ENOENT, f'remote filesystem {remote_fs_name} does not exist')
+            local_fscid = FSSnapshotMirror.get_filesystem_id(local_fs_name, self.fs_map)
+            if self.rados.get_fsid() == remote_conf['fsid'] and local_fscid == remote_fscid:
+                raise MirrorException(-errno.EINVAL, "Source and destination cluster fsid and "\
+                                      "file-system name can't be the same")
+        finally:
+            disconnect_from_cluster(cluster_name, remote_cluster)
+
     def init_pool_policy(self, filesystem):
         metadata_pool_id = get_metadata_pool(filesystem, self.fs_map)
         if not metadata_pool_id:
@@ -637,6 +703,52 @@ class FSSnapshotMirror:
         except Exception as e:
             return e.args[0], '', 'failed to add peer'
 
+    def peer_add_per_share(self, filesystem, token_dct):
+        try:
+            client_id = token_dct['user']
+            site_name = token_dct['site_name']
+            remote_fs_name = token_dct['filesystem']
+            remote_conf = {k: token_dct[k] for k in ('fsid', 'mon_host', 'key')}
+        except KeyError as ke:
+            return -errno.EINVAL, '', f'token is missing {ke}'
+        try:
+            with self.lock:
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                peer_uuid = FSSnapshotMirror.peer_uuid_from_super_key(client_id)
+                if token_dct.get('peer_uuid') != peer_uuid:
+                    raise MirrorException(-errno.EINVAL, 'peer uuid in token does not match the super-key name')
+                omap_peers = FSSnapshotMirror.get_omap_peers(fspolicy.ioctx)
+                ### peer updates for key, site-name are not yet supported
+                if peer_uuid in omap_peers:
+                    return 0, json.dumps({}), ''
+                if omap_peers or self.get_filesystem_peers(filesystem):
+                    raise MirrorException(-errno.EEXIST, f'filesystem {filesystem} already has a peer')
+                self.verify_per_share_peer(filesystem, client_id, site_name, remote_fs_name, remote_conf)
+                # secret first, then the record that points at it
+                config_key = FSSnapshotMirror.peer_config_key(filesystem, peer_uuid)
+                self.config_set(config_key, json.dumps(remote_conf))
+                record = {'version': 1,
+                          'client_name': client_id,
+                          'site_name': site_name,
+                          'remote_fs_name': remote_fs_name,
+                          'auth_mode': AuthMode.per_share.value}
+                try:
+                    FSSnapshotMirror.set_omap_peer(fspolicy.ioctx, peer_uuid, record)
+                except Exception:
+                    try:
+                        log.debug(f'cleaning up config-key for {peer_uuid}')
+                        self.config_set(config_key)
+                    except:
+                        pass
+                    raise
+                return 0, json.dumps({}), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except Exception as e:
+            return e.args[0], '', 'failed to add peer'
+
     def peer_remove(self, filesystem, peer_uuid):
         try:
             with self.lock:
@@ -675,18 +787,7 @@ class FSSnapshotMirror:
                 if auth_mode == AuthMode.per_share:
                     # the super-key is created by the orchestrator or the
                     # administrator, not here; only fetch and package it.
-                    prefix = FSSnapshotMirror.SUPER_KEY_PREFIX
-                    if not client_name.startswith(prefix):
-                        raise MirrorException(-errno.EINVAL,
-                                              f'super-key must be named {prefix}<peer_uuid>')
-                    peer_uuid = client_name[len(prefix):]
-                    try:
-                        # accept only the canonical form so the name round-trips
-                        if str(uuid.UUID(peer_uuid)) != peer_uuid:
-                            raise ValueError
-                    except ValueError:
-                        raise MirrorException(-errno.EINVAL,
-                                              f'invalid peer uuid in super-key name {client_name}')
+                    peer_uuid = FSSnapshotMirror.peer_uuid_from_super_key(client_name)
                 else:
                     cmd = {'prefix': 'fs authorize',
                            'filesystem': fs_name,
@@ -735,6 +836,12 @@ class FSSnapshotMirror:
             token_dct = json.loads(token_str.decode('utf-8'))
         except:
             return -errno.EINVAL, '', 'failed to parse token'
+        try:
+            auth_mode = AuthMode(token_dct.get('auth_mode', AuthMode.legacy.value))
+        except ValueError:
+            return -errno.EINVAL, '', 'invalid auth_mode in token'
+        if auth_mode == AuthMode.per_share:
+            return self.peer_add_per_share(filesystem, token_dct)
         client_name = token_dct.pop('user')
         cluster_name = token_dct.pop('site_name')
         remote_fs_name = token_dct.pop('filesystem')
