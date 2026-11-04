@@ -10684,6 +10684,64 @@ int Client::readdir_snapdiff(dir_result_t* d1, snapid_t snap2,
   return 0;
 }
 
+/*
+ * Open a snapdiff stream on subdirectory @name of @parent without a path
+ * walk. insert_readdir_results() links each snapdiff entry under the
+ * parent's inode in the snapshot it was reported at, so a directory the
+ * parent's stream returned is already cached under one of the two.
+ * Snapshot inodes do not change, so no lease is needed to trust it.
+ * Returns -ENOENT if it is not cached (any more); the caller then opens
+ * it by path.
+ */
+int Client::open_snapdiff_child(dir_result_t* parent, snapid_t parent_other,
+                                const char* name, dir_result_t** out,
+                                snapid_t* out_other)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::scoped_lock lock(client_lock);
+
+  if (!parent || !parent->inode || !name || !out || !out_other)
+    return -EINVAL;
+
+  Inode* p1 = parent->inode.get();
+  Inode* parents[2] = {p1, nullptr};
+  auto it = inode_map.find(vinodeno_t(p1->ino, parent_other));
+  if (it != inode_map.end())
+    parents[1] = it->second;
+
+  // A name can be a file in one snapshot and a directory in the other.
+  Inode* in = nullptr;
+  bool found = false;
+  for (Inode* p : parents) {
+    if (!p || !p->dir)
+      continue;
+    auto dn = p->dir->dentries.find(name);
+    if (dn == p->dir->dentries.end() || !dn->second->inode)
+      continue;
+    found = true;
+    if (dn->second->inode->is_dir()) {
+      in = dn->second->inode.get();
+      break;
+    }
+  }
+  if (in) {
+    int r = _opendir(in, out, parent->perms);
+    if (r < 0)
+      return r;
+    // Start past "." and "..": nobody walking a snapdiff wants them, and
+    // _readdir_r_cb() would send a getattr to the MDS for each.
+    (*out)->offset = 2;
+    *out_other = in->snapid == p1->snapid ? parent_other : p1->snapid;
+    ldout(cct, 10) << __func__ << " " << name << " -> " << *in
+                   << " other " << *out_other << dendl;
+    return 0;
+  }
+  return found ? -ENOTDIR : -ENOENT;
+}
+
 /* getdents */
 struct getdents_result {
   char *buf;

@@ -459,6 +459,8 @@ public:
   int readdir_snapdiff(dir_result_t* dir1, snapid_t snap2,
     unsigned diff_mask,
     struct dirent* out_de, snapid_t* out_snap);
+  int open_snapdiff_child(dir_result_t* parent, snapid_t parent_other,
+    const char* name, dir_result_t** out, snapid_t* out_other);
 
   int getdir(const char *relpath, std::list<std::string>& names,
 	     const UserPerm& perms);  // get the whole dir at once.

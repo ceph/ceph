@@ -246,6 +246,8 @@ cdef nogil:
         pass
     int ceph_open_snapdiff2(ceph_mount_info *cmount, const char *root_path, const char *rel_path, const char *snap1path, const char *snap2root, unsigned mask, ceph_snapdiff_info2 **out):
         pass
+    int ceph_open_snapdiff2_at(ceph_snapdiff_info2 *parent, const char *name, ceph_snapdiff_info2 **out):
+        pass
     int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out):
         pass
     int ceph_readdir_snapdiff2(ceph_snapdiff_info2 *snapdiff, ceph_snapdiff_entry_t *out):

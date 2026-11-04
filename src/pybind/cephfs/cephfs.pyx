@@ -452,6 +452,30 @@ cdef class SnapDiffHandle2(object):
                         d_name=difent.dir_entry.d_name,
                         d_snapid=difent.snapid)
 
+    def openat(self, name) -> 'SnapDiffHandle2':
+        """
+        Open a v2 snapdiff stream on a subdirectory this stream returned,
+        without a path lookup. Raises ObjectNotFound if the subdirectory is
+        no longer in the client cache; open it with opensnapdiff2() then.
+
+        :param name: the subdirectory's name
+        :returns: the open directory stream handle (SnapDiffHandle2)
+        """
+        self.lib.require_state("mounted")
+        if not self.opened:
+            raise make_ex(EBADF, "snapdiff stream is closed")
+        h = SnapDiffHandle2(self.lib)
+        n = cstr(name, 'name')
+        cdef:
+            char* _name = n
+        with nogil:
+            ret = ceph_open_snapdiff2_at(self.handle, _name, &h.handle)
+        if ret < 0:
+            raise make_ex(ret, "open_snapdiff2_at failed for {}"
+                .format(n.decode('utf-8')))
+        h.opened = 1
+        return h
+
     def close(self):
         if (not self.opened):
             return
