@@ -87,6 +87,7 @@ func main() {
 		Debug:                    os.Getenv("KVRGW_DEBUG") == "1",
 		S3Options: []s3api.Option{
 			s3api.WithRoute(http.MethodPut, "/_admin/tenant/:name", adminAddTenantHandler(kvBe)),
+			s3api.WithMiddleware("/", responseRewriteMiddleware),
 		},
 	}
 

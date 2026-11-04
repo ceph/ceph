@@ -13,8 +13,8 @@
 Source: `../../test/rgw/s3-tests/s3tests/functional/test_s3.py` (lines 15821-16111, 19861).
 
 **Current state (verified):**
-- The vendored versitygw controller already parses and validates the checksum request headers and writes the checksum response headers.
-  - `UploadPart`: `frontend/third_party/versitygw/s3api/controllers/object-put.go:277`.
+- The versitygw controller already parses and validates the checksum request headers and writes the checksum response headers.
+  - `UploadPart`: `versitygw/s3api/controllers/object-put.go:277`.
   - `CompleteMultipartUpload`: `object-post.go:269`.
   - `CreateMultipartUpload`: `object-post.go:147`.
 - `KvRgwBackend` ignores all checksum fields (`frontend/backend_kvrgw.go:930, 956, 979`). `backend/src` has no checksum storage or computation. Only the MD5 ETag exists.
@@ -293,7 +293,7 @@ Manifest in a child-D KV (items 6 and 7), independent of the checksum tier:
 - [x] Extend `kvrgw_initiate_multipart_upload` and `kvrgw_upload_part` in `backend/include/kvrgw_c_api.h` (359, 367) and in `backend/src/kvrgw_c_api.cpp`.
 - [x] Extend the `kvrgwc` Go binding.
 - [x] Update `KvRgwBackend.CreateMultipartUpload` and `UploadPart` (`frontend/backend_kvrgw.go`), including the response structs.
-- [x] Check that the controller response path for `CreateMultipartUpload` (`object-post.go:251-257`) and `UploadPart` (`object-put.go:319-328`) exposes `ChecksumAlgorithm`, and patch the vendored copy if it does not. Record any patch next to the existing local patches. (No patch needed: the controller echoes `x-amz-checksum-algorithm` from the request headers and writes the `UploadPart` checksum headers from the returned `s3.UploadPartOutput`.)
+- [x] Check that the controller response path for `CreateMultipartUpload` (`object-post.go:251-257`) and `UploadPart` (`object-put.go:319-328`) exposes `ChecksumAlgorithm`, and add a fix outside versitygw if it does not. (No patch needed: the controller echoes `x-amz-checksum-algorithm` from the request headers and writes the `UploadPart` checksum headers from the returned `s3.UploadPartOutput`.)
 - [x] Add the new error code for `BadDigest`, mapped in `mapErrorCode`.
 - [x] Backend unit tests, then run SHA256 part-level assertions from `test_multipart_checksum_sha256`.
 
@@ -335,8 +335,8 @@ Manifest in a child-D KV (items 6 and 7), independent of the checksum tier:
 
 **Relevant Context:**
 - `backend/src/service_impl_multipart.cpp`: Complete scan around 1137-1217, `complete_multipart_upload_step3` (1394), the revert at 1462, `complete_multipart_upload` (1546).
-- `frontend/third_party/versitygw/s3api/controllers/object-post.go:269-414`.
-- `frontend/third_party/versitygw/s3response/s3response.go:455` (`CompleteMultipartUploadResult`).
+- `versitygw/s3api/controllers/object-post.go:269-414`.
+- `versitygw/s3response/s3response.go:455` (`CompleteMultipartUploadResult`).
 
 **Status:** `[x] done`
 
@@ -361,13 +361,13 @@ Manifest in a child-D KV (items 6 and 7), independent of the checksum tier:
 - [x] Return the part's checksum from the blob in the `PartNumber` paths of `get_object` and `head_object` (`backend/src/service_impl.cpp`); the entry index is the rank of the part in the manifest's included parts.
 - [x] Update `KvRgwBackend.GetObject` (298) and `HeadObject` (372), gated on `ChecksumMode`.
 - [x] Extend `get_object_attributes`, which is planned in `plans/multipart_test_fixes.md` (Bug/Gap 3), to carry the checksum. If that plan is not yet implemented, implement the checksum part together with it, and note it in both plans.
-- [x] Patch the vendored `s3response.ObjectPart` if it lacks a per-part checksum field.
+- [x] Check `s3response.ObjectPart` for a per-part checksum field (none needed).
 - [x] Unit tests for each path, including pagination in each tier (8, 100, 256 and 10,000 parts, all using the override helper from sub-task 1b): no marker, mid-list marker, past-end marker, `MaxParts` smaller and larger than the part count, and a last page that is shorter than `MaxParts`.
 
 **Relevant Context:**
 - `plans/multipart_test_fixes.md`, section "Bug/Gap 3".
-- `frontend/third_party/versitygw/s3api/controllers/object-get.go:397-581`, `object-head.go:123-202`.
-- `frontend/third_party/versitygw/s3response/s3response.go:124-137`.
+- `versitygw/s3api/controllers/object-get.go:397-581`, `object-head.go:123-202`.
+- `versitygw/s3response/s3response.go:124-137`.
 
 **Status:** `[x] done`
 
@@ -422,6 +422,6 @@ Review of the plan against the code. Each item names the flaw, the evidence and 
 ## Implementation notes (outcome)
 
 - Verified: all 7 in-scope s3-tests pass; `test_multipart_reupload_checksum_and_etag` fails by design; default suite 295 passed.
-- Behavior matched to RGW/s3-tests: a part listed in Complete without a checksum is accepted (only a listed, mismatching one gives `BadDigest`); a malformed whole-object checksum header gives `BadDigest` (vendored `ParseCompleteMpChecksumHeaders`, marked "kvrgw local patch"); `GetObject` with `PartNumber` returns that part's checksum and `ChecksumType` without `ChecksumMode`.
+- Behavior matched to RGW/s3-tests: a part listed in Complete without a checksum is accepted (only a listed, mismatching one gives `BadDigest`); a malformed whole-object checksum header gives `BadDigest` (versitygw's `ParseCompleteMpChecksumHeaders` returns `InvalidRequest`; `frontend/rewrite_middleware.go` rewrites it to `BadDigest`); `GetObject` with `PartNumber` returns that part's checksum and `ChecksumType` without `ChecksumMode`.
 - Manifest cost is about 3 bytes per irregular part, so about 500 irregular parts are needed to exceed the 1 KB `:O:` limit; tests use 500.
 - Tests: `checksum_test`, `multipart_cksum_test` (algorithms, Complete vectors, read paths and `GetObjectAttributes` pagination in every tier up to 10,000 parts), `multipart_children_test` (placement matrix, every delete path, copy in both deletion orders, 10,000 parts and GC). The latter was reworked per `plans/refactor_multipart_tests.md`: position-tagged data, random upload order, and full verification of every read; `KVRGW_TEST_SEED` replays a run.

@@ -510,12 +510,16 @@ func (b *KvRgwBackend) GetObjectAttributes(ctx context.Context, input *s3.GetObj
 			MaxParts:         int(maxParts),
 			IsTruncated:      res.Truncated,
 			Parts:            parts,
-			PartsCount:       int(res.TotalPartsCount),
 		}
 		if res.Truncated {
 			objParts.NextPartNumberMarker = int(res.NextPartNumberMarker)
 		}
 		out.ObjectParts = objParts
+		// s3response.ObjectParts has no parts-count field; hand the count to
+		// responseRewriteMiddleware through the request context.
+		if rc, ok := ctx.(interface{ SetUserValue(key, value any) }); ok {
+			rc.SetUserValue(partsCountKey, int(res.TotalPartsCount))
+		}
 	}
 	return out, nil
 }
