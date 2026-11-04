@@ -13,6 +13,7 @@
 #include "osd/scrubber_common.h"
 
 #include "crimson/osd/scrub/scrub_queue.h"
+#include "crimson/osd/scrub/scrub_metrics.h"
 namespace crimson::osd {
   class PG;
 }
@@ -94,9 +95,7 @@ class ReplicaReservations {
    */
   reservation_nonce_t& m_last_request_sent_nonce;
 
-  /// the performance counters relevant to this scrub
-  const ScrubCounterSet& m_perf_indices;
-
+  const ScrubMetrics& m_metrics;
   /// used only for the 'duration of the reservation process' perf counter.
   /// discarded once the success or failure are recorded
   std::optional<ScrubTimePoint> m_process_started_at;
@@ -104,7 +103,7 @@ class ReplicaReservations {
  public:
    ReplicaReservations(crimson::osd::scrub::PGScrubber& scrubber,
                        reservation_nonce_t& nonce,
-                       const ScrubCounterSet& pc);
+                       const ScrubMetrics& sm);
   ~ReplicaReservations();
 
   /**

@@ -39,6 +39,7 @@ add_executable(crimson-osd
   scheduler/scheduler.cc
   scheduler/mclock_scheduler.cc
   scrub/scrub_machine.cc
+  scrub/scrub_metrics.cc
   scrub/scrub_validator.cc
   scrub/pg_scrubber.cc
   ${PROJECT_SOURCE_DIR}/src/osd/scrubber/scrub_job.cc
