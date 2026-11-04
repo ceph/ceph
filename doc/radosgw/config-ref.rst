@@ -421,7 +421,7 @@ For more information, see `Bucket Notifications`_.
 
 The default behavior is to push indefinitely and as frequently as possible.
 With these settings you can control how long and how often to retry an
-unsuccessful notification by configuring the maximum retention time and/or or
+unsuccessful notification by configuring the maximum retention time and/or
 maximum number of retries.
 The interval between push retries can be configured via the sleep duration
 parameter.

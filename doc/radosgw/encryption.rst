@@ -224,7 +224,7 @@ In addition the ``rgw`` collection has:
 - ``kms_error_transient``: Transient KMS fetch error counter. Each
   event results in a transient error cache entry.
 - ``kms_error_permanent``: Permanent KMS fetch error counter. Each
-  event results in a negative cache cache entry.
+  event results in a negative cache entry.
 
 .. _Linux Kernel Key Retention Service:  https://www.kernel.org/doc/html/latest/security/keys/core.html
 .. _Amazon SSE-C: https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html
