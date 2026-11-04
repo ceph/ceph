@@ -2732,6 +2732,98 @@ TEST(LibCephFS, Lseek) {
   ceph_shutdown(cmount);
 }
 
+// A readdir of a snapshot directory must keep listing the snapshot when the
+// client cache trims the snapshot directory's dentries partway through
+// (https://tracker.ceph.com/issues/82652). Without its dentries, the
+// directory's request path used to fall back to the bare inode number, and
+// the MDS answered with the live directory.
+TEST(LibCephFS, SnapReaddirAfterDentryTrim) {
+  const int nfiles = 3000;
+  const int nother = 2000;
+  char dir_path[64];
+  char other_path[64];
+  char snap_name[] = "snap0";
+  char path[PATH_MAX];
+  sprintf(dir_path, "/snap_readdir_trim_%d", getpid());
+  sprintf(other_path, "/snap_readdir_trim_other_%d", getpid());
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  ASSERT_EQ(0, ceph_mkdir(cmount, other_path, 0755));
+  for (int i = 0; i < nfiles; i++) {
+    sprintf(path, "%s/f_%05d", dir_path, i);
+    int fd = ceph_open(cmount, path, O_CREAT|O_WRONLY, 0644);
+    ASSERT_LE(0, fd);
+    ASSERT_EQ(0, ceph_close(cmount, fd));
+  }
+  for (int i = 0; i < nother; i++) {
+    sprintf(path, "%s/o_%05d", other_path, i);
+    int fd = ceph_open(cmount, path, O_CREAT|O_WRONLY, 0644);
+    ASSERT_LE(0, fd);
+    ASSERT_EQ(0, ceph_close(cmount, fd));
+  }
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, nullptr, 0));
+  // make the live directory differ from the snapshot
+  for (int i = 0; i < nfiles; i++) {
+    sprintf(path, "%s/f_%05d", dir_path, i);
+    ASSERT_EQ(0, ceph_unlink(cmount, path));
+    sprintf(path, "%s/live_%05d", dir_path, i);
+    int fd = ceph_open(cmount, path, O_CREAT|O_WRONLY, 0644);
+    ASSERT_LE(0, fd);
+    ASSERT_EQ(0, ceph_close(cmount, fd));
+  }
+
+  // read the snapshot with a small cache, and fill it in between
+  struct ceph_mount_info *reader;
+  ASSERT_EQ(ceph_create(&reader, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(reader, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(reader, NULL));
+  ASSERT_EQ(0, ceph_conf_set(reader, "client_cache_size", "100"));
+  ASSERT_EQ(do_ceph_mount(reader, NULL), 0);
+
+  sprintf(path, "%s/.snap/%s", dir_path, snap_name);
+  struct ceph_dir_result *dirp;
+  ASSERT_EQ(0, ceph_opendir(reader, path, &dirp));
+  int snap_entries = 0, live_entries = 0, read = 0;
+  struct dirent *de;
+  while ((de = ceph_readdir(reader, dirp)) != NULL) {
+    if (strncmp(de->d_name, "f_", 2) == 0)
+      snap_entries++;
+    else if (strncmp(de->d_name, "live_", 5) == 0)
+      live_entries++;
+    if (++read == 50) {
+      for (int i = 0; i < nother; i++) {
+        struct ceph_statx stx;
+        sprintf(path, "%s/o_%05d", other_path, i);
+        ASSERT_EQ(0, ceph_statx(reader, path, &stx, CEPH_STATX_INO, 0));
+      }
+    }
+  }
+  ASSERT_EQ(0, ceph_closedir(reader, dirp));
+  ceph_shutdown(reader);
+
+  ASSERT_EQ(0, live_entries);
+  ASSERT_EQ(nfiles, snap_entries);
+
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  for (int i = 0; i < nfiles; i++) {
+    sprintf(path, "%s/live_%05d", dir_path, i);
+    ASSERT_EQ(0, ceph_unlink(cmount, path));
+  }
+  for (int i = 0; i < nother; i++) {
+    sprintf(path, "%s/o_%05d", other_path, i);
+    ASSERT_EQ(0, ceph_unlink(cmount, path));
+  }
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ASSERT_EQ(0, ceph_rmdir(cmount, other_path));
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, SnapInfoOnNonSnapshot) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
