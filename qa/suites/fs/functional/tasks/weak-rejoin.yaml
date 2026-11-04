@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - Replacing daemon mds
+      - MDS_FAILED
+      - MDS_DEGRADED
+      - FS_DEGRADED
+      - FS_WITH_FAILED_MDS
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_failover.TestFailover.test_deferred_weak_rejoin

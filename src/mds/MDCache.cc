@@ -83,6 +83,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/likely.h"
 #include "common/perf_counters.h"
 #include "common/safe_io.h"
 
@@ -283,6 +284,12 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
   if (changed.count("mds_use_global_snaprealm_seq_for_subvol")) {
     use_global_snaprealm_seq = g_conf().get_val<bool>("mds_use_global_snaprealm_seq_for_subvol");
     dout(20) << __func__ << " mds_use_global_snaprealm_seq_for_subvol now " << use_global_snaprealm_seq << dendl;
+  }
+  if (changed.count("mds_defer_rejoin_send_for_testing") &&
+      !g_conf().get_val<bool>("mds_defer_rejoin_send_for_testing") &&
+      mds->is_rejoin()) {
+    dout(1) << "mds_defer_rejoin_send_for_testing cleared, retrying rejoins" << dendl;
+    maybe_send_pending_rejoins();
   }
 
   migrator->handle_conf_change(changed, mdsmap);
@@ -4106,6 +4113,14 @@ void MDCache::rejoin_start(MDSContext *rejoin_done_)
 void MDCache::rejoin_send_rejoins()
 {
   dout(10) << "rejoin_send_rejoins with recovery_set " << recovery_set << dendl;
+
+  // Hold every rejoin send, including a survivor's OP_STRONG, so a test can
+  // fail a peer and release the send while that peer is still below rejoin.
+  if (unlikely(g_conf().get_val<bool>("mds_defer_rejoin_send_for_testing"))) {
+    dout(1) << "rejoin_send_rejoins deferred by mds_defer_rejoin_send_for_testing" << dendl;
+    rejoins_pending = true;
+    return;
+  }
 
   if (rejoin_gather.count(mds->get_nodeid())) {
     dout(7) << "rejoin_send_rejoins still processing imported caps, delaying" << dendl;

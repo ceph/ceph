@@ -1837,6 +1837,16 @@ options:
   default: 0
   flags:
   - runtime
+- name: mds_defer_rejoin_send_for_testing
+  type: bool
+  level: dev
+  desc: Defer cache rejoin messages until this option is cleared
+  long_desc: While set, rejoin_send_rejoins() records rejoins_pending and returns without sending. Clearing it retries the send from a rank that is still in rejoin. Used to reproduce https://tracker.ceph.com/issues/54840.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_server_dispatch_killpoint_random
   type: float
   level: dev
