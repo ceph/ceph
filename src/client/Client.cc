@@ -10283,7 +10283,10 @@ int Client::_readdir_r_cb(int op,
     if (dirp->at_end())
       return 0;
 
-    bool check_caps = true;
+    // Snapdiff entries are snapshot inodes the MDS just sent: they cannot
+    // change, so asking the MDS for their attributes again (a getattr with
+    // rstats for every directory entry) gains nothing.
+    bool check_caps = op != CEPH_MDS_OP_READDIR_SNAPDIFF;
     if (!dirp->is_cached()) {
       int r = _readdir_get_frag(op, dirp, fill_cb);
       if (r)
