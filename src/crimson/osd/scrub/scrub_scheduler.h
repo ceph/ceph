@@ -55,5 +55,10 @@ public:
   scrub::ScrubQueue& get_queue() {
     return m_queue;
   }
+
+  /// Dump scrub reservations for debugging
+  void dump_scrub_reservations(ceph::Formatter* f) const;
+  /// Handle configuration changes that affect scrub scheduling
+  void on_config_change();
 };
 } // namespace crimson::osd
