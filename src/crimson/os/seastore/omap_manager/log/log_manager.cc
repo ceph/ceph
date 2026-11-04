@@ -138,7 +138,6 @@ LogManager::omap_set_keys(
    * before the entry goes to a new LogNode. Otherwise the old LogNode keeps a
    * live entry and is never freed.
    */
-  bool has_ow_key = false;
   if (kvs.size() == OW_SIZE &&
       is_pg_log_key(kvs.begin()->first) &&
       is_ow_key(kvs.rbegin()->first)) {
