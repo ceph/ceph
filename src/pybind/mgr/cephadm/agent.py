@@ -1214,10 +1214,10 @@ class CephadmAgentHelpers:
                 self.mgr.spec_store.rm(CephadmAgent.TYPE)
                 need_apply = True
             if not self.mgr.cache.get_daemons_by_service(CephadmAgent.TYPE):
-                self.mgr.agent_cache.agent_counter = {}
-                self.mgr.agent_cache.agent_timestamp = {}
-                self.mgr.agent_cache.agent_keys = {}
-                self.mgr.agent_cache.agent_ports = {}
+                # Normally already done per host when each agent daemon was
+                # removed. Also drop the stored entries: clearing only the
+                # in-memory maps brought the old state back on mgr restart.
+                self.mgr.agent_cache.rm_all_agents()
         return need_apply
 
     def _check_agent(self, host: str) -> bool:

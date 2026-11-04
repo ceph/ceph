@@ -2282,6 +2282,15 @@ class CephadmAgent(CephService):
             ]
         )
 
+    def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
+        super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
+        # Drop the agent's keyring, counter and listener port. Otherwise a
+        # report still in flight from the removed agent is accepted, and a
+        # later agent on this host starts with the old counter and port: the
+        # mgr then sees every report as out of date and keeps messaging it.
+        assert daemon.hostname is not None
+        self.mgr.agent_cache.rm_agent(daemon.hostname)
+
     def prepare_create(
             self,
             deploy_ctx: DaemonDeployContext,
