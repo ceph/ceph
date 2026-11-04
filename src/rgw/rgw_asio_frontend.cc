@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <ctime>
@@ -140,6 +141,34 @@ class StreamIO : public rgw::asio::ClientIO {
                                        yield[ec]);
     } else {
       bytes = boost::asio::write(stream, boost::asio::buffer(buf, len), ec);
+    }
+    timeout.cancel();
+    if (ec) {
+      ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
+      if (ec == boost::asio::error::broken_pipe) {
+        boost::system::error_code ec_ignored;
+        stream.lowest_layer().shutdown(tcp::socket::shutdown_both, ec_ignored);
+      }
+      if (!fatal_ec) {
+        fatal_ec = ec;
+      }
+      throw rgw::io::Exception(ec.value(), std::system_category());
+    }
+    return bytes;
+  }
+
+  size_t write_data_gather(const char* buf1, size_t len1,
+                           const char* buf2, size_t len2) override {
+    const std::array<boost::asio::const_buffer, 2> bufs{
+      boost::asio::buffer(buf1, len1), boost::asio::buffer(buf2, len2)};
+    boost::system::error_code ec;
+    timeout.start();
+    size_t bytes = 0;
+    if (y) {
+      boost::asio::yield_context& yield = y.get_yield_context();
+      bytes = boost::asio::async_write(stream, bufs, yield[ec]);
+    } else {
+      bytes = boost::asio::write(stream, bufs, ec);
     }
     timeout.cancel();
     if (ec) {
