@@ -196,6 +196,7 @@ private:
 
   size_t num_read = 0;    ///< count read ops
   size_t num_write = 0;   ///< count update ops
+  bool initial_obs_dirty = false; ///< FLAG_DIRTY on the object before this op
 
   /// obc->attr_cache as it was before the first op of this request
   /// modified it. Used to revert the cache if a later op fails.
@@ -372,6 +373,9 @@ private:
 
   interruptible_errorated_future<osd_op_errorator>
   do_execute_op(OSDOp& osd_op);
+
+  interruptible_errorated_future<osd_op_errorator>
+  do_execute_op_body(OSDOp& osd_op);
 
   OpsExecuter(Ref<PG> pg,
               ObjectContextRef obc,
@@ -577,13 +581,14 @@ class PgOpsExecuter {
 
 public:
   PgOpsExecuter(const PG& pg, const MOSDOp& msg)
-    : pg(pg), nspace(msg.get_hobj().nspace) {
+    : pg(pg), m(&msg), nspace(msg.get_hobj().nspace) {
   }
 
   interruptible_future<> execute_op(OSDOp& osd_op);
 
 private:
   const PG& pg;
+  const MOSDOp* m;
   const std::string& nspace;
 };
 

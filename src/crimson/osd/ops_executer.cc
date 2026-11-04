@@ -628,14 +628,27 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_WRITESAME:
   case CEPH_OSD_OP_APPEND:
   case CEPH_OSD_OP_COPY_FROM2:
-    if (pg->is_local_store_full() && !get_message().has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
-      return crimson::ct_error::eagain::make();
-    }
-    break;
+    return interruptor::make_interruptible(
+      pg->is_local_store_full()
+    ).then_interruptible(
+      [this, &osd_op](bool is_full)
+      -> interruptible_errorated_future<osd_op_errorator> {
+        if (is_full && !get_message().has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
+          return crimson::ct_error::eagain::make();
+        }
+        return do_execute_op_body(osd_op);
+      });
   default:
     break;
   }
+  return do_execute_op_body(osd_op);
+}
+
+OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
+OpsExecuter::do_execute_op_body(OSDOp& osd_op)
+{
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
+
   case CEPH_OSD_OP_SYNC_READ:
     [[fallthrough]];
   case CEPH_OSD_OP_READ:
@@ -891,7 +904,6 @@ OpsExecuter::flush_changes_and_submit(
     ceph_assert(want_mutate);
   }
 
-  apply_stats();
   if (want_mutate) {
     osd_op_params->at_version = pg->get_next_version();
     osd_op_params->pg_trim_to = pg->get_pg_trim_to();
@@ -905,6 +917,10 @@ OpsExecuter::flush_changes_and_submit(
     }
 
     log_entries.emplace_back(prepare_head_update(ops, txn));
+
+    // must follow prepare_head_update(): it accounts for the bytes the newest
+    // clone now holds on to.
+    apply_stats();
 
     if (auto log_rit = log_entries.rbegin(); log_rit != log_entries.rend()) {
       ceph_assert(log_rit->version == osd_op_params->at_version);
@@ -920,6 +936,8 @@ OpsExecuter::flush_changes_and_submit(
 
     submitted = std::move(_submitted);
     all_completed = std::move(_all_completed);
+  } else {
+    apply_stats();
   }
 
   if (op_effects.size()) [[unlikely]] {
@@ -984,7 +1002,15 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
     obc->obs.oi.last_reqid = osd_op_params->req_id;
     obc->obs.oi.mtime = osd_op_params->mtime;
     obc->obs.oi.local_mtime = ceph_clock_now();
-    
+
+    // Mark the object dirty if it was clean before this write transaction.
+    // This mirrors classic OSD's make_writeable() and must happen exactly once
+    // per transaction, based on the object's state at operation start.
+    if (!initial_obs_dirty) {
+      obc->obs.oi.set_flag(object_info_t::FLAG_DIRTY);
+      ++delta_stats.num_objects_dirty;
+    }
+
     obc->ssc->exists = true;
     pg->get_backend().set_metadata(
       obc->obs.oi.soid,
@@ -996,7 +1022,7 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
     // reset cached ObjectState without enforcing eviction
     obc->obs.oi = object_info_t(obc->obs.oi.soid);
   }
-  
+
   DEBUGDPP("entry: {}", *pg, ret);
   return ret;
 }
@@ -1048,8 +1074,17 @@ void OpsExecuter::prepare_cloning_ctx(
   cloning_ctx->clone_obc = prepare_clone(cloning_ctx->coid, initial_obs);
 
   delta_stats.num_objects++;
+  if (cloning_ctx->clone_obc->obs.oi.is_dirty()) {
+    delta_stats.num_objects_dirty++;
+  }
   if (cloning_ctx->clone_obc->obs.oi.is_omap()) {
     delta_stats.num_objects_omap++;
+  }
+  if (cloning_ctx->clone_obc->obs.oi.is_cache_pinned()) {
+    delta_stats.num_objects_pinned++;
+  }
+  if (cloning_ctx->clone_obc->obs.oi.has_manifest()) {
+    delta_stats.num_objects_manifest++;
   }
   delta_stats.num_object_clones++;
   // newsnapset is obc's ssc
@@ -1105,11 +1140,15 @@ pg_log_entry_t OpsExecuter::complete_cloning_ctx()
 void OpsExecuter::update_clone_overlap() {
   interval_set<uint64_t> *newest_overlap;
   if (cloning_ctx) {
+    if (cloning_ctx->new_snapset.clone_overlap.empty()) {
+      return;
+    }
     newest_overlap =
       &cloning_ctx->new_snapset.clone_overlap.rbegin()->second;
-  } else if (op_info.may_write() 
-    && obc->obs.exists 
-    && !obc->ssc->snapset.clones.empty()) {
+  } else if (op_info.may_write()
+    && obc->obs.exists
+    && !obc->ssc->snapset.clones.empty()
+    && !obc->ssc->snapset.clone_overlap.empty()) {
     newest_overlap =
       &obc->ssc->snapset.clone_overlap.rbegin()->second;
   } else {
@@ -1166,6 +1205,7 @@ OpsExecuter::OpsExecuter(Ref<PG> _pg,
     msg(std::move(msg)),
     conn(conn),
     txn(pg->min_peer_features()),
+    initial_obs_dirty(obc->obs.oi.is_dirty()),
     snapc(_snapc)
 {
   if (op_info.may_write() && should_clone(*obc, snapc)) {
@@ -1553,6 +1593,28 @@ static PG::interruptible_future<> do_pgls_filtered(
   });
 }
 
+static PG::interruptible_future<> do_scrub_ls(
+  const PG& pg,
+  const MOSDOp* m,
+  OSDOp& osd_op)
+{
+  int r = pg.do_scrub_ls(m, &osd_op);
+
+  if (r < 0) {
+    if (r == -EINVAL) {
+      throw crimson::osd::invalid_argument{};
+    } else if (r == -EAGAIN) {
+      throw crimson::osd::error(std::errc::resource_unavailable_try_again);
+    } else if (r == -ENOENT) {
+      throw crimson::osd::object_not_found{};
+    } else {
+      throw crimson::osd::make_error(r);
+    }
+  }
+
+  return seastar::now();
+}
+
 PgOpsExecuter::interruptible_future<>
 PgOpsExecuter::execute_op(OSDOp& osd_op)
 {
@@ -1566,6 +1628,8 @@ PgOpsExecuter::execute_op(OSDOp& osd_op)
     return do_pgnls(pg, nspace, osd_op);
   case CEPH_OSD_OP_PGNLS_FILTER:
     return do_pgnls_filtered(pg, nspace, osd_op);
+  case CEPH_OSD_OP_SCRUBLS:
+    return do_scrub_ls(pg, m, osd_op);
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(
