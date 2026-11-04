@@ -249,6 +249,44 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
 
   explicit LruOnodeCacheShard(CephContext *cct) : bluestore::OnodeCacheShard(cct) {}
 
+  /// stamp the onode into the newest age bin, moving its count there
+  void _stamp(bluestore::Onode* o)
+  {
+    if (o->cache_age_bin == age_bins.front()) {
+      return;  // the common case on the unpin path: touched again this bin
+    }
+    if (o->cache_age_bin) {
+      *(o->cache_age_bin) -= 1;
+    }
+    o->cache_age_bin = age_bins.front();
+    *(o->cache_age_bin) += 1;
+  }
+  void _link_front(list_t& l, bluestore::Onode* o)
+  {
+    l.push_front(*o);
+    _stamp(o);
+  }
+  void _unlink(bluestore::Onode* o)
+  {
+    *(o->cache_age_bin) -= 1;
+    o->cache_age_bin.reset();
+    lru.erase(lru.iterator_to(*o));
+  }
+  /// A use of the onode ended (its last pin was dropped): link the onode,
+  /// or move it to the front.  Lock held, o->exists.
+  void _touch(bluestore::Onode* o)
+  {
+    if (o->lru_item.is_linked()) {
+      // move onode within LRU
+      lru.erase(lru.iterator_to(*o));
+      _link_front(lru, o);
+      dout(20) << __func__ << " " << this << " " << o->oid << " touched" << dendl;
+    } else {
+      _link_front(lru, o);
+      dout(20) << __func__ << " " << this << " " << o->oid << " unpinned" << dendl;
+    }
+  }
+
   void _add(bluestore::Onode* o) override
   {
     // every caller holds a reference besides the onode map's, so the onode
@@ -264,8 +302,7 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
   {
     o->clear_cached();
     if (o->lru_item.is_linked()) {
-      *(o->cache_age_bin) -= 1;
-      lru.erase(lru.iterator_to(*o));
+      _unlink(o);
     }
     ceph_assert(num);
     --num;
@@ -289,33 +326,16 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
       return;
     }
     if (o->is_cached() && o->pin_nref == 1) {
-      if(!o->lru_item.is_linked()) {
-        if (o->exists) {
-	  lru.push_front(*o);
-	  o->cache_age_bin = age_bins.front();
-	  *(o->cache_age_bin) += 1;
-	  dout(20) << __func__ << " " << this << " " << o->oid << " unpinned"
-                   << dendl;
-        } else {
-	  ceph_assert(num);
-	  --num;
-	  o->clear_cached();
-	  dout(20) << __func__ << " " << this << " " << o->oid << " removed"
-                   << dendl;
-          // remove will also decrement nref
-          o->c->onode_space._remove(o->oid);
-        }
-      } else if (o->exists) {
-        // move onode within LRU
-        lru.erase(lru.iterator_to(*o));
-        lru.push_front(*o);
-        if (o->cache_age_bin != age_bins.front()) {
-          *(o->cache_age_bin) -= 1;
-          o->cache_age_bin = age_bins.front();
-          *(o->cache_age_bin) += 1;
-        }
-        dout(20) << __func__ << " " << this << " " << o->oid << " touched"
+      if (o->exists) {
+        _touch(o);
+      } else if (!o->lru_item.is_linked()) {
+	ceph_assert(num);
+	--num;
+	o->clear_cached();
+	dout(20) << __func__ << " " << this << " " << o->oid << " removed"
                  << dendl;
+        // remove will also decrement nref
+        o->c->onode_space._remove(o->oid);
       }
     }
     ocs->lock.unlock();
@@ -339,11 +359,14 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
 
       *(o->cache_age_bin) -= 1;
       if (o->pin_nref > 1) {
+        // still in use: it is linked again, and stamped, when that use ends
+        o->cache_age_bin.reset();
         dout(20) << __func__ << " " << this << " " << " " << " " << o->oid << dendl;
       } else {
 	ceph_assert(num);
         --num;
         o->clear_cached();
+        o->cache_age_bin.reset();  // unlinked onodes carry no stamp
         o->c->onode_space._remove(o->oid);
       }
     }
