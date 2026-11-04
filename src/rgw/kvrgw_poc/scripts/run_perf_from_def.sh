@@ -522,15 +522,17 @@ try:
       disk_writes = p.get('disk',{}).get('writes',{}).get('hz',0)
       print(f'log addr={addr} cpu={cpu:.3f} mem_bytes={mem} rss_bytes={rss} input_hz={inp:.0f} durable_hz={dur:.0f} queue_disk_bytes={queue_disk} queue_mem_bytes={queue_mem} disk_busy={disk_busy:.3f} disk_reads_hz={disk_reads:.0f} disk_writes_hz={disk_writes:.0f}')
 
+  # One line per stateless-class process (idle ones included), plus any other
+  # process hosting a proxy/resolver role. Roles are comma-joined.
   for pid,p in sorted(procs.items()):
-    for r in p.get('roles',[]):
-      if r.get('role') not in ('commit_proxy','grv_proxy','resolver'): continue
-      addr = p.get('address','?')
-      role = r.get('role')
-      cpu = p.get('cpu',{}).get('usage_cores',0)
-      mem = p.get('memory',{}).get('used_bytes',0)
-      rss = p.get('memory',{}).get('rss_bytes', mem)
-      print(f'sl addr={addr} role={role} cpu={cpu:.3f} mem_bytes={mem} rss_bytes={rss}')
+    roles = [r.get('role') for r in p.get('roles',[]) if r.get('role') not in ('storage','log')]
+    if p.get('class_type') != 'stateless' and not any(x in ('commit_proxy','grv_proxy','resolver') for x in roles): continue
+    addr = p.get('address','?')
+    role = ','.join(roles) if roles else 'none'
+    cpu = p.get('cpu',{}).get('usage_cores',0)
+    mem = p.get('memory',{}).get('used_bytes',0)
+    rss = p.get('memory',{}).get('rss_bytes', mem)
+    print(f'sl addr={addr} role={role} cpu={cpu:.3f} mem_bytes={mem} rss_bytes={rss}')
 
   if disk_free:
     print(f'disk_free {disk_free}')
@@ -565,10 +567,23 @@ collect_kvrgw_stats() {
 
 collect_host_stats() {
   local outfile="${OUTDIR}/host_stats_${TIMESTAMP}.log"
+  local iostat_tmp
+  iostat_tmp="$(mktemp)"
+  trap 'rm -f "${iostat_tmp}"' EXIT
   while true; do
     echo "--- $(date -u +%Y-%m-%dT%H:%M:%SZ) ---" >> "${outfile}"
+    # The first iostat report is the average since boot; run 2 reports and keep only the second (last second).
+    iostat -xz 1 2 2>/dev/null | awk '/^avg-cpu:/{n++} n>=2' | grep -v '^$' > "${iostat_tmp}" 2>/dev/null &
+    local iostat_pid=$!
     pidstat -p ALL 1 1 2>/dev/null | grep -E 'fdb|kv-rgw' >> "${outfile}" 2>&1 || true
-    iostat -xz 1 1 2>/dev/null | grep -v '^$' >> "${outfile}" 2>&1 || true
+    local be_pids
+    be_pids="$(pgrep -d, -x kv-rgw-backend 2>/dev/null || true)"
+    if [[ -n "${be_pids}" ]]; then
+      echo "# pidstat -t kv-rgw-backend" >> "${outfile}"
+      pidstat -t -p "${be_pids}" 1 1 2>/dev/null | grep -E 'kv-rgw|Average' >> "${outfile}" 2>&1 || true
+    fi
+    wait "${iostat_pid}" 2>/dev/null || true
+    cat "${iostat_tmp}" >> "${outfile}" 2>&1 || true
     free -m | head -2 >> "${outfile}" 2>&1 || true
     sleep "${sample_interval}"
   done

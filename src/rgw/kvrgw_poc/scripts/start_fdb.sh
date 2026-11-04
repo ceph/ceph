@@ -65,7 +65,8 @@ done
 
 running=$(sudo docker ps --filter "name=fdb-storage0" --format '{{.Names}}' 2>/dev/null || true)
 if [[ -z "${running}" ]]; then
-  echo "Starting FDB cluster (12 containers)..."
+  n_containers=$(grep -c 'container_name:' "${COMPOSE_DIR}/docker-compose.yml" || true)
+  echo "Starting FDB cluster (${n_containers} containers)..."
   cd "${COMPOSE_DIR}" && sudo docker compose up -d >> "${LOG_DIR}/fdb-cluster.log" 2>&1
   sleep 5
 fi
@@ -86,6 +87,14 @@ if ! timeout 15 "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "status minimal" 2>/dev
     exit 1
   fi
   timeout 30 "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "configure triple" >/dev/null 2>&1 || true
+  FDB_CONFIGURE="$(grep -oP '^x-fdb-configure: "\K[^"]*' "${COMPOSE_DIR}/docker-compose.yml" 2>/dev/null | head -1 || true)"
+  if [[ -n "${FDB_CONFIGURE}" ]]; then
+    echo "Configuring FDB roles: ${FDB_CONFIGURE}"
+    if ! timeout 30 "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "configure ${FDB_CONFIGURE}"; then
+      echo "ERROR: configure ${FDB_CONFIGURE} failed" >&2
+      exit 1
+    fi
+  fi
   timeout 30 "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "coordinators auto" >/dev/null 2>&1 || true
   sleep 3
   cp /mnt/fdb0/fdb.cluster "${CLUSTER_FILE}"

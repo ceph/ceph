@@ -14,7 +14,7 @@
 ## FDB Resource Limits
 
 - Max CPU cores for FDB: 48
-- Max DRAM for FDB: 96 GB
+- Max DRAM for FDB: 250 GB
 
 Any config requesting more than these limits will be rejected by the generator script.
 
@@ -30,13 +30,17 @@ Only these drives/partitions may be used by FDB containers. Everything else is o
 
 ### SS Allocation Rule
 
-Valid storage-server counts: 1, 3, 6, 9, 12. SS processes are distributed round-robin across the 3 drives (e.g. count=6: fdb0, fdb1, fdb2, fdb0, fdb1, fdb2). Any other count is rejected by the generator script.
+Valid storage-server counts: 1, 3, 6, 9, 12, 15, 18. SS processes are distributed round-robin across the 3 drives (e.g. count=6: fdb0, fdb1, fdb2, fdb0, fdb1, fdb2). Any other count is rejected by the generator script.
 
 ### Log partitions
 
 - nvme1n1p3 (74.5G) → /mnt/fdb-log0
 - nvme7n1p3 (74.5G) → /mnt/fdb-log1
 - nvme5n1/vg_nvme-lv_fdblog (80G LVM) → /mnt/fdb-log2
+
+### Log / Stateless Allocation Rule
+
+Valid log-server counts: 3, 6. Valid stateless-server counts: 3, 6, 9. Log and stateless processes are distributed round-robin across the 3 log partitions (e.g. count=6: log0, log1, log2, log0, log1, log2), so a partition may host more than one process. Each process uses its own per-port data directory on the partition. Any other count is rejected by the generator script.
 
 ## Current FDB Allocation (default config)
 

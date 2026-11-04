@@ -458,11 +458,11 @@ File naming: `perf-results/csv/raw_<timestamp>.csv`
 
 The FDB cluster is configured through a three-file system:
 
-- **`System-Resources.md`** — one-time machine inventory: CPU cores, NVMe drives, RAM, and hard limits on what FDB may use (max 48 cores, max 48 GB DRAM). Created once, updated only when hardware changes. Must be approved before use.
+- **`System-Resources.md`** — one-time machine inventory: CPU cores, NVMe drives, RAM, and hard limits on what FDB may use (currently max 48 cores, max 240 GB DRAM; see `System-Resources.md`). Created once, updated only when hardware changes. Must be approved before use.
 - **`FDB-Default-Config.txt`** — human-editable intent file declaring role counts and resources per container (e.g. 6 SS at 1 core/1 GB each). Edit this to change FDB topology for different test profiles.
 - **`scripts/gen_fdb_config.sh`** — reads both files, validates the config against resource limits, assigns actual core IDs and NVMe mount points, and outputs a fully resolved `FDB-Default-Config.md`.
 
-Storage-server count must be one of {1, 3, 6, 9, 12} — SS processes are distributed round-robin across the 3 NVMe drives. Any other count is rejected. Port ranges: SS 4500-4511, LOG 4520-4522, SL 4530-4532.
+Storage-server count must be one of {1, 3, 6, 9, 12, 15, 18} — SS processes are distributed round-robin across the 3 NVMe drives. Log-server and stateless-server counts must each be 3 or 6 — they are distributed round-robin across the 3 log partitions, so a partition may host several processes. Any other count is rejected. Port ranges: SS 4500-4517, LOG 4520-4525, SL 4530-4535. Container names are `fdb-storage<drive><slot>`, `fdb-log<drive><slot>` and `fdb-stateless<drive><slot>`.
 
 `scripts/gen_docker_compose.sh` reads the generated `.md` and produces `fdb-cluster/docker-compose.yml`. Every parameter is binding: container name, port, cpuset, memory, mount, zone, machine ID, FDB `-m` and `--cache_memory` flags. Mount paths are validated against `System-Resources.md` allowlist.
 
@@ -477,6 +477,19 @@ storage_hard_limit_mb: 500
 - `storage_hard_limit_mb`: positive integer in MB (default: 1500). Sets `--knob_storage_hard_limit_bytes` on SS processes — the cluster stops accepting writes when any SS queue exceeds this. Lower values (e.g. 500) prevent deep queue buildup under heavy load.
 
 The runner applies `throttle enable` via fdbcli after cluster init when configured.
+
+Optional role counts, applied with `fdbcli configure` during a clean cluster init:
+
+```
+logs: 6
+commit_proxies: 2
+grv_proxies: 1
+resolvers: 2
+```
+
+- `logs`: defaults to the log-server count and must not exceed it.
+- `commit_proxies`, `grv_proxies`, `resolvers`: default to `auto` (not passed to FDB).
+- The values are recorded in the `FDB Cluster Settings` table of the generated `.md`, carried to `docker-compose.yml` as `x-fdb-configure:`, and run as `configure <settings>` right after `configure triple`. A failing `configure` aborts the init.
 
 To create additional test profiles, copy `FDB-Default-Config.txt` to a new name (e.g. `FDB-12SS-Config.txt`), edit the counts/resources, and run:
 
@@ -577,7 +590,7 @@ perf-results/<fdb-config-name>_<perf-test-name>_<timestamp>/
   instance-01_<timestamp>.stats
   ...
   fdb_stats_<timestamp>.log         # per-interval FDB stats
-  host_stats_<timestamp>.log        # pidstat, iostat, memory
+  host_stats_<timestamp>.log        # pidstat (+ per-thread kv-rgw-backend), iostat (last second), memory
   Perf-Test-XXX.md                  # copy of test definition
   FDB-Config-XXX.md                 # copy of cluster config
 ```

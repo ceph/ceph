@@ -1606,9 +1606,6 @@ KvrgwErrorCode KvRgwServiceImpl::complete_multipart_upload_step3(
     return fdb_to_error(werr);
   }
 
-  // TBD:
-  // PRECONDITION should be checked before modiying version state!
-
   // Check condition -> displace -> version. Nothing is written on a failure.
   ObjectValue new_value;
   auto ids = install_object_value(*tr, vb->versioning_state, object_key.view(),

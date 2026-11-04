@@ -74,6 +74,11 @@ read sl_count sl_cpu sl_mem <<< "$(parse_line "$stateless_line")"
 # Parse throttle, storage_hard_limit_mb, engine
 throttle=$(grep -i '^throttle:' "${CONFIG}" | awk '{print $2}' || echo "disable")
 storage_hard_limit_mb=$(grep -i '^storage_hard_limit_mb:' "${CONFIG}" | awk '{print $2}' || echo "1500")
+# Optional role counts passed to "configure" at cluster init (logs defaults to the log server count, others to auto)
+cfg_logs=$(grep -i '^logs:' "${CONFIG}" | awk '{print $2}' || true)
+cfg_commit_proxies=$(grep -i '^commit_proxies:' "${CONFIG}" | awk '{print $2}' || true)
+cfg_grv_proxies=$(grep -i '^grv_proxies:' "${CONFIG}" | awk '{print $2}' || true)
+cfg_resolvers=$(grep -i '^resolvers:' "${CONFIG}" | awk '{print $2}' || true)
 engine=$(grep -i '^engine:' "${CONFIG}" | awk '{print $2}' || true)
 if [[ -z "${engine}" ]]; then
   echo "ERROR: engine: is required (ssd2, ssd-redwood-1, or rocksdb)" >&2; exit 1
@@ -93,6 +98,27 @@ if ! [[ "$storage_hard_limit_mb" =~ ^[0-9]+$ ]] || (( storage_hard_limit_mb <= 0
 fi
 storage_hard_limit_bytes=$(( storage_hard_limit_mb * 1048576 ))
 
+cfg_logs="${cfg_logs:-${log_count}}"
+cfg_commit_proxies="${cfg_commit_proxies:-auto}"
+cfg_grv_proxies="${cfg_grv_proxies:-auto}"
+cfg_resolvers="${cfg_resolvers:-auto}"
+for kv in "logs:${cfg_logs}" "commit_proxies:${cfg_commit_proxies}" "grv_proxies:${cfg_grv_proxies}" "resolvers:${cfg_resolvers}"; do
+  k="${kv%%:*}"; v="${kv#*:}"
+  if [[ "$v" != "auto" ]] && { ! [[ "$v" =~ ^[0-9]+$ ]] || (( v <= 0 )); }; then
+    echo "ERROR: '${k}' must be a positive integer or 'auto', got '${v}'" >&2; exit 1
+  fi
+done
+if [[ "$cfg_logs" != "auto" ]] && (( cfg_logs > log_count )); then
+  echo "ERROR: 'logs' (${cfg_logs}) exceeds the log server count (${log_count})" >&2; exit 1
+fi
+_sl_roles=0
+for v in "$cfg_commit_proxies" "$cfg_grv_proxies" "$cfg_resolvers"; do
+  if [[ "$v" != "auto" ]]; then _sl_roles=$(( _sl_roles + v )); fi
+done
+if (( _sl_roles > sl_count )); then
+  echo "WARNING: commit_proxies + grv_proxies + resolvers = ${_sl_roles} exceeds stateless server count ${sl_count}; other process classes may host the extra roles" >&2
+fi
+
 total_cpu=$(( ss_count * ss_cpu + log_count * log_cpu + sl_count * sl_cpu ))
 total_mem=$(( ss_count * ss_mem + log_count * log_mem + sl_count * sl_mem ))
 
@@ -103,19 +129,19 @@ if (( total_mem > MAX_MEM )); then
   echo "ERROR: FDB config requests ${total_mem} GB DRAM, limit is ${MAX_MEM} GB" >&2; exit 1
 fi
 
-VALID_SS_COUNTS="1 3 6 9 12"
+VALID_SS_COUNTS="1 3 6 9 12 15 18"
 ss_valid=0
 for v in $VALID_SS_COUNTS; do
   if (( ss_count == v )); then ss_valid=1; break; fi
 done
 if (( ss_valid == 0 )); then
-  echo "ERROR: storage-server count must be one of {1, 3, 6, 9, 12} (round-robin across 3 NVMe drives), got ${ss_count}" >&2; exit 1
+  echo "ERROR: storage-server count must be one of {1, 3, 6, 9, 12, 15, 18} (round-robin across 3 NVMe drives), got ${ss_count}" >&2; exit 1
 fi
-if (( log_count > 3 )); then
-  echo "ERROR: max 3 log servers (3 log partitions available)" >&2; exit 1
+if (( log_count != 3 && log_count != 6 )); then
+  echo "ERROR: log-server count must be one of {3, 6} (round-robin across 3 log partitions), got ${log_count}" >&2; exit 1
 fi
-if (( sl_count > 3 )); then
-  echo "ERROR: max 3 stateless servers (co-located with log partitions)" >&2; exit 1
+if (( sl_count != 3 && sl_count != 6 && sl_count != 9 )); then
+  echo "ERROR: stateless-server count must be one of {3, 6, 9} (round-robin across 3 log partitions), got ${sl_count}" >&2; exit 1
 fi
 
 SS_DRIVE_MOUNTS=(/mnt/fdb0 /mnt/fdb1 /mnt/fdb2)
@@ -139,16 +165,42 @@ for (( i=0; i<ss_count; i++ )); do
 done
 
 # #20: Separate port ranges to avoid collision
-LOG_PORTS=(4520 4521 4522)
-LOG_MOUNTS=(/mnt/fdb-log0 /mnt/fdb-log1 /mnt/fdb-log2)
-LOG_ZONES=(zone3 zone4 zone5)
-LOG_MACHINES=(fdb-log0 fdb-log1 fdb-log2)
+# Log and stateless processes are distributed round-robin over the 3 log partitions (like SS over the SS drives)
+LOG_DRIVE_MOUNTS=(/mnt/fdb-log0 /mnt/fdb-log1 /mnt/fdb-log2)
+LOG_DRIVE_ZONES=(zone3 zone4 zone5)
+LOG_DRIVE_MACHINES=(fdb-log0 fdb-log1 fdb-log2)
+LOG_BASE_PORT=4520
+SL_BASE_PORT=4530
 
-SL_PORTS=(4530 4531 4532)
-SL_MOUNTS=(/mnt/fdb-log0 /mnt/fdb-log1 /mnt/fdb-log2)
-SL_ZONES=(zone3 zone4 zone5)
-SL_MACHINES=(fdb-log0 fdb-log1 fdb-log2)
-SL_NAMES=(fdb-stateless0 fdb-stateless1 fdb-stateless2)
+LOG_PORTS=()
+LOG_MOUNTS=()
+LOG_ZONES=()
+LOG_MACHINES=()
+LOG_NAMES=()
+for (( i=0; i<log_count; i++ )); do
+  drive_idx=$(( i % 3 ))
+  slot=$(( i / 3 ))
+  LOG_MOUNTS+=("${LOG_DRIVE_MOUNTS[$drive_idx]}")
+  LOG_ZONES+=("${LOG_DRIVE_ZONES[$drive_idx]}")
+  LOG_MACHINES+=("${LOG_DRIVE_MACHINES[$drive_idx]}")
+  LOG_PORTS+=( $(( LOG_BASE_PORT + i )) )
+  LOG_NAMES+=("fdb-log${drive_idx}${slot}")
+done
+
+SL_PORTS=()
+SL_MOUNTS=()
+SL_ZONES=()
+SL_MACHINES=()
+SL_NAMES=()
+for (( i=0; i<sl_count; i++ )); do
+  drive_idx=$(( i % 3 ))
+  slot=$(( i / 3 ))
+  SL_MOUNTS+=("${LOG_DRIVE_MOUNTS[$drive_idx]}")
+  SL_ZONES+=("${LOG_DRIVE_ZONES[$drive_idx]}")
+  SL_MACHINES+=("${LOG_DRIVE_MACHINES[$drive_idx]}")
+  SL_PORTS+=( $(( SL_BASE_PORT + i )) )
+  SL_NAMES+=("fdb-stateless${drive_idx}${slot}")
+done
 
 # #24: Use global variable instead of subshell to preserve core_idx
 core_idx=0
@@ -226,7 +278,7 @@ EOF
 for (( i=0; i<log_count; i++ )); do
   next_cores "$log_cpu"
   printf "| %-14s | %4d | %6s | %5d | %2dG | %-14s | %-5s | %-10s |\n" \
-    "${LOG_MACHINES[$i]}" "${LOG_PORTS[$i]}" "$_cpuset_result" "$log_cpu" "$log_mem" \
+    "${LOG_NAMES[$i]}" "${LOG_PORTS[$i]}" "$_cpuset_result" "$log_cpu" "$log_mem" \
     "${LOG_MOUNTS[$i]}" "${LOG_ZONES[$i]}" "${LOG_MACHINES[$i]}"
 done
 
@@ -264,6 +316,10 @@ Container mem_limit: SS=${ss_mem_limit} LOG=${log_mem_limit} SL=${sl_mem_limit}
 | storage_hard_limit_mb | ${storage_hard_limit_mb} |
 | engine | ${engine} |
 | fdbcli_engine | ${fdbcli_engine} |
+| logs | ${cfg_logs} |
+| commit_proxies | ${cfg_commit_proxies} |
+| grv_proxies | ${cfg_grv_proxies} |
+| resolvers | ${cfg_resolvers} |
 EOF
 } > "${OUTPUT}"
 

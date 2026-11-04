@@ -480,13 +480,15 @@ kvrgw_clean_fdb() {
     ssd|ssd-redwood-1|ssd-rocksdb-v1) ;;
     *) echo "ERROR: unknown x-fdb-engine '${fdbcli_engine}'" >&2; return 1 ;;
   esac
+  local fdb_configure
+  fdb_configure=$(grep -oP '^x-fdb-configure: "\K[^"]*' "${compose_file}" 2>/dev/null | head -1 || true)
   local mounts=(/mnt/fdb0 /mnt/fdb1 /mnt/fdb2 /mnt/fdb-log0 /mnt/fdb-log1 /mnt/fdb-log2)
   echo "Stopping FDB containers..."
   (cd "${compose_dir}" && sudo docker compose down) >/dev/null 2>&1 || true
   kvrgw_fdb_check_server_mount || return 1
   echo "Wiping FDB data..."
   for m in "${mounts[@]}"; do
-    sudo rm -rf "${m}/data" "${m}/logs" "${m}/fdb.cluster" 2>/dev/null || true
+    sudo rm -rf "${m}/data" "${m}/data-stateless" "${m}/logs" "${m}/fdb.cluster" 2>/dev/null || true
     sudo mkdir -p "${m}/logs"
   done
   echo "Seeding fresh cluster file..."
@@ -519,6 +521,14 @@ kvrgw_clean_fdb() {
     return 1
   fi
   kvrgw_fdbcli "configure triple" >/dev/null 2>&1 || true
+  if [[ -n "${fdb_configure}" ]]; then
+    echo "Configuring FDB roles: ${fdb_configure}"
+    if ! kvrgw_fdbcli "configure ${fdb_configure}"; then
+      echo "ERROR: configure ${fdb_configure} failed" >&2
+      kvrgw_fdb_dump_failure
+      return 1
+    fi
+  fi
   kvrgw_fdbcli "coordinators auto" >/dev/null 2>&1 || true
   sleep 3
   cp /mnt/fdb0/fdb.cluster "${FDB_CLUSTER_FILE}"

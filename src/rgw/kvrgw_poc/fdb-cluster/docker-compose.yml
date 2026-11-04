@@ -1,182 +1,399 @@
 x-fdb-engine: ssd-redwood-1
+x-fdb-configure: "logs=6 commit_proxies=2 resolvers=2"
 services:
   fdb-storage00:
     image: rockylinux:9-minimal
     container_name: fdb-storage00
     network_mode: host
-    mem_limit: 12g
+    mem_limit: 16g
     cpuset: "0"
     volumes:
       - /mnt/fdb0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4500 -d /data/data/4500 -L /data/logs -m 6GiB --cache_memory 3GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4500 -d /data/data/4500 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
   fdb-storage10:
     image: rockylinux:9-minimal
     container_name: fdb-storage10
     network_mode: host
-    mem_limit: 12g
+    mem_limit: 16g
     cpuset: "1"
     volumes:
       - /mnt/fdb1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4501 -d /data/data/4501 -L /data/logs -m 6GiB --cache_memory 3GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4501 -d /data/data/4501 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
   fdb-storage20:
     image: rockylinux:9-minimal
     container_name: fdb-storage20
     network_mode: host
-    mem_limit: 12g
+    mem_limit: 16g
     cpuset: "2"
     volumes:
       - /mnt/fdb2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4502 -d /data/data/4502 -L /data/logs -m 6GiB --cache_memory 3GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4502 -d /data/data/4502 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
   fdb-storage01:
     image: rockylinux:9-minimal
     container_name: fdb-storage01
     network_mode: host
-    mem_limit: 12g
+    mem_limit: 16g
     cpuset: "3"
     volumes:
       - /mnt/fdb0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4503 -d /data/data/4503 -L /data/logs -m 6GiB --cache_memory 3GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4503 -d /data/data/4503 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
   fdb-storage11:
     image: rockylinux:9-minimal
     container_name: fdb-storage11
     network_mode: host
-    mem_limit: 12g
+    mem_limit: 16g
     cpuset: "4"
     volumes:
       - /mnt/fdb1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4504 -d /data/data/4504 -L /data/logs -m 6GiB --cache_memory 3GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4504 -d /data/data/4504 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
   fdb-storage21:
     image: rockylinux:9-minimal
     container_name: fdb-storage21
     network_mode: host
-    mem_limit: 12g
+    mem_limit: 16g
     cpuset: "5"
     volumes:
       - /mnt/fdb2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4505 -d /data/data/4505 -L /data/logs -m 6GiB --cache_memory 3GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4505 -d /data/data/4505 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
   fdb-storage02:
     image: rockylinux:9-minimal
     container_name: fdb-storage02
     network_mode: host
-    mem_limit: 12g
+    mem_limit: 16g
     cpuset: "6"
     volumes:
       - /mnt/fdb0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4506 -d /data/data/4506 -L /data/logs -m 6GiB --cache_memory 3GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4506 -d /data/data/4506 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
   fdb-storage12:
     image: rockylinux:9-minimal
     container_name: fdb-storage12
     network_mode: host
-    mem_limit: 12g
+    mem_limit: 16g
     cpuset: "7"
     volumes:
       - /mnt/fdb1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4507 -d /data/data/4507 -L /data/logs -m 6GiB --cache_memory 3GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4507 -d /data/data/4507 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
   fdb-storage22:
     image: rockylinux:9-minimal
     container_name: fdb-storage22
     network_mode: host
-    mem_limit: 12g
+    mem_limit: 16g
     cpuset: "8"
     volumes:
       - /mnt/fdb2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4508 -d /data/data/4508 -L /data/logs -m 6GiB --cache_memory 3GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4508 -d /data/data/4508 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
-  fdb-log0:
+  fdb-storage03:
     image: rockylinux:9-minimal
-    container_name: fdb-log0
+    container_name: fdb-storage03
     network_mode: host
-    mem_limit: 8g
+    mem_limit: 16g
     cpuset: "9"
     volumes:
-      - /mnt/fdb-log0:/data
+      - /mnt/fdb0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4520 -d /data/data/4520 -L /data/logs -m 4GiB --cache_memory 2GiB --class log --locality_machineid fdb-log0 --locality_zoneid zone3"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4509 -d /data/data/4509 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
-  fdb-log1:
+  fdb-storage13:
     image: rockylinux:9-minimal
-    container_name: fdb-log1
+    container_name: fdb-storage13
     network_mode: host
-    mem_limit: 8g
+    mem_limit: 16g
     cpuset: "10"
     volumes:
-      - /mnt/fdb-log1:/data
+      - /mnt/fdb1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4521 -d /data/data/4521 -L /data/logs -m 4GiB --cache_memory 2GiB --class log --locality_machineid fdb-log1 --locality_zoneid zone4"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4510 -d /data/data/4510 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
-  fdb-log2:
+  fdb-storage23:
     image: rockylinux:9-minimal
-    container_name: fdb-log2
+    container_name: fdb-storage23
     network_mode: host
-    mem_limit: 8g
+    mem_limit: 16g
     cpuset: "11"
     volumes:
-      - /mnt/fdb-log2:/data
+      - /mnt/fdb2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4522 -d /data/data/4522 -L /data/logs -m 4GiB --cache_memory 2GiB --class log --locality_machineid fdb-log2 --locality_zoneid zone5"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4511 -d /data/data/4511 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
     restart: unless-stopped
 
-  fdb-stateless0:
+  fdb-storage04:
     image: rockylinux:9-minimal
-    container_name: fdb-stateless0
+    container_name: fdb-storage04
     network_mode: host
-    mem_limit: 8g
+    mem_limit: 16g
     cpuset: "12"
+    volumes:
+      - /mnt/fdb0:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4512 -d /data/data/4512 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    restart: unless-stopped
+
+  fdb-storage14:
+    image: rockylinux:9-minimal
+    container_name: fdb-storage14
+    network_mode: host
+    mem_limit: 16g
+    cpuset: "13"
+    volumes:
+      - /mnt/fdb1:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4513 -d /data/data/4513 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    restart: unless-stopped
+
+  fdb-storage24:
+    image: rockylinux:9-minimal
+    container_name: fdb-storage24
+    network_mode: host
+    mem_limit: 16g
+    cpuset: "14"
+    volumes:
+      - /mnt/fdb2:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4514 -d /data/data/4514 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    restart: unless-stopped
+
+  fdb-storage05:
+    image: rockylinux:9-minimal
+    container_name: fdb-storage05
+    network_mode: host
+    mem_limit: 16g
+    cpuset: "15"
+    volumes:
+      - /mnt/fdb0:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4515 -d /data/data/4515 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    restart: unless-stopped
+
+  fdb-storage15:
+    image: rockylinux:9-minimal
+    container_name: fdb-storage15
+    network_mode: host
+    mem_limit: 16g
+    cpuset: "16"
+    volumes:
+      - /mnt/fdb1:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4516 -d /data/data/4516 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    restart: unless-stopped
+
+  fdb-storage25:
+    image: rockylinux:9-minimal
+    container_name: fdb-storage25
+    network_mode: host
+    mem_limit: 16g
+    cpuset: "17"
+    volumes:
+      - /mnt/fdb2:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4517 -d /data/data/4517 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    restart: unless-stopped
+
+  fdb-log00:
+    image: rockylinux:9-minimal
+    container_name: fdb-log00
+    network_mode: host
+    mem_limit: 16g
+    cpuset: "18"
     volumes:
       - /mnt/fdb-log0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4530 -d /data/data-stateless/4530 -L /data/logs -m 4GiB --cache_memory 2GiB --class stateless --locality_machineid fdb-log0 --locality_zoneid zone3"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4520 -d /data/data/4520 -L /data/logs -m 8GiB --cache_memory 4GiB --class log --locality_machineid fdb-log0 --locality_zoneid zone3"]
     restart: unless-stopped
 
-  fdb-stateless1:
+  fdb-log10:
     image: rockylinux:9-minimal
-    container_name: fdb-stateless1
+    container_name: fdb-log10
     network_mode: host
-    mem_limit: 8g
-    cpuset: "13"
+    mem_limit: 16g
+    cpuset: "19"
     volumes:
       - /mnt/fdb-log1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4531 -d /data/data-stateless/4531 -L /data/logs -m 4GiB --cache_memory 2GiB --class stateless --locality_machineid fdb-log1 --locality_zoneid zone4"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4521 -d /data/data/4521 -L /data/logs -m 8GiB --cache_memory 4GiB --class log --locality_machineid fdb-log1 --locality_zoneid zone4"]
     restart: unless-stopped
 
-  fdb-stateless2:
+  fdb-log20:
     image: rockylinux:9-minimal
-    container_name: fdb-stateless2
+    container_name: fdb-log20
     network_mode: host
-    mem_limit: 8g
-    cpuset: "14"
+    mem_limit: 16g
+    cpuset: "20"
     volumes:
       - /mnt/fdb-log2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4532 -d /data/data-stateless/4532 -L /data/logs -m 4GiB --cache_memory 2GiB --class stateless --locality_machineid fdb-log2 --locality_zoneid zone5"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4522 -d /data/data/4522 -L /data/logs -m 8GiB --cache_memory 4GiB --class log --locality_machineid fdb-log2 --locality_zoneid zone5"]
+    restart: unless-stopped
+
+  fdb-log01:
+    image: rockylinux:9-minimal
+    container_name: fdb-log01
+    network_mode: host
+    mem_limit: 16g
+    cpuset: "21"
+    volumes:
+      - /mnt/fdb-log0:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4523 -d /data/data/4523 -L /data/logs -m 8GiB --cache_memory 4GiB --class log --locality_machineid fdb-log0 --locality_zoneid zone3"]
+    restart: unless-stopped
+
+  fdb-log11:
+    image: rockylinux:9-minimal
+    container_name: fdb-log11
+    network_mode: host
+    mem_limit: 16g
+    cpuset: "22"
+    volumes:
+      - /mnt/fdb-log1:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4524 -d /data/data/4524 -L /data/logs -m 8GiB --cache_memory 4GiB --class log --locality_machineid fdb-log1 --locality_zoneid zone4"]
+    restart: unless-stopped
+
+  fdb-log21:
+    image: rockylinux:9-minimal
+    container_name: fdb-log21
+    network_mode: host
+    mem_limit: 16g
+    cpuset: "23"
+    volumes:
+      - /mnt/fdb-log2:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4525 -d /data/data/4525 -L /data/logs -m 8GiB --cache_memory 4GiB --class log --locality_machineid fdb-log2 --locality_zoneid zone5"]
+    restart: unless-stopped
+
+  fdb-stateless00:
+    image: rockylinux:9-minimal
+    container_name: fdb-stateless00
+    network_mode: host
+    mem_limit: 12g
+    cpuset: "24"
+    volumes:
+      - /mnt/fdb-log0:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4530 -d /data/data-stateless/4530 -L /data/logs -m 6GiB --cache_memory 3GiB --class stateless --locality_machineid fdb-log0 --locality_zoneid zone3"]
+    restart: unless-stopped
+
+  fdb-stateless10:
+    image: rockylinux:9-minimal
+    container_name: fdb-stateless10
+    network_mode: host
+    mem_limit: 12g
+    cpuset: "25"
+    volumes:
+      - /mnt/fdb-log1:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4531 -d /data/data-stateless/4531 -L /data/logs -m 6GiB --cache_memory 3GiB --class stateless --locality_machineid fdb-log1 --locality_zoneid zone4"]
+    restart: unless-stopped
+
+  fdb-stateless20:
+    image: rockylinux:9-minimal
+    container_name: fdb-stateless20
+    network_mode: host
+    mem_limit: 12g
+    cpuset: "26"
+    volumes:
+      - /mnt/fdb-log2:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4532 -d /data/data-stateless/4532 -L /data/logs -m 6GiB --cache_memory 3GiB --class stateless --locality_machineid fdb-log2 --locality_zoneid zone5"]
+    restart: unless-stopped
+
+  fdb-stateless01:
+    image: rockylinux:9-minimal
+    container_name: fdb-stateless01
+    network_mode: host
+    mem_limit: 12g
+    cpuset: "27"
+    volumes:
+      - /mnt/fdb-log0:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4533 -d /data/data-stateless/4533 -L /data/logs -m 6GiB --cache_memory 3GiB --class stateless --locality_machineid fdb-log0 --locality_zoneid zone3"]
+    restart: unless-stopped
+
+  fdb-stateless11:
+    image: rockylinux:9-minimal
+    container_name: fdb-stateless11
+    network_mode: host
+    mem_limit: 12g
+    cpuset: "56"
+    volumes:
+      - /mnt/fdb-log1:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4534 -d /data/data-stateless/4534 -L /data/logs -m 6GiB --cache_memory 3GiB --class stateless --locality_machineid fdb-log1 --locality_zoneid zone4"]
+    restart: unless-stopped
+
+  fdb-stateless21:
+    image: rockylinux:9-minimal
+    container_name: fdb-stateless21
+    network_mode: host
+    mem_limit: 12g
+    cpuset: "57"
+    volumes:
+      - /mnt/fdb-log2:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4535 -d /data/data-stateless/4535 -L /data/logs -m 6GiB --cache_memory 3GiB --class stateless --locality_machineid fdb-log2 --locality_zoneid zone5"]
+    restart: unless-stopped
+
+  fdb-stateless02:
+    image: rockylinux:9-minimal
+    container_name: fdb-stateless02
+    network_mode: host
+    mem_limit: 12g
+    cpuset: "58"
+    volumes:
+      - /mnt/fdb-log0:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4536 -d /data/data-stateless/4536 -L /data/logs -m 6GiB --cache_memory 3GiB --class stateless --locality_machineid fdb-log0 --locality_zoneid zone3"]
+    restart: unless-stopped
+
+  fdb-stateless12:
+    image: rockylinux:9-minimal
+    container_name: fdb-stateless12
+    network_mode: host
+    mem_limit: 12g
+    cpuset: "59"
+    volumes:
+      - /mnt/fdb-log1:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4537 -d /data/data-stateless/4537 -L /data/logs -m 6GiB --cache_memory 3GiB --class stateless --locality_machineid fdb-log1 --locality_zoneid zone4"]
+    restart: unless-stopped
+
+  fdb-stateless22:
+    image: rockylinux:9-minimal
+    container_name: fdb-stateless22
+    network_mode: host
+    mem_limit: 12g
+    cpuset: "60"
+    volumes:
+      - /mnt/fdb-log2:/data
+      - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4538 -d /data/data-stateless/4538 -L /data/logs -m 6GiB --cache_memory 3GiB --class stateless --locality_machineid fdb-log2 --locality_zoneid zone5"]
     restart: unless-stopped
 

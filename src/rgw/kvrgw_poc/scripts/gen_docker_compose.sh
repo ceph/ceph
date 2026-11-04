@@ -76,6 +76,15 @@ case "${fdbcli_engine}" in
   *) echo "ERROR: unknown fdbcli_engine '${fdbcli_engine}'" >&2; exit 1 ;;
 esac
 
+# Optional role counts for "configure" at cluster init. Rows missing (older .md) or "auto" are skipped.
+fdb_configure=""
+for setting in logs commit_proxies grv_proxies resolvers; do
+  val=$(grep -oP "^\\| ${setting} \\| \\K\\S+" "${FDB_MD}" | head -1 || true)
+  if [[ -n "${val}" && "${val}" != "auto" ]]; then
+    fdb_configure+="${fdb_configure:+ }${setting}=${val}"
+  fi
+done
+
 parse_table() {
   local file="$1" section="$2" class="$3" fdb_mem="$4" cache_mem="$5"
   local in_section=0 in_table=0
@@ -156,6 +165,7 @@ total=$((ss_count + log_count + sl_count))
 
 {
   echo "x-fdb-engine: ${fdbcli_engine}"
+  echo "x-fdb-configure: \"${fdb_configure}\""
   echo "services:"
   parse_table "${FDB_MD}" "Storage Servers" "storage" "${ss_fdb_mem}" "${ss_cache}"
   parse_table "${FDB_MD}" "Log Servers" "log" "${log_fdb_mem}" "${log_cache}"
@@ -171,6 +181,7 @@ fi
 echo "Generated: ${COMPOSE_OUT}"
 echo "  ${ss_count} SS + ${log_count} LOG + ${sl_count} SL = ${total} containers"
 echo "  Engine (fdbcli): ${fdbcli_engine}"
+echo "  Configure: ${fdb_configure:-<none>}"
 echo "  SS: -m ${ss_fdb_mem} --cache_memory ${ss_cache}"
 echo "  LOG: -m ${log_fdb_mem} --cache_memory ${log_cache}"
 echo "  SL: -m ${sl_fdb_mem} --cache_memory ${sl_cache}"
