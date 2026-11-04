@@ -84,6 +84,19 @@ def receive_agent_metadata_all_hosts(m: CephadmOrchestrator) -> None:
         receive_agent_metadata(m, host)
 
 
+# The optional mgr module cephadm asks for device constraints.
+FCM_MODULE = 'fcm_ad'
+
+
+def _remote_fcm_absent(module_name, *args, **kwargs):
+    # mgr.remote() raises ImportError for a module that is not loaded. Model
+    # the optional 'fcm_ad' module as absent; other modules keep the MagicMock
+    # return value.
+    if module_name == FCM_MODULE:
+        raise ImportError('Module not found')
+    return mock.DEFAULT
+
+
 @contextmanager
 def with_cephadm_module(module_options=None, store=None):
     """
@@ -94,7 +107,8 @@ def with_cephadm_module(module_options=None, store=None):
             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
             mock.patch('cephadm.module.CephadmOrchestrator.get_module_option_ex', get_module_option_ex), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
-            mock.patch("cephadm.module.CephadmOrchestrator.remote"), \
+            mock.patch("cephadm.module.CephadmOrchestrator.remote",
+                       side_effect=_remote_fcm_absent), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn'), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1'), \
             mock.patch("cephadm.agent.CephadmAgentHelpers._request_agent_acks"), \

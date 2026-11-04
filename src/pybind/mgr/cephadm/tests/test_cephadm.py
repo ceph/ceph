@@ -42,7 +42,8 @@ from orchestrator import DaemonDescription, InventoryHost, \
 from mgr_module import MonCommandFailed
 from tests import mock
 from .fixtures import wait, _run_cephadm, match_glob, with_host, \
-    with_cephadm_module, with_service, make_daemons_running, async_side_effect
+    with_cephadm_module, with_service, make_daemons_running, async_side_effect, \
+    FCM_MODULE
 from cephadm.module import CephadmOrchestrator
 
 """
@@ -1494,6 +1495,240 @@ class TestCephadm(object):
                 'test', 'osd', 'ceph-volume', ['--', '--log-level', 'info', 'raw', 'list', '--format', 'json'],
                 image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
             )
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_osd_fcm_reservation(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            spec = DriveGroupSpec(
+                service_id='foo',
+                placement=PlacementSpec(host_pattern='*'),
+                data_devices=DeviceSelection(all=True),
+            )
+            wait(cephadm_module, cephadm_module.apply([spec]))
+            cephadm_module.cache.update_host_devices(
+                'test', Devices([Device('/dev/sdb', available=True)]).devices)
+
+            cephadm_module.remote.side_effect = lambda *a, **kw: {
+                'data_size_bytes': 900, 'device_bytes': 1000, 'osd_metadata': {}}
+            _run_cephadm.side_effect = async_side_effect((['{}'], '', 0))
+
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
+
+            cephadm_module.remote.assert_any_call(
+                'fcm_ad', 'get_device_constraints', 'test', '/dev/sdb')
+            _run_cephadm.assert_any_call(
+                'test', 'osd', 'ceph-volume',
+                ['--config-json', '-', '--', 'lvm', 'batch',
+                    '--no-auto', '/dev/sdb', '--objectstore', 'bluestore',
+                    '--data-allocate-fraction', '0.9', '--yes', '--no-systemd'],
+                env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True,
+                stdin='{"config": "", "keyring": ""}')
+            # the stored spec must not be modified
+            stored = cephadm_module.spec_store['osd.foo'].spec
+            assert stored.data_allocate_fraction is None
+
+    def _fraction(self, cephadm_module, devices, constraints, **spec_kwargs):
+        dg = DriveGroupSpec(
+            service_id='foo',
+            placement=PlacementSpec(host_pattern='*'),
+            data_devices=DeviceSelection(all=True),
+            **spec_kwargs,
+        )
+        ds = DriveSelection(dg, Devices([Device(d, available=True) for d in devices]).devices)
+
+        def remote(module, method, host, path):
+            c = constraints[path]
+            if isinstance(c, Exception):
+                raise c
+            return c
+
+        cephadm_module.remote.side_effect = remote
+        return cephadm_module.wait_async(
+            cephadm_module.osd_service.get_data_allocate_fraction('test', dg, ds))
+
+    @staticmethod
+    def _fcm_calls(cephadm_module):
+        # remote() is shared with other modules, only look at fcm_ad calls
+        return [c for c in cephadm_module.remote.call_args_list if c.args[:1] == (FCM_MODULE,)]
+
+    def test_fcm_fraction_module_absent(self, cephadm_module):
+        assert self._fraction(
+            cephadm_module, ['/dev/sdb', '/dev/sdc'],
+            {'/dev/sdb': ImportError(), '/dev/sdc': ImportError()}) is None
+        # first ImportError short-circuits the remaining devices
+        assert len(self._fcm_calls(cephadm_module)) == 1
+
+    def test_fcm_fraction_skips_devices_already_hosting_an_osd(self, cephadm_module):
+        dg = DriveGroupSpec(
+            service_id='foo',
+            placement=PlacementSpec(host_pattern='*'),
+            data_devices=DeviceSelection(all=True),
+        )
+        disks = [
+            Device('/dev/sdb', available=False, ceph_device_lvm=True),
+            Device('/dev/sdc', available=True),
+        ]
+        ds = DriveSelection(dg, disks)
+        assert [d.path for d in ds.data_devices()] == ['/dev/sdb', '/dev/sdc']
+        cephadm_module.remote.side_effect = lambda m, meth, host, path: {
+            'data_size_bytes': 900, 'device_bytes': 1000}
+        assert cephadm_module.wait_async(
+            cephadm_module.osd_service.get_data_allocate_fraction('test', dg, ds)) == 0.9
+        # only the new device is reported to the module
+        assert self._fcm_calls(cephadm_module) == [
+            mock.call('fcm_ad', 'get_device_constraints', 'test', '/dev/sdc')]
+
+    def test_fcm_fraction_only_existing_osds_is_noop(self, cephadm_module):
+        dg = DriveGroupSpec(
+            service_id='foo',
+            placement=PlacementSpec(host_pattern='*'),
+            data_devices=DeviceSelection(all=True),
+        )
+        ds = DriveSelection(dg, [Device('/dev/sdb', available=False, ceph_device_lvm=True)])
+        assert cephadm_module.wait_async(
+            cephadm_module.osd_service.get_data_allocate_fraction('test', dg, ds)) is None
+        assert self._fcm_calls(cephadm_module) == []
+
+    def test_fcm_fraction_no_fcm_devices(self, cephadm_module):
+        assert self._fraction(
+            cephadm_module, ['/dev/sdb'], {'/dev/sdb': None}) is None
+
+    def test_fcm_fraction_same_for_all_devices(self, cephadm_module):
+        c = {'data_size_bytes': 750, 'device_bytes': 1000}
+        assert self._fraction(
+            cephadm_module, ['/dev/sdb', '/dev/sdc'],
+            {'/dev/sdb': c, '/dev/sdc': dict(c)}) == 0.75
+
+    @pytest.mark.parametrize('constraints, spec_kwargs, msg', [
+        ({'/dev/sdb': {'data_size_bytes': 900, 'device_bytes': 1000},
+          '/dev/sdc': None}, {}, 'separate OSD specs'),
+        ({'/dev/sdb': {'data_size_bytes': 900, 'device_bytes': 1000},
+          '/dev/sdc': {'data_size_bytes': 800, 'device_bytes': 1000}}, {},
+         'different size reservations'),
+        ({'/dev/sdb': RuntimeError('boom'), '/dev/sdc': None}, {}, 'boom'),
+        ({'/dev/sdb': {'device_bytes': 1000}, '/dev/sdc': None}, {}, 'Invalid fcm_ad constraints'),
+        ({'/dev/sdb': {'data_size_bytes': 0, 'device_bytes': 1000}, '/dev/sdc': None}, {},
+         'Invalid fcm_ad constraints'),
+        ({'/dev/sdb': {'data_size_bytes': 1001, 'device_bytes': 1000}, '/dev/sdc': None}, {},
+         'Invalid fcm_ad constraints'),
+        ({'/dev/sdb': 'junk', '/dev/sdc': None}, {}, 'Invalid fcm_ad constraints'),
+    ])
+    def test_fcm_fraction_errors(self, cephadm_module, constraints, spec_kwargs, msg):
+        with pytest.raises(OrchestratorError, match=msg):
+            self._fraction(cephadm_module, ['/dev/sdb', '/dev/sdc'], constraints, **spec_kwargs)
+
+    @pytest.mark.parametrize('spec_kwargs, msg', [
+        ({'method': 'raw'}, 'method: raw'),
+        ({'data_allocate_fraction': 0.5}, 'data_allocate_fraction'),
+        ({'osds_per_device': 2}, 'osds_per_device'),
+    ])
+    def test_fcm_fraction_incompatible_spec(self, cephadm_module, spec_kwargs, msg):
+        c = {'data_size_bytes': 900, 'device_bytes': 1000}
+        with pytest.raises(OrchestratorError, match=msg):
+            self._fraction(cephadm_module, ['/dev/sdb'], {'/dev/sdb': c}, **spec_kwargs)
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_osd_fcm_constraint_error_is_surfaced(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            spec = DriveGroupSpec(
+                service_id='foo',
+                placement=PlacementSpec(host_pattern='*'),
+                data_devices=DeviceSelection(all=True),
+                data_allocate_fraction=0.5,
+            )
+            wait(cephadm_module, cephadm_module.apply([spec]))
+            cephadm_module.cache.update_host_devices(
+                'test', Devices([Device('/dev/sdb', available=True)]).devices)
+            cephadm_module.remote.side_effect = lambda *a, **kw: {
+                'data_size_bytes': 900, 'device_bytes': 1000}
+            _run_cephadm.reset_mock()
+            _run_cephadm.side_effect = async_side_effect((['{}'], '', 0))
+
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
+
+            check = cephadm_module.health_checks.get('CEPHADM_APPLY_SPEC_FAIL')
+            assert check is not None
+            assert 'osd.foo' in check['summary']
+            assert any('test:' in d and 'data_allocate_fraction' in d for d in check['detail'])
+            # no ceph-volume command ran, and the host stays eligible for a retry
+            assert not any('batch' in str(c) for c in _run_cephadm.mock_calls)
+            assert 'osd.foo' not in cephadm_module.cache.osdspec_last_applied.get('test', {})
+            assert cephadm_module.cache.osdspec_needs_apply('test', spec)
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_osd_other_host_failures_stay_unsurfaced(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        # only device-constraint errors are escalated; existing behaviour for
+        # other per-host failures (logged, not raised) is unchanged
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            spec = DriveGroupSpec(
+                service_id='foo',
+                placement=PlacementSpec(host_pattern='*'),
+                data_devices=DeviceSelection(all=True),
+            )
+            wait(cephadm_module, cephadm_module.apply([spec]))
+            cephadm_module.cache.update_host_devices(
+                'test', Devices([Device('/dev/sdb', available=True)]).devices)
+            with mock.patch.object(
+                    cephadm_module.osd_service, 'create_single_host',
+                    side_effect=RuntimeError('ceph-volume failed')):
+                assert CephadmServe(cephadm_module)._apply_all_services() is False
+            assert cephadm_module.health_checks.get('CEPHADM_APPLY_SPEC_FAIL') is None
+
+    def test_create_osds_rejects_fcm_constraint_error_before_saving_spec(self, cephadm_module):
+        with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
+            with mock.patch.object(CephadmOrchestrator, 'validate_device', return_value=''):
+                with with_host(cephadm_module, 'test'):
+                    cephadm_module.cache.update_host_devices(
+                        'test', Devices([Device('/dev/sdb', available=True)]).devices)
+                    cephadm_module.remote.side_effect = lambda *a, **kw: {
+                        'data_size_bytes': 900, 'device_bytes': 1000}
+                    dg = DriveGroupSpec(
+                        placement=PlacementSpec(host_pattern='test'),
+                        data_devices=DeviceSelection(paths=['/dev/sdb']),
+                        osds_per_device=2,
+                    )
+                    with mock.patch.object(
+                            cephadm_module.osd_service, 'create_from_spec') as create:
+                        with pytest.raises(OrchestratorError, match='osds_per_device'):
+                            wait(cephadm_module, cephadm_module.create_osds(dg))
+                    create.assert_not_called()
+                    assert 'osd.default' not in cephadm_module.spec_store.all_specs
+
+    def test_create_osds_without_fcm_module_is_unchanged(self, cephadm_module):
+        with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
+            with mock.patch.object(CephadmOrchestrator, 'validate_device', return_value=''):
+                with with_host(cephadm_module, 'test'):
+                    dg = DriveGroupSpec(
+                        placement=PlacementSpec(host_pattern='test'),
+                        data_devices=DeviceSelection(paths=['/dev/sdb']),
+                        osds_per_device=2,
+                    )
+                    with mock.patch.object(
+                            cephadm_module.osd_service, 'create_from_spec',
+                            return_value='ok') as create:
+                        with mock.patch.object(CephadmOrchestrator, 'create_osd_default_spec'):
+                            assert wait(cephadm_module, cephadm_module.create_osds(dg)) == 'ok'
+                    create.assert_called_once()
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch('cephadm.services.osd.OSDService._run_ceph_volume_command')
+    def test_generate_previews_ignores_fcm(self, _run_cv_cmd, cephadm_module):
+        # previews must not consult the fcm module
+        _run_cv_cmd.side_effect = async_side_effect((['{}'], '', 0))
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(paths=['/dev/sdb']),
+                                service_id='foo')
+            cephadm_module.cache.update_host_devices(
+                'test', Devices([Device('/dev/sdb', available=True)]).devices)
+            cephadm_module.osd_service.generate_previews([dg], 'test')
+            assert not any(c.args[:1] == (FCM_MODULE,)
+                           for c in cephadm_module.remote.call_args_list)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")

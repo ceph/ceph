@@ -3924,6 +3924,22 @@ Then run the following:
             if err_msg:
                 return err_msg
 
+        # Check device constraints (e.g. a required size reservation) before
+        # saving the spec, so an impossible request is rejected here instead
+        # of leaving a spec behind that the serve loop retries and fails.
+        #
+        # Build the selection the way the apply does rather than by hand:
+        # prepare_drivegroup accounts for existing daemons and schedulable
+        # hosts, both of which feed DriveSelection's limit handling, so a
+        # hand-built selection can check a different set of devices than the
+        # one that is subsequently deployed.
+        for sel_host, drive_selection in self.osd_service.prepare_drivegroup(drive_group):
+            if sel_host != host_name:
+                continue
+            with self.async_timeout_handler(sel_host, 'device constraints'):
+                self.wait_async(self.osd_service.get_data_allocate_fraction(
+                    sel_host, drive_group, drive_selection))
+
         # Only save/apply osd.default after validation passes. Otherwise the serve loop
         # would still apply the spec and create an OSD while the CLI returns an error.
         # Spec store keys are full service names (example: "osd.default"), not service_id alone.
