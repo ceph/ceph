@@ -135,6 +135,8 @@ target_link_libraries(
   crimson
   crimson-common
   crimson::gtest)
+add_ceph_unittest(unittest-crimson-scrub
+  --memory 256M --smp 1)
 
 add_executable(unittest-crimson-watch-notify
   test_watch_notify.cc
