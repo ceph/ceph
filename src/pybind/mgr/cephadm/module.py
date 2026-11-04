@@ -439,6 +439,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Multiplied by agent refresh rate to calculate how long agent must not report before being marked down'
         ),
         Option(
+            'agent_max_concurrent_messages',
+            type='int',
+            default=10,
+            min=1,
+            desc='Maximum number of messages the mgr sends to agents at the same time',
+            long_desc=('Messages from the mgr to the agents (ack requests, config pushes) '
+                       'are sent from a bounded set of threads. Messages beyond this limit '
+                       'wait in a queue; a host has at most one message queued.'),
+        ),
+        Option(
             'hw_monitoring',
             type='bool',
             default=False,
@@ -731,6 +741,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.agent_refresh_rate = 0
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
+            self.agent_max_concurrent_messages = 10
             self.hw_monitoring = False
             self.hw_monitoring_vendor = 'generic'
             self.service_discovery_port = 0
@@ -868,6 +879,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.debug('shutdown')
         self._worker_pool.close()
         self._worker_pool.join()
+        self.agent_helpers.shutdown()
         self.http_server.shutdown()
         self.offline_watcher.shutdown()
         self.run = False

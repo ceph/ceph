@@ -4,6 +4,7 @@ import socket
 import ssl
 import threading
 import time
+from collections import deque
 
 from orchestrator import DaemonDescriptionStatus, OrchestratorError
 from orchestrator._interface import daemon_type_to_service
@@ -20,7 +21,7 @@ from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 
 from urllib.error import HTTPError, URLError
-from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple
+from typing import Any, Deque, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -846,30 +847,49 @@ class HostData:
             return err_str
 
 
-class AgentMessageThread(threading.Thread):
-    def __init__(self, host: str, port: int, data: Dict[Any, Any], mgr: "CephadmOrchestrator", daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
+class AgentMessage:
+    """One message from the mgr to the agent on a host.
+
+    The payload is built when the message is sent, so it always carries the
+    host's current ack counter, even if the message waited in the queue.
+    """
+
+    def __init__(self, host: str, port: int, mgr: "CephadmOrchestrator", daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         self.mgr = mgr
         self.agent = mgr.http_server.agent
         self.host = host
-        self.addr = self.mgr.inventory.get_addr(host) if host in self.mgr.inventory else host
         self.port = port
-        self.data: str = json.dumps(data)
         self.daemon_spec: Optional[CephadmDaemonDeploySpec] = daemon_spec
         self.agent_response: str = ''
-        super().__init__(target=self.run)
 
-    def run(self) -> None:
+    def merge(self, newer: 'AgentMessage') -> 'AgentMessage':
+        """Combine a queued message with a newer one for the same host.
+
+        The newer port wins. A config push is kept when the newer message has
+        none, so a plain ack request never drops a pending config.
+        """
+        if newer.daemon_spec is None:
+            newer.daemon_spec = self.daemon_spec
+        return newer
+
+    def _payload(self) -> str:
+        data: Dict[str, Any] = {'counter': self.mgr.agent_cache.agent_counter.get(self.host, 1)}
+        if self.daemon_spec:
+            data['config'] = self.daemon_spec.final_config
+        return json.dumps(data)
+
+    def send(self) -> None:
         self.mgr.log.debug(f'Sending message to agent on host {self.host}')
-        self.mgr.agent_cache.sending_agent_message[self.host] = True
+        self.addr = self.mgr.inventory.get_addr(self.host) if self.host in self.mgr.inventory else self.host
         try:
             assert self.agent
             ssl_ctx = self.agent.get_client_ssl_context()
         except Exception as e:
             self.mgr.log.error(f'Failed to get certs for connecting to agent: {e}')
-            self.mgr.agent_cache.sending_agent_message[self.host] = False
             return
         try:
-            bytes_len: str = str(len(self.data.encode('utf-8')))
+            data = self._payload()
+            bytes_len: str = str(len(data.encode('utf-8')))
             if len(bytes_len.encode('utf-8')) > 10:
                 raise Exception(
                     f'Message is too big to send to agent. Message size is {bytes_len} bytes!')
@@ -877,14 +897,13 @@ class AgentMessageThread(threading.Thread):
                 bytes_len = '0' + bytes_len
         except Exception as e:
             self.mgr.log.error(f'Failed to get length of json payload: {e}')
-            self.mgr.agent_cache.sending_agent_message[self.host] = False
             return
         for retry_wait in [3, 5]:
             try:
                 agent_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 secure_agent_socket = ssl_ctx.wrap_socket(agent_socket, server_hostname=self.addr)
                 secure_agent_socket.connect((self.addr, self.port))
-                msg = (bytes_len + self.data)
+                msg = (bytes_len + data)
                 secure_agent_socket.sendall(msg.encode('utf-8'))
                 self.agent_response = secure_agent_socket.recv(1024).decode()
                 self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
@@ -893,7 +912,6 @@ class AgentMessageThread(threading.Thread):
                     self.mgr.log.info(
                         f'HTTP config push to agent on {self.host} acknowledged; '
                         f'agent config deps updated (deps={self.daemon_spec.deps})')
-                self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
             except ConnectionError as e:
                 # if it's a connection error, possibly try to connect again.
@@ -907,23 +925,113 @@ class AgentMessageThread(threading.Thread):
                 self.mgr.log.error(
                     f'Failed to contact agent on host {self.host}: {e}. '
                     f'Agent config deps left unchanged for retry')
-                self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
         # Leave agent config deps unchanged so _check_agent can retry next cycle.
         self.mgr.log.error(
             f'Could not connect to agent on host {self.host}. '
             f'Agent config deps left unchanged for retry')
-        self.mgr.agent_cache.sending_agent_message[self.host] = False
-        return
 
     def get_agent_response(self) -> str:
         return self.agent_response
+
+
+class AgentMessenger:
+    """Send mgr->agent messages from a bounded set of worker threads.
+
+    At most ``agent_max_concurrent_messages`` messages are sent at the same
+    time; the rest wait in a FIFO queue. Workers are started on demand and
+    exit when the queue is empty, so an idle mgr runs none.
+
+    A host has at most one message queued and one being sent. A new message
+    for a host that already has one queued replaces it (see
+    ``AgentMessage.merge()``); one for a host whose message is being sent is
+    queued behind it. The host is marked as being messaged
+    (``AgentCache.messaging_agent()``) before the message is queued, so
+    callers that check that flag don't queue duplicates.
+    """
+
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+        self.mgr = mgr
+        self._lock = threading.Lock()
+        self._queue: Deque[str] = deque()
+        self._pending: Dict[str, AgentMessage] = {}
+        self._running: Set[str] = set()
+        self._workers = 0
+        self._stopping = False
+
+    def _max_workers(self) -> int:
+        try:
+            return max(int(self.mgr.agent_max_concurrent_messages), 1)
+        except (AttributeError, TypeError, ValueError):
+            return 1
+
+    def send(self, msg: AgentMessage) -> None:
+        with self._lock:
+            if self._stopping:
+                return
+            host = msg.host
+            if host in self._pending:
+                self._pending[host] = self._pending[host].merge(msg)
+                return
+            self._pending[host] = msg
+            self.mgr.agent_cache.sending_agent_message[host] = True
+            if host not in self._running:
+                self._queue.append(host)
+                self._maybe_start_worker()
+
+    def _maybe_start_worker(self) -> None:
+        # called with self._lock held
+        if self._queue and self._workers < self._max_workers():
+            self._workers += 1
+            threading.Thread(target=self._worker, name='cephadm-agent-msg', daemon=True).start()
+
+    def _worker(self) -> None:
+        while True:
+            with self._lock:
+                if self._stopping or not self._queue:
+                    self._workers -= 1
+                    return
+                host = self._queue.popleft()
+                msg = self._pending.pop(host)
+                self._running.add(host)
+            try:
+                msg.send()
+            except Exception as e:
+                self.mgr.log.exception(f'Unexpected error sending message to agent on host {host}: {e}')
+            finally:
+                with self._lock:
+                    self._running.discard(host)
+                    if host in self._pending and not self._stopping:
+                        self._queue.append(host)
+                    else:
+                        self._pending.pop(host, None)
+                        self.mgr.agent_cache.sending_agent_message[host] = False
+
+    def stats(self) -> Dict[str, int]:
+        with self._lock:
+            return {
+                'workers': self._workers,
+                'queued': len(self._queue),
+                'running': len(self._running),
+            }
+
+    def shutdown(self) -> None:
+        with self._lock:
+            self._stopping = True
+            for host in self._queue:
+                self._pending.pop(host, None)
+                self.mgr.agent_cache.sending_agent_message[host] = False
+            self._queue.clear()
 
 
 class CephadmAgentHelpers:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.agent = mgr.http_server.agent
+        self.messenger: AgentMessenger = AgentMessenger(mgr)
+
+    def shutdown(self) -> None:
+        self.messenger.shutdown()
 
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         for host in hosts:
@@ -933,12 +1041,8 @@ class CephadmAgentHelpers:
                 self.mgr.agent_cache.agent_counter[host] = 1
             elif increment:
                 self.mgr.agent_cache.agent_counter[host] = self.mgr.agent_cache.agent_counter[host] + 1
-            payload: Dict[str, Any] = {'counter': self.mgr.agent_cache.agent_counter[host]}
-            if daemon_spec:
-                payload['config'] = daemon_spec.final_config
-            message_thread = AgentMessageThread(
-                host, self.mgr.agent_cache.agent_ports[host], payload, self.mgr, daemon_spec)
-            message_thread.start()
+            self.messenger.send(AgentMessage(
+                host, self.mgr.agent_cache.agent_ports[host], self.mgr, daemon_spec))
 
     def _request_ack_all_not_up_to_date(self) -> None:
         self.mgr.agent_helpers._request_agent_acks(
