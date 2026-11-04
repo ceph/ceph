@@ -143,7 +143,17 @@ ReplicatedBackend::submit_transaction(
       continue;
     }
     MURef<MOSDRepOp> m;
-    if (pg.should_send_op(pg_shard, hoid)) {
+    // should_send_op() decides based on the backfill scan watermark
+    // (last_backfill_started/last_backfill), which can race ahead of a
+    // freshly created head object if the backfill scan already passed
+    // this hoid's position before the object existed. When that happens,
+    // peer_missing is the authoritative record that the peer never
+    // actually received the head object. Shipping a real op containing
+    // an OP_CLONE whose source the peer doesn't have would make the
+    // peer's local _do_transaction_step() abort with ENOENT, so fall
+    // back to the safe "empty op + explicit push" path in that case.
+    if (pg.should_send_op(pg_shard, hoid) &&
+	!(_new_clone && pg.is_missing_on_peer(pg_shard, hoid))) {
       m = new_repop_msg(
 	pg_shard, hoid, encoded_txn_p_bl, encoded_txn_d_bl, osd_op_p,
 	min_epoch, map_epoch, log_entries, true, tid);
@@ -202,7 +212,7 @@ ReplicatedBackend::submit_transaction(
     }
     // wait for all peers to ack (ReplicatedBackend::got_rep_op_reply)
     return peers->all_committed.get_shared_future();
-  }).then_interruptible([pending_txn, this, _new_clone, &hoid,
+  }).then_interruptible([pending_txn, this, _new_clone, hoid,
 			to_push_delete=std::move(to_push_delete),
 			to_push_clone=std::move(to_push_clone)] {
     auto acked_peers = std::move(pending_txn->second.acked_peers);
