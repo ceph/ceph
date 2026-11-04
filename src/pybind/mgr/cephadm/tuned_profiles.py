@@ -4,7 +4,7 @@ from ceph.utils import datetime_now
 from .schedule import HostAssignment
 from ceph.deployment.service_spec import ServiceSpec, TunedProfileSpec
 from .serve import CephadmServe
-from .utils import cephadmNoImage
+from .utils import cephadmNoImage, forall_hosts
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -66,9 +66,44 @@ class TunedProfileUtils():
             for host in {s.hostname for s in all_slots}:
                 host_profile_mapping[host].append({profile.profile_name: p_str})
 
-        for host, profiles in host_profile_mapping.items():
+        self._reconcile_hosts(host_profile_mapping.items())
+
+    @forall_hosts
+    def _reconcile_hosts(self, host: str, profiles: List[Dict[str, str]]) -> None:
+        """
+        Called with (host, profiles) pairs, reconciles the hosts in parallel.
+        A failing host must not keep the other hosts from being reconciled or
+        abort the serve loop pass. Nothing is recorded for it, so it is
+        retried on the next pass.
+        """
+        try:
+            self._reconcile_host(host, profiles)
+        except Exception as e:
+            logger.warning(f'Failed to reconcile tuned profiles on host {host}: {e}')
+
+    def _reconcile_host(self, host: str, profiles: List[Dict[str, str]]) -> None:
+        """
+        Make the cephadm profile files on the host match "profiles".
+
+        Listing /etc/sysctl.d costs one cephadm call per host, so we only do it
+        when the set of profiles the host should have differs from the set we
+        last reconciled there (or when we have no record for the host, e.g.
+        after an upgrade or when it is added). Stray files can only appear when
+        a profile stops applying to a host, and that always changes the set.
+        Changes to a profile's settings are handled by _write_tuned_profiles.
+        """
+        if self.mgr.cache.is_host_unreachable(host):
+            return
+        names = sorted({name for p in profiles for name in p})
+        changed = self.mgr.cache.tuned_profile_names.get(host) != names
+        if changed:
             self._remove_stray_tuned_profiles(host, profiles)
-            self._write_tuned_profiles(host, profiles)
+        self._write_tuned_profiles(host, profiles)
+        if changed:
+            # only record once both steps succeeded, so a failure is retried.
+            # Persist it so a mgr failover doesn't rescan every host.
+            self.mgr.cache.tuned_profile_names[host] = names
+            self.mgr.cache.save_host(host)
 
     def _remove_stray_tuned_profiles(self, host: str, profiles: List[Dict[str, str]]) -> None:
         """

@@ -468,6 +468,15 @@ To remove a previously applied profile, run a command of the following form:
 When a profile is removed, cephadm cleans up the file previously written
 to ``/etc/sysctl.d``, and then ``sysctl --system`` is run on the host.
 
+.. note::
+
+  Cephadm looks for stray profile files in ``/etc/sysctl.d`` on a host only
+  when the set of profiles that apply to that host changes, for example when
+  a profile is removed or its placement no longer includes the host. A
+  ``*-cephadm-tuned-profile.conf`` file that was added to a host by hand is
+  therefore not removed right away. It is removed the next time the set of
+  profiles for that host changes.
+
 
 Modifying Profiles
 ------------------

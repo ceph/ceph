@@ -2,6 +2,7 @@ import asyncio
 import pytest
 import json
 from contextlib import contextmanager
+from multiprocessing.pool import ThreadPool
 from tests import mock
 from cephadm.tuned_profiles import TunedProfileUtils, SYSCTL_DIR
 from cephadm.utils import cephadmNoImage
@@ -27,6 +28,11 @@ class FakeCache:
         self.unreachable_hosts = [HostSpec(h) for h in unreachable_hosts]
         self.schedulable_hosts = [HostSpec(h) for h in schedulable_hosts]
         self.last_tuned_profile_update = {}
+        self.tuned_profile_names = {}
+        self.saved_hosts = []
+
+    def save_host(self, host):
+        self.saved_hosts.append(host)
 
     def get_hosts(self):
         return self.hosts
@@ -89,6 +95,19 @@ class FakeMgr:
                                                      PlacementSpec(hosts=['y']),
                                                      {'y': 'y'}).to_json()})
         return ''
+
+
+@pytest.fixture(autouse=True)
+def worker_pool():
+    # _write_all_tuned_profiles() reconciles hosts through forall_hosts(),
+    # which needs CephadmOrchestrator.instance._worker_pool
+    pool = ThreadPool(4)
+    try:
+        with mock.patch('cephadm.module.CephadmOrchestrator.instance',
+                        mock.Mock(_worker_pool=pool)):
+            yield
+    finally:
+        pool.terminate()
 
 
 class TestTunedProfiles:
@@ -216,6 +235,108 @@ class TestTunedProfiles:
         # to the last_tuned_profile_update dict
         tp._write_tuned_profiles('b', {})
         assert 'b' not in tp.mgr.cache.last_tuned_profile_update
+
+    @mock.patch("cephadm.tuned_profiles.TunedProfileUtils._remove_stray_tuned_profiles")
+    @mock.patch("cephadm.tuned_profiles.TunedProfileUtils._write_tuned_profiles")
+    def test_stray_scan_only_when_profile_set_changes(self, _write_profiles, _rm_profiles):
+        profiles = {'p1': self.tspec1, 'p2': self.tspec2, 'p3': self.tspec3}
+        mgr = FakeMgr(['a', 'b', 'c', 'd'],
+                      ['a', 'b', 'c', 'd'],
+                      [],
+                      profiles)
+        tp = TunedProfileUtils(mgr)
+
+        # first pass: no record for any host, so every host is scanned once,
+        # including "d" which has no profiles (it may have leftovers)
+        tp._write_all_tuned_profiles()
+        assert sorted(c.args[0] for c in _rm_profiles.call_args_list) == ['a', 'b', 'c', 'd']
+        assert mgr.cache.tuned_profile_names == {
+            'a': ['p1', 'p2'], 'b': ['p1'], 'c': ['p1', 'p2', 'p3'], 'd': []}
+        assert sorted(mgr.cache.saved_hosts) == ['a', 'b', 'c', 'd']
+
+        # nothing changed: no host is scanned or saved, writes still run
+        _rm_profiles.reset_mock()
+        _write_profiles.reset_mock()
+        mgr.cache.saved_hosts = []
+        tp._write_all_tuned_profiles()
+        _rm_profiles.assert_not_called()
+        assert _write_profiles.call_count == 4
+        assert mgr.cache.saved_hosts == []
+
+        # a settings change keeps the set of names, so no scan
+        profiles['p1'] = TunedProfileSpec('p1',
+                                          PlacementSpec(hosts=['a', 'b', 'c']),
+                                          {'setting1': 'other'})
+        tp._write_all_tuned_profiles()
+        _rm_profiles.assert_not_called()
+
+        # removing a profile only rescans the hosts it applied to
+        del profiles['p2']
+        tp._write_all_tuned_profiles()
+        assert sorted(c.args[0] for c in _rm_profiles.call_args_list) == ['a', 'c']
+        assert mgr.cache.tuned_profile_names['a'] == ['p1']
+        assert mgr.cache.tuned_profile_names['c'] == ['p1', 'p3']
+
+        # a placement change only rescans the hosts whose set changed
+        _rm_profiles.reset_mock()
+        profiles['p3'] = TunedProfileSpec('p3', PlacementSpec(hosts=['d']), {'x': 'y'})
+        tp._write_all_tuned_profiles()
+        assert sorted(c.args[0] for c in _rm_profiles.call_args_list) == ['c', 'd']
+
+    @mock.patch("cephadm.tuned_profiles.TunedProfileUtils._remove_stray_tuned_profiles")
+    @mock.patch("cephadm.tuned_profiles.TunedProfileUtils._write_tuned_profiles")
+    def test_stray_scan_skips_unreachable_and_retries_failures(self, _write_profiles, _rm_profiles):
+        profiles = {'p1': TunedProfileSpec('p1', PlacementSpec(host_pattern='*'), {'k': 'v'})}
+        mgr = FakeMgr(['a', 'b'],
+                      ['a'],
+                      ['b'],
+                      profiles)
+        tp = TunedProfileUtils(mgr)
+
+        # unreachable host: not scanned and not recorded, so it is scanned
+        # once it comes back
+        tp._write_all_tuned_profiles()
+        assert [c.args[0] for c in _rm_profiles.call_args_list] == ['a']
+        assert 'b' not in mgr.cache.tuned_profile_names
+
+        # a failed write leaves no record, so the next pass scans again
+        _write_profiles.side_effect = Exception('boom')
+        del mgr.cache.tuned_profile_names['a']
+        _rm_profiles.reset_mock()
+        with pytest.raises(Exception):
+            tp._reconcile_host('a', self.profiles_to_calls(tp, [self.tspec1]))
+        assert 'a' not in mgr.cache.tuned_profile_names
+        _write_profiles.side_effect = None
+        tp._reconcile_host('a', self.profiles_to_calls(tp, [self.tspec1]))
+        assert _rm_profiles.call_count == 2
+        assert mgr.cache.tuned_profile_names['a'] == ['p1']
+
+    @mock.patch("cephadm.tuned_profiles.TunedProfileUtils._remove_stray_tuned_profiles")
+    @mock.patch("cephadm.tuned_profiles.TunedProfileUtils._write_tuned_profiles")
+    def test_failing_host_does_not_block_others(self, _write_profiles, _rm_profiles):
+        profiles = {'p1': TunedProfileSpec('p1', PlacementSpec(host_pattern='*'), {'k': 'v'})}
+        mgr = FakeMgr(['a', 'b', 'c'],
+                      ['a', 'b', 'c'],
+                      [],
+                      profiles)
+        tp = TunedProfileUtils(mgr)
+
+        def fail_on_b(host, profiles):
+            if host == 'b':
+                raise Exception('boom')
+        _rm_profiles.side_effect = fail_on_b
+
+        # the error on "b" doesn't escape and the other hosts are reconciled
+        tp._write_all_tuned_profiles()
+        assert sorted(c.args[0] for c in _write_profiles.call_args_list) == ['a', 'c']
+        assert mgr.cache.tuned_profile_names == {'a': ['p1'], 'c': ['p1']}
+
+        # "b" has no record, so it is the only host scanned on the next pass
+        _rm_profiles.side_effect = None
+        _rm_profiles.reset_mock()
+        tp._write_all_tuned_profiles()
+        assert [c.args[0] for c in _rm_profiles.call_args_list] == ['b']
+        assert mgr.cache.tuned_profile_names['b'] == ['p1']
 
     def test_store(self):
         mgr = FakeMgr(['a', 'b', 'c'],
