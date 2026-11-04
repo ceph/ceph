@@ -1963,7 +1963,7 @@ One or more pools have reached (or are very close to reaching) their quota. The
 threshold to raise this health check is determined by the
 :confval:`mon_pool_quota_crit_threshold` configuration option.
 
-Pool quotas can be adjusted up or down (or removed) by running commands of the the following
+Pool quotas can be adjusted up or down (or removed) by running commands of the following
 forms:
 
 .. prompt:: bash #
