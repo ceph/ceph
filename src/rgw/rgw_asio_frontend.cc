@@ -443,7 +443,7 @@ class AsioFrontend {
     tcp::socket socket;
     boost::asio::cancellation_signal signal;
     bool use_ssl = false;
-    bool use_nodelay = false;
+    bool use_nodelay = true;
 
     explicit Listener(boost::asio::io_context& context)
       : acceptor(context), socket(context) {}
@@ -670,11 +670,13 @@ int AsioFrontend::init()
     listeners.emplace_back(context);
     listeners.back().endpoint = endpoint;
   }
-  // parse tcp nodelay
+  // parse tcp nodelay. On by default: with Nagle's algorithm, a small
+  // response body written after its headers waits for the client to
+  // acknowledge them, which takes up to its delayed-ACK timeout (~40ms).
   auto nodelay = config.find("tcp_nodelay");
   if (nodelay != config.end()) {
     for (auto& l : listeners) {
-      l.use_nodelay = (nodelay->second == "1");
+      l.use_nodelay = (nodelay->second != "0");
     }
   }
 
