@@ -250,6 +250,14 @@ class TestAgentUnreachableHealth:
             seconds=cephadm_module.agent_helpers._agent_unreachable_grace() + 1)
         assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([]) == [agent_host]
 
+    def test_failed_listener_skips_grace(
+            self, cephadm_module: CephadmOrchestrator, agent_host: str) -> None:
+        cephadm_module.agent_cache.record_agent_deployed(agent_host)
+        cephadm_module.agent_cache.record_agent_listener_state(agent_host, 'failed', 'PEM lib')
+        assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([]) == [agent_host]
+        hc = cephadm_module.health_checks[self.HC]
+        assert 'agent listener is down: PEM lib' in hc['detail'][0]
+
     def test_grace_from_daemon_last_deployed(
             self, cephadm_module: CephadmOrchestrator, agent_host: str) -> None:
         # e.g. after a mgr failover: no in-memory deploy time
@@ -352,3 +360,52 @@ class TestAgentFailureSummary:
             AgentMessageThread('host1', 4721, {'counter': 1}, cephadm_module).run()
         error.assert_not_called()
         warning.assert_not_called()
+
+
+class TestAgentListenerState:
+
+    def _report(self, m: CephadmOrchestrator, host: str, **listener: str) -> None:
+        data = {'host': host, 'port': '4721', 'ack': '1'}
+        if listener:
+            data['listener'] = listener  # type: ignore
+        with mock.patch.object(m.agent_cache, 'save_agent'):
+            HostData(m).handle_metadata(data)
+
+    def test_failed_listener_flags_host_at_once(
+            self, cephadm_module: CephadmOrchestrator, clock: _Clock) -> None:
+        ac = cephadm_module.agent_cache
+        ac.agent_counter['host1'] = 5  # stale ack: would normally message the agent
+        with mock.patch('cephadm.agent.AgentMessageThread') as thread, \
+                mock.patch.object(cephadm_module.agent_helpers, '_request_agent_acks',
+                                  lambda *a, **kw: _real_request_agent_acks(cephadm_module.agent_helpers, *a, **kw)):
+            self._report(cephadm_module, 'host1', state='failed', error='SSLError: PEM lib')
+            thread.assert_not_called()
+        assert ac.agent_unreachable('host1')
+        assert not ac.agent_message_allowed('host1')
+        r = ac.get_agent_reachability('host1')
+        assert r is not None
+        assert r.listener_state == 'failed'
+        assert r.last_error == 'agent listener is down: SSLError: PEM lib'
+        # not a failed message
+        s = ac.take_agent_message_summary()
+        assert s is not None and s[1] == {}
+
+    def test_listener_back_allows_messages(
+            self, cephadm_module: CephadmOrchestrator, clock: _Clock) -> None:
+        ac = cephadm_module.agent_cache
+        ac.agent_counter['host1'] = 1
+        self._report(cephadm_module, 'host1', state='failed', error='boom')
+        # a back-off from an earlier failed message doesn't hold it back either
+        ac.record_agent_message_failure('host1', 'refused')
+        self._report(cephadm_module, 'host1', state='listening', error='')
+        assert not ac.agent_unreachable('host1')
+        assert ac.agent_message_allowed('host1')
+        s = ac.take_agent_message_summary()
+        assert s is not None and s[2] == {'host1'}
+
+    def test_old_agent_without_listener_field(
+            self, cephadm_module: CephadmOrchestrator, clock: _Clock) -> None:
+        cephadm_module.agent_cache.agent_counter['host1'] = 1
+        self._report(cephadm_module, 'host1')
+        assert cephadm_module.agent_cache.get_agent_reachability('host1') is None
+        assert cephadm_module.agent_cache.agent_message_allowed('host1')

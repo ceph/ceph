@@ -16,7 +16,7 @@ from mgr_util import verify_tls_files
 import tempfile
 from cephadm.services.service_registry import service_registry
 from cephadm.services.agent import CephadmAgent
-from cephadm.inventory import AGENT_UNREACHABLE_GRACE
+from cephadm.inventory import AGENT_LISTENER_FAILED, AGENT_UNREACHABLE_GRACE
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 
@@ -744,6 +744,11 @@ class HostData:
         try:
             host = data['host']
             self.mgr.agent_cache.agent_ports[host] = int(data['port'])
+            # agents older than the mgr don't report their listener state
+            listener = data.get('listener')
+            if isinstance(listener, dict):
+                self.mgr.agent_cache.record_agent_listener_state(
+                    host, str(listener.get('state', '')), str(listener.get('error', '')))
             if host not in self.mgr.agent_cache.agent_counter:
                 self.mgr.agent_cache.agent_counter[host] = 1
                 self.mgr.agent_helpers._request_agent_acks({host})
@@ -994,7 +999,8 @@ class CephadmAgentHelpers:
         skipping:
         - hosts in `exclude` (the agents already reported down);
         - offline, maintenance and draining hosts, and hosts without an agent;
-        - agents (re)deployed less than the grace period ago.
+        - agents (re)deployed less than the grace period ago, unless they
+          report that their listener failed to start.
         """
         if not self.mgr.use_agent:
             return []
@@ -1012,7 +1018,9 @@ class CephadmAgentHelpers:
                 continue
             r = self.mgr.agent_cache.get_agent_reachability(host)
             deployed = [d for d in [r.deployed_at if r else None, agents[0].last_deployed] if d]
-            if deployed and (now - max(deployed)).total_seconds() < grace:
+            # no grace if the agent itself says its listener failed
+            listener_failed = r is not None and r.listener_state == AGENT_LISTENER_FAILED
+            if not listener_failed and deployed and (now - max(deployed)).total_seconds() < grace:
                 continue
             res.append(host)
         return res

@@ -56,6 +56,8 @@ AGENT_UNREACHABLE_GRACE = 120
 # Minimum interval between two summaries of failed mgr->agent messages in
 # the mgr log. Per-message detail is logged at DEBUG.
 AGENT_FAILURE_SUMMARY_INTERVAL = 60
+# Agent listener states, as reported by the agent with its metadata
+AGENT_LISTENER_FAILED = 'failed'
 
 
 def _monotonic() -> float:
@@ -2110,6 +2112,10 @@ class AgentReachability():
         self.last_success: Optional[datetime.datetime] = None
         # last successful SSH deploy/reconfig seen by this mgr
         self.deployed_at: Optional[datetime.datetime] = None
+        # listener state reported by the agent ('' if the agent doesn't
+        # report it), and the error if it failed to start
+        self.listener_state = ''
+        self.listener_error = ''
         # _monotonic() before which no message is sent to the agent
         self.retry_after = 0.0
 
@@ -2282,11 +2288,48 @@ class AgentCache():
             self._last_summary = now
             return res
 
+    def record_agent_listener_state(self, host: str, state: str, error: str) -> None:
+        """
+        Record the listener state the agent reported with its metadata.
+
+        An agent whose listener failed to start can't be reached at all, so
+        flag it as unreachable at once instead of waiting for messages to
+        fail. When the agent reports its listener is back, drop the back-off
+        so the next message goes through.
+        """
+        with self._reachability_lock:
+            r = self.agent_reachability.setdefault(host, AgentReachability())
+            prev = r.listener_state
+            r.listener_state = state
+            r.listener_error = error
+            if state == AGENT_LISTENER_FAILED:
+                now = datetime_now()
+                if prev != AGENT_LISTENER_FAILED:
+                    self.mgr.log.debug(f'Agent on host {host} reports its listener is down: {error}')
+                r.last_error = f'agent listener is down: {error}'
+                r.last_failure = now
+                if r.first_failure is None:
+                    r.first_failure = now
+                r.consecutive_failures = max(r.consecutive_failures, AGENT_UNREACHABLE_FAILURES)
+            elif prev == AGENT_LISTENER_FAILED:
+                self.mgr.log.debug(f'Agent on host {host} reports its listener is {state or "up"}')
+                r.consecutive_failures = 0
+                r.first_failure = None
+                r.retry_after = 0.0
+                self._recovered_since_summary.add(host)
+
     def agent_message_allowed(self, host: str) -> bool:
-        """False while we are backing off after failed messages to this agent."""
+        """
+        False while we are backing off after failed messages to this agent,
+        or while the agent reports that its listener is down.
+        """
         with self._reachability_lock:
             r = self.agent_reachability.get(host)
-            return r is None or _monotonic() >= r.retry_after
+            if r is None:
+                return True
+            if r.listener_state == AGENT_LISTENER_FAILED:
+                return False
+            return _monotonic() >= r.retry_after
 
     def agent_unreachable(self, host: str) -> bool:
         with self._reachability_lock:
