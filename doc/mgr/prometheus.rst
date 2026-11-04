@@ -344,7 +344,7 @@ All daemon statistics have a ``ceph_daemon`` label with a value
 that identifies the type and ID of the daemon they come from,
 for example ``osd.123``.
 A given metric may be reported by multiple types of daemon, so for
-example when when querying an OSD RocksDB stats, you may constrain
+example when querying an OSD RocksDB stats, you may constrain
 the query with a pattern of the form ``ceph_daemon=~'osd.*'`` so that Monitor
 RocksDB metrics are excluded.
 

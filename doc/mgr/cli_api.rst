@@ -22,7 +22,7 @@ Ensure that the ``cli api`` module is enabled by running the following command:
 Usage
 --------
 
-This the the general form of Manager CLI commands: 
+This is the general form of Manager CLI commands: 
 
 .. prompt:: bash #
 
