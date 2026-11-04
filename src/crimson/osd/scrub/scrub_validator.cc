@@ -1144,10 +1144,21 @@ chunk_result_t validate_chunk(
     // Replica-shard errors go into replica_snapset_errors (logged only).
     // Deduplication sets prevent the same (name, snap) pair being reported
     // twice when iterating multiple shards.
-    std::set<std::string> emitted_primary_head;
-    std::set<std::pair<std::string, uint64_t>> emitted_primary_clone;
-    std::set<std::string> emitted_replica_head;
-    std::set<std::pair<std::string, uint64_t>> emitted_replica_clone;
+    // Keyed on the full object identity, not the bare name: namespace plays no
+    // part in placement, so two same-named objects in different namespaces can
+    // share a chunk and the second one's errors would be dropped as duplicates.
+    using head_key_t = std::tuple<std::string, std::string, std::string>;
+    using clone_key_t = std::tuple<std::string, std::string, std::string, uint64_t>;
+    std::set<head_key_t> emitted_primary_head;
+    std::set<clone_key_t> emitted_primary_clone;
+    std::set<head_key_t> emitted_replica_head;
+    std::set<clone_key_t> emitted_replica_clone;
+    auto head_key = [](const hobject_t &h) {
+      return head_key_t{h.oid.name, h.nspace, h.get_key()};
+    };
+    auto clone_key = [](const librados::object_id_t &o) {
+      return clone_key_t{o.name, o.nspace, o.locator, uint64_t{o.snap}};
+    };
 
     for (const auto &[shard, scrub_map] : in) {
       const bool is_primary = (shard == policy.primary);
@@ -1359,7 +1370,7 @@ chunk_result_t validate_chunk(
       // test where the head has "errors":[] but clone sizes or overlaps are off).
       if (result.head_error &&
           (result.head_error->errors || !emittable_clones.empty())) {
-        if (head_seen.find(oid.oid.name) == head_seen.end()) {
+        if (head_seen.find(head_key(oid)) == head_seen.end()) {
           dest_head.push_back(std::move(*result.head_error));
           DEBUGDPP(
             "debug snapset dest_head oid={} size={} entries={}",
@@ -1367,13 +1378,27 @@ chunk_result_t validate_chunk(
             oid,
             dest_head.size(),
             dest_head);
-          head_seen.insert(oid.oid.name);
+          head_seen.insert(head_key(oid));
+          // Record the real hobject so pg_scrubber can log the object with
+          // its hash; the wrapper only carries name/nspace/locator/snap.
+          ret.object_hoids[oid] = oid;
         }
       }
       for (auto *ce : emittable_clones) {
-        auto key = std::make_pair(ce->object.name, uint64_t{ce->object.snap});
+        auto key = clone_key(ce->object);
         if (clone_seen.find(key) == clone_seen.end()) {
           clone_seen.insert(key);
+          auto ce_hoid = std::find_if(
+            object_set.begin(), object_set.end(),
+            [ce](const hobject_t &h) {
+              return h.oid.name == ce->object.name &&
+                     h.snap == snapid_t{ce->object.snap} &&
+                     h.nspace == ce->object.nspace &&
+                     h.get_key() == ce->object.locator;
+            });
+          if (ce_hoid != object_set.end()) {
+            ret.object_hoids[*ce_hoid] = *ce_hoid;
+          }
           dest_clone.push_back(std::move(*ce));
         }
       }
@@ -1398,6 +1423,7 @@ chunk_result_t validate_chunk(
       clone_error.set_info_missing();
     }
     clone_error.set_headless();
+    ret.object_hoids[oid] = oid;
     ret.snapset_errors.push_back(clone_error);
   }
 
@@ -1487,11 +1513,20 @@ chunk_result_t validate_chunk(
   //   _scan_snaps() which increments shallow_errors at the point of decode failure
   //   regardless of pool type.
   {
-    // Build the set of head object names already counted via the shard loop.
-    std::set<std::string> in_object_errors;
+  // Objects are keyed by (name, namespace, locator): the namespace does not
+  // affect placement, so two objects sharing a name in different namespaces
+  // hash alike and land in the same chunk.  Keying on the name alone made the
+  // second one look already-counted and silently dropped its error.
+  auto obj_key = [](const librados::object_id_t &o) {
+    return std::tuple<std::string, std::string, std::string>{
+      o.name, o.nspace, o.locator};
+  };
+
+    // Build the set of head objects already counted via the shard loop.
+    std::set<std::tuple<std::string, std::string, std::string>> in_object_errors;
     for (const auto &i : ret.object_errors) {
       if (i.object.snap == CEPH_NOSNAP) {
-        in_object_errors.insert(i.object.name);
+        in_object_errors.insert(obj_key(i.object));
       }
     }
     constexpr uint64_t snapset_attr_only_mask =
@@ -1509,7 +1544,7 @@ chunk_result_t validate_chunk(
         // Head has only attr errors (SNAPSET_MISSING/CORRUPTED).
         // Count only if NOT already in object_errors (i.e. not in a multi-copy
         // pool where the per-shard loop fired).
-        if (in_object_errors.find(se.object.name) == in_object_errors.end()) {
+        if (in_object_errors.find(obj_key(se.object)) == in_object_errors.end()) {
           ++ret.stats.num_shallow_scrub_errors;
         }
       }
@@ -1538,14 +1573,19 @@ chunk_result_t validate_chunk(
   {
     // Build a set of head names whose object_errors entry has a selected_oi shard.
     // For those objects the replica shard error is already counted; skip them.
-    std::set<std::string> heads_with_selected_oi;
+    auto obj_key = [](const librados::object_id_t &o) {
+      return std::tuple<std::string, std::string, std::string>{
+        o.name, o.nspace, o.locator};
+    };
+    std::set<std::tuple<std::string, std::string, std::string>>
+      heads_with_selected_oi;
     for (const auto &i : ret.object_errors) {
       if (i.object.snap != CEPH_NOSNAP) continue;
       const bool has_sel = std::any_of(
         i.shards.begin(), i.shards.end(),
         [](const auto &p) { return p.second.selected_oi; });
       if (has_sel) {
-        heads_with_selected_oi.insert(i.object.name);
+        heads_with_selected_oi.insert(obj_key(i.object));
       }
     }
     constexpr uint64_t snapset_attr_errors =
@@ -1553,7 +1593,7 @@ chunk_result_t validate_chunk(
       static_cast<uint64_t>(librados::inconsistent_snapset_t::SNAPSET_CORRUPTED);
     for (const auto &se : ret.replica_snapset_errors) {
       if (!(se.errors & snapset_attr_errors)) continue;
-      if (heads_with_selected_oi.count(se.object.name)) continue;
+      if (heads_with_selected_oi.count(obj_key(se.object))) continue;
       ++ret.stats.num_shallow_scrub_errors;
     }
   }
