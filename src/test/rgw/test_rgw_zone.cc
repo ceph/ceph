@@ -13,7 +13,7 @@
 
 #include "rgw_zone.h"
 
-#include <list>
+#include <vector>
 #include <optional>
 #include <string>
 
@@ -25,7 +25,7 @@ const std::string local_id = "74506436-cfb6-4105-8a8c-edd0c62632b7";
 const std::string remote_id = "70271812-eb5c-472a-9050-16e289e78941";
 
 RGWZoneGroup make_zonegroup(const std::string& id, const std::string& name,
-                            std::list<std::string> endpoints)
+                            std::vector<std::string> endpoints)
 {
   RGWZoneGroup zonegroup{id, name};
   zonegroup.endpoints = std::move(endpoints);
@@ -33,7 +33,7 @@ RGWZoneGroup make_zonegroup(const std::string& id, const std::string& name,
 }
 
 void add_master_zone(RGWZoneGroup& zonegroup, const std::string& zone_id,
-                     std::list<std::string> endpoints)
+                     std::vector<std::string> endpoints)
 {
   zonegroup.master_zone = zone_id;
   RGWZone& zone = zonegroup.zones[zone_id];
