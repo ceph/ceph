@@ -40,6 +40,28 @@ cached longer than it already was, and no extra request is sent to the MDS.
 
 Setting both to a minute is roughly what a default NFS mount does.
 
+``ceph-fuse`` also lets the kernel cache lookups and attributes, for as long
+as the client itself may still serve them. That time is the interval, counted
+from when the client last knew the answer to be current: from now while it
+holds the capabilities that keep it current, and otherwise from when the MDS
+last told it. Without this, every path component of every ``stat()`` is a
+round trip through FUSE, however warm the client's cache is. With both
+options at zero the kernel caches nothing, as before.
+
+The kernel then resolves cached paths without asking the client, and so
+without the client's permission checks. With ``client_dentry_cache_timeout``
+set, ``ceph-fuse`` therefore mounts with ``fuse_default_permissions``: the
+kernel checks permissions itself, with the attributes it caches. That is
+decided when ``ceph-fuse`` mounts. On a mount made without
+``fuse_default_permissions``, setting ``client_dentry_cache_timeout`` later
+caches names in the client only, not in the kernel.
+
+Set the two options together for ``ceph-fuse``. With only
+``client_dentry_cache_timeout``, the kernel checks permissions on every path
+component but may not cache the attributes it needs for that, so each
+component costs a ``getattr`` through FUSE: reopening files was 15% slower
+than with both options off in one measurement.
+
 What is given up
 ================
 
@@ -51,6 +73,12 @@ Within the interval, a client can report:
   created (looking the file up by name finds it);
 * a directory that still contains a file another client removed, whose inode
   is then found to be gone when it is opened.
+
+Through ``ceph-fuse``, the size the kernel has cached also limits reads: a
+read by a process that already has the file open can stop at the old end of
+file, or return data from before another client's write, until the interval
+is over. Opening the file, or taking a POSIX or flock lock on it, makes the
+kernel fetch the attributes again.
 
 A client's own changes are always visible to itself; it is other clients that
 are seen late.  Nothing is cached across a mount, and a blocklisted client
@@ -69,15 +97,16 @@ name turns out to have been stale fails with ``ESTALE``, on which the kernel
 looks the name up again.  ``lseek(SEEK_END)`` and the reads that check for
 end of file ask the MDS as well.
 
-.. note:: Through ``ceph-fuse`` the kernel resolves the name of an exclusive
-   create, ``mkdir()``, ``mknod()``, ``symlink()`` or ``link()`` with an
-   ordinary lookup first, and FUSE does not say why it looks a name up, so
-   there such an operation can still fail with ``EEXIST`` on a name another
-   client removed within the interval.  libcephfs callers,
-   ``ceph_ll_create()`` included, are not affected.
+Through ``ceph-fuse`` the kernel caches names as well, and before it
+creates or replaces one it asks ``ceph-fuse`` about it again with an
+ordinary lookup, even if it may still cache it.  The client resolves such a
+lookup at the MDS too: one for a name it let the kernel cache, before that
+has timed out.  A FUSE file system written against libcephfs gets the same
+by handing the kernel ``ceph_ll_dentry_ttl()`` as the entry timeout.
 
 Both options can be changed at runtime, and take effect on the next lookup or
-``stat()``.
+``stat()``; for the kernel side of ``client_dentry_cache_timeout`` under
+``ceph-fuse``, see above.
 
 Where it helps
 ==============
@@ -92,6 +121,8 @@ It does not help a client that holds more inodes than
 ``mds_max_caps_per_client`` allows.  To give capabilities back under recall,
 the client trims those inodes from its cache altogether, so there is nothing
 left to answer from, and every ``stat()`` of a trimmed inode goes to the MDS
-as before.
+as before.  Through ``ceph-fuse`` it helps nonetheless: the kernel goes on
+answering out of what it was allowed to cache, for as long as it was
+allowed to.
 
 For the file data half of the same trade, see :doc:`/cephfs/lazyio`.

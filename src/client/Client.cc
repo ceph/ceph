@@ -1119,6 +1119,7 @@ void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
   if (truncate_seq > in->truncate_seq ||
       (truncate_seq == in->truncate_seq && size > in->effective_size())) {
     ldout(cct, 10) << "size " << in->effective_size() << " -> " << size << dendl;
+    _ll_attrs_changed(in);
     if (in->is_fscrypt_enabled()) {
       in->set_effective_size(size);
 #if defined(__linux__)
@@ -8174,6 +8175,158 @@ bool Client::_dir_cache_valid(const Inode *diri) const
   return ceph_clock_now() < expires;
 }
 
+/*
+ * How long ceph-fuse may let the kernel cache what it just answered: the
+ * timeout, counted from when we last knew the answer to be current - now if
+ * the MDS is still keeping it current for us, else when the MDS last told
+ * us.  The kernel then never answers out of a copy older than the timeouts
+ * allow, and with attribute and dentry caching off this is zero,
+ * which keeps the stock behaviour of revalidating every lookup and getattr.
+ * Without it, every path component of every stat() is a round trip through
+ * FUSE however warm our own cache is.
+ */
+double Client::_cache_ttl(utime_t since, std::chrono::seconds timeout) const
+{
+  if (timeout <= std::chrono::seconds::zero() || blocklisted || since.is_zero())
+    return 0;
+
+  utime_t expires = since;
+  expires += utime_t(timeout.count(), 0);
+  utime_t now = ceph_clock_now();
+  return expires > now ? (double)(expires - now) : 0;
+}
+
+/*
+ * Whether ceph-fuse may let the kernel keep its page cache across this open.
+ * Under close-to-open only if Fc has protected the cache without a break
+ * since the kernel's pages were filled: otherwise the kernel would serve
+ * pages from before the writes this open is supposed to see, and reads it
+ * answers itself never reach us to be revalidated.  Holding Fc now is not
+ * enough, because the kernel's copy is invalidated asynchronously when Fc
+ * goes; cache_gen moves every time Fc comes back, so compare it with what it
+ * was the last time the kernel was allowed to keep its pages.
+ */
+bool Client::ll_keep_page_cache(Fh *fh)
+{
+  std::scoped_lock lock(client_lock);
+  Inode *in = fh->inode.get();
+  if (!fh->close_to_open)
+    return true;
+  bool keep = in->caps_issued_mask(CEPH_CAP_FILE_CACHE, true) &&
+	      !in->lazyio_cache_stale &&
+	      in->fuse_cache_gen == in->cache_gen;
+  in->fuse_cache_gen = in->cache_gen;
+  return keep;
+}
+
+/*
+ * Whether ceph-fuse must make the kernel drop its cached attributes before it
+ * answers an open or a lock request: the kernel may hold an older size under
+ * the attribute timeout we gave it, which would cut reads short at the old
+ * end of file.
+ */
+bool Client::ll_invalidates_attrs(Fh *fh)
+{
+  std::scoped_lock lock(client_lock);
+  Inode *in = fh->inode.get();
+  bool stale = in->ll_attr_stale;
+  in->ll_attr_stale = false;
+  return stale || (fh->close_to_open &&
+		   attr_cache_timeout > std::chrono::seconds::zero());
+}
+
+double Client::ll_attr_ttl(Inode *in)
+{
+  std::scoped_lock lock(client_lock);
+  /*
+   * While we hold the shared caps the MDS keeps our copy current, so it is
+   * good as of now, not as of the last stat the MDS sent: count from now,
+   * the way an NFS client counts from its last revalidation.
+   */
+  utime_t since = in->attr_cached_at;
+  if (!since.is_zero() &&
+      in->caps_issued_mask(CEPH_CAP_AUTH_SHARED | CEPH_CAP_LINK_SHARED |
+			   CEPH_CAP_FILE_SHARED, true))
+    since = ceph_clock_now();
+  double ttl = _cache_ttl(since, attr_cache_timeout);
+  in->ll_attr_expires = ceph_clock_now();
+  in->ll_attr_expires += ttl;
+  in->ll_attr_stale = false;
+  return ttl;
+}
+
+// a FUSE kernel may hold attributes of this inode that are now wrong
+void Client::_ll_attrs_changed(Inode *in)
+{
+  if (!in->ll_attr_expires.is_zero() && ceph_clock_now() < in->ll_attr_expires)
+    in->ll_attr_stale = true;
+}
+
+double Client::ll_dentry_ttl(Inode *parent, const char *name)
+{
+  std::scoped_lock lock(client_lock);
+  if (!parent->dir)
+    return 0;
+  // the kernel resolves the names it caches without asking us: only if it
+  // checks permissions itself, which is fixed when ceph-fuse mounts
+  if (is_fuse && !fuse_mount_default_permissions)
+    return 0;
+  // "", "." and "..": no dentry to cache
+  if (!name[0] || !strcmp(name, ".") || !strcmp(name, ".."))
+    return 0;
+
+  std::string dname(name), alternate_name;
+  if (!_wrap_name(*parent, dname, alternate_name))
+    return 0;
+
+  auto it = parent->dir->dentries.find(dname);
+  // only names that exist: the kernel must ask again about a missing one
+  if (it == parent->dir->dentries.end() || !it->second->inode)
+    return 0;
+  Dentry *dn = it->second;
+  // as for attributes: a name the MDS still vouches for is current now
+  utime_t since = dn->cached_at;
+  if (!since.is_zero() &&
+      (_dentry_valid(dn) ||
+       (parent->caps_issued_mask(CEPH_CAP_FILE_SHARED, true) &&
+	dn->cap_shared_gen == parent->shared_gen)))
+    since = ceph_clock_now();
+  double ttl = _cache_ttl(since, dentry_cache_timeout);
+  dn->ll_expires = ceph_clock_now();
+  dn->ll_expires += ttl;
+  return ttl;
+}
+
+/*
+ * Whether this lookup is the kernel asking again about a name it may still
+ * cache: FUSE does that only when it needs the name to be current, for an
+ * exclusive create, mkdir(), mknod(), symlink(), link(), the target of a
+ * rename(), and a retry after ESTALE.  Those must not be answered out of an
+ * unprotected cache, or they fail with EEXIST on a name another client has
+ * removed, the way they would be resolved at the MDS had they come to us as
+ * what they are.  A FUSE lookup carries no intent; this is how we tell.
+ */
+bool Client::_ll_lookup_revalidates(Inode *parent, const char *name)
+{
+  if (dentry_cache_timeout <= std::chrono::seconds::zero() || !parent->dir)
+    return false;
+  // "", "." and "..": no dentry to cache
+  if (!name[0] || !strcmp(name, ".") || !strcmp(name, ".."))
+    return false;
+
+  std::string dname(name), alternate_name;
+  if (!_wrap_name(*parent, dname, alternate_name))
+    return false;
+
+  auto it = parent->dir->dentries.find(dname);
+  if (it == parent->dir->dentries.end())
+    return false;
+  Dentry *dn = it->second;
+  bool r = !dn->ll_expires.is_zero() && ceph_clock_now() < dn->ll_expires;
+  dn->ll_expires = utime_t();
+  return r;
+}
+
 bool Client::_dentry_valid(const Dentry *dn)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
@@ -14585,6 +14738,16 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 		    << dendl;
   }
 
+  // the previous holder may have changed the file: attributes cached without
+  // caps are not good enough for the new holder of the lock
+  if (ret == 0 && !removing && op == CEPH_MDS_OP_SETFILELOCK &&
+      lock_cmd != CEPH_LOCK_UNLOCK &&
+      attr_cache_timeout > std::chrono::seconds::zero()) {
+    if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED, true))
+      _forget_cached_attrs(in);
+    _ll_attrs_changed(in);
+  }
+
   return ret;
 }
 
@@ -15312,7 +15475,9 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   }
 
   InodeRef in;
-  r = path_walk(parent, filepath(name), &in, perms, {.followsym = false, .mask = CEPH_STAT_CAP_INODE_ALL});
+  r = path_walk(parent, filepath(name), &in, perms,
+		{.followsym = false, .mask = CEPH_STAT_CAP_INODE_ALL,
+		 .authoritative = _ll_lookup_revalidates(parent, name)});
   if (r < 0) {
     attr->st_ino = 0;
     goto out;
@@ -15410,7 +15575,9 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 
   unsigned mask = statx_to_mask(flags, want);
   InodeRef in;
-  r = path_walk(parent, filepath(name), &in, perms, {.followsym = false, .mask = mask});
+  r = path_walk(parent, filepath(name), &in, perms,
+		{.followsym = false, .mask = mask,
+		 .authoritative = _ll_lookup_revalidates(parent, name)});
   if (r < 0) {
     stx->stx_ino = 0;
     stx->stx_mask = 0;

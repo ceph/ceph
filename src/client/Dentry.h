@@ -108,6 +108,8 @@ public:
   int cap_shared_gen = -1;
   // when the MDS told us about this name, for dentry caching
   utime_t cached_at;
+  // until when ll_dentry_ttl() let the caller (the kernel) cache the name
+  utime_t ll_expires;
   std::string alternate_name;
   bool is_renaming = false;
 

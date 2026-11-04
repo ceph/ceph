@@ -731,6 +731,11 @@ public:
   int ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		Inode **out, const UserPerm& perms);
   int ll_lookup_inode(struct inodeno_t ino, const UserPerm& perms, Inode **inode);
+  // how long a FUSE kernel may cache what ll_lookup()/ll_getattr() answered
+  double ll_attr_ttl(Inode *in);
+  bool ll_keep_page_cache(Fh *fh);
+  bool ll_invalidates_attrs(Fh *fh);
+  double ll_dentry_ttl(Inode *parent, const char *name);
   int ll_lookup_vino(vinodeno_t vino, const UserPerm& perms, Inode **inode);
   int ll_lookupx(Inode *parent, const char *name, Inode **out,
 			struct ceph_statx *stx, unsigned want, unsigned flags,
@@ -1145,6 +1150,14 @@ public:
   }
   bool get_fuse_default_permissions() const {
     return fuse_default_permissions;
+  }
+  // before mounting: the FUSE mount checks permissions, the client need not
+  void set_fuse_default_permissions(bool v) {
+    fuse_default_permissions = v;
+  }
+  // whether the FUSE mount was made with default_permissions
+  void set_fuse_mount_default_permissions(bool v) {
+    fuse_mount_default_permissions = v;
   }
 
   bool get_fscrypt_as() const {
@@ -2274,8 +2287,11 @@ private:
     return _getattr(in, mask, perms, force, true);
   }
   bool _attr_cache_valid(const Inode *in, int mask) const;
+  void _ll_attrs_changed(Inode *in);
   void _forget_cached_attrs(Inode *in);
   bool _dentry_cache_valid(const Dentry *dn) const;
+  bool _ll_lookup_revalidates(Inode *parent, const char *name);
+  double _cache_ttl(utime_t since, std::chrono::seconds timeout) const;
   bool _dir_cache_valid(const Inode *diri) const;
   int _readlink(const InodeRef& diri, const char* relpath, char *buf, size_t size, const UserPerm& perms);
   int _getxattr(Inode *in, const char *name, void *value, size_t len,
@@ -2574,6 +2590,7 @@ private:
   feature_bitset_t myfeatures;
 
   bool is_fuse = false;
+  bool fuse_mount_default_permissions = false;
   bool client_permissions;
   bool alternate_name_visible;
   bool close_to_open;
