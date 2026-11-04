@@ -9654,6 +9654,16 @@ int RGWHandler::init(rgw::sal::Driver* _driver,
 
 int RGWHandler::do_init_permissions(const DoutPrefixProvider *dpp, optional_yield y)
 {
+#ifdef RGW_HAVE_D4N_FILTER
+  // Remote cache headers select privileged cache operations. Authenticate the
+  // system user before any bucket/object policy lookup can act on those headers.
+  const bool d4n_remote_request =
+      s->cct->_conf.get_val<std::string>("rgw_filter") == "d4n" &&
+      s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST");
+  if (d4n_remote_request && !s->system_request) {
+    return -EACCES;
+  }
+#endif
   int ret = rgw_build_bucket_policies(dpp, driver, s, y);
   if (ret < 0) {
     ldpp_dout(dpp, 10) << "init_permissions on " << s->bucket
@@ -9661,6 +9671,13 @@ int RGWHandler::do_init_permissions(const DoutPrefixProvider *dpp, optional_yiel
     return ret==-ENODATA ? -EACCES : ret;
   }
 
+#ifdef RGW_HAVE_D4N_FILTER
+  if (d4n_remote_request) {
+    // The authenticated identity remains the system user. Cache replicas retain
+    // the destination bucket's ownership, resolved locally without impersonation.
+    s->owner = s->bucket_owner;
+  }
+#endif
   rgw_build_iam_environment(s);
   return ret;
 }

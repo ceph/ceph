@@ -13,26 +13,53 @@
 
 #include "../../../common/async/yield_context.h"
 #include "common/async/blocked_completion.h"
+#include "common/errno.h"
+
 #include <utility>
 
 namespace rgw::d4n {
 
+// System user (global tenant) whose S3 key signs remote cache requests.
+// It must be created by the cluster admin on every RGW in the D4N cluster.
+static constexpr std::string_view D4N_SYSTEM_USER = "rgw-d4n-system-user";
+
 std::expected<RGWAccessKey, int> RemoteCacheOp::load_access_key(
     const DoutPrefixProvider *dpp, const optional_yield y)
 {
-  auto user = driver->get_user(op.bucket_owner);
-  if (0 > user->load_user(dpp, y)) {
-    return std::unexpected(-EPERM);
+  const std::string uid{D4N_SYSTEM_USER};
+  auto user = driver->get_user(rgw_user{uid});
+  if (!user) {
+    ldpp_dout(dpp, 0) << "D4N could not obtain system user " << uid << dendl;
+    return std::unexpected(-ENOENT);
+  }
+  if (const int ret = user->load_user(dpp, y); ret < 0) {
+    ldpp_dout(dpp, 0) << "D4N failed to load system user " << uid
+                      << ": " << cpp_strerror(ret) << dendl;
+    return std::unexpected(ret);
   }
 
-  const auto& keys = user->get_info().access_keys;
-  if (keys.empty()) {
-    return std::unexpected(-EINVAL);
+  const auto& info = user->get_info();
+  if (!info.system || info.suspended) {
+    ldpp_dout(dpp, 0) << "D4N user " << uid
+                      << " must be an unsuspended system user" << dendl;
+    return std::unexpected(-EACCES);
   }
+  for (const auto& [id, candidate] : info.access_keys) {
+    if (candidate.active && !candidate.id.empty() && !candidate.key.empty()) {
+      return candidate;
+    }
+  }
+  ldpp_dout(dpp, 0) << "D4N system user " << uid << " has no usable active S3 key" << dendl;
+  return std::unexpected(-EACCES);
+}
 
-  const auto& key = keys.begin()->second;
-
-  return std::expected<RGWAccessKey, int>{std::in_place, key.id, key.key};
+param_vec_t RemoteCacheOp::request_params() const
+{
+  param_vec_t params;
+  if (!op.instance_id.empty()) {
+    params.emplace_back("versionId", op.instance_id);
+  }
+  return params;
 }
 
 int RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl)
@@ -51,12 +78,9 @@ int RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp, optional_yield
   uint64_t end_offset = op.offset + op.len - 1;
   std::string range_val = "bytes=" + std::to_string(op.offset) + "-" + std::to_string(end_offset);
   extra_headers["RANGE"] = std::move(range_val);
-  param_vec_t params;
-  if (op.instance_id.size()) {
-	params.push_back(param_pair_t("versionId", op.instance_id));
-  }
+  auto params = request_params();
 
-  auto resource = get_resource(op.bucket_name, op.object_name);
+  auto resource = get_resource(op.bucket_name, op.object_name, op.bucket_tenant);
   sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "GET", op.remote_addr, &cb, nullptr, &params, "", host_style);
 
   if (const auto ret = sender->send_request(dpp, &*access_key, extra_headers, resource, nullptr, bl); ret < 0) {
@@ -73,36 +97,11 @@ rgw::AioResultList RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp,
 
   auto op_func = [this, dpp, y](Aio* aio, AioResult& r) mutable {
     this->r = &r;
-
-    auto access_key = load_access_key(dpp, y);
-    if (!access_key) {
-      r.result = access_key.error();
-      this->r = nullptr;
-      aio->put(r);
-      return;
-    }
-
-    HostStyle host_style = PathStyle;
-    std::map<std::string, std::string> extra_headers;
-	extra_headers["x-rgw-remote-cache-request"] = "true";
-	extra_headers["x-rgw-cache-object-version"] = op.version;
-    uint64_t end_offset = op.offset + op.len - 1;
-    std::string range_val = "bytes=" + std::to_string(op.offset) + "-" + std::to_string(end_offset);
-    extra_headers["RANGE"] = std::move(range_val);
-    extra_headers["x-rgw-remote-cache-request"] = "true";
-    extra_headers["x-rgw-cache-object-version"] = op.version;
-    param_vec_t params;
-	if (op.instance_id.size()) {
-	  params.push_back(param_pair_t("versionId", op.instance_id));
-	}
-    auto resource = get_resource(op.bucket_name, op.object_name);
-    sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "GET", op.remote_addr, &cb, nullptr, &params, "", host_style);
-
-    if (const auto ret = sender->send_request(dpp, &*access_key, extra_headers, resource, nullptr, nullptr);
-        ret < 0) {
+    const int ret = send_request(dpp, y);
+    if (ret < 0) {
       sender.reset();
-      r.result = ret;
       this->r = nullptr;
+      r.result = ret;
       aio->put(r);
       return;
     }
@@ -133,9 +132,12 @@ int RemoteCacheGetOp::complete_request(const DoutPrefixProvider* dpp, optional_y
 rgw::AioResultList RemoteCacheGetOp::send_and_complete_request(const DoutPrefixProvider* dpp, rgw::Aio* aio, uint64_t cost, uint64_t id, optional_yield& y)
 {
   rgw::AioResultList results = send_request(dpp, aio, cost, id, y);
-  auto ret = complete_request(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << "RemoteCacheGetOp:: " << __func__ <<  " complete_request failed with ret: " << ret << dendl;
+  // A failed submission has already completed its AioResult exactly once.
+  if (r) {
+    auto ret = complete_request(dpp, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 20) << "RemoteCacheGetOp:: " << __func__ << " complete_request failed with ret: " << ret << dendl;
+    }
   }
 
   return results;
@@ -198,7 +200,7 @@ int RemoteCacheDeleteOp::send_request(const DoutPrefixProvider* dpp, optional_yi
     extra_headers["x-rgw-cache-delete-marker-mtime"] = op.delete_marker_mtime;
   }
 
-  auto resource = get_resource(op.bucket_name, op.object_name);
+  auto resource = get_resource(op.bucket_name, op.object_name, op.bucket_tenant);
   sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "DELETE", op.remote_addr, &cb, nullptr, nullptr, "", host_style);
 
   if (const auto ret = sender->send_request(dpp, &*access_key, extra_headers, resource, nullptr, bl); ret < 0) {
@@ -236,7 +238,7 @@ int RemoteCachePutOp::send_request(const DoutPrefixProvider* dpp, optional_yield
     extra_headers["x-rgw-cache-block-only"] = "true";
   }
 
-  auto resource = get_resource(op.bucket_name, op.object_name);
+  auto resource = get_resource(op.bucket_name, op.object_name, op.bucket_tenant);
   sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "PUT", op.remote_addr, &cb, nullptr, nullptr, "", host_style);
 
   return sender->send_request(dpp, &*access_key, extra_headers, resource, nullptr, bl);

@@ -269,13 +269,13 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
         creationTime = ceph::real_time(std::chrono::nanoseconds(ns));
         ldpp_dout(dpp, 20) << "LFUDAPolicy: " << __func__ << "(): creationTime: " << creationTime << dendl;
       }
-      rgw_user user;
+      rgw_owner user;
       if (auto i = attrs.find(RGW_ATTR_ACL); i != attrs.end()) {
         RGWAccessControlPolicy policy;
         auto iter = i->second.cbegin();
         policy.decode(iter);
-        user = std::get<rgw_user>(policy.get_owner().id);
-        ldpp_dout(dpp, 20) << "LFUDAPolicy: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
+        user = policy.get_owner().id;
+        ldpp_dout(dpp, 20) << "LFUDAPolicy: " << __func__ << "(): rgw_owner: " << to_string(user) << dendl;
       }
       std::string bucket_name;
       if (auto i = attrs.find(RGW_CACHE_ATTR_BUCKET_NAME); i != attrs.end()) {
@@ -303,7 +303,7 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
   };
 
   auto block_callback = [this](
-          const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, const rgw_user user, const std::string& bucketName, optional_yield y, std::string& restore_val) {
+          const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, const rgw_owner user, const std::string& bucketName, optional_yield y, std::string& restore_val) {
     update(dpp, key, offset, len, version, dirty, user, bucketName, RefCount::NOOP, y, nullptr, restore_val);
   };
 
@@ -731,7 +731,19 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 			op.len = block.size;
 			op.version = block.version;
 			op.dirty = false;
-			op.bucket_owner = entry.user;
+            if (const auto* uid = std::get_if<rgw_user>(&entry.user)) {
+              op.bucket_tenant = uid->tenant;
+            } else {
+              RGWAccountInfo account;
+              rgw::sal::Attrs attrs;
+              RGWObjVersionTracker objv;
+              ret = driver->load_account_by_id(
+                  dpp, y, std::get<rgw_account_id>(entry.user), account, attrs, objv);
+              if (ret < 0) {
+                return ret;
+              }
+              op.bucket_tenant = account.tenant;
+            }
 			op.remote_addr = remoteCacheAddress;
 			op.obj_size = block.cacheObj.size;
 			op.instance_id = instance_id;
@@ -829,7 +841,7 @@ bool LFUDAPolicy::update_refcount_if_key_exists(const DoutPrefixProvider* dpp, c
   return true;
 }
 
-void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_user user, const std::string& bucketName, uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block, std::string& restore_val)
+void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_owner user, const std::string& bucketName, uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block, std::string& restore_val)
 {
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): updating entry: " << key << dendl;
   using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
@@ -936,7 +948,7 @@ void LFUDAPolicy::queue_oldest(const ObjectVersions& versions)
 
 LFUDAPolicy::LFUDAObjEntry* LFUDAPolicy::create_obj_entry(const DoutPrefixProvider* dpp, const std::string& dirty_obj_key, const std::string& version,
                                               bool deleteMarker, uint64_t size, ceph::real_time creationTime,
-                                              const rgw_user& user, const std::string& etag,
+                                              const rgw_owner& user, const std::string& etag,
                                               const std::string& bucket_name, const std::string& bucket_id,
                                               const rgw_obj_key& obj_key, State state)
 {
@@ -957,7 +969,7 @@ LFUDAPolicy::LFUDAObjEntry* LFUDAPolicy::create_obj_entry(const DoutPrefixProvid
   return e;
 }
 
-void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, ceph::real_time creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val)
+void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, ceph::real_time creationTime, const rgw_owner& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val)
 {
   State state{State::INIT};
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Before acquiring lock, adding entry: " << key << dendl;
@@ -1787,17 +1799,33 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
 
   rgw::sal::Attrs obj_attrs;
   uint64_t len = 0;
-  rgw_user c_rgw_user = e->user; 
-  //writing data to the backend
-  //we need to create an atomic_writer
-  std::unique_ptr<rgw::sal::User> c_user = driver->get_next()->get_user(c_rgw_user);
+  // Account owners have no User object. Resolve their tenant and display name
+  // from account metadata while preserving the owner ID for backend writes.
+  ACLOwner owner{e->user, {}};
+  std::string tenant;
+  if (const auto* uid = std::get_if<rgw_user>(&e->user)) {
+    auto user = driver->get_next()->get_user(*uid);
+    ret = user->load_user(dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
+    tenant = uid->tenant;
+    owner.display_name = user->get_display_name();
+  } else {
+    RGWAccountInfo account;
+    rgw::sal::Attrs attrs;
+    RGWObjVersionTracker objv;
+    ret = driver->get_next()->load_account_by_id(
+        dpp, y, std::get<rgw_account_id>(e->user), account, attrs, objv);
+    if (ret < 0) {
+      return ret;
+    }
+    tenant = account.tenant;
+    owner.display_name = account.name;
+  }
 
   std::unique_ptr<rgw::sal::Bucket> c_bucket;
-  rgw_bucket c_rgw_bucket = rgw_bucket(c_rgw_user.tenant, e->bucket_name, e->bucket_id);
-
-  RGWBucketInfo c_bucketinfo;
-  c_bucketinfo.bucket = c_rgw_bucket;
-  c_bucketinfo.owner = c_rgw_user;
+  rgw_bucket c_rgw_bucket(tenant, e->bucket_name, e->bucket_id);
   ret = driver->get_next()->load_bucket(dpp, c_rgw_bucket, &c_bucket, y);
   if (ret < 0) {
     ldpp_dout(dpp, 10) << __func__ << "(): load_bucket() returned ret=" << ret << dendl;
@@ -1811,8 +1839,6 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
     c_obj->clear_instance();
   }
   ldpp_dout(dpp, 20) << __func__ << "(): c_obj oid =" << c_obj->get_oid() << dendl;
-
-  ACLOwner owner{c_user->get_id(), c_user->get_display_name()};
 
   ldpp_dout(dpp, 10) << __func__ << "(): e->key=" << e->key << dendl;
   int op_ret;
@@ -2374,7 +2400,7 @@ int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_y
   return 0;
 }
 
-void LRUPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_user user, const std::string& bucketName, uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block, std::string& restore_val)
+void LRUPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_owner user, const std::string& bucketName, uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block, std::string& restore_val)
 {
   const std::lock_guard l(lru_lock);
   _erase(dpp, key, y);
@@ -2387,7 +2413,7 @@ void LRUPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, ui
   entries_map.emplace(key, e);
 }
 
-void LRUPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, ceph::real_time creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
+void LRUPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, ceph::real_time creationTime, const rgw_owner& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
 const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val)
 {
   const std::lock_guard l(lru_lock);

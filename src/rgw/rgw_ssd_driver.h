@@ -296,7 +296,7 @@ private:
 
   bool extract_delete_marker(const DoutPrefixProvider* dpp,
                                       const rgw::sal::Attrs& attrs);
-  rgw_user extract_user_from_attrs(const DoutPrefixProvider* dpp,
+  rgw_owner extract_user_from_attrs(const DoutPrefixProvider* dpp,
                                             const rgw::sal::Attrs& attrs);
   std::string extract_attr_string(const DoutPrefixProvider* dpp,
                                            const rgw::sal::Attrs& attrs,

@@ -597,13 +597,13 @@ class D4NFilterObject : public FilterObject {
         rgw::d4n::CachePolicy* policy{nullptr};
         std::string version;            // source version (data block keys and directory entries)
         std::string prefix;             // source cache block prefix
-        rgw_user owner;
+        rgw_owner owner;
         std::string bucket_name;
         rgw::d4n::CacheBlock block;     // template for the source data block entries
         bool copy_dest{false};          // write-back copy: also write the destination blocks
         std::string dest_version;
         std::string dest_prefix;
-        rgw_user dest_owner;
+        rgw_owner dest_owner;
         std::string dest_bucket_name;
         Attrs dest_attrs;
       };
@@ -870,7 +870,7 @@ class D4NFilterObject : public FilterObject {
     void set_remote_block_only(bool flag) { block_only = flag; }
     uint64_t get_remote_obj_size() const { return obj_size; }
 	int write_if_space_available(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const Attrs& attrs,
-								  uint64_t offset, const std::string& version, const bool& dirty, const rgw_user user, const std::string& bucketName,
+								  uint64_t offset, const std::string& version, const bool& dirty, const rgw_owner user, const std::string& bucketName,
 								  uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block, bool update_policy = true);
 };
 
@@ -906,7 +906,7 @@ class D4NFilterWriter : public FilterWriter {
     // Set once complete() has committed the HEAD; until then the PUT can still fail or be abandoned.
     bool head_committed = false;
 
-    static int write_to_remote_cache(const DoutPrefixProvider* dpp_o, const std::string& prefix, uint64_t size, const rgw_user& user, const std::string& remote_addr, const std::string& bucket_name, const std::string& obj_name, const std::string& version, const std::string& old_version, const std::string& mtime, bool dirty, D4NFilterDriver* driver, optional_yield y);
+    static int write_to_remote_cache(const DoutPrefixProvider* dpp_o, const std::string& prefix, uint64_t size, const std::string& bucket_tenant, const std::string& remote_addr, const std::string& bucket_name, const std::string& obj_name, const std::string& version, const std::string& old_version, const std::string& mtime, bool dirty, D4NFilterDriver* driver, optional_yield y);
 
   public:
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 

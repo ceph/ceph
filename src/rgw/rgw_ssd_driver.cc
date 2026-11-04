@@ -597,7 +597,7 @@ rgw_obj_key SSDDriver::build_obj_key(const std::string& object_name,
 }
 
 //Helper method to decode ACL and extract user name from it
-rgw_user SSDDriver::extract_user_from_attrs(const DoutPrefixProvider* dpp,
+rgw_owner SSDDriver::extract_user_from_attrs(const DoutPrefixProvider* dpp,
                                             const rgw::sal::Attrs& attrs)
 {
     const auto attr = attrs.find(RGW_ATTR_ACL);
@@ -610,7 +610,7 @@ rgw_user SSDDriver::extract_user_from_attrs(const DoutPrefixProvider* dpp,
     // Invalid ACLs belong to the existing per-file restoration exception boundary.
     policy.decode(iter);
 
-    return std::get<rgw_user>(policy.get_owner().id);
+    return policy.get_owner().id;
 }
 
 //Helper method to check if the block is a delete marker
@@ -646,7 +646,7 @@ void SSDDriver::process_data_block(const DoutPrefixProvider* dpp,
     std::string instance = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_VERSION_ID);
     std::string invalidStr = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_INVALID);
     std::string localWeightStr = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_LOCAL_WEIGHT);
-    rgw_user user = extract_user_from_attrs(dpp, attrs);
+    rgw_owner user = extract_user_from_attrs(dpp, attrs);
     std::string bucket_name = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_BUCKET_NAME);
 
     // Invalid blocks remain dirty so obj_func creates object entry for cleaning thread
@@ -666,7 +666,7 @@ void SSDDriver::process_clean_head_block(const DoutPrefixProvider* dpp,
                                          BlockDataCallback block_func)
 {
     std::string localWeightStr = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_LOCAL_WEIGHT);
-    rgw_user user = extract_user_from_attrs(dpp, attrs);
+    rgw_owner user = extract_user_from_attrs(dpp, attrs);
     std::string bucket_name = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_BUCKET_NAME);
 
     uint64_t offset = 0, len = 0;
@@ -691,7 +691,7 @@ void SSDDriver::process_dirty_head_block(const DoutPrefixProvider* dpp,
     bool deleteMarker = extract_delete_marker(dpp, attrs);
     std::string invalidStr = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_INVALID);
     std::string localWeightStr = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_LOCAL_WEIGHT);
-    rgw_user user = extract_user_from_attrs(dpp, attrs);
+    rgw_owner user = extract_user_from_attrs(dpp, attrs);
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): calling func for: " << key << dendl;
     obj_func(dpp, key, version, deleteMarker, bucket_id, obj_key, instance, null_yield, invalidStr);

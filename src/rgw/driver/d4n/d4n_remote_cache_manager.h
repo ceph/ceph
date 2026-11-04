@@ -27,8 +27,12 @@ namespace rgw::d4n {
 namespace asio = boost::asio;
 namespace sys = boost::system;
 
-inline std::string get_resource(std::string& bucket_name, std::string& oid) {
-  return fmt::format("{}{}{}", bucket_name, "/", oid);
+inline std::string get_resource(const std::string& bucket_name,
+                                const std::string& oid,
+                                const std::string& tenant) {
+  // An explicit empty tenant (:bucket) prevents a tenant-scoped system user
+  // from redirecting requests for global buckets into its own namespace.
+  return fmt::format("{}:{}/{}", tenant, bucket_name, oid);
 }
 
 struct RemoteGetCB : RGWHTTPStreamRWRequest::ReceiveCB {
@@ -50,7 +54,7 @@ class RemoteCacheOp {
       uint64_t len = 0;
       std::string version; // Cache version (equivalent to "instance_id" param in versioning enabled buckets)
 	  bool dirty{false};
-      rgw_user bucket_owner;
+      std::string bucket_tenant;
       std::string remote_addr;
       uint64_t obj_size = 0;
       std::string instance_id = "";
@@ -68,6 +72,7 @@ class RemoteCacheOp {
   protected:
     std::expected<RGWAccessKey, int> load_access_key(const DoutPrefixProvider *dpp,
                                                     optional_yield y);
+    param_vec_t request_params() const;
 
     rgw::sal::Driver* driver;
     RemoteCacheOpData op;
