@@ -1,7 +1,7 @@
 :orphan:
 
 =========================================
- rbd-nbd -- map rbd images to nbd device
+ rbd-nbd -- map RBD images to NBD devices
 =========================================
 
 .. program:: rbd-nbd
@@ -18,8 +18,8 @@ Synopsis
 Description
 ===========
 
-**rbd-nbd** is a client for RADOS block device (rbd) images like rbd kernel module.
-It will map an rbd image to an nbd (Network Block Device) device, allowing access to it
+**rbd-nbd** is a client for RADOS Block Device (RBD) images, like the rbd kernel module.
+It will map an RBD image to an NBD (Network Block Device) device, allowing access to it
 as a regular local block device.
 
 Options
@@ -37,7 +37,7 @@ Options
 .. option:: --nbds_max *limit*
 
    Override the parameter nbds_max of NBD kernel module when modprobe, used to
-   limit the count of nbd devices.
+   limit the count of NBD devices.
 
 .. option:: --max_part *limit*
 
