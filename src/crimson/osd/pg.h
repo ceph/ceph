@@ -241,7 +241,7 @@ public:
     return false;
   }
 
-  bool is_local_store_full() const {
+  seastar::future<bool> is_local_store_full() const {
     return shard_services.is_local_storage_full(get_store_index());
   }
 
@@ -1021,6 +1021,7 @@ private:
   interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
 
 public:
+  int do_scrub_ls(const MOSDOp *m, OSDOp *osd_op) const;
   using rep_op_fut_t = std::tuple<interruptible_future<>,
                                   interruptible_future<>>;
   interruptible_future<rep_op_fut_t>
@@ -1095,6 +1096,7 @@ public:
   friend class ScrubReserveRange;
   friend class ScrubSleep;
   friend class ScrubDigestUpdate;
+  friend class ScrubSnapMapperRepair;
   friend class scrub::PGScrubber;
   template <typename T> friend class RemoteScrubEventBaseT;
 
@@ -1153,6 +1155,9 @@ public:
   }
   PGRecovery* get_recovery_handler() final {
     return recovery_handler.get();
+  }
+  scrub::PGScrubber* get_scrubber() final {
+    return &scrubber;
   }
   PeeringState& get_peering_state() final {
     return peering_state;

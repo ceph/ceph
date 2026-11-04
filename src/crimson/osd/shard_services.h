@@ -577,16 +577,15 @@ public:
   seastar::future<> shutdown_cluster_lane();
   seastar::future<> mark_down_cluster_lane(entity_addr_t addr);
 
-  crimson::os::BackendStore get_store(store_index_t store_index) {
+  crimson::os::BackendStore get_store(store_index_t store_index) const {
     auto store = local_state.b_store;
     store.store_index = store_index;
     return store;
   }
 
-  bool is_local_storage_full(store_index_t store_index) const {
-    const auto &shard_store =
-        local_state.b_store.f_store.get_sharded_store(store_index);
-    return shard_store.is_storage_full();
+  seastar::future<bool> is_local_storage_full(store_index_t store_index) const {
+    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::is_storage_full>(
+        get_store(store_index));
   }
 
   struct shard_stats_t {
