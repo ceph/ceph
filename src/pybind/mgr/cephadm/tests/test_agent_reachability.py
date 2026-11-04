@@ -8,6 +8,7 @@ from orchestrator import DaemonDescription
 
 from cephadm.agent import AgentMessageThread, CephadmAgentHelpers, HostData
 from cephadm.inventory import (
+    AGENT_FAILURE_SUMMARY_INTERVAL,
     AGENT_MSG_BACKOFF_BASE,
     AGENT_MSG_BACKOFF_MAX,
     AGENT_UNREACHABLE_FAILURES,
@@ -278,3 +279,76 @@ class TestAgentUnreachableHealth:
         cephadm_module.use_agent = False
         assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([]) == []
         assert self.HC not in cephadm_module.health_checks
+
+
+class TestAgentFailureSummary:
+
+    def test_rate_limited_and_reset(self, cephadm_module: CephadmOrchestrator, clock: _Clock) -> None:
+        ac = cephadm_module.agent_cache
+        ac.record_agent_message_failure('host1', 'refused')
+        ac.record_agent_message_failure('host1', 'refused')
+        ac.record_agent_message_failure('host2', 'timed out')
+        s = ac.take_agent_message_summary()
+        assert s is not None
+        assert s[1] == {'host1': 2, 'host2': 1}
+        # too soon for another summary; failures keep accumulating
+        ac.record_agent_message_failure('host1', 'refused')
+        assert ac.take_agent_message_summary() is None
+        clock.now += AGENT_FAILURE_SUMMARY_INTERVAL
+        s = ac.take_agent_message_summary()
+        assert s is not None
+        assert s[0] == AGENT_FAILURE_SUMMARY_INTERVAL
+        assert s[1] == {'host1': 1}
+
+    def test_recovered_hosts(self, cephadm_module: CephadmOrchestrator, clock: _Clock) -> None:
+        ac = cephadm_module.agent_cache
+        ac.record_agent_message_success('host0')  # never failed: not "recovered"
+        ac.record_agent_message_failure('host1', 'refused')
+        ac.record_agent_message_success('host1')
+        ac.record_agent_message_failure('host2', 'refused')
+        ac.record_agent_message_success('host2')
+        ac.record_agent_message_failure('host2', 'refused')
+        s = ac.take_agent_message_summary()
+        assert s is not None
+        assert s[2] == {'host1'}
+
+    def test_one_warning_per_pass(self, cephadm_module: CephadmOrchestrator, clock: _Clock) -> None:
+        ac = cephadm_module.agent_cache
+        for i in range(8):
+            ac.record_agent_message_failure(f'host{i}', f'refused {i}')
+        ac.record_agent_message_failure('host7', 'refused 7')
+        with mock.patch.object(cephadm_module.log, 'warning') as warn, \
+                mock.patch.object(cephadm_module.log, 'info') as info:
+            cephadm_module.agent_helpers._log_agent_message_summary(['host7'])
+            assert warn.call_count == 1
+            msg = warn.call_args.args[0]
+            assert msg.startswith('9 message(s) to 8 agent(s) failed since mgr start')
+            assert msg.index('host7: refused 7') < msg.index('host0: refused 0')
+            assert 'and 3 more' in msg
+            assert '1 agent(s) are unreachable' in msg
+            # nothing new and too soon: no log
+            cephadm_module.agent_helpers._log_agent_message_summary(['host7'])
+            assert warn.call_count == 1
+            # only recoveries: one INFO line
+            ac.record_agent_message_success('host7')
+            clock.now += AGENT_FAILURE_SUMMARY_INTERVAL
+            cephadm_module.agent_helpers._log_agent_message_summary([])
+            assert warn.call_count == 1
+            info.assert_called_once()
+            assert 'host7' in info.call_args.args[0]
+
+    @mock.patch('cephadm.agent.time.sleep')
+    @mock.patch('cephadm.agent.ssl.create_default_context')
+    def test_failed_message_is_not_logged_as_error(self, ssl_ctx: mock.MagicMock, sleep: mock.MagicMock,
+                                                   cephadm_module: CephadmOrchestrator,
+                                                   clock: _Clock) -> None:
+        ssl_ctx.return_value.wrap_socket.return_value.connect.side_effect = ConnectionRefusedError(111, 'refused')
+        cephadm_module.http_server.agent = mock.MagicMock()
+        with mock.patch.object(cephadm_module.cert_mgr, 'get_root_ca', return_value='ca'), \
+                mock.patch.object(cephadm_module.cert_mgr, 'generate_cert',
+                                  return_value=TLSCredentials('cert', 'key')), \
+                mock.patch.object(cephadm_module.log, 'error') as error, \
+                mock.patch.object(cephadm_module.log, 'warning') as warning:
+            AgentMessageThread('host1', 4721, {'counter': 1}, cephadm_module).run()
+        error.assert_not_called()
+        warning.assert_not_called()

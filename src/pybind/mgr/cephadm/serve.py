@@ -341,7 +341,9 @@ class CephadmServe:
         self._write_all_client_files()
 
         self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
-        self.mgr.agent_helpers._update_agent_unreachable_healthcheck(agents_down)
+        unreachable_agents = self.mgr.agent_helpers._update_agent_unreachable_healthcheck(
+            agents_down)
+        self.mgr.agent_helpers._log_agent_message_summary(unreachable_agents)
         self.mgr.http_server.config_update()
 
         if self.mgr.config_checks_enabled:

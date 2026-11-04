@@ -53,6 +53,9 @@ AGENT_UNREACHABLE_FAILURES = 3
 # Minimum time after an agent is (re)deployed before it can be reported as
 # unreachable. Its listener may still be starting.
 AGENT_UNREACHABLE_GRACE = 120
+# Minimum interval between two summaries of failed mgr->agent messages in
+# the mgr log. Per-message detail is logged at DEBUG.
+AGENT_FAILURE_SUMMARY_INTERVAL = 60
 
 
 def _monotonic() -> float:
@@ -2135,6 +2138,10 @@ class AgentCache():
         # in-memory only, updated from AgentMessageThread
         self._reachability_lock = threading.Lock()
         self.agent_reachability = {}  # type: Dict[str, AgentReachability]
+        # failed messages per host and recovered hosts since the last summary
+        self._failures_since_summary = {}  # type: Dict[str, int]
+        self._recovered_since_summary = set()  # type: Set[str]
+        self._last_summary: Optional[float] = None
 
     def load(self):
         # type: () -> None
@@ -2213,9 +2220,10 @@ class AgentCache():
         with self._reachability_lock:
             r = self.agent_reachability.setdefault(host, AgentReachability())
             if r.consecutive_failures:
-                self.mgr.log.info(
+                self.mgr.log.debug(
                     f'Agent on host {host} is reachable again after '
                     f'{r.consecutive_failures} failed message(s)')
+                self._recovered_since_summary.add(host)
             r.consecutive_failures = 0
             r.first_failure = None
             r.retry_after = 0.0
@@ -2238,6 +2246,8 @@ class AgentCache():
             delay = min(AGENT_MSG_BACKOFF_MAX,
                         AGENT_MSG_BACKOFF_BASE * 2 ** min(r.consecutive_failures - 1, 16))
             r.retry_after = _monotonic() + delay
+            self._failures_since_summary[host] = self._failures_since_summary.get(host, 0) + 1
+            self._recovered_since_summary.discard(host)
             return r.consecutive_failures
 
     def record_agent_deployed(self, host: str) -> None:
@@ -2252,6 +2262,25 @@ class AgentCache():
             r.first_failure = None
             r.retry_after = 0.0
             r.deployed_at = datetime_now()
+
+    def take_agent_message_summary(
+        self, min_interval: float = AGENT_FAILURE_SUMMARY_INTERVAL
+    ) -> Optional[Tuple[float, Dict[str, int], Set[str]]]:
+        """
+        Return (seconds covered, failed messages per host, recovered hosts)
+        since the last summary and start a new one. Returns None if the last
+        summary is less than min_interval seconds old.
+        """
+        with self._reachability_lock:
+            now = _monotonic()
+            if self._last_summary is not None and now - self._last_summary < min_interval:
+                return None
+            elapsed = now - self._last_summary if self._last_summary is not None else 0.0
+            res = (elapsed, self._failures_since_summary, self._recovered_since_summary)
+            self._failures_since_summary = {}
+            self._recovered_since_summary = set()
+            self._last_summary = now
+            return res
 
     def agent_message_allowed(self, host: str) -> bool:
         """False while we are backing off after failed messages to this agent."""

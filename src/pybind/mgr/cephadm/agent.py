@@ -897,7 +897,10 @@ class AgentMessageThread(threading.Thread):
 
     def _failed(self, error: str) -> None:
         failures = self.mgr.agent_cache.record_agent_message_failure(self.host, error)
-        self.mgr.log.error(
+        # One failure per message adds up quickly on large clusters. Failures
+        # are summarized once per serve pass (_log_agent_message_summary);
+        # per-message detail is only logged at DEBUG.
+        self.mgr.log.debug(
             f'Agent on host {self.host}: {error} '
             f'({failures} consecutive failure(s)). '
             f'Agent config deps left unchanged for retry')
@@ -1042,6 +1045,36 @@ class CephadmAgentHelpers:
         if self.mgr.health_checks.get(name) != check:
             self.mgr.set_health_warning(name, summary=summary, count=len(hosts), detail=detail)
         return hosts
+
+    def _log_agent_message_summary(self, unreachable: List[str]) -> None:
+        """
+        Log one line about failed mgr->agent messages since the last summary,
+        at most every AGENT_FAILURE_SUMMARY_INTERVAL seconds.
+        """
+        summary = self.mgr.agent_cache.take_agent_message_summary()
+        if summary is None:
+            return
+        elapsed, failures, recovered = summary
+        if failures:
+            examples = []
+            for host in sorted(failures, key=lambda h: (-failures[h], h))[:5]:
+                r = self.mgr.agent_cache.get_agent_reachability(host)
+                examples.append(f'{host}: {r.last_error if r else "unknown error"}')
+            more = f', and {len(failures) - len(examples)} more' if len(failures) > len(examples) else ''
+            period = f'in the last {int(elapsed)}s' if elapsed else 'since mgr start'
+            msg = (f'{sum(failures.values())} message(s) to {len(failures)} agent(s) '
+                   f'failed {period} ({"; ".join(examples)}{more}).')
+            if unreachable:
+                msg += (f' {len(unreachable)} agent(s) are unreachable, '
+                        'see CEPHADM_AGENT_UNREACHABLE.')
+            if recovered:
+                msg += f' {len(recovered)} agent(s) are reachable again.'
+            self.mgr.log.warning(msg)
+        elif recovered:
+            self.mgr.log.info(
+                f'{len(recovered)} agent(s) are reachable again: '
+                f'{", ".join(sorted(recovered)[:5])}'
+                f'{", ..." if len(recovered) > 5 else ""}')
 
     # this function probably seems very unnecessary, but it makes it considerably easier
     # to get the unit tests working. All unit tests that check which daemons were deployed
