@@ -1195,11 +1195,22 @@ class CephadmAgentHelpers:
             for agent in self.mgr.cache.get_daemons_by_service(CephadmAgent.TYPE):
                 if agent.hostname not in self.mgr.agent_cache.agent_keys:
                     self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
-            if CephadmAgent.TYPE not in self.mgr.spec_store:
+            # Check active specs, not the whole store: after use_agent was
+            # turned off (or 'orch rm agent'), the agent spec stays in the
+            # store, marked deleted, until every agent daemon is removed.
+            # Such a spec is never applied, so it has to be revived here.
+            if CephadmAgent.TYPE not in self.mgr.spec_store.active_specs:
+                if self.mgr.spec_store.undelete(CephadmAgent.TYPE):
+                    self.mgr.log.info(
+                        'use_agent is enabled: cancelled the pending removal of the agent service')
+                # (re)write the spec cephadm expects, also over a revived one
                 self.mgr.agent_helpers._apply_agent()
                 need_apply = True
         else:
-            if CephadmAgent.TYPE in self.mgr.spec_store:
+            # A spec that is already pending removal must not be removed
+            # again: rm() would re-save it and this handler would report
+            # a change on every serve loop pass until the purge.
+            if CephadmAgent.TYPE in self.mgr.spec_store.active_specs:
                 self.mgr.spec_store.rm(CephadmAgent.TYPE)
                 need_apply = True
             if not self.mgr.cache.get_daemons_by_service(CephadmAgent.TYPE):
