@@ -270,8 +270,10 @@ available, then the "failed" daemon will return as a standby.
 
     ceph tell mds.<daemon name> command ...
 
-Send a command to the MDS daemon(s). Use ``mds.*`` to send a command to all
-daemons. Use ``ceph tell mds.* help`` to learn available commands.
+Send a command to the MDS daemon(s). Use ``'mds.*'``, quoted so that the shell
+does not expand it, to send a command to all daemons. Use ``ceph tell
+mds.<daemon name> help`` to learn the available commands, and see
+:ref:`cephfs-mds-daemon-commands`.
 
 ::
 
