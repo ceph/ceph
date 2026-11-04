@@ -586,6 +586,25 @@ class SpecStore():
         self.save(self._specs[service_name], update_create=False)
         return True
 
+    def undelete(self, service_name: str) -> bool:
+        """
+        Cancel the pending removal of a service.
+
+        After `rm()`, a spec stays in the store, marked deleted, until all its
+        daemons are gone and `_purge_deleted_services()` drops it. While it is
+        marked, `save()` keeps the mark: the spec is not reconciled and its
+        daemons are removed as orphans. Callers that apply the service again
+        must call this first.
+
+        Returns True if a pending removal was cancelled.
+        """
+        if service_name not in self.spec_deleted:
+            return False
+        del self.spec_deleted[service_name]
+        if service_name in self._specs:
+            self._save(service_name)
+        return True
+
     def finally_rm(self, service_name):
         # type: (str) -> bool
         found = service_name in self._specs

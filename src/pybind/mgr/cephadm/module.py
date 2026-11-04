@@ -4977,11 +4977,24 @@ Then run the following:
             allow_colo=service_registry.get_service(spec.service_type).allow_colo(),
         ).validate()
 
+        revived = False
+        if not spec.preview_only and self.spec_store.undelete(spec.service_name()):
+            # Applying a service that is pending removal ('orch rm') cancels
+            # the removal. Otherwise the spec would stay marked deleted: it
+            # would not be reconciled and its daemons would be removed as
+            # orphans, while 'orch apply' reported success.
+            revived = True
+            self.log.info('Cancelled the pending removal of service %s' % spec.service_name())
         self.log.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
         self._kick_serve_loop()
         msg = f"Scheduled {spec.service_name()} update...{cert_warning}"
+        if revived:
+            msg += (
+                f'\nNOTE: {spec.service_name()} was pending removal. The'
+                f' removal has been cancelled.'
+            )
         if spec.unmanaged:
             # Spec is stored, but reconciliation/_check_daemons will no-op until
             # the service is managed again. Do not special-case OSDs here: an
