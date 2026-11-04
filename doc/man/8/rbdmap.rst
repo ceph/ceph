@@ -94,7 +94,7 @@ commands::
 
     rbd map foopool/bar1 --id admin --keyring /etc/ceph/ceph.client.admin.keyring
     rbd map foopool/bar2 --id admin --keyring /etc/ceph/ceph.client.admin.keyring
-    rbd map foopool/bar2 --id admin --keyring /etc/ceph/ceph.client.admin.keyring --options lock_on_read,queue_depth=1024
+    rbd map foopool/bar3 --id admin --keyring /etc/ceph/ceph.client.admin.keyring --options lock_on_read,queue_depth=1024
 
 If the images had XFS file systems on them, the corresponding ``/etc/fstab``
 entries might look like this::
@@ -127,4 +127,4 @@ https://docs.ceph.com for more information.
 See also
 ========
 
-:doc:`rbd <rbd>`\(8),
+:doc:`rbd <rbd>`\(8)

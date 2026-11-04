@@ -15,7 +15,7 @@ Synopsis
 Description
 ===========
 
-**rbd-replay-many** is a utility for replaying a rados block device (RBD) workload on several clients.
+**rbd-replay-many** is a utility for replaying a RADOS block device (RBD) workload on several clients.
 Although all clients use the same workload, they replay against separate images.
 This matches normal use of librbd, where each original client is a VM with its own image.
 
