@@ -16,6 +16,7 @@ overrides:
         rgw sts key: AQA/3Fxpz2k2AxAAYWJjZGVmZ2hpamtsbW5vcA==
         rgw s3 auth use sts: true
         rgw reshard progress judge interval: 10
+        rgw disable s3select: false
   rgw:
     compression type: random
     storage classes:
