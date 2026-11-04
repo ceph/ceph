@@ -2992,6 +2992,15 @@ void MDCache::send_subtree_resolves()
     mds->send_message_mds(m, p.first);
   }
   resolves_pending = false;
+
+  // With no peer in the recovery set (e.g. every other in rank is still
+  // up:creating) no MMDSResolve will arrive, so handle_resolve() never
+  // calls maybe_resolve_finish().  Finish here instead of waiting forever.
+  if (resolve_done && resolve_gather.empty() &&
+      resolve_ack_gather.empty() && resolve_need_rollback.empty()) {
+    dout(10) << "send_subtree_resolves no peers to wait for" << dendl;
+    maybe_resolve_finish();
+  }
 }
 
 void MDCache::maybe_finish_peer_resolve() {
