@@ -239,6 +239,15 @@ def test_agent_shutdown(_is_alive):
         assert agent.event.is_set() == True
 
 
+def test_agent_unit_restarts_are_bounded():
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        unit = agent.unit_file()
+        assert 'Restart=on-failure' in unit
+        assert 'StartLimitInterval=30min' in unit
+        assert 'StartLimitBurst=5' in unit
+
+
 def test_agent_unit_is_type_simple():
     with with_cephadm_ctx([]) as ctx:
         agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
@@ -575,6 +584,7 @@ def test_agent_get_ls(_ls_subset, _ls, cephadm_fs):
 @mock.patch("cephadm.HostFacts.__init__", lambda _, __: None)
 @mock.patch("ssl.SSLContext.load_verify_locations")
 @mock.patch("threading.Thread.is_alive")
+@mock.patch("cephadm.MgrListener.setup")
 @mock.patch("cephadm.MgrListener.start")
 @mock.patch("cephadm.AgentGatherer.start")
 @mock.patch("cephadm.port_in_use")
@@ -697,6 +707,7 @@ def test_agent_run(_time, _pull_conf_settings, _port_in_use, _gatherer_start,
                 'Content-Type': 'application/json',
             }
         )
+        _listener_setup.assert_called()
         _listener_start.assert_called()
         _gatherer_start.assert_called()
         _urlopen.assert_called()
@@ -927,6 +938,90 @@ def test_mgr_listener_run(_load_cert_chain, _load_verify_locations, _handle_json
         agent.mgr_listener.run()
         FakeConn.send.assert_not_called()
         FSS_exc_testing.accept.call_count == 3
+
+
+@pytest.mark.parametrize('cert, key', [
+    ('', ''),            # empty listener credentials (agent spec without ssl)
+    ('not a cert', 'not a key'),
+])
+def test_mgr_listener_setup_fails_on_bad_credentials(cert, key, tmp_path):
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        agent.listener_port = '0'
+        agent.listener_cert_path = str(tmp_path / 'listener.crt')
+        agent.listener_key_path = str(tmp_path / 'listener.key')
+        agent.ca_path = str(tmp_path / 'root_cert.pem')
+        for path, content in [(agent.listener_cert_path, cert),
+                              (agent.listener_key_path, key),
+                              (agent.ca_path, '')]:
+            with open(path, 'w') as f:
+                f.write(content)
+        closed = []
+        real_socket = socket.socket
+
+        class _Socket(real_socket):
+            def close(self):
+                closed.append(True)
+                super().close()
+
+        with mock.patch('socket.socket', _Socket):
+            with pytest.raises(_cephadm.Error, match='Failed to start agent listener on port 0'):
+                agent.mgr_listener.setup()
+        assert closed
+        assert agent.mgr_listener._listen_socket is None
+
+
+@mock.patch("ssl.SSLContext.load_verify_locations")
+@mock.patch("threading.Thread.is_alive", return_value=False)
+@mock.patch("cephadm.MgrListener.start")
+@mock.patch("cephadm.AgentGatherer.start")
+@mock.patch("cephadm.port_in_use", return_value=False)
+@mock.patch("cephadm.CephadmAgent.pull_conf_settings")
+def test_agent_run_exits_if_listener_cannot_start(_pull_conf_settings, _port_in_use,
+                                                  _gatherer_start, _listener_start,
+                                                  _is_alive, _load_verify_locations):
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        with mock.patch.object(agent.mgr_listener, 'setup',
+                               side_effect=_cephadm.Error('Failed to start agent listener on port 4721: PEM lib')):
+            with pytest.raises(_cephadm.Error, match='PEM lib'):
+                agent.run()
+        _listener_start.assert_not_called()
+        _gatherer_start.assert_not_called()
+
+
+@mock.patch("cephadm.CephadmAgent.wakeup")
+def test_mgr_listener_records_unexpected_stop(_wakeup):
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        with mock.patch.object(agent.mgr_listener, '_serve', side_effect=OSError('boom')):
+            agent.mgr_listener.run()
+        assert agent.mgr_listener.error == 'boom'
+        _wakeup.assert_called_once()
+
+        # no error recorded on a requested shutdown
+        agent.mgr_listener.error = None
+        agent.mgr_listener.stop = True
+        with mock.patch.object(agent.mgr_listener, '_serve', side_effect=OSError('closed')):
+            agent.mgr_listener.run()
+        assert agent.mgr_listener.error is None
+
+
+@mock.patch("ssl.SSLContext.load_verify_locations")
+@mock.patch("threading.Thread.is_alive", return_value=False)
+@mock.patch("cephadm.MgrListener.setup")
+@mock.patch("cephadm.MgrListener.start")
+@mock.patch("cephadm.AgentGatherer.start")
+@mock.patch("cephadm.port_in_use", return_value=False)
+@mock.patch("cephadm.CephadmAgent.pull_conf_settings")
+def test_agent_run_exits_if_listener_stops(_pull_conf_settings, _port_in_use,
+                                           _gatherer_start, _listener_start, _listener_setup,
+                                           _is_alive, _load_verify_locations):
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        agent.mgr_listener.error = 'boom'
+        with pytest.raises(_cephadm.Error, match='Agent listener stopped: boom'):
+            agent.run()
 
 
 @mock.patch("cephadm.CephadmAgent._get_ls")
