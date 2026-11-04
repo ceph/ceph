@@ -68,3 +68,8 @@
 .. confval:: mds_symlink_recovery
 .. confval:: mds_extraordinary_events_dump_interval
 .. confval:: subv_metrics_window_interval
+.. confval:: mds_session_blocklist_on_evict
+.. confval:: mds_enable_op_tracker
+.. confval:: mds_op_complaint_time
+.. confval:: mds_op_history_size
+.. confval:: mds_op_history_duration
