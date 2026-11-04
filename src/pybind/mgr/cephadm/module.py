@@ -2965,6 +2965,24 @@ Then run the following:
 
     @handle_orch_error
     @host_exists()
+    def get_nvme_device_info(self, host: str, device_path: str) -> Dict[str, Any]:
+        """Describe one NVMe namespace on a host.
+
+        Returns the PCI ids, the namespace id and both Identify structures as
+        hex, exactly as `cephadm nvme-info` reported them. Nothing is
+        interpreted here; a caller that needs a field reads it out of the
+        Identify data itself.
+
+        :param host: (str) host name
+        :param device_path: (str) NVMe namespace path, e.g. /dev/nvme0n1
+        """
+        with self.async_timeout_handler(host, f'cephadm nvme-info {device_path}'):
+            return self.wait_async(CephadmServe(self)._run_cephadm_json(
+                host, cephadmNoImage, 'nvme-info',
+                ['--device', device_path], no_fsid=True))
+
+    @handle_orch_error
+    @host_exists()
     def rescan_host(self, hostname: str) -> str:
         """Use cephadm to issue a disk rescan on each HBA
 

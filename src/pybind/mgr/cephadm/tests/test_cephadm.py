@@ -1659,6 +1659,59 @@ class TestCephadm(object):
             assert cephadm_module.cache.osdspec_needs_apply('test', spec)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_get_nvme_device_info_returns_what_the_binary_reported(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        described = {
+            'device': '/dev/nvme0n1', 'pci_vendor': '0x1014',
+            'pci_device': '0x0634', 'nsid': 1,
+            'identify_controller': 'ab' * 4096,
+            'identify_namespace': 'cd' * 4096,
+        }
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            _run_cephadm.side_effect = async_side_effect(
+                ([json.dumps(described)], '', 0))
+            assert wait(cephadm_module, cephadm_module.get_nvme_device_info(
+                'test', '/dev/nvme0n1')) == described
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_get_nvme_device_info_invokes_nvme_info_without_an_fsid(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect((['{}'], '', 0))
+        with with_host(cephadm_module, 'test'):
+            _run_cephadm.reset_mock()
+            _run_cephadm.side_effect = async_side_effect((['{}'], '', 0))
+            wait(cephadm_module, cephadm_module.get_nvme_device_info(
+                'test', '/dev/nvme1n2'))
+        call = next(c for c in _run_cephadm.mock_calls if 'nvme-info' in str(c))
+        assert call.args[2] == 'nvme-info'
+        assert call.args[3] == ['--device', '/dev/nvme1n2']
+        assert call.kwargs['no_fsid'] is True
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_get_nvme_device_info_surfaces_unparseable_output(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        # A caller decides what a drive is from the Identify data, so a probe
+        # that could not be read has to raise rather than return something the
+        # caller might take as a definite answer about the hardware.
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            _run_cephadm.side_effect = async_side_effect((['not json'], '', 0))
+            with pytest.raises(OrchestratorError):
+                wait(cephadm_module, cephadm_module.get_nvme_device_info(
+                    'test', '/dev/nvme0n1'))
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_get_nvme_device_info_surfaces_a_non_zero_exit(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            _run_cephadm.side_effect = async_side_effect(([''], 'not a namespace', 1))
+            with pytest.raises(OrchestratorError):
+                wait(cephadm_module, cephadm_module.get_nvme_device_info(
+                    'test', '/dev/sda'))
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_osd_other_host_failures_stay_unsurfaced(
             self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         # only device-constraint errors are escalated; existing behaviour for
