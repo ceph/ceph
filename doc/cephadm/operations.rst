@@ -656,6 +656,42 @@ You can disable this health warning by running the following command:
   ceph config set mgr mgr/cephadm/warn_on_failed_host_check false
 
 
+.. _cephadm-agent-unreachable:
+
+``CEPHADM_AGENT_UNREACHABLE``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This check applies only when the cephadm agent is enabled
+(``mgr/cephadm/use_agent`` is ``true``). It indicates that the agent on one or
+more hosts is still sending metadata to the manager, but the manager cannot
+connect to the agent's listener port. The manager uses that connection to ask
+the agent for fresh metadata and to push configuration changes, so until the
+agent can be reached again the metadata cached for the host may be out of date.
+
+An agent is reported after several consecutive failed connection attempts.
+Agents that were deployed or reconfigured in the last few minutes are not
+reported, because their listener may still be starting. Agents that have
+stopped reporting altogether are reported by ``CEPHADM_AGENT_DOWN`` instead.
+
+While an agent cannot be reached, the manager retries the connection less and
+less often, up to once every 10 minutes.
+
+To see which hosts are affected and the last connection error for each, run
+the following command:
+
+.. prompt:: bash #
+
+  ceph health detail
+
+Common causes are a firewall that blocks the agent's port, or an agent whose
+listener failed to start. To redeploy the agent on an affected host, run the
+following command:
+
+.. prompt:: bash #
+
+  ceph orch daemon redeploy agent.<hostname>
+
+
 Cluster Configuration Checks
 ----------------------------
 

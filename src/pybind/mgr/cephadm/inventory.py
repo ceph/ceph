@@ -50,6 +50,9 @@ AGENT_MSG_BACKOFF_MAX = 600
 # Number of consecutive failed mgr->agent messages after which the agent is
 # considered unreachable.
 AGENT_UNREACHABLE_FAILURES = 3
+# Minimum time after an agent is (re)deployed before it can be reported as
+# unreachable. Its listener may still be starting.
+AGENT_UNREACHABLE_GRACE = 120
 
 
 def _monotonic() -> float:
@@ -2102,6 +2105,8 @@ class AgentReachability():
         self.first_failure: Optional[datetime.datetime] = None
         self.last_failure: Optional[datetime.datetime] = None
         self.last_success: Optional[datetime.datetime] = None
+        # last successful SSH deploy/reconfig seen by this mgr
+        self.deployed_at: Optional[datetime.datetime] = None
         # _monotonic() before which no message is sent to the agent
         self.retry_after = 0.0
 
@@ -2242,12 +2247,11 @@ class AgentCache():
         failure totals for reporting.
         """
         with self._reachability_lock:
-            r = self.agent_reachability.get(host)
-            if r is None:
-                return
+            r = self.agent_reachability.setdefault(host, AgentReachability())
             r.consecutive_failures = 0
             r.first_failure = None
             r.retry_after = 0.0
+            r.deployed_at = datetime_now()
 
     def agent_message_allowed(self, host: str) -> bool:
         """False while we are backing off after failed messages to this agent."""

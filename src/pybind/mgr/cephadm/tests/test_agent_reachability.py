@@ -1,6 +1,10 @@
+import datetime
 from unittest import mock
 
 import pytest
+
+from ceph.utils import datetime_now
+from orchestrator import DaemonDescription
 
 from cephadm.agent import AgentMessageThread, CephadmAgentHelpers, HostData
 from cephadm.inventory import (
@@ -186,3 +190,91 @@ class TestAgentMessageThread:
             self._thread(cephadm_module).run()
         assert cephadm_module.agent_cache.get_agent_reachability('host1') is None
         assert not cephadm_module.agent_cache.messaging_agent('host1')
+
+
+class TestAgentUnreachableHealth:
+
+    HC = 'CEPHADM_AGENT_UNREACHABLE'
+
+    @pytest.fixture()
+    def agent_host(self, cephadm_module: CephadmOrchestrator, clock: _Clock):
+        with mock.patch('cephadm.serve.CephadmServe._run_cephadm', _run_cephadm('[]')), \
+                with_host(cephadm_module, 'test', refresh_hosts=False):
+            cephadm_module.use_agent = True
+            cephadm_module.agent_cache.agent_ports['test'] = 4721
+            cephadm_module.cache.add_daemon('test', DaemonDescription(
+                'agent', 'test', 'test',
+                last_deployed=datetime_now() - datetime.timedelta(hours=1)))
+            yield 'test'
+            cephadm_module.use_agent = False
+
+    def _fail(self, m: CephadmOrchestrator, host: str, n: int = AGENT_UNREACHABLE_FAILURES) -> None:
+        for _ in range(n):
+            m.agent_cache.record_agent_message_failure(host, 'connection refused')
+
+    def test_raised_after_threshold(self, cephadm_module: CephadmOrchestrator, agent_host: str) -> None:
+        helpers = cephadm_module.agent_helpers
+        self._fail(cephadm_module, agent_host, AGENT_UNREACHABLE_FAILURES - 1)
+        assert helpers._update_agent_unreachable_healthcheck([]) == []
+        assert self.HC not in cephadm_module.health_checks
+
+        self._fail(cephadm_module, agent_host, 1)
+        assert helpers._update_agent_unreachable_healthcheck([]) == [agent_host]
+        hc = cephadm_module.health_checks[self.HC]
+        assert hc['count'] == 1
+        assert 'host test (port 4721)' in hc['detail'][0]
+        assert 'connection refused' in hc['detail'][0]
+
+        cephadm_module.agent_cache.record_agent_message_success(agent_host)
+        assert helpers._update_agent_unreachable_healthcheck([]) == []
+        assert self.HC not in cephadm_module.health_checks
+
+    def test_not_pushed_again_when_unchanged(
+            self, cephadm_module: CephadmOrchestrator, agent_host: str) -> None:
+        self._fail(cephadm_module, agent_host)
+        with mock.patch.object(cephadm_module, 'set_health_checks') as set_hc:
+            cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([])
+            self._fail(cephadm_module, agent_host)
+            cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([])
+            assert set_hc.call_count == 1
+
+    def test_grace_after_deploy(self, cephadm_module: CephadmOrchestrator, agent_host: str) -> None:
+        cephadm_module.agent_cache.record_agent_deployed(agent_host)
+        self._fail(cephadm_module, agent_host)
+        assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([]) == []
+
+        r = cephadm_module.agent_cache.agent_reachability[agent_host]
+        assert r.deployed_at is not None
+        r.deployed_at -= datetime.timedelta(
+            seconds=cephadm_module.agent_helpers._agent_unreachable_grace() + 1)
+        assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([]) == [agent_host]
+
+    def test_grace_from_daemon_last_deployed(
+            self, cephadm_module: CephadmOrchestrator, agent_host: str) -> None:
+        # e.g. after a mgr failover: no in-memory deploy time
+        dd = cephadm_module.cache.get_daemons_by_type('agent', host=agent_host)[0]
+        dd.last_deployed = datetime_now()
+        self._fail(cephadm_module, agent_host)
+        assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([]) == []
+
+    def test_down_agents_are_not_reported(
+            self, cephadm_module: CephadmOrchestrator, agent_host: str) -> None:
+        self._fail(cephadm_module, agent_host)
+        assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([agent_host]) == []
+
+    def test_offline_and_draining_hosts_are_not_reported(
+            self, cephadm_module: CephadmOrchestrator, agent_host: str) -> None:
+        self._fail(cephadm_module, agent_host)
+        cephadm_module.offline_hosts.add(agent_host)
+        assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([]) == []
+        cephadm_module.offline_hosts.discard(agent_host)
+        with mock.patch.object(cephadm_module.cache, 'is_host_draining', return_value=True):
+            assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([]) == []
+
+    def test_cleared_when_agent_disabled(
+            self, cephadm_module: CephadmOrchestrator, agent_host: str) -> None:
+        self._fail(cephadm_module, agent_host)
+        assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([])
+        cephadm_module.use_agent = False
+        assert cephadm_module.agent_helpers._update_agent_unreachable_healthcheck([]) == []
+        assert self.HC not in cephadm_module.health_checks

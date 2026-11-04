@@ -7,7 +7,7 @@ import time
 
 from orchestrator import DaemonDescriptionStatus, OrchestratorError
 from orchestrator._interface import daemon_type_to_service
-from ceph.utils import datetime_now, http_req
+from ceph.utils import datetime_now, datetime_to_str, http_req
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, CertificateSource
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
@@ -16,6 +16,7 @@ from mgr_util import verify_tls_files
 import tempfile
 from cephadm.services.service_registry import service_registry
 from cephadm.services.agent import CephadmAgent
+from cephadm.inventory import AGENT_UNREACHABLE_GRACE
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 
@@ -978,6 +979,69 @@ class CephadmAgentHelpers:
                 count=len(down_agent_hosts),
                 detail=detail,
             )
+
+    def _agent_unreachable_grace(self) -> float:
+        """Seconds after a (re)deploy during which an agent is not reported unreachable."""
+        down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
+        return max(float(AGENT_UNREACHABLE_GRACE), down_mult * float(self.mgr.agent_refresh_rate))
+
+    def _unreachable_agent_hosts(self, exclude: Set[str]) -> List[str]:
+        """
+        Hosts whose agent the mgr can't reach (see AgentCache.agent_unreachable),
+        skipping:
+        - hosts in `exclude` (the agents already reported down);
+        - offline, maintenance and draining hosts, and hosts without an agent;
+        - agents (re)deployed less than the grace period ago.
+        """
+        if not self.mgr.use_agent:
+            return []
+        now = datetime_now()
+        grace = self._agent_unreachable_grace()
+        skip = exclude | {h.hostname for h in self.mgr.cache.get_unreachable_hosts()}
+        res: List[str] = []
+        for host in self.mgr.cache.get_hosts():
+            if host in skip or self.mgr.cache.is_host_draining(host):
+                continue
+            if not self.mgr.agent_cache.agent_unreachable(host):
+                continue
+            agents = self.mgr.cache.get_daemons_by_type(CephadmAgent.TYPE, host=host)
+            if not agents:
+                continue
+            r = self.mgr.agent_cache.get_agent_reachability(host)
+            deployed = [d for d in [r.deployed_at if r else None, agents[0].last_deployed] if d]
+            if deployed and (now - max(deployed)).total_seconds() < grace:
+                continue
+            res.append(host)
+        return res
+
+    def _update_agent_unreachable_healthcheck(self, down_agent_hosts: List[str]) -> List[str]:
+        """
+        Raise CEPHADM_AGENT_UNREACHABLE for agents that report to the mgr but
+        that the mgr can't reach. Agents that don't report at all are covered
+        by CEPHADM_AGENT_DOWN. Returns the unreachable hosts.
+        """
+        name = 'CEPHADM_AGENT_UNREACHABLE'
+        hosts = self._unreachable_agent_hosts(set(down_agent_hosts))
+        if not hosts:
+            self.mgr.remove_health_warning(name)
+            return hosts
+        detail: List[str] = []
+        for host in sorted(hosts):
+            r = self.mgr.agent_cache.get_agent_reachability(host)
+            assert r is not None
+            port = self.mgr.agent_cache.agent_ports.get(host)
+            since = datetime_to_str(r.first_failure) if r.first_failure else 'unknown'
+            detail.append(
+                f'Cephadm agent on host {host} (port {port}) is reporting but cannot '
+                f'be reached by the mgr since {since}. Last error: {r.last_error}')
+        summary = (f'{len(hosts)} Cephadm agent(s) are reporting but cannot be '
+                   'reached by the mgr')
+        check = {'severity': 'warning', 'summary': summary, 'count': len(hosts), 'detail': detail}
+        # the detail only changes when the set of hosts or their errors
+        # change; don't push identical health checks on every pass
+        if self.mgr.health_checks.get(name) != check:
+            self.mgr.set_health_warning(name, summary=summary, count=len(hosts), detail=detail)
+        return hosts
 
     # this function probably seems very unnecessary, but it makes it considerably easier
     # to get the unit tests working. All unit tests that check which daemons were deployed
