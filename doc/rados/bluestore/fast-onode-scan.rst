@@ -44,7 +44,7 @@ Crash recovery
 ==============
 
 If BlueStore was not shut down gracefully there will be no updated file from which to read allocator state.
-Since RADOS objects are then the only only source of truth regarding underlying device usage,
+Since RADOS objects are then the only source of truth regarding underlying device usage,
 the recovery procedure must iterate over all RADOS objects in order to determine used vs
 available device blocks.
 
