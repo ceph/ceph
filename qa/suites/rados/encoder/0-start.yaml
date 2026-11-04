@@ -1,3 +1,10 @@
+teuthology:
+  postmerge:
+    - |
+      if yaml.os_type == "rocky" then
+        log.debug("not testing on rocky: https://tracker.ceph.com/issues/80294")
+        reject()
+      end
 roles:
 - - mon.a
   - mgr.x
