@@ -721,6 +721,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.ssh_user: Optional[str] = None
             self._ssh_options: Optional[str] = None
             self.tkey = NamedTemporaryFile()
+            self.ssh_keypairs: List['asyncssh.SSHKeyPair'] = []
             self.ssh_config_fname: Optional[str] = None
             self.ssh_config: Optional[str] = None
             self._temp_files: List = []
