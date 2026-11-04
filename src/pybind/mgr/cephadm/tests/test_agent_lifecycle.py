@@ -232,3 +232,77 @@ class TestAgentApplyAndRemove:
         cephadm_module.use_agent = False
         assert wait(cephadm_module, cephadm_module.remove_service('agent')) == 'Removed service agent'
         assert 'agent' in store.spec_deleted
+
+
+class TestUseAgentWaiting:
+
+    def _setup(self, m: CephadmOrchestrator, hosts, agent_hosts, reported_hosts):
+        m.use_agent = True
+        m.spec_store.save(CephadmAgentHelpers.agent_spec())
+        for h in hosts:
+            m.cache.metadata_up_to_date[h] = False
+        for h in reported_hosts:
+            m.agent_cache.agent_ports[h] = 4721
+        agents = [DaemonDescription(daemon_type='agent', daemon_id=h, hostname=h)
+                  for h in agent_hosts]
+        m.http_server.agent = mock.MagicMock(server_port=7150)
+        return (
+            mock.patch.object(m.cache, 'get_hosts', return_value=list(hosts)),
+            mock.patch.object(m.cache, 'get_unreachable_hosts', return_value=[]),
+            mock.patch.object(m.cache, 'get_daemons_by_type', return_value=agents),
+        )
+
+    def test_not_waiting(self, cephadm_module: CephadmOrchestrator):
+        cephadm_module.use_agent = False
+        assert cephadm_module.agent_helpers.use_agent_waiting_reason() is None
+        cephadm_module.use_agent = True
+        with mock.patch.object(cephadm_module.cache, 'get_hosts', return_value=['h1']):
+            cephadm_module.cache.metadata_up_to_date['h1'] = True
+            assert cephadm_module.agent_helpers.use_agent_waiting_reason() is None
+        cephadm_module.use_agent = False
+
+    def test_waiting_reason_by_host(self, cephadm_module: CephadmOrchestrator):
+        m = cephadm_module
+        p1, p2, p3 = self._setup(m, ['h1', 'h2', 'h3'], agent_hosts=['h2', 'h3'],
+                                 reported_hosts=['h3'])
+        with p1, p2, p3:
+            msg = m.agent_helpers.use_agent_waiting_reason()
+        assert msg is not None
+        assert 'Waiting for 3 host(s)' in msg
+        assert '1 without an agent daemon (h1)' in msg
+        assert '1 with no report from their agent yet (h2)' in msg
+        assert '1 waiting for their agent to acknowledge the latest request (h3)' in msg
+        assert 'Blocked' not in msg
+        m.use_agent = False
+
+    def test_waiting_reason_caps_host_list_and_shows_blockers(self, cephadm_module: CephadmOrchestrator):
+        m = cephadm_module
+        hosts = [f'h{i}' for i in range(8)]
+        p1, p2, p3 = self._setup(m, hosts, agent_hosts=[], reported_hosts=[])
+        spec = CephadmAgentHelpers.agent_spec()
+        spec.unmanaged = True
+        m.spec_store.save(spec)
+        m.http_server.agent = None
+        with p1, p2, p3:
+            msg = m.agent_helpers.use_agent_waiting_reason()
+        assert msg is not None
+        assert '8 without an agent daemon (h0, h1, h2, h3, h4, and 3 more)' in msg
+        assert 'the agent service is unmanaged' in msg
+        assert 'the cephadm agent endpoint is not ready yet' in msg
+        m.use_agent = False
+
+    def test_report_logs_on_change_and_adds_event(self, cephadm_module: CephadmOrchestrator):
+        m = cephadm_module
+        p1, p2, p3 = self._setup(m, ['h1'], agent_hosts=[], reported_hosts=[])
+        with p1, p2, p3, mock.patch.object(m.log, 'info') as info:
+            m.agent_helpers.report_use_agent_waiting()
+            m.agent_helpers.report_use_agent_waiting()
+            assert info.call_count == 1
+            events = m.events.get_for_service('agent')
+            assert any('without an agent daemon (h1)' in e.message for e in events)
+
+            m.cache.metadata_up_to_date['h1'] = True
+            m.agent_helpers.report_use_agent_waiting()
+            assert info.call_count == 2
+            assert 'applying all services' in info.call_args.args[0]
+        m.use_agent = False

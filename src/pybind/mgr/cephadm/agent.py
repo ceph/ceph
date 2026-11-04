@@ -6,7 +6,7 @@ import ssl
 import threading
 import time
 
-from orchestrator import DaemonDescriptionStatus, OrchestratorError
+from orchestrator import DaemonDescriptionStatus, OrchestratorError, OrchestratorEvent
 from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now, http_req
 from ceph.deployment.inventory import Devices
@@ -1098,9 +1098,13 @@ class AgentMessageThread(threading.Thread):
 
 
 class CephadmAgentHelpers:
+    # max hostnames listed per category in the use_agent waiting message
+    WAITING_MAX_HOSTS = 5
+
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.agent = mgr.http_server.agent
+        self._last_waiting_msg: Optional[str] = None
 
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         stats = getattr(self.mgr, 'agent_metadata_stats', None)
@@ -1221,6 +1225,83 @@ class CephadmAgentHelpers:
             'setting. The applied spec was replaced with the default agent spec '
             '(all hosts, cephadm-signed TLS); other settings are ignored.'
         )
+
+    def use_agent_waiting_reason(self) -> Optional[str]:
+        """
+        With use_agent=true, the serve loop applies only the agent spec until
+        every reachable host has sent up-to-date metadata. Say what it is
+        waiting for, by host, or return None if it is not waiting.
+        """
+        if not self.mgr.use_agent:
+            return None
+        cache = self.mgr.cache
+        unreachable = {h.hostname for h in cache.get_unreachable_hosts()}
+        waiting = [h for h in cache.get_hosts()
+                   if h not in unreachable and not cache.host_metadata_up_to_date(h)]
+        if not waiting:
+            return None
+
+        spec = self.mgr.spec_store.active_specs.get(CephadmAgent.TYPE)
+        blockers: List[str] = []
+        if spec is None:
+            blockers.append('the agent service is being (re)created')
+        elif spec.unmanaged:
+            blockers.append(
+                "the agent service is unmanaged, so agents are not deployed "
+                "(run 'ceph orch set-managed agent')")
+        endpoint = self.mgr.http_server.agent
+        if not endpoint or not endpoint.server_port:
+            blockers.append('the cephadm agent endpoint is not ready yet')
+
+        agent_hosts = {dd.hostname for dd in cache.get_daemons_by_type(CephadmAgent.TYPE)}
+        categories: Dict[str, List[str]] = {
+            'without an agent daemon': [],
+            'with no report from their agent yet': [],
+            'waiting for their agent to acknowledge the latest request': [],
+        }
+        for h in sorted(waiting):
+            if h not in agent_hosts:
+                categories['without an agent daemon'].append(h)
+            elif h not in self.mgr.agent_cache.agent_ports:
+                categories['with no report from their agent yet'].append(h)
+            else:
+                categories['waiting for their agent to acknowledge the latest request'].append(h)
+
+        def _hosts(hosts: List[str]) -> str:
+            shown = ', '.join(hosts[:self.WAITING_MAX_HOSTS])
+            more = len(hosts) - self.WAITING_MAX_HOSTS
+            return f'{shown}, and {more} more' if more > 0 else shown
+
+        parts = [f'{len(hosts)} {what} ({_hosts(hosts)})'
+                 for what, hosts in categories.items() if hosts]
+        msg = (f'use_agent: other services are not applied until all hosts report '
+               f'up-to-date metadata. Waiting for {len(waiting)} host(s): '
+               + '; '.join(parts))
+        if blockers:
+            msg += '. Blocked because ' + '; '.join(blockers)
+        return msg
+
+    def report_use_agent_waiting(self) -> None:
+        """
+        Log the waiting reason at INFO when it changes (DEBUG otherwise) and
+        record it as an event on the agent service, visible with
+        'ceph orch ls agent --format yaml'.
+        """
+        msg = self.use_agent_waiting_reason()
+        if msg is None:
+            if self._last_waiting_msg is not None:
+                self.mgr.log.info('use_agent: all hosts have up-to-date metadata, '
+                                  'applying all services')
+                self._last_waiting_msg = None
+            return
+        if msg != self._last_waiting_msg:
+            self.mgr.log.info(msg)
+            self._last_waiting_msg = msg
+        else:
+            self.mgr.log.debug(msg)
+        spec = self.mgr.spec_store.active_specs.get(CephadmAgent.TYPE)
+        if spec is not None:
+            self.mgr.events.for_service(spec, OrchestratorEvent.INFO, msg)
 
     def check_agent_service_remove(self) -> None:
         """
