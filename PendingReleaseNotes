@@ -10,6 +10,9 @@
   ``rbd trash purge schedule add`` commands now accept a ``w`` suffix to
   specify the schedule interval in weeks (e.g. ``2w``), in addition to the
   existing ``d``, ``h``, and ``m`` suffixes.
+* RGW: Swift API ``401 Unauthorized`` responses now include a
+  ``WWW-Authenticate`` header (``Swift realm=…``, and ``Keystone uri=…`` when
+  Keystone is configured), matching OpenStack Swift and RFC 9110.
 
 * Cephadm: ``ceph orch upgrade start`` and ``ceph orch upgrade check`` now
   verify that every host's CPU supports the x86-64 microarchitecture level
