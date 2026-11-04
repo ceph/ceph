@@ -1111,6 +1111,10 @@ TEST_P(seastore_test_t, stat_nonexistent)
 {
   run_async([this] {
     auto st = sharded_seastore->stat(coll, make_oid(99)).handle_error(
+      crimson::ct_error::enoent::handle([] {
+        struct stat empty = {};
+        return seastar::make_ready_future<struct stat>(empty);
+      }),
       crimson::ct_error::assert_all("stat failed in stat_nonexistent")
     ).get();
     EXPECT_EQ(st.st_size, 0);
@@ -1799,6 +1803,17 @@ TEST_P(seastore_test_t, zero)
 }
 
 #include "crimson/os/seastore/omap_manager/log/log_node.h"
+TEST_P(seastore_test_t, repeated_set_alloc_hint_log_is_idempotent)
+{
+  run_async([this] {
+    auto &obj = get_object(make_oid(2001));
+    obj.touch(*sharded_seastore);
+    obj.set_log_object(*sharded_seastore);
+    obj.set_log_object(*sharded_seastore);
+    obj.set_log_object(*sharded_seastore);
+  });
+}
+
 TEST_P(seastore_test_t, pgmeta_io)
 {
   run_async([this] {
