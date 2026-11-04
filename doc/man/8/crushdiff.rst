@@ -19,12 +19,12 @@ Description
 ===========
 
 **crushdiff** is a utility that lets you test the effect of a crushmap
-change: number of pgs, objects, bytes moved. This is a wrapper around
+change: number of PGs, objects, bytes moved. This is a wrapper around
 :doc:`osdmaptool <osdmaptool>`\(8), relying on its **--test-map-pgs-dump**
-option to get the list of changed pgs. Additionally it uses pg stats
+option to get the list of changed PGs. Additionally, it uses PG stats
 to calculate the numbers of objects and bytes moved.
 
-By default, **crushdiff** will use the cluster current osdmap and pg
+By default, **crushdiff** will use the cluster's current osdmap and PG
 stats, which requires access to the cluster. Though one can use the
 **--osdmap** and **--pg-dump** options to test against previously
 obtained data.
@@ -34,19 +34,19 @@ Options
 
 .. option:: --compiled
 
-   The input/output crushmap is compiled. If the options is not
-   specified the expected/returned crushmap is in txt (decompiled)
+   The input/output CRUSH map is compiled. If the option is not
+   specified, the expected/returned CRUSH map is in txt (decompiled)
    format.
 
 .. option:: --pg-dump <pg-dump>
 
-   JSON output of **ceph pg dump**. If not specified **crushdiff**
-   will try to get data running the command itself.
+   JSON output of **ceph pg dump**. If not specified, **crushdiff**
+   will try to get data by running the command itself.
 
 .. option:: --osdmap <osdmap>
 
    The cluster osdmap, obtained with **ceph osd getmap** command. If
-   not specified **crushdiff** will try to get data running the
+   not specified, **crushdiff** will try to get data by running the
    command itself.
 
 .. option:: --verbose
@@ -58,7 +58,7 @@ Commands
 
 :command:`compare` *crushmap*
   Compare the crushmap from *crushmap* file with the crushmap from
-  the cluster osdmap. The output will show the expected number of pgs,
+  the cluster osdmap. The output will show the expected number of PGs,
   objects, bytes moved when the new crushmap is installed.
 
 :command:`export` *crushmap*
@@ -89,13 +89,13 @@ Check the result::
         730.52Mi/10.55Gi (6.76%) bytes to move
 
 When running with **--verbose** option the output will also contain
-detailed information about the affected pgs, like below::
+detailed information about the affected PGs, like below::
 
         4.3	[0, 2, 1] -> [1, 4, 2]
         4.b	[0, 1, 3] -> [2, 1, 3]
         4.c	[4, 0, 1] -> [4, 1, 2]
 
-i.e. a pg number, and its old and the new osd active sets.
+i.e. a PG number, and its old and the new OSD active sets.
 
 If the result is satisfactory install the updated map::
 
@@ -115,4 +115,4 @@ See also
 
 :doc:`ceph <ceph>`\(8),
 :doc:`crushtool <crushtool>`\(8),
-:doc:`osdmaptool <osdmaptool>`\(8),
+:doc:`osdmaptool <osdmaptool>`\(8)
