@@ -464,6 +464,7 @@ public:
       internal_context_t &ctx,
       const coll_t& cid);
 
+    std::map<coll_t, boost::intrusive_ptr<SeastoreCollection>> coll_map;
     boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
 
     static constexpr auto LAT_MAX = static_cast<std::size_t>(op_type_t::MAX);
