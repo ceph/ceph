@@ -185,4 +185,11 @@ struct ECListener {
     const eversion_t &applied_version) = 0;
 
   virtual std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) = 0;
+  /**
+   * Called once a sub-write's transaction (including backfill/async-recovery
+   * sub-writes) is actually durable in the local object store, so a scrub
+   * chunk scan waiting on this version can safely proceed.  No-op by
+   * default; only crimson's scrub state machine needs this signal.
+   */
+  virtual void on_sub_write_applied(const eversion_t &at_version) {}
 };
