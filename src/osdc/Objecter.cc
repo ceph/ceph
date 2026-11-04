@@ -1266,6 +1266,15 @@ void Objecter::_scan_requests(
       force_resend_writes = force_resend_writes ||
 	(*pool_full_map)[op->target.base_oloc.pool];
     int r = _calc_target(&op->target);
+    if (r != RECALC_OP_TARGET_POOL_DNE && r != RECALC_OP_TARGET_POOL_EIO) {
+      // an op submitted before the first map, whose release the client
+      // learns only now, goes out with no descriptors below the delivery
+      // release: a write of it that pulls fails instead, before it is sent
+      if (const int pr = _rdma_pull_error(op); pr < 0) {
+	_check_op_pull_refused(op, pr, &sl);
+	continue;
+      }
+    }
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       if (!skipped_map && !(force_resend_writes && op->target.respects_full()))
@@ -1795,6 +1804,36 @@ void Objecter::_check_op_pool_eio(Op *op, std::unique_lock<std::shared_mutex> *s
   } else {
     _finish_op(op, 0);	// no session
   }
+}
+
+int Objecter::_rdma_pull_error(const Op *op) const
+{
+  // rwlock is locked
+  if (rdma_pull_malformed(op)) {
+    return -EINVAL;
+  }
+  if (osdmap->get_epoch() &&
+      rdma_pull_refused(op, osdmap->require_osd_release)) {
+    return -EOPNOTSUPP;
+  }
+  return 0;
+}
+
+void Objecter::_check_op_pull_refused(Op *op, int r,
+				      std::unique_lock<std::shared_mutex> *sl)
+{
+  // rwlock is locked unique, and op's session lock in *sl
+  ldout(cct, 10) << __func__ << " tid " << op->tid << " pulls a write's"
+		 << " payload that no OSD can pull: " << cpp_strerror(r)
+		 << dendl;
+  ceph_assert(sl->owns_lock() && sl->mutex() == &op->session->lock);
+  deliver_rdma_unsent(op);
+  if (op->has_completion()) {
+    num_in_flight--;
+    op->complete(osdcode(r), r, service.get_executor());
+  }
+  _op_cancel_map_check(op);
+  _finish_op(op, r);
 }
 
 void Objecter::_send_op_map_check(Op *op)
@@ -2502,6 +2541,17 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
       _session_op_remove(op->session, op);
       sl.unlock();
       op->split_op_tids.reset();
+      if (op->has_rdma_delivery() && !op->rdma_split_settled) {
+	// The split was an attempt: its sub-reads may have started
+	// transfers into the window. Send the retry as a resend, which
+	// the primary delivers inline and the result marks resent.
+	// When every sub-read was answered declined or landed (a replica
+	// bounced its share, say), nothing of the split can land any
+	// more, and the retry goes out as the first attempt it is.
+	op->attempts = std::max(op->attempts, 1);
+	op->rdma_history_unsettled = true;
+      }
+      op->rdma_split_settled = false;
       ceph_tid_t tid = 0;
       _op_submit(op, sul, &tid);
     }
@@ -2734,6 +2784,21 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
       _finish_unsent_op(op);
       return;
     }
+  }
+
+  // a write whose payload no OSD can pull fails here, as an OSD that
+  // cannot pull fails it, so that the caller sends its data inline. One
+  // submitted before the first map fails when the map comes
+  // (_scan_requests())
+  if (const int pr = _rdma_pull_error(op); pr < 0) {
+    ldout(cct, 10) << __func__ << " op " << op << " pulls a write's payload"
+		   << " that no OSD can pull: " << cpp_strerror(pr) << dendl;
+    deliver_rdma_unsent(op);
+    if (op->has_completion()) {
+      op->complete(osdcode(pr), pr, service.get_executor());
+    }
+    _finish_unsent_op(op);
+    return;
   }
 
   // Try to get a session, including a retry if we need to take write lock
@@ -3720,6 +3785,15 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
   if (!honor_pool_full)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
+  if (MOSDOp::wants_pull_records(op->ops, op->rdma_delivery)) {
+    // the primary keeps what it pulled for a write in the op's return
+    // data, which the reply then carries too. The PG log keeps it with
+    // the write either way, and the reply to a resend it answers as a
+    // dup reports the pull from it. Not when another op returns
+    // anything, which the flag would change
+    flags |= CEPH_OSD_FLAG_RETURNVEC;
+  }
+
   op->target.paused = false;
   op->stamp = ceph::coarse_mono_clock::now();
 
@@ -3752,6 +3826,18 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   if (op->otel_trace && op->otel_trace->IsValid()) {
      m->otel_trace = jspan_context(*op->otel_trace);
+  }
+
+  // advisory out-of-band delivery: an OSD that does not know the
+  // descriptors skips them and replies inline with no results, which
+  // reads as a transfer that may have started. A cluster below
+  // umbrella may hold such OSDs, so withhold the descriptors there;
+  // the ops' results then read declined, and the data simply returns
+  // inline, which is always correct.
+  if (auto deliveries = stamp_rdma_attempt(
+	op, rdma_delivery_sent(osdmap->require_osd_release));
+      !deliveries.empty()) {
+    m->set_rdma_deliveries(std::move(deliveries));
   }
 
   logger->inc(l_osdc_op_send);
@@ -3839,20 +3925,33 @@ void Objecter::_send_op(Op *op)
 
 int Objecter::calc_op_budget(const bc::small_vector_base<OSDOp>& ops)
 {
-  int op_budget = 0;
+  // count in 64 bits and saturate: a pulled write or a read may name
+  // any length, and a budget that wrapped negative would trip the
+  // throttle's asserts
+  constexpr uint64_t max_budget = std::numeric_limits<int>::max();
+  uint64_t op_budget = 0;
+  auto charge = [&](uint64_t bytes) {
+    op_budget += std::min(bytes, max_budget);
+  };
   for (auto i = ops.begin(); i != ops.end(); ++i) {
-    if (i->op.op & CEPH_OSD_OP_MODE_WR) {
-      op_budget += i->indata.length();
+    if ((i->op.op == CEPH_OSD_OP_WRITE || i->op.op == CEPH_OSD_OP_WRITEFULL) &&
+	i->indata.length() == 0) {
+      // a pulled write (ObjectOperation::write_pulled()) carries no
+      // data: the primary reads its bytes out of the client window, and
+      // they are in flight all the same
+      charge(i->op.extent.length);
+    } else if (i->op.op & CEPH_OSD_OP_MODE_WR) {
+      charge(i->indata.length());
     } else if (ceph_osd_op_mode_read(i->op.op)) {
       if (ceph_osd_op_uses_extent(i->op.op)) {
         if ((int64_t)i->op.extent.length > 0)
-          op_budget += (int64_t)i->op.extent.length;
+          charge(i->op.extent.length);
       } else if (ceph_osd_op_type_attr(i->op.op)) {
-        op_budget += i->op.xattr.name_len + i->op.xattr.value_len;
+        charge(uint64_t(i->op.xattr.name_len) + i->op.xattr.value_len);
       }
     }
   }
-  return op_budget;
+  return std::min(op_budget, max_budget);
 }
 
 void Objecter::_throttle_op(Op *op,
@@ -4033,6 +4132,23 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
     // have, but that is better than doing callbacks out of order.
   }
 
+  if (op->rdma_attempt_unsettled) {
+    // the reply to the attempt in flight: when every descriptor-bearing
+    // op was declined or landed, nothing of that attempt lands after
+    // this point, and a resend of it (a replica's -EAGAIN) may deliver
+    // out of band
+    const auto& oob = m->get_oob_results();
+    std::vector<uint32_t> parts;
+    for (unsigned i = 0; i < op->rdma_delivery.size(); ++i) {
+      if (!op->rdma_delivery[i].empty()) {
+	parts.push_back(i < oob.size() ? oob[i].flags : 0);
+      }
+    }
+    if (ceph::rdma::attempt_settled(parts)) {
+      op->rdma_attempt_unsettled = false;
+    }
+  }
+
   int rc = m->get_result();
 
   if (m->is_redirect_reply()) {
@@ -4125,6 +4241,10 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
 		  << " != request ops " << op->ops
 		  << " from " << m->get_source_inst() << dendl;
 
+  // per-op out-of-band delivery results, served before the per-op
+  // handlers below, which stop at out_ops.end()
+  deliver_rdma_oob_results(op, m->get_oob_results());
+
   bs::error_code handler_error = process_op_reply_handlers(op, out_ops);
 
   logger->inc(l_osdc_op_reply);
@@ -4133,6 +4253,150 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
 
   // This function unlocks sl.
   complete_op_reply(op, handler_error, s, sl, rc);
+}
+
+bool Objecter::rdma_oob_wanted(const Op *op, unsigned i)
+{
+  return op->rdma_oob_handler && i < op->rdma_oob_handler->size() &&
+    (*op->rdma_oob_handler)[i];
+}
+
+void Objecter::deliver_rdma_oob_result(Op *op, unsigned i,
+				       const ceph::rdma::oob_result_t& in)
+{
+  // An op sent more than once may have started a transfer in an earlier
+  // attempt that this result knows nothing of: say so, so that a caller
+  // fences its window before reusing it - unless every earlier attempt
+  // was answered declined or landed.
+  ceph::rdma::oob_result_t r = in;
+  if (op->attempts > 1 && !op->rdma_retry_settled) {
+    r.flags |= ceph::rdma::oob_result_t::FLAG_RESENT;
+  }
+  if (rdma_oob_wanted(op, i)) {
+    auto& handler = (*op->rdma_oob_handler)[i];
+    std::move(handler)(r);
+    handler = nullptr;
+  }
+}
+
+void Objecter::deliver_rdma_oob_results(
+  Op *op, const std::vector<ceph::rdma::oob_result_t>& oob)
+{
+  // An OSD that pushed fills oob aligned with the ops; an inline reply
+  // (old OSD, refusal, or nothing requested) carries none, which reads
+  // back as all-zero results - except for an attempt that went out
+  // without its descriptors, whose descriptor-bearing ops read
+  // declined. Every op that asked for its result is served, so a caller
+  // learns "nothing delivered" even for an op the reply left out.
+  const ceph::rdma::oob_result_t none;
+  ceph::rdma::oob_result_t withheld;
+  withheld.flags = ceph::rdma::oob_result_t::FLAG_DECLINED;
+  for (unsigned i = 0; i < op->rdma_delivery.size(); ++i) {
+    if (!rdma_oob_wanted(op, i)) {
+      continue;
+    }
+    if (op->rdma_withheld && !op->rdma_delivery[i].empty()) {
+      deliver_rdma_oob_result(op, i, withheld);
+    } else {
+      deliver_rdma_oob_result(op, i, i < oob.size() ? oob[i] : none);
+    }
+  }
+}
+
+bool Objecter::rdma_pull_refused(const Op *op,
+				 ceph_release_t require_osd_release)
+{
+  return !rdma_delivery_sent(require_osd_release) &&
+    ceph::rdma::any_pull(op->rdma_delivery);
+}
+
+bool Objecter::rdma_pull_malformed(const Op *op)
+{
+  return std::any_of(op->rdma_delivery.begin(), op->rdma_delivery.end(),
+		     [](const auto& d) {
+		       return d.empty() &&
+			 (d.flags & ceph::rdma::delivery_t::FLAG_PULL);
+		     });
+}
+
+void Objecter::deliver_rdma_unsent(Op *op)
+{
+  ceph::rdma::oob_result_t declined;
+  declined.flags = ceph::rdma::oob_result_t::FLAG_DECLINED;
+  for (unsigned i = 0; i < op->rdma_delivery.size(); ++i) {
+    deliver_rdma_oob_result(op, i, declined);
+  }
+}
+
+std::vector<ceph::rdma::delivery_t>
+Objecter::stamp_rdma_attempt(Op *op, bool send)
+{
+  std::vector<ceph::rdma::delivery_t> deliveries;
+  op->rdma_withheld = false;
+  if (!op->has_rdma_delivery()) {
+    return deliveries;
+  }
+  if (op->rdma_attempt_unsettled) {
+    // the attempt this one supersedes had no settled reply: a write
+    // of it may still land, now and for every later attempt
+    op->rdma_history_unsettled = true;
+  }
+  // a resend whose earlier attempts were all answered declined or
+  // landed, or went out without descriptors, may be delivered like a
+  // first attempt; say so
+  op->rdma_retry_settled = op->attempts > 1 && !op->rdma_history_unsettled;
+  if (!send) {
+    // nothing of this attempt goes out of band
+    op->rdma_withheld = true;
+    op->rdma_attempt_unsettled = false;
+    return deliveries;
+  }
+  ceph_assert(op->rdma_delivery.size() == op->ops.size());
+  deliveries.assign(op->rdma_delivery.begin(), op->rdma_delivery.end());
+  for (auto& d : deliveries) {
+    // only this attempt's history vouches for it, whatever the caller
+    // put in the request's flags
+    d.flags &= ~ceph::rdma::delivery_t::FLAG_PRIOR_SETTLED;
+    if (op->rdma_retry_settled && !d.empty()) {
+      d.flags |= ceph::rdma::delivery_t::FLAG_PRIOR_SETTLED;
+    }
+  }
+  op->rdma_attempt_unsettled = true;
+  return deliveries;
+}
+
+void Objecter::fan_out_rdma(const Op *op, Op *sub_op,
+			    const std::vector<int>& parent_ops,
+			    std::vector<ceph::rdma::oob_result_t>& results)
+{
+  ceph_assert(parent_ops.size() == sub_op->ops.size());
+  ceph_assert(sub_op->rdma_delivery.size() == sub_op->ops.size());
+  ceph_assert(op->rdma_delivery.size() == op->ops.size());
+  results.assign(sub_op->ops.size(), ceph::rdma::oob_result_t{});
+  // a sub-read asks for no results of its own: this replaces none
+  sub_op->rdma_oob_handler = std::make_unique<
+    std::vector<::ObjectOperation::rdma_oob_handler_t>>(sub_op->ops.size());
+  for (unsigned j = 0; j < sub_op->ops.size(); ++j) {
+    const int parent = parent_ops[j];
+    if (parent < 0 || sub_op->ops[j].op.op != CEPH_OSD_OP_READ ||
+	op->rdma_delivery[parent].empty()) {
+      continue;
+    }
+    auto d = op->rdma_delivery[parent];
+    // zero shift for EC-direct subs (they carry the parent extent)
+    d.base_offset += sub_op->ops[j].op.extent.offset -
+		     op->ops[parent].op.extent.offset;
+    // the crc request rides along unchanged: a shard OSD reports one
+    // range per chunk it placed, and the aggregate on completion folds
+    // every sub-read's ranges in window order, so interleaving across
+    // shards costs the caller nothing
+    sub_op->rdma_delivery[j] = std::move(d);
+    // the sub-read's result waits in its slot for that fold
+    (*sub_op->rdma_oob_handler)[j] =
+      [&slot = results[j]](const ceph::rdma::oob_result_t& r) {
+	slot = r;
+      };
+  }
 }
 
 void Objecter::complete_op_reply(Op *op, bs::error_code handler_error, OSDSession *s, unique_lock<std::shared_mutex> &sl, int rc) {

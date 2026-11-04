@@ -40,6 +40,9 @@ struct ECSubWriteReply;
 struct ECSubRead;
 struct ECSubReadReply;
 class ECSwitch;
+namespace ceph::osd::oob {
+struct sub_read_push;
+}
 
 class ECSwitch;
 
@@ -84,6 +87,37 @@ class ECBackend : public ECCommon {
       ECSubReadReply *reply,
       const ZTracer::Trace &trace
     );
+  /**
+   * The push of a sub-read's data into the primary's gather window (the
+   * op's push_token), once handle_sub_read() filled in reply: checks
+   * it, finds the executor, takes the data read and fixes the bounds of
+   * the transfer, from received, when the sub-read arrived on the
+   * monotonic clock (OpRequest::get_mono_recv_stamp()). Marks the
+   * reply as having sent nothing into the window, which a push that
+   * starts revises, and returns the push, or nullopt when the reply
+   * goes inline as it is. Starts no transfer.
+   */
+  std::optional<ceph::osd::oob::sub_read_push> prepare_sub_read_push(
+    const ECSubRead &op, ECSubReadReply *reply,
+    ceph::mono_clock::time_point received);
+  /**
+   * The buffer of the OSD's arena that handle_sub_read() reads op's
+   * extents into, so that a transport writes them from there with no
+   * copy (osd_oob_direct_read): for a push into the primary's gather
+   * window, and for the primary's own shard of a read whose result goes
+   * out of band (ReadOp::into_arena). *reads gets the read of each
+   * extent, in the order of op.to_read, as ceph::osd::oob::arena_layout()
+   * lays them out for the store's block size: of the whole blocks that
+   * hold it, which the store reads with no copy, and handle_sub_read()
+   * hands out the extent from them. An empty ptr when neither
+   * applies, or when no buffer is free. *mode gets the mode to read
+   * under (ceph::osd::oob::direct_read_flags()).
+   */
+  ceph::buffer::ptr sub_read_arena_buffer(
+    pg_shard_t from, const ECSubRead &op,
+    ceph::osd::oob::direct_read_t *mode,
+    std::vector<ceph::osd::oob::arena_read_t> *reads);
+
   void handle_sub_read_n_reply(
     pg_shard_t from,
     ECSubRead &op,
@@ -147,6 +181,15 @@ class ECBackend : public ECCommon {
     ceph::buffer::list *bl
   );
 
+  int objects_read_local_into(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    const struct iovec *iov,
+    int iovcnt
+  );
+
   std::pair<uint64_t, uint64_t> extent_to_shard_extent(uint64_t off, uint64_t len);
 
   int objects_readv_sync(const hobject_t &hoid,
@@ -198,7 +241,8 @@ class ECBackend : public ECCommon {
                                 std::pair<ceph::buffer::list*, Context*>>> &
       to_read,
       Context *on_complete,
-      bool fast_read = false
+      bool fast_read = false,
+      bool into_arena = false
     );
 
   bool ec_can_decode(const shard_id_set &available_shards) const;
@@ -206,6 +250,9 @@ class ECBackend : public ECCommon {
   shard_id_map<bufferlist> ec_decode_acting_set(
       const shard_id_map<bufferlist> &shard_map, int chunk_size) const;
   ECUtil::stripe_info_t ec_get_sinfo() const;
+  bool ec_supports_direct_reads() const {
+    return sinfo.supports_direct_reads();
+  }
 
  private:
   friend struct ECRecoveryHandle;

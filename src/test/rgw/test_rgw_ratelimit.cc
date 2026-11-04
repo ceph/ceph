@@ -206,6 +206,88 @@ TEST(RGWRateLimit, write_limit_does_not_affect_reads)
   delay = ratelimit.should_rate_limit("GET", key, time, &info, "");
   EXPECT_EQ(0, delay);
 }
+TEST(RGWRateLimit, reject_read_bw_charged_by_direction)
+{
+  // out-of-band bytes are charged by direction, not by method
+  std::atomic_bool replacing;
+  std::condition_variable cv;
+  RateLimiter ratelimit(g_ceph_context, replacing, cv);
+  RGWRateLimitInfo info;
+  info.enabled = true;
+  info.max_read_bytes = 1;
+  auto time = ceph::coarse_real_clock::now();
+  std::string key = "uuser123";
+  int64_t delay = ratelimit.should_rate_limit("GET", key, time, &info, "");
+  ratelimit.decrease_bytes(true, key, 2, &info);
+  time = ceph::coarse_real_clock::now();
+  delay = ratelimit.should_rate_limit("GET", key, time, &info, "");
+  EXPECT_GT(delay, 0);
+}
+TEST(RGWRateLimit, reject_write_bw_charged_by_direction)
+{
+  // likewise for writes
+  std::atomic_bool replacing;
+  std::condition_variable cv;
+  RateLimiter ratelimit(g_ceph_context, replacing, cv);
+  RGWRateLimitInfo info;
+  info.enabled = true;
+  info.max_write_bytes = 1;
+  auto time = ceph::coarse_real_clock::now();
+  std::string key = "uuser123";
+  int64_t delay = ratelimit.should_rate_limit("PUT", key, time, &info, "");
+  ratelimit.decrease_bytes(false, key, 2, &info);
+  time = ceph::coarse_real_clock::now();
+  delay = ratelimit.should_rate_limit("PUT", key, time, &info, "");
+  EXPECT_GT(delay, 0);
+}
+TEST(RGWRateLimit, read_direction_of_post_does_not_affect_writes)
+{
+  // an RC GET is a POST: its bytes count against reads, not writes,
+  // while the method overload books a POST's bytes as writes
+  std::atomic_bool replacing;
+  std::condition_variable cv;
+  RateLimiter ratelimit(g_ceph_context, replacing, cv);
+  RGWRateLimitInfo info;
+  info.enabled = true;
+  info.max_read_bytes = 1;
+  info.max_write_bytes = 1;
+  auto time = ceph::coarse_real_clock::now();
+  std::string key = "uuser123";
+  int64_t delay = ratelimit.should_rate_limit("POST", key, time, &info, "");
+  ratelimit.decrease_bytes(true, key, 10000, &info);
+  time = ceph::coarse_real_clock::now();
+  delay = ratelimit.should_rate_limit("POST", key, time, &info, "");
+  EXPECT_EQ(0, delay);
+  delay = ratelimit.should_rate_limit("GET", key, time, &info, "");
+  EXPECT_GT(delay, 0);
+
+  std::string key2 = "uuser456";
+  delay = ratelimit.should_rate_limit("POST", key2, time, &info, "");
+  ratelimit.decrease_bytes("POST", key2, 10000, &info);
+  delay = ratelimit.should_rate_limit("GET", key2, time, &info, "");
+  EXPECT_EQ(0, delay);
+  delay = ratelimit.should_rate_limit("POST", key2, time, &info, "");
+  EXPECT_GT(delay, 0);
+}
+TEST(RGWRateLimit, direction_charge_skips_disabled_limit)
+{
+  // a disabled limit is not charged
+  std::atomic_bool replacing;
+  std::condition_variable cv;
+  RateLimiter ratelimit(g_ceph_context, replacing, cv);
+  RGWRateLimitInfo info;
+  info.enabled = true;
+  info.max_read_bytes = 1;
+  RGWRateLimitInfo disabled = info;
+  disabled.enabled = false;
+  auto time = ceph::coarse_real_clock::now();
+  std::string key = "bmarker123";
+  int64_t delay = ratelimit.should_rate_limit("GET", key, time, &info, "");
+  ratelimit.decrease_bytes(true, key, 10000, &disabled);
+  time = ceph::coarse_real_clock::now();
+  delay = ratelimit.should_rate_limit("GET", key, time, &info, "");
+  EXPECT_EQ(0, delay);
+}
 
 TEST(RGWRateLimit, allow_unlimited_access)
 {

@@ -40,6 +40,7 @@
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/perf_counters.h"
+#include "global/global_context.h"
 
 #include "NVMEDevice.h"
 
@@ -140,6 +141,9 @@ class SharedDriverData {
   uint64_t get_size() {
     return size;
   }
+  const char *get_traddr() const {
+    return trid.traddr;
+  }
 };
 
 class SharedDriverQueueData {
@@ -157,7 +161,7 @@ class SharedDriverQueueData {
     uint32_t current_queue_depth = 0;
     std::atomic_ulong completed_op_seq, queue_op_seq;
     bi::slist<data_cache_buf, bi::constant_time_size<true>> data_buf_list;
-    void _aio_handle(Task *t, IOContext *ioc);
+    void _aio_handle(Task *t);
 
     SharedDriverQueueData(NVMEDevice *bdev, SharedDriverData *driver)
       : bdev(bdev),
@@ -347,7 +351,7 @@ int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
   return 0;
 }
 
-void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
+void SharedDriverQueueData::_aio_handle(Task *t)
 {
   dout(20) << __func__ << " start" << dendl;
 
@@ -356,7 +360,11 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
   uint32_t max_io_completion = (uint32_t)g_conf().get_val<uint64_t>("bluestore_spdk_max_io_completion");
   uint64_t io_sleep_in_us = g_conf().get_val<uint64_t>("bluestore_spdk_io_sleep");
 
-  while (ioc->num_running) {
+  // Run until every task is issued and the queue drains. Don't loop on
+  // the ioc's num_running: the last completion's aio callback may hand
+  // the ioc's owner to another thread that frees it. The queue is
+  // per-thread, so the I/O on it is the I/O submitted here.
+  while (t || current_queue_depth) {
  again:
     dout(40) << __func__ << " polling" << dendl;
     if (current_queue_depth) {
@@ -655,6 +663,74 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
   return 0;
 }
 
+// Log a failed completion with its raw NVMe status (SCT/SC) so it can
+// be grepped for; there is no kernel log to fall back on with SPDK.
+// End-to-end protection (PI) check failures are named explicitly: the
+// guard, application or reference tag did not match. A controller only
+// reports those when the command asks for PI checks, which ours don't
+// yet (io_flags is 0).
+static void log_io_error(Task *task, const struct spdk_nvme_cpl *completion)
+{
+  const char *op = "flush";
+  if (task->command == IOCommand::READ_COMMAND) {
+    op = "read";
+  } else if (task->command == IOCommand::WRITE_COMMAND) {
+    op = "write";
+  }
+  const char *pi = nullptr;
+  if (spdk_nvme_cpl_is_pi_error(completion)) {
+    switch (completion->status.sc) {
+    case SPDK_NVME_SC_GUARD_CHECK_ERROR:
+      pi = "PI guard check failed";
+      break;
+    case SPDK_NVME_SC_APPLICATION_TAG_CHECK_ERROR:
+      pi = "PI application tag check failed";
+      break;
+    case SPDK_NVME_SC_REFERENCE_TAG_CHECK_ERROR:
+      pi = "PI reference tag check failed";
+      break;
+    }
+  }
+  derr << "io_complete nvme " << op << " error on "
+       << task->device->get_driver()->get_traddr()
+       << " at 0x" << std::hex << task->offset << "~" << task->len
+       << ": sct 0x" << (unsigned)completion->status.sct
+       << " sc 0x" << (unsigned)completion->status.sc << std::dec
+       << " dnr " << (unsigned)completion->status.dnr
+       << " (" << spdk_nvme_cpl_get_status_string(&completion->status) << ")";
+  if (pi) {
+    *_dout << ", " << pi;
+  }
+  *_dout << dendl;
+}
+
+// An I/O error on an aio, handled as KernelDevice::_aio_thread does: an
+// IOContext that allows EIO gets -EIO, anything else (a transaction's
+// write, say) has no way to fail and aborts.
+static void aio_error(Task *task)
+{
+  IOContext *ctx = task->ctx;
+  if (ctx->allow_eio) {
+    derr << "io_complete translating the error to EIO for upper layer"
+         << dendl;
+    ctx->set_return_value(-EIO);
+    return;
+  }
+  note_io_error_event(
+    task->device->get_driver()->get_traddr(),
+    nullptr,
+    -EIO,
+    // the libaio opcode KernelDevice reports: IO_CMD_PREADV (7) or
+    // IO_CMD_PWRITEV (8); an SPDK build need not have libaio
+    task->command == IOCommand::READ_COMMAND ? 7 : 8,
+    task->offset,
+    task->len);
+  ceph_abort_msg(
+    "Unexpected IO error. "
+    "This may suggest a hardware issue. "
+    "Please check the NVMe status logged above!");
+}
+
 void io_complete(void *t, const struct spdk_nvme_cpl *completion)
 {
   Task *task = static_cast<Task*>(t);
@@ -664,10 +740,19 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
   ceph_assert(queue != NULL);
   ceph_assert(ctx != NULL);
   --queue->current_queue_depth;
+  bool error = spdk_nvme_cpl_is_error(completion);
+  if (error) {
+    log_io_error(task, completion);
+  }
   if (task->command == IOCommand::WRITE_COMMAND) {
-    ceph_assert(!spdk_nvme_cpl_is_error(completion));
-    dout(20) << __func__ << " write/zero op successfully, left "
-             << queue->queue_op_seq - queue->completed_op_seq << dendl;
+    if (error) {
+      aio_error(task);
+    } else {
+      dout(20) << __func__ << " write/zero op successfully, left "
+               << queue->queue_op_seq - queue->completed_op_seq << dendl;
+    }
+    // release_segs touches the ioc, so it goes before the callback
+    task->release_segs(queue);
     // check waiting count before doing callback (which may
     // destroy this ioc).
     if (ctx->priv) {
@@ -677,15 +762,20 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     } else {
       ctx->try_aio_wake();
     }
-    task->release_segs(queue);
     delete task;
   } else if (task->command == IOCommand::READ_COMMAND) {
-    ceph_assert(!spdk_nvme_cpl_is_error(completion));
-    dout(20) << __func__ << " read op successfully" << dendl;
-    task->fill_cb();
+    // on error the bounce buffers may hold another I/O's data; don't
+    // copy them out
+    if (!error) {
+      dout(20) << __func__ << " read op successfully" << dendl;
+      task->fill_cb();
+    }
     task->release_segs(queue);
     // read submitted by AIO
     if (!task->return_code) {
+      if (error) {
+        aio_error(task);
+      }
       if (ctx->priv) {
 	if (!--ctx->num_running) {
           task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
@@ -695,18 +785,26 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
       }
       delete task;
     } else {
+      // read()/read_random() return the error, as KernelDevice's do;
+      // once a subtask fails, the later ones must not clear it
       if (Task* primary = task->primary; primary != nullptr) {
         delete task;
-        if (!primary->ref)
+        if (error)
+          primary->return_code = -EIO;
+        else if (!primary->ref && primary->return_code > 0)
           primary->return_code = 0;
       } else {
-	  task->return_code = 0;
+	  task->return_code = error ? -EIO : 0;
       }
       --ctx->num_running;
     }
   } else {
     ceph_assert(task->command == IOCommand::FLUSH_COMMAND);
-    ceph_assert(!spdk_nvme_cpl_is_error(completion));
+    if (error) {
+      // KernelDevice::flush aborts on an fdatasync error too (nothing
+      // issues an NVMe flush today: NVMEDevice::flush is a no-op)
+      ceph_abort_msg("nvme flush failed");
+    }
     dout(20) << __func__ << " flush op successfully" << dendl;
     task->return_code = 0;
   }
@@ -821,7 +919,7 @@ void NVMEDevice::aio_submit(IOContext *ioc)
     ioc->nvme_task_first = ioc->nvme_task_last = nullptr;
 
     thread_local SharedDriverQueueData queue_t = SharedDriverQueueData(this, driver);
-    queue_t._aio_handle(t, ioc);
+    queue_t._aio_handle(t);
   }
 }
 
@@ -930,6 +1028,10 @@ int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered, int write_hin
   ceph_assert(off < size);
   ceph_assert(off + len <= size);
 
+  // no allow_eio: a write error aborts in io_complete. KernelDevice
+  // returns it instead, but BlueFS::_write_super ignores the result and
+  // would go on to release the old log the on-disk superblock still
+  // points at.
   IOContext ioc(cct, NULL);
   write_split(this, off, bl, &ioc);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
@@ -955,7 +1057,9 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   aio_submit(&read_ioc);
 
-  pbl->push_back(std::move(p));
+  if (t.return_code == 0) {
+    pbl->push_back(std::move(p));
+  }
   return t.return_code;
 }
 

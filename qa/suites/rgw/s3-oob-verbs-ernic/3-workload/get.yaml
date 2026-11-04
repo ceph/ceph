@@ -1,0 +1,11 @@
+# GETs whose data the OSDs write into the client's memory, of objects that
+# plain PUTs wrote: whole, ranged and with CRC-32C. The workunit takes the
+# provider from oob client transports, and the RDMA device from the
+# address that reaches the gateway.
+tasks:
+- workunit:
+    clients:
+      client.1:
+      - rgw/run-s3-oob.sh
+    env:
+      OOB_OPS: get

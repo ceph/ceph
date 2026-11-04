@@ -1,0 +1,12 @@
+# PUTs whose payload the OSDs pull from the client's memory, read back
+# with plain GETs.
+tasks:
+- workunit:
+    clients:
+      client.1:
+      - rgw/run-s3-oob.sh
+    env:
+      OOB_PROVIDER: uet
+      OOB_DOMAIN: rocm-rdma-ernic0
+      OOB_NODE: '-'
+      OOB_OPS: put

@@ -163,6 +163,13 @@ EOM
     if [ $WITH_CRIMSON ]; then
         cmake_opts+=" -DWITH_CRIMSON=ON"
     fi
+    # out-of-band delivery over libfabric, when WITH_OOB_OFI asks for it
+    # (ON, as for the CMake option); install-deps.sh then installs
+    # libfabric. Its unit tests run over the tcp and shm providers
+    case "${WITH_OOB_OFI:-}" in
+        ON|On|on|1|TRUE|True|true|YES|Yes|yes)
+            cmake_opts+=" -DWITH_OOB_OFI=ON" ;;
+    esac
     cmake_opts+=" -DWITH_RBD_SSD_CACHE=ON"
 
     cmake_opts+=" $(detect_ceph_dev_pkgs)"

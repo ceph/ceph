@@ -1,0 +1,29 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        # oob network and oob network interface come from the uet_host
+        # task, which reads them off the nodes' interfaces
+        oob client transports: uet
+        oob cluster transport: uet
+      osd:
+        oob memory: 512M
+        debug osd: 10
+        debug ms: 1
+      client:
+        # the gateway drops to ceph, as in production
+        setuser: ceph
+        setgroup: ceph
+        rgw rdma osd direct: true
+        debug rgw: 20
+        debug ms: 1
+    log-ignorelist:
+    - OOB_CUTOFF_LATE
+  rgw:
+    frontend: beast
+    ec-data-pool: true
+    erasure_code_profile:
+      name: uethost
+      k: 2
+      m: 1
+      crush-failure-domain: host

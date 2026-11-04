@@ -2104,6 +2104,99 @@ TEST(pool_opts_t, deep_scrub_interval) {
   EXPECT_FALSE(opts.is_set(pool_opts_t::DEEP_SCRUB_INTERVAL));
 }
 
+TEST(pg_pool_t, rdma_delivery_bounds) {
+  // an out-of-band transfer holds an op thread for up to lease plus
+  // drain, which must stay below osd_op_thread_timeout
+  EXPECT_LT(pg_pool_t::MAX_RDMA_DELIVERY_LEASE +
+	    pg_pool_t::MAX_RDMA_DELIVERY_DRAIN, 15.0);
+  EXPECT_LE(pg_pool_t::DEFAULT_RDMA_DELIVERY_LEASE,
+	    pg_pool_t::MAX_RDMA_DELIVERY_LEASE);
+  EXPECT_LE(pg_pool_t::DEFAULT_RDMA_DELIVERY_DRAIN,
+	    pg_pool_t::MAX_RDMA_DELIVERY_DRAIN);
+  EXPECT_LE(pg_pool_t::MIN_RDMA_DELIVERY_LEASE,
+	    pg_pool_t::DEFAULT_RDMA_DELIVERY_LEASE);
+  EXPECT_LE(pg_pool_t::MIN_RDMA_DELIVERY_DRAIN,
+	    pg_pool_t::DEFAULT_RDMA_DELIVERY_DRAIN);
+
+  pg_pool_t p;
+  EXPECT_EQ(pg_pool_t::DEFAULT_RDMA_DELIVERY_LEASE,
+	    p.get_rdma_delivery_lease());
+  EXPECT_EQ(pg_pool_t::DEFAULT_RDMA_DELIVERY_DRAIN,
+	    p.get_rdma_delivery_drain());
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE, 2.5);
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_DRAIN, 1.5);
+  EXPECT_EQ(2.5, p.get_rdma_delivery_lease());
+  EXPECT_EQ(1.5, p.get_rdma_delivery_drain());
+
+  // the smallest values the mon takes
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE, 0.1);
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_DRAIN, 0.5);
+  EXPECT_EQ(0.1, p.get_rdma_delivery_lease());
+  EXPECT_EQ(0.5, p.get_rdma_delivery_drain());
+
+  // a value out of the bounds, which a mon of this release rejects but a
+  // development or downstream build may store, reads as the default, as
+  // the smallest value or as the largest value
+  const double inf = std::numeric_limits<double>::infinity();
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE, nan);
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_DRAIN, -1.0);
+  EXPECT_EQ(pg_pool_t::DEFAULT_RDMA_DELIVERY_LEASE,
+	    p.get_rdma_delivery_lease());
+  EXPECT_EQ(pg_pool_t::DEFAULT_RDMA_DELIVERY_DRAIN,
+	    p.get_rdma_delivery_drain());
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE, 0.01);
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_DRAIN, 0.4);
+  EXPECT_EQ(pg_pool_t::MIN_RDMA_DELIVERY_LEASE, p.get_rdma_delivery_lease());
+  EXPECT_EQ(pg_pool_t::MIN_RDMA_DELIVERY_DRAIN, p.get_rdma_delivery_drain());
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE, inf);
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_DRAIN, 1e10);
+  EXPECT_EQ(pg_pool_t::MAX_RDMA_DELIVERY_LEASE, p.get_rdma_delivery_lease());
+  EXPECT_EQ(pg_pool_t::MAX_RDMA_DELIVERY_DRAIN, p.get_rdma_delivery_drain());
+}
+
+TEST(pg_pool_t, rdma_delivery_out_of_range) {
+  // what the pool reads otherwise than as stored, which OSDMap's
+  // health check reports: only values out of the range the mon takes
+  pg_pool_t p;
+  EXPECT_TRUE(p.rdma_delivery_out_of_range().empty());
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE, 0.1);
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_DRAIN, 4.0);
+  EXPECT_TRUE(p.rdma_delivery_out_of_range().empty());
+  // 0 restores the default
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE, 0.0);
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_DRAIN, 0.0);
+  EXPECT_TRUE(p.rdma_delivery_out_of_range().empty());
+
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE, 0.05);
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_DRAIN, 0.2);
+  auto o = p.rdma_delivery_out_of_range();
+  ASSERT_EQ(2u, o.size());
+  EXPECT_EQ("rdma_delivery_lease", o[0].name);
+  EXPECT_EQ(0.05, o[0].stored);
+  EXPECT_EQ(pg_pool_t::MIN_RDMA_DELIVERY_LEASE, o[0].used);
+  EXPECT_EQ("rdma_delivery_drain", o[1].name);
+  EXPECT_EQ(0.2, o[1].stored);
+  EXPECT_EQ(pg_pool_t::MIN_RDMA_DELIVERY_DRAIN, o[1].used);
+
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE, 2.0);
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_DRAIN, 9.0);
+  o = p.rdma_delivery_out_of_range();
+  ASSERT_EQ(1u, o.size());
+  EXPECT_EQ("rdma_delivery_drain", o[0].name);
+  EXPECT_EQ(pg_pool_t::MAX_RDMA_DELIVERY_DRAIN, o[0].used);
+
+  // a value that is no positive number reads as the default
+  p.opts.set(pool_opts_t::RDMA_DELIVERY_LEASE,
+	     std::numeric_limits<double>::quiet_NaN());
+  p.opts.unset(pool_opts_t::RDMA_DELIVERY_DRAIN);
+  o = p.rdma_delivery_out_of_range();
+  ASSERT_EQ(1u, o.size());
+  EXPECT_EQ("rdma_delivery_lease", o[0].name);
+  EXPECT_TRUE(std::isnan(o[0].stored));
+  EXPECT_EQ(pg_pool_t::DEFAULT_RDMA_DELIVERY_LEASE, o[0].used);
+}
+
 struct RequiredPredicate : IsPGRecoverablePredicate {
   unsigned required_size;
   explicit RequiredPredicate(unsigned required_size) : required_size(required_size) {}

@@ -1,0 +1,32 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        # oob network and oob network interface come from the ernic task,
+        # which reads them off the guests' ionic NICs
+        oob client transports: uet
+        oob cluster transport: uet
+      osd:
+        # each OSD has a VM of 8 GiB
+        oob memory: 512M
+        debug osd: 10
+        debug ms: 1
+      client:
+        # the gateway drops to ceph, as in production. It opens no UET
+        # endpoint here (see 1-cluster), so this does not test how it
+        # keeps CAP_NET_RAW for one
+        setuser: ceph
+        setgroup: ceph
+        rgw rdma osd direct: true
+        debug rgw: 20
+        debug ms: 1
+    log-ignorelist:
+    - OOB_CUTOFF_LATE
+  rgw:
+    frontend: beast
+    ec-data-pool: true
+    erasure_code_profile:
+      name: ernic
+      k: 2
+      m: 1
+      crush-failure-domain: host

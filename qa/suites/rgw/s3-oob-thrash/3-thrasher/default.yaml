@@ -1,0 +1,13 @@
+# at least 6 of the 8 OSDs stay in and alive, so that the PGs of an EC 4+2
+# pool stay active
+tasks:
+- thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 1
+    chance_pgnum_shrink: 1
+    chance_pgpnum_fix: 1
+    op_delay: 30
+    min_in: 6
+    min_live: 6
+    chance_test_min_size: 0
+    ceph_objectstore_tool: false

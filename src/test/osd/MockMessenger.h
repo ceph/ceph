@@ -63,6 +63,13 @@ private:
   DoutPrefixProvider *dpp = nullptr;
   
 public:
+  /**
+   * If set, called with every message as it is sent, before it is
+   * encoded, so a test can alter what the receiver gets (a fault in
+   * transit). A test that sets it clears it before it returns.
+   */
+  std::function<void(int from_osd, int to_osd, Message *m)> on_send;
+
   MockMessenger(EventLoop* loop, CephContext* cct, DoutPrefixProvider *dpp = nullptr)
     : event_loop(loop), dpp(dpp) {
     ceph_assert(event_loop != nullptr);
@@ -160,6 +167,10 @@ public:
     
     // Wrap in MessageRef to manage lifetime
     MessageRef mref(m);
+
+    if (on_send) {
+      on_send(from_osd, to_osd, m);
+    }
     
     // Capture the receiver's epoch at send time for epoch checking
     epoch_t send_epoch = 0;

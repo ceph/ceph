@@ -1,0 +1,6 @@
+# osd_oob_direct_read: how an OSD reads the data of an out-of-band read
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd oob direct read: "cached"

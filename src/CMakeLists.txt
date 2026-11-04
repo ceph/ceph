@@ -590,6 +590,39 @@ if(WITH_JAEGER)
 endif()
 
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
+# ofi-rma: libfabric RMA for out-of-band delivery, in a library of its
+# own so that clients can lend windows without building Ceph
+option(WITH_SYSTEM_OFI_RMA "build against an installed ofi-rma" OFF)
+if(WITH_OOB_OFI)
+  if(WITH_SYSTEM_OFI_RMA)
+    # 0.4 for the staging fields of config_t (stage_mem, stage_alloc)
+    # that the OSD's executor sets. A CMake install ships a package whose
+    # version file takes only the same minor version; a meson install
+    # ships only ofi-rma.pc
+    find_package(ofi_rma 0.4 QUIET)
+    if(ofi_rma_FOUND)
+      get_target_property(OFI_RMA_INCLUDE_DIRS ofi_rma::ofi_rma
+        INTERFACE_INCLUDE_DIRECTORIES)
+      set(ofi_rma_target ofi_rma::ofi_rma)
+    else()
+      find_package(PkgConfig REQUIRED)
+      pkg_check_modules(OFI_RMA REQUIRED IMPORTED_TARGET "ofi-rma>=0.4")
+      set(ofi_rma_target PkgConfig::OFI_RMA)
+    endif()
+    include_directories(SYSTEM ${OFI_RMA_INCLUDE_DIRS})
+    add_library(ofi_rma INTERFACE)
+    target_link_libraries(ofi_rma INTERFACE ${ofi_rma_target})
+  else()
+    include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/ofi-rma/include")
+    # a static library inside Ceph's, with no tests or install of its own
+    # (unittest_ofi_rma runs its tests)
+    set(OFI_RMA_SHARED OFF)
+    set(OFI_RMA_BUILD_TESTS OFF)
+    set(OFI_RMA_INSTALL OFF)
+    add_subdirectory(ofi-rma)
+  endif()
+endif()
+
 add_subdirectory(auth)
 add_subdirectory(common)
 add_subdirectory(crush)

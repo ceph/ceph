@@ -1,0 +1,19 @@
+# soft-RoCE: rdma_rxe on each host's public interface, and libfabric's
+# verbs provider (verbs;ofi_rxm) between the clients and the OSDs. The OSDs
+# take the device and GID of their public address. On soft-RoCE ofi_rxm
+# fails to create its completion queues without a small FI_UNIVERSE_SIZE;
+# the workunits set it for the clients.
+overrides:
+  ceph:
+    daemon_env:
+      FI_UNIVERSE_SIZE: 16
+    conf:
+      global:
+        oob client transports: verbs_ofi_rxm
+  rgw:
+    env:
+      FI_UNIVERSE_SIZE: 16
+  oob_check:
+    transport: provider verbs
+tasks:
+- rdma_rxe:

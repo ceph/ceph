@@ -1,0 +1,36 @@
+# Delivery faults. Each transfer waits 800 ms before it starts and 200 ms
+# before its reply, and the gateway's data pool gives a transfer a lease
+# and a drain of 1 s each, so that some transfers start too late and go
+# inline. The thrasher stops OSDs with SIGSTOP for longer than
+# osd_oob_cutoff_late_tolerance, so that their writes miss their deadlines
+# and are cut off late, which the OSDs report.
+#
+# A write that a stopped OSD had queued can land when the OSD goes on,
+# before its late cut-off (OOB_CUTOFF_PAST_TOLERANCE). The gateway and a
+# client that got a response wait for the OSD's reply, which comes after
+# the cut-off. A client whose GET failed, as when rgw_thrash kills
+# radosgw, does not: the soak's fence for it is the longest stop
+# (sigstop_max, 10 s), the data pool's lease and drain (1 s each),
+# osd_oob_cutoff_late_tolerance (1 s), and a second for the cut-off after
+# SIGCONT, 14 s after the GET ended.
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd debug oob delay post ms: 800
+        osd debug oob delay done ms: 200
+    log-ignorelist:
+      - \(OOB_CUTOFF_LATE\)
+      - \(OOB_CUTOFF_PAST_TOLERANCE\)
+      - libfabric delivery cut writes off late
+  thrashosds:
+    chance_sigstop: 1
+    sigstop_max: 10
+  workunit:
+    env:
+      SOAK_FENCE_MS: "14000"
+tasks:
+- exec:
+    client.0:
+      - sudo ceph osd pool set default.rgw.buckets.data rdma_delivery_lease 1
+      - sudo ceph osd pool set default.rgw.buckets.data rdma_delivery_drain 1

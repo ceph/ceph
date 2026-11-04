@@ -48,7 +48,7 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
         dnf_clean
     ;;
     # EL-ish, 9+
-    *~*centos*|*~fedora*|*~rocky*|*~alma*)
+    *~*centos*|*~fedora*|*~rocky*|*~alma*|*~rhel*)
         dnf install -y /usr/bin/{rpmbuild,wget,curl}
         install_container_deps
         dnf_clean

@@ -334,6 +334,14 @@ class D4NFilterWriter : public FilterWriter {
 
     virtual int prepare(optional_yield y);
     virtual int process(bufferlist&& data, uint64_t offset) override;
+    // the cache must see the object's bytes, which an OSD-direct PUT
+    // never passes through the gateway
+    virtual bool set_pulled() override { return false; }
+    virtual int process_pulled(uint64_t len, const std::string& token,
+			       uint32_t want,
+			       std::vector<PulledStripe>* stripes) override {
+      return -EOPNOTSUPP;
+    }
     virtual int complete(size_t accounted_size, const std::string& etag,
 			 ceph::real_time *mtime, ceph::real_time set_mtime,
 			 std::map<std::string, bufferlist>& attrs,

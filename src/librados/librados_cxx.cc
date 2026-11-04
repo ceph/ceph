@@ -36,6 +36,7 @@
 #include "librados/RadosXattrIter.h"
 #include "librados/ListObjectImpl.h"
 #include "librados/librados_util.h"
+#include "librados/rdma_result.h"
 #include "cls/lock/cls_lock_client.h"
 
 #include <string>
@@ -222,6 +223,75 @@ void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
   o->sparse_read(off, len, m, data_bl, prval, truncate_size, truncate_seq);
+}
+
+namespace {
+/// the wire request flags for a caller's: only the RDMA_DELIVERY_WANT_*
+/// bits are its to set. The other wire bits belong to the client
+/// library (FLAG_PRIOR_SETTLED vouches for a resend's earlier attempts,
+/// FLAG_PULL marks a pulled write), and share their values with result
+/// flags a caller may pass by mistake
+uint32_t rdma_request_flags(uint32_t flags)
+{
+  return flags & (librados::ObjectOperation::RDMA_DELIVERY_WANT_CRC64 |
+		  librados::ObjectOperation::RDMA_DELIVERY_WANT_CRC32C);
+}
+
+/// a caller's result as the op is set up: only the reply handler writes
+/// it, so an op that gets no reply (it timed out, or was cancelled)
+/// leaves nothing of an earlier use of it
+void reset_rdma_result(
+  librados::ObjectOperation::rdma_delivery_result *result)
+{
+  if (result) {
+    *result = librados::ObjectOperation::rdma_delivery_result{};
+  }
+}
+} // anonymous namespace
+
+void librados::ObjectReadOperation::set_rdma_delivery(
+    const std::string& token, uint64_t base_offset, uint32_t flags,
+    rdma_delivery_result *result)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  // the public flag values are the wire ones; the result itself is
+  // copied field by field when the reply is processed
+  using result_t = librados::ObjectReadOperation::rdma_delivery_result;
+  static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64 ==
+		ceph::rdma::delivery_t::FLAG_CRC64NVME);
+  static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_WANT_CRC32C ==
+		ceph::rdma::delivery_t::FLAG_CRC32C);
+  static_assert(result_t::CRC32C_VALID ==
+		ceph::rdma::oob_result_t::FLAG_CRC32C);
+  static_assert(result_t::CRC64_VALID ==
+		ceph::rdma::oob_result_t::FLAG_CRC64NVME);
+  static_assert(result_t::COMBINABLE ==
+		ceph::rdma::oob_result_t::FLAG_COMBINABLE);
+  static_assert(result_t::RANGES ==
+		ceph::rdma::oob_result_t::FLAG_RANGES);
+  static_assert(result_t::DECLINED ==
+		ceph::rdma::oob_result_t::FLAG_DECLINED);
+  static_assert(result_t::LANDED ==
+		ceph::rdma::oob_result_t::FLAG_LANDED);
+  static_assert(result_t::RESENT ==
+		ceph::rdma::oob_result_t::FLAG_RESENT);
+  reset_rdma_result(result);
+  if (o->size() == 0) {
+    // no read to deliver: the request asks for nothing, and the result
+    // says that no transfer starts, so that the caller does not fence
+    // a window that nothing writes. No reply changes it
+    if (result) {
+      result->flags = result_t::DECLINED;
+    }
+    return;
+  }
+  o->set_rdma_delivery(token, base_offset, rdma_request_flags(flags),
+		       [result](const ceph::rdma::oob_result_t& r) {
+			 if (result) {
+			   copy_rdma_result(r, result);
+			 }
+		       });
 }
 
 void librados::ObjectReadOperation::checksum(rados_checksum_type_t type,
@@ -480,6 +550,42 @@ void librados::ObjectWriteOperation::write_full(const bufferlist& bl)
   ::ObjectOperation *o = &impl->o;
   bufferlist c = bl;
   o->write_full(c);
+}
+
+void librados::ObjectWriteOperation::write_full_pulled(
+    uint64_t len, const std::string& token, uint64_t base_offset,
+    uint32_t flags, rdma_delivery_result *result)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->write_full_pulled(len);
+  reset_rdma_result(result);
+  o->set_rdma_delivery(token, base_offset,
+		       rdma_request_flags(flags) |
+		       ceph::rdma::delivery_t::FLAG_PULL,
+		       [result](const ceph::rdma::oob_result_t& r) {
+			 if (result) {
+			   copy_rdma_result(r, result);
+			 }
+		       });
+}
+
+void librados::ObjectWriteOperation::write_pulled(
+    uint64_t off, uint64_t len, const std::string& token,
+    uint64_t base_offset, uint32_t flags, rdma_delivery_result *result)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->write_pulled(off, len);
+  reset_rdma_result(result);
+  o->set_rdma_delivery(token, base_offset,
+		       rdma_request_flags(flags) |
+		       ceph::rdma::delivery_t::FLAG_PULL,
+		       [result](const ceph::rdma::oob_result_t& r) {
+			 if (result) {
+			   copy_rdma_result(r, result);
+			 }
+		       });
 }
 
 void librados::ObjectWriteOperation::writesame(uint64_t off, uint64_t write_len,
@@ -1225,6 +1331,16 @@ uint64_t librados::IoCtx::pool_required_alignment()
 int librados::IoCtx::pool_required_alignment2(uint64_t *alignment)
 {
   return io_ctx_impl->client->pool_required_alignment2(get_id(), alignment);
+}
+
+int librados::IoCtx::pool_rdma_delivery_lease(double *seconds)
+{
+  return io_ctx_impl->client->pool_rdma_delivery_lease(get_id(), seconds);
+}
+
+int librados::IoCtx::pool_rdma_delivery_drain(double *seconds)
+{
+  return io_ctx_impl->client->pool_rdma_delivery_drain(get_id(), seconds);
 }
 
 std::string librados::IoCtx::get_pool_name()

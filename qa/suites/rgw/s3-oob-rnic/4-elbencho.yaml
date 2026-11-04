@@ -1,0 +1,9 @@
+# elbencho as a load generator over the RDMA NIC, after the other
+# workloads: 8 threads PUT and GET objects of three sizes out of band, and
+# check every byte and every CRC. The workunit builds ofi-rma and
+# elbencho on the node.
+tasks:
+- workunit:
+    clients:
+      client.0:
+      - rgw/run-s3-oob-elbencho.sh

@@ -1,0 +1,6 @@
+# Every process registers its windows for RUD (FI_UET_RUDI=0), so the
+# OSDs write the client windows, and the gather windows of their peers,
+# with RUD, which keeps state at the target.
+overrides:
+  uet_host:
+    pds: rud

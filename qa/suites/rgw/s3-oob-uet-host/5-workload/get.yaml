@@ -1,0 +1,12 @@
+# GETs whose data the OSDs write into the client's memory, of objects that
+# plain PUTs wrote: whole, ranged and with CRC-32C. uet_host gives the
+# workunits OOB_DOMAIN, the name of the nodes' interface, and the client
+# address is the node's own.
+tasks:
+- workunit:
+    clients:
+      client.1:
+      - rgw/run-s3-oob.sh
+    env:
+      OOB_PROVIDER: uet
+      OOB_OPS: get

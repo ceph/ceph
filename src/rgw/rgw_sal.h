@@ -73,6 +73,16 @@ namespace rgw::lua {
 class RGWGetDataCB {
 public:
   virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) = 0;
+  /// bytes [ofs, ofs+len) of the requested range went out of band: an
+  /// OSD wrote them into the window of ReadOp::params.rdma_token. ofs
+  /// is relative to the start of the range. The range tells a consumer
+  /// that tracks placement where the bytes went. Ranges may arrive in
+  /// any order. Only called when a token was set. landed: the OSD's
+  /// result says that every byte was in the window before it replied,
+  /// else they may land until rgw::rdma::delivery_fence() after the reads
+  virtual int handle_oob(uint64_t ofs, uint64_t len, bool landed) {
+    return 0;
+  }
   RGWGetDataCB() {}
   virtual ~RGWGetDataCB() {}
 };
@@ -1182,6 +1192,33 @@ class Object {
         /// If the object is multipart, the total number of multipart
         /// parts is assigned to this output parameter.
         std::optional<int> parts_count;
+
+        /// When non-empty, iterate() must deliver data out of band:
+        /// each stripe is RDMA-written into the client memory window
+        /// described by this opaque cuObject token at offset
+        /// (stripe logical offset - iterate's ofs argument), and the
+        /// callback receives no data. Stores that cannot honor this
+        /// must fail iterate() with -EOPNOTSUPP before delivering any
+        /// data so the caller can fall back.
+        std::string rdma_token;
+        /// out: bytes delivered out of band by iterate(), also by one
+        /// that failed or fell back
+        uint64_t* rdma_bytes{nullptr};
+        /// out: canonical CRC64-NVME of the delivered bytes, combined in
+        /// logical order - set only when every stripe reported one. A
+        /// null pointer asks the OSDs for none.
+        std::optional<uint64_t>* rdma_crc64{nullptr};
+        /// out: the same for the canonical CRC-32C
+        std::optional<uint32_t>* rdma_crc32c{nullptr};
+        /// out: true when iterate() sent at least one descriptor-bearing
+        /// operation to the OSDs (fence-wait gating on fallback)
+        bool rdma_submitted{false};
+        /// out: false when no write of the operations can land any more,
+        /// so neither a fallback nor the response need wait out the fence
+        /// (rgw::rdma::delivery_fence()) after the last operation
+        /// completed: every one came back declined or landed, and none was
+        /// resent (see rgw::rdma::fence_needed())
+        bool rdma_fence_needed{true};
       } params;
 
       virtual ~ReadOp() = default;
@@ -1821,6 +1858,17 @@ protected:
  * like compression and encryption on async writes.  This is the base abstraction for
  * those filters.
  */
+/** One stripe of an OSD-direct PUT, and what its OSD reported pulling */
+struct PulledStripe {
+  uint64_t ofs = 0;    ///< offset of the stripe in the object
+  uint64_t len = 0;
+  uint64_t bytes = 0;  ///< bytes the OSD pulled, as it reported them
+  uint64_t crc64 = 0;  ///< CRC-64/NVME of those bytes, with crc64_valid
+  bool crc64_valid = false;
+  uint32_t crc32c = 0; ///< CRC-32C of those bytes, with crc32c_valid
+  bool crc32c_valid = false;
+};
+
 class Writer : public ObjectProcessor {
 public:
   Writer() {}
@@ -1847,6 +1895,31 @@ public:
                        rgw_zone_set *zones_trace, bool *canceled,
                        const req_context& rctx,
                        uint32_t flags) = 0;
+
+  /**
+   * OSD-direct PUT (S3 over RDMA): before prepare(), ask for an object
+   * whose bytes never pass through the gateway. The storage pulls them
+   * out of client memory, and the object's head holds none of them, so
+   * that it can be written last, with the checksum and ETag that only
+   * the pulls produce. False when this writer cannot.
+   */
+  virtual bool set_pulled() { return false; }
+  /**
+   * After set_pulled() and prepare(), instead of process(): write the
+   * object's len bytes as stripes, which the storage pulls out of the
+   * client window that token names, from its start. want is a mask of
+   * librados::ObjectOperation::RDMA_DELIVERY_WANT_CRC64 and
+   * RDMA_DELIVERY_WANT_CRC32C, the CRCs each stripe reports. Returns once
+   * every stripe is written, with one entry per stripe, in order, in
+   * *stripes; or a negative errno, with nothing of the object visible,
+   * and an entry in *stripes for each stripe that was sent, whose bytes
+   * say what its OSD pulled.
+   */
+  virtual int process_pulled(uint64_t len, const std::string& token,
+                             uint32_t want,
+                             std::vector<PulledStripe>* stripes) {
+    return -EOPNOTSUPP;
+  }
 };
 
 

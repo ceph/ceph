@@ -1,0 +1,16 @@
+# The clients reach the OSDs over libfabric's verbs provider, on the RDMA
+# NIC of each host's interface, such as a ConnectX RoCE port. rdma_rxe
+# with hardware: true adds no soft-RoCE, and fails a host whose interface
+# has no RDMA device: schedule with a machine type whose nodes have one,
+# such as mako (--machine-type mako).
+overrides:
+  ceph:
+    conf:
+      global:
+        oob client transports: verbs_ofi_rxm
+  oob_check:
+    transport: provider verbs
+  rdma_rxe:
+    hardware: true
+tasks:
+- rdma_rxe:

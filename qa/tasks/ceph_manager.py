@@ -201,6 +201,42 @@ class PoolType:
     ERASURE_CODED = 3
 
 
+def conf_value(conf, name, sections=('osd', 'global')):
+    """
+    The value that conf gives option name in the first of sections that
+    sets it, spelled with spaces or with underscores, or None
+    """
+    want = name.replace('_', ' ')
+    for section in sections:
+        for key, value in (conf.get(section) or {}).items():
+            if key.replace('_', ' ') == want:
+                return value
+    return None
+
+
+def millisecs_to_seconds(value):
+    """
+    A millisecs option's value in seconds: 1000, '1000' and '1000ms' give
+    1.0, and '2s' gives 2.0
+    """
+    text = str(value).strip()
+    if text.endswith('ms'):
+        return float(text[:-2]) / 1000
+    if text.endswith('s'):
+        return float(text[:-1])
+    return float(text) / 1000
+
+
+def sigstop_duration(tolerance, low, high, uniform=random.uniform):
+    """
+    How long, in seconds, to stop an OSD: from low to high, but at least a
+    second longer than tolerance, the OSD's osd_oob_cutoff_late_tolerance
+    """
+    low = max(float(low), tolerance + 1.0)
+    high = max(float(high), low)
+    return uniform(low, high)
+
+
 class OSDThrasher(Thrasher):
     """
     Object used to thrash Ceph
@@ -238,6 +274,7 @@ class OSDThrasher(Thrasher):
         self.chance_force_recovery = self.config.get('chance_force_recovery', 0.3)
         self.chance_reset_purged_snaps_last = self.config.get('chance_reset_purged_snaps_last', 0.3)
         self.chance_trim_stale_osdmaps = self.config.get('chance_trim_stale_osdmaps', 0.3)
+        self.chance_sigstop = self.config.get('chance_sigstop', 0)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * len(num_osds)
@@ -835,6 +872,29 @@ class OSDThrasher(Thrasher):
             except CommandFailedError:
                 self.log('Failed to reset_purged_snaps_last, ignoring')
 
+    def sigstop_osd(self, osd=None):
+        """
+        Stop a live osd with SIGSTOP for longer than its
+        osd_oob_cutoff_late_tolerance, then let it go on with SIGCONT. Its
+        out-of-band writes in flight miss their deadlines, and it cuts
+        them off late when it goes on.
+        """
+        if osd is None:
+            osd = random.choice(self.live_osds)
+        cluster = self.ceph_manager.ctx.ceph[self.cluster]
+        tolerance = conf_value(cluster.conf, 'osd_oob_cutoff_late_tolerance')
+        duration = sigstop_duration(
+            millisecs_to_seconds(1000 if tolerance is None else tolerance),
+            self.config.get('sigstop_min', 2),
+            self.config.get('sigstop_max', 10))
+        self.log('sigstop osd.%s for %.1f s' % (osd, duration))
+        self.ceph_manager.signal_osd(osd, signal.SIGSTOP)
+        try:
+            time.sleep(duration)
+        finally:
+            self.ceph_manager.signal_osd(osd, signal.SIGCONT)
+        self.log('sigcont osd.%s' % osd)
+
     def trim_stale_osdmaps(self):
        """
        Trim stale osdmaps
@@ -1344,6 +1404,8 @@ class OSDThrasher(Thrasher):
             actions.append((self.reset_purged_snaps_last, self.chance_reset_purged_snaps_last))
         if self.chance_trim_stale_osdmaps > 0:
             actions.append((self.trim_stale_osdmaps, self.chance_trim_stale_osdmaps))
+        if self.chance_sigstop > 0 and self.live_osds:
+            actions.append((self.sigstop_osd, self.chance_sigstop,))
 
         for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
             for scenario in [

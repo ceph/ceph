@@ -298,6 +298,18 @@ int ReplicatedBackend::objects_read_local(
   return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
 }
 
+int ReplicatedBackend::objects_read_local_into(
+  const hobject_t &hoid,
+  uint64_t off,
+  uint64_t len,
+  uint32_t op_flags,
+  const struct iovec *iov,
+  int iovcnt)
+{
+  return store->read_into(ch, ghobject_t(hoid), off, len, iov, iovcnt,
+			  op_flags);
+}
+
 int ReplicatedBackend::objects_readv_sync(
   const hobject_t &hoid,
   map<uint64_t, uint64_t>& m,
@@ -318,7 +330,8 @@ void ReplicatedBackend::objects_read_async(
   const list<pair<ec_align_t,
 		  pair<bufferlist*, Context*> > > &to_read,
   Context *on_complete,
-  bool fast_read)
+  bool fast_read,
+  bool into_arena)
 {
   ceph_abort_msg("async read is not used by replica pool");
 }

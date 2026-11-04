@@ -1,0 +1,10 @@
+# elbencho as a load generator: 8 threads PUT and GET objects of three
+# sizes over UET, and check every byte and every CRC. The workunit builds
+# ofi-rma and elbencho on the node, and gives elbencho cap_net_raw.
+tasks:
+- workunit:
+    clients:
+      client.1:
+      - rgw/run-s3-oob-elbencho.sh
+    env:
+      OOB_PROVIDER: uet

@@ -67,6 +67,8 @@ enum {
   l_rgw_bucket_reshard_failed_end_time,
   l_rgw_bucket_reshard_ok_time_avg,
 
+  l_rgw_rdma_cksum_unchecked,
+
   l_rgw_last,
 };
 

@@ -91,6 +91,16 @@ public:
   };
   RecoveryCallbackTracker recovery_tracker;
 
+  /// every ec_repair_on_read call: the object and the shards it named
+  std::vector<std::pair<hobject_t, std::set<pg_shard_t>>> ec_read_repairs;
+
+  /// what oob_gather_executor() returns: the executor that lends the EC
+  /// read pipeline its gather windows, or null
+  OSDOobExecutor* gather_executor = nullptr;
+  /// oob_gather_executor() calls: the read pipeline asks only when it
+  /// sends the sub-reads of a read that lends windows, executor or not
+  int gather_executor_asked = 0;
+
   MockPGBackendListener(OSDMapRef osdmap, int64_t pool_id, DoutPrefixProvider *dpp, pg_shard_t pg_whoami, PeeringState *ps = nullptr) :
     osdmap(osdmap), pool_id(pool_id),
     pool(osdmap, pool_id, *osdmap->get_pg_pool(pool_id), osdmap->get_pool_name(pool_id)),
@@ -218,6 +228,12 @@ public:
     const std::set<pg_shard_t> &from,
     const hobject_t &soid,
     const eversion_t &v) override {
+  }
+
+  void ec_repair_on_read(
+    const hobject_t &hoid,
+    const std::set<pg_shard_t> &shards) override {
+    ec_read_repairs.emplace_back(hoid, shards);
   }
 
   void cancel_pull(const hobject_t &soid) override {
@@ -811,6 +827,11 @@ public:
 
   struct ECListener *get_eclistener() override {
     return static_cast<ECListener *>(this);
+  }
+
+  OSDOobExecutor* oob_gather_executor() override {
+    ++gather_executor_asked;
+    return gather_executor;
   }
 };
 

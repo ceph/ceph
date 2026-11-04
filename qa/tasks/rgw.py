@@ -57,6 +57,11 @@ def start_rgw(ctx, config, clients):
             'term',
             ]
 
+        rgw_env = getattr(ctx.rgw, 'env', None)
+        if rgw_env:
+            cmd_prefix.extend(['env'] + ['%s=%s' % (k, v) for k, v in
+                                         sorted(rgw_env.items())])
+
         rgw_cmd = ['radosgw']
 
         log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
@@ -515,6 +520,13 @@ def task(ctx, config):
           rgw:
             data_pool_pg_size: 256
             index_pool_pg_size: 128
+
+    To set environment variables for every radosgw:
+
+        overrides:
+          rgw:
+            env:
+              FI_UNIVERSE_SIZE: 16
     """
     if config is None:
         config = dict(('client.{id}'.format(id=id_), None)
@@ -546,6 +558,7 @@ def task(ctx, config):
     ctx.rgw.realm = config.pop('realm', None)
     ctx.rgw.zonegroup = config.pop('zonegroup', 'default')
     ctx.rgw.zone = config.pop('zone', 'default')
+    ctx.rgw.env = config.pop('env', {})
     enable_features = config.pop('enable features', [])
     disable_features = config.pop('disable features', [])
     ctx.rgw.config = config

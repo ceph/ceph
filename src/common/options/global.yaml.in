@@ -3,6 +3,8 @@
 headers: |
   #include "common/strtol.h"
   #include "osdc/SplitOp.h"
+  // cuobj_dc_key validation
+  #include "common/oob_config.h"
 options:
 - name: host
   type: str
@@ -158,6 +160,169 @@ options:
   - cluster_network
   flags:
   - startup
+- name: oob_network
+  type: str
+  level: advanced
+  desc: Subnets of the network that carries out-of-band transfers of object
+    data
+  long_desc: A comma-separated list of subnets, as for public_network. Each
+    OSD and gateway takes the first address of its host in these subnets for
+    its out-of-band transports. From the address it finds the network
+    interface, and for an RDMA transport the device, the port and the RoCE
+    GID that carry the address. When it is empty, an OSD uses its public
+    address, and a gateway uses public_addr only when that is set. Set it
+    for every gateway that runs a transport.
+  tags:
+  - network
+  services:
+  - osd
+  - rgw
+  see_also:
+  - oob_network_interface
+  - oob_addr
+  - oob_client_transports
+  - oob_cluster_transport
+  flags:
+  - startup
+- name: oob_network_interface
+  type: str
+  level: advanced
+  desc: Interfaces from which oob_network picks an address
+  long_desc: A comma-separated list of interface names. The value can use
+    metavariables such as $id, for a provider that needs one interface for
+    each process, as the UEC reference provider does.
+  tags:
+  - network
+  services:
+  - osd
+  - rgw
+  see_also:
+  - oob_network
+  flags:
+  - startup
+- name: oob_addr
+  type: str
+  level: advanced
+  desc: Out-of-band address of this daemon; overrides oob_network
+  tags:
+  - network
+  services:
+  - osd
+  - rgw
+  see_also:
+  - oob_network
+  flags:
+  - startup
+- name: oob_client_transports
+  type: str
+  level: advanced
+  desc: Out-of-band transports that the cluster serves to clients
+  long_desc: A comma-separated list. A libfabric provider (for example
+    verbs_ofi_rxm or uet) serves libfabric tokens. tcp is for tests only,
+    because closing a socket does not discard the writes that the kernel
+    queued, so a write that the OSD cuts off can still land after the
+    gateway's fence. An OSD opens one libfabric endpoint. Write a layered
+    provider with an underscore, as in verbs_ofi_rxm, since a semicolon
+    starts a comment in a configuration file; libfabric's spelling,
+    verbs;ofi_rxm, works too. "cuobj" serves
+    cuObject descriptors, through the cuObject executor of each OSD and the
+    cuObject server of the gateway. "rc" has the gateway serve hipobj-rc-v2
+    sessions. Empty turns out-of-band transfers with clients off.
+  services:
+  - osd
+  - rgw
+  see_also:
+  - oob_cluster_transport
+  - oob_network
+  flags:
+  - startup
+- name: oob_cluster_transport
+  type: str
+  level: advanced
+  desc: Out-of-band transport between Ceph daemons
+  long_desc: One libfabric provider, or "cuobj". It carries the shard reads
+    that an erasure-coded primary gathers, and the stripes that the OSDs write
+    into the gateway's relay buffers for RC sessions. Every daemon must run
+    the same one. Empty keeps gathers on the messenger and relays in the
+    gateway.
+  services:
+  - osd
+  - rgw
+  see_also:
+  - oob_client_transports
+  - oob_network
+  flags:
+  - startup
+- name: oob_memory
+  type: size
+  level: advanced
+  desc: Memory that each OSD and gateway sets aside for out-of-band transfers
+  long_desc: A daemon that runs an out-of-band transport allocates this much
+    memory, in whole blocks of 64 MiB, when it starts. Its transports
+    register it, and take their staging buffers, gather windows and session
+    buffers from it, each buffer at most 64 MiB. Each OSD allocates its own,
+    so a host with many OSDs needs a smaller value in the osd section. The
+    memory is locked, so give the daemons a locked memory limit above it
+    (LimitMEMLOCK, or the oob section of a cephadm service specification).
+    It is mapped outside the heap, so the OSD's cache autotuner does not
+    count it, and an OSD uses up to osd_memory_target plus oob_memory.
+  default: 2_G
+  services:
+  - osd
+  - rgw
+  see_also:
+  - oob_client_transports
+  - oob_cluster_transport
+  - osd_memory_target
+  flags:
+  - startup
+- name: oob_keep_net_raw
+  type: bool
+  level: advanced
+  desc: Have an OSD keep CAP_NET_RAW for the uet provider when it switches
+    to the ceph user
+  long_desc: The uet provider opens a raw socket, which needs CAP_NET_RAW. An
+    OSD that starts as root and switches to another user (setuser) keeps
+    that capability, and no other, when uet is the provider of its endpoint.
+    But the OSD switches before it reads the monitor configuration, so it
+    sees uet only when ceph.conf, the environment or the command line selects
+    it. Set this option for an OSD whose transports are only in the monitor
+    configuration. cephadm sets it on the command line of the OSDs of a spec
+    whose oob section has raw_sockets.
+  default: false
+  services:
+  - osd
+  see_also:
+  - oob_cluster_transport
+  - set_keepcaps
+  flags:
+  - startup
+- name: cuobj_dc_key
+  type: str
+  level: advanced
+  desc: Dynamically Connected key of every cuObject DC initiator and target
+  long_desc: It must match the key of the cuObject client library across the
+    cluster, rdma_dc_key in cufile.json. Give it in hexadecimal after 0x, as
+    cufile.json does, or in decimal; any other value is rejected. The
+    default, 0xffeeddcc, is the library's default.
+  default: "0xffeeddcc"
+  services:
+  - osd
+  - rgw
+  see_also:
+  - oob_client_transports
+  flags:
+  - startup
+  validator: |
+    [](std::string *value, std::string *error_message) {
+      uint64_t key;
+      if (!ceph::oob::parse_dc_key(*value, &key)) {
+        *error_message = "not a 64-bit key in hexadecimal after 0x, such "
+                         "as 0xffeeddcc, or in decimal";
+        return -EINVAL;
+      }
+      return 0;
+    }
 - name: monmap
   type: str
   level: advanced

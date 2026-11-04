@@ -1,0 +1,14 @@
+# GETs whose data the OSDs write into the client's memory, of objects that
+# plain PUTs wrote: whole, ranged and with CRC-32C.
+tasks:
+- workunit:
+    clients:
+      client.1:
+      - rgw/run-s3-oob.sh
+    env:
+      OOB_PROVIDER: uet
+      # the name rocm-ernic's udev rule gives the ionic RDMA device
+      OOB_DOMAIN: rocm-rdma-ernic0
+      # the provider binds the engine's address, not one of the node's
+      OOB_NODE: '-'
+      OOB_OPS: get

@@ -1,0 +1,32 @@
+# s3tests over HTTP, then the soak client while rgw_thrash kills and
+# restarts radosgw and kills the clients. GETs may fail and fall back to
+# HTTP (OOB_MODE mixed), but none may break a window.
+tasks:
+- tox: [client.0]
+- s3tests:
+    client.0:
+      rgw_server: client.0
+- rgw_thrash:
+    clients: [client.0]
+    min_thrash_delay: 60
+    max_thrash_delay: 180
+- workunit:
+    clients:
+      client.0:
+        - rgw/run-s3-oob-soak.sh
+    env:
+      OOB_MODE: mixed
+      SOAK_DURATION: "1800"
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt s3 kms backend: testing
+        rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl: false
+        rgw sts key: AQA/3Fxpz2k2AxAAYWJjZGVmZ2hpamtsbW5vcA==
+        rgw s3 auth use sts: true
+  s3tests:
+    accounts:
+      iam root: RGW88888888888888888
+      iam alt root: RGW99999999999999999

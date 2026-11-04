@@ -46,6 +46,7 @@ from ceph.deployment.utils import verify_size_with_units, validate_port, validat
     validate_ip
 from ceph.deployment.utils import verify_dir_path
 from ceph.cephadm.d3n_types import D3NCacheSpec, D3NCacheError
+from ceph.cephadm.oob_types import OOBSpec, OOBError
 from ceph.utils import is_hex
 from ceph.smb import constants as smbconst
 from ceph.smb import network as smbnet
@@ -1748,6 +1749,12 @@ class RGWSpec(ServiceSpec):
                     host2:
                       - /dev/nvme1n1
                       - /dev/nvme2n1
+            # Optional: give the containers what S3 over RDMA needs
+            oob:
+                rdma_devices:            # RDMA devices to pass in, or "all"
+                  - mlx5_0
+                memlock: 4G              # default: oob_memory plus 1G
+                raw_sockets: false       # true for the uet provider
 
     See also: :ref:`orchestrator-cli-service-spec`
     """
@@ -1800,6 +1807,7 @@ class RGWSpec(ServiceSpec):
                  rgw_exit_timeout_secs: int = 120,
                  qat: Optional[Dict[str, str]] = None,
                  d3n_cache: Optional[Dict[str, Any]] = None,
+                 oob: Optional[Dict[str, Any]] = None,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1871,6 +1879,9 @@ class RGWSpec(ServiceSpec):
 
         self.qat = qat or {}
         self.d3n_cache = d3n_cache or {}
+        #: What the containers need for out-of-band (S3 over RDMA) transfers,
+        #: see :class:`ceph.cephadm.oob_types.OOBSpec`
+        self.oob = oob or {}
 
     def get_port_start(self) -> List[int]:
         ports = self.get_port()
@@ -2094,6 +2105,12 @@ class RGWSpec(ServiceSpec):
             try:
                 D3NCacheSpec.from_json(self.d3n_cache)
             except D3NCacheError as e:
+                raise SpecValidationError(str(e))
+
+        if self.oob:
+            try:
+                OOBSpec.from_json(self.oob)
+            except OOBError as e:
                 raise SpecValidationError(str(e))
 
 

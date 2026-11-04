@@ -35,6 +35,7 @@ from ..data_utils import dict_get
 from ..host_facts import HostFacts
 from ..logging import Highlight
 from ..net_utils import get_hostname, get_ip_addresses
+from ..oob import oob_container_args, oob_process_args
 
 
 logger = logging.getLogger()
@@ -280,6 +281,28 @@ class Ceph(ContainerDaemonForm):
         ):
             self.setup_qat_args(ctx, args)
 
+        oob = self.oob_config(ctx)
+        if oob:
+            # osd runs privileged, see container()
+            args.extend(
+                oob_container_args(
+                    oob, privileged=self.identity.daemon_type == 'osd'
+                )
+            )
+
+    def oob_config(self, ctx: CephadmContext) -> Dict[str, Any]:
+        """The oob config of an RGW or OSD deployment, for out-of-band
+        (S3 over RDMA) transports, or an empty dict.
+        """
+        if self.identity.daemon_type not in ['rgw', 'osd']:
+            return {}
+        oob: Any = (fetch_configs(ctx) or {}).get('oob') or {}
+        if not isinstance(oob, dict):
+            raise Error(
+                f'Invalid oob config: expected dict got {type(oob).__name__}'
+            )
+        return oob
+
     def customize_process_args(
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
@@ -300,6 +323,7 @@ class Ceph(ContainerDaemonForm):
         if ident.daemon_type != 'crash':
             args.append('-f')
         args.extend(self.get_daemon_args())
+        args.extend(oob_process_args(self.oob_config(ctx), ident.daemon_type))
 
     def customize_container_envs(
         self, ctx: CephadmContext, envs: List[str]

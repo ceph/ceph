@@ -894,6 +894,31 @@ class TestCephadm(object):
                 )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_extra_container_args_change(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        # a changed extra_container_args reaches the running daemon by a
+        # redeploy, without removing and creating the service again
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        def deploys():
+            return [
+                json.loads(c.kwargs['stdin'])['params']
+                for c in _run_cephadm.call_args_list
+                if c.args[2] == ['_orch', 'deploy']
+            ]
+
+        with with_host(cephadm_module, 'test'):
+            spec = ServiceSpec(service_type='crash', extra_container_args=['--cpus=2'])
+            with with_service(cephadm_module, spec, CephadmOrchestrator.apply_crash):
+                _run_cephadm.reset_mock()
+                CephadmServe(cephadm_module)._check_daemons()
+                assert deploys() == []
+
+                spec = ServiceSpec(service_type='crash', extra_container_args=['--cpus=3'])
+                wait(cephadm_module, cephadm_module.apply_crash(spec))
+                CephadmServe(cephadm_module)._check_daemons()
+                assert [p['extra_container_args'] for p in deploys()] == [['--cpus=3']]
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_extra_entrypoint_args(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         with with_host(cephadm_module, 'test'):

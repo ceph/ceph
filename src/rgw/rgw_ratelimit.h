@@ -333,16 +333,23 @@ class RateLimiter : public DoutPrefix {
       }
       OpType type = op_type(method, "", info);
       // Only read and write ops affect bytes
-      if ((type == OpType::Read && !info->max_read_bytes) || (type == OpType::Write && !info->max_write_bytes))
+      if (type == OpType::Read || type == OpType::Write)
+        decrease_bytes(type == OpType::Read, key, amount, info);
+      // OpType::List does not affect bytes
+    }
+    // for bytes whose direction the method does not tell, such as an
+    // out-of-band transfer: an RC GET is a POST
+    void decrease_bytes(bool is_read, const std::string& key, const int64_t amount, const RGWRateLimitInfo* info) {
+      if (key.empty() || key.length() == 1 || !info->enabled)
+      {
+        return;
+      }
+      if ((is_read && !info->max_read_bytes) || (!is_read && !info->max_write_bytes))
       {
         return;
       }
       auto& it = find_or_create(key);
-      if (type == OpType::Read)
-        it.decrease_bytes(true, amount, info);
-      else if (type == OpType::Write)
-        it.decrease_bytes(false, amount, info);
-      // OpType::List does not affect bytes
+      it.decrease_bytes(is_read, amount, info);
     }
     void clear() {
       ratelimit_entries.clear();

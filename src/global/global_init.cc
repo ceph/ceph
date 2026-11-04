@@ -28,6 +28,7 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/oob_config.h"
 #include "common/signal.h"
 #include "common/version.h"
 #include "erasure-code/ErasureCodePlugin.h"
@@ -363,10 +364,20 @@ global_init(const std::map<std::string,std::string> *defaults,
 	     << std::endl;
 	exit(1);
       }
+      // the UEC reference provider ("uet") opens a raw socket, which
+      // needs CAP_NET_RAW: an OSD that runs it keeps that capability,
+      // and no other, for ceph::oob::with_net_raw() to raise while the
+      // endpoint opens. Only ceph.conf, the environment and the command
+      // line count here: the mon config arrives after the switch
+      bool keep_net_raw = false;
+#if defined(HAVE_SYS_PRCTL_H) && defined(WITH_OOB_OFI)
+      keep_net_raw = ceph::oob::osd_keeps_net_raw(g_ceph_context);
+#endif
 #if defined(HAVE_SYS_PRCTL_H)
-      if (g_conf().get_val<bool>("set_keepcaps")) {
-	if (prctl(PR_SET_KEEPCAPS, 1) == -1) {
-	  cerr << "warning: unable to set keepcaps flag: " << cpp_strerror(errno) << std::endl;
+      if (g_conf().get_val<bool>("set_keepcaps") || keep_net_raw) {
+	std::string err;
+	if (ceph::oob::keep_caps(&err) < 0) {
+	  cerr << "warning: " << err << std::endl;
 	}
       }
 #endif
@@ -375,11 +386,23 @@ global_init(const std::map<std::string,std::string> *defaults,
 	     << std::endl;
 	exit(1);
       }
+      bool kept_net_raw = false;
+      if (keep_net_raw) {
+	std::string err;
+	if (ceph::oob::keep_only_net_raw(&kept_net_raw, &err) < 0) {
+	  cerr << err << std::endl;
+	  exit(1);
+	}
+      }
       if (setenv("HOME", home_directory.c_str(), 1) != 0) {
 	cerr << "warning: unable to set HOME to " << home_directory << ": "
              << cpp_strerror(errno) << std::endl;
       }
       priv_ss << "set uid:gid to " << uid << ":" << gid << " (" << uid_string << ":" << gid_string << ")";
+      if (keep_net_raw) {
+	priv_ss << (kept_net_raw ? ", keeping CAP_NET_RAW for uet" :
+		    ", without CAP_NET_RAW, which uet needs");
+      }
     } else {
       priv_ss << "deferred set uid:gid to " << uid << ":" << gid << " (" << uid_string << ":" << gid_string << ")";
     }

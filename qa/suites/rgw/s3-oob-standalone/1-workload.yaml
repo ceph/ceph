@@ -1,0 +1,27 @@
+# The standalone tests of out-of-band delivery on a build with
+# WITH_OOB_OFI: osd-oob-async.sh (transfers on the transfer threads) and
+# osd-oob-copies.sh (the copies of read_into). Each test starts its own
+# cluster on 127.0.0.1, over the libfabric tcp provider, and needs
+# ceph_test_osd_oob_read and libceph_test_copycount from ceph-test. On a
+# build without WITH_OOB_OFI the tests skip and pass, as they do in
+# rados/standalone. CEPH_OOB_REQUIRED makes a skip fail here.
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- workunit:
+    basedir: qa/standalone
+    clients:
+      all:
+        - osd/osd-oob-async.sh
+        - osd/osd-oob-copies.sh
+    env:
+      CEPH_OOB_REQUIRED: '1'

@@ -91,3 +91,6 @@
 [submodule "src/rgw/lancedb-c"]
 	path = src/rgw/lancedb-c
 	url = https://github.com/lancedb/lancedb-c.git
+[submodule "src/ofi-rma"]
+	path = src/ofi-rma
+	url = https://github.com/mmgaggle/ofi-rma.git

@@ -1026,6 +1026,13 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
     chunked_upload = true;
   }
 
+  // S3 over RDMA: only the S3 API takes x-amz-rdma-token. execute()
+  // declines a PUT without a body that carries one, which ignoring the
+  // token would store as an empty object
+  if (s->info.env->exists("HTTP_X_AMZ_RDMA_TOKEN")) {
+    rdma_token_refusal = "the Swift API does not take x-amz-rdma-token";
+  }
+
   supplied_etag = s->info.env->get("HTTP_ETAG");
   if_match = s->info.env->get("HTTP_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");

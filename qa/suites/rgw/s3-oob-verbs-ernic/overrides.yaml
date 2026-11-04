@@ -1,0 +1,32 @@
+# libfabric's verbs provider (verbs;ofi_rxm) over the ionic RDMA driver of
+# the emulated NIC, between the S3 client and the OSDs, and between the
+# OSDs: an erasure-coded primary lends gather windows to its shards.
+overrides:
+  ceph:
+    conf:
+      global:
+        # oob network and oob network interface come from the ernic task,
+        # which reads them off the guests' ionic NICs
+        oob client transports: verbs_ofi_rxm
+        oob cluster transport: verbs_ofi_rxm
+      osd:
+        # each OSD has a VM of 8 GiB
+        oob memory: 512M
+        debug osd: 10
+        debug ms: 1
+      client:
+        setuser: ceph
+        setgroup: ceph
+        rgw rdma osd direct: true
+        debug rgw: 20
+        debug ms: 1
+    log-ignorelist:
+    - OOB_CUTOFF_LATE
+  rgw:
+    frontend: beast
+    ec-data-pool: true
+    erasure_code_profile:
+      name: ernic
+      k: 2
+      m: 1
+      crush-failure-domain: host

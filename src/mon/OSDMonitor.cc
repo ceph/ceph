@@ -5592,7 +5592,7 @@ namespace {
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    SUPPORTS_OMAP };
+    SUPPORTS_OMAP, RDMA_DELIVERY_LEASE, RDMA_DELIVERY_DRAIN };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6416,6 +6416,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
       {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
       {"supports_omap", SUPPORTS_OMAP},
+      {"rdma_delivery_lease", RDMA_DELIVERY_LEASE},
+      {"rdma_delivery_drain", RDMA_DELIVERY_DRAIN},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6663,6 +6665,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case RDMA_DELIVERY_LEASE:
+	  case RDMA_DELIVERY_DRAIN:
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
@@ -6844,6 +6848,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case RDMA_DELIVERY_LEASE:
+	  case RDMA_DELIVERY_DRAIN:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -9555,6 +9561,37 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       if (n < 0 || n > 100) {
         ss << "read_ratio must be between 0 and 100";
         return -ERANGE;
+      }
+    } else if (var == "rdma_delivery_lease" || var == "rdma_delivery_drain") {
+      if (floaterr.length()) {
+        ss << "error parsing floating point value '" << val << "': "
+           << floaterr;
+        return -EINVAL;
+      }
+      // an op thread waits on a transfer for up to lease plus drain
+      const double max = var == "rdma_delivery_lease" ?
+        pg_pool_t::MAX_RDMA_DELIVERY_LEASE : pg_pool_t::MAX_RDMA_DELIVERY_DRAIN;
+      if (!std::isfinite(f) || f < 0 || f > max) {
+        ss << var << " must be between 0 and " << max
+           << " seconds (0 restores the default)";
+        return -ERANGE;
+      }
+      // a lease too short leaves a transfer no time to start, and a
+      // drain too short leaves a transport no time to cut off a write
+      // that missed it
+      const bool lease = var == "rdma_delivery_lease";
+      const double min = lease ?
+        pg_pool_t::MIN_RDMA_DELIVERY_LEASE : pg_pool_t::MIN_RDMA_DELIVERY_DRAIN;
+      if (f > 0 && f < min) {
+        ss << var << " must be at least " << min
+           << " seconds (0 restores the default): "
+           << (lease ? "an OSD starts no transfer for a read after the "
+                       "lease, and a shorter lease leaves no time to "
+                       "start one" :
+                       "an OSD cuts off each write that has not landed by "
+                       "the end of the drain, and the transports need "
+                       "time to cut off their writes");
+        return -EINVAL;
       }
     }
 

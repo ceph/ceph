@@ -14,11 +14,31 @@
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_connection_priv.h"
 #include "osd/object_state_fmt.h"
+#include "osd/oob_xfer.h"
 #include "osd/osd_perf_counters.h"
 
 SET_SUBSYS(osd);
 
 namespace crimson::osd {
+
+namespace {
+
+/// Crimson starts no out-of-band transfer: each reply to a request with
+/// delivery descriptors declines them all, so that the client need not
+/// fence its windows. That holds for a dup too, since crimson refuses
+/// every pulled write: the attempt that did the write pulled nothing.
+void decline_rdma_deliveries(const MOSDOp& m, MOSDOpReply& reply)
+{
+  if (!m.has_rdma_delivery()) {
+    return;
+  }
+  const auto& deliveries = m.get_rdma_deliveries();
+  std::vector<ceph::rdma::oob_result_t> oob(deliveries.size());
+  ceph::osd::oob::decline_all(deliveries, oob);
+  reply.set_oob_results(std::move(oob));
+}
+
+} // anonymous namespace
 
 
 void ClientRequest::Orderer::requeue(Ref<PG> pg)
@@ -125,6 +145,7 @@ ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
     !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
   reply->set_reply_versions(eversion_t(), 0);
   reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
+  decline_rdma_deliveries(*m, *reply);
   // TODO: gate the crosscore sending
   return interruptor::make_interruptible(
     get_foreign_connection().send_with_throttling(std::move(reply))
@@ -299,6 +320,7 @@ ClientRequest::process_pg_op(
   Ref<PG> pg)
 {
   auto reply = co_await pg->do_pg_ops(m);
+  decline_rdma_deliveries(*m, *reply);
   // TODO: gate the crosscore sending
   co_await interruptor::make_interruptible(
     get_foreign_connection().send_with_throttling(std::move(reply)));
@@ -387,6 +409,7 @@ ClientRequest::process_op(
       m.get(), completed->err, pg->get_osdmap_epoch(),
       CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
     reply->set_reply_versions(completed->version, completed->user_version);
+    decline_rdma_deliveries(*m, *reply);
     // TODO: gate the crosscore sending
     co_await interruptor::make_interruptible(
       get_foreign_connection().send_with_throttling(std::move(reply))
@@ -479,6 +502,27 @@ ClientRequest::do_process(
     DEBUGDPP("{}.{}: {} is blocklisted",
 	     *pg, *this, this_instance_id, get_foreign_connection().get_peer_addr());
     co_await reply_op_error(pg, -EBLOCKLISTED);
+    co_return;
+  }
+
+  if (m->has_pulls()) {
+    // crimson reads no client memory window, so a write whose payload
+    // the primary should pull from one (delivery_t::FLAG_PULL) would run
+    // without its data, and as a WRITEFULL of no bytes empty the object.
+    // It fails as on a classic OSD without a transport, each descriptor
+    // declined, as no transfer of it started: the client sends the data
+    // inline instead
+    DEBUGDPP("{}.{}: refusing a pulled write",
+	     *pg, *this, this_instance_id);
+    auto reply = crimson::make_message<MOSDOpReply>(
+      m.get(), -EOPNOTSUPP, pg->get_osdmap_epoch(),
+      m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
+      !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
+    reply->set_reply_versions(eversion_t(), 0);
+    reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
+    decline_rdma_deliveries(*m, *reply);
+    co_await interruptor::make_interruptible(
+      get_foreign_connection().send_with_throttling(std::move(reply)));
     co_return;
   }
 
@@ -590,6 +634,7 @@ ClientRequest::do_process(
       pg->peering_state.get_info().last_update,
       pg->peering_state.get_info().last_user_version);
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+    decline_rdma_deliveries(*m, *reply);
     
     // TODO: gate the crosscore sending
     co_await interruptor::make_interruptible(
@@ -624,6 +669,7 @@ ClientRequest::do_process(
       reply->set_reply_versions(pg->peering_state.get_info().last_update,
 				pg->peering_state.get_info().last_user_version);
     }
+    decline_rdma_deliveries(*m, *reply);
     
     DEBUGDPP("{}.{}: sending response {}",
 	     *pg, *this, this_instance_id, *m);

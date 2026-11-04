@@ -22,6 +22,8 @@
 #################################################################################
 %bcond_with make_check
 %bcond_with cmake_verbose_logging
+# Experimental cuObject S3 RDMA support (disabled by default).
+%bcond_with cuobj
 %bcond_without ceph_test_package
 %ifarch s390
 %bcond_with tcmalloc
@@ -112,6 +114,8 @@
 %bcond_with system_qat
 %endif
 %bcond_with system_rdkafka
+# out-of-band delivery over libfabric, which needs libfabric 1.20 or later
+%bcond_with oob_ofi
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} || 0%{?openEuler}
 %global weak_deps 1
 %endif
@@ -278,6 +282,12 @@ BuildRequires:	pkgconfig(openssl)
 BuildRequires:	pkgconfig(ldap)
 BuildRequires:	pkgconfig(libibverbs)
 BuildRequires:	pkgconfig(librdmacm)
+%if %{with cuobj}
+BuildRequires:  libcuobjserver-devel >= 2.0.0
+%endif
+%if 0%{with oob_ofi}
+BuildRequires:	pkgconfig(libfabric) >= 1.20
+%endif
 BuildRequires:	pkgconfig(liblz4) >= 1.7
 BuildRequires:	pkgconfig(libnl-3.0)
 BuildRequires:	pkgconfig(liboath)
@@ -1805,6 +1815,11 @@ cmake .. \
 %else
     -DWITH_RADOSGW_LANCEDB:BOOL=OFF \
 %endif
+%if %{with cuobj}
+    -DWITH_RADOSGW_CUOBJ:BOOL=ON \
+%else
+    -DWITH_RADOSGW_CUOBJ:BOOL=OFF \
+%endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
 %endif
@@ -1813,6 +1828,9 @@ cmake .. \
 %endif
 %if 0%{with system_rdkafka}
     -DWITH_SYSTEM_RDKAFKA:BOOL=ON \
+%endif
+%if 0%{with oob_ofi}
+    -DWITH_OOB_OFI:BOOL=ON \
 %endif
 %if 0%{without jaeger}
     -DWITH_JAEGER:BOOL=OFF \
@@ -2964,6 +2982,7 @@ fi
 %{_mandir}/man8/ceph-debugpack.8*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
+%{_libdir}/ceph/libceph_test_copycount.so
 %if 0%{with lancedb}
 %{_libdir}/libceph_rgw_sal_test_env.so
 %endif

@@ -18,6 +18,10 @@ Copyright:
     Copyright 2016 Philippe Proulx <pproulx@efficios.com>
 License: BSD 3-clause
 
+Files: src/ofi-rma/*
+Copyright: Copyright (c) 2026 IBM Corporation
+License: MIT (see src/ofi-rma/LICENSE)
+
 Files: doc/*
 Copyright: (c) 2010-2012 New Dream Network and contributors
 License: Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)
@@ -231,7 +235,11 @@ Files: src/common/*s390x*
 Copyright: 2024 IBM <contact@ibm.com>
 License: Apache License, version 2.0
 
-Files: src/rgw/madler/*
+Files: src/common/spdk/*
+Copyright: Copyright (C) 2023 Intel Corporation. All rights reserved.
+License: BSD 3-clause
+
+Files: src/common/madler/*
 License:
   Copyright (C) 2014-2025 Mark Adler
 

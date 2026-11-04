@@ -1,0 +1,23 @@
+# Five rocm-ernic VMs on one hypervisor: schedule with -m ernic. The ernic
+# provisioner puts every VM of a job on one hypervisor's bridge, because
+# UET has no gateway. The ernic machine type and its provisioner are not
+# in ceph/teuthology yet, so this suite runs only on a teuthology that
+# has them.
+#
+# Each process that uses UET gets a VM of its own: libuet_ernic gives a
+# process the engine's one endpoint. Here only the three OSDs and the S3
+# client (client.1) use UET. The gateway (client.0) opens a UET endpoint
+# only for the relay windows of RC clients, with rc in
+# oob_client_transports, and this suite does not cover RC relay windows.
+roles:
+- [mon.a, mgr.x, osd.0]
+- [mon.b, mgr.y, osd.1]
+- [mon.c, osd.2]
+- [client.0]
+- [client.1]
+# For the provisioner: the VMs, and one scratch disk each for the OSDs.
+ernic:
+  vcpus: 4
+  memory: 8192
+  scratch_disks: 1
+  scratch_size: 64G

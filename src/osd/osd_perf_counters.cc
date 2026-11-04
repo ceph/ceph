@@ -62,6 +62,10 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
     l_osd_op_delayed_degraded, "op_delayed_degraded",
     "Count of ops delayed due to target object being degraded");
+  osd_plb.add_u64_counter(
+    l_osd_ec_read_repair, "ec_read_repair",
+    "Count of erasure-coded shards marked missing for recovery after a "
+    "client read decoded around their media error");
 
   osd_plb.add_u64_counter(
     l_osd_op_r, "op_r", "Client read operations");
@@ -148,6 +152,14 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     l_osd_replica_read_served,
     "replica_read_served",
     "Count of replica reads served");
+  // Not one of the replica_read redirects: on a non-primary shard the
+  // read fails after do_op counted it in replica_read_served, and a
+  // read of the primary's own shard, never a replica_read, counts too.
+  osd_plb.add_u64_counter(
+    l_osd_ec_direct_read_redirect_eio,
+    "ec_direct_read_redirect_eio",
+    "Count of EC direct reads redirected to primary due to a shard read "
+    "error, the primary's own shard included");
 
   osd_plb.add_u64_counter(
     l_osd_sop, "subop", "Suboperations");

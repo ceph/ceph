@@ -1,0 +1,20 @@
+# Five rocm-ernic VMs on one hypervisor, as in rgw/s3-oob-uet-ernic:
+# schedule with -m ernic. The ernic machine type and its provisioner are
+# not in ceph/teuthology yet, so this suite runs only on a teuthology that
+# has them.
+#
+# The layout is the one of the uet suite, so that the two suites differ
+# only in the transport. Verbs has no limit of one endpoint per process,
+# but every process here still gets a VM of its own.
+roles:
+- [mon.a, mgr.x, osd.0]
+- [mon.b, mgr.y, osd.1]
+- [mon.c, osd.2]
+- [client.0]
+- [client.1]
+# For the provisioner: the VMs, and one scratch disk each for the OSDs.
+ernic:
+  vcpus: 4
+  memory: 8192
+  scratch_disks: 1
+  scratch_size: 64G

@@ -154,6 +154,10 @@ public:
 	   bool buffered) override;
   int aio_read(uint64_t off, uint64_t len, ceph::buffer::list *pbl,
 	       IOContext *ioc) override;
+  bool supports_read_into() const override;
+  bool can_read_into(const char *buf, uint64_t len) const override;
+  int aio_read_into(uint64_t off, uint64_t len, char *buf,
+		    IOContext *ioc) override;
   int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
 
   int write(uint64_t off, ceph::buffer::list& bl, bool buffered, int write_hint = WRITE_LIFE_NOT_SET) override;
