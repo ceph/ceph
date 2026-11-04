@@ -415,40 +415,60 @@ Config Reference <rados_config_pool_pg_crush_ref>` for details.
 PGs Inconsistent
 ================
 
-If the command ``ceph health detail`` returns an ``active+clean+inconsistent``
-state, this might indicate an error during scrubbing. Identify
-the inconsistent placement group or placement groups by running the following
-command:
+A scrub marks a placement group ``inconsistent`` when it finds that the copies
+of an object in the PG do not match, or that a copy cannot be read. The copies
+are the replicas of the object in a replicated pool, or its shards in an
+erasure-coded pool. The ``OSD_SCRUB_ERRORS`` and ``PG_DAMAGED`` health checks
+report the PG (see :ref:`health-checks`):
 
 .. prompt:: bash #
 
-    ceph health detail
+   ceph health detail
 
 .. code-block:: none
 
-    HEALTH_ERR 1 pgs inconsistent; 2 scrub errors
-    pg 0.6 is active+clean+inconsistent, acting [0,1,2]
-    2 scrub errors
+   HEALTH_ERR 2 scrub errors; Possible data damage: 1 pg inconsistent
+   [ERR] OSD_SCRUB_ERRORS: 2 scrub errors
+   [ERR] PG_DAMAGED: Possible data damage: 1 pg inconsistent
+       pg 0.6 is active+clean+inconsistent, acting [0,1,2]
 
-Alternatively, run this command if you prefer to inspect the output in a
-programmatic way:
+An inconsistent PG still serves client reads and writes. In a replicated
+pool, if a client reads an object whose copy on the primary OSD cannot be
+read or fails its checksum, the primary recovers its copy from another OSD
+and then completes the read. In an erasure-coded pool, the primary rebuilds
+the data from the other shards instead, and the damaged shard stays damaged.
+
+Writes do not check for damage. A write that replaces the whole object
+replaces every copy, including the damaged one. A write that changes only
+part of an object changes the same bytes in every copy, and the rest of a
+damaged copy stays damaged. Such a write also removes the data digest from
+the object info, so after it a scrub cannot use the digest to find the
+damaged copy (see `How PG Repair Works`_).
+
+Only a scrub updates the count of scrub errors behind the ``inconsistent``
+flag, so the flag can stay set after the damaged copy is gone, for example
+after a failed drive is replaced and backfill has rebuilt its copies. To clear
+the flag, run a deep scrub of the PG (see `Requesting a Deep Scrub or
+Repair`_).
+
+To list the inconsistent PGs of a pool, run a command of the following form:
 
 .. prompt:: bash #
 
-   rados list-inconsistent-pg rbd
+   rados list-inconsistent-pg {pool}
 
 .. code-block:: none
 
     ["0.6"]
 
-There is only one consistent state, but in the worst case, we could have
-different inconsistencies in multiple perspectives found in more than one
-object. If an object named ``foo`` in PG ``0.6`` is truncated, the output of
-``rados list-inconsistent-pg rbd`` will look something like this:
+To see the objects with errors in a PG, run a command of the following form:
 
 .. prompt:: bash #
 
-   rados list-inconsistent-obj 0.6 --format=json-pretty
+   rados list-inconsistent-obj {pgid} --format=json-pretty
+
+For example, if the copy of the object ``foo`` on ``osd.2`` has been truncated
+to zero bytes, the output for PG ``0.6`` looks like this:
 
 .. code-block:: json
 
@@ -502,129 +522,157 @@ object. If an object named ``foo`` in PG ``0.6`` is truncated, the output of
         ]
     }
 
-In this case, the output indicates the following:
+In this output:
 
-* The only inconsistent object is named ``foo``, and its head has
-  inconsistencies.
-* The inconsistencies fall into two categories:
+* ``errors`` lists the ways in which the copies of the object differ from each
+  other, without saying which copy is wrong:
 
-  #. ``errors``: These errors indicate inconsistencies between shards, without
-     an indication of which shard(s) are bad. Check for the ``errors`` in the
-     ``shards`` array, if available, to pinpoint the problem.
+  * ``data_digest_mismatch``: The data digest of the copy on ``osd.2``
+    differs from the data digests of the copies on ``osd.0`` and ``osd.1``.
+  * ``size_mismatch``: The copy on ``osd.2`` is ``0`` bytes long, and the
+    copies on ``osd.0`` and ``osd.1`` are ``968`` bytes long.
 
-     * ``data_digest_mismatch``: The digest of the replica read from ``OSD.2``
-       is different from the digests of the replica reads of ``OSD.0`` and
-       ``OSD.1``.
-     * ``size_mismatch``: The size of the replica read from ``OSD.2`` is ``0``,
-       but the size reported by ``OSD.0`` and ``OSD.1`` is ``968``.
+* The ``errors`` of each entry in ``shards`` list what is wrong with that
+  copy, and ``union_shard_errors`` combines them for all of the copies. Errors
+  whose names end in ``_info`` compare the copy with ``selected_object_info``,
+  the object info of the authoritative copy (see `How PG Repair Works`_):
 
-  #. ``union_shard_errors``: The union of all shard-specific ``errors`` in the
-     ``shards`` array. The ``errors`` are set for the shard with the problem.
-     These errors include ``read_error`` and other similar errors. The
-     ``errors`` ending in ``oi`` indicate a comparison with
-     ``selected_object_info``. Examine the ``shards`` array to determine
-     which shard has which error or errors.
+  * ``data_digest_mismatch_info``: The data digest calculated from the copy on
+    ``osd.2`` (``0xffffffff``) differs from the data digest recorded in the
+    object info (``e978e67f``).
+  * ``size_mismatch_info``: The size of the copy on ``osd.2`` (``0``) differs
+    from the size recorded in the object info (``968``).
 
-     * ``data_digest_mismatch_info``: The digest stored in the ``object-info``
-       is not ``0xffffffff``, which is calculated from the shard read from
-       ``OSD.2``.
-     * ``size_mismatch_info``: The size stored in the ``object-info`` is
-       different from the size read from ``OSD.2``. The latter is ``0``.
+.. warning:: A ``read_error`` in the ``errors`` of a shard usually means that
+   the drive behind that OSD has a media error. BlueStore also reports a
+   checksum failure as a ``read_error``. Check the output of ``dmesg`` and
+   ``smartctl`` on the host of that OSD before you repair the PG.
 
-.. warning:: If ``read_error`` is listed in a shard's ``errors`` attribute, the
-   inconsistency is likely due to physical storage errors. In cases like this,
-   check the storage used by that OSD.
+``rados list-inconsistent-snapset {pgid}`` lists errors in the snapshot
+metadata of the objects in a PG.
 
-   Examine the output of ``dmesg`` and ``smartctl`` before attempting a drive
-   repair.
+No Scrub Information Available
+------------------------------
 
-To repair the inconsistent placement group, run a command of the following
-form:
+``rados list-inconsistent-obj`` can report that it has no scrub information
+for a PG that is inconsistent:
+
+.. code-block:: none
+
+   No scrub information available for pg 0.6
+   error 2: (2) No such file or directory
+
+The primary OSD of the PG keeps the details of the errors from the most recent
+scrub, but the count of scrub errors is stored with the PG. The primary
+discards the details when it restarts and whenever the PG peers again, for
+example when one of its OSDs goes down or comes back up. The count of errors,
+and with it the ``inconsistent`` flag, remains. To regenerate the details, run
+a deep scrub of the PG, and run ``rados list-inconsistent-obj`` again after the
+PG no longer shows ``scrubbing+deep`` in ``ceph health detail`` output:
 
 .. prompt:: bash #
 
-   ceph pg repair {placement-group-ID}
+   ceph pg deep-scrub {pgid}
+
+Additionally, while ``ceph pg repair`` runs, ``rados list-inconsistent-obj``
+returns an empty list until the deep scrub that follows the repair has
+finished.
+
+Repairing an Inconsistent PG
+----------------------------
+
+Before you repair a PG, look at what is wrong with it:
+
+* If the errors are ``read_error`` errors on one OSD whose drive is failing,
+  you do not need ``ceph pg repair``. Replace the OSD as described in
+  :ref:`rados-replacing-an-osd`. Backfill rebuilds the copies of that OSD from
+  the good copies. Then run a deep scrub of the PG to clear the
+  ``inconsistent`` flag.
+* If the ``errors`` of the object show mismatches but no shard has errors,
+  the copies differ and nothing shows which of them is wrong. In this case,
+  ``ceph pg repair`` keeps the copy on the primary OSD, which might be the
+  damaged one (see `How PG Repair Works`_).
+
+To repair a PG, run a command of the following form:
+
+.. prompt:: bash #
+
+   ceph pg repair {pgid}
 
 For example:
 
 .. prompt:: bash #
 
-   ceph pg repair 1.4
+   ceph pg repair 0.6
 
-.. warning:: This command overwrites the "bad" copies with "authoritative"
-   copies. In most cases, Ceph is able to choose authoritative copies from all
-   the available replicas by using some predefined criteria. This, however,
-   does not work in every case. For example, it might be the case that the
-   stored data digest is missing, which means that the calculated digest is
-   ignored when Ceph chooses the authoritative copies. Be aware of this, and
-   use the above command with caution.
+.. note:: PG IDs have the form ``N.xxxxx``, where ``N`` is the ID of the pool
+   that contains the PG. The command ``ceph osd lspools`` lists the pool IDs.
 
-.. note:: PG IDs have the form ``N.xxxxx``, where ``N`` is the number of the
-   pool that contains the PG. The command ``ceph osd listpools`` and the
-   command ``ceph osd dump | grep pool`` return a list of pool numbers.
+How PG Repair Works
+-------------------
 
+``ceph pg repair`` runs a deep scrub of the PG, which reads every copy of every
+object, and repairs the objects that have errors:
 
-If you receive ``active+clean+inconsistent`` states periodically due to
-clock skew, consider configuring the `NTP
-<https://en.wikipedia.org/wiki/Network_Time_Protocol>`_ daemons on your monitor
-hosts to act as peers. See `The Network Time Protocol <https://www.ntp.org>`_
-and Ceph :ref:`Clock Settings <mon-config-ref-clock>` for more information.
+#. For each damaged object, Ceph chooses an authoritative copy. A copy cannot
+   be authoritative if it cannot be read, if its object info is missing or
+   corrupt, or if its size does not match its object info. Among the remaining
+   copies, Ceph prefers the one with the newest version, then the one whose
+   object info records more digests, and then the copy on the primary OSD.
+   Ceph then compares each copy with the object info of the authoritative
+   copy. The data and omap digests find the copies that differ, but do not
+   choose the authoritative copy.
 
+#. Ceph marks every copy that differs from the authoritative copy as missing,
+   and recovers it from the authoritative copy as it would recover any missing
+   copy. Meanwhile, the PG shows the ``repair`` state. In an erasure-coded
+   pool, recovery rebuilds the damaged shards from the other shards. If all of
+   the copies match each other but not the digest in their object info, Ceph
+   corrects the digest in the object info and copies no data.
 
-More Information on PG Repair
------------------------------
+#. When recovery finishes, Ceph runs another deep scrub of the PG. If this
+   scrub finds no errors, the ``inconsistent`` flag clears. If errors remain,
+   the PG shows ``failed_repair``.
 
-Ceph stores and updates the checksums of objects stored in the cluster. When a
-scrub is performed on a PG, the lead OSD attempts to choose an authoritative
-copy from among its replicas. Only one of the possible cases is consistent.
-After performing a deep scrub, Ceph calculates the checksum of each object that
-is read from disk and compares it to the checksum that was previously recorded.
-If the current checksum and the previously recorded checksum do not match, that
-mismatch is considered to be an inconsistency. In the case of replicated pools,
-any mismatch between the checksum of any replica of an object and the checksum
-of the authoritative copy means that there is an inconsistency. The discovery
-of these inconsistencies cause a PG's state to be set to ``inconsistent``.
+``ceph pg repair`` cannot repair an object when none of its copies can be
+authoritative, for example when every copy has a read error. In this case, the
+OSD log says ``failed to pick suitable object info``, and the PG shows
+``failed_repair``. Errors in snapshot metadata are not repaired.
 
-The ``pg repair`` command attempts to fix inconsistencies of various kinds. When
-``pg repair`` finds an inconsistent PG, it attempts to overwrite the digest of
-the inconsistent copy with the digest of the authoritative copy. When ``pg
-repair`` finds an inconsistent copy in a replicated pool, it marks the
-inconsistent copy as missing. In the case of replicated pools, recovery is
-beyond the scope of ``pg repair``.
+The object info of an object has no data digest after a write that changes
+only part of the object, other than an append. In that case, Ceph cannot tell
+from the digests which copy is wrong. A deep scrub records the data digest
+again when all of the copies match and the object has not been modified for
+:confval:`osd_deep_scrub_update_digest_min_age`.
 
-In the case of erasure-coded and BlueStore pools, Ceph will automatically
-perform repairs if :confval:`osd_scrub_auto_repair` (default ``false``) is set to
-``true`` and if no more than :confval:`osd_scrub_auto_repair_num_errors` (default
-``5``) errors are found.
+Requesting a Deep Scrub or Repair
+---------------------------------
 
-The ``pg repair`` command will not solve every problem. Ceph does not
-automatically repair PGs when they are found to contain inconsistencies.
+Ceph starts a deep scrub that you request with ``ceph pg deep-scrub``, or a
+repair that you request with ``ceph pg repair``, ahead of scheduled scrubs. It
+does not wait for the ``noscrub`` or ``nodeep-scrub`` flags to be unset, for
+the allowed scrub hours, for a free :confval:`osd_max_scrubs` slot, or for
+recovery on the OSD to finish (see :confval:`osd_scrub_during_recovery`). It
+does wait until the PG is ``active+clean``, and checks again every
+:confval:`osd_scrub_retry_pg_state` seconds, so a PG that is recovering or
+backfilling is scrubbed only after it is clean.
 
-The checksum of a RADOS object or an omap is not always available. Checksums
-are calculated incrementally. If a replicated object is updated
-non-sequentially, the write operation involved in the update changes the object
-and invalidates its checksum. The whole object is not read while the checksum
-is recalculated. The ``pg repair`` command is able to make repairs even when
-checksums are not available to it, as in the case of Filestore. Users working
-with replicated Filestore pools might prefer manual repair to ``ceph pg
-repair``.
+The deep scrub that follows a repair waits for the allowed scrub hours and for
+a free :confval:`osd_max_scrubs` slot, and it honors
+:confval:`osd_scrub_during_recovery`.
 
-This material is relevant for Filestore, but not for BlueStore, which has its
-own internal checksums. The matched-record checksum and the calculated checksum
-cannot prove that any specific copy is in fact authoritative. If there is no
-checksum available, ``pg repair`` favors the data on the primary, but this
-might not be the uncorrupted replica. Because of this uncertainty, human
-intervention is necessary when an inconsistency is discovered. This
-intervention sometimes involves use of ``ceph-objectstore-tool``.
+Automatic Repair
+----------------
 
-
-PG Repair Walkthrough
----------------------
-
-https://ceph.io/geen-categorie/ceph-manually-repair-object/ - This page
-contains a walkthrough of the repair of a PG on the deprecated Filestore OSD back end. It is recommended reading if you
-want to repair a PG on a Filestore OSD but have never done so. The walkthrough does not
-apply to modern BlueStore OSDs.
+Ceph does not repair inconsistencies by itself unless
+:confval:`osd_scrub_auto_repair` is set to ``true``. It is ``false`` by
+default. When it is ``true``, a scheduled deep scrub repairs the errors that it
+finds, and a scheduled shallow scrub that finds errors starts a deep scrub to
+repair them. A scheduled scrub does not repair anything if it finds more than
+:confval:`osd_scrub_auto_repair_num_errors` damaged objects. With
+:confval:`osd_scrub_auto_repair` enabled, a deep scrub that you request with
+``ceph pg deep-scrub`` also repairs the errors that it finds, however many
+there are.
 
 
 Erasure Coded PGs are not ``active+clean``
