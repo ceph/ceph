@@ -129,12 +129,16 @@ add_ceph_unittest(unittest-crimson-coroutine
 
 add_executable(unittest-crimson-scrub
   test_crimson_scrub.cc
-  ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_machine.cc
   ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_validator.cc
+  # scrub_validator.cc references ECLegacy::ECUtilL::get_hinfo_key() from its
+  # (currently unreachable) EC branches; those are defined out of line, so the
+  # test has to compile them in.  Dropping them only links with compilers that
+  # fold the "if (policy.is_ec())" branch away.
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtilL.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
 target_link_libraries(
   unittest-crimson-scrub
+  crimson
   crimson-common
   crimson::gtest)
 
