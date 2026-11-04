@@ -5058,6 +5058,112 @@ TEST(OnodeCache, ratio_set_to_zero_keeps_probation_onodes) {
   EXPECT_EQ(1499u, c.probation);
 }
 
+// The tuner's budget below the hot set: a missed hot onode would come back
+// through probation and be evicted before its second later use, so the LRU
+// never regrows. An onode that the LRU evicted moments ago goes straight
+// back to the LRU on its next miss; an onode never seen goes on probation.
+TEST(OnodeCache, re_missed_lru_onode_skips_probation) {
+  const unsigned HOT = 1000, BUDGET = 500;
+  OnodeCacheFixture f(0.1);
+  for (unsigned i = 0; i < HOT; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  f.oc->set_max(BUDGET);
+  f.oc->trim();
+  ASSERT_EQ(BUDGET, f.stats().onodes);
+  ASSERT_FALSE(f.cached(0)) << "the least recently used half is gone";
+
+  f.create(0);  // a miss on an onode the LRU evicted
+  auto c = f.stats();
+  EXPECT_EQ(0u, c.probation) << "back to the LRU, not on probation";
+  EXPECT_EQ(BUDGET + 1, c.onodes);
+  f.oc->trim();
+  EXPECT_TRUE(f.cached(0)) << "the LRU's tail made room, not the newcomer";
+  EXPECT_FALSE(f.cached(BUDGET)) << "the LRU's tail made room";
+
+  f.create(HOT + 1);  // a miss on an onode never seen
+  c = f.stats();
+  EXPECT_EQ(1u, c.probation) << "on probation as before";
+}
+
+// The evicted keys are remembered up to the shard's budget, the oldest
+// forgotten first, so the list costs a bounded fraction of what it guards.
+TEST(OnodeCache, ghost_list_is_bounded_by_the_budget) {
+  const unsigned HOT = 1000, BUDGET = 100;
+  OnodeCacheFixture f(0.1);
+  for (unsigned i = 0; i < HOT; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  f.oc->set_max(BUDGET);
+  f.oc->trim();  // evicts onodes 0..899, oldest first; remembers 800..899
+  ASSERT_EQ(BUDGET, f.stats().onodes);
+
+  f.create(HOT - 2 * BUDGET - 1);  // the newest of the forgotten evictions
+  EXPECT_EQ(1u, f.stats().probation) << "forgotten: on probation";
+  // the next arrival is over budget by that one: its own add evicts the
+  // LRU's tail (onode 900) first, and that eviction forgets ghost 800
+  f.create(HOT - 2 * BUDGET + 1);  // the oldest remembered one then
+  auto c = f.stats();
+  EXPECT_EQ(1u, c.probation) << "remembered: back to the LRU";
+  EXPECT_EQ(BUDGET + 1, c.onodes);
+  EXPECT_TRUE(f.cached(HOT - 2 * BUDGET - 1)) << "the one on probation";
+  EXPECT_TRUE(f.cached(HOT - 2 * BUDGET + 1));
+  EXPECT_FALSE(f.cached(HOT - BUDGET)) << "the LRU's tail made room";
+}
+
+// A key evicted again is remembered for a whole budget's worth of
+// evictions from then on, not from its first eviction.
+TEST(OnodeCache, ghost_list_remembers_the_latest_eviction_of_a_key) {
+  const unsigned HOT = 6, BUDGET = 3;
+  OnodeCacheFixture f(0.1);
+  for (unsigned i = 0; i < HOT; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < HOT; i++) f.use(i);
+  }
+  f.oc->set_max(BUDGET);
+  f.oc->trim();  // evicts 0, 1, 2: remembered in that order
+  f.create(1);   // back to the LRU
+  for (unsigned i = 3; i < HOT; i++) f.use(i);  // onode 1 is the LRU's tail
+  f.oc->trim();  // evicts 1 again: the newest ghost now
+  f.create(0); f.oc->trim();  // 0 back, 3 evicted
+  f.create(2); f.oc->trim();  // 2 back, 4 evicted: three evictions since 1's
+  f.create(1);
+  EXPECT_EQ(0u, f.stats().probation) << "remembered since its latest eviction";
+}
+
+TEST(OnodeCache, admission_off_remembers_no_evictions) {
+  OnodeCacheFixture f(0);
+  for (unsigned i = 0; i < 10; i++) f.create(i);  // admitted at once
+  f.oc->set_max(5);
+  f.oc->trim();  // evicts 0..4 from the LRU
+  f.oc->probation_ratio = 0.1;
+  f.create(0);
+  EXPECT_EQ(1u, f.stats().probation) << "evicted with admission off: unknown";
+}
+
+// Turning admission off forgets the evictions remembered so far: nothing
+// takes them, and they cost memory the tuner charges to the cache.
+TEST(OnodeCache, admission_turned_off_forgets_the_evictions) {
+  OnodeCacheFixture f(0.1);
+  for (unsigned i = 0; i < 10; i++) f.create(i);
+  for (int r = 0; r < 2; r++) {
+    f.oc->shift_bins();
+    for (unsigned i = 0; i < 10; i++) f.use(i);
+  }
+  f.oc->set_max(5);
+  f.oc->trim();  // evicts 0..4: remembered
+  f.oc->probation_ratio = 0;
+  f.oc->trim();  // forgets them
+  f.oc->probation_ratio = 0.1;
+  f.create(0);
+  EXPECT_EQ(1u, f.stats().probation) << "forgotten: on probation";
+}
+
 // maybe_unpin() may be entered through the shard an onode was in before a
 // PG split moved it; the shard that holds it now must do the work, or the
 // caller links the onode into the wrong shard's lists under the wrong lock.
