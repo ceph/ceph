@@ -1700,11 +1700,22 @@ class CephadmAgent(DaemonForm):
         self.ssl_ctx.check_hostname = True
         self.ssl_ctx.verify_mode = ssl.CERT_REQUIRED
 
+    # files the agent can't work without: an empty listener cert or key
+    # kills the listener, so the mgr can no longer reach the agent
+    non_empty_files = [
+        'root_cert.pem',
+        'listener.crt',
+        'listener.key',
+    ]
+
     def validate(self, config: Dict[str, str] = {}) -> None:
         # check for the required files
         for fname in self.required_files:
             if fname not in config:
                 raise Error('required file missing from config: %s' % fname)
+        for fname in self.non_empty_files:
+            if not (config[fname] or '').strip():
+                raise Error('required file is empty in config: %s' % fname)
 
     def write_required_files(self, config: Dict[str, str]) -> None:
         """Write agent required config files. These are the same set that

@@ -30,6 +30,13 @@ def test_agent_validate():
                 agent.validate(incomplete_files)
         all_files = {s: 'text' for s in required_files}
         agent.validate(all_files)
+        # an empty listener cert/key (or root cert) is as bad as a missing one
+        for fname in ['root_cert.pem', 'listener.crt', 'listener.key']:
+            for empty in ['', '\n', None]:
+                files = dict(all_files)
+                files[fname] = empty
+                with pytest.raises(_cephadm.Error, match=f'required file is empty in config: {fname}'):
+                    agent.validate(files)
 
 
 def _check_file(path, content):
@@ -54,6 +61,17 @@ def test_agent_write_required_files(cephadm_fs):
                 _cephadm.Error,
                 match='required file missing from config: agent.json'):
             agent.write_required_files(incomplete)
+
+        # nothing is written if the listener credentials are empty
+        empty_creds = {s: f'content-{s}' for s in agent.required_files}
+        empty_creds['listener.crt'] = ''
+        empty_creds['listener.key'] = ''
+        with pytest.raises(
+                _cephadm.Error,
+                match='required file is empty in config: listener.crt'):
+            agent.write_required_files(empty_creds)
+        for fname in agent.required_files:
+            assert not os.path.exists(os.path.join(AGENT_DIR, fname))
 
         config = {s: f'content-{s}' for s in agent.required_files}
         config['extra.txt'] = 'do-not-write'
