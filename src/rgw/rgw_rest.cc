@@ -290,14 +290,72 @@ void dump_errno(const struct rgw_err &err, string& out) {
   dump_errno(err.http_ret, out);
 }
 
+static std::string escape_auth_param(std::string_view value)
+{
+  std::string out;
+  out.reserve(value.size() + 8);
+  for (const char c : value) {
+    if (c == '\\' || c == '"') {
+      out += '\\';
+    }
+    out += c;
+  }
+  return out;
+}
+
+static std::string swift_www_authenticate_realm(const req_state *s)
+{
+  if (!s->account_name.empty()) {
+    return std::string("AUTH_") + s->account_name;
+  }
+
+  const std::string_view uri = s->decoded_uri;
+  const std::string_view marker = "/AUTH_";
+  const auto pos = uri.find(marker);
+  if (pos != std::string_view::npos) {
+    const auto start = pos + 1; /* skip leading slash */
+    const auto end = uri.find('/', start);
+    if (end == std::string_view::npos) {
+      return std::string(uri.substr(start));
+    }
+    return std::string(uri.substr(start, end - start));
+  }
+
+  return "unknown";
+}
+
+void dump_swift_www_authenticate(req_state *s)
+{
+  if (!(s->prot_flags & RGW_REST_SWIFT)) {
+    return;
+  }
+
+  const std::string swift_challenge =
+      "Swift realm=\"" + escape_auth_param(swift_www_authenticate_realm(s)) + '"';
+  dump_header(s, "WWW-Authenticate", swift_challenge);
+
+  const std::string& keystone = s->cct->_conf->rgw_keystone_url;
+  if (!keystone.empty()) {
+    const std::string keystone_challenge =
+        "Keystone uri=\"" + escape_auth_param(keystone) + '"';
+    dump_header(s, "WWW-Authenticate", keystone_challenge);
+  }
+}
+
 void dump_errno(req_state *s)
 {
   dump_status(s, s->err.http_ret, http_status_names[s->err.http_ret]);
+  if (s->err.http_ret == 401) {
+    dump_swift_www_authenticate(s);
+  }
 }
 
 void dump_errno(req_state *s, int http_ret)
 {
   dump_status(s, http_ret, http_status_names[http_ret]);
+  if (http_ret == 401) {
+    dump_swift_www_authenticate(s);
+  }
 }
 
 void dump_header(req_state* const s,
