@@ -3246,7 +3246,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   int res = 0;
   if (!multipart_upload_id.empty()) {
     std::unique_ptr<rgw::sal::MultipartUpload> upload =
-      s->bucket->get_multipart_upload(s->object->get_name(),
+      s->bucket->get_multipart_upload(this, s->yield, s->object->get_name(),
 				  multipart_upload_id);
     std::unique_ptr<rgw::sal::Object> obj = upload->get_meta_obj();
     obj->set_in_extra_data(true);

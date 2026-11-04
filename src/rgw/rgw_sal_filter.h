@@ -668,6 +668,8 @@ public:
   }
 
   virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
+				const DoutPrefixProvider* dpp,
+				optional_yield y,
 				const std::string& oid,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
@@ -841,8 +843,6 @@ public:
 			       optional_yield y) override;
   virtual bool is_expired() override;
   virtual void gen_rand_obj_instance_name() override;
-  virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
-						       const std::string& lock_name) override;
   virtual int transition(Bucket* bucket,
 			 const rgw_placement_rule& placement_rule,
 			 const real_time& mtime,
@@ -1026,21 +1026,11 @@ public:
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
-  virtual void print(std::ostream& out) const override { return next->print(out); }
-};
+  int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
+  int unlock(const DoutPrefixProvider *dpp, optional_yield y) override;
+  bool is_locked() override;
+  void clear_locked() override;
 
-class FilterMPSerializer : public MPSerializer {
-protected:
-  std::unique_ptr<MPSerializer> next;
-
-public:
-  FilterMPSerializer(std::unique_ptr<MPSerializer> _next) : next(std::move(_next)) {}
-  virtual ~FilterMPSerializer() = default;
-
-  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
-  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual void clear_locked() override { next->clear_locked(); }
-  virtual bool is_locked() override { return next->is_locked(); }
   virtual void print(std::ostream& out) const override { return next->print(out); }
 };
 

@@ -1208,7 +1208,7 @@ int rgw_multipart_init( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
 
   std::string initial_upload_id;
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(obj_id->key, initial_upload_id);
+    bucket->get_multipart_upload(dpp, y, obj_id->key, initial_upload_id);
   if (!upload) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_init: allocation failed" << dendl;
     return -ENOMEM;
@@ -1257,7 +1257,7 @@ int rgw_multipart_put_part( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   }
 
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(obj_id->key, upload_id);
+    bucket->get_multipart_upload(dpp, y, obj_id->key, upload_id);
   if (!upload) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_put_part: allocation failed" << dendl;
     return -ENOMEM;
@@ -1364,7 +1364,7 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   }
 
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(obj_id->key, upload_id);
+    bucket->get_multipart_upload(dpp, y, obj_id->key, upload_id);
   if (!upload) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_complete: allocation failed" << dendl;
     return -ENOMEM;
@@ -1511,7 +1511,7 @@ int rgw_multipart_abort( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   }
 
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(obj_id->key, upload_id);
+    bucket->get_multipart_upload(dpp, y, obj_id->key, upload_id);
   if (!upload) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_abort: allocation failed" << dendl;
     return -ENOMEM;

@@ -436,23 +436,6 @@ public:
   }
 };
 
-class StoreMPSerializer : public MPSerializer {
-protected:
-  std::atomic<bool> locked;
-  std::string oid;
-public:
-  StoreMPSerializer() : locked(false) {}
-  StoreMPSerializer(std::string _oid) : locked(false), oid(_oid) {}
-  virtual ~StoreMPSerializer() = default;
-
-  virtual void clear_locked() override {
-    locked = false;
-  }
-  virtual bool is_locked() override { return locked; }
-
-  virtual void print(std::ostream& out) const override { out << oid; }
-};
-
 class StoreLCSerializer : public LCSerializer {
 protected:
   std::string oid;
