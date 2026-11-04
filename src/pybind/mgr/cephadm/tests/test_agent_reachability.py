@@ -1,10 +1,12 @@
 import datetime
+import json
 from unittest import mock
 
 import pytest
 
 from ceph.utils import datetime_now
-from orchestrator import DaemonDescription
+from orchestrator import DaemonDescription, DaemonDescriptionStatus
+from orchestrator.module import Format
 
 from cephadm.agent import AgentMessageThread, CephadmAgentHelpers, HostData
 from cephadm.inventory import (
@@ -15,7 +17,7 @@ from cephadm.inventory import (
 )
 from cephadm.module import CephadmOrchestrator
 from cephadm.serve import CephadmServe
-from cephadm.tests.fixtures import _run_cephadm, with_cephadm_module, with_host
+from cephadm.tests.fixtures import _run_cephadm, wait, with_cephadm_module, with_host
 from cephadm.tlsobject_types import TLSCredentials
 
 # with_cephadm_module() mocks _request_agent_acks; keep the real one.
@@ -463,3 +465,75 @@ class TestApplyWithUnreachableAgents:
             serve._apply_all_services()
             getitem.assert_called_with('agent')
             assert apply.call_count == 1
+
+
+class TestAgentStatus:
+
+    @pytest.fixture()
+    def agents(self, cephadm_module: CephadmOrchestrator, clock: _Clock):
+        with mock.patch('cephadm.serve.CephadmServe._run_cephadm', _run_cephadm('[]')), \
+                with_host(cephadm_module, 'host1', refresh_hosts=False), \
+                with_host(cephadm_module, 'host2', refresh_hosts=False):
+            ac = cephadm_module.agent_cache
+            for h in ['host1', 'host2']:
+                cephadm_module.cache.add_daemon(h, DaemonDescription(
+                    'agent', h, h, status=DaemonDescriptionStatus.running,
+                    status_desc='running', started=datetime_now()))
+                ac.agent_ports[h] = 4721
+                ac.agent_counter[h] = 3
+                ac.agent_timestamp[h] = datetime_now()
+            cephadm_module.cache.metadata_up_to_date = {'host1': True, 'host2': False}
+            ac.record_agent_listener_state('host1', 'listening', '')
+            ac.record_agent_message_success('host1')
+            for _ in range(AGENT_UNREACHABLE_FAILURES):
+                ac.record_agent_message_failure('host2', 'connection refused')
+            yield
+
+    def test_agent_status(self, cephadm_module: CephadmOrchestrator, agents: None) -> None:
+        st = {e['hostname']: e for e in cephadm_module.agent_helpers.agent_status()}
+        assert st['host1']['reachability'] == 'ok'
+        assert st['host1']['listener_state'] == 'listening'
+        assert st['host1']['metadata_up_to_date'] is True
+        assert st['host1']['last_success'] is not None
+        assert st['host2']['reachability'] == 'unreachable'
+        assert st['host2']['listener_state'] == 'unknown'
+        assert st['host2']['metadata_up_to_date'] is False
+        assert st['host2']['consecutive_failures'] == AGENT_UNREACHABLE_FAILURES
+        assert st['host2']['retry_in'] > 0
+        assert st['host2']['last_error'] == 'connection refused'
+        assert [e['hostname'] for e in cephadm_module.agent_helpers.agent_status('host2')] == ['host2']
+        assert cephadm_module.agent_helpers.agent_status('nohost') == []
+
+    def test_agent_status_command(self, cephadm_module: CephadmOrchestrator, agents: None) -> None:
+        r = cephadm_module._agent_status()
+        assert r.retval == 0
+        lines = r.stdout.splitlines()
+        assert lines[0].split()[:3] == ['HOST', 'PORT', 'LAST']
+        host2 = [line for line in lines if line.startswith('host2')][0]
+        assert 'pending (counter 3)' in host2
+        assert f'unreachable ({AGENT_UNREACHABLE_FAILURES} failures, retry in' in host2
+        assert 'connection refused' in host2
+        host1 = [line for line in lines if line.startswith('host1')][0]
+        assert 'up to date' in host1 and 'connection refused' not in host1
+
+        r = cephadm_module._agent_status(hostname='host1', format=Format.json)
+        assert [e['hostname'] for e in json.loads(r.stdout)] == ['host1']
+        assert cephadm_module._agent_status(format=Format.xml).retval != 0
+        assert 'No cephadm agent on host nohost' in cephadm_module._agent_status(hostname='nohost').stdout
+
+    def test_orch_ps_status(self, cephadm_module: CephadmOrchestrator, agents: None) -> None:
+        def desc(host: str) -> str:
+            dds = wait(cephadm_module, cephadm_module.list_daemons(daemon_type='agent', host=host))
+            assert dds[0].status == DaemonDescriptionStatus.running
+            return dds[0].status_desc
+
+        assert desc('host1') == 'running'
+        assert desc('host2') == 'running, unreachable'
+        cephadm_module.agent_cache.record_agent_listener_state('host1', 'failed', 'PEM lib')
+        assert desc('host1') == 'running, listener down'
+        # the cached daemon is not altered
+        dd = cephadm_module.cache.get_daemons_by_type('agent', host='host1')[0]
+        assert dd.status_desc == 'running'
+        # no status_desc from the host: built from the status
+        dd.status_desc = None
+        assert desc('host1') == 'running, listener down'

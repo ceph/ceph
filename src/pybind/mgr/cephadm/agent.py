@@ -1084,6 +1084,61 @@ class CephadmAgentHelpers:
                 f'{", ".join(sorted(recovered)[:5])}'
                 f'{", ..." if len(recovered) > 5 else ""}')
 
+    def agent_status(self, host: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Per-host state of the agent as seen by the mgr: when it last
+        reported, whether its metadata is up to date (it has acknowledged
+        the latest counter), its listener state and whether the mgr can
+        reach it.
+        """
+        hosts = sorted({
+            d.hostname for d in self.mgr.cache.get_daemons_by_type(CephadmAgent.TYPE)
+            if d.hostname and (host is None or d.hostname == host)
+        })
+        ac = self.mgr.agent_cache
+        res: List[Dict[str, Any]] = []
+        for h in hosts:
+            r = ac.get_agent_reachability(h)
+            if r is None:
+                reachability = 'unknown'
+            elif ac.agent_unreachable(h):
+                reachability = 'unreachable'
+            elif r.consecutive_failures:
+                reachability = 'failing'
+            elif r.last_success:
+                reachability = 'ok'
+            else:
+                reachability = 'unknown'
+            last_report = ac.agent_timestamp.get(h)
+            res.append({
+                'hostname': h,
+                'port': ac.agent_ports.get(h),
+                'last_report': datetime_to_str(last_report) if last_report else None,
+                'counter': ac.agent_counter.get(h),
+                'metadata_up_to_date': self.mgr.cache.host_metadata_up_to_date(h),
+                'listener_state': (r.listener_state if r else '') or 'unknown',
+                'listener_error': r.listener_error if r else '',
+                'reachability': reachability,
+                'consecutive_failures': r.consecutive_failures if r else 0,
+                'total_failures': r.total_failures if r else 0,
+                'retry_in': int(r.backoff_seconds()) if r else 0,
+                'last_success': datetime_to_str(r.last_success) if r and r.last_success else None,
+                'last_failure': datetime_to_str(r.last_failure) if r and r.last_failure else None,
+                'last_error': r.last_error if r else '',
+            })
+        return res
+
+    def agent_status_desc(self, host: str) -> Optional[str]:
+        """Extra status for the agent daemon on this host in 'orch ps', if any."""
+        r = self.mgr.agent_cache.get_agent_reachability(host)
+        if r is None:
+            return None
+        if r.listener_state == AGENT_LISTENER_FAILED:
+            return 'listener down'
+        if self.mgr.agent_cache.agent_unreachable(host):
+            return 'unreachable'
+        return None
+
     # this function probably seems very unnecessary, but it makes it considerably easier
     # to get the unit tests working. All unit tests that check which daemons were deployed
     # or services setup would have to be individually changed to expect an agent service or

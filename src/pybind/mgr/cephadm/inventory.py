@@ -1548,6 +1548,12 @@ class HostCache():
                 # We do not refresh daemons on hosts in maintenance mode, so stored daemon statuses
                 # could be wrong. We must assume maintenance is working and daemons are stopped
                 dd.status = orchestrator.DaemonDescriptionStatus.stopped
+            elif dd.daemon_type == 'agent' and dd.status == orchestrator.DaemonDescriptionStatus.running:
+                # the agent reports, but the mgr can't connect to it
+                extra = self.mgr.agent_helpers.agent_status_desc(host)
+                if extra:
+                    base = dd.status_desc or orchestrator.DaemonDescriptionStatus.to_str(dd.status)
+                    dd.status_desc = f'{base}, {extra}'
             dd.events = self.mgr.events.get_for_daemon(dd.name())
             return dd
 
