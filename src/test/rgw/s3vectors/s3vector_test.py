@@ -6754,8 +6754,14 @@ def get_rebuild_admin_status(since=0, bucket='', tenant=''):
         params['tenant'] = tenant
 
     url = f'{scheme}{hostname}:{port_no}/admin/vectorbucket/rebuild'
+    # Send the Host header explicitly, so that the signed value and the sent
+    # value are the same: botocore signs the host WITHOUT the port when it is
+    # the default one of the scheme (80/443), while urllib sends it WITH the
+    # port of the URL. RGW signs the header it received, so on a default port
+    # (as in teuthology) the signatures differ and the request gets a 403.
+    headers = {'Host': f'{hostname}:{port_no}'}
     creds = Credentials(get_access_key(), get_secret_key())
-    request = AWSRequest(method='GET', url=url, params=params)
+    request = AWSRequest(method='GET', url=url, params=params, headers=headers)
     # S3SigV4Auth (not plain SigV4Auth): RGW is an S3 service, so it expects the
     # x-amz-content-sha256 header and S3-style path canonicalization. Plain
     # SigV4Auth omits that header, causing a SignatureDoesNotMatch (403).
