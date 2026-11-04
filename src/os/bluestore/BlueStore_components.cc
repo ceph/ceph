@@ -24,6 +24,8 @@
 #include "os/kv.h"
 #include "common/pretty_binary.h"
 
+#include <string_view>
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
@@ -295,6 +297,65 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
     return std::max<uint64_t>({probation_floor.load(), (uint64_t)(max.load() * std::min(r, 1.0)),
                                recent});
   }
+  /// The keys of the onodes lru evicted most recently, as many as the
+  /// shard's budget, oldest first. A miss on one of them is a hot onode the
+  /// budget could not hold: it goes back to lru rather than through
+  /// probation, where under a budget below the hot set it would be evicted
+  /// before its second later use, so that lru never grew back. A key
+  /// evicted again moves to the back. The keys are hashes: a collision
+  /// promotes a stranger, which lru then ages out as any other.
+  using ghost_list_t = mempool::bluestore_cache_other::list<uint64_t>;
+  ghost_list_t ghosts;
+  /// key -> its place in ghosts
+  mempool::bluestore_cache_other::unordered_map<uint64_t, ghost_list_t::iterator>
+    ghost_pos;
+
+  /// 64 bits of the whole object id. std::hash<ghobject_t> is the 32-bit
+  /// placement hash, which same-named objects of two pools share.
+  static uint64_t _ghost_key(const bluestore::Onode* o)
+  {
+    const hobject_t& h = o->oid.hobj;
+    std::hash<std::string_view> hs;
+    uint64_t k = hs(h.oid.name);
+    auto mix = [&k](uint64_t v) {
+      k ^= v + 0x9e3779b97f4a7c15ULL + (k << 6) + (k >> 2);
+    };
+    mix(hs(h.nspace));
+    mix(hs(h.get_key()));
+    mix(h.pool);
+    mix(h.snap.val);
+    mix(h.get_hash());
+    mix(o->oid.generation);
+    mix(o->oid.shard_id.id);
+    return k;
+  }
+  /// remember an onode lru evicts
+  void _ghost_add(const bluestore::Onode* o)
+  {
+    auto [it, fresh] = ghost_pos.try_emplace(_ghost_key(o), ghosts.end());
+    if (!fresh) {
+      ghosts.erase(it->second);
+    }
+    ghosts.push_back(it->first);
+    it->second = std::prev(ghosts.end());
+    // a few at a time, as _trim_to does: a budget cut may leave many over
+    uint64_t cap = std::max<uint64_t>(1, max.load());
+    for (int i = 0; i < 4 && ghosts.size() > cap; i++) {
+      ghost_pos.erase(ghosts.front());
+      ghosts.pop_front();
+    }
+  }
+  /// was the arriving onode evicted from lru lately? forget it either way
+  bool _ghost_take(const bluestore::Onode* o)
+  {
+    auto it = ghost_pos.find(_ghost_key(o));
+    if (it == ghost_pos.end()) {
+      return false;
+    }
+    ghosts.erase(it->second);
+    ghost_pos.erase(it);
+    return true;
+  }
   list_t& _list_of(bluestore::Onode* o)
   {
     return o->cache_promoted ? lru : probation;
@@ -345,6 +406,15 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
           _stamp(o);
         }
         if (!linked) {
+          if (!popped && _ghost_take(o)) {
+            // an arrival that lru evicted lately: a hot onode the budget
+            // could not hold, back to lru as a plain LRU would have it
+            o->cache_promoted = true;
+            _link_front(lru, o);
+            dout(20) << __func__ << " " << this << " " << o->oid
+                     << " promoted, evicted lately" << dendl;
+            return;
+          }
           _link_front(probation, o);
           if (!popped) {
             probation_arrivals[0]++;
@@ -434,6 +504,11 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
 
   void _trim_to(uint64_t new_size) override
   {
+    if (!_admission() && !ghosts.empty()) {
+      // nothing takes them with admission off
+      ghosts.clear();
+      ghost_pos.clear();
+    }
     uint64_t linked = lru.size() + probation.size();
     uint64_t pmax = _probation_max();
     // the promoted onodes come first: over budget, probation may hold only
@@ -487,6 +562,9 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
         --num;
         o->clear_cached();
         o->cache_age_bin.reset();  // unlinked onodes carry no stamp
+        if (&l == &lru && o->exists && _admission()) {
+          _ghost_add(o);  // a deleted object's name may be reused
+        }
         o->c->onode_space._remove(o->oid);
       }
     }
