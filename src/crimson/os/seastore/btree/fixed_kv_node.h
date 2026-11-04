@@ -543,8 +543,10 @@ struct FixedKVInternalNode
       }
       if (pending_version.get_last_committed_crc()) {
         // if pending_version has already calculated its crc,
-        // calculate it again.
-        pending_version.set_last_committed_crc(pending_version.calc_crc32c());
+        // calculate it again and keep the on-page checksum in sync.
+        auto crc = pending_version.calc_crc32c();
+        pending_version.set_last_committed_crc(crc);
+        pending_version.update_in_extent_chksum_field(crc);
       }
     }
   }
