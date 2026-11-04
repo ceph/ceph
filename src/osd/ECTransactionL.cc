@@ -502,7 +502,7 @@ void ECTransactionL::generate_transactions(
 			     << dendl;
 	  off = new_size;
 	}
-	if (!sinfo.logical_offset_is_stripe_aligned(end) && (end > append_after)) {
+	if (!sinfo.logical_offset_is_stripe_aligned(end) && (end > new_size)) {
 	  uint64_t aligned_end = sinfo.logical_to_next_stripe_offset(
 	    end);
 	  uint64_t tail = aligned_end - end;
