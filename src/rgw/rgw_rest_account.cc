@@ -165,6 +165,9 @@ void RGWOp_Account_Modify::execute(optional_yield y)
 
   op_ret = rgw::account::modify(this, driver, op_state,
                                 s->err.message, flusher, y);
+  if (op_ret == -EEXIST) {
+    op_ret = -ERR_ACCOUNT_EXISTS;
+  }
 }
 
 
