@@ -8,7 +8,7 @@ from threading import Thread
 from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
-from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union, Any
+from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union, Any, Sequence
 from ceph.deployment.hostspec import normalize_hostname
 from orchestrator import OrchestratorError
 from .utils import is_fips_enabled, get_default_ssh_config
@@ -220,13 +220,14 @@ class SSHManager:
 
         with self.redirect_log(host, addr):
             try:
-                ssh_options = asyncssh.SSHClientConnectionOptions(
-                    keepalive_interval=self.mgr.ssh_keepalive_interval,
-                    keepalive_count_max=self.mgr.ssh_keepalive_count_max
-                )
-                conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name],
+                client_keys: Sequence[Union['asyncssh.SSHKeyPair', str]] = self.mgr.ssh_keypairs
+                if not client_keys:
+                    client_keys = [self.mgr.tkey.name]
+                conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=client_keys,
                                               known_hosts=None, config=[self.mgr.ssh_config_fname],
-                                              preferred_auth=['publickey'], options=ssh_options)
+                                              preferred_auth=['publickey'],
+                                              keepalive_interval=self.mgr.ssh_keepalive_interval,
+                                              keepalive_count_max=self.mgr.ssh_keepalive_count_max)
             except OSError:
                 raise
             except asyncssh.Error:
@@ -617,6 +618,16 @@ class SSHManager:
                 tcert.flush()  # make visible to other processes
                 temp_files += [tcert]
             ssh_options += ['-i', self.mgr.tkey.name]
+
+        # asyncssh parses and validates a key file on every connect, which for
+        # RSA costs about 0.5s with the GIL held. On failure connect falls back
+        # to the file and reports the error per host.
+        self.mgr.ssh_keypairs = []
+        if ssh_key:
+            try:
+                self.mgr.ssh_keypairs = list(asyncssh.load_keypairs(self.mgr.tkey.name))
+            except (asyncssh.KeyImportError, OSError) as e:
+                logger.warning(f'Failed to load the cephadm SSH identity: {e}')
 
         self.mgr._temp_files = temp_files
         if ssh_options:
