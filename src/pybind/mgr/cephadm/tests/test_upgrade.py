@@ -27,6 +27,16 @@ from .fixtures import _run_cephadm, wait, with_host, with_service, \
 
 from typing import List, Tuple, Optional
 
+# These drive _do_upgrade() through the real _detect_need_upgrade(),
+# _filtered_scope_up_to_date() and _mark_upgrade_complete() and assert the
+# outcome (upgrade_state cleared or kept). Staggered upgrades must complete
+# once every daemon in their scope is upgraded, regardless of daemons outside
+# the scope still running the old image.
+
+_NEW_DIGEST = 'quay.io/ceph/ceph@sha256:' + 'a' * 64
+_OLD_DIGEST = 'quay.io/ceph/ceph@sha256:' + 'b' * 64
+_NEW_IMAGE = 'quay.io/ceph/ceph:v20'
+_OLD_IMAGE = 'quay.io/ceph/ceph:v19'
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 def test_upgrade_start(cephadm_module: CephadmOrchestrator):
@@ -1573,6 +1583,229 @@ def test_do_upgrade_limit_exhausted_marks_complete_without_scope_check(
 
     mark_complete.assert_called_once()
     filtered_scope.assert_not_called()
+
+
+def _completion_dd(daemon_type: str, daemon_id: str, host: str,
+                   upgraded: bool) -> DaemonDescription:
+    digest = _NEW_DIGEST if upgraded else _OLD_DIGEST
+    return DaemonDescription(
+        daemon_type=daemon_type,
+        daemon_id=daemon_id,
+        hostname=host,
+        container_image_digests=[digest],
+        deployed_by=[digest],
+        container_image_name=_NEW_IMAGE if upgraded else _OLD_IMAGE,
+    )
+
+
+def _run_do_upgrade_for_completion(
+    cephadm_module: CephadmOrchestrator,
+    daemons: List[DaemonDescription],
+    **upgrade_state_kwargs,
+) -> Optional[UpgradeState]:
+    cephadm_module.use_repo_digest = True
+    cephadm_module.use_agent = False
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        _NEW_IMAGE,
+        '0',
+        target_id='image_id',
+        target_digests=[_NEW_DIGEST],
+        target_version='19.3.0-0',
+        **upgrade_state_kwargs,
+    )
+    with mock.patch('cephadm.inventory.HostCache._get_daemons', return_value=daemons), \
+            mock.patch.object(CephadmUpgrade, '_handle_need_upgrade_self'), \
+            mock.patch.object(CephadmUpgrade, '_rotate_mgr_mon_auth_keys'), \
+            mock.patch.object(CephadmUpgrade, '_set_container_images'), \
+            mock.patch.object(CephadmUpgrade, '_complete_osd_upgrade'), \
+            mock.patch.object(CephadmUpgrade, '_complete_mds_upgrade'), \
+            mock.patch.object(CephadmUpgrade, '_update_upgrade_progress'), \
+            mock.patch.object(CephadmUpgrade, '_clear_rotated_daemon_entry'), \
+            mock.patch.object(CephadmUpgrade, '_save_upgrade_state'), \
+            mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings',
+                              return_value={}), \
+            mock.patch('cephadm.module.CephadmOrchestrator.lookup_release_name',
+                       return_value='tentacle'), \
+            mock.patch('cephadm.module.CephadmOrchestrator.check_mon_command',
+                       return_value=(0, '{}', '')), \
+            mock.patch('cephadm.module.CephadmOrchestrator.set_container_image'), \
+            mock.patch('cephadm.module.CephadmOrchestrator.get_active_mgr_digests',
+                       return_value=[_NEW_DIGEST]), \
+            mock.patch('cephadm.module.CephadmOrchestrator.remote'), \
+            mock.patch('cephadm.module.CephadmOrchestrator.get', return_value={
+                'min_mon_release': 19,
+                'require_osd_release': 'tentacle',
+                'have_local_config_map': True,
+            }), \
+            mock.patch('cephadm.module.CephadmOrchestrator.version',
+                       new_callable=mock.PropertyMock,
+                       return_value='ceph version 19.3.0-0 (hash)'):
+        cephadm_module.upgrade._do_upgrade()
+    return cephadm_module.upgrade.upgrade_state
+
+
+@pytest.mark.parametrize(
+    "scope",
+    [
+        {'daemon_types': ['mgr']},
+        {'services': ['mgr']},
+    ],
+)
+def test_staggered_upgrade_completes_with_daemons_out_of_scope(
+    scope, cephadm_module: CephadmOrchestrator,
+):
+    # Only the mgrs are in scope and they are all upgraded; mons and OSDs
+    # still on the old image must not prevent the upgrade from completing.
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('mgr', 'y', 'host2', True),
+        _completion_dd('mon', 'host1', 'host1', False),
+        _completion_dd('mon', 'host2', 'host2', False),
+        _completion_dd('osd', '0', 'host1', False),
+        _completion_dd('osd', '1', 'host2', False),
+    ]
+    assert _run_do_upgrade_for_completion(cephadm_module, daemons, **scope) is None
+
+
+@mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, []))
+def test_staggered_upgrade_does_not_complete_with_mgr_pending(
+    _to_upgrade: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    # Both mgrs are selected, but only one has the target image. Old-image
+    # daemons outside the mgr scope must not affect the completion decision.
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('mgr', 'y', 'host2', False),
+        _completion_dd('mon', 'host1', 'host1', False),
+        _completion_dd('osd', '0', 'host1', False),
+    ]
+    assert _run_do_upgrade_for_completion(
+        cephadm_module, daemons, daemon_types=['mgr'],
+    ) is not None
+
+
+@mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, []))
+def test_staggered_upgrade_multiple_types_waits_for_all_selected_daemons(
+    _to_upgrade: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    # Mgrs are done, but a selected mon still has the old image. An OSD
+    # outside the scope is also old and must not influence completion.
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('mgr', 'y', 'host2', True),
+        _completion_dd('mon', 'host1', 'host1', True),
+        _completion_dd('mon', 'host2', 'host2', False),
+        _completion_dd('osd', '0', 'host1', False),
+    ]
+    assert _run_do_upgrade_for_completion(
+        cephadm_module, daemons, daemon_types=['mgr', 'mon'],
+    ) is not None
+
+
+def test_staggered_upgrade_by_host_completes_with_other_hosts_pending(
+    cephadm_module: CephadmOrchestrator,
+):
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('mon', 'host1', 'host1', True),
+        _completion_dd('osd', '0', 'host1', True),
+        _completion_dd('mgr', 'y', 'host2', True),
+        _completion_dd('mon', 'host2', 'host2', False),
+        _completion_dd('osd', '1', 'host2', False),
+    ]
+    assert _run_do_upgrade_for_completion(
+        cephadm_module, daemons, hosts=['host1']) is None
+
+
+def test_limited_upgrade_completes_when_limit_exhausted(
+    cephadm_module: CephadmOrchestrator,
+):
+    # --daemon-types osd --limit 2: the batch quota is used up, the remaining
+    # OSDs are intentionally left for a later run.
+    daemons = [_completion_dd('mgr', 'x', 'host1', True)] + [
+        _completion_dd('osd', str(i), 'host1', i < 2) for i in range(8)
+    ]
+    assert _run_do_upgrade_for_completion(
+        cephadm_module, daemons,
+        daemon_types=['osd'], total_count=2, remaining_count=0,
+    ) is None
+
+
+@mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, []))
+def test_full_upgrade_does_not_complete_with_daemons_pending(
+    _to_upgrade: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    # https://tracker.ceph.com/issues/81131: an unfiltered upgrade must not be
+    # marked complete while osd.1 still runs the old image. _to_upgrade is
+    # mocked so osd.1 is not redeployed during this pass.
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('mon', 'host1', 'host1', True),
+        _completion_dd('osd', '0', 'host1', True),
+        _completion_dd('osd', '1', 'host2', False),
+    ]
+    assert _run_do_upgrade_for_completion(cephadm_module, daemons) is not None
+
+
+def test_full_upgrade_completes_when_all_daemons_upgraded(
+    cephadm_module: CephadmOrchestrator,
+):
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('mgr', 'y', 'host2', True),
+        _completion_dd('mon', 'host1', 'host1', True),
+        _completion_dd('mon', 'host2', 'host2', True),
+        _completion_dd('osd', '0', 'host1', True),
+        _completion_dd('osd', '1', 'host2', True),
+    ]
+    assert _run_do_upgrade_for_completion(cephadm_module, daemons) is None
+
+
+def test_mgr_only_upgrade_never_processes_grafana(
+    cephadm_module: CephadmOrchestrator,
+):
+    # Regression for 614344: the monitoring stack must not enter a mgr-only
+    # upgrade pass, even if Grafana still has an old image.
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('mgr', 'y', 'host2', True),
+        _completion_dd('grafana', 'host1', 'host1', False),
+        _completion_dd('mon', 'host1', 'host1', False),
+        _completion_dd('osd', '0', 'host1', False),
+    ]
+    with mock.patch.object(
+        CephadmUpgrade, '_detect_need_upgrade',
+        wraps=cephadm_module.upgrade._detect_need_upgrade,
+    ) as detect:
+        assert _run_do_upgrade_for_completion(
+            cephadm_module, daemons, daemon_types=['mgr'],
+        ) is None
+    for call in detect.call_args_list:
+        assert all(d.daemon_type != 'grafana' for d in call.args[0])
+
+
+@pytest.mark.parametrize('in_bucket_upgraded', [True, False])
+@mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, []))
+def test_crush_scoped_upgrade_completion_ignores_other_buckets(
+    _to_upgrade: mock.MagicMock,
+    in_bucket_upgraded: bool,
+    cephadm_module: CephadmOrchestrator,
+):
+    # Only osd.0 belongs to the chosen rack. Out-of-bucket osd.1 is old.
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('osd', '0', 'host1', in_bucket_upgraded),
+        _completion_dd('osd', '1', 'host2', False),
+    ]
+    cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket = {'osd.0'}
+    state = _run_do_upgrade_for_completion(
+        cephadm_module, daemons, daemon_types=['osd'],
+        crush_bucket_type='rack', crush_bucket_name='rack-a',
+    )
+    assert (state is None) == in_bucket_upgraded
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
