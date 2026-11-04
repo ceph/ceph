@@ -1465,10 +1465,14 @@ options:
 - name: ms_async_rdma_enable_hugepage
   type: bool
   level: advanced
-  desc: Allocate RDMA buffers from huge pages
-  fmt_desc: Allocate the RDMA send and receive buffers from 2 MiB huge pages, and
-    set ``RDMAV_HUGEPAGES_SAFE`` for libibverbs. If a huge page allocation fails,
-    Ceph uses ordinary memory for that allocation.
+  desc: Allocate RDMA buffers from the reserved huge page pool
+  fmt_desc: Allocate the RDMA send and receive buffers from the kernel's pool of
+    reserved huge pages (``mmap()`` with ``MAP_HUGETLB``), and set
+    ``RDMAV_HUGEPAGES_SAFE`` for libibverbs. This doesn't use transparent huge
+    pages, which Ceph daemons disable for themselves unless ``thp`` is set.
+    Reserve huge pages first, for example with the ``vm.nr_hugepages`` sysctl.
+    When an allocation can't get huge pages, Ceph uses ordinary memory for it
+    without logging a message.
   default: false
   with_legacy: true
 - name: ms_async_rdma_buffer_size
