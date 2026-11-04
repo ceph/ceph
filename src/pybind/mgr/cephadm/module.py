@@ -3518,6 +3518,8 @@ Then run the following:
         )
         self._trigger_preview_refresh(service_name=service_name)
         if service_name in self.spec_store:
+            if self.spec_store[service_name].spec.service_type == 'agent':
+                self.agent_helpers.check_agent_service_remove()
             if self.spec_store[service_name].spec.service_type in ('mon', 'mgr'):
                 return (
                     f'Unable to remove {service_name} service.\n'
@@ -4879,6 +4881,10 @@ Then run the following:
         spec.rgw_frontend_ssl_certificate = None
 
     def _apply_service_spec(self, spec: ServiceSpec) -> str:
+        agent_note = ''
+        if spec.service_type == 'agent':
+            spec, agent_note = self.agent_helpers.check_agent_spec_apply(spec)
+
         if spec.placement.is_empty():
             # fill in default placement
             defaults = {
@@ -4990,7 +4996,7 @@ Then run the following:
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
         self._kick_serve_loop()
-        msg = f"Scheduled {spec.service_name()} update...{cert_warning}"
+        msg = f"Scheduled {spec.service_name()} update...{cert_warning}{agent_note}"
         if revived:
             msg += (
                 f'\nNOTE: {spec.service_name()} was pending removal. The'
