@@ -1447,7 +1447,19 @@ void CDir::mark_dirty(LogSegmentRef const& ls, version_t pv)
   ceph_assert(is_auth());
 
   if (pv) {
-    ceph_assert(get_version() < pv);
+    if (unlikely(get_version() >= pv)) {
+      // When multiple mutations project the same directory and
+      // their journal commits complete out of order, a later
+      // projection may already have advanced get_version() past
+      // the pv of an earlier one.  This is harmless: the dir is
+      // already dirty at a newer version, and the dentry/inode
+      // versions are already set by their own mark_dirty before
+      // reaching here.  Skip the stale version mark.
+      dout(10) << __func__ << " version already advanced, "
+               << "get_version()=" << get_version() << " pv=" << pv
+               << " " << *this << dendl;
+      return;
+    }
     ceph_assert(pv <= projected_version);
     ceph_assert(!projected_fnode.empty() &&
 	        pv <= projected_fnode.front()->version);
