@@ -674,7 +674,7 @@ class CephadmServe:
         # end up stuck between wanting metadata to be up to date to apply specs
         # and needing to apply the agent spec to get up to date metadata
         if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
-            self.log.info('Metadata not up to date on all hosts. Skipping non agent specs')
+            self.mgr.agent_helpers.report_use_agent_waiting()
             agent_spec = self.mgr.spec_store.active_specs.get('agent')
             if agent_spec is None:
                 # A missing or deleted agent spec is (re)created by
@@ -684,6 +684,7 @@ class CephadmServe:
                 return r
             specs.append(agent_spec)
         else:
+            self.mgr.agent_helpers.report_use_agent_waiting()
             _specs: List[ServiceSpec] = []
             for sn, spec in self.mgr.spec_store.active_specs.items():
                 _specs.append(spec)
