@@ -1,7 +1,7 @@
 import ssl
 from unittest.mock import patch
 
-from cephadm.agent import AgentMessageThread
+from cephadm.agent import AgentMessage
 from cephadm.services.agent import CephadmAgent
 from .fixtures import with_cephadm_module
 
@@ -49,11 +49,10 @@ def test_agent_message_uses_shared_client_context():
         host = 'test'
         agent = mgr.http_server.agent
         ctx = agent.get_client_ssl_context()
-        thread = AgentMessageThread(host, 1234, {'counter': 1}, mgr)
+        message = AgentMessage(host, 1234, mgr)
         with patch.object(mgr.cert_mgr, 'generate_cert') as generate_cert, \
                 patch.object(agent, 'get_client_ssl_context', return_value=ctx) as get_ctx, \
                 patch('cephadm.agent.socket.socket', side_effect=OSError('no network in tests')):
-            thread.run()
+            message.send()
         get_ctx.assert_called_once()
         generate_cert.assert_not_called()
-        assert mgr.agent_cache.sending_agent_message[host] is False
