@@ -103,6 +103,8 @@ private:
   std::map<int, std::deque<out_queue_entry_t>, std::greater<int>> out_queue;
 
   std::deque<MessageRef> sent;
+  // when `sent` last got an ack, or last became non-empty
+  ceph::coarse_mono_time last_ack_progress;
   std::atomic<uint64_t> out_seq{0};
   std::atomic<uint64_t> in_seq{0};
   std::atomic<uint64_t> ack_left{0};
@@ -228,6 +230,8 @@ public:
   virtual bool sent_queue_empty() const override;
   virtual void write_event() override;
   virtual bool is_queued() override;
+  virtual bool is_stalled(ceph::coarse_mono_time now,
+                          ceph::timespan limit) override;
 
   virtual void dump(Formatter *f) override;
 

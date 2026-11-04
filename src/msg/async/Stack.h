@@ -233,6 +233,7 @@ enum {
 
   l_msgr_connection_ready_timeouts,
   l_msgr_connection_idle_timeouts,
+  l_msgr_connection_stall_timeouts,
 
   l_msgr_labeled_last,
 };
@@ -301,6 +302,10 @@ class Worker {
         l_msgr_connection_idle_timeouts, "msgr_connection_idle_timeouts",
         "Number of connections closed due to idleness", NULL,
         PerfCountersBuilder::PRIO_USEFUL);
+    plb_labeled.add_u64_counter(
+        l_msgr_connection_stall_timeouts, "msgr_connection_stall_timeouts",
+        "Number of connections reset because no message was acknowledged",
+        NULL, PerfCountersBuilder::PRIO_USEFUL);
 
     perf_labeled_logger = plb_labeled.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_labeled_logger);

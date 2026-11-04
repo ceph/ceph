@@ -18,6 +18,7 @@
 #ifndef CEPH_MSG_ASYNCCONNECTION_H
 #define CEPH_MSG_ASYNCCONNECTION_H
 
+#include <algorithm>
 #include <atomic>
 #include <climits>
 #include <deque>
@@ -66,6 +67,12 @@ class AsyncConnection : public Connection {
   void fault();
   void inject_delay();
   bool inject_network_congestion() const;
+  bool inject_blackhole();
+  // how often tick() runs once the connection is up
+  uint64_t tick_interval_us() const {
+    return stall_timeout_us ? std::min(inactive_timeout_us, stall_timeout_us / 2)
+                            : inactive_timeout_us;
+  }
 
   bool is_queued() const;
   void shutdown_socket();
@@ -211,6 +218,8 @@ private:
   uint64_t last_tick_id = 0;
   const uint64_t connect_timeout_us;
   const uint64_t inactive_timeout_us;
+  const uint64_t stall_timeout_us;
+  bool blackholed = false;  // ms_inject_blackhole_lossless
 
   // Tis section are temp variables used by state transition
 
