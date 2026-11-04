@@ -11,7 +11,6 @@
 
 #include "services/svc_zone.h"
 
-#define FIRST_EPOCH 1
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
@@ -93,9 +92,7 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
       ldpp_dout(dpp, -1) << "failed to pull period " << period_id << dendl;
       return r;
     }
-    // write the period to rados
-    period.period_map.id = period.id = rgw::gen_random_uuid();
-    period.epoch = FIRST_EPOCH;
+    // write the period to rados as pulled: it keeps the master's id and epoch
     constexpr bool exclusive = true;
     r = cfgstore->create_period(dpp, y, exclusive, period);
     if (r == -EEXIST) {
