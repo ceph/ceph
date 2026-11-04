@@ -2,6 +2,8 @@
 Tests for the agent service lifecycle: mgr/cephadm/use_agent owns the
 agent spec.
 """
+import pytest
+
 from ceph.deployment.service_spec import (
     CertificateSource,
     PlacementSpec,
@@ -9,7 +11,7 @@ from ceph.deployment.service_spec import (
 )
 
 from ceph.utils import datetime_now
-from orchestrator import DaemonDescription
+from orchestrator import DaemonDescription, OrchestratorError
 
 from cephadm.agent import CephadmAgentHelpers
 from cephadm.inventory import AGENT_CACHE_PREFIX, AgentCache
@@ -18,7 +20,7 @@ from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephService
 from cephadm.services.service_registry import service_registry
 from tests import mock
-from .fixtures import _run_cephadm, with_host
+from .fixtures import _run_cephadm, wait, with_host
 
 # with_cephadm_module() mocks _apply_agent(); keep the real one so these
 # tests can check the spec it writes.
@@ -168,3 +170,65 @@ class TestAgentStateReset:
             cephadm_module.use_agent = False
             cephadm_module.agent_helpers._handle_use_agent_setting()
             assert not _has_agent_state(cephadm_module, 'host1')
+
+
+class TestAgentApplyAndRemove:
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.module.CephadmOrchestrator._kick_serve_loop")
+    def test_apply_refused_without_use_agent(self, _kick, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.use_agent = False
+            with pytest.raises(OrchestratorError, match='use_agent'):
+                cephadm_module._apply_service_spec(CephadmAgentHelpers.agent_spec())
+            assert 'agent' not in cephadm_module.spec_store
+
+    @pytest.mark.parametrize('applied', [
+        # hand-written spec: no ssl, which leaves agents with empty
+        # listener credentials
+        ServiceSpec('agent', placement=PlacementSpec(host_pattern='*')),
+        # no placement: used to fail with a KeyError on the placement defaults
+        ServiceSpec('agent'),
+        # subset of hosts
+        ServiceSpec('agent', placement=PlacementSpec(label='foo'), ssl=True,
+                    certificate_source=CertificateSource.CEPHADM_SIGNED.value),
+        # unmanaged
+        ServiceSpec('agent', placement=PlacementSpec(host_pattern='*'), unmanaged=True,
+                    ssl=True, certificate_source=CertificateSource.CEPHADM_SIGNED.value),
+    ])
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.module.CephadmOrchestrator._kick_serve_loop")
+    def test_apply_normalizes_spec(self, _kick, cephadm_module: CephadmOrchestrator, applied):
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.use_agent = True
+            msg = cephadm_module._apply_service_spec(applied)
+            assert 'WARNING: the agent service is managed by' in msg
+            spec = cephadm_module.spec_store.active_specs['agent']
+            _assert_canonical_agent_spec(spec)
+            assert not spec.unmanaged
+            cephadm_module.use_agent = False
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.module.CephadmOrchestrator._kick_serve_loop")
+    def test_apply_canonical_spec_no_warning(self, _kick, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.use_agent = True
+            msg = cephadm_module._apply_service_spec(CephadmAgentHelpers.agent_spec())
+            assert 'WARNING' not in msg
+            _assert_canonical_agent_spec(cephadm_module.spec_store.active_specs['agent'])
+            cephadm_module.use_agent = False
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._kick_serve_loop")
+    def test_rm_agent_service(self, _kick, cephadm_module: CephadmOrchestrator):
+        store = cephadm_module.spec_store
+        store.save(CephadmAgentHelpers.agent_spec())
+
+        cephadm_module.use_agent = True
+        with pytest.raises(OrchestratorError, match='use_agent false'):
+            wait(cephadm_module, cephadm_module.remove_service('agent'))
+        assert 'agent' in store.active_specs
+
+        # with use_agent=false, removing a leftover agent service is fine
+        cephadm_module.use_agent = False
+        assert wait(cephadm_module, cephadm_module.remove_service('agent')) == 'Removed service agent'
+        assert 'agent' in store.spec_deleted

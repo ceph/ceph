@@ -1177,13 +1177,61 @@ class CephadmAgentHelpers:
     # or services setup would have to be individually changed to expect an agent service or
     # daemons, OR we can put this in its own function then mock the function
     def _apply_agent(self) -> None:
-        spec = ServiceSpec(
+        self.mgr.spec_store.save(self.agent_spec())
+
+    @staticmethod
+    def agent_spec() -> ServiceSpec:
+        """
+        The only agent spec cephadm supports: an agent on every host, with a
+        listener certificate signed by the cephadm root CA. The agent
+        listener cannot work without TLS, and every host needs an agent.
+        """
+        return ServiceSpec(
             service_type=CephadmAgent.TYPE,
             placement=PlacementSpec(host_pattern='*'),
             ssl=True,
             certificate_source=CertificateSource.CEPHADM_SIGNED.value,
         )
-        self.mgr.spec_store.save(spec)
+
+    def check_agent_spec_apply(self, spec: ServiceSpec) -> Tuple[ServiceSpec, str]:
+        """
+        Validate an 'orch apply' of the agent service.
+
+        The agent service is owned by mgr/cephadm/use_agent. An applied
+        agent spec is refused while use_agent is false (the serve loop
+        would remove it again) and is otherwise replaced by agent_spec(),
+        with a warning if it differed.
+
+        Returns the spec to save and a note for the apply output.
+        """
+        if not self.mgr.use_agent:
+            raise OrchestratorError(
+                'The agent service is managed by the mgr/cephadm/use_agent setting. '
+                'To deploy agents, run: '
+                'ceph config set mgr mgr/cephadm/use_agent true')
+        canonical = self.agent_spec()
+        canonical.preview_only = spec.preview_only
+        if spec.to_json() == canonical.to_json():
+            return canonical, ''
+        self.mgr.log.warning(
+            f'Replaced the applied agent spec {spec.to_json()} with the spec managed by '
+            f'use_agent {canonical.to_json()}')
+        return canonical, (
+            '\nWARNING: the agent service is managed by the mgr/cephadm/use_agent '
+            'setting. The applied spec was replaced with the default agent spec '
+            '(all hosts, cephadm-signed TLS); other settings are ignored.'
+        )
+
+    def check_agent_service_remove(self) -> None:
+        """
+        Refuse 'orch rm agent' while use_agent is true: the serve loop would
+        re-create the service right away.
+        """
+        if self.mgr.use_agent:
+            raise OrchestratorError(
+                'The agent service is managed by the mgr/cephadm/use_agent setting. '
+                'To remove the agents, run: '
+                'ceph config set mgr mgr/cephadm/use_agent false')
 
     def _handle_use_agent_setting(self) -> bool:
         need_apply = False
