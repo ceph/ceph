@@ -67,6 +67,26 @@ sc::result WaitUpdate::react(const ScrubContext::reserve_range_complete_t &e)
   }
 
   context<ChunkState>().version = e.value;
+
+  // Don't scan until every write in the reserved range (including in-flight
+  // local transactions found in projected_log) is durable in the object
+  // store; otherwise the scan can see a not-yet-committed object as
+  // SHARD_MISSING.  If we must wait, PGScrubber::on_log_update() will post
+  // await_update_complete_t.
+  if (!get_scrub_context().await_update(e.value)) {
+    return discard_event();
+  }
+  return transit<ScanRange>();
+}
+
+sc::result WaitUpdate::react(const ScrubContext::await_update_complete_t &)
+{
+  DECLARE_LOCALS;
+
+  if (!m_scrbr->verify_against_abort(pg.get_osdmap_epoch())) {
+    post_event(events::abort_t{});
+    return discard_event();
+  }
   return transit<ScanRange>();
 }
 
