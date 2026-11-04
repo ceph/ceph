@@ -213,6 +213,13 @@ void PG::publish_stats_to_osd()
 {
   if (!is_primary())
     return;
+
+  peering_state.update_stats_wo_resched(
+    [this](pg_history_t& hist,
+           pg_stat_t& info) mutable -> void {
+      info.scrub_sched_status = scrubber.get_schedule();
+    });
+
   if (auto new_pg_stats = peering_state.prepare_stats_for_publish(
         pg_stats,
         object_stat_collection_t());
@@ -1022,7 +1029,12 @@ void PG::dump_primary(Formatter* f)
   f->close_section();
 
   // TODO: snap_trimq
-  // TODO: scrubber state
+
+  // Dump scrubber state
+  if (is_primary() && is_active()) {
+    scrubber.dump_scrub_metrics(f);
+  }
+
   // TODO: agent state
 }
 
@@ -1987,6 +1999,7 @@ void PG::C_PG_FinishRecovery::finish(int r) {
   if (this == pg.recovery_finisher) {
     peering_state.purge_strays();
     pg.recovery_finisher = nullptr;
+    pg.scrubber.recovery_completed();
   } else {
     DEBUGDPP("stale recovery finsher", pg);
   }
