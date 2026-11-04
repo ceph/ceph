@@ -146,6 +146,23 @@ ScrubReserveRange::ifut<> ScrubReserveRange::run(PG &pg)
     ceph_assert(!scrubber.blocked);
     scrubber.blocked = scrub::blocked_range_t{begin, end};
     blocked_set = true;
+
+    // Search projected_log first (in-flight writes whose log entries have been
+    // assigned but whose transactions haven't yet committed), then fall back to
+    // the committed log.  This mirrors classic OSD's search_log_for_updates()
+    // and ensures we wait for any in-flight write in the scrub range before
+    // starting the scan, closing the race between wait_scrub() and log_operation().
+    auto& projected = pg.projected_log.log;
+    auto pi = find_if(
+      projected.crbegin(), projected.crend(),
+      [this](const auto& e) -> bool {
+	return e.soid >= begin && e.soid < end;
+      });
+    if (pi != projected.crend()) {
+      return scrubber.machine.process_event(
+	scrub::ScrubContext::reserve_range_complete_t{pi->version});
+    }
+
     auto& log = pg.peering_state.get_pg_log().get_log().log;
     auto p = find_if(
       log.crbegin(), log.crend(),

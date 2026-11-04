@@ -123,6 +123,9 @@ void PGScrubber::on_primary_active_clean()
 {
   LOG_PREFIX(PGScrubber::on_primary_active_clean);
   DEBUGDPP("", pg);
+  if (pg.get_info().last_complete > last_applied_durable) {
+    last_applied_durable = pg.get_info().last_complete;
+  }
   handle_event(events::primary_activate_t{});
 }
 
@@ -130,6 +133,9 @@ void PGScrubber::on_replica_activate()
 {
   LOG_PREFIX(PGScrubber::on_replica_activate);
   DEBUGDPP("", pg);
+  if (pg.get_info().last_complete > last_applied_durable) {
+    last_applied_durable = pg.get_info().last_complete;
+  }
   handle_event(events::replica_activate_t{});
 }
 
@@ -149,6 +155,10 @@ void PGScrubber::on_interval_change()
    * released on the other side) */
   handle_event(events::reset_t{});
   waiting_for_update = std::nullopt;
+  pending_writes.clear();
+  if (pg.get_info().last_complete > last_applied_durable) {
+    last_applied_durable = pg.get_info().last_complete;
+  }
 }
 
 void PGScrubber::flag_reservations_failure()
@@ -169,13 +179,45 @@ void PGScrubber::flag_reservations_failure()
   return ScrubJob::requires_reservation(m_active_target->urgency());
 }
 
+void PGScrubber::on_rep_op_submitted(eversion_t v)
+{
+  if (v != eversion_t{}) {
+    pending_writes.insert(v);
+  }
+}
+
 void PGScrubber::on_log_update(eversion_t v)
 {
   LOG_PREFIX(PGScrubber::on_log_update);
-  if (waiting_for_update && v >= *waiting_for_update) {
-    DEBUGDPP("waiting_for_update: {}, v: {}", pg, *waiting_for_update, v);
-    handle_event(await_update_complete_t{});
-    waiting_for_update = std::nullopt;
+  pending_writes.erase(v);
+  if (v > last_applied_durable) {
+    last_applied_durable = v;
+  }
+  if (pg.get_info().last_complete > last_applied_durable) {
+    last_applied_durable = pg.get_info().last_complete;
+  }
+  // Wake the waiting scrub scan if all of the following hold:
+  //  1. a scrub is waiting for a version to become durable,
+  //  2. last_applied_durable has reached that version (the highest-versioned
+  //     write committing first may have already advanced it), and
+  //  3. there are no in-flight writes with version <= waiting_for_update.
+  //
+  // We must check condition (3) regardless of whether 'v' itself equals or
+  // exceeds waiting_for_update.  In a multi-shard Crimson OSD, transactions
+  // can commit out of version order: a later-versioned write (V+N) commits
+  // first, advancing last_applied_durable past waiting_for_update(V) and
+  // leaving V still in pending_writes.  When V finally commits, 'v < V+N'
+  // so the old "v >= *waiting_for_update" guard was false and the scan
+  // would never wake.  Checking only last_applied_durable + pending_writes
+  // is correct in both orderings.
+  if (waiting_for_update &&
+      *waiting_for_update <= last_applied_durable) {
+    auto it = pending_writes.begin();
+    if (it == pending_writes.end() || *it > *waiting_for_update) {
+      DEBUGDPP("waiting_for_update: {}, v: {}", pg, *waiting_for_update, v);
+      handle_event(await_update_complete_t{});
+      waiting_for_update = std::nullopt;
+    }
   }
 }
 
@@ -943,7 +985,7 @@ void PGScrubber::handle_scrub_message(Message &_m)
     MOSDRepScrub &m = *static_cast<MOSDRepScrub*>(&_m);
     DEBUGDPP("MOSDRepScrub: {}", pg, m);
     handle_event(events::replica_scan_t{
-	m.start, m.end, m.scrub_from, m.deep
+ m.start, m.end, m.scrub_to, m.deep
       });
     break;
   }
@@ -1123,12 +1165,6 @@ void PGScrubber::request_range(const hobject_t &start)
     >(start, &pg);
 }
 
-/* TODO: This isn't actually enough.  Here, classic would
- * hold the pg lock from the wait_scrub through to IO submission.
- * ClientRequest, however, isn't in the processing ExclusivePhase
- * bit yet, and so this check may miss ops between the wait_scrub
- * check and adding the IO to the log. */
-
 void PGScrubber::reserve_range(const hobject_t &start, const hobject_t &end)
 {
   LOG_PREFIX(PGScrubber::reserve_range);
@@ -1189,14 +1225,27 @@ bool PGScrubber::await_update(const eversion_t &version)
   LOG_PREFIX(PGScrubber::await_update);
   DEBUGDPP("version: {}", pg, version);
   ceph_assert(!waiting_for_update);
-  auto& log = pg.peering_state.get_pg_log().get_log().log;
-  eversion_t current = log.empty() ? eversion_t() : log.rbegin()->version;
-  if (version <= current) {
-    return true;
-  } else {
-    waiting_for_update = version;
-    return false;
+  // Use last_applied_durable rather than the pg log tail: log entries are
+  // appended to the in-memory pg log before their transaction commits, so
+  // the log tail can appear up to date while the write is still in flight.
+  //
+  // Additionally, check pending_writes: in a multi-shard Crimson OSD,
+  // transactions can commit out of version order.  A later-versioned
+  // transaction committing first advances last_applied_durable past
+  // 'version', but an earlier in-flight write at a version <= 'version'
+  // may still be outstanding.  We must wait until all pending writes with
+  // version <= 'version' have committed before starting the scan.
+  if (pg.get_info().last_complete > last_applied_durable) {
+    last_applied_durable = pg.get_info().last_complete;
   }
+  if (version <= last_applied_durable) {
+    auto it = pending_writes.begin();
+    if (it == pending_writes.end() || *it > version) {
+      return true;
+    }
+  }
+  waiting_for_update = version;
+  return false;
 }
 
 void PGScrubber::generate_and_submit_chunk_result(
@@ -2420,6 +2469,11 @@ void PGScrubber::clear_pgscrub_state()
   pg.state_clear(PG_STATE_DEEP_SCRUB);
 
   m_local_osd_resource.reset();
+
+  // a scrub that is torn down (abort, interval change, completion) while
+  // parked in WaitUpdate must not leave a stale waiter behind, or the next
+  // await_update() would trip its !waiting_for_update assert.
+  waiting_for_update = std::nullopt;
 
   reset_internal_state();
   m_flags = scrub_flags_t{};

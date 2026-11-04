@@ -2124,6 +2124,8 @@ PendingTimer::PendingTimer(my_context ctx) : ScrubState(ctx) {}
 WaitUpdate::WaitUpdate(my_context ctx) : ScrubState(ctx) {}
 sc::result WaitUpdate::react(const ScrubContext::reserve_range_complete_t &)
 { return discard_event(); }
+sc::result WaitUpdate::react(const ScrubContext::await_update_complete_t &)
+{ return discard_event(); }
 
 ScanRange::ScanRange(my_context ctx) : ScrubState(ctx) {}
 sc::result ScanRange::react(const ScrubContext::scan_range_complete_t &)
