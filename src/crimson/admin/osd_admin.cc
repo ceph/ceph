@@ -225,6 +225,57 @@ private:
 };
 template std::unique_ptr<AdminSocketHook> make_asok_hook<FlushPgStatsHook>(crimson::osd::OSD& osd);
 
+/**
+ * dump scrubs
+ * list all scheduled scrubs
+ */
+class DumpScrubsHook : public AdminSocketHook {
+public:
+  explicit DumpScrubsHook(crimson::osd::ShardServices& shard_services) :
+    AdminSocketHook("dump_scrubs",
+		    "",
+		    "print scheduled scrubs"),
+    shard_services{shard_services}
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&&) const final
+  {
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    shard_services.get_scrub_scheduler().get_queue().dump_scrubs(f.get());
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
+  }
+
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpScrubsHook>(crimson::osd::ShardServices& shard_services);
+
+/**
+ * list all scrub reservations
+ */
+class DumpScrubReservationsHook : public AdminSocketHook {
+public:
+  explicit DumpScrubReservationsHook(crimson::osd::ShardServices& shard_services) :
+    AdminSocketHook("dump_scrub_reservations",
+		    "",
+		    "print scrub reservations"),
+    shard_services{shard_services}
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&&) const final
+  {
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    shard_services.get_scrub_scheduler().dump_scrub_reservations(f.get());
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
+  }
+
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpScrubReservationsHook>(crimson::osd::ShardServices& shard_services);
+
 /// dump the history of PGs' peering state
 class DumpPGStateHistory final: public AdminSocketHook {
 public:
