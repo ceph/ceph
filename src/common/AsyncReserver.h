@@ -114,13 +114,18 @@ class AsyncReserver {
       if (it->second.empty()) {
 	queues.erase(it);
       }
-      if (p.grant) {
-	f->queue(p.grant);
-	p.grant = nullptr;
-      }
+      // Publish the reservation before handing the grant to the finisher, so
+      // that a callback which inspects in_progress sees it.  Detach the grant
+      // first: the copy stored in in_progress must not retain a pointer to a
+      // Context the finisher is about to run and delete.
+      Context *grant = p.grant;
+      p.grant = nullptr;
       in_progress[p.item] = p;
       if (p.preempt) {
 	preempt_by_prio.insert(std::make_pair(p.prio, p.item));
+      }
+      if (grant) {
+	f->queue(grant);
       }
     }
   }
