@@ -158,7 +158,10 @@ class not_before_queue_t {
     }
   };
   struct removal_registry_disposer_t {
-    void operator()(container_t *p) { delete p; }
+    void operator()(container_t *p) {
+      p->status = status_t::INVALID;
+      delete p;
+    }
   };
   using removal_registry_t = boost::intrusive::multiset<
     container_t,
@@ -421,4 +424,14 @@ public:
   }
 
   int eligible_count() const { return eligible_queue.size(); }
+
+  void clear() {
+    ineligible_queue.clear();
+    eligible_queue.clear();
+    removal_registry.clear_and_dispose(removal_registry_disposer_t{});
+  }
+
+  ~not_before_queue_t() {
+    clear();
+  }
 };
