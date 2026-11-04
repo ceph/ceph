@@ -3152,6 +3152,8 @@ int POSIXBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 }
 
 std::unique_ptr<MultipartUpload> POSIXBucket::get_multipart_upload(
+				  const DoutPrefixProvider* dpp,
+				  optional_yield y,
 				  const std::string& oid,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
@@ -3542,18 +3544,14 @@ void POSIXObject::gen_rand_obj_instance_name()
   state.obj.key.set_instance(gen_rand_instance_name());
 }
 
-std::unique_ptr<MPSerializer> POSIXObject::get_serializer(const DoutPrefixProvider *dpp, optional_yield y, const std::string& lock_name)
+int POSIXMultipartUpload::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
 {
-  return std::make_unique<MPPOSIXSerializer>(dpp, driver, this, lock_name);
-}
-
-int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
-{
-  if (!obj->check_exists(dpp)) {
+  auto obj = POSIXObject{driver, rgw_obj_key(get_meta(), std::string(), mp_ns), bucket};
+  if (!obj.check_exists(dpp)) {
     return -ENOENT;
   }
 
-  POSIXBucket* b = static_cast<POSIXBucket*>(obj->get_bucket());
+  POSIXBucket* b = static_cast<POSIXBucket*>(bucket);
   if (b->get_dir()->get_type() == ObjectType::MULTIPART && b->get_dir_fd(dpp) > 0) {
     locked = true;
     return 0;
@@ -3562,7 +3560,7 @@ int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan du
   return -ENOENT;
 }
 
-int MPPOSIXSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)
+int POSIXMultipartUpload::unlock(const DoutPrefixProvider *dpp, optional_yield y)
 {
   clear_locked();
   return 0;

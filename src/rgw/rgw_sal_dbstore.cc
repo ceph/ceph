@@ -395,6 +395,8 @@ namespace rgw::sal {
   }
 
   std::unique_ptr<MultipartUpload> DBBucket::get_multipart_upload(
+				const DoutPrefixProvider* dpp,
+				optional_yield y,
 				const std::string& oid,
 				std::optional<std::string> upload_id,
 				ACLOwner owner, ceph::real_time mtime) {
@@ -617,23 +619,26 @@ namespace rgw::sal {
     return 0;
   }
 
-  int MPDBSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
+  int DBMultipartUpload::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
   {
     locked = true;
     return 0;
   }
 
-  int MPDBSerializer::unlock(const DoutPrefixProvider* dpp, optional_yield y)
+  int DBMultipartUpload::unlock(const DoutPrefixProvider* dpp, optional_yield y)
   {
     clear_locked();
     return 0;
   }
 
-  std::unique_ptr<MPSerializer> DBObject::get_serializer(const DoutPrefixProvider *dpp,
-							 optional_yield y,
-							 const std::string& lock_name)
+  bool DBMultipartUpload::is_locked()
   {
-    return std::make_unique<MPDBSerializer>(dpp, store, this, lock_name);
+    return locked;
+  }
+
+  void DBMultipartUpload::clear_locked()
+  {
+    locked = false;
   }
 
   int DBObject::transition(Bucket* bucket,

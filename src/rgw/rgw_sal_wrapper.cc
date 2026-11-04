@@ -1208,7 +1208,7 @@ int rgw_multipart_init( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
 
   std::string initial_upload_id;
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(obj_id->key, initial_upload_id);
+    bucket->get_multipart_upload(dpp, y, obj_id->key, initial_upload_id);
   if (!upload) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_init: allocation failed" << dendl;
     return -ENOMEM;
@@ -1257,7 +1257,7 @@ int rgw_multipart_put_part( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   }
 
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(obj_id->key, upload_id);
+    bucket->get_multipart_upload(dpp, y, obj_id->key, upload_id);
   if (!upload) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_put_part: allocation failed" << dendl;
     return -ENOMEM;
@@ -1364,7 +1364,7 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   }
 
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(obj_id->key, upload_id);
+    bucket->get_multipart_upload(dpp, y, obj_id->key, upload_id);
   if (!upload) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_complete: allocation failed" << dendl;
     return -ENOMEM;
@@ -1399,9 +1399,7 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   int max_lock_secs_mp = g_ceph_context->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   const ceph::timespan dur = std::chrono::seconds(max_lock_secs_mp);
   
-  std::unique_ptr<rgw::sal::MPSerializer> serializer = 
-    meta_obj->get_serializer(dpp, y, "rgw_multipart_complete");
-  ret = serializer->try_lock(dpp, dur, y);
+  ret = upload->try_lock(dpp, dur, y);
   if (ret == -ENOENT) {
     // Multipart upload was already completed or doesn't exist
     ldpp_dout(dpp, 4) << "NOTICE: Multipart upload already completed or doesn't exist" << dendl;
@@ -1422,7 +1420,7 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     target_obj->set_attrs(meta_obj->get_attrs());
   }
 
-  if (!serializer->is_locked()) {
+  if (!upload->is_locked()) {
     // lock renewal failed, it's not safe to commit the head object
     ret = -ERR_INTERNAL_ERROR;
     ldpp_dout(dpp, 0) << "This multipart completion is already in progress" << ret << dendl;
@@ -1455,7 +1453,7 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     if (del_ret != -ECANCELED || i == MAX_DELETE_RETRIES - 1) {
       if (ret >= 0) {
         /* serializer's exclusive lock is released */
-        serializer->clear_locked();
+        upload->clear_locked();
       } else {
         ldpp_dout(dpp, 1) << "WARNING: failed to remove multipart metadata object " << meta_obj << " ret: " << del_ret << dendl;
         // Don't fail the complete operation if metadata deletion fails
@@ -1511,7 +1509,7 @@ int rgw_multipart_abort( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   }
 
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(obj_id->key, upload_id);
+    bucket->get_multipart_upload(dpp, y, obj_id->key, upload_id);
   if (!upload) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_abort: allocation failed" << dendl;
     return -ENOMEM;
