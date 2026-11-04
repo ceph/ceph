@@ -12285,6 +12285,26 @@ void Server::handle_file_blockdiff_finish(const MDRequestRef& mdr, CInode *in, c
   respond_to_request(mdr, r);
 }
 
+class C_MDS_SnapDiffFetched : public ServerContext {
+  MDRequestRef mdr;
+  dirfrag_t df;
+public:
+  CDir::snapdiff_fetch_t result;
+  C_MDS_SnapDiffFetched(Server *s, const MDRequestRef& r, dirfrag_t d) :
+    ServerContext(s), mdr(r), df(d) {}
+  void finish(int r) override {
+    if (result.done) {
+      // Pin what was loaded until the request is done, so that trimming
+      // can't drop an entry the diff needs.
+      for (auto dn : result.loaded)
+        mdr->pin(dn);
+      mdr->snapdiff_fetched = df;
+    }
+    mdr->retry++;
+    get_mds()->mdcache->dispatch_request(mdr);
+  }
+};
+
 void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest>& req = mdr->client_request;
@@ -12373,10 +12393,27 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
       dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       return;
     }
-    // fetch
-    dout(10) << " incomplete dir contents for snapdiff on " << *dir << ", fetching" << dendl;
-    dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
-    return;
+    if (mdr->snapdiff_fetched == dir->dirfrag()) {
+      dout(10) << " snapdiff entries of " << *dir << " are loaded" << dendl;
+    } else if (g_conf().get_val<bool>("mds_snapdiff_fetch_changed_only") &&
+               mdcache->cache_size() >= mdcache->cache_limit_memory() *
+                 g_conf().get_val<double>("mds_snapdiff_fetch_changed_only_cache_ratio") &&
+               mdr->snapid != CEPH_NOSNAP &&
+               req->head.args.snapdiff.snap_other != CEPH_NOSNAP &&
+               req->head.args.snapdiff.snap_other != mdr->snapid) {
+      dout(10) << " incomplete dir contents for snapdiff on " << *dir
+               << ", fetching the entries that can differ" << dendl;
+      auto c = new C_MDS_SnapDiffFetched(this, mdr, dir->dirfrag());
+      dir->fetch_snapdiff(mdr->snapid,
+                          (uint64_t)req->head.args.snapdiff.snap_other,
+                          &c->result, c);
+      return;
+    } else {
+      // fetch
+      dout(10) << " incomplete dir contents for snapdiff on " << *dir << ", fetching" << dendl;
+      dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
+      return;
+    }
   }
 
 #ifdef MDS_VERIFY_FRAGSTAT

@@ -209,6 +209,38 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_snapdiff_fetch_changed_only
+  type: bool
+  level: advanced
+  desc: load only entries that can differ when a snapdiff reads a directory
+    that is not cached
+  long_desc: A readdir_snapdiff of a directory that is not in the MDS cache
+    reads the directory from the metadata pool, as readdir does. With this
+    set, the MDS loads into its cache only the entries that can differ
+    between the two snapshots (e.g. not files unchanged in both), instead
+    of the whole directory, and the directory stays incomplete in the cache.
+    See mds_snapdiff_fetch_changed_only_cache_ratio for when.
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_snapdiff_fetch_changed_only_cache_ratio
+  type: float
+  level: advanced
+  desc: cache use, as a fraction of mds_cache_memory_limit, from which
+    mds_snapdiff_fetch_changed_only applies
+  long_desc: Below it, a snapdiff loads the whole directory into the cache
+    like readdir, so that a later readdir or snapdiff of it is served from
+    the cache. From it on, it loads only the entries that can differ, so
+    that a walk over a large tree does not push other metadata out of the
+    cache. 0 always loads only those entries.
+  default: 0.5
+  min: 0
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_dir_keys_per_op
   type: int
   level: advanced

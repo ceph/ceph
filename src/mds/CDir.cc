@@ -1841,6 +1841,203 @@ void CDir::_omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
 			     new C_OnFinisher(fin, mdcache->mds->finisher));
 }
 
+/*
+ * A snapdiff of a directory that is not in the cache only needs the
+ * entries that can differ between the two snapshots. fetch_snapdiff()
+ * reads the dirfrag like fetch(), but loads only those into the cache
+ * (the dirfrag stays incomplete), and hands the caller the dentries it
+ * loaded so it can pin them for its request.
+ */
+class C_IO_Dir_OMAP_FetchedSnapDiff : public CDirIOContext {
+  MDSContext *fin;
+  snapid_t snap1, snap2;
+  CDir::snapdiff_fetch_t *out;
+public:
+  const version_t omap_version;
+  bufferlist hdrbl;
+  bool more = false;
+  map<string, bufferlist> omap;       ///< carry-over from before
+  map<string, bufferlist> omap_more;  ///< new batch
+  int ret1 = 0, ret2 = 0;
+  C_IO_Dir_OMAP_FetchedSnapDiff(CDir *d, snapid_t s1, snapid_t s2,
+                                CDir::snapdiff_fetch_t *o, MDSContext *f,
+                                version_t v) :
+    CDirIOContext(d), fin(f), snap1(s1), snap2(s2), out(o), omap_version(v) { }
+  void finish(int r) override {
+    if (r >= 0) r = ret1;
+    if (r >= 0) r = ret2;
+    if (omap_version < dir->get_committed_version()) {
+      // committed while we were reading it: start over
+      dir->_omap_fetch_snapdiff(snap1, snap2, out, fin,
+                                dir->get_committing_version(), {}, {});
+      return;
+    }
+    if (omap.empty()) {
+      omap.swap(omap_more);
+    } else {
+      omap.insert(std::make_move_iterator(omap_more.begin()),
+                  std::make_move_iterator(omap_more.end()));
+    }
+    if (more && r >= 0) {
+      dir->_omap_fetch_snapdiff(snap1, snap2, out, fin, omap_version,
+                                std::move(hdrbl), std::move(omap));
+      return;
+    }
+    dir->_omap_fetched_snapdiff(hdrbl, omap, snap1, snap2, out, r);
+    if (fin)
+      fin->complete(r);
+  }
+  void print(ostream& out) const override {
+    out << "dirfrag_fetch_snapdiff(" << dir->dirfrag() << ")";
+  }
+};
+
+void CDir::fetch_snapdiff(snapid_t snap1, snapid_t snap2,
+                          snapdiff_fetch_t *out, MDSContext *c)
+{
+  dout(10) << __func__ << " " << snap1 << " vs " << snap2 << " on " << *this
+           << dendl;
+  ceph_assert(is_auth());
+  ceph_assert(!is_complete());
+
+  // Leave the cases fetch() handles specially to it: a full fetch already
+  // under way, a dirfrag we can't auth_pin yet, an unlinked directory.
+  CDir *pdir = get_parent_dir();
+  if (state_test(CDir::STATE_FETCHING) || !can_auth_pin() ||
+      (pdir && pdir->inode->is_stray() && !inode->snaprealm)) {
+    fetch(c, true);
+    return;
+  }
+
+  auth_pin(this);
+  _omap_fetch_snapdiff(snap1, snap2, out, c, get_committing_version(), {}, {});
+  mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
+}
+
+void CDir::_omap_fetch_snapdiff(snapid_t snap1, snapid_t snap2,
+                                snapdiff_fetch_t *out, MDSContext *fin,
+                                version_t omap_version, bufferlist&& hdrbl,
+                                map<string, bufferlist>&& omap)
+{
+  auto c = new C_IO_Dir_OMAP_FetchedSnapDiff(this, snap1, snap2, out, fin,
+                                             omap_version);
+  ObjectOperation rd;
+  if (omap.empty()) {
+    rd.omap_get_header(&c->hdrbl, &c->ret1);
+    rd.omap_get_vals("", "", g_conf()->mds_dir_keys_per_op,
+                     &c->omap_more, &c->more, &c->ret2);
+  } else {
+    c->hdrbl = std::move(hdrbl);
+    c->omap.swap(omap);
+    rd.omap_get_vals(c->omap.rbegin()->first, "", g_conf()->mds_dir_keys_per_op,
+                     &c->omap_more, &c->more, &c->ret2);
+  }
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  mdcache->mds->objecter->read(get_ondisk_object(), oloc, rd, CEPH_NOSNAP,
+                               NULL, 0,
+                               new C_OnFinisher(c, mdcache->mds->finisher));
+}
+
+/*
+ * Whether Server::build_snap_diff() would pass over this stored dentry
+ * without reporting it, for snapshots snap1 < snap2. Keep it in step with
+ * that function. Anything not certain is loaded.
+ */
+static bool snapdiff_skippable(snapid_t last, const bufferlist& bl,
+                               snapid_t snap1, snapid_t snap2)
+{
+  try {
+    auto q = bl.cbegin();
+    snapid_t first;
+    decode(first, q);
+    char type;
+    decode(type, q);
+
+    // in neither snapshot, or only in between them
+    if (last < snap1 || first > snap2)
+      return true;
+    if (snap1 < first && last < snap2)
+      return true;
+
+    if (type != 'I' && type != 'i')
+      return false;
+    if (first > snap1 || last < snap2)
+      return false;
+
+    // The dentry spans both snapshots. Its inode is unchanged, unless it
+    // was COWed without its dentry (old_inodes). Directories are always
+    // reported.
+    bool is_dir = false, has_old_inodes = false;
+    bool peeked = false;
+    if (type == 'i') {
+      DECODE_START(2, q);
+      if (struct_v >= 2) {
+        uint32_t len;  // alternate_name
+        decode(len, q);
+        q += len;
+      }
+      {
+        // InodeStoreBase::decode()
+        DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, q);
+        peeked = InodeStoreBase::peek_bare(q, &is_dir, &has_old_inodes);
+        DECODE_FINISH(q);
+      }
+      DECODE_FINISH(q);
+    } else {
+      peeked = InodeStoreBase::peek_bare(q, &is_dir, &has_old_inodes);
+    }
+    if (!peeked)
+      return false;  // old encoding: let _load_dentry() decode it
+    return !is_dir && !has_old_inodes;
+  } catch (const buffer::error&) {
+    return false;  // _load_dentry() reports it
+  }
+}
+
+void CDir::_omap_fetched_snapdiff(bufferlist& hdrbl,
+                                  map<string, bufferlist>& omap,
+                                  snapid_t snap1, snapid_t snap2,
+                                  snapdiff_fetch_t *out, int r)
+{
+  if (snap1 > snap2)
+    std::swap(snap1, snap2);
+
+  map<string, bufferlist> load;
+  std::set<string> head_keys;  // _omap_fetched() takes only head keys
+  std::vector<string_snap_t> names;
+  int count = 0;
+  for (auto& [key, bl] : omap) {
+    string_snap_t k;
+    dentry_key_t::decode_helper(key, k.name, k.snapid);
+    if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+      mdcache->mds->heartbeat_reset();
+    if (snapdiff_skippable(k.snapid, bl, snap1, snap2))
+      continue;
+    if (k.snapid == CEPH_NOSNAP)
+      head_keys.insert(key);
+    load.emplace(key, std::move(bl));
+    names.push_back(std::move(k));
+  }
+  dout(10) << __func__ << " " << snap1 << " vs " << snap2 << ": loading "
+           << load.size() << " of " << omap.size() << " keys of " << *this
+           << dendl;
+  if (mdcache->mds->logger) {
+    mdcache->mds->logger->inc(l_mds_dir_fetch_snapdiff);
+    mdcache->mds->logger->inc(l_mds_dir_fetch_snapdiff_skipped,
+                              omap.size() - load.size());
+  }
+
+  _omap_fetched(hdrbl, load, false, head_keys, r);
+
+  if (out) {
+    for (auto& k : names) {
+      if (CDentry *dn = lookup_exact_snap(k.name, k.snapid))
+        out->loaded.push_back(dn);
+    }
+    out->done = true;
+  }
+}
+
 CDentry *CDir::_load_dentry(
     std::string_view key,
     std::string_view dname,
