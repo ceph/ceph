@@ -1547,7 +1547,8 @@ int BufferlistObject::clone(Object *src, uint64_t srcoff,
   ceph::buffer::list bl;
   {
     std::lock_guard<decltype(srcbl->mutex)> lock(srcbl->mutex);
-    if (srcoff == dstoff && len == src->get_size()) {
+    // Share the source's data only if it replaces all of ours.
+    if (srcoff == dstoff && len == src->get_size() && get_size() <= len) {
       data = srcbl->data;
       return 0;
     }
