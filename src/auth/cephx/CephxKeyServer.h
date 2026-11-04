@@ -24,6 +24,7 @@
 #include <boost/intrusive_ptr.hpp>
 
 #include "auth/KeyRing.h"
+#include "common/ceph_context.h" // for intrusive_ptr_release(CephContext*)
 #include "CephxProtocol.h"
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
