@@ -2712,6 +2712,172 @@ Then run the following:
             self.set_health_warning("HOST_IN_MAINTENANCE", f"{len(in_maintenance)} {s} in maintenance mode", 1, [
                                     f"{h} is in maintenance" for h in in_maintenance])
 
+    def _get_noout_targets(self, hostname: str) -> List[str]:
+        """Return the targets to pass to 'osd set-group/unset-group noout'
+        for the OSDs that cephadm manages on the given host.
+
+        The CRUSH host bucket of an OSD does not have to be named after the
+        host as known to cephadm (e.g. the bucket was renamed, a custom
+        crush_location was used or the host was added under its FQDN), so
+        the bucket names are looked up in the CRUSH map rather than derived
+        from the hostname. A host bucket is used only if all OSDs below it,
+        including those in nested buckets, belong to this host, as the flag
+        applies to the whole subtree and no other host's OSDs must be
+        flagged. OSDs that are not covered by such a bucket are flagged
+        individually.
+
+        Examples for host 'node1.example.com' with OSDs 1 and 2:
+
+          host node1 [1, 2], host node2 [3, 4]  -> ['node1']
+          host rack1-srv07 [1, 2]               -> ['rack1-srv07']
+          host node1-hdd [1], node1-ssd [2]     -> ['node1-hdd', 'node1-ssd']
+          host node1 [1, 2, 3] (3 elsewhere)    -> ['osd.1', 'osd.2']
+          host node1 [1], OSD 2 not in CRUSH    -> ['node1', 'osd.2']
+          host node1 [1, 2, nested bucket [3]]  -> ['osd.1', 'osd.2']
+          no OSD daemons with a numeric id      -> ['node1']
+        """
+        osd_ids: Set[int] = {
+            int(dd.daemon_id)
+            for dd in self.cache.get_daemons_by_type('osd', host=hostname)
+            if dd.daemon_id and dd.daemon_id.isdigit()
+        }
+        if not osd_ids:
+            # nothing to look up, keep the historical behaviour
+            return [hostname.split('.')[0]]
+
+        # Same structure as 'ceph osd tree -f json': buckets have negative
+        # ids and list their items in 'children', OSDs have ids >= 0.
+        # Without a usable tree all OSDs are flagged individually below.
+        tree = self.get('osd_map_tree')
+        nodes = tree.get('nodes', []) if isinstance(tree, dict) else []
+        by_id = {n['id']: n for n in nodes if 'id' in n}
+        buckets: List[str] = []
+        covered: Set[int] = set()
+        for node in nodes:
+            # racks, roots etc. span several hosts
+            if node.get('type') != 'host':
+                continue
+            # The flag applies to the whole subtree, so use the bucket only
+            # if all OSDs below it are on this host. Empty buckets are
+            # skipped, an empty set would match any host.
+            below = self._crush_osds_below(by_id, node)
+            if below and below <= osd_ids:
+                buckets.append(node['name'])
+                covered |= below
+        # OSDs in a shared bucket or not in the CRUSH map at all are
+        # flagged one by one. Sorted to get a stable result.
+        return sorted(buckets) + [f'osd.{i}' for i in sorted(osd_ids - covered)]
+
+    def _crush_osds_below(self, by_id: Dict[int, Dict[str, Any]],
+                          node: Dict[str, Any]) -> Optional[Set[int]]:
+        """Return all OSDs in the subtree of a CRUSH bucket, or None if the
+        subtree refers to a bucket missing from the tree."""
+        osds: Set[int] = set()
+        for child_id in node.get('children', []):
+            if child_id >= 0:
+                osds.add(child_id)
+                continue
+            child = by_id.get(child_id)
+            below = self._crush_osds_below(by_id, child) if child is not None else None
+            if below is None:
+                return None
+            osds |= below
+        return osds
+
+    def _get_noout_flagged(self, targets: List[str]) -> Set[str]:
+        """Return the targets that have the noout flag set on themselves
+        already, e.g. by an administrator. Maintenance leaves these alone."""
+        osd_map = self.get('osd_map')
+        if not isinstance(osd_map, dict):
+            return set()
+        node_flags = osd_map.get('crush_node_flags', {})
+        osd_states = {o.get('osd'): o.get('state', []) for o in osd_map.get('osds', [])}
+        flagged = set()
+        for target in targets:
+            if target.startswith('osd.') and target[4:].isdigit():
+                if 'noout' in osd_states.get(int(target[4:]), []):
+                    flagged.add(target)
+            elif 'noout' in node_flags.get(target, []):
+                flagged.add(target)
+        return flagged
+
+    def _get_crush_items(self) -> List[Dict[str, Any]]:
+        tree = self.get('osd_map_tree')
+        if not isinstance(tree, dict):
+            return []
+        return tree.get('nodes', []) + tree.get('stray', [])
+
+    def _noout_record(self, targets: List[str]) -> List[Dict[str, Any]]:
+        """Return the record of the noout targets set by maintenance, which
+        is kept in the host's inventory entry until maintenance is exited.
+        The CRUSH ids are kept as well, so that a bucket renamed in the
+        meantime is still found, and for buckets also the OSDs below them,
+        so that exit can tell whether the bucket still is the same.
+
+        Example: [{'name': 'node1', 'id': -3, 'osds': [1, 2]},
+                  {'name': 'osd.5', 'id': 5}]
+        """
+        items = self._get_crush_items()
+        by_name = {n['name']: n for n in items if 'name' in n and 'id' in n}
+        by_id = {n['id']: n for n in items if 'id' in n}
+        record: List[Dict[str, Any]] = []
+        for target in targets:
+            node = by_name.get(target)
+            if node is None:
+                record.append({'name': target})
+                continue
+            entry: Dict[str, Any] = {'name': target, 'id': node['id']}
+            if node['id'] < 0:
+                below = self._crush_osds_below(by_id, node)
+                if below is not None:
+                    entry['osds'] = sorted(below)
+            record.append(entry)
+        return record
+
+    def _noout_record_targets(
+            self, record: List[Dict[str, Any]]) -> Tuple[List[str], List[str], List[str]]:
+        """Return the current names of the targets in a noout record that
+        can be unset, the reasons why other buckets are left alone, and
+        the names of the buckets that no longer exist. A bucket is only
+        unset if its OSDs are still the ones it had when maintenance was
+        entered; otherwise the bucket may have been reorganised or its id
+        reused and the flag is left for the administrator to check. The
+        flag of a removed bucket is gone with it, there is nothing to
+        unset."""
+        items = self._get_crush_items()
+        by_id = {n['id']: n for n in items if 'id' in n}
+        targets: List[str] = []
+        kept: List[str] = []
+        removed: List[str] = []
+        for entry in record:
+            if 'id' not in entry:
+                targets.append(entry['name'])
+                continue
+            if entry['id'] >= 0:
+                # the flag of an OSD is part of its state, CRUSH does not matter
+                targets.append(f"osd.{entry['id']}")
+                continue
+            name = entry['name']
+            if not items:
+                kept.append(f"{name}: the CRUSH map is not available to verify the bucket")
+                continue
+            node = by_id.get(entry['id'])
+            if node is None:
+                removed.append(name)
+                continue
+            label = name if node.get('name') == name else f"{node.get('name')} (was {name})"
+            if 'osds' in entry:
+                below = self._crush_osds_below(by_id, node)
+                if below is None:
+                    kept.append(f"{label}: the OSDs below the bucket cannot be determined")
+                    continue
+                if sorted(below) != entry['osds']:
+                    kept.append(f"{label}: its OSDs changed since entering maintenance, "
+                                f"from {entry['osds']} to {sorted(below)}")
+                    continue
+            targets.append(node['name'])
+        return targets, kept, removed
+
     @handle_orch_error
     @host_exists()
     def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> str:
@@ -2755,10 +2921,18 @@ Then run the following:
             # Set noout before any daemon is stopped, so that a failure
             # here does not leave the host with its daemons stopped while
             # not being marked as in maintenance.
+            # Only the targets flagged here are recorded, rolled back and
+            # unset on exit, a flag set before by an administrator stays.
             noout_targets: List[str] = []
             if "osd" in host_daemons:
-                crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
-                noout_targets = [crush_node]
+                targets = self._get_noout_targets(hostname)
+                flagged = self._get_noout_flagged(targets)
+                if flagged:
+                    self.log.info(
+                        f"maintenance mode request for {hostname}: noout already set on "
+                        f"{', '.join(sorted(flagged))}, leaving it as it is")
+                noout_targets = [t for t in targets if t not in flagged]
+            if noout_targets:
                 rc, out, err = self.mon_command({
                     'prefix': 'osd set-group',
                     'flags': 'noout',
@@ -2817,6 +2991,10 @@ Then run the following:
 
         # update the host status in the inventory
         tgt_host["status"] = "maintenance"
+        if "osd" in host_daemons:
+            # recorded even if empty, so that exit does not fall back to
+            # unsetting the flags it computes itself
+            tgt_host["maintenance_noout"] = self._noout_record(noout_targets)
         self.inventory._inventory[hostname] = tgt_host
         self.inventory.save()
 
@@ -2862,6 +3040,8 @@ Then run the following:
             pass
 
         host_offline = hostname in self.offline_hosts
+        noout_kept: List[str] = []
+        noout_removed: List[str] = []
 
         if host_offline and not offline:
             raise OrchestratorValidationError(
@@ -2888,12 +3068,26 @@ Then run the following:
                     raise OrchestratorError(
                         f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}", errno=errno.EPERM)
 
-            if "osd" in self.cache.get_daemon_types(hostname):
-                crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
+            noout_targets: List[str] = []
+            if 'maintenance_noout' in tgt_host:
+                # unset exactly the flags set when entering maintenance
+                noout_targets, noout_kept, noout_removed = self._noout_record_targets(
+                    tgt_host['maintenance_noout'])
+                for reason in noout_kept:
+                    self.log.warning(
+                        f"maintenance mode exit for {hostname} left noout set on {reason}")
+                if noout_removed:
+                    self.log.info(
+                        f"maintenance mode exit for {hostname}: CRUSH buckets flagged by "
+                        f"maintenance no longer exist: {', '.join(noout_removed)}")
+            elif "osd" in self.cache.get_daemon_types(hostname):
+                # entered maintenance with a version that kept no record
+                noout_targets = self._get_noout_targets(hostname)
+            if noout_targets:
                 rc, _out, _err = self.mon_command({
                     'prefix': 'osd unset-group',
                     'flags': 'noout',
-                    'who': [crush_node],
+                    'who': noout_targets,
                     'format': 'json'
                 })
                 if rc:
@@ -2919,6 +3113,8 @@ Then run the following:
 
         # update the host record status
         tgt_host['status'] = ""
+        if not host_offline:
+            tgt_host.pop('maintenance_noout', None)
         self.inventory._inventory[hostname] = tgt_host
         self.inventory.save()
         # make sure we refresh state for this host now that it's out
@@ -2928,7 +3124,17 @@ Then run the following:
 
         self.update_maintenance_healthcheck()
 
-        return f"Ceph cluster {self._cluster_fsid} on {hostname} has exited maintenance mode"
+        msg = f"Ceph cluster {self._cluster_fsid} on {hostname} has exited maintenance mode"
+        if noout_kept:
+            msg += ("\nnoout was left set on these CRUSH buckets:\n"
+                    + "\n".join(f"  {reason}" for reason in noout_kept)
+                    + "\nCheck them and unset the flag with "
+                    "'ceph osd unset-group noout <bucket>' where appropriate.")
+        if noout_removed:
+            msg += ("\nThese CRUSH buckets flagged by maintenance no longer exist, "
+                    "there is nothing to unset:\n"
+                    + "\n".join(f"  {name}" for name in noout_removed))
+        return msg
 
     @handle_orch_error
     @host_exists()
