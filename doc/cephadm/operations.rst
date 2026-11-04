@@ -683,13 +683,15 @@ the following command:
 
   ceph health detail
 
-Common causes are a firewall that blocks the agent's port, or an agent whose
-listener failed to start. To redeploy the agent on an affected host, run the
-following command:
+To see the state of the agent on every host, run the following command:
 
 .. prompt:: bash #
 
-  ceph orch daemon redeploy agent.<hostname>
+  ceph cephadm agent-status
+
+Common causes are a firewall that blocks the agent's port, or an agent whose
+listener failed to start. See :ref:`cephadm-troubleshooting-unreachable-agents`
+for how to find and fix the cause.
 
 
 Cluster Configuration Checks
