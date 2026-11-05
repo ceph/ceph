@@ -712,6 +712,10 @@ private:
   void rejoin_start(MDSContext *rejoin_done_);
   void rejoin_gather_finish();
   void rejoin_send_rejoins();
+  void rejoin_send_rejoins_if_pending() {
+    if (rejoins_pending)
+      rejoin_send_rejoins();
+  }
   void rejoin_export_caps(inodeno_t ino, client_t client, const cap_reconnect_t& icr,
 			  int target=-1, bool drop_path=false) {
     auto& ex = cap_exports[ino];
@@ -1330,8 +1334,7 @@ private:
   void rejoin_send_acks();
   void rejoin_trim_undef_inodes();
   void maybe_send_pending_rejoins() {
-    if (rejoins_pending)
-      rejoin_send_rejoins();
+    rejoin_send_rejoins_if_pending();
   }
 
   void touch_inode(CInode *in) {
