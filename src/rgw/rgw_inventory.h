@@ -49,15 +49,13 @@ int verify_destination_policy(const DoutPrefixProvider* dpp,
                               std::string* err_message);
 
 // Called from RGWLC::bucket_lc_process() for every bucket on the
-// lifecycle work list. Runs each enabled, due configuration. Errors are
-// logged; they never change the lifecycle result for the bucket.
+// lifecycle work list. Runs each enabled, due configuration, writing the
+// report straight into the destination bucket (RGWOutputStream); nothing
+// is written to local disk. Errors are logged; they never change the
+// lifecycle result for the bucket.
 int process_bucket(const DoutPrefixProvider* dpp,
                    rgw::sal::Driver* driver,
                    rgw::sal::Bucket* bucket,
                    optional_yield y);
-
-// Remove temp parquet files left behind by crashed runs.
-void cleanup_stale_temp_files(const DoutPrefixProvider* dpp,
-                              CephContext* cct);
 
 } // namespace rgw::inventory

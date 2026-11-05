@@ -4,8 +4,8 @@
 #include "rgw_inventory_manifest.h"
 
 #include <chrono>
+#include <cstdio>
 #include <ctime>
-#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <string_view>
@@ -58,6 +58,33 @@ std::string build_file_schema(const FieldSelection& sel)
   return s;
 }
 
+std::string json_escape(std::string_view s)
+{
+  std::string out;
+  out.reserve(s.size());
+  for (const char ch : s) {
+    const auto c = static_cast<unsigned char>(ch);
+    switch (c) {
+    case '"':  out += "\\\""; break;
+    case '\\': out += "\\\\"; break;
+    case '\b': out += "\\b"; break;
+    case '\f': out += "\\f"; break;
+    case '\n': out += "\\n"; break;
+    case '\r': out += "\\r"; break;
+    case '\t': out += "\\t"; break;
+    default:
+      if (c < 0x20) {
+        char buf[8];
+        std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+        out += buf;
+      } else {
+        out += ch;  // UTF-8 multi-byte sequences pass through unchanged
+      }
+    }
+  }
+  return out;
+}
+
 static std::string hex_digest(const unsigned char* digest, size_t len)
 {
   std::ostringstream oss;
@@ -66,22 +93,6 @@ static std::string hex_digest(const unsigned char* digest, size_t len)
         << static_cast<int>(digest[i]);
   }
   return oss.str();
-}
-
-std::string md5_of_file(const std::string& path)
-{
-  std::ifstream f(path, std::ios::binary);
-  if (!f) return "";
-
-  MD5 hash;
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-  char buf[65536];
-  while (f.read(buf, sizeof(buf)) || f.gcount()) {
-    hash.Update(reinterpret_cast<const unsigned char*>(buf), f.gcount());
-  }
-  unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  hash.Final(digest);
-  return hex_digest(digest, CEPH_CRYPTO_MD5_DIGESTSIZE);
 }
 
 std::string md5_of_string(const std::string& s)
@@ -98,17 +109,6 @@ int64_t current_time_millis()
 {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::system_clock::now().time_since_epoch()).count();
-}
-
-std::string inventory_run_timestamp()
-{
-  std::time_t t = std::chrono::system_clock::to_time_t(
-      std::chrono::system_clock::now());
-  std::tm tm_buf{};
-  gmtime_r(&t, &tm_buf);
-  char buf[32];
-  std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H-%MZ", &tm_buf);
-  return std::string(buf);
 }
 
 std::string inventory_run_folder(time_t now)
@@ -155,19 +155,19 @@ std::string Manifest::to_json() const
 {
   std::ostringstream o;
   o << "{\n";
-  o << "  \"sourceBucket\": \"" << source_bucket << "\",\n";
-  o << "  \"destinationBucket\": \"" << destination_bucket_arn << "\",\n";
-  o << "  \"version\": \"" << version << "\",\n";
+  o << "  \"sourceBucket\": \"" << json_escape(source_bucket) << "\",\n";
+  o << "  \"destinationBucket\": \"" << json_escape(destination_bucket_arn) << "\",\n";
+  o << "  \"version\": \"" << json_escape(version) << "\",\n";
   o << "  \"creationTimestamp\": \"" << creation_timestamp_ms << "\",\n";
-  o << "  \"fileFormat\": \"" << file_format << "\",\n";
-  o << "  \"fileSchema\": \"" << file_schema << "\",\n";
+  o << "  \"fileFormat\": \"" << json_escape(file_format) << "\",\n";
+  o << "  \"fileSchema\": \"" << json_escape(file_schema) << "\",\n";
   o << "  \"files\": [\n";
   for (size_t i = 0; i < files.size(); ++i) {
     const auto& f = files[i];
     o << "    {\n";
-    o << "      \"key\": \"" << f.key << "\",\n";
+    o << "      \"key\": \"" << json_escape(f.key) << "\",\n";
     o << "      \"size\": " << f.size << ",\n";
-    o << "      \"MD5checksum\": \"" << f.md5checksum << "\"\n";
+    o << "      \"MD5checksum\": \"" << json_escape(f.md5checksum) << "\"\n";
     o << "    }";
     if (i + 1 < files.size()) o << ",";
     o << "\n";

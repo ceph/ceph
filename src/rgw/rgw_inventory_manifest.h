@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <ctime>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "rgw_inventory_parquet.h"
@@ -15,7 +16,7 @@ namespace rgw::inventory {
 struct ManifestFile {
   std::string key;          // destination object key
   uint64_t    size;         // parquet file size in bytes
-  std::string md5checksum;  // MD5 hex of parquet file
+  std::string md5checksum;  // MD5 hex of the parquet object (its ETag)
 };
 
 struct Manifest {
@@ -29,6 +30,8 @@ struct Manifest {
 
   // Serialise to manifest.json content. Uses creation_timestamp_ms as-is
   // so the output (and therefore manifest.checksum) is deterministic.
+  // All string values are JSON-escaped: object keys and the bucket name
+  // may contain '"', '\\' or control characters.
   std::string to_json() const;
 };
 
@@ -39,14 +42,11 @@ int64_t current_time_millis();
 // e.g. "message s3.inventory {  required binary bucket (STRING); ...}"
 std::string build_file_schema(const FieldSelection& sel);
 
-// MD5 hex digest of a file on disk ("" if the file can't be opened).
-std::string md5_of_file(const std::string& path);
+// Escape a string for use inside a JSON string literal (RFC 8259).
+std::string json_escape(std::string_view s);
 
-// MD5 hex digest of a string.
+// MD5 hex digest of a string (used for manifest.checksum).
 std::string md5_of_string(const std::string& s);
-
-// Minute-granular run timestamp, UTC: "YYYY-MM-DDTHH-MMZ".
-std::string inventory_run_timestamp();
 
 // Day-granular per-run manifest folder, UTC: "YYYY-MM-DDT00-00Z".
 // One folder per day makes "does today's manifest.json exist?" the

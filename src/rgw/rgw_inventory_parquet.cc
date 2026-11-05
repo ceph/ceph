@@ -4,7 +4,7 @@
 #include "rgw_inventory_parquet.h"
 
 #include <arrow/api.h>
-#include <arrow/io/file.h>
+#include <arrow/io/interfaces.h>
 #include <parquet/arrow/writer.h>
 
 #include <stdexcept>
@@ -57,7 +57,7 @@ std::shared_ptr<arrow::Schema> build_inventory_schema(const FieldSelection& sel)
 
 struct ParquetInventoryWriter::Impl {
   std::shared_ptr<arrow::Schema> schema;
-  std::shared_ptr<arrow::io::FileOutputStream> sink;
+  std::shared_ptr<arrow::io::OutputStream> sink;
   std::unique_ptr<parquet::arrow::FileWriter> writer;
 
   // column builders (only the selected ones are used)
@@ -73,23 +73,28 @@ struct ParquetInventoryWriter::Impl {
 };
 
 ParquetInventoryWriter::ParquetInventoryWriter(
-  const std::string& path, const FieldSelection& sel, int64_t row_group_size)
+  std::shared_ptr<arrow::io::OutputStream> sink, const FieldSelection& sel,
+  int64_t row_group_size)
   : impl_(std::make_unique<Impl>()), sel_(sel), row_group_size_(row_group_size)
 {
-  impl_->schema = build_inventory_schema(sel_);
-
-  auto sink_res = arrow::io::FileOutputStream::Open(path);
-  if (!sink_res.ok()) {
-    throw std::runtime_error("open failed: " + sink_res.status().ToString());
+  if (!sink) {
+    throw std::runtime_error("parquet inventory writer: null sink");
   }
-  impl_->sink = *sink_res;
+  impl_->sink = std::move(sink);
+  impl_->schema = build_inventory_schema(sel_);
 
   auto props = parquet::WriterProperties::Builder()
                  .compression(parquet::Compression::SNAPPY)
                  ->build();
+  // Encode on the calling thread: see the class comment in the header.
+  auto arrow_props = parquet::ArrowWriterProperties::Builder()
+                       .set_use_threads(false)
+                       ->build();
   auto writer_res = parquet::arrow::FileWriter::Open(
-      *impl_->schema, arrow::default_memory_pool(), impl_->sink, props);
+      *impl_->schema, arrow::default_memory_pool(), impl_->sink, props,
+      arrow_props);
   if (!writer_res.ok()) {
+    abort();
     throw std::runtime_error("writer open failed: " +
                              writer_res.status().ToString());
   }
@@ -109,9 +114,9 @@ ParquetInventoryWriter::ParquetInventoryWriter(
 
 ParquetInventoryWriter::~ParquetInventoryWriter()
 {
-  if (!closed_) {
-    try { close(); } catch (...) {}
-  }
+  // Not closed explicitly means the run failed part way: discard it rather
+  // than publishing a truncated report.
+  abort();
 }
 
 namespace {
@@ -125,6 +130,9 @@ void append_opt(Builder& b, const std::optional<V>& v)
 
 void ParquetInventoryWriter::append(const InventoryEntry& e)
 {
+  if (finished_) {
+    throw std::runtime_error("parquet inventory writer: append after close");
+  }
   auto& im = *impl_;
   if (auto s = im.bucket.Append(e.bucket); !s.ok())
     throw std::runtime_error(s.ToString());
@@ -204,11 +212,32 @@ void ParquetInventoryWriter::flush_row_group()
 
 void ParquetInventoryWriter::close()
 {
-  if (closed_) return;
-  flush_row_group();
-  auto s = impl_->writer->Close();
-  if (!s.ok()) throw std::runtime_error(s.ToString());
-  closed_ = true;
+  if (finished_) return;
+  try {
+    flush_row_group();
+    // writes the footer; the sink itself is left open
+    if (auto s = impl_->writer->Close(); !s.ok()) {
+      throw std::runtime_error(s.ToString());
+    }
+  } catch (...) {
+    abort();
+    throw;
+  }
+  finished_ = true;
+  // publishes the report (for RGWOutputStream: completes the object write)
+  if (auto s = impl_->sink->Close(); !s.ok()) {
+    throw std::runtime_error(s.ToString());
+  }
+}
+
+void ParquetInventoryWriter::abort() noexcept
+{
+  if (finished_) return;
+  finished_ = true;
+  if (impl_ && impl_->sink) {
+    auto s = impl_->sink->Abort();
+    (void)s;
+  }
 }
 
 } // namespace rgw::inventory

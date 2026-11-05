@@ -5177,13 +5177,3 @@ options:
   default: false
   services:
   - rgw
-- name: rgw_inventory_temp_dir
-  type: str
-  level: advanced
-  desc: Local scratch directory for S3 Inventory Parquet generation
-  long_desc: The Parquet writer builds each report on local disk before
-    it is uploaded to the destination bucket. Files are removed after
-    upload; leftovers from crashed runs are removed at startup.
-  default: /tmp/rgw-inventory
-  services:
-  - rgw

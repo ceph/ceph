@@ -351,9 +351,6 @@ void RGWLC::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
   char cookie_buf[COOKIE_LEN + 1];
   gen_rand_alphanumeric(cct, cookie_buf, sizeof(cookie_buf) - 1);
   cookie = cookie_buf;
-#ifdef _ARROW_EXIST
-  rgw::inventory::cleanup_stale_temp_files(this, cct);
-#endif
 }
 
 void RGWLC::finalize()

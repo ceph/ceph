@@ -5,26 +5,11 @@
 
 #include "rgw/rgw_inventory_manifest.h"
 
-#include <filesystem>
-#include <fstream>
 #include <string>
 
 using namespace rgw::inventory;
-namespace fs = std::filesystem;
 
 namespace {
-
-struct TempTextFile {
-  std::string path;
-  explicit TempTextFile(const std::string& content) {
-    path = (fs::temp_directory_path() /
-            ("rgw_inv_manifest_test_" + std::to_string(::getpid()) + "_" +
-             std::to_string(rand()) + ".txt")).string();
-    std::ofstream f(path, std::ios::binary);
-    f << content;
-  }
-  ~TempTextFile() { std::error_code ec; fs::remove(path, ec); }
-};
 
 FieldSelection all_fields()
 {
@@ -44,14 +29,6 @@ TEST_CASE("md5_of_string matches RFC 1321 test vectors", "[inventory][manifest][
 {
   CHECK(md5_of_string("") == "d41d8cd98f00b204e9800998ecf8427e");
   CHECK(md5_of_string("abc") == "900150983cd24fb0d6963f7d28e17f72");
-}
-
-TEST_CASE("md5_of_file matches md5_of_string", "[inventory][manifest][md5]")
-{
-  const std::string content = "hello inventory";
-  TempTextFile f(content);
-  CHECK(md5_of_file(f.path) == md5_of_string(content));
-  CHECK(md5_of_file("/nonexistent/path.parquet") == "");
 }
 
 TEST_CASE("build_file_schema matches the real AWS fileSchema", "[inventory][manifest][aws]")
@@ -91,13 +68,8 @@ TEST_CASE("build_file_schema omits unselected fields", "[inventory][manifest]")
         "}");
 }
 
-TEST_CASE("run timestamp and folder formats", "[inventory][manifest][keys]")
+TEST_CASE("run folder format", "[inventory][manifest][keys]")
 {
-  const auto ts = inventory_run_timestamp();
-  REQUIRE(ts.size() == 17);
-  CHECK(ts[10] == 'T');
-  CHECK(ts[16] == 'Z');
-
   // 2026-01-01 13:45:00 UTC -> day folder, time zeroed
   CHECK(inventory_run_folder(1767275100) == "2026-01-01T00-00Z");
 }
@@ -149,4 +121,25 @@ TEST_CASE("Manifest::to_json separates multiple files correctly", "[inventory][m
   const auto json = m.to_json();
   CHECK(json.find("\"c1\"\n    },") != std::string::npos);
   CHECK(json.find("\"c2\"\n    },") == std::string::npos);
+}
+
+TEST_CASE("json_escape handles quotes, backslashes and control characters",
+          "[inventory][manifest][json]")
+{
+  CHECK(json_escape("plain/key.txt") == "plain/key.txt");
+  CHECK(json_escape("a\"b") == "a\\\"b");
+  CHECK(json_escape("a\\b") == "a\\\\b");
+  CHECK(json_escape("l1\nl2\tx") == "l1\\nl2\\tx");
+  CHECK(json_escape(std::string("\x01", 1)) == "\\u0001");
+  CHECK(json_escape("caf\xc3\xa9") == "caf\xc3\xa9");  // UTF-8 unchanged
+}
+
+TEST_CASE("Manifest::to_json escapes object keys", "[inventory][manifest][json]")
+{
+  Manifest m;
+  m.source_bucket = "src";
+  m.creation_timestamp_ms = 1;
+  m.files.push_back({"dir/we\"ird\\key", 1, "c1"});
+  const auto json = m.to_json();
+  CHECK(json.find("\"key\": \"dir/we\\\"ird\\\\key\"") != std::string::npos);
 }

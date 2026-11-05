@@ -4,17 +4,11 @@
 #include "rgw_inventory.h"
 
 #include <chrono>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
-#include <system_error>
-#include <vector>
 
-#include <openssl/evp.h>
+#include <arrow/util/io_util.h>
 
 #include "include/ceph_hash.h"
 #include "include/uuid.h"
-#include "common/ceph_crypto.h"
 #include "rgw_acl.h"
 #include "rgw_arn.h"
 #include "rgw_auth.h"
@@ -22,20 +16,16 @@
 #include "rgw_common.h"
 #include "rgw_iam_policy.h"
 #include "rgw_inventory_manifest.h"
+#include "rgw_output_stream.h"
 #include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw
-
-namespace fs = std::filesystem;
-using ceph::crypto::MD5;
 
 namespace rgw::inventory {
 
 namespace {
 
 constexpr int kListChunk = 1000;
-constexpr size_t kUploadChunk = 4 * 1024 * 1024;
-constexpr auto kStaleTempAge = std::chrono::hours(48);
 
 int64_t to_millis(ceph::real_time t)
 {
@@ -43,16 +33,11 @@ int64_t to_millis(ceph::real_time t)
       t.time_since_epoch()).count();
 }
 
-std::string to_hex(const unsigned char* d, size_t n)
+// RGWOutputStream reports SAL errors as IOErrors carrying the errno.
+int status_to_errno(const arrow::Status& s)
 {
-  static constexpr char digits[] = "0123456789abcdef";
-  std::string out;
-  out.reserve(n * 2);
-  for (size_t i = 0; i < n; ++i) {
-    out.push_back(digits[d[i] >> 4]);
-    out.push_back(digits[d[i] & 0xf]);
-  }
-  return out;
+  const int e = arrow::internal::ErrnoFromStatus(s);
+  return e > 0 ? -e : -EIO;
 }
 
 // Key path under which this configuration's output lands, used as the
@@ -61,6 +46,72 @@ std::string key_prefix(const Configuration& cfg, const std::string& source)
 {
   const std::string& p = cfg.destination.s3.prefix;
   return (p.empty() ? "" : p + "/") + source + "/" + cfg.id + "/";
+}
+
+// The attributes a PUT would store: an owner-full-control ACL for the
+// destination bucket's owner, and the content type.
+rgw::sal::Attrs object_attrs(rgw::sal::Bucket* dest,
+                             const std::string& content_type)
+{
+  rgw::sal::Attrs attrs;
+  {
+    RGWAccessControlPolicy policy;
+    policy.create_default(dest->get_owner(), "");
+    bufferlist bl;
+    policy.encode(bl);
+    attrs[RGW_ATTR_ACL] = std::move(bl);
+  }
+  {
+    bufferlist bl;
+    bl.append(content_type);
+    attrs[RGW_ATTR_CONTENT_TYPE] = std::move(bl);
+  }
+  return attrs;
+}
+
+// Open `key` in `dest` for writing through the SAL atomic writer.
+// The object only becomes visible when the stream is closed.
+int open_object(const DoutPrefixProvider* dpp, optional_yield y,
+                rgw::sal::Driver* driver, rgw::sal::Bucket* dest,
+                const std::string& key, const std::string& content_type,
+                const std::string& tag, std::shared_ptr<RGWOutputStream>* out)
+{
+  auto res = RGWOutputStream::Open(dpp, y, driver, dest, rgw_obj_key(key),
+                                   object_attrs(dest, content_type), tag);
+  if (!res.ok()) {
+    ldpp_dout(dpp, 0) << "inventory: cannot open " << dest->get_name() << "/"
+                      << key << " for writing: " << res.status().ToString()
+                      << dendl;
+    return status_to_errno(res.status());
+  }
+  *out = std::move(*res);
+  return 0;
+}
+
+// Write a small object (manifest, checksum) in one go.
+int write_object(const DoutPrefixProvider* dpp, optional_yield y,
+                 rgw::sal::Driver* driver, rgw::sal::Bucket* dest,
+                 const std::string& key, const std::string& data,
+                 const std::string& content_type, const std::string& tag)
+{
+  std::shared_ptr<RGWOutputStream> out;
+  int r = open_object(dpp, y, driver, dest, key, content_type, tag, &out);
+  if (r < 0) {
+    return r;
+  }
+  arrow::Status s = out->Write(data.data(), static_cast<int64_t>(data.size()));
+  if (!s.ok()) {
+    auto a = out->Abort();
+    (void)a;
+  } else {
+    s = out->Close();
+  }
+  if (!s.ok()) {
+    ldpp_dout(dpp, 0) << "inventory: writing " << dest->get_name() << "/"
+                      << key << " failed: " << s.ToString() << dendl;
+    return status_to_errno(s);
+  }
+  return 0;
 }
 
 InventoryEntry entry_from_listing(const std::string& bucket_name,
@@ -106,16 +157,18 @@ InventoryEntry entry_from_listing(const std::string& bucket_name,
   return ie;
 }
 
+// Ordered bucket listing -> Parquet rows -> sink. On success the sink is
+// closed (the report is published); on any failure it is aborted.
 int list_and_write(const DoutPrefixProvider* dpp,
                    rgw::sal::Bucket* bucket,
                    const Configuration& cfg,
                    const FieldSelection& sel,
-                   const std::string& path,
+                   std::shared_ptr<arrow::io::OutputStream> sink,
                    uint64_t* rows,
                    optional_yield y)
 {
   try {
-    ParquetInventoryWriter writer(path, sel);
+    ParquetInventoryWriter writer(std::move(sink), sel);
 
     rgw::sal::Bucket::ListParams params;
     params.list_versions = (cfg.included_object_versions == "All");
@@ -128,7 +181,7 @@ int list_and_write(const DoutPrefixProvider* dpp,
       if (r < 0) {
         ldpp_dout(dpp, 0) << "inventory: listing " << bucket->get_key()
                           << " failed: " << r << dendl;
-        return r;
+        return r;  // writer's destructor aborts the sink
       }
       for (const auto& e : results.objs) {
         writer.append(entry_from_listing(bucket->get_name(), e, sel));
@@ -139,97 +192,10 @@ int list_and_write(const DoutPrefixProvider* dpp,
 
     writer.close();
   } catch (const std::exception& ex) {
-    ldpp_dout(dpp, 0) << "inventory: parquet writer error: " << ex.what()
-                      << dendl;
+    ldpp_dout(dpp, 0) << "inventory: writing report for " << bucket->get_key()
+                      << " failed: " << ex.what() << dendl;
     return -EIO;
   }
-  return 0;
-}
-
-// Write a complete object through the same SAL atomic-writer path a normal
-// PUT uses (rgw_op.cc), so it works on every SAL backend.
-int put_object(const DoutPrefixProvider* dpp, optional_yield y,
-               rgw::sal::Driver* driver, rgw::sal::Bucket* dest,
-               const std::string& key, std::istream& in,
-               const std::string& content_type,
-               const std::string& unique_tag,
-               uint64_t* size_out, std::string* md5_out)
-{
-  std::unique_ptr<rgw::sal::Object> obj = dest->get_object(rgw_obj_key(key));
-
-  ACLOwner owner;
-  owner.id = dest->get_owner();
-
-  std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-      dpp, y, obj.get(), owner, &dest->get_placement_rule(),
-      /*olh_epoch=*/0, unique_tag);
-
-  int r = writer->prepare(y);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "inventory: prepare failed for " << key << ": "
-                      << r << dendl;
-    return r;
-  }
-
-  MD5 hash;
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-  uint64_t ofs = 0;
-  std::vector<char> buf(kUploadChunk);
-  while (in) {
-    in.read(buf.data(), buf.size());
-    const std::streamsize n = in.gcount();
-    if (n <= 0) {
-      break;
-    }
-    hash.Update(reinterpret_cast<const unsigned char*>(buf.data()), n);
-    bufferlist bl;
-    bl.append(buf.data(), n);
-    r = writer->process(std::move(bl), ofs);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "inventory: write failed for " << key << ": "
-                        << r << dendl;
-      return r;
-    }
-    ofs += n;
-  }
-  if (in.bad()) {
-    return -EIO;
-  }
-  r = writer->process({}, ofs);  // empty buffer flushes
-  if (r < 0) {
-    return r;
-  }
-
-  unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  hash.Final(digest);
-  const std::string etag = to_hex(digest, CEPH_CRYPTO_MD5_DIGESTSIZE);
-
-  std::map<std::string, bufferlist> attrs;
-  {
-    RGWAccessControlPolicy policy;
-    policy.create_default(owner.id, owner.display_name);
-    bufferlist acl_bl;
-    policy.encode(acl_bl);
-    attrs[RGW_ATTR_ACL] = std::move(acl_bl);
-  }
-  {
-    bufferlist ct;
-    ct.append(content_type);
-    attrs[RGW_ATTR_CONTENT_TYPE] = std::move(ct);
-  }
-
-  const req_context rctx{dpp, y, nullptr};
-  r = writer->complete(ofs, etag, nullptr, ceph::real_time(), attrs,
-                       std::nullopt, ceph::real_time(), nullptr, nullptr,
-                       nullptr, nullptr, nullptr, rctx,
-                       rgw::sal::FLAG_LOG_OP);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "inventory: complete failed for " << key << ": "
-                      << r << dendl;
-    return r;
-  }
-  if (size_out) *size_out = ofs;
-  if (md5_out) *md5_out = etag;
   return 0;
 }
 
@@ -263,7 +229,7 @@ int run_config(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
     return r;
   }
 
-  // manifest.json is uploaded last, so its presence means today's run
+  // manifest.json is written last, so its presence means today's run
   // completed; nothing else needs to be stored.
   r = object_exists(dpp, dest.get(), manifest_key, y);
   if (r == 0) {
@@ -283,45 +249,23 @@ int run_config(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
     return r;
   }
 
-  const std::string tmp_dir =
-      cct->_conf.get_val<std::string>("rgw_inventory_temp_dir");
-  std::error_code ec;
-  fs::create_directories(tmp_dir, ec);
-  if (ec) {
-    ldpp_dout(dpp, 0) << "inventory: cannot create " << tmp_dir << ": "
-                      << ec.message() << dendl;
-    return -EIO;
-  }
   uuid_d run_id;
   run_id.generate_random();
-  const std::string tmp_path = tmp_dir + "/" + run_id.to_string() + ".parquet";
-  struct TempGuard {
-    std::string path;
-    ~TempGuard() { std::error_code e; fs::remove(path, e); }
-  } guard{tmp_path};
-
+  const std::string tag = run_id.to_string();
   const FieldSelection sel = field_selection_from_config(cfg);
-  uint64_t rows = 0;
-  r = list_and_write(dpp, bucket, cfg, sel, tmp_path, &rows, y);
+
+  // 1) the Parquet report, streamed straight into the destination bucket
+  const std::string data_key = inventory_data_key(prefix, src, cfg.id);
+  std::shared_ptr<RGWOutputStream> data_out;
+  r = open_object(dpp, y, driver, dest.get(), data_key,
+                  "application/octet-stream", tag, &data_out);
   if (r < 0) {
     return r;
   }
-
-  // 1) parquet data file
-  const std::string data_key = inventory_data_key(prefix, src, cfg.id);
-  uint64_t parquet_size = 0;
-  std::string parquet_md5;
-  {
-    std::ifstream pf(tmp_path, std::ios::binary);
-    if (!pf) {
-      return -EIO;
-    }
-    r = put_object(dpp, y, driver, dest.get(), data_key, pf,
-                   "application/octet-stream", run_id.to_string(),
-                   &parquet_size, &parquet_md5);
-    if (r < 0) {
-      return r;
-    }
+  uint64_t rows = 0;
+  r = list_and_write(dpp, bucket, cfg, sel, data_out, &rows, y);
+  if (r < 0) {
+    return r;
   }
 
   Manifest m;
@@ -329,26 +273,27 @@ int run_config(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
   m.destination_bucket_arn = cfg.destination.s3.bucket_arn;
   m.creation_timestamp_ms = current_time_millis();
   m.file_schema = build_file_schema(sel);
-  m.files.push_back({data_key, parquet_size, parquet_md5});
+  // the stream computed both while the data went through
+  m.files.push_back({data_key, static_cast<uint64_t>(data_out->size()),
+                     data_out->etag()});
   const std::string json = m.to_json();
 
   // 2) checksum, then 3) manifest last: manifest.json is the commit marker
-  std::istringstream cs(md5_of_string(json));
-  r = put_object(dpp, y, driver, dest.get(),
-                 inventory_checksum_key(manifest_key), cs, "text/plain",
-                 run_id.to_string(), nullptr, nullptr);
+  r = write_object(dpp, y, driver, dest.get(),
+                   inventory_checksum_key(manifest_key), md5_of_string(json),
+                   "text/plain", tag);
   if (r < 0) {
     return r;
   }
-  std::istringstream js(json);
-  r = put_object(dpp, y, driver, dest.get(), manifest_key, js,
-                 "application/json", run_id.to_string(), nullptr, nullptr);
+  r = write_object(dpp, y, driver, dest.get(), manifest_key, json,
+                   "application/json", tag);
   if (r < 0) {
     return r;
   }
 
   ldpp_dout(dpp, 5) << "inventory: " << src << "/" << cfg.id << " -> "
-                    << dest->get_name() << " (" << rows << " rows)" << dendl;
+                    << dest->get_name() << " (" << rows << " rows, "
+                    << data_out->size() << " bytes)" << dendl;
   return 0;
 }
 
@@ -487,30 +432,6 @@ int process_bucket(const DoutPrefixProvider* dpp,
     }
   }
   return first_err;
-}
-
-void cleanup_stale_temp_files(const DoutPrefixProvider* dpp,
-                              CephContext* cct)
-{
-  const std::string dir =
-      cct->_conf.get_val<std::string>("rgw_inventory_temp_dir");
-  std::error_code ec;
-  if (!fs::exists(dir, ec)) {
-    return;
-  }
-  const auto now = fs::file_time_type::clock::now();
-  for (const auto& entry : fs::directory_iterator(dir, ec)) {
-    if (entry.path().extension() != ".parquet") {
-      continue;
-    }
-    std::error_code e;
-    const auto mtime = fs::last_write_time(entry.path(), e);
-    if (!e && now - mtime > kStaleTempAge) {
-      fs::remove(entry.path(), e);
-      ldpp_dout(dpp, 5) << "inventory: removed stale temp file "
-                        << entry.path() << dendl;
-    }
-  }
 }
 
 } // namespace rgw::inventory

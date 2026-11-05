@@ -10,7 +10,10 @@
 #include <string>
 #include <vector>
 
-namespace arrow { class Schema; }
+namespace arrow {
+class Schema;
+namespace io { class OutputStream; }
+}
 
 namespace rgw::inventory {
 
@@ -58,10 +61,27 @@ struct FieldSelection {
 // Validated against real AWS-generated inventory (17 columns).
 std::shared_ptr<arrow::Schema> build_inventory_schema(const FieldSelection& sel);
 
+// Streams inventory rows into a Parquet file written to `sink`.
+//
+// The sink decides where the bytes go: an RGWOutputStream writes straight
+// into an RGW object, a BufferOutputStream into memory (tests), a
+// FileOutputStream into a local file.
+//
+// close() finishes the Parquet footer and then closes the sink; for an
+// RGWOutputStream that is the moment the object becomes visible. If the
+// writer is destroyed without a successful close(), or abort() is called,
+// the sink is aborted instead, so a failed run never publishes a partial
+// report.
+//
+// Encoding runs on the calling thread only (Arrow's thread pool is not
+// used): the inventory runner executes inside the lifecycle worker's
+// coroutine, and RGWOutputStream issues SAL writes with that coroutine's
+// yield context, which must not be used from another thread.
 class ParquetInventoryWriter {
 public:
-  // Opens `path` for writing. Throws std::runtime_error on failure.
-  ParquetInventoryWriter(const std::string& path, const FieldSelection& sel,
+  // Throws std::runtime_error if the Parquet writer can't be opened.
+  ParquetInventoryWriter(std::shared_ptr<arrow::io::OutputStream> sink,
+                         const FieldSelection& sel,
                          int64_t row_group_size = 10000);
   ~ParquetInventoryWriter();
 
@@ -71,8 +91,12 @@ public:
   // Buffer one entry; flushes a row group when row_group_size is reached.
   void append(const InventoryEntry& e);
 
-  // Flush remaining rows and finalize the file footer. Must be called.
+  // Flush remaining rows, write the footer and close the sink.
+  // Throws std::runtime_error on failure (the sink is aborted first).
   void close();
+
+  // Discard the report: the sink is aborted, nothing is published.
+  void abort() noexcept;
 
   int64_t rows_written() const { return total_rows_; }
 
@@ -84,7 +108,7 @@ private:
   FieldSelection sel_;
   int64_t row_group_size_;
   int64_t total_rows_ = 0;
-  bool closed_ = false;
+  bool finished_ = false;   // closed or aborted
 };
 
 } // namespace rgw::inventory

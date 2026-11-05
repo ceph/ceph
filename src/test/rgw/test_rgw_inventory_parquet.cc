@@ -6,34 +6,31 @@
 #include "rgw/rgw_inventory_parquet.h"
 
 #include <arrow/api.h>
-#include <arrow/io/file.h>
+#include <arrow/io/memory.h>
 #include <parquet/arrow/reader.h>
 
-#include <filesystem>
+#include <memory>
 #include <string>
 
 using namespace rgw::inventory;
-namespace fs = std::filesystem;
 
 namespace {
 
-struct TempFile {
-  std::string path;
-  TempFile() {
-    path = (fs::temp_directory_path() /
-            ("rgw_inv_test_" + std::to_string(::getpid()) + "_" +
-             std::to_string(rand()) + ".parquet")).string();
-  }
-  ~TempFile() { std::error_code ec; fs::remove(path, ec); }
-};
-
-std::shared_ptr<arrow::Table> read_back(const std::string& path)
+// In-memory sink: the writer only sees an arrow::io::OutputStream, exactly
+// as it does with RGWOutputStream in the runner.
+std::shared_ptr<arrow::io::BufferOutputStream> memory_sink()
 {
-  auto infile_res = arrow::io::ReadableFile::Open(path);
-  REQUIRE(infile_res.ok());
+  auto res = arrow::io::BufferOutputStream::Create();
+  REQUIRE(res.ok());
+  return *res;
+}
+
+std::shared_ptr<arrow::Table> read_back(const std::shared_ptr<arrow::Buffer>& buf)
+{
+  auto input = std::make_shared<arrow::io::BufferReader>(buf);
 
   parquet::arrow::FileReaderBuilder builder;
-  auto st = builder.Open(*infile_res);
+  auto st = builder.Open(input);
   REQUIRE(st.ok());
 
   std::unique_ptr<parquet::arrow::FileReader> reader;
@@ -47,6 +44,39 @@ std::shared_ptr<arrow::Table> read_back(const std::string& path)
   REQUIRE(table != nullptr);
   return table;
 }
+
+// Bytes the writer produced. BufferOutputStream::Finish() also closes the
+// stream, so only call it on a sink the writer did not close.
+std::shared_ptr<arrow::Buffer> contents(
+    const std::shared_ptr<arrow::io::BufferOutputStream>& sink)
+{
+  auto res = sink->Finish();
+  REQUIRE(res.ok());
+  return *res;
+}
+
+// Wraps a BufferOutputStream and records how the writer finished it.
+class TrackingSink : public arrow::io::OutputStream {
+public:
+  TrackingSink() : inner_(memory_sink()) {}
+
+  arrow::Status Close() override { closed_by_close = true; return inner_->Close(); }
+  arrow::Status Abort() override { aborted = true; return inner_->Abort(); }
+  arrow::Result<int64_t> Tell() const override { return inner_->Tell(); }
+  bool closed() const override { return inner_->closed(); }
+  arrow::Status Write(const void* data, int64_t nbytes) override {
+    return inner_->Write(data, nbytes);
+  }
+  using arrow::io::Writable::Write;
+
+  std::shared_ptr<arrow::Buffer> buffer() { return contents(inner_); }
+
+  bool closed_by_close = false;
+  bool aborted = false;
+
+private:
+  std::shared_ptr<arrow::io::BufferOutputStream> inner_;
+};
 
 InventoryEntry sample_entry(int i)
 {
@@ -115,35 +145,31 @@ TEST_CASE("all optional fields produce the 17-column AWS schema", "[inventory][s
 
 TEST_CASE("write a small inventory without crash", "[inventory][write]")
 {
-  TempFile tmp;
+  auto sink = memory_sink();
   FieldSelection sel;
 
-  ParquetInventoryWriter w(tmp.path, sel);
+  ParquetInventoryWriter w(sink, sel);
   for (int i = 0; i < 10; ++i) {
     w.append(sample_entry(i));
   }
   REQUIRE_NOTHROW(w.close());
   CHECK(w.rows_written() == 10);
-
-  std::error_code ec;
-  auto sz = fs::file_size(tmp.path, ec);
-  REQUIRE(!ec);
-  CHECK(sz > 0);
+  CHECK(contents(sink)->size() > 0);
 }
 
 TEST_CASE("write and read back a small inventory", "[inventory][roundtrip]")
 {
-  TempFile tmp;
+  auto sink = memory_sink();
   FieldSelection sel;
 
   {
-    ParquetInventoryWriter w(tmp.path, sel);
+    ParquetInventoryWriter w(sink, sel);
     for (int i = 0; i < 100; ++i) w.append(sample_entry(i));
     REQUIRE_NOTHROW(w.close());
     CHECK(w.rows_written() == 100);
   }
 
-  auto table = read_back(tmp.path);
+  auto table = read_back(contents(sink));
   REQUIRE(table != nullptr);
   CHECK(table->num_rows() == 100);
   CHECK(table->num_columns() == 6);
@@ -158,13 +184,28 @@ TEST_CASE("write and read back a small inventory", "[inventory][roundtrip]")
   CHECK(key_col->GetString(99) == "prefix/object-99");
 }
 
-TEST_CASE("null optional values are preserved", "[inventory][nulls]")
+TEST_CASE("multiple row groups read back in order", "[inventory][roundtrip]")
 {
-  TempFile tmp;
+  auto sink = memory_sink();
   FieldSelection sel;
 
   {
-    ParquetInventoryWriter w(tmp.path, sel);
+    ParquetInventoryWriter w(sink, sel, /*row_group_size=*/7);
+    for (int i = 0; i < 50; ++i) w.append(sample_entry(i));
+    REQUIRE_NOTHROW(w.close());
+  }
+
+  auto table = read_back(contents(sink));
+  CHECK(table->num_rows() == 50);
+}
+
+TEST_CASE("null optional values are preserved", "[inventory][nulls]")
+{
+  auto sink = memory_sink();
+  FieldSelection sel;
+
+  {
+    ParquetInventoryWriter w(sink, sel);
     InventoryEntry e;
     e.bucket = "b";
     e.key = "k";
@@ -172,9 +213,55 @@ TEST_CASE("null optional values are preserved", "[inventory][nulls]")
     REQUIRE_NOTHROW(w.close());
   }
 
-  auto table = read_back(tmp.path);
+  auto table = read_back(contents(sink));
   REQUIRE(table != nullptr);
   int size_idx = table->schema()->GetFieldIndex("size");
   REQUIRE(size_idx >= 0);
   CHECK(table->column(size_idx)->null_count() == 1);
+}
+
+TEST_CASE("close() closes the sink", "[inventory][sink]")
+{
+  auto sink = std::make_shared<TrackingSink>();
+  {
+    ParquetInventoryWriter w(sink, FieldSelection{});
+    w.append(sample_entry(1));
+    REQUIRE_NOTHROW(w.close());
+    CHECK(sink->closed());
+    REQUIRE_NOTHROW(w.close());  // idempotent
+  }
+  CHECK(sink->closed_by_close);
+  CHECK_FALSE(sink->aborted);    // destructor after close() is a no-op
+  CHECK(read_back(sink->buffer())->num_rows() == 1);
+}
+
+TEST_CASE("destroying the writer without close() aborts the sink",
+          "[inventory][sink]")
+{
+  auto sink = std::make_shared<TrackingSink>();
+  {
+    ParquetInventoryWriter w(sink, FieldSelection{});
+    w.append(sample_entry(1));
+    // simulated failure: no close()
+  }
+  CHECK(sink->aborted);
+  CHECK_FALSE(sink->closed_by_close);
+}
+
+TEST_CASE("abort() discards the report and blocks further appends",
+          "[inventory][sink]")
+{
+  auto sink = std::make_shared<TrackingSink>();
+  ParquetInventoryWriter w(sink, FieldSelection{});
+  w.append(sample_entry(1));
+  w.abort();
+  CHECK(sink->aborted);
+  CHECK_THROWS(w.append(sample_entry(2)));
+  REQUIRE_NOTHROW(w.close());  // no-op after abort
+  CHECK_FALSE(sink->closed_by_close);
+}
+
+TEST_CASE("a null sink is rejected", "[inventory][sink]")
+{
+  CHECK_THROWS(ParquetInventoryWriter(nullptr, FieldSelection{}));
 }
