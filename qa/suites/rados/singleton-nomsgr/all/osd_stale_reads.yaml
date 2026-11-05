@@ -14,6 +14,8 @@ overrides:
       - \(PG_DEGRADED\)
       - application not enabled
       - slow request
+      - MDS_ALL_DOWN
+      - MDS_UP_LESS_THAN_MAX
     conf:
       osd:
         osd scrub backoff ratio: 0
