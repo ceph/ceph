@@ -3616,6 +3616,126 @@ TEST(ECSparseFuncs_Decode, DC3_NoShardsMissing_NoOp)
   ASSERT_EQ(r, 0);
 }
 
+// A codec which, like jerasure, fails (returns -1) if it is asked to decode a
+// slice with more than m erasures (i.e. fewer than k input shards).
+class TooManyErasuresFailsCode : public MockErasureCode {
+public:
+  using MockErasureCode::MockErasureCode;
+  int decode_chunks(const shard_id_set &, shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &) override {
+    return std::cmp_less(in.size(), k) ? -1 : 0;
+  }
+  int k = 4;
+};
+
+TEST(ECSparseFuncs_Decode, DC9_SmallObjectMissingShard0_LargeChunk)
+{
+  // Reproduces the teuthology failure "copy_from returned error code -1":
+  // k=4, m=2, chunk=16K, object smaller than one chunk (10113 bytes), data
+  // shard 0 unavailable.  Only shard 0 holds object data; shards 1-3 are
+  // implicit zeros.
+  constexpr unsigned k = 4, m = 2;
+  constexpr uint64_t chunk = 16384;
+  const uint64_t object_size = 10113;
+  ECUtil::stripe_info_t s(k, m, k * chunk, std::vector<shard_id_t>{});
+  ECListenerStub listener;
+  for (int sh = 1; sh < (int)(k + m); ++sh) {  // shard 0 is missing
+    listener.acting_shards.insert(pg_shard_t(sh, shard_id_t(sh)));
+  }
+  ErasureCodeInterfaceRef ec_impl(new TooManyErasuresFailsCode(k, k + m));
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listener);
+
+  // This is what do_copy_get() asks for: the whole object.
+  std::list<ec_align_t> to_read = {{0, object_size, 0}};
+  bool needs_reconstruct = false;
+  int out_r = -1;
+  auto req = prepare_sparse_read_request(hobject_t{}, to_read, object_size,
+                                         /*for_mapext=*/false, pipeline,
+                                         needs_reconstruct, out_r);
+  ASSERT_TRUE(req.has_value());
+  ASSERT_TRUE(needs_reconstruct);
+
+  // Emulate the shard replies: every shard we asked to read returns its
+  // whole requested extent, and is recorded in sparse_extents_read.
+  ECUtil::shard_extent_map_t sem(&s);
+  shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents(k + m);
+  for (auto &[shard, sr] : req->shard_reads) {
+    for (auto [off, len] : sr.extents) {
+      sem.insert_in_shard(shard, off, make_nonzero_buf(len));
+      sparse_extents[shard][off] = len;
+    }
+  }
+
+  int r = ec_sparse_decode(sem, req->shard_want_to_read,
+                           req->zeros_for_decode, sparse_extents, ec_impl,
+                           object_size, nullptr);
+  ASSERT_EQ(r, 0) << "want=" << req->shard_want_to_read
+                  << " zeros_for_decode=" << req->zeros_for_decode
+                  << " shard_reads=" << req->shard_reads;
+}
+
+// Sweep object sizes, missing data shard and read ranges for a k=4 m=2, 16K
+// chunk pool.  For every combination the sparse read request must be
+// decodable (no slice with too few inputs) and must not be empty.
+TEST(ECSparseFuncs_Decode, DC10_Sweep_LargeChunk_MissingDataShard)
+{
+  constexpr unsigned k = 4, m = 2;
+  constexpr uint64_t chunk = 16384;
+  ECUtil::stripe_info_t s(k, m, k * chunk, std::vector<shard_id_t>{});
+  const std::vector<uint64_t> sizes = {
+    1, 4095, 4096, 4097, 10113, 16383, 16384, 16385, 20000, 32768, 49153,
+    65535, 65536, 65537, 75649, 131072, 131077};
+
+  for (uint64_t object_size : sizes) {
+    for (int missing = 0; missing < (int)k; ++missing) {
+      // whole object, then the second half only
+      std::vector<std::pair<uint64_t, uint64_t>> ranges = {
+        {0, object_size}, {object_size / 2, object_size - object_size / 2}};
+      for (auto [off, len] : ranges) {
+        SCOPED_TRACE(testing::Message() << "size=" << object_size
+                     << " missing=" << missing << " off=" << off
+                     << " len=" << len);
+        ECListenerStub listener;
+        for (int sh = 0; sh < (int)(k + m); ++sh) {
+          if (sh != missing) {
+            listener.acting_shards.insert(pg_shard_t(sh, shard_id_t(sh)));
+          }
+        }
+        ErasureCodeInterfaceRef ec_impl(
+          new TooManyErasuresFailsCode(k, k + m));
+        ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listener);
+
+        std::list<ec_align_t> to_read = {{off, len, 0}};
+        bool needs_reconstruct = false;
+        int out_r = -1;
+        auto req = prepare_sparse_read_request(
+          hobject_t{}, to_read, object_size, /*for_mapext=*/false, pipeline,
+          needs_reconstruct, out_r);
+        ASSERT_TRUE(req.has_value());
+        ASSERT_FALSE(req->shard_reads.empty());
+        if (!needs_reconstruct) {
+          continue;
+        }
+
+        ECUtil::shard_extent_map_t sem(&s);
+        shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents(k + m);
+        for (auto &[shard, sr] : req->shard_reads) {
+          for (auto [eoff, elen] : sr.extents) {
+            sem.insert_in_shard(shard, eoff, make_nonzero_buf(elen));
+            sparse_extents[shard][eoff] = elen;
+          }
+        }
+        int r = ec_sparse_decode(sem, req->shard_want_to_read,
+                                 req->zeros_for_decode, sparse_extents,
+                                 ec_impl, object_size, nullptr);
+        ASSERT_EQ(r, 0) << "want=" << req->shard_want_to_read
+                        << " zeros_for_decode=" << req->zeros_for_decode
+                        << " shard_reads=" << req->shard_reads;
+      }
+    }
+  }
+}
+
 // --------------------------------------------------------------------------
 // ec_sparse_merge_ro_fiemap
 // --------------------------------------------------------------------------
