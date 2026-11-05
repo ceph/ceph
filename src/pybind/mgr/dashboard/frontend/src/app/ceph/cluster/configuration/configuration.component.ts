@@ -13,6 +13,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 const RGW = 'rgw';
+const COLLAPSED_VALUE_LIMIT = 5;
 
 @Component({
   selector: 'cd-configuration',
@@ -27,6 +28,9 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
   icons = Icons;
   columns: CdTableColumn[];
   selection = new CdTableSelection();
+  collapsedValueLimit = COLLAPSED_VALUE_LIMIT;
+  // Keyed by option name: the table periodically re-fetches and replaces row objects.
+  private expandedValueLists = new Set<string>();
   filters: CdTableColumn[] = [
     {
       name: $localize`Modified`,
@@ -125,6 +129,20 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
         cellClass: 'text-center'
       }
     ];
+  }
+
+  isValueListExpanded(row: { name: string }): boolean {
+    return !!row && this.expandedValueLists.has(row.name);
+  }
+
+  toggleValueList(row: { name: string }, event?: Event) {
+    // Don't let the click select/deselect the table row.
+    event?.stopPropagation();
+    if (this.expandedValueLists.has(row.name)) {
+      this.expandedValueLists.delete(row.name);
+    } else {
+      this.expandedValueLists.add(row.name);
+    }
   }
 
   updateSelection(selection: CdTableSelection) {
