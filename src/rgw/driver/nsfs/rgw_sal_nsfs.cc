@@ -6015,7 +6015,13 @@ int NSFSDriver::check_owner_can_create_at(const DoutPrefixProvider* dpp,
 
 /* Whether `path` carries any user.nsfs:* attribute:  1 if it does, 0 if
  * not, else a negative errno.  More attributes than fit counts as
- * carrying them, since a directory nothing wrote to has few. */
+ * carrying them, since a directory nothing wrote to has few.
+ *
+ * Not a subtree marker.  The question is whether the directory is, or
+ * was, a bucket, and a subtree marker is written only below a bucket's
+ * root:  it says the directory was converted as part of one, and a
+ * bucket placed there after that one is removed is not over a bucket
+ * (DECISIONS.md 2026-11-05). */
 static int carries_nsfs_state(const std::string& path)
 {
   char names[8192];
@@ -6024,7 +6030,9 @@ static int carries_nsfs_state(const std::string& path)
     return (errno == ERANGE) ? 1 : -errno;
   }
   for (const char* q = names; q < names + len; q += std::strlen(q) + 1) {
-    if (std::string_view(q).starts_with("user.nsfs:")) {
+    const std::string_view n(q);
+    if (n.starts_with("user.nsfs:") &&
+	!n.starts_with(nsfs::SUBTREE_MARKER_PREFIX)) {
       return 1;
     }
   }
@@ -8416,6 +8424,19 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
     return 0;
   }
 
+  /* Nothing changes a converting bucket's profile (DECISIONS.md
+   * 2026-11-05).  Between two nsfs profiles only the mask is written,
+   * which would report the bucket complete over a tree still mixed, and
+   * check_empty() below would read it half converted.  Asking for the
+   * profile it is converting to is the resume above. */
+  if (converting) {
+    ldpp_dout(dpp, 0) << "ERROR: not setting bucket " << get_name()
+      << " to extension set " << target << ":  it is converting to "
+      << profile->name() << ", and its profile changes once it is adopted"
+      << dendl;
+    return -ERR_INVALID_BUCKET_STATE;
+  }
+
   if (target & ~current) {
     if (current == nsfs::EXTENSIONS_BASE) {
       /* Leaving base is adopting the bucket (DECISIONS.md 2026-10-11),
@@ -8611,25 +8632,34 @@ static constexpr uint64_t CONVERT_REWRITE_CAPS =
 static constexpr uint64_t CONVERT_CHOWN_CAPS =
   nsfs::cap_bit(CAP_CHOWN);
 
-/* The names on the file that hold `key` in NooBaa's spelling, added to
- * `out`.  One name for most keys;  for one NooBaa spreads over several
- * -- tags, one per tag;  retention, two;  legal hold -- the ones its
- * disk_attrs() finds in `names`, the file's own.  disk_name() alone
- * names none of those, and conversion left them on the file. */
+/* The NooBaa attributes on the file that hold `key`, added to `out`.
+ * One name for most keys;  for one NooBaa spreads over several -- tags,
+ * one per tag;  retention, two;  legal hold -- the ones its disk_attrs()
+ * names.  disk_name() alone names none of those, and conversion left
+ * them on the file.
+ *
+ * Only names in `names`, the file's own:  removing one that is not
+ * there is a syscall for nothing, one for every attribute of an object
+ * a resumed walk reaches again. */
 static void foreign_names(const nsfs::XattrStrategy* nb,
 			  const std::string& key,
 			  const std::vector<std::string>& names,
 			  const std::string& ours,
 			  std::vector<std::string>& out)
 {
+  std::vector<std::string> candidates;
   nsfs::xattr_map_t none_written;
   bufferlist none;
-  if (nb->disk_attrs(key, none, names, none_written, out)) {
-    return;
+  if (!nb->disk_attrs(key, none, names, none_written, candidates)) {
+    const std::string foreign = nb->disk_name(key);
+    if (!foreign.empty() && (foreign != ours)) {
+      candidates.push_back(foreign);
+    }
   }
-  const std::string foreign = nb->disk_name(key);
-  if (!foreign.empty() && (foreign != ours)) {
-    out.push_back(foreign);
+  for (auto& c : candidates) {
+    if (std::find(names.begin(), names.end(), c) != names.end()) {
+      out.push_back(std::move(c));
+    }
   }
 }
 
@@ -8681,10 +8711,18 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
     const std::string disk_name = xs->disk_name(key);
-    if (!disk_name.empty()) {
+    const size_t foreign = to_remove.size();
+    foreign_names(xattr_fallback, key, names, disk_name, to_remove);
+    /* Already converted:  the RGW attribute is on the file and no
+     * NooBaa attribute for the key is, so the value read is the RGW
+     * attribute's, and writing it again changes nothing (DECISIONS.md
+     * 2026-11-02).  A key with both, a walk stopped between `written`
+     * and `pruned`, is written again:  rare, and the same bytes. */
+    const bool converted = (to_remove.size() == foreign) &&
+      (std::find(names.begin(), names.end(), disk_name) != names.end());
+    if (!disk_name.empty() && !converted) {
       to_write.try_emplace(disk_name, attr_on_disk(xs, key, bl));
     }
-    foreign_names(xattr_fallback, key, names, disk_name, to_remove);
   }
 
   /* Record the owner:  the bucket's (DECISIONS.md 2026-10-11).
@@ -8879,8 +8917,16 @@ static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
   for (const auto& name : entries) {
     int fd = ::openat(vers.get_fd(), name.c_str(), O_RDONLY | O_NOFOLLOW);
     if (fd < 0) {
-      /* deleted under us;  one version, not a failed conversion */
-      continue;
+      if (errno == ENOENT) {
+	/* deleted under us;  one version, not a failed conversion */
+	continue;
+      }
+      /* there and unopenable:  passed over, it would be left in
+       * NooBaa's format under a directory marked converted */
+      ret = -errno;
+      ldpp_dout(dpp, 0) << "ERROR: not converting version " << name
+	<< " under " << prefix << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
     }
     auto close_fd = make_scope_guard([fd] { ::close(fd); });
 
@@ -8910,28 +8956,35 @@ static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
 
 /* Convert one directory object from NooBaa's format.
  *
- * `dir_fd` is the directory the object is stored at, and `key` its key,
- * for the log and the callback.  Shared by the sweep and by a client
- * write, which converts the object it is about to change before changing
- * it (DECISIONS.md 2026-10-13), so the two cannot differ about what a
- * converted directory object is.
- *
- * A directory object in NooBaa's format:
+ * `dir_fd` is the directory the object is stored at, `key` its key, for
+ * the log and the callback, and `dobj` what its dir_content says.
  *
  * NooBaa's marker is user.noobaa.dir_content on the directory and
  * nsfs's is the sentinel file, and the attributes move with it:
- * NooBaa's live on the directory, nsfs's on `.folder`.  So
- * converting one is a move, not a rename of an attribute -- create
- * the sentinel if the object was empty, carry the attributes
- * across, and drop dir_content.
+ * NooBaa's live on the directory, nsfs's on `.folder`.  So converting
+ * one is a move, not a rename of an attribute -- make the sentinel if
+ * the object was empty, carry the attributes across, and drop
+ * dir_content.
  *
- * The sentinel is created before the attributes are written, so a
- * reader that arrives between the two sees an empty object rather
- * than none.  A partial conversion is visible either way;  this is
- * the ordering that makes it visible as the object it is. */
+ * Empty is what dir_content says, a size of 0, and not whether a
+ * sentinel is there:  dir_content goes last, so a resumed walk still
+ * reads it after the sentinel is made.
+ *
+ * A sentinel the walk makes is built nameless (O_TMPFILE) -- its mode,
+ * the directory's mtime, and every attribute, the ETag the reader
+ * reported among them -- and linked into place whole.  The reader
+ * reports an empty object with the directory's stat, and making the
+ * sentinel changes the directory's mtime, so the object keeps the ETag
+ * and Last-Modified it had (DECISIONS.md 2026-10-13) only if they are
+ * on the sentinel before it appears:  a walk stopped before the link
+ * leaves the directory as it was, and one stopped after finds them
+ * there.  A filesystem without O_TMPFILE gets a named sentinel and its
+ * mtime straight after, as before, which a stop between the two still
+ * loses. */
 static int convert_directory_object(const DoutPrefixProvider* dpp,
 				    optional_yield y, int dir_fd,
 				    const std::string& key,
+				    const nsfs::PathStrategy::DirectoryObject& dobj,
 				    nsfs::FSStrategy* fs,
 				    const nsfs::XattrStrategy* xs,
 				    const nsfs::XattrStrategy* xattr_fallback,
@@ -8943,93 +8996,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
 {
   int ret;
   const std::string sname = path_fallback->folder_object_name();
-
-  /* An empty object has no sentinel, and the one created below is a new
-   * inode with this moment's mtime.  The reader reports such an object
-   * with the directory's stat, so that stat is taken first -- creating
-   * the sentinel changes the directory's mtime -- and the object keeps
-   * the ETag and Last-Modified it had (DECISIONS.md 2026-10-13). */
-  struct statx probe{};
-  const bool empty =
-    (nsfs::statx(dir_fd, sname.c_str(), AT_SYMLINK_NOFOLLOW, STATX_INO,
-	     &probe) < 0) && (errno == ENOENT);
-  struct statx reported{};
-  if (empty &&
-      (nsfs::statx(dir_fd, "", AT_EMPTY_PATH, STATX_BASIC_STATS,
-		   &reported) < 0)) {
-    ret = -errno;
-    ldpp_dout(dpp, 0) << "ERROR: cannot stat " << key << ": "
-		      << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  /* NooBaa's object mode, as every object nsfs creates carries
-   * (DECISIONS.md 2026-10-11).  Restored straight after the open,
-   * while the gateway still owns the file, because the ids are
-   * taken from the directory below.
-   *
-   * Raised, as the directory's other writes below are:  in an adopted
-   * tree the directory is whoever NooBaa ran as, at `0770`. */
-  int sfd = -1;
-  ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
-    sfd = ::openat(dir_fd, sname.c_str(),
-		   O_RDONLY | O_NOFOLLOW | O_CREAT, nsfs::file_create_mode());
-    return (sfd < 0) ? -errno : 0;
-  });
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: creating " << sname << " under "
-		      << key << ": " << cpp_strerror(-ret)
-		      << dendl;
-    return ret;
-  }
-  auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
-  ret = nsfs::apply_create_mode(dpp, sfd, nsfs::file_create_mode(), y);
-  if (ret < 0) {
-    return ret;
-  }
-  if (empty) {
-    const struct timespec times[2] = {
-      { 0, UTIME_OMIT },
-      { reported.stx_mtime.tv_sec, reported.stx_mtime.tv_nsec },
-    };
-    if (::futimens(sfd, times) < 0) {
-      ret = -errno;
-      ldpp_dout(dpp, 0) << "ERROR: giving " << sname << " under " << key
-	<< " its directory's mtime: " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-  }
-
-  /* The sentinel re-expresses the directory, so it takes the
-   * directory's uid and gid. */
-  struct statx dstx{};
-  ret = statx_ids(dir_fd, dstx);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: cannot stat " << key
-      << " to give " << sname << " its owner: "
-      << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
-    return inherit_ids(dpp, sfd, dstx, no_chown, sname);
-  });
-  if (ret < 0) {
-    /* The sentinel exists by now, and the whole point of failing is
-     * not to leave a file whose owner is wrong.  Take it back out --
-     * the directory object is still in NooBaa's format and still readable
-     * through the fallback, which is where a stopped conversion
-     * leaves everything else.  Raised, as its creation was. */
-    const int uret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS,
-					     [&]() -> int {
-      return (::unlinkat(dir_fd, sname.c_str(), 0) < 0) ? -errno : 0;
-    });
-    if (uret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not remove " << sname
-	<< " after its creation failed: " << cpp_strerror(-uret)
-	<< dendl;
-    }
-    return ret;
-  }
+  const bool empty = !dobj.content_in_sentinel;
 
   nsfs::ConvertEvent ev{};
   ev.kind = nsfs::ConvertEvent::Kind::directory_object;
@@ -9063,23 +9030,88 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     }
   }
 
+  /* The sentinel, where there is one:  NooBaa's, holding the bytes, or
+   * the one a stopped walk linked.  Raised, as the directory's other
+   * writes below are:  in an adopted tree the directory is whoever
+   * NooBaa ran as, at `0770`. */
+  int sfd = -1;
+  ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+    sfd = ::openat(dir_fd, sname.c_str(), O_RDONLY | O_NOFOLLOW);
+    return (sfd < 0) ? -errno : 0;
+  });
+  if ((ret < 0) && (ret != -ENOENT)) {
+    ldpp_dout(dpp, 0) << "ERROR: opening " << sname << " under " << key
+      << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  auto close_sfd = make_scope_guard([&sfd] {
+    if (sfd >= 0) {
+      ::close(sfd);
+    }
+  });
+  const bool make = (sfd < 0);
+
+  /* What a walk stopped after `written`, or after its link, already put
+   * on the sentinel, which a resumed one does not write again.  Only
+   * that walk can have:  NooBaa writes nothing under `user.nsfs:`
+   * (DECISIONS.md 2026-11-05), so what is there is what this would
+   * write. */
+  std::vector<std::string> on_sentinel;
+  if (!make) {
+    Attrs sattrs;
+    ret = get_x_attrs(y, dpp, sfd, sattrs, ev.key, xs, nullptr, {}, {},
+		      nullptr, &on_sentinel);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  auto written_before = [&on_sentinel](const std::string& n) {
+    return std::find(on_sentinel.begin(), on_sentinel.end(), n)
+      != on_sentinel.end();
+  };
+
   nsfs::xattr_map_t to_write;
   for (const auto& [key, bl] : dattrs) {
     const std::string disk_name = xs->disk_name(key);
-    if (!disk_name.empty()) {
+    if (!disk_name.empty() && !written_before(disk_name)) {
       to_write.try_emplace(disk_name, attr_on_disk(xs, key, bl));
     }
   }
-  /* The ETag the reader reported for an empty object, from the
-   * directory's stat, recorded so the new inode does not change it.  A
-   * stored MD5 has already been carried across and is kept. */
-  if (empty) {
+
+  /* The stat the reader reported an empty object with:  the directory's,
+   * taken before anything changes it.  A sentinel a stopped walk made
+   * without O_TMPFILE carries the directory's mtime already, and the
+   * directory keeps its inode. */
+  struct statx reported{};
+  const std::string etag_name = xs->disk_name(RGW_ATTR_ETAG);
+  const bool record_etag = (make || empty) && !etag_name.empty() &&
+    !written_before(etag_name);
+  if (make || record_etag) {
+    if (nsfs::statx(dir_fd, "", AT_EMPTY_PATH, STATX_BASIC_STATS,
+		    &reported) < 0) {
+      ret = -errno;
+      ldpp_dout(dpp, 0) << "ERROR: cannot stat " << key << ": "
+			<< cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+  if (record_etag && !make) {
+    struct statx sstx{};
+    if (nsfs::statx(sfd, "", AT_EMPTY_PATH, STATX_MTIME, &sstx) < 0) {
+      ret = -errno;
+      ldpp_dout(dpp, 0) << "ERROR: cannot stat " << sname << " under " << key
+	<< ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    reported.stx_mtime = sstx.stx_mtime;
+  }
+  /* The ETag the reader reported for an empty object, recorded so the
+   * sentinel does not change it.  A stored MD5 has already been carried
+   * across and is kept. */
+  if (record_etag) {
     bufferlist ebl;
     ebl.append(synthesize_etag(reported));
-    const std::string disk_name = xs->disk_name(RGW_ATTR_ETAG);
-    if (!disk_name.empty()) {
-      to_write.try_emplace(disk_name, attr_on_disk(xs, RGW_ATTR_ETAG, ebl));
-    }
+    to_write.try_emplace(etag_name, attr_on_disk(xs, RGW_ATTR_ETAG, ebl));
   }
   /* Record the owner, for the reason convert_attrs() gives:  the
    * bucket's.  It lands on the sentinel along with everything else
@@ -9090,12 +9122,113 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     bufferlist aclbl;
     policy.encode(aclbl);
     const std::string disk_name = xs->disk_name(RGW_ATTR_ACL);
-    if (!disk_name.empty()) {
+    if (!disk_name.empty() && !written_before(disk_name)) {
       to_write.insert_or_assign(disk_name, attr_on_disk(xs, RGW_ATTR_ACL,
-						   aclbl));
+						       aclbl));
     }
   }
-  if (!to_write.empty()) {
+
+  /* NooBaa's object mode, as every object nsfs creates carries
+   * (DECISIONS.md 2026-10-11), and the directory's mtime on a sentinel
+   * the walk makes.  While the gateway still owns the file, because the
+   * ids are taken from the directory below. */
+  auto shape = [&](int fd) -> int {
+    int r = nsfs::apply_create_mode(dpp, fd, nsfs::file_create_mode(), y);
+    if ((r < 0) || !make) {
+      return r;
+    }
+    const struct timespec times[2] = {
+      { 0, UTIME_OMIT },
+      { reported.stx_mtime.tv_sec, reported.stx_mtime.tv_nsec },
+    };
+    if (::futimens(fd, times) < 0) {
+      r = -errno;
+      ldpp_dout(dpp, 0) << "ERROR: giving " << sname << " under " << key
+	<< " its directory's mtime: " << cpp_strerror(-r) << dendl;
+    }
+    return r;
+  };
+
+  bool written = false;
+  if (make) {
+    int tfd = -1;
+    ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+      tfd = ::openat(dir_fd, ".", O_TMPFILE | O_RDWR,
+		     nsfs::file_create_mode());
+      return (tfd < 0) ? -errno : 0;
+    });
+    if ((ret == -EOPNOTSUPP) || (ret == -EISDIR) || (ret == -EINVAL)) {
+      /* a filesystem without O_TMPFILE:  a named sentinel */
+      ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+	sfd = ::openat(dir_fd, sname.c_str(),
+		       O_RDONLY | O_NOFOLLOW | O_CREAT | O_EXCL,
+		       nsfs::file_create_mode());
+	return (sfd < 0) ? -errno : 0;
+      });
+      if (ret == 0) {
+	ret = shape(sfd);
+      }
+    } else if (ret == 0) {
+      sfd = tfd;
+      ret = shape(sfd);
+      if ((ret == 0) && !to_write.empty()) {
+	ret = fs->set_xattrs(dpp, sfd, to_write, y);
+      }
+      if (ret == 0) {
+	ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS,
+				      [&]() -> int {
+	  return fs->link_temp_file_excl(sfd, dir_fd, sname, dpp, y);
+	});
+      }
+      written = (ret == 0);
+    }
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: making " << sname << " under "
+			<< key << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  } else {
+    ret = shape(sfd);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  /* The sentinel re-expresses the directory, so it takes the
+   * directory's uid and gid. */
+  struct statx dstx{};
+  ret = statx_ids(dir_fd, dstx);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: cannot stat " << key
+      << " to give " << sname << " its owner: "
+      << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
+    return inherit_ids(dpp, sfd, dstx, no_chown, sname);
+  });
+  if (ret < 0) {
+    /* The whole point of failing is not to leave a file whose owner is
+     * wrong, so a sentinel this walk made is taken back out:  the
+     * directory object is still in NooBaa's format and still readable
+     * through the fallback, which is where a stopped conversion leaves
+     * everything else.  Never NooBaa's own, which holds the object's
+     * bytes.  Raised, as its making was. */
+    if (make) {
+      const int uret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS,
+					       [&]() -> int {
+	return (::unlinkat(dir_fd, sname.c_str(), 0) < 0) ? -errno : 0;
+      });
+      if (uret < 0) {
+	ldpp_dout(dpp, 0) << "ERROR: could not remove " << sname
+	  << " after giving it its owner failed: " << cpp_strerror(-uret)
+	  << dendl;
+      }
+    }
+    return ret;
+  }
+
+  if (!written && !to_write.empty()) {
     /* The adopted-tree case.  inherit_ids() above has given the
      * sentinel the directory's owner, and in a tree we laid down that
      * is the gateway, which needs no raise to write it.  In an adopted
@@ -9230,12 +9363,51 @@ static void count_link(const DoutPrefixProvider* dpp, int dir_fd,
     << "is not served" << dendl;
 }
 
+/* Whether the subtree at `fd` was converted to `converted_to`, the
+ * target extension set as EXTENSIONS_XATTR writes it.  A marker naming
+ * another set is a conversion to that one, and says nothing of this. */
+static bool subtree_converted(int fd, const std::string& converted_to)
+{
+  char buf[32];
+  const ssize_t n = nsfs::fgetxattr(fd, nsfs::SUBTREE_CONVERTED_XATTR,
+				    buf, sizeof(buf));
+  return (n >= 0) && (std::string_view(buf, n) == converted_to);
+}
+
+/* Mark the subtree at `fd` converted to `converted_to`.  Only after
+ * everything under it is.  Not a failure of the walk when it cannot be
+ * written:  the subtree is converted either way, and a resumed walk
+ * converts it again, writing nothing (DECISIONS.md 2026-11-02). */
+static void mark_subtree_converted(const DoutPrefixProvider* dpp, int fd,
+				   const std::string& converted_to,
+				   const std::string& prefix)
+{
+  /* raised, as the walk's other writes are:  in an adopted tree the
+   * directory is whoever NooBaa ran as */
+  const int ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS,
+					  [&]() -> int {
+    return (::fsetxattr(fd, nsfs::SUBTREE_CONVERTED_XATTR,
+			converted_to.data(), converted_to.size(), 0) < 0)
+      ? -errno : 0;
+  });
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: not marking " << prefix << " converted: "
+      << cpp_strerror(-ret) << ";  a resumed walk goes through it again"
+      << dendl;
+  }
+}
+
 /* One directory of the tree, and everything under it.
  *
  * Depth first, and the order within a directory is readdir's, so a
  * caller sequencing against this gets whatever the filesystem gives.
  * Nothing here depends on the order:  each item is converted on its
  * own and a run that stops leaves the rest for the next one.
+ *
+ * A subdirectory whose subtree is converted to `converted_to` is
+ * passed with one read, and one this converts is marked once it and
+ * everything under it is.  The root is not marked:  its completion is
+ * the bucket's, which clear_converting() records.
  */
 static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 			     nsfs::Directory* d, CephContext* cct,
@@ -9246,6 +9418,7 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 			     const ACLOwner& bucket_owner,
 			     const nsfs::PathStrategy* path_fallback,
 			     const nsfs::ReservedNames& rn,
+			     const std::string& converted_to,
 			     nsfs::convert_cb_t* cb,
 			     nsfs::ConvertProgress& progress,
 			     bool no_chown)
@@ -9296,8 +9469,16 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
   for (const auto& name : files) {
     int fd = ::openat(d->get_fd(), name.c_str(), O_RDONLY | O_NOFOLLOW);
     if (fd < 0) {
-      /* deleted under us;  one object, not a failed conversion */
-      continue;
+      if (errno == ENOENT) {
+	/* deleted under us;  one object, not a failed conversion */
+	continue;
+      }
+      /* there and unopenable:  passed over, it would be left in
+       * NooBaa's format under a directory marked converted */
+      ret = -errno;
+      ldpp_dout(dpp, 0) << "ERROR: not converting " << prefix << name
+	<< ": " << cpp_strerror(-ret) << dendl;
+      return ret;
     }
     auto close_fd = make_scope_guard([fd] { ::close(fd); });
 
@@ -9326,14 +9507,26 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
   for (const auto& name : subdirs) {
     nsfs::Directory sub(name, d, cct);
     ret = sub.open(dpp);
+    if (ret == -ENOENT) {
+      continue;   /* removed under us */
+    }
     if (ret < 0) {
+      /* there and unopenable:  passed over, this directory would be
+       * marked converted over it */
+      return ret;
+    }
+
+    /* Before its directory object, which the walk converts before
+     * descending:  a marked subtree's is converted already. */
+    if (subtree_converted(sub.get_fd(), converted_to)) {
+      ++progress.directories_skipped;
       continue;
     }
 
     nsfs::PathStrategy::DirectoryObject dobj{};
     if (path_fallback->directory_object(dpp, sub.get_fd(), dobj)) {
       ret = convert_directory_object(dpp, y, sub.get_fd(), prefix + name + "/",
-				     fs, xs, xattr_fallback, bucket_owner,
+				     dobj, fs, xs, xattr_fallback, bucket_owner,
 				     path_fallback, cb, progress, no_chown);
       if (ret != 0) {
 	return ret;
@@ -9342,12 +9535,66 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 
     ret = convert_directory(dpp, y, &sub, cct, prefix + name + "/", fs,
 			    xs, xattr_fallback, bucket_owner, path_fallback, rn,
-			    cb, progress, no_chown);
+			    converted_to, cb, progress, no_chown);
     if (ret != 0) {
       return ret;
     }
+    mark_subtree_converted(dpp, sub.get_fd(), converted_to,
+			   prefix + name + "/");
   }
 
+  return 0;
+}
+
+/* NooBaa's bucket temp directory, removed whole once the walk and the
+ * uploads are converted (DECISIONS.md 2026-11-05).  Its
+ * multipart-uploads/ is empty by then;  uploads/ holds whatever NooBaa
+ * wrote and never moved into place, writes cut short that were never
+ * objects, counted so the log says what went.  Nothing finds no
+ * directory, and a tree with more than one has none found. */
+static int remove_noobaa_temp_dir(const DoutPrefixProvider* dpp,
+				  int bucket_fd,
+				  const nsfs::MPUStrategy* nb_mpu,
+				  const nsfs::ReservedNames& rn,
+				  const std::string& bucket)
+{
+  const auto tmp = nb_mpu ? nb_mpu->temp_dir(dpp, bucket_fd) : std::nullopt;
+  if (!tmp) {
+    return 0;
+  }
+
+  uint64_t partial = 0;
+  const std::string uploads = *tmp + "/uploads";
+  const int ufd = ::openat(bucket_fd, uploads.c_str(),
+			   O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (ufd >= 0) {
+    DIR* ud = ::fdopendir(ufd);
+    if (ud) {
+      while (const struct dirent* e = ::readdir(ud)) {
+	const std::string_view n(e->d_name);
+	if ((n != ".") && (n != "..")) {
+	  ++partial;
+	}
+      }
+      ::closedir(ud);
+    } else {
+      ::close(ufd);
+    }
+  }
+
+  /* theirs, and in an adopted tree whoever NooBaa ran as */
+  const int ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS,
+					  [&]() -> int {
+    return delete_directory(bucket_fd, tmp->c_str(), true, dpp, rn);
+  });
+  if ((ret < 0) && (ret != -ENOENT)) {
+    ldpp_dout(dpp, 0) << "ERROR: removing NooBaa's temp directory " << *tmp
+      << " from bucket " << bucket << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket << ":  removed NooBaa's "
+    << "temp directory " << *tmp << ", with " << partial
+    << " unfinished writes of theirs" << dendl;
   return 0;
 }
 
@@ -9836,9 +10083,11 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
  * it resumable:  the state on disk is "some of this is still NooBaa's",
  * and that is exactly what the marker says.
  *
- * Idempotent.  An item already converted reads through the nsfs
- * strategy, writes back the same bytes under the same names, and
- * prunes a NooBaa attribute that is not there.
+ * Idempotent, and cheap to resume.  An item already converted costs its
+ * attribute read and writes nothing:  no RGW attribute is written again
+ * and no NooBaa attribute that is not there is removed.  A subdirectory
+ * whose subtree is converted is passed with one read
+ * (SUBTREE_CONVERTED_XATTR).
  */
 /* How long a mutation waits on a closed gate before giving up, and how
  * long an upgrade waits for the mutations already running.
@@ -10061,7 +10310,7 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
   {
     nsfs::PathStrategy::DirectoryObject dobj{};
     if (nb_paths->directory_object(dpp, dir->get_fd(), dobj)) {
-      ret = convert_directory_object(dpp, y, dir->get_fd(), "/",
+      ret = convert_directory_object(dpp, y, dir->get_fd(), "/", dobj,
 				     driver->get_fs_strategy(), xattr_strategy(),
 				     nb_xattrs, default_object_owner(dpp, y),
 				     nb_paths, cb, prog,
@@ -10072,21 +10321,33 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
 
+  /* the set the subtree markers name, as the bucket's mask names it */
+  ret = resolve_profile(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  const std::string converted_to = std::to_string(profile->extensions);
+
   ret = convert_directory(dpp, y, dir.get(), driver->ctx(),
 			  std::string(), driver->get_fs_strategy(),
 			  xattr_strategy(), nb_xattrs,
 			  default_object_owner(dpp, y), nb_paths,
-			  driver->get_reserved_names(), cb, prog,
+			  driver->get_reserved_names(), converted_to, cb, prog,
 			  driver->no_chown_injected());
   if (ret == 0) {
     ret = convert_uploads(dpp, y, cb, prog);
+  }
+  if (ret == 0) {
+    ret = remove_noobaa_temp_dir(dpp, dir->get_fd(), mpu_fallback(),
+				 driver->get_reserved_names(), get_name());
   }
   if (ret != 0) {
     ldpp_dout(dpp, 1) << "nsfs: converting bucket " << get_name()
       << " stopped after " << prog.objects << " objects, "
       << prog.directory_objects << " directory objects, "
       << prog.versions << " versions and "
-      << prog.uploads << " uploads: "
+      << prog.uploads << " uploads, passing "
+      << prog.directories_skipped << " converted subtrees: "
       << cpp_strerror(-ret) << ";  the marker stays and a later run "
       << "resumes" << dendl;
     return ret;
@@ -10102,7 +10363,8 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
     << prog.objects << " objects, " << prog.directory_objects
     << " directory objects, " << prog.versions << " versions, "
     << prog.uploads << " uploads ("
-    << prog.parts << " parts)" << dendl;
+    << prog.parts << " parts), passing "
+    << prog.directories_skipped << " converted subtrees" << dendl;
   if (prog.links.total() > 0) {
     ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name() << " holds "
       << prog.links.total() << " symbolic links, not served:  "
@@ -19106,6 +19368,7 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   put_report("versions", std::to_string(prog.versions));
   put_report("uploads", std::to_string(prog.uploads));
   put_report("parts", std::to_string(prog.parts));
+  put_report("directories_skipped", std::to_string(prog.directories_skipped));
   put_report("links_file", std::to_string(prog.links.file));
   put_report("links_directory", std::to_string(prog.links.directory));
   put_report("links_outside", std::to_string(prog.links.outside));

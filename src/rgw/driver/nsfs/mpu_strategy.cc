@@ -705,12 +705,23 @@ NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
 
 /* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
  * adoption carries an upload NooBaa started into RGW's layout, and a
- * write to one it has not reached waits for it. */
+ * write to an upload is refused until its bucket is adopted. */
 std::optional<std::string>
 NooBaaMPUStrategy::staging_root_for_write(const DoutPrefixProvider* dpp,
 					  int bucket_fd) const
 {
   return std::nullopt;
+}
+
+/* The bucket temp directory, whatever it holds:  multipart-uploads/,
+ * and uploads/, where NooBaa writes each object before moving it into
+ * place (`namespace_fs.js:1301`).  Found as staging_root() finds it, so
+ * a tree with more than one has none to remove. */
+std::optional<std::string>
+NooBaaMPUStrategy::temp_dir(const DoutPrefixProvider* dpp,
+			    int bucket_fd) const
+{
+  return nb_tmpdir(dpp, bucket_fd);
 }
 
 /* Does this name end in `_` followed by something UUID-shaped?

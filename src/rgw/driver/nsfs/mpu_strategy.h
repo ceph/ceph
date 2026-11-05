@@ -233,6 +233,15 @@ public:
     return std::string{"."};
   }
 
+  /* The directory this layout keeps everything it stages in, when that
+   * is a directory of its own the conversion removes once it has
+   * re-staged what is in it.  Nullopt for a layout whose staging sits
+   * beside the objects, and where there is none to find. */
+  virtual std::optional<std::string> temp_dir(
+      const DoutPrefixProvider* dpp, int bucket_fd) const {
+    return std::nullopt;
+  }
+
   /* Where staging WOULD go, creating what is missing.
    *
    * A different question from staging_root(), which must not name a
@@ -587,6 +596,8 @@ public:
 					  int bucket_fd) const override;
   std::optional<std::string> staging_root_for_write(
       const DoutPrefixProvider* dpp, int bucket_fd) const override;
+  std::optional<std::string> temp_dir(const DoutPrefixProvider* dpp,
+				      int bucket_fd) const override;
 
   std::string part_name(uint32_t part_num) const override;
   std::optional<uint32_t> part_number(std::string_view name) const override;

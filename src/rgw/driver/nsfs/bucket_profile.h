@@ -146,6 +146,27 @@ inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
  * bucket undeletable. */
 inline constexpr const char* OWNS_STORAGE_XATTR = "user.nsfs:marker.owns_storage";
 
+/* The markers on a directory below a bucket's root.  A bucket's markers
+ * say what the bucket is;  these say what one subtree is, so they have
+ * a prefix of their own, which carries_nsfs_state() -- is this
+ * directory, or was it, a bucket -- skips as a class (DECISIONS.md
+ * 2026-11-05).  Never written on a bucket's root. */
+inline constexpr const char* SUBTREE_MARKER_PREFIX =
+  "user.nsfs:marker.subtree.";
+
+/* The subtree is converted:  this directory's files, versions and
+ * directory object, and every subdirectory, are in the bucket's format.
+ * Written after the children, so a walk that stops partway leaves it
+ * off the directory it stopped in, and a resumed walk passes a marked
+ * subdirectory, and everything under it, with one read.
+ *
+ * The value is the extension set the subtree was converted to, as
+ * EXTENSIONS_XATTR writes it, and a walk skips only a marker naming its
+ * own target.  Left after the conversion completes:  nothing reads it
+ * once the bucket's converting marker is gone. */
+inline constexpr const char* SUBTREE_CONVERTED_XATTR =
+  "user.nsfs:marker.subtree.converted";
+
 /* THE VALUE IS A SET, NOT A LEVEL.
  *
  * A decimal integer in the attribute, read as a bitmask:  one bit per

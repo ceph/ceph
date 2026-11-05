@@ -139,6 +139,11 @@ struct ConvertProgress {
   uint64_t versions{0};
   uint64_t uploads{0};
   uint64_t parts{0};
+  /* Subdirectories a resumed walk passed over, their subtree already
+   * converted (SUBTREE_CONVERTED_XATTR).  One each:  what is under one
+   * is not counted, since counting it is the walk the marker saves
+   * (DECISIONS.md 2026-11-05). */
+  uint64_t directories_skipped{0};
   /* Symbolic links, which are not objects and are not converted (DECISIONS.md
    * 2026-10-23).  Counted by what each resolves to as NooBaa resolved it, its
    * real path against the bucket's, with read-search held so the count does

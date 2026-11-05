@@ -12037,6 +12037,274 @@ TEST_F(NSFSUpgradeTest, ReStagesAnUploadInFlight)
   EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload);
 }
 
+/* NooBaa's temp directory goes with the last upload in it.  Each upload's
+ * staging is removed as it is re-staged, and the directory that held
+ * them is NooBaa's alone:  left, it is no longer hidden once the bucket
+ * stops converting, since only NooBaa's path strategy reserves the
+ * name. */
+TEST_F(NSFSUpgradeTest, ConversionRemovesTheirEmptiedTempDirectory)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  nb_object("beside.bin", "text/plain");
+  const sf::path tmpdir = tree.staging.parent_path().parent_path();
+  ASSERT_TRUE(sf::is_directory(tmpdir)) << tmpdir;
+  /* an object write of theirs cut short before its move into place
+   * (`namespace_fs.js:1301`):  never an object, and it goes too */
+  sf::create_directories(tmpdir / "uploads");
+  write_file(tmpdir / "uploads" / fake_uuid("partial"), "half");
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  ASSERT_TRUE(prog.complete);
+
+  for (const char* delim : {"", "/"}) {
+    rgw::sal::Bucket::ListParams params;
+    params.delim = delim;
+    rgw::sal::Bucket::ListResults results;
+    ASSERT_EQ(bucket->list(env->dpp, params, 1000, results, null_yield), 0);
+    for (const auto& e : results.objs) {
+      EXPECT_FALSE(e.key.name.starts_with(".noobaa-nsfs"))
+	<< "delim '" << delim << "' lists " << e.key.name;
+    }
+    for (const auto& [cp, _] : results.common_prefixes) {
+      EXPECT_FALSE(cp.starts_with(".noobaa-nsfs"))
+	<< "delim '" << delim << "' lists the prefix " << cp;
+    }
+  }
+  EXPECT_FALSE(sf::exists(tmpdir)) << tmpdir;
+}
+
+/* The subtree marker's value, or nullopt when there is none. */
+static std::optional<std::string> subtree_marker(const sf::path& p)
+{
+  char buf[64];
+  const ssize_t n = ::getxattr(p.c_str(), nsfs::SUBTREE_CONVERTED_XATTR,
+			       buf, sizeof(buf));
+  if (n < 0) {
+    return std::nullopt;
+  }
+  return std::string(buf, n);
+}
+
+/* What every subtree marker of an upgrade to strong names. */
+static const std::string STRONG_SET = std::to_string(nsfs::EXTENSIONS_STRONG);
+
+/* Stops each walk at its first upload, which comes after the tree:  so
+ * every subdirectory is converted and marked, and the bucket is not. */
+static nsfs::convert_cb_t stop_at_upload()
+{
+  return [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+    return (ev.kind == nsfs::ConvertEvent::Kind::upload) ? -EINTR : 0;
+  };
+}
+
+/* A finished subdirectory is marked with the target set, after what is
+ * under it;  the root is not, its completion being the bucket's.  A
+ * resumed walk passes each marked one with one read, reaching nothing
+ * under it, and counts it.  The markers stay after completion. */
+TEST_F(NSFSUpgradeTest, AResumedWalkPassesAConvertedSubtree)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  nb_object("top.bin", "text/plain");
+  nb_object("a/one.bin", "text/plain");
+  nb_object("a/deep/two.bin", "text/plain");
+  nb_object("b/three.bin", "text/plain");
+  nb_folder("c", "application/x-directory");
+
+  auto stop = stop_at_upload();
+  nsfs::ConvertProgress first;
+  ASSERT_EQ(upgrade(&stop, &first), -EINTR);
+  for (const char* d : {"a", "a/deep", "b", "c"}) {
+    EXPECT_EQ(subtree_marker(bucket_path() / d), STRONG_SET) << d;
+  }
+  EXPECT_EQ(subtree_marker(bucket_path()), std::nullopt);
+
+  std::vector<std::string> seen;
+  nsfs::convert_cb_t record =
+    [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if (ev.phase == nsfs::ConvertEvent::Phase::before) {
+	seen.push_back(ev.key);
+      }
+      return 0;
+    };
+  nsfs::ConvertProgress second;
+  ASSERT_EQ(upgrade(&record, &second), 0);
+  EXPECT_TRUE(second.complete);
+  /* a, b and c;  a/deep is under a, and not reached */
+  EXPECT_EQ(second.directories_skipped, 3u);
+  for (const auto& k : seen) {
+    EXPECT_FALSE(k.starts_with("a/") || k.starts_with("b/") ||
+		 k.starts_with("c/")) << k << " is under a converted subtree";
+  }
+  EXPECT_NE(std::find(seen.begin(), seen.end(), "top.bin"), seen.end());
+
+  for (const char* d : {"a", "a/deep", "b", "c"}) {
+    EXPECT_EQ(subtree_marker(bucket_path() / d), STRONG_SET)
+	<< d << ":  the marker stays after completion";
+  }
+}
+
+/* A subtree marker naming another extension set says nothing of this
+ * conversion, and the walk goes through the subtree. */
+TEST_F(NSFSUpgradeTest, AMarkerNamingAnotherSetIsNotPassed)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  nb_object("a/one.bin", "text/plain");
+  nb_object("b/two.bin", "text/plain");
+
+  auto stop = stop_at_upload();
+  ASSERT_EQ(upgrade(&stop, nullptr), -EINTR);
+  const std::string other = std::to_string(nsfs::EXTENSIONS_SHARED);
+  ASSERT_EQ(::setxattr((bucket_path() / "a").c_str(),
+		       nsfs::SUBTREE_CONVERTED_XATTR, other.data(),
+		       other.size(), 0), 0);
+
+  nsfs::ConvertProgress second;
+  ASSERT_EQ(upgrade(nullptr, &second), 0);
+  EXPECT_EQ(second.directories_skipped, 1u) << "b only";
+  EXPECT_EQ(second.objects, 1u) << "a/one.bin, walked again";
+  EXPECT_EQ(subtree_marker(bucket_path() / "a"), STRONG_SET);
+}
+
+/* A walk that reaches an object already converted writes no RGW
+ * attribute to it again, which would move its ctime (DECISIONS.md
+ * 2026-11-02).  The object had one-to-many NooBaa attributes, whose
+ * names a key's removal used to list whether or not they were there. */
+TEST_F(NSFSUpgradeTest, AWalkWritesNothingToAConvertedObject)
+{
+  nb_object("top.bin", "text/plain");
+  nb_object("d/inner.bin", "text/plain");
+  {
+    const sf::path p{bucket_path() / "top.bin"};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.tag.a", "1", 1, 0), 0);
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.legal_hold", "ON", 2, 0), 0);
+  }
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+
+  auto ctime = [](const sf::path& p) {
+    struct statx stx{};
+    EXPECT_EQ(::statx(AT_FDCWD, p.c_str(), 0, STATX_CTIME, &stx), 0) << p;
+    return std::pair{stx.stx_ctime.tv_sec, stx.stx_ctime.tv_nsec};
+  };
+  const auto top = ctime(bucket_path() / "top.bin");
+  const auto inner = ctime(bucket_path() / "d/inner.bin");
+
+  /* the bucket converting again, and d's marker gone, so the walk
+   * reaches both objects */
+  ASSERT_EQ(::setxattr(bucket_path().c_str(), nsfs::CONVERTING_XATTR,
+		       nsfs::CONVERTING_FROM_NOOBAA,
+		       std::strlen(nsfs::CONVERTING_FROM_NOOBAA), 0), 0);
+  ASSERT_EQ(::removexattr((bucket_path() / "d").c_str(),
+			  nsfs::SUBTREE_CONVERTED_XATTR), 0);
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&bucket, null_yield), 0);
+  ASSERT_TRUE(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+		->is_converting());
+
+  nsfs::ConvertProgress again;
+  ASSERT_EQ(upgrade(nullptr, &again), 0);
+  EXPECT_EQ(again.objects, 2u) << "both reached";
+  EXPECT_EQ(ctime(bucket_path() / "top.bin"), top);
+  EXPECT_EQ(ctime(bucket_path() / "d/inner.bin"), inner);
+}
+
+/* What a directory object is served with:  its ETag and Last-Modified. */
+static std::pair<std::string, ceph::real_time>
+served_as(rgw::sal::Bucket* bucket, const DoutPrefixProvider* dpp,
+	  const std::string& key)
+{
+  auto obj = bucket->get_object(rgw_obj_key(key));
+  EXPECT_EQ(obj->load_obj_state(dpp, null_yield), 0) << key;
+  EXPECT_EQ(obj->get_obj_attrs(null_yield, dpp), 0) << key;
+  auto& attrs = obj->get_attrs();
+  auto i = attrs.find(RGW_ATTR_ETAG);
+  return {(i == attrs.end()) ? std::string() : rgw_bl_str(i->second),
+	  obj->get_mtime()};
+}
+
+/* An empty directory object keeps the ETag and Last-Modified it was
+ * served with, through a walk stopped after its sentinel is linked and
+ * the walk that resumes it.  Both come from the directory's stat, which
+ * making the sentinel changes, so they are on the sentinel before it
+ * appears (DECISIONS.md 2026-10-13). */
+TEST_F(NSFSUpgradeTest, AnEmptyDirectoryObjectKeepsItsETagAcrossAStop)
+{
+  nb_folder("photos", "application/x-directory");
+  const auto before = served_as(bucket.get(), env->dpp, "photos/");
+  ASSERT_FALSE(before.first.empty());
+
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      return ((ev.kind == nsfs::ConvertEvent::Kind::directory_object) &&
+	      (ev.phase == nsfs::ConvertEvent::Phase::written)) ? -EINTR : 0;
+    };
+  ASSERT_EQ(upgrade(&stop, nullptr), -EINTR);
+  ASSERT_TRUE(sf::exists(bucket_path() / "photos" / ".folder"));
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+
+  const auto after = served_as(bucket.get(), env->dpp, "photos/");
+  EXPECT_EQ(after.first, before.first);
+  EXPECT_EQ(after.second, before.second);
+}
+
+/* A walk on a filesystem without O_TMPFILE names its sentinel and gives
+ * it the directory's mtime straight after.  Stopped there, the sentinel
+ * exists and holds nothing, and dir_content still says the object is
+ * empty:  the resumed walk records the ETag the object was served with,
+ * from the directory's inode and the sentinel's mtime.  It used to take
+ * the sentinel for NooBaa's and record none. */
+TEST_F(NSFSUpgradeTest, AResumedWalkRecordsTheETagOfAnEmptyDirectoryObject)
+{
+  nb_folder("photos", "application/x-directory");
+  const auto before = served_as(bucket.get(), env->dpp, "photos/");
+  ASSERT_FALSE(before.first.empty());
+
+  const sf::path d{bucket_path() / "photos"};
+  struct statx dstx{};
+  ASSERT_EQ(::statx(AT_FDCWD, d.c_str(), 0, STATX_MTIME, &dstx), 0);
+  const sf::path sentinel{d / ".folder"};
+  write_file(sentinel, "");
+  const struct timespec times[2] = {
+    { 0, UTIME_OMIT },
+    { dstx.stx_mtime.tv_sec, dstx.stx_mtime.tv_nsec },
+  };
+  ASSERT_EQ(::utimensat(AT_FDCWD, sentinel.c_str(), times, 0), 0);
+
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+  const auto after = served_as(bucket.get(), env->dpp, "photos/");
+  EXPECT_EQ(after.first, before.first);
+  EXPECT_EQ(after.second, before.second);
+}
+
+/* Nothing changes a converting bucket's profile (DECISIONS.md
+ * 2026-11-05):  between two nsfs profiles only the mask would be
+ * written, reporting the bucket complete over a mixed tree.  Asking for
+ * the profile it is converting to still resumes it. */
+TEST_F(NSFSUpgradeTest, AConvertingBucketKeepsItsProfile)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  nb_object("a/one.bin", "text/plain");
+
+  auto stop = stop_at_upload();
+  ASSERT_EQ(upgrade(&stop, nullptr), -EINTR);
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_TRUE(b->is_converting());
+
+  nsfs::ConvertProgress prog;
+  EXPECT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED,
+			   nullptr, &prog), -ERR_INVALID_BUCKET_STATE);
+  EXPECT_FALSE(prog.complete);
+  EXPECT_STREQ(b->profile_name(), "strong");
+  EXPECT_TRUE(b->is_converting());
+
+  ASSERT_EQ(upgrade(nullptr, &prog), 0) << "the resume is still asked for";
+  EXPECT_TRUE(prog.complete);
+}
+
 /* An upload whose parts were listed before the upgrade still lists and
  * completes after it.
  *
@@ -20326,6 +20594,19 @@ TEST_F(NSFSPlaceBucketTest, ADirectoryCarryingNsfsStateIsRejected)
 
   ASSERT_EQ(::removexattr(at.c_str(), nsfs::EXTENSIONS_XATTR), 0);
   EXPECT_EQ(place("was-a-bucket", at), 0) << "the control:  it can be placed";
+}
+
+/* A subtree marker is not bucket state:  it is written below a bucket's
+ * root, and says the directory was converted as part of one.  A bucket
+ * removed with its directory kept leaves its subdirectories marked, and
+ * one of them can be placed (DECISIONS.md 2026-11-05). */
+TEST_F(NSFSPlaceBucketTest, ASubtreeMarkerIsNotBucketState)
+{
+  const sf::path at = elsewhere() / "was-a-subdirectory";
+  sf::create_directories(at);
+  ASSERT_EQ(::setxattr(at.c_str(), nsfs::SUBTREE_CONVERTED_XATTR, "3", 1, 0),
+	    0);
+  EXPECT_EQ(place("was-a-subdirectory", at), 0);
 }
 
 /* The `unplaced-directory` hint makes, opens and removes a directory
