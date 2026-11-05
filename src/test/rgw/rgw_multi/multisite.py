@@ -18,6 +18,10 @@ class Cluster:
         """ execute a ceph command """
         pass
 
+    def rados(self, args = None, **kwargs):
+        """ execute a rados command """
+        pass
+
 class Gateway:
     """ interface to control a single radosgw instance """
     __metaclass__ = ABCMeta
