@@ -125,7 +125,8 @@ class CephadmHttpServer(threading.Thread):
             main_config: dict,
             ssl_info: Optional[dict] = None,
             extra_mounts: Optional[Any] = None,
-            logger: Optional[Any] = None
+            logger: Optional[Any] = None,
+            server_options: Optional[dict] = None,
         ) -> ServerAdapter:
             if logger:
                 logger.info(f'Starting {name} server on {bind_addr[0]}:{bind_addr[1]}...')
@@ -140,7 +141,8 @@ class CephadmHttpServer(threading.Thread):
                 tree,
                 name,
                 bind_addr,
-                ssl_info=ssl_info
+                ssl_info=ssl_info,
+                server_options=server_options,
             )
             return adapter
 
@@ -173,7 +175,8 @@ class CephadmHttpServer(threading.Thread):
                 main_config=agent_config,
                 ssl_info=agent_ssl_info,
                 extra_mounts=agent_mounts,
-                logger=self.mgr.log
+                logger=self.mgr.log,
+                server_options=self.agent.get_server_options(),
             )
 
         try:

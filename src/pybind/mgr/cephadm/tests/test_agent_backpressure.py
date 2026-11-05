@@ -160,3 +160,15 @@ def test_drop_limit_follows_report_timeout(hosts, age, dropped):
     with patch('cephadm.agent.time.time', return_value=NOW):
         result = HostData(mgr)._stale_report_age(NOW - age)
     assert (result is not None) is dropped
+
+
+def test_agent_endpoint_listen_backlog_reaches_cheroot():
+    # The option must be accepted by the cheroot version in use.
+    from cheroot.wsgi import Server
+    from cephadm.agent import AgentEndpoint
+
+    endpoint = AgentEndpoint.__new__(AgentEndpoint)
+    options = endpoint.get_server_options()
+    assert options == {'request_queue_size': AgentEndpoint.LISTEN_BACKLOG}
+    server = Server(('127.0.0.1', 0), lambda e, s: [], **options)
+    assert server.request_queue_size == AgentEndpoint.LISTEN_BACKLOG

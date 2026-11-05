@@ -103,11 +103,14 @@ class CherryPyMgr:
         tree: Tree,
         name: str,
         bind_addr: Tuple[str, int],
-        ssl_info: Optional[Dict[str, Any]] = None
+        ssl_info: Optional[Dict[str, Any]] = None,
+        server_options: Optional[Dict[str, Any]] = None,
     ) -> Tuple[ServerAdapter, Any]:
         """
         :param bind_addr: Tuple (host, port)
         :param ssl_info: Dict containing {'cert': path, 'key': path, 'context': ssl_context}
+        :param server_options: Extra keyword arguments for the cheroot server,
+            e.g. accepted_queue_size or request_queue_size (listen backlog)
         """
         cls._trees[name] = tree
 
@@ -138,7 +141,7 @@ class CherryPyMgr:
                 raise
 
         cls.configure_logging()
-        adapter = cls.create_adapter(tree, bind_addr, ssl_info)
+        adapter = cls.create_adapter(tree, bind_addr, ssl_info, server_options)
         cls.subscribe_adapter(adapter)
         adapter.start()
 
@@ -190,12 +193,14 @@ class CherryPyMgr:
         app: Any,
         bind_addr: Tuple[str, int],
         ssl_info: Optional[Dict[str, Any]] = None,
+        server_options: Optional[Dict[str, Any]] = None,
     ) -> ServerAdapter:
         server = WSGIServer(
             bind_addr=bind_addr,
             wsgi_app=app,
             numthreads=30,
-            server_name='Ceph-Mgr'
+            server_name='Ceph-Mgr',
+            **(server_options or {})
         )
 
         if ssl_info:
