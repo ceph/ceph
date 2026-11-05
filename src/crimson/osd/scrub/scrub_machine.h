@@ -172,7 +172,10 @@ struct ScrubContext {
   virtual void notify_scrub_start(bool deep) = 0;
 
   /// notifies implementation of scrub end; default no-op, override to observe.
-  virtual void notify_scrub_end(bool /*deep*/) {}
+  /// Pure virtual on purpose: a defaulted no-op here let the PGScrubber
+  /// override be dropped silently, which stalled snap trimming after an
+  /// aborted scrub.  Keep implementers honest.
+  virtual void notify_scrub_end(bool deep) = 0;
 
   /// requests range to scrub starting at start
   struct request_range_result_t {

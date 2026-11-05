@@ -345,6 +345,7 @@ private:
   void schedule_scrub_with_osd() override;
   void rm_from_osd_scrubbing() override;
   void clear_pgscrub_state() override;
+  void notify_scrub_end(bool deep) override;
 
   void notify_scrub_start(bool deep) override;
   void requeue_penalized(
