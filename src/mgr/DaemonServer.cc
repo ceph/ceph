@@ -3448,11 +3448,9 @@ void DaemonServer::adjust_pgs()
 	const pg_pool_t& p = i.second;
         const auto& pool_name = osdmap.get_pool_name(i.first);
         current_pools[i.first] = pool_name;
-
-        //If it has the nopgchange flag skip the pool
-        if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
-          dout(10) << "Pool " << i.first << " has the flag NOPGCHANGE "
-                   << "so will be skipped" << dendl;
+        if (p.is_migrating() && p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
+          dout(10) << "Pool " << i.first << " is migrating and has the flag "
+                   << "NOPGCHANGE so will be skipped" << dendl;
           continue;
         }
 
