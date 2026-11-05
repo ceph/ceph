@@ -10325,6 +10325,13 @@ void RGWPutBucketEncryption::execute(optional_yield y)
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
+  if (!bucket_encryption_conf.kms_master_key_id().empty() &&
+      bucket_encryption_conf.sse_algorithm() != "aws:kms") {
+    s->err.message = "KMSMasterKeyID is not applicable if SSEAlgorithm is not aws:kms";
+    ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
                                          &data, nullptr, s->info, s->err, y);
