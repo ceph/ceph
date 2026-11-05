@@ -14,7 +14,7 @@
 #ifndef CEPH_HISTOGRAM_H
 #define CEPH_HISTOGRAM_H
 
-#include <list>
+#include <vector>
 #include "include/encoding.h"
 #include "include/intarith.h"
 
@@ -122,7 +122,7 @@ public:
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
-  static std::list<pow2_hist_t> generate_test_instances();
+  static std::vector<pow2_hist_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(pow2_hist_t)
 

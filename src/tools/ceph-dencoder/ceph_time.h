@@ -1,7 +1,7 @@
 #ifndef TEST_CEPH_TIME_H
 #define TEST_CEPH_TIME_H
 
-#include <list>
+#include <vector>
 
 #include "include/encoding.h"
 #include "common/ceph_time.h"
@@ -28,8 +28,8 @@ class time_point_wrapper {
     auto epoch_time = Clock::to_time_t(t);
     f->dump_string("time", std::ctime(&epoch_time));
   }
-  static std::list<time_point_wrapper> generate_test_instances() {
-    std::list<time_point_wrapper> ls;
+  static std::vector<time_point_wrapper> generate_test_instances() {
+    std::vector<time_point_wrapper> ls;
     constexpr time_t t{455500800}; // Ghostbusters release date
     ls.push_back(time_point_wrapper(Clock::from_time_t(t)));
     return ls;
@@ -60,8 +60,8 @@ class timespan_wrapper {
   void dump(Formatter* f) {
     f->dump_int("timespan", d.count());
   }
-  static std::list<timespan_wrapper> generate_test_instances() {
-    std::list<timespan_wrapper> ls;
+  static std::vector<timespan_wrapper> generate_test_instances() {
+    std::vector<timespan_wrapper> ls;
     constexpr std::chrono::seconds d{7377}; // marathon world record (2:02:57)
     ls.push_back(timespan_wrapper(d));
     return ls;

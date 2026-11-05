@@ -18,7 +18,7 @@
 
 #include <cstdint>
 #include <iosfwd>
-#include <list>
+#include <vector>
 #include <string>
 #include <string>
 #include <string_view>
@@ -59,7 +59,7 @@ struct object_t {
 
   void dump(ceph::Formatter *f) const;
 
-  static std::list<object_t> generate_test_instances();
+  static std::vector<object_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(object_t)
 
@@ -169,7 +169,7 @@ struct sobject_t {
     decode(snap, bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<sobject_t> generate_test_instances();
+  static std::vector<sobject_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(sobject_t)
 

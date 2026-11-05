@@ -17,7 +17,7 @@
 
 #include <concepts>
 #include <limits>
-#include <list>
+#include <vector>
 #include <variant>
 
 #include <boost/mp11/algorithm.hpp> // for mp_with_index
@@ -222,7 +222,7 @@ void decode(std::variant<Ts...>& v, bufferlist::const_iterator& p)
 /// ceph-object-corpus. This allows the ceph-dencoder tests to catch any
 /// breaking changes to the variant types that are present in encodings.
 template <typename ...Ts>
-void generate_test_instances(std::list<std::variant<Ts...>>& instances)
+void generate_test_instances(std::vector<std::variant<Ts...>>& instances)
 {
   // use an immediately-invoked lambda to get a parameter pack of variant indices
   [&instances] <std::size_t ...I> (std::index_sequence<I...>) {

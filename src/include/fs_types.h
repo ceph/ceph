@@ -5,7 +5,7 @@
 #define CEPH_INCLUDE_FS_TYPES_H
 
 #include <cstdint>
-#include <list>
+#include <vector>
 #include <iosfwd>
 #include <string>
 
@@ -47,8 +47,8 @@ struct inodeno_t {
     decode(val, p);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<inodeno_t> generate_test_instances() {
-    std::list<inodeno_t> ls;
+  static std::vector<inodeno_t> generate_test_instances() {
+    std::vector<inodeno_t> ls;
     ls.push_back(inodeno_t(1));
     ls.push_back(inodeno_t(123456789));
     return ls;
@@ -139,7 +139,7 @@ struct file_layout_t {
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<file_layout_t> generate_test_instances();
+  static std::vector<file_layout_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(file_layout_t)
 
