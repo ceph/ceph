@@ -114,6 +114,22 @@ int mount(RadosRef cluster, const Filesystem &filesystem, bool cross_check_fscid
     return r;
   }
 
+  // Ciphertext-preserving sync for fscrypt trees: disable access semantics so
+  // locked dirs can be opened/read without the master key, and expose
+  // alternate_name so long encrypted names can be copied as xattrs. The mirror
+  // daemon does not hold user fscrypt keys.
+  r = ceph_conf_set(cmi, "client_fscrypt_as", "false");
+  if (r < 0) {
+    derr << ": mount error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = ceph_conf_set(cmi, "client_alternate_name_visible", "true");
+  if (r < 0) {
+    derr << ": mount error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   // mount timeout applies for local and remote mounts.
   auto mount_timeout = g_ceph_context->_conf.get_val<std::chrono::seconds>
     ("cephfs_mirror_mount_timeout").count();
