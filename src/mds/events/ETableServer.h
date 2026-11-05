@@ -16,6 +16,7 @@
 #ifndef CEPH_MDS_ETABLESERVER_H
 #define CEPH_MDS_ETABLESERVER_H
 
+#include <deque>
 #include "common/config.h"
 #include "include/types.h"
 
@@ -40,7 +41,7 @@ struct ETableServer : public LogEvent {
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static std::list<ETableServer> generate_test_instances();
+  static std::deque<ETableServer> generate_test_instances();
 
   void print(std::ostream& out) const override {
     out << "ETableServer " << get_mdstable_name(table) 

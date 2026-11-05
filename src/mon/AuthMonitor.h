@@ -84,8 +84,8 @@ public:
       f->dump_int("auth_type", auth_type);
       f->dump_int("auth_data_len", auth_data.length());
     }
-    static std::list<Incremental> generate_test_instances() {
-      std::list<Incremental> ls;
+    static std::vector<Incremental> generate_test_instances() {
+      std::vector<Incremental> ls;
       ls.emplace_back();
       ls.emplace_back();
       ls.back().inc_type = GLOBAL_ID;
