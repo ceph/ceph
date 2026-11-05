@@ -1039,6 +1039,8 @@ struct inode_t {
   version_t backtrace_version = 0;
   // The pool a migration left objects in that are still to be cleared.
   int64_t migrating_from = -1;
+  // Moves back into a pool holding redirects, each needing a new namespace.
+  uint32_t migrate_gen = 0;
 
   snapid_t oldest_snap;
 
@@ -1133,6 +1135,7 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(optmetadata, bl, features);
 
   encode(migrating_from, bl);
+  encode(migrate_gen, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1257,8 +1260,10 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 
   if (struct_v >= 21) {
     decode(migrating_from, p);
+    decode(migrate_gen, p);
   } else {
     migrating_from = -1;
+    migrate_gen = 0;
   }
 
   DECODE_FINISH(p);

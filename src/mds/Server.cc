@@ -7092,8 +7092,12 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
  * may cache the old layout of a snapshot inode, and snap caps cannot be
  * revoked, so the OSD has to forward their reads.  Operations on a redirect
  * are forwarded too, so the MDS must use IGNORE_REDIRECT on them.  The inode
- * is flagged so that redirects get removed with the file, or before it moves
- * back into that pool.
+ * is flagged so that redirects get removed with the file.
+ *
+ * A file moving back into a pool holding its redirects must not touch them: a
+ * client may be reading through one, and a rebuilt object has only part of its
+ * history for a while.  It gets a new namespace in that pool instead, and the
+ * old redirects stay valid, so a stale reader just follows one more hop.
  *
  * Otherwise only the head moves.  The file is cowed, and the old objects are
  * removed under the realm's snap context: the snapshotted inode keeps the old
@@ -7101,7 +7105,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
  * pool until the snapshots are deleted.
  */
 struct Server::FileMigrate {
-  enum Phase { SCAN, CLEAN, COPY };
+  enum Phase { SCAN, COPY };
   struct Object {
     bool exists = false;
     bool head = false;
@@ -7117,6 +7121,7 @@ struct Server::FileMigrate {
   uint64_t num_remove = 0;  // objects that may exist in the old pool
   Phase phase = COPY;
   bool whole = false;       // the snapshots move too
+  uint32_t gen = 0;         // namespace generation of the target
   bool dir_fetched = false;
   bool fetching = false;
   std::vector<CInode*> versions;  // snapped inodes of this file
@@ -7192,6 +7197,16 @@ void Server::handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
   fm->from = pi->layout;
   fm->to = pi->layout;
   fm->to.pool_id = to.pool_id;
+  fm->gen = pi->migrate_gen;
+  if (pi->get_has_redirects() && pi->old_pools.count(to.pool_id)) {
+    // Clients may be limited to the namespace a file was created in.
+    if (!pi->layout.pool_ns.empty() && pi->migrate_gen == 0) {
+      respond_to_request(mdr, -EOPNOTSUPP);
+      return;
+    }
+    fm->gen++;
+    fm->to.pool_ns = MDCache::migrate_namespace(fm->gen);
+  }
   mdr->no_early_reply = true;
 
   // The xlock stops writes but leaves clients Fb, and data they still buffer
@@ -7304,7 +7319,9 @@ bool Server::_file_migrate_find_versions(std::shared_ptr<FileMigrate> fm)
     }
     CInode *in = l->get_inode();
     // An earlier migration may have left this version elsewhere.
-    if (!in->is_auth() || in->get_projected_inode()->layout.pool_id != fm->from.pool_id)
+    const auto& vl = in->get_projected_inode()->layout;
+    if (!in->is_auth() || vl.pool_id != fm->from.pool_id ||
+        vl.pool_ns != fm->from.pool_ns)
       return false;
     if (std::find(fm->versions.begin(), fm->versions.end(), in) == fm->versions.end()) {
       fm->mdr->pin(in);
@@ -7316,17 +7333,6 @@ bool Server::_file_migrate_find_versions(std::shared_ptr<FileMigrate> fm)
 
 void Server::_file_migrate_start_copy(std::shared_ptr<FileMigrate> fm)
 {
-  // Moving back into a pool that holds redirects from an earlier migration:
-  // a write there would be forwarded to the pool we are leaving.
-  if (fm->phase != FileMigrate::CLEAN && fm->num_remove &&
-      fm->in->get_projected_inode()->get_has_redirects() &&
-      fm->in->get_projected_inode()->old_pools.count(fm->to.pool_id)) {
-    fm->phase = FileMigrate::CLEAN;
-    fm->next = 0;
-    _file_migrate_issue(fm);
-    return;
-  }
-
   dout(10) << __func__ << " " << *fm->in << " pool " << fm->from.pool_id
            << " -> " << fm->to.pool_id << ", copying " << fm->num_copy
            << " objects, whole " << fm->whole << dendl;
@@ -7428,21 +7434,7 @@ void Server::_file_migrate_issue(std::shared_ptr<FileMigrate> fm)
                           LIBRADOS_SNAP_DIR, nullptr, 0, fin);
       continue;
     }
-    if (fm->phase == FileMigrate::COPY) {
-      _file_migrate_copy_step(fm, i, 0);
-      continue;
-    }
-
-    // Moving back into a pool that holds redirects from an earlier migration.
-    ObjectOperation op;
-    op.remove();
-    auto fin = new C_OnFinisher(
-      new C_IO_Wrapper(mds, new LambdaContext([this, fm](int r) {
-        _file_migrate_op_finish(fm, r);
-      })), mds->finisher);
-    mds->objecter->mutate(oid, OSDMap::file_to_object_locator(fm->to), op,
-                          SnapContext(), ceph::real_clock::now(),
-                          CEPH_OSD_FLAG_IGNORE_REDIRECT, fin);
+    _file_migrate_copy_step(fm, i, 0);
   }
 }
 
@@ -7470,17 +7462,13 @@ void Server::_file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r)
         Striper::get_num_objects(fm->from, fm->in->get_projected_inode()->size) : 0;
     _file_migrate_start_copy(fm);
     break;
-  case FileMigrate::CLEAN:
   case FileMigrate::COPY:
     // On error the new pool may hold copies; a retry overwrites them.
     if (fm->err) {
       respond_to_request(fm->mdr, fm->err);
       return;
     }
-    if (fm->phase == FileMigrate::CLEAN)
-      _file_migrate_start_copy(fm);
-    else
-      _file_migrate_copied(fm);
+    _file_migrate_copied(fm);
     break;
   }
 }
@@ -7495,6 +7483,7 @@ void Server::_file_migrate_copied(std::shared_ptr<FileMigrate> fm)
   pi.inode->add_old_pool(fm->from.pool_id);
   pi.inode->layout = fm->to;
   pi.inode->migrating_from = fm->from.pool_id;
+  pi.inode->migrate_gen = fm->gen;
   pi.inode->set_migrate_whole(fm->whole);
   if (fm->whole) {
     pi.inode->set_has_redirects(true);
