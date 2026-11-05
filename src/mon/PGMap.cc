@@ -3316,9 +3316,7 @@ void PGMap::get_health_checks(
       } else if (asum.first == "EXTBLKDEV") {
         summary += " reporting problems with ExtBlkDev plugin";
       } else if (asum.first.find("_DISCARD_QUEUE") != std::string::npos) {
-	for (auto str : asum.second.second) {
-	  summary += str;
-	}
+        summary += " experiencing slow discard operations";
       }
 
       auto& d = checks->add(asum.first, HEALTH_WARN, summary, asum.second.first);
