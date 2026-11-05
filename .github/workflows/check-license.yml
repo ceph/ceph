@@ -21,9 +21,22 @@ jobs:
     - name: Check PR Diff for License
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD: ${{ github.event.pull_request.head.sha }}
       run: |
-        DIFF=$(gh pr diff ${{ github.event.pull_request.number }} -R ${{ github.repository }})
-        if echo "$DIFF" | grep -qi "GNU General Public License"; then
+        # Use the API for the merge base and Git for the complete, pinned diff.
+        MERGE_BASE=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${PR_BASE}...${PR_HEAD}" \
+          --jq '.merge_base_commit.sha')
+        REPOSITORY="${RUNNER_TEMP}/license-diff.git"
+        git init --bare "$REPOSITORY"
+        git -C "$REPOSITORY" remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+        git -C "$REPOSITORY" config remote.origin.promisor true
+        git -C "$REPOSITORY" config remote.origin.partialclonefilter blob:none
+        git -C "$REPOSITORY" fetch --no-tags --depth=1 --filter=blob:none origin \
+          "$MERGE_BASE" "$PR_HEAD"
+        git -C "$REPOSITORY" diff --no-ext-diff --no-textconv "$MERGE_BASE" "$PR_HEAD" \
+          > "${RUNNER_TEMP}/license.diff"
+        if grep -qi "GNU General Public License" "${RUNNER_TEMP}/license.diff"; then
           echo "Error: Incompatible license 'GNU General Public License' found in PR diff."
           exit 1
         fi
