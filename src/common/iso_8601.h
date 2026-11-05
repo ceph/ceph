@@ -20,6 +20,17 @@ enum class iso_8601_mode {
   ///     - ',' as the fractional second separator as well as '.'
   ///     - Hour-only times (YYYY-MM-DDTHHZ)
   strict,
+  /// Use the ISO-8601 basic form without '-' and ':' delimiters.
+  /// 'YYYYMM'-style dates are disallowed. So to enumerate specifically, we allow:
+  ///     - YYYY
+  ///     - YYYYMMDD
+  ///     - YYYYMMDDThh
+  ///     - YYYYMMDDThh
+  ///     - YYYYMMDDThhmm
+  ///     - YYYYMMDDThhmmss
+  ///     - YYYYMMDDThhmmss.n[n…]
+  // Time formats require either 'Z' or an offset of the form ±hh[mm]
+  basic,
   /// Allow the variations:
   ///     - lowercase 't' or space to separate time and date
   ///     - lowercase 'z' to specify UTC

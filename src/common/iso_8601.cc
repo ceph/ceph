@@ -3,12 +3,12 @@
 
 #include "iso_8601.h"
 
+#include <cassert>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 
 #include "common/ceph_time.h"
-#include "include/ceph_assert.h"
 
 #include "common/strtol.h"
 
@@ -224,7 +224,7 @@ std::optional<real_time> from_iso_8601(const std::string_view s,
                                        const iso_8601_mode mode) noexcept
 {
   auto remaining = s;
-  ceph_assert(mode == iso_8601_mode::strict || mode == iso_8601_mode::lax);
+  assert(mode >= iso_8601_mode::strict && mode <= iso_8601_mode::lax);
   auto lax = (mode == iso_8601_mode::lax);
 
   auto time = read_date(remaining);
@@ -242,8 +242,7 @@ string to_iso_8601(const real_time t,
 		   const iso_8601_format f,
                    std::string_view date_separator,
                    std::string_view time_separator) noexcept {
-  ceph_assert(f >= iso_8601_format::Y &&
-	      f <= iso_8601_format::YMDhmsn);
+  assert(f >= iso_8601_format::Y && f <= iso_8601_format::YMDhmsn);
   stringstream out(std::ios_base::out);
 
   auto sec = real_clock::to_time_t(t);
