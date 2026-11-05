@@ -2409,7 +2409,10 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     if (is_primary()) {
       // missing the specific snap we need; requeue and wait.
       ceph_assert(!op->may_write()); // only happens on a read/cache
-      wait_for_unreadable_object(missing_oid, op);
+      if (is_unreadable_object(missing_oid))
+	wait_for_unreadable_object(missing_oid, op);
+      else
+	wait_for_degraded_object(missing_oid, op);  // missing on a peer only
       return;
     }
   } else if (r == 0) {
@@ -7367,6 +7370,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  hobject_t coid = soid;
 	  coid.snap = snap;
 	  if (is_degraded_or_backfilling_object(coid)) {
+	    // -EAGAIN here means the op was requeued: the client gets no reply.
+	    wait_for_degraded_object(coid, ctx->op);
 	    result = -EAGAIN;
 	    break;
 	  }
