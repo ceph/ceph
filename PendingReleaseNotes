@@ -1,5 +1,16 @@
 >=22.0.0
 
+* CephFS: A regular file's data can now be moved to another data pool, with
+  ``setfattr -n ceph.file.migrate.pool -v <pool> <file>``.  The file's snapshots
+  move with it if the MDS can find them all, which it cannot for hard links or
+  for files renamed after a snapshot.  Files are moved one at a time, and the
+  old pool stays in use: it keeps redirects for clients that hold the old
+  layout.  See the file layouts documentation.
+
+* CephFS: ``ceph fs rm_data_pool`` now refuses to remove a pool that still
+  holds objects, unless ``--yes-i-really-mean-it`` is added.  Scripts that
+  remove a data pool with objects in it must add the flag.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to

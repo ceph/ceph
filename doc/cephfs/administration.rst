@@ -92,8 +92,8 @@ system) cannot be removed.
 The Monitors cannot see which files use a pool, so as a precaution this command
 refuses to remove a pool that still holds objects, unless
 ``--yes-i-really-mean-it`` is added.  A pool can hold objects that no file's
-current layout points to and that are still needed.  The check uses the pool
-statistics
+current layout points to and that are still needed: see
+:ref:`cephfs-moving-a-file-to-another-pool`.  The check uses the pool statistics
 that the OSDs last reported, which can be some seconds old, so a pool that was
 written to just now might still look empty.
 
