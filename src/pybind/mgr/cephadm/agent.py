@@ -84,6 +84,10 @@ cherrypy.tools.cephadm_agent_stats_end = cherrypy.Tool(
 class AgentEndpoint:
 
     DEFAULT_AGENT_TASK_DURATION_SECONDS = 2
+    # Upper bound on how long an agent waits for the reply to a report. Keeps
+    # an agent stuck on a hung mgr from waiting a whole (possibly long)
+    # report period before it can notice a new target.
+    MAX_REPORT_TIMEOUT_SECONDS = 120
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -230,6 +234,18 @@ class AgentEndpoint:
             return max(2, int(agents_refresh_rate * 0.5))
         else:
             return self.mgr.agent_jitter_seconds
+
+    def get_report_timeout(self) -> int:
+        """
+        How long (in seconds) an agent waits for the reply to a metadata report.
+
+        The agent sends one report per refresh period and waits for the reply
+        before starting its next cycle. Waiting up to the refresh period keeps
+        at most one report per agent in flight: when the mgr is slow, agents
+        report less often instead of giving up and queueing another report
+        behind the one still waiting. Capped at MAX_REPORT_TIMEOUT_SECONDS.
+        """
+        return min(self.compute_agents_refrsh_rate(), self.MAX_REPORT_TIMEOUT_SECONDS)
 
     def configure(self) -> Tuple[Dict, Dict, List[tuple], tuple]:
         self.host_data = HostData(self.mgr)
@@ -873,6 +889,7 @@ class HostData:
             jitter_seconds = self.mgr.http_server.agent.get_jitter()
             results['refresh_period'] = refresh_period
             results['jitter_seconds'] = jitter_seconds
+            results['report_timeout'] = self.mgr.http_server.agent.get_report_timeout()
             if stats:
                 stats.record_pacing(
                     host_count=len(self.mgr.cache.get_hosts()),

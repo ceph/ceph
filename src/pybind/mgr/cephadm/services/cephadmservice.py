@@ -2327,7 +2327,8 @@ class CephadmAgent(CephService):
                'metadata_compresion_enabled': self.mgr.agent_metadata_compresion_enabled,
                'refresh_period': agent.compute_agents_refrsh_rate(),
                'initial_startup_delay_max': agent.get_initial_delay(),
-               'jitter_seconds': agent.get_jitter()}
+               'jitter_seconds': agent.get_jitter(),
+               'report_timeout': agent.get_report_timeout()}
 
         tls_creds = self.get_certificates(daemon_spec)
         config = {

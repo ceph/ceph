@@ -4220,6 +4220,7 @@ Then run the following:
             'agent_avg_concurrency': str(agent.compute_agents_avg_concurrency()),
             'agent_initial_startup_delay_max': str(agent.get_initial_delay()),
             'agent_jitter_seconds': str(agent.get_jitter()),
+            'agent_report_timeout': str(agent.get_report_timeout()),
             'agent_down_multiplier': str(self.agent_down_multiplier),
             'agent_starting_port': str(self.agent_starting_port),
         }
