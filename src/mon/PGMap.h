@@ -85,8 +85,8 @@ public:
       f->dump_int("up_not_acting", up_not_acting);
       f->dump_int("primary", primary);
     }
-    static std::list<pg_count> generate_test_instances() {
-      std::list<pg_count> o;
+    static std::vector<pg_count> generate_test_instances() {
+      std::vector<pg_count> o;
       o.emplace_back();
       o.emplace_back();
       o.back().acting = 1;
@@ -253,7 +253,7 @@ public:
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<PGMapDigest> generate_test_instances();
+  static std::vector<PGMapDigest> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(PGMapDigest::pg_count);
 WRITE_CLASS_ENCODER_FEATURES(PGMapDigest);
@@ -323,7 +323,7 @@ public:
       osd_stat_updates.erase(osd);
     }
     void dump(ceph::Formatter *f) const;
-    static std::list<Incremental> generate_test_instances();
+    static std::vector<Incremental> generate_test_instances();
 
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0) {}
 
@@ -538,7 +538,7 @@ public:
     health_check_map_t *checks) const;
   void print_summary(ceph::Formatter *f, std::ostream *out) const;
 
-  static std::list<PGMap> generate_test_instances();
+  static std::vector<PGMap> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(PGMap)
 
