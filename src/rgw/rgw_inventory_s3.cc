@@ -92,7 +92,7 @@ void Configuration::decode_xml(XMLObj* obj)
 void Configuration::dump_xml(Formatter* f) const
 {
   encode_xml("Id", id, f);
-  encode_xml("IsEnabled", enabled, f);
+  encode_xml("IsEnabled", enabled ? "true" : "false", f);
   encode_xml("IncludedObjectVersions", included_object_versions, f);
   f->open_object_section("Schedule");
   schedule.dump_xml(f);

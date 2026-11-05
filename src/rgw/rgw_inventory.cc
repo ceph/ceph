@@ -121,8 +121,8 @@ InventoryEntry entry_from_listing(const std::string& bucket_name,
   InventoryEntry ie;
   ie.bucket = bucket_name;
   ie.key = e.key.name;
-  if (sel.version_id && !e.key.instance.empty()) {
-    ie.version_id = e.key.instance;
+  if (sel.version_id) {
+    ie.version_id = e.key.instance.empty() ? "null" : e.key.instance;
   }
   if (sel.is_latest) {
     ie.is_latest = e.is_current();
