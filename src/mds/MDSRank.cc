@@ -3082,7 +3082,14 @@ void MDSRankDispatcher::handle_asok_command(
       r = -EINVAL;
       goto out;
     }
-    command_export_dir(f, path, (mds_rank_t)rank);
+    frag_t fg;
+    string frag;
+    if (cmd_getval(cmdmap, "frag", frag) && !fg.parse(frag.c_str())) {
+      *css << "malformed frag";
+      r = -EINVAL;
+      goto out;
+    }
+    command_export_dir(f, path, (mds_rank_t)rank, fg);
   } else if (command == "dump cache") {
     std::lock_guard l(mds_lock);
     int64_t timeout = 0;
@@ -3370,9 +3377,10 @@ void MDSRank::command_get_subtrees(Formatter *f)
 
 void MDSRank::command_export_dir(Formatter *f,
     std::string_view path,
-    mds_rank_t target)
+    mds_rank_t target,
+    frag_t fg)
 {
-  int r = _command_export_dir(path, target);
+  int r = _command_export_dir(path, target, fg);
   f->open_object_section("results");
   f->dump_int("return_code", r);
   f->close_section(); // results
@@ -3380,7 +3388,8 @@ void MDSRank::command_export_dir(Formatter *f,
 
 int MDSRank::_command_export_dir(
     std::string_view path,
-    mds_rank_t target)
+    mds_rank_t target,
+    frag_t fg)
 {
   auto fp = filepath(path, {.drop_trailing = true});
 
@@ -3396,9 +3405,9 @@ int MDSRank::_command_export_dir(
     derr << "bad path '" << path << "'" << dendl;
     return -ENOENT;
   }
-  CDir *dir = in->get_dirfrag(frag_t());
+  CDir *dir = in->get_dirfrag(fg);
   if (!dir || !(dir->is_auth())) {
-    derr << "bad export_dir path dirfrag frag_t() or dir not auth" << dendl;
+    derr << "bad export_dir path dirfrag " << fg << " or dir not auth" << dendl;
     return -EINVAL;
   }
 
