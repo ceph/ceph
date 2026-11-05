@@ -14,8 +14,7 @@
 //
 // The tests named ReplicaLost* mark an OSD down and set cluster-wide flags, so
 // they run only with CEPH_TEST_REMOVE_CLONES_DISRUPT=1 on a cluster of exactly
-// 3 OSDs with nothing else running.  Tests named DISABLED_ show known problems:
-// run them with --gtest_also_run_disabled_tests.
+// 3 OSDs with nothing else running.
 
 #include <algorithm>
 #include <cerrno>
@@ -587,13 +586,11 @@ TEST_P(RemoveClones, RefusesWhenNotLastOnARedirect)
   expect_history("o", history, false);
 }
 
-// Disabled: the OSD does not refuse a snap context today, and the file system
-// is safe only because it sends none.  make_writeable() runs after the op has
-// reset the seq, so it clones the head for every snap in the context.
-//
-// With a snap newer than the head, the op returns 0, scrub is clean, and reads
-// at every snapshot return the head's data instead of their own.
-TEST_P(RemoveClones, DISABLED_RefusesNewerSnapContext)
+// make_writeable() runs after the op has reset the seq, so with a snap context
+// it would clone the head for every snap in it.  With a snap newer than the
+// head, the op returned 0, scrub was clean, and reads at every snapshot could
+// return the head's data instead of their own.
+TEST_P(RemoveClones, RefusesNewerSnapContext)
 {
   auto history = make_history("o", 3);
   new_snap();
@@ -603,10 +600,10 @@ TEST_P(RemoveClones, DISABLED_RefusesNewerSnapContext)
 }
 
 // With the head's own snap context, which is what a client would normally
-// send, the new clone has the id of one the op has just locked, and the OSD
-// asserts in get_write_greedy().  The client resends, so this takes down every
-// OSD in the PG in turn: run it last, on a cluster you can throw away.
-TEST_P(RemoveClones, DISABLED_CRASHES_RefusesCurrentSnapContext)
+// send, the new clone would have the id of one the op has just locked, and the
+// OSD asserted in get_write_greedy().  The client resends, so that took down
+// every OSD in the PG in turn.
+TEST_P(RemoveClones, RefusesCurrentSnapContext)
 {
   auto history = make_history("o", 3);
   EXPECT_EQ(-EINVAL, redirect_and_remove_clones("o"));
@@ -851,13 +848,11 @@ TEST_P(RemoveClones, ReplicaLostMidway)
   deep_scrub_both();
 }
 
-// A clone that a returning replica has not recovered yet must not be removed:
-// the caller is told to try again, as the file system's cleanup does.
-//
-// Disabled: the op returns -EAGAIN for this, and execute_ctx() takes that from
-// an op to mean that it has queued itself to run again.  So nothing replies,
-// and the client waits until the PG changes interval and it resends.
-TEST_P(RemoveClones, DISABLED_ReplicaLostRetriesOnDegradedClone)
+// A clone that a returning replica has not recovered yet must not be removed.
+// The op waits for it, like any op on a degraded object, and goes on by itself.
+// It used to return -EAGAIN, which to execute_ctx() means that an op has queued
+// itself: nothing replied, and the client hung.
+TEST_P(RemoveClones, ReplicaLostWaitsForDegradedClone)
 {
   if (!disruptive_tests_enabled()) {
     GTEST_SKIP() << "needs CEPH_TEST_REMOVE_CLONES_DISRUPT=1";
@@ -886,30 +881,26 @@ TEST_P(RemoveClones, DISABLED_ReplicaLostRetriesOnDegradedClone)
   ASSERT_EQ(0, ioctx.setxattr("o", "user.kick", one));
 
   use_snapc(false);
-  {
-    ObjectWriteOperation op;
-    op.set_redirect("o", target, 0);
-    op.remove_clones();
-    AioCompletion* c = rados.aio_create_completion();
-    auto release = make_scope_guard([&] { c->release(); });
-    ASSERT_EQ(0, ioctx.aio_operate("o", c, &op, OPERATION_IGNORE_REDIRECT));
-    for (int i = 0; i < 30 && !c->is_complete(); ++i) {
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-    ASSERT_TRUE(c->is_complete()) << "the OSD did not reply";
-    int r = c->get_return_value();
-    EXPECT_TRUE(r == -EAGAIN || r == -EBUSY) << cpp_strerror(r);
-  }
-  use_snapc(true);
-  EXPECT_EQ(1u, num_clones("o"));
-  EXPECT_EQ(v1, read_at(ioctx, "o", snaps[0]));
+  ObjectWriteOperation op;
+  op.set_redirect("o", target, 0);
+  op.remove_clones();
+  AioCompletion* c = rados.aio_create_completion();
+  auto release = make_scope_guard([&] { c->release(); });
+  ASSERT_EQ(0, ioctx.aio_operate("o", c, &op, OPERATION_IGNORE_REDIRECT));
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+  EXPECT_FALSE(c->is_complete()) << "it did not wait for the clone";
 
   ASSERT_EQ(0, osd_flag("unset", "norecover"));
+  for (int i = 0; i < 60 && !c->is_complete(); ++i) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+  ASSERT_TRUE(c->is_complete()) << "the op was lost";
+  EXPECT_EQ(0, c->get_return_value());
+  use_snapc(true);
   wait_for_clean(pool_name);
 
-  ASSERT_EQ(0, move("o"));
   EXPECT_EQ(0u, num_clones("o"));
-  EXPECT_EQ(upper(v1), read_at(ioctx, "o", snaps[0]));
+  EXPECT_EQ(upper(v1), read_at(ioctx, "o", snaps[0])) << "forwarded to the target";
   deep_scrub_both();
 }
 

@@ -7358,9 +7358,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	//
 	// Only a redirect may do this, or snapshot data would simply be lost,
 	// and it must be the last op, since it cannot be undone if one fails.
+	// No snap context: make_writeable() runs after this and would clone the
+	// head for snaps that have just lost their clones.
 	if (soid.snap != CEPH_NOSNAP ||
 	    !oi.has_manifest() || !oi.manifest.is_redirect() ||
-	    &osd_op != &ops.back()) {
+	    &osd_op != &ops.back() ||
+	    ctx->snapc.seq != 0 || !ctx->snapc.snaps.empty()) {
 	  result = -EINVAL;
 	  break;
 	}

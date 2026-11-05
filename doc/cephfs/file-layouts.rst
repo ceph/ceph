@@ -333,11 +333,11 @@ does no other harm.  Running the migration again overwrites it.
 
 After ``setfattr`` has returned, the MDS clears the old pool in the background.
 If an MDS fails at this point, the next one picks up the work by itself, whether
-or not the client is still there.  If an OSD keeps the MDS from finishing, for
-example during recovery, the MDS retries every 5 seconds for 5 minutes.  It then
-gives up with a warning in the cluster log (``migration of <inode> left objects
-in pool <pool id>``).  The file is fine at that point: only the space is not
-freed.  A new migration of a file waits until an earlier one has finished
+or not the client is still there.  An object that is being recovered is cleared
+once recovery reaches it.  If clients keep reading a snapshot object through the
+old pool, the MDS retries every 5 seconds for 5 minutes.  It then gives up with a
+warning in the cluster log (``migration of <inode> left objects in pool <pool
+id>``).  The file is fine at that point: only the space is not freed.  A new migration of a file waits until an earlier one has finished
 clearing its old pool.
 
 The call is refused in these cases:
