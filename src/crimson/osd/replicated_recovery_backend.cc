@@ -1076,12 +1076,19 @@ ReplicatedRecoveryBackend::handle_pull_response(
   PushOp& push_op = m->pushes[0]; //TODO: only one push per message for now.
   if (push_op.version == eversion_t()) {
     // replica doesn't have it!
+    ERRORDPP("{} does not have {}, failing the pull", pg, m->from, push_op.soid);
+    auto &recovery_waiter = get_recovering(push_op.soid);
     pg.get_recovery_handler()->on_failed_recover({ m->from }, push_op.soid,
-	get_recovering(push_op.soid).pull_info->recovery_info.version);
-    throw std::runtime_error(
-      fmt::format(
-	"Error on pushing side {} when pulling obj {}",
-	m->from, push_op.soid));
+	recovery_waiter.pull_info->recovery_info.version);
+    // on_failed_recover() only marks the object missing on the sending peer;
+    // it does not resolve the 'pulled' promise that maybe_pull_missing_obj()
+    // is parked on.  Fail that wait explicitly, or the puller - and every
+    // client op blocked behind it - hangs until the next peering interval.
+    // repeat_pull() completes it with eagain so recovery retries, and since
+    // the peer has just been marked missing the retry picks another shard.
+    // Classic does the same via _failed_pull() -> on_failed_pull()+clear_pull().
+    recovery_waiter.repeat_pull();
+    co_return;
   }
 
   DEBUGDPP("{}", pg, *m);
