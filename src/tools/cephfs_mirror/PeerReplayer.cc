@@ -98,6 +98,103 @@ const std::string PEER_CONFIG_KEY_PREFIX = "cephfs/mirror/peer";
 // Matches the mgr mirroring omap read batch size (dir_map/load.py MAX_RETURN).
 constexpr size_t SYNC_STAT_OMAP_LOAD_BATCH_SIZE = 256;
 
+// Ciphertext sync needs the source nonce/logical size and long-name material.
+// Order matches volumes cptree: auth before file so logical-size update keeps blocks.
+constexpr const char *FSCRYPT_AUTH_XATTR = "ceph.fscrypt.auth";
+constexpr const char *FSCRYPT_SYNC_XATTRS[] = {
+  FSCRYPT_AUTH_XATTR,
+  "ceph.fscrypt.file",
+  "ceph.alternate_name",
+};
+
+bool fd_has_fscrypt_auth(MountRef mnt, int fd) {
+  int size = ceph_fgetxattr(mnt, fd, FSCRYPT_AUTH_XATTR, nullptr, 0);
+  return size > 0;
+}
+
+// Probe ceph.fscrypt.auth only. Used to detect a new policy root under a
+// plaintext parent; skipped entirely when the parent is already fscrypt.
+int probe_fscrypt_auth_at(MountRef mnt, int dirfd, const std::string &epath,
+                          int open_flags, bool *has_auth) {
+  *has_auth = false;
+  int fd = ceph_openat(mnt, dirfd, epath.c_str(), open_flags, 0);
+  if (fd < 0) {
+    return fd;
+  }
+  *has_auth = fd_has_fscrypt_auth(mnt, fd);
+  ceph_close(mnt, fd);
+  return 0;
+}
+
+int resolve_dir_is_fscrypt(MountRef mnt, int dirfd, const std::string &epath,
+                           bool parent_is_fscrypt, bool *is_fscrypt) {
+  if (parent_is_fscrypt) {
+    *is_fscrypt = true;
+    return 0;
+  }
+  return probe_fscrypt_auth_at(mnt, dirfd, epath,
+                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW, is_fscrypt);
+}
+
+int sync_fscrypt_xattrs(MountRef src, int src_fd, MountRef dst, int dst_fd) {
+  for (const char *name : FSCRYPT_SYNC_XATTRS) {
+    int size = ceph_fgetxattr(src, src_fd, name, nullptr, 0);
+    if (size == -ENODATA || size == -EOPNOTSUPP) {
+      continue;
+    }
+    if (size < 0) {
+      return size;
+    }
+    if (size == 0) {
+      continue;
+    }
+
+    std::vector<char> buf(size);
+    int r = ceph_fgetxattr(src, src_fd, name, buf.data(), buf.size());
+    if (r < 0) {
+      return r;
+    }
+    r = ceph_fsetxattr(dst, dst_fd, name, buf.data(), r, 0);
+    if (r < 0) {
+      return r;
+    }
+  }
+  return 0;
+}
+
+int sync_fscrypt_xattrs_at(MountRef src, int src_dirfd, MountRef dst, int dst_dirfd,
+                           const std::string &epath, int open_flags) {
+  int sfd = ceph_openat(src, src_dirfd, epath.c_str(), open_flags, 0);
+  if (sfd < 0) {
+    return sfd;
+  }
+
+  int dfd = ceph_openat(dst, dst_dirfd, epath.c_str(), open_flags, 0);
+  if (dfd < 0) {
+    ceph_close(src, sfd);
+    return dfd;
+  }
+
+  int r = sync_fscrypt_xattrs(src, sfd, dst, dfd);
+  ceph_close(src, sfd);
+  ceph_close(dst, dfd);
+  return r;
+}
+
+int fscrypt_open_flags_for_mode(mode_t mode) {
+  if (S_ISLNK(mode)) {
+#if defined(__linux__) && defined(O_PATH)
+    return O_PATH | O_NOFOLLOW;
+#else
+    return O_RDONLY | O_NOFOLLOW;
+#endif
+  }
+  if (S_ISDIR(mode)) {
+    return O_RDONLY | O_DIRECTORY | O_NOFOLLOW;
+  }
+  return O_RDONLY | O_NOFOLLOW;
+}
+
 std::string entry_path(const std::string &dir, const std::string &name) {
   return dir + "/" + name;
 }
@@ -1693,7 +1790,8 @@ int PeerReplayer::propagate_snap_renames(
   return 0;
 }
 
-int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const struct ceph_statx &stx) {
+int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const struct ceph_statx &stx,
+                                              bool is_fscrypt) {
   dout(10) << ": remote epath=" << epath << dendl;
 
   int r = ceph_mkdirat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_mode & ~S_IFDIR);
@@ -1701,6 +1799,16 @@ int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const st
     derr << ": failed to create remote directory=" << epath << ": " << cpp_strerror(r)
          << dendl;
     return r;
+  }
+
+  if (is_fscrypt) {
+    r = sync_fscrypt_xattrs_at(m_local, m_fh->c_fd, m_remote, m_fh->r_fd_dir_root, epath,
+                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    if (r < 0) {
+      derr << ": failed to sync fscrypt xattrs for remote directory=" << epath << ": "
+           << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
 
   r = ceph_chownat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_uid, stx.stx_gid,
@@ -1735,7 +1843,7 @@ int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const st
 #define IOVEC_SIZE (8 * 1024 * 1024) // buffer size for each iovec
 int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string &epath,
                                  const struct ceph_statx &stx, const FHandles &fh,
-                                 uint64_t num_blocks, struct cblock *b) {
+                                 uint64_t num_blocks, struct cblock *b, bool is_fscrypt) {
   dout(10) << ": dir_root=" << dir_root << ", epath=" << epath << ", num_blocks="
            << num_blocks << dendl;
   int l_fd;
@@ -1767,6 +1875,16 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   }
 
   r_fd = r;
+  // Stamp source fscrypt identity before writing ciphertext.
+  if (is_fscrypt) {
+    r = sync_fscrypt_xattrs(m_local_mount, l_fd, m_remote_mount, r_fd);
+    if (r < 0) {
+      derr << ": failed to sync fscrypt xattrs for remote file path=" << epath << ": "
+           << cpp_strerror(r) << dendl;
+      goto close_remote_fd;
+    }
+  }
+
   ptr = malloc(NR_IOVECS * IOVEC_SIZE);
   if (!ptr) {
     r = -ENOMEM;
@@ -1894,16 +2012,18 @@ close_local_fd:
 
 int PeerReplayer::remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const std::string &dir_root,
                                  const std::string &epath, const struct ceph_statx &stx,
-                                 bool sync_check, const FHandles &fh, bool need_data_sync, bool need_attr_sync) {
+                                 bool sync_check, const FHandles &fh, bool need_data_sync, bool need_attr_sync,
+                                 bool is_fscrypt) {
   dout(10) << ": dir_root=" << dir_root << ", epath=" << epath << ", need_data_sync=" << need_data_sync
-           << ", need_attr_sync=" << need_attr_sync << dendl;
+           << ", need_attr_sync=" << need_attr_sync << ", is_fscrypt=" << is_fscrypt << dendl;
 
   int r;
   if (need_data_sync) {
     if (S_ISREG(stx.stx_mode)) {
       r = syncm->get_changed_blocks(epath, stx, sync_check,
-                                    [this, &dir_root, &epath, &stx, &fh](uint64_t num_blocks, struct cblock *b) {
-                                      int ret = copy_to_remote(dir_root, epath, stx, fh, num_blocks, b);
+                                    [this, &dir_root, &epath, &stx, &fh, is_fscrypt](uint64_t num_blocks, struct cblock *b) {
+                                      int ret = copy_to_remote(dir_root, epath, stx, fh, num_blocks, b,
+                                                               is_fscrypt);
                                       if (ret < 0) {
                                         derr << ": failed to copy path=" << epath << ": " << ret << dendl;
                                       }
@@ -1938,6 +2058,15 @@ int PeerReplayer::remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const st
              << ": " << cpp_strerror(r) << dendl;
         return r;
       }
+      if (is_fscrypt) {
+        r = sync_fscrypt_xattrs_at(m_local_mount, fh.c_fd, m_remote_mount, fh.r_fd_dir_root,
+                                   epath, fscrypt_open_flags_for_mode(stx.stx_mode));
+        if (r < 0) {
+          derr << ": failed to sync fscrypt xattrs for remote symlink=" << epath << ": "
+               << cpp_strerror(r) << dendl;
+          return r;
+        }
+      }
     } else {
       dout(5) << ": skipping entry=" << epath << ": unsupported mode=" << stx.stx_mode
               << dendl;
@@ -1969,6 +2098,16 @@ int PeerReplayer::remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const st
       derr << ": failed to change [am]time on remote directory=" << epath << ": "
            << cpp_strerror(r) << dendl;
       return r;
+    }
+
+    if (is_fscrypt) {
+      r = sync_fscrypt_xattrs_at(m_local_mount, fh.c_fd, m_remote_mount, fh.r_fd_dir_root,
+                                 epath, fscrypt_open_flags_for_mode(stx.stx_mode));
+      if (r < 0) {
+        derr << ": failed to sync fscrypt xattrs for path=" << epath << ": "
+             << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
   }
 
@@ -2572,7 +2711,19 @@ int PeerReplayer::SnapDiffSync::init_sync() {
     return r;
   }
 
-  m_sync_stack.emplace(SyncEntry(".", info, tstx));
+  SyncEntry root(".", info, tstx);
+  root.is_fscrypt = fd_has_fscrypt_auth(m_local, m_fh->c_fd);
+  if (root.is_fscrypt) {
+    // Mirrored root itself may be the policy directory; stamp it once.
+    r = sync_fscrypt_xattrs(m_local, m_fh->c_fd, m_remote, m_fh->r_fd_dir_root);
+    if (r < 0) {
+      derr << ": failed to sync fscrypt xattrs for dir_root=" << m_dir_root << ": "
+           << cpp_strerror(r) << dendl;
+      ceph_close_snapdiff(&info);
+      return r;
+    }
+  }
+  m_sync_stack.emplace(std::move(root));
   return 0;
 }
 
@@ -2796,9 +2947,18 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
             se.set_purged_or_itype_changed();
           }
 
+          r = resolve_dir_is_fscrypt(m_local, m_fh->c_fd, _epath, entry.is_fscrypt,
+                                     &se.is_fscrypt);
+          if (r < 0) {
+            derr << ": failed to probe fscrypt auth for directory=" << _epath << ": "
+                 << cpp_strerror(r) << dendl;
+            fini_directory(se);
+            return r;
+          }
+
           m_sync_stack.emplace(se);
           dout(20) << ": Added directory to stack =" << _epath << dendl;
-          r = remote_mkdir(_epath, estx);
+          r = remote_mkdir(_epath, estx, se.is_fscrypt);
           if (r < 0) {
             derr << ": mkdir failed on remote. epath=" << _epath << ": " << cpp_strerror(r)
                << dendl;
@@ -2809,7 +2969,9 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
           *stx = estx;
           return r; // New directory added to stack
         } else {
-          push_dataq_entry(SyncEntry(_epath, estx, !pic));
+          SyncEntry fe(_epath, estx, !pic);
+          fe.is_fscrypt = entry.is_fscrypt;
+          push_dataq_entry(std::move(fe));
           dout(10) << ": sync_check=" << *sync_check << " for epath=" << _epath << dendl;
 	}
       }
@@ -2980,7 +3142,18 @@ int PeerReplayer::RemoteSync::init_sync() {
     return r;
   }
 
-  m_sync_stack.emplace(SyncEntry(".", tdirp, tstx));
+  SyncEntry root(".", tdirp, tstx);
+  root.is_fscrypt = fd_has_fscrypt_auth(m_local, m_fh->c_fd);
+  if (root.is_fscrypt) {
+    r = sync_fscrypt_xattrs(m_local, m_fh->c_fd, m_remote, m_fh->r_fd_dir_root);
+    if (r < 0) {
+      derr << ": failed to sync fscrypt xattrs for dir_root=" << m_dir_root << ": "
+           << cpp_strerror(r) << dendl;
+      ceph_closedir(m_local, tdirp);
+      return r;
+    }
+  }
+  m_sync_stack.emplace(std::move(root));
   return 0;
 }
 
@@ -3048,9 +3221,19 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
             return r;
           }
 
-          m_sync_stack.emplace(SyncEntry(_epath, dirp, cstx));
+          SyncEntry se(_epath, dirp, cstx);
+          r = resolve_dir_is_fscrypt(m_local, m_fh->c_fd, _epath, entry.is_fscrypt,
+                                     &se.is_fscrypt);
+          if (r < 0) {
+            derr << ": failed to probe fscrypt auth for directory=" << _epath << ": "
+                 << cpp_strerror(r) << dendl;
+            ceph_closedir(m_local, dirp);
+            return r;
+          }
+
+          m_sync_stack.emplace(se);
           dout(20) << ": Added directory to stack =" << _epath << dendl;
-          r = remote_mkdir(_epath, cstx);
+          r = remote_mkdir(_epath, cstx, se.is_fscrypt);
           if (r < 0) {
             derr << ": mkdir failed on remote. epath=" << _epath << ": " << cpp_strerror(r)
                << dendl;
@@ -3061,7 +3244,9 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
           *stx = cstx;
           return r; // New directory added to stack
         } else {
-          push_dataq_entry(SyncEntry(_epath, cstx));
+          SyncEntry fe(_epath, cstx);
+          fe.is_fscrypt = entry.is_fscrypt;
+          push_dataq_entry(std::move(fe));
         }
       }
     }
@@ -3715,7 +3900,7 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
       if (need_data_sync || need_attr_sync) {
         r = remote_file_op(syncm, std::string(syncm->get_m_dir_root()),
                            entry.epath, entry.stx, entry.sync_check, fh,
-                           need_data_sync, need_attr_sync);
+                           need_data_sync, need_attr_sync, entry.is_fscrypt);
         if (r < 0) {
           dout(5) << ": remote_file_op failed, cannot proceed sync: " << cpp_strerror(r)
                   << " dir_root=" << syncm->get_m_dir_root() << " epath=" << entry.epath << dendl;
