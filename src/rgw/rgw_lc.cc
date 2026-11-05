@@ -1565,6 +1565,7 @@ public:
 			     << oc.bucket << ":" << o.key 
 			     << " -> " << transition.storage_class 
 			     << " " << cpp_strerror(r)
+			     << (r == -ECANCELED ? " (object changed concurrently)" : "")
 			     << " " << oc.wq->thr_name() << dendl;
         return r;
       }
@@ -1718,8 +1719,9 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
 
     int r = (*selected)->process(ctx);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj " 
+      ldpp_dout(dpp, 0) << "ERROR: lifecycle action failed on "
 			<< env.bucket << ":" << o.key
+			<< " rule_id=" << env.op.id
 			<< " " << cpp_strerror(r)
 			<< " " << wq->thr_name() << dendl;
       return r;
