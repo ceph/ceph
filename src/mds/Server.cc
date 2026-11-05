@@ -7146,6 +7146,14 @@ struct Server::FileMigrate {
   uint64_t next = 0;
   unsigned in_flight = 0;
   int err = 0;
+  bool snaps_stay = false;  // snapshots see this file and keep the old pool
+  FileMigrateResult *result = nullptr;  // internal requests only
+};
+
+struct Server::FileMigrateArgs {
+  CInode *in;
+  int64_t pool;
+  FileMigrateResult *result;
 };
 
 static const unsigned FILE_MIGRATE_MAX_OPS = 16;
@@ -7174,6 +7182,53 @@ void Server::handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
     return;
   }
 
+  file_layout_t to = cur->get_projected_inode()->layout;
+  if (check_layout_vxattr(mdr, "layout.pool", value, &to) < 0)
+    return;
+
+  _file_migrate_begin(mdr, cur, to.pool_id);
+}
+
+/*
+ * Migrate a file without a client: same path, same semantics.  It needs a
+ * request all the same, for the file's locks.  fin gets the result; *result,
+ * if given, must stay valid until then.
+ */
+void Server::file_migrate(CInode *in, int64_t pool, Context *fin,
+                          FileMigrateResult *result)
+{
+  ceph_assert(in->is_auth() && in->is_file());
+  MDRequestRef mdr = mdcache->request_start_internal(CEPH_MDS_OP_FILE_MIGRATE);
+  mdr->set_filepath(filepath(in->ino()));
+  mdr->pin(in);
+  mdr->internal_op_finish = fin;
+  mdr->internal_op_private = new FileMigrateArgs{in, pool, result};
+  dispatch_file_migrate(mdr);
+}
+
+void Server::dispatch_file_migrate(const MDRequestRef& mdr)
+{
+  auto *args = static_cast<FileMigrateArgs*>(mdr->internal_op_private);
+  // Exported while it waited for a lock or a freeze.
+  if (!args->in->is_auth()) {
+    _file_migrate_reply(mdr, -EXDEV);
+    return;
+  }
+  _file_migrate_begin(mdr, args->in, args->pool);
+}
+
+void Server::_file_migrate_reply(const MDRequestRef& mdr, int r)
+{
+  if (!mdr->client_request) {
+    delete static_cast<FileMigrateArgs*>(mdr->internal_op_private);
+    mdr->internal_op_private = nullptr;
+  }
+  respond_to_request(mdr, r);
+}
+
+void Server::_file_migrate_begin(const MDRequestRef& mdr, CInode *cur,
+                                 int64_t pool)
+{
   // An earlier migration is still clearing its old pool.  A client that
   // resends its request after a failover ends up here too.
   if (cur->get_projected_inode()->migrating_from >= 0) {
@@ -7183,14 +7238,13 @@ void Server::handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
   }
 
   file_layout_t to = cur->get_projected_inode()->layout;
-  if (check_layout_vxattr(mdr, "layout.pool", value, &to) < 0)
-    return;
+  to.pool_id = pool;
 
   // Not with the file still being copied without a lock for someone else:
   // both write the same objects.
   auto running = file_migrates.find(cur->ino());
   if (running != file_migrates.end() && running->second->mdr != mdr) {
-    respond_to_request(mdr, -EBUSY);
+    _file_migrate_reply(mdr, -EBUSY);
     return;
   }
   if (running == file_migrates.end() && _file_migrate_precopy(mdr, cur, to))
@@ -7204,18 +7258,18 @@ void Server::handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
   const auto& pi = cur->get_projected_inode();
   if (!pi->fscrypt_auth.empty() ||
       pi->inline_data.version != CEPH_INLINE_NONE) {
-    respond_to_request(mdr, -EINVAL);
+    _file_migrate_reply(mdr, -EINVAL);
     return;
   }
   // Objects past truncate_size may still hold data from before the
   // truncation; a copy stamped with the current truncate_seq would expose it.
   if (pi->is_truncating()) {
-    respond_to_request(mdr, -EBUSY);
+    _file_migrate_reply(mdr, -EBUSY);
     return;
   }
   if (to.pool_id == pi->layout.pool_id) {
     file_migrates.erase(cur->ino());
-    respond_to_request(mdr, 0);
+    _file_migrate_reply(mdr, 0);
     return;
   }
 
@@ -7252,10 +7306,12 @@ std::shared_ptr<Server::FileMigrate> Server::_file_migrate_new(
   fm->to = pi->layout;
   fm->to.pool_id = to.pool_id;
   fm->gen = pi->migrate_gen;
+  if (!mdr->client_request)
+    fm->result = static_cast<FileMigrateArgs*>(mdr->internal_op_private)->result;
   if (pi->get_has_redirects() && pi->old_pools.count(to.pool_id)) {
     // Clients may be limited to the namespace a file was created in.
     if (!pi->layout.pool_ns.empty() && pi->migrate_gen == 0) {
-      respond_to_request(mdr, -EOPNOTSUPP);
+      _file_migrate_reply(mdr, -EOPNOTSUPP);
       return nullptr;
     }
     fm->gen++;
@@ -7311,7 +7367,7 @@ void Server::_file_migrate_precopied(std::shared_ptr<FileMigrate> fm)
   fm->precopied = true;
   if (!fm->in->is_auth())
     file_migrates.erase(fm->in->ino());  // exported: the new rank starts over
-  dispatch_client_request(fm->mdr);
+  mdcache->dispatch_request(fm->mdr);
 }
 
 void Server::_file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm)
@@ -7393,12 +7449,10 @@ void Server::_file_migrate_prepare(std::shared_ptr<FileMigrate> fm)
 bool Server::_file_migrate_find_versions(std::shared_ptr<FileMigrate> fm)
 {
   CInode *cur = fm->in;
-  // Versions in old_inodes, or reachable through remote links, are not handled.
-  if (cur->is_multiversion() || !cur->client_need_snapflush.empty())
-    return false;
-
   CDentry *dn = cur->get_projected_parent_dn();
-  SnapRealm *realm = cur->find_snaprealm();
+  // The directory's realm: a hard link has its own, a global one, and that
+  // has no snapshot infos.  For any other file they are the same realm.
+  SnapRealm *realm = dn->get_dir()->get_inode()->find_snaprealm();
   std::map<snapid_t,const SnapInfo*> infomap;
   realm->get_snap_info(infomap);
   const utime_t btime = cur->get_projected_inode()->btime;
@@ -7418,6 +7472,11 @@ bool Server::_file_migrate_find_versions(std::shared_ptr<FileMigrate> fm)
   }
   if (!any)
     return false;  // no snapshot sees this file: nothing to gain
+  fm->snaps_stay = true;  // until proven otherwise
+
+  // Versions in old_inodes, or reachable through remote links, are not handled.
+  if (cur->is_multiversion() || !cur->client_need_snapflush.empty())
+    return false;
 
   CDir *dir = dn->get_dir();
   if (!older.empty() && !dir->is_complete()) {
@@ -7457,6 +7516,7 @@ bool Server::_file_migrate_find_versions(std::shared_ptr<FileMigrate> fm)
       fm->versions.push_back(in);
     }
   }
+  fm->snaps_stay = false;
   return true;
 }
 
@@ -7560,6 +7620,7 @@ void Server::_file_migrate_issue(std::shared_ptr<FileMigrate> fm)
             }
           } else if (r != -ENOENT) {
             fm->whole = false;
+            fm->snaps_stay = true;
           }
           _file_migrate_op_finish(fm, 0);
         })), mds->finisher);
@@ -7604,7 +7665,7 @@ void Server::_file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r)
     // On error the new pool may hold copies; a retry overwrites them.
     if (fm->err) {
       file_migrates.erase(fm->in->ino());
-      respond_to_request(fm->mdr, fm->err);
+      _file_migrate_reply(fm->mdr, fm->err);
       return;
     }
     _file_migrate_copied(fm);
@@ -7616,7 +7677,6 @@ void Server::_file_migrate_copied(std::shared_ptr<FileMigrate> fm)
 {
   const MDRequestRef& mdr = fm->mdr;
   CInode *cur = fm->in;
-  const cref_t<MClientRequest> &req = mdr->client_request;
 
   auto pi = cur->project_inode(mdr);
   pi.inode->add_old_pool(fm->from.pool_id);
@@ -7643,7 +7703,8 @@ void Server::_file_migrate_copied(std::shared_ptr<FileMigrate> fm)
 
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "file migrate");
-  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  if (const auto& req = mdr->client_request)
+    le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   if (fm->whole) {
     // No cow: snapshots must not see a change, and nothing about them does
@@ -7665,7 +7726,12 @@ void Server::_file_migrate_logged(std::shared_ptr<FileMigrate> fm)
   ceph_assert(g_conf().get_val<int64_t>("mds_kill_file_migrate_at") != 2);
   file_migrates.erase(fm->in->ino());
   mdcache->migrate_cleanup(fm->in, fm->mdr->ls);
-  respond_to_request(fm->mdr, 0);
+  if (fm->result) {
+    fm->result->moved = true;
+    fm->result->head_only = fm->snaps_stay;
+    fm->result->bytes = fm->in->get_projected_inode()->size;
+  }
+  _file_migrate_reply(fm->mdr, 0);
 }
 
 const Server::XattrHandler Server::xattr_handlers[] = {
